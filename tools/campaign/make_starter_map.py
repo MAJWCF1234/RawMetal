@@ -250,11 +250,13 @@ class Starter:
             north, south, west, east = open_to((c, r - 1)), open_to((c, r + 1)), open_to((c - 1, r)), open_to((c + 1, r))
             # MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|
             #     openN|openS|openW|openE|lift|residencyGroup|floorMaterial|musicCue|spawnYaw|spawnPitch|startUnarmed
+            #     [|hazeR|hazeG|hazeB|hazeDensity[|wetness]]
             out.append('|'.join(f(v) for v in ['MAP', i, 'Starter Map / ' + m['name'], 24 * c, 24 * r, spawn[0], spawn[1], 0,
                                                 int(m['outdoor']), m['ceiling'], m['ambient'],
                                                 'brutal_wasteland' if m['outdoor'] else 'industrial_night',
                                                 int(north), int(south), int(west), int(east), 0, -1, 0, 0, spawn[2], 0, 0,
-                                                *m.get('haze', ())]))
+                                                *m.get('haze', ('', '', '', '') if 'wetness' in m else ()),
+                                                *((m['wetness'],) if 'wetness' in m else ())]))
             if m['surface'] is not None:
                 s = SURFACES.index(m['surface'])
                 out.append('SURFACE|%d|%d|%d|-1' % (i, s, s if s not in (3, 4, 10, 11, 12) else 0))
@@ -393,11 +395,15 @@ def build():
                 g = o.get('gel')
                 tail = [o.get('kelvin', 3400), o.get('tint', 0), '', '', '', o.get('period', ''), o.get('onTime', ''), '', o.get('flicker', '')]
                 if g: tail += ['', '', '', '', *g]
-                s.rec(m, 'LIGHT', 1, cx, ly, 3.4, 0, 0, 1.5, 5, *tail)
+                s.rec(m, 'LIGHT', 1, cx, ly, 3.4, 0, 0, 1.5, 7, *tail)
             s.sign(m, cx, (22.95 if row else 1.05), 1.0, 1.7, .4, title, sub, gold, PI if row else 0)
             s.zone(m, cx - 1, y1, cx + 1, y2, 'LIGHT / %s / %s' % (title, sub))
             s.index.append({'map': 1, 'section': 'LIGHTS', 'x': cx, 'y': ly, 'title': title, 'name': sub})
-    s.rec(m, 'LIGHT', 1, 12, 12, 3.45, 0, 0, .7, 9)
+    # The hall: a row of warm downlights, each a pool on the floor and a cone in the haze.
+    for x in (3.5, 8, 12.5, 17, 21.5):
+        s.rec(m, 'LIGHT', 1, x, 12, 3.45, 0, 0, .9, 7, 3000)
+    m['haze'] = (.05, .055, .065, .012)
+    m['wetness'] = .5  # a damp floor: the lamp row runs down the hall in its sheen and puddles
 
     # ---- HAZARDS -------------------------------------------------------------------------------
     m = s.new_map('Hazards', 2, 0, ceiling=4.5)

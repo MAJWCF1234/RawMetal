@@ -116,6 +116,9 @@ struct ChunkDefinition {
     // Off-duty openings: no weapon drawn and no viewmodel until the first punch.
     bool startUnarmed=false;
     Haze haze=EnvironmentHaze;
+    // How wet the floors are (0 dry .. 1 flooded); negative leaves it to World::wetness.
+    // A polished or damp floor carries the lamps down a hall as reflections.
+    float wetness=-1;
 };
 inline constexpr int CampaignChunkCount=180;
 inline constexpr int AshfallChunkCount=15;

@@ -150,6 +150,10 @@ private:
         float band=0; const Texture* above=nullptr; bool liquid=false; };
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
+    // A lamp fitting's glowing texture with its emission in the lamp's tone
+    // (cached per texture and tone, so each stays one GPU material).
+    std::unordered_map<std::uint64_t,Texture> m_lampFaces;
+    const Texture& lampFace(const Texture& base,Point3 tone);
     static void deriveSurfaceNormal(Texture& texture,float strength);
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();

@@ -101,6 +101,14 @@ vec3 lampColour(float kelvin,float tint){
 // A lamp record's final tone (blackbody x tint x gel, WorldLight::tone), packed
 // on the CPU as half floats: z = red, green and w = blue, 1.
 vec3 lampTone(vec4 params){vec2 rg=unpackHalf2x16(floatBitsToUint(params.z)),b=unpackHalf2x16(floatBitsToUint(params.w));return vec3(rg,b.x);}
+// WorldLight::beam: the share of a lamp's light leaving toward `away` (unit,
+// lamp to receiver), by the beam code packed beside its blue channel.
+float lampBeam(vec4 params,vec3 away){
+ float code=unpackHalf2x16(floatBitsToUint(params.w)).y;
+ if(code<1.5)return 1.0;
+ if(code<3.0)return 0.2+0.8*smoothstep(0.0,1.0,(-away.z-0.42)/0.45);
+ float yaw=code-4.0;return 0.12+0.88*smoothstep(0.0,1.0,(away.x*cos(yaw)+away.y*sin(yaw)+0.25)/0.75);
+}
 
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
 vec3 toDisplay(vec3 c){return pow(max(c,vec3(0.0)),vec3(1.0/2.2));}
@@ -382,6 +390,7 @@ void main(){
     float t=1.0-d2/r2,falloff=params.x*3.2*t*t/(1.0+d2*0.12);
     float distance=sqrt(d2);vec3 L=toLamp/distance;
     float geometric=dot(Ng,L);if(geometric<=0.0)continue;
+    falloff*=lampBeam(params,-L);
     float shadow=1.0;
     if(params.y>=0.0&&falloff>0.003){
      // Slope-scaled bias in shadow texels: a texel covers about 2d/256 m at

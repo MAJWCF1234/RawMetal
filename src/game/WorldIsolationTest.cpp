@@ -61,6 +61,14 @@ bool Game::testWorldIsolation(){
    lightContract&=rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||1|0.1\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||1.5|0|0\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||0|0|0\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|3400|0||||||||||||nan|0|1\n");
    lightContract&=rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|336\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|99999|1|1|1\n")&&rejects(base+"LIGHT|0|5|5|3|0|0|1|8|5600|0|||||||0|336|0|1|1\n");
    lightContract&=std::fabs(ceiling.falloff(25)-3.2f*std::pow(1.f-25.f/144.f,2.f)/(1.f+25.f*.12f))<.000001f&&wall.falloff(36)==0&&wall.falloff(35)>0;
+   // Beams: a ceiling fitting is full straight down and keeps a fifth sideways and up;
+   // the wall lamp (yaw pi/2) is full into the room and keeps an eighth behind it.
+   lightContract&=ceiling.beam({0,0,-1})==1&&std::fabs(ceiling.beam({1,0,0})-.2f)<1e-5f&&std::fabs(ceiling.beam({0,0,1})-.2f)<1e-5f&&ceiling.beam({.6f,0,-.8f})>ceiling.beam({.8f,0,-.6f});
+   lightContract&=std::fabs(wall.beam({0,1,0})-1)<1e-5f&&std::fabs(wall.beam({0,-1,0})-.12f)<1e-5f&&ceiling.beamCode()==2&&std::fabs(wall.beamCode()-(4+1.5707963f))<1e-5f;
+   lightContract&=ceiling.reach({0,0,2},4)==ceiling.falloff(4)&&std::fabs(ceiling.reach({2,0,0},4)-.2f*ceiling.falloff(4))<1e-6f;
+   {auto wet=[&](const std::string& value){auto text=base;const std::string tail="industrial_night|0|0|0|0|0\n";text.replace(text.find(tail),tail.size(),"industrial_night|0|0|0|0|0|-1|0|0|0|0|0|||||"+value+"\n");return text;};
+    auto damp=load(wet("0.5"));lightContract&=damp->maps[0]->definition.wetness==.5f&&World(0,damp->maps[0]).wetness()==.5f&&load(base)->maps[0]->definition.wetness<0;
+    for(const char* bad:{"1.5","-0.2","nan"}){try{load(wet(bad));lightContract=false;}catch(const std::runtime_error&){}}}
    auto mounted=load(base+"STRUCT|0|0|1|1|20|0|3.4|0|2\nLIGHT|0|1|6|2|1|0|1.2|6\n");World mountedWall(0,mounted->maps[0]);auto target=mountedWall.lights()[0].shadowTarget();
    lightContract&=mountedWall.lightRayClear({3,6},1.5f,{target.x,target.y},target.z)&&!mountedWall.lightRayClear({3,6},1.5f,{.98f,6},2);
    valid&=lightContract;

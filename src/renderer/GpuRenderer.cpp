@@ -56,6 +56,9 @@ const uint32_t taaFragmentShader[]=
 const uint32_t exposureFragmentShader[]=
 #include "exposure.frag.inc"
 ;
+const uint32_t bloomFragmentShader[]=
+#include "bloom.frag.inc"
+;
 // Display transform, matching displayCurve in composite.frag (derived there
 // from first principles). After the inset the curve is per channel, so it is
 // tabulated by the top 18 bits of the float (sign, exponent, 9 mantissa bits):
@@ -240,9 +243,9 @@ float emissionFloat(uint16_t bits){
  float value=(bits&0x7c00u)==0?std::ldexp(float(bits&0x3ffu),-24):std::ldexp(1.f+float(bits&0x3ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;
 }
 // A lamp record's colour slots (lamps[2i+1].zw) carry its linear tone as half
-// floats: z = red | green<<16, w = blue | 1.0<<16, unpacked with unpackHalf2x16.
+// floats: z = red | green<<16, w = blue | beam<<16 (WorldLight::beamCode), unpacked with unpackHalf2x16.
 // Channels stay at or above 2^-10, so neither slot's bits form a denormal or NaN.
-std::array<float,2> lampToneSlots(Point3 tone){auto h=[](float v){return uint32_t(emissionHalf(std::clamp(v,1.f/1024.f,60000.f)));};return {std::bit_cast<float>(h(tone.x)|h(tone.y)<<16),std::bit_cast<float>(h(tone.z)|0x3c00u<<16)};}
+std::array<float,2> lampToneSlots(Point3 tone,float beam=1.f){auto h=[](float v){return uint32_t(emissionHalf(std::clamp(v,1.f/1024.f,60000.f)));};return {std::bit_cast<float>(h(tone.x)|h(tone.y)<<16),std::bit_cast<float>(h(tone.z)|h(std::max(beam,1.f))<<16)};}
 std::vector<std::vector<uint8_t>> emissionBytes(const std::vector<EmissionLevel>& levels){
  std::vector<std::vector<uint8_t>> result;result.reserve(levels.size());
  for(const auto&level:levels){std::vector<uint8_t> bytes(level.pixels.size()*8);for(size_t i=0;i<level.pixels.size();++i)for(size_t c=0;c<4;++c){auto half=emissionHalf(level.pixels[i][c]);std::memcpy(bytes.data()+i*8+c*2,&half,2);}result.push_back(std::move(bytes));}
@@ -441,6 +444,11 @@ struct GpuRenderer::Impl {
  // Occlusion stage: AO + one-bounce light. Compose stage: denoise, haze,
  // volumetric lamps, bloom, grade. Both read scene RGB + planar depth (alpha).
  FullscreenStage occlusionStage,shadowStage,composeStage;
+ // Bloom: six halvings of the scene, then five climbs back to half size.
+ // One stage per pass, since a stage's descriptor set is rewritten per run.
+ static constexpr int BloomLevels=6;
+ std::array<FullscreenStage,BloomLevels> bloomDown;std::array<FullscreenStage,BloomLevels-1> bloomUp;
+ std::array<VkExtent2D,BloomLevels> bloomExtents{};
  bool postAvailable=false,postEnabled=true,postDebugOcclusion=false;bool postRan=false;
  // Temporal AA: the stage renders into alternating history images; the one
  // written this frame is the final image. Layouts are tracked because present
@@ -642,6 +650,7 @@ struct GpuRenderer::Impl {
    for(auto f:mirrorFrames)vkDestroyFramebuffer(device,f,nullptr);for(auto v:mirrorViews)vkDestroyImageView(device,v,nullptr);if(mirrorPipeline)vkDestroyPipeline(device,mirrorPipeline,nullptr);if(mirrorPass)vkDestroyRenderPass(device,mirrorPass,nullptr);
    for(auto&b:projectionBuffers)destroy(b);for(auto&b:actorBuffers)destroy(b);if(projectionPool)vkDestroyDescriptorPool(device,projectionPool,nullptr);if(projectionLayout)vkDestroyDescriptorSetLayout(device,projectionLayout,nullptr);
    destroyStage(occlusionStage);destroyStage(shadowStage);destroyStage(composeStage);destroyTaaTargets();destroyStage(taaStage);
+   for(auto&stage:bloomDown)destroyStage(stage);for(auto&stage:bloomUp)destroyStage(stage);
    for(int i=0;i<2;++i){if(exposureFrames[size_t(i)])vkDestroyFramebuffer(device,exposureFrames[size_t(i)],nullptr);destroy(exposureImages[size_t(i)]);}destroyStage(exposureStage);destroy(materialTarget);destroy(materialColor);
    destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(actorVertexBuffers[i]);destroy(overlayBuffers[i]);}
@@ -1050,7 +1059,9 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   };
   buildStage(m->occlusionStage,occlusionFragmentShader,sizeof(occlusionFragmentShader),1,"Create occlusion post stage");
   buildStage(m->shadowStage,shadowFragmentShader,sizeof(shadowFragmentShader),1,"Create shadow post stage",true);
-  buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),5,"Create compose post stage",true);
+  buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),6,"Create compose post stage",true);
+  for(auto&stage:m->bloomDown)buildStage(stage,bloomFragmentShader,sizeof(bloomFragmentShader),2,"Create bloom halving stage");
+  for(auto&stage:m->bloomUp)buildStage(stage,bloomFragmentShader,sizeof(bloomFragmentShader),2,"Create bloom climb stage");
   buildStage(m->exposureStage,exposureFragmentShader,sizeof(exposureFragmentShader),2,"Create auto exposure stage");
   for(int i=0;i<2;++i){
    m->makeImage(m->exposureImages[size_t(i)],1,1,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
@@ -1153,6 +1164,7 @@ void GpuRenderer::begin(int width,int height){
  // Render target size changed — must drain GPU fully before resize.
  vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
  m->destroyStageTarget(m->occlusionStage);m->destroyStageTarget(m->shadowStage);m->destroyStageTarget(m->composeStage);m->destroyTaaTargets();
+ for(auto&stage:m->bloomDown)m->destroyStageTarget(stage);for(auto&stage:m->bloomUp)m->destroyStageTarget(stage);
  if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->sceneColor);m->destroy(m->depth);m->destroy(m->readback);m->destroy(m->materialTarget);m->destroy(m->materialColor);
  m->makeImage(m->materialTarget,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
  if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->materialColor,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);
@@ -1162,6 +1174,13 @@ void GpuRenderer::begin(int width,int height){
  if(m->postAvailable)for(auto* stage:{&m->occlusionStage,&m->shadowStage,&m->composeStage}){
   m->makeImage(stage->image,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
   VkFramebufferCreateInfo pfb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};pfb.renderPass=stage->pass;pfb.attachmentCount=1;pfb.pAttachments=&stage->image.view;pfb.width=width;pfb.height=height;pfb.layers=1;check(vkCreateFramebuffer(m->device,&pfb,nullptr,&stage->framebuffer),"Create post stage target");
+ }
+ if(m->postAvailable)for(int i=0;i<Impl::BloomLevels;++i){
+  VkExtent2D size{uint32_t(std::max(1,width>>(i+1))),uint32_t(std::max(1,height>>(i+1)))};m->bloomExtents[size_t(i)]=size;
+  for(auto* stage:{&m->bloomDown[size_t(i)],i<Impl::BloomLevels-1?&m->bloomUp[size_t(i)]:nullptr}){if(!stage)continue;
+   m->makeImage(stage->image,int(size.width),int(size.height),1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+   VkFramebufferCreateInfo bfb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};bfb.renderPass=stage->pass;bfb.attachmentCount=1;bfb.pAttachments=&stage->image.view;bfb.width=size.width;bfb.height=size.height;bfb.layers=1;check(vkCreateFramebuffer(m->device,&bfb,nullptr,&stage->framebuffer),"Create bloom target");
+  }
  }
  if(m->postAvailable&&m->taaStage.pass)for(int i=0;i<2;++i){
   m->makeImage(m->taaImages[size_t(i)],width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
@@ -1268,7 +1287,7 @@ void GpuRenderer::setLamps(const std::vector<std::array<float,16>>&input,bool en
  m->lampData.assign(sizeof(header)+size_t(Impl::MaxLamps)*32+cells.size()*4,0);
  std::memcpy(m->lampData.data(),&header,sizeof(header));
  // The colour slots carry the final tone (blackbody x tint x gel), not kelvin and tint.
- for(size_t i=0;i<count;++i){auto tone=lampToneSlots(WorldLight::tone(input[i][5],input[i][6],{input[i][13],input[i][14],input[i][15]}));float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&input[i][7]>0&&int(i)<m->shadowCapacity?float(i):-1.f,tone[0],tone[1]};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
+ for(size_t i=0;i<count;++i){auto tone=lampToneSlots(WorldLight::tone(input[i][5],input[i][6],{input[i][13],input[i][14],input[i][15]}),std::fabs(input[i][7]));float record[8]={input[i][0],input[i][1],input[i][2],input[i][3],input[i][4],enabled&&input[i][7]>0&&int(i)<m->shadowCapacity?float(i):-1.f,tone[0],tone[1]};std::memcpy(m->lampData.data()+sizeof(header)+i*32,record,32);}
  if(!cells.empty())std::memcpy(m->lampData.data()+sizeof(header)+size_t(Impl::MaxLamps)*32,cells.data(),cells.size()*4);
  ++m->lampGeneration;
 }
@@ -1495,7 +1514,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   // Scene RGB is linear radiance and alpha is planar camera depth.
   m->barrier(m->target,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
   const auto& v=m->viewState;auto linear=[](float c){return std::pow(std::max(0.f,c),2.2f);};
-  float params[32]={m->postDebugOcclusion?-1.f:1.f,v[7],Projection::horizontal,.7f, linear(v[28]),linear(v[29]),linear(v[30]),v[31]*.9f, 1.f/float(m->width),1.f/float(m->height),.09f,1.08f, .004f,.05f,.004f*(1.f-m->darkness),900.f};
+  float params[32]={m->postDebugOcclusion?-1.f:1.f,v[7],Projection::horizontal,.7f, linear(v[28]),linear(v[29]),linear(v[30]),v[31]*.9f, 1.f/float(m->width),1.f/float(m->height),1.f,1.08f, .004f,.05f,.004f*(1.f-m->darkness),900.f};
   // The four nearest ceiling lamps (world) become view-space scatter sources.
   for(int i=0;i<4;++i){float dx=v[12+i*4]-v[0],dy=v[13+i*4]-v[1],dz=v[14+i*4]-.1f-v[2];
    float right=-dx*v[4]+dy*v[3],forward=dx*v[3]+dy*v[4];
@@ -1521,6 +1540,17 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   runStage(m->shadowStage,{m->target.view});m->stamp(cmd,4);
   m->barrier(m->shadowStage.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
   {
+   // Bloom: threshold 1.1 with a 0.7 knee, so lit walls stay out and lamp cores glow.
+   auto bloomPass=[&](Impl::FullscreenStage& stage,VkImageView source,VkImageView level,VkExtent2D from,VkExtent2D to,float mode){
+    float bloomParams[32]={1.f/float(from.width),1.f/float(from.height),mode,1.1f, .7f,1.f};
+    runStage(stage,{source,level},bloomParams,VK_NULL_HANDLE,to);
+    m->barrier(stage.image,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
+   };
+   VkExtent2D full{uint32_t(m->width),uint32_t(m->height)};
+   for(int i=0;i<Impl::BloomLevels;++i){auto source=i?m->bloomDown[size_t(i-1)].image.view:m->target.view;bloomPass(m->bloomDown[size_t(i)],source,source,i?m->bloomExtents[size_t(i-1)]:full,m->bloomExtents[size_t(i)],i?1.f:0.f);}
+   for(int i=Impl::BloomLevels-2;i>=0;--i){auto&below=i==Impl::BloomLevels-2?m->bloomDown[size_t(i+1)]:m->bloomUp[size_t(i+1)];bloomPass(m->bloomUp[size_t(i)],below.image.view,m->bloomDown[size_t(i)].image.view,m->bloomExtents[size_t(i+1)],m->bloomExtents[size_t(i)],2.f);}
+  }
+  {
    // Meter this frame; the window eases toward the target, headless frames adapt at once.
    int write=m->exposureWrite^1,read=m->exposureWrite;auto& previousLayout=m->exposureLayouts[size_t(read)];
    if(previousLayout!=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL){m->barrier(m->exposureImages[size_t(read)],previousLayout,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,0,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);previousLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;}
@@ -1534,7 +1564,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    m->exposureLayouts[size_t(write)]=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;m->exposureWrite=write;
   }
   m->stamp(cmd,5);
-  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view});m->stamp(cmd,6);
+  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view,m->bloomUp[0].image.view});m->stamp(cmd,6);
   m->postRan=true;
   m->taaRan=false;
   if(taaThisFrame){

@@ -349,12 +349,14 @@ def terrain_diagram():
 RECORDS = [
     ('Campaign and maps', [
         ('CAMPAIGN|name|startMap', 'Once per file. The name appears in the CUSTOM MAPS menu; startMap is the map you spawn in.'),
-        ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed]',
+        ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed|hazeR|hazeG|hazeB|hazeDensity|wetness]',
          'One per map, numbered 0, 1, 2... with no gaps. origin places the 24 x 24 m map in the world: maps touch at multiples of 24. '
          'spawn is in map metres. environment 0 indoor, 1 outdoor. ceiling is the absolute ceiling height (indoors). ambient 0-1 is the base light (0.3 is a good start). '
          'skybox: industrial_night indoors; zone_overcast (or brutal_wasteland) outdoors, which also switches on the campaign TERRAIN. '
          'openN/S/W/E 1 lets you walk across that edge into the neighbouring map. lift 0. '
-         'Optional tail: residency -1, floorMaterial 0 concrete / 1 carpet, music 0, spawnYaw radians, spawnPitch, startUnarmed 0/1.'),
+         'Optional tail: residency -1, floorMaterial 0 concrete / 1 carpet, music 0, spawnYaw radians, spawnPitch, startUnarmed 0/1. '
+         'haze R G B (0-1) and density (0-0.1) give the map its own air: 0.01 is enough for lamps to hang cones of light in it. '
+         'wetness 0-1 is how damp the floors are: a sheen and puddles that reflect the lamps (0.5 in the Lights hall); leave the haze fields empty to set only wetness.'),
         ('SURFACE|map|wall|floor|ceiling', 'Wall, floor and ceiling finish for the whole map; -1 keeps the default. See the surface table.'),
         ('LAYER|map|layer|name|elevation|thickness', 'A floor level. Layer 0 is the ground (elevation 0, thickness 0). Upper layers use thickness > 0 and = tiles for walkable deck.'),
         ('ROW|map|layer|row|24 characters', 'One line of the tile grid, row 0 (north) to 23 (south). Exactly 24 characters: see the tile diagram.')]),
@@ -388,7 +390,9 @@ RECORDS = [
     ('Light and air', [
         ('LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker|fitting|w|d|h|gelR|gelG|gelB]',
          'A lamp. Only x, y, z are required. mount 0 ceiling, 1 wall (x,y on the wall face, yaw pointing out), 2 floor. intensity ~1, range in metres, kelvin 1000-12000 (3400 default), tint -1 magenta..1 green, '
-         'state/value switch it with a state, period/onTime blink it, flicker 0-1. gel R G B (0-1 each) colours it: 1 0.1 0.06 is emergency red.'),
+         'state/value switch it with a state, period/onTime blink it, flicker 0-1. gel R G B (0-1 each) colours it: 1 0.1 0.06 is emergency red. '
+         'A ceiling lamp throws its light down: full within about 30 degrees of straight down, fading to a fifth by 65, so it pools on the floor and scallops the walls; '
+         'space a row about its height apart. A wall lamp lights the room in front of it; a floor lamp shines every way. The fitting glows in the lamp\'s own colour.'),
         ('DARK|map|x1|y1|x2|y2[|bottom|top|state|value|invert|jam]', 'True darkness inside the box; jam 1 (default) also kills the flashlight.'),
         ('ZONE|map|x1|y1|x2|y2|name[|bottom|top|title|hazeR|hazeG|hazeB|density]', 'A named place: the HUD shows name while you are inside. A title shows a big title card on entry. A haze gives the box its own fog colour.'),
         ('EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count', 'Smoke or steam rising from a point.')]),

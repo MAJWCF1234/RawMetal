@@ -80,6 +80,29 @@ struct WorldLight {
   float t=1.f-squaredDistance/radiusSquared;
   return intensity*3.2f*t*t/(1.f+squaredDistance*.12f);
  }
+ // Beam profile toward `out` (unit, lamp to receiver). A ceiling fitting
+ // throws its light down: pools on the floor, scallops on the walls under
+ // it, the ceiling only the spill round the housing. A wall lamp lights the
+ // room in front of it; a bare light shines every way. scene.frag and
+ // shadow.frag mirror this (lampBeam), keyed by beamCode().
+ static float smooth01(float x){x=std::clamp(x,0.f,1.f);return x*x*(3.f-2.f*x);}
+ float beam(Point3 out)const{
+  if(mount==WorldLightMount::Ceiling)return .2f+.8f*smooth01((-out.z-.42f)/.45f);
+  if(mount==WorldLightMount::Wall)return .12f+.88f*smooth01((out.x*std::cos(yaw)+out.y*std::sin(yaw)+.25f)/.75f);
+  return 1.f;
+ }
+ // falloff and beam together; toLamp runs from the receiver to emitter().
+ float reach(Point3 toLamp,float squaredDistance)const{
+  float f=falloff(squaredDistance);if(f<=0||squaredDistance<1e-6f)return f;
+  return f*beam(toLamp*(-1.f/std::sqrt(squaredDistance)));
+ }
+ // The beam for the GPU lamp record: 1 every way, 2 a ceiling fitting,
+ // 4 + yaw (wrapped to 0..2 pi) a wall lamp facing yaw.
+ float beamCode()const{
+  if(mount==WorldLightMount::Ceiling)return 2.f;
+  if(mount==WorldLightMount::Wall){float a=std::fmod(yaw,6.2831853f);return 4.f+(a<0?a+6.2831853f:a);}
+  return 1.f;
+ }
 };
 // Outdoor worlds carry one directional light. Direction points toward the
 // sun (z up); intensity 0 means no sun. Colour is linear.
@@ -513,6 +536,7 @@ public:
     // How wet floors are (0 dry .. 1 flooded): damp sheen everywhere, puddles
     // on level ground. Carpet never puddles; the Foundry runs hot and dry.
     float wetness()const{
+     if(definition().wetness>=0)return definition().wetness;
      if(definition().floorMaterial==FloorMaterial::OfficeCarpet)return 0.f;
      if(zoneSky())return .38f;
      if(outdoors())return .55f;

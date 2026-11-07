@@ -4,6 +4,28 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.5 - Light and shadow (2026-11-07)
+
+Lamps now behave like real fittings, and bright light blooms.
+
+- Ceiling lamps shine downward: they throw pools of light on the floor and
+  scallops down the walls, and the ceiling between fittings stays dark.
+  Wall lamps throw their light into the room. Bare bulbs still light every
+  direction.
+- Light shafts in hazy rooms follow the same cones, so a downlight shows a
+  visible beam to the floor.
+- New bloom: a soft, wide glow that spreads at several sizes around
+  anything bright, instead of the old ring of points.
+- Lamp fittings glow in their lamp's own colour and are bright enough to
+  bloom.
+- Custom maps: an optional 28th `MAP` field sets floor wetness (0 to 1).
+  Wet floors get puddles and a sheen that reflects the lamps.
+- Starter Map: the Lights hall has five warm downlights along the corridor,
+  booth colours that spill further across the floor, a light haze and a
+  wet floor. `GUIDE.html` covers the wetness field.
+
+---
+
 ## v1.2.4 - Glass and concrete (2026-11-06)
 
 Glass breaks like glass, and custom maps get a brutalist building kit.

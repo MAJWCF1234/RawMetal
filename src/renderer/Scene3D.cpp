@@ -20,6 +20,20 @@
 #include <stdexcept>
 #include <mutex>
 namespace retro {
+const SoftwareRenderer::Texture& SoftwareRenderer::lampFace(const Texture& base,Point3 tone){
+ const float peak=std::max({tone.x,tone.y,tone.z,1e-4f});
+ // Emission bytes are display-encoded: the linear filter goes in as its 1/2.2 power.
+ const std::array<float,3> filter{std::pow(tone.x/peak,1/2.2f),std::pow(tone.y/peak,1/2.2f),std::pow(tone.z/peak,1/2.2f)};
+ std::uint64_t key=std::uint64_t(reinterpret_cast<std::uintptr_t>(&base))*1099511628211ull;
+ for(float f:filter)key=(key^std::uint64_t(std::lround(f*63)))*1099511628211ull;
+ auto found=m_lampFaces.find(key);if(found!=m_lampFaces.end())return found->second;
+ Texture face=base;
+ // Each texel keeps its brightness (its peak channel, the brightest raised to
+ // full) and takes the lamp's colour.
+ unsigned brightest=1;for(auto p:face.emission)brightest=std::max({brightest,(p>>16)&255u,(p>>8)&255u,p&255u});
+ for(auto&p:face.emission){float level=float(std::max({(p>>16)&255u,(p>>8)&255u,p&255u}))*255.f/float(brightest);unsigned c[3];for(int i=0;i<3;++i)c[i]=unsigned(std::lround(level*filter[size_t(i)]));p=(p&0xff000000u)|(c[0]<<16)|(c[1]<<8)|c[2];}
+ return m_lampFaces.emplace(key,std::move(face)).first->second;
+}
 // First-person weapon meshes are normalized to their physical footprint, not
 // to the player collision height. Scaling them with the taller world hull
 // made a standard rifle render almost two metres long on screen.
@@ -515,7 +529,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(movingGeometry){
    const float dark=ambientDarkness();
    float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
-   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
+   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
     auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
     brightness+=visibility*facing*weight;
@@ -566,7 +580,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
-    auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.falloff(d2);if(weight<=0||d2<.001f)continue;
+    auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2);if(weight<=0||d2<.001f)continue;
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
     float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
     float visibility=0;
@@ -598,7 +612,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    NormalLighting lights;
    for(auto source:lightCells[lightCell(center)]){const auto&fixture=w.lights()[source];
     auto delta=lightFrames[source].emitter-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
-    float weight=fixture.falloff(d2)*lampPower(source);if(weight<=0||d2<.001f)continue;
+    float weight=fixture.reach(delta,d2)*lampPower(source);if(weight<=0||d2<.001f)continue;
     // A visibility ray can only reduce this upper bound. If the lamp cannot
     // beat the second retained light, it cannot affect either material slot.
     if(weight<=lights.weights[1])continue;
@@ -622,6 +636,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   return cameraPoint(point+normal,game)-cameraPoint(point,game);
  };
  bool objectLighting=false;float objectLight=1;const NormalLighting*objectNormalLighting=nullptr;
+ // While a ceiling lamp's fitting draws: its tone, which its glowing parts take.
+ const Point3*fittingTone=nullptr;
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
   perf::ActorTriangleScope profile;
   if(!m_staticGeometryBuild&&std::max({a.p.z,b.p.z,c.p.z})<dormantFloor)return;
@@ -819,7 +835,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // Pack exports include thin panels and mixed winding. Keep both sides;
    // the shared depth buffer selects the visible exterior without opening holes.
    float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));
-   tri(face.v[0],face.v[1],face.v[2],*materials.parts[size_t(face.part)],light);
+   const Texture*texture=materials.parts[size_t(face.part)];
+   if(fittingTone&&!texture->emission.empty())texture=&lampFace(*texture,*fittingTone);
+   tri(face.v[0],face.v[1],face.v[2],*texture,light);
   };
   for(auto face:mesh.triangles){
    for(auto&v:face.v){auto p=v.p-center;p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};v.p={x+p.x*c+p.z*s,y-p.x*s+p.z*c,base+p.y+height*.5f};}
@@ -1449,9 +1467,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Original square fixture proportions, with its top 2 cm below its support.
  // The light source sits 4 cm beneath the luminous underside.
  auto ceilingLamp=[&](const WorldLight&light,float mount,float power){
-  m_emissionScale=light.intensity*power;
-  if(light.fitting>=0){facility(light.fitting,light.position.x,light.position.y,mount-light.fittingHeight,light.fittingWidth,light.fittingDepth,light.fittingHeight,light.yaw);return;}
-  facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);
+  // A lamp face is the brightest thing in its room: past the bloom threshold, in the lamp's colour.
+  m_emissionScale=light.intensity*power*6.f;const Point3 tone=light.tone();fittingTone=&tone;
+  if(light.fitting>=0){facility(light.fitting,light.position.x,light.position.y,mount-light.fittingHeight,light.fittingWidth,light.fittingDepth,light.fittingHeight,light.yaw);fittingTone=nullptr;return;}
+  facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);fittingTone=nullptr;
   if(w.campaign()&&(w.level()>=7||w.authored())){
    // The next slab or roof above this lamp is its actual mounting surface.
    // Low bay lamps in tall rooms need visible suspension, rather than floating.
@@ -1477,7 +1496,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())&&!lampSwitchable[size_t(&light-w.lights().data())]){
    float mount=lampMount(light);
    mounts.push_back({&light,mount});
-   for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw})hash(std::bit_cast<std::uint32_t>(value));
+   for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw,light.kelvin,light.tint,light.gel.x,light.gel.y,light.gel.z})hash(std::bit_cast<std::uint32_t>(value));
   }
   if(!mounts.empty()&&m_gpu->beginStaticCache(2*Game::MaxChunks+w.level(),key)){
    int previousBudget=shadowBudget;m_staticGeometryBuild=true;shadowBudget=400000;
@@ -3229,7 +3248,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  NormalLighting roomLights;float roomAmbient=std::max(.10f,game.world().definition().ambient*.55f)*handFloor;
  const auto&player=m_view;Point3 receiver{player.pos.x,player.pos.y,player.z+player.eye};
  for(const auto&source:game.world().lights()){
-  auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.falloff(d2)*(source.switchable()?game.lampPower(source):1.f);if(d2<.001f||weight<=0)continue;
+  auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.reach(delta,d2)*(source.switchable()?game.lampPower(source):1.f);if(d2<.001f||weight<=0)continue;
   // A lamp that cannot enter the existing top two cannot affect the result.
   // Reject it before tracing its shadow; retain source order and exact ties.
   int slot=weight>roomLights.weights[0]?0:1;if(weight<=roomLights.weights[slot])continue;

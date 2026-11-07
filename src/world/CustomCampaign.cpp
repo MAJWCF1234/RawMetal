@@ -105,6 +105,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=24&&!f[23].empty()){if(f.size()<27)throw std::runtime_error("a map haze needs its red, green, blue and density");
     map->definition.haze={number(f,23,"haze red"),number(f,24,"haze green"),number(f,25,"haze blue"),number(f,26,"haze density")};
     if(map->definition.haze[3]<0||!validHaze(map->definition.haze))throw std::runtime_error("map haze channels must be 0 through 1 and density 0 through 0.1");}
+   // |wetness: the floors' sheen and puddles, 0 dry through 1 flooded (empty for the default).
+   if(f.size()>=28&&!f[27].empty()){map->definition.wetness=number(f,27,"wetness");if(!(map->definition.wetness>=0&&map->definition.wetness<=1))throw std::runtime_error("map wetness must be 0 through 1");}
   }else if(tag=="TERRAIN"){
    // TERRAIN|seed|base|amplitude|scale|roughness: the campaign's outdoor heightfield.
    if(f.size()!=6)throw std::runtime_error("malformed TERRAIN record");if(!terrain)terrain=std::make_shared<TerrainShape>();

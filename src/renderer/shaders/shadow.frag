@@ -89,6 +89,13 @@ float shadowTap(int slot,vec3 d,float range){
 }
 // A lamp record's final tone (blackbody x tint x gel), packed as half floats.
 vec3 lampTone(vec4 params){vec2 rg=unpackHalf2x16(floatBitsToUint(params.z)),b=unpackHalf2x16(floatBitsToUint(params.w));return vec3(rg,b.x);}
+// WorldLight::beam (see scene.frag): a ceiling fitting's shaft is a cone.
+float lampBeam(vec4 params,vec3 away){
+ float code=unpackHalf2x16(floatBitsToUint(params.w)).y;
+ if(code<1.5)return 1.0;
+ if(code<3.0)return 0.2+0.8*smoothstep(0.0,1.0,(-away.z-0.42)/0.45);
+ float yaw=code-4.0;return 0.12+0.88*smoothstep(0.0,1.0,(away.x*cos(yaw)+away.y*sin(yaw)+0.25)/0.75);
+}
 // Shadow-mapped single scattering in each lamp's own colour: light pours
 // through gaps and stops at walls. The torch scatters too, in the same march:
 // its cone from the eye, unshadowed, but the march ends at the visible surface
@@ -122,7 +129,7 @@ vec3 lampShafts(float depth,float jitter){
    uint entry=lampGrid.cells[base+k];if(entry==0u)break;
    int index=int(entry)-1;vec4 lamp=lampGrid.lamps[index*2],params=lampGrid.lamps[index*2+1];
    vec3 toLamp=lamp.xyz-world;float d2=dot(toLamp,toLamp),r2=lamp.w*lamp.w;if(d2>=r2)continue;
-   float fade=1.0-d2/r2,falloff=params.x*fade*fade/(0.35+d2*0.6);
+   float fade=1.0-d2/r2,falloff=params.x*fade*fade/(0.35+d2*0.6)*lampBeam(params,-toLamp*inversesqrt(max(d2,1e-4)));
    float visible=params.y>=0.0?shadowTap(int(params.y),-toLamp,lamp.w):1.0;
    // Mild forward scattering (Henyey-Greenstein, g=0.3) toward the viewer.
    float c=dot(direction,toLamp*inversesqrt(max(d2,1e-4)));float phase=0.75/pow(1.09-0.6*c,1.5);

@@ -9,7 +9,9 @@ layout(set=0,binding=1) uniform sampler2D occlusionImage;
 layout(set=0,binding=2) uniform sampler2D shadowImage;
 layout(set=0,binding=3) uniform sampler2D exposureImage;
 layout(set=0,binding=4) uniform sampler2D materialImage;
-layout(std430,set=0,binding=5) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];} lampGrid;
+// The bloom chain's top level (half size): the sum of six glare widths.
+layout(set=0,binding=5) uniform sampler2D bloomImage;
+layout(std430,set=0,binding=6) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];} lampGrid;
 layout(push_constant) uniform PostParams {
  vec4 camera;   // x AO strength (negative: debug view), y aspect, z focal, w radius (m)
  vec4 haze;     // rgb linear haze colour, w density per metre
@@ -75,16 +77,6 @@ float lampScatter(vec3 rayDirection,float rayLength,vec4 lamp){
  float h2=max(dot(lamp.xyz,lamp.xyz)-along*along,0.04);float h=sqrt(h2);
  float glow=(atan((rayLength-along)/h)-atan(-along/h))/h;
  return glow*lamp.w;
-}
-
-vec3 highlight(vec2 at){vec3 c=texture(sceneImage,clamp(at,vec2(0.0),vec2(1.0))).rgb;return max(c-vec3(0.85),vec3(0.0));}
-vec3 bloom(){
- vec3 sum=vec3(0.0);float weight=0.0;
- for(int ring=1;ring<=3;++ring){
-  float r=float(ring*ring)*5.0;float w=1.0/float(ring);
-  for(int i=0;i<8;++i){float a=float(i)*0.7853982+float(ring)*0.39;sum+=highlight(uv+vec2(cos(a),sin(a))*p.frame.xy*r)*w;weight+=w;}
- }
- return sum/weight;
 }
 
 vec3 worldDirection(vec3 v){
@@ -296,7 +288,7 @@ void main(){
    color+=vec3(1.0,0.86,0.66)*scatter*p.haze.w*0.4;
   }
  }
- color+=bloom()*p.frame.z*exposure;
+ color+=texture(bloomImage,uv).rgb*(p.frame.z/6.0)*exposure;
  // Grade in linear light: gentle saturation, cool lifted shadows, warm highs.
  float luminance=dot(color,vec3(0.2126,0.7152,0.0722));
  color=mix(vec3(luminance),color,p.frame.w);
