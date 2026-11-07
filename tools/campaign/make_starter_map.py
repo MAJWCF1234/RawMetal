@@ -774,6 +774,10 @@ def building(s, slot, catalogue):
             for a, b in gaps:
                 box(side, a, b, 0, .3, 4.4, FACADE, WALL)                     # over the door
                 box(side, a - 1.2, b + 1.2, 0, 4.0, 4.0, 4.4, WALL)           # a deep concrete canopy
+                box(side, a, b, -.4, .4, -1.2, .01, WALL)                      # a sill across the seam, so the
+                box(side, a, a + .1, -.4, .4, 0, 4.4, WALL)                    # doorway is one primitive from
+                box(side, b - .1, b, -.4, .4, 0, 4.4, WALL)                    # room to landing, without a rip
+                box(side, a, b, -.4, .4, 4.3, 4.4, WALL)
                 box(side, a - .6, b + .6, 0, 2.2, -1.2, 0, WALL)               # a landing level with the floor
                 box(side, a - .6, b + .6, 2.2, 2.8, -1.2, -.17, WALL)          # two steps down: the player only
                 box(side, a - .6, b + .6, 2.8, 3.4, -1.2, -.34, WALL)          # walks up .215 m without a jump
