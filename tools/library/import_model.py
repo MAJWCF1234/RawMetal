@@ -94,6 +94,8 @@ def main():
         bpy.ops.wm.obj_import(filepath=a.src)
     elif ext in ('.glb', '.gltf'):
         bpy.ops.import_scene.gltf(filepath=a.src)
+    elif ext == '.blend':
+        bpy.ops.wm.open_mainfile(filepath=a.src)
     else:
         raise SystemExit('unsupported source ' + ext)
     source = [o for o in bpy.data.objects if o.type == 'MESH']

@@ -197,7 +197,11 @@ struct CargoLift {
  StateId callState=0,releaseState=0,positionState=0,downState=0,arrivedState=0,descendedState=0;
 };
 struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
-struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;};
+// Shapes other than a box are drawn as their true geometry inside x1..top,
+// non-solid; PRIM records give them collision-proxy boxes (Primitives.h).
+// `facing` is the quarter turn they rise or open toward: 0 +y, 1 +x, 2 -y, 3 -x.
+enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel};
+struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;

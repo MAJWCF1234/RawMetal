@@ -165,7 +165,11 @@ struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
-struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int level=0;PropMaterial material=PropMaterial::Glass;float width=.1f,height=.1f;bool pane=false;Vec2 along{};};
+struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int level=0;PropMaterial material=PropMaterial::Glass;float width=.1f,height=.1f;bool pane=false;Vec2 along{};int index=-1;};
+// Where a pane gave way and which way the blow came from, so its shards fall
+// from the hole and lie where they landed. Not saved: a reloaded pane breaks
+// about its centre.
+struct GlassBreak {int level=0,index=0;Point3 at{},direction{};};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
@@ -344,6 +348,7 @@ public:
     // `tearAge` gets the time since the tear (the round, the power).
     static Game electricInspection(float seconds,int view=0,float* tearAge=nullptr);
     const std::vector<BreakEvent>& breakEvents()const{return m_breakEvents;}
+    const GlassBreak* glassBreak(int level,int index)const{for(const auto&g:m_glassBreaks)if(g.level==level&&g.index==index)return &g;return nullptr;}
     static Game clutterInspection(int kind,float seconds);
     static bool testStreaming();
     static bool testCampaignMaps();
@@ -1190,6 +1195,7 @@ private:
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<BarrelExplosion> m_barrelExplosions;
     std::vector<BreakEvent> m_breakEvents;
+    std::vector<GlassBreak> m_glassBreaks;
     std::vector<electric::Burst> m_sparkBursts;std::vector<electric::Arc> m_timedArcs;
     // This frame's electricity per chunk (electricNow) and the transient lights from it (weaponFlashes).
     struct ElectricFrame {std::uint64_t key=0;std::vector<electric::Scene> scenes;std::vector<std::uint8_t> made;bool lit=false;std::array<electric::Flash,4> flashes{};};

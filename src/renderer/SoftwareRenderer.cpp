@@ -60,9 +60,14 @@ constexpr SurfaceFinish surfaceFinishes[]={
  {1.5f,1.2f,.3f},{1.2f,1.f,.45f,.7f,.2f},                   // resonance growth (34), crystal (35)
  {2.f,.5f,.08f},                                            // clinic paint, above the bands
  {2.3f,.5f,.12f,0,0,1.1f},{2.3f,.5f,.12f,0,0,1.1f},{2.3f,.5f,.12f,0,0,1.1f}, // teal, green, maroon dado bands (36-38)
- {1.2f,.8f,.04f}};                                          // ward curtain fabric (39)
-constexpr int GrowthFinish=23,CrystalFinish=24,PaintFinish=25,TealBandFinish=26,CurtainFinish=29;
-static_assert(std::size(surfaceFinishes)==CurtainFinish+1);
+ {1.2f,.8f,.04f},                                           // ward curtain fabric (39)
+ {2.4f,.8f,.06f},{2.4f,.9f,.06f},{2.f,.7f,.08f},            // formwork, board-form, cast concrete (40-42)
+ {2.4f,.9f,.05f},{2.4f,.8f,.08f},{1.6f,1.1f,.08f},          // weathered, stained, ribbed concrete (43-45)
+ {1.5f,1.f,.3f},{2.f,1.f,.12f},{2.f,1.f,.22f},              // tread plate, rusted steel, metal roofing (46-48)
+ {3.f,.8f,.1f},{1.6f,.7f,.2f},{2.f,.9f,.1f}};               // asphalt, floor tile, plank floor (49-51)
+constexpr int GrowthFinish=23,CrystalFinish=24,PaintFinish=25,TealBandFinish=26,CurtainFinish=29,ArchitectureFinish=30;
+constexpr int FirstArchitectureMaterial=40,ArchitectureMaterials=12;
+static_assert(std::size(surfaceFinishes)==ArchitectureFinish+ArchitectureMaterials);
 std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t limit=3){
  std::vector<std::string> lines;columns=std::max(size_t(1),columns);
  while(!remaining.empty()&&lines.size()<limit){size_t count=std::min(columns,remaining.size());
@@ -522,6 +527,7 @@ const SoftwareRenderer::Texture* SoftwareRenderer::finishMaterial(int material)c
   case 36:case 37:case 38:return &m_surfaceTextures[size_t(TealBandFinish+material-36)];
   case 39:return &m_surfaceTextures[CurtainFinish];
  }
+ if(material>=FirstArchitectureMaterial&&material<FirstArchitectureMaterial+ArchitectureMaterials)return &m_surfaceTextures[size_t(ArchitectureFinish+material-FirstArchitectureMaterial)];
  return nullptr;
 }
 Vec2 SoftwareRenderer::finishRepeat(const Texture& texture)const{

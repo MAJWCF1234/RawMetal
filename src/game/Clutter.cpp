@@ -5,6 +5,7 @@
 #include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
 #include "../world/CampaignKit.h"
+#include "../world/GlassFracture.h"
 #include "ai/WalkQueryCache.h"
 namespace retro {
 PropTraits Game::propTraits(int id){
@@ -439,7 +440,8 @@ bool Game::damagePane(int level,int index,float amount,Point3 at,Point3 directio
  auto&w=level==m_level?m_world:m_chunks[level].world;if(!w.breakableIntact(index))return false;const auto b=w.breakables().at(index);bool broken=w.damageBreakable(index,amount);auto shift=chunkOffset(level)-chunkOffset(m_level);Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};
  if(!broken){m_bulletImpacts.push_back({{at.x,at.y},at.z,{-direction.x,-direction.y},m_elapsed,level,false,-3});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());m_sounds.push_back({Sound::JunkGlass,center+shift,.4f,.6f,true,17,at.z});return false;}
  m_bulletImpacts.erase(std::remove_if(m_bulletImpacts.begin(),m_bulletImpacts.end(),[&](const BulletImpact&p){return p.level==level&&p.pos.x>=b.x1-.03f&&p.pos.x<=b.x2+.03f&&p.pos.y>=b.y1-.03f&&p.pos.y<=b.y2+.03f&&p.z>=b.bottom-.03f&&p.z<=b.top+.03f;}),m_bulletImpacts.end());
- bool alongX=b.x2-b.x1>b.y2-b.y1;PropMaterial material=b.material==17?PropMaterial::Glass:b.material==22?PropMaterial::Plastic:PropMaterial::Wood;m_breakEvents.push_back({center,b.bottom,direction,m_elapsed,level,material,std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom,true,alongX?Vec2{1,0}:Vec2{0,1}});if(m_breakEvents.size()>24)m_breakEvents.erase(m_breakEvents.begin());
+ bool alongX=b.x2-b.x1>b.y2-b.y1;PropMaterial material=b.material==17?PropMaterial::Glass:b.material==22?PropMaterial::Plastic:PropMaterial::Wood;m_breakEvents.push_back({center,b.bottom,direction,m_elapsed,level,material,std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom,true,alongX?Vec2{1,0}:Vec2{0,1},index});if(m_breakEvents.size()>24)m_breakEvents.erase(m_breakEvents.begin());
+ if(b.material==17){std::erase_if(m_glassBreaks,[&](const GlassBreak&g){return g.level==level&&g.index==index;});m_glassBreaks.push_back({level,index,at,direction});}
  SoundEvent event{b.material==17?Sound::GlassShatter:b.material==22?Sound::PlasterBreak:Sound::WoodBreak,center+shift,1,1,true,20,(b.bottom+b.top)*.5f};event.aiRadius=14;m_sounds.push_back(event);
  if(b.material!=17){auto&debris=level==m_level?m_clutter:m_chunks[level].clutter;for(int n=0;n<6;++n){Clutter c;c.kind=6;c.pos=center;c.z=b.material==22?b.bottom:(b.bottom+b.top)*.5f;c.velocity={std::cos(n*kPi/3)*1.5f,std::sin(n*kPi/3)*1.5f};c.vz=b.material==22?-1.f:2.f;debris.push_back(c);}}
  if(b.state)setState(b.state,1);
@@ -462,6 +464,19 @@ namespace retro {
 bool Game::testGlass(){
  std::ofstream report("glass-test.txt");bool ok=true;auto check=[&](bool pass,const char*label){report<<(pass?"PASS ":"FAIL ")<<label<<'\n';report.flush();ok&=pass;};
  auto room=[](bool holds=false){auto m=regression::room();m->definition.playerStart={6.5f,8};kit::breakable(*m,9.97f,5,10.03f,11,0,3,17,holds,stateId("pane_broken"),stateId("pane_trigger"));return regression::campaign(m);};
+ {const float W=2.4f,H=2.2f;const Vec2 hit{.7f,1.3f};const auto shards=glass::fracture(W,H,hit,1234);float area=0,widest=0,firstLate=1e9f,lastEarly=0;bool centred=false;
+  for(const auto&s:shards){area+=s.shape.area();float lo=1e9f,hi=-1e9f,bottom=1e9f,top=-1e9f;for(int k=0;k<s.shape.n;++k){const auto p=s.shape.p[size_t(k)];lo=std::min(lo,p.x);hi=std::max(hi,p.x);bottom=std::min(bottom,p.y);top=std::max(top,p.y);
+    if(std::fabs(p.x-hit.x)<1e-4f&&std::fabs(p.y-hit.y)<1e-4f)centred=true;}
+   widest=std::max({widest,hi-lo,top-bottom});if(s.ring<=1)lastEarly=std::max(lastEarly,s.delay);else firstLate=std::min(firstLate,s.delay);}
+  check(std::fabs(area-W*H)<.02f*W*H&&shards.size()>=40&&shards.size()<=400,"a broken pane comes apart into pieces that cover it exactly");
+  check(centred&&widest<.75f&&lastEarly==0&&firstLate>0,"the pieces radiate from the hit, none much past half a metre, the centre blown out first and the rest let go after");
+  const auto again=glass::fracture(W,H,hit,1234);bool same=again.size()==shards.size();for(size_t i=0;same&&i<shards.size();++i)same=again[i].shape.n==shards[i].shape.n&&again[i].shape.p[0].x==shards[i].shape.p[0].x&&again[i].delay==shards[i].delay;
+  check(same,"the same pane and hit always break the same way, so the shards on the floor match the ones that fell");
+  float teethTop=0;for(const auto&t:glass::teeth(W,H,1234))if(t.n==3&&t.p[0].y==0&&t.p[1].y==0)teethTop=std::max(teethTop,t.p[2].y);
+  check(teethTop>.05f&&teethTop<=.24f+1e-4f,"jagged teeth stay standing in the bottom of the frame, no higher than 0.24 m");
+  const auto light=glass::cracks(hit,0,77),heavy=glass::cracks(hit,1,77);float reachLight=0,reachHeavy=0;
+  for(const auto&c:light)reachLight=std::max(reachLight,length(c.b-hit));for(const auto&c:heavy)reachHeavy=std::max(reachHeavy,length(c.b-hit));
+  check(!light.empty()&&reachHeavy>reachLight*3&&glass::cracks(hit,0,78)[0].b.x!=light[0].b.x,"each hit cracks its own way, and the cracks spread as the pane weakens");}
  {auto m=regression::room();kit::glazing(*m,6,9.9f,12,10.1f,0,4);World w(0,m);check(w.breakables().size()==5,"glazing builds one breakable per 1.2 m bay");Game fixture(regression::campaign(m));check(auditMapScene(fixture,0),"glazing fixture audit PASS");}
  {auto m=regression::room();kit::glazing(*m,6,9.9f,12,10.1f,0,4,3,.95f,2.4f,false,stateId("shared_broken"));Game g(regression::campaign(m));g.damagePane(0,2,100,{9,10,1},{0,1,0});g.updateBreakables();check(g.world().brokenBreakables().size()==1&&g.state(stateId("shared_broken")),"a shared broken signal preserves all unbroken bays");}
  {Game g(room());std::vector<uint32_t> before,after;ai::collisionSnapshot(g.world(),before);Point3 origin{8,8,1},dir{1,0,0};auto hit=g.traceShot(origin,dir,10);check(hit.passed[0].kind==1,"shot trace reports transparent pane passage");g.m_bulletImpacts.push_back({{10,8},1,{1,0},0,0});g.resolveShot(hit,origin,dir,weaponDef(WeaponId::Shotgun).hitscan,true);ai::collisionSnapshot(g.world(),after);Point3 n;
@@ -483,6 +498,13 @@ bool Game::testGlass(){
  report<<(ok?"ALL PASSED glass":"FAILED glass")<<'\n';return ok;
 }
 Game Game::physicsInspection(int view,float seconds){
+ // A 2.4 x 2.2 m pane three rounds have cracked (seconds < 0), or `seconds` after
+ // a shotgun round breaks it: at eye level (8), or the floor beyond it (9).
+ if(view==8||view==9){auto m=regression::room();m->definition.playerStart={8,view==9?8.9f:6.6f};kit::breakable(*m,6.8f,9.97f,9.2f,10.03f,0,2.2f,17);m->lights.push_back({{8,8},3});m->lights.push_back({{8,12},3});
+  Game g(regression::campaign(m));g.m_weaponEquipped=false;g.m_holster=1;g.m_player.angle=kPi*.5f;g.m_player.pitch=view==9?-62.f:0.f;const Point3 into{0,1,0};
+  for(Point3 at:{Point3{7.5f,10,1.5f},Point3{8.6f,10,.9f},Point3{8.1f,10,1.75f}})g.damagePane(0,0,5,at,into);
+  if(seconds>=0){g.damagePane(0,0,100,{7.6f,10,1.3f},into);g.m_elapsed+=seconds;}
+  return g;}
  if(view==7){auto m=regression::room();m->definition.playerStart={8,6.5f};m->fixtures.push_back({model::desk,{8,8},0,1.4f,.7f,.75f,0,true});m->fixtures.push_back({model::crt_monitor,{8,8},.75f,.42f,.4f,.38f,kPi,false});kit::fixturePart(*m,1,1,7.82f,7.78f,8.18f,7.82f,.85f,1.08f,0,stateId("fixture_inspection_break"));m->lights.push_back({{8,7},3});Game g(regression::campaign(m));g.m_weaponEquipped=false;g.m_holster=1;g.m_player.angle=kPi*.5f;g.m_player.pitch=-42;if(seconds>0){g.setState(stateId("fixture_inspection_break"),1);g.updateBreakables();g.m_elapsed=seconds;}return g;}
 
  auto map=regression::room();map->name="Physics inspection";map->definition.playerStart={6,5.5f};map->fixtures.push_back({24,{8,8},0,1.4f,.7f,.75f,0,true});kit::deskSet(*map,{8,8},.75f,0,1);

@@ -19,10 +19,10 @@ bool SoftwareRenderer::testSurfaceSets(std::string* report){
  for(int s=0;s<SurfaceCount;++s){const auto* set=renderer.surfaceSet(s);
   check(set&&loaded(set->wall)&&loaded(set->floor)&&loaded(set->ceiling)&&set->wallRepeat.x>0&&set->wallRepeat.y>0&&set->floorRepeat>0&&set->ceilingRepeat>0,"surface "+std::to_string(s));}
  check(!renderer.surfaceSet(SurfaceDefault)&&!renderer.surfaceSet(SurfaceCount),"default and invalid surfaces retain legacy selection");
- const int materials[]={26,27,28,29,31,32,33,34,35,36,37,38,39};
+ const int materials[]={26,27,28,29,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51};
  check(renderer.finishMaterial(36)->band>0&&renderer.finishMaterial(36)->above&&renderer.finishMaterial(36)->above->band==0,"dado bands carry their height and the paint above");
  for(int material:materials){const auto* t=renderer.finishMaterial(material);check(loaded(t)&&renderer.finishRepeat(*t).x>0,"structure material "+std::to_string(material));}
- check(!renderer.finishMaterial(30)&&!renderer.finishMaterial(25),"collision proxy and molten metal retain their behavior");
+ check(!renderer.finishMaterial(30)&&!renderer.finishMaterial(25)&&!renderer.finishMaterial(52),"collision proxy, molten metal and unknown materials retain their behavior");
  auto glowing=[](const Texture& t){return t.emission.size()==t.pixels.size()&&std::any_of(t.emission.begin(),t.emission.end(),[](auto p){return (p&0xffffffu)!=0;});};
  check(glowing(*renderer.finishMaterial(35))&&renderer.finishMaterial(34)->emission.empty()&&glowing(*renderer.surfaceSet(SurfaceLabPanel)->ceiling),"crystal and lab diffuser have nonzero emission; growth is unlit");
 

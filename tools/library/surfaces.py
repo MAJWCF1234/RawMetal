@@ -149,6 +149,20 @@ TEXTURES = [
     ('surface_paint_band_maroon', lambda: dado('painted_concrete_wall_pt_5_1')),
     # Ward privacy curtains: the woven fabric, pale hospital green, pleated.
     ('surface_curtain', curtain),
+    # Structure materials 40-51: architectural finishes for STRUCT and PRIM,
+    # graded toward neutral so they sit together on one building.
+    ('surface_formwork', lambda: grade(load(PSX + '/concrete_wall_pt_10.png'), saturation=.4, mean=104)),
+    ('surface_boardform', lambda: grade(load(PSX + '/concrete_wall_pt_3.png'), saturation=.35, mean=118)),
+    ('surface_cast_concrete', lambda: grade(load(PSX + '/concrete_pt_2.png'), saturation=.4, mean=122)),
+    ('surface_weathered_concrete', lambda: grade(load(PSX + '/old_concrete_wall_pt_1.png'), saturation=.5, mean=96)),
+    ('surface_stained_concrete', lambda: grade(load(PSX + '/concrete_wall_pt_6.png'), saturation=.7, mean=108)),
+    ('surface_ribbed_concrete', lambda: grade(load(PSX + '/concrete_wall_pt_4.png'), saturation=.35, mean=116)),
+    ('surface_tread_plate', lambda: grade(load(PSX + '/metal_floor_pt_1.png'), saturation=.4, mean=112)),
+    ('surface_rusted_steel', lambda: grade(load(PSX + '/rusty_metal_pt_1.png'), saturation=.85, mean=92)),
+    ('surface_metal_roofing', lambda: grade(load(PSX + '/metal_roofing_pt_1.png'), saturation=.5, mean=110)),
+    ('surface_asphalt', lambda: grade(load(PSX + '/asphalt_old_pt_1.png'), saturation=.4, mean=84)),
+    ('surface_floor_tile', lambda: grade(load(PSX + '/tiles_floor_pt_2.png'), saturation=.4, mean=118)),
+    ('surface_plank_floor', lambda: grade(load(PSX + '/wooden_floor_pt_1.png'), saturation=.8, mean=100)),
 ]
 FIRST_RESOURCE = 2100
 # Finishes past the first 25 continue in the free block at 2150.

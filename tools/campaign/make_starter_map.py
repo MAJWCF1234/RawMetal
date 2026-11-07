@@ -71,7 +71,10 @@ MATERIALS = {0: 'default wall', 1: 'water (hidden)', 2: 'steel', 3: 'wall finish
              13: 'hazard stripe', 14: 'yellow paint', 15: 'bunker concrete', 16: 'blood', 17: 'glass', 18: 'rubber',
              19: 'copper', 20: 'pale steel', 21: 'office wall', 22: 'drop ceiling', 23: 'carpet', 24: 'office tile',
              25: 'glow', 26: 'rock', 27: 'clinic tile', 28: 'lab panel', 29: 'corrugated', 30: 'invisible proxy',
-             31: 'brick', 32: 'mine timber', 33: 'ancient stone', 34: 'growth', 35: 'crystal'}
+             31: 'brick', 32: 'mine timber', 33: 'ancient stone', 34: 'growth', 35: 'crystal',
+             36: 'teal dado', 37: 'green dado', 38: 'maroon dado', 39: 'curtain', 40: 'formwork', 41: 'board-form',
+             42: 'cast concrete', 43: 'weathered', 44: 'stained', 45: 'ribbed', 46: 'tread plate', 47: 'rusted steel',
+             48: 'metal roofing', 49: 'asphalt', 50: 'floor tile', 51: 'plank floor'}
 SURFACES = ['concrete', 'pressure works', 'brick', 'clinic tile', 'lab panel', 'rock', 'corrugated', 'office plaster',
             'mine timber', 'ancient stone', 'clinic teal', 'clinic green', 'clinic maroon']
 START_X = 2.2                     # museum rows start east of the section corridor
@@ -515,8 +518,94 @@ def build():
         s.museum(title, items, palette[gi], SURFACES, 2 + gi)
     outdoors(s, slot, catalogue)
     scripts(s)                  # built after the rest so every earlier map keeps its number
+    architecture(s)
+    architecture_2(s)
     building(s, slot, catalogue)
     return s
+
+
+def prim_exhibit(s, m, grey=0xa0a8b0):
+    """A PRIM writer for an exhibit room: the record, a labelled post in front, a zone, an index entry."""
+    i = m['index']
+    def prim(kind, x, y, z, w, d, h, facing, material, label, sx=None, sy=None, sign=True):
+        s.rec(m, 'PRIM', i, kind, x, y, z, w, d, h, facing, material)
+        if not sign: return
+        s.post_sign(m, x if sx is None else sx, y - 1.4 if sy is None else sy, 'PRIM %s' % kind, label, grey, 1.2)
+        s.zone(m, x - 1.4, y - 2, x + 1.4, y + 2, 'PRIM %s / %s' % (kind, label))
+        s.index.append({'map': i, 'section': 'ARCHITECTURE', 'x': x, 'y': y, 'title': 'PRIM %s' % kind, 'name': label})
+    return prim
+
+
+def architecture(s):
+    """ARCHITECTURE, east of Scripts: every PRIM kind at its default size, the wall-mounted
+    ones on the north wall, and STRUCT materials 36-51 (the pack finishes) as pillars.
+    Defaults are sized for the 1.6 m player: 0.17 m risers, 2.2 m doors, 1.1 m guards."""
+    m = s.new_map('Architecture', 6, 0, ceiling=5.2, surface='concrete')
+    i, grey = m['index'], 0xa0a8b0
+    s.zone(m, 0, 0, 24, 1.2, '', 'ARCHITECTURE')
+    prim = prim_exhibit(s, m, grey)
+
+    # On the north wall (its face at y 1), facing into the room: 0 sizes take the defaults.
+    prim('window', 3.5, 1.15, 1.0, 0, 0, 0, 0, 42, 'ribbon window, sill at z', sy=3.2)
+    prim('doorframe', 7.8, 1.15, 0, 0, 0, 0, 0, 46, 'frames a 1.2 x 2.2 door', sy=3.2)
+    prim('fins', 11.8, 1.2, 0, 0, 0, 0, 0, 45, 'vertical fins, 3 m', sy=3.2)
+    prim('corbel', 15.2, 1.3, 2.4, 0, 0, 0, 0, 40, 'stepped bracket', sy=3.2)
+    prim('canopy', 19.5, 1.75, 2.6, 0, 0, 0, 0, 42, 'cantilever, lip at the front', sy=3.2)
+    # Free-standing: walk up, round and through them.
+    prim('stairs', 2.4, 7.5, 0, 0, 0, 1.0, 0, 41, 'risers of 0.17 m or less')
+    prim('ramp', 5.4, 7.7, 0, 0, 0, .6, 0, 49, 'true slope, walkable')
+    prim('column', 8.2, 7.5, 0, 0, 0, 0, 0, 42, 'round, 0.6 x 3 m')
+    prim('pillar', 10.4, 7.5, 0, 0, 0, 0, 0, 43, 'square, 0.5 x 3 m')
+    prim('box', 12.6, 7.5, 0, 0, 0, 0, 0, 47, 'a STRUCT, centred')
+    prim('plinth', 15.6, 7.5, 0, 0, 0, 0, 0, 44, 'base with a cap')
+    prim('railing', 19.6, 7.5, 0, 0, 0, 0, 0, 20, 'guard rail, 1.1 m')
+    prim('arch', 4.0, 14.5, 0, 0, 0, 0, 0, 40, 'opening 2.2 m to spring')
+    prim('arch', 9.5, 14.5, 0, 4.0, .8, 4.6, 0, 41, 'arch 4 x 4.6 x 0.8')
+    prim('vault', 17.0, 14.5, 0, 4.0, 4.0, 3.0, 1, 42, 'barrel vault, walk under', sy=11.9)
+    # STRUCT materials 36-51: the paints, curtain and architectural finishes.
+    for n, k in enumerate(range(36, 52)):
+        x, y = 1.6 + n * 1.33, 21.2
+        s.struct(m, x - .3, y - .3, x + .3, y + .3, 0, 1.4, k)
+        s.sign(m, x, y - .31, .25, .56, .3, 'MAT %d' % k, MATERIALS[k], grey)
+        s.zone(m, x - .6, y - 1.2, x + .6, y + .4, 'STRUCT material %d / %s' % (k, MATERIALS[k]))
+    s.index.append({'map': i, 'section': 'ARCHITECTURE', 'x': 12, 'y': 21.2, 'title': 'MATERIALS 36-51', 'name': 'pack finishes'})
+
+
+def architecture_2(s):
+    """ARCHITECTURE 2, east of Architecture: the brutalist openings, masses and details."""
+    m = s.new_map('Architecture 2', 7, 0, ceiling=6.0, surface='concrete')
+    s.zone(m, 0, 0, 24, 1.2, '', 'ARCHITECTURE 2')
+    prim = prim_exhibit(s, m)
+    # Openings through thick walls, standing free so you can look through them.
+    prim('slit', 2.2, 5.5, 0, 0, 0, 0, 0, 41, 'too narrow to pass')
+    prim('clerestory', 5.8, 5.5, 0, 0, 0, 0, 0, 40, 'light above the eye')
+    prim('embrasure', 9.6, 5.5, 0, 0, 0, 0, 0, 43, 'deep, at eye height')
+    prim('roundel', 13.0, 5.5, 0, 0, 0, 0, 0, 42, 'round, at eye height')
+    prim('lattice', 16.4, 5.5, 0, 0, 0, 0, 0, 42, 'cobogo screen')
+    # On the north wall (its face at y 1).
+    prim('band', 5.0, 1.04, 3.2, 6, 0, 0, 0, 42, 'string course', sy=3.0)
+    prim('spout', 5.0, 1.4, 3.8, 0, 0, 0, 0, 47, 'rain scupper', sy=3.0, sign=False)
+    prim('chase', 18.6, 1.1, 0, 0, 0, 0, 0, 40, 'service recess', sy=3.0)
+    prim('niche', 20.2, 1.25, .6, 0, 0, 0, 0, 41, 'alcove, 1.3 m inside', sy=3.0)
+    prim('hood', 22.0, 1.25, .6, 0, 0, 0, 0, 42, 'hooded alcove', sy=3.0)
+    # Masses and structure.
+    prim('batter', 2.6, 11.0, 0, 0, 0, 0, 0, 43, 'leans back, unclimbable')
+    prim('megastep', 6.6, 11.0, 0, 0, 0, 0, 0, 41, '0.45 m seats, jump up', sy=9.0)
+    prim('pilotis', 9.6, 11.0, 0, 0, 0, 0, 0, 42, 'column and capital')
+    prim('quadpier', 11.9, 11.0, 0, 0, 0, 0, 0, 40, 'four piers, walk between')
+    prim('strut', 15.0, 11.0, 0, 0, 0, 0, 1, 47, 'diagonal brace')
+    prim('girder', 20.2, 11.0, 2.6, 0, 0, 0, 1, 47, 'I-beam on two piers')
+    for x in (18.45, 21.95):
+        prim('pillar', x, 11.0, 0, .3, .3, 2.6, 0, 42, '', sign=False)
+    # Big pieces.
+    prim('waffle', 3.2, 17.0, 3.2, 0, 0, 0, 0, 40, 'coffered slab on columns')
+    for x in (1.6, 4.8):
+        for y in (15.4, 18.6):
+            prim('column', x, y, 0, .4, .4, 3.2, 0, 42, '', sign=False)
+    prim('lightwell', 8.6, 17.0, 0, 0, 0, 0, 0, 41, 'shaft rim, guard height')
+    prim('dome', 13.2, 17.0, 0, 0, 0, 0, 0, 42, 'half ellipsoid')
+    prim('core', 19.6, 17.0, 0, 0, 0, 5.0, 2, 41, 'tower shaft, 2.2 m door', sx=16.6, sy=14.4)
+    prim('bridge', 6.0, 21.5, 0, 2.4, 0, 2.6, 1, 41, 'walk-through span', sx=11.2, sy=20.6)
 
 
 def scripts(s):
@@ -719,7 +808,11 @@ TREES = [('pine_a', 8, 1.15, 1.75), ('pine_b', 8, 1.15, 1.75), ('aspen_a', 2, 1.
          ('dead_tree_a', 1, .9, 1.3), ('dead_tree_b', 1, .9, 1.3)]
 UNDER = [('fern_a', 6), ('fern_big', 5), ('bush_a', 2), ('bush_b', 2), ('bush_c', 2), ('grass_a', 1), ('tall_grass_l', 1),
          ('rock_mossy', 2), ('mushrooms', 1), ('stump', 1)]
-WALL, STAIN, DARK = 2, 8, 8      # smooth grey concrete (steel reads as cast concrete), dark streaks, ribbon windows
+WALL, STAIN, DARK = 41, 8, 8     # board-formed concrete, dark streaks, ribbon windows
+CAST, DAMP = 42, 43              # cast concrete (canopies, columns), weathered concrete up the damp foot of the wall
+IVY = ('ivy_wall_a', 'ivy_wall_b', 'ivy_strand', 'ivy_strand')
+FACING = {'N': 0, 'S': 2, 'W': 1, 'E': 3}           # PRIM facing away from the building on that side
+IVY_YAW = {'N': 0, 'S': PI, 'W': -HALF, 'E': HALF}  # ivy leaves turned out from the wall
 FLOORS = (4.4, 8.0, 11.6)        # the outer wall's floor ledges; a ribbon window under each
 
 
@@ -784,14 +877,32 @@ def building(s, slot, catalogue):
             for a, b in sorted(gaps):
                 solid.append((at, a)); at = b
             solid.append((at, 24))
+            def at(t, d):
+                """Map metres t along this edge, d out from the building."""
+                return {'N': (t, d), 'S': (t, 24 - d), 'W': (d, t), 'E': (24 - d, t)}[side]
+
+            def prim(kind, t, d, z, w, dd, h, material):
+                """A PRIM at absolute height z, facing out from the wall (raised like a ledge plant)."""
+                x, y = at(t, d)
+                s.raised.append((m, wx + x, wy + y, z, ['PRIM', m['index'], kind, x, y, None, w, dd, h, FACING[side], material]))
+
+            def ivy(t, z, face=.3):
+                """An ivy patch or strand flush on a face this far out, hanging with its top at z (absolute)."""
+                name = rng.choice(IVY); k = rng.uniform(.8, 1.3); w, dd, h = catalogue[name]
+                x, y = at(t, face + dd * k / 2)
+                s.raised.append((m, wx + x, wy + y, z - h * k, ['FIXTURE', m['index'], slot[name], x, y, None,
+                                                                w * k, dd * k, h * k, IVY_YAW[side], 0]))
+
             for a, b in solid:
                 box(side, a, b, 0, .3, 0, FACADE, WALL)
-                box(side, a, b, 0, .6, 0, rng.uniform(.5, 1.3), STAIN)         # damp up the foot of the wall
+                box(side, a, b, 0, .6, 0, rng.uniform(.5, 1.3), DAMP)          # damp up the foot of the wall
                 for z in FLOORS[:1]:                                           # ground-floor ribbon, not over doors
                     box(side, a + .4, b - .4, .3, .33, z - 1.9, z - .45, DARK)
             for a, b in gaps:
                 box(side, a, b, 0, .3, 4.4, FACADE, WALL)                     # over the door
-                box(side, a - 1.2, b + 1.2, 0, 4.0, 4.0, 4.4, WALL)           # a deep concrete canopy
+                box(side, a - 1.2, b + 1.2, 0, 4.0, 4.0, 4.4, CAST)           # a deep concrete canopy
+                for t in (a - .8, b + .8):                                     # on two round columns (PRIM column)
+                    prim('column', t, 3.4, -1.2, .5, .5, 5.2, CAST)
                 box(side, a, b, -.4, .4, -1.2, .01, WALL)                      # a sill across the seam, so the
                 box(side, a, a + .1, -.4, .4, 0, 4.4, WALL)                    # doorway is one primitive from
                 box(side, b - .1, b, -.4, .4, 0, 4.4, WALL)                    # room to landing, without a rip
@@ -803,20 +914,32 @@ def building(s, slot, catalogue):
                 s.thresholds.append('TERRAIN_FLAT|%g|%g|%g|%g|-1|4' % {
                     'N': (wx + a1, wy, wx + b1, wy + d1), 'S': (wx + a1, wy + 24 - d1, wx + b1, wy + 24),
                     'W': (wx, wy + a1, wx + d1, wy + b1), 'E': (wx + 24 - d1, wy + a1, wx + 24, wy + b1)}[side])
-            def overgrow(base, depth, count):
-                """Plants rooted on a ledge: the building is going back to the forest."""
+            def overgrow(base, depth, count, hang, face=.3):
+                """The building going back to the forest: ivy hanging down the wall from a ledge
+                (its underside at hang), and a little grass rooted on top of it."""
                 for _ in range(count):
-                    t, name = rng.uniform(.6, 23.4), rng.choice(('grass_a', 'grass_b', 'fern_a', 'grass_l', 'bush_b'))
-                    x, y = {'N': (t, depth), 'S': (t, 24 - depth), 'W': (depth, t), 'E': (24 - depth, t)}[side]
+                    ivy(rng.uniform(1.4, 22.6), hang, face)
+                for _ in range(rng.randint(0, 2)):
+                    t, name = rng.uniform(.6, 23.4), rng.choice(('grass_a', 'grass_b', 'grass_l'))
+                    x, y = at(t, depth)
                     k = rng.uniform(.7, 1.2); w, d, h = catalogue[name]
                     s.raised.append((m, wx + x, wy + y, base, ['FIXTURE', m['index'], slot[name], x, y, None,
                                                                w * k, d * k, h * k, rng.uniform(-PI, PI), 0]))
             for z in FLOORS:
                 if z > FLOORS[0]: box(side, 0, 24, .3, .33, z - 1.9, z - .45, DARK)
                 box(side, 0, 24, 0, 1.1, z - .35, z, WALL)                    # a floor ledge
-                overgrow(z, .7, rng.randint(2, 5))
+                overgrow(z, .7, rng.randint(3, 6), z - .35)
             box(side, 0, 24, 0, .45, FACADE, FACADE + 1.0, WALL)              # the parapet
-            overgrow(FACADE + 1.0, .25, rng.randint(2, 4))
+            overgrow(FACADE + 1.0, .25, rng.randint(4, 7), FACADE + 1.0, .45)
+            for _ in range(rng.randint(2, 4)):                                 # ivy climbing from the ground
+                t = rng.uniform(1.4, 22.6)
+                if any(ga - 1.5 < t < gb + 1.5 for ga, gb in gaps): continue
+                base = 0                                                       # outdoor FIXTURE bases are above the ground
+                for _ in range(rng.randint(2, 4)):
+                    name = rng.choice(('ivy_wall_a', 'ivy_wall_b')); k = rng.uniform(.9, 1.3); w, dd, h = catalogue[name]
+                    x, y = at(t + rng.uniform(-.3, .3), .3 + dd * k / 2)
+                    s.rec(m, 'FIXTURE', m['index'], slot[name], x, y, base, w * k, dd * k, h * k, IVY_YAW[side], 0)
+                    base += h * k * .85
             for p in (0, 24):                                                  # a fin at each seam
                 box(side, p - .5, p + .5, 0, 1.3, 0, FACADE + 1.0, WALL)
             for _ in range(rng.randint(3, 6)):                                 # streaks where water runs
@@ -827,7 +950,7 @@ def building(s, slot, catalogue):
                 t = rng.uniform(0, 1.2)
                 while t < 23.4:                                                # ferns crowd the foot of the wall
                     if not any(ga - 1 < t < gb + 1 for ga, gb in gaps):
-                        d = rng.uniform(.9, 2.1); name = rng.choice(('fern_big', 'fern_a', 'fern_a', 'bush_b'))
+                        d = rng.uniform(.9, 2.1); name = rng.choice(('fern_big', 'fern_a', 'fern_a', 'fern_big'))
                         x, y = {'N': (t, d), 'S': (t, 24 - d), 'W': (d, t), 'E': (24 - d, t)}[side]
                         k = rng.uniform(.9, 1.4); w, dd, h = catalogue[name]
                         s.rec(m, 'FIXTURE', m['index'], slot[name], x, y, 0, w * k, dd * k, h * k, rng.uniform(-PI, PI), 0)

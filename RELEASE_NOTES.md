@@ -4,6 +4,35 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.4 - Glass and concrete (2026-11-06)
+
+Glass breaks like glass, and custom maps get a brutalist building kit.
+
+- Glass cracks where you hit it: every round leaves its own spider-web, and
+  the cracks reach further as the pane weakens.
+- A pane that gives way fractures from the hole outward. The centre blows
+  out along the shot, the rest of the web hangs in the frame and lets go
+  piece by piece, the shards land and stay on the floor, and jagged teeth
+  stay standing in the frame.
+- The Chimera no longer comes apart at the waist: its torso is hinged where
+  it sits on the horse body and skinned across the join.
+- New `PRIM` record for custom maps: 35 ready-made building parts (stairs,
+  ramps, round columns, arches, barrel vaults, domes, struts, doorframes,
+  ribbon windows, fins, canopies, slits, roundels, lattice screens, waffle
+  slabs, bridges, stair cores and more). Curved parts are true shapes with
+  collision built in, and every default is sized for the player: 0.17 m
+  risers, 1.2 x 2.2 m doors, 1.1 m guard rails, arches you walk through
+  with headroom, screens you see through but cannot pass.
+- STRUCT materials 40-51: formwork, board-form, cast, weathered, stained and
+  ribbed concrete, tread plate, rusted steel, metal roofing, asphalt, dark
+  floor tile and plank floor.
+- Starter Map: hanging and climbing ivy on the facility instead of bushes,
+  round columns under the entrance canopy, and two Architecture rooms
+  showing every PRIM part and material.
+- `GUIDE.html`: the PRIM record, a table of every part with its default
+  size, and the player's scale to build to.
+
+---
 ## v1.2.3 - The facility in the woods (2026-11-06)
 
 The Starter Map is now one building in a forest.

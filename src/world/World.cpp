@@ -1057,6 +1057,8 @@ void World::buildLightOcclusion()const{
  for(const auto&s:m_structures){
   // Glass and painted floor markings do not cast an opaque box shadow.
   if(s.material==17||((s.material==16||s.material==14||s.material==13)&&s.top-s.bottom<.04f))continue;
+  // A ramp, column, arch or vault shadows through its collision proxies, not its bounds.
+  if(s.shape!=ShapeBox)continue;
   if(!s.rail){box(s.x1,s.y1,s.x2,s.y2,s.bottom,s.top);continue;}
   // Movement uses the whole guardrail envelope; light passes between its bars.
   if(s.top-s.bottom>1.5f){

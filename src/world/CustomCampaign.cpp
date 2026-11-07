@@ -1,4 +1,5 @@
 #include "CustomCampaign.h"
+#include "Primitives.h"
 #include "../core/PackedResource.h"
 #include <algorithm>
 #include <cctype>
@@ -225,6 +226,11 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
     number(f,2,"structure x1"),number(f,3,"structure y1"),number(f,4,"structure x2"),number(f,5,"structure y2"),
      number(f,6,"structure bottom"),number(f,7,"structure top"),boolean(f,8,"structure rail"),integer(f,9,"structure material"),f.size()>10&&!f[10].empty()?boolean(f,10,"structure solid"):true});
+  }else if(tag=="PRIM"){
+   if(f.size()<11)throw std::runtime_error("malformed PRIM record");auto map=mapAt(maps,f);
+   const Primitive primitive{f[2],number(f,3,"primitive x"),number(f,4,"primitive y"),number(f,5,"primitive z"),number(f,6,"primitive width"),number(f,7,"primitive depth"),
+    number(f,8,"primitive height"),integer(f,9,"primitive facing"),integer(f,10,"primitive material"),f.size()>11&&!f[11].empty()?boolean(f,11,"primitive solid"):true};
+   try{expandPrimitive(primitive,map->structures);}catch(const std::runtime_error& e){throw std::runtime_error("map "+f[1]+" PRIM: "+e.what());}
   }else if(tag=="FIXTURE"){
    if(f.size()<11)throw std::runtime_error("malformed FIXTURE record");auto map=mapAt(maps,f);map->fixtures.push_back({
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),

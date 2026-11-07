@@ -45,7 +45,9 @@ for leg, (x, y) in LEGS.items():
     BONES['Thigh' + leg] = ((x, y, .75), (x, y, KNEE), 'Body')
     BONES['Shin' + leg] = ((x, y, KNEE), (x, y, 0), 'Thigh' + leg)
 BONES.update({
-    'Torso': ((0, .05, 1.15), (0, .05, 1.95), 'Body'),
+    # The torso pivots on the ring where it meets the horse body (z 1.55-1.6),
+    # so leaning never lifts its base off the barrel.
+    'Torso': ((0, .1, 1.57), (0, .05, 2.0), 'Body'),
     'UpperArmL': ((.24, .05, 2.0), (.28, .03, ELBOW), 'Torso'), 'ForearmL': ((.28, .03, ELBOW), (.30, 0, 1.2), 'UpperArmL'),
     'UpperArmR': ((-.24, .05, 2.0), (-.28, .03, ELBOW), 'Torso'), 'ForearmR': ((-.28, .03, ELBOW), (-.30, 0, 1.2), 'UpperArmR'),
     'Head': ((0, 0, 2.12), (0, 0, 2.5), 'Torso'),
@@ -81,10 +83,24 @@ def bone_for(part, p):
         return ('Thigh' if p.z >= KNEE else 'Shin') + leg
     return 'Body'
 
+WAIST = (1.45, 1.75)
+def waist(p):
+    """The Torso's share of a vertex at the waist: one function for both meshes,
+    so the shared ring where the torso sits on the barrel moves as one."""
+    return min(1, max(0, (p.z - WAIST[0]) / (WAIST[1] - WAIST[0])))
+
 for name, o in parts.items():
     groups = {b: o.vertex_groups.new(name=b) for b in BONES}
     for v in o.data.vertices:
-        groups[bone_for(name, v.co)].add([v.index], 1.0, 'REPLACE')
+        bone = bone_for(name, v.co)
+        front = name.startswith('LowerBody') and bone == 'Body' and v.co.y < .45
+        if (bone == 'Torso' or front) and waist(v.co) < 1:
+            share = waist(v.co)
+            if share > 0:
+                groups['Torso'].add([v.index], share, 'REPLACE')
+            groups['Body'].add([v.index], 1 - share, 'REPLACE')
+        else:
+            groups[bone].add([v.index], 1.0, 'REPLACE')
     o.parent = rig
     o.modifiers.new('Rig', 'ARMATURE').object = rig
 for pb in rig.pose.bones:

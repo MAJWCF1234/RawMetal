@@ -261,7 +261,7 @@ private:
     // Pack finishes (tools/library/surfaces.py, resources 2100-2124 and 2150-2154):
     // structure materials 34 resonance growth and 35 crystal, then the clinic
     // paint, its three dado bands (materials 36-38) and ward curtain fabric (39).
-    std::array<Texture,30> m_surfaceTextures;
+    std::array<Texture,42> m_surfaceTextures;
     static Texture loadSurfaceFinish(int index);
     const SurfaceSet* surfaceSet(int surface)const{return surface>=0&&surface<SurfaceCount?&m_surfaceSets[size_t(surface)]:nullptr;}
     // Structure materials 26-29 and 31-39, or nullptr for every other material.
@@ -287,7 +287,8 @@ private:
         Mesh{2244},Mesh{2246},Mesh{2248},Mesh{2250},
         Mesh{2265},Mesh{2267},
         Mesh{2314},Mesh{2322},Mesh{2330},Mesh{2336},
-        Mesh{2343},Mesh{2345}};
+        Mesh{2343},Mesh{2345},
+        Mesh{2350},Mesh{2352},Mesh{2354}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

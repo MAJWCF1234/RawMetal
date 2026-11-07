@@ -520,7 +520,7 @@ bool Game::testCampaignMaps(){
  }
  // Surface sets: every Surface value and structure finish 26-35 resolves to
  // loaded textures, SURFACE records parse, and invalid sets are rejected.
- {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-39 resolves to loaded textures");out<<report;
+ {std::string report;check(SoftwareRenderer::testSurfaceSets(&report),"Every surface set and structure finish 26-51 resolves to loaded textures");out<<report;
   std::string records="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Surface test|0\nMAP|0|Room|0|0|6.5|6.5|0|0|8|0.3||0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
   for(int y=0;y<24;++y)records+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";
   auto parse=[&](const char* surface){try{return loadCustomCampaignText(records+surface+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","surface-test.txt");}catch(const std::exception&){return std::shared_ptr<const CustomCampaign>{};}};

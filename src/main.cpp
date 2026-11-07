@@ -10,6 +10,7 @@
 #include "world/TerrainSurfaceCache.h"
 #include "renderer/MinimapCache.h"
 #include "world/CustomCampaign.h"
+#include "world/Primitives.h"
 #include "vr/VrRuntime.h"
 #include <windows.h>
 #include <commctrl.h>
@@ -1282,7 +1283,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(commandArguments().find(L"--physics-inspection")){
      constexpr int w=1280,h=720;auto renderer=std::make_unique<retro::SoftwareRenderer>(w,h);if(commandArguments().find(L"--vulkan")&&!renderer->enableHardware())return 36;
-     struct View{int view;float seconds;const char*name;};const View views[]={{0,0,"desk-before"},{0,.15f,"desk-shot-015"},{0,2,"desk-shot-2"},{1,0,"monitor-0"},{1,.1f,"monitor-01"},{1,.4f,"monitor-04"},{1,2,"monitor-2"},{2,0,"holds-0"},{3,0,"holds-1"},{4,0,"holds-2"},{5,0,"holds-3"},{6,2,"litter"},{7,0,"fixture-intact"},{7,1,"fixture-broken"}};
+     struct View{int view;float seconds;const char*name;};const View views[]={{0,0,"desk-before"},{0,.15f,"desk-shot-015"},{0,2,"desk-shot-2"},{1,0,"monitor-0"},{1,.1f,"monitor-01"},{1,.4f,"monitor-04"},{1,2,"monitor-2"},{2,0,"holds-0"},{3,0,"holds-1"},{4,0,"holds-2"},{5,0,"holds-3"},{6,2,"litter"},{7,0,"fixture-intact"},{7,1,"fixture-broken"},
+      {8,-1,"pane-cracked"},{8,.05f,"pane-break-005"},{8,.3f,"pane-break-03"},{8,.7f,"pane-break-07"},{8,1.2f,"pane-break-12"},{8,3,"pane-settled"},{9,1.6f,"pane-floor-16"},{9,3,"pane-floor"}};
      for(const auto&v:views){auto scene=retro::Game::physicsInspection(v.view,v.seconds);renderer->render(scene);std::ofstream out(std::string("physics-")+v.name+".ppm",std::ios::binary);out<<"P6\n"<<w<<' '<<h<<"\n255\n";for(int pixel=0;pixel<w*h;++pixel){auto p=renderer->pixels()[pixel];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}return 0;
     }
     if(commandArguments().find(L"--electric-inspection")){
@@ -1695,7 +1697,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"storm",retro::Game::testStorm},
          {"zone-people",retro::Game::testZonePeople},
          {"handgun",retro::Game::testHandgun},
-         {"scripting",retro::Game::testScripting}};
+         {"scripting",retro::Game::testScripting},
+         {"primitives",retro::testPrimitives}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){

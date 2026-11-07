@@ -3,6 +3,8 @@
 #include "BoxSurfaces.h"
 #include "../game/CreatureAnimation.h"
 #include "../world/ModelIds.h"
+#include "../world/GlassFracture.h"
+#include "../world/Primitives.h"
 #include "Projection.h"
 #include "RenderProfile.h"
 #include "../core/FrameProfile.h"
@@ -639,7 +641,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)if(w.tile(x,y)=='#')
   surfaceBoxes.push_back({{float(x),float(y),w.floorHeight(x+.5f,y+.5f)},{float(x+1),float(y+1),w.wallHeight(x,y)},y*World::Width+x});
  for(size_t i=0;i<w.structures().size();++i){const auto&s=w.structures()[i];
-  if(s.rail||w.isBreakableStructure(int(i))||s.material==1||s.material==6||s.material==9||s.material==17||s.material==CollisionProxyMaterial||s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+  if(s.rail||s.shape!=ShapeBox||w.isBreakableStructure(int(i))||s.material==1||s.material==6||s.material==9||s.material==17||s.material==CollisionProxyMaterial||s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
   surfaceBoxes.push_back({{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},World::Width*World::Height+int(i)});
  }
  auto emitQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
@@ -1102,6 +1104,88 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.pixels[size_t(i)]=0xff000000u|(unsigned(110+145*heat)<<16)|(unsigned(30+70*heat)<<8)|unsigned(10*heat);
    t.emission[size_t(i)]=0xff000000u|(unsigned(255*heat)<<16)|(unsigned(120*heat*heat)<<8)|unsigned(20*heat*heat);}
   return t;}();
+ // Materials 26-29, 31-51 are the pack finishes; 3, the wall finish, follows the map's wall surface.
+ auto structureTexture=[&](const Structure& s)->const Texture&{
+  if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material))return *finish;
+  return s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor;};
+ // Ramps, columns, arches and vaults: true geometry in the structure's bounds,
+ // u across and v along its facing. Faces wind outward; UVs are in metres.
+ auto drawShape=[&](const Structure& s,const Texture& texture){
+  if(hidden({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top}))return;
+  const int f=s.facing&3;const Vec2 forward=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0},side{forward.y,-forward.x};
+  const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,hw=(f%2?s.y2-s.y1:s.x2-s.x1)*.5f,hd=(f%2?s.x2-s.x1:s.y2-s.y1)*.5f,z0=s.bottom,z1=s.top,h=z1-z0;
+  auto P=[&](float u,float v,float z){return Point3{cx+side.x*u+forward.x*v,cy+side.y*u+forward.y*v,z};};
+  Vec2 repeat=finishRepeat(texture);if(repeat.x<=0)repeat={2,2};
+  auto length=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  auto rect=[&](Point3 a,Point3 b,Point3 c,Point3 d){emitQuad(a,b,c,d,texture,1.f,{length(b-a)/repeat.x,length(d-a)/repeat.y});};
+  auto planar=[&](Point3 a,Point3 b,Point3 c){const Point3 n=cross3(b-a,c-a);
+   auto uv=[&](Point3 p)->MeshVertex{if(std::fabs(n.z)>=std::max(std::fabs(n.x),std::fabs(n.y)))return {p,p.x/repeat.x,p.y/repeat.y};
+    return std::fabs(n.x)>std::fabs(n.y)?MeshVertex{p,p.y/repeat.x,-p.z/repeat.y}:MeshVertex{p,p.x/repeat.x,-p.z/repeat.y};};
+   tri(uv(a),uv(b),uv(c),texture,1.f);};
+  auto quadPlanar=[&](Point3 a,Point3 b,Point3 c,Point3 d){planar(a,b,c);planar(a,c,d);};
+  auto axisBox=[&](float u0,float u1,float v0,float v1,float bottom,float top){const auto a=P(u0,v0,bottom),b=P(u1,v1,top);
+   box({std::min(a.x,b.x),std::min(a.y,b.y),bottom},{std::max(a.x,b.x),std::max(a.y,b.y),top},texture,1.05f);};
+  constexpr int segments=12;
+  if(s.shape==ShapeRamp){
+   rect(P(-hw,-hd,z0),P(hw,-hd,z0),P(hw,hd,z1),P(-hw,hd,z1));
+   rect(P(hw,hd,z0),P(-hw,hd,z0),P(-hw,hd,z1),P(hw,hd,z1));
+   rect(P(-hw,hd,z0),P(hw,hd,z0),P(hw,-hd,z0),P(-hw,-hd,z0));
+   planar(P(hw,-hd,z0),P(hw,hd,z0),P(hw,hd,z1));planar(P(-hw,-hd,z0),P(-hw,hd,z1),P(-hw,hd,z0));
+  }else if(s.shape==ShapeColumn)cylinder({cx,cy,z0},{cx,cy,z1},std::min(hw,hd),texture);
+  else if(s.shape==ShapeArch){
+   const auto arch=archOpening(hw*2,h);
+   axisBox(-hw,-arch.half,-hd,hd,z0,z1);axisBox(arch.half,hw,-hd,hd,z0,z1);
+   rect(P(-arch.half,-hd,z1),P(arch.half,-hd,z1),P(arch.half,hd,z1),P(-arch.half,hd,z1));
+   for(int k=0;k<segments;++k){
+    const float a0=kPi*(1-float(k)/segments),a1=kPi*(1-float(k+1)/segments);
+    const float u0=arch.half*std::cos(a0),u1=arch.half*std::cos(a1),i0=z0+arch.spring+arch.half*std::sin(a0),i1=z0+arch.spring+arch.half*std::sin(a1);
+    quadPlanar(P(u1,hd,i1),P(u0,hd,i0),P(u0,hd,z1),P(u1,hd,z1));
+    quadPlanar(P(u0,-hd,i0),P(u1,-hd,i1),P(u1,-hd,z1),P(u0,-hd,z1));
+    rect(P(u0,hd,i0),P(u1,hd,i1),P(u1,-hd,i1),P(u0,-hd,i0));
+   }
+  }else if(s.shape==ShapeVault){
+   const float iw=hw-VaultShell,ih=h-VaultShell;
+   for(int k=0;k<segments;++k){
+    const float a0=kPi*(1-float(k)/segments),a1=kPi*(1-float(k+1)/segments);
+    const float o0=hw*std::cos(a0),o1=hw*std::cos(a1),p0=z0+h*std::sin(a0),p1=z0+h*std::sin(a1);
+    const float u0=iw*std::cos(a0),u1=iw*std::cos(a1),q0=z0+ih*std::sin(a0),q1=z0+ih*std::sin(a1);
+    rect(P(o0,-hd,p0),P(o1,-hd,p1),P(o1,hd,p1),P(o0,hd,p0));
+    rect(P(u0,hd,q0),P(u1,hd,q1),P(u1,-hd,q1),P(u0,-hd,q0));
+    quadPlanar(P(u1,hd,q1),P(u0,hd,q0),P(o0,hd,p0),P(o1,hd,p1));
+    quadPlanar(P(u0,-hd,q0),P(u1,-hd,q1),P(o1,-hd,p1),P(o0,-hd,p0));
+   }
+  }else if(s.shape==ShapeDome){
+   constexpr int rings=6,sectors=16;const float around=(hw+hd)*.5f;
+   auto at=[&](int ring,int sector)->MeshVertex{const float e=kPi*.5f*ring/rings,a=kTwoPi*sector/sectors;
+    return {P(hw*std::cos(e)*std::cos(a),hd*std::cos(e)*std::sin(a),z0+h*std::sin(e)),a*around/repeat.x,-h*std::sin(e)/repeat.y};};
+   for(int j=0;j<rings;++j)for(int k=0;k<sectors;++k){
+    const auto a=at(j,k),b=at(j,k+1),c=at(j+1,k+1),d=at(j+1,k);
+    tri(a,b,c,texture,1.f);if(j+1<rings)tri(a,c,d,texture,1.f);}
+  }else if(s.shape==ShapeStrut){
+   const float t=strutSection(hw*2,h);
+   rect(P(-hw,-hd,z0+t),P(hw,-hd,z0+t),P(hw,hd,z1),P(-hw,hd,z1));
+   rect(P(-hw,hd,z1-t),P(hw,hd,z1-t),P(hw,-hd,z0),P(-hw,-hd,z0));
+   rect(P(hw,-hd,z0),P(hw,hd,z1-t),P(hw,hd,z1),P(hw,-hd,z0+t));
+   rect(P(-hw,hd,z1-t),P(-hw,-hd,z0),P(-hw,-hd,z0+t),P(-hw,hd,z1));
+   rect(P(hw,hd,z1-t),P(-hw,hd,z1-t),P(-hw,hd,z1),P(hw,hd,z1));
+   rect(P(-hw,-hd,z0),P(hw,-hd,z0),P(hw,-hd,z0+t),P(-hw,-hd,z0+t));
+  }else if(s.shape==ShapeRoundel){
+   const auto ring=roundelOpening(hw*2,h);const float r=ring.radius,c=z0+ring.centre;
+   axisBox(-hw,-r,-hd,hd,z0,z1);axisBox(r,hw,-hd,hd,z0,z1);
+   rect(P(-r,-hd,z1),P(r,-hd,z1),P(r,hd,z1),P(-r,hd,z1));
+   rect(P(-r,hd,z0),P(r,hd,z0),P(r,-hd,z0),P(-r,-hd,z0));
+   for(int k=0;k<segments;++k){
+    const float a0=kPi*(1-float(k)/segments),a1=kPi*(1-float(k+1)/segments);
+    const float u0=r*std::cos(a0),u1=r*std::cos(a1),up0=c+r*std::sin(a0),up1=c+r*std::sin(a1),dn0=c-r*std::sin(a0),dn1=c-r*std::sin(a1);
+    quadPlanar(P(u1,hd,up1),P(u0,hd,up0),P(u0,hd,z1),P(u1,hd,z1));
+    quadPlanar(P(u0,-hd,up0),P(u1,-hd,up1),P(u1,-hd,z1),P(u0,-hd,z1));
+    quadPlanar(P(u0,hd,dn0),P(u1,hd,dn1),P(u1,hd,z0),P(u0,hd,z0));
+    quadPlanar(P(u1,-hd,dn1),P(u0,-hd,dn0),P(u0,-hd,z0),P(u1,-hd,z0));
+    rect(P(u0,hd,up0),P(u1,hd,up1),P(u1,-hd,up1),P(u0,-hd,up0));
+    rect(P(u0,-hd,dn0),P(u1,-hd,dn1),P(u1,hd,dn1),P(u0,hd,dn0));
+   }
+  }
+ };
  for(auto&s:w.structures()){
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
@@ -1109,6 +1193,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(s.material==CollisionProxyMaterial)continue;
+  if(s.shape!=ShapeBox){drawShape(s,structureTexture(s));continue;}
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.material==1){
    // Faceted containment jacket, with consistent metre-scale panels, centred
@@ -1130,9 +1215,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
    quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
   }
-  // Materials 26-29 and 31-35 are the pack finishes; 3, the wall finish, follows the map's wall surface.
-  else if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material);finish&&!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},*finish,1.05f);
-  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor,1.05f);
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},structureTexture(s),1.05f);
   else{if(s.top-s.bottom>1.5f){
     if(w.hasLift()){
      // A safety cage must not become an opaque wall around every cab window.
@@ -1418,22 +1501,58 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  {uint64_t key=geometryKey;bool any=false;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){any=true;key^=w.fixtureParts(i);key*=1099511628211ull;}
  for(int j=0;j<int(w.breakables().size());++j)if(w.breakables()[j].fixture>=0){key^=(j+1)*(w.breakableIntact(j)?1ull:2ull);key*=1099511628211ull;}
  if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(40*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){const auto&f=w.fixtures()[i];if(f.visible)facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw,w.fixtureParts(i),i);}if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
- static const std::array<Texture,3> cracks=[](){std::array<Texture,3> out;for(int stage=0;stage<3;++stage){auto&t=out[stage];t={128,128,std::vector<std::uint32_t>(128*128)};t.transparent=true;t.clampEdges=true;
-  for(int branch=0;branch<7+stage*5;++branch){float angle=branch*2.399963f;int cx=64+(branch%3-1)*stage*17,cy=64+(branch%2?1:-1)*stage*13;for(int step=0;step<28+stage*15;++step){int x=cx+int(std::cos(angle)*step+std::sin(step*.4f+branch)*1.5f),y=cy+int(std::sin(angle)*step);if(x>=0&&x<128&&y>=0&&y<128)t.pixels[size_t(y*128+x)]=0xbbb7c8c9u;}}
- }return out;}();
- static const auto fadedCracks=[&](){std::array<std::array<Texture,17>,3> out;for(int s=0;s<3;++s)for(int a=0;a<=16;++a){auto&t=out[s][a];t=cracks[s];for(auto&p:t.pixels)p=(p&0xffffffu)|(((p>>24)*a/16)<<24);}return out;}();
+ // Broken glass is the fracture GlassFracture.h works out for each pane: the
+ // pieces fall from the hole outward and stay where they land; teeth stay in the frame.
+ static const Texture shardTexture=[](){Texture t{8,8,std::vector<std::uint32_t>(64)};t.transparent=true;t.glossStrength=.9f;
+  for(int i=0;i<64;++i){unsigned l=150u+unsigned((i*37)%29);t.pixels[size_t(i)]=(0x78u<<24)|((l*62/100)<<16)|((l*76/100)<<8)|(l*74/100);}return t;}();
+ // A crack line at each healing opacity (sixteenths) of bullet-resistant glass.
+ static const auto crackLines=[](){std::array<Texture,17> out;for(int a=0;a<=16;++a){auto&t=out[size_t(a)];t={4,4,std::vector<std::uint32_t>(16,(unsigned(0xc4*a/16)<<24)|0xe2e8e8u)};t.transparent=true;t.clampEdges=true;}return out;}();
+ struct PaneFrame{Point3 origin,along,normal;float width,height;};
+ auto paneFrame=[](const Breakable&b){const bool alongX=b.x2-b.x1>b.y2-b.y1;const Vec2 c{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};
+  return PaneFrame{alongX?Point3{b.x1,c.y,b.bottom}:Point3{c.x,b.y1,b.bottom},alongX?Point3{1,0,0}:Point3{0,1,0},alongX?Point3{0,1,0}:Point3{1,0,0},std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom};};
+ auto planePoint=[](const PaneFrame&f,Vec2 q,float off=0){return f.origin+f.along*q.x+Point3{0,0,q.y}+f.normal*off;};
+ auto paneSeed=[&](int i){return std::uint32_t(level*7919+i*104729+17);};
+ auto paneHit=[&](int i,const PaneFrame&f){if(auto g=game.glassBreak(level,i)){auto d=g->at-f.origin;return Vec2{std::clamp(d.x*f.along.x+d.y*f.along.y,0.f,f.width),std::clamp(d.z,0.f,f.height)};}return Vec2{f.width*.5f,f.height*.55f};};
+ auto paneDrive=[&](int i,const PaneFrame&f){Vec2 d{};if(auto g=game.glassBreak(level,i))d=normalized(Vec2{g->direction.x,g->direction.y});
+  if(length(d)<.5f)d=Vec2{f.normal.x,f.normal.y}*(glass::hashUnit(paneSeed(i),99)<.5f?-1.f:1.f);return d;};
+ auto crackEdge=[&](const PaneFrame&f,Vec2 a,Vec2 e,float width,const Texture&t){const Vec2 run=e-a;const float len=length(run);if(len<.002f)return;const Vec2 n=Vec2{-run.y,run.x}*(width*.5f/len);
+  for(float side:{-.014f,.014f})quad(planePoint(f,a-n,side),planePoint(f,e-n,side),planePoint(f,e+n,side),planePoint(f,a+n,side),t,1.3f);};
+ auto falling=[&](int i){for(const auto&e:game.breakEvents())if(e.level==level&&e.pane&&e.index==i){float t=game.elapsed()-e.time;if(t>=0&&t<2.5f)return true;}return false;};
+ // One shard t seconds after the break (t<0: settled). The centre goes first
+ // along the blow; the rest hangs in the frame until its delay, then drops.
+ auto drawShard=[&](const PaneFrame&f,const glass::Shard&s,int id,Vec2 drive,float t){
+  const Vec2 c=s.shape.centroid();const Point3 c0=planePoint(f,c);const bool blown=s.ring<=1;
+  const Vec2 v=drive*(blown?2.2f+1.8f*s.scatter:.25f+.5f*s.scatter)+Vec2{f.along.x,f.along.y}*((s.scatter-.5f)*(blown?1.2f:.4f));const float vz=blown?.6f+.8f*s.scatter:0.f;
+  auto at=[&](float te){return Point3{c0.x+v.x*te,c0.y+v.y*te,c0.z+vz*te-4.9f*te*te};};
+  float floor=w.supportBelow(c0.x,c0.y,c0.z),land=0;
+  for(int pass=0;pass<3;++pass){land=(vz+std::sqrt(vz*vz+19.6f*std::max(0.f,c0.z-floor-.004f)))/9.8f;auto p=at(land);floor=w.supportBelow(p.x,p.y,c0.z);}
+  const float te=t<0?1e9f:t-s.delay;std::array<Point3,10> pts{};
+  if(te<=0){for(int k=0;k<s.shape.n;++k)pts[size_t(k)]=planePoint(f,c+(s.shape.p[size_t(k)]-c)*.96f);
+   for(int k=0;k<s.shape.n;++k)crackEdge(f,c+(s.shape.p[size_t(k)]-c)*.96f,c+(s.shape.p[size_t((k+1)%s.shape.n)]-c)*.96f,.0025f,crackLines[16]);}
+  else if(te<land){auto p=at(te);float a=s.spin*te,b=s.tumble*te,ca=std::cos(a),sa=std::sin(a),cb=std::cos(b),sb=std::sin(b);
+   for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;float x=o.x*ca-o.y*sa,y=o.x*sa+o.y*ca;pts[size_t(k)]=p+f.along*x+Point3{0,0,y*cb}+f.normal*(y*sb);}}
+  else{auto p=at(land);float ca=std::cos(s.yaw),sa=std::sin(s.yaw),z=floor+.004f+.0004f*float(id%9);
+   for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;pts[size_t(k)]={p.x+o.x*ca-o.y*sa,p.y+o.x*sa+o.y*ca,z};}}
+  for(int k=1;k+1<s.shape.n;++k)tri({pts[0],0,0},{pts[size_t(k)],1,0},{pts[size_t(k+1)],.5f,1},te<=0?m_glassTexture:shardTexture,te<=0?1.05f:1.5f);};
  if(!w.breakables().empty()){
-  auto key=geometryKey;for(int i=0;i<int(w.breakables().size());++i){key^=std::uint64_t(!w.breakableIntact(i)+1);key*=1099511628211ull;float damage=w.breakableDamage(i);int stage=damage>=180?3:damage>=90?2:damage>=30?1:0;if(!w.breakables()[i].holds&&damage>0)stage=1;key^=stage*17+int(w.breakableOpacity(i)*16);key*=1099511628211ull;}
+  auto key=geometryKey;for(int i=0;i<int(w.breakables().size());++i){key^=std::uint64_t(!w.breakableIntact(i)+1)+(falling(i)?4u:0u);key*=1099511628211ull;
+   if(auto g=game.glassBreak(level,i)){key^=std::uint64_t(std::int64_t(g->at.x*256)*31+std::int64_t(g->at.y*256)*977+std::int64_t(g->at.z*256)*7919);key*=1099511628211ull;}}
   bool build=!m_gpuFrame||m_gpu->beginStaticCache(3*Game::MaxChunks+level,key);
   if(build){if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
    if(w.breakableIntact(i)){if(b.material!=17){box({b.x1,b.y1,b.bottom},{b.x2,b.y2,b.top},b.material==22?m_dropCeiling:m_crateTexture,1.f);continue;}float x1=alongX?b.x1:center.x-.012f,x2=alongX?b.x2:center.x+.012f,y1=alongX?center.y-.012f:b.y1,y2=alongX?center.y+.012f:b.y2;box({x1,y1,b.bottom},{x2,y2,b.top},m_glassTexture,1.05f);
-    float damage=w.breakableDamage(i);int stage=damage>=180?3:damage>=90?2:damage>=30?1:0;if(!b.holds&&damage>0)stage=1;if(stage){const auto&t=fadedCracks[stage-1][int(w.breakableOpacity(i)*16)];if(alongX)for(float side:{-.014f,.014f})quad({b.x1,center.y+side,b.bottom},{b.x2,center.y+side,b.bottom},{b.x2,center.y+side,b.top},{b.x1,center.y+side,b.top},t,1.3f);else for(float side:{-.014f,.014f})quad({center.x+side,b.y1,b.bottom},{center.x+side,b.y2,b.bottom},{center.x+side,b.y2,b.top},{center.x+side,b.y1,b.top},t,1.3f);}
-   }else if(b.material==17){chips(center,b.bottom,width*.5f+.9f,std::clamp(int(width*(b.top-b.bottom)*30),12,70),i+113);
-    for(int tooth=0;tooth<9;++tooth){float along=width*(tooth+.2f)/9;float h=.04f+(tooth%3)*.035f;Point3 a=alongX?Point3{b.x1+along,center.y,b.bottom}:Point3{center.x,b.y1+along,b.bottom};Point3 u=alongX?Point3{.06f,0,0}:Point3{0,.06f,0};tri({a,0,0},{a+u,1,0},{a+u*.3f+Point3{0,0,h},.5f,1},m_glassTexture,1.2f);}
+   }else if(b.material==17){const auto f=paneFrame(b);const auto seed=paneSeed(i);
+    for(const auto&t:glass::teeth(f.width,f.height,seed)){for(int k=1;k+1<t.n;++k)tri({planePoint(f,t.p[0]),0,0},{planePoint(f,t.p[size_t(k)]),1,0},{planePoint(f,t.p[size_t(k+1)]),.5f,1},m_glassTexture,1.05f);
+     for(int k=1;k<t.n;++k)crackEdge(f,t.p[size_t(k)],t.p[size_t((k+1)%t.n)],.002f,crackLines[11]);}
+    if(!falling(i)){const auto shards=glass::fracture(f.width,f.height,paneHit(i,f),seed);const Vec2 drive=paneDrive(i,f);for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,-1);}
+    chips(center,b.bottom,width*.5f+.6f,std::clamp(int(width*(b.top-b.bottom)*14),6,30),i+113);
    }
   }if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}
  }
- for(const auto&e:game.breakEvents())if(e.level==level){float t=game.elapsed()-e.time;if(t<0||t>2.5f)continue;int count=e.pane?std::clamp(int(e.width*e.height*40),8,40):propMaterialTraits(e.material).shards;
+ for(const auto&e:game.breakEvents())if(e.level==level){float t=game.elapsed()-e.time;if(t<0||t>2.5f)continue;
+  if(e.pane&&e.material==PropMaterial::Glass&&e.index>=0&&e.index<int(w.breakables().size())&&!w.breakableIntact(e.index)){
+   const auto f=paneFrame(w.breakables()[size_t(e.index)]);const auto shards=glass::fracture(f.width,f.height,paneHit(e.index,f),paneSeed(e.index));const Vec2 drive=paneDrive(e.index,f);
+   for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,t);}
+  int count=e.pane?std::clamp(int(e.width*e.height*12),6,16):propMaterialTraits(e.material).shards;
   for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},e.material==PropMaterial::Ceramic?m_paleSteel:m_glassTexture,1.5f);}
  }
  auto drawClutter=[&](const Clutter&c){
@@ -1993,7 +2112,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.pixels[size_t(y*n+x)]=(unsigned(a*200.f)<<24)|0x00060505u;
   }return t;}();
  for(const auto&mark:game.bulletImpacts())if(mark.level==level){
-  if(mark.tint==-3){int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);int alpha=pane>=0?int(w.breakableOpacity(pane)*16):16;float size=.18f;Point3 normal{mark.normal.x,mark.normal.y,0},tangent{-mark.normal.y,mark.normal.x,0},up{0,0,size};Point3 p{mark.pos.x,mark.pos.y,mark.z};p=p+normal*.02f;auto side=tangent*size;quad(p-side-up,p+side-up,p+side+up,p-side+up,fadedCracks[0][alpha],1.3f);continue;}
+  if(mark.tint==-3){
+   // Each hit's own spider-web, its rays reaching further as the pane weakens.
+   const int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);if(pane<0)continue;const auto&b=w.breakables()[size_t(pane)];const auto f=paneFrame(b);
+   const float limit=b.holds?180.f:b.health>0?b.health:20.f,strain=std::clamp(w.breakableDamage(pane)/limit,0.f,1.f);
+   const auto&line=crackLines[size_t(int(w.breakableOpacity(pane)*16))];
+   const Point3 d=Point3{mark.pos.x,mark.pos.y,mark.z}-f.origin;const Vec2 hit{d.x*f.along.x+d.y*f.along.y,d.z};
+   const auto seed=std::uint32_t(int(mark.pos.x*331)*7+int(mark.pos.y*331)*131+int(mark.z*331)*1031);
+   auto inside=[&](Vec2 q){return Vec2{std::clamp(q.x,0.f,f.width),std::clamp(q.y,0.f,f.height)};};
+   for(const auto&c:glass::cracks(hit,strain,seed)){const Vec2 a=inside(c.a),e=inside(c.b),run=e-a;const float len=length(run);if(len<.002f)continue;const Vec2 n=Vec2{-run.y,run.x}*(c.width*.5f/len);
+    for(float side:{-.014f,.014f})quad(planePoint(f,a-n,side),planePoint(f,e-n,side),planePoint(f,e+n,side),planePoint(f,a+n,side),line,1.3f);}
+   continue;}
   if(mark.blood){
    int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);float tint=creatureVisuals[size_t(species)].bloodLight;const Texture&blood=m_bloodVariants[size_t(species)];
    if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}

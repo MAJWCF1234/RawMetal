@@ -368,6 +368,10 @@ RECORDS = [
         ('SHELTER|map|x1|y1|x2|y2|bottom|top', 'Map metres. Under this box the storm does no harm. Heights are from the ground at its centre.')]),
     ('Building', [
         ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it.'),
+        ('PRIM|map|kind|x|y|z|w|d|h|facing|material[|solid]', 'A ready-made building part, centred at x,y and standing on z. w runs across it, d along its facing, h up; '
+         'facing 0 +y (south), 1 +x (east), 2 -y (north), 3 -x (west) is the way it rises or opens. Give 0 for a size and it takes the default, sized for the 1.6 m player. '
+         'Ramps, columns, arches, vaults, domes, struts and roundels are true curved or sloped shapes with invisible collision boxes inside; the rest are built from STRUCT boxes. '
+         'Outdoors z is measured from the ground. Kinds and defaults are in the value tables; see them all in the Architecture rooms.'),
         ('STAIR|map|x1|y1|x2|y2|bottom|top|steps|alongY|ascending[|openUnderside|tread|rails]', 'A flight of steps inside the box. alongY 1 climbs along y, ascending 1 rises toward the larger coordinate. Optional open underside, tread thickness (0.12) and side rails.'),
         ('DOOR|map|left|right|y|z|entry|transfer|swinging|needClear|sign[|state|value]', 'A door across x left..right at y (use a tile line + 0.5, between # tiles). swinging 0 slides, 1 swings. needClear 1 keeps it shut until the map\'s creatures are dead; state/value lock it until a state is set. transfer 1 makes it the exit to the next chapter, entry 1 the door you arrive through: leave both 0. sign 0.'),
         ('PIPE|map|x1|y1|x2|y2|z|radius|endZ|material', 'A pipe from (x1,y1) at height z to (x2,y2) at endZ. Same x,y and different heights make a riser. material 0-6.'),
@@ -577,8 +581,39 @@ def main():
     o.append('</div><p>To copy anything you see, search <code>Starter Map.txt</code> for its sign text (for example <code>|#27|</code> or <code>HAZARD 4</code>): '
              'the records just above it build that exhibit.</p>')
 
+    PRIM_KINDS = [
+        ('box', '1 x 1 x 1', 'a plain box'), ('pillar', '0.5 x 0.5 x 3', 'a square pier'),
+        ('stairs', '1.2 x (from h) x 1', 'a flight of 0.17 m risers on 0.28 m treads, rising toward facing'),
+        ('ramp', '1.2 x (4 x h) x 0.6', 'a 1:4 slope, walked without steps'), ('column', '0.6 x 0.6 x 3', 'a round column'),
+        ('arch', '2.4 x 0.6 x 3.4', 'a wall with a round-headed opening; refused if a standing player could not walk through'),
+        ('vault', '4 x 4 x 3', 'a barrel-vaulted roof, open at both ends, 2 m+ walkable under'),
+        ('dome', '4 x 4 x 2', 'a half ellipsoid'), ('doorframe', '1.2 x 0.3 x 2.2', 'jambs and lintel round a game-size door opening'),
+        ('window', '3 x 0.3 x 1', 'a ribbon window with sill, head, mullions and glass; set z to about 0.9 so it frames the eye line'),
+        ('fins', '3 x 0.4 x 3', 'vertical louvres with 0.38 m gaps: see through, not walk through'),
+        ('canopy', '3 x 1.5 x 0.25', 'a cantilevered slab with a lip; set z to 2.6 or more'),
+        ('railing', '2 x 0.06 x 1.1', 'a guard rail'), ('corbel', '0.6 x 0.6 x 0.6', 'stepped brackets'),
+        ('plinth', '2 x 2 x 0.45', 'a podium at seat height, jumped onto'),
+        ('slit', '1.2 x 0.4 x 3', 'a wall with a 0.25 m arrow slit'), ('clerestory', '3 x 0.4 x 3', 'a wall with a slot above head height'),
+        ('embrasure', '1.6 x 0.8 x 3', 'a deep wall with an 0.8 m opening at eye height'),
+        ('roundel', '2 x 0.4 x 3', 'a wall with a round opening centred near eye height'),
+        ('niche', '1 x 0.5 x 1.6', 'an alcove in a wall face'), ('hood', '1 x 0.5 x 1.6', 'an alcove with a projecting hood'),
+        ('batter', '3 x 1 x 2.5', 'a wall leaning back, too steep to climb'), ('waffle', '4 x 4 x 0.6', 'a coffered slab with ribs under it; z is its underside'),
+        ('pilotis', '0.6 x 0.6 x 3.5', 'a column with a flared capital'), ('megastep', '3 x (from h) x 1.35', '0.45 m risers you jump, or sit on'),
+        ('lightwell', '4 x 4 x 1.1', 'a parapet round a shaft'), ('bridge', '3 x 8 x 3', 'an enclosed span you walk through, with an eye-level slot'),
+        ('core', '4 x 4 x 8', 'a stair or lift tower with a 1.2 x 2.2 m door in its face'), ('strut', '0.35 x 3 x 3', 'a diagonal brace'),
+        ('girder', '0.5 x 4 x 0.6', 'a steel I-beam'), ('quadpier', '1 x 1 x 3', 'four slender piers you can walk between'),
+        ('band', '3 x 0.08 x 0.25', 'a string course on a facade'), ('spout', '0.25 x 0.8 x 0.2', 'a rain scupper'),
+        ('chase', '0.8 x 0.2 x 3', 'a recessed service channel'), ('lattice', '2 x 0.2 x 2.4', 'a cobogo screen with 0.24 m holes')]
     o.append('<h2 id="values">10. Value tables</h2>')
     o.append('<h3>STRUCT materials</h3>' + table(['material', 'look'], sorted(starter.MATERIALS.items())))
+    o.append('<h3>The player\'s scale</h3><p>Build to these and everything works: the PRIM defaults already do.</p>' + table(['measure', 'metres', 'what it means'], [
+        ('standing height / eyes', '1.6 / 1.42', 'openings to walk through need 1.75 m clear; put windows and slots around 1.42'),
+        ('crouched / prone height', '1.05 / 0.58', 'the lowest crawlspace is 0.6 m'),
+        ('width (radius 0.2)', '0.4', 'gaps under 0.4 m stop her but can be seen and shot through'),
+        ('automatic step', '0.215', 'risers and ledges up to this are walked; stairs use 0.17'),
+        ('jump / crouch-jump', '1.04 / 1.1', 'guard rails and parapets of 1.1 m need a crouch-jump'),
+        ('doors', '1.2 x 2.2', 'the doorframe and core door size')]))
+    o.append('<h3>PRIM kinds</h3>' + table(['kind', 'default w x d x h', 'what it builds'], PRIM_KINDS))
     o.append('<h3>SURFACE sets</h3>' + table(['value', 'finish'], [(-1, 'default')] + list(enumerate(starter.SURFACES))))
     o.append('<h3>Creatures, pickups, hazards, clutter</h3>')
     o.append(table(['value', 'CREATURE kind', 'PICKUP kind', 'HAZARD kind', 'CLUTTER kind'],
