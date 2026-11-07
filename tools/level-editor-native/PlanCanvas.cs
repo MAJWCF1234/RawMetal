@@ -247,7 +247,7 @@ public sealed class PlanCanvas : Control
             g.FillRectangle(brush, rect);
             g.DrawRectangle(o == Selected ? Pens.Gold : Pens.Black, rect.X, rect.Y, rect.Width, rect.Height);
             brush.Dispose();
-            string label = o.Type switch
+            string label = o.EngineFixture >= 0 && Selected != o ? "" : o.Type switch
             {
                 "spawn" => o.SpawnKind ?? "spawn",
                 "asset" => o.Name,
@@ -255,7 +255,11 @@ public sealed class PlanCanvas : Control
                 "sign" => string.IsNullOrEmpty(o.Title) ? "sign" : o.Title!,
                 _ => o.Type,
             };
-            if (c > 11 && label.Length > 0)
+            // Imported showcase maps carry hundreds of fixtures per map;
+            // labelling every one is noise, not information. Labels earn
+            // their place when zoomed in or on sparse maps.
+            bool showLabel = c > 15 || Chunk.Objects.Count <= 120 || o == Selected;
+            if (showLabel && label.Length > 0)
                 g.DrawString(label.Length > 14 ? label[..14] : label, LabelF, Brushes.White, rect.X + 2, rect.Y + 1);
         }
         if (_rectStart is { } s)

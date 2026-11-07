@@ -50,6 +50,9 @@ public sealed class Chunk
     public int SurfaceWall { get; set; } = -1;
     public int SurfaceFloor { get; set; } = -1;
     public int SurfaceCeiling { get; set; } = -1;
+    // MAP records carry environment tuning per map.  Keeping the raw tail
+    // avoids silently flattening an imported campaign to one skybox.
+    public List<string> MapTail { get; set; } = new();
     public List<Layer> Layers { get; set; } = new();
     public List<Obj> Objects { get; set; } = new();
 }
@@ -82,6 +85,12 @@ public sealed class Obj
     // asset
     public string? Model { get; set; }
     public string? Texture { get; set; }
+    // Engine fixture slots are the complete in-game catalogue.  A project can
+    // contain models that have no editor-asset thumbnail yet; retain their
+    // slot and dimensions so they remain visible/editable and round-trip.
+    public int EngineFixture { get; set; } = -1;
+    public string? EngineFixtureName { get; set; }
+    public List<string> EngineFixtureTail { get; set; } = new();
     // light
     public string? LampMount { get; set; }
     public float Intensity { get; set; } = 1;
@@ -105,6 +114,19 @@ public sealed class Obj
     public string? WallAxis { get; set; }
     public int TileX { get; set; }
     public int TileY { get; set; }
+    // Physics and stair settings carried by the native .rmc format.
+    // Defaults retain the editor's simple placement behaviour.
+    public int BreakMaterial { get; set; } = -1;
+    public float BreakHealth { get; set; }
+    public bool Holds { get; set; }
+    public string? BreakState { get; set; }
+    public string? BreakTrigger { get; set; }
+    public int StairSteps { get; set; } = 17;
+    public bool StairAlongY { get; set; } = true;
+    public bool StairAscending { get; set; } = true;
+    public bool StairOpenUnderside { get; set; }
+    public float StairTread { get; set; } = .12f;
+    public bool StairSideRails { get; set; }
 }
 
 // ---------- Asset blob (editor-assets.rmblob) ----------
@@ -112,6 +134,7 @@ public sealed class Prefab
 {
     public string Id = "", Name = "", Category = "", Model = "", Ext = ".obj";
     public string? ModelUrl, Texture, TextureUrl;
+    public Dictionary<string, string> MaterialUrls = new(StringComparer.OrdinalIgnoreCase);
     public float W = 1, D = 1, H = 1;
 }
 
@@ -148,6 +171,11 @@ public sealed class Blob : IDisposable
                 Texture = Str(p, "texture", null), TextureUrl = Str(p, "textureUrl", null),
                 Ext = Str(p, "ext"), W = Num(p, "w", 1), D = Num(p, "d", 1), H = Num(p, "h", 1),
             });
+            var prefab = blob.Prefabs[^1];
+            if (p.TryGetProperty("materialUrls", out var materialUrls) && materialUrls.ValueKind == JsonValueKind.Object)
+                foreach (var material in materialUrls.EnumerateObject())
+                    if (material.Value.ValueKind == JsonValueKind.String)
+                        prefab.MaterialUrls[material.Name] = material.Value.GetString() ?? "";
         }
         foreach (var m in root.GetProperty("materials").EnumerateArray())
             blob.Materials.Add(new MaterialItem
@@ -188,7 +216,16 @@ public sealed class Blob : IDisposable
     {
         var bytes = ForUrl(urlOrPath);
         if (bytes == null) return null;
-        try { using var ms = new MemoryStream(bytes); return Image.FromStream(ms); }
+        // Image.FromStream keeps the source stream alive lazily.  The old
+        // implementation disposed that stream before OpenGL locked the
+        // pixels, which made blob textures silently degrade to flat fixture
+        // colours on some GDI+ drivers.  Clone while the stream is alive.
+        try
+        {
+            using var ms = new MemoryStream(bytes);
+            using var source = Image.FromStream(ms);
+            return new Bitmap(source);
+        }
         catch { return null; }
     }
 
@@ -204,6 +241,7 @@ public sealed class Mappings
     public Dictionary<string, string> Pickup = new();
     public Dictionary<string, int> PickupIndex = new();
     public Dictionary<string, string> Creature = new();
+    public Dictionary<int, string> FixtureNames = new();
 
     public static Mappings Load()
     {
@@ -222,9 +260,32 @@ public sealed class Mappings
                 foreach (var kv in pk.EnumerateObject()) m.Pickup[kv.Name] = kv.Value.GetString() ?? "";
             if (r.TryGetProperty("creature", out var cr))
                 foreach (var kv in cr.EnumerateObject()) m.Creature[kv.Name] = kv.Value.GetString() ?? "";
+            LoadFixtureNames(m);
             return m;
         }
+        LoadFixtureNames(m);
         return m;
+    }
+
+    private static void LoadFixtureNames(Mappings mappings)
+    {
+        // ModelIds.h is generated from the exact engine catalogue.  Using it
+        // here keeps the editor's visual lookup aligned with the game instead
+        // of a tiny hand-maintained subset of mappings.json.
+        foreach (var path in new[]
+        {
+            Path.Combine(Directory.GetCurrentDirectory(), "src", "world", "ModelIds.h"),
+            Path.Combine(AppContext.BaseDirectory, "ModelIds.h"),
+        })
+        {
+            if (!File.Exists(path)) continue;
+            foreach (var line in File.ReadLines(path))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"inline constexpr int ([A-Za-z0-9_]+)=(\d+);");
+                if (match.Success) mappings.FixtureNames[int.Parse(match.Groups[2].Value)] = match.Groups[1].Value;
+            }
+            if (mappings.FixtureNames.Count > 0) return;
+        }
     }
 
     private static void Fill(JsonElement root, string key, Dictionary<string, int> dst)

@@ -28,11 +28,17 @@ public partial class MainWindow : Window
     private int _layerIndex;
     private Prefab? _pickedPrefab;
     private MaterialItem? _pickedMaterial;
-    private bool _playtested, _exported, _catsFilled;
+    private bool _playtested, _exported, _catsFilled, _simpleMode;
 
     private readonly PlanCanvas _plan = new();
     private readonly GlView _gl = new();
     private readonly Dictionary<string, Button> _toolButtons = new();
+    private sealed class MapItem
+    {
+        public int Index { get; init; }
+        public string Text { get; init; } = "";
+        public override string ToString() => Text;
+    }
 
     private Chunk? Chunk => _project.Chunks.Count == 0 ? null
         : _project.Chunks[Math.Min(_project.Chunks.Count - 1, Math.Max(0, _chunkIndex))];
@@ -98,12 +104,28 @@ public partial class MainWindow : Window
     // ---------------- chrome ----------------
     private void BuildToolbar()
     {
+        ToolbarPanel.Children.Clear();
         void Add(string label, Action act, bool gold = false)
         {
             var b = new Button { Content = label, Style = (Style)FindResource(gold ? "GoldBtn" : "TopBtn") };
             b.Click += (_, _) => act();
             ToolbarPanel.Children.Add(b);
         }
+        if (_simpleMode)
+        {
+            // This is deliberately project-agnostic.  It edits whatever map
+            // the person opened through the normal file flow.
+            Add("🌼 Advanced tools", ToggleSimpleMode);
+            Add("🏠 Draw a room", () => { SetTool("roombox"); SetViewMode("dual"); SetStatus("Drag on the plan to make a room. The game walls and floor are made for you."); });
+            Add("✨ Light & furnish", FurnishRoom);
+            Add("🧍 Add a person", () => { SpawnRoleCombo.SelectedItem = "Scientist"; SetTool("people"); SetStatus("Click the plan to put down a friendly scientist. Use Advanced tools for guards and monsters."); });
+            Add("✋ Move things", () => { SetTool("select"); SetStatus("Drag anything in the plan to rearrange it. Right-click an item to remove it."); });
+            Add("▶ Walk inside", StartWalk);
+            Add("📸 See it in game", EngineShot);
+            Add("EXPORT .RMC", ExportRmc, gold: true);
+            return;
+        }
+        Add("🌼 SIMPLE MODE", ToggleSimpleMode, gold: true);
         Add("New", () => { _project = NewBlankProject(); _chunkIndex = 0; _layerIndex = 0; LoadIntoViews(); SetStatus("Blank campaign. 🏠 Drag-a-room to begin."); });
         Add("Open Project", OpenProject);
         Add("Save Project", SaveProject);
@@ -122,6 +144,21 @@ public partial class MainWindow : Window
         Add("📸 AUTO ENGINE", ToggleAutoEngine);
         Add("✨ FURNISH", FurnishRoom);
         Add("▶ TEST IN GAME", TestInEngine);
+    }
+
+    private void ToggleSimpleMode()
+    {
+        _simpleMode = !_simpleMode;
+        ToolsPanel.Visibility = _simpleMode ? Visibility.Collapsed : Visibility.Visible;
+        RightDock.Visibility = _simpleMode ? Visibility.Collapsed : Visibility.Visible;
+        RightCol.Width = _simpleMode ? new GridLength(0) : new GridLength(348);
+        BuildToolbar();
+        if (_simpleMode)
+        {
+            SetViewMode("dual");
+            SetStatus("Simple Mode: choose one friendly action above. Your current map and all engine data stay exactly where they are.");
+        }
+        else SetStatus("Advanced tools are back. Nothing in your map changed.");
     }
 
     private void BuildTools()
@@ -165,14 +202,15 @@ public partial class MainWindow : Window
         AddFloorBtn.Click += (_, _) => AddFloor();
         MapList.SelectionChanged += (_, _) =>
         {
-            if (MapList.SelectedIndex >= 0 && MapList.SelectedIndex != _chunkIndex)
+            if (MapList.SelectedItem is MapItem item && item.Index != _chunkIndex)
             {
-                _chunkIndex = MapList.SelectedIndex; _layerIndex = 0;
+                _chunkIndex = item.Index; _layerIndex = 0;
                 _plan.Selected = null; BuildInspector(null);
                 RefreshLayers(); _plan.Invalidate(); _gl.Invalidate();
                 SetStatus($"Now editing map: {Chunk?.Name}. Each map is a place the player travels between.");
             }
         };
+        MapSearch.TextChanged += (_, _) => RefreshMaps();
         AddMapBtn.Click += (_, _) => AddMap();
         WireTerrain();
         PartSearch.TextChanged += (_, _) => ListParts();
@@ -309,15 +347,24 @@ public partial class MainWindow : Window
     }
 
     // ---------------- undo ----------------
-    private readonly Stack<string> _undo = new();
+    // ChunkIndex -1 means "whole project". Big campaigns (the 150-map
+    // Starter) must never pay a whole-project JSON snapshot per click -
+    // that was a visible freeze on every stroke. Everyday edits are
+    // chunk-local, so everyday undo is chunk-scoped and instant.
+    private sealed class UndoEntry { public string Json = ""; public int ChunkIndex = -1; }
+    private readonly Stack<UndoEntry> _undo = new();
 
     private void PushUndo()
     {
         try
         {
-            var snap = System.Text.Json.JsonSerializer.Serialize(_project);
-            if (_undo.Count > 0 && _undo.Peek() == snap) return;
-            _undo.Push(snap);
+            UndoEntry entry;
+            if (Chunk != null && _project.Chunks.Count > 4)
+                entry = new UndoEntry { Json = System.Text.Json.JsonSerializer.Serialize(Chunk), ChunkIndex = _chunkIndex };
+            else
+                entry = new UndoEntry { Json = System.Text.Json.JsonSerializer.Serialize(_project), ChunkIndex = -1 };
+            if (_undo.Count > 0 && _undo.Peek().Json == entry.Json && _undo.Peek().ChunkIndex == entry.ChunkIndex) return;
+            _undo.Push(entry);
             if (_undo.Count > 40)
             {
                 var keep = _undo.Take(20).Reverse().ToArray();
@@ -331,10 +378,21 @@ public partial class MainWindow : Window
     private void Undo()
     {
         if (_undo.Count == 0) { SetStatus("Nothing to undo yet."); return; }
-        var restored = System.Text.Json.JsonSerializer.Deserialize<Project>(_undo.Pop());
-        if (restored == null) return;
-        _project = restored;
-        _chunkIndex = Math.Min(_chunkIndex, Math.Max(0, _project.Chunks.Count - 1));
+        var entry = _undo.Pop();
+        if (entry.ChunkIndex >= 0 && entry.ChunkIndex < _project.Chunks.Count)
+        {
+            var chunk = System.Text.Json.JsonSerializer.Deserialize<Chunk>(entry.Json);
+            if (chunk == null) return;
+            _project.Chunks[entry.ChunkIndex] = chunk;
+            _chunkIndex = entry.ChunkIndex;
+        }
+        else
+        {
+            var restored = System.Text.Json.JsonSerializer.Deserialize<Project>(entry.Json);
+            if (restored == null) return;
+            _project = restored;
+            _chunkIndex = Math.Min(_chunkIndex, Math.Max(0, _project.Chunks.Count - 1));
+        }
         _layerIndex = 0;
         LoadIntoViews();
         SetStatus("Undone. (Ctrl+Z is your friend - experimenting is free now.)");
@@ -411,8 +469,13 @@ public partial class MainWindow : Window
     private void RefreshMaps()
     {
         MapList.Items.Clear();
-        foreach (var c in _project.Chunks.OrderBy(c => c.Number)) MapList.Items.Add($"Map {c.Number}: {c.Name}");
-        if (MapList.Items.Count > 0) MapList.SelectedIndex = Math.Min(_chunkIndex, MapList.Items.Count - 1);
+        string query = MapSearch?.Text.Trim() ?? "";
+        foreach (var item in _project.Chunks
+            .Select((c, index) => new MapItem { Index = index, Text = $"Map {c.Number}: {c.Name}" })
+            .OrderBy(item => _project.Chunks[item.Index].Number)
+            .Where(item => query.Length == 0 || item.Text.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            MapList.Items.Add(item);
+        MapList.SelectedItem = MapList.Items.OfType<MapItem>().FirstOrDefault(item => item.Index == _chunkIndex);
     }
 
     private void AddMap()

@@ -12,6 +12,8 @@ public static class Rmc
     private static float Num(string s, float fallback = 0)
         => float.TryParse(s, NumberStyles.Float, Inv, out var v) ? v : fallback;
     private static string Esc(string s) => Uri.EscapeDataString(s).Replace("%20", " ");
+    private static char GetRowTile(Layer layer, int x, int y)
+        => y >= 0 && y < layer.Rows.Count && x >= 0 && x < layer.Rows[y].Length ? layer.Rows[y][x] : '_';
 
     public static readonly string[] PrimKinds =
     {
@@ -65,7 +67,10 @@ public static class Rmc
             float top = layers.Max(l => l.Z + Math.Max(.5f, l.CeilingHeight));
             bool north = grid.ContainsKey((chunk.Gx, chunk.Gy - 1)), south = grid.ContainsKey((chunk.Gx, chunk.Gy + 1));
             bool west = grid.ContainsKey((chunk.Gx - 1, chunk.Gy)), east = grid.ContainsKey((chunk.Gx + 1, chunk.Gy));
-            lines.Add($"MAP|{mi}|{Esc(chunk.Name)}|{chunk.Gx * 24}|{chunk.Gy * 24}|{F(spawnX)}|{F(spawnY)}|{F(spawnZ)}|0|{F(top)}|0.27|{Esc(project.Skybox)}|{(north ? 1 : 0)}|{(south ? 1 : 0)}|{(west ? 1 : 0)}|{(east ? 1 : 0)}|0");
+            string mapTail = chunk.MapTail.Count > 0
+                ? string.Join("|", chunk.MapTail)
+                : $"0|{F(top)}|0.27|{Esc(project.Skybox)}|{(north ? 1 : 0)}|{(south ? 1 : 0)}|{(west ? 1 : 0)}|{(east ? 1 : 0)}|0";
+            lines.Add($"MAP|{mi}|{Esc(chunk.Name)}|{chunk.Gx * 24}|{chunk.Gy * 24}|{F(spawnX)}|{F(spawnY)}|{F(spawnZ)}|{mapTail}");
 
             // Rows, with door/window openings carved.
             var exported = new Dictionary<string, char[][]>();
@@ -129,12 +134,15 @@ public static class Rmc
                         break;
                     }
                     case "box":
-                        lines.Add($"STRUCT|{mi}|{F(o.X - o.W / 2)}|{F(o.Y - o.D / 2)}|{F(o.X + o.W / 2)}|{F(o.Y + o.D / 2)}|{F(o.Z)}|{F(o.Z + Math.Max(.05f, o.H))}|0|2");
+                        if (o.BreakMaterial >= 0)
+                            lines.Add($"BREAKABLE|{mi}|{F(o.X - o.W / 2)}|{F(o.Y - o.D / 2)}|{F(o.X + o.W / 2)}|{F(o.Y + o.D / 2)}|{F(o.Z)}|{F(o.Z + Math.Max(.05f, o.H))}|{o.BreakMaterial}|{F(o.BreakHealth)}|{(o.Holds ? 1 : 0)}|{Esc(o.BreakState ?? "")}|{Esc(o.BreakTrigger ?? "")}");
+                        else
+                            lines.Add($"STRUCT|{mi}|{F(o.X - o.W / 2)}|{F(o.Y - o.D / 2)}|{F(o.X + o.W / 2)}|{F(o.Y + o.D / 2)}|{F(o.Z)}|{F(o.Z + Math.Max(.05f, o.H))}|0|{o.Material}");
                         break;
                     case "stairs":
                     {
                         float topZ = o.Z + Math.Max(.25f, o.H);
-                        lines.Add($"STAIR|{mi}|{F(o.X - o.W / 2)}|{F(o.Y - o.D / 2)}|{F(o.X + o.W / 2)}|{F(o.Y + o.D / 2)}|{F(o.Z)}|{F(topZ)}|17|1|1|0|0.12|0");
+                        lines.Add($"STAIR|{mi}|{F(o.X - o.W / 2)}|{F(o.Y - o.D / 2)}|{F(o.X + o.W / 2)}|{F(o.Y + o.D / 2)}|{F(o.Z)}|{F(topZ)}|{Math.Clamp(o.StairSteps, 3, 64)}|{(o.StairAlongY ? 1 : 0)}|{(o.StairAscending ? 1 : 0)}|{(o.StairOpenUnderside ? 1 : 0)}|{F(Math.Clamp(o.StairTread, .025f, .5f))}|{(o.StairSideRails ? 1 : 0)}");
                         break;
                     }
                     case "light":
@@ -223,15 +231,23 @@ public static class Rmc
                         string model = NormalizeModel(o.Model);
                         float yaw = o.Rotation * MathF.PI / 180;
                         float baseOff = o.Z - baseZ;
-                        if (maps.Facility.TryGetValue(model, out int fi))
+                        if (o.EngineFixture >= 0)
+                        {
+                            string tail = o.EngineFixtureTail.Count == 0 ? "" : "|" + string.Join("|", o.EngineFixtureTail);
+                            lines.Add($"FIXTURE|{mi}|{o.EngineFixture}|{F(o.X)}|{F(o.Y)}|{F(baseOff)}|{F(o.W)}|{F(o.D)}|{F(o.H)}|{F(yaw)}|1{tail}");
+                        }
+                        else if (maps.Facility.TryGetValue(model, out int fi))
                             lines.Add($"FIXTURE|{mi}|{fi}|{F(o.X)}|{F(o.Y)}|{F(baseOff)}|{F(o.W)}|{F(o.D)}|{F(o.H)}|{F(yaw)}|{(fi is 3 or 4 or 5 ? 0 : 1)}");
                         else if (maps.Prop.TryGetValue(model, out int pk))
                             lines.Add($"PROP|{mi}|{pk}|{F(o.X)}|{F(o.Y)}|{F(o.H)}|{F(Math.Max(o.W, o.D))}|{F(yaw)}|{F(o.W / 2)}|{F(o.D / 2)}|{F(baseOff)}");
                         else if (maps.Clutter.TryGetValue(model, out int ck))
                             lines.Add($"CLUTTER|{mi}|{ck}|{F(o.X)}|{F(o.Y)}|{F(Math.Abs(o.Z - baseZ) < .03f ? -999 : o.Z)}|{F(yaw)}");
-                        else if (maps.Pickup.TryGetValue(model, out string kindName) && maps.PickupIndex.TryGetValue(kindName, out int pi))
+                        else if (maps.Pickup.TryGetValue(model, out string? kindName) &&
+                                 !string.IsNullOrWhiteSpace(kindName) &&
+                                 maps.PickupIndex.TryGetValue(kindName, out int pi))
                             lines.Add($"PICKUP|{mi}|{pi}|{F(o.X)}|{F(o.Y)}");
-                        else if (maps.Creature.TryGetValue(model, out string creature))
+                        else if (maps.Creature.TryGetValue(model, out string? creature) &&
+                                 !string.IsNullOrWhiteSpace(creature))
                             lines.Add($"CREATURE|{mi}|{Math.Max(0, Array.IndexOf(CreatureSpecies, creature))}|{F(o.X)}|{F(o.Y)}|{F(o.Z)}");
                         else warnings.Add($"{chunk.Name}: asset '{o.Name}' has no engine placement mapping and was skipped.");
                         break;
@@ -273,8 +289,15 @@ public static class Rmc
         int counter = 0;
         string NextId() => "imp" + (++counter);
 
-        var facilityByIndex = maps.Facility.ToDictionary(kv => kv.Value, kv => kv.Key);
-        var propByKind = maps.Prop.ToDictionary(kv => kv.Value, kv => kv.Key);
+        // Engine mappings deliberately contain aliases (multiple source paths
+        // that resolve to the same model slot).  Import needs one canonical
+        // editor path per slot, not a uniqueness assumption that crashes.
+        var facilityByIndex = maps.Facility
+            .GroupBy(kv => kv.Value)
+            .ToDictionary(g => g.Key, g => g.First().Key);
+        var propByKind = maps.Prop
+            .GroupBy(kv => kv.Value)
+            .ToDictionary(g => g.Key, g => g.First().Key);
         var pickupByIndex = new Dictionary<int, string>();
         foreach (var (path, kindName) in maps.Pickup)
             if (maps.PickupIndex.TryGetValue(kindName, out int pi)) pickupByIndex[pi] = path;
@@ -315,9 +338,10 @@ public static class Rmc
                     {
                         Id = "map" + idx, Number = idx + 1, Name = f[2],
                         Gx = (int)Num(f[3]) / 24, Gy = (int)Num(f[4]) / 24,
+                        MapTail = f.Skip(8).ToList(),
                     };
                     chunks[idx] = chunk;
-                    project.Skybox = f[11];
+                    if (f.Length > 11) project.Skybox = f[11];
                     chunk.Objects.Add(new Obj
                     {
                         Id = NextId(), Type = "spawn", SpawnKind = "Player", Name = "Player Start",
@@ -432,16 +456,77 @@ public static class Rmc
                     });
                     break;
                 }
+                case "STRUCT" when f.Length >= 10:
+                {
+                    var chunk = ChunkAt(MapIdx()); if (chunk == null) break;
+                    float x1 = Num(f[2]), y1 = Num(f[3]), x2 = Num(f[4]), y2 = Num(f[5]);
+                    float bottom = Num(f[6]), top = Num(f[7]);
+                    // Upper-floor walls are generated from the rows.  Do not
+                    // turn those derived records into duplicate editable boxes.
+                    bool derivedWall = chunk.Layers.Any(l => Math.Abs(l.Z - bottom) < .01f &&
+                        Math.Abs(x2 - x1 - 1) < .01f && Math.Abs(y2 - y1 - 1) < .01f &&
+                        x1 >= 0 && x1 < 24 && y1 >= 0 && y1 < 24 && GetRowTile(l, (int)x1, (int)y1) == '#');
+                    if (!derivedWall)
+                        chunk.Objects.Add(new Obj { Id = NextId(), Type = "box", Name = "Structure",
+                            X = (x1 + x2) / 2, Y = (y1 + y2) / 2, Z = bottom,
+                            W = Math.Max(.05f, x2 - x1), D = Math.Max(.05f, y2 - y1), H = Math.Max(.05f, top - bottom),
+                            Material = (int)Num(f[9], 2) });
+                    break;
+                }
+                case "STAIR" when f.Length >= 11:
+                {
+                    var chunk = ChunkAt(MapIdx()); if (chunk == null) break;
+                    float x1 = Num(f[2]), y1 = Num(f[3]), x2 = Num(f[4]), y2 = Num(f[5]);
+                    float bottom = Num(f[6]), top = Num(f[7]);
+                    chunk.Objects.Add(new Obj { Id = NextId(), Type = "stairs", Name = "Stairs",
+                        X = (x1 + x2) / 2, Y = (y1 + y2) / 2, Z = bottom,
+                        W = Math.Max(.05f, x2 - x1), D = Math.Max(.05f, y2 - y1), H = Math.Max(.25f, top - bottom),
+                        StairSteps = (int)Num(f[8], 17), StairAlongY = Num(f[9], 1) != 0, StairAscending = Num(f[10], 1) != 0,
+                        StairOpenUnderside = f.Length > 11 && Num(f[11]) != 0, StairTread = f.Length > 12 ? Num(f[12], .12f) : .12f,
+                        StairSideRails = f.Length > 13 && Num(f[13]) != 0 });
+                    break;
+                }
+                case "BREAKABLE" when f.Length >= 11:
+                {
+                    var chunk = ChunkAt(MapIdx()); if (chunk == null) break;
+                    float x1 = Num(f[2]), y1 = Num(f[3]), x2 = Num(f[4]), y2 = Num(f[5]);
+                    float bottom = Num(f[6]), top = Num(f[7]);
+                    chunk.Objects.Add(new Obj { Id = NextId(), Type = "box", Name = "Breakable",
+                        X = (x1 + x2) / 2, Y = (y1 + y2) / 2, Z = bottom,
+                        W = Math.Max(.05f, x2 - x1), D = Math.Max(.05f, y2 - y1), H = Math.Max(.05f, top - bottom),
+                        BreakMaterial = (int)Num(f[8]), BreakHealth = Num(f[9]), Holds = Num(f[10]) != 0,
+                        BreakState = f.Length > 11 ? f[11] : "", BreakTrigger = f.Length > 12 ? f[12] : "" });
+                    break;
+                }
                 case "FIXTURE" when f.Length >= 11:
                 {
                     var chunk = ChunkAt(MapIdx()); if (chunk == null) break;
+                    float baseZ = chunk.Layers.Count == 0 ? 0 : chunk.Layers.Min(layer => layer.Z);
                     if (facilityByIndex.TryGetValue((int)Num(f[2]), out string? model))
                         chunk.Objects.Add(new Obj
                         {
                             Id = NextId(), Type = "asset", Name = Path.GetFileNameWithoutExtension(model), Model = model,
-                            X = Num(f[3]), Y = Num(f[4]), Z = Num(f[5]), W = Num(f[6], 1), D = Num(f[7], 1), H = Num(f[8], 1),
+                            X = Num(f[3]), Y = Num(f[4]), Z = baseZ + Num(f[5]), W = Num(f[6], 1), D = Num(f[7], 1), H = Num(f[8], 1),
                             Rotation = Num(f[9]) * 180 / MathF.PI,
                         });
+                    else
+                    {
+                        // The map is still a first-class editable map when
+                        // its fixture uses a newer engine model than the
+                        // thumbnail catalogue knows.  The preview uses its
+                        // true footprint as a labelled proxy, and export puts
+                        // the exact fixture slot back into the campaign.
+                        chunk.Objects.Add(new Obj
+                        {
+                            Id = NextId(), Type = "asset", Name = $"Engine fixture {(int)Num(f[2])}",
+                            EngineFixture = (int)Num(f[2]),
+                            EngineFixtureName = maps.FixtureNames.TryGetValue((int)Num(f[2]), out var fixtureName) ? fixtureName : null,
+                            X = Num(f[3]), Y = Num(f[4]), Z = baseZ + Num(f[5]),
+                            W = Num(f[6], 1), D = Num(f[7], 1), H = Num(f[8], 1),
+                            Rotation = Num(f[9]) * 180 / MathF.PI,
+                            EngineFixtureTail = f.Skip(11).ToList(),
+                        });
+                    }
                     break;
                 }
                 case "PROP" when f.Length >= 8:
@@ -454,6 +539,7 @@ public static class Rmc
                             X = Num(f[3]), Y = Num(f[4]), H = Num(f[5], 1),
                             Rotation = Num(f[7]) * 180 / MathF.PI,
                         });
+                    else project.RuntimeRecords.Add(line);
                     break;
                 }
                 case "PICKUP" when f.Length >= 5:
@@ -465,6 +551,7 @@ public static class Rmc
                             Id = NextId(), Type = "asset", Name = Path.GetFileNameWithoutExtension(model), Model = model,
                             X = Num(f[3]), Y = Num(f[4]), W = .5f, D = .5f, H = .5f,
                         });
+                    else project.RuntimeRecords.Add(line);
                     break;
                 }
                 case "CREATURE" when f.Length >= 6:
@@ -511,8 +598,11 @@ public static class Rmc
                         acc.Armed = (int)Num(f[3]) switch { 1 => "shotgun", 2 => "handgun", _ => "none" };
                     break;
                 }
-                case "STRUCT" or "STAIR" or "CLUTTER" or "BREAKABLE":
-                    break; // upper walls are rows; boxes/stairs return as generic blocks below
+                case "CLUTTER":
+                    // Some legacy clutter models are outside the editor's asset
+                    // catalogue. Keep their exact engine record on export.
+                    project.RuntimeRecords.Add(line);
+                    break;
                 default:
                 {
                     string[] carried = { "TIMED_SEQUENCE", "ACTOR_TALK", "ACTOR_VOICE", "SEQUENCE_CUE", "SEQUENCE_SIGHT", "SURFACE" };

@@ -252,15 +252,15 @@
         </Border>
 
         <!-- Main area -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" x:Name="WorkspaceGrid">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="238"/>
+                <ColumnDefinition x:Name="LeftCol" Width="238"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="348"/>
+                <ColumnDefinition x:Name="RightCol" Width="348"/>
             </Grid.ColumnDefinitions>
 
             <!-- Tools rail -->
-            <Border Grid.Column="0" Style="{StaticResource Glass}" Padding="14,10" Margin="0,0,10,0">
+            <Border x:Name="ToolsDock" Grid.Column="0" Style="{StaticResource Glass}" Padding="14,10" Margin="0,0,10,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="ToolsRail">
                         <TextBlock Text="🛠  TOOLS" Style="{StaticResource RailLabel}" Margin="2,0,0,8"/>
@@ -276,6 +276,7 @@
                                  BorderBrush="#4C6076" FontSize="13"/>
                         <Button x:Name="AddFloorBtn" Content="＋ Add a floor above" Style="{StaticResource TopBtn}" Margin="0,8,0,0"/>
                         <TextBlock Text="🗺 Maps in this campaign" Style="{StaticResource RailLabel}"/>
+                        <TextBox x:Name="MapSearch" ToolTip="Find a map by number or name"/>
                         <ListBox x:Name="MapList" Height="86" Background="#131C26" Foreground="#EEF3F8"
                                  BorderBrush="#4C6076" FontSize="13"/>
                         <Button x:Name="AddMapBtn" Content="＋ Add a map (next door)" Style="{StaticResource TopBtn}" Margin="0,8,0,0"/>
@@ -309,7 +310,7 @@
             </Border>
 
             <!-- Right dock -->
-            <Border Grid.Column="2" Style="{StaticResource Glass}" Padding="10">
+            <Border x:Name="RightDock" Grid.Column="2" Style="{StaticResource Glass}" Padding="10">
                 <TabControl Background="Transparent" BorderThickness="0">
                     <TabItem Header="🧩 Parts">
                         <Grid Margin="0,8,0,0">

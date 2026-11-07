@@ -59,7 +59,8 @@ public sealed class GlView : GLControl
     public event Action<string>? Status;
 
     private readonly Dictionary<string, int> _textures = new();
-    private sealed class MeshData { public List<float[]> Tris = new(); public Vector3 Min, Size = Vector3.One; }
+    private sealed class MeshTri { public float[] Vertices = Array.Empty<float>(); public string Material = ""; }
+    private sealed class MeshData { public List<MeshTri> Tris = new(); public Vector3 Min, Size = Vector3.One; }
     private readonly Dictionary<string, MeshData> _meshes = new();
     private Dictionary<string, MaterialItem>? _matByName;
 
@@ -358,7 +359,10 @@ public sealed class GlView : GLControl
         if (Project == null) { GL.ClearColor(0.04f, 0.05f, 0.06f, 1); GL.Clear(ClearBufferMask.ColorBufferBit); SwapBuffers(); return; }
         MakeCurrent();
         GL.Viewport(0, 0, Width, Height);
-        GL.ClearColor(0.035f, 0.045f, 0.06f, 1);
+        var focused = Project.Chunks.FirstOrDefault(chunk => chunk.Gx == FocusGx && chunk.Gy == FocusGy)
+            ?? Project.Chunks.FirstOrDefault();
+        var sky = SkyColour(focused);
+        GL.ClearColor(sky.R / 255f, sky.G / 255f, sky.B / 255f, 1);
         GL.Enable(EnableCap.DepthTest);
         GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
@@ -399,20 +403,50 @@ public sealed class GlView : GLControl
             _rayAspect = Math.Max(.1f, (float)Width / Math.Max(1, Height));
         }
         GL.MatrixMode(MatrixMode.Modelview); GL.LoadMatrix(ref view);
-        GL.PolygonMode(MaterialFace.FrontAndBack, Wireframe ? PolygonMode.Line : PolygonMode.Fill);
+        GL.PolygonMode(TriangleFace.FrontAndBack, Wireframe ? PolygonMode.Line : PolygonMode.Fill);
         if (Wireframe) GL.Color3(0.55f, 0.9f, 0.85f);
         DrawScene();
         if (BuildMode && _ghostValid)
         {
             if (GhostPrefab != null)
                 DrawPrefab(GhostPrefab, _ghostWorld.X, BuildPlaneZ, _ghostWorld.Z, BuildRotation, GhostSize.W, GhostSize.H, GhostSize.D);
-            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
+            GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
             Box(_ghostWorld.X, BuildPlaneZ + GhostSize.H / 2, _ghostWorld.Z,
                 GhostSize.W, GhostSize.H, GhostSize.D, TextureFor(null, Color.FromArgb(240, 200, 110)), BuildRotation);
         }
-        GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
+        GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
         GL.Color3(1f, 1f, 1f);
         SwapBuffers();
+    }
+
+    // The edit view is intentionally lightweight, but it must still respect
+    // the map's authored world mood.  Engine Shot remains the exact renderer;
+    // this immediate backdrop makes night, wasteland and underground maps
+    // legible while editing rather than showing one misleading black void.
+    private static Color SkyColour(Chunk? chunk)
+    {
+        string name = chunk?.MapTail.Count > 3 ? Uri.UnescapeDataString(chunk.MapTail[3]) : "industrial_night";
+        return name.ToLowerInvariant() switch
+        {
+            "brutal_wasteland" or "ashfall" => Color.FromArgb(101, 79, 57),
+            "industrial_day" => Color.FromArgb(105, 132, 151),
+            "mine" or "underground" => Color.FromArgb(30, 25, 20),
+            _ => Color.FromArgb(9, 16, 29),
+        };
+    }
+
+    private static Color EngineFixtureTint(Obj o)
+    {
+        string name = o.EngineFixtureName ?? "";
+        if (name.Contains("tree", StringComparison.OrdinalIgnoreCase) || name.Contains("fern", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("grass", StringComparison.OrdinalIgnoreCase) || name.Contains("bush", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("plant", StringComparison.OrdinalIgnoreCase) || name.Contains("clover", StringComparison.OrdinalIgnoreCase))
+            return Color.FromArgb(96, 132, 82);
+        if (name.Contains("rock", StringComparison.OrdinalIgnoreCase) || name.Contains("ore", StringComparison.OrdinalIgnoreCase))
+            return Color.FromArgb(111, 109, 101);
+        if (name.Contains("wood", StringComparison.OrdinalIgnoreCase) || name.Contains("log", StringComparison.OrdinalIgnoreCase) || name.Contains("crate", StringComparison.OrdinalIgnoreCase))
+            return Color.FromArgb(127, 91, 57);
+        return Color.FromArgb(123, 137, 143);
     }
 
     private int TextureFor(string? url, Color tint)
@@ -425,6 +459,10 @@ public sealed class GlView : GLControl
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.Repeat);
         GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.Repeat);
+        // The compatibility context is shared with WPF/WinForms.  Set the
+        // fixed-function texture combine explicitly rather than inheriting
+        // whichever state the host control last used.
+        GL.TexEnv(TextureEnvTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, (int)TextureEnvMode.Modulate);
         var image = url != null ? Blob?.TextureImage(url) : null;
         if (image != null && tint != Color.White)
         {
@@ -502,6 +540,43 @@ public sealed class GlView : GLControl
         GL.PopMatrix();
     }
 
+    private static readonly float[][] CubeFaces =
+    {
+        new[] { -.5f, -.5f, .5f, .5f, -.5f, .5f, .5f, .5f, .5f, -.5f, .5f, .5f },
+        new[] { .5f, -.5f, -.5f, -.5f, -.5f, -.5f, -.5f, .5f, -.5f, .5f, .5f, -.5f },
+        new[] { .5f, -.5f, .5f, .5f, -.5f, -.5f, .5f, .5f, -.5f, .5f, .5f, .5f },
+        new[] { -.5f, -.5f, -.5f, -.5f, -.5f, .5f, -.5f, .5f, .5f, -.5f, .5f, -.5f },
+        new[] { -.5f, .5f, .5f, .5f, .5f, .5f, .5f, .5f, -.5f, -.5f, .5f, -.5f },
+        new[] { -.5f, -.5f, -.5f, .5f, -.5f, -.5f, .5f, -.5f, .5f, -.5f, -.5f, .5f },
+    };
+
+    // A box whose FRONT face (+z local) carries one texture and every
+    // other face another. Signs read forwards from the front and are
+    // blank-backed from behind - never mirror writing.
+    private void BoxFaced(float x, float z, float y, float w, float h, float d, int frontTex, int sideTex, float rotDeg = 0)
+    {
+        GL.PushMatrix();
+        GL.Translate(x, z, y);
+        if (rotDeg != 0) GL.Rotate(-rotDeg, 0, 1, 0);
+        GL.Scale(w, h, d);
+        float[] shade = { .98f, .6f, .85f, .68f, 1.05f, .5f };
+        for (int fi = 0; fi < CubeFaces.Length; fi++)
+        {
+            var f = CubeFaces[fi];
+            if (!Wireframe) { GL.BindTexture(TextureTarget.Texture2D, fi == 0 ? frontTex : sideTex); GL.Enable(EnableCap.Texture2D); }
+            GL.Begin(PrimitiveType.Quads);
+            GL.Color3(shade[fi], shade[fi], shade[fi]);
+            GL.TexCoord2(0, 0); GL.Vertex3(f[0], f[1], f[2]);
+            GL.TexCoord2(1, 0); GL.Vertex3(f[3], f[4], f[5]);
+            GL.TexCoord2(1, 1); GL.Vertex3(f[6], f[7], f[8]);
+            GL.TexCoord2(0, 1); GL.Vertex3(f[9], f[10], f[11]);
+            GL.End();
+            if (!Wireframe) GL.Disable(EnableCap.Texture2D);
+        }
+        GL.Color3(1f, 1f, 1f);
+        GL.PopMatrix();
+    }
+
     private MeshData? MeshFor(Prefab prefab)
     {
         if (_meshes.TryGetValue(prefab.Model, out var cached)) return cached;
@@ -512,6 +587,7 @@ public sealed class GlView : GLControl
             var inv = System.Globalization.CultureInfo.InvariantCulture;
             var verts = new List<Vector3>();
             var uvs = new List<Vector2>();
+            string material = "";
             foreach (var line in System.Text.Encoding.UTF8.GetString(bytes).Split('\n'))
             {
                 var p = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -520,6 +596,8 @@ public sealed class GlView : GLControl
                     verts.Add(new(float.Parse(p[1], inv), float.Parse(p[2], inv), float.Parse(p[3], inv)));
                 else if (p[0] == "vt" && p.Length >= 3)
                     uvs.Add(new(float.Parse(p[1], inv), float.Parse(p[2], inv)));
+                else if (p[0] == "usemtl" && p.Length >= 2)
+                    material = string.Join(' ', p.Skip(1));
                 else if (p[0] == "f" && p.Length >= 4)
                 {
                     // OBJ faces can be polygons: fan-triangulate, and
@@ -545,7 +623,7 @@ public sealed class GlView : GLControl
                             tri[c * 5] = corners[c].V.X; tri[c * 5 + 1] = corners[c].V.Y; tri[c * 5 + 2] = corners[c].V.Z;
                             tri[c * 5 + 3] = corners[c].T.X; tri[c * 5 + 4] = corners[c].T.Y;
                         }
-                        mesh.Tris.Add(tri);
+                        mesh.Tris.Add(new MeshTri { Vertices = tri, Material = material });
                     }
                 }
             }
@@ -567,19 +645,37 @@ public sealed class GlView : GLControl
     {
         var mesh = MeshFor(prefab);
         if (mesh is not { Tris.Count: > 0 }) return false;
-        int tex = TextureFor(prefab.TextureUrl ?? prefab.Texture, Color.FromArgb(170, 160, 175));
+        // Authored model textures must be shown unmodified.  The old lavender
+        // multiply was intended as a missing-material fallback, but it also
+        // tinted every textured engine fixture and made the preview unlike the
+        // game.  Keep the neutral fallback only when no diffuse map exists.
+        bool hasTexture = !string.IsNullOrWhiteSpace(prefab.TextureUrl ?? prefab.Texture);
+        int fallbackTex = TextureFor(prefab.TextureUrl ?? prefab.Texture,
+            hasTexture ? Color.White : Color.FromArgb(170, 160, 175));
         GL.PushMatrix();
         GL.Translate(wx, baseZ, wy);
         GL.Rotate(-rot, 0, 1, 0);
         GL.Scale(w / mesh.Size.X, h / mesh.Size.Y, d / mesh.Size.Z);
         GL.Translate(-mesh.Min.X, -mesh.Min.Y, -mesh.Min.Z);
-        if (!Wireframe) { GL.BindTexture(TextureTarget.Texture2D, tex); GL.Enable(EnableCap.Texture2D); }
+        if (!Wireframe) { GL.BindTexture(TextureTarget.Texture2D, fallbackTex); GL.Enable(EnableCap.Texture2D); }
         GL.Begin(PrimitiveType.Triangles);
         // Flat shading from real face normals: without this, models are
         // paper cut-outs - every triangle identical, no form at all.
         var lightDir = Vector3.Normalize(new Vector3(-.45f, .85f, .4f));
-        foreach (var tri in mesh.Tris)
+        string? activeMaterial = null;
+        foreach (var triData in mesh.Tris)
         {
+            var tri = triData.Vertices;
+            if (!Wireframe && !string.Equals(activeMaterial, triData.Material, StringComparison.Ordinal))
+            {
+                activeMaterial = triData.Material;
+                string? textureUrl = null;
+                if (!string.IsNullOrWhiteSpace(activeMaterial))
+                    prefab.MaterialUrls.TryGetValue(activeMaterial, out textureUrl);
+                GL.BindTexture(TextureTarget.Texture2D,
+                    TextureFor(textureUrl ?? prefab.TextureUrl ?? prefab.Texture,
+                        textureUrl != null || hasTexture ? Color.White : Color.FromArgb(170, 160, 175)));
+            }
             var a = new Vector3(tri[0], tri[1], tri[2]);
             var b = new Vector3(tri[5], tri[6], tri[7]);
             var c = new Vector3(tri[10], tri[11], tri[12]);
@@ -856,9 +952,13 @@ public sealed class GlView : GLControl
                 {
                     case "asset":
                     {
-                        var prefab = Blob?.Prefabs.FirstOrDefault(p => p.Model == o.Model);
+                        var prefab = Blob?.Prefabs.FirstOrDefault(p => p.Model == o.Model)
+                            ?? (string.IsNullOrWhiteSpace(o.EngineFixtureName) ? null
+                                : Blob?.Prefabs.FirstOrDefault(p =>
+                                    string.Equals(Path.GetFileNameWithoutExtension(p.Model), o.EngineFixtureName, StringComparison.OrdinalIgnoreCase)));
                         if (prefab == null || !DrawPrefab(prefab, wx, o.Z, wy, o.Rotation, o.W, o.H, o.D))
-                            Box(wx, o.Z + o.H / 2, wy, o.W, o.H, o.D, TextureFor(o.Texture, Color.FromArgb(143, 113, 158)), o.Rotation);
+                            Box(wx, o.Z + o.H / 2, wy, o.W, o.H, o.D,
+                                TextureFor(o.Texture, o.EngineFixture >= 0 ? EngineFixtureTint(o) : Color.FromArgb(143, 113, 158)), o.Rotation);
                         break;
                     }
                     case "light":
@@ -868,7 +968,8 @@ public sealed class GlView : GLControl
                         break;
                     }
                     case "sign":
-                        Box(wx, o.Z, wy, Math.Max(.3f, o.W), Math.Max(.2f, o.H), .08f, SignTexture(o), o.Rotation);
+                        BoxFaced(wx, o.Z, wy, Math.Max(.3f, o.W), Math.Max(.2f, o.H), .08f,
+                            SignTexture(o), TextureFor(null, Color.FromArgb(24, 29, 38)), o.Rotation);
                         break;
                     case "prim":
                         DrawPrim(o, wx, wy);

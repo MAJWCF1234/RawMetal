@@ -154,11 +154,29 @@ public partial class MainWindow
     {
         var dlg = new Microsoft.Win32.OpenFileDialog { Filter = "RawMetal campaign (*.rmc;*.txt)|*.rmc;*.txt|All files|*.*" };
         if (dlg.ShowDialog(this) != true) return;
-        _project = Rmc.Import(File.ReadAllText(dlg.FileName), _maps);
-        if (_project.Chunks.Count == 0) _project = NewBlankProject();
-        _chunkIndex = 0; _layerIndex = 0;
-        LoadIntoViews();
-        SetStatus("World file imported.");
+        OpenCampaignFile(dlg.FileName, Path.GetFileNameWithoutExtension(dlg.FileName));
+    }
+
+    private void OpenCampaignFile(string path, string label)
+    {
+        try
+        {
+            var imported = Rmc.Import(File.ReadAllText(path), _maps);
+            if (imported.Chunks.Count == 0) throw new InvalidDataException("The file did not contain any maps.");
+            _project = imported; _chunkIndex = 0; _layerIndex = 0;
+            MapSearch.Clear();
+            LoadIntoViews();
+            SetStatus($"{label} loaded: {_project.Chunks.Count} maps. Search the map list, click a map, then edit safely.");
+            // Every normal campaign load gets a game-authored reference view
+            // when it has a Player Start.  This is not a Starter-map special
+            // case: it is the honest visual companion for any RMC, using the
+            // same renderer, materials, fog and sky as play mode.
+            _ = ShowLoadedCampaignReferenceAsync(label);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Could not open {label}: {ex.Message}");
+        }
     }
 
     private void ExportRmc()
@@ -208,6 +226,26 @@ public partial class MainWindow
         _playtested = true; UpdateChecklist();
         ShowEngineImage(img, "The real game, rendering your map");
         SetStatus("That's the actual game - lighting, bloom and all. 🎉");
+    }
+
+    private bool _referenceBusy;
+    private async Task ShowLoadedCampaignReferenceAsync(string label)
+    {
+        if (_referenceBusy) return;
+        var player = _project.Chunks.SelectMany(c => c.Objects.Where(o => o.Type == "spawn" && o.SpawnKind == "Player")
+            .Select(o => (Chunk: c, Obj: o))).FirstOrDefault();
+        if (player.Obj == null || FindEngine() == null) return;
+        _referenceBusy = true;
+        try
+        {
+            int mapIndex = Math.Max(0, _project.Chunks.OrderBy(c => c.Number).ToList().IndexOf(player.Chunk));
+            float wx = player.Chunk.Gx * 24 + player.Obj.X, wy = player.Chunk.Gy * 24 + player.Obj.Y;
+            var img = await RunEngineShotAsync(mapIndex, wx, wy, player.Obj.Rotation, 0, 1.7f);
+            if (img != null)
+                ShowEngineImage(img, $"Real game reference — {label}");
+        }
+        catch { /* The fast editor remains usable if a reference shot cannot render. */ }
+        finally { _referenceBusy = false; }
     }
 
     // The actual engine, headless, rendering one named view of the temp
@@ -430,6 +468,16 @@ public partial class MainWindow
                 var chunk = Chunk!; var layer = Layer!;
                 int Count(string type) => chunk.Objects.Count(o => o.Type == type);
 
+                Check("simple mode keeps the same map", () =>
+                {
+                    var before = Chunk;
+                    ToggleSimpleMode();
+                    bool simple = ToolsPanel.Visibility == Visibility.Collapsed &&
+                                  RightDock.Visibility == Visibility.Collapsed && Chunk == before;
+                    ToggleSimpleMode();
+                    return simple && ToolsPanel.Visibility == Visibility.Visible && RightDock.Visibility == Visibility.Visible;
+                });
+
                 Check("drag-a-room makes walls+floor", () =>
                 { RectFillRoom(2, 2, 10, 8); return GetTile(layer, 2, 2) == '#' && GetTile(layer, 5, 5) == '.'; });
                 Check("paint floor stroke", () =>
@@ -498,6 +546,36 @@ public partial class MainWindow
             catch (Exception ex) { results.Add($"FAIL harness: {ex}"); }
             File.WriteAllText("selftest-tools.txt", string.Join("\n", results));
             System.Windows.Application.Current.Shutdown();
+        };
+    }
+
+    // Reproduces the real application path for both engine-owned fixtures:
+    // import, populate the map rail, bind the plan and render the focused
+    // neighbourhood.  This protects against a parser-only green test while
+    // the actual editor still falls over when a campaign is opened.
+    public void RunFixtureWindowTest()
+    {
+        Loaded += async (_, _) =>
+        {
+            try
+            {
+                var reports = new List<string>();
+                foreach (var file in new[] { "Starter Map.rmc", "RawMetal-Ashfall-Exclusion-Zone.txt" })
+                {
+                    string path = Path.Combine(Directory.GetCurrentDirectory(), "custom maps", file);
+                    _project = Rmc.Import(File.ReadAllText(path), _maps);
+                    _chunkIndex = 0; _layerIndex = 0;
+                    LoadIntoViews();
+                    await Task.Delay(450);
+                    var (distinct, brightness) = _gl.RenderStats();
+                    if (distinct < 8 || brightness <= .001f)
+                        throw new InvalidOperationException($"{file}: focused 3D view is blank.");
+                    reports.Add($"{file}: {_project.Chunks.Count} maps, 3D distinct={distinct}, brightness={brightness:0.###}");
+                }
+                File.WriteAllLines("selftest-fixture-windows.txt", reports);
+            }
+            catch (Exception ex) { File.WriteAllText("selftest-fixture-windows-fail.txt", ex.ToString()); }
+            finally { System.Windows.Application.Current.Shutdown(); }
         };
     }
 
