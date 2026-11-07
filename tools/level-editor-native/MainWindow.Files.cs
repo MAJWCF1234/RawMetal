@@ -447,6 +447,40 @@ public partial class MainWindow
         };
     }
 
+    // The Starter entrance, rendered headless: proves real campaigns draw
+    // with their materials and models, not flat proxy boxes. Written
+    // because "the building shows none of the materials" shipped under
+    // tests that only ever rendered the sample. Frame: .build/starter-frame.png
+    public void RunStarterViewTest()
+    {
+        Loaded += async (_, _) =>
+        {
+            try
+            {
+                string path = Path.Combine(Directory.GetCurrentDirectory(), "custom maps", "Starter Map.rmc");
+                _project = Rmc.Import(File.ReadAllText(path), _maps);
+                _chunkIndex = 0; _layerIndex = 0;
+                // Stand where the player stands: the walk POV at the
+                // Player Start is the view everyone judges the editor by.
+                int spawnChunk = _project.Chunks.FindIndex(c => c.Objects.Any(o => o.Type == "spawn" && o.SpawnKind == "Player"));
+                if (spawnChunk >= 0) _chunkIndex = spawnChunk;
+                RefreshMaps(); RefreshLayers(); LoadIntoViews();
+                SetViewMode("3d");
+                _gl.EnterWalk();
+                await Task.Delay(900);
+                Directory.CreateDirectory(@"n:\rawmetal\.build");
+                _gl.DebugSaveFrame(@"n:\rawmetal\.build\starter-frame.png");
+                var (distinct, brightness) = _gl.RenderStats();
+                if (distinct < 40 || brightness <= 0.001f)
+                    throw new InvalidOperationException($"Starter view looks flat (distinct={distinct}, brightness={brightness:0.###})");
+                File.WriteAllText("selftest-view.txt",
+                    $"Starter entrance renders textured: distinct={distinct}, brightness={brightness:0.###}");
+            }
+            catch (Exception ex) { File.WriteAllText("selftest-fail.txt", ex.ToString()); }
+            finally { System.Windows.Application.Current.Shutdown(); }
+        };
+    }
+
     // Every tool, exercised the way a person uses it, with an assertion
     // on the result. Written because "most tools don't work" shipped
     // under a happy-path-only test. Output: selftest-tools.txt

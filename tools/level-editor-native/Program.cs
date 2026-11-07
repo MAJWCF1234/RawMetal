@@ -16,6 +16,7 @@ internal static class Program
         var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
         var window = new MainWindow();
         if (args.Contains("--selftest-3d")) window.RunSelfTest();
+        if (args.Contains("--selftest-view")) window.RunStarterViewTest();
         if (args.Contains("--selftest-tools")) window.RunToolTest();
         if (args.Contains("--selftest-fixture-windows")) window.RunFixtureWindowTest();
         app.Run(window);

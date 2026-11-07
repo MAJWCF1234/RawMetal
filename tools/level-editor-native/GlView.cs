@@ -77,6 +77,11 @@ public sealed class GlView : GLControl
     private int SurfaceTex(Chunk chunk, string role)
     {
         int set = role switch { "wall" => chunk.SurfaceWall, "floor" => chunk.SurfaceFloor, _ => chunk.SurfaceCeiling };
+        return SurfaceTexForSet(set, role);
+    }
+
+    private int SurfaceTexForSet(int set, string role)
+    {
         (string Name, Color Tint) pick = (set, role) switch
         {
             (0, "floor") => ("Concrete Floor", Color.White),
@@ -107,6 +112,68 @@ public sealed class GlView : GLControl
         };
         var mat = FindMat(pick.Name);
         return mat != null ? TextureFor(mat.Url, pick.Tint) : TextureFor(null, Color.Gray);
+    }
+
+    private int MatTex(string name, Color tint)
+    {
+        var mat = FindMat(name);
+        return mat != null ? TextureFor(mat.Url, tint)
+            : TextureFor(null, tint == Color.White ? Color.Gray : tint);
+    }
+
+    // STRUCT boxes carry the game's structure material index (World.h /
+    // Scene3D's structureTexture chain). Drawing them all one flat colour
+    // made every real facade - the Starter entrance included - read as
+    // untextured slabs. Map each index to the same finish the game binds.
+    private int StructTex(Obj o, Chunk chunk)
+    {
+        if (o.Name == "Breakable")
+            return o.BreakMaterial == 17 ? TextureFor(null, Color.FromArgb(52, 74, 78)) : MatTex("Wooden Pallet", Color.White);
+        return o.Material switch
+        {
+            3 => SurfaceTex(chunk, "wall"),
+            26 => SurfaceTexForSet(5, "wall"),
+            27 => SurfaceTexForSet(3, "wall"),
+            28 => SurfaceTexForSet(4, "wall"),
+            29 => SurfaceTexForSet(6, "wall"),
+            31 => SurfaceTexForSet(2, "wall"),
+            32 => SurfaceTexForSet(8, "wall"),
+            33 => SurfaceTexForSet(9, "wall"),
+            36 => SurfaceTexForSet(10, "wall"),
+            37 => SurfaceTexForSet(11, "wall"),
+            38 => SurfaceTexForSet(12, "wall"),
+            1 or 2 or 6 => MatTex("Panel Metal", Color.White),
+            7 => MatTex("Bulkhead", Color.White),
+            8 => MatTex("Iron Plate", Color.White),
+            11 => MatTex("Pressure Wall", Color.White),
+            13 => MatTex("Straight Hazard Stripes", Color.White),
+            15 => MatTex("Wall Grey", Color.White),
+            21 => MatTex("Wall Painted", Color.White),
+            22 => MatTex("Ceiling 1", Color.White),
+            23 => MatTex("Office Carpet", Color.White),
+            24 or 50 => MatTex("Floor 1", Color.White),
+            10 or 51 => MatTex("Wooden Pallet", Color.White),
+            40 or 42 => MatTex("Wall Grey", Color.White),
+            41 => MatTex("Wall Grey", Color.FromArgb(196, 186, 168)),
+            43 => MatTex("Wall Grey", Color.FromArgb(178, 172, 160)),
+            44 => MatTex("Wall Grey", Color.FromArgb(150, 146, 138)),
+            45 or 48 => MatTex("Panel Metal", Color.FromArgb(170, 178, 186)),
+            46 => MatTex("Panel Metal", Color.White),
+            47 => MatTex("Iron Plate", Color.FromArgb(214, 148, 92)),
+            49 => MatTex("Concrete Floor", Color.FromArgb(120, 120, 122)),
+            17 or 9 => TextureFor(null, Color.FromArgb(52, 74, 78)),
+            16 => TextureFor(null, Color.FromArgb(96, 34, 30)),
+            25 => TextureFor(null, Color.FromArgb(198, 92, 30)),
+            34 => TextureFor(null, Color.FromArgb(96, 128, 64)),
+            35 => TextureFor(null, Color.FromArgb(126, 206, 224)),
+            39 => MatTex("Wall Painted", Color.FromArgb(158, 148, 168)),
+            12 => MatTex("Panel Metal", Color.FromArgb(88, 92, 96)),
+            14 => MatTex("Wall Painted", Color.FromArgb(206, 172, 66)),
+            18 => MatTex("Panel Metal", Color.FromArgb(206, 176, 84)),
+            19 => MatTex("Panel Metal", Color.FromArgb(176, 84, 62)),
+            20 => MatTex("Panel Metal", Color.FromArgb(208, 213, 218)),
+            _ => SurfaceTex(chunk, "wall"),
+        };
     }
 
     // Compatibility profile is load-bearing: this view paints with the
@@ -529,10 +596,19 @@ public sealed class GlView : GLControl
         {
             var f = faces[fi];
             GL.Color3(shade[fi], shade[fi], shade[fi]);
+            // Textures repeat every ~2.4 m like the game's own finishes -
+            // one stretch of concrete over a whole facade reads as flat
+            // colour no matter how good the texture is.
+            (float su, float sv) = fi switch
+            {
+                0 or 1 => (w / 2.4f, h / 2.4f),
+                2 or 3 => (d / 2.4f, h / 2.4f),
+                _ => (w / 2.4f, d / 2.4f),
+            };
             GL.TexCoord2(0, 0); GL.Vertex3(f[0], f[1], f[2]);
-            GL.TexCoord2(1, 0); GL.Vertex3(f[3], f[4], f[5]);
-            GL.TexCoord2(1, 1); GL.Vertex3(f[6], f[7], f[8]);
-            GL.TexCoord2(0, 1); GL.Vertex3(f[9], f[10], f[11]);
+            GL.TexCoord2(su, 0); GL.Vertex3(f[3], f[4], f[5]);
+            GL.TexCoord2(su, sv); GL.Vertex3(f[6], f[7], f[8]);
+            GL.TexCoord2(0, sv); GL.Vertex3(f[9], f[10], f[11]);
         }
         GL.Color3(1f, 1f, 1f);
         GL.End();
@@ -553,7 +629,7 @@ public sealed class GlView : GLControl
     // A box whose FRONT face (+z local) carries one texture and every
     // other face another. Signs read forwards from the front and are
     // blank-backed from behind - never mirror writing.
-    private void BoxFaced(float x, float z, float y, float w, float h, float d, int frontTex, int sideTex, float rotDeg = 0)
+    private void BoxFaced(float x, float z, float y, float w, float h, float d, int frontTex, int sideTex, float rotDeg = 0, bool readableBack = false)
     {
         GL.PushMatrix();
         GL.Translate(x, z, y);
@@ -563,18 +639,51 @@ public sealed class GlView : GLControl
         for (int fi = 0; fi < CubeFaces.Length; fi++)
         {
             var f = CubeFaces[fi];
-            if (!Wireframe) { GL.BindTexture(TextureTarget.Texture2D, fi == 0 ? frontTex : sideTex); GL.Enable(EnableCap.Texture2D); }
+            // Signs read from behind too: the back face repeats the front
+            // with U mirrored, so the words never come out backwards.
+            bool back = fi == 1 && readableBack;
+            if (!Wireframe) { GL.BindTexture(TextureTarget.Texture2D, fi == 0 || back ? frontTex : sideTex); GL.Enable(EnableCap.Texture2D); }
             GL.Begin(PrimitiveType.Quads);
             GL.Color3(shade[fi], shade[fi], shade[fi]);
-            GL.TexCoord2(0, 0); GL.Vertex3(f[0], f[1], f[2]);
-            GL.TexCoord2(1, 0); GL.Vertex3(f[3], f[4], f[5]);
-            GL.TexCoord2(1, 1); GL.Vertex3(f[6], f[7], f[8]);
-            GL.TexCoord2(0, 1); GL.Vertex3(f[9], f[10], f[11]);
+            if (back)
+            {
+                GL.TexCoord2(1, 0); GL.Vertex3(f[0], f[1], f[2]);
+                GL.TexCoord2(0, 0); GL.Vertex3(f[3], f[4], f[5]);
+                GL.TexCoord2(0, 1); GL.Vertex3(f[6], f[7], f[8]);
+                GL.TexCoord2(1, 1); GL.Vertex3(f[9], f[10], f[11]);
+            }
+            else
+            {
+                GL.TexCoord2(0, 0); GL.Vertex3(f[0], f[1], f[2]);
+                GL.TexCoord2(1, 0); GL.Vertex3(f[3], f[4], f[5]);
+                GL.TexCoord2(1, 1); GL.Vertex3(f[6], f[7], f[8]);
+                GL.TexCoord2(0, 1); GL.Vertex3(f[9], f[10], f[11]);
+            }
             GL.End();
             if (!Wireframe) GL.Disable(EnableCap.Texture2D);
         }
         GL.Color3(1f, 1f, 1f);
         GL.PopMatrix();
+    }
+
+    private readonly Dictionary<string, Prefab> _prefabByStem = new();
+
+    // Engine fixture slots are snake_case library names (ModelIds.h:
+    // dead_tree_a=73, pine_a=121) and the blob files carry exactly those
+    // stems - resolve by stem, preferring the textured .obj twin over .glb.
+    private Prefab? PrefabByStem(string? name)
+    {
+        if (Blob == null || string.IsNullOrWhiteSpace(name)) return null;
+        if (_prefabByStem.Count == 0)
+            foreach (var p in Blob.Prefabs)
+            {
+                string stem = Path.GetFileNameWithoutExtension(p.Model ?? "");
+                if (stem.Length == 0) continue;
+                string key = stem.ToLowerInvariant();
+                if (!_prefabByStem.TryGetValue(key, out var cur) || (p.Ext == ".obj" && cur.Ext != ".obj"))
+                    _prefabByStem[key] = p;
+            }
+        return _prefabByStem.TryGetValue(name.Trim().ToLowerInvariant(), out var hit) ? hit : null;
     }
 
     private MeshData? MeshFor(Prefab prefab)
@@ -730,6 +839,9 @@ public sealed class GlView : GLControl
             g.DrawString(string.IsNullOrEmpty(o.Title) ? "SIGN" : o.Title, title, Brushes.White, 30, 26);
             if (!string.IsNullOrEmpty(o.Subtitle)) g.DrawString(o.Subtitle, sub, Brushes.LightSteelBlue, 32, 104);
         }
+        // GDI bitmaps are top-row-first, GL uploads bottom-row-first:
+        // without this flip every sign renders upside down.
+        bmp.RotateFlip(RotateFlipType.RotateNoneFlipY);
         id = UploadBitmap(bmp);
         _signTex[key] = id;
         return id;
@@ -907,11 +1019,13 @@ public sealed class GlView : GLControl
         if (Project == null) return;
         if (Project.TerrainEnabled)
         {
+            // Ground paint and pads sit 3 cm under floor-slab tops, or the
+            // two coplanar surfaces z-fight in stripes wherever they meet.
             foreach (var g in Project.Ground)
-                Box((g.X1 + g.X2) / 2, Project.TerrainBase - .06f, (g.Y1 + g.Y2) / 2,
+                Box((g.X1 + g.X2) / 2, Project.TerrainBase - .09f, (g.Y1 + g.Y2) / 2,
                     Math.Max(.5f, g.X2 - g.X1), .12f, Math.Max(.5f, g.Y2 - g.Y1), TextureFor(null, GroundColor(g.Kind)));
             foreach (var fl in Project.Flats)
-                Box((fl.X1 + fl.X2) / 2, fl.Height - .07f, (fl.Y1 + fl.Y2) / 2,
+                Box((fl.X1 + fl.X2) / 2, fl.Height - .10f, (fl.Y1 + fl.Y2) / 2,
                     Math.Max(.5f, fl.X2 - fl.X1), .14f, Math.Max(.5f, fl.Y2 - fl.Y1), TextureFor(null, Color.FromArgb(141, 141, 132)));
         }
         foreach (var chunk in Project.Chunks)
@@ -953,9 +1067,8 @@ public sealed class GlView : GLControl
                     case "asset":
                     {
                         var prefab = Blob?.Prefabs.FirstOrDefault(p => p.Model == o.Model)
-                            ?? (string.IsNullOrWhiteSpace(o.EngineFixtureName) ? null
-                                : Blob?.Prefabs.FirstOrDefault(p =>
-                                    string.Equals(Path.GetFileNameWithoutExtension(p.Model), o.EngineFixtureName, StringComparison.OrdinalIgnoreCase)));
+                            ?? PrefabByStem(o.EngineFixtureName)
+                            ?? PrefabByStem(o.Name);
                         if (prefab == null || !DrawPrefab(prefab, wx, o.Z, wy, o.Rotation, o.W, o.H, o.D))
                             Box(wx, o.Z + o.H / 2, wy, o.W, o.H, o.D,
                                 TextureFor(o.Texture, o.EngineFixture >= 0 ? EngineFixtureTint(o) : Color.FromArgb(143, 113, 158)), o.Rotation);
@@ -969,7 +1082,12 @@ public sealed class GlView : GLControl
                     }
                     case "sign":
                         BoxFaced(wx, o.Z, wy, Math.Max(.3f, o.W), Math.Max(.2f, o.H), .08f,
-                            SignTexture(o), TextureFor(null, Color.FromArgb(24, 29, 38)), o.Rotation);
+                            SignTexture(o), TextureFor(null, Color.FromArgb(24, 29, 38)), o.Rotation, readableBack: true);
+                        break;
+                    case "box":
+                        // STRUCT (and BREAKABLE) architecture: the game's
+                        // own material index decides the finish.
+                        Box(wx, o.Z + o.H / 2, wy, o.W, o.H, o.D, StructTex(o, chunk), o.Rotation);
                         break;
                     case "prim":
                         DrawPrim(o, wx, wy);
