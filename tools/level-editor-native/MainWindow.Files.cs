@@ -473,8 +473,20 @@ public partial class MainWindow
                 var (distinct, brightness) = _gl.RenderStats();
                 if (distinct < 40 || brightness <= 0.001f)
                     throw new InvalidOperationException($"Starter view looks flat (distinct={distinct}, brightness={brightness:0.###})");
+                // Same proof for the outdoor campaign: real hills, no slabs.
+                string ashfallPath = Path.Combine(Directory.GetCurrentDirectory(), "custom maps", "RawMetal-Ashfall-Exclusion-Zone.txt");
+                _gl.ExitWalk();
+                _project = Rmc.Import(File.ReadAllText(ashfallPath), _maps);
+                _chunkIndex = 0; _layerIndex = 0;
+                RefreshMaps(); RefreshLayers(); LoadIntoViews();
+                await Task.Delay(900);
+                _gl.DebugSaveFrame(@"n:\rawmetal\.build\ashfall-frame.png");
+                var (aDistinct, aBrightness) = _gl.RenderStats();
+                if (aDistinct < 40 || aBrightness <= 0.001f)
+                    throw new InvalidOperationException($"Ashfall view looks flat (distinct={aDistinct}, brightness={aBrightness:0.###})");
                 File.WriteAllText("selftest-view.txt",
-                    $"Starter entrance renders textured: distinct={distinct}, brightness={brightness:0.###}");
+                    $"Starter entrance renders textured: distinct={distinct}, brightness={brightness:0.###}\n" +
+                    $"Ashfall outdoors renders textured: distinct={aDistinct}, brightness={aBrightness:0.###}");
             }
             catch (Exception ex) { File.WriteAllText("selftest-fail.txt", ex.ToString()); }
             finally { System.Windows.Application.Current.Shutdown(); }

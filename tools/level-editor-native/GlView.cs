@@ -1014,13 +1014,121 @@ public sealed class GlView : GLControl
         _ => Color.FromArgb(100, 120, 70),
     };
 
+    // The engine's authored heightfield, ported line for line from
+    // World.cpp (value-noise lattice + flats blending), so the editor's
+    // ground IS the game's ground - same seed, same hills, same pads.
+    private static float LatticeValue(uint seed, int x, int y)
+    {
+        uint h = seed * 0x9E3779B1u ^ (uint)x * 0x85EBCA77u ^ (uint)y * 0xC2B2AE3Du;
+        h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
+        return (h & 0xffffff) / (float)0xffffff * 2f - 1f;
+    }
+
+    private static float ValueNoise(uint seed, float x, float y)
+    {
+        int ix = (int)MathF.Floor(x), iy = (int)MathF.Floor(y);
+        float fx = x - ix, fy = y - iy;
+        static float Fade(float t) => t * t * t * (t * (t * 6 - 15) + 10);
+        float u = Fade(fx), v = Fade(fy);
+        float a = LatticeValue(seed, ix, iy), b = LatticeValue(seed, ix + 1, iy),
+              c = LatticeValue(seed, ix, iy + 1), d = LatticeValue(seed, ix + 1, iy + 1);
+        return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+    }
+
+    public float TerrainHeight(float wx, float wy)
+    {
+        var p = Project!;
+        float sum = 0, amp = 1, freq = 1 / MathF.Max(4, p.TerrainScale), norm = 0;
+        for (int octave = 0; octave < 4; octave++)
+        {
+            sum += ValueNoise((uint)p.TerrainSeed + (uint)octave * 101u, wx * freq, wy * freq) * amp;
+            norm += amp; amp *= p.TerrainRoughness; freq *= 2.03f;
+        }
+        float h = p.TerrainBase + p.TerrainAmplitude * sum / norm;
+        foreach (var flat in p.Flats)
+        {
+            float dx = MathF.Max(MathF.Max(flat.X1 - wx, 0), wx - flat.X2);
+            float dy = MathF.Max(MathF.Max(flat.Y1 - wy, 0), wy - flat.Y2);
+            float d = MathF.Sqrt(dx * dx + dy * dy);
+            float t = flat.Blend > 0 ? Math.Clamp(1 - d / flat.Blend, 0, 1) : (d <= 0 ? 1 : 0);
+            t = t * t * (3 - 2 * t);
+            h += (flat.Height - h) * t;
+        }
+        return h;
+    }
+
+    // World.cpp authoredGroundKind: noise meadow, then paint rects in order.
+    private int GroundKindAt(float wx, float wy)
+    {
+        var p = Project!;
+        uint seed = (uint)p.TerrainSeed;
+        float a = ValueNoise(seed + 7001u, wx * .11f, wy * .11f) + ValueNoise(seed + 7002u, wx * .31f, wy * .31f) * .35f;
+        float b = ValueNoise(seed + 7003u, wx * .07f, wy * .07f) + ValueNoise(seed + 7004u, wx * .23f, wy * .23f) * .4f;
+        int kind = a > .62f ? 4 : a > .42f ? 3 : b > .38f ? 2 : b < -.2f ? 1 : 0;
+        foreach (var paint in p.Ground)
+        {
+            float jitter = ValueNoise(seed + 7005u, wx * .6f, wy * .6f) * paint.Edge;
+            float dx = MathF.Max(paint.X1 - wx, wx - paint.X2), dy = MathF.Max(paint.Y1 - wy, wy - paint.Y2);
+            if (MathF.Max(dx, dy) < jitter && paint.Kind != 8) kind = paint.Kind;
+        }
+        return kind;
+    }
+
+    // Real hills instead of the flat slabs that used to bury every outdoor
+    // map: a 1 m grid over the focused maps, coloured by ground kind and
+    // shaded by its own normals.
+    private void DrawTerrain()
+    {
+        var p = Project!;
+        float x0, y0, x1, y1;
+        if (FocusSet)
+        {
+            x0 = (FocusGx - 1) * 24; y0 = (FocusGy - 1) * 24;
+            x1 = (FocusGx + 2) * 24; y1 = (FocusGy + 2) * 24;
+        }
+        else if (p.Chunks.Count > 0)
+        {
+            x0 = p.Chunks.Min(c => c.Gx) * 24f; y0 = p.Chunks.Min(c => c.Gy) * 24f;
+            x1 = (p.Chunks.Max(c => c.Gx) + 1) * 24f; y1 = (p.Chunks.Max(c => c.Gy) + 1) * 24f;
+        }
+        else return;
+        float step = (x1 - x0) > 110 || (y1 - y0) > 110 ? 2f : 1f;
+        var lightDir = Vector3.Normalize(new Vector3(-.45f, .85f, .4f));
+        if (!Wireframe) GL.Disable(EnableCap.Texture2D);
+        GL.Begin(PrimitiveType.Triangles);
+        for (float gy = y0; gy < y1; gy += step)
+            for (float gx = x0; gx < x1; gx += step)
+            {
+                float cx = gx + step / 2, cy = gy + step / 2;
+                var col = GroundColor(GroundKindAt(cx, cy));
+                float h00 = TerrainHeight(gx, gy), h10 = TerrainHeight(gx + step, gy),
+                      h01 = TerrainHeight(gx, gy + step), h11 = TerrainHeight(gx + step, gy + step);
+                var a = new Vector3(gx, h00, gy); var b = new Vector3(gx + step, h10, gy);
+                var c = new Vector3(gx, h01, gy + step); var d = new Vector3(gx + step, h11, gy + step);
+                void Tri(Vector3 A, Vector3 B, Vector3 C)
+                {
+                    var n = Vector3.Cross(B - A, C - A);
+                    float shade = n.LengthSquared > 0
+                        ? .52f + .48f * Math.Clamp(Vector3.Dot(Vector3.Normalize(n), lightDir), 0, 1)
+                        : .8f;
+                    GL.Color3(col.R / 255f * shade, col.G / 255f * shade, col.B / 255f * shade);
+                    GL.Vertex3(A); GL.Vertex3(B); GL.Vertex3(C);
+                }
+                Tri(a, b, c); Tri(b, d, c);
+            }
+        GL.End();
+        GL.Color3(1f, 1f, 1f);
+    }
+
     private void DrawScene()
     {
         if (Project == null) return;
         if (Project.TerrainEnabled)
+            DrawTerrain();
+        else
         {
-            // Ground paint and pads sit 3 cm under floor-slab tops, or the
-            // two coplanar surfaces z-fight in stripes wherever they meet.
+            // No heightfield: ground paint and pads as thin slabs, 3 cm
+            // under floor-slab tops so the surfaces never z-fight.
             foreach (var g in Project.Ground)
                 Box((g.X1 + g.X2) / 2, Project.TerrainBase - .09f, (g.Y1 + g.Y2) / 2,
                     Math.Max(.5f, g.X2 - g.X1), .12f, Math.Max(.5f, g.Y2 - g.Y1), TextureFor(null, GroundColor(g.Kind)));
