@@ -223,17 +223,22 @@ public sealed class PlanCanvas : Control
         if (Project is { TerrainEnabled: true })
         {
             float ox = Chunk.Gx * 24, oy = Chunk.Gy * 24;
+            // Ground paint is campaign-wide; clip it to this map and keep
+            // it faint, or one big rect washes the whole plan into soup.
+            var clip = new RectangleF(_pan.X, _pan.Y, 24 * c, 24 * c);
             foreach (var gr in Project.Ground)
             {
-                var r = new RectangleF(_pan.X + (gr.X1 - ox) * c, _pan.Y + (gr.Y1 - oy) * c,
-                                       (gr.X2 - gr.X1) * c, (gr.Y2 - gr.Y1) * c);
-                using var gb = new SolidBrush(Color.FromArgb(110, GlView.GroundColor(gr.Kind)));
+                var r = RectangleF.Intersect(clip, new RectangleF(_pan.X + (gr.X1 - ox) * c, _pan.Y + (gr.Y1 - oy) * c,
+                                       (gr.X2 - gr.X1) * c, (gr.Y2 - gr.Y1) * c));
+                if (r.IsEmpty) continue;
+                using var gb = new SolidBrush(Color.FromArgb(55, GlView.GroundColor(gr.Kind)));
                 g.FillRectangle(gb, r);
             }
             foreach (var fl in Project.Flats)
             {
-                var r = new RectangleF(_pan.X + (fl.X1 - ox) * c, _pan.Y + (fl.Y1 - oy) * c,
-                                       (fl.X2 - fl.X1) * c, (fl.Y2 - fl.Y1) * c);
+                var r = RectangleF.Intersect(clip, new RectangleF(_pan.X + (fl.X1 - ox) * c, _pan.Y + (fl.Y1 - oy) * c,
+                                       (fl.X2 - fl.X1) * c, (fl.Y2 - fl.Y1) * c));
+                if (r.IsEmpty) continue;
                 using var pen = new Pen(Color.FromArgb(232, 184, 96), 2f);
                 g.DrawRectangle(pen, r.X, r.Y, r.Width, r.Height);
                 if (c > 9) g.DrawString($"pad {fl.Height:0.#}m", LabelF, Brushes.Gold, r.X + 3, r.Y + 2);
@@ -273,6 +278,19 @@ public sealed class PlanCanvas : Control
             g.DrawRectangle(pen, r.X, r.Y, r.Width, r.Height);
             g.DrawString("let go = a whole room appears", LabelF, Brushes.Gold, r.X + 4, Math.Max(0, r.Y - 16));
         }
+        // Say where you are, on top of everything else. A loaded campaign
+        // opening on an unnamed grid of rectangles is how
+        // "what am I even looking at??" happens.
+        {
+            int idx = Project.Chunks.IndexOf(Chunk);
+            string banner = $"Map {idx + 1} of {Project.Chunks.Count} — {Chunk.Name}";
+            using var bannerFont = new Font("Segoe UI", 11f, FontStyle.Bold);
+            var size = g.MeasureString(banner, bannerFont);
+            using var back = new SolidBrush(Color.FromArgb(205, 10, 15, 22));
+            g.FillRectangle(back, 8, 8, size.Width + 16, size.Height + 24);
+            g.DrawString(banner, bannerFont, Brushes.White, 16, 12);
+            g.DrawString("plan — top-down view of this map", LabelF, Brushes.LightSteelBlue, 16, 14 + size.Height);
+        }
     }
 
     private static Color ColorFor(Obj o) => o.Type switch
@@ -290,7 +308,25 @@ public sealed class PlanCanvas : Control
             "Hostile" or "Creature" => Color.FromArgb(200, 100, 85),
             _ => Color.FromArgb(140, 160, 200),
         },
-        "asset" => Color.FromArgb(143, 113, 158),
+        "asset" => AssetColor(o),
         _ => Color.FromArgb(101, 117, 105),
     };
+
+    // One lavender for every model made a forest and a forklift the same
+    // purple blob. Colour by what the thing IS; lavender keeps the rest.
+    private static Color AssetColor(Obj o)
+    {
+        string name = (o.EngineFixtureName ?? o.Name ?? o.Model ?? "").ToLowerInvariant();
+        if (name.Contains("tree") || name.Contains("pine") || name.Contains("oak") || name.Contains("aspen")
+            || name.Contains("fern") || name.Contains("grass") || name.Contains("bush") || name.Contains("plant")
+            || name.Contains("ivy") || name.Contains("mushroom") || name.Contains("clover"))
+            return Color.FromArgb(96, 132, 82);
+        if (name.Contains("rock") || name.Contains("stone") || name.Contains("stump") || name.Contains("ore"))
+            return Color.FromArgb(121, 116, 106);
+        if (name.Contains("crate") || name.Contains("wood") || name.Contains("log") || name.Contains("barrel"))
+            return Color.FromArgb(150, 108, 64);
+        if (name.Contains("car") || name.Contains("van") || name.Contains("vehicle") || name.Contains("truck"))
+            return Color.FromArgb(96, 130, 168);
+        return Color.FromArgb(143, 113, 158);
+    }
 }

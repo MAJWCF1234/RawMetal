@@ -263,6 +263,11 @@
             <Border x:Name="ToolsDock" Grid.Column="0" Style="{StaticResource Glass}" Padding="14,10" Margin="0,0,10,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="ToolsRail">
+                        <TextBlock Text="🗺 Maps in this campaign" Style="{StaticResource RailLabel}" Margin="2,0,0,8"/>
+                        <TextBox x:Name="MapSearch" ToolTip="Find a map by number or name"/>
+                        <ListBox x:Name="MapList" Height="110" Background="#131C26" Foreground="#EEF3F8"
+                                 BorderBrush="#4C6076" FontSize="13"/>
+                        <Button x:Name="AddMapBtn" Content="＋ Add a map (next door)" Style="{StaticResource TopBtn}" Margin="0,8,0,10"/>
                         <TextBlock Text="🛠  TOOLS" Style="{StaticResource RailLabel}" Margin="2,0,0,8"/>
                         <StackPanel x:Name="ToolsPanel"/>
                         <TextBlock Text="Person to place" Style="{StaticResource RailLabel}"/>
@@ -275,11 +280,6 @@
                         <ListBox x:Name="LayerList" Height="86" Background="#131C26" Foreground="#EEF3F8"
                                  BorderBrush="#4C6076" FontSize="13"/>
                         <Button x:Name="AddFloorBtn" Content="＋ Add a floor above" Style="{StaticResource TopBtn}" Margin="0,8,0,0"/>
-                        <TextBlock Text="🗺 Maps in this campaign" Style="{StaticResource RailLabel}"/>
-                        <TextBox x:Name="MapSearch" ToolTip="Find a map by number or name"/>
-                        <ListBox x:Name="MapList" Height="86" Background="#131C26" Foreground="#EEF3F8"
-                                 BorderBrush="#4C6076" FontSize="13"/>
-                        <Button x:Name="AddMapBtn" Content="＋ Add a map (next door)" Style="{StaticResource TopBtn}" Margin="0,8,0,0"/>
                         <TextBlock Text="Room finishes (the game's own)" Style="{StaticResource RailLabel}"/>
                         <TextBlock Text="Walls" Foreground="#A9BCD2" FontSize="12"/>
                         <ComboBox x:Name="SurfWallCombo"/>
