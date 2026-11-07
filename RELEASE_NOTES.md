@@ -4,6 +4,25 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.6 - RawMetal Campaigns (2026-11-07)
+
+Custom maps get a file type of their own.
+
+- Custom maps are now `.rmc` files — RawMetal Campaigns. The Starter Map
+  ships as `Starter Map.rmc`, the title screen asks for `.rmc` campaign
+  files, and the map installer writes `.rmc`.
+- Inside, an `.rmc` is still the same readable text: open it in Notepad
+  and edit it by hand, exactly as before.
+- Old maps keep working: plain `.txt` maps still load, and renaming a
+  `.txt` map to `.rmc` keeps its saves — progress follows the map through
+  the rename. If a `.txt` and its renamed `.rmc` sit side by side, the
+  game lists the map once.
+- `GUIDE.html`: rewritten quick start for `.rmc` — opening maps in
+  Notepad, and turning a fresh Notepad file into a campaign by renaming
+  it from `My Map.txt` to `My Map.rmc`.
+
+---
+
 ## v1.2.5 - Light and shadow (2026-11-07)
 
 Lamps now behave like real fittings, and bright light blooms.

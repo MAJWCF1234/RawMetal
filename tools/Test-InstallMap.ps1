@@ -27,7 +27,7 @@ foreach($encoding in $encodings) {
         if($LASTEXITCODE -ne 0 -or $resolved -ne 'CUSTOM') { throw 'Custom routing failed' }
         & powershell -NoProfile -ExecutionPolicy Bypass -File $installer -Payload $payload -Mode Auto
         if($LASTEXITCODE -ne 0) { throw 'Auto installation failed' }
-        $installed = [IO.File]::ReadAllText((Join-Path $sandbox 'custom maps/Regression.txt'))
+        $installed = [IO.File]::ReadAllText((Join-Path $sandbox 'custom maps/Regression.rmc'))
         foreach($tag in @('LAYER', 'CREATURE')) {
             if([regex]::Matches($installed, "(?m)^$tag\|").Count -ne 2) { throw "Lost $tag entries during conversion" }
         }

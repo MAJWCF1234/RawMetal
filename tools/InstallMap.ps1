@@ -115,7 +115,7 @@ if($Mode -eq "Custom") {
     $safeName = $campaignName -replace '[<>:"/\\|?*]', '_'
     $safeName = ($safeName -replace '\s+', '_').Trim('_')
     if([string]::IsNullOrWhiteSpace($safeName)) { $safeName = "Custom_Campaign" }
-    $destination = Join-Path $customDir ($safeName + ".txt")
+    $destination = Join-Path $customDir ($safeName + ".rmc")
 
     $installedText = $payloadText
     $hasRuntimeData = [regex]::IsMatch(

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cwctype>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -54,6 +55,9 @@ StateId scriptName(const std::vector<std::string>& f,size_t index,const char* la
 }
 std::uint64_t campaignKey(std::string value){
  std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return char(std::tolower(c));});
+ // Saves made while a pack was still "Name.txt" must keep loading after it is renamed "Name.rmc".
+ constexpr std::string_view packExtension=".rmc";
+ if(value.size()>packExtension.size()&&value.ends_with(packExtension))value.replace(value.size()-packExtension.size(),packExtension.size(),".txt");
  std::uint64_t h=1469598103934665603ull;for(unsigned char c:value){h^=c;h*=1099511628211ull;}return h;
 }
 std::shared_ptr<AuthoredMapData> mapAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,const std::vector<std::string>& f,size_t field=1){
@@ -515,6 +519,13 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  campaign->maps.reserve(maps.size());for(auto& map:maps)campaign->maps.push_back(std::move(map));
  return campaign;
 }
+static std::wstring lowerExtension(const std::filesystem::path& path){
+ auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),[](wchar_t c){return wchar_t(std::towlower(c));});return ext;
+}
+static bool isRawMetalCampaignName(const std::string& file){return lowerExtension(std::filesystem::path(file))==L".rmc";}
+bool isCustomCampaignFile(const std::filesystem::path& path){
+ auto ext=lowerExtension(path);return ext==L".rmc"||ext==L".txt";
+}
 std::shared_ptr<const CustomCampaign> loadCustomCampaignFile(const std::filesystem::path& path){
  return loadCustomCampaignText(readText(path),path.filename().string());
 }
@@ -535,10 +546,15 @@ std::shared_ptr<const CustomCampaign> builtInCampaignForKey(std::uint64_t key){
 std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(const std::filesystem::path& directory,std::vector<std::string>* errors){
  std::vector<std::shared_ptr<const CustomCampaign>> result;std::error_code ec;
  if(std::filesystem::exists(directory,ec))for(auto& entry:std::filesystem::directory_iterator(directory,ec)){
-  if(ec)break;if(!entry.is_regular_file()||entry.path().extension()!=L".txt")continue;
+  if(ec)break;if(!entry.is_regular_file()||!isCustomCampaignFile(entry.path()))continue;
   try{result.push_back(loadCustomCampaignFile(entry.path()));}
   catch(const std::exception& error){if(errors)errors->push_back(entry.path().filename().string()+": "+error.what());}
  }
+ // "Name.txt" left beside its renamed "Name.rmc" is the same pack; the renamed file wins.
+ auto isPack=[](const auto& c){return isRawMetalCampaignName(c->sourceFile);};
+ std::stable_sort(result.begin(),result.end(),[&](auto&a,auto&b){return isPack(a)&&!isPack(b);});
+ std::vector<std::uint64_t> seen;
+ std::erase_if(result,[&](const auto& c){if(std::find(seen.begin(),seen.end(),c->key)!=seen.end())return true;seen.push_back(c->key);return false;});
  // One-file friend builds have no sidecar custom-maps folder. Keep Exclusion Zone
  // available from the embedded payload unless a disk copy already wins.
  bool hasExclusionZone=false;for(const auto& campaign:result)hasExclusionZone|=campaign->sourceFile=="RawMetal-Ashfall-Exclusion-Zone.txt";

@@ -16,7 +16,7 @@ import make_starter_map as starter  # noqa: E402
 ROOT = starter.ROOT
 MAPS = os.path.join(ROOT, 'custom maps')
 IMAGES = os.path.join(MAPS, 'guide')
-PACK = os.path.join(MAPS, 'Starter Map.txt')
+PACK = os.path.join(MAPS, 'Starter Map.rmc')
 
 # name, map name, x, y, yaw degrees, pitch, lift: map-local views of the Starter Map.
 SHOTS = [
@@ -87,10 +87,10 @@ def folder_diagram():
             (1, 'DepthWorks.exe', 'the game', '#d8dade'),
             (1, 'RawMetal-custom-maps.txt', 'written by the game: OK or ERROR per map file', '#e0b030'),
             (1, 'custom maps/', 'PUT MAP FILES HERE', '#50b060'),
-            (2, 'Starter Map.txt', 'the debug world: every part, lined up', '#d8dade'),
+            (2, 'Starter Map.rmc', 'the debug world: every part, lined up', '#d8dade'),
             (2, 'GUIDE.html', 'this guide', '#d8dade'),
             (2, 'guide/', 'pictures for this guide (ignored by the game)', '#8a9099'),
-            (2, 'My Map.txt', 'yours: any name ending in .txt', '#50b060')]
+            (2, 'My Map.rmc', 'yours: any name ending in .rmc', '#50b060')]
     y = 34
     for depth, name, note, color in rows:
         x = 24 + depth * 34
@@ -450,18 +450,23 @@ def main():
     models = starter.models()
 
     o = ['<!doctype html><html><head><meta charset="utf-8"><title>Custom maps: the guide</title><style>%s</style></head><body><main>' % CSS]
-    o.append('<h1>Making custom maps</h1><p class="lede">A custom map is one plain text file. Put it in <code>custom maps</code> beside the game, '
-             'start the game, and pick it under <b>CUSTOM MAPS</b> on the title screen. This guide shows how the file works, with '
-             '<b>Starter Map.txt</b> as the worked example: a walkable debug world with every part of a map lined up and labelled.</p>')
+    o.append('<h1>Making custom maps</h1><p class="lede">A custom map is one <b>.rmc</b> file: a RawMetal Campaign. Put it in <code>custom maps</code> beside the game, '
+             'start the game, and pick it under <b>CUSTOM MAPS</b> on the title screen. Inside, an .rmc is readable text you write by hand. This guide shows how it works, with '
+             '<b>Starter Map.rmc</b> as the worked example: a walkable debug world with every part of a map lined up and labelled.</p>')
     o.append('<nav><a href="#start">Quick start</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#scripting">Scripting</a><a href="#records">Records</a>'
              '<a href="#starter">Starter Map tour</a><a href="#values">Value tables</a><a href="#models">All models</a><a href="#errors">When it fails</a></nav>')
 
     o.append('<h2 id="start">1. Quick start</h2>')
     o.append('<figure>%s<figcaption>Where everything lives after you unzip the game.</figcaption></figure>' % folder_diagram())
-    o.append('<ol><li>Copy <code>Starter Map.txt</code> to <code>My Map.txt</code> in the same folder.</li>'
-             '<li>Open it in Notepad. Change the <code>CAMPAIGN|STARTER MAP|0</code> line to <code>CAMPAIGN|MY MAP|0</code>.</li>'
-             '<li>Start the game: <b>CUSTOM MAPS</b> now lists MY MAP. Each map file is its own campaign.</li>'
+    o.append('<ol><li>Copy <code>Starter Map.rmc</code> to <code>My Map.rmc</code> in the same folder.</li>'
+             '<li>Right-click it, choose <b>Open with</b>, then <b>Notepad</b> (tick <i>Always use this app</i> so .rmc files open in Notepad from then on). '
+             'Change the <code>CAMPAIGN|STARTER MAP|0</code> line to <code>CAMPAIGN|MY MAP|0</code> and save.</li>'
+             '<li>Start the game: <b>CUSTOM MAPS</b> now lists MY MAP. Each .rmc file is its own campaign.</li>'
              '<li>Delete the parts you do not want, move the rest, and add your own. Restart the game, or reopen the CUSTOM MAPS menu, to reload.</li></ol>')
+    o.append('<div class="note"><b>Starting from a blank Notepad file?</b> Notepad saves it as <code>My Map.txt</code>. Turn it into a campaign by renaming it to '
+             '<code>My Map.rmc</code>. If you cannot see the <code>.txt</code> on the end, open File Explorer, choose <b>View</b>, then <b>Show</b>, and tick '
+             '<b>File name extensions</b>. Windows asks whether you are sure you want to change the extension: choose <b>Yes</b>. '
+             'Saves follow the map through the rename.</div>')
     o.append('<div class="note">The game rescans the folder every time the CUSTOM MAPS menu opens, so you can edit, save and reopen the menu without quitting. '
              'Any file that fails to load is skipped and listed in <code>RawMetal-custom-maps.txt</code> next to the game, with the line number of the problem.</div>')
     o.append('<p>A smallest working map, one closed room 6 x 6 m with a lamp:</p><pre>%s</pre>' % esc(
@@ -582,7 +587,7 @@ def main():
     for name, *_, caption in SHOTS:
         if os.path.exists(os.path.join(IMAGES, name + '.jpg')):
             o.append('<figure><img src="guide/%s.jpg" alt="%s"><figcaption>%s</figcaption></figure>' % (name, esc(name), esc(caption)))
-    o.append('</div><p>To copy anything you see, search <code>Starter Map.txt</code> for its sign text (for example <code>|#27|</code> or <code>HAZARD 4</code>): '
+    o.append('</div><p>To copy anything you see, search <code>Starter Map.rmc</code> for its sign text (for example <code>|#27|</code> or <code>HAZARD 4</code>): '
              'the records just above it build that exhibit.</p>')
 
     PRIM_KINDS = [
@@ -637,7 +642,7 @@ def main():
 
     o.append('<h2 id="errors">12. When it fails</h2>')
     o.append(table(['You see', 'Why, and the fix'], [
-        ('The map is not in CUSTOM MAPS', 'Open RawMetal-custom-maps.txt beside the game. Each file is OK or ERROR with the line number and record. The file must end in .txt and sit directly in custom maps (not a subfolder).'),
+        ('The map is not in CUSTOM MAPS', 'Open RawMetal-custom-maps.txt beside the game. Each file is OK or ERROR with the line number and record. The file must end in .rmc and sit directly in custom maps (not a subfolder). A name like My Map.rmc.txt means Notepad added .txt: rename it to end in .rmc only.'),
         ('ERROR custom map rows must be exactly 24 characters', 'Count the tiles: every ROW has 24 characters, no spaces.'),
         ('ERROR ... missing CUSTOM_CAMPAIGN_DATA markers', 'Both marker lines must be present exactly as shown, three dashes each side.'),
         ('ERROR custom campaign maps require contiguous MAP records', 'Number maps 0, 1, 2... with no gap, each with one MAP record.'),

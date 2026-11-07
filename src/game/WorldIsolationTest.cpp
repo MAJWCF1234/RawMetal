@@ -39,6 +39,16 @@ bool Game::testWorldIsolation(){
  authored->layers[0].rows[0]=".";if(!check(rejected(),"Malformed map row rejected before collision generation"))return false;authored->layers[0].rows[0]=std::string(World::Width,'.');
  authored->structures.resize(65536);if(!check(rejected(),"Excess structures rejected without a wrapping collision index"))return false;authored->structures.clear();
  {
+  auto folder=std::filesystem::temp_directory_path()/("rawmetal-pack-names-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directories(folder);
+  auto pack=[](const char* name){std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|"+std::string(name)+"|0\nMAP|0|Room|0|0|3|3|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";for(int row=0;row<24;++row)text+="ROW|0|0|"+std::to_string(row)+"|........................\n";return text+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";};
+  for(auto [file,name]:{std::pair{"Pack.txt","OLD"},{"Pack.rmc","RENAMED"},{"Other.RMC","OTHER"},{"Legacy.txt","LEGACY"},{"notes.md","NOTES"}})std::ofstream(folder/file)<<pack(name);
+  auto packs=retro::loadCustomCampaignDirectory(folder);std::filesystem::remove_all(folder);
+  auto listed=[&](const char* file){auto found=std::find_if(packs.begin(),packs.end(),[&](const auto& c){return c->sourceFile==file;});return found==packs.end()?nullptr:*found;};
+  auto renamed=listed("Pack.rmc");
+  bool named=renamed&&listed("Other.RMC")&&listed("Legacy.txt")&&!listed("Pack.txt")&&!listed("notes.md")&&renamed->key==loadCustomCampaignText(pack("OLD"),"Pack.txt")->key;
+  if(!check(named,".rmc packs load, .txt still loads, a renamed pack keeps its save key and replaces its .txt original"))return false;
+ }
+ {
   auto path=std::filesystem::temp_directory_path()/("rawmetal-map-validation-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".txt");
   auto records=[](int id,int x){std::string text="MAP|"+std::to_string(id)+"|Validation|"+std::to_string(x)+"|0|3|3|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|"+std::to_string(id)+"|0|Floor|0|0\n";for(int row=0;row<24;++row)text+="ROW|"+std::to_string(id)+"|0|"+std::to_string(row)+"|........................\n";return text;};
   auto base=std::string("CAMPAIGN|Validation|0\n")+records(0,0);

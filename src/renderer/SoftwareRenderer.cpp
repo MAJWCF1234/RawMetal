@@ -1211,7 +1211,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
   for(int y=band;y<std::min(m_height,band+4+int((h>>4)%6));++y){auto row=m_pixels.begin()+size_t(y)*m_width;std::rotate(row,row+m_width-shift,row+m_width);}}
  fill(40,134,4,16,red,1);
  uiText(52,133,game.customMapsOpen()?"CUSTOM MAP ARCHIVE":"CONTAINMENT FAILURE",red,0,15,1,3);
- uiText(52,153,game.customMapsOpen()?"Drop campaign .txt files in /custom maps":"Something broke loose below the foundry. Nobody is coming.",dim,1,13);
+ uiText(52,153,game.customMapsOpen()?"Drop .rmc campaign files in /custom maps":"Something broke loose below the foundry. Nobody is coming.",dim,1,13);
  const char* normalLabels[]={"NEW GAME","CUSTOM MAPS","LOAD GAME","SETTINGS","QUIT"};
  for(int row=0;row<game.titleRows();++row){
   int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();

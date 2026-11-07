@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 REPO = 'MAJWCF1234/RawMetal'
 # The starter kit shipped in "custom maps/" (other packs there are built into the exe).
 CUSTOM_MAPS = ROOT / 'custom maps'
-STARTER_KIT = ['Starter Map.txt', 'GUIDE.html']
+STARTER_KIT = ['Starter Map.rmc', 'GUIDE.html']
 
 
 def starter_kit():

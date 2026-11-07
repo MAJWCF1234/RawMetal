@@ -20,7 +20,7 @@ with a clear corridor down the west side joining the rows:
   OUTDOORS    under the model rows: ground paints, terrain, a grove, then the SEAMS
               between maps, north-south and east-west, signed with their open flags
 
-Writes "custom maps/Starter Map.txt" by default. The file is also the worked
+Writes "custom maps/Starter Map.rmc" by default. The file is also the worked
 example for custom maps/GUIDE.html (tools/campaign/make_custom_map_guide.py).
 """
 import json, math, os, re, sys
@@ -1065,7 +1065,7 @@ def main():
     index = None
     if '--index' in argv:
         at = argv.index('--index'); index = argv[at + 1]; del argv[at:at + 2]
-    out = argv[0] if argv else os.path.join(ROOT, 'custom maps', 'Starter Map.txt')
+    out = argv[0] if argv else os.path.join(ROOT, 'custom maps', 'Starter Map.rmc')
     s = build()
     lines = s.write(out)
     if index:
