@@ -511,18 +511,22 @@ def main():
              'There is no ceiling, sun and sky light it, and you can mix outdoor and indoor maps in one campaign.</p>')
     o.append('<figure>%s<figcaption>The ground in profile: TERRAIN noise between base - amplitude and base + amplitude, levelled by TERRAIN_FLAT boxes.</figcaption></figure>' % terrain_diagram())
     o.append('<pre>%s</pre>' % esc('TERRAIN|2026|1|2.5|30|0.45                      rolling ground around 1 m\n'
-                                   'TERRAIN_FLAT|0|264|72|266|0|8                   level with the indoor floor where they meet\n'
+                                   'TERRAIN_FLAT|0|264|72|266|0|8                   level ground where the indoor row opens\n'
                                    'TERRAIN_FLAT|37|275|44|281|3.5|5                a plateau\n'
                                    'GROUND|24|284|48|286|6|1                        a gravel road\n'
                                    'HORIZON|60|6|6|121,122,118,150,73              woods past the edges\n'
-                                   'MAP|n|Starter Map / Ground paint|0|264|...|1|2.8|0.3|zone_overcast|1|1|0|1|...'))
+                                   'MAP|n|Starter Map / Ground paint|0|264|...|1|2.8|0.2|brutal_wasteland|1|1|0|1|...'))
     o.append('<ul><li><b>World metres.</b> TERRAIN_FLAT, GROUND and HORIZON are not tied to a map: their x, y are world positions (map origin plus map x, y). '
              'A pad at map 12 6 on the map with origin 24 264 is at 36 270.</li>'
              '<li><b>Heights follow the ground.</b> On an outdoor map every base, z, bottom and top is measured from the ground under it. A tree with base 0 '
              'stands on the hillside; a sign with z 1.6 is 1.6 m above the ground at its spot.</li>'
              '<li><b>Rows outdoors.</b> Leave the tiles <code>.</code>: the open flags are the boundary. <code>#</code> tiles still build 2.8 m walls if you want ruins.</li>'
-             '<li><b>Indoor to outdoor.</b> Put a TERRAIN_FLAT at height 0 along the seam so the ground meets the indoor floor; the Starter Map does this '
-             'where the Outdoors model row opens onto Ground paint, Terrain and Grove.</li>'
+             '<li><b>Indoor to outdoor.</b> Terrain is built from 1 m voxels and you walk half a metre above a TERRAIN_FLAT\'s height: a flat at 0 '
+             'walks at +0.5, a flat at -1 at -0.5. The player only steps up 0.215 m without jumping, so ground can never meet a floor at 0 flush. '
+             'Level the ground at -1 outside the door and build the difference as STRUCT steps: a landing at 0, then steps at -0.17 and -0.34. '
+             'Every door of the Starter Map\'s facility is built this way.</li>'
+             '<li><b>Which sky.</b> <code>zone_overcast</code> lays a low steam over ground below about 4 m, so low terrain reads milky white; '
+             '<code>brutal_wasteland</code> has no steam and darker air, and the Starter Map\'s forest uses it with a blue-grey MAP haze.</li>'
              '<li><b>Buildings outdoors</b> are FIXTURE models (houses, sheds, the outdoor set) on a TERRAIN_FLAT pad, or STRUCT boxes. Add a SHELTER inside if the campaign has a STORM.</li></ul>')
 
     o.append('<h2 id="scripting">7. Scripting: making things happen</h2>')

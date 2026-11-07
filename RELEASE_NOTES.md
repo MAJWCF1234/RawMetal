@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.3 - The facility in the woods (2026-11-06)
+
+The Starter Map is now one building in a forest.
+
+- Every room of the Starter Map sits inside one massive brutalist concrete
+  facility: stained cast-concrete walls, deep ribbon windows, floor ledges
+  and a parapet going back to grass and ferns, stair towers at the corners
+  with the site emblem, and sky bridges between the wings.
+- A pine forest rings the whole building, in dark blue-grey fog. You start
+  outside, at the front door.
+- Every way out of the building has a landing and two low steps, so you walk
+  in and out without jumping.
+- The Leyline Sanctuary sample campaign is gone.
+- `GUIDE.html`: the indoor-to-outdoor advice is corrected (terrain walks half
+  a metre above its TERRAIN_FLAT height and the player only steps up
+  0.215 m, so build the difference as steps), with a note on which outdoor
+  sky to pick.
+
+---
+
 ## v1.2.2 - Wires and switches (2026-11-06)
 
 Custom campaigns can think a little harder.
