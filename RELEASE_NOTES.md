@@ -4,6 +4,27 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.7 - The Campaign Editor (2026-11-07)
+
+The map editor is out, and it speaks fluent `.rmc`.
+
+- **DepthWorks Campaign Editor** (separate optional download,
+  `DepthWorks-CampaignEditor-v1.2.7.zip`): build your own campaigns in a
+  paint program, not a spreadsheet. Drag a room and the game walls and
+  floors it for you; paint floors, walls, lamps, signs, stairs, people
+  and monsters; furnish a room in one click; then walk inside what you
+  made and shoot the 📸 ENGINE SHOT to see it exactly as the game renders.
+- It opens the shipped campaigns losslessly — the Starter Map's 150 maps
+  and the Ashfall Exclusion Zone load, edit and re-export with every
+  record intact — and its 3D view draws the game's real materials,
+  models and terrain heightfield, so what you see is what players get.
+- 445 models and the game's own finishes are in the Parts palette;
+  outdoors, paint ground cover and flatten building pads on real hills.
+- Export `.rmc` into the game's `custom maps` folder and play it from
+  the title screen.
+
+---
+
 ## v1.2.6 - RawMetal Campaigns (2026-11-07)
 
 Custom maps get a file type of their own.
