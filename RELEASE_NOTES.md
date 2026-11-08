@@ -4,6 +4,14 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.9 - One program (2026-11-08)
+
+The Campaign Builder and the game are one program now. An edit goes straight
+into the running world instead of round-tripping through files, so what you
+draw shows up in the 3D view in a couple of frames.
+
+---
+
 ## v1.2.8 - The Campaign Builder (2026-11-08)
 
 The Raw Metal Campaign Builder has been rebuilt for people who have never
