@@ -201,7 +201,8 @@ add_executable(RawMetal WIN32
     renderer/Performance.cpp
     renderer/GpuRenderer.cpp
     ThirdParty/ufbx/ufbx.c
-    platform/Win32Window.cpp)
+    platform/Win32Window.cpp
+    platform/EditorPreview.cpp)
 # One published game executable for every build configuration.
 get_filename_component(RAWMETAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 set(RAWMETAL_RUNTIME_DIRECTORY "${RAWMETAL_ROOT}" CACHE PATH "Game output directory (override for testing while the game is running)")

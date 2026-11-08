@@ -2,7 +2,13 @@
 setlocal
 cd /d "%~dp0"
 
-echo Starting Raw Metal Campaign Editor...
+if exist "tools\Level Editor\RawMetal.exe" (
+    start "" /d "%~dp0tools\Level Editor" "%~dp0tools\Level Editor\RawMetal.exe" %*
+    exit /b 0
+)
+
+echo Build maps with tools\Level Editor\RawMetal.exe
+echo.
 where py >nul 2>nul
 if not errorlevel 1 (
     py -3 tools\level-editor\server.py

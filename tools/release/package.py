@@ -8,11 +8,9 @@ name (--name, DepthWorks by default). Writes into DIR (default .build/release/TA
                    and "custom maps/": the folder the game loads maps from, holding the
                    Starter Map, GUIDE.html and its pictures
   GAME-CampaignEditor-TAG.zip
-                   the campaign editor as its own OPTIONAL download beside the
-                   game's zip (self-contained single-file exe + asset blob);
-                   players who only want the game never pay for its size.
+                   RawMetal.exe (play and edit, menu first) and custom maps.
                    Skip with --no-editor.
-  GAME-TAG.sha256  SHA-256 of GAME.exe and of the zip (and the editor zip)
+  GAME-TAG.sha256  SHA-256 of GAME.exe, the game zip, and the editor zip
   body.md              the GitHub release text: download links first, then
                        only this version's section of RELEASE_NOTES.md
 
@@ -23,8 +21,6 @@ import argparse
 import hashlib
 import re
 import shutil
-import subprocess
-import sys
 import zipfile
 from pathlib import Path
 
@@ -54,53 +50,37 @@ def section(tag):
     return match.group(0).strip() + '\n'
 
 
-def package_editor(out, name, tag):
-    """Publish the campaign editor and zip it beside the game's zip.
+EDITOR = ROOT / 'tools' / 'Level Editor'
 
-    Returns the zip path, or None (with a warning) when the editor cannot
-    be built - it is an optional download and must never sink a game release.
-    The exe finds editor-assets.rmblob, mappings.json and ModelIds.h beside
-    itself, so all three ride in the zip root next to it.
+
+def package_editor(out, name, tag):
+    """Zip the standalone level editor beside the game.
+
+    Players unzip it anywhere. It does not need the game folder. RawMetal.exe
+    opens on a menu: new campaign, a previous project, or play.
     """
-    project = ROOT / 'tools' / 'level-editor-native' / 'RawMetalCampaignEditor.csproj'
-    blob = ROOT / 'tools' / 'level-editor' / 'editor-assets.rmblob'
-    publish = ROOT / '.build' / 'editor-publish'
-    for needed in (project, blob):
-        if not needed.is_file():
-            print('WARNING: editor skipped, missing %s' % needed)
-            return None
-    if publish.exists():
-        shutil.rmtree(publish)
-    run = subprocess.run(
-        ['dotnet', 'publish', str(project), '-c', 'Release', '-r', 'win-x64',
-         '--self-contained', 'true', '-p:PublishSingleFile=true', '-o', str(publish)],
-        capture_output=True, text=True)
-    if run.returncode != 0:
-        print('WARNING: editor publish failed; shipping the game without it.\n' + run.stdout[-2000:] + run.stderr[-2000:])
+    window = EDITOR / 'RawMetal.exe'
+    engine = EDITOR / '.build' / 'engine' / 'RawMetal.exe'
+    maps = EDITOR / 'custom maps'
+    program = window if window.is_file() else engine
+    if not program.is_file():
+        print('WARNING: editor skipped, missing %s' % program)
         return None
-    exe = publish / 'RawMetalCampaignEditor.exe'
-    if not exe.is_file():
-        print('WARNING: editor publish produced no exe in %s' % publish)
-        return None
-    shutil.copyfile(blob, publish / blob.name)
-    model_ids = ROOT / 'src' / 'world' / 'ModelIds.h'
-    if model_ids.is_file():
-        shutil.copyfile(model_ids, publish / model_ids.name)
-    (publish / 'README-EDITOR.txt').write_text(
-        '%s Campaign Editor (%s)\n\n'
-        'Unzip anywhere and run DepthWorksCampaignEditor.exe - nothing is installed.\n'
-        'Open a campaign (.rmc) from the game\'s "custom maps" folder, build, then\n'
-        'Export .rmc back into that folder to play it in the game.\n'
-        'Keep editor-assets.rmblob, mappings.json and ModelIds.h beside the exe:\n'
-        'they are the model/texture library the editor previews with.\n' % (name, tag),
-        encoding='utf-8')
-    editor_exe = publish / ('%sCampaignEditor.exe' % name)
-    exe.replace(editor_exe)
     archive = out / ('%s-CampaignEditor-%s.zip' % (name, tag))
+    readme = (
+        '%s Campaign Editor (%s)\n\n'
+        'Unzip anywhere. The game campaign is a separate download.\n'
+        'Run RawMetal.exe. New campaign starts a blank map. A project opens\n'
+        'that map in the editor. Play runs the game from the same program.\n'
+        % (name, tag))
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-        for entry in sorted(publish.iterdir()):
-            if entry.is_file() and entry.suffix not in ('.pdb',):
-                z.write(entry, entry.name)
+        z.writestr('README-EDITOR.txt', readme)
+        z.write(program, 'RawMetal.exe')
+        if maps.is_dir():
+            for entry in sorted(maps.rglob('*')):
+                # The editor's unsaved-work copies stay on the author's machine.
+                if entry.is_file() and 'Autosave' not in entry.relative_to(maps).parts:
+                    z.write(entry, 'custom maps/' + entry.relative_to(maps).as_posix())
     return archive
 
 
@@ -119,7 +99,7 @@ def main():
     parser.add_argument('--exe', type=Path, default=ROOT / 'RawMetal.exe')
     parser.add_argument('--out', type=Path)
     parser.add_argument('--notes-tag', help="use this earlier version's notes (a patch with no section of its own)")
-    parser.add_argument('--no-editor', action='store_true', help='skip the optional campaign editor zip')
+    parser.add_argument('--no-editor', action='store_true', help='skip the standalone campaign editor zip')
     args = parser.parse_args()
     tag, out, name = args.tag, args.out or ROOT / '.build' / 'release' / args.tag, args.name
     if not args.exe.is_file():
@@ -153,7 +133,7 @@ def main():
     base = 'https://github.com/%s/releases/download/%s/' % (REPO, tag)
     editor_line = ''
     if editor_archive is not None:
-        editor_line = ('- [%s](%s%s): the campaign editor (optional, only needed to make your own maps)\n'
+        editor_line = ('- [%s](%s%s): the campaign editor and custom-map player (optional, unzip anywhere)\n'
                        % (editor_archive.name, base, editor_archive.name))
     body = ('## Download\n\n'
             '- **[%s](%s%s)**: %s\n'

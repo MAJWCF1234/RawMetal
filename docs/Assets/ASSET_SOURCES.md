@@ -18,6 +18,19 @@ The player handgun's effects (resources 2260-2264, `src/assets/audio/pistol-*.wa
 
 A torn electrical lead's arc (`Sound::LeadArc`, resource 2347, the RMS1 `src/assets/library/audio/lead_arc.sfx` embedded from its `lead_arc.wav` master beside it) comes from the ROT Horror Audio Bundle v1.9: `ROT - Horror Audio Bundle v1.9/ROT - Horror Audio Bundle/Audio/Sound Effects/Misc/electric_shock_mx_1.ogg` (the same clip is at the library root's `Audio/Sound Effects/Misc/`). It was raised 5 dB and trimmed to 2.7 s, kept 44.1 kHz stereo PCM16; the spark bursts drawn at a torn end keep time with its crackles (`leadArc` in `src/world/World.h`). Like the rest of `src/assets/library/`, the master and the `.sfx` stay out of git.
 
+The Campaign Builder's building sounds are the Creating Constructs clips, cut by `tools/Level Editor/editor/PrepareSounds.py` (same offsets, lengths and mastering as `N:/Finished/Monolith maker/tools/prepare_audio.py`: highpass 55 Hz, lowpass, loudnorm, 7 ms fades, 0.251 peak) into 16 kHz mono PCM16 under `tools/Level Editor/.build/sounds/`, which is build output and stays out of git. Sources, all under `O:/retro official/Complex/`:
+- `placeStone`: `SFX/Movement/Footsteps/Asphalt/FS-Asphalt_1.wav`, 0-0.45 s, -23 LUFS.
+- `placeWood`: `SFX/Movement/Footsteps/Wood/FS-Wood_1.wav`, 0-0.45 s, -23 LUFS.
+- `placeMetal`: `SFX/Movement/Footsteps/Stairs/Metal/MetalStairs_FS1.wav`, 0-0.45 s, -24 LUFS.
+- `breakStone`: `SFX/Cutscenes/StatueHeadFall_Ending_2.wav`, 0-0.65 s, -24 LUFS.
+- `breakWood`: `SFX/LadderStepOn.wav`, 0-0.65 s, -24 LUFS.
+- `breakMetal`: `SFX/Cutscenes/MetalClash.wav`, 0-0.8 s, -26 LUFS.
+- `click`: `SFX/UI/UI_Click.wav`, 0-0.22 s, -26 LUFS.
+- `hover`: `SFX/UI/UI_Hover.wav`, 0-0.14 s, -30 LUFS.
+- `back`: `SFX/UI/UI_Back.wav`, 0-0.26 s, -26 LUFS.
+- `slider`: `SFX/UI/UI_Slider.wav`, 0-0.12 s, -30 LUFS.
+- `musicKey`: `Music/BassPluckLoop.wav`, 0-0.85 s, -26 LUFS.
+
 Surface-lift/reactor sources include Rust & Blood v1.1d, ROT v1.9, and Echoes v2.1 assets. Runtime WAV effects are 44.1 kHz PCM16; MP3 music is decoded at runtime.
 
 ## Physical clutter

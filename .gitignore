@@ -61,6 +61,4 @@ src/assets/library/
 tools/level-editor/editor-assets.rmblob
 fbx2obj.obj
 
-tools/level-editor-native/bin/
-tools/level-editor-native/obj/
 selftest-*.txt

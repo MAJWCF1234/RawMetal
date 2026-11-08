@@ -4,6 +4,36 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.8 - The Campaign Builder (2026-11-08)
+
+The Raw Metal Campaign Builder has been rebuilt for people who have never
+opened a level editor, and for people who opened too many.
+
+- **Paint on a black plan, build in the live view.** The plan is a black
+  sheet with bright lines: white walls, yellow doors, cyan lamps, green
+  people. F2 paints in 2D, F4 builds in 3D, F3 shows both. The tools are big
+  tiles on five pages (Build, Decor, People, Logic, World), and every one
+  shows a ghost of what it will make before you let go.
+- **Rooms that dress themselves.** Drag a box and it becomes an office, a
+  lounge, a store, a lab, a workshop or a plant room, with walls, a lamp, a
+  door onto the floor next to it and a few things left in it. Draw any
+  outline and raise it into walls, a block or terraces; brush the floor up
+  into steps; join two rooms with a corridor.
+- **Paint and parts by picture.** P paints real materials onto whatever you
+  touch. The parts browser shows every model and shape as a picture.
+  Furniture backs onto the wall it lands near, and V swaps it for another.
+- **Lamps you can play with.** Pick a lamp and drag its brightness, reach and
+  warmth; the room relights while you drag. Moods (cosy, eerie, alarm, cold
+  lab) set a room in one click.
+- **Watch it, then walk it.** F6 runs the map where it stands: guards walk
+  their rounds, triggers fire, and F6 again puts everything back. F5 drops
+  you into it; Escape brings you back to the same spot.
+- **Nothing lost.** Every step can be undone or scrubbed back through.
+  Unsaved work comes back on its own after a crash. The Starter Map still
+  opens and saves exactly as it was.
+
+---
+
 ## v1.2.7 - The Campaign Editor (2026-11-07)
 
 The map editor is out, and it speaks fluent `.rmc`.

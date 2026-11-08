@@ -22,6 +22,7 @@
 #pragma comment(lib,"shell32.lib")
 #include "renderer/SoftwareRenderer.h"
 #include "platform/Win32Window.h"
+#include "platform/EditorPreview.h"
 #include "audio/AudioEngine.h"
 #include <chrono>
 #include <atomic>
@@ -46,7 +47,7 @@ struct CommandArguments {
   for(const auto& value:values)if(value==flag||(flag.back()==L'='?value.starts_with(flag):(value.starts_with(flag)&&value.size()>flag.size()&&value[flag.size()]==L'=')))return value.c_str();
   return nullptr;
  }
- bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
+ bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency",L"--editor-"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
 };
 static const CommandArguments& commandArguments(){static const CommandArguments args;return args;}
 // The shipped folder keeps "custom maps" beside the exe; a shortcut may start the game anywhere.
@@ -848,6 +849,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     constexpr int W=retro::DisplayWidth,H=retro::DisplayHeight;
     // Render A/B switches apply to every mode below, inspections included.
     applyRenderSwitches();
+    if(auto path=commandArguments().find(L"--editor-validate="))return retro::validateEditorCampaign(path+18);
+    if(auto path=commandArguments().find(L"--editor-pack=")){
+     retro::EditorPreviewOptions options;options.pack=path+14;
+     if(auto v=commandArguments().find(L"--editor-control="))options.control=v+17;
+     if(auto v=commandArguments().find(L"--editor-status="))options.status=v+16;
+     if(auto v=commandArguments().find(L"--editor-host="))options.parent=reinterpret_cast<HWND>(std::stoull(v+14));
+     if(auto v=commandArguments().find(L"--editor-frames="))options.frames=std::stoi(v+16);
+     if(auto v=commandArguments().find(L"--editor-capture="))options.capture=v+17;
+     options.hidden=commandArguments().find(L"--editor-hidden")!=nullptr;
+     return retro::runEditorPreview(options);
+    }
     if(commandArguments().find(L"--no-impostors"))retro::SoftwareRenderer::s_impostors=false;
     if(commandArguments().find(L"--smooth"))retro::SoftwareRenderer::setCrispTexels(false); // A/B: plain bilinear texels
     if(commandArguments().find(L"--notilt"))retro::SoftwareRenderer::setTiltShift(false); // A/B: no tilt-shift

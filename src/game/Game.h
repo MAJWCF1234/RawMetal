@@ -291,6 +291,7 @@ public:
 
     const World& world() const { return m_world; }
     const Player& player() const { return m_player; }
+    void restoreEditorCamera(const Player& camera);
     Vec2 playerVelocity()const{return m_velocity;}
     float bodyGait()const{return m_bodyGait;}
     bool bodySprinting()const{return m_bodySprint;}

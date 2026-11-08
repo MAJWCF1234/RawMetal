@@ -12,6 +12,11 @@
 namespace retro {
 
 Game::Game(WorldId id):m_worldId(id) { restart(); }
+void Game::restoreEditorCamera(const Player& camera){
+ if(!std::isfinite(camera.pos.x)||!std::isfinite(camera.pos.y)||!std::isfinite(camera.z)||!std::isfinite(camera.angle)||!std::isfinite(camera.pitch))throw std::runtime_error("Invalid editor camera");
+ m_player.pos=camera.pos;m_player.z=camera.z;m_player.angle=camera.angle;m_player.pitch=camera.pitch;
+ m_player.crouched=camera.crouched;m_player.prone=camera.prone;m_player.eye=camera.eye;m_player.verticalVelocity=0;
+}
 Game::Game(std::shared_ptr<const CustomCampaign> campaign):m_worldId(WorldId::Custom),m_customCampaign(std::move(campaign)){
  if(!m_customCampaign||m_customCampaign->maps.empty())throw std::runtime_error("Cannot start an empty custom campaign");
  m_customCampaigns.push_back(m_customCampaign);
