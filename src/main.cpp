@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <map>
 #include "world/CampaignMaps.h"
+#include "world/CampaignExport.h"
 #pragma comment(lib,"shell32.lib")
 #include "renderer/SoftwareRenderer.h"
 #include "platform/Win32Window.h"
@@ -47,7 +48,7 @@ struct CommandArguments {
   for(const auto& value:values)if(value==flag||(flag.back()==L'='?value.starts_with(flag):(value.starts_with(flag)&&value.size()>flag.size()&&value[flag.size()]==L'=')))return value.c_str();
   return nullptr;
  }
- bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency",L"--editor-"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
+ bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency",L"--editor-",L"smoke"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
 };
 static const CommandArguments& commandArguments(){static const CommandArguments args;return args;}
 // The shipped folder keeps "custom maps" beside the exe; a shortcut may start the game anywhere.
@@ -850,6 +851,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // Render A/B switches apply to every mode below, inspections included.
     applyRenderSwitches();
     if(auto path=commandArguments().find(L"--editor-validate="))return retro::validateEditorCampaign(path+18);
+    // A custom campaign as the Custom Maps menu loads it (the folder report too), then played headless.
+    if(auto path=commandArguments().find(L"--custom-map-smoke=")){retro::Game menu;menu.loadCustomCampaignDirectory(customMapsFolder());std::ofstream report("RawMetal-custom-map-smoke.txt");return retro::Game::customMapSmoke(path+19,report)?0:21;}
+    // Campaign maps as .rmc: --dev-campaign, --export-rmc, --campaign-map-list, --campaign-overrides
+    // and their proofs (world/CampaignExport.cpp). -1: none of them was asked for.
+    if(const int code=retro::campaignRmcCommands(commandArguments().values);code>=0)return code;
     if(auto path=commandArguments().find(L"--editor-pack=")){
      retro::EditorPreviewOptions options;options.pack=path+14;
      if(auto v=commandArguments().find(L"--editor-control="))options.control=v+17;

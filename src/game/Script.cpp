@@ -400,4 +400,42 @@ bool Game::testScripting(){
   check(decoded&&restored.state("mat_steps")==2&&restored.state("crystals")==3&&restored.state("calm")==2,"A restored save keeps counters and the repeating latches, so nothing refires");}
  report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed==0;
 }
+// --custom-map-smoke=<file>: a campaign as the Custom Maps menu loads it, played
+// headless. Each map starts, runs five seconds with no hands on it, then the
+// player is carried into every trigger area so the scripted triggers run.
+// Gated triggers that never become ready are listed, not failed.
+bool Game::customMapSmoke(const std::filesystem::path& file,std::ostream& report){
+ auto loaded=loadCustomCampaignFile(file);bool ok=true;constexpr float dt=1.f/60;
+ report<<"CAMPAIGN "<<loaded->name<<" / "<<loaded->maps.size()<<" map(s) from "<<file.filename().string()<<'\n';
+ for(size_t m=0;m<loaded->maps.size();++m)try{
+  auto campaign=std::make_shared<CustomCampaign>(*loaded);campaign->startMap=int(m);
+  Game game(campaign);game.m_god=true;game.m_player.health=std::max(game.m_player.health,100.f);
+  if(game.m_level!=int(m))throw std::runtime_error("started on map "+std::to_string(game.m_level));
+  int frames=0;for(;frames<300;++frames)game.update({},dt);
+  auto finite=[&]{return std::isfinite(game.m_player.pos.x)&&std::isfinite(game.m_player.pos.y)&&std::isfinite(game.m_player.z);};
+  if(!finite())throw std::runtime_error("player position is not finite after the first frames");
+  int fired=0,events=0;std::string waiting;
+  // Two passes: a trigger gated on another trigger's switch gets its chance.
+  std::vector<StateId> done;
+  for(int pass=0;pass<2;++pass)for(size_t e=0;e<game.m_scriptEvents.size();++e){
+   const auto ev=game.m_scriptEvents[e];
+   if(!ev.id||(ev.scope!=ScriptEvent::Scope::Campaign&&ev.level!=game.m_level)||containsEvent(done,ev.id))continue;
+   if(ev.scope==ScriptEvent::Scope::Box){
+    Vec2 at{(ev.x1+ev.x2)*.5f,(ev.y1+ev.y2)*.5f};float z=std::clamp(game.m_world.floorHeight(at.x,at.y),ev.bottom,ev.top);
+    game.m_player.pos=at;game.m_player.z=z;game.m_player.verticalVelocity=0;
+   }
+   bool ran=containsEvent(game.m_firedEvents,ev.id);
+   for(int f=0;f<30&&!ran;++f){ran=game.scriptEventReady(ev);if(ev.scope==ScriptEvent::Scope::Box){game.m_player.pos={(ev.x1+ev.x2)*.5f,(ev.y1+ev.y2)*.5f};game.m_player.z=std::clamp(game.m_world.floorHeight(game.m_player.pos.x,game.m_player.pos.y),ev.bottom,ev.top);game.m_player.verticalVelocity=0;}game.update({},dt);++frames;}
+   ran|=containsEvent(game.m_firedEvents,ev.id);
+   if(ran)done.push_back(ev.id);
+  }
+  for(const auto&ev:game.m_scriptEvents){if(!ev.id||(ev.scope!=ScriptEvent::Scope::Campaign&&ev.level!=game.m_level))continue;++events;if(containsEvent(done,ev.id))++fired;else waiting+=" "+std::to_string(ev.id);}
+  for(int f=0;f<60;++f,++frames)game.update({},dt);
+  if(!finite())throw std::runtime_error("player position is not finite after the triggers");
+  report<<"OK map "<<m<<": "<<frames<<" frames, "<<game.m_friendlyActors.size()<<" people, "<<game.m_enemies.size()<<" creatures, triggers fired "<<fired<<'/'<<events;
+  if(!waiting.empty())report<<" (gated, never ready:"<<waiting<<')';
+  report<<", switch_1="<<game.state("switch_1")<<" counter="<<game.state("counter")<<'\n';
+ }catch(const std::exception&error){ok=false;report<<"ERROR map "<<m<<": "<<error.what()<<'\n';}
+ report<<(ok?"PASS":"FAIL")<<'\n';return ok;
+}
 }

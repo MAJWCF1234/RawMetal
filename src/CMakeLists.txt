@@ -57,8 +57,25 @@ add_custom_command(OUTPUT "${RAWMETAL_PACKED_RC}" ${RAWMETAL_RMZ}
     COMMAND $<TARGET_FILE:RawMetalAssetPacker> "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/packed" "${CMAKE_BINARY_DIR}/packed/unused-bundle.bin"
     DEPENDS RawMetalAssetPacker "${RAWMETAL_ASSET_MANIFEST_DEP}" ${RAWMETAL_ASSETS}
     COMMENT "Losslessly packing embedded assets" VERBATIM)
+# Campaign map overrides: campaign-overrides/NN.rmc (or "NN name.rmc") replaces
+# campaign chunk NN's C++ map (world/CampaignExport.cpp). Each file is embedded
+# as raw resource 6000+NN; none exist by default, and the generated .rc is then empty.
+file(GLOB RAWMETAL_OVERRIDE_FILES CONFIGURE_DEPENDS "${RAWMETAL_ROOT}/campaign-overrides/*.rmc")
+set(RAWMETAL_OVERRIDE_RC_TEXT "// Generated from campaign-overrides/ by CMakeLists.txt.\n")
+foreach(RAWMETAL_OVERRIDE IN LISTS RAWMETAL_OVERRIDE_FILES)
+    get_filename_component(RAWMETAL_OVERRIDE_NAME "${RAWMETAL_OVERRIDE}" NAME)
+    if(RAWMETAL_OVERRIDE_NAME MATCHES "^0*([0-9]+)([^0-9].*)?$")
+        math(EXPR RAWMETAL_OVERRIDE_ID "6000 + ${CMAKE_MATCH_1}")
+        if(CMAKE_MATCH_1 LESS 180)
+            string(APPEND RAWMETAL_OVERRIDE_RC_TEXT "${RAWMETAL_OVERRIDE_ID} RCDATA \"${RAWMETAL_OVERRIDE}\"\n")
+        endif()
+    endif()
+endforeach()
+file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/campaign-overrides.rc" CONTENT "${RAWMETAL_OVERRIDE_RC_TEXT}")
+set_source_files_properties("${CMAKE_BINARY_DIR}/campaign-overrides.rc" PROPERTIES OBJECT_DEPENDS "${RAWMETAL_OVERRIDE_FILES}")
 add_executable(RawMetal WIN32
     main.cpp
+    "${CMAKE_BINARY_DIR}/campaign-overrides.rc"
     vr/VrRuntime.cpp
     app.rc
     "${RAWMETAL_PACKED_RC}"
@@ -190,6 +207,7 @@ add_executable(RawMetal WIN32
     world/CampaignChapterFinaleB.cpp
     world/CampaignChapterFinaleC.cpp
     world/CustomCampaign.cpp
+    world/CampaignExport.cpp
     world/Primitives.cpp
     renderer/SoftwareRenderer.cpp
     renderer/SurfaceSetTest.cpp

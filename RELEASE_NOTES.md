@@ -28,6 +28,9 @@ opened a level editor, and for people who opened too many.
 - **Watch it, then walk it.** F6 runs the map where it stands: guards walk
   their rounds, triggers fire, and F6 again puts everything back. F5 drops
   you into it; Escape brings you back to the same spot.
+- **The campaign is yours to remix.** Open from campaign brings any released
+  level of DepthWorks into the builder, the way it shipped. Change it, save
+  it as your own map, or save it into your game and play it there.
 - **Nothing lost.** Every step can be undone or scrubbed back through.
   Unsaved work comes back on its own after a crash. The Starter Map still
   opens and saves exactly as it was.

@@ -3,6 +3,7 @@
 #include "Game.h"
 #include <cstdlib>
 #include "../world/CampaignMaps.h"
+#include "../world/CampaignExport.h"
 #include "../world/ModelIds.h"
 #include <fstream>
 #include <queue>
@@ -209,7 +210,7 @@ bool Game::auditMapScene(Game& game,int level){
   // a continuous sloped basin/terrain bank for a discontinuous step.
   if(w.openSouthBoundary()){inside.y=23.99f;outside.y=24.01f;}else if(w.openEastBoundary()){inside.x=23.99f;outside.x=24.01f;}else if(w.openNorthBoundary()){inside.y=.01f;outside.y=-.01f;}else if(w.openWestBoundary()){inside.x=.01f;outside.x=-.01f;}else seam=false;
   if(seam){exitHeights=surfaces(w,inside);Vec2 absolute=outside+w.definition().origin;
-   for(int other=0;other<worldChunkCount(WorldId::Campaign);++other){if(other==level)continue;auto data=campaignMap(other);const auto& definition=data?data->definition:chunkDefinition(WorldId::Campaign,other);auto local=absolute-definition.origin;
+   for(int other=0;other<worldChunkCount(WorldId::Campaign);++other){if(other==level)continue;auto data=campaignMapResolved(other);const auto& definition=data?data->definition:chunkDefinition(WorldId::Campaign,other);auto local=absolute-definition.origin;
     if(local.x<0||local.x>=24||local.y<0||local.y>=24)continue;
     World neighbor(other);auto adjoining=surfaces(neighbor,local);std::vector<float> matched;
     for(float z:exitHeights)if(std::any_of(adjoining.begin(),adjoining.end(),[&](float next){return std::fabs(next-z)<=Step;}))matched.push_back(z);
@@ -281,7 +282,7 @@ bool Game::auditMapScene(Game& game,int level){
  // Water sits in its basin, never as a slab above the floor around it.
  for(const auto& b:w.waterVolumes())if(b.surface>w.layers().front().elevation-.02f)fail("WATER ABOVE FLOOR basin at "+at({b.x1,b.y1})+" surface "+std::to_string(b.surface));
  // Stairs are single flights: two flights that touch read as one broken stair.
- if(auto map=campaignMap(level))for(size_t i=0;i<map->stairs.size();++i)for(size_t j=i+1;j<map->stairs.size();++j){const auto& a=map->stairs[i];const auto& b=map->stairs[j];
+ if(auto map=campaignMapResolved(level))for(size_t i=0;i<map->stairs.size();++i)for(size_t j=i+1;j<map->stairs.size();++j){const auto& a=map->stairs[i];const auto& b=map->stairs[j];
   if(a.x1<b.x2+.01f&&a.x2>b.x1-.01f&&a.y1<b.y2+.01f&&a.y2>b.y1-.01f&&std::fabs(a.bottom-b.top)>.01f&&std::fabs(a.top-b.bottom)>.01f)fail("STAIRS TOUCH at "+at({a.x1,a.y1})+" and "+at({b.x1,b.y1}));}
  // Pipes: no run crosses a walkable space at body height, no horizontal run
  // passes through a deck slab, and every end lands on something: a wall,
@@ -303,7 +304,7 @@ bool Game::auditMapScene(Game& game,int level){
     int x=int(std::floor(xy.x)),y=int(std::floor(xy.y));if(x<0||y<0||x>=24||y>=24)return false;
     for(const auto& layer:w.layers())if(std::fabs(feet-layer.elevation)<.25f&&
       (layer.thickness<=0?w.tile(x,y)!='#':layer.rows[size_t(y)][size_t(x)]=='='))return true;
-   if(auto map=campaignMap(level))for(const auto& st:map->stairs)if(xy.x>=st.x1&&xy.x<st.x2&&xy.y>=st.y1&&xy.y<st.y2&&feet>=std::min(st.bottom,st.top)-.1f&&feet<=std::max(st.bottom,st.top)+.1f)return true;
+   if(auto map=campaignMapResolved(level))for(const auto& st:map->stairs)if(xy.x>=st.x1&&xy.x<st.x2&&xy.y>=st.y1&&xy.y<st.y2&&feet>=std::min(st.bottom,st.top)-.1f&&feet<=std::max(st.bottom,st.top)+.1f)return true;
    return false;};
   // Equipment carries pipes: an end inside a fixture or prop footprint is held.
   auto onEquipment=[&](Vec2 xy,float z){
@@ -320,7 +321,7 @@ bool Game::auditMapScene(Game& game,int level){
    const bool isVertical=vertical(p);const float radius=p.radius,z1=topZ(p);
    if(dressing(p))continue;
    // A stair's own stringers run inside its footprint from landing to landing.
-   bool stringer=false;if(auto map=campaignMap(level))for(const auto& st:map->stairs){
+   bool stringer=false;if(auto map=campaignMapResolved(level))for(const auto& st:map->stairs){
     auto inside=[&](Vec2 q){return q.x>=st.x1-.05f&&q.x<=st.x2+.05f&&q.y>=st.y1-.05f&&q.y<=st.y2+.05f;};
     if(inside(p.start)&&inside(p.end)&&p.radius<.1f)stringer=true;}
    if(stringer)continue;

@@ -5,6 +5,7 @@
 #include "TerrainSurfaceCache.h"
 #include "../core/Ray.h"
 #include "CampaignMaps.h"
+#include "CampaignExport.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -424,7 +425,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
 World::World(int level,WorldId id):m_worldId(id) {
  if(worldChunkCount(id)<=0)throw std::invalid_argument("Custom worlds require authored map data");
  m_level=std::clamp(level,0,worldChunkCount(m_worldId)-1);
- if(campaign())if(auto map=campaignMap(m_level)){loadAuthoredMap(std::move(map));return;}
+ // A campaign override (campaign-overrides/NN.rmc) stands in for the C++ map.
+ if(campaign())if(auto map=campaignMapResolved(m_level)){loadAuthoredMap(std::move(map));return;}
  buildPopulation();
  if(horrorMode()){
   const char* regionNames[]={

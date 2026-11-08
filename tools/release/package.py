@@ -51,6 +51,11 @@ def section(tag):
 
 
 EDITOR = ROOT / 'tools' / 'Level Editor'
+# Beside the exe in every public zip: the game and the Campaign Builder then list and export
+# only released chapters (world/CampaignExport.h, Chapter2Released). Builds without it,
+# the owner's own and any he hands on, open every level.
+PUBLIC_MARKER = ('public-release.txt',
+                 'This is a public release. Levels of chapters not yet released stay sealed.\r\n')
 
 
 def package_editor(out, name, tag):
@@ -75,6 +80,7 @@ def package_editor(out, name, tag):
         % (name, tag))
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.writestr('README-EDITOR.txt', readme)
+        z.writestr(*PUBLIC_MARKER)
         z.write(program, 'RawMetal.exe')
         if maps.is_dir():
             for entry in sorted(maps.rglob('*')):
@@ -115,6 +121,7 @@ def main():
     archive = out / ('%s-%s.zip' % (name, tag))
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.write(exe, exe.name)
+        z.writestr(*PUBLIC_MARKER)
         z.write(out / ('RELEASE_NOTES_%s.md' % tag), 'RELEASE_NOTES_%s.md' % tag)
         guide = ROOT / 'docs' / 'windows-compatibility.md'
         if guide.is_file():

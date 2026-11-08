@@ -755,6 +755,7 @@ public:
     std::array<electric::Flash,4> weaponFlashes()const;
     static bool testDarkness();
     static bool testScripting();
+    static bool customMapSmoke(const std::filesystem::path& file,std::ostream& report);
     bool inventoryOpen()const{return m_inventoryOpen;}
     // A conversation with choices is open (DialogueNode): the world runs on,
     // the player stands and picks a reply with 1-4, the arrows or the mouse.

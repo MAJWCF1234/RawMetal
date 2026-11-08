@@ -48,8 +48,18 @@ float number(const std::vector<std::string>& f,size_t index,const char* label){
 bool boolean(const std::vector<std::string>& f,size_t index,const char* label){
  int v=integer(f,index,label);if(v!=0&&v!=1)throw std::runtime_error(std::string("invalid ")+label);return v!=0;
 }
+// "#1234567" names a state by its id (stateId's hash) instead of its spelling:
+// what the campaign exporter writes for a state whose name it does not know.
+// It loads back to the identical state. Any other text is hashed as a name.
+bool rawState(std::string_view value,StateId& id){
+ if(value.size()<2||value[0]!='#')return false;std::uint64_t n=0;
+ for(char c:value.substr(1)){if(c<'0'||c>'9')return false;n=n*10+unsigned(c-'0');if(n>0xffffffffull)return false;}
+ id=StateId(n);return true;
+}
+StateId stateField(std::string_view raw){auto value=decode(raw);StateId id=0;return rawState(value,id)?id:stateId(value);}
 StateId scriptName(const std::vector<std::string>& f,size_t index,const char* label){
  if(index>=f.size())throw std::runtime_error(std::string("missing ")+label);auto value=decode(f[index]);
+ if(StateId id=0;rawState(value,id)){if(!id)throw std::runtime_error(std::string("invalid ")+label);return id;}
  if(value.empty()||value.size()>96||!std::all_of(value.begin(),value.end(),[](unsigned char c){return (c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='_'||c=='-'||c=='.'||c=='/';}))throw std::runtime_error(std::string("invalid ")+label);
  return stateId(value);
 }
@@ -88,6 +98,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#'){++lineNumber;continue;}
   auto f=fields(line);if(f.empty()){++lineNumber;continue;}const auto& tag=f[0];
   ++lineNumber;try{
+  // A field the exporter appends to an older record (empty or absent keeps the default).
+  auto given=[&](size_t i){return f.size()>i&&!f[i].empty();};
   if(tag=="CAMPAIGN"){
    if(f.size()<3)throw std::runtime_error("malformed CAMPAIGN record");campaign->name=decode(f[1]);campaign->startMap=integer(f,2,"campaign start map");sawCampaign=true;
   }else if(tag=="MAP"){
@@ -182,13 +194,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="SCRIPT_TRIGGER"){
    // SCRIPT_TRIGGER|map|event|where|match|repeat: where is box (default), map or campaign;
    // match is all (default) or any; repeat 1 fires each time the gates turn true.
-   if(f.size()!=6)throw std::runtime_error("malformed SCRIPT_TRIGGER record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"trigger event name");
+   // Optional |once: 0 lets an event that does not repeat fire on every pass its gates hold.
+   if(f.size()!=6&&f.size()!=7)throw std::runtime_error("malformed SCRIPT_TRIGGER record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"trigger event name");
    auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("SCRIPT_TRIGGER references an undeclared event");
    const auto where=decode(f[3]),match=decode(f[4]);
    if(where=="box"||where.empty())event->scope=ScriptEvent::Scope::Box;else if(where=="map")event->scope=ScriptEvent::Scope::Map;else if(where=="campaign")event->scope=ScriptEvent::Scope::Campaign;
    else throw std::runtime_error("invalid SCRIPT_TRIGGER scope; use box, map or campaign");
    if(match=="all"||match.empty())event->matchAny=false;else if(match=="any")event->matchAny=true;else throw std::runtime_error("invalid SCRIPT_TRIGGER match; use all or any");
-   event->rearm=boolean(f,5,"trigger repeat");event->once=!event->rearm;
+   event->rearm=boolean(f,5,"trigger repeat");event->once=!event->rearm;if(given(6))event->once=boolean(f,6,"trigger once");
   }else if(tag=="SCRIPT_ACTION"){
    if(f.size()<4)throw std::runtime_error("malformed SCRIPT_ACTION record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"action event name");
    auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("script action references an undeclared event");
@@ -209,6 +222,15 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    }else if(kind=="SHAKE"){
     if(f.size()!=5)throw std::runtime_error("malformed SHAKE SCRIPT_ACTION record");action.type=ScriptAction::Type::Shake;action.amount=number(f,4,"shake amount");
     if(action.amount<=0||action.amount>3)throw std::runtime_error("invalid shake amount; use more than 0 up to 3");
+   }else if(kind=="RAW"){
+    // RAW|type|state|value|index|creature|x|y|z|amount|sound|text: any action exactly as the
+    // engine holds it (ScriptAction), for what the kinds above can not say (doors, sounds, spawns).
+    if(f.size()!=15)throw std::runtime_error("malformed RAW SCRIPT_ACTION record");int type=integer(f,4,"action type");
+    if(type<0||type>int(ScriptAction::Type::ShowMessage))throw std::runtime_error("invalid RAW action type");action.type=ScriptAction::Type(type);
+    if(given(5))action.id=stateField(f[5]);action.value=integer(f,6,"action value");action.index=integer(f,7,"action index");
+    int creature=integer(f,8,"action creature");if(creature<0||creature>int(CreatureKind::Transformed))throw std::runtime_error("invalid RAW action creature");action.enemyKind=CreatureKind(creature);
+    action.position={number(f,9,"action x"),number(f,10,"action y")};action.z=number(f,11,"action z");action.amount=number(f,12,"action amount");
+    int sound=integer(f,13,"action sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid RAW action sound");action.sound=Sound(sound);action.text=decode(f[14]);
    }else throw std::runtime_error("unknown script action type");
    if(event->actions.size()>=16)throw std::runtime_error("too many actions for script event");event->actions.push_back(action);
   }else if(tag=="SIGN"){
@@ -225,13 +247,24 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<11)throw std::runtime_error("malformed DOOR record");auto map=mapAt(maps,f);
    Door d;d.left=number(f,2,"door left");d.right=number(f,3,"door right");d.y=number(f,4,"door y");d.z=number(f,5,"door z");
    d.entry=boolean(f,6,"door entry");d.transfer=boolean(f,7,"door transfer");d.swinging=boolean(f,8,"door swinging");d.requireEnemiesClear=boolean(f,9,"door clear flag");d.sign=integer(f,10,"door sign");
-   if(f.size()>=12&&!f[11].empty())d.requireState=stateId(decode(f[11]));
+   if(f.size()>=12&&!f[11].empty())d.requireState=stateField(f[11]);
    if(f.size()>=13)d.requireValue=integer(f,12,"door require value");
+   // |control|swing|maxOpen|open|opening: the plant's control gate, the side a swinging
+   // leaf opens to (1 or -1), how far it opens (0-1), and how open it starts and whether it is opening.
+   if(given(13))d.requireControl=boolean(f,13,"door control gate");
+   if(given(14))d.swing=number(f,14,"door swing");
+   if(given(15))d.maxOpen=number(f,15,"door max open");
+   if(given(16))d.open=number(f,16,"door open");
+   if(given(17))d.opening=boolean(f,17,"door opening");
+   if(f.size()>18||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1)throw std::runtime_error("malformed DOOR record");
    map->doors.push_back(d);
   }else if(tag=="STRUCT"){
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
     number(f,2,"structure x1"),number(f,3,"structure y1"),number(f,4,"structure x2"),number(f,5,"structure y2"),
      number(f,6,"structure bottom"),number(f,7,"structure top"),boolean(f,8,"structure rail"),integer(f,9,"structure material"),f.size()>10&&!f[10].empty()?boolean(f,10,"structure solid"):true});
+   // |shape|facing: a drawn shape (World.h StructureShape, 0 box .. 7 roundel) and the quarter turn it faces.
+   if(given(11)){int shape=integer(f,11,"structure shape");if(shape<0||shape>ShapeRoundel)throw std::runtime_error("invalid structure shape");map->structures.back().shape=std::uint8_t(shape);}
+   if(given(12)){int facing=integer(f,12,"structure facing");if(facing<0||facing>3)throw std::runtime_error("invalid structure facing");map->structures.back().facing=std::uint8_t(facing);}
   }else if(tag=="PRIM"){
    if(f.size()<11)throw std::runtime_error("malformed PRIM record");auto map=mapAt(maps,f);
    const Primitive primitive{f[2],number(f,3,"primitive x"),number(f,4,"primitive y"),number(f,5,"primitive z"),number(f,6,"primitive width"),number(f,7,"primitive depth"),
@@ -256,7 +289,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // a lamp; the optional tail switches it like a HAZARD (state gate, timed window) and adds flicker 0-1.
    // A ceiling lamp's fitting is a fixture model drawn flush under its ceiling at width x depth x height.
    // gelR|gelG|gelB (each 0-1, all three) filters its colour: 1|0.1|0.06 is a red emergency lamp.
-   if(f.size()<5||f.size()>25)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
+   // |shadows|prop: 0 casts no shadow; prop rides that CLUTTER record (from 0) when it is carried.
+   if(f.size()<5||f.size()>27)throw std::runtime_error("malformed LIGHT record");auto map=mapAt(maps,f);
    WorldLight light{{number(f,2,"light x"),number(f,3,"light y")},number(f,4,"light z")};
    if(f.size()>=6&&!f[5].empty()){int mount=integer(f,5,"light mount");if(mount<0||mount>2)throw std::runtime_error("invalid light mount");light.mount=WorldLightMount(mount);}
    if(f.size()>=7&&!f[6].empty())light.yaw=number(f,6,"light yaw");
@@ -282,6 +316,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     light.gel={number(f,22,"light gel red"),number(f,23,"light gel green"),number(f,24,"light gel blue")};
     if(!(light.gel.x>=0&&light.gel.x<=1&&light.gel.y>=0&&light.gel.y<=1&&light.gel.z>=0&&light.gel.z<=1)||light.gel.x+light.gel.y+light.gel.z<=0)throw std::runtime_error("light gel channels must be 0 through 1 and not all 0");
    }
+   if(given(25))light.shadows=boolean(f,25,"light shadows");
+   if(given(26)){light.prop=integer(f,26,"light prop");if(light.prop<-1)throw std::runtime_error("invalid light prop");}
    if(light.period<0||light.onTime<0||light.onTime>light.period||light.flicker<0||light.flicker>1)throw std::runtime_error("light switching needs period >= 0, on time within the period and flicker 0 through 1");
    map->lights.push_back(light);
   }else if(tag=="DARK"){
@@ -298,7 +334,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top)throw std::runtime_error("invalid DARK bounds");
    if(map->darkZones.size()>=64)throw std::runtime_error("too many DARK records in one map");map->darkZones.push_back(zone);
   }else if(tag=="ZONE"){
-   // ZONE|map|x1|y1|x2|y2|name[|bottom|top[|title[|hazeR|hazeG|hazeB|hazeDensity]]]: a named
+   // ZONE|map|x1|y1|x2|y2|name[|bottom|top[|title[|hazeR|hazeG|hazeB|hazeDensity]]]: a named (up to 64 characters)
    // HUD location; a title makes it a major area announced by a title card (name
    // may be empty); a haze gives the box its own air (name and title may then both be empty).
    if(f.size()<7||f.size()>14)throw std::runtime_error("malformed ZONE record");auto map=mapAt(maps,f);AuthoredZone zone;
@@ -309,44 +345,53 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=11&&!f[10].empty()){if(f.size()<14)throw std::runtime_error("a zone haze needs its red, green, blue and density");
     zone.haze={number(f,10,"zone haze red"),number(f,11,"zone haze green"),number(f,12,"zone haze blue"),number(f,13,"zone haze density")};
     if(zone.haze[3]<0||!validHaze(zone.haze))throw std::runtime_error("zone haze channels must be 0 through 1 and density 0 through 0.1");}
-   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||(zone.name.empty()&&zone.title.empty()&&zone.haze[3]<0)||zone.name.size()>40||zone.title.size()>40)throw std::runtime_error("invalid ZONE bounds, name or title");
+   if(zone.x1>=zone.x2||zone.y1>=zone.y2||zone.bottom>=zone.top||(zone.name.empty()&&zone.title.empty()&&zone.haze[3]<0)||zone.name.size()>64||zone.title.size()>64)throw std::runtime_error("invalid ZONE bounds, name or title");
    map->zones.push_back(std::move(zone));
   }else if(tag=="TERMINAL"){
    if(f.size()<9)throw std::runtime_error("malformed TERMINAL record");auto map=mapAt(maps,f);AuthoredTerminalData t;
    t.position={number(f,2,"terminal x"),number(f,3,"terminal y")};t.z=number(f,4,"terminal z");t.control=boolean(f,5,"terminal control");
    t.title=decode(f[6]);t.line1=decode(f[7]);t.line2=decode(f[8]);
-   if(f.size()>=10&&!f[9].empty())t.activateState=stateId(decode(f[9]));
+   if(f.size()>=10&&!f[9].empty())t.activateState=stateField(f[9]);
    if(f.size()>=11)t.toggleState=boolean(f,10,"terminal toggle");
-   if(f.size()>=12&&!f[11].empty())t.requireState=stateId(decode(f[11]));
+   if(f.size()>=12&&!f[11].empty())t.requireState=stateField(f[11]);
    if(f.size()>=13&&!f[12].empty())t.yaw=number(f,12,"terminal yaw");
+   // |readable|taped|surface|reactor: 0 screen, 1 letter, 2 note, 3 sticky; paper taped to its
+   // wall; the desk top paper lies on (-1 its own bench); a reactor console action.
+   if(given(13)){int readable=integer(f,13,"terminal readable");if(readable<0||readable>3)throw std::runtime_error("invalid terminal readable");t.readable=Readable(readable);}
+   if(given(14))t.taped=boolean(f,14,"terminal taped");
+   if(given(15))t.surface=number(f,15,"terminal surface");
+   if(given(16))t.reactorAction=integer(f,16,"terminal reactor action");
    map->terminals.push_back(std::move(t));
   }else if(tag=="CARGO_LIFT"){
    if(f.size()<15)throw std::runtime_error("malformed CARGO_LIFT record");auto map=mapAt(maps,f);
    for(size_t key=9;key<15;++key)if(f[key].empty())throw std::runtime_error("cargo lift requires six named states");
-   map->cargoLift={number(f,2,"lift x1"),number(f,3,"lift y1"),number(f,4,"lift x2"),number(f,5,"lift y2"),number(f,6,"lift lower"),number(f,7,"lift upper"),number(f,8,"lift speed"),stateId(decode(f[9])),stateId(decode(f[10])),stateId(decode(f[11])),stateId(decode(f[12])),stateId(decode(f[13])),stateId(decode(f[14]))};
+   map->cargoLift={number(f,2,"lift x1"),number(f,3,"lift y1"),number(f,4,"lift x2"),number(f,5,"lift y2"),number(f,6,"lift lower"),number(f,7,"lift upper"),number(f,8,"lift speed"),stateField(f[9]),stateField(f[10]),stateField(f[11]),stateField(f[12]),stateField(f[13]),stateField(f[14])};
   }else if(tag=="TIMED_SEQUENCE"){
    if(f.size()<17||f[2].empty()||f[3].empty())throw std::runtime_error("malformed TIMED_SEQUENCE record");auto map=mapAt(maps,f);
    int tick=integer(f,14,"sequence sound");if(tick<0||tick>=int(Sound::Count))throw std::runtime_error("invalid sequence sound");
-   map->timedSequences.push_back({stateId(decode(f[2])),stateId(decode(f[3])),number(f,4,"sequence x1"),number(f,5,"sequence y1"),number(f,6,"sequence x2"),number(f,7,"sequence y2"),number(f,8,"sequence bottom"),number(f,9,"sequence top"),integer(f,10,"sequence duration"),integer(f,11,"sequence finish time"),integer(f,12,"sequence sound interval"),integer(f,13,"sequence sound cutoff"),Sound(tick),number(f,15,"sequence gain"),number(f,16,"sequence pitch")});
+   map->timedSequences.push_back({stateField(f[2]),stateField(f[3]),number(f,4,"sequence x1"),number(f,5,"sequence y1"),number(f,6,"sequence x2"),number(f,7,"sequence y2"),number(f,8,"sequence bottom"),number(f,9,"sequence top"),integer(f,10,"sequence duration"),integer(f,11,"sequence finish time"),integer(f,12,"sequence sound interval"),integer(f,13,"sequence sound cutoff"),Sound(tick),number(f,15,"sequence gain"),number(f,16,"sequence pitch")});
    if(f.size()>17)map->timedSequences.back().loop=boolean(f,17,"sequence loop");
+   // |soundX|soundY|soundZ: where the tick plays when it is not the box's centre.
+   if(given(18)&&given(19))map->timedSequences.back().soundAt={number(f,18,"sequence sound x"),number(f,19,"sequence sound y")};
+   if(given(20))map->timedSequences.back().soundZ=number(f,20,"sequence sound z");
   }else if(tag=="ACTOR"){
    // ACTOR|map|timer|visual|scale|loop|tool|index[|dropsSidearm]: the optional last field drops a carrier's pistol when he goes down.
    if(f.size()!=8&&f.size()!=9)throw std::runtime_error("malformed ACTOR record");auto map=mapAt(maps,f);int kind=integer(f,3,"actor visual");if(kind<0||kind>int(LastActorVisual)||f[2].empty())throw std::runtime_error("invalid actor visual or timer");
    if(integer(f,7,"actor index")!=int(map->actorTracks.size()))throw std::runtime_error("actor indices must be sequential");
-   map->actorTracks.push_back({stateId(decode(f[2])),ActorVisual(kind),number(f,4,"actor scale"),boolean(f,5,"actor loop"),boolean(f,6,"actor tool"),{}});
+   map->actorTracks.push_back({stateField(f[2]),ActorVisual(kind),number(f,4,"actor scale"),boolean(f,5,"actor loop"),boolean(f,6,"actor tool"),{}});
    if(f.size()==9)map->actorTracks.back().ai.dropsSidearm=boolean(f,8,"actor drops sidearm");
   }else if(tag=="ACTOR_AI"){
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR_AI record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),mode=integer(f,3,"actor AI mode");
    if(index<0||index>=int(map->actorTracks.size())||mode<0||mode>3)throw std::runtime_error("invalid actor AI target or mode");
-   auto& ai=map->actorTracks[size_t(index)].ai;ai.mode=ActorAiMode(mode);ai.enableState=f[4].empty()?0:stateId(decode(f[4]));ai.speed=number(f,5,"actor speed");ai.followDistance=number(f,6,"follow distance");ai.dangerRange=number(f,7,"danger range");
+   auto& ai=map->actorTracks[size_t(index)].ai;ai.mode=ActorAiMode(mode);ai.enableState=f[4].empty()?0:stateField(f[4]);ai.speed=number(f,5,"actor speed");ai.followDistance=number(f,6,"follow distance");ai.dangerRange=number(f,7,"danger range");
   }else if(tag=="ACTOR_FACTION"){
    if(f.size()!=5)throw std::runtime_error("malformed ACTOR_FACTION record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),faction=integer(f,3,"actor faction");
    if(index<0||index>=int(map->actorTracks.size())||faction<0||faction>5)throw std::runtime_error("invalid actor faction target or value");
-   auto&ai=map->actorTracks[size_t(index)].ai;ai.faction=AiFaction(faction);ai.squad=f[4].empty()?0:stateId(decode(f[4]));
+   auto&ai=map->actorTracks[size_t(index)].ai;ai.faction=AiFaction(faction);ai.squad=f[4].empty()?0:stateField(f[4]);
   }else if(tag=="ACTOR_GUARD"){
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR_GUARD record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("guard configuration has no actor");
-   auto& ai=map->actorTracks[size_t(index)].ai;ai.sightRange=number(f,3,"guard sight range");ai.sightDot=number(f,4,"guard sight dot");ai.recognitionMs=integer(f,5,"guard recognition duration");ai.searchMs=integer(f,6,"guard search duration");ai.alertState=f[7].empty()?0:stateId(decode(f[7]));
+   auto& ai=map->actorTracks[size_t(index)].ai;ai.sightRange=number(f,3,"guard sight range");ai.sightDot=number(f,4,"guard sight dot");ai.recognitionMs=integer(f,5,"guard recognition duration");ai.searchMs=integer(f,6,"guard search duration");ai.alertState=f[7].empty()?0:stateField(f[7]);
    guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_WEAPON"){
    if(f.size()!=8)throw std::runtime_error("malformed ACTOR_WEAPON record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
@@ -371,25 +416,25 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="ACTOR_STANCE"){
    // ACTOR_STANCE|map|actor|state: the state holding this squad's stance (0 declared, 1 hostile, 2 truce, 3 ally).
    if(f.size()!=4||f[3].empty())throw std::runtime_error("malformed ACTOR_STANCE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
-   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("stance has no actor");map->actorTracks[size_t(index)].ai.stance=stateId(decode(f[3]));
+   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("stance has no actor");map->actorTracks[size_t(index)].ai.stance=stateField(f[3]);
   }else if(tag=="ACTOR_TALK"){
    // ACTOR_TALK|map|actor|node: the dialogue node E opens on this actor.
    if(f.size()!=4||f[3].empty())throw std::runtime_error("malformed ACTOR_TALK record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
-   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("dialogue has no actor");map->actorTracks[size_t(index)].talk=stateId(decode(f[3]));
+   if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("dialogue has no actor");map->actorTracks[size_t(index)].talk=stateField(f[3]);
   }else if(tag=="DIALOGUE"){
    // DIALOGUE|map|node|speaker|line|voice
    if(f.size()!=6||f[2].empty())throw std::runtime_error("malformed DIALOGUE record");auto map=mapAt(maps,f);
-   map->dialogue.push_back({stateId(decode(f[2])),decode(f[3]),decode(f[4]),decode(f[5]),{}});
+   map->dialogue.push_back({stateField(f[2]),decode(f[3]),decode(f[4]),decode(f[5]),{}});
   }else if(tag=="DIALOGUE_REPLY"){
    // DIALOGUE_REPLY|map|node|text|next|require|requireValue|hide|sets|stance
    // sets: state=value pairs joined by ';'. next and stance may be empty (end; no change).
-   if(f.size()!=10||f[2].empty()||f[3].empty())throw std::runtime_error("malformed DIALOGUE_REPLY record");auto map=mapAt(maps,f);StateId node=stateId(decode(f[2]));
+   if(f.size()!=10||f[2].empty()||f[3].empty())throw std::runtime_error("malformed DIALOGUE_REPLY record");auto map=mapAt(maps,f);StateId node=stateField(f[2]);
    auto owner=std::find_if(map->dialogue.begin(),map->dialogue.end(),[&](const DialogueNode&n){return n.id==node;});
    if(owner==map->dialogue.end())throw std::runtime_error("dialogue reply before its node");
-   DialogueReply reply;reply.text=decode(f[3]);reply.next=f[4].empty()?0:stateId(decode(f[4]));reply.require=f[5].empty()?0:stateId(decode(f[5]));
-   reply.requireValue=integer(f,6,"reply require value");reply.hide=f[7].empty()?0:stateId(decode(f[7]));
+   DialogueReply reply;reply.text=decode(f[3]);reply.next=f[4].empty()?0:stateField(f[4]);reply.require=f[5].empty()?0:stateField(f[5]);
+   reply.requireValue=integer(f,6,"reply require value");reply.hide=f[7].empty()?0:stateField(f[7]);
    std::string sets=decode(f[8]);for(size_t at=0;at<sets.size();){size_t end=sets.find(';',at);if(end==std::string::npos)end=sets.size();auto pair=sets.substr(at,end-at);at=end+1;if(pair.empty())continue;
-    auto eq=pair.find('=');if(eq==std::string::npos||eq==0)throw std::runtime_error("dialogue reply sets need state=value");reply.sets.push_back({stateId(pair.substr(0,eq)),std::stoi(pair.substr(eq+1))});}
+    auto eq=pair.find('=');if(eq==std::string::npos||eq==0)throw std::runtime_error("dialogue reply sets need state=value");reply.sets.push_back({stateField(pair.substr(0,eq)),std::stoi(pair.substr(eq+1))});}
    reply.stance=f[9].empty()?-1:integer(f,9,"reply stance");if(reply.stance<-1||reply.stance>3)throw std::runtime_error("invalid reply stance");
    owner->replies.push_back(std::move(reply));
   }else if(tag=="ACTOR_ROLE"){
@@ -399,12 +444,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(index<0||index>=int(map->actorTracks.size())||suppress<0||suppress>1)throw std::runtime_error("invalid actor tactics target or suppression");
    auto&ai=map->actorTracks[size_t(index)].ai;ai.suppress=suppress!=0;ai.grenades=integer(f,4,"grenade inventory");guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_PATROL"){
-   if(f.size()!=7)throw std::runtime_error("malformed ACTOR_PATROL record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
+   // Optional |look: the bearing held at this post.
+   if(f.size()!=7&&f.size()!=8)throw std::runtime_error("malformed ACTOR_PATROL record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");
    if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("patrol point has no actor");
    map->actorTracks[size_t(index)].ai.patrol.push_back({{number(f,3,"patrol x"),number(f,4,"patrol y")},number(f,5,"patrol height"),integer(f,6,"patrol pause")});
+   if(given(7))map->actorTracks[size_t(index)].ai.patrol.back().look=number(f,7,"patrol look");
    guardTargets.emplace_back(integer(f,1,"map index"),index);
   }else if(tag=="ACTOR_HEALTH"){
-   if(f.size()!=6||f[4].empty()||f[5].empty())throw std::runtime_error("malformed ACTOR_HEALTH record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("health has no actor");auto& t=map->actorTracks[size_t(index)];t.health=integer(f,3,"actor health");t.damageState=stateId(decode(f[4]));t.deadState=stateId(decode(f[5]));
+   if(f.size()!=6||f[4].empty()||f[5].empty())throw std::runtime_error("malformed ACTOR_HEALTH record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("health has no actor");auto& t=map->actorTracks[size_t(index)];t.health=integer(f,3,"actor health");t.damageState=stateField(f[4]);t.deadState=stateField(f[5]);
   }else if(tag=="ACTOR_SUSPEND"){
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_SUSPEND record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index");if(index<0||index>=int(map->actorTracks.size()))throw std::runtime_error("suspension has no actor");map->actorTracks[size_t(index)].suspensionTop=number(f,3,"suspension top");
   }else if(tag=="ACTOR_PLATFORM"){
@@ -418,12 +465,17 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    ActorKey key{integer(f,3,"actor time"),{number(f,4,"actor x"),number(f,5,"actor y")},number(f,6,"actor z"),number(f,7,"actor yaw"),integer(f,8,"actor clip"),number(f,9,"actor phase")};if(f.size()>10)key.lookAtActor=integer(f,10,"look target");
    auto& actor=map->actorTracks[size_t(index)];(tag=="ACTOR_KEY"?actor.keys:actor.idleKeys).push_back(key);
   }else if(tag=="SEQUENCE_CUE"){
-   if(f.size()<10||f.size()>12)throw std::runtime_error("malformed SEQUENCE_CUE record");auto map=mapAt(maps,f);int sound=integer(f,4,"cue sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid cue sound");
-   map->sequenceCues.push_back({stateId(decode(f[2])),integer(f,3,"cue time"),Sound(sound),{number(f,5,"cue x"),number(f,6,"cue y")},number(f,7,"cue gain"),number(f,8,"cue pitch"),decode(f[9]),f.size()>=11&&!f[10].empty()?number(f,10,"cue height"):std::numeric_limits<float>::quiet_NaN()});
-   if(f.size()==12)map->sequenceCues.back().voice=decode(f[11]); // a voiced take (NpcVoiceClip::line)
+   // Optional |aiRadius: how far the AI hears it (0 as its sound allows).
+   if(f.size()<10||f.size()>13)throw std::runtime_error("malformed SEQUENCE_CUE record");auto map=mapAt(maps,f);int sound=integer(f,4,"cue sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid cue sound");
+   map->sequenceCues.push_back({stateField(f[2]),integer(f,3,"cue time"),Sound(sound),{number(f,5,"cue x"),number(f,6,"cue y")},number(f,7,"cue gain"),number(f,8,"cue pitch"),decode(f[9]),f.size()>=11&&!f[10].empty()?number(f,10,"cue height"):std::numeric_limits<float>::quiet_NaN()});
+   if(f.size()>=12)map->sequenceCues.back().voice=decode(f[11]); // a voiced take (NpcVoiceClip::line)
+   if(given(12))map->sequenceCues.back().aiRadius=number(f,12,"cue AI radius");
   }else if(tag=="HAZARD"){
    if(f.size()<10)throw std::runtime_error("malformed HAZARD record");auto map=mapAt(maps,f);int kind=integer(f,2,"hazard kind");if(kind<0||kind>int(Hazard::Kind::Anomaly))throw std::runtime_error("invalid hazard kind");
    map->hazards.push_back({Hazard::Kind(kind),number(f,3,"hazard x1"),number(f,4,"hazard y1"),number(f,5,"hazard x2"),number(f,6,"hazard y2"),number(f,7,"hazard bottom"),number(f,8,"hazard top"),number(f,9,"hazard damage")});
+   // |state|value|invert|period|onTime|phase: switched like a LIGHT (state gate, timed window).
+   {auto& h=map->hazards.back();if(given(10))h.enabledFlag=stateField(f[10]);if(given(11))h.enabledValue=integer(f,11,"hazard state value");if(given(12))h.invertFlag=boolean(f,12,"hazard invert");
+    if(given(13))h.period=number(f,13,"hazard period");if(given(14))h.onTime=number(f,14,"hazard on time");if(given(15))h.phase=number(f,15,"hazard phase");}
   }else if(tag=="EMITTER"){
    // EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count: a smoke/vapour plume.
    if(f.size()!=12)throw std::runtime_error("malformed EMITTER record");auto map=mapAt(maps,f);
@@ -441,24 +493,26 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // keeps it dormant, blind and deaf until set or until it is hurt.
    if(f.size()>6&&!f[6].empty())spawn.scale=number(f,6,"creature scale");
    if(f.size()>7&&!f[7].empty())spawn.health=number(f,7,"creature health");
-   if(f.size()>8&&!f[8].empty())spawn.wakeState=stateId(decode(f[8]));
+   if(f.size()>8&&!f[8].empty())spawn.wakeState=stateField(f[8]);
    if(f.size()>9||spawn.scale<.5f||spawn.scale>2||spawn.health<0||spawn.health>5000)throw std::runtime_error("creature parameters out of range");
    map->creatureSpawns.push_back(spawn);
   }else if(tag=="PICKUP"){
    if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::HandgunAmmo))throw std::runtime_error("invalid pickup kind");
    map->pickupSpawns.push_back({{number(f,3,"pickup x"),number(f,4,"pickup y")},PickupKind(kind)});
+   if(given(5))map->pickupSpawns.back().z=number(f,5,"pickup z"); // absolute height (empty: on the floor)
   }else if(tag=="CLUTTER"){
    if(f.size()<7)throw std::runtime_error("malformed CLUTTER record");auto map=mapAt(maps,f);int kind=integer(f,2,"clutter kind");if(kind<0||kind>7)throw std::runtime_error("invalid clutter kind");
    map->clutterSpawns.push_back({kind,{number(f,3,"clutter x"),number(f,4,"clutter y")},number(f,5,"clutter z"),number(f,6,"clutter yaw")});
-   if(kind==7){if(f.size()!=14)throw std::runtime_error("model CLUTTER needs model, dimensions, pose and break state");auto&v=map->clutterSpawns.back();v.model=integer(f,7,"prop model");v.width=number(f,8,"prop width");v.depth=number(f,9,"prop depth");v.height=number(f,10,"prop height");v.pitch=number(f,11,"prop pitch");v.roll=number(f,12,"prop roll");v.breakState=stateId(decode(f[13]));}
+   if(kind==7){if(f.size()!=14)throw std::runtime_error("model CLUTTER needs model, dimensions, pose and break state");auto&v=map->clutterSpawns.back();v.model=integer(f,7,"prop model");v.width=number(f,8,"prop width");v.depth=number(f,9,"prop depth");v.height=number(f,10,"prop height");v.pitch=number(f,11,"prop pitch");v.roll=number(f,12,"prop roll");v.breakState=stateField(f[13]);}
   }else if(tag=="BREAKABLE"){
    if(f.size()!=13&&f.size()!=15)throw std::runtime_error("malformed BREAKABLE record");auto map=mapAt(maps,f);
-   Breakable v{number(f,2,"breakable x1"),number(f,3,"breakable y1"),number(f,4,"breakable x2"),number(f,5,"breakable y2"),number(f,6,"breakable bottom"),number(f,7,"breakable top"),integer(f,8,"breakable material"),number(f,9,"breakable health"),boolean(f,10,"breakable holds"),stateId(decode(f[11])),stateId(decode(f[12]))};
+   Breakable v{number(f,2,"breakable x1"),number(f,3,"breakable y1"),number(f,4,"breakable x2"),number(f,5,"breakable y2"),number(f,6,"breakable bottom"),number(f,7,"breakable top"),integer(f,8,"breakable material"),number(f,9,"breakable health"),boolean(f,10,"breakable holds"),stateField(f[11]),stateField(f[12])};
    if(f.size()==15){v.fixture=integer(f,13,"breakable fixture");v.part=unsigned(integer(f,14,"breakable part"));}map->breakables.push_back(v);
   }else if(tag=="PIPE"){
    if(f.size()<9)throw std::runtime_error("malformed PIPE record");auto map=mapAt(maps,f);map->pipes.push_back({
     {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z"),f.size()>9?integer(f,9,"pipe material"):0});
-   if(map->pipes.back().material<0||map->pipes.back().material>6)throw std::runtime_error("invalid pipe material");
+   // 0-6 the PipeRun finishes; any other number (the campaign has 7, 8 and 20) is drawn as service pipe.
+   if(map->pipes.back().material<0||map->pipes.back().material>99)throw std::runtime_error("invalid pipe material");
   }else if(tag=="LEAD"){
    // LEAD|map|ax|ay|az|bx|by|bz|length|radius[|material|live|state|prop|ox|oy|oz|loose|panel|socket|terminal]: prop is the map's
    // CLUTTER record (from 0, file order) it clips to; without one the far end is fixed at b, or loose.
@@ -469,7 +523,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    const bool panel=f.size()>18&&!f[18].empty();auto anchor=[&](size_t i,const char* label){return panel&&f[i].empty()?0.f:number(f,i,label);};
    v.anchor={anchor(2,"lead ax"),anchor(3,"lead ay"),anchor(4,"lead az")};v.end={number(f,5,"lead bx"),number(f,6,"lead by"),number(f,7,"lead bz")};
    v.length=number(f,8,"lead length");v.radius=number(f,9,"lead radius");if(f.size()>10&&!f[10].empty())v.material=integer(f,10,"lead material");
-   if(f.size()>11&&!f[11].empty())v.live=boolean(f,11,"lead live");if(f.size()>12&&!f[12].empty())v.state=stateId(decode(f[12]));
+   if(f.size()>11&&!f[11].empty())v.live=boolean(f,11,"lead live");if(f.size()>12&&!f[12].empty())v.state=stateField(f[12]);
    if(f.size()>13&&!f[13].empty())v.prop=integer(f,13,"lead prop");
    auto offset=[&](size_t i,const char* label){return f[i].empty()?0.f:number(f,i,label);};
    if(f.size()>16)v.offset={offset(14,"lead ox"),offset(15,"lead oy"),offset(16,"lead oz")};else if(f.size()>14)throw std::runtime_error("lead offset needs all three of ox, oy and oz");
@@ -484,6 +538,23 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="COMPACTOR"){
    if(f.size()<9)throw std::runtime_error("malformed COMPACTOR record");auto map=mapAt(maps,f);map->compactors.push_back({
     number(f,2,"compactor x1"),number(f,3,"compactor y1"),number(f,4,"compactor x2"),number(f,5,"compactor y2"),number(f,6,"compactor bed"),number(f,7,"compactor raised"),number(f,8,"compactor period"),0});
+   if(given(9))map->compactors.back().stopState=stateField(f[9]); // |stop: a state that halts it
+  }else if(tag=="HUNG_SUIT"){
+   // HUNG_SUIT|map|x|y|z|facing: an empty suit hung by its hood from a hook (absolute height).
+   if(f.size()!=6)throw std::runtime_error("malformed HUNG_SUIT record");auto map=mapAt(maps,f);
+   map->hungSuits.push_back({{number(f,2,"suit hook x"),number(f,3,"suit hook y"),number(f,4,"suit hook z")},number(f,5,"suit facing")});
+  }else if(tag=="CRATE"){
+   // CRATE|map|x|y|z|size: a heavy crate to shove; z above the map's first floor.
+   if(f.size()!=6)throw std::runtime_error("malformed CRATE record");auto map=mapAt(maps,f);PushCrate crate;
+   crate.position={number(f,2,"crate x"),number(f,3,"crate y")};crate.z=number(f,4,"crate z");crate.size=number(f,5,"crate size");
+   if(crate.size<=0||crate.size>3)throw std::runtime_error("invalid crate size");map->pushCrates.push_back(crate);
+  }else if(tag=="CRATE_PLATE"){
+   // CRATE_PLATE|map|x|y|state: a floor plate; its state is 1 while a crate rests on it.
+   if(f.size()!=5)throw std::runtime_error("malformed CRATE_PLATE record");auto map=mapAt(maps,f);
+   map->cratePlates.push_back({{number(f,2,"plate x"),number(f,3,"plate y")},given(4)?stateField(f[4]):0});
+  }else if(tag=="CRATE_RESET"){
+   // CRATE_RESET|map|state: setting it sends every crate on the map home.
+   if(f.size()!=3)throw std::runtime_error("malformed CRATE_RESET record");auto map=mapAt(maps,f);map->crateReset=given(2)?stateField(f[2]):0;
   }else if(tag=="NAV_HINT"){
    if(f.size()!=6)throw std::runtime_error("malformed NAV_HINT record");auto map=mapAt(maps,f);int hint=integer(f,5,"nav hint kind");
    if(hint<0||hint>1)throw std::runtime_error("invalid nav hint kind; use Path (0) or Cover (1)");

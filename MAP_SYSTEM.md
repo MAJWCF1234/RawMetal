@@ -502,3 +502,72 @@ one air into another blends over a second. All four fields or none. Density also
 sets how brightly lamps glow through the air, so a denser room brightens its
 light shafts too (0.016 doubles them against today's interior). In C++ it is
 `ChunkDefinition::haze`, and the last argument of `zone()` in CampaignKit.
+
+## Campaign maps as .rmc (export, overrides, round trip)
+
+`src/world/CampaignExport.cpp` writes any campaign level (its `AuthoredMapData`) as
+custom-campaign text that `loadCustomCampaignText` reads back record for record.
+
+- `RawMetal.exe --export-rmc=34-40 --out=Power.rmc` writes the levels as one custom
+  campaign; `--out=<folder>` writes one `NNN NAME.rmc` per level and a
+  `campaign-maps.txt` index. `--campaign-map-list --out=<file>` lists the levels
+  (`chunk|chapter|district|name|sealed`). Reports go to `export-rmc.txt`.
+- Chapter 2 on (chunk 68, Research Intake, behind `chapter2_open`) is sealed until
+  `Chapter2Released` in `CampaignExport.h` (the one release switch) is set. Only a
+  public release hides it: `tools/release/package.py` puts `public-release.txt`
+  beside the exe in both zips, and there the game and the Campaign Builder list and
+  export only released levels, unless a whitelisted admin unlocked them on that
+  machine (`src/core/CampaignAdmin.h`: a salted SHA-256 of name and PIN, no PIN in
+  any file; a soft gate, remembered per Windows user in
+  `HKCU\Software\DepthWorks\Campaign Builder`). Every other build, the owner's and
+  any copy he hands on, opens every level. A sealed level is never written into a
+  `custom maps` folder.
+- A single exported level carries `# CAMPAIGN_BASE|chunk=N|version=1.2.8|hash=...` in
+  its header: the record hash (`rmcDataHash`: the data lines without comments) of the
+  level as the game played it then.
+- States the map sources spell keep their names (`src/world/CampaignStateNames.inc`,
+  made by `tools/campaign/state_names.py`); any other state is written `#1234567`,
+  its id, and loads back to the identical state. Every record that takes a state
+  name accepts that form.
+- What the format cannot carry is listed in a comment block at the top of the
+  file: behaviour C++ keeps outside the map's records (the chunk 3 lift and
+  reactor, the chunk 14 breach, door-order pairing for residency group -1...).
+- Overrides: `campaign-overrides/NN.rmc` (or `NN name.rmc`) replaces level NN's
+  C++ map. CMake embeds every file there as resource 6000+NN; the workspace exe
+  reads the folder directly, so a level saved into the game plays at once. The
+  override keeps the level's world origin; its script events belong to the level.
+  A released copy also reads a `campaign-overrides` folder beside its exe (levels a
+  player saved into their own copy), which wins over the built-in ones. None exist
+  by default. `--campaign-overrides=<folder>` installs a folder for one run in a
+  non-public build (tests, `--campaign-map-test`, `--map-audit=N`).
+- Sending edits back: the builder's "Export my changes" (Ctrl+Shift+E) writes
+  `<user>-campaign-edits-<date>.zip` (manifest, each changed level, the level it
+  started from); `python tools/campaign/merge_edits.py <zip>` installs each into
+  `campaign-overrides/`, and when the level here changed since that base it keeps
+  this side's version in `campaign-overrides/review/` and reports "both changed".
+- Proofs: `--export-roundtrip-test` (export, reload, rebuild the World, compare
+  for a set of levels, a district and the custom campaigns) and
+  `--campaign-override-test[=all|chapter2|68-109] [--keep=<folder>]` (each level
+  through the override path against its C++ map, with a hand-over verdict).
+
+Additions to the format for this (older files load unchanged; all optional):
+
+| Record | Added |
+|---|---|
+| `STRUCT` | `\|shape\|facing` (World.h StructureShape 0-7, quarter turn 0-3) |
+| `DOOR` | `\|control\|swing\|maxOpen\|open\|opening` |
+| `LIGHT` | `\|shadows\|prop` (0 casts none; the CLUTTER index a lamp rides) |
+| `TERMINAL` | `\|readable\|taped\|surface\|reactor` |
+| `TIMED_SEQUENCE` | `\|soundX\|soundY\|soundZ` |
+| `SEQUENCE_CUE` | `\|aiRadius` |
+| `HAZARD` | `\|state\|value\|invert\|period\|onTime\|phase` |
+| `PICKUP` | `\|z` |
+| `COMPACTOR` | `\|stop` |
+| `ACTOR_PATROL` | `\|look` |
+| `SCRIPT_TRIGGER` | `\|once` (0: fires on every pass its gates hold) |
+| `SCRIPT_ACTION` | kind `RAW\|type\|state\|value\|index\|creature\|x\|y\|z\|amount\|sound\|text`: any action exactly (doors, sounds, spawns) |
+| `HUNG_SUIT\|map\|x\|y\|z\|facing` | new: an empty suit hung from a hook |
+| `CRATE\|map\|x\|y\|z\|size`, `CRATE_PLATE\|map\|x\|y\|state`, `CRATE_RESET\|map\|state` | new: the push-crate puzzle |
+
+`PIPE` materials past 6 load (the campaign draws 7, 8 and 20 as service pipe) and
+`ZONE` names and titles may run to 64 characters.
