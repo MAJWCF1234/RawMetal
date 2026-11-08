@@ -4,6 +4,14 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.10 - The rooms were there (2026-11-08)
+
+Opening a level from the official campaign showed an empty corner. Those rooms sit underground, and the picture was the empty space above the ceiling. The walls, lights and furniture are in the picture now.
+
+An official level stays in Open from campaign. It does not appear on the title as a project.
+
+---
+
 ## v1.2.9 - One program (2026-11-08)
 
 The Campaign Builder and the game are one program now. An edit goes straight
