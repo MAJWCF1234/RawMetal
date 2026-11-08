@@ -1096,7 +1096,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
     const auto&material=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
     float offset=(dx!=0?ax*dx:ay*dy)*.5f;
-    float wallBase=w.outdoors()?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
+    // Authored maps, including an official level opened in the builder, carry
+    // their own floor. The 0 and -9 slabs are only the old built-in chapters.
+    float wallBase=w.outdoors()||w.authored()||(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
     if(wallFinish&&wallFinish->wall->band>0&&wallFinish->wall->above){
      // A painted wall: the dado band once from the floor, the paint above it.
      const auto& band=*wallFinish->wall;const float top=std::min(Z,wallBase+band.band),h=(top-wallBase)/band.band;

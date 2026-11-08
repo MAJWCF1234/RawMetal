@@ -614,10 +614,18 @@ std::shared_ptr<const CustomCampaign> builtInCampaignForKey(std::uint64_t key){
  auto exclusion=loadEmbeddedExclusionZoneCampaign();if(exclusion->key==key)return exclusion;
  return nullptr;
 }
+static bool isOfficialCampaignExport(const std::filesystem::path& path){
+ std::ifstream in(path,std::ios::binary);if(!in)return false;
+ std::string head(4096,'\0');in.read(head.data(),std::streamsize(head.size()));
+ head.resize(size_t(std::max<std::streamsize>(0,in.gcount())));
+ return head.find("CAMPAIGN_BASE|chunk=")!=std::string::npos;
+}
 std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(const std::filesystem::path& directory,std::vector<std::string>* errors){
  std::vector<std::shared_ptr<const CustomCampaign>> result;std::error_code ec;
  if(std::filesystem::exists(directory,ec))for(auto& entry:std::filesystem::directory_iterator(directory,ec)){
   if(ec)break;if(!entry.is_regular_file()||!isCustomCampaignFile(entry.path()))continue;
+  // An exported official level stays in Open from campaign. It is not a project.
+  if(isOfficialCampaignExport(entry.path()))continue;
   try{result.push_back(loadCustomCampaignFile(entry.path()));}
   catch(const std::exception& error){if(errors)errors->push_back(entry.path().filename().string()+": "+error.what());}
  }
