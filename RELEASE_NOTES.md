@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.15 - Live editing and room dressing (2026-11-09)
+
+Moving or deleting furniture now updates the live 3D picture, including loose props.
+
+- Autodressing has a visible on/off setting. It starts on and remembers your choice.
+- Redressing replaces its own generated furniture, floors and lamps while leaving user content alone. All older maps are treated as user-generated. Editing an automatic item makes it yours.
+- Drawn walls take priority over intersecting objects on that floor. One Undo restores the wall operation and removed content together.
+- Room dressing respects the actual room shape, rotated model sizes, occupied space and doorway access. Repeated dressing and lamp addition no longer pile up duplicates.
+- Relighting keeps user lamps and other floors intact. Floor painting preserves neighboring rooms and floors.
+
+Verified with rendered movement/deletion checks, creation and ownership regressions, the 56-check authoring suite, Starter save/reopen, simulation, and the 1,729-record Starter reconstruction.
+
+The separate game download is unchanged.
+
+---
+
 ## v1.2.14 - Look works in the picture (2026-11-09)
 
 Right mouse on the 3D picture looks around again. The picture was ignoring the mouse.
