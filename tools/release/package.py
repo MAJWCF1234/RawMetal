@@ -70,6 +70,18 @@ def require_split(game, editor):
         raise SystemExit('game exe must stay the game, without the editor packed into it: %s' % game)
 
 
+def editor_catalogues():
+    """New campaign reads these beside the exe. Without them it returns to the title."""
+    models = EDITOR / 'src' / 'world' / 'ModelIds.h'
+    cues = EDITOR / 'src' / 'world' / 'WorldDefinition.h'
+    if not models.is_file():
+        raise SystemExit('editor download is missing the model list: %s' % models)
+    text = cues.read_text(encoding='utf-8', errors='replace') if cues.is_file() else ''
+    if 'enum class MusicCue' not in text:
+        raise SystemExit('editor download is missing the soundtrack list: %s' % cues)
+    return models, cues
+
+
 def package_editor(out, name, tag, game):
     """Zip the standalone level editor beside the game.
 
@@ -94,6 +106,8 @@ def package_editor(out, name, tag, game):
         z.writestr('README-EDITOR.txt', readme)
         z.writestr(*PUBLIC_MARKER)
         z.write(program, 'RawMetal.exe')
+        for header in editor_catalogues():
+            z.write(header, 'src/world/' + header.name)
         if maps.is_dir():
             for entry in sorted(maps.rglob('*')):
                 # The editor's unsaved-work copies stay on the author's machine.

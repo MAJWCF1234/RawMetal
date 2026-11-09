@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.13 - New campaign stays open (2026-11-09)
+
+New campaign opens a blank map and stays in the editor.
+
+The v1.2.12 editor download was missing the soundtrack list, so New campaign came back to the title. That list ships with the editor now.
+
+The game download beside it is unchanged.
+
+---
+
 ## v1.2.12 - New campaign stays open (2026-11-09)
 
 New campaign opens a blank map and stays in the editor. It no longer drops back to the title.
