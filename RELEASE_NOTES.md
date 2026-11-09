@@ -4,6 +4,14 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.12 - New campaign stays open (2026-11-09)
+
+New campaign opens a blank map and stays in the editor. It no longer drops back to the title.
+
+The game download beside it is unchanged.
+
+---
+
 ## v1.2.11 - The editor download opens the editor (2026-11-09)
 
 The campaign editor download is the program that opens the editor. New campaign, a saved project, and Play live in that exe.
