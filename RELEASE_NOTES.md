@@ -12,6 +12,8 @@ Moving or deleting furniture now updates the live 3D picture, including loose pr
 - Redressing replaces its own generated furniture, floors and lamps while leaving user content alone. All older maps are treated as user-generated. Editing an automatic item makes it yours.
 - Drawn walls take priority over intersecting objects on that floor. One Undo restores the wall operation and removed content together.
 - Room dressing respects the actual room shape, rotated model sizes, occupied space and doorway access. Repeated dressing and lamp addition no longer pile up duplicates.
+- Dressing uses room names and authored furniture as context, pairs chairs with desks or sofas, and leaves usable space in front of equipment.
+- Committed edits repair managed arrangements locally. Valid pieces stay put, repeated updates settle to identical saved content, and deliberately deleted items do not immediately respawn.
 - Relighting keeps user lamps and other floors intact. Floor painting preserves neighboring rooms and floors.
 
 Verified with rendered movement/deletion checks, creation and ownership regressions, the 56-check authoring suite, Starter save/reopen, simulation, and the 1,729-record Starter reconstruction.
