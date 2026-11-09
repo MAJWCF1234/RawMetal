@@ -21,6 +21,8 @@ public:
     ~SoftwareRenderer();
     bool enableHardware(void* window=nullptr);
     bool hardwareActive()const{return bool(m_gpu);}
+    const std::vector<int>& renderedChunks()const{return m_renderedChunks;}
+    std::vector<int> m_renderedChunks;
     // Windowed path: the post-processed scene of the last frame as a PPM.
     bool saveSceneCapture(const char* path);
     void saveSunCascades(const char* prefix);
@@ -391,6 +393,7 @@ private:
     std::array<std::uint64_t,Game::MaxChunks> m_chunkLightSourceKeys{};
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
+    const Game* m_lightingGame=nullptr;
     float m_gripError=0,m_pistolContact=0;ShotgunContact m_shotgunContact{};std::array<Point3,2> m_shotgunTarget{};
     int m_cleanupInspectionStage=0;
     float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0,m_cleanupEdgeStretch=1;

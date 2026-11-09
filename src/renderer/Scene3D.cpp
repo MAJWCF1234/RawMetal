@@ -1215,7 +1215,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(s.material==CollisionProxyMaterial)continue;
   if(s.shape!=ShapeBox){drawShape(s,structureTexture(s));continue;}
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
-  if(s.material==1){
+  if(s.layerSurface){
+   const auto* finish=s.layerSurface==1?wallFinish:floorFinish;
+   const auto& tex=finish?(s.layerSurface==1?*finish->wall:*finish->floor):(s.layerSurface==1?m_pressureWall:m_concrete);
+   auto repeat=finish?(s.layerSurface==1?finish->wallRepeat:Vec2{finish->floorRepeat,finish->floorRepeat}):Vec2{2,2};
+   const float x=s.x1,y=s.y1,X=s.x2,Y=s.y2,b=s.bottom,t=s.top;
+   // Native layer geometry uses the same metre-based surface mapping as the
+   // ground floor. Resizing changes repeat count, never texel density.
+   auto face=[&](Point3 a,Point3 b,Point3 c,Point3 d){
+    if(s.layerSurface==1&&tex.band>0&&tex.above&&std::abs(c.z-a.z)>.001f){
+      float bandTop=std::min(c.z,a.z+tex.band),height=(bandTop-a.z)/tex.band;
+      Point3 C=c,D=d;C.z=D.z=bandTop;
+      float run=std::hypot(b.x-a.x,b.y-a.y),offset=std::abs(b.x-a.x)>=std::abs(b.y-a.y)?a.x:a.y;
+      quad(a,b,C,D,tex,1.f,{run/repeat.x,height},{offset/repeat.x,1-height});
+      if(c.z>bandTop){a.z=b.z=bandTop;finishQuad(a,b,c,d,*tex.above,1.f,finishRepeat(*tex.above));}
+    }else finishQuad(a,b,c,d,tex.band>0&&tex.above?*tex.above:tex,1.f,repeat);
+   };
+   face({x,y,b},{X,y,b},{X,y,t},{x,y,t});face({X,Y,b},{x,Y,b},{x,Y,t},{X,Y,t});
+   face({x,Y,b},{x,y,b},{x,y,t},{x,Y,t});face({X,y,b},{X,Y,b},{X,Y,t},{X,y,t});
+   face({x,y,t},{X,y,t},{X,Y,t},{x,Y,t});face({x,Y,b},{X,Y,b},{X,y,b},{x,y,b});continue;
+  }  if(s.material==1){
    // Faceted containment jacket, with consistent metre-scale panels, centred
    // on its structure (radius 1.16 x the half-width: 1.74 m for a 3 m bay).
    const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,r=(s.x2-s.x1)*.58f,base=s.bottom;

@@ -358,7 +358,7 @@ RECORDS = [
          'haze R G B (0-1) and density (0-0.1) give the map its own air: 0.01 is enough for lamps to hang cones of light in it. '
          'wetness 0-1 is how damp the floors are: a sheen and puddles that reflect the lamps (0.5 in the Lights hall); leave the haze fields empty to set only wetness.'),
         ('SURFACE|map|wall|floor|ceiling', 'Wall, floor and ceiling finish for the whole map; -1 keeps the default. See the surface table.'),
-        ('LAYER|map|layer|name|elevation|thickness', 'A floor level. Layer 0 is the ground (elevation 0, thickness 0). Upper layers use thickness > 0 and = tiles for walkable deck.'),
+        ('LAYER|map|layer|name|elevation|thickness', 'A floor level. Layer 0 is the ground (elevation 0, thickness 0). Upper layers use thickness > 0 and = tiles for walkable deck. Upper # cells form walls from that layer to the map ceiling; upper . and _ cells stay empty.'),
         ('ROW|map|layer|row|24 characters', 'One line of the tile grid, row 0 (north) to 23 (south). Exactly 24 characters: see the tile diagram.')]),
     ('Outdoors (campaign-wide, world metres)', [
         ('TERRAIN|seed|base|amplitude|scale|roughness', 'The ground of every outdoor map. seed picks the pattern; base is the mean height (-10 to 16); amplitude how far hills rise and dip from it (0-12); '
@@ -453,7 +453,7 @@ def main():
     o.append('<h1>Making custom maps</h1><p class="lede">A custom map is one <b>.rmc</b> file: a RawMetal Campaign. Put it in <code>custom maps</code> beside the game, '
              'start the game, and pick it under <b>CUSTOM MAPS</b> on the title screen. Inside, an .rmc is readable text you write by hand. This guide shows how it works, with '
              '<b>Starter Map.rmc</b> as the worked example: a walkable debug world with every part of a map lined up and labelled.</p>')
-    o.append('<nav><a href="#start">Quick start</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#scripting">Scripting</a><a href="#records">Records</a>'
+    o.append('<nav><a href="#start">Quick start</a><a href="#editor">Editor workflow</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#scripting">Scripting</a><a href="#records">Records</a>'
              '<a href="#starter">Starter Map tour</a><a href="#values">Value tables</a><a href="#models">All models</a><a href="#errors">When it fails</a></nav>')
 
     o.append('<h2 id="start">1. Quick start</h2>')
@@ -639,6 +639,45 @@ def main():
         loc = '%s, %g %g' % (mapname[it['map']], it['x'], it['y']) if it else ''
         rows.append((slot, name, '%.2f x %.2f x %.2f' % (w, d, h), loc))
     o.append(table(['ID', 'name', 'size (m)', 'where'], rows))
+
+    o.append('<h2 id="editor">Editor: selection, floors and export</h2>')
+    o.append('<p>The editor uses the game engine and saves native <code>.rmc</code> files. Use the matching game and editor build, '
+             'then save your campaign into the game&#39;s <code>custom maps</code> folder and choose it under <b>CUSTOM MAPS</b>.</p>')
+    o.append('<h3>Pick and reshape</h3><ul>'
+             '<li><b>Shift-click</b> adds or removes objects from the selector. Drag a selection box in the plan to select several; Shift adds that box to the current selection. '
+             'Move, Turn, Copy and Delete operate on the selection. An ordinary click picks one object.</li>'
+             '<li>The plan and 3D view outline the object under the pointer. Selected objects have visible handles. Drag a footprint corner to resize it; a pipe or cable has endpoint handles.</li>'
+             '<li>In 3D, select a wall or ceiling and drag its highlighted upper edge upward to create headroom. A map wall follows the native MAP ceiling. '
+             'For a separate thin roof slab, drag the underside edge: the slab lifts with its thickness intact. Escape cancels the drag; one Undo restores the whole edit.</li>'
+             '<li>Wall and floor finishes use metre-based texture repeats. Resizing changes how many repeats fit on a face rather than stretching one image over it. '
+             'Model and material IDs remain native.</li></ul>')
+    o.append('<h3>Floors / layers dock</h3><p>The adapting right dock has <b>Inspector</b> and <b>Floors / layers</b> tabs. '
+             'The layer stack shows floor names, elevations, visibility and locks, with a small plan preview. '
+             'Other-floor outlines let you align a new floor with the building below it.</p>')
+    o.append(table(['Command', 'Result'], [
+        ('New Layer... (Ctrl+Shift+N)', 'Name a new floor and choose its elevation and thickness. New upper floors reserve 2.4 m of headroom by raising the MAP ceiling when needed.'),
+        ('New from Visible', 'Create an editable composite group of copies of the visible floors. Relative floor heights, stairs, masks and native materials remain intact.'),
+        ('New Layer Group', 'Organize selected floors together.'),
+        ('Duplicate Layers (Ctrl+Shift+D)', 'Copy selected floors and their native objects together, preserving cross-floor relationships.'),
+        ('Merge Down', 'Move the active floor content onto the floor below and combine their tile layouts.'),
+        ('Delete Layers', 'Remove selected floor content and retain a valid, contiguous layer list. The map keeps at least one floor.'),
+        ('Stack', 'Change the order in the dock. Elevation remains a separate physical property.'),
+        ('Mask', 'Use a plan selection as an editing-view mask, invert it, or remove it.'),
+        ('Transparency', 'Adjust visibility while editing in 2D and 3D.'),
+        ('Transform', 'Resize the floor footprint, flip the layout, or edit elevation and thickness.')]))
+    o.append('<p><b>Visibility, opacity and masks are editing aids.</b> They are saved with the project as editor comments. '
+             'They do not silently delete geometry from the exported playable map. Play uses the complete authored map and its real collision. '
+             'To make a permanent hole, erase the floor tiles or edit its native geometry.</p>')
+    o.append('<p>The standing player is <b>1.6 m</b> tall. Check the dock&#39;s headroom readout before playing an upper floor: '
+             'a deck at 3.5 m under a ceiling at 4.5 m has only 1 m of room. Raise that ceiling, or lift the underside of an explicit roof slab. '
+             'Place the player start on the intended floor.</p>')
+    o.append('<p>On an upper layer, <code>.</code> is empty space and <code>=</code> is a walkable deck with positive thickness. '
+             'The upper-floor Floor tool offers <b>Floor</b> or <b>Open space</b>; choose any floor material, including concrete. Open space cuts the floor geometry for ramp openings. The Paint tool paints local rectangles or stripes; Fill paints the connected room. Material-painted floors export as native STRUCT geometry, with metre-scale UVs. Upper <code>#</code> walls reach the authored MAP ceiling and inherit the map wall finish. '
+             'Keep the game engine updated for this upper-wall behavior.</p>')
+    o.append('<h3>Adding adjoining maps</h3><p>Click <b>+ Map</b> and choose North/top, South/bottom, West/left or East/right. Occupied edges are disabled. The new map shares the ground-floor elevation, a short three-tile opening joins the edges, and the editor switches to its ground floor. Uncheck <b>Open a passage between maps</b> in that menu to keep the original walls and boundary settings intact. One Undo restores the whole join. The native renderer draws the active map and nearby maps within 48 m, while distant maps stay out of the draw list.</p>')
+    o.append('<h3>Managed dressing and manual content</h3><p>Autodressing starts on and can be disabled. It uses room context, usable space, access and furniture relationships. '
+             'It repairs conflicting generated placements while keeping valid ones stable. Unmarked older maps are user-authored. '
+             'Manually editing a generated item makes it yours. New walls take priority and remove the furniture or items they physically intersect; Undo restores both.</p>')
 
     o.append('<h2 id="errors">12. When it fails</h2>')
     o.append(table(['You see', 'Why, and the fix'], [

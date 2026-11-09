@@ -1,0 +1,3439 @@
+#include <cstdio>
+#include <cstdlib>
+#include "BoxSurfaces.h"
+#include "../game/CreatureAnimation.h"
+#include "../world/ModelIds.h"
+#include "../world/GlassFracture.h"
+#include "../world/Primitives.h"
+#include "Projection.h"
+#include "RenderProfile.h"
+#include "../core/FrameProfile.h"
+#include "SoftwareRenderer.h"
+#include "GpuRenderer.h"
+#include "ElectricFx.h"
+#include "../vr/VrRuntime.h"
+#include <algorithm>
+#include <bit>
+#include <map>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+#include <mutex>
+namespace retro {
+const SoftwareRenderer::Texture& SoftwareRenderer::lampFace(const Texture& base,Point3 tone){
+ const float peak=std::max({tone.x,tone.y,tone.z,1e-4f});
+ // Emission bytes are display-encoded: the linear filter goes in as its 1/2.2 power.
+ const std::array<float,3> filter{std::pow(tone.x/peak,1/2.2f),std::pow(tone.y/peak,1/2.2f),std::pow(tone.z/peak,1/2.2f)};
+ std::uint64_t key=std::uint64_t(reinterpret_cast<std::uintptr_t>(&base))*1099511628211ull;
+ for(float f:filter)key=(key^std::uint64_t(std::lround(f*63)))*1099511628211ull;
+ auto found=m_lampFaces.find(key);if(found!=m_lampFaces.end())return found->second;
+ Texture face=base;
+ // Each texel keeps its brightness (its peak channel, the brightest raised to
+ // full) and takes the lamp's colour.
+ unsigned brightest=1;for(auto p:face.emission)brightest=std::max({brightest,(p>>16)&255u,(p>>8)&255u,p&255u});
+ for(auto&p:face.emission){float level=float(std::max({(p>>16)&255u,(p>>8)&255u,p&255u}))*255.f/float(brightest);unsigned c[3];for(int i=0;i<3;++i)c[i]=unsigned(std::lround(level*filter[size_t(i)]));p=(p&0xff000000u)|(c[0]<<16)|(c[1]<<8)|c[2];}
+ return m_lampFaces.emplace(key,std::move(face)).first->second;
+}
+// First-person weapon meshes are normalized to their physical footprint, not
+// to the player collision height. Scaling them with the taller world hull
+// made a standard rifle render almost two metres long on screen.
+namespace {
+constexpr float kViewModelScale=1.15f;
+// The viewmodel frames its arms about this rig-space point: the centre of the
+// original arm rig's default (relax) pose. Fixed, so a different arm mesh
+// (Claire's own, resource 111) keeps the tuned shoulders, grips and framing.
+constexpr Point3 kArmsRigCenter{0.f,1.515185f,.171566f};
+// Shotgun wrist offsets from the trigger and support sockets (view units).
+// Claire's right hand closes round the stock's wrist behind the trigger guard,
+// her left at the back of the fore-end, as far as her reach holds it through sway and recoil.
+// Sockets in the Remington's own coordinates: the right hand on the stock's
+// narrow wrist behind the trigger guard (z 1.0-1.5), the left on the rear half
+// of the pump's wooden fore-end (z -3.0 to -1.5, measured from the model).
+constexpr Point3 kTriggerSocket{.02f,.70f,1.10f},kSupportSocket{-.064f,1.10f,-2.30f};
+constexpr Point3 kTriggerWrist{.045f,-.035f,-.04f},kSupportWrist{-.085f,-.01f,-.03f};
+// The shotgun's hands keep the frames the rig was tuned to (trigger palm to
+// the stock, support palm up under the fore-end); the trigger elbow points out
+// and a little down, as a shouldered long gun is held, instead of folding down
+// under the gun with the forearm stood upright and the wrist wrung.
+const Mesh::ArmHold kShotgunHoldDefault{{Point3{0,.65f,.76f},Point3{-.95f,0,.312f}},{Point3{1,0,0},Point3{0,1,0}},2,{Point3{-1.f,-.3f,-.25f},Point3{}},{false,true},.5f};
+// RAWMETAL_SHOTGUN_HANDS ("fRx fRy fRz pRx pRy pRz fLx fLy fLz pLx pLy pLz
+// eRx eRy eRz eLx eLy eLz swingLeft roll") and RAWMETAL_SHOTGUN_SOCKETS ("tx ty tz
+// sx sy sz") override the hand frames and sockets for tuning.
+Mesh::ArmHold shotgunHold(){Mesh::ArmHold h=kShotgunHoldDefault;if(const char*e=std::getenv("RAWMETAL_SHOTGUN_HANDS")){float v[20];
+ if(std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",v,v+1,v+2,v+3,v+4,v+5,v+6,v+7,v+8,v+9,v+10,v+11,v+12,v+13,v+14,v+15,v+16,v+17,v+18,v+19)==20){
+  h.forward={Point3{v[0],v[1],v[2]},Point3{v[6],v[7],v[8]}};h.palm={Point3{v[3],v[4],v[5]},Point3{v[9],v[10],v[11]}};
+  h.elbow={Point3{v[12],v[13],v[14]},Point3{v[15],v[16],v[17]}};h.swingOnly={false,v[18]>.5f};h.forearmRoll=v[19];}}return h;}
+Point3 shotgunSocket(bool support){Point3 t=kTriggerSocket,sp=kSupportSocket;if(const char*e=std::getenv("RAWMETAL_SHOTGUN_SOCKETS"))std::sscanf(e,"%f %f %f %f %f %f",&t.x,&t.y,&t.z,&sp.x,&sp.y,&sp.z);return support?sp:t;}
+// Where the shotgun and her arms sit in view space (chosen from a sweep so the
+// stock clears the frame, the gun and arms sit as close as her fists do, the
+// trigger elbow bends at about 57% of her reach
+// and the support arm at 89%, with room for sway and recoil): the gun's centre, the arm
+// rig's centre, the gun turned in toward the crosshair (radians), and the
+// wrist offsets from the trigger and support sockets. RAWMETAL_SHOTGUN_VIEW
+// ("gx gy gz ax ay az toe tx ty tz sx sy sz scale tilt roll") overrides it for tuning.
+struct ShotgunView{Point3 gun{.16f,-.18f,.64f},arms{.20f,-.30f,.38f};float toe=.08f;Point3 trigger=kTriggerWrist,support=kSupportWrist;float scale=1.3f;float tilt=0,roll=0;};   // scale: the gun and her arms at the size of her body under them
+ShotgunView shotgunLayout(ShotgunView v,const char*variable){if(const char*e=std::getenv(variable))std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f",&v.gun.x,&v.gun.y,&v.gun.z,&v.arms.x,&v.arms.y,&v.arms.z,&v.toe,&v.trigger.x,&v.trigger.y,&v.trigger.z,&v.support.x,&v.support.y,&v.support.z,&v.scale,&v.tilt,&v.roll);
+ // The whole assembly grows about the arm rig's centre: gun, sockets and arms
+ // keep their proportions, so the reach and the grip are unchanged.
+ v.gun=v.arms+(v.gun-v.arms)*v.scale;v.trigger=v.trigger*v.scale;v.support=v.support*v.scale;return v;}
+// Hip: the gun's axis runs from off the bottom-right, the stock tucked under
+// her shoulder, to the crosshair. Aimed (right mouse): square to the view, the
+// bead and the receiver's top on the crosshair. RAWMETAL_SHOTGUN_AIM tunes the
+// aimed layout as RAWMETAL_SHOTGUN_VIEW does the hip.
+ShotgunView shotgunView(float aim=0){
+ ShotgunView hip{};hip.gun={.172f,-.186f,.570f};hip.arms={.212f,-.306f,.402f};hip.toe=.26f;hip.tilt=.18f;
+ ShotgunView sights{};sights.gun={.043f,-.191f,.500f};sights.arms={.083f,-.311f,.332f};sights.toe=0;sights.tilt=0;   // centre ends at (.031,-.155,.55): bore on the crosshair line
+ hip=shotgunLayout(hip,"RAWMETAL_SHOTGUN_VIEW");if(aim<=0)return hip;
+ sights=shotgunLayout(sights,"RAWMETAL_SHOTGUN_AIM");const float t=aim*aim*(3-2*aim);
+ auto mix=[&](Point3 a,Point3 b){return a+(b-a)*t;};ShotgunView v=hip;
+ v.gun=mix(hip.gun,sights.gun);v.arms=mix(hip.arms,sights.arms);v.trigger=mix(hip.trigger,sights.trigger);v.support=mix(hip.support,sights.support);
+ v.toe=hip.toe+(sights.toe-hip.toe)*t;v.tilt=hip.tilt+(sights.tilt-hip.tilt)*t;v.roll=hip.roll+(sights.roll-hip.roll)*t;v.scale=hip.scale+(sights.scale-hip.scale)*t;return v;}
+// Toe turns the muzzle in toward the crosshair; tilt raises it, dropping the stock.
+Point3 shotgunPlace(const ShotgunView&v,Point3 p){const float c=std::cos(v.toe),sn=std::sin(v.toe),tc=std::cos(v.tilt),ts=std::sin(v.tilt),rc=std::cos(v.roll),rs=std::sin(v.roll);
+ // Roll turns the receiver's side toward the eye (about the bore), then tilt
+ // raises the muzzle, then toe turns it in.
+ const float x=p.x*rc-p.y*rs,y=p.x*rs+p.y*rc,z=-p.z;const float y2=y*tc+z*ts,z2=-y*ts+z*tc;return Point3{x*c+z2*sn+v.gun.x,y2+v.gun.y,-x*sn+z2*c+v.gun.z};}
+// Claire's textures (resources 2302-2311, in this order) by FBX material name:
+// her body and her first-person arms both carry her materials.
+static int claireMaterial(const Mesh&mesh,int part){
+ static constexpr const char* materials[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
+ if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos)return m;
+ return -1;
+}
+// How a gun-holding civilian's baked body takes the arm attachment, in its
+// rest-OBJ space (civilianActorBody order: Worker, then the five staff).
+// Joints are the FBX RightArm/LeftArm, ForeArm and Hand in the pose that
+// RawMetalClutterImport --skin-rest exports (its listing prints them); palms
+// point from Hand toward Middle1 (Index1 where the rig has no Middle1).
+// `unit` is the rest height over the Worker's 1.632, scaling the mask's
+// distances; the torso axis splits the sides and the band bounds arm
+// vertices: from .26 units below the wrists (bare fingers hang to about .24;
+// the light suit's gloves follow by material) to .17 above the shoulders.
+// Bare hands have no glove material: `fingers` extends the arm chain from the
+// wrist along the palm (fingertips at Hand + palm * fingers) so the whole hand
+// joins the grip. The Worker keeps its original hand-tuned values.
+struct CivilianRig {std::array<Point3,2> shoulders,elbows,hands,palms;float torsoX,torsoZ,sideSplit,bandLow,bandHigh,pullStart,unit,fingers;};
+constexpr std::array<CivilianRig,6> kCivilianRigs{{
+ {{{{-.299655f,1.128231f,.062529f},{.175621f,1.137175f,.208664f}}},{{{-.320979f,1.004710f,-.043664f},{.235904f,.985455f,.190558f}}},{{{-.455896f,.685732f,-.040689f},{.244775f,.711805f,.402681f}}},
+  {{{-.017374f,-.105655f,.031950f},{.020742f,-.075568f,.078422f}}},-.085f,.10f,-.1f,.55f,1.30f,.66f,1.f,0},
+ {{{{-0.547253f,3.60615f,-0.0740935f},{0.312347f,3.60615f,-0.0846731f}}},{{{-0.713854f,2.99819f,-0.00719324f},{0.478948f,2.99819f,-0.00706265f}}},{{{-0.817165f,2.39903f,0.22525f},{0.58226f,2.39903f,0.22548f}}},
+  {{{-0.0629246f,-0.272458f,0.127924f},{0.0649639f,-0.273789f,0.124002f}}},-0.117453f,-0.0555683f,-0.117453f,1.67221f,4.08138f,2.59672f,2.79547f,2.2f},
+ {{{{-0.49371f,3.55719f,-0.0917704f},{0.299881f,3.55719f,-0.0909463f}}},{{{-0.734385f,2.93329f,-0.11308f},{0.540556f,2.93329f,-0.118474f}}},{{{-0.835041f,2.29881f,-0.0457228f},{0.641212f,2.29881f,-0.0424704f}}},
+  {{{-0.0161463f,-0.290415f,0.0870152f},{0.024676f,-0.292103f,0.0789926f}}},-0.0969143f,-0.063972f,-0.0969143f,1.58121f,4.02639f,2.5045f,2.76f,2.2f},
+ {{{{-0.41536f,3.685f,-0.0267333f},{0.327459f,3.685f,-0.0300128f}}},{{{-0.687445f,3.17155f,-0.0157767f},{0.599544f,3.17155f,-0.0117012f}}},{{{-0.944825f,2.62909f,0.00320618f},{0.856924f,2.62909f,0.0011927f}}},
+  {{{-0.19006f,-0.239095f,0.0249561f},{0.197376f,-0.233138f,0.0245304f}}},-0.0439507f,-0.0198611f,-0.0439507f,1.90475f,4.15861f,2.71382f,2.78592f,2.2f},
+ {{{{-0.455447f,3.66273f,-0.0464635f},{0.343809f,3.66273f,-0.0446663f}}},{{{-0.846065f,3.11828f,-0.0595233f},{0.734426f,3.11828f,-0.0570286f}}},{{{-1.19234f,2.65597f,-0.0651441f},{1.0807f,2.65597f,-0.0655766f}}},
+  {{{-0.159059f,-0.26061f,0.0216822f},{0.154528f,-0.264f,0.0106013f}}},-0.0558194f,-0.0318954f,-0.0558194f,1.93250f,4.13577f,2.59176f,2.78258f,2.2f},
+ {{{{-0.170945f,1.14816f,0.00725444f},{0.149303f,1.15564f,0.102785f}}},{{{-0.189157f,1.04289f,-0.0831918f},{0.200698f,1.02632f,0.0873293f}}},{{{-0.315382f,0.744461f,-0.0802804f},{0.209169f,0.770415f,0.285742f}}},
+  {{{-0.0260366f,-0.0960641f,0.0277716f},{0.0252621f,-0.0618565f,0.0788231f}}},-0.000731455f,0.0199785f,-0.000731455f,0.612948f,1.31533f,0.83484f,0.939381f,0},
+}};
+// A field terminal is authored geometry in the actor's metre-sized frame.
+// Its working surface tilts toward both the operator and a standing observer.
+struct FieldTerminalFrame {
+ Point3 center{},right{},up{},normal{};float size=1;
+ Point3 point(float x,float y,float z=0)const{return center+(right*x+up*y+normal*z)*size;}
+};
+FieldTerminalFrame fieldTerminalFrame(const ActorPose&pose,float scale,bool working){
+ Point3 right{std::cos(pose.yaw),-std::sin(pose.yaw),0},forward{std::sin(pose.yaw),std::cos(pose.yaw),0},up{0,0,1};float size=scale/1.6f;
+ Point3 center=Point3{pose.position.x,pose.position.y,pose.z}+(right*(working?-.035f:-.29f)+forward*(working?.31f:.045f)+up*(working?1.02f:.86f))*size;
+ return working?FieldTerminalFrame{center,right,forward*-.8f+up*.6f,forward*.6f+up*.8f,size}:FieldTerminalFrame{center,forward,up,right*-1.f,size};
+}
+Point3 fieldTerminalHand(const FieldTerminalFrame&frame,int side,float touch){
+ return side?frame.point(.095f,-.035f,.037f+.010f*touch):frame.point(-.183f,-.02f,-.025f);
+}
+FieldTerminalFrame heldFieldTerminalFrame(Point3 wrist,Point3 palm,float yaw,float scale){
+ // The direct texting take owns the arms and fingers. Attach a compact pad
+ // to its holding palm instead of pulling both authored hands onto a large
+ // fixed panel. The wrist carries it into and out of the pocket as well.
+ auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+ auto unit=[&](Point3 p,Point3 fallback){float length=std::sqrt(dot(p,p));return length>.0001f?p*(1.f/length):fallback;};
+ Point3 actorRight{std::cos(yaw),-std::sin(yaw),0},vertical{0,0,1},forward{std::sin(yaw),std::cos(yaw),0};
+ Point3 right=unit(palm*-1.f,actorRight);
+ if(dot(right,actorRight)<0)right=right*-1.f;
+ Point3 upHint=std::fabs(right.z)<.9f?vertical:forward;
+ Point3 up=unit(upHint-right*dot(upHint,right),actorRight);
+ Point3 normal=unit({up.y*right.z-up.z*right.y,up.z*right.x-up.x*right.z,up.x*right.y-up.y*right.x},forward);
+ float size=scale/1.6f;
+ return {wrist-right*(.065f*size)+up*(.045f*size)+normal*(.005f*size),right,up,normal,size*.45f};
+}
+struct MedicalCaseFrame {
+ Point3 center{},right{},forward{},up{0,0,1};float size=1;
+ Point3 point(float x,float y,float z)const{return center+(right*x+forward*y+up*z)*size;}
+};
+MedicalCaseFrame medicalCaseFrame(Point3 actorBase,float yaw,float size){
+ Point3 right{std::cos(yaw),-std::sin(yaw),0},forward{std::sin(yaw),std::cos(yaw),0},up{0,0,1};
+ // Place the entire open box ahead of the chest; fit the hands to its rim.
+ // A box hung from an arbitrary donor palm could pass through the abdomen.
+ return {actorBase+(forward*.35f+up*.99f)*size,right,forward,up,size};
+}
+}
+bool SoftwareRenderer::validate3D(){
+ if(!testNormalMapping())return false;
+ {for(Mesh*cleanupMesh:cleanupMeshes()){const auto&rest=cleanupMesh->bindTriangles();
+  bool head=false,body=false;for(const auto&face:rest){if(face.part<0||size_t(face.part)>=cleanupMesh->materialNames.size())return false;const auto&name=cleanupMesh->materialNames[size_t(face.part)];head|=name.find("head")!=std::string::npos;body|=name.find("body")!=std::string::npos;}
+  if(!head||!body)return false;
+  // Natural idle is a posed clip. The repaired OBJ is the immutable bind mesh.
+  if(!cleanupMesh->hasCreatureLayerPose())return false;
+  float walkMotion=0,deathTop=0;for(int clip=0;clip<6;++clip){cleanupMesh->poseCreature(clip,clip==4&&cleanupMesh->hasDirectCreatureMotion()?1.f:.6f);for(size_t i=0;i<rest.size();++i)for(int v=0;v<3;++v){auto p=cleanupMesh->triangles[i].v[v].p;if(!std::isfinite(p.x)||!std::isfinite(p.y)||!std::isfinite(p.z)||p.y<-.003f||p.y>2.f)return false;if(clip==1)walkMotion+=std::fabs(p.z-rest[i].v[v].p.z);if(clip==4)deathTop=std::max(deathTop,p.y);}}if(walkMotion<1||deathTop>1)return false;}}
+ {for(float phase:{0.f,.25f,.6f,1.f}){m_cleanupMedic.poseCreature(6,phase);for(const auto&t:m_cleanupMedic.triangles)for(const auto&v:t.v)if(!std::isfinite(v.p.x)||!std::isfinite(v.p.y)||!std::isfinite(v.p.z)||v.p.y<-.003f||v.p.y>2.1f)return false;
+  for(float yaw:{0.f,kPi*.5f,-kPi*.5f,kPi})for(float size:{.5f,1.f,1.25f}){Point3 base{2,3,.2f};auto kit=medicalCaseFrame(base,yaw,size);for(float x:{-.18f,.18f})for(float y:{-.13f,.13f})for(float z:{-.13f,.25f}){auto delta=kit.point(x,y,z)-base;float clearance=delta.x*kit.forward.x+delta.y*kit.forward.y;if(clearance<.219f*size)return false;}}
+ }m_cleanupMedic.poseCreature(0,0);}
+ if(m_cleanupEngineer.hasDirectCreatureMotion()){
+  auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+  for(int clip:{6,7,8})for(float phase:{0.f,.25f,.5f,.75f,1.f}){
+   if(unsigned(clip)>=m_cleanupEngineer.creatureClipCount())return false;
+   m_cleanupEngineer.poseCreature(clip,phase);
+   const auto&hand=m_cleanupEngineer.creatureLayerPose().arms[1];
+   auto world=[](Point3 p){return Point3{p.x,p.z,p.y};};
+   auto frame=heldFieldTerminalFrame(world(hand[2]),world(hand[3]),0,1.6f);
+   for(auto axis:{frame.right,frame.up,frame.normal})if(!std::isfinite(axis.x)||!std::isfinite(axis.y)||!std::isfinite(axis.z)||std::fabs(dot(axis,axis)-1.f)>.0001f)return false;
+   if(std::fabs(dot(frame.right,frame.up))>.0001f||std::fabs(dot(frame.up,frame.normal))>.0001f||std::fabs(dot(frame.right,frame.normal))>.0001f)return false;
+   auto offset=frame.center-world(hand[2]);if(dot(offset,offset)>.01f)return false;
+  }
+  m_cleanupEngineer.poseCreature(0,0);
+ }
+ // Verify the legacy terminal's physical grips against the imported Engineer's
+ // calibrated arm lengths, including scale and rotation. This catches a
+ // stretched or floating tool before relying on a favourable camera angle.
+ if(!m_cleanupEngineer.hasDirectCreatureMotion())for(float yaw:{0.f,kPi*.5f,-kPi*.5f,kPi})for(float height:{.8f,1.6f,2.f}){
+  ActorPose pose;pose.position={8,8};pose.z=.5f;pose.yaw=yaw;auto terminal=fieldTerminalFrame(pose,height,true);
+  float c=std::cos(yaw),s=std::sin(yaw),scale=height/std::max(.01f,m_cleanupEngineer.maximum.y-m_cleanupEngineer.minimum.y);
+  auto world=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  for(int side=0;side<2;++side){const auto&joint=m_cleanupArms[1][side];auto shoulder=world(joint[0]),elbow=world(joint[1]),hand=world(joint[2]);
+   auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};float reach=length(elbow-shoulder)+length(hand-elbow);
+   for(float touch:{-1.f,0.f,1.f}){auto target=fieldTerminalHand(terminal,side,touch);if(!std::isfinite(target.x)||!std::isfinite(target.y)||!std::isfinite(target.z)||length(target-shoulder)>reach+.003f||target.z<pose.z+height*.40f||target.z>pose.z+height*.8f)return false;}
+  }
+ }
+ {auto&lamp=m_facilityTextures.at("lamp_1_on");if(lamp.emission.size()!=lamp.pixels.size()||std::none_of(lamp.emission.begin(),lamp.emission.end(),[](auto p){return (p&255)>128;}))return false;
+  Texture emissive{1,1,{0xff000000u}};emissive.emission={0xffffffffu};clear(0);std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
+  triangle3D({{-.3f,-.3f,1},0,0},{{.3f,-.3f,1},1,0},{{0,.3f,1},.5f,1},emissive,0);
+  if((m_pixels[size_t((m_height/2)*m_width+m_width/2)]&0xffffffu)!=0xffffffu)return false;
+ }
+ // Standalone decals clamp at their edges, and distant detail averages instead of aliasing.
+ if(m_facilityTextures.at("wooden_crate_hx_2_1").mips.empty())return false;
+ if(m_hazard.mips.empty()||sample(m_hazard,1,1)!=m_hazard.pixels.back()||sample(m_hazard,-1,-1)!=m_hazard.pixels.front())return false;
+ Texture checker{8,8,std::vector<std::uint32_t>(64)};for(int y=0;y<8;++y)for(int x=0;x<8;++x)checker.pixels[y*8+x]=(x+y)%2?0xffffffffu:0xff000000u;
+ prepareDecal(checker);auto distant=sample(checker,.13f,.67f,3);if((distant&255)<126||(distant&255)>128)return false;
+ for(const char*name:{"hand.R","hand.L"}){auto p=m_armsMesh.bonePosition(name);Point3 target=name[5]=='R'?Point3{-.025f,1.55f,.223f}:Point3{-.025f,1.60f,.49f};auto d=p-target;if(d.x*d.x+d.y*d.y+d.z*d.z>.0004f)return false;}
+ if(m_armsMesh.bones<10||m_enemyMesh.triangles.size()<100||m_weaponMesh.triangles.size()<100)return false;
+ const size_t junkTriangles[]={50,150,86,12,94,172};
+ for(size_t i=0;i<6;++i)if(m_clutterMeshes[i].triangles.size()!=junkTriangles[i]||m_clutterTextures[i].pixels.empty())return false;
+ for(int model=0;model<int(m_facilityMeshes.size());++model){auto&mesh=m_facilityMeshes[model];if(mesh.triangles.empty())return false;for(const auto&face:mesh.triangles)if(facilityTexture(model,face.part).pixels.empty())return false;}
+ m_armsMesh.pose(0,0);auto before=m_armsMesh.triangles;m_armsMesh.pose(1,1);
+ float delta=0;for(size_t i=0;i<before.size();++i)for(int j=0;j<3;++j){auto d=before[i].v[j].p-m_armsMesh.triangles[i].v[j].p;delta+=d.x*d.x+d.y*d.y+d.z*d.z;}
+ if(delta<.0001f)return false;
+ clear(0);std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
+ triangle3D({{-.3f,-.3f,1},0,0},{{.3f,-.3f,1},1,0},{{0,.3f,1},.5f,1},m_wall,1);
+ auto index=size_t((m_height/2)*m_width+m_width/2);auto color=m_pixels[index];
+ triangle3D({{-.6f,-.6f,2},0,0},{{.6f,-.6f,2},1,0},{{0,.6f,2},.5f,1},m_floor,1);
+ if(std::fabs(m_zbuffer[index]-1)>1e-4f||m_pixels[index]!=color)return false;
+ std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
+ triangle3D({{-.3f,-.1f,-.2f},0,0},{{.3f,-.1f,1},1,0},{{0,.3f,1},.5f,1},m_wall,1);
+ size_t coverage=0;for(auto z:m_zbuffer){if(!std::isfinite(z)||z<.059f)return false;if(z<9999)++coverage;}
+ return coverage>100;
+}
+void SoftwareRenderer::previewModel(int model,float angle){
+ clear(0xff283038);std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
+ Mesh* meshes[]={&m_weaponMesh,&m_armsMesh,&m_enemyMesh,&m_waspMesh,&m_bruteMesh,&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh,&m_clutterMeshes[0],&m_clutterMeshes[1],&m_clutterMeshes[2],&m_clutterMeshes[3],&m_clutterMeshes[4],&m_clutterMeshes[5]};
+ Texture* textures[]={&m_weaponTexture,&m_arms,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_clutterTextures[0],&m_clutterTextures[1],&m_clutterTextures[2],&m_clutterTextures[3],&m_clutterTextures[4],&m_clutterTextures[5]};
+ auto&mesh=model>=15?m_facilityMeshes.at(model-15):*meshes[std::clamp(model,0,14)];auto&texture=*textures[std::clamp(model,0,14)];
+ Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+ float scale=2.0f/std::max({range.x,range.y,range.z});
+ for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;float x=p.x*std::cos(angle)+p.z*std::sin(angle),z=-p.x*std::sin(angle)+p.z*std::cos(angle);v.p={x,p.y*.94f-z*.34f,3.f+z*.94f+p.y*.34f};}triangle3D(face.v[0],face.v[1],face.v[2],model>=15?facilityTexture(model-15,face.part):texture,1.15f);}
+}
+static Point3 cross3(Point3 a,Point3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
+Point3 SoftwareRenderer::cameraPoint(Point3 v,const Game&)const{return cameraPoint(v,m_view);}
+Point3 SoftwareRenderer::cameraPoint(Point3 v,const Player&p)const{
+float yaw=p.angle,pitch=p.pitch/140.f;
+ static thread_local float previousYaw=999,previousPitch=999,cy=1,sy=0,cp=1,sp=0;
+ if(yaw!=previousYaw){cy=std::cos(yaw);sy=std::sin(yaw);previousYaw=yaw;}if(pitch!=previousPitch){cp=std::cos(pitch);sp=std::sin(pitch);previousPitch=pitch;}
+ float x=v.x-p.pos.x,y=v.y-p.pos.y,z=v.z-(p.z+p.eye);
+ float forward=x*cy+y*sy;
+ return {-x*sy+y*cy,z*cp-forward*sp,forward*cp+z*sp};
+}
+void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting){
+ // With no fixture power an opaque surface has exactly unit diffuse response
+ // and zero specular light. Water still needs its tangent frame for Fresnel.
+ // Per-pixel lamps keep the tangent frame (and normal map) even with no baked light.
+ bool tangentActive=normalLighting!=nullptr&&(texture.transparent||normalLighting->weights[0]!=0.f||normalLighting->weights[1]!=0.f||(m_pixelLighting&&m_staticGeometryBuild));bool normalActive=tangentActive&&!texture.normalLevels.empty();std::array<Point3,2> tangentLights{};float flatResponse=.22f;
+ auto dot=[](Point3 p,Point3 q){return p.x*q.x+p.y*q.y+p.z*q.z;};
+ auto unitWithSquared=[&](Point3 v,float squared){
+  if(squared>1.e-30f&&squared<1.e30f)return v*(1/std::sqrt(squared));
+  // Rescaling is needed only for extreme magnitudes, rather than adding three
+  // divisions to every ordinary model triangle in the animation path.
+  float scale=std::max({std::fabs(v.x),std::fabs(v.y),std::fabs(v.z)});if(!(scale>0)||!std::isfinite(scale))return Point3{};
+  v={v.x/scale,v.y/scale,v.z/scale};return v*(1/std::sqrt(dot(v,v)));
+ };
+ auto unit=[&](Point3 v){return unitWithSquared(v,dot(v,v));};
+ if(tangentActive){
+  auto e1=b.p-a.p,e2=c.p-a.p;float du1=b.u-a.u,dv1=b.v-a.v,du2=c.u-a.u,dv2=c.v-a.v;
+  // UV magnitude is not degeneracy: atlas islands and magnified surfaces may
+  // have tiny spans. Rescale before testing the relative angle of the axes.
+  float uvScale=std::max({std::fabs(du1),std::fabs(dv1),std::fabs(du2),std::fabs(dv2)});
+  if(!(uvScale>0)||!std::isfinite(uvScale)){normalActive=false;tangentActive=false;}
+  else{
+   du1/=uvScale;dv1/=uvScale;du2/=uvScale;dv2/=uvScale;
+   float det=du1*dv2-du2*dv1,uvAreaScale=(du1*du1+dv1*dv1)*(du2*du2+dv2*dv2);
+   if(!(uvAreaScale>0&&det*det>uvAreaScale*.00000001f)){normalActive=false;tangentActive=false;}
+   else{
+    float handedness=det<0?-1.f:1.f;
+    auto tangent=unit((e1*dv2-e2*dv1)*handedness),rawBitangent=(e2*du1-e1*du2)*handedness;
+    // A skewed UV map must still use an orthonormal lighting frame. Keep the
+    // source V direction instead of reconstructing B from a facing normal,
+    // which would silently reverse mirrored atlas islands.
+    auto bitangent=unit(rawBitangent-tangent*dot(tangent,rawBitangent)),geometricNormal=cross3(tangent,bitangent);
+    float geometricSquared=dot(geometricNormal,geometricNormal),authoredSquared=dot(normalLighting->surfaceNormal,normalLighting->surfaceNormal);
+    Point3 normal;bool frameValid=false;
+    if(authoredSquared>.5f&&geometricSquared>1.e-30f&&geometricSquared<1.e30f){
+     // In unit()'s ordinary finite range the geometric normal is guaranteed
+     // valid, then discarded in favour of the authored receiver normal. Skip
+     // that unused normalization while keeping the final N math identical.
+     normal=unitWithSquared(normalLighting->surfaceNormal,authoredSquared);frameValid=true;
+    }else{
+     normal=unitWithSquared(geometricNormal,geometricSquared);frameValid=dot(normal,normal)>.5f;
+     if(frameValid){if(authoredSquared>.5f)normal=unitWithSquared(normalLighting->surfaceNormal,authoredSquared);else if(dot(normal,a.p)>0)normal=normal*-1;}
+    }
+    if(!frameValid){normalActive=false;tangentActive=false;}
+    else{
+     for(int i=0;i<2;++i){auto lightDirection=normalLighting->directions[i];tangentLights[i]={dot(tangent,lightDirection),dot(bitangent,lightDirection),dot(normal,lightDirection)};flatResponse+=normalLighting->weights[i]*std::max(0.f,tangentLights[i].z);}
+    }
+   }
+  }
+ }
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale);return;}
+ // Clip in camera space before perspective division; preserve UVs at intersections.
+ const Projection projection{float(m_width)/m_height};
+ MeshVertex input[8]={a,b,c},output[8];int count=3;
+ for(int plane=0;plane<5;++plane){
+  auto distance=[&](MeshVertex v){switch(plane){case 0:return v.p.z-Projection::nearPlane;case 1:return v.p.z+v.p.x*Projection::horizontal;case 2:return v.p.z-v.p.x*Projection::horizontal;case 3:return v.p.z+v.p.y*projection.vertical();default:return v.p.z-v.p.y*projection.vertical();}};
+  int next=0;
+  for(int i=0;i<count;++i){auto v=input[i],w=input[(i+1)%count];float d=distance(v),e=distance(w);
+   if(d>=0)output[next++]=v;
+   if((d>=0)!=(e>=0)){float t=d/(d-e);output[next++]={v.p+(w.p-v.p)*t,v.u+(w.u-v.u)*t,v.v+(w.v-v.v)*t,v.light+(w.light-v.light)*t};}
+  }
+  count=next;if(count<3)return;std::copy(output,output+count,input);
+ }
+ struct P{float x,y,iz,u,v,light;};float focal=projection.focal(float(m_width));
+ auto project=[&](MeshVertex v){float iz=1.f/v.p.z;return P{m_width*.5f+v.p.x*focal*iz,m_height*.5f-v.p.y*focal*iz,iz,v.u*iz,v.v*iz,v.light*iz};};
+ for(int t=1;t<count-1;++t){P A=project(input[0]),B=project(input[t]),C=project(input[t+1]);
+  float area=(B.x-A.x)*(C.y-A.y)-(B.y-A.y)*(C.x-A.x);if(std::fabs(area)<.001f)continue;
+  float inverseArea=1.f/area;
+  auto derivative=[&](float a,float b,float c){return Vec2{((b-a)*(C.y-A.y)-(c-a)*(B.y-A.y))*inverseArea,((c-a)*(B.x-A.x)-(b-a)*(C.x-A.x))*inverseArea};};
+  auto depthDerivative=derivative(A.iz,B.iz,C.iz),uDerivative=derivative(A.u,B.u,C.u),vDerivative=derivative(A.v,B.v,C.v);
+  float normalLod=0;
+  if(normalActive){
+   float zc=3.f/(A.iz+B.iz+C.iz),uc=(A.u+B.u+C.u)*zc/3,vc=(A.v+B.v+C.v)*zc/3;
+   float ux=(uDerivative.x-uc*depthDerivative.x)*zc*texture.width,uy=(uDerivative.y-uc*depthDerivative.y)*zc*texture.width;
+   float vx=(vDerivative.x-vc*depthDerivative.x)*zc*texture.height,vy=(vDerivative.y-vc*depthDerivative.y)*zc*texture.height;
+   normalLod=std::max(0.f,.5f*std::log2(std::max({1.f,ux*ux+vx*vx,uy*uy+vy*vy})));
+  }
+  int left=std::max(0,int(std::floor(std::min({A.x,B.x,C.x})))),right=std::min(m_width-1,int(std::ceil(std::max({A.x,B.x,C.x}))));
+  int top=std::max(0,int(std::floor(std::min({A.y,B.y,C.y})))),bottom=std::min(m_height-1,int(std::ceil(std::max({A.y,B.y,C.y}))));
+  // Clip each scanline to the triangle before per-pixel depth/material work.
+  // Conservative bounds retain the existing barycentric edge coverage rule.
+  for(int y=top;y<=bottom;++y){float py=y+.5f,lo=float(right+1),hi=float(left-1);
+   auto edge=[&](const P& p,const P& q){if(py<std::min(p.y,q.y)||py>std::max(p.y,q.y)||std::fabs(q.y-p.y)<.000001f)return;float x=p.x+(py-p.y)*(q.x-p.x)/(q.y-p.y);lo=std::min(lo,x);hi=std::max(hi,x);};
+   edge(A,B);edge(B,C);edge(C,A);
+   int rowLeft=std::max(left,int(std::floor(lo-.5f))-1),rowRight=std::min(right,int(std::ceil(hi-.5f))+1);
+   for(int x=rowLeft;x<=rowRight;++x){float px=x+.5f;
+   float u=((B.x-px)*(C.y-py)-(B.y-py)*(C.x-px))*inverseArea,v=((C.x-px)*(A.y-py)-(C.y-py)*(A.x-px))*inverseArea,w=1.f-u-v;
+   if(u<0||v<0||w<0)continue;float iz=A.iz*u+B.iz*v+C.iz*w,z=1.f/iz;size_t index=size_t(y*m_width+x);
+   if(z>=m_zbuffer[index])continue;
+   float U=(A.u*u+B.u*v+C.u*w)*z,V=(A.v*u+B.v*v+C.v*w)*z,lod=0;
+   if(normalActive)lod=normalLod;
+   else if(!texture.mips.empty()){
+    float ux=(uDerivative.x-U*depthDerivative.x)*z*texture.width,uy=(uDerivative.y-U*depthDerivative.y)*z*texture.width;
+    float vx=(vDerivative.x-V*depthDerivative.x)*z*texture.height,vy=(vDerivative.y-V*depthDerivative.y)*z*texture.height;
+    lod=std::max(0.f,.5f*std::log2(std::max({1.f,ux*ux+vx*vx,uy*uy+vy*vy})));
+   }
+   auto texel=sample(texture,U,V,lod);if((texel>>24)==0||(!texture.transparent&&(texel>>24)<128))continue;
+   float vertexLight=(A.light*u+B.light*v+C.light*w)*z;
+   if(normalActive){auto n=sampleNormal(texture,U,V,lod);float response=.22f;
+    for(int i=0;i<2;++i)response+=normalLighting->weights[i]*std::max(0.f,dot(n,tangentLights[i]));
+    vertexLight*=std::clamp(response/flatResponse,.35f,1.8f);
+   }
+   if(texture.additive){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;
+    for(int channel=0;channel<3;++channel){float tint=channel==0?.35f:channel==1?.72f:1.f;unsigned value=std::min(255u,unsigned((old>>(channel*8))&255)+unsigned(((texel>>(channel*8))&255)*alpha*light*tint));result|=value<<(channel*8);}put(x,y,result);
+   }else{if(!texture.transparent)m_zbuffer[index]=z;auto color=shade(texel,light*vertexLight/(1.f+z*.018f));
+    if(!texture.emission.empty()){
+     int ex=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ey=std::min(texture.height-1,int((V-std::floor(V))*texture.height));auto glow=texture.emission[size_t(ey*texture.width+ex)];unsigned result=0xff000000u;
+     for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f*m_emissionScale));result|=value<<(channel*8);}color=result;
+    }if(texture.transparent){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;for(int channel=0;channel<3;++channel){int shift=channel*8;result|=unsigned(((color>>shift)&255)*alpha+((old>>shift)&255)*(1-alpha))<<shift;}color=result;}put(x,y,color);}
+   }
+  }
+ }
+}
+void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
+ perf::Scope frameProfile(perf::Scene);
+ if(clearDepth)std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
+ if(level<0)level=game.level();const auto&w=game.chunkWorld(level);
+ const float dormantFloor=game.dormantBelow(level);
+ auto player=m_view;player.pos+=game.chunkOffset(game.level())-game.chunkOffset(level);
+ // One immutable camera basis per chunk draw, rather than thread-local angle
+ // comparisons and player lookups at every triangle corner and light probe.
+ const float cameraCy=std::cos(player.angle),cameraSy=std::sin(player.angle);
+ const float cameraCp=std::cos(player.pitch/140.f),cameraSp=std::sin(player.pitch/140.f);
+ auto cameraPoint=[&](Point3 point,const Game&){
+  float x=point.x-player.pos.x,y=point.y-player.pos.y,z=point.z-(player.z+player.eye);
+  float forward=x*cameraCy+y*cameraSy;
+  return Point3{-x*cameraSy+y*cameraCy,z*cameraCp-forward*cameraSp,forward*cameraCp+z*cameraSp};
+ };
+ auto&m_lightingCache=m_chunkLighting[w.level()];
+ // Architecture and fixture lighting are baked from immovable occluders.
+ // Door leaves render separately at their exact pose; invalidating a whole
+ // chunk at each animation step caused repeated shadow bakes and uploads.
+ if(m_lightingCache.size()>250000){m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();}
+ bool movingGeometry=false;
+ int shadowBudget=m_shadowBudgetLimit;
+ // Rebuilding a VBO for a different World instance must retain valid probe
+ // samples for the same authored sources. Invalidate only actual source edits,
+ // before binning or probing, rather than discarding prior neighbor bakes.
+ std::uint64_t fixedLightSourceKey=1469598103934665603ull;
+ auto hashLightSource=[&](std::uint64_t value){fixedLightSourceKey^=value;fixedLightSourceKey*=1099511628211ull;};
+ hashLightSource(w.lights().size());
+ for(const auto&light:w.lights())if(!light.cargoLift&&!(w.hasLift()&&&light==&w.lights().back())){
+  hashLightSource(static_cast<std::uint64_t>(light.mount));
+  for(float value:{light.position.x,light.position.y,light.z,light.yaw,light.intensity,light.range,light.kelvin,light.tint,light.gel.x,light.gel.y,light.gel.z})hashLightSource(std::bit_cast<std::uint32_t>(value));
+ }
+ if(m_chunkLightSourceKeys[w.level()]!=fixedLightSourceKey){
+  m_chunkLightSourceKeys[w.level()]=fixedLightSourceKey;m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_chunkLightCells[w.level()].clear();m_chunkLightCounts[w.level()]=0;
+ }
+ // A light's pose is immutable during a draw. Reuse its exact emitter and
+ // shadow samples instead of evaluating wall-lamp trigonometry per receiver.
+ const auto sun=w.sun();
+ // Dynamic geometry and the vertex-lit fallback take an unshadowed sun term;
+ // static caches get the shadowed per-pixel sun in the scene shader.
+ auto sunTerm=[&](Point3 normal){return sun.intensity>0?sun.intensity*.4f*std::max(0.f,normal.x*sun.direction.x+normal.y*sun.direction.y+normal.z*sun.direction.z):0.f;};
+ struct LightFrame {Point3 emitter,target;std::array<Point3,3> shadowSamples;};
+ std::vector<LightFrame> lightFrames;lightFrames.reserve(w.lights().size());
+ for(const auto&light:w.lights()){
+  auto emitter=light.emitter(),target=light.shadowTarget();
+  Point3 spread=light.mount==WorldLightMount::Wall?Point3{-std::sin(light.yaw)*.45f,std::cos(light.yaw)*.45f,0}:Point3{1,0,0};
+  lightFrames.push_back({emitter,target,{{target+spread*-.18f,target+spread*0.f,target+spread*.18f}}});
+ }
+ // Switchable lamps (state, timer, flicker) never enter a baked value: each
+ // keeps its unpowered contribution beside the cache and is scaled by its power
+ // per frame. Vulkan uses per-pixel lamps for these maps; the CPU fallback
+ // scales the cached contributions directly. Darkness removes only ambient.
+ const float darkness=game.darkness();
+ std::vector<float> lampPowers(w.lights().size(),1.f);std::vector<std::uint8_t> lampSwitchable(w.lights().size(),0);bool anySwitchable=false;
+ for(size_t i=0;i<w.lights().size()&&i<2000;++i){const auto&light=w.lights()[i];if(!light.switchable()||(w.hasLift()&&i+1==w.lights().size()))continue;lampSwitchable[i]=1;anySwitchable=true;lampPowers[i]=game.lampPower(light);}
+ auto lampPower=[&](size_t source){return lampPowers[source];};
+ auto ambientDarkness=[&]{return m_staticGeometryBuild?0.f:darkness;};
+ constexpr std::uint64_t AmbientTag=1ull<<53;auto lampTag=[](size_t source){return std::uint64_t(source+2)<<53;};
+ // Bin lights in 4 m cells; a stacked map must not scan every storey's lamps
+ // for each surface sample. The radius test below remains the exact filter.
+ auto&lightCells=m_chunkLightCells[w.level()];
+ auto lightCell=[](Point3 p){int x=std::clamp(int(std::floor((p.x+4)/4)),0,7),y=std::clamp(int(std::floor((p.y+4)/4)),0,7),z=std::clamp(int(std::floor((p.z+12)/4)),0,7);return (z*8+y)*8+x;};
+ auto rebuildLightCells=[&]{
+ lightCells.assign(512,{});m_chunkLightCounts[w.level()]=w.lights().size();
+ for(const auto& light:w.lights()){
+  if(w.hasLift()&&&light==&w.lights().back())continue;
+  auto emitter=lightFrames[size_t(&light-w.lights().data())].emitter;
+  for(int z=0;z<8;++z)for(int y=0;y<8;++y)for(int x=0;x<8;++x){
+   auto separation=[](float p,int cell,float origin){float lo=cell==0?-1000.f:origin+cell*4,hi=cell==7?1000.f:origin+(cell+1)*4;return std::max({lo-p,0.f,p-hi});};
+   float dx=separation(emitter.x,x,-4),dy=separation(emitter.y,y,-4),dz=light.cargoLift?0.f:separation(emitter.z,z,-12);
+   if(dx*dx+dy*dy+dz*dz<=light.range*light.range+.01f)lightCells[(z*8+y)*8+x].push_back(size_t(&light-w.lights().data()));
+  }
+ }
+ };
+ if(lightCells.empty()||m_chunkLightCounts[w.level()]!=w.lights().size())rebuildLightCells();
+ // Merge authored deck runs into opaque rectangles. Only reject a complete
+ // projected bounding box covered by one rectangle: shaft/stair openings stay
+ // visible at every camera height, with no arbitrary floor-distance cutoff.
+ std::vector<Structure> occluders;
+ if(w.hasLift()&&m_visibilityCulling)for(const auto&layer:w.layers())if(layer.thickness>0){
+  size_t first=occluders.size();
+  for(int y=0;y<24;++y)for(int x=0;x<24;){if(layer.rows[y][x]!='='){++x;continue;}int begin=x;while(x<24&&layer.rows[y][x]=='=')++x;
+   bool joined=false;for(size_t i=first;i<occluders.size();++i){auto&o=occluders[i];if(o.x1==begin&&o.x2==x&&o.y2==y){o.y2=float(y+1);joined=true;break;}}
+   if(!joined)occluders.push_back({float(begin),float(y),float(x),float(y+1),layer.elevation-layer.thickness,layer.elevation});
+  }
+ }
+ // Only actual opaque box draws qualify. Rails, glass, the faceted vessel
+ // and collision-only proxies do not fill their collision bounds visually.
+ if(m_visibilityCulling)for(const auto&s:w.structures())
+  if(!s.rail&&s.material!=1&&s.material!=6&&s.material!=9&&s.material!=17&&
+     s.top-s.bottom>=1.5f&&std::max(s.x2-s.x1,s.y2-s.y1)>=1.5f&&
+     s.x2>s.x1&&s.y2>s.y1)occluders.push_back(s);
+ Point3 eye{player.pos.x,player.pos.y,player.z+player.eye};
+ std::sort(occluders.begin(),occluders.end(),[&](const Structure&a,const Structure&b){
+  auto distance=[&](const Structure&s){float x=std::clamp(eye.x,s.x1,s.x2)-eye.x,y=std::clamp(eye.y,s.y1,s.y2)-eye.y,z=std::clamp(eye.z,s.bottom,s.top)-eye.z;return x*x+y*y+z*z;};
+  return distance(a)<distance(b);
+ });
+ auto hidden=[&](Point3 a,Point3 b){
+  if(m_staticGeometryBuild)return false;
+  for(const auto&o:occluders){
+   // Project all eight bound corners onto a separating slab plane. Requiring
+   // complete coverage by one solid rectangle preserves every doorway/edge.
+   float lo[]={o.x1,o.y1,o.bottom},hi[]={o.x2,o.y2,o.top};
+   float e[]={eye.x,eye.y,eye.z},mn[]={a.x,a.y,a.z},mx[]={b.x,b.y,b.z};
+   for(int axis=0;axis<3;++axis){
+    if(!((e[axis]>hi[axis]+.03f&&mx[axis]<lo[axis]-.03f)||(e[axis]<lo[axis]-.03f&&mn[axis]>hi[axis]+.03f)))continue;
+    float plane=(lo[axis]+hi[axis])*.5f;bool covered=true;
+    for(int side=0;side<2&&covered;++side){float t=(plane-e[axis])/((side?mx[axis]:mn[axis])-e[axis]);
+     for(int other=0;other<3;++other)if(other!=axis){
+      float p=e[other]+(mn[other]-e[other])*t,q=e[other]+(mx[other]-e[other])*t;
+      if(std::min(p,q)<lo[other]+.005f||std::max(p,q)>hi[other]-.005f){covered=false;break;}
+     }
+    }
+    if(covered)return true;
+   }
+  }return false;
+ };
+ float farPlane=w.outdoors()?70.f:160.f;
+ // VR headsets outrun the desktop frustum; keep sphere/edge culling but widen
+ // the planes so peripheral geometry does not pop at the HMD borders.
+ const Projection projection{float(m_width)/m_height};
+ float hx=m_vrRendering?.72f:Projection::horizontal,hy=m_vrRendering?1.15f:projection.vertical(),hr=m_vrRendering?1.95f:std::sqrt(1+hx*hx),vr=m_vrRendering?2.65f:std::sqrt(1+hy*hy);
+ auto outside=[&](Point3 p){if(m_staticGeometryBuild)return 0u;if(!m_vrRendering)return projection.outside(p.x,p.y,p.z)|(p.z>farPlane?32u:0u);unsigned mask=0;if(p.z<Projection::nearPlane)mask|=1;if(p.z+p.x*hx<0)mask|=2;if(p.z-p.x*hx<0)mask|=4;if(p.z+p.y*hy<0)mask|=8;if(p.z-p.y*hy<0)mask|=16;if(p.z>farPlane)mask|=32;return mask;};
+ auto sphereVisible=[&](Point3 point,float radius){if(m_staticGeometryBuild)return true;if(!m_visibilityCulling)return true;auto p=cameraPoint(point,game);return p.z+radius>Projection::nearPlane&&p.z-radius<farPlane&&p.z+p.x*hx+radius*hr>0&&p.z-p.x*hx+radius*hr>0&&p.z+p.y*hy+radius*vr>0&&p.z-p.y*hy+radius*vr>0;};
+ auto flashPitch=player.pitch/140.f,flashCp=std::cos(flashPitch),flashSp=std::sin(flashPitch);
+ Point3 flashForward{std::cos(player.angle)*flashCp,std::sin(player.angle)*flashCp,flashSp};
+ bool flashlightEnabled=game.flashlightOn();int flashlightRayBudget=4096;
+ const float muzzleFlash=game.muzzleFlash(),muzzleFalloff=.045f-.033f*darkness;
+ Point3 muzzlePoint{eye.x+flashForward.x*.42f,eye.y+flashForward.y*.42f,eye.z+flashForward.z*.42f-.10f};
+ // NPC gun flashes in darkness, sparks and arcs light the room too (world space to this chunk).
+ const auto weaponFlashes=game.weaponFlashes();const auto chunkOrigin=game.chunkOffset(level);
+ auto flashlightContribution=[&](Point3 point,Point3 normal){
+  if(!flashlightEnabled)return 0.f;Point3 delta=point-eye;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2<.04f||d2>196.f)return 0.f;
+  float distance=std::sqrt(d2),along=(delta.x*flashForward.x+delta.y*flashForward.y+delta.z*flashForward.z)/distance;if(along<=.80f)return 0.f;
+  float cone=std::clamp((along-.80f)/.16f,0.f,1.f);cone=cone*cone*(3.f-2.f*cone);
+  float nl=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z),facing=.65f;if(nl>.00001f)facing=.30f+.70f*std::fabs((normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/(nl*distance));
+  // Never treat an untested receiver as visible when the ray budget runs out.
+  if(flashlightRayBudget<=0)return 0.f;
+  if(flashlightRayBudget>0){--flashlightRayBudget;float startT=0.f;
+   if(eye.x<.01f&&delta.x>0)startT=std::max(startT,(.01f-eye.x)/delta.x);if(eye.x>23.99f&&delta.x<0)startT=std::max(startT,(23.99f-eye.x)/delta.x);
+   if(eye.y<.01f&&delta.y>0)startT=std::max(startT,(.01f-eye.y)/delta.y);if(eye.y>23.99f&&delta.y<0)startT=std::max(startT,(23.99f-eye.y)/delta.y);
+   startT=std::clamp(startT,0.f,.98f);auto start=eye+delta*startT;
+   if(!w.rayClear({start.x,start.y},start.z,{point.x,point.y},point.z,true,false))return 0.f;
+  }
+  return cone*facing*1.9f/(1.f+d2*.020f);
+ };
+ // Sparks and arcs: a small source near the wall, so a steeper falloff and a gentler gain than a gun's,
+ // all of them summed under a soft shoulder -- this rasteriser has no tone curve, and several strikes at
+ // once must lift a wall, not burn it white (the Vulkan path holds them in its display curve).
+ const float electricFalloff=.55f-.4f*darkness;constexpr float ElectricShoulder=.75f;
+ auto muzzleContribution=[&](Point3 point,Point3 normal){
+  float total=0.f,electric=0.f;
+  for(int flash=0;flash<=int(weaponFlashes.size());++flash){float strength=flash==0?muzzleFlash:weaponFlashes[size_t(flash-1)].strength;if(strength<=0.f)continue;
+   const auto&f=weaponFlashes[size_t(std::max(flash-1,0))];auto delta=point-(flash==0?muzzlePoint:Point3{f.at.x-chunkOrigin.x,f.at.y-chunkOrigin.y,f.at.z});
+   const float reach2=flash==0?144.f:f.reach*f.reach;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;if(d2>=reach2)continue;
+   float distance=std::sqrt(std::max(.001f,d2));float facing=.35f+.65f*std::fabs(normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
+   float edge=1.f-d2/reach2;
+   if(flash==0||f.muzzle)total+=strength*1.4f*edge*edge*facing/(1.f+d2*muzzleFalloff);else electric+=strength*.7f*edge*edge*facing/(1.f+d2*electricFalloff);
+  }
+  return electric>0?total+ElectricShoulder*(1.f-std::exp(-electric/ElectricShoulder)):total;
+ };
+ auto illumination=[&](Point3 point,Point3 normal){
+  float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
+  if(movingGeometry){
+   const float dark=ambientDarkness();
+   float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
+   for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
+    float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
+    auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
+    brightness+=visibility*facing*weight;
+   }
+   return std::clamp(brightness*(.35f+.65f*w.liftLampPower())+sunTerm(normal)+flashlightContribution(point,normal)+muzzleContribution(point,normal),.075f*(1.f-dark),4.f);
+  }
+  // Static fixture lighting is cached; the player-mounted flashlight is added
+  // afterward because its cone moves every frame with yaw and pitch.
+  auto positionBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
+  auto normalBits=[](float value){return std::uint64_t(std::clamp(int(std::round(value*15))+15,0,30));};
+  // Static caches with per-pixel lamps bake ambient and contact occlusion only.
+  const bool pixelLamps=m_pixelLighting&&m_staticGeometryBuild;
+  auto key=positionBits(point.x)|(positionBits(point.y)<<12)|(positionBits(point.z)<<24)|(normalBits(normal.x)<<36)|(normalBits(normal.y)<<41)|(normalBits(normal.z)<<46)|(pixelLamps?1ull<<52:0ull);
+  // Beside the fixed value (ambient, fixed lamps, sun) the cache keeps the
+  // ambient share (AmbientTag) and each switchable lamp's unpowered share.
+  const float dark=ambientDarkness();
+  float brightness=0,ambient=0,switched=0;auto cached=m_lightingCache.find(key);
+  if(cached!=m_lightingCache.end()){brightness=cached->second;
+   if(dark>0){auto share=m_lightingCache.find(key|AmbientTag);if(share!=m_lightingCache.end())ambient=share->second;}
+   if(anySwitchable&&!pixelLamps)for(auto source:lightCells[lightCell(point)])if(lampSwitchable[source]){float power=lampPower(source);if(power<=0)continue;
+    auto share=m_lightingCache.find(key|lampTag(source));if(share!=m_lightingCache.end())switched+=power*share->second;}
+  }
+  else{
+   // Probe the free hemisphere around the receiver. This darkens recesses and
+   // floor/wall junctions from the actual map solids, including terrain, while
+   // leaving open surfaces alone. The result is baked with the static vertices.
+   float accessibility=1.f;
+   // Terrain is already faceted by its mesh. World::fits performs a full
+   // volumetric terrain trace, so thousands of hemisphere probes during a
+   // streaming rebuild would stall the frame; reserve them for indoor solids.
+   if(!w.outdoors()){
+    Point3 outward=normal;
+    auto freeAt=[&](Point3 p){return w.fits(p.x,p.y,p.z,.01f,false,false);};
+    if(!freeAt(point+outward*.09f)&&freeAt(point-outward*.09f))outward=outward*-1.f;
+    Point3 reference=std::fabs(outward.z)<.82f?Point3{0,0,1}:Point3{0,1,0};
+    Point3 tangent=cross3(outward,reference);float tangentLength=std::sqrt(tangent.x*tangent.x+tangent.y*tangent.y+tangent.z*tangent.z);
+    if(tangentLength>.00001f)tangent=tangent*(1.f/tangentLength);
+    Point3 bitangent=cross3(outward,tangent);normal=outward;
+    float occlusion=0.f;
+    for(Point3 direction:{tangent,tangent*-1.f,bitangent,bitangent*-1.f}){
+     for(float radius:{.28f,.70f}){
+      Point3 probe=point+outward*(.09f+radius*.48f)+direction*radius;
+      if(!freeAt(probe)){occlusion+=radius<.5f?.65f:.35f;break;}
+     }
+    }
+    accessibility=1.f-.68f*occlusion*.25f;
+   }
+   ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
+   if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
+    if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
+    auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2);if(weight<=0||d2<.001f)continue;
+    float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;
+    float side=normal.x*delta.x+normal.y*delta.y+normal.z*delta.z>=0?1.f:-1.f;auto origin=point+normal*(side*.025f)+delta*(.025f/distance);
+    float visibility=0;
+    for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=!fixture.shadows||w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
+    float contribution=(visibility/3.f)*(.04f+.96f*facing)*weight;
+    if(!lampSwitchable[source])brightness+=contribution;
+    else{switched+=lampPower(source)*contribution;if(shadowBudget>0)m_lightingCache.emplace(key|lampTag(source),contribution);}
+   }
+   if(!pixelLamps)brightness+=sunTerm(normal);
+   // A per-pixel static bake never darkens on the CPU (the shader scales it).
+   if(shadowBudget>0){m_lightingCache.emplace(key,brightness);if(!pixelLamps)m_lightingCache.emplace(key|AmbientTag,ambient);}
+  }
+  brightness=std::clamp(brightness-ambient*dark+switched,.075f*(1.f-dark),1.4f);
+  float carried=0;
+  if(!m_staticGeometryBuild)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(!fixture.cargoLift)continue;
+   auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
+   if(d2>.001f)carried+=fixture.falloff(d2)*lampPower(source)*std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/std::sqrt(d2);
+  }
+  return std::clamp(brightness+carried+(m_staticGeometryBuild?0.f:flashlightContribution(point,normal)+muzzleContribution(point,normal)),.075f*(1.f-dark),4.f);
+ };
+ auto normalLightingAt=[&](Point3 center){
+  if(m_pixelLighting&&m_staticGeometryBuild)return NormalLighting{};
+  auto bits=[](float value){return uint64_t(std::clamp(int(std::round(value*64))+2048,0,4095));};
+  uint64_t key=bits(center.x)|(bits(center.y)<<12)|(bits(center.z)<<24);auto&cache=m_chunkNormalLighting[w.level()];
+  // Two strongest lights by current power: a switchable lamp in reach keeps the cell uncached.
+  bool uncached=movingGeometry;if(anySwitchable&&!uncached)for(auto source:lightCells[lightCell(center)])if(lampSwitchable[source]){uncached=true;break;}
+  auto found=uncached?cache.end():cache.find(key);
+  if(found==cache.end()){
+   NormalLighting lights;
+   for(auto source:lightCells[lightCell(center)]){const auto&fixture=w.lights()[source];
+    auto delta=lightFrames[source].emitter-center;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;
+    float weight=fixture.reach(delta,d2)*lampPower(source);if(weight<=0||d2<.001f)continue;
+    // A visibility ray can only reduce this upper bound. If the lamp cannot
+    // beat the second retained light, it cannot affect either material slot.
+    if(weight<=lights.weights[1])continue;
+    auto start=center+delta*(.04f/std::sqrt(d2));
+    if(!uncached&&shadowBudget<=0)continue;
+    auto target=lightFrames[source].target;if(!uncached)--shadowBudget;if(fixture.shadows&&!w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z))weight*=.04f;
+    if(weight<=lights.weights[1])continue;
+    int slot=weight>lights.weights[0]?0:1;if(slot==0){lights.weights[1]=lights.weights[0];lights.directions[1]=lights.directions[0];}
+    lights.weights[slot]=weight;lights.directions[slot]=delta*(1/std::sqrt(d2));
+   }
+   if(uncached||shadowBudget<=0){auto origin=cameraPoint(center,game);for(auto&direction:lights.directions)direction=cameraPoint(center+direction,game)-origin;return lights;}
+   found=cache.emplace(key,lights).first;
+  }
+  auto result=found->second;auto origin=cameraPoint(center,game);
+  for(auto&direction:result.directions)direction=cameraPoint(center+direction,game)-origin;
+  return result;
+ };
+ auto surfaceNormal=[&](Point3 point,Point3 normal){
+  float length=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(length<.00001f)return Point3{};normal=normal*(1.f/length);
+  if(!w.fits(point.x+normal.x*.09f,point.y+normal.y*.09f,point.z+normal.z*.09f,.01f,false,true)&&w.fits(point.x-normal.x*.09f,point.y-normal.y*.09f,point.z-normal.z*.09f,.01f,false,true))normal=normal*-1.f;
+  return cameraPoint(point+normal,game)-cameraPoint(point,game);
+ };
+ bool objectLighting=false;float objectLight=1;const NormalLighting*objectNormalLighting=nullptr;
+ // While a ceiling lamp's fitting draws: its tone, which its glowing parts take.
+ const Point3*fittingTone=nullptr;
+ auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
+  perf::ActorTriangleScope profile;
+  if(!m_staticGeometryBuild&&std::max({a.p.z,b.p.z,c.p.z})<dormantFloor)return;
+  auto A=cameraPoint(a.p,game),B=cameraPoint(b.p,game),C=cameraPoint(c.p,game);if(outside(A)&outside(B)&outside(C))return;
+  const bool needsNormalLighting=!objectLighting&&(!t.normalLevels.empty()||t.glossStrength>0);
+  Point3 worldCenter{},worldNormal{};
+  if(needsNormalLighting)worldCenter=(a.p+b.p+c.p)*(1.f/3.f);
+  if(!objectLighting&&(light<1.5f||needsNormalLighting))worldNormal=cross3(b.p-a.p,c.p-a.p);
+  if(objectLighting)light*=objectLight;
+  else if(light<1.5f){a.light=illumination(a.p,worldNormal);b.light=illumination(b.p,worldNormal);c.light=illumination(c.p,worldNormal);}
+  a.p=A;b.p=B;c.p=C;
+  if(objectNormalLighting&&(!t.normalLevels.empty()||t.glossStrength>0))triangle3D(a,b,c,t,light,objectNormalLighting);
+  else if(needsNormalLighting){auto lights=normalLightingAt(worldCenter);lights.surfaceNormal=surfaceNormal(worldCenter,worldNormal);triangle3D(a,b,c,t,light,&lights);}
+  else triangle3D(a,b,c,t,light);
+ };
+ bool clipArchitecture=false;int surfaceOwner=-1;std::vector<SurfaceBox> surfaceBoxes;
+ for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)if(w.tile(x,y)=='#')
+  surfaceBoxes.push_back({{float(x),float(y),w.floorHeight(x+.5f,y+.5f)},{float(x+1),float(y+1),w.wallHeight(x,y)},y*World::Width+x});
+ for(size_t i=0;i<w.structures().size();++i){const auto&s=w.structures()[i];
+  if(s.rail||s.shape!=ShapeBox||w.isBreakableStructure(int(i))||s.material==1||s.material==6||s.material==9||s.material==17||s.material==CollisionProxyMaterial||s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+  surfaceBoxes.push_back({{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},World::Width*World::Height+int(i)});
+ }
+ auto emitQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
+  if(!m_staticGeometryBuild&&std::max({a.z,b.z,c.z,d.z})<dormantFloor)return;
+  if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
+  if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),std::min({a.z,b.z,c.z,d.z})},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),std::max({a.z,b.z,c.z,d.z})}))return;
+  auto size=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  // Sample large architectural surfaces on a regular grid so light and shadow
+  // gradients do not expose the two triangles of an entire wall or door.
+  int columns=1,rows=1;
+  if(light<1.5f&&(t.mips.empty()||!t.normalLevels.empty())){columns=std::clamp(int(std::ceil(size(b-a))),1,16);rows=std::clamp(int(std::ceil(size(d-a))),1,16);}
+  bool floorFace=std::fabs(a.z-b.z)<.001f&&std::fabs(a.z-d.z)<.001f;
+  bool wallFace=std::fabs(a.x-d.x)<.001f&&std::fabs(a.y-d.y)<.001f&&d.z>a.z+.4f;
+  if(floorFace&&light<1.5f){auto center=(a+c)*.5f;
+   bool nearWall=false;for(auto offset:{Vec2{-.55f,0},Vec2{.55f,0},Vec2{0,-.55f},Vec2{0,.55f}})
+    nearWall|=w.tile(int(std::floor(center.x+offset.x)),int(std::floor(center.y+offset.y)))=='#';
+   if(nearWall){columns=std::max(columns,3);rows=std::max(rows,3);}
+   // Gloss/normal materials keep top-two fixture weights flat per cell. On a
+   // 1 m ceiling tile that snaps the corona to the map grid; denser samples
+   // let falloff cross tile seams instead of stair-stepping at each edge.
+   if(center.z>eye.z+.35f&&(!t.normalLevels.empty()||t.glossStrength>0)){
+    columns=std::max(columns,4);rows=std::max(rows,4);
+    for(const auto&fixture:w.lights()){
+     if(fixture.mount!=WorldLightMount::Ceiling)continue;
+     float dx=fixture.position.x-center.x,dy=fixture.position.y-center.y;
+     if(dx*dx+dy*dy<=fixture.range*fixture.range*.36f){columns=std::max(columns,6);rows=std::max(rows,6);break;}
+    }
+   }
+  }
+  auto normal=cross3(b-a,c-a);std::array<MeshVertex,289> vertices;
+  for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){float u=float(x)/columns,v=float(y)/rows;auto p=a+(b-a)*u+(d-a)*v;
+   vertices[size_t(y*(columns+1)+x)]={cameraPoint(p,game),u*uvScale.x+uvOffset.x,(1-v)*uvScale.y+uvOffset.y,-1.f};
+  }
+  for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto &A=vertices[i],&B=vertices[i+1],&C=vertices[i+columns+2],&D=vertices[i+columns+1];
+   if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
+   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal):1.f;
+    if(floorFace&&light<1.5f){bool nearWall=false;
+     for(auto offset:{Vec2{-.24f,0},Vec2{.24f,0},Vec2{0,-.24f},Vec2{0,.24f}})
+      nearWall|=w.tile(int(std::floor(p.x+offset.x)),int(std::floor(p.y+offset.y)))=='#';
+     if(nearWall)v.light*=.75f;
+    }else if(wallFace&&light<1.5f){v.light*=.72f+.28f*std::clamp((p.z-a.z)/.4f,0.f,1.f);}
+   }};
+   illuminate(A,x,y);illuminate(B,x+1,y);illuminate(C,x+1,y+1);illuminate(D,x,y+1);
+   NormalLighting lights;const NormalLighting* normalState=nullptr;
+   if((!t.normalLevels.empty()||t.glossStrength>0)){auto center=a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows);lights=normalLightingAt(center);lights.surfaceNormal=surfaceNormal(center,normal);normalState=&lights;}
+   triangle3D(A,B,C,t,light,normalState);triangle3D(A,C,D,t,light,normalState);}
+ };
+ auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
+  if(!clipArchitecture){emitQuad(a,b,c,d,t,light,uvScale,uvOffset);return;}
+  auto u=b-a,v=d-a;
+  for(auto p:exposedBoxFace(a,b,d,surfaceOwner,surfaceBoxes))
+   emitQuad(a+u*p.u0+v*p.v0,a+u*p.u1+v*p.v0,a+u*p.u1+v*p.v1,a+u*p.u0+v*p.v1,t,light,
+    {uvScale.x*(p.u1-p.u0),uvScale.y*(p.v1-p.v0)},{uvOffset.x+uvScale.x*p.u0,uvOffset.y+uvScale.y*(1-p.v1)});
+ };
+ Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
+ const Texture& iron=m_ironTexture;Texture red{1,1,{0xffb84728u}};
+ // Swinging service doors are enamelled steel: a pigment over the fine grain of
+ // the clinic paint finish (the pack surface above finish 36's band), its luma
+ // taken relative to its mean so each plate reads at its pigment's brightness.
+ // A grey-green leaf in a darker grey frame; the rusted bulkhead iron and the
+ // near-black panel metal they had read as one dark slab under any lamp.
+ auto enamel=[&](std::uint32_t pigment,float gloss){Texture t=*finishMaterial(36)->above;double sum=0;for(auto p:t.pixels)sum+=((p>>16)&255)*.2126+((p>>8)&255)*.7152+(p&255)*.0722;const float mean=float(std::max(1.,sum/double(std::max<size_t>(1,t.pixels.size()))));
+  auto paint=[&](std::uint32_t&p){const float grain=std::clamp((((p>>16)&255)*.2126f+((p>>8)&255)*.7152f+(p&255)*.0722f)/mean,.7f,1.25f);std::uint32_t out=p&0xff000000u;for(int c=0;c<3;++c)out|=std::uint32_t(std::clamp(float((pigment>>(c*8))&255)*grain,0.f,255.f))<<(c*8);p=out;};
+  for(auto&p:t.pixels)paint(p);for(auto&mip:t.mips)for(auto&p:mip)paint(p);t.emission.clear();t.glossStrength=gloss;return t;};
+ static const Texture doorLeaf=enamel(0xff7d8a83u,.3f),doorFrame=enamel(0xff585f5cu,.22f);
+ Texture cabWindow{1,1,{0xff30464bu}};cabWindow.glossStrength=.46f;
+ auto boxFaces=[&](Point3 a,Point3 b,const Texture&texture,float light){
+  if(hidden(a,b))return;
+  // Architectural repeats are measured in metres, never stretched over a deck.
+  // Pack finishes (surface sets, materials 26-35) repeat at their own scale on every map.
+  const Vec2 finish=finishRepeat(texture);
+  auto face=[&](Point3 A,Point3 B,Point3 C,Point3 D,float intensity){auto length3=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};
+   // The band maps once from the floor (texture bottom) to the band's height.
+   if(texture.band>0){const float h=(b.z-a.z)/texture.band;if(std::fabs(D.z-A.z)>.001f){quad(A,B,C,D,texture,intensity,{length3(B-A)/finish.x,h},{0,1-h});return;}
+    quad(A,B,C,D,texture.above?*texture.above:texture,intensity,{length3(B-A)/2.f,length3(D-A)/2.f});return;}
+   quad(A,B,C,D,texture,intensity,finish.x>0?Vec2{length3(B-A)/finish.x,length3(D-A)/finish.y}:((w.campaign()&&w.level()>=3)||w.custom())?Vec2{length3(B-A)*(&texture==&m_pressureWall?.5f:1.f),length3(D-A)*(&texture==&m_pressureWall?1.f/3.f:1.f)}:Vec2{1,1});};
+  if(m_staticGeometryBuild||eye.y<=a.y)face({a.x,a.y,a.z},{b.x,a.y,a.z},{b.x,a.y,b.z},{a.x,a.y,b.z},light);
+  if(m_staticGeometryBuild||eye.y>=b.y)face({b.x,b.y,a.z},{a.x,b.y,a.z},{a.x,b.y,b.z},{b.x,b.y,b.z},light*.8f);
+  if(m_staticGeometryBuild||eye.x<=a.x)face({a.x,b.y,a.z},{a.x,a.y,a.z},{a.x,a.y,b.z},{a.x,b.y,b.z},light*.85f);
+  if(m_staticGeometryBuild||eye.x>=b.x)face({b.x,a.y,a.z},{b.x,b.y,a.z},{b.x,b.y,b.z},{b.x,a.y,b.z},light);
+  if(m_staticGeometryBuild||eye.z>=b.z)face({a.x,a.y,b.z},{b.x,a.y,b.z},{b.x,b.y,b.z},{a.x,b.y,b.z},light*1.1f);
+  if(m_staticGeometryBuild||eye.z<=a.z)face({a.x,b.y,a.z},{b.x,b.y,a.z},{b.x,a.y,a.z},{a.x,a.y,a.z},light*.88f);
+ };
+ // A dado band stands on the floor: a box whose foot meets the floor beside it
+ // takes the band once up to its height and the paint above; a box raised off
+ // the floor (a header, a shelf) is all paint.
+ auto box=[&](Point3 a,Point3 b,const Texture&texture,float light){
+  if(texture.band<=0||!texture.above){boxFaces(a,b,texture,light);return;}
+  const Vec2 c{(a.x+b.x)*.5f,(a.y+b.y)*.5f};bool grounded=false;
+  for(Vec2 p:{Vec2{a.x-.3f,c.y},Vec2{b.x+.3f,c.y},Vec2{c.x,a.y-.3f},Vec2{c.x,b.y+.3f}})grounded|=std::fabs(w.floorHeight(p.x,p.y)-a.z)<.06f;
+  if(!grounded){boxFaces(a,b,*texture.above,light);return;}
+  if(b.z>a.z+texture.band){boxFaces({a.x,a.y,a.z+texture.band},b,*texture.above,light);b.z=a.z+texture.band;}
+  boxFaces(a,b,texture,light);
+ };
+ // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
+ static const auto cylinderRing=[](){std::array<Vec2,11> ring{};for(int i=0;i<10;++i){float angle=i*kTwoPi/10;ring[i]={std::cos(angle),std::sin(angle)};}ring[10]=ring[0];return ring;}();
+ auto cylinder=[&](Point3 a,Point3 b,float radius,const Texture&texture){
+  Point3 axis=b-a;float length=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);if(length<.001f)return;
+  axis=axis*(1.f/length);Point3 u=cross3(axis,std::fabs(axis.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
+  u=u*(1.f/std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z));Point3 v=cross3(axis,u);
+  if(!sphereVisible((a+b)*.5f,length*.5f+radius))return;
+  if(hidden({std::min(a.x,b.x)-radius,std::min(a.y,b.y)-radius,std::min(a.z,b.z)-radius},{std::max(a.x,b.x)+radius,std::max(a.y,b.y)+radius,std::max(a.z,b.z)+radius}))return;
+  for(int i=0;i<10;++i){const auto current=cylinderRing[i],next=cylinderRing[i+1];auto p=(u*current.x+v*current.y)*radius,q=(u*next.x+v*next.y)*radius;
+   quad(a+p,a+q,b+q,b+p,texture,1.f,{radius*.63f,length});
+   // Planar cap UVs preserve a continuous texture and a nonzero tangent
+   // determinant. The former centre/diagonal UVs were collinear, disabling
+   // normal/gloss lighting and stretching each cap triangle into a stripe.
+   Vec2 uvP{.5f+.5f*current.x,.5f+.5f*current.y},uvQ{.5f+.5f*next.x,.5f+.5f*next.y};
+   tri({a,.5f,.5f},{a+q,uvQ.x,uvQ.y},{a+p,uvP.x,uvP.y},texture,.8f);
+   tri({b,.5f,.5f},{b+p,uvP.x,uvP.y},{b+q,uvQ.x,uvQ.y},texture,.8f);
+  }
+ };
+ struct ExteriorLight {std::array<Point3,6> normals;std::array<float,6> brightness{};std::array<NormalLighting,6> gloss{};bool hasGloss;};
+ auto exteriorLight=[&](Point3 center,float width,float depth,float height,float yaw,bool gloss){
+  float c=std::cos(yaw),s=std::sin(yaw);ExteriorLight result{{{{c,-s,0},{-c,s,0},{s,c,0},{-s,-c,0},{0,0,1},{0,0,-1}}},{},{},gloss};
+  // Probes outside the oriented hull avoid self-shadowing at a solid centre.
+  for(size_t i=0;i<6;++i){float extent=i<2?width*.5f:i<4?depth*.5f:height*.5f;auto probe=center+result.normals[i]*(extent+.035f);
+   result.brightness[i]=illumination(probe,result.normals[i]);if(gloss){result.gloss[i]=normalLightingAt(probe);result.gloss[i].surfaceNormal=cameraPoint(probe+result.normals[i],game)-cameraPoint(probe,game);}
+  }return result;
+ };
+ auto selectFaceLight=[&](const ExteriorLight& lights,Point3 normal,Point3 outward){
+  // Several supplied meshes have mixed winding. Select physical exterior
+  // lighting rather than letting an inward face borrow the opposite side.
+  if(normal.x*outward.x+normal.y*outward.y+normal.z*outward.z<0)normal=normal*-1.f;
+  size_t side=0;float alignment=-1.e30f;for(size_t i=0;i<6;++i){auto n=lights.normals[i];float dot=normal.x*n.x+normal.y*n.y+normal.z*n.z;if(dot>alignment){alignment=dot;side=i;}}
+  objectLight=lights.brightness[side];objectNormalLighting=lights.hasGloss?&lights.gloss[side]:nullptr;
+ };
+ if(level==game.level()){const auto&v=m_view;auto hands=exteriorLight({v.pos.x,v.pos.y,v.z+v.eye-.25f},.45f,.45f,.5f,kPi*.5f-v.angle,false);
+  m_handNormals=hands.normals;m_handLight=hands.brightness;m_handLightReady=true;}
+ auto prop=[&](Mesh&mesh,const Texture&texture,float x,float y,float height,float yaw,float footprint=.94f,float base=-999.f){
+ perf::Scope propProfile(perf::Prop);
+  if(base==-999.f)base=w.floorHeight(x,y);if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max(height,footprint)))return;
+  if(hidden({x-footprint,y-footprint,base},{x+footprint,y+footprint,base+height}))return;
+  if(base-w.floorHeight(x,y)<.15f){
+   static const Texture contact=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
+    for(int row=0;row<16;++row)for(int column=0;column<16;++column){float u=(column-7.5f)/7.5f,v=(row-7.5f)/7.5f,r=u*u+v*v;
+     unsigned alpha=unsigned(std::clamp((1.f-r)*.42f,0.f,1.f)*255.f);t.pixels[size_t(row*16+column)]=alpha<<24;}return t;}();
+   float radius=footprint*.62f,z=w.floorHeight(x,y)+.019f;
+   quad({x-radius,y-radius,z},{x+radius,y-radius,z},{x+radius,y+radius,z},{x-radius,y+radius,z},contact,1.6f);
+  }
+  objectLighting=true;
+  auto lights=exteriorLight(receiver,footprint,footprint,height,yaw,texture.glossStrength>0);
+  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  float scale=std::min(height/std::max(.001f,range.y),footprint/std::max(range.x,range.z));
+  float cosine=std::cos(yaw),sine=std::sin(yaw);
+  for(auto face:mesh.triangles){for(auto&vertex:face.v){auto p=(vertex.p-center)*scale;vertex.p={x+p.x*cosine+p.z*sine,y-p.x*sine+p.z*cosine,base+p.y+range.y*scale*.5f};}
+   auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],texture,light);
+  }
+  objectLighting=false;objectNormalLighting=nullptr;
+ };
+ // Repeated fixtures share source meshes and material parts. Resolve each
+ // used part once per draw, preserving the documented fallback bindings.
+ struct FacilityMaterials {std::vector<const Texture*> parts;bool ready=false,hasGloss=false;};
+ std::array<FacilityMaterials,FacilityModelCount> facilityMaterials;
+ auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1){
+  auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
+  float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
+  objectLighting=true;
+  auto&materials=facilityMaterials[size_t(model)];
+  if(!materials.ready){
+   int lastPart=0;for(const auto&face:mesh.triangles)lastPart=std::max(lastPart,face.part);
+   materials.parts.resize(size_t(lastPart)+1);
+   for(const auto&face:mesh.triangles){
+    auto*&texture=materials.parts[size_t(face.part)];
+    if(!texture){texture=&facilityTexture(model,face.part);materials.hasGloss|=texture->glossStrength>0;}
+   }
+   materials.ready=true;
+  }
+  float c=std::cos(yaw),s=std::sin(yaw);
+  auto lights=exteriorLight(receiver,width,depth,height,yaw,materials.hasGloss);
+  auto drawFace=[&](const MeshTriangle&face){
+   auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);
+   selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+   // Pack exports include thin panels and mixed winding. Keep both sides;
+   // the shared depth buffer selects the visible exterior without opening holes.
+   float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));
+   const Texture*texture=materials.parts[size_t(face.part)];
+   if(fittingTone&&!texture->emission.empty())texture=&lampFace(*texture,*fittingTone);
+   tri(face.v[0],face.v[1],face.v[2],*texture,light);
+  };
+  for(auto face:mesh.triangles){
+   for(auto&v:face.v){auto p=v.p-center;p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};v.p={x+p.x*c+p.z*s,y-p.x*s+p.z*c,base+p.y+height*.5f};}
+   if(partFixture<0||unsigned(face.part)>=32||(parts&(1u<<face.part))!=0){drawFace(face);continue;}
+   std::vector<std::array<MeshVertex,3>> pieces{{{face.v[0],face.v[1],face.v[2]}}};
+   if(partFixture>=0)for(int j=0;j<int(w.breakables().size());++j){const auto&part=w.breakables()[j];if(part.fixture!=partFixture||w.breakableIntact(j)||(parts&part.part)!=0||unsigned(face.part)>=32||!(part.part&(1u<<face.part)))continue;
+    std::vector<std::array<MeshVertex,3>> remaining;
+    for(const auto&piece:pieces){std::vector<MeshVertex> inside(piece.begin(),piece.end());
+     // Subtract the authored part box. Keep and triangulate each outside
+     // polygon, preserving its UVs, rather than dropping a whole bezel face.
+     for(int plane=0;plane<6&&!inside.empty();++plane){int axis=plane/2;float sign=plane%2?-1.f:1.f;float bound=axis==0?(plane%2?part.x2:part.x1):axis==1?(plane%2?part.y2:part.y1):(plane%2?part.top:part.bottom);
+      auto distance=[&](const MeshVertex&v){float value=axis==0?v.p.x:axis==1?v.p.y:v.p.z;return (value-bound)*sign;};std::vector<MeshVertex> keep,outside;
+      for(size_t k=0;k<inside.size();++k){const auto&v=inside[k];const auto&next=inside[(k+1)%inside.size()];float d=distance(v),nd=distance(next);bool in=d>=-.00001f,nin=nd>=-.00001f;(in?keep:outside).push_back(v);if(in!=nin){float t=std::clamp(d/(d-nd),0.f,1.f);MeshVertex cross{v.p+(next.p-v.p)*t,v.u+(next.u-v.u)*t,v.v+(next.v-v.v)*t,v.light+(next.light-v.light)*t};keep.push_back(cross);outside.push_back(cross);}}
+      for(size_t k=1;k+1<outside.size();++k)remaining.push_back({outside[0],outside[k],outside[k+1]});inside=std::move(keep);
+     }
+    }pieces=std::move(remaining);
+   }
+   for(const auto&piece:pieces){for(int k=0;k<3;++k)face.v[k]=piece[k];drawFace(face);
+   }
+  }
+  objectLighting=false;objectNormalLighting=nullptr;
+ };
+ // parts: 1 the backing and guard, 2 the diffuser, 3 both. A switchable lamp
+ // keeps its body in the static chunk and draws its diffuser per frame, lit
+ // by its power (dark glass when off).
+ auto wallLamp=[&](const WorldLight& light,int parts,float power){
+  // Backing, recessed diffuser and a real steel guard share the authored wall
+  // pose. Wall lamps are part of the static chunk, rather than animated meshes.
+  float cosine=std::cos(light.yaw),sine=std::sin(light.yaw);
+  auto point=[&](float side,float depth,float height){return Point3{light.position.x-sine*side+cosine*depth,light.position.y+cosine*side+sine*depth,light.z+height};};
+  if(!sphereVisible(point(0,.08f,0),.36f))return;
+  auto profile=[](float width,float height,float bevel){return std::array<Vec2,8>{{{-width+bevel,-height},{width-bevel,-height},{width,-height+bevel},{width,height-bevel},{width-bevel,height},{-width+bevel,height},{-width,height-bevel},{-width,-height+bevel}}};};
+  const auto outer=profile(.17f,.285f,.055f),inner=profile(.128f,.23f,.04f);
+  if(parts&1)for(int i=0;i<8;++i){int next=(i+1)%8;auto a=outer[size_t(i)],b=outer[size_t(next)],u=inner[size_t(i)],v=inner[size_t(next)];
+   quad(point(a.x,.012f,a.y),point(b.x,.012f,b.y),point(b.x,.075f,b.y),point(a.x,.075f,a.y),m_panelMetal,.95f);
+   quad(point(a.x,.075f,a.y),point(b.x,.075f,b.y),point(v.x,.081f,v.y),point(u.x,.081f,u.y),m_panelMetal,1.f);
+   tri({point(0,.012f,0),.5f,.5f},{point(b.x,.012f,b.y),(b.x+.17f)/.34f,(b.y+.285f)/.57f},{point(a.x,.012f,a.y),(a.x+.17f)/.34f,(a.y+.285f)/.57f},m_panelMetal,.8f);
+  }
+  static const Texture diffuser=[](){Texture t{1,1,{0xfff9d9a1u}};t.emission={0xffffc873u};return t;}();
+  const bool lit=light.intensity>0&&power>.02f;const Texture& lens=lit?diffuser:cabWindow;
+  float previousEmission=m_emissionScale;m_emissionScale=light.intensity*power;
+  // A self-lit diffuser keeps its vertex light: power dims its face with its glow.
+  if(parts&2)for(int i=0;i<8;++i){int next=(i+1)%8;auto a=inner[size_t(i)],b=inner[size_t(next)];
+   MeshVertex centre{point(0,.13f,0),.5f,.5f,power},left{point(a.x,.105f,a.y),(a.x+.128f)/.256f,(a.y+.23f)/.46f,power},right{point(b.x,.105f,b.y),(b.x+.128f)/.256f,(b.y+.23f)/.46f,power};
+   tri(centre,left,right,lens,lit?1.6f:.9f);
+  }
+  m_emissionScale=previousEmission;
+  if(!(parts&1))return;
+  auto guard=[&](float x1,float y1,float z1,float x2,float y2,float z2){
+   quad(point(x1,y1,z1),point(x2,y1,z1),point(x2,y1,z2),point(x1,y1,z2),m_panelMetal,.8f);
+   quad(point(x2,y2,z1),point(x1,y2,z1),point(x1,y2,z2),point(x2,y2,z2),m_panelMetal,.9f);
+   quad(point(x1,y2,z1),point(x1,y1,z1),point(x1,y1,z2),point(x1,y2,z2),m_panelMetal,.85f);
+   quad(point(x2,y1,z1),point(x2,y2,z1),point(x2,y2,z2),point(x2,y1,z2),m_panelMetal,.85f);
+   quad(point(x1,y1,z2),point(x2,y1,z2),point(x2,y2,z2),point(x1,y2,z2),m_panelMetal,.95f);
+   quad(point(x1,y2,z1),point(x2,y2,z1),point(x2,y1,z1),point(x1,y1,z1),m_panelMetal,.75f);
+  };
+  for(float side:{-.082f,.082f})guard(side-.009f,.143f,-.246f,side+.009f,.163f,.246f);
+  for(float height:{-.14f,0.f,.14f})guard(-.141f,.14f,height-.009f,.141f,.163f,height+.009f);
+  for(float height:{-.256f,.256f})guard(-.105f,.076f,height-.016f,.105f,.151f,height+.016f);
+  // Four fasteners and the conduit socket sit on the backing, with no rods
+  // extending toward a ceiling several storeys above the light.
+  for(float side:{-.132f,.132f})for(float height:{-.239f,.239f})guard(side-.015f,.076f,height-.015f,side+.015f,.088f,height+.015f);
+  guard(-.032f,.015f,.278f,.032f,.068f,.335f);
+ };
+ bool buildStaticGeometry=!m_gpuFrame;
+ int cacheSlot=w.level();
+ std::uint64_t geometryKey=0;
+ if(m_gpuFrame){
+  std::uint64_t key=1469598103934665603ull;
+  auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
+  auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
+  hash(std::uint64_t(game.worldId()));hash(game.sessionRevision());hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  // Revision: tile crates/barrels + authored props bake into the static VBO.
+  hash(5);
+  // Reusing a renderer across maps at the same address must not retain the
+  // previous map's finishes, even when its tiles and lamps are identical.
+  for(int surface:{w.wallSurface(),w.floorSurface(),w.ceilingSurface()})hash(std::uint64_t(surface+1));
+  for(size_t i=0;i<w.structures().size();++i)if(!w.isBreakableStructure(int(i)))hash(std::uint64_t(w.structures()[i].material));
+  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)hash(static_cast<unsigned char>(w.tile(x,y)));
+  for(const auto&door:w.doors())for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);
+  // Authored lamp power may change independently of the map/session. Use exact
+  // float bits so even a small power change refreshes emission and baked light.
+  hash(fixedLightSourceKey);
+  buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
+  geometryKey=key;
+ }
+ m_staticGeometryBuild=m_gpuFrame&&buildStaticGeometry;
+ if(m_staticGeometryBuild)++m_staticGeometryBuilds;
+ // Static lighting is baked once per chunk. A frame-sized ray budget leaves
+ // later surfaces at ambient only, producing flat walls and missing shadows.
+ if(m_staticGeometryBuild)shadowBudget=400000;
+ // Surface sets (World.h): the map's own wall, floor and ceiling finish, or
+ // null for the legacy choice. Finishes are laid in world metres, u along the
+ // face and v down world z (or along y on flats), so they run on unbroken
+ // across tiles, risers, steps and door fills.
+ const SurfaceSet* wallFinish=surfaceSet(w.wallSurface());const SurfaceSet* floorFinish=surfaceSet(w.floorSurface());const SurfaceSet* ceilingFinish=surfaceSet(w.ceilingSurface());
+ auto finishQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 repeat){
+  const bool alongX=std::fabs(b.x-a.x)>=std::fabs(b.y-a.y),flat=std::fabs(d.z-a.z)<.001f;
+  const float u0=alongX?a.x:a.y,u1=alongX?b.x:b.y,v0=flat?(alongX?a.y:a.x):a.z,v1=flat?(alongX?d.y:d.x):d.z,sign=u1<u0?-1.f:1.f;
+  quad(a,b,c,d,t,light,{std::fabs(u1-u0)/repeat.x,(v1-v0)/repeat.y},{sign*u0/repeat.x,-v1/repeat.y});
+ };
+ if(buildStaticGeometry){ // Outdoor chunks carry an explicit low-poly mesh generated from the same
+ // height field used by collision. This replaces the old flat half-metre floor
+ // patches while leaving authored ruins, machinery and props on top.
+ // Painterly Horizon LOD, grass into ground: count ground plants per metre so
+ // the terrain under a dense patch carries its colour and shade. Near, the
+ // real plants stand on it; far, where they fade out, the patch still reads.
+ std::vector<std::uint8_t> plantCover;
+ if(w.hasTerrain()&&w.zoneSky()&&s_impostors){plantCover.assign(size_t(World::Width)*World::Height,0);
+  for(const auto&fixture:w.fixtures())if(fixture.visible&&fixture.height<1.4f&&fixture.model>=FirstLibraryModel&&impostorFor(fixture.model))
+   for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){int cx=int(fixture.position.x)+dx,cy=int(fixture.position.y)+dy;
+    if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height){auto&c=plantCover[size_t(cy*World::Width+cx)];c=std::uint8_t(std::min(255,c+(dx||dy?1:2)));}}}
+ if(w.hasTerrain())for(const auto&face:w.terrain()){
+  MeshVertex a{{face.a.x,face.a.y,face.a.z},0,0};
+  MeshVertex b{{face.b.x,face.b.y,face.b.z},0,0};
+  MeshVertex c{{face.c.x,face.c.y,face.c.z},0,0};
+  // Project texture coordinates on the triangle's dominant plane. The first
+  // Surface Nets pass used XY UVs for everything, so near-vertical cliff faces
+  // collapsed to a line in texture space and produced the long streaks seen in
+  // Ashfall. World-aligned planar UVs keep one texel scale on floors and cliffs.
+  Point3 n=cross3(b.p-a.p,c.p-a.p);float ax=std::fabs(n.x),ay=std::fabs(n.y),az=std::fabs(n.z);
+  // Exposed slopes use rock; flatter deposits use the purchased dirt material.
+  // Terrain never inherits industrial wall panels or metal floor grating.
+  bool rocky=face.material==TerrainRock||az<std::max(ax,ay)*1.35f;
+  float groundShade=1.f;
+  const Texture*terrainMaterial=&(w.coast()?(rocky?m_coastRock:m_coastSand):(rocky?m_terrainRock:m_terrainDirt));
+  // Painted zone ground: the authored cover kind under the triangle's centre.
+  // Steep faces stay rock; the cover changes per triangle, PSX-style.
+  {
+   static const char* const groundNames[GroundKinds]={"ground_shortgrass","ground_leafygrass","ground_clover","ground_wild","ground_dry","ground_litter","ground_gravel","ground_mud"};
+   const auto origin=w.definition().origin;
+   // Painted ground carries over small banks; only real rock (deep relief or
+   // high bluffs) shows stone, so one-metre steps read as grassy slopes.
+   int kind=(az>=std::max(ax,ay)*1.35f||face.material!=TerrainRock)?w.groundKind((a.p.x+b.p.x+c.p.x)/3+origin.x,(a.p.y+b.p.y+c.p.y)/3+origin.y):-1;
+   int cover=0;
+   if(kind>=0&&kind<=GroundWild&&!plantCover.empty()){int cx=int((a.p.x+b.p.x+c.p.x)/3),cy=int((a.p.y+b.p.y+c.p.y)/3);
+    if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height)cover=plantCover[size_t(cy*World::Width+cx)];
+    if(cover>=4)kind=GroundLeafyGrass;}
+   if(kind>=0){auto found=m_facilityTextures.find(groundNames[kind]);if(found!=m_facilityTextures.end())terrainMaterial=&found->second;}
+   groundShade=1.f-.16f*std::min(1.f,cover/8.f);
+  }
+  auto uv=[&](MeshVertex&v){float wx=v.p.x+w.definition().origin.x,wy=v.p.y+w.definition().origin.y,wz=v.p.z;
+   constexpr float scale=.28f;
+   if(az>=ax&&az>=ay){v.u=wx*scale;v.v=wy*scale;}
+   else if(ax>=ay){v.u=wy*scale;v.v=wz*scale;}
+   else {v.u=wx*scale;v.v=wz*scale;}
+  };
+  uv(a);uv(b);uv(c);
+  // Flat triangle lighting preserves the block-authored faceting.
+  tri(a,b,c,*terrainMaterial,(w.coast()?1.20f:.96f)*groundShade);
+ }
+ // Painterly Horizon: unreachable land past the zone edge. Each edge map draws
+ // the strip beyond its open sides (corners belong to corner maps): painted
+ // ground rising into hills, wooded with impostor-only trees. Everything is
+ // derived from world position, so neighbouring strips meet without seams.
+ if(w.hasTerrain()&&w.zoneSky()&&m_gpuFrame&&s_impostors)if(const auto* shape=w.terrainShape();shape&&shape->horizonDepth>0){
+  const auto origin=w.definition().origin;const float cell=6.f,depth=std::ceil(shape->horizonDepth/cell)*cell;
+  float minX=1e9f,minY=1e9f,maxX=-1e9f,maxY=-1e9f;
+  for(int level=0;level<game.chunkCount();++level){auto o=game.chunkOffset(level);minX=std::min(minX,o.x);minY=std::min(minY,o.y);maxX=std::max(maxX,o.x+World::Width);maxY=std::max(maxY,o.y+World::Height);}
+  const float x0=origin.x,y0=origin.y,x1=x0+World::Width,y1=y0+World::Height;
+  const float rx0=x0<=minX?minX-depth:x0,rx1=x1>=maxX?maxX+depth:x1,ry0=y0<=minY?minY-depth:y0,ry1=y1>=maxY?maxY+depth:y1;
+  auto outside=[&](float x,float y){float dx=std::max({minX-x,0.f,x-maxX}),dy=std::max({minY-y,0.f,y-maxY});return std::sqrt(dx*dx+dy*dy);};
+  auto ground=[&](float x,float y){return w.outskirtHeight(x,y,outside(x,y))-.25f;};
+  auto hash=[](int x,int y,unsigned salt){unsigned h=unsigned(x)*73856093u^unsigned(y)*19349663u^salt*83492791u;h^=h>>13;h*=0x5bd1e995u;h^=h>>15;return float(h&0xffffffu)/16777216.f;};
+  const Texture* cover[3]={&m_terrainDirt,&m_terrainDirt,&m_terrainDirt};
+  {const char* names[3]={"ground_leafygrass","ground_wild","ground_litter"};
+   for(int i=0;i<3;++i){auto found=m_facilityTextures.find(names[i]);if(found!=m_facilityTextures.end())cover[i]=&found->second;}}
+  objectLighting=true;
+  for(float gy=ry0;gy<ry1-.01f;gy+=cell)for(float gx=rx0;gx<rx1-.01f;gx+=cell){
+   float cx=std::min(gx+cell,rx1),cy=std::min(gy+cell,ry1);
+   if(gx>=minX&&cx<=maxX&&gy>=minY&&cy<=maxY)continue;
+   auto vertex=[&](float x,float y){return MeshVertex{{x-origin.x,y-origin.y,ground(x,y)},x*.28f,y*.28f};};
+   float distant=outside((gx+cx)*.5f,(gy+cy)*.5f)/depth,n=hash(int(gx),int(gy),11);
+   const Texture& t=*cover[distant>.35f?2:n<.6f?0:1];
+   MeshVertex a=vertex(gx,gy),b=vertex(cx,gy),c=vertex(cx,cy),d=vertex(gx,cy);
+   tri(a,b,c,t,.9f);tri(a,c,d,t,.9f);
+  }
+  objectLighting=false;
+  // Forest: one jittered candidate per spacing cell; dense near the edge,
+  // thinning toward the far hills.
+  const float spacing=shape->horizonSpacing;
+  for(float gy=std::floor(ry0/spacing)*spacing;gy<ry1;gy+=spacing)for(float gx=std::floor(rx0/spacing)*spacing;gx<rx1;gx+=spacing){
+   int ix=int(std::floor(gx/spacing)),iy=int(std::floor(gy/spacing));
+   float x=gx+hash(ix,iy,1)*spacing,y=gy+hash(ix,iy,2)*spacing;
+   if(x<rx0||x>=rx1||y<ry0||y>=ry1)continue;
+   float away=outside(x,y);if(away<1.5f||(x>=minX&&x<=maxX&&y>=minY&&y<=maxY))continue;
+   if(hash(ix,iy,3)>(away<depth*.4f?.95f:.55f))continue;
+   int model=shape->horizonModels.empty()?-1:shape->horizonModels[size_t(hash(ix,iy,4)*shape->horizonModels.size())%shape->horizonModels.size()];
+   const Impostor* impostor=model>=0?impostorFor(model):nullptr;if(!impostor)continue;
+   const auto&mesh=m_facilityMeshes[size_t(model)];float scale=.8f+.5f*hash(ix,iy,5),height=(mesh.maximum.y-mesh.minimum.y)*scale;
+   GpuRenderer::LodTag tag;tag.impostor=true;tag.lod=1;tag.half=impostor->radius*scale;tag.yaw=hash(ix,iy,6)*6.2831853f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
+   float lx=x-origin.x,ly=y-origin.y,z=ground(x,y)+.25f+height*.5f;tag.z=z;
+   m_gpu->setLodTag(&tag);objectLighting=true;
+   MeshVertex a{{lx-1,ly,z-1},-1,-1},b{{lx+1,ly,z-1},1,-1},c{{lx+1,ly,z+1},1,1},d{{lx-1,ly,z+1},-1,1};
+   tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;m_gpu->setLodTag(nullptr);
+  }
+ }
+ clipArchitecture=true;
+ for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){surfaceOwner=y*World::Width+x;float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
+  // Only resident chunks reach this renderer; reject off-screen modules early.
+  if(w.tile(x,y)!='#'){
+   bool serviceMap=w.campaign()&&w.level()>=6&&w.level()<=9;
+   if(!w.outdoors()||!w.hasTerrain()){
+    // Authored outdoor grid maps have no terrain mesh. Draw their floor just
+    // like collision does, while terrain worlds keep their existing mesh.
+    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
+     // Maps 0-2 lay their area floor as 2 m tiles; grating and raised plate stay functional.
+     if(floorFinish)finishQuad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},*floorFinish->floor,.95f,{floorFinish->floorRepeat,floorFinish->floorRepeat});
+     else if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
+     else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.metalFloor(x,y)?.8f:.95f);
+     float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
+     // Risers between floor heights: steel plate, or the floor's own finish.
+     auto riser=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(floorFinish)finishQuad(a,b,c,d,*floorFinish->floor,.9f,{floorFinish->floorRepeat,floorFinish->floorRepeat});else quad(a,b,c,d,m_metal,.9f);};
+     if(h>north)riser({ax,ay,north},{ax+.5f,ay,north},{ax+.5f,ay,h},{ax,ay,h});
+     if(h>south)riser({ax+.5f,ay+.5f,south},{ax,ay+.5f,south},{ax,ay+.5f,h},{ax+.5f,ay+.5f,h});
+     if(h>west)riser({ax,ay+.5f,west},{ax,ay,west},{ax,ay,h},{ax,ay+.5f,h});
+     if(h>east)riser({ax+.5f,ay,east},{ax+.5f,ay+.5f,east},{ax+.5f,ay+.5f,h},{ax+.5f,ay,h});
+    }
+
+    if(!w.outdoors()){
+    // Match floor half-metre patches so lighting probes and gloss weights are
+    // not locked to the full 1 m map tile under overhead fixtures.
+    const Texture&ceilingTexture=serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1");
+    float ceilingLight=serviceMap?.82f:.6f;
+    for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f;
+     if(ceilingFinish)finishQuad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},*ceilingFinish->ceiling,.6f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});
+     else quad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},ceilingTexture,ceilingLight);
+    }
+   // Close ceiling height changes instead of exposing the void between sectors.
+   // A surface ceiling carries its finish down the step; legacy maps use plate.
+   auto soffit=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(ceilingFinish)finishQuad(a,b,c,d,*ceilingFinish->ceiling,.7f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad(a,b,c,d,m_metal,.7f);};
+   float northCeiling=w.ceilingHeight(X+.5f,Y-.01f),westCeiling=w.ceilingHeight(X-.01f,Y+.5f);
+   if(Z>northCeiling&&w.tile(x,y-1)!='#')soffit({X,Y,northCeiling},{X+1,Y,northCeiling},{X+1,Y,Z},{X,Y,Z});
+   if(Z>westCeiling&&w.tile(x-1,y)!='#')soffit({X,Y+1,westCeiling},{X,Y,westCeiling},{X,Y,Z},{X,Y+1,Z});
+   float southCeiling=w.ceilingHeight(X+.5f,Y+1.01f),eastCeiling=w.ceilingHeight(X+1.01f,Y+.5f);
+   if(Z>southCeiling&&w.tile(x,y+1)!='#')soffit({X+1,Y+1,southCeiling},{X,Y+1,southCeiling},{X,Y+1,Z},{X+1,Y+1,Z});
+   if(Z>eastCeiling&&w.tile(x+1,y)!='#')soffit({X+1,Y,eastCeiling},{X+1,Y+1,eastCeiling},{X+1,Y+1,Z},{X+1,Y,Z});
+   }
+   }
+   // Painted route edges and worn hazard stripes tie the loops together.
+   // Route instruction paint removed; safety tape remains at machinery and doors.
+   char tile=w.tile(x,y);
+   // GPU path bakes tile crates/barrels into the static cache. Software and the
+   // static-build pass still emit them here; cached GPU frames skip the redraw.
+   if(tile=='C'&&(!m_gpuFrame||m_staticGeometryBuild))prop(m_crateMesh,m_crateTexture,X+.5f,Y+.5f,.85f,(x%2)*1.5708f);
+   if(tile=='B'&&(!m_gpuFrame||m_staticGeometryBuild))prop(m_barrelMesh,m_barrelTexture,X+.5f,Y+.5f,1.1f,float(x));
+   // T tiles are the machine plinth; the map places converter vessels on it.
+   if(tile=='T')box({X,Y,0},{X+1,Y+1,.14f},m_pressureMetal,.9f);
+  }else{
+   float roof=Z;Z=w.wallHeight(x,y);
+   if(Z<roof){
+    if(wallFinish)finishQuad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.8f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);else quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);
+    if(!w.outdoors()){if(ceilingFinish)finishQuad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},*ceilingFinish->ceiling,.43f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
+   }
+   auto wall=[&](float ax,float ay,float bx,float by,float light){
+    float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
+    const auto&material=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
+    float offset=(dx!=0?ax*dx:ay*dy)*.5f;
+    // Authored maps, including an official level opened in the builder, carry
+    // their own floor. The 0 and -9 slabs are only the old built-in chapters.
+    float wallBase=w.outdoors()||w.authored()||(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
+    if(wallFinish&&wallFinish->wall->band>0&&wallFinish->wall->above){
+     // A painted wall: the dado band once from the floor, the paint above it.
+     const auto& band=*wallFinish->wall;const float top=std::min(Z,wallBase+band.band),h=(top-wallBase)/band.band;
+     quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,top},{ax,ay,top},band,1.f,{std::hypot(bx-ax,by-ay)/wallFinish->wallRepeat.x,h},{(dx!=0?ax:ay)*(dx<0||dy<0?-1.f:1.f)/wallFinish->wallRepeat.x,1-h});
+     if(Z>top)finishQuad({ax,ay,top},{bx,by,top},{bx,by,Z},{ax,ay,Z},*band.above,1.f,finishRepeat(*band.above));
+    }else if(wallFinish)finishQuad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},*wallFinish->wall,1.f,wallFinish->wallRepeat);
+    else quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
+    if(w.campaign()&&!w.authored()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
+    (void)light;
+   };
+   if(w.tile(x-1,y)!='#')wall(X,Y,X,Y+1,.90f);
+   if(w.tile(x+1,y)!='#')wall(X+1,Y+1,X+1,Y,.90f);
+   if(w.tile(x,y-1)!='#')wall(X+1,Y,X,Y,.75f);
+   if(w.tile(x,y+1)!='#')wall(X,Y+1,X+1,Y+1,.75f);
+  }
+ }
+ // Material 25: molten metal, a bright emissive pour under the Foundry's converters.
+ static const Texture molten=[](){constexpr int N=64;Texture t{N,N,std::vector<std::uint32_t>(N*N)};t.emission.resize(N*N);
+  // Smooth, tileable flow bands with darker cooling crust islands.
+  for(int i=0;i<N*N;++i){float u=float(i%N)/N*kPi*2,v=float(i/N)/N*kPi*2;
+   float flow=.5f+.25f*std::sin(u*2+std::sin(v*3)*1.2f)+.25f*std::sin(v*2-std::cos(u*3)*.9f);
+   float crust=std::clamp((flow-.72f)*4.f,0.f,1.f),heat=1.f-crust*.85f;
+   t.pixels[size_t(i)]=0xff000000u|(unsigned(110+145*heat)<<16)|(unsigned(30+70*heat)<<8)|unsigned(10*heat);
+   t.emission[size_t(i)]=0xff000000u|(unsigned(255*heat)<<16)|(unsigned(120*heat*heat)<<8)|unsigned(20*heat*heat);}
+  return t;}();
+ // Materials 26-29, 31-51 are the pack finishes; 3, the wall finish, follows the map's wall surface.
+ auto structureTexture=[&](const Structure& s)->const Texture&{
+  if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material))return *finish;
+  return s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor;};
+ // Ramps, columns, arches and vaults: true geometry in the structure's bounds,
+ // u across and v along its facing. Faces wind outward; UVs are in metres.
+ auto drawShape=[&](const Structure& s,const Texture& texture){
+  if(hidden({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top}))return;
+  const int f=s.facing&3;const Vec2 forward=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0},side{forward.y,-forward.x};
+  const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,hw=(f%2?s.y2-s.y1:s.x2-s.x1)*.5f,hd=(f%2?s.x2-s.x1:s.y2-s.y1)*.5f,z0=s.bottom,z1=s.top,h=z1-z0;
+  auto P=[&](float u,float v,float z){return Point3{cx+side.x*u+forward.x*v,cy+side.y*u+forward.y*v,z};};
+  Vec2 repeat=finishRepeat(texture);if(repeat.x<=0)repeat={2,2};
+  auto length=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  auto rect=[&](Point3 a,Point3 b,Point3 c,Point3 d){emitQuad(a,b,c,d,texture,1.f,{length(b-a)/repeat.x,length(d-a)/repeat.y});};
+  auto planar=[&](Point3 a,Point3 b,Point3 c){const Point3 n=cross3(b-a,c-a);
+   auto uv=[&](Point3 p)->MeshVertex{if(std::fabs(n.z)>=std::max(std::fabs(n.x),std::fabs(n.y)))return {p,p.x/repeat.x,p.y/repeat.y};
+    return std::fabs(n.x)>std::fabs(n.y)?MeshVertex{p,p.y/repeat.x,-p.z/repeat.y}:MeshVertex{p,p.x/repeat.x,-p.z/repeat.y};};
+   tri(uv(a),uv(b),uv(c),texture,1.f);};
+  auto quadPlanar=[&](Point3 a,Point3 b,Point3 c,Point3 d){planar(a,b,c);planar(a,c,d);};
+  auto axisBox=[&](float u0,float u1,float v0,float v1,float bottom,float top){const auto a=P(u0,v0,bottom),b=P(u1,v1,top);
+   box({std::min(a.x,b.x),std::min(a.y,b.y),bottom},{std::max(a.x,b.x),std::max(a.y,b.y),top},texture,1.05f);};
+  constexpr int segments=12;
+  if(s.shape==ShapeRamp){
+   rect(P(-hw,-hd,z0),P(hw,-hd,z0),P(hw,hd,z1),P(-hw,hd,z1));
+   rect(P(hw,hd,z0),P(-hw,hd,z0),P(-hw,hd,z1),P(hw,hd,z1));
+   rect(P(-hw,hd,z0),P(hw,hd,z0),P(hw,-hd,z0),P(-hw,-hd,z0));
+   planar(P(hw,-hd,z0),P(hw,hd,z0),P(hw,hd,z1));planar(P(-hw,-hd,z0),P(-hw,hd,z1),P(-hw,hd,z0));
+  }else if(s.shape==ShapeColumn)cylinder({cx,cy,z0},{cx,cy,z1},std::min(hw,hd),texture);
+  else if(s.shape==ShapeArch){
+   const auto arch=archOpening(hw*2,h);
+   axisBox(-hw,-arch.half,-hd,hd,z0,z1);axisBox(arch.half,hw,-hd,hd,z0,z1);
+   rect(P(-arch.half,-hd,z1),P(arch.half,-hd,z1),P(arch.half,hd,z1),P(-arch.half,hd,z1));
+   for(int k=0;k<segments;++k){
+    const float a0=kPi*(1-float(k)/segments),a1=kPi*(1-float(k+1)/segments);
+    const float u0=arch.half*std::cos(a0),u1=arch.half*std::cos(a1),i0=z0+arch.spring+arch.half*std::sin(a0),i1=z0+arch.spring+arch.half*std::sin(a1);
+    quadPlanar(P(u1,hd,i1),P(u0,hd,i0),P(u0,hd,z1),P(u1,hd,z1));
+    quadPlanar(P(u0,-hd,i0),P(u1,-hd,i1),P(u1,-hd,z1),P(u0,-hd,z1));
+    rect(P(u0,hd,i0),P(u1,hd,i1),P(u1,-hd,i1),P(u0,-hd,i0));
+   }
+  }else if(s.shape==ShapeVault){
+   const float iw=hw-VaultShell,ih=h-VaultShell;
+   for(int k=0;k<segments;++k){
+    const float a0=kPi*(1-float(k)/segments),a1=kPi*(1-float(k+1)/segments);
+    const float o0=hw*std::cos(a0),o1=hw*std::cos(a1),p0=z0+h*std::sin(a0),p1=z0+h*std::sin(a1);
+    const float u0=iw*std::cos(a0),u1=iw*std::cos(a1),q0=z0+ih*std::sin(a0),q1=z0+ih*std::sin(a1);
+    rect(P(o0,-hd,p0),P(o1,-hd,p1),P(o1,hd,p1),P(o0,hd,p0));
+    rect(P(u0,hd,q0),P(u1,hd,q1),P(u1,-hd,q1),P(u0,-hd,q0));
+    quadPlanar(P(u1,hd,q1),P(u0,hd,q0),P(o0,hd,p0),P(o1,hd,p1));
+    quadPlanar(P(u0,-hd,q0),P(u1,-hd,q1),P(o1,-hd,p1),P(o0,-hd,p0));
+   }
+  }else if(s.shape==ShapeDome){
+   constexpr int rings=6,sectors=16;const float around=(hw+hd)*.5f;
+   auto at=[&](int ring,int sector)->MeshVertex{const float e=kPi*.5f*ring/rings,a=kTwoPi*sector/sectors;
+    return {P(hw*std::cos(e)*std::cos(a),hd*std::cos(e)*std::sin(a),z0+h*std::sin(e)),a*around/repeat.x,-h*std::sin(e)/repeat.y};};
+   for(int j=0;j<rings;++j)for(int k=0;k<sectors;++k){
+    const auto a=at(j,k),b=at(j,k+1),c=at(j+1,k+1),d=at(j+1,k);
+    tri(a,b,c,texture,1.f);if(j+1<rings)tri(a,c,d,texture,1.f);}
+  }else if(s.shape==ShapeStrut){
+   const float t=strutSection(hw*2,h);
+   rect(P(-hw,-hd,z0+t),P(hw,-hd,z0+t),P(hw,hd,z1),P(-hw,hd,z1));
+   rect(P(-hw,hd,z1-t),P(hw,hd,z1-t),P(hw,-hd,z0),P(-hw,-hd,z0));
+   rect(P(hw,-hd,z0),P(hw,hd,z1-t),P(hw,hd,z1),P(hw,-hd,z0+t));
+   rect(P(-hw,hd,z1-t),P(-hw,-hd,z0),P(-hw,-hd,z0+t),P(-hw,hd,z1));
+   rect(P(hw,hd,z1-t),P(-hw,hd,z1-t),P(-hw,hd,z1),P(hw,hd,z1));
+   rect(P(-hw,-hd,z0),P(hw,-hd,z0),P(hw,-hd,z0+t),P(-hw,-hd,z0+t));
+  }else if(s.shape==ShapeRoundel){
+   const auto ring=roundelOpening(hw*2,h);const float r=ring.radius,c=z0+ring.centre;
+   axisBox(-hw,-r,-hd,hd,z0,z1);axisBox(r,hw,-hd,hd,z0,z1);
+   rect(P(-r,-hd,z1),P(r,-hd,z1),P(r,hd,z1),P(-r,hd,z1));
+   rect(P(-r,hd,z0),P(r,hd,z0),P(r,-hd,z0),P(-r,-hd,z0));
+   for(int k=0;k<segments;++k){
+    const float a0=kPi*(1-float(k)/segments),a1=kPi*(1-float(k+1)/segments);
+    const float u0=r*std::cos(a0),u1=r*std::cos(a1),up0=c+r*std::sin(a0),up1=c+r*std::sin(a1),dn0=c-r*std::sin(a0),dn1=c-r*std::sin(a1);
+    quadPlanar(P(u1,hd,up1),P(u0,hd,up0),P(u0,hd,z1),P(u1,hd,z1));
+    quadPlanar(P(u0,-hd,up0),P(u1,-hd,up1),P(u1,-hd,z1),P(u0,-hd,z1));
+    quadPlanar(P(u0,hd,dn0),P(u1,hd,dn1),P(u1,hd,z0),P(u0,hd,z0));
+    quadPlanar(P(u1,-hd,dn1),P(u0,-hd,dn0),P(u0,-hd,z0),P(u1,-hd,z0));
+    rect(P(u0,hd,up0),P(u1,hd,up1),P(u1,-hd,up1),P(u0,-hd,up0));
+    rect(P(u0,-hd,dn0),P(u1,-hd,dn1),P(u1,hd,dn1),P(u0,hd,dn0));
+   }
+  }
+ };
+ for(auto&s:w.structures()){
+  surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
+  if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+  if(w.isBreakableStructure(int(&s-w.structures().data())))continue;
+  if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
+  if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
+  if(s.material==CollisionProxyMaterial)continue;
+  if(s.shape!=ShapeBox){drawShape(s,structureTexture(s));continue;}
+  if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
+  if(s.layerSurface){
+   const auto* finish=s.layerSurface==1?wallFinish:floorFinish;
+   const auto& tex=finish?(s.layerSurface==1?*finish->wall:*finish->floor):(s.layerSurface==1?m_pressureWall:m_concrete);
+   auto repeat=finish?(s.layerSurface==1?finish->wallRepeat:Vec2{finish->floorRepeat,finish->floorRepeat}):Vec2{2,2};
+   const float x=s.x1,y=s.y1,X=s.x2,Y=s.y2,b=s.bottom,t=s.top;
+   // Native layer geometry uses the same metre-based surface mapping as the
+   // ground floor. Resizing changes repeat count, never texel density.
+   auto face=[&](Point3 a,Point3 b,Point3 c,Point3 d){
+    if(s.layerSurface==1&&tex.band>0&&tex.above&&std::abs(c.z-a.z)>.001f){
+      float bandTop=std::min(c.z,a.z+tex.band),height=(bandTop-a.z)/tex.band;
+      Point3 C=c,D=d;C.z=D.z=bandTop;
+      float run=std::hypot(b.x-a.x,b.y-a.y),offset=std::abs(b.x-a.x)>=std::abs(b.y-a.y)?a.x:a.y;
+      quad(a,b,C,D,tex,1.f,{run/repeat.x,height},{offset/repeat.x,1-height});
+      if(c.z>bandTop){a.z=b.z=bandTop;finishQuad(a,b,c,d,*tex.above,1.f,finishRepeat(*tex.above));}
+    }else finishQuad(a,b,c,d,tex.band>0&&tex.above?*tex.above:tex,1.f,repeat);
+   };
+   face({x,y,b},{X,y,b},{X,y,t},{x,y,t});face({X,Y,b},{x,Y,b},{x,Y,t},{X,Y,t});
+   face({x,Y,b},{x,y,b},{x,y,t},{x,Y,t});face({X,y,b},{X,Y,b},{X,Y,t},{X,y,t});
+   face({x,y,t},{X,y,t},{X,Y,t},{x,Y,t});face({x,Y,b},{X,Y,b},{X,y,b},{x,y,b});continue;
+  }  if(s.material==1){
+   // Faceted containment jacket, with consistent metre-scale panels, centred
+   // on its structure (radius 1.16 x the half-width: 1.74 m for a 3 m bay).
+   const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,r=(s.x2-s.x1)*.58f,base=s.bottom;
+   for(int side=0;side<12;++side){float a=side*kPi/6,b=(side+1)*kPi/6;float ax=cx+r*std::cos(a),ay=cy+r*std::sin(a),bx=cx+r*std::cos(b),by=cy+r*std::sin(b);
+    quad({ax,ay,s.bottom},{bx,by,s.bottom},{bx,by,s.top},{ax,ay,s.top},m_bulkhead,1.f,{.9f,5.6f});
+    for(float z:{base+.4f,base+2.5f,base+5.f}){float R=r+.08f,A=cx+R*std::cos(a),B=cy+R*std::sin(a),C=cx+R*std::cos(b),D=cy+R*std::sin(b);quad({A,B,z},{C,D,z},{C,D,z+.16f},{A,B,z+.16f},m_pressureMetal,1.1f,{.94f,.16f});}
+    tri({{cx,cy,s.top},.5f,.5f},{{ax,ay,s.top},0,0},{{bx,by,s.top},1,0},m_metal,1.f);
+   }
+   // Containment vessel spans both reactor maps. Luminous coolant channels
+   // and heavy external bands make it readable from below and the balcony.
+   const float face=cy-r*1.035f;
+   for(float x:{cx-.45f,cx+.3f})for(float z:{base+.6f,base+1.6f,base+3.1f,base+4.1f})box({x,face,z},{x+.06f,face+.08f,z+.65f},blue,1.2f);
+   quad({cx+.4f,face-.03f,base+3.3f},{cx-.4f,face-.03f,base+3.3f},{cx-.4f,face-.03f,base+4.1f},{cx+.4f,face-.03f,base+4.1f},m_chemicalSign,1.1f);
+  }
+  else if(s.material==4){
+   // Every tread uses the same concrete body and one inset anti-slip plate.
+   box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},m_concrete,1.05f);
+   quad({s.x1+.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y1+.035f,s.top+.003f},{s.x2-.08f,s.y2-.035f,s.top+.003f},{s.x1+.08f,s.y2-.035f,s.top+.003f},m_pressureMetal,1.05f,{s.x2-s.x1-.16f,s.y2-s.y1-.07f});
+  }
+  else if(!s.rail)box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},structureTexture(s),1.05f);
+  else{if(s.top-s.bottom>1.5f){
+    if(w.hasLift()){
+     // A safety cage must not become an opaque wall around every cab window.
+     box({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.bottom+.16f},m_panelMetal,.8f);
+     box({s.x1,s.y1,s.bottom+.92f},{s.x2,s.y2,s.bottom+.96f},m_metal,.9f);
+     float run=std::max(s.x2-s.x1,s.y2-s.y1);int bars=std::max(1,int(run/.4f));
+     for(int i=1;i<=bars;++i){float t=float(i)/(bars+1),x=s.x1+(s.x2-s.x1)*t,y=s.y1+(s.y2-s.y1)*t;
+      box({x-.012f,y-.012f,s.bottom+.16f},{x+.012f,y+.012f,s.top-.07f},m_metal,.85f);}
+    }else box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f},m_floor,.8f);
+   }
+   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
+   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},m_panelMetal,.9f);
+   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},m_panelMetal,.9f);}
+ }
+ // The supplied tape is a straight strip. Lay one continuous strip across each
+ // opening, preserving its aspect ratio instead of repeating corner decals per tile.
+ }
+ clipArchitecture=false;surfaceOwner=-1;
+ const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
+ if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))){
+  float base=w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base;
+  // Painterly Horizon LOD (experimental, open-zone only): repeated foliage
+  // carries its real mesh and a shared multi-view impostor in the static
+  // cache; the shaders hand one to the other with distance. Ground plants
+  // fold into the painted ground beyond a few crossfades.
+  const Impostor* impostor=m_gpuFrame&&s_impostors&&w.zoneSky()?impostorFor(fixture.model):nullptr;
+  GpuRenderer::LodTag tag;
+  if(impostor){const auto&mesh=m_facilityMeshes[size_t(fixture.model)];float scale=fixture.height/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
+   tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
+  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+  if(impostor){
+   tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;
+   tag.farFade=fixture.height<1.4f?tag.lod*2.6f:0.f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
+   float x=fixture.position.x,y=fixture.position.y,z=tag.z;
+   MeshVertex a{{x-1,y,z-1},-1,-1},b{{x+1,y,z-1},1,-1},c{{x+1,y,z+1},1,1},d{{x-1,y,z+1},-1,1};
+   objectLighting=true;tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;
+  }
+  if(m_gpu)m_gpu->setLodTag(nullptr);
+ }
+ if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
+ // A swinging door's posts and head never move, so they bake with the wall they
+ // stand in (per-pixel lamps on Vulkan): lit like that wall from the first frame,
+ // not left at ambient while a per-frame shadow budget catches up.
+ if(buildStaticGeometry)for(const auto&door:w.doors())if(door.swinging){const float base=w.floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+  box({door.left-.09f,door.y-.17f,base},{door.left+.09f,door.y+.17f,base+2.48f},doorFrame,1.f);
+  box({door.right-.08f,door.y-.17f,base},{door.right+.08f,door.y+.17f,base+2.48f},doorFrame,1.f);
+  box({door.left,door.y-.17f,base+2.35f},{door.right,door.y+.17f,base+2.55f},doorFrame,1.f);}
+ if(buildStaticGeometry)for(const auto& sign:w.signs()){
+  std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
+  auto found=m_authoredSigns.find(key);
+  if(found==m_authoredSigns.end()){
+   found=m_authoredSigns.emplace(key,makeSign(sign.title.c_str(),sign.subtitle.c_str(),sign.accent)).first;
+   if(m_gpu)m_gpu->prepare(found->second);
+  }
+  Vec2 side{std::cos(sign.yaw),-std::sin(sign.yaw)};
+  auto left=sign.position-side*(sign.width*.5f),right=sign.position+side*(sign.width*.5f);
+  quad({left.x,left.y,sign.z},{right.x,right.y,sign.z},{right.x,right.y,sign.z+sign.height},{left.x,left.y,sign.z+sign.height},found->second,1.f);
+ }
+ if(buildStaticGeometry&&staticFixtures)for(const auto&p:w.props()){
+  Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};
+  prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);
+ }
+ if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
+ m_staticGeometryBuild=false;
+ for(size_t i=0;i<w.lights().size();++i)if(lampSwitchable[i]&&w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],2,lampPowers[i]);
+ // The one-time static bake has its own large shadow-ray allowance. Dynamic
+ // fixtures and objects still need their normal per-frame budget on that
+ // first frame, otherwise they visibly brighten when the cache is reused.
+ shadowBudget=m_shadowBudgetLimit;
+ // Heavy crates move, so they are drawn every frame, never baked.
+ for(const auto& crate:w.pushCrates())facility(model::wooden_crate,crate.position.x,crate.position.y,crate.z,crate.size,crate.size,crate.size,0);
+ // Locker leaves swing on the hinges at the outer edges of the open front
+ // (the source FBX: left leaf 0.43 wide hung 0.432 left of centre, right 0.443
+ // hung 0.441 right, both 0.075 off the floor in the front plane), so they are
+ // drawn every frame and lit as moving geometry, shut in or not: from inside a
+ // shut locker its own leaves, vent holes and all, are what the player sees,
+ // the same pixels as the frame before they met (no stand-in face to swap to).
+ {movingGeometry=true;
+  for(size_t i=0;i<w.fixtures().size();++i){const auto&f=w.fixtures()[i];if(f.model!=model::psx_locker||!f.visible)continue;
+   const float sx=f.width/.64f,sz=f.depth/.9f,sy=f.height/2.2969f,c=std::cos(f.yaw),s=std::sin(f.yaw),base=w.floorHeight(f.position.x,f.position.y)+f.base+.075f*sy;
+   const Vec2 out{c,-s},side{s,c};
+   for(int leaf=0;leaf<2;++leaf){const float hand=leaf?-1.f:1.f,half=(leaf?.2216f:.215f)*sz,angle=game.lockerDoorOpen(level,int(i),leaf)*kPi*(110.f/180.f);
+    const Vec2 hinge=f.position+out*(.32f*sx)+side*((leaf?.4412f:.432f)*sz*hand),toward=side*(-hand*std::cos(angle))+out*std::sin(angle),centre=hinge+toward*half;
+    facility(leaf?model::psx_locker_door_r:model::psx_locker_door_l,centre.x,centre.y,base,.02f*sx,half*2,2.2f*sy,f.yaw-hand*angle);}
+  }movingGeometry=false;}
+ if(w.cargoLift().upper>w.cargoLift().lower){
+  const auto& lift=w.cargoLift();float z=w.cargoLiftHeight();
+  const float x1=lift.x1,x2=lift.x2,y1=lift.y1,y2=lift.y2,mx=(x1+x2)*.5f,width=x2-x1,depth=y2-y1;
+  const bool released=game.state(lift.downState)!=0,landed=game.state(lift.descendedState)!=0;
+  // Same freight-cab kit as the reactor surface lift: deck, kick panels, cage
+  // windows, header band, roof light, hoist crosshead and guide rails. The
+  // 2.4 m roof matches the platform's collision ceiling.
+  static const Texture roofLight=[](){Texture t{1,1,{0xfff2ead2u}};t.emission={0xffe8dcb4u};return t;}();
+  static const Texture emergencyLight=[](){Texture t{1,1,{0xff3a1210u}};t.emission={0xff4a0e0au};return t;}();
+  // The dead diffuser once the brake lets go: grey plastic, no glow.
+  static const Texture roofLightOff=[](){Texture t{1,1,{0xff4a4844u}};return t;}();
+  box({x1,y1,z-.25f},{x2,y2,z},m_pressureMetal,1.05f);
+  quad({x1+.12f,y1+.12f,z+.004f},{x2-.12f,y1+.12f,z+.004f},{x2-.12f,y2-.12f,z+.004f},{x1+.12f,y2-.12f,z+.004f},m_ironTexture,1.f,{width*.5f,depth*.5f});
+  for(float y:{y1+.02f,y2-.18f})quad({x1+.12f,y,z+.01f},{x2-.12f,y,z+.01f},{x2-.12f,y+.16f,z+.01f},{x1+.12f,y+.16f,z+.01f},m_hazard,1.1f);
+  for(float x:{x1,x2-.12f}){
+   box({x,y1,z},{x+.12f,y2,z+.65f},m_pressureWall,.95f);
+   box({x,y1,z+2.0f},{x+.12f,y2,z+2.4f},m_panelMetal,.9f);
+   for(float y=y1+.45f;y<y2-.3f;y+=.45f)box({x+.03f,y,z+.65f},{x+.09f,y+.04f,z+2.0f},m_metal,.8f);
+   float rail=x<mx?x1+.16f:x2-.22f;box({rail,y1+.2f,z+.82f},{rail+.06f,y2-.2f,z+.89f},m_metal,1.1f);
+   box({x+.015f,y1+.5f,z+.13f},{x+.1f,y1+.95f,z+.47f},m_bulkhead,1.05f);
+  }
+  for(float x:{x1,x2-.16f})for(float y:{y1,y2-.16f})box({x,y,z},{x+.16f,y+.16f,z+2.4f},m_yellowSteel,1.f);
+  // Back wall: a solid panel with dispatch lamps, or a split gate that slides
+  // open at the lower landing when the cab exits through that side.
+  float opening=landed?1.f:0.f;
+  for(int leaf=0;leaf<2;++leaf){float half=width*.5f-.16f,left=leaf?mx+opening*half:x1+.16f-opening*half,right=left+half;
+   box({left,y2-.12f,z},{right,y2,z+1.1f},m_bulkhead,1.f);box({left,y2-.12f,z+1.8f},{right,y2,z+2.4f},m_bulkhead,1.f);
+   for(float post:{left,left+half*.5f,right-.06f})box({post,y2-.12f,z+1.1f},{post+.06f,y2,z+1.8f},m_metal,.8f);}
+  auto&signal=released&&!landed&&int(game.elapsed()*4)%2?m_redPaint:amber;
+  for(float x:{x1+.5f,x2-.6f})box({x,y2-.2f,z+2.1f},{x+.1f,y2-.12f,z+2.3f},signal,1.8f);
+  // Control station on the right wall, facing into the cab.
+  box({x2-.2f,y1+.35f,z+1.0f},{x2-.12f,y1+.75f,z+1.45f},m_panelMetal,1.f);
+  quad({x2-.201f,y1+.42f,z+1.08f},{x2-.201f,y1+.68f,z+1.08f},{x2-.201f,y1+.68f,z+1.38f},{x2-.201f,y1+.42f,z+1.38f},m_facilityTextures.at("keypad_1"),1.3f);
+  box({x1,y1,z+2.4f},{x2,y2,z+2.6f},m_bulkhead,.9f);
+  quad({mx-.6f,y1+.6f,z+2.395f},{mx+.6f,y1+.6f,z+2.395f},{mx+.6f,y2-.6f,z+2.395f},{mx-.6f,y2-.6f,z+2.395f},released?roofLightOff:roofLight,1.f);
+  // After the cable goes, a small emergency lamp by the door is all that is lit,
+  // not the whole ceiling panel painted red.
+  if(released)box({mx-.12f,y1+.32f,z+2.32f},{mx+.12f,y1+.44f,z+2.4f},emergencyLight,1.8f);
+  box({mx-.7f,y1+.3f,z+2.6f},{mx+.7f,y1+.6f,z+2.85f},m_pressureMetal,.8f);box({mx-.7f,y2-.6f,z+2.6f},{mx+.7f,y2-.3f,z+2.85f},m_pressureMetal,.8f);
+  box({mx-.25f,y1+.3f,z+2.85f},{mx+.25f,y2-.3f,z+3.05f},m_pressureMetal,.8f);
+  // Hoist cables run up the shaft until the brake lets go; then they trail.
+  float cableTop=released?z+3.6f:lift.upper+6.f;
+  for(float y:{y1+.45f,y2-.45f})box({mx-.03f,y,z+3.05f},{mx+.03f,y+.06f,cableTop},m_metal,.7f);
+  for(float x:{x1-.09f,x2+.02f})box({x,(y1+y2)*.5f-.06f,lift.lower-.2f},{x+.07f,(y1+y2)*.5f+.06f,lift.upper+3.f},m_metal,.75f);
+ }
+ auto stripeBand=[&](float left,float right,float centerY,float offset=0.f){
+  float halfWidth=(right-left)*m_hazard.height/m_hazard.width*.5f;
+  float height=w.floorHeight((left+right)*.5f,centerY)+offset+.009f;
+  quad({left,centerY-halfWidth,height},{right,centerY-halfWidth,height},{right,centerY+halfWidth,height},{left,centerY+halfWidth,height},m_hazard,.85f);
+ };
+ for(auto&door:w.doors())if(!door.swinging)stripeBand(door.left,door.right,door.y,door.z);
+ for(int y=1;y<World::Height-1;++y)for(int x=1;x<World::Width-1;){
+  if(w.tile(x,y)!='G'){++x;continue;}
+  int start=x;while(x<World::Width-1&&w.tile(x,y)=='G')++x;
+  stripeBand(float(start),float(x),y-.18f);
+ }
+ // Door lintels and signs are geometry in the world, visible along both routes.
+ for(auto&door:w.doors()){
+  float x=(door.left+door.right)*.5f,y=door.y-.5f,half=(door.right-door.left)*.5f;
+  float base=w.floorHeight(x,door.y)+door.z;
+  if(door.swinging){
+   // The frame is static (above). The leaf moves, so it is lit as moving
+   // geometry every frame, as locker leaves are: a cached receiver drawn after
+   // the frame's shadow budget ran out took ambient alone and went black. Each
+   // face is wound outward, so it takes the light on its own side of the wall.
+   float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;
+   Vec2 axis{std::cos(angle),std::sin(angle)},normal{-axis.y,axis.x};
+   Vec2 hinge{door.left,door.y},edge=hinge+axis*width;
+   auto point=[&](Vec2 p,float side,float z){return Point3{p.x+normal.x*side,p.y+normal.y*side,base+z};};
+   movingGeometry=true;
+   // A shut leaf's jambs sit on the wall's end faces and its faces inside the wall's
+   // thickness, so a ray from a corner toward a lamp beyond that jamb started in the
+   // wall, and those corners shaded the whole leaf. Light is taken instead at points
+   // set .15 in from the jambs, sill and head and .12 out from the leaf's middle (past
+   // a 20 cm wall's face), a column every 30 cm, and blended across the face. The leaf
+   // is opaque, so only the face on the eye's side is lit and drawn.
+   const Point3 lo{std::min(hinge.x,edge.x)-.05f,std::min(hinge.y,edge.y)-.05f,base},hi{std::max(hinge.x,edge.x)+.05f,std::max(hinge.y,edge.y)+.05f,base+2.35f};
+   static const bool jambLegacy=std::getenv("RM_DOOR_JAMB")!=nullptr;// TEMPORARY A/B switch, removed before the final build
+   if(jambLegacy){quad(point(hinge,-.045f,0),point(edge,-.045f,0),point(edge,-.045f,2.35f),point(hinge,-.045f,2.35f),doorLeaf,1.f,{width*.5f,1.175f});
+    quad(point(edge,.045f,0),point(hinge,.045f,0),point(hinge,.045f,2.35f),point(edge,.045f,2.35f),doorLeaf,1.f,{width*.5f,1.175f});
+    quad(point(edge,-.045f,0),point(edge,.045f,0),point(edge,.045f,2.35f),point(edge,-.045f,2.35f),doorLeaf,.9f,{.045f,1.175f});}
+   else if(sphereVisible((lo+hi)*.5f,width*.5f+1.2f)&&!hidden(lo,hi)){
+    const float eyeSide=(eye.x-hinge.x)*normal.x+(eye.y-hinge.y)*normal.y;const int columns=std::clamp(int(std::ceil(width/.3f)),3,6);constexpr int rows=2;
+    objectLighting=true;objectLight=1;
+    for(float side:{-1.f,1.f}){if(eyeSide*side<-.12f)continue;
+     const Point3 out{normal.x*side,normal.y*side,0};std::array<MeshVertex,7*(rows+1)> grid;
+     // Wound outward: the - face runs hinge to edge, the + face edge to hinge.
+     auto along=[&](float x){return (side<0?x/columns:1-x/columns)*width;};
+     auto sample=[&](float at,float z){return point(hinge+axis*std::clamp(at,.15f,width-.15f),side*.12f,std::clamp(z,.15f,2.2f));};
+     for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){const float z=2.35f*y/rows;
+      grid[size_t(y*(columns+1)+x)]={point(hinge+axis*along(float(x)),side*.045f,z),float(x)/columns*width*.5f,(1-float(y)/rows)*1.175f,illumination(sample(along(float(x)),z),out)};}
+     for(int x=0;x<columns;++x){const auto centre=sample(along(x+.5f),1.175f);NormalLighting lights=normalLightingAt(centre);lights.surfaceNormal=cameraPoint(centre+out,game)-cameraPoint(centre,game);objectNormalLighting=&lights;
+      for(int y=0;y<rows;++y){const size_t i=size_t(y*(columns+1)+x);tri(grid[i],grid[i+1],grid[i+columns+2],doorLeaf,1.f);tri(grid[i],grid[i+columns+2],grid[i+columns+1],doorLeaf,1.f);}}
+     objectNormalLighting=nullptr;
+    }
+    // The free edge, by the light at the leaf's last column on each side.
+    if((eye.x-edge.x)*axis.x+(eye.y-edge.y)*axis.y>0){float lit[2];for(int s=0;s<2;++s)lit[s]=illumination(point(hinge+axis*(width-.15f),s?.12f:-.12f,1.175f),{axis.x,axis.y,0})*.9f;
+     const MeshVertex a{point(edge,-.045f,0),0,1.175f,lit[0]},b{point(edge,.045f,0),.045f,1.175f,lit[1]},c{point(edge,.045f,2.35f),.045f,0,lit[1]},d{point(edge,-.045f,2.35f),0,0,lit[0]};
+     tri(a,b,c,doorLeaf,1.f);tri(a,c,d,doorLeaf,1.f);}
+    objectLighting=false;
+   }
+   // The latch block stands proud of both faces.
+   Vec2 latch=hinge+axis*(width-.18f);
+   box({latch.x-.065f,latch.y-.065f,base+1.02f},{latch.x+.065f,latch.y+.065f,base+1.13f},iron,1.1f);
+   movingGeometry=false;continue;
+  }
+  float headerTop=std::min(base+3.f,w.ceilingHeight(x,door.y)),headerBottom=std::min(base+2.5f,headerTop-.44f);
+  box({x-half,y-.12f,headerBottom},{x+half,y+1.12f,headerTop},m_metal,.8f);
+  // Tall walls: the wall continues over the opening up to the roof, so the
+  // header and its sign are set in the wall instead of hanging under a slot.
+  if(float roof=w.ceilingHeight(x,door.y);roof>headerTop+.05f){
+   const auto&fill=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
+   for(float face:{y,y+1.f}){
+    if(wallFinish)finishQuad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.9f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);
+    else quad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},fill,.9f,{half*.5f,(roof-headerTop)/3.f});
+   }
+   box({x-half,y,headerTop},{x+half,y+1.f,headerTop+.02f},m_metal,.8f);
+  }
+  float bottom=base+door.open*2.65f;
+  box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},m_bulkhead,1.f);
+  float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
+  quad({door.right,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f+stripeHeight},{door.right,door.y-.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
+  quad({door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
+  for(float jamb:{door.left,door.right})box({jamb-.055f,y-.08f,base},{jamb+.055f,y+1.08f,base+2.75f},m_panelMetal,.85f);
+  // Switch housings attach to the fixed wall on both sides, never to the moving leaf.
+  for(float side:{-1.f,1.f}){const float switchX=door.left-.25f;
+   float h=base;
+   // Mount on the real face of the wall beside the opening, however thick it
+   // is; where there is no wall there is no switch, rather than one in the air.
+   float face=door.y;bool wallThere=false;
+   for(float d=.02f;d<.66f;d+=.02f)if(w.fits(switchX,door.y+side*d,h+1.05f,.02f,false)){face=door.y+side*(d-.005f);wallThere=d>.03f;break;}
+   if(!wallThere)continue;
+   box({switchX-.17f,face-.035f,h+.86f},{switchX+.17f,face+.035f,h+1.27f},m_panelMetal,.9f);
+   if(side<0)quad({switchX+.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+1.24f},{switchX+.14f,face-.04f,h+1.24f},m_terminalTexture,.85f);
+   else quad({switchX-.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+1.24f},{switchX-.14f,face+.04f,h+1.24f},m_terminalTexture,.85f);
+   box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
+  }
+  // Doors carry no area-name plates: title cards announce areas. Only an
+  // explicit notice (a door that says why it is shut) is bolted to the header.
+  if(door.sign>=CampaignChunkCount&&door.sign<CampaignChunkCount+int(m_noticeSigns.size())){const auto& notice=m_noticeSigns[size_t(door.sign-CampaignChunkCount)];
+   float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
+   quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},notice,.9f);
+   quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},notice,.9f);}
+ }
+ if(!m_gpuFrame||!staticFixtures)for(const auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
+ // Original square fixture proportions, with its top 2 cm below its support.
+ // The light source sits 4 cm beneath the luminous underside.
+ auto ceilingLamp=[&](const WorldLight&light,float mount,float power){
+  // A lamp face is the brightest thing in its room: past the bloom threshold, in the lamp's colour.
+  m_emissionScale=light.intensity*power*6.f;const Point3 tone=light.tone();fittingTone=&tone;
+  if(light.fitting>=0){facility(light.fitting,light.position.x,light.position.y,mount-light.fittingHeight,light.fittingWidth,light.fittingDepth,light.fittingHeight,light.yaw);fittingTone=nullptr;return;}
+  facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);fittingTone=nullptr;
+  if(w.campaign()&&(w.level()>=7||w.authored())){
+   // The next slab or roof above this lamp is its actual mounting surface.
+   // Low bay lamps in tall rooms need visible suspension, rather than floating.
+   float top=light.z+.13f;
+   if(mount>top+.025f)for(float dx:{-.26f,.26f}){
+    float x=light.position.x+dx,y=light.position.y;
+    box({x-.018f,y-.018f,top},{x+.018f,y+.018f,mount},iron,.9f);
+    box({x-.065f,y-.065f,mount-.035f},{x+.065f,y+.065f,mount},m_panelMetal,.9f);
+   }
+  }
+ };
+ // Fixed lamps and suspension rods use the same world-space shader lighting
+ // as cached architecture. The moving reactor lift lamp remains per-frame.
+ // Retain the reference path for software rendering and cache comparisons.
+ // A lamp in a freight cab's shaft sits flush: the cab's roof above it is no
+ // mounting surface, and rods to it would run up through the cab floor.
+ auto lampMount=[&](const WorldLight&light){return w.campaign()&&(w.level()>=7||w.authored())&&!w.insideCargoLift(light.position.x,light.position.y)?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;};
+ movingGeometry=false;
+ const bool cacheCeilingLamps=m_gpuFrame&&m_cacheFixedServices;
+ if(cacheCeilingLamps){
+  struct CeilingMount {const WorldLight*light;float mount;};std::vector<CeilingMount> mounts;mounts.reserve(w.lights().size());
+  std::uint64_t key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
+  for(const auto&light:w.lights())if(light.mount==WorldLightMount::Ceiling&&!(w.hasLift()&&&light==&w.lights().back())&&!lampSwitchable[size_t(&light-w.lights().data())]){
+   float mount=lampMount(light);
+   mounts.push_back({&light,mount});
+   for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw,light.kelvin,light.tint,light.gel.x,light.gel.y,light.gel.z})hash(std::bit_cast<std::uint32_t>(value));
+  }
+  if(!mounts.empty()&&m_gpu->beginStaticCache(2*Game::MaxChunks+w.level(),key)){
+   int previousBudget=shadowBudget;m_staticGeometryBuild=true;shadowBudget=400000;
+   for(const auto&entry:mounts)ceilingLamp(*entry.light,entry.mount,1.f);
+   m_gpu->endStaticCache();m_staticGeometryBuild=false;shadowBudget=previousBudget;
+  }
+ }
+ for(const auto&light:w.lights()){
+  if(light.mount!=WorldLightMount::Ceiling)continue;
+  movingGeometry=w.hasLift()&&&light==&w.lights().back();
+  // Switchable housings draw per frame: their glow follows the lamp's power.
+  size_t index=size_t(&light-w.lights().data());
+  if(cacheCeilingLamps&&!movingGeometry&&!lampSwitchable[index])continue;
+  ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
+ }
+ movingGeometry=false;m_emissionScale=1.f;
+ if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data())))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ // Seeded debris is derived from persistent tombstones, never a second simulated population.
+ auto chips=[&](Vec2 center,float z,float width,int count,int seed){for(int i=0;i<count;++i){unsigned h=(unsigned(i+seed)*2654435761u);float a=float(h%6283)*.001f,r=float((h>>12)%1000)*.001f*width;float x=center.x+std::cos(a)*r,y=center.y+std::sin(a)*r,s=.008f+float((h>>22)%20)*.001f;float floor=w.supportBelow(x,y,z+.1f)+.008f;tri({{x-s,y-s,floor},0,0},{{x+s,y-s,floor},1,0},{{x,y+s,floor},.5f,1},m_glassTexture,1.3f);}};
+ // Fixture parts have a separate cache; a screen hit never rebuilds the chunk.
+ {uint64_t key=geometryKey;bool any=false;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){any=true;key^=w.fixtureParts(i);key*=1099511628211ull;}
+ for(int j=0;j<int(w.breakables().size());++j)if(w.breakables()[j].fixture>=0){key^=(j+1)*(w.breakableIntact(j)?1ull:2ull);key*=1099511628211ull;}
+ if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(40*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){const auto&f=w.fixtures()[i];if(f.visible)facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw,w.fixtureParts(i),i);}if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
+ // Broken glass is the fracture GlassFracture.h works out for each pane: the
+ // pieces fall from the hole outward and stay where they land; teeth stay in the frame.
+ static const Texture shardTexture=[](){Texture t{8,8,std::vector<std::uint32_t>(64)};t.transparent=true;t.glossStrength=.9f;
+  for(int i=0;i<64;++i){unsigned l=150u+unsigned((i*37)%29);t.pixels[size_t(i)]=(0x78u<<24)|((l*62/100)<<16)|((l*76/100)<<8)|(l*74/100);}return t;}();
+ // A crack line at each healing opacity (sixteenths) of bullet-resistant glass.
+ static const auto crackLines=[](){std::array<Texture,17> out;for(int a=0;a<=16;++a){auto&t=out[size_t(a)];t={4,4,std::vector<std::uint32_t>(16,(unsigned(0xc4*a/16)<<24)|0xe2e8e8u)};t.transparent=true;t.clampEdges=true;}return out;}();
+ struct PaneFrame{Point3 origin,along,normal;float width,height;};
+ auto paneFrame=[](const Breakable&b){const bool alongX=b.x2-b.x1>b.y2-b.y1;const Vec2 c{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};
+  return PaneFrame{alongX?Point3{b.x1,c.y,b.bottom}:Point3{c.x,b.y1,b.bottom},alongX?Point3{1,0,0}:Point3{0,1,0},alongX?Point3{0,1,0}:Point3{1,0,0},std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom};};
+ auto planePoint=[](const PaneFrame&f,Vec2 q,float off=0){return f.origin+f.along*q.x+Point3{0,0,q.y}+f.normal*off;};
+ auto paneSeed=[&](int i){return std::uint32_t(level*7919+i*104729+17);};
+ auto paneHit=[&](int i,const PaneFrame&f){if(auto g=game.glassBreak(level,i)){auto d=g->at-f.origin;return Vec2{std::clamp(d.x*f.along.x+d.y*f.along.y,0.f,f.width),std::clamp(d.z,0.f,f.height)};}return Vec2{f.width*.5f,f.height*.55f};};
+ auto paneDrive=[&](int i,const PaneFrame&f){Vec2 d{};if(auto g=game.glassBreak(level,i))d=normalized(Vec2{g->direction.x,g->direction.y});
+  if(length(d)<.5f)d=Vec2{f.normal.x,f.normal.y}*(glass::hashUnit(paneSeed(i),99)<.5f?-1.f:1.f);return d;};
+ auto crackEdge=[&](const PaneFrame&f,Vec2 a,Vec2 e,float width,const Texture&t){const Vec2 run=e-a;const float len=length(run);if(len<.002f)return;const Vec2 n=Vec2{-run.y,run.x}*(width*.5f/len);
+  for(float side:{-.014f,.014f})quad(planePoint(f,a-n,side),planePoint(f,e-n,side),planePoint(f,e+n,side),planePoint(f,a+n,side),t,1.3f);};
+ auto falling=[&](int i){for(const auto&e:game.breakEvents())if(e.level==level&&e.pane&&e.index==i){float t=game.elapsed()-e.time;if(t>=0&&t<2.5f)return true;}return false;};
+ // One shard t seconds after the break (t<0: settled). The centre goes first
+ // along the blow; the rest hangs in the frame until its delay, then drops.
+ auto drawShard=[&](const PaneFrame&f,const glass::Shard&s,int id,Vec2 drive,float t){
+  const Vec2 c=s.shape.centroid();const Point3 c0=planePoint(f,c);const bool blown=s.ring<=1;
+  const Vec2 v=drive*(blown?2.2f+1.8f*s.scatter:.25f+.5f*s.scatter)+Vec2{f.along.x,f.along.y}*((s.scatter-.5f)*(blown?1.2f:.4f));const float vz=blown?.6f+.8f*s.scatter:0.f;
+  auto at=[&](float te){return Point3{c0.x+v.x*te,c0.y+v.y*te,c0.z+vz*te-4.9f*te*te};};
+  float floor=w.supportBelow(c0.x,c0.y,c0.z),land=0;
+  for(int pass=0;pass<3;++pass){land=(vz+std::sqrt(vz*vz+19.6f*std::max(0.f,c0.z-floor-.004f)))/9.8f;auto p=at(land);floor=w.supportBelow(p.x,p.y,c0.z);}
+  const float te=t<0?1e9f:t-s.delay;std::array<Point3,10> pts{};
+  if(te<=0){for(int k=0;k<s.shape.n;++k)pts[size_t(k)]=planePoint(f,c+(s.shape.p[size_t(k)]-c)*.96f);
+   for(int k=0;k<s.shape.n;++k)crackEdge(f,c+(s.shape.p[size_t(k)]-c)*.96f,c+(s.shape.p[size_t((k+1)%s.shape.n)]-c)*.96f,.0025f,crackLines[16]);}
+  else if(te<land){auto p=at(te);float a=s.spin*te,b=s.tumble*te,ca=std::cos(a),sa=std::sin(a),cb=std::cos(b),sb=std::sin(b);
+   for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;float x=o.x*ca-o.y*sa,y=o.x*sa+o.y*ca;pts[size_t(k)]=p+f.along*x+Point3{0,0,y*cb}+f.normal*(y*sb);}}
+  else{auto p=at(land);float ca=std::cos(s.yaw),sa=std::sin(s.yaw),z=floor+.004f+.0004f*float(id%9);
+   for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;pts[size_t(k)]={p.x+o.x*ca-o.y*sa,p.y+o.x*sa+o.y*ca,z};}}
+  for(int k=1;k+1<s.shape.n;++k)tri({pts[0],0,0},{pts[size_t(k)],1,0},{pts[size_t(k+1)],.5f,1},te<=0?m_glassTexture:shardTexture,te<=0?1.05f:1.5f);};
+ if(!w.breakables().empty()){
+  auto key=geometryKey;for(int i=0;i<int(w.breakables().size());++i){key^=std::uint64_t(!w.breakableIntact(i)+1)+(falling(i)?4u:0u);key*=1099511628211ull;
+   if(auto g=game.glassBreak(level,i)){key^=std::uint64_t(std::int64_t(g->at.x*256)*31+std::int64_t(g->at.y*256)*977+std::int64_t(g->at.z*256)*7919);key*=1099511628211ull;}}
+  bool build=!m_gpuFrame||m_gpu->beginStaticCache(3*Game::MaxChunks+level,key);
+  if(build){if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
+   if(w.breakableIntact(i)){if(b.material!=17){box({b.x1,b.y1,b.bottom},{b.x2,b.y2,b.top},b.material==22?m_dropCeiling:m_crateTexture,1.f);continue;}float x1=alongX?b.x1:center.x-.012f,x2=alongX?b.x2:center.x+.012f,y1=alongX?center.y-.012f:b.y1,y2=alongX?center.y+.012f:b.y2;box({x1,y1,b.bottom},{x2,y2,b.top},m_glassTexture,1.05f);
+   }else if(b.material==17){const auto f=paneFrame(b);const auto seed=paneSeed(i);
+    for(const auto&t:glass::teeth(f.width,f.height,seed)){for(int k=1;k+1<t.n;++k)tri({planePoint(f,t.p[0]),0,0},{planePoint(f,t.p[size_t(k)]),1,0},{planePoint(f,t.p[size_t(k+1)]),.5f,1},m_glassTexture,1.05f);
+     for(int k=1;k<t.n;++k)crackEdge(f,t.p[size_t(k)],t.p[size_t((k+1)%t.n)],.002f,crackLines[11]);}
+    if(!falling(i)){const auto shards=glass::fracture(f.width,f.height,paneHit(i,f),seed);const Vec2 drive=paneDrive(i,f);for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,-1);}
+    chips(center,b.bottom,width*.5f+.6f,std::clamp(int(width*(b.top-b.bottom)*14),6,30),i+113);
+   }
+  }if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}
+ }
+ for(const auto&e:game.breakEvents())if(e.level==level){float t=game.elapsed()-e.time;if(t<0||t>2.5f)continue;
+  if(e.pane&&e.material==PropMaterial::Glass&&e.index>=0&&e.index<int(w.breakables().size())&&!w.breakableIntact(e.index)){
+   const auto f=paneFrame(w.breakables()[size_t(e.index)]);const auto shards=glass::fracture(f.width,f.height,paneHit(e.index,f),paneSeed(e.index));const Vec2 drive=paneDrive(e.index,f);
+   for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,t);}
+  int count=e.pane?std::clamp(int(e.width*e.height*12),6,16):propMaterialTraits(e.material).shards;
+  for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},e.material==PropMaterial::Ceramic?m_paleSteel:m_glassTexture,1.5f);}
+ }
+ auto drawClutter=[&](const Clutter&c){
+  if(c.broken){if(c.material()==PropMaterial::Glass||c.material()==PropMaterial::Ceramic)chips(c.pos,c.z,.18f,10,c.model);return;}bool woodShard=c.kind==6;auto size=c.size();
+  float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},c.footprint()+c.height()))return;
+  if(c.model>=0&&std::max({size[0],size[1],size[2]})<.15f&&length(c.pos-player.pos)>16)return;
+  if(!w.outdoors()&&(m_staticGeometryBuild||length(c.pos-player.pos)<15.f)){const WorldLight* source=nullptr;float nearest=25.f;
+   for(const auto&candidate:w.lights()){auto emitter=candidate.emitter();float dx=emitter.x-c.pos.x,dy=emitter.y-c.pos.y,d2=dx*dx+dy*dy;if(candidate.intensity>0&&lampPower(size_t(&candidate-w.lights().data()))>.05f&&emitter.z>mid+.2f&&d2<candidate.range*candidate.range&&d2<nearest){nearest=d2;source=&candidate;}}
+   if(source){static const Texture softShadow=[](){Texture t{16,16,std::vector<std::uint32_t>(16*16)};t.transparent=true;t.clampEdges=true;
+     for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/7.5f,dy=(y-7.5f)/7.5f,r=dx*dx+dy*dy;unsigned a=unsigned(std::clamp((1.f-r)*.30f,0.f,1.f)*255.f);t.pixels[size_t(y*16+x)]=a<<24;}return t;}();
+    auto emitter=source->emitter();float floor=w.floorHeight(c.pos.x,c.pos.y),factor=std::clamp((emitter.z-floor)/std::max(.25f,emitter.z-mid),1.f,3.f);
+    float x=emitter.x+(c.pos.x-emitter.x)*factor,y=emitter.y+(c.pos.y-emitter.y)*factor;
+    float radius=std::clamp(std::max(size[0],size[1])*.7f*factor,.08f,.75f),z=w.floorHeight(x,y)+.022f;
+    if(x>radius&&y>radius&&x<24.f-radius&&y<24.f-radius)quad({x-radius,y-radius,z},{x+radius,y-radius,z},{x+radius,y+radius,z},{x-radius,y+radius,z},softShadow,1.6f);
+   }
+  }
+  objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
+  if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=v.p-center;auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
+  }else if(woodShard){
+   // Thin splinter with a broken point and irregular edges; use a strip from
+   // the crate's own vertical-grain atlas instead of mapping a whole crate face.
+   constexpr int points=6;MeshVertex bottom[points],top[points];
+   const float x[points]={-.50f,-.29f,.28f,.50f,.31f,-.34f};
+   const float y[points]={-.30f,-.50f,-.42f,.02f,.50f,.34f};
+   for(int i=0;i<points;++i){float px=x[i]*size[0],py=y[i]*size[1];auto rb=c.rotate(px,py,-size[2]*.5f),rt=c.rotate(px,py,size[2]*.5f);
+    float across=.115f+std::clamp(y[i],-.5f,.5f)*.07f,along=.055f+std::clamp(x[i]+.5f,0.f,1.f)*.275f;
+    bottom[i]={{c.pos.x+rb[0],c.pos.y+rb[1],mid+rb[2]},across,along};top[i]={{c.pos.x+rt[0],c.pos.y+rt[1],mid+rt[2]},across,along};}
+   auto uvAt=[&](MeshVertex v,float u,float vv){v.u=u;v.v=vv;return v;};
+   for(int i=1;i<points-1;++i){tri(top[0],top[i],top[i+1],m_crateTexture,1.f);tri(bottom[0],bottom[i+1],bottom[i],m_crateTexture,1.f);}
+   for(int i=0;i<points;++i){int j=(i+1)%points;auto a=bottom[i],b=bottom[j],d=top[j],e=top[i];a=uvAt(a,.115f,.055f);b=uvAt(b,.185f,.055f);d=uvAt(d,.185f,.33f);e=uvAt(e,.115f,.33f);tri(a,b,d,m_crateTexture,1.f);tri(a,d,e,m_crateTexture,1.f);}
+  }else{
+   auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
+   for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}
+  }
+  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+ };
+ std::array<std::vector<const Clutter*>,36> resting;
+ for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
+ if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;float bottom=1000,top=-1000;for(const auto*c:resting[cell]){bottom=std::min(bottom,c->z);top=std::max(top,c->z+c->height());}if(!sphereVisible({(cell%6)*4.f+2,(cell/6)*4.f+2,(bottom+top)*.5f},3.f+(top-bottom)*.5f))continue;
+  auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));}
+  if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){++m_propGeometryBuilds;m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
+ }
+ // Electrical leads: a thin tube through each cable's points every frame, lit
+ // per point like a moving prop and shaded round its girth, in its pipe finish;
+ // its plugs (a test lead's) or a post where it plugs in and the clip on its
+ // prop. A torn live end's sparks and arcs, in time with its lead_arc clip, are
+ // drawn with all the electricity (ElectricFx, below the hazards).
+ for(size_t index=0;index<w.leadRopes().size()&&index<w.leads().size();++index){const auto&lead=w.leads()[index];const auto&rope=w.leadRopes()[index];const size_t n=std::min<size_t>(rope.points.size(),24);if(n<2)continue;
+  Point3 lo=rope.points[0],hi=lo;for(size_t k=0;k<n;++k){const auto&p=rope.points[k];lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};}
+  const float age=game.elapsed()-rope.tornAt;float sinceBurst=0;const float arc=lead.live&&rope.torn?leadArc(age,&sinceBurst):0.f;
+  const auto span=hi-lo;if(!sphereVisible((lo+hi)*.5f,std::sqrt(span.x*span.x+span.y*span.y+span.z*span.z)*.5f+(arc>0?.6f:.05f))||(arc<=0&&hidden(lo-Point3{.05f,.05f,.05f},hi+Point3{.05f,.05f,.05f})))continue;
+  static const Texture insulation[2]={Texture{1,1,{0xff202124u}},Texture{1,1,{0xffa1221au}}};
+  const Texture&finish=lead.material>=7?insulation[lead.material-7]:lead.material==6?iron:lead.material==5?m_paleSteel:lead.material==4?m_redSteel:lead.material==3?m_yellowSteel:lead.material==2?m_panelSteel:lead.material==1?m_metal:m_pipeTexture;
+  movingGeometry=true;objectLighting=true;objectLight=1;objectNormalLighting=nullptr;
+  // The tube follows the cable's curve through its points (leadCurve), three pieces a segment,
+  // so a bend (out of a clip's boot, over a prop's edge, in a sag) is round rather than a
+  // corner; the curve bows to the outside of a bend, away from what the cable is bent over.
+  // Light is taken at the points and blended along. The segment a plug or a socket's boot
+  // holds is drawn straight, so the curve never bows out through the plug's side.
+  constexpr size_t pieces=3;const size_t m=(n-1)*pieces+1;
+  std::array<float,24> pointLit{};std::array<float,24*pieces> lit{};std::array<Point3,24*pieces> curve{},across{},up{};
+  for(size_t k=0;k<n;++k)pointLit[k]=illumination(rope.points[k],{0,0,1});
+  // A seated plug's cable ends in its head, PlugHead up its post; a torn one's at the cable's end.
+  const bool seated=lead.plugged()&&!rope.torn&&(rope.plugUp.x!=0||rope.plugUp.y!=0||rope.plugUp.z!=0);const Point3 tail=seated?rope.points[n-1]+rope.plugUp*Lead::PlugHead:rope.points[n-1];
+  for(size_t k=0;k+1<n;++k)for(size_t s=0;s<pieces;++s){const float t=float(s)/float(pieces);curve[k*pieces+s]=k==0&&lead.socketed()?rope.points[0]+(rope.points[1]-rope.points[0])*t:k+2==n&&lead.plugged()?rope.points[k]+(tail-rope.points[k])*t:leadCurve(rope.points,k,t);lit[k*pieces+s]=pointLit[k]+(pointLit[k+1]-pointLit[k])*t;}
+  curve[m-1]=tail;lit[m-1]=pointLit[n-1];
+  auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
+  auto crossed=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+  for(size_t k=0;k<m;++k){
+   // Each ring is carried from the last along the cable, so the tube never twists.
+   const auto t=unit(curve[std::min(k+1,m-1)]-curve[k>0?k-1:0]);auto u=k?across[k-1]-t*(across[k-1].x*t.x+across[k-1].y*t.y+across[k-1].z*t.z):crossed(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
+   u=unit(u);if(u.x==0&&u.y==0&&u.z==0)u=unit(crossed(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1}));across[k]=u;up[k]=crossed(t,u);}
+  constexpr int sides=6;
+  auto ring=[&](size_t k,int side){const float a=float(side%sides)*kTwoPi/sides;const auto o=across[k]*std::cos(a)+up[k]*std::sin(a);return MeshVertex{curve[k]+o*lead.radius,float(side)/sides*.05f,float(k)*(.06f/float(pieces)),lit[k]*(.68f+.32f*(.5f+.5f*o.z))};};
+  for(size_t k=0;k+1<m;++k)for(int side=0;side<sides;++side){auto a=ring(k,side),b=ring(k,side+1),c=ring(k+1,side+1),d=ring(k+1,side);tri(a,b,c,finish,1.f);tri(a,c,d,finish,1.f);}
+  objectLighting=false;
+  auto cube=[&](Point3 c,float half,const Texture&t,float light){box(c-Point3{half,half,half},c+Point3{half,half,half},t,light);};
+  // A test lead's plugs, in the tube's own lighting: from its tip a pin (hidden in the socket or
+  // the post it is seated in, bare once torn), a steel ferrule, the moulded body in the lead's
+  // colour and a tapering boot the cable leaves in line with (the rope holds the point beyond
+  // it). In the panel's socket the plug is straight, with a ribbed grip, inside the socket's
+  // collar (+ red, - black); on a post it is a right-angle plug, its body standing on the post
+  // and its boot leaving level from the head toward the cable. Torn, the plug hangs pin down
+  // off the cable's end, and lies on its side on what the end comes to rest on (leadPlug).
+  static const Texture moulding[2]={Texture{1,1,{0xff1b1c1fu}},Texture{1,1,{0xffb1281du}}},collar[2]={Texture{1,1,{0xff121315u}},Texture{1,1,{0xffc8301fu}}};
+  auto sleeve=[&](Point3 a,Point3 b,float ra,float rb,const Texture&t,float light,bool capA,bool capB){
+   const auto axis=unit(b-a);const auto u=unit(crossed(axis,std::fabs(axis.z)>.9f?Point3{1,0,0}:Point3{0,0,1})),v=crossed(axis,u);constexpr int sides=8;
+   auto at=[&](Point3 c,float r,int side){const float q=float(side%sides)*kTwoPi/sides;const auto o=u*std::cos(q)+v*std::sin(q);return MeshVertex{c+o*r,float(side)/sides,0,light*(.66f+.34f*(.5f+.5f*o.z))};};
+   for(int side=0;side<sides;++side){tri(at(a,ra,side),at(a,ra,side+1),at(b,rb,side+1),t,1.f);tri(at(a,ra,side),at(b,rb,side+1),at(b,rb,side),t,1.f);
+    if(capA)tri(MeshVertex{a,.5f,.5f,light*.62f},at(a,ra,side+1),at(a,ra,side),t,1.f);if(capB)tri(MeshVertex{b,.5f,.5f,light},at(b,rb,side),at(b,rb,side+1),t,1.f);}};
+  const float r=lead.radius;const auto&body=moulding[lead.material==8?1:0];
+  auto pin=[&](Point3 tip,Point3 out,float light){sleeve(tip-out*.013f,tip-out*.004f,.0019f,.0026f,m_paleSteel,light*1.2f,true,false);sleeve(tip-out*.004f,tip,.0026f,.0021f,m_paleSteel,light*1.2f,false,false);
+   sleeve(tip,tip+out*.004f,r*.98f,r*.98f,m_paleSteel,light*1.1f,true,false);};
+  auto straight=[&](Point3 tip,Point3 out){const float light=illumination(tip+out*.03f,{0,0,1});pin(tip,out,light);
+   sleeve(tip+out*.004f,tip+out*.03f,r*1.38f,r*1.3f,body,light,true,true);for(float g:{.012f,.02f})sleeve(tip+out*g,tip+out*(g+.003f),r*1.48f,r*1.48f,body,light*.85f,true,true);
+   sleeve(tip+out*.03f,tip+out*.058f,r*1.3f,r*1.05f,body,light,false,true);};
+  auto angled=[&](Point3 tip,Point3 up,Point3 side){const Point3 head=tip+up*Lead::PlugHead;const float light=illumination(head,{0,0,1});pin(tip,up,light);
+   sleeve(tip+up*.004f,tip+up*.031f,r*1.48f,r*1.38f,body,light,true,true);sleeve(tip+up*.009f,tip+up*.012f,r*1.56f,r*1.56f,body,light*.85f,true,true);
+   sleeve(head+side*.004f,head+side*.042f,r*1.32f,r*1.05f,body,light,true,true);};
+  objectLighting=true;objectLight=1;
+  if(lead.socketed()){const auto out=unit(lead.socket);const bool positive=lead.socketPort>=0?leadPorts()[size_t(lead.socketPort)].name=="+":lead.material==8;
+   const float shade=illumination(lead.anchor+out*.01f,{0,0,1});sleeve(lead.anchor-out*.002f,lead.anchor+out*.006f,.0196f,.0186f,collar[positive?1:0],shade,false,true);
+   sleeve(lead.anchor+out*.006f,lead.anchor+out*.0075f,.0128f,.0122f,m_paleSteel,shade*1.15f,false,true);straight(lead.anchor+out*.0055f,out);}
+  if(lead.plugged()&&n>=3){const auto&e=rope.points[n-1];const auto plug=leadPlug(lead,rope,seated?e.z:w.supportBelow(e.x,e.y,e.z+.02f));angled(plug.tip,plug.up,plug.side);}
+  objectLighting=false;
+  if(!lead.socketed())cube(lead.anchor,lead.radius*2.2f,iron,.9f);
+  if(!lead.plugged()){if(!rope.torn&&lead.prop>=0)cube(rope.points[n-1],lead.radius*1.8f,iron,.9f);else cube(rope.points[n-1],lead.radius*1.15f,m_paleSteel,1.1f);}
+  movingGeometry=false;objectNormalLighting=nullptr;
+ }
+ // A test set's pilot: a jewel lens over the lamp its leads share, glowing with the lamp's power
+ // (lampPower: lit while the circuit holds, stuttering out with the arc).
+ for(size_t index=0;index<w.leads().size();++index){const int pilot=w.leads()[index].lamp;if(pilot<0||pilot>=int(w.lights().size()))continue;
+  bool first=true;for(size_t j=0;j<index;++j)first&=w.leads()[j].lamp!=pilot;const auto&light=w.lights()[size_t(pilot)];const auto&owner=w.leads()[index];
+  Point3 face=owner.socketed()?owner.socket:Point3{0,0,1};{const float f=std::sqrt(face.x*face.x+face.y*face.y+face.z*face.z);face=face*(1/f);}
+  const Point3 lens=Point3{light.position.x,light.position.y,light.z}-face*.008f;Point3 side{-face.y,face.x,0};if(side.x*side.x+side.y*side.y<1e-6f)side={1,0,0};{const float f=std::sqrt(side.x*side.x+side.y*side.y);side=side*(1/f);}
+  const Point3 rise{face.y*side.z-face.z*side.y,face.z*side.x-face.x*side.z,face.x*side.y-face.y*side.x};
+  if(!first||!sphereVisible(lens,.02f))continue;const float power=game.lampPower(light);static const Texture jewel{1,1,{0xffff7a3au}},dark{1,1,{0xff4a1a12u}};
+  movingGeometry=true;objectLighting=true;objectLight=1;constexpr int sides=10;const float r=.0066f,dome=.005f,bezel=illumination(lens,face);
+  for(int edge=0;edge<sides;++edge){const float a=float(edge)*kTwoPi/sides,b=float(edge+1)*kTwoPi/sides;auto rim=[&](float q,float scale,float z){return lens+side*(std::cos(q)*r*scale)+rise*(std::sin(q)*r*scale)+face*z;};
+   const auto&t=power>.05f?jewel:dark;const float glow=power>.05f?1.6f+1.6f*power:.85f;
+   tri({rim(a,1,0),0,0,1},{rim(b,1,0),1,0,1},{rim(b,.62f,dome*.7f),1,1,1},t,glow);tri({rim(a,1,0),0,0,1},{rim(b,.62f,dome*.7f),1,1,1},{rim(a,.62f,dome*.7f),0,1,1},t,glow);
+   tri({rim(a,.62f,dome*.7f),0,0,1},{rim(b,.62f,dome*.7f),1,0,1},{lens+face*dome,.5f,.5f,1},t,glow);
+   tri({rim(a,1.34f,.0012f),0,0,bezel},{rim(b,1.34f,.0012f),1,0,bezel},{rim(b,1,0),1,1,bezel},m_paleSteel,1.f);tri({rim(a,1.34f,.0012f),0,0,bezel},{rim(b,1,0),1,1,bezel},{rim(a,1,0),0,1,bezel},m_paleSteel,1.f);}
+  objectLighting=false;movingGeometry=false;}
+
+ // Services belong to the map; custom worlds never inherit campaign pipework.
+ // Pipes and their mounting brackets do not animate. Keep the complete
+ // geometry in a separate world-space VBO instead of retessellating cylinders,
+ // probing physical normals and resampling light as the camera turns.
+ const int pipeShadowBudget=shadowBudget;
+ const bool cachePipes=m_gpuFrame&&m_cacheFixedServices&&!w.pipes().empty();
+ const bool buildPipes=!cachePipes||m_gpu->beginStaticCache(Game::MaxChunks+w.level(),geometryKey);
+ if(cachePipes&&buildPipes){m_staticGeometryBuild=true;shadowBudget=400000;}
+ if(buildPipes)for(const auto& pipe:w.pipes()){
+  float endZ=pipe.endZ>-999?pipe.endZ:pipe.z;
+  cylinder({pipe.start.x,pipe.start.y,pipe.z},{pipe.end.x,pipe.end.y,endZ},pipe.radius,pipe.material==6?iron:pipe.material==5?m_paleSteel:pipe.material==4?m_redSteel:pipe.material==3?m_yellowSteel:pipe.material==2?m_panelSteel:pipe.material==1?m_metal:m_pipeTexture);
+  if(pipe.endZ>-999)continue; // Vertical drops terminate inside solid equipment.
+  float distance=length(pipe.end-pipe.start);int supports=std::max(1,int(std::ceil(distance/3.f)));
+  for(int i=0;i<=supports;++i){
+   Vec2 p=pipe.start+(pipe.end-pipe.start)*(float(i)/supports);
+   float roof=w.ceilingHeight(p.x,p.y);
+   box({p.x-.025f,p.y-.025f,pipe.z+pipe.radius},{p.x+.025f,p.y+.025f,roof},iron,.9f);
+   box({p.x-pipe.radius-.04f,p.y-.045f,pipe.z-pipe.radius-.04f},{p.x+pipe.radius+.04f,p.y+.045f,pipe.z-pipe.radius},iron,.9f);
+  }
+ }
+ if(cachePipes&&buildPipes){m_gpu->endStaticCache();m_staticGeometryBuild=false;shadowBudget=pipeShadowBudget;}
+  for(const auto& press:w.compactors()){
+   float z=game.compactorHeight(press);
+   box({press.x1,press.y1,z},{press.x2,press.y2,z+.32f},m_metal,.9f);
+   // The old press read as a floating sheet in wide map views. Give its
+   // moving platen a legible, walk-around gantry: four legs, paired head
+   // beams, ram guides and a telescoping hydraulic pair that follows the
+   // actual cycle height. Keep the complete frame inside the existing press
+   // footprint so the player route and crusher collision remain unchanged.
+   float frameTop=std::min(w.ceilingHeight((press.x1+press.x2)*.5f,(press.y1+press.y2)*.5f)-.32f,press.raised+.62f);
+   float frameBottom=press.bed+.08f;
+   for(float x:{press.x1+.16f,press.x2-.16f})for(float y:{press.y1+.12f,press.y2-.12f}){
+    box({x-.105f,y-.105f,frameBottom},{x+.105f,y+.105f,frameTop},iron,1.f);
+    box({x-.16f,y-.16f,frameBottom+.02f},{x+.16f,y+.16f,frameBottom+.17f},m_hazard,.95f);
+    box({x-.15f,y-.15f,frameTop-.2f},{x+.15f,y+.15f,frameTop},m_panelMetal,1.f);
+   }
+   box({press.x1+.08f,press.y1+.12f,frameTop-.28f},{press.x2-.08f,press.y1+.38f,frameTop-.08f},m_panelMetal,1.f);
+   box({press.x1+.08f,press.y2-.38f,frameTop-.28f},{press.x2-.08f,press.y2-.12f,frameTop-.08f},m_panelMetal,1.f);
+   for(float x:{(press.x1+press.x2)*.5f-.56f,(press.x1+press.x2)*.5f+.56f}){
+    cylinder({x,press.y1+.25f,frameTop-.25f},{x,press.y1+.25f,z+.42f},.12f,m_pipeTexture);
+    cylinder({x,press.y1+.25f,frameTop-.25f},{x,press.y1+.25f,frameTop-.06f},.205f,m_panelMetal);
+   }
+   // A segmented amber warning bar is visible from both the catwalk and the
+   // lower press aisle, making the active machinery state readable at range.
+   for(int segment=0;segment<5;++segment){float x=press.x1+.45f+segment*(press.x2-press.x1-.9f)/5.f;
+    box({x,press.y1+.025f,frameTop-.34f},{x+.32f,press.y1+.055f,frameTop-.29f},game.state(press.stopState)?lamp:amber,1.6f);
+   }
+   for(float x:{press.x1+.4f,press.x2-.4f})
+    cylinder({x,(press.y1+press.y2)*.5f,z+.32f},{x,(press.y1+press.y2)*.5f,w.ceilingHeight(x,press.y1)-.6f},.15f,m_pipeTexture);
+  bool isolated=game.state(press.stopState)!=0;
+  box({press.x1+.10f,press.y1-.005f,press.bed+1.80f},{press.x1+.22f,press.y1+.016f,press.bed+1.845f},isolated?lamp:amber,1.8f);
+  quad({press.x1,press.y1-2,press.bed+.035f},{press.x2,press.y1-2,press.bed+.035f},{press.x2,press.y2,press.bed+.035f},{press.x1,press.y2,press.bed+.035f},m_floor,.8f,{2,4},{0,isolated?0.f:-game.elapsed()*.12f});
+  quad({press.x1,press.y1-.06f,z},{press.x2,press.y1-.06f,z},{press.x2,press.y1-.06f,z+.25f},{press.x1,press.y1-.06f,z+.25f},m_hazard,.95f,{2,1});
+ }
+ // Electricity -- live leads' torn ends, Electricity hazards, rounds striking solids and
+ // anything else that throws sparks or strikes an arc -- is drawn by one path (ElectricFx.cpp).
+ // Sparks and bolts are self-lit, so straight to triangles; the smoke is lit as moving geometry (never
+ // cached). Out of view or behind an occluder is asked once a shower or bolt.
+ {const bool moving=movingGeometry;movingGeometry=true;
+  ElectricFx::draw(game,level,eye,1.f/projection.focal(float(m_width)),[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light){tri({a,0,1},{b,1,1},{c,1,0},t,light);tri({a,0,1},{c,1,0},{d,0,0},t,light);},
+   [&](Point3 lo,Point3 hi){const Point3 half=(hi-lo)*.5f;return !sphereVisible(lo+half,std::sqrt(half.x*half.x+half.y*half.y+half.z*half.z))||hidden(lo,hi);});
+  movingGeometry=moving;}
+ if(w.campaign()&&w.level()==6&&!w.authored()){
+  // Put a real high-voltage warning over the only control that isolates the
+  // live sump, then carry hazard tape along its two exposed concrete curbs.
+  quad({21.955f,12.50f,-6.34f},{21.955f,11.30f,-6.34f},
+       {21.955f,11.30f,-5.18f},{21.955f,12.50f,-5.18f},m_cautionSign,1.15f);
+  quad({10.952f,8.03f,-8.56f},{10.952f,11.31f,-8.56f},
+       {10.952f,11.31f,-8.39f},{10.952f,8.03f,-8.39f},m_hazard,.95f,{4,1});
+  quad({15.048f,11.31f,-8.56f},{15.048f,8.03f,-8.56f},
+       {15.048f,8.03f,-8.39f},{15.048f,11.31f,-8.39f},m_hazard,.95f,{4,1});
+ }
+ if(w.campaignChunk(7)){
+  // Steel-backed controls and operator-room wall panels break the
+  // blank concrete without adding obstacles to the approach or stair landing.
+  box({12.66f,9.25f,-11.35f},{12.70f,11.6f,-9.45f},m_panelMetal,.9f);
+  for(float y:{9.3f,10.45f,11.55f})box({12.64f,y,-11.35f},{12.66f,y+.025f,-9.45f},iron,.95f);
+  box({22.36f,18.4f,-3.95f},{22.40f,20.65f,-2.25f},m_panelMetal,.9f);
+  quad({19.61f,16.995f,-1.46f},{21.39f,16.995f,-1.46f},{21.39f,16.995f,-1.06f},{19.61f,16.995f,-1.06f},m_controlSign,1.f);
+  quad({12.695f,9.7f,-10.65f},{12.695f,11.2f,-10.65f},{12.695f,11.2f,-9.7f},{12.695f,9.7f,-9.7f},m_pumpSign,1.f);
+ }
+ if(w.campaignChunk(8)){
+  // The primary utilities door says why it is shut.
+  box({1.01f,18.4f,-8.95f},{1.055f,22.4f,-6.1f},m_panelMetal,.85f);
+  quad({1.06f,21.4f,-6.8f},{1.06f,19.4f,-6.8f},{1.06f,19.4f,-6.25f},{1.06f,21.4f,-6.25f},m_serviceAreaSigns[1],1.f);
+  quad({13.125f,14.3f,-7.35f},{13.125f,11.2f,-7.35f},{13.125f,11.2f,-6.8f},{13.125f,14.3f,-6.8f},m_cautionSign,1.f);
+ }
+ if(w.campaignChunk(9)){
+  // Thin painted bin rims make the open salvage mouths visible at range.
+  for(float y:{8.5f,12.8f}){
+   box({5.35f,y,-10.92f},{7.8f,y+.12f,-10.89f},m_hazard,.95f);
+   box({5.35f,y+2.f,-10.92f},{7.8f,y+2.12f,-10.89f},m_hazard,.95f);
+   box({5.35f,y,-10.92f},{5.47f,y+2.12f,-10.89f},m_hazard,.95f);
+  }
+  box({19.f,22.94f,-11.95f},{21.f,22.99f,-9.5f},m_panelMetal,.85f);
+  quad({20.9f,22.935f,-10.05f},{19.1f,22.935f,-10.05f},{19.1f,22.935f,-9.55f},{20.9f,22.935f,-9.55f},m_serviceAreaSigns[2],1.f);
+  quad({12.145f,9.65f,-11.85f},{12.145f,11.65f,-11.85f},{12.145f,11.65f,-11.10f},{12.145f,9.65f,-11.10f},m_cautionSign,1.f);
+  quad({19.15f,19.795f,-9.57f},{21.25f,19.795f,-9.57f},{21.25f,19.795f,-9.23f},{19.15f,19.795f,-9.23f},m_transferSign,1.f);
+ }
+ // Paint sits directly on the authored walking floor, so a route cannot
+ // appear suspended over the storey below or across a stair opening.
+ if(w.campaign()&&w.level()>=7&&w.level()<=9&&!w.authored()){
+  auto lane=[&](float x,float y,float endY,float z){
+   for(;y<endY;y+=.9f)if(std::fabs(w.supportHeight(x,y)-z)<.03f){
+    quad({x-.035f,y,z+.012f},{x+.035f,y,z+.012f},{x+.035f,y+.42f,z+.012f},{x-.035f,y+.42f,z+.012f},m_routePaint,1.f);
+   }
+  };
+  if(w.level()==7){lane(10.1f,8.7f,11.8f,-12);lane(18.55f,17.5f,22.6f,-4);}
+  if(w.level()==8){lane(17.4f,15.3f,22.7f,-9);lane(3.8f,8,14,-9);}
+  if(w.level()==9){lane(19.f,9.5f,19.2f,-12);lane(9.f,6,10,-12);}
+ }
+ for(const auto& terminal:w.terminals())if(terminal.activateState){
+  float z=w.floorHeight(terminal.position.x,terminal.position.y)+terminal.z;
+  if(w.level()==6&&!w.authored()){
+   auto&statusLamp=game.state(terminal.activateState)?lamp:amber;
+   box({21.94f,11.83f,-6.52f},{21.985f,11.97f,-6.43f},statusLamp,1.8f);
+  }else{
+   // Keep the status lamp on the desk/bezel edge. A fixed -Y offset lands on
+   // the CRT phosphor for pedestal terminals that face -Y / authored yaw.
+   float yaw=terminal.yaw;if(w.campaign()&&w.level()>=6&&w.level()<=9&&!w.authored()){if(w.level()==6)yaw=-kPi*.5f;}
+   else if(std::fabs(yaw)<1e-4f)yaw=kPi;
+   Vec2 front{std::sin(yaw),std::cos(yaw)},side{front.y,-front.x};
+   Vec2 p=terminal.position+front*.29f+side*.20f;
+   float lampZ=z+((w.campaign()&&w.level()>=6)?.832f:.70f);
+   box({p.x-.025f,p.y-.025f,lampZ},{p.x+.025f,p.y+.025f,lampZ+.023f},game.state(terminal.activateState)?lamp:amber,1.8f);
+  }
+ }
+ // Anomalies show as a slow vortex of pale motes; fires as flame tongues and
+ // lifting embers. Both sit in their hazard box so players can read and avoid them.
+ for(const auto& hazard:w.hazards())if((hazard.kind==Hazard::Kind::Anomaly||hazard.kind==Hazard::Kind::Fire)&&game.hazardActive(hazard)){
+  static Texture mote=[](){Texture t{16,16,std::vector<uint32_t>(256)};t.clampEdges=true;
+   for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/8,dy=(y-7.5f)/8,d=dx*dx+dy*dy;t.pixels[y*16+x]=d<.55f?0xffd8f4ffu:d<1?0xff7fc8e8u:0;}return t;}();
+  // A soft additive tongue (base on the last row: quads map their bottom edge
+  // to v=1): white-yellow core, orange body, dark red edge,
+  // fading out at the tip; black is transparent under additive blending.
+  static Texture flame=[](){Texture t{32,64,std::vector<uint32_t>(2048)};t.clampEdges=true;t.additive=true;
+   for(int y=0;y<64;++y)for(int x=0;x<32;++x){float v=1-y/63.f,u=std::fabs(x-15.5f)/16,width=std::pow(1-v,.65f)*.92f+.04f;
+    float body=std::clamp(1-u/width,0.f,1.f);body=body*body*(3-2*body)*std::pow(1-v,.45f);
+    float heat=std::clamp(body*1.35f-.1f,0.f,1.f);
+    float r=body*(.55f+.45f*heat),g=body*(.12f+.75f*heat*heat),b=body*.55f*heat*heat*heat;
+    auto c=[](float value){return std::uint32_t(std::clamp(value,0.f,1.f)*255.f+.5f);};
+    t.pixels[y*32+x]=0xff000000u|(c(r)<<16)|(c(g)<<8)|c(b);}return t;}();
+  Point3 side{-std::sin(player.angle),std::cos(player.angle),0},c{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f,hazard.bottom};
+  float r=std::min(hazard.x2-hazard.x1,hazard.y2-hazard.y1)*.5f,t=game.elapsed();
+  if(hazard.kind==Hazard::Kind::Anomaly){
+   // Pinpoint glints that crawl over the surface and now and then lift off it,
+   // shrinking as they rise and twinkling out of step: the tingle before the bite.
+   for(int i=0;i<18;++i){float k=std::fmod(i*.618f,1.f),a=t*(.5f+k*.6f)+i*2.4f,d=r*(.2f+.75f*k),rise=std::fmod(t*.22f+k*1.7f,1.f),h=.1f+rise*rise*1.1f,sz=(.022f+.028f*k)*(1.f-.6f*rise);
+    float glint=1.3f+1.1f*std::max(0.f,std::sin(t*(17.f+k*9.f)+i*3.1f));
+    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+h};
+    // Wading through it, the glints at the player's own face would fill the view: they shrink away.
+    const float fade=std::clamp((length(Vec2{p.x,p.y}-player.pos)-.3f)/.9f,0.f,1.f);if(fade<=0)continue;sz*=fade;
+    Point3 up{0,0,sz};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,mote,glint);}
+  }else{
+   // One tall body flame, then tongues that lick up from the embers and shrink.
+   float scale=std::min(1.f,r*2.f),body=(.34f+.04f*std::sin(t*9.f)+.03f*std::sin(t*23.f))*scale;
+   {Point3 p{c.x,c.y,c.z+.16f},up{0,0,body*2.7f};quad(p-side*body,p+side*body,p+side*body+up,p-side*body+up,flame,2.f);}
+   for(int i=0;i<12;++i){float age=std::fmod(t*1.6f+i/12.f,1.f),a=i*2.1f+t*.7f,d=r*.5f*(1-age),h=age*.45f;
+    float flicker=.85f+.15f*std::sin(t*13.f+i*1.7f),sz=(.24f*(1-age)+.07f)*scale*flicker;
+    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+.16f+h},up{0,0,sz*2.6f};quad(p-side*sz,p+side*sz,p+side*sz+up,p-side*sz+up,flame,2.2f);}
+   for(int i=0;i<6;++i){float age=std::fmod(t*.6f+i/6.f,1.f),a=i*1.7f;Point3 p{c.x+std::cos(a)*r*.3f+age*.2f,c.y+std::sin(a)*r*.3f,c.z+.4f+age*2.2f},up{0,0,.025f};
+    quad(p-side*.025f-up,p+side*.025f-up,p+side*.025f+up,p-side*.025f+up,flame,2.8f);}
+  }
+ }
+ for(const auto& emitter:w.particleEmitters()){
+  static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
+   for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=dx*dx+dy*dy;unsigned noise=unsigned(x+y*32+1)*747796405u+2891336453u;noise=((noise>>((noise>>28)+4))^noise)*277803737u;noise=((noise>>22)^noise)&255u;
+    t.pixels[y*32+x]=d<1&&noise<190*(1-d)?0xff7f8e91u:0;}return t;}();
+  // The open zone's smoke is soft and blended, fading as each puff rises.
+  static const std::array<Texture,4> smoke=[](){std::array<Texture,4> result;
+   for(int k=0;k<4;++k){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;t.transparent=true;
+    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=std::sqrt(dx*dx+dy*dy),a=std::clamp(1-d,0.f,1.f);
+     t.pixels[y*32+x]=(std::uint32_t(a*a*150.f*(1-k*.24f))<<24)|0x8a8d8eu;}result[size_t(k)]=std::move(t);}return result;}();
+  const bool softSmoke=w.zoneSky();
+  Point3 side{-std::sin(player.angle),std::cos(player.angle),0};
+  for(int i=0;i<emitter.count;++i){float age=std::fmod(game.elapsed()*emitter.rate+float(i)/emitter.count,1.f),radius=emitter.radius+age*emitter.growth;Point3 p{emitter.position.x+age*emitter.drift.x,emitter.position.y+age*emitter.drift.y,emitter.z+age*emitter.rise},up{0,0,radius};
+   quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,softSmoke?smoke[size_t(std::min(3,int(age*4)))]:steam,.9f);}
+ }
+ // Falling ash (Game::ashFall): flakes in a box that moves with the camera,
+ // each on its own slow tumble down the wind; a storm fills the air with them.
+ if(const float ash=game.ashFall();ash>0&&level==game.level()){
+  static const Texture flake=[](){Texture t{8,8,std::vector<uint32_t>(64)};t.clampEdges=true;t.transparent=true;
+   for(int y=0;y<8;++y)for(int x=0;x<8;++x){float dx=(x-3.5f)/4,dy=(y-3.5f)/4,a=std::clamp(1-std::sqrt(dx*dx+dy*dy),0.f,1.f);t.pixels[y*8+x]=(std::uint32_t(a*210.f)<<24)|0xc9c4bdu;}return t;}();
+  constexpr float Box=14.f;const float t=game.elapsed(),storm=game.stormIntensity();
+  const Point3 eye{player.pos.x,player.pos.y,player.z+player.eye},side{-std::sin(player.angle),std::cos(player.angle),0};
+  const int count=int(ash*ash*1600.f);
+  for(int i=0;i<count;++i){unsigned h=unsigned(i)*2654435761u;auto rnd=[&](int k){h^=h>>15;h*=2246822519u;h^=h>>13;h+=unsigned(k)*3266489917u;return float(h&65535u)/65535.f;};
+   const float fall=.35f+rnd(1)*.4f+storm*1.2f,windX=.5f+storm*3.5f,windY=.2f+storm*1.2f;
+   auto wrap=[&](float v,float c){return c-Box*.5f+std::fmod(std::fmod(v-(c-Box*.5f),Box)+Box,Box);};
+   Point3 p{wrap(rnd(2)*Box+t*windX+std::sin(t*.9f+i)*.3f,eye.x),wrap(rnd(3)*Box+t*windY,eye.y),wrap(rnd(4)*Box-t*fall,eye.z)};
+   const float size=.025f+rnd(5)*.035f;const Point3 up{0,0,size};
+   quad(p-side*size-up,p+side*size-up,p+side*size+up,p-side*size+up,flake,1.1f);}
+ }
+ // Empty suits hung on hooks: the hazmat ragdoll, thinned so it reads empty, lit as one object.
+ for(const auto& suit:game.hungSuits(w.level()))if(suit.initialized&&sphereVisible({suit.p[0].x,suit.p[0].y,suit.p[0].z},1.3f)){
+  suit.skin(m_suitPose);const auto&vertices=Ragdoll::asset().vertices;objectLighting=true;objectLight=illumination({suit.p[1].x,suit.p[1].y,suit.p[1].z},{0,0,1});
+  for(size_t i=0;i+2<vertices.size();i+=3){MeshVertex face[3];for(int j=0;j<3;++j){auto p=m_suitPose[i+j];face[j]={{p.x,p.y,p.z},vertices[i+j].u,vertices[i+j].v};}
+   tri(face[0],face[1],face[2],m_hazmatTextures[vertices[i].material],.95f);}
+  objectLighting=false;
+ }
+ if(w.campaign()&&w.hasLift()){
+  // The shaft, cab and the hazmat casualty belong to every lift map.
+  const auto& corpse=game.hazmat();
+  if(corpse.initialized&&sphereVisible({corpse.p[0].x,corpse.p[0].y,corpse.p[0].z},2.1f)){
+   quad({8.25f,6.7f,.009f},{9.55f,6.7f,.009f},{9.55f,7.9f,.009f},{8.25f,7.9f,.009f},m_blood,1.1f);
+   quad({8.05f,7.7f,.010f},{8.43f,7.7f,.010f},{8.43f,8.13f,.010f},{8.05f,8.13f,.010f},m_blood,.9f);
+   // Narrow contact smears lead into the final collapse, not an even halo.
+   quad({9.00f,7.58f,.011f},{9.20f,7.49f,.011f},{9.72f,8.28f,.011f},{9.55f,8.39f,.011f},m_blood,.82f);
+   quad({9.49f,8.21f,.012f},{9.62f,8.15f,.012f},{9.94f,8.62f,.012f},{9.83f,8.69f,.012f},m_blood,.72f);
+   bool poseChanged=!m_hazmatPoseValid;
+   for(int joint=0;joint<Ragdoll::Count&&!poseChanged;++joint){auto a=corpse.p[joint],b=m_hazmatPoseJoints[joint];poseChanged=a.x!=b.x||a.y!=b.y||a.z!=b.z;}
+   if(poseChanged){corpse.skin(m_hazmatPose);m_hazmatPoseJoints=corpse.p;m_hazmatPoseValid=true;}
+   const auto&posed=m_hazmatPose;auto&vertices=Ragdoll::asset().vertices;objectLighting=true;objectLight=illumination({corpse.p[1].x,corpse.p[1].y,corpse.p[1].z},{0,0,1});
+   for(size_t i=0;i<vertices.size();i+=3){MeshVertex face[3];for(int j=0;j<3;++j){auto p=posed[i+j];face[j]={{p.x,p.y,p.z},vertices[i+j].u,vertices[i+j].v};}
+    tri(face[0],face[1],face[2],m_hazmatTextures[vertices[i].material],.95f);
+    // The blood follows the skinned chest surface, not a floating world card.
+    bool patch=vertices[i].material==0;float front=0;for(int j=0;j<3;++j){auto p=vertices[i+j].p;patch&=p.x>-.40f&&p.x<.40f&&p.z>.72f&&p.z<1.42f;front+=p.y;}
+    if(patch&&std::fabs(front)>.02f){auto n=cross3(face[1].p-face[0].p,face[2].p-face[0].p);auto a=vertices[i+1].p-vertices[i].p,b=vertices[i+2].p-vertices[i].p;float restY=a.z*b.x-a.x*b.z;float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);n=n*((restY*front<0?-1.f:1.f)*.004f/std::max(.00001f,len));
+     for(int j=0;j<3;++j){face[j].p=face[j].p+n;auto p=vertices[i+j].p;face[j].u=p.x/.8f+.5f;face[j].v=1-(p.z-.72f)/.7f;}tri(face[0],face[1],face[2],m_blood,.95f);
+    }
+   }
+   objectLighting=false;
+  }
+  // Theatre-like shaft bays: readable machinery silhouettes within the window
+  // sightline, backed by opaque walls instead of distant explorable rooms.
+  for(float z:{-3.f,3.f,6.f,9.f}){
+   for(float x:{8.16f,15.84f}){
+    if(z==3)facility(6,x<12?8.5f:15.5f,11.65f,z+.12f,2.38f,.70f,1.26f,kPi*.5f);
+    else if(z==6){for(float y:{10.7f,12.2f,13.7f})facility(8,x,y,z+.55f,.7856f,.136f,1.0656f,kPi*.5f);}
+    else if(z==-3){for(float y:{10.8f,12.f,13.2f}){cylinder({x,y,z+.12f},{x,y,z+2.45f},.12f,m_pressureMetal);for(float h:{.4f,1.9f})cylinder({x,y,z+h},{x,y,z+h+.09f},.18f,m_metal);}}
+    else {box({x-.06f,10.2f,z},{x+.06f,13.8f,z+2.35f},m_bulkhead,1.f);}
+   }
+   // Different color accents and heavy cross-members identify a passing level.
+   auto&accent=z==-3?blue:z==6?red:amber;
+   for(float x:{8.95f,14.95f}){box({x,9.2f,z+2.28f},{x+.10f,14.8f,z+2.42f},m_metal,.9f);box({x+.025f,10.3f,z+2.24f},{x+.075f,13.7f,z+2.27f},accent,1.65f);}
+  }
+  // Close guide rails and repeated height markers supply real parallax during
+  // ascent and much faster upward optical flow during the scripted fall.
+  for(float x:{9.45f,14.45f}){
+   box({x,10.5f,-8.9f},{x+.10f,10.64f,12.f},m_metal,.9f);
+   box({x,13.35f,-8.9f},{x+.10f,13.49f,12.f},m_metal,.9f);
+   for(int band=-7;band<10;++band){float z=band*1.2f;box({x-.025f,13.30f,z},{x+.125f,13.34f,z+.10f},band<0?red:amber,1.65f);}
+  }
+  auto phase=w.liftPhase();float phaseTime=w.liftPhaseTime(),cab=w.liftHeight();
+  bool broken=phase==World::LiftPhase::Falling||phase==World::LiftPhase::Caught||phase==World::LiftPhase::Crashed;
+  bool scrape=phase==World::LiftPhase::Falling||(phase==World::LiftPhase::Caught&&phaseTime<.35f)||(phase==World::LiftPhase::Crashed&&phaseTime<.45f);
+  movingGeometry=true;
+  if(broken&&phase!=World::LiftPhase::Crashed){float sway=.12f*std::sin(phaseTime*11.f);Point3 a{14.25f,11.5f,cab+2.9f},b{14.25f+sway,11.5f,cab+1.6f},c{14.3f+sway*1.8f,11.5f,cab+.85f};
+   quad(a,b,b+Point3{0,.035f,0},a+Point3{0,.035f,0},m_metal,.8f,{1,3});quad(b,c,c+Point3{0,.035f,0},b+Point3{0,.035f,0},m_metal,.8f,{1,2});
+  }
+  if(scrape)for(float x:{9.65f,14.35f})for(int i=0;i<12;++i){float life=std::fmod(phaseTime*2.7f+i*.137f,1.f),y=12.1f+i*.055f,z=cab+.65f+life*1.7f;
+   quad({x,y,z},{x,y+.012f,z},{x,y+.06f,z+.10f+life*.15f},{x,y+.048f,z+.10f+life*.15f},i%3?amber:lamp,1.8f);
+  }
+  movingGeometry=false;
+  movingGeometry=true;
+  float z=w.liftHeight();bool ready=w.liftPhase()==World::LiftPhase::Ready,crashed=w.liftPhase()==World::LiftPhase::Crashed;
+  // Modular freight cab: structural frame, recessed kick panels, wide cage
+  // windows and split doors. Detail is geometry using the purchased materials.
+  box({10,10,z-.25f},{14,14,z},m_pressureMetal,1.05f);
+  quad({10.3f,10.3f,z+.004f},{13.7f,10.3f,z+.004f},{13.7f,13.7f,z+.004f},{10.3f,13.7f,z+.004f},m_floor,1.f,{2,2});
+  for(float y:{10.18f,13.62f})quad({10.2f,y,z+.01f},{13.8f,y,z+.01f},{13.8f,y+.16f,z+.01f},{10.2f,y+.16f,z+.01f},m_hazard,1.1f);
+  box({10,10,z+2.6f},{14,14,z+2.8f},m_bulkhead,.9f);
+  for(float y:{10.15f,13.65f})box({10.12f,y,z+2.42f},{13.88f,y+.2f,z+2.6f},m_metal,.85f);
+  for(float x:{10.8f,12.85f})box({x,10.25f,z+2.50f},{x+.10f,13.75f,z+2.59f},m_metal,.85f);
+  // Recessed utility panels and ventilation keep the cab from reading as a box.
+  for(float y:{10.7f,12.6f}){box({10.125f,y,z+1.65f},{10.15f,y+.6f,z+2.08f},iron,.8f);for(int i=0;i<5;++i)box({10.15f,y+.04f,z+1.69f+i*.07f},{10.18f,y+.56f,z+1.71f+i*.07f},m_metal,.85f);}
+  for(float x:{10.f,13.88f}){
+   box({x,10,z},{x+.12f,14,z+.65f},m_pressureWall,.95f);
+   box({x,10,z+2.12f},{x+.12f,14,z+2.6f},m_panelMetal,.9f);
+   for(float y:{10.05f,11.95f,13.8f})box({x,y,z},{x+.12f,y+.15f,z+2.6f},m_metal,.8f);
+   float rail=x<11?10.16f:13.78f;
+   box({rail,10.2f,z+.82f},{rail+.06f,13.8f,z+.89f},m_metal,1.1f);
+   for(float y:{10.6f,12.9f})box({x+.015f,y,z+.13f},{x+.1f,y+.45f,z+.47f},m_bulkhead,1.05f);
+  }
+  for(float y:{10.f,13.88f}){
+   box({10,y,z},{11,y+.12f,z+2.6f},m_panelMetal,1.f);
+   box({13,y,z},{14,y+.12f,z+2.6f},m_panelMetal,1.f);
+   box({11,y,z+2.2f},{13,y+.12f,z+2.6f},m_panelMetal,1.f);
+   float opening=y==10?(ready?1.f:w.liftPhase()==World::LiftPhase::Ascending?1-std::min(1.f,w.liftPhaseTime()/.65f):0.f):(crashed?std::clamp((w.liftPhaseTime()-3.f)/.65f,0.f,1.f):0.f);
+   for(int leaf=0;leaf<2;++leaf){float left=11+leaf+(leaf?opening:-opening),right=left+1;
+    box({left,y,z},{right,y+.12f,z+1.12f},m_bulkhead,1.f);
+    box({left,y,z+1.82f},{right,y+.12f,z+2.2f},m_bulkhead,1.f);
+    for(float post:{left,left+.47f,right-.06f})box({post,y,z+1.12f},{post+.06f,y+.12f,z+1.82f},m_metal,.8f);
+    box({left,y,z+1.45f},{right,y+.12f,z+1.49f},m_metal,.8f);
+   }
+   // Load plate and threshold tracks stay on the fixed door frame.
+   box({10.94f,y-.025f,z+.01f},{13.06f,y+.145f,z+.035f},m_metal,1.f);
+  }
+  quad({12.7f,13.865f,z+2.23f},{11.3f,13.865f,z+2.23f},{11.3f,13.865f,z+2.56f},{12.7f,13.865f,z+2.56f},m_liftSign,1.2f);
+  // Header-mounted sign leaves the passing scenery window unobstructed.
+  box({13.84f,10.88f,z+2.14f},{13.89f,12.12f,z+2.52f},m_panelMetal,.95f);
+  quad({13.833f,10.95f,z+2.16f},{13.833f,12.05f,z+2.16f},{13.833f,12.05f,z+2.50f},{13.833f,10.95f,z+2.50f},m_liftDispatch,1.2f);
+  bool alarm=w.liftPhase()==World::LiftPhase::Jammed||w.liftPhase()==World::LiftPhase::Falling||w.liftPhase()==World::LiftPhase::Caught;
+  auto&signal=alarm&&int(game.elapsed()*2)%2?m_redPaint:amber;
+  for(float x:{10.65f,13.25f})box({x,13.70f,z+2.27f},{x+.1f,13.82f,z+2.49f},signal,1.8f);
+  for(float x:{10.15f,13.75f})box({x,10.3f,z+2.8f},{x+.045f,10.35f,crashed||w.liftPhase()==World::LiftPhase::Falling||w.liftPhase()==World::LiftPhase::Caught?z+3.2f:15.8f},m_metal,.7f);
+  box({11.3f,11.6f,z+2.8f},{12.7f,12.4f,z+3.05f},m_pressureMetal,.8f);
+  // The sealed surface gates stay in the shaft when the room plunges away.
+  box({10,14.05f,9},{14,14.25f,12},m_bulkhead,1.f);
+  quad({13.8f,14.04f,10.5f},{10.2f,14.04f,10.5f},{10.2f,14.04f,11.3f},{13.8f,14.04f,11.3f},m_surfaceSign,1.1f);
+ }
+ movingGeometry=false;
+ for(auto&terminal:w.terminals()){movingGeometry=w.hasLift()&&terminal.control;float x=terminal.position.x,y=terminal.position.y,h=w.floorHeight(x,y)+terminal.z;
+  if(terminal.paper()){
+   // Paper is a sheet, not a screen: put down on its bench a little askew, or
+   // taped flat to the wall it faces.
+   const auto& sheet=m_paperProps[static_cast<size_t>(terminal.readable)-1];
+   const bool letter=terminal.readable==Readable::Letter,sticky=terminal.readable==Readable::Sticky;
+   const float hw=sticky?.038f:letter?.105f:.075f,hh=sticky?.038f:letter?.1485f:.105f;
+   if(terminal.taped){
+    const Vec2 side{std::cos(terminal.yaw),-std::sin(terminal.yaw)},l=terminal.position-side*hw,r=terminal.position+side*hw;
+    quad({l.x,l.y,h-hh},{r.x,r.y,h-hh},{r.x,r.y,h+hh},{l.x,l.y,h+hh},sheet,1.f);
+   }else{
+    const float deskTop=h+.75f;
+    if(terminal.surface<0){
+     box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
+     for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
+      box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
+    }
+    const float a=terminal.yaw+.22f,z=terminal.surface<0?deskTop+.068f:h+terminal.surface+.004f;const Vec2 u{std::cos(a)*hw,std::sin(a)*hw},v{-std::sin(a)*hh,std::cos(a)*hh};
+    quad({x-u.x-v.x,y-u.y-v.y,z},{x+u.x-v.x,y+u.y-v.y,z},{x+u.x+v.x,y+u.y+v.y,z},{x-u.x+v.x,y-u.y+v.y,z},sheet,1.f);
+   }
+   continue;
+  }
+  if(terminal.control){
+   box({x-.27f,y-.18f,h},{x+.27f,y+.18f,h+.2f},m_panelMetal,.9f);
+   facility(8,x,y,h+.2f,.36f,.54f,.75f,kPi*.5f);
+  }else if(terminal.reactorAction>=2){
+   // Mechanical gate valve: pipe, flanges, valve body, projecting stem and wheel.
+   // No electrical switch housing is reused behind the handwheel.
+   cylinder({x,y+.12f,h},{x,y+.12f,h+2.45f},.09f,m_pressureMetal);
+   for(float z:{.12f,.78f,1.38f,2.32f})cylinder({x,y+.12f,h+z},{x,y+.12f,h+z+.08f},.15f,m_metal);
+   cylinder({x,y+.12f,h+.92f},{x,y+.12f,h+1.23f},.17f,m_metal);
+   cylinder({x,y+.12f,h+1.08f},{x,y-.19f,h+1.08f},.045f,m_metal);
+   cylinder({x,y-.17f,h+1.08f},{x,y-.22f,h+1.08f},.07f,m_metal);
+   for(int i=0;i<12;++i){float a=i*kPi/6,b=(i+1)*kPi/6;
+    auto point=[&](float angle,float radius,float depth){return Point3{x+radius*std::cos(angle),y+depth,h+1.08f+radius*std::sin(angle)};};
+    quad(point(a,.23f,-.23f),point(b,.23f,-.23f),point(b,.19f,-.23f),point(a,.19f,-.23f),m_metal,1.f);
+    quad(point(a,.19f,-.19f),point(b,.19f,-.19f),point(b,.23f,-.19f),point(a,.23f,-.19f),m_metal,1.f);
+    quad(point(a,.23f,-.19f),point(b,.23f,-.19f),point(b,.23f,-.23f),point(a,.23f,-.23f),m_metal,.9f);
+    if(i%3==0)cylinder({x,y-.21f,h+1.08f},point(a,.20f,-.21f),.014f,m_metal);
+   }
+   // Small identification tag clamped to the pipe, below the mechanical assembly.
+   box({x-.16f,y-.005f,h+.46f},{x+.16f,y+.02f,h+.60f},m_panelMetal,.9f);
+   quad({x+.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.47f},{x-.15f,y-.01f,h+.59f},{x+.15f,y-.01f,h+.59f},terminal.reactorAction==2?m_feedSign:m_returnSign,1.f);
+  }else{
+   // A terminal placed within a solid fixture's footprint (a desk) uses that
+   // furniture's own computer models; only freestanding ones get a console.
+   // A campaign records bench is skipped only on a desk, which carries its own CRT.
+   bool onFurniture=false,onDesk=false;
+   for(const auto&f:w.fixtures()){float dx=x-f.position.x,dy=y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);
+    bool inside=f.solid&&std::fabs(dx*c-dy*s)<f.width*.5f&&std::fabs(dx*s+dy*c)<f.depth*.5f;
+    onFurniture|=inside;onDesk|=inside&&(f.model==model::desk||f.model==model::desk_corner||f.model==model::lab_exec_desk);}
+   if(onDesk){
+   }else if(w.campaign()&&w.level()>=6&&terminal.reactorAction==0){
+    // Personnel records belong on a computer, visually distinct from switchgear.
+    // A grounded service bench carries the CRT on four legs; the narrow post
+    // made the screen look perched in empty space. Its compact top also keeps
+    // the screen and keyboard readable from the aisle.
+    float deskTop=h+.75f;
+    box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
+    for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
+     box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
+    box({x+.30f,y-.27f,h+.16f},{x+.36f,y+.27f,h+.21f},m_metal,.85f);
+    float terminalYaw=w.level()==6&&!w.authored()?-kPi*.5f:terminal.yaw;
+    float keyboardX=x+std::sin(terminalYaw)*.22f,keyboardY=y+std::cos(terminalYaw)*.22f;
+    float halfX=std::fabs(std::cos(terminalYaw))*.14f+std::fabs(std::sin(terminalYaw))*.105f;
+    float halfY=std::fabs(std::sin(terminalYaw))*.14f+std::fabs(std::cos(terminalYaw))*.105f;
+    box({keyboardX-halfX,keyboardY-halfY,deskTop+.07f},{keyboardX+halfX,keyboardY+halfY,deskTop+.10f},m_panelMetal,1.f);
+    facility(11,x,y,deskTop+.065f,.386509f,.53235f,.50505f,terminalYaw);
+   }else if(!onFurniture){
+    box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
+    box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);
+    // Honor authored yaw so Exclusion/custom CRTs face their controls; legacy
+    // zero-yaw terminals keep the original -Y facing.
+    float terminalYaw=std::fabs(terminal.yaw)<1e-4f?kPi:terminal.yaw;
+    facility(11,x,y,h+.445f,.386509f,.53235f,.50505f,terminalYaw);
+   }
+   if(terminal.reactorAction==1){box({x-.2f,y-.295f,h+.28f},{x+.2f,y-.24f,h+.39f},m_metal,1.f);box({x-.15f,y-.30f,h+.33f},{x+.11f,y-.296f,h+.345f},iron,1.f);box({x+.15f,y-.302f,h+.32f},{x+.17f,y-.295f,h+.34f},w.reactorStage()>=World::ReactorStage::DiskLoaded?blue:amber,1.8f);}
+  }
+ }
+ // Extraction floor remains readable even before its gate unlocks.
+ movingGeometry=false;
+ if(w.hasLift()&&w.reactorStage()==World::ReactorStage::NoDisk){auto p=World::reactorDiskPosition();prop(m_clutterMeshes[5],m_clutterTextures[5],p.x,p.y,.018f,0,.28f,World::ReactorDiskZ);}
+ if(w.campaign()&&!w.authored())for(int edge=0;edge<3;++edge){float y=22.1f+edge*.25f,h=w.floorHeight(21.5f,y)+.01f;quad({21.1f,y,h},{21.9f,y,h},{21.9f,y+.12f,h},{21.1f,y+.12f,h},game.enemiesRemaining(level)==0?m_routePaint:m_redPaint,1.f);}
+ // Alpha-blend damage into the rendered wall so its grain and lighting remain visible.
+ static const Texture impact=[](){Texture t{24,24,std::vector<std::uint32_t>(24*24)};
+  for(int y=0;y<24;++y)for(int x=0;x<24;++x){float dx=(x-11.5f)/11.5f,dy=(y-11.5f)/11.5f;
+   unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x9e3779b9u);float jitter=float(noise%101u)/100.f;
+   float distance=std::sqrt(dx*dx+dy*dy)*(1.08f+(jitter-.5f)*.3f);
+   float soot=std::clamp((.9f-distance)*1.4f,0.f,1.f)*std::clamp((distance-.3f)*4.f,0.f,1.f);
+   unsigned alpha=unsigned(std::clamp(soot*(.6f+jitter*.4f),0.f,1.f)*215.f);
+   t.pixels[size_t(y*24+x)]=(alpha<<24)|0x00070808u;
+  }
+  t.clampEdges=true;t.transparent=true;return t;}();
+ // The hole itself: an opaque, alpha-tested crater with its own relief and
+ // normals. The parallax path displaces the bowl with the view, so the chip
+ // reads as a chunk taken out of the surface rather than a dark sticker.
+ static const Texture crater=[](){const int n=32;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;
+  std::vector<float> height(size_t(n*n));
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f;
+   unsigned noise=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x4f1bbcdcu);noise=(noise^(noise>>13))*1274126177u;float jitter=float((noise>>24)&255u)/255.f;
+   float r=std::sqrt(dx*dx+dy*dy)*(1.f+(jitter-.5f)*.22f);
+   // A ragged outline: the edge wanders with angle, never a clean circle.
+   float angle=std::atan2(dy,dx),edge=.78f+.1f*std::sin(angle*5.f+jitter)+.06f*std::sin(angle*11.f+1.7f);
+   float bowl=std::clamp(1.f-r/edge,0.f,1.f),depth=std::sqrt(bowl)*(1.f-jitter*.2f);
+   height[size_t(y*n+x)]=1.f-depth;
+   // Dark core where the round went in; round it a band of chipped, freshly
+   // exposed substrate, brighter and broken, fading into the surface.
+   bool inside=r<edge;float core=std::clamp((edge*.42f-r)*12.f,0.f,1.f);
+   float chips=r>edge*.45f?(.42f+.3f*jitter)*(jitter>.18f?1.f:.4f):0.f;
+   float shade=core*.03f+(1.f-core)*chips;unsigned v=unsigned(std::clamp(shade,0.f,1.f)*255.f);
+   t.pixels[size_t(y*n+x)]=((inside?0xffu:0u)<<24)|(v<<16)|(unsigned(v*.95f)<<8)|unsigned(v*.88f);
+  }
+  prepareDecal(t,true);
+  t.relief.resize(size_t(n*n));for(size_t i=0;i<height.size();++i)t.relief[i]=std::uint8_t(std::round(height[i]*255.f));
+  auto sample=[&](int x,int y){x=std::clamp(x,0,n-1);y=std::clamp(y,0,n-1);return height[size_t(y*n+x)];};
+  std::vector<Point3> normals;normals.reserve(size_t(n*n));
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){float gx=(sample(x+1,y)-sample(x-1,y))*3.f,gy=(sample(x,y+1)-sample(x,y-1))*3.f;Point3 nn{-gx,gy,1.f};float l=std::sqrt(nn.x*nn.x+nn.y*nn.y+nn.z*nn.z);normals.push_back(nn*(1.f/l));}
+  t.normalLevels.push_back(std::move(normals));
+  int w=n,h=n;while(w>1||h>1){int nw=std::max(1,w/2),nh=std::max(1,h/2);std::vector<Point3> next(size_t(nw*nh));auto&previous=t.normalLevels.back();
+   for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){Point3 sum{};for(int j=0;j<2;++j)for(int i=0;i<2;++i)sum=sum+previous[size_t(std::min(h-1,y*2+j)*w+std::min(w-1,x*2+i))];float l=std::sqrt(sum.x*sum.x+sum.y*sum.y+sum.z*sum.z);next[size_t(y*nw+x)]=l>.00001f?sum*(1.f/l):Point3{0,0,1};}
+   t.normalLevels.push_back(std::move(next));w=nw;h=nh;}
+  t.parallaxScale=.12f;return t;}();
+ // A blast leaves a broad scorch on the floor.
+ static const Texture scorch=[](){const int n=48;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.transparent=true;t.clampEdges=true;
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
+   unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0x51f15e3bu);hash=(hash^(hash>>15))*3266489917u;float noise=float((hash>>24)&255u)/255.f;
+   float angle=std::atan2(dy,dx),edge=.78f+.12f*std::sin(angle*4.f+.6f)+.08f*std::sin(angle*9.f-1.9f);
+   float a=std::clamp((edge-r)*3.2f,0.f,1.f)*(.55f+.45f*std::clamp(1.f-r*1.1f,0.f,1.f))*(.75f+noise*.25f);
+   t.pixels[size_t(y*n+x)]=(unsigned(a*200.f)<<24)|0x00060505u;
+  }return t;}();
+ for(const auto&mark:game.bulletImpacts())if(mark.level==level){
+  if(mark.tint==-3){
+   // Each hit's own spider-web, its rays reaching further as the pane weakens.
+   const int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);if(pane<0)continue;const auto&b=w.breakables()[size_t(pane)];const auto f=paneFrame(b);
+   const float limit=b.holds?180.f:b.health>0?b.health:20.f,strain=std::clamp(w.breakableDamage(pane)/limit,0.f,1.f);
+   const auto&line=crackLines[size_t(int(w.breakableOpacity(pane)*16))];
+   const Point3 d=Point3{mark.pos.x,mark.pos.y,mark.z}-f.origin;const Vec2 hit{d.x*f.along.x+d.y*f.along.y,d.z};
+   const auto seed=std::uint32_t(int(mark.pos.x*331)*7+int(mark.pos.y*331)*131+int(mark.z*331)*1031);
+   auto inside=[&](Vec2 q){return Vec2{std::clamp(q.x,0.f,f.width),std::clamp(q.y,0.f,f.height)};};
+   for(const auto&c:glass::cracks(hit,strain,seed)){const Vec2 a=inside(c.a),e=inside(c.b),run=e-a;const float len=length(run);if(len<.002f)continue;const Vec2 n=Vec2{-run.y,run.x}*(c.width*.5f/len);
+    for(float side:{-.014f,.014f})quad(planePoint(f,a-n,side),planePoint(f,e-n,side),planePoint(f,e+n,side),planePoint(f,a+n,side),line,1.3f);}
+   continue;}
+  if(mark.blood){
+   int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);float tint=creatureVisuals[size_t(species)].bloodLight;const Texture&blood=m_bloodVariants[size_t(species)];
+   if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}
+   float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
+   quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},blood,tint);continue;
+  }
+  if(mark.tint==-2){float size=.7f,z=mark.z;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},scorch,.9f);continue;}
+  float tangentX=-mark.normal.y,tangentY=mark.normal.x;
+  Point3 p{mark.pos.x,mark.pos.y,mark.z};
+  Point3 impactNormal{mark.normal.x,mark.normal.y,mark.normalZ};
+  // Each hole turns by its own angle so no two look stamped from one die.
+  unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)^unsigned(std::fabs(mark.pos.y)*613.f)^unsigned(std::fabs(mark.z)*977.f);float spin=float(seed%360u)*kPi/180.f;
+  Point3 a,b;if(std::fabs(mark.normalZ)>.5f){p.z+=mark.normalZ*.012f;a={1,0,0};b={0,mark.normalZ>0?1.f:-1.f,0};}else{a={tangentX,tangentY,0};b={0,0,1};}
+  auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
+  hole(p+impactNormal*.003f,.1f,impact,.9f);
+  hole(p+impactNormal*.005f,.042f,crater,.9f);
+  // Its sparks are drawn with all the electricity (ElectricFx).
+ }
+ // Barrel fire stays in world space, so walls and props occlude it. Every
+ // mask is generated here; no runtime image dependency is needed.
+ static const Texture fire=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
+  for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
+   unsigned hash=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x6d2b79f5u);hash=(hash^(hash>>13))*1274126177u;
+   float noise=float((hash>>24)&255u)/255.f,angle=std::atan2(dy,dx);
+   float boundary=.86f+.10f*std::sin(angle*5.f+1.4f)+.07f*std::sin(angle*11.f-2.1f)+.045f*std::sin(angle*17.f+.7f);
+   float edge=std::clamp((boundary-r)*9.f+(noise-.5f)*.28f,0.f,1.f);
+   float turbulence=std::sin(dx*13.f+std::sin(dy*9.f)*2.f)*std::sin(dy*11.f-dx*4.f);
+   float heat=std::clamp(.62f-r*.32f+turbulence*.20f+(noise-.5f)*.14f,0.f,1.f);
+   unsigned red=unsigned(210.f+45.f*heat),green=unsigned(78.f+147.f*heat),blue=unsigned(8.f+48.f*heat),alpha=unsigned(edge*220.f);
+   t.pixels[size_t(y*48+x)]=(alpha<<24)|(red<<16)|(green<<8)|blue;
+  }return t;}();
+ // The flash: an additive core that the bloom pass spreads across the hall.
+ static const Texture flash=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
+  for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f,r=std::sqrt(dx*dx+dy*dy);
+   float core=std::clamp(1.f-r,0.f,1.f);core=core*core;unsigned v=unsigned(core*255.f);
+   t.pixels[size_t(y*32+x)]=(v<<24)|(255u<<16)|(unsigned(205.f+50.f*core)<<8)|unsigned(90.f+140.f*core);
+  }return t;}();
+ static const Texture smoke=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
+  for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
+   unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0xa8c3b75eu);hash=(hash^(hash>>15))*3266489917u;
+   float noise=float((hash>>24)&255u)/255.f,alpha=std::clamp((.95f-r)*1.55f+(noise-.5f)*.18f,0.f,1.f)*.48f;
+   t.pixels[size_t(y*48+x)]=(unsigned(alpha*255.f)<<24)|0x00645b53u;
+  }return t;}();
+ Point3 effectSide{-std::sin(player.angle),std::cos(player.angle),0};
+ // Cards face the camera and keep upright; a spin turns each one so the
+ // same mask never reads as a stamp.
+ auto effectCard=[&](Point3 center,float radius,const Texture&texture,float light,float turn=0.f){Point3 across=effectSide*radius,up{0,0,radius};float cs=std::cos(turn),sn=std::sin(turn);Point3 u=across*cs+up*sn,v=across*-sn+up*cs;quad(center-u-v,center+u-v,center+u+v,center-u+v,texture,light);};
+ for(const auto&blast:game.barrelExplosions())if(blast.level==level){
+  float age=game.elapsed()-blast.time;if(age<0.f||age>2.6f)continue;
+  Point3 center{blast.pos.x,blast.pos.y,blast.z};
+  unsigned seed=unsigned(std::fabs(blast.pos.x)*131.f)^unsigned(std::fabs(blast.pos.y)*719.f);
+  auto rnd=[&](int i){unsigned h=(seed+unsigned(i)*2654435761u);h=(h^(h>>13))*1274126177u;return float((h>>24)&255u)/255.f;};
+  if(age<.14f){float flare=1.f-age/.14f;effectCard(center+Point3{0,0,.25f},1.4f*(.6f+.4f*flare)+age*4.f,flash,2.2f*flare);}
+  if(age<.7f){float life=std::clamp(1.f-age/.7f,0.f,1.f),growth=.70f+std::min(age/.09f,1.f)*.5f;
+   effectCard(center+Point3{0,0,.12f+age*.6f},.8f*growth*std::sqrt(life),fire,1.65f,rnd(0)*6.28f+age*1.2f);
+   for(int i=0;i<7;++i){float phase=rnd(i+1)*6.283f,spread=(.15f+age*(.8f+rnd(i+9)*.8f))*(i%2?.85f:1.f),size=(.22f+rnd(i+20)*.16f)*growth*life;
+    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.1f+age*(.6f+rnd(i+30)*1.1f)};
+    effectCard(p,size,fire,1.45f,rnd(i+40)*6.28f-age*(1.f+rnd(i)));
+   }
+  }
+  // Embers: burning fragments thrown out on ballistic arcs.
+  if(age<1.1f)for(int i=0;i<14;++i){float phase=rnd(i+50)*6.283f,speed=2.5f+rnd(i+70)*4.f,lift=3.f+rnd(i+90)*3.5f,t=age;
+   Point3 e{center.x+std::cos(phase)*speed*t,center.y+std::sin(phase)*speed*t,center.z+.2f+lift*t-4.9f*t*t};
+   if(e.z<w.floorHeight(e.x,e.y)+.02f)continue;
+   float glow=std::clamp(1.f-age/1.1f,0.f,1.f);
+   quad(e,{e.x+.03f,e.y,e.z},{e.x+.03f,e.y,e.z+.05f},{e.x,e.y,e.z+.05f},amber,1.2f+glow*.9f);
+  }
+  // A shock ring races over the floor, then smoke climbs and thins.
+  if(age<.32f){float ring=age/.32f,radius=.4f+ring*3.2f,z=w.floorHeight(center.x,center.y)+.03f;
+   for(int i=0;i<16;++i){float a0=i*kPi/8,a1=(i+1)*kPi/8,inner=radius-.25f;
+    quad({center.x+std::cos(a0)*inner,center.y+std::sin(a0)*inner,z},{center.x+std::cos(a1)*inner,center.y+std::sin(a1)*inner,z},{center.x+std::cos(a1)*radius,center.y+std::sin(a1)*radius,z},{center.x+std::cos(a0)*radius,center.y+std::sin(a0)*radius,z},flash,1.3f*(1.f-ring));}
+  }
+  if(age>.1f){float puff=std::clamp((age-.1f)/.25f,0.f,1.f)*std::clamp((2.6f-age)/.9f,0.f,1.f);
+   for(int i=0;i<6;++i){float phase=rnd(i+100)*6.283f,spread=.15f+age*(.35f+rnd(i+110)*.3f),radius=(.4f+age*.5f)*puff;
+    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.3f+age*(.7f+rnd(i+120)*.4f)};
+    effectCard(p,radius,smoke,1.5f,rnd(i+130)*6.28f+age*.4f*(i%2?1.f:-1.f));
+   }
+  }
+ }
+ movingGeometry=true;
+ auto drawTacticalGrenade=[&](Point3 p,float fuse){
+  if(!sphereVisible(p,.15f))return;
+  cylinder(p+Point3{0,0,-.065f},p+Point3{0,0,.055f},.065f,m_pressureMetal);
+  cylinder(p+Point3{0,0,.055f},p+Point3{0,0,.083f},.028f,m_panelMetal);
+  box(p+Point3{-.02f,-.035f,.079f},p+Point3{.02f,.075f,.091f},m_panelMetal,1.f);
+  bool blink=int(fuse*8.f)%2==0;box(p+Point3{-.018f,-.066f,-.012f},p+Point3{.018f,-.062f,.012f},blink?red:m_panelMetal,blink?2.f:1.f);
+ };
+ const auto engineerDrones=game.engineerDrones();
+ auto drawActor=[&](const ActorTrack&track,ActorPose pose,const NpcWeaponPose* weapon,int actor,std::uint64_t emitSlot){
+ perf::Scope actorProfile(perf::Actor);
+    float radius=humanActorVisual(track.visual)?track.scale:track.scale*.8f;
+    if(track.platform)radius=std::max(radius,std::hypot(track.footprint.x,track.footprint.y)*.5f);
+  if(!sphereVisible({pose.position.x,pose.position.y,pose.z+radius*.5f},radius))return;
+  if(track.suspensionTop>pose.z){float top=pose.z+(track.platform?0.f:track.scale);if(top<track.suspensionTop)cylinder({pose.position.x,pose.position.y,top},{pose.position.x,pose.position.y,track.suspensionTop},.035f,m_pressureMetal);}
+  if(track.platform){float x=pose.position.x,y=pose.position.y,halfWidth=track.footprint.x*.5f,d=track.footprint.y*.5f;box({x-halfWidth,y-d,pose.z-track.thickness},{x+halfWidth,y+d,pose.z},m_pressureMetal,1.f);quad({x-halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d+.12f,pose.z+.004f},{x-halfWidth,y-d+.12f,pose.z+.004f},m_hazard,1.f);return;}
+  if(track.visual==ActorVisual::Cargo){prop(m_crateMesh,m_crateTexture,pose.position.x,pose.position.y,track.scale,pose.yaw,track.scale,pose.z);return;}
+  bool human=humanActorVisual(track.visual),cleanup=cleanupActorVisual(track.visual),wasp=track.visual==ActorVisual::Wasp;
+  // Civilians share the Worker path; civilianBody picks the Worker or a staff model.
+  const int civilianBody=std::max(0,civilianActorBody(track.visual));const auto&rig=kCivilianRigs[size_t(civilianBody)];
+  int cleanupRole=cleanup?cleanupActorBody(track.visual):0;auto& mesh=cleanup?*cleanupMeshes()[size_t(cleanupRole)]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
+  bool treating=human&&weapon&&weapon->treatment>0&&pose.clip!=4;
+  bool directTreatment=treating&&cleanup&&mesh.hasDirectCreatureMotion();
+  bool engineer=human&&weapon&&weapon->armed&&track.ai.role==GuardSquadRole::Engineer&&pose.clip!=4;
+  bool directSupport=engineer&&mesh.hasDirectCreatureMotion()&&weapon->supportAnimation;
+  bool engineering=engineer&&(weapon->engineering>0||weapon->maintenance||directSupport);
+  auto terminal=fieldTerminalFrame(pose,track.scale,engineering);
+  float terminalTouch=engineering?std::sin((weapon->maintenance?game.elapsed()*5.f:weapon->engineering*3.f)*kPi):0;
+  if(human){
+   if(directSupport)mesh.poseCreature(weapon->supportClip,weapon->supportPhase);
+   else if(treating&&track.visual==ActorVisual::CleanupMedic)mesh.poseCreature(6,weapon->treatment);
+   else if(cleanup&&pose.clip!=4&&m_cleanupInspectionStage!=1){
+    // Tank layering: walk/crouch legs maneuver while the aim-idle upper holds
+    // the gun; restricted mid/head twist looks toward the combat aim.
+    float aimYaw=0,aimPitch=0;
+    // Only twist the Mixamo upper when actively raising — do not overwrite the
+    // baked carry pose with a fake low-ready pitch.
+    if(weapon&&weapon->armed&&weapon->raise>.05f){
+     float raise=std::clamp(weapon->raise,0.f,1.f);
+     float dirYaw=std::atan2(weapon->direction.x,weapon->direction.y);
+     aimYaw=std::remainder(dirYaw-pose.yaw,2.f*kPi)*raise;
+     aimPitch=std::asin(std::clamp(weapon->direction.z,-1.f,1.f))*raise;
+    }
+    float aimPhase=pose.phase;
+    int upperClip=0;
+    if(weapon&&weapon->action==GuardAction::Fire&&(!weapon->handgun||mesh.hasDirectCreatureMotion())&&!engineering){upperClip=2;aimPhase=std::clamp(weapon->actionProgress,0.f,1.f);}
+    if(pose.clip==5||(weapon&&weapon->crouched&&pose.clip<=1))mesh.poseCreatureTank(5,pose.phase,5,pose.phase,aimYaw,aimPitch);
+    else if(pose.clip==1)mesh.poseCreatureTank(1,pose.phase,upperClip,aimPhase,aimYaw,aimPitch);
+    else if(pose.clip==0)mesh.poseCreatureTank(0,pose.phase,upperClip,aimPhase,aimYaw,aimPitch);
+    else mesh.poseCreature(pose.clip,pose.phase);
+   }else mesh.poseCreature(pose.clip,pose.phase);
+   if(cleanup&&m_cleanupInspectionStage==3)mesh.triangles=mesh.bindTriangles();
+  }
+  float scale=track.scale/std::max(.01f,human?mesh.maximum.y-mesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
+  float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
+  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  if(directSupport){const auto&hand=mesh.creatureLayerPose().arms[1];auto wrist=transform(hand[2]);terminal=heldFieldTerminalFrame(wrist,transform(hand[2]+hand[3])-wrist,pose.yaw,track.scale);}
+  auto medicalKit=medicalCaseFrame({pose.position.x,pose.position.y,pose.z},pose.yaw,track.scale/1.6f);
+  if(directTreatment){
+   // The authored Opening A Lid take bends to this reference case, then lifts
+   // its lid. Keep that complete skin pose; fit the prop to the hands that
+   // actually grasp it rather than dragging them onto a standing-height kit.
+   auto reference=mesh.creatureLayerPoseAt(6,.25f);
+   auto rightWrist=transform(reference.arms[0][2]),leftWrist=transform(reference.arms[1][2]);
+   auto span=leftWrist-rightWrist;float width=std::sqrt(span.x*span.x+span.y*span.y+span.z*span.z);
+   float bodyScale=track.scale/1.6f;
+   medicalKit.center=(rightWrist+leftWrist)*.5f+medicalKit.forward*(.06f*bodyScale)-medicalKit.up*(.035f*bodyScale);
+   medicalKit.size=width/.36f;
+  }else if(treating&&cleanup){
+   // Chest_Open bends the chest forward over the abdomen. Clear the actual
+   // posed torso, including the raised lid, rather than a standing hull.
+   float front=.22f*medicalKit.size;const auto&rest=mesh.bindTriangles();
+   for(size_t face=0;face<mesh.triangles.size();++face)for(int vertex=0;vertex<3;++vertex){auto bind=rest[face].v[vertex].p;const auto&weight=m_cleanupWeights[cleanupRole][face*3+vertex];if(weight[0]>32||bind.y<.75f||bind.y>1.32f)continue;auto point=transform(mesh.triangles[face].v[vertex].p);auto delta=point-Point3{pose.position.x,pose.position.y,pose.z};front=std::max(front,delta.x*medicalKit.forward.x+delta.y*medicalKit.forward.y);}
+   const auto&shoulders=mesh.creatureLayerPose().arms;float height=(shoulders[0][0].y+shoulders[1][0].y)*.5f*scale-.26f*medicalKit.size;
+   auto base=Point3{pose.position.x,pose.position.y,pose.z};medicalKit.center=base+medicalKit.forward*(front+.155f*medicalKit.size)+medicalKit.up*height;
+  }
+  const bool armed=human&&weapon&&weapon->armed&&pose.clip!=4&&!treating&&!directSupport;
+  // Final attachment starts from the composed bake and keeps the physical
+  // gameplay grip/barrel authoritative. It never resets cleanup arms to bind.
+  const bool posedArms=cleanup&&mesh.hasCreatureLayerPose();
+  Point3 gunForward{},gunRight{},gunUp{},gunGrip{},gunMuzzle{};float gunScale=0;
+  struct ArmAttachment {Point3 shoulder{},elbow{},hand{},targetShoulder{},targetElbow{},targetHand{};std::array<Point3,3> upper{},lower{},palm{};};
+  std::array<ArmAttachment,2> arms{};
+  // The full-body Worker uses baked vertex animation rather than a live rig.
+  // Use its imported standing upper body, with complete jacket sleeves and
+  // gauntlets attached to the gun. The distressed Worker's hunched idle puts
+  // its visor inside the weapon. Walking still uses the authored legs.
+  struct ArmedVertex {Point3 position{};int side=0;float influence=0,lower=0,palm=0;uint32_t group=0;};
+  const std::vector<std::array<ArmedVertex,3>>* armedVertices=nullptr;uint32_t attachmentGroups=0;
+  if(armed||(treating&&cleanup&&!directTreatment)){
+   auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+   auto unit=[&](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,dot(p,p))));};
+   gunForward=unit(weapon->direction);gunRight=unit({gunForward.y,-gunForward.x,0});gunUp=unit(cross3(gunRight,gunForward));
+   float bodyScale=track.scale/1.6f;gunScale=weapon->handgun?bodyScale:.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z)*bodyScale;
+   auto recoil=gunForward*(-.022f*weapon->recoil*bodyScale);
+   gunGrip=weapon->grip+recoil;gunMuzzle=weapon->muzzle+recoil;
+   if(cleanup){auto barrel=gunGrip+gunForward*((weapon->handgun?.172f:.500522f)*bodyScale)+gunUp*((weapon->handgun?.035f:.058961f)*bodyScale)+gunRight*((weapon->handgun?0.f:-.007496f)*bodyScale);m_cleanupBarrelError=std::max(m_cleanupBarrelError,std::sqrt(dot(barrel-gunMuzzle,barrel-gunMuzzle)));}
+   // Civilian joints come from each FBX (kCivilianRigs); cleanup calibration
+   // comes from each retained Blender mesh. All imports face +Z, matching the
+   // shared NPC yaw.
+   std::array<Point3,2> shoulders=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][0],m_cleanupArms[cleanupRole][1][0]}:rig.shoulders;
+   std::array<Point3,2> elbows=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][1],m_cleanupArms[cleanupRole][1][1]}:rig.elbows;
+   std::array<Point3,2> hands=cleanup?std::array<Point3,2>{m_cleanupArms[cleanupRole][0][2],m_cleanupArms[cleanupRole][1][2]}:rig.hands;
+   if(posedArms)for(int side=0;side<2;++side){const auto&j=mesh.creatureLayerPose().arms[side];shoulders[side]=j[0];elbows[side]=j[1];hands[side]=j[2];}
+   // One binding per body: 0 the Worker, 1-7 the cleanup bodies, 8-12 the staff.
+   const size_t bindingSlot=cleanup?size_t(cleanupRole+1):civilianBody?size_t(kCleanupBodies+civilianBody):0;
+   constexpr size_t bodies=1+kCleanupBodies+5;
+   static std::array<std::vector<std::array<ArmedVertex,3>>,bodies> bindings;static std::once_flag bindOnce[bodies];static std::array<uint32_t,bodies> groupCounts{};
+   auto&bind=bindings[bindingSlot];std::call_once(bindOnce[bindingSlot],[&](){bind=[&](){
+    const auto&rest=mesh.bindTriangles();std::vector<std::array<ArmedVertex,3>> result(rest.size());
+    auto segmentDistance=[&](Point3 p,Point3 a,Point3 b){auto line=b-a;auto delta=p-a;float t=std::clamp(dot(delta,line)/dot(line,line),0.f,1.f);auto d=delta-line*t;return std::sqrt(dot(d,d));};
+    const float u=rig.unit;
+    for(size_t face=0;face<rest.size();++face){const auto&t=rest[face];bool glove=t.part>=0&&t.part<int(mesh.materialNames.size())&&mesh.materialNames[t.part].find("mano")!=std::string::npos;
+     for(int vertex=0;vertex<3;++vertex){auto p=t.v[vertex].p;auto&v=result[face][vertex];v.position=p;v.side=p.x<(cleanup?0.f:rig.sideSplit)?0:1;
+      if(cleanup){const auto&weight=m_cleanupWeights[cleanupRole][face*3+vertex];v.influence=weight[0]/255.f;v.lower=weight[1]/255.f;v.palm=weight[2]/255.f;v.side=weight[3];continue;}
+      if(glove){v.influence=1;v.palm=1;continue;}
+      if(p.y<rig.bandLow||p.y>rig.bandHigh)continue;
+      auto S=shoulders[v.side],E=elbows[v.side],H=hands[v.side];float armDistance=std::min(segmentDistance(p,S,E),segmentDistance(p,E,H));
+      if(rig.fingers>0)armDistance=std::min(armDistance,segmentDistance(p,H,H+rig.palms[size_t(v.side)]*rig.fingers));
+      float torsoDistance=std::hypot(p.x-rig.torsoX,p.z-rig.torsoZ);
+      v.influence=std::clamp((torsoDistance-armDistance-.04f*u)/(.10f*u),0.f,1.f)*std::clamp((S.y+.13f*u-p.y)/(.16f*u),0.f,1.f)*std::clamp((.18f*u-armDistance)/(.06f*u),0.f,1.f);
+      v.lower=std::clamp((E.y+.09f*u-p.y)/(.18f*u),0.f,1.f);v.palm=std::clamp((H.y+.06f*u-p.y)/(.12f*u),0.f,1.f);
+     }
+    }
+    // A corner can share its final position only when both the animated
+    // source index and every attachment input match exactly.
+    std::map<std::array<uint32_t,8>,uint32_t> groups;const auto&indices=mesh.creatureVertexIndices();
+    for(size_t face=0;face<result.size();++face)for(size_t vertex=0;vertex<3;++vertex){auto&v=result[face][vertex];size_t corner=face*3+vertex;
+     std::array<uint32_t,8> key{indices.empty()?uint32_t(corner):uint32_t(indices[corner]),uint32_t(v.side),std::bit_cast<uint32_t>(v.influence),std::bit_cast<uint32_t>(v.lower),std::bit_cast<uint32_t>(v.palm),std::bit_cast<uint32_t>(v.position.x),std::bit_cast<uint32_t>(v.position.y),std::bit_cast<uint32_t>(v.position.z)};
+     auto entry=groups.emplace(key,uint32_t(groups.size()));v.group=entry.first->second;
+    }
+    groupCounts[bindingSlot]=uint32_t(groups.size());return result;
+   }();});armedVertices=&bind;attachmentGroups=groupCounts[bindingSlot];
+   auto rotation=[&](Point3 from,Point3 to){
+    from=unit(from);to=unit(to);float cosine=std::clamp(dot(from,to),-1.f,1.f);auto axis=cross3(from,to);float sine=std::sqrt(dot(axis,axis));
+    if(sine<.00001f){if(cosine>0)return std::array<Point3,3>{Point3{1,0,0},Point3{0,1,0},Point3{0,0,1}};axis=unit(cross3(from,std::fabs(from.z)<.9f?Point3{0,0,1}:Point3{0,1,0}));}
+    else axis=axis*(1.f/sine);
+    auto rotate=[&](Point3 p){return p*cosine+cross3(axis,p)*sine+axis*(dot(axis,p)*(1-cosine));};
+    return std::array<Point3,3>{rotate({1,0,0}),rotate({0,1,0}),rotate({0,0,1})};
+   };
+   auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
+   for(int side=0;side<2;++side){auto&arm=arms[side];arm.shoulder=transform(shoulders[side]);arm.elbow=transform(elbows[side]);arm.hand=transform(hands[side]);
+    // Wrist offsets keep the curled gauntlets wrapped around the trigger and
+    // fore-end; the shotgun's barrel remains the common gameplay muzzle.
+    arm.targetHand=side?gunPoint({.02f,1.10f,-1.15f})+(gunRight*.085f-gunUp*.040f)*bodyScale:gunGrip+(gunRight*.008f-gunUp*.090f+gunForward*.010f)*bodyScale;
+    if(weapon->handgun)arm.targetHand=gunGrip+(gunRight*(side?.055f:.008f)-gunUp*.065f+gunForward*(side?.025f:0.f))*bodyScale;
+    if(side&&weapon->reload>0){float feed=std::sin(weapon->reload*3.f*kPi);arm.targetHand=gunGrip+(gunForward*(.10f+.06f*feed)-gunUp*(.10f+.05f*std::fabs(feed))+gunRight*.09f)*bodyScale;}
+    if(!side&&weapon->grenadeThrow>0){float wind=std::sin(weapon->grenadeThrow*kPi);arm.targetHand=gunGrip+(gunRight*.12f-gunForward*(.12f*wind)+gunUp*(.08f+.12f*wind))*bodyScale;}
+    if(engineering)arm.targetHand=fieldTerminalHand(terminal,side,terminalTouch);
+    if(treating)arm.targetHand=side?medicalKit.point(.055f,.005f,.045f+.035f*std::sin(weapon->treatment*4*kPi)):medicalKit.point(-.235f,0,.035f);
+    // A locker's handle: the support hand leaves the gun for the doors.
+    if(side&&weapon->haul>0)arm.targetHand=arm.targetHand+(weapon->handle-arm.targetHand)*weapon->haul;
+    auto upper=arm.elbow-arm.shoulder,lower=arm.hand-arm.elbow;float l1=std::sqrt(dot(upper,upper)),l2=std::sqrt(dot(lower,lower));
+    if(posedArms&&side&&!weapon->handgun&&weapon->reload<=0&&!engineering&&!treating&&weapon->haul<=0){
+     // The receiver/linkage and pump form a continuous support surface from
+     // 0-.363 m ahead of the grip. Extreme aim can move a short arm back
+     // from the bulky pump onto the receiver without stretching its cuff.
+     float preferred=2.25f*gunScale;auto base=arm.targetHand-gunForward*preferred;auto delta=base-arm.shoulder;float axial=dot(delta,gunForward),perpendicular=dot(delta,delta)-axial*axial;
+     float reachLimit=l1+l2-.005f,furthest=-axial+std::sqrt(std::max(0.f,reachLimit*reachLimit-perpendicular));
+     arm.targetHand=base+gunForward*std::clamp(furthest,0.f,.363f*bodyScale);
+    }
+    float supportRelease=0;
+    if(posedArms&&side&&weapon->handgun&&weapon->reload<=0&&!engineering&&!treating&&weapon->haul<=0){auto delta=arm.targetHand-arm.shoulder;float limit=l1+l2-.005f;
+     supportRelease=std::clamp((std::sqrt(dot(delta,delta))-(limit-.06f))/.06f,0.f,1.f);supportRelease*=supportRelease*(3-2*supportRelease);
+     if(supportRelease>0){auto rest=transform(mesh.creatureLayerPose().pelvis+Point3{.22f,.15f,.10f});arm.targetHand=arm.targetHand+(rest-arm.targetHand)*supportRelease;}
+    }
+    arm.targetShoulder=arm.shoulder;
+    auto reach=arm.targetHand-arm.shoulder;
+    // A small clavicle reach accompanies extreme crouched aim. Keep the arm
+    // bones at their imported lengths and the trigger hand on the real grip;
+    // silently clamping the wrist left short characters off their trigger.
+    float reachLength=std::sqrt(dot(reach,reach));
+    if(posedArms&&reachLength>l1+l2-.005f){arm.targetShoulder=arm.shoulder+unit(reach)*std::min(.045f*bodyScale,reachLength-(l1+l2-.005f));reach=arm.targetHand-arm.targetShoulder;}
+    float distance=std::clamp(std::sqrt(dot(reach,reach)),std::fabs(l1-l2)+.001f,l1+l2-.001f);auto axis=unit(reach);
+    auto reachable=arm.targetShoulder+axis*distance;if(posedArms){auto error=arm.targetHand-reachable;m_cleanupReachError=std::max(m_cleanupReachError,std::sqrt(dot(error,error)));arm.targetHand=reachable;}
+    float along=(l1*l1-l2*l2+distance*distance)/(2*distance),height=std::sqrt(std::max(0.f,l1*l1-along*along));
+    auto bend=gunRight*(side?.35f:-.35f)-gunUp*.30f-gunForward*.10f;bend=unit(bend-axis*dot(bend,axis));arm.targetElbow=arm.targetShoulder+axis*along+bend*height;
+    arm.upper=rotation(upper,arm.targetElbow-arm.targetShoulder);arm.lower=rotation(lower,arm.targetHand-arm.targetElbow);
+    Point3 sourcePalm=posedArms?mesh.creatureLayerPose().arms[side][3]:cleanup?m_cleanupPalms[cleanupRole][side]:rig.palms[size_t(side)];
+    auto sourceDirection=transform(hands[side]+sourcePalm)-arm.hand;
+    auto palmDirection=side?gunRight*-.060f+gunUp*.025f:gunUp*.075f+gunForward*.025f;
+    if(supportRelease>0)palmDirection=palmDirection+(Point3{0,0,-.08f}-palmDirection)*supportRelease;
+    if(engineering)palmDirection=side?terminal.normal*-.055f+terminal.up*.012f:terminal.up*.05f-terminal.normal*.04f;
+    if(treating)palmDirection=side?medicalKit.up*-.055f+medicalKit.forward*.025f:medicalKit.right*.065f+medicalKit.up*-.045f;
+    arm.palm=rotation(sourceDirection,palmDirection);
+   }
+  }
+  objectLighting=true;objectNormalLighting=nullptr;
+  ExteriorLight actorLights;
+  {perf::ActorScope profile(0);actorLights=exteriorLight({pose.position.x,pose.position.y,pose.z+track.scale*.5f},track.scale*.5f,track.scale*.5f,track.scale,pose.yaw,true);}
+  // Preserve the existing per-triangle distance rejection near a chunk's
+  // far limit; ordinary nearby actors use hardware projection and clipping.
+  const bool nearFarLimit=cameraPoint({pose.position.x,pose.position.y,pose.z+radius*.5f},game).z+radius*4.f>=farPlane;
+  const Point3 actorCenter{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
+  const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos,actorCenter):-1;
+  std::array<GpuRenderer::ActorMaterial,4> gpuMaterials{};
+  std::array<bool,4> gpuMaterialReady{};
+  auto actorTriangle=[&](const MeshTriangle&face,const Texture&texture,GpuRenderer::ActorMaterial&material,bool&ready){
+   perf::ActorTriangleScope submissionProfile(gpuActor>=0);
+   if(gpuActor>=0){
+    if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
+     // Resolve on the first submitted face, retaining material creation order.
+     if(!ready){material=m_gpu->prepareActorMaterial(texture,m_emissionScale);ready=true;}
+     m_gpu->submitActor(face.v[0],face.v[1],face.v[2],gpuActor,material);
+    }
+   }else{
+    auto center=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
+    auto outward=center-actorCenter;
+    selectFaceLight(actorLights,cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),outward);
+    tri(face.v[0],face.v[1],face.v[2],texture,1.f);
+   }
+  };
+  // A rooted actor still animates. Every clip phase participates in retained
+  // geometry identity, including idle, crouch and a progressing death fall.
+  auto mixBits=[&](std::uint64_t&h,std::uint32_t v){h^=std::uint64_t(v)+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2);};
+  auto mixFloat=[&](std::uint64_t&h,float v){mixBits(h,std::bit_cast<std::uint32_t>(v));};
+  std::uint64_t emitIdentity=0xC6A4A7935BD1E995ull;
+  mixFloat(emitIdentity,dormantFloor);mixFloat(emitIdentity,m_emissionScale);
+  mixBits(emitIdentity,std::uint32_t(track.visual));mixFloat(emitIdentity,track.scale);mixFloat(emitIdentity,pose.position.x);mixFloat(emitIdentity,pose.position.y);
+  mixFloat(emitIdentity,pose.z);mixFloat(emitIdentity,pose.yaw);mixBits(emitIdentity,std::uint32_t(pose.clip));mixBits(emitIdentity,std::uint32_t(m_cleanupInspectionStage));
+  mixFloat(emitIdentity,pose.phase);if(wasp)mixFloat(emitIdentity,game.elapsed());
+  if(weapon){mixBits(emitIdentity,weapon->armed);mixBits(emitIdentity,weapon->handgun);mixBits(emitIdentity,weapon->crouched);mixBits(emitIdentity,weapon->maintenance);
+   mixBits(emitIdentity,weapon->supportAnimation);mixBits(emitIdentity,weapon->padVisible);mixBits(emitIdentity,weapon->pistolVisible);mixBits(emitIdentity,std::uint32_t(weapon->supportClip));
+   mixBits(emitIdentity,std::uint32_t(weapon->action));mixFloat(emitIdentity,weapon->supportPhase);mixFloat(emitIdentity,weapon->treatment);mixFloat(emitIdentity,weapon->engineering);
+   mixFloat(emitIdentity,weapon->grip.x);mixFloat(emitIdentity,weapon->grip.y);mixFloat(emitIdentity,weapon->grip.z);mixFloat(emitIdentity,weapon->muzzle.x);mixFloat(emitIdentity,weapon->muzzle.y);mixFloat(emitIdentity,weapon->muzzle.z);
+   mixFloat(emitIdentity,weapon->direction.x);mixFloat(emitIdentity,weapon->direction.y);mixFloat(emitIdentity,weapon->direction.z);mixFloat(emitIdentity,weapon->raise);mixFloat(emitIdentity,weapon->flash);
+   mixFloat(emitIdentity,weapon->recoil);mixFloat(emitIdentity,weapon->actionProgress);mixFloat(emitIdentity,weapon->reload);mixFloat(emitIdentity,weapon->grenadeThrow);
+   mixFloat(emitIdentity,weapon->haul);mixFloat(emitIdentity,weapon->handle.x);mixFloat(emitIdentity,weapon->handle.y);mixFloat(emitIdentity,weapon->handle.z);}
+  const std::uint32_t emitStart=gpuActor>=0?m_gpu->actorEmitPosition():0;
+  const bool replayedEmit=m_actorEmitCaching&&gpuActor>=0&&m_gpu->replayActorEmit(emitSlot,emitIdentity,gpuActor);
+  if(!replayedEmit){
+  // Material ownership is immutable during this draw. Resolve each name
+  // once instead of copying/searching strings for every animated triangle.
+  std::vector<int> actorMaterials(mesh.materialNames.size());
+  for(size_t part=0;part<mesh.materialNames.size();++part){const auto&name=mesh.materialNames[part];
+   if(cleanup)actorMaterials[part]=name.find("head")!=std::string::npos?1:0;
+   // Civilian parts: 0 body, 1 gloves (mano), 2 boots (pies), 3 respirator (mask).
+   else if(human)actorMaterials[part]=name.find("pies")!=std::string::npos?2:name.find("mano")!=std::string::npos?1:name.find("mask")!=std::string::npos?3:0;
+  }
+  // Scratch is reset for every actor/pose; no position survives into another
+  // pose. UVs, material ownership and per-face lighting remain per corner.
+  const bool reuseAttachment=posedArms&&armedVertices&&m_cleanupInspectionStage==0;
+  static thread_local std::vector<Point3> attachmentPositions;
+  static thread_local std::vector<unsigned char> attachmentReady;
+  if(reuseAttachment){attachmentPositions.resize(attachmentGroups);attachmentReady.assign(attachmentGroups,0);}
+  size_t actorFace=0;
+  const bool streamBody=gpuActor>=0&&m_actorStreamWriting;
+  GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(mesh.triangles.size());
+  uint32_t emitted=0,runStart=0;int runMaterial=-1;
+  auto flushRun=[&]{if(runMaterial>=0)m_gpu->actorStreamRun(stream.start+runStart,emitted-runStart,gpuMaterials[runMaterial]);runStart=emitted;};
+  {perf::ActorScope profile(1);
+  for(auto face:mesh.triangles){
+   int vertex=0;for(auto& v:face.v){
+    uint32_t group=reuseAttachment?(*armedVertices)[actorFace][vertex].group:0;
+    if(reuseAttachment&&attachmentReady[group]){v.p=attachmentPositions[group];++vertex;continue;}
+    auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
+    v.p=transform(p);
+    if(armedVertices&&m_cleanupInspectionStage==0){const auto&bind=(*armedVertices)[actorFace][vertex];auto source=posedArms?v.p:transform(bind.position);
+     // Worker hunched idle used to bury the visor in the gun, so the jacket is
+     // pulled toward bind. Cleanup UAL / Worker walk already clear the weapon —
+     // keep most of the posed body so idle and legs read as motion.
+     float bindPull=std::clamp((bind.position.y-rig.pullStart)/(.28f*rig.unit),0.f,1.f);
+     if(posedArms)bindPull=0;
+     else if(cleanup)bindPull*=.18f;
+     else if(pose.clip==1||pose.clip==5)bindPull*=.4f;
+     else if(pose.clip==0)bindPull*=.55f;
+     if(bindPull>.001f)v.p=v.p+(source-v.p)*bindPull;
+     if(bind.influence>.001f){const auto&arm=arms[bind.side];
+     auto rotate=[](const std::array<Point3,3>&basis,Point3 p){return basis[0]*p.x+basis[1]*p.y+basis[2]*p.z;};
+     auto upper=arm.targetShoulder+rotate(arm.upper,source-arm.shoulder),lower=arm.targetElbow+rotate(arm.lower,source-arm.elbow),hand=arm.targetHand+rotate(arm.palm,source-arm.hand);
+     // Move the currently skinned hand as a unit for final grip alignment.
+     // Its source finger bends are already in 'source'; this rotation must
+     // preserve them rather than reapplying a rigid bind hand.
+     bool rigidHand=cleanup&&bind.influence*bind.palm>.15f;
+     auto sleeve=upper+(lower-upper)*bind.lower;auto attached=rigidHand?hand:sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*(rigidHand?1.f:bind.influence);
+    }}
+    if(reuseAttachment){attachmentPositions[group]=v.p;attachmentReady[group]=1;}
+    ++vertex;}
+   if(m_environmentInspection&&posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
+   if(m_environmentInspection&&cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
+   int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
+   if(streamBody){
+    if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
+     if(!gpuMaterialReady[material]){const auto&texture=cleanup?m_cleanupTextures[cleanupRole][material]:human?civilianTexture(civilianBody,material):wasp?m_waspTexture:m_enemyTexture;
+      gpuMaterials[material]=m_gpu->prepareActorMaterial(texture,m_emissionScale);gpuMaterialReady[material]=true;}
+     if(runMaterial!=material){flushRun();runMaterial=material;}
+     GpuRenderer::writeActorTriangle(stream.triangles[emitted++],face,gpuActor,gpuMaterials[material]);
+    }
+   }else actorTriangle(face,cleanup?m_cleanupTextures[cleanupRole][material]:human?civilianTexture(civilianBody,material):wasp?m_waspTexture:m_enemyTexture,gpuMaterials[material],gpuMaterialReady[material]);
+   ++actorFace;
+  }
+  if(streamBody){flushRun();m_gpu->endActorStream(stream,emitted);}
+  }
+  if(armed){
+   auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
+   const auto&gunMesh=weapon->handgun?m_handgunMesh:m_weaponMesh;
+   const auto&gunTexture=weapon->handgun?m_handgunTexture:m_weaponTexture;
+   GpuRenderer::ActorMaterial gunMaterial{};bool gunMaterialReady=false;
+   Point3 holsterGrip=Point3{pose.position.x,pose.position.y,pose.z}+Point3{c,-s,0}*(.27f*track.scale/1.6f)+Point3{s,c,0}*(.025f*track.scale/1.6f)+Point3{0,0,.87f*track.scale/1.6f};
+   // The pistol's magazine part is the player's reload; an actor's gun draws as it always has.
+   for(auto face:gunMesh.bindTriangles()){if(!weapon->handgun&&face.part==3)continue;if(weapon->handgun&&face.part==5)continue;for(auto&v:face.v){auto p=v.p;
+    if(engineering&&weapon->handgun)v.p=holsterGrip+(Point3{c,-s,0}*p.x+Point3{s,c,0}*p.y-Point3{0,0,1}*p.z)*gunScale;
+    else v.p=weapon->handgun?gunGrip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale:gunPoint(p);}
+    actorTriangle(face,gunTexture,gunMaterial,gunMaterialReady);
+   }
+  }
+  if(m_actorEmitCaching&&gpuActor>=0)m_gpu->commitActorEmit(emitSlot,emitIdentity,emitStart);
+  }
+  if(armed&&weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
+  objectLighting=false;objectNormalLighting=nullptr;
+  if(engineer&&(!mesh.hasDirectCreatureMotion()||(directSupport&&weapon->padVisible))){
+   const Texture&terminalCase=m_rubberTexture,&terminalRubber=m_leatherTexture,&terminalStrap=m_leatherTexture;
+   static const Texture terminalGlass{1,1,{0xff071b1cu}};
+   static const Texture terminalSignal=[](){Texture t{1,1,{0xff56d4b7u}};t.emission={0xff23705cu};return t;}();
+   static const Texture terminalRepair=[](){Texture t{1,1,{0xffe2b452u}};t.emission={0xff725423u};return t;}();
+   auto solid=[&](const FieldTerminalFrame&frame,Point3 low,Point3 high,const Texture&texture){
+    auto p=[&](float x,float y,float z){return frame.point(x,y,z);};
+    quad(p(low.x,low.y,low.z),p(high.x,low.y,low.z),p(high.x,high.y,low.z),p(low.x,high.y,low.z),texture,.85f);
+    quad(p(low.x,high.y,high.z),p(high.x,high.y,high.z),p(high.x,low.y,high.z),p(low.x,low.y,high.z),texture,1.f);
+    quad(p(low.x,low.y,high.z),p(high.x,low.y,high.z),p(high.x,low.y,low.z),p(low.x,low.y,low.z),texture,.9f);
+    quad(p(high.x,high.y,high.z),p(low.x,high.y,high.z),p(low.x,high.y,low.z),p(high.x,high.y,low.z),texture,.9f);
+    quad(p(low.x,high.y,high.z),p(low.x,low.y,high.z),p(low.x,low.y,low.z),p(low.x,high.y,low.z),texture,.9f);
+    quad(p(high.x,low.y,high.z),p(high.x,high.y,high.z),p(high.x,high.y,low.z),p(high.x,low.y,low.z),texture,.9f);
+   };
+   solid(terminal,{-.19f,-.14f,-.022f},{.19f,.14f,.022f},terminalCase);
+   for(float x:{-.173f,.173f})for(float y:{-.121f,.121f})solid(terminal,{x-.019f,y-.019f,-.025f},{x+.019f,y+.019f,.027f},terminalRubber);
+   auto panel=[&](float x1,float y1,float x2,float y2,const Texture&texture,float depth=.024f,float light=1.f){quad(terminal.point(x1,y1,depth),terminal.point(x2,y1,depth),terminal.point(x2,y2,depth),terminal.point(x1,y2,depth),texture,light);};
+   panel(-.155f,-.099f,.155f,.099f,terminalGlass);
+   if(engineering){
+    const auto&signal=weapon->maintenance?terminalRepair:terminalSignal;
+    // Five radio channels show the real owned drone count. The separate bar
+    // indicates assembly or maintenance activity, never a fabricated spawn.
+    int owned=0;for(const auto&drone:engineerDrones)owned+=actor>=0&&drone.owner==actor;
+    for(int channel=0;channel<5;++channel){float x=-.125f+channel*.0625f;const auto&status=channel<owned?terminalSignal:terminalCase;
+     panel(x-.017f,.038f,x+.017f,.056f,status,.025f,channel<owned?1.65f:1.f);
+     panel(x-.023f,.029f,x-.011f,.066f,status,.025f,channel<owned?1.65f:1.f);
+     panel(x+.011f,.029f,x+.023f,.066f,status,.025f,channel<owned?1.65f:1.f);
+    }
+    for(int row=0;row<3;++row){float y=.008f-row*.022f;panel(-.126f,y,.072f-row*.027f,y+.004f,signal,.025f,1.6f);}
+    float progress=weapon->maintenance?.5f+.45f*std::sin(game.elapsed()*4.f):std::clamp(weapon->engineering,0.f,1.f);
+    panel(-.127f,-.083f,.127f,-.069f,terminalCase,.025f);
+    panel(-.125f,-.081f,-.125f+.25f*progress,-.071f,signal,.026f,1.7f);
+    panel(.105f,-.039f,.123f,-.020f,signal,.026f,1.7f);
+    // Legacy actors keep their existing holster assembly. Direct actors use
+    // their authored pad sequence and show the pistol after it is stowed.
+    if(!directSupport){FieldTerminalFrame holster{Point3{pose.position.x,pose.position.y,pose.z}+(Point3{c,-s,0}*.27f+Point3{s,c,0}*.025f+Point3{0,0,.75f})*(track.scale/1.6f),{c,-s,0},{0,0,1},{s,c,0},track.scale/1.6f};
+     solid(holster,{-.041f,-.115f,-.037f},{.041f,.07f,.026f},terminalStrap);}
+   }else{
+    // The terminal stays visible on the Engineer's left hip while his pistol
+    // and combat hands use the existing firearm attachment and action pose.
+    panel(-.035f,-.14f,.035f,.14f,terminalStrap,.027f);
+    panel(-.046f,.076f,.046f,.090f,terminalCase,.029f);
+   }
+  }
+  if(treating&&m_cleanupInspectionStage==0){
+   const Texture&kitWhite=m_medkitCaseTexture,&kitInside=m_rubberTexture,&kitLabel=m_medkitLabelTexture;
+   const Texture&kitStand=m_darkMetalTexture,&kitFeet=m_rubberTexture;
+   Point3 forward{s,c,0},up{0,0,1};float size=track.scale/1.6f;
+   auto kit=medicalKit;
+   auto casePoint=[&](float x,float y,float z){return kit.point(x,y,z);};
+   auto A=casePoint(-.18f,-.13f,-.13f),B=casePoint(.18f,-.13f,-.13f),C=casePoint(.18f,.13f,-.13f),D=casePoint(-.18f,.13f,-.13f);
+   auto a=casePoint(-.18f,-.13f,-.02f),b=casePoint(.18f,-.13f,-.02f),d=casePoint(-.18f,.13f,-.02f),e=casePoint(.18f,.13f,-.02f);
+   if(directTreatment){
+    // Opening A Lid was authored over an elevated case. Its folding field
+    // stand carries that weight after the operator lifts both hands away.
+    for(float x:{-.155f,.155f})for(float y:{-.105f,.105f}){
+     auto top=casePoint(x,y,-.135f);
+     auto foot=top+kit.right*((x<0?-.025f:.025f)*kit.size)+kit.forward*((y<0?-.025f:.025f)*kit.size);foot.z=pose.z+.02f;
+     if(top.z>foot.z){cylinder(top,foot,.010f*kit.size,kitStand);cylinder(foot-Point3{0,0,.01f},foot+Point3{0,0,.006f},.020f*kit.size,kitFeet);}
+    }
+    for(float y:{-.105f,.105f})cylinder(casePoint(-.155f,y,-.135f),casePoint(.155f,y,-.135f),.010f*kit.size,kitStand);
+   }
+   quad(A,B,C,D,kitWhite,1.f);quad(A,a,b,B,kitWhite,1.f);quad(B,b,e,C,kitWhite,1.f);quad(C,e,d,D,kitWhite,1.f);quad(D,d,a,A,kitWhite,1.f);quad(a,d,e,b,kitInside,1.f);
+   // Medical markings on the case remain readable while its lid is open.
+   quad(casePoint(.181f,-.075f,-.12f),casePoint(.181f,.075f,-.12f),casePoint(.181f,.075f,-.03f),casePoint(.181f,-.075f,-.03f),kitLabel,1.f);
+   float open=directTreatment?std::clamp((weapon->treatment-.4f)/.3f,0.f,1.f):std::clamp(std::min(weapon->treatment/.25f,(1-weapon->treatment)/.16f),0.f,1.f),angle=open*(directTreatment?1.8f:1.5f);
+   // The far hinge opens toward the patient, clearing the operator's leaning
+   // chest and mask while leaving the near rim accessible to both hands.
+   auto lid=[&](float x,float y){return casePoint(x,.13f-y*std::cos(angle),-.018f+y*std::sin(angle));};
+   auto marking=[&](float x,float y){return lid(x,y)+(up*std::cos(angle)+forward*std::sin(angle))*.0015f;};
+   quad(lid(-.18f,0),lid(.18f,0),lid(.18f,.26f),lid(-.18f,.26f),kitWhite,1.f);
+   quad(marking(-.075f,.055f),marking(.075f,.055f),marking(.075f,.205f),marking(-.075f,.205f),kitLabel,1.f);
+   // Dressing and disinfectant remain visible inside the open case.
+   cylinder(casePoint(-.07f,-.02f,-.09f),casePoint(-.07f,-.02f,-.025f),.026f*size,kitWhite);
+   quad(casePoint(.015f,-.06f,-.025f),casePoint(.12f,-.06f,-.025f),casePoint(.12f,.07f,-.025f),casePoint(.015f,.07f,-.025f),kitWhite,1.f);
+  }
+  if(armed&&!engineering&&weapon->flash>0){float size=(.075f+.09f*weapon->flash)*track.scale/1.6f;Point3 across=effectSide*size,up{0,0,size};quad(gunMuzzle-across-up,gunMuzzle+across-up,gunMuzzle+across+up,gunMuzzle-across+up,m_muzzleFlash,2.4f*weapon->flash);}
+  if(human&&track.tool&&!armed&&pose.clip!=4){auto hand=transform(mesh.poseAnchor(0)),elbow=transform(mesh.poseAnchor(1));auto direction=hand-elbow;float length=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(length>.01f)cylinder(hand-direction*(.12f/length),hand+direction*(.65f/length),.023f,m_pressureMetal);}
+ };
+ for(size_t i=0;i<w.actorTracks().size();++i)if(!game.autonomousActor(w.actorTracks()[i]))drawActor(w.actorTracks()[i],w.actorPose(i),nullptr,-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i);
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level==level&&game.autonomousActor(npc.track())&&!game.npcStowed(i)){auto weapon=game.npcWeaponPose(i);drawActor(npc.track(),npc.pose,&weapon,int(i),0xA000000000000000ull|i);}}
+ // What each guard makes of the player, over his head: a "?" that fills from
+ // its foot, yellow turning orange, as he works out what he is looking at (dim
+ // while he checks a spot), a red "!" that pops once he has them, a red "?"
+ // while he hunts the player he had or is on his way to open a locker's doors,
+ // and a pulsing handset while he radios.
+ for(size_t i=0;i<game.npcActors().size();++i){const auto&npc=game.npcActors()[i];if(npc.level!=level)continue;
+  const auto card=game.guardLockerCard(i);if(card.kind==Game::GuardCardKind::None)continue;
+  // 7x11 glyphs, scaled into 16x24 cards; black is clear. Rows below `from` take `low`.
+  static const auto glyph=[](const char* rows[11],std::uint32_t colour,int from=24,std::uint32_t low=0){Texture t{16,24,std::vector<uint32_t>(16*24)};t.clampEdges=true;
+   for(int y=0;y<24;++y)for(int x=0;x<16;++x){int gx=(x-1)*7/14,gy=(y-1)*11/22;if(x<1||x>14||y<1||y>22)continue;if(rows[gy][gx]=='#')t.pixels[y*16+x]=y>=from?low:colour;}
+   t.emission=t.pixels;return t;};
+  static const char* question[11]={".#####.","##...##","##...##","....##.","...##..","...##..","...##..",".......","...##..","...##..","......."};
+  static const char* bang[11]={"..###..","..###..","..###..","..###..","..###..","..###..","..###..",".......","..###..","..###..","......."};
+  static const char* handset[11]={"...#...",".#.#.#.","#..#..#","...#...","..###..","..#.#..","..###..","..#.#..","..###..","..###..","......."};
+  // One '?' per filled row (0..22): the empty top dim amber, the filled foot yellow, orange near full.
+  static const auto filling=[]{std::array<Texture,23> cards;for(int rows=0;rows<23;++rows){float f=rows/22.f,o=std::clamp((f-.55f)/.45f,0.f,1.f);
+   std::uint32_t g=std::uint32_t(208-104*o),b=std::uint32_t(64-40*o);cards[size_t(rows)]=glyph(question,0xff4a3a14u,23-rows,0xff000000u|(255u<<16)|(g<<8)|b);}return cards;}();
+  static const Texture alerted=glyph(bang,0xffff3020u),hunting=glyph(question,0xffff4a26u),radio=glyph(handset,0xff78e6ffu);
+  static const Texture bar=[]{Texture t{4,4,std::vector<uint32_t>(16,0xff78e6ffu)};t.clampEdges=true;t.emission=t.pixels;return t;}();
+  const bool alert=card.kind==Game::GuardCardKind::Alert;const float bob=std::sin(game.elapsed()*6.f+float(i))*.03f;
+  Point3 head{npc.pose.position.x,npc.pose.position.y,npc.pose.z+npc.track().scale*1.08f+.18f+bob};
+  // Past 9 m the card grows with distance so it still reads at 15 m and beyond;
+  // the '!' starts half as large again and settles over its first ~100 ms.
+  Point3 eyeAt{player.pos.x,player.pos.y,player.z+player.eye},toCard=head-eyeAt;
+  float reach=std::clamp(std::sqrt(toCard.x*toCard.x+toCard.y*toCard.y+toCard.z*toCard.z)/14.f,1.f,2.f),pop=alert?std::clamp(1.f-card.bangMs/100.f,0.f,1.f):0.f,scale=reach*(1+.55f*pop*pop);
+  const Point3 across=effectSide*((alert?.07f:.065f)*scale),up{0,0,(alert?.11f:.10f)*scale};
+  const Texture* face=&alerted;float glow=1.25f+.8f*pop;
+  if(card.kind==Game::GuardCardKind::Hunting){face=&hunting;glow=2.f;}
+  else if(card.kind==Game::GuardCardKind::Making){face=&filling[size_t(std::lround(card.fill*22))];glow=.9f+.6f*card.fill;}
+  else if(card.kind==Game::GuardCardKind::Checking){face=&filling[size_t(std::lround(card.fill*22))];glow=.8f;}
+  quad(head-across-up,head+across-up,head+across+up,head-across+up,*face,glow);
+  if(card.call>0){
+   // On the radio: a handset beside the card, pulsing, over a bar that fills as the call goes out.
+   const Point3 side=effectSide*(.065f*reach),tall{0,0,.10f*reach},at=head+effectSide*(.17f*reach);const float pulse=.9f+.35f*std::sin(game.elapsed()*16.f);
+   quad(at-side-tall,at+side-tall,at+side+tall,at-side+tall,radio,pulse);
+   const Point3 foot=at-tall-Point3{0,0,.03f*reach},left=foot-side,thin{0,0,.015f*reach};const Point3 right=left+side*(2.f*card.call);
+   quad(left-thin,right-thin,right+thin,left+thin,bar,1.f);
+  }
+ }
+ for(const auto&drone:engineerDrones)if(drone.level==level){
+  if(!sphereVisible(drone.position+Point3{0,0,EngineerDroneHeight*.5f},1.2f))continue;
+  m_engineerDrone.poseCreature(drone.walking?1:0,drone.phase);
+  prop(m_engineerDrone,m_droneTexture,drone.position.x,drone.position.y,EngineerDroneHeight,drone.yaw,.90f,drone.position.z);
+  if(drone.flash>0){Point3 muzzle=drone.position+Point3{std::sin(drone.yaw)*.48f,std::cos(drone.yaw)*.48f,EngineerDroneHeight*.60f};Point3 side{std::cos(drone.yaw)*.12f,-std::sin(drone.yaw)*.12f,0},up{0,0,.12f};quad(muzzle-side-up,muzzle+side-up,muzzle+side+up,muzzle-side+up,m_muzzleFlash,2.4f*drone.flash);}
+  if(drone.repair>0)cylinder(drone.position+Point3{0,0,.4f},drone.position+Point3{0,0,.65f},.03f,m_panelMetal);
+ }
+ for(const auto&grenade:game.tacticalGrenades())if(grenade.level==level)drawTacticalGrenade(grenade.position,grenade.fuse);
+ movingGeometry=false;
+ for(const auto&e:game.chunkEnemies(level)){
+  if(e.bodyTop()<dormantFloor)continue;
+  if(!e.visible())continue;
+  Point3 receiver{e.pos.x,e.pos.y,e.z+.85f};if(!sphereVisible(receiver,1.8f))continue;
+  const WorldLight* keyLight=nullptr;float keyDistance=36.f;
+  if(!w.outdoors()&&length(e.pos-player.pos)<15.f)for(const auto&source:w.lights()){
+   auto emitter=source.emitter();float dx=emitter.x-e.pos.x,dy=emitter.y-e.pos.y,d2=dx*dx+dy*dy;
+   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>e.bodyTop()+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
+  }
+  movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
+  // Baked kinds are skinned bodies posed from their clips; the rest deform their meshes here.
+  const bool baked=creatureTraits(e.kind).baked;
+  bool wasp=e.kind==Enemy::Kind::Wasp,brute=e.kind==Enemy::Kind::Brute||e.kind==Enemy::Kind::Warden;
+  const auto&visual=creatureVisuals[size_t(e.kind)];
+  auto&mesh=this->*visual.mesh;
+  auto&texture=this->*visual.texture;
+  if(baked){auto p=creatureAnimationSample(e,game.elapsed());
+   if(e.visualClip==p.clip&&e.visualTransition<1){float blend=e.visualTransition*e.visualTransition*(3-2*e.visualTransition);mesh.poseCreatureBlend(e.previousVisualClip,e.previousVisualPhase,p.clip,p.phase,blend);}
+   else mesh.poseCreature(p.clip,p.phase);
+  }
+  // The transformed wears the Worker's body, gloves (mano) and boots (pies).
+  std::array<const Texture*,8> parts{};parts.fill(&texture);
+  if(e.kind==Enemy::Kind::Transformed)for(size_t part=0;part<mesh.materialNames.size()&&part<parts.size();++part){const auto&name=mesh.materialNames[part];
+   parts[part]=name.find("pies")!=std::string::npos?&m_transformedBoots:name.find("mano")!=std::string::npos?&m_transformedGloves:&m_transformedTexture;}
+  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
+  float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
+  float shrink=e.alive?1.f:1.f-std::clamp((e.deathTime-1.25f)/1.15f,0.f,1.f);
+  float wind=e.windup>0?std::sin(e.windup*5.f)*.12f:0;
+  // Mesh X is actor right; exteriorLight X points at yaw=(pi/2-heading).
+  auto enemyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),kPi*.5f-angle,true);
+  for(auto face:mesh.triangles){
+   for(auto&v:face.v){Point3 p=(v.p-center)*scale;
+    float localY=p.z;
+    float height=p.y+range.y*scale*.5f;
+    if(e.alive&&!baked){
+     if(wasp){height+=.60f+.065f*std::sin(game.elapsed()*4.f+e.pos.x);if(face.part==1)height+=std::sin(game.elapsed()*36.f)*std::fabs(p.x)*.9f;}
+     else if(brute){float sway=e.moving?std::sin(e.gait)*.07f:0;p.x+=sway*height;height+=std::fabs(sway)*.18f;}
+     else if(std::fabs(p.x)>.21f){
+      // Alternate leg groups rotate around their body attachment; feet lift only while walking.
+      float phase=e.gait+(p.x<0?3.14159f:0.f)+std::floor((p.z+.7f)*4.f)*3.14159f;
+      float stride=e.moving?std::sin(phase)*.16f:0;
+      localY+=stride*(std::fabs(p.x)-.18f);height+=std::max(0.f,e.moving?std::cos(phase)*.10f:0.f);
+     }
+     height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;
+     localY-=e.painFlash*.035f;
+    }else if(!e.alive&&!baked){height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
+    p.x*=shrink;localY*=shrink;height*=shrink;
+    if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==1)
+     v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};
+    else if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==2)
+     v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+1.05f-height};
+    else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
+   }
+   Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+   selectFaceLight(enemyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+   float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
+   // Thin wasp wings transmit light from the far side of the membrane.
+   if(wasp&&face.part==1&&keyLight&&len>.00001f){auto toLamp=keyLight->emitter()-receiver;float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
+   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[size_t(std::clamp(face.part,0,int(parts.size())-1))],e.alive?light:.65f);
+   if(e.alive&&keyLight){
+    static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
+    MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
+    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
+     if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;
+     float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
+     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-e.pos.x,y-e.pos.y)>4.f){valid=false;break;}
+     cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};
+    }
+    if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadow,1.f);}
+   }
+  }
+  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+ }
+ // The player's body: Claire, posed from how the player moves. In first person
+ // her head, hair and arms are left out (the viewmodel's arms stand in for
+ // hers) and she stands a hand's width behind the eye, so looking down shows
+ // her chest, belt, legs and boots in step with the footsteps. Her whole
+ // silhouette throws the floor shadow under the nearest lamp.
+ if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&!m_vrRendering&&!m_environmentInspection&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
+  auto&mesh=m_claireMesh;const auto&state=game.player();
+  if(m_claireFaceTexture.size()!=mesh.triangles.size()){
+   // Classify once, on the bind pose: material by name, and the head (above
+   // the neck) and arms (out past the shoulders above the belt) to leave out.
+   const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
+   for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
+   const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
+   m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);m_claireHeadFace.assign(bind.size(),0);
+   for(size_t f=0;f<bind.size();++f){const unsigned char texture=static_cast<unsigned char>(std::max(0,claireMaterial(mesh,bind[f].part)));
+    m_claireFaceTexture[f]=texture;bool hidden=texture>=7;
+    for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
+    bool head=true;for(const auto&v:bind[f].v)head=head&&(v.p.y-low.y)/height>.88f;m_claireHeadFace[f]=head;
+    if(head)for(const auto&v:bind[f].v){m_claireHeadHeight+=(v.p.y-low.y)/height;++m_claireHeadSamples;}
+    m_claireFaceHidden[f]=hidden;}
+  }
+  // Which clip: 0 idle, 1-4 run forward/back/left/right, 5 sprint, 6 crouched
+  // idle, 7-10 crouched walk forward/back/left/right, 11 falling, 13 walk.
+  const Vec2 velocity=game.playerVelocity(),forward{std::cos(state.angle),std::sin(state.angle)},right{-forward.y,forward.x};
+  const float speed=length(velocity),ahead=dot(velocity,forward),across=dot(velocity,right),gait=std::fmod(game.bodyGait()/(2*kPi),1.f);
+  const int direction=std::fabs(ahead)>=std::fabs(across)?(ahead>=0?0:1):(across>=0?3:2);
+  int clip=0;float phase=std::fmod(game.elapsed()/2.13f,1.f);
+  if(game.dead()){if(m_bodyDeathStart<0)m_bodyDeathStart=game.elapsed();clip=12;phase=std::min(1.f,(game.elapsed()-m_bodyDeathStart)/3.4f);}
+  else if(!state.grounded){clip=11;phase=std::fmod(game.elapsed(),1.f);}
+  else if(state.prone){if(speed<.2f)clip=14;else{clip=direction==1?19:15;phase=gait;}}
+  else if(state.crouched){if(speed<.25f)clip=6;else{clip=7+direction;phase=gait;}}
+  else if(speed>=.25f){phase=gait;clip=direction==0&&game.bodySprinting()&&speed>4.2f?5:speed<2.f?(direction==0?13:15+direction):1+direction;}
+  // A change of stance standing still plays its transition once (16-19 are
+  // walk back/left/right and crawl back; 20 stand-crouch, 21 crouch-stand,
+  // 22 crouch-prone, 23 prone-crouch), at a pace the eye's own move matches.
+  {const int stance=state.prone?2:state.crouched?1:0;const float now=game.elapsed();
+   if(m_bodyStance>=0&&stance!=m_bodyStance&&state.grounded&&!game.dead()&&speed<.25f){
+    m_bodyTransitionClip=stance>m_bodyStance?(m_bodyStance==0&&stance==1?20:22):(stance==0?21:23);
+    m_bodyTransitionStart=now;m_bodyTransitionLength=m_bodyTransitionClip==20?.45f:m_bodyTransitionClip==21?.9f:.95f;
+    m_bodyTransitionRange=m_bodyTransitionClip==21?.55f:1.f;}
+   m_bodyStance=stance;
+   if(m_bodyTransitionClip>=0){const float t=(now-m_bodyTransitionStart)/m_bodyTransitionLength;
+    if(t>=1||t<0||speed>=.25f||!state.grounded||game.dead())m_bodyTransitionClip=-1;else{clip=m_bodyTransitionClip;phase=t*m_bodyTransitionRange;}}}
+  // Aiming, firing and reloading where she stands (24-27: aim idle, crouched
+  // aim idle, the rifle shot, the reload stretched over the shell reload).
+  if(!game.dead()&&state.grounded&&!state.prone&&speed<.25f&&m_bodyTransitionClip<0){
+   if(game.reloading()&&game.activeFirearm()==WeaponId::Shotgun){clip=27;phase=game.reloadProgress();}
+   else if(game.shotAge()<.3f&&!game.unarmed()){clip=26;phase=game.shotAge()/.3f;}
+   else if(game.aimBlend()>.5f){clip=state.crouched?25:24;phase=std::fmod(game.elapsed()/(state.crouched?1.9f:2.03f),1.f);}}
+  // (The map's angle grows clockwise, so a growing look is a right turn.)
+  // Third person: the body trails the look while she stands still (28-31: turn
+  // left/right, crouched turn left/right). In first person it is the look.
+  float bodyAngle=state.angle;
+  if(m_bodyOutside&&SoftwareRenderer::thirdPerson()&&!game.dead()&&!m_turnYawReady){
+   // Measure each turn clip's turn as drawn (the mirror included): her facing is
+   // her eyes against her head, at the clip's first and last frame.
+   auto facing=[&](int c,float ph){mesh.poseCreature(c,ph);Point3 eyes{},head{};int ne=0,nh=0;
+    for(size_t f=0;f<mesh.triangles.size()&&f<m_claireFaceTexture.size();++f){bool e=m_claireFaceTexture[f]==8,h=f<m_claireHeadFace.size()&&m_claireHeadFace[f];if(!e&&!h)continue;
+     for(const auto&v:mesh.triangles[f].v){if(e){eyes=eyes+v.p;++ne;}if(h){head=head+v.p;++nh;}}}
+    if(!ne||!nh)return 0.f;const Point3 d=eyes*(1.f/ne)-head*(1.f/nh);return std::atan2(-d.x,d.z);};
+   for(int i=0;i<4;++i){float a=facing(28+i,0),b=facing(28+i,1),d=b-a;while(d>kPi)d-=2*kPi;while(d<-kPi)d+=2*kPi;m_turnYaw[size_t(i)]=d;}
+   m_turnYawReady=true;}
+  if(m_bodyOutside&&SoftwareRenderer::thirdPerson()&&!game.dead()){const float t=game.elapsed();
+   auto wrap=[](float a){while(a>kPi)a-=2*kPi;while(a<-kPi)a+=2*kPi;return a;};
+   const float dt=m_tpYawTime<0||t<m_tpYawTime?0.f:std::min(.1f,t-m_tpYawTime);m_tpYawTime=t;
+   if(m_tpBodyYaw<-1e8f||dt==0)m_tpBodyYaw=state.angle;
+   if(m_tpTurnClip>=0){const float u=(t-m_tpTurnStart)/m_tpTurnLength;
+    if(u>=1||speed>=.25f||!state.grounded){if(u>=1)m_tpBodyYaw=wrap(m_tpBodyYaw+m_turnYaw[size_t(m_tpTurnClip-28)]);m_tpTurnClip=-1;}else{clip=m_tpTurnClip;phase=u;}}
+   if(m_tpTurnClip<0){const float d=wrap(state.angle-m_tpBodyYaw);
+    if(speed>=.25f||!state.grounded||state.prone||game.aimBlend()>.5f)m_tpBodyYaw=wrap(m_tpBodyYaw+d*std::min(1.f,dt*12.f));
+    else if(std::fabs(d)>1.1f){m_tpTurnSign=d>0?1:-1;{const int base=state.crouched?30:28;m_tpTurnClip=(m_turnYaw[size_t(base-28)]>0)==(d>0)?base:base+1;}m_tpTurnStart=t;m_tpTurnLength=state.crouched?1.27f:1.f;clip=m_tpTurnClip;phase=0;}}
+   bodyAngle=m_tpBodyYaw;}
+  else m_tpBodyYaw=-1e9f;
+  // A change of clip blends over .2 s from the pose it left.
+  const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
+  if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;}
+  m_bodyLastElapsed=now;
+  if(clip!=m_bodyClip){if(m_bodyClip>=0){m_bodyFrom=mesh.triangles;m_bodyBlendStart=now;}m_bodyClip=clip;}
+  mesh.poseCreature(clip,phase);
+  const float blend=m_bodyBlendStart<0?1.f:std::clamp((now-m_bodyBlendStart)/.2f,0.f,1.f);
+  if(blend<1&&m_bodyFrom.size()==mesh.triangles.size())for(size_t f=0;f<mesh.triangles.size();++f)for(int v=0;v<3;++v){auto&p=mesh.triangles[f].v[v].p;const auto&q=m_bodyFrom[f].v[v].p;p=q+(p-q)*blend;}
+  else m_bodyBlendStart=-1;
+  // Stand her on the player's feet as tall as the game's other people (1.7 m,
+  // an actor's authored size), a hand's width behind the eye.
+  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  // First person scales her so her eyes are the camera's (her head's centre
+  // sits about 4 cm above the eye line): at 1.7 m they would be 16 cm above it.
+  const float headFraction=m_claireHeadSamples?m_claireHeadHeight/m_claireHeadSamples:.93f;
+  const float scale=(m_bodyOutside?1.7f:(Player::StandingEye+.04f)/headFraction)/std::max(.01f,range.y),angle=bodyAngle;
+  // In first person her animated head sits just behind the eye, wherever the
+  // clip carries it (the rifle stance leans, a kneel sits back on the heel),
+  // so her legs fall under and behind the view instead of out in front of it.
+  // From outside she stands a hand's width behind the player's position.
+  Vec2 at=state.pos-forward*.14f;const float feet=state.z;
+  if(!m_bodyOutside){Point3 head{};int count=0;for(size_t f=0;f<mesh.triangles.size()&&f<m_claireHeadFace.size();++f)if(m_claireHeadFace[f])for(const auto&v:mesh.triangles[f].v){head=head+v.p;++count;}
+   if(count){head=(head*(1.f/count)-center)*scale;const Vec2 side{std::sin(angle),-std::cos(angle)};at=state.pos-forward*.10f-forward*head.z-side*head.x;}}
+  Point3 receiver{at.x,at.y,feet+.85f};
+  const WorldLight* keyLight=nullptr;float keyDistance=36.f;
+  if(!w.outdoors())for(const auto&source:w.lights()){auto emitter=source.emitter();float dx=emitter.x-at.x,dy=emitter.y-at.y,d2=dx*dx+dy*dy;
+   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>feet+1.8f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}}
+  movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
+  auto bodyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),kPi*.5f-angle,true);
+  static const Texture shadowTexture=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
+  // Her FBX puts her left side on +X, so +X is her left (the creatures'
+  // convention mirrors that; she must not be: her armband is on her right).
+  // Mirroring back reverses the winding, so each face swaps two corners.
+  // First person also leaves out anything within reach of the eye (a crouch
+  // puts the eye inside her torso).
+  const Point3 eye{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
+  for(size_t f=0;f<mesh.triangles.size();++f){auto face=mesh.triangles[f];
+   for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
+    v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
+   std::swap(face.v[1],face.v[2]);
+   bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.18f&&d.x*d.x+d.y*d.y<.25f*.25f)||(state.crouched&&d.z>-.12f);}
+   // Third person pulled in against a wall: what is within reach of the lens is
+   // left out, so the view sees past her shoulder instead of into her coat.
+   if(m_bodyOutside&&!nearEye)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}
+   // Crouched or prone, anything of hers up at the eye is left out; her whole
+   // body, head included, still throws the one shadow.
+   const bool hiddenHere=((m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside)||(m_bodyOutside&&nearEye);
+   // Only the faces turned to the lamp cast: a closed body then darkens each
+   // floor pixel about once. Every face casting stacked the translucent
+   // triangles into a faceted black mass, worst crouched over her shadow.
+   bool lit=false;if(keyLight){auto emitter=keyLight->emitter();Point3 c=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f),n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);
+    lit=n.x*(emitter.x-c.x)+n.y*(emitter.y-c.y)+n.z*(emitter.z-c.z)>0;}
+   if(keyLight&&lit){MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
+    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
+     if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
+     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-at.x,y-at.y)>4.f){valid=false;break;}
+     cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
+    if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
+   if(hiddenHere)continue;
+   Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+   selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+   tri(face.v[0],face.v[1],face.v[2],m_claireTextures[m_claireFaceTexture[f]],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));
+  }
+  // From outside, the gun she carries sits in her right hand and points at
+  // her left (the rifle hold every clip shares).
+  if(m_bodyOutside&&!game.dead()&&game.equippedWeapon()!=WeaponId::Fists){
+   auto world=[&](Point3 p){p=(p-center)*scale;return Point3{at.x+p.z*std::cos(angle)+p.x*std::sin(angle),at.y+p.z*std::sin(angle)-p.x*std::cos(angle),feet+p.y+range.y*scale*.5f+.01f};};
+   const Point3 grip=world(mesh.poseAnchor(0)),support=world(mesh.poseAnchor(1));
+   auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-5f?v*(1/l):Point3{1,0,0};};
+   Point3 gunForward=unit(support-grip);if(std::sqrt((support-grip).x*(support-grip).x+(support-grip).y*(support-grip).y)<.08f)gunForward={std::cos(angle),std::sin(angle),0};
+   const Point3 gunRight=unit({gunForward.y,-gunForward.x,0}),gunUp=unit(cross3(gunRight,gunForward));
+   const bool handgun=game.equippedWeapon()==WeaponId::Handgun;const auto&gunMesh=handgun?m_handgunMesh:m_weaponMesh;const auto&gunTexture=handgun?m_handgunTexture:m_weaponTexture;
+   const float gunScale=handgun?1.f:.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z);
+   for(auto face:gunMesh.bindTriangles()){if(!handgun&&face.part==3)continue;
+    for(auto&v:face.v){auto p=v.p;if(handgun)v.p=grip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale;else{p=(p-Point3{.02f,.70f,1.10f})*gunScale;v.p=grip+gunRight*p.x+gunUp*p.y-gunForward*p.z;}}
+    {bool near=false;for(const auto&v:face.v){Point3 d=v.p-eye;near=near||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}if(near)continue;}   // as her body, past the lens
+    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+    tri(face.v[0],face.v[1],face.v[2],gunTexture,.75f+.3f*std::fabs(n.z)/std::max(.001f,len));}
+  }
+  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+ }
+ // Recognizable authored supplies, with their original UVs and world depth.
+ for(auto&p:game.chunkPickups(level))if(p.active){
+  const float base=p.z>-999?p.z:w.floorHeight(p.pos.x,p.pos.y);
+  if(p.kind==Pickup::Kind::Health)prop(m_medkitMesh,m_medkitTexture,p.pos.x,p.pos.y,.4f,-.3f,.65f,base);
+  else if(p.kind==Pickup::Kind::HandgunAmmo)prop(m_nineMesh,m_nineTexture,p.pos.x,p.pos.y,.12f,-.3f,.34f,base);
+  else prop(m_shellsMesh,m_shellsTexture,p.pos.x,p.pos.y,.36f,-.3f,.48f,base);
+ }
+ // A downed carrier's pistol where it fell: the actor's own m_handgunMesh,
+ // in metres, lying on its left side (the model's +x is the gun's left, so
+ // it points down) with the barrel along its yaw, magazine in.
+ for(const auto&gun:game.droppedSidearms())if(gun.level==level){
+  perf::Scope propProfile(perf::Prop);Point3 receiver{gun.position.x,gun.position.y,gun.position.z+.03f};
+  if(!sphereVisible(receiver,.25f)||hidden({gun.position.x-.2f,gun.position.y-.2f,gun.position.z},{gun.position.x+.2f,gun.position.y+.2f,gun.position.z+.05f}))continue;
+  const Point3 forward{std::cos(gun.yaw),std::sin(gun.yaw),0},across{-std::sin(gun.yaw),std::cos(gun.yaw),0};
+  objectLighting=true;auto lights=exteriorLight(receiver,.2f,.2f,.05f,gun.yaw,m_handgunTexture.glossStrength>0);
+  for(auto face:m_handgunMesh.triangles){for(auto&v:face.v){auto p=v.p;v.p=receiver+forward*p.z+across*p.y+Point3{0,0,m_handgunMesh.maximum.x-p.x-.03f+.004f};}
+   auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],m_handgunTexture,light);}
+  objectLighting=false;objectNormalLighting=nullptr;
+ }
+ // Water mesh uses the same authored basins as floor collision and buoyancy.
+ if(!w.waterVolumes().empty()){
+  const auto&water=w.coast()?m_coastWater:m_water;
+  // One continuous quad per basin avoids cracks between individually rasterized
+  // ripples. Moving normal-mapped UVs still gives the surface visible motion.
+  for(const auto& basin:w.waterVolumes()){
+   float bank=w.layers().front().elevation;
+   float inset=w.coast()?0.f:.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
+   float left=basin.x1+inset,right=basin.x2-inset,near=basin.y1+inset,far=basin.y2-inset;
+   float z=basin.surface+.004f;
+   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.05f,
+        {(right-left)*.45f,(far-near)*.45f},{left+game.elapsed()*.014f,near-game.elapsed()*.008f});
+  }
+ }
+ // A single camera-facing tapered sheet gives each lamp a readable shaft.
+ // Multiple crossed sheets overlap into distracting round bright patches.
+ if(!m_gpuFrame&&!w.outdoors()){
+  static const Texture dust=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
+   for(int y=0;y<32;++y)for(int x=0;x<32;++x){float u=(x+.5f)/32.f,v=(y+.5f)/32.f,r=std::fabs(u-.5f)*2.f;float feather=std::pow(std::max(0.f,1.f-r),2.f),end=std::min(1.f,std::min(v,1.f-v)*12.f);unsigned a=unsigned(std::clamp(feather*end*.06f,0.f,1.f)*255.f);t.pixels[size_t(y*32+x)]=(a<<24)|0x00d6b884u;}return t;}();
+  int beams=0;for(const auto&beamLight:w.lights()){
+   if(beamLight.mount==WorldLightMount::Wall||beamLight.intensity<=0||lampPower(size_t(&beamLight-w.lights().data()))<=.05f)continue;
+   float dx=beamLight.position.x-player.pos.x,dy=beamLight.position.y-player.pos.y;if(dx*dx+dy*dy>144.f)continue;
+   float x=beamLight.position.x,y=beamLight.position.y,bottom=w.floorHeight(x,y)+.08f,top=std::min(beamLight.z,w.clearanceAbove(x,y,bottom)-.04f);
+   if(top-bottom<1.f||top-bottom>10.f||!sphereVisible({x,y,(bottom+top)*.5f},top-bottom))continue;
+   float inv=1.f/std::sqrt(std::max(.0001f,dx*dx+dy*dy)),ux=-dy*inv,uy=dx*inv,wide=.72f,fixtureHalfWidth=.42f;
+   quad({x-ux*wide,y-uy*wide,bottom},{x+ux*wide,y+uy*wide,bottom},{x+ux*fixtureHalfWidth,y+uy*fixtureHalfWidth,top},{x-ux*fixtureHalfWidth,y-uy*fixtureHalfWidth,top},dust,1.6f*lampPower(size_t(&beamLight-w.lights().data())));
+   if(++beams==6)break;
+  }
+ }
+}
+Point3 SoftwareRenderer::vrPistolPoint(Point3 p,bool handFrame){
+ // The model is in metres with its grip at the origin, +z the muzzle and +x
+ // the gun's left: turned about up, the barrel runs down the frame's -z and
+ // the grip sits through the fist (the controller frame keeps older offsets).
+ return handFrame?Point3{-p.x,p.y,-p.z}:Point3{-p.x,p.y-.04f,-p.z+.06f};
+}
+void SoftwareRenderer::drawTrackedHands(const Game&game){
+ auto origin=game.chunkOffset(game.level());const auto&hands=VrRuntime::active()->hands();
+ auto draw=[&](const MeshTriangle&face,const Texture&texture,const VrHand&hand){
+  MeshVertex vertices[3];for(int i=0;i<3;++i){vertices[i]=face.v[i];auto p=face.v[i].p;auto world=hand.position+hand.basis[0]*p.x+hand.basis[1]*p.y+hand.basis[2]*p.z;world.x-=origin.x;world.y-=origin.y;vertices[i].p=cameraPoint(world,game);}
+  triangle3D(vertices[0],vertices[1],vertices[2],texture,.85f);
+ };
+ // The hand mesh sits in SteamVR's skeletal hand frame; without skeletal input
+ // it falls back to the controller frame.
+ for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}
+  for(const auto&triangle:m_vrHandMeshes[side]){const int claire=claireMaterial(m_armsMesh,triangle.part);draw(triangle,claire>=0?m_claireTextures[size_t(claire)]:m_arms,frame);}}
+ // Alyx-style displays (SoftwareRenderer::prepareVrDisplays): camera-facing
+ // glass cards on the back of the left hand and on the gun, and title and
+ // subtitle cards held ahead of the head. Both windings, so no culling.
+ auto card=[&](Point3 c,float width,float height,const Texture&texture){if(texture.pixels.empty())return;
+  MeshVertex a{{c.x-width*.5f,c.y-height*.5f,c.z},0,1},b{{c.x+width*.5f,c.y-height*.5f,c.z},1,1},d{{c.x+width*.5f,c.y+height*.5f,c.z},1,0},e{{c.x-width*.5f,c.y+height*.5f,c.z},0,0};
+  triangle3D(a,b,d,texture,1.f);triangle3D(a,d,e,texture,1.f);triangle3D(a,d,b,texture,1.f);triangle3D(a,e,d,texture,1.f);};
+ auto at=[&](Point3 world){world.x-=origin.x;world.y-=origin.y;return cameraPoint(world,game);};
+ // Each card sits just above its hand and is pulled toward the eye, so the
+ // hand or the gun never hides it.
+ auto clear=[](Point3 c,float lift,float pull){c.y+=lift;float l=std::sqrt(c.x*c.x+c.y*c.y+c.z*c.z);return l>pull?c*((l-pull)/l):c;};
+ if(hands[0].tracked){const auto&h=hands[0];card(clear(at(h.handFrame?h.handOrigin+h.handBasis[2]*-.05f:h.position),.05f,.07f),.10f,.019f,m_vrHealthTexture);}
+ card({0,.24f,1.8f},1.2f,.15f,m_vrTitleTexture);card({0,-.42f,1.5f},.9f,.127f,m_vrCaptionTexture);
+
+ if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
+  VrHand gun=hands[1];if(gun.handFrame){gun.position=gun.gunOrigin;gun.basis=gun.gunBasis;}
+  const bool pistol=game.activeFirearm()==WeaponId::Handgun;
+  if(game.vrSupportGrip()&&hands[0].tracked&&!pistol){
+   auto delta=(hands[0].handFrame?hands[0].gunOrigin:hands[0].position)-gun.position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
+   if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=gun.basis[1];
+    Point3 side={back.y*upHint.z-back.z*upHint.y,back.z*upHint.x-back.x*upHint.z,back.x*upHint.y-back.y*upHint.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
+    if(sideLength>.0001f){side=side*(1.f/sideLength);Point3 up={side.y*back.z-side.z*back.y,side.z*back.x-side.x*back.z,side.x*back.y-side.y*back.x};gun.basis={side,up,back};}
+   }
+  }
+  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=.85f/std::max({range.x,range.y,range.z});
+  // In the grip frame the pistol grip sits in the palm (13 cm behind the model's
+  // centre) with the bore about 6 cm above the fist; the controller frame keeps
+  // its older offsets.
+  const float gripLift=hands[1].handFrame?0.f:.055f,gripBack=hands[1].handFrame?.13f:.25f;
+  // The pistol (vrPistolPoint), its slide home or locked back on an empty magazine.
+  if(pistol){const float slide=game.slideLocked()?.026f:0.f;for(auto face:m_handgunMesh.triangles){for(auto&v:face.v){auto p=v.p;if(face.part==4)p.z-=slide;v.p=vrPistolPoint(p,hands[1].handFrame);}draw(face,m_handgunTexture,gun);}}
+  else for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack};}draw(face,m_weaponTexture,gun);}
+  // The load, on a plate on the left of the receiver (facing the player's eye
+  // when the gun is held right-handed), or of the pistol's slide; drawn both ways round.
+  if(!m_vrAmmoTexture.pixels.empty()){const float x=pistol?-.021f:-.036f,y0=pistol?.022f:.022f,y1=pistol?.05f:.052f,z0=pistol?-.11f:-.08f,z1=pistol?-.05f:-.02f;
+   MeshTriangle plate{{{{x,y0,z0},0,1},{{x,y0,z1},1,1},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y1,z0},0,0}}};draw(plate,m_vrAmmoTexture,gun);
+   plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y0,z1},1,1}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z0},0,0},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);}
+ }
+}
+namespace {
+// The player's pistol (medic-handgun.obj): model metres, the grip at the
+// origin, +z to the muzzle and +x the gun's LEFT (the pack's slide stop and
+// safety are there), so the view map turns x round. The magazine leaves down
+// the well, 16 degrees back from straight down.
+constexpr Point3 kPistolMuzzle{0,.0463f,.176f},kPistolWell{0,-.961f,-.276f},kPistolHammerPivot{0,.0345f,-.0224f};
+// The arms sit centred for the pistol and far enough forward that the elbows
+// are nearly straight with the gun out at arm's length.
+Point3 pistolArmOffset(){return {.1f,-.31f,.39f};}
+}
+SoftwareRenderer::PistolHold SoftwareRenderer::pistolHold(const Game& game)const{
+ PistolHold h;const auto&motion=game.weaponMotion();const auto&cycle=playerWeaponDef(WeaponId::Handgun).cycle;const float s=kViewModelScale;
+ auto dot=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+ auto unit=[&](Point3 p){return p*(1.f/std::sqrt(std::max(1e-12f,dot(p,p))));};
+ auto smooth=[](float a,float b,float x){x=std::clamp((x-a)/(b-a),0.f,1.f);return x*x*(3-2*x);};
+ // The gun's frame in view space: grip origin O, right R, up U and the bore F,
+ // converging on the crosshair a few metres out, held out at arm's length and
+ // toed in a few degrees so its right flank, not only the glove backs, faces the eye.
+ Point3 O{.13f,-.13f,.56f};
+ Point3 F=unit(Point3{-O.x,-O.y,4.f-O.z}),U=unit(Point3{0,1,0}-F*F.y),R=cross3(U,F);
+ auto turn=[&](Point3 v,Point3 k,float a){return v*std::cos(a)+cross3(k,v)*std::sin(a)+k*(dot(k,v)*(1-std::cos(a)));};
+ // A turn about R by a positive angle tips the muzzle down; about U, right; about F, rolls the top left.
+ auto rotate=[&](Point3 k,float a,Point3 pivot){k=unit(k);O=pivot+turn(O-pivot,k,a);R=turn(R,k,a);U=turn(U,k,a);F=turn(F,k,a);};
+ // Reload: the top cants right and the muzzle turns in and up a little, so the
+ // well faces down-left, away from the right forearm: the magazine coming up
+ // from the left hand shows below the grip instead of behind the glove.
+ const bool reloading=game.reloading()&&game.activeFirearm()==WeaponId::Handgun;
+ const float p=reloading?game.reloadProgress():0.f,duration=std::max(.1f,game.reloadDuration());const bool empty=reloading&&game.emptyReload();
+ const float tilt=reloading?smooth(0,.12f,p)*(1-smooth(empty?.90f:.80f,1,p)):0.f;
+ rotate(U,-.07f,O);rotate(F,-.80f*tilt,O);rotate(R,-.10f*tilt,O);rotate(U,-.35f*tilt,O);O=O+Point3{-.08f,.03f,0}*tilt;
+ // Sprinting: low ready, muzzle down and in.
+ const float run=motion.sprint*(1-tilt);
+ rotate(R,.60f*run,O);rotate(U,-.12f*run,O);rotate(F,.08f*run,O);O=O+Point3{-.030f,-.025f,-.03f}*run;
+ // Lowered (holstered, empty, or a switch): the muzzle tips down as assembly()
+ // drops the arms; a gun coming up from a switch rises canted the other way.
+ const float lowered=game.holster();
+ rotate(R,.90f*lowered,O);rotate(F,(game.weaponSwitchPhase()==2?.35f:-.20f)*lowered,O);
+ // An empty reload ends with the hands back on the grip and the right thumb
+ // on the slide stop: the slide slams home with a small jolt.
+ const float rack=cycle.rackAt,in=cycle.magInAt,out=cycle.magOutAt;
+ if(empty){const float jolt=std::sin(std::clamp((p-rack)/.06f,0.f,1.f)*kPi);rotate(R,.035f*jolt,O);O=O+F*(.006f*jolt);}
+ // A shot: sharp muzzle rise about the wrists, fast return, a short shove back.
+ const float age=game.shotAge(),kick=game.weaponKick();const bool shot=kick>0&&kick+3.f*age>.97f&&!reloading;
+ float rise=0;if(shot)rise=age<.028f?age/.028f:std::exp(-(age-.028f)/.075f);
+ rotate(R,-.16f*rise,O-F*(.07f*s)-U*(.04f*s));O=O-F*(.030f*rise)+U*(.006f*rise);
+ // Sway, bob and drift as the shotgun's, about the grip, less the game's own
+ // kick terms (Game::updateWeaponMotion), which the rise above replaces.
+ {const float pitch=motion.pitch-kick*.065f,back=motion.back-kick*.095f,cp=std::cos(pitch),sp=std::sin(pitch),cy=std::cos(motion.yaw),sy=std::sin(motion.yaw);
+  auto sway=[&](Point3 v){float y=v.y*cp+v.z*sp,z=-v.y*sp+v.z*cp;return Point3{v.x*cy+z*sy,y,-v.x*sy+z*cy};};
+  R=sway(R);U=sway(U);F=sway(F);O=O+Point3{0,motion.bob,-back};}
+ h.origin=O;h.axis={R*-s,U*s,F*s};
+ auto dir=[&](Point3 d){return unit(R*-d.x+U*d.y+F*d.z);};
+ // The slide runs back and home with each shot, stays back on an empty
+ // magazine, and goes home when the empty reload releases it.
+ float back=0;if(shot)back=age<.022f?age/.022f:std::max(0.f,1-(age-.022f)/.05f);
+ if(game.activeFirearm()==WeaponId::Handgun&&game.slideLocked())back=1;
+ h.slide=.026f*back;
+ h.hammer=.30f*std::min(1.f,h.slide/.026f);h.trigger=shot&&age<.06f?.003f:0.f;
+ // The trigger hand: palm on the right panel, the backstrap in its heel, the
+ // middle knuckle under the guard and the index on the trigger.
+ h.wrist[0]=h.point({-.002f,-.03f,-.095f});h.forward[0]=dir({-.25f,.10f,.96f});h.palm[0]=dir({.96f,0.f,.25f});
+ // The support hand: its heel on the left panel, fingers round the firing fingers.
+ struct Pose{Point3 wrist,forward,palm;};
+ const Pose grip{h.point({.06f,-.034f,-.075f}),dir({-.30f,.05f,.95f}),dir({-.95f,0.f,-.30f})};
+ Pose left=grip;
+ if(reloading){
+  // The support hand drops to the belt as the old magazine falls, comes back
+  // with a fresh one under the well, pushes it home and returns to the grip.
+  auto blend=[&](const Pose&a,const Pose&b,float t){t=std::clamp(t,0.f,1.f);t=t*t*(3-2*t);return Pose{a.wrist+(b.wrist-a.wrist)*t,unit(a.forward+(b.forward-a.forward)*t),unit(a.palm+(b.palm-a.palm)*t)};};
+  const Pose belt{Point3{-.30f,-.55f,.30f},unit(Point3{.2f,-1.f,.3f}),unit(Point3{1.f,0.f,0.f})};
+  auto magazineHand=[&](float drop){Point3 base=h.point(Point3{0,-.078f,-.02f}+kPistolWell*drop);return Pose{base+(R*-.06f+U*-.085f+F*-.020f)*s,dir({-.35f,.55f,.75f}),dir({-.70f,.60f,-.20f})};};
+  const float leave=out-.07f,atBelt=.34f,ready=in-.10f,seated=in+.05f,home=empty?rack-.04f:.82f,lift=.1f;
+  const Pose readyHand=magazineHand(lift);
+  if(p<leave)left=grip;
+  else if(p<atBelt)left=blend(grip,belt,(p-leave)/(atBelt-leave));
+  else if(p<atBelt+.03f)left=belt;
+  else if(p<ready)left=blend(belt,readyHand,(p-atBelt-.03f)/(ready-atBelt-.03f));
+  else if(p<in)left=magazineHand(lift*(1-smooth(ready,in,p)));
+  else if(p<seated)left=magazineHand(0);
+  else left=blend(magazineHand(0),grip,(p-seated)/(home-seated));
+  h.support=p<leave||p>=home;
+  // The old magazine slides out and falls clear; the fresh one rides in the hand.
+  const float fall=(p-out-.02f)*duration;
+  if(p<out-.03f)h.magazine=0;
+  else if(p<out+.02f){h.magazine=1;h.magazineDrop=.06f*smooth(out-.03f,out+.02f,p);}
+  else if(fall<.25f){h.magazine=2;h.magazineDrop=.06f;h.magazineShift={0,-4.9f*fall*fall,-.3f*fall};}
+  else if(p<atBelt+.03f)h.magazine=3;
+  else if(p<ready){h.magazine=2;h.magazineDrop=lift;h.magazineShift=left.wrist-readyHand.wrist;}
+  else if(p<in){h.magazine=1;h.magazineDrop=lift*(1-smooth(ready,in,p));}
+ }
+ h.wrist[1]=left.wrist;h.forward[1]=left.forward;h.palm[1]=left.palm;
+ return h;
+}
+// The shotgun clip for this moment, from game state; the pack's clips run at 24 fps.
+SoftwareRenderer::FpClip SoftwareRenderer::fpShotgunClip(const Game& game)const{
+ auto loop=[&](const char*name,float frames){return FpClip{name,std::fmod(game.elapsed()*24.f/frames,1.f)};};
+ const bool aimed=game.aimBlend()>.5f;const float speed=length(game.playerVelocity());
+ if(game.holster()>.01f)return FpClip{"draw",std::clamp(1-game.holster(),0.f,1.f)};
+ if(game.reloading()){const float t=game.reloadElapsed(),inserts=game.reloadShells()*Game::ShellInsert;   // each clip at its own pace
+  if(t<Game::ShellStart)return FpClip{"reload_start",t/Game::ShellStart};
+  if(t<Game::ShellStart+inserts)return FpClip{"reload_step",std::fmod((t-Game::ShellStart)/Game::ShellInsert,1.f)};
+  return FpClip{"reload_end",std::clamp((t-Game::ShellStart-inserts)/Game::ShellFinish,0.f,1.f)};}
+ const float fire=aimed?25/24.f:1.f;if(game.shotAge()<fire)return FpClip{aimed?"fire_aim":"fire",game.shotAge()/fire};
+ if(aimed)return speed>.3f?loop("walk_aim",40):loop("aim",160);
+ if(game.bodySprinting()&&speed>4.f)return loop("run",20);
+ if(speed>.3f)return loop("walk",40);
+ if(game.player().crouched)return loop("crouch",160);
+ return loop("idle",160);
+}
+// A point on the Remington (its model coordinates) where this frame's pose
+// carries it, in view space (x right, y up, z forward). The baked gun and pump
+// points are its origin and unit axes in the rig's camera space (z back).
+Point3 SoftwareRenderer::fpShotgunPoint(Point3 e,bool pump)const{
+ const char*o=pump?"pump_o":"gun_o";auto at=[&](const char*n){return m_fpShotgun.bonePosition(n);};
+ const Point3 origin=at(o),x=at(pump?"pump_x":"gun_x")-origin,y=at(pump?"pump_y":"gun_y")-origin,z=at(pump?"pump_z":"gun_z")-origin;
+ const Point3 p=origin+x*e.x+y*e.y+z*e.z;return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};
+}
+void SoftwareRenderer::prepareViewModel(const Game& game){
+ const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
+ if(game.heldNpc()>=0||game.takedownActive()||locker){
+  auto center=kArmsRigCenter;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
+  auto toRig=[&](Point3 world){auto p=(cameraPoint(world,game)-Point3{0,-.22f,.30f})*(1.f/kViewModelScale);p.x=-p.x;return p+center;};
+  m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
+ }
+ if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
+ if(game.activeFirearm()==WeaponId::Handgun){
+  // The pistol: both hands on the grip from pistolHold, frames and all (the
+  // rig is the view mirrored in x), with the pistol's finger set.
+  const auto hold=pistolHold(game);auto armCenter=kArmsRigCenter;
+  auto toRig=[&](Point3 view){auto p=(view-pistolArmOffset())*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
+  Mesh::ArmHold arms{};arms.curls=1;for(size_t side=0;side<2;++side){arms.forward[side]={-hold.forward[side].x,hold.forward[side].y,hold.forward[side].z};arms.palm[side]={-hold.palm[side].x,hold.palm[side].y,hold.palm[side].z};}
+  m_armsMesh.poseAttached(toRig(hold.wrist[0]),toRig(hold.wrist[1]),motion.elbow,0,0,game.elapsed()*2.f,game.weaponKick(),&arms);return;
+ }
+ // The shotgun: the pack's authored clips (the procedural hold below remains
+ // only if the baked rig is missing).
+ m_fpShotgunPosed=false;
+ if(m_fpShotgun.bones){const auto clip=fpShotgunClip(game);if(m_fpShotgun.poseAction(clip.name,clip.phase)){m_fpShotgunPosed=true;return;}}
+ auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
+ const auto view=shotgunView(game.aimBlend());scale*=view.scale;auto local=[&](Point3 source){return shotgunPlace(view,(source-center)*scale);};
+ const Point3 pivot{view.gun.x,view.gun.y,view.gun.z-.30f};
+ auto animated=[&](Point3 p){p=p-pivot;float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;};
+ auto armCenter=kArmsRigCenter;
+ auto toRig=[&](Point3 at){auto p=(at-view.arms)*(1.f/(kViewModelScale*view.scale));p.x=-p.x;return p+armCenter;};
+ auto right=animated(local(shotgunSocket(false))+view.trigger),left=animated(local(shotgunSocket(true)+Point3{0,0,motion.bolt/scale})+view.support);   // the left hand rides the pump
+ const auto hands=shotgunHold();
+ auto pose=[&]{m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick(),&hands);};
+ // Fit the hands to the gun: pose, see where the curled fingers landed, move
+ // each wrist by the miss, pose again. The left fingertips close on the pump's
+ // wood, the right on the stock's narrow wrist with the index level with the
+ // trigger along it. Two passes converge (the fingers move with the wrist).
+ {const float unit=kViewModelScale*view.scale;
+  auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*unit;p.x=-p.x;return p+view.arms;};
+  auto at=[&](Point3 source,bool pump){return animated(local(pump?source+Point3{0,0,motion.bolt/scale}:source));};
+  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  auto closest=[](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);return a+ab*t;};
+  auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  const Point3 pumpA=at({-.064f,1.22f,-3.0f},true),pumpB=at({-.064f,1.22f,-1.5f},true),wristA=at({-.064f,1.25f,1.0f},false),wristB=at({-.064f,1.15f,1.5f},false),blade=at({-.064f,1.0f,.45f},false);
+  auto wrap=[&](std::initializer_list<const char*> fingers,const char*side,Point3 a,Point3 b,float radius){Point3 shift{};int n=0;
+   for(const char*f:fingers){Point3 c=bone((std::string(f)+side).c_str()),q=closest(c,a,b),out=c-q;float d=len(out);if(d<1e-5f)continue;shift=shift+(q+out*(radius*unit/d)-c);++n;}
+   if(!n)return Point3{};shift=shift*(1.f/n);const float l=len(shift),cap=.05f*view.scale;return l>cap?shift*(cap/l):shift;};   // a capped step: the arm must still reach
+  for(int pass=0;pass<2;++pass){pose();
+   left=left+wrap({"f_index.03","f_middle.03","f_ring.03","f_pinky.03"},".L",pumpA,pumpB,.030f);
+   Point3 along=wristB-wristA;along=along*(1.f/std::max(1e-6f,len(along)));const Point3 toBlade=blade-bone("f_index.03.R");const float slide=std::clamp(toBlade.x*along.x+toBlade.y*along.y+toBlade.z*along.z,-.08f*view.scale,.08f*view.scale);
+   right=right+wrap({"f_middle.03","f_ring.03","f_pinky.03"},".R",wristA,wristB,.032f)+along*slide;}}
+ m_shotgunTarget={right,left};pose();
+}
+void SoftwareRenderer::drawViewModel(const Game& game){
+ perf::Scope viewProfile(perf::ViewModel);
+ // The hands on a locker's leaves (Game::lockerHands) draw however the gun is.
+ std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
+ if(game.handsLowered()&&!game.holdingClutter()&&game.heldNpc()<0&&!locker)return; // Off duty: nothing in hand.
+ if(m_gpuFrame)m_gpu->clearDepth();
+ if(game.holdingClutter()&&!m_inspectRig)return;
+ std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
+ const int heldActor=game.heldNpc();
+ const auto&motion=game.weaponMotion();
+ Point3 gunCenter=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f;
+ Point3 gunRange=m_weaponMesh.maximum-m_weaponMesh.minimum;
+ float gunScale=kViewModelScale/std::max({gunRange.x,gunRange.y,gunRange.z});
+ const auto shotgun=shotgunView(game.aimBlend());gunScale*=shotgun.scale;auto gunLocal=[&](Point3 source){return shotgunPlace(shotgun,(source-gunCenter)*gunScale);};
+ const Point3 pivot{shotgun.gun.x,shotgun.gun.y,shotgun.gun.z-.30f};
+ auto animated=[&](Point3 p){
+  p=p-pivot;
+  float y=p.y*std::cos(motion.pitch)+p.z*std::sin(motion.pitch),z=-p.y*std::sin(motion.pitch)+p.z*std::cos(motion.pitch);
+  return Point3{p.x*std::cos(motion.yaw)+z*std::sin(motion.yaw),y+motion.bob,-p.x*std::sin(motion.yaw)+z*std::cos(motion.yaw)-motion.back}+pivot;
+ };
+ // Sockets are authored in the imported gun's coordinates. Palm offsets put the
+ // curled fingers around the grip while keeping the wrists outside the stock.
+ const Point3 triggerSocket=shotgunSocket(false),supportSocket=shotgunSocket(true);
+  auto rightWrist=m_shotgunTarget[0];   // the fitted targets prepareViewModel posed to
+  auto leftWrist=m_shotgunTarget[1];
+ bool fists=game.unarmed()||locker;
+ // The pistol has its own frame, parts and wrist targets (pistolHold).
+ const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;
+ PistolHold hold;if(pistol){hold=pistolHold(game);rightWrist=hold.wrist[0];leftWrist=hold.wrist[1];}
+ Point3 armCenter=kArmsRigCenter,armOffset=fists?Point3{0,-.22f,.30f}:pistol?pistolArmOffset():shotgun.arms;
+ const float armScale=kViewModelScale*(fists||pistol?1.f:shotgun.scale);auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*armScale;p.x=-p.x;return p+armOffset;};
+ if(!m_poseReady)prepareViewModel(game);
+ // The shotgun on the pack's authored rig: its clips carry the arms and the gun.
+ const bool fpShotgun=!fists&&!pistol&&heldActor<0&&!game.takedownActive()&&!locker&&m_fpShotgunPosed;
+ // The pack framed its clips for a 90-degree lens; ours is 75, so the aimed
+ // clips sit too close. Push the whole assembly back along the view while
+ // aiming (the sights stay on the crosshair line). RAWMETAL_FP_PUSH "hip aim".
+ {static const float hipPush=[]{float h=0,a=0;if(const char*e=std::getenv("RAWMETAL_FP_PUSH"))std::sscanf(e,"%f",&h);return h;}();
+  static const float aimPush=[]{float h=0,a=0;if(const char*e=std::getenv("RAWMETAL_FP_PUSH"))std::sscanf(e,"%f %f",&h,&a);return a;}();
+  static const float aimDrop=[]{float h,a,d=.02f;if(const char*e=std::getenv("RAWMETAL_FP_PUSH"))std::sscanf(e,"%f %f %f",&h,&a,&d);return d;}();
+  const float t=game.aimBlend(),k=t*t*(3-2*t);m_fpPush=hipPush+(aimPush-hipPush)*k;m_fpDrop=aimDrop*k;}
+ if(!fists&&!pistol&&!fpShotgun){rightWrist=m_shotgunTarget[0];leftWrist=m_shotgunTarget[1];}   // fitted this frame
+ auto assembly=[&](Point3 p){float roll=motion.roll;float x=p.x*std::cos(roll)-p.y*std::sin(roll),y=p.x*std::sin(roll)+p.y*std::cos(roll);
+  if(heldActor>=0||locker||fpShotgun)return p;   // the clips carry their own sway and draw
+  // The pistol tips down first (pistolHold) and drops late, so a switch shows it.
+  const float drop=pistol?game.holster()*game.holster():game.holster();
+  return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-drop*.85f),p.z};};
+ m_gripError=0;
+ if(heldActor>=0||game.takedownActive()||locker){auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
+ // A pistol's support hand off the gun (at the belt in a reload) is free.
+ for(int side=0;side<2&&!fists&&!fpShotgun;++side){if(side&&pistol&&!hold.support)continue;auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
+  auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
+ }
+ // A wrist on its target is not yet a hand on the pistol, so measure the
+ // fingers too (metres): the trigger finger's tip joint at the trigger, and
+ // each gripping hand's middle finger from the grip's axis, butt to tang.
+ m_pistolContact=0;
+ if(pistol){auto metres=[](Point3 d){return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)/kViewModelScale;};
+  const Point3 butt=hold.point({0,-.072f,-.024f}),tang=hold.point({0,-.005f,-.004f}),along=tang-butt;
+  auto fromAxis=[&](Point3 p){Point3 d=p-butt;float t=std::clamp((d.x*along.x+d.y*along.y+d.z*along.z)/std::max(1e-9f,along.x*along.x+along.y*along.y+along.z*along.z),0.f,1.f);return metres(d-along*t);};
+  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  m_pistolContact=std::max(metres(bone("f_index.03.R")-hold.point({0,.002f,.034f})),fromAxis(bone("f_middle.02.R")));
+  if(hold.support)m_pistolContact=std::max(m_pistolContact,fromAxis(bone("f_middle.02.L")));}
+ m_shotgunContact={};
+ if(fpShotgun){
+  // Measured on the authored pose (metres): left fingertips from the pump's
+  // axis, right from the stock wrist's, the right index from the trigger blade.
+  auto view=[&](const char*n){auto p=m_fpShotgun.bonePosition(n);return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};};
+  auto fromLine=[&](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);Point3 q=d-ab*t;return std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z);};
+  const Point3 pumpA=fpShotgunPoint({-.064f,1.22f,-3.0f},true),pumpB=fpShotgunPoint({-.064f,1.22f,-1.5f},true),wristA=fpShotgunPoint({-.064f,1.25f,1.0f},false),wristB=fpShotgunPoint({-.064f,1.15f,1.5f},false),blade=fpShotgunPoint({-.064f,1.0f,.45f},false);
+  float left=0,right=0;for(const char*f:{"index_03_l","middle_03_l","ring_03_l","pinky_03_l"})left+=fromLine(view(f),pumpA,pumpB);
+  for(const char*f:{"middle_03_r","ring_03_r","pinky_03_r"})right+=fromLine(view(f),wristA,wristB);
+  Point3 d=view("index_03_r")-blade;m_shotgunContact={left/4,right/3,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)};
+ }else if(!fists&&!pistol&&heldActor<0&&!game.takedownActive()&&!locker){
+  // Parts measured from the Remington (its own coordinates): the pump's wood
+  // on its axis, the stock's narrow wrist on its axis, the trigger blade.
+  auto at=[&](Point3 source,bool pump){return animated(gunLocal(pump?source+Point3{0,0,motion.bolt/gunScale}:source));};
+  const float unit=kViewModelScale*shotgun.scale;
+  auto fromLine=[&](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);Point3 q=d-ab*t;return std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z)/unit;};
+  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  const Point3 pumpA=at({-.064f,1.22f,-3.0f},true),pumpB=at({-.064f,1.22f,-1.5f},true),wristA=at({-.064f,1.25f,1.0f},false),wristB=at({-.064f,1.15f,1.5f},false),blade=at({-.064f,1.0f,.45f},false);
+  float left=0,right=0;for(const char*f:{"f_index.03","f_middle.03","f_ring.03","f_pinky.03"}){left+=fromLine(bone((std::string(f)+".L").c_str()),pumpA,pumpB);}
+  for(const char*f:{"f_middle.03","f_ring.03","f_pinky.03"}){right+=fromLine(bone((std::string(f)+".R").c_str()),wristA,wristB);}
+  Point3 d=bone("f_index.03.R")-blade;m_shotgunContact={left/4,right/3,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)/unit};}
+ // In true darkness the hands lose the room fill and floor too: only lamps,
+ // the torch lens and the shot (longer and brighter there) show them.
+ const float darkness=game.darkness(),handFloor=1.f-darkness;
+ NormalLighting roomLights;float roomAmbient=std::max(.10f,game.world().definition().ambient*.55f)*handFloor;
+ const auto&player=m_view;Point3 receiver{player.pos.x,player.pos.y,player.z+player.eye};
+ for(const auto&source:game.world().lights()){
+  auto delta=source.emitter()-receiver;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=source.reach(delta,d2)*(source.switchable()?game.lampPower(source):1.f);if(d2<.001f||weight<=0)continue;
+  // A lamp that cannot enter the existing top two cannot affect the result.
+  // Reject it before tracing its shadow; retain source order and exact ties.
+  int slot=weight>roomLights.weights[0]?0:1;if(weight<=roomLights.weights[slot])continue;
+  auto target=source.shadowTarget();if(!game.world().lightRayClear(player.pos,receiver.z,{target.x,target.y},target.z))continue;
+  if(slot==0){roomLights.weights[1]=roomLights.weights[0];roomLights.directions[1]=roomLights.directions[0];}
+  roomLights.weights[slot]=weight;roomLights.directions[slot]=cameraPoint(receiver+delta*(1.f/std::sqrt(d2)),game);
+ }
+ auto shade=[&](MeshTriangle face,const Texture&texture){
+   for(auto&v:face.v){v.p=assembly(v.p);if(m_inspectRig)v.p=inspectionPoint(v.p);}
+   Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+   if(len>.00001f)n=n*(1.f/len);if(n.x*face.v[0].p.x+n.y*face.v[0].p.y+n.z*face.v[0].p.z>0)n=n*-1.f;
+   float light=roomAmbient;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::max(0.f,n.x*l.x+n.y*l.y+n.z*l.z);}
+   if(m_handLightReady&&!m_inspectRig){
+    // Lit as the world lights her body: the face's normal turned into the world
+    // and given the brightness of the probe side it faces.
+    const float cy=std::cos(m_view.angle),sy=std::sin(m_view.angle),cp=std::cos(m_view.pitch/140.f),sp=std::sin(m_view.pitch/140.f);
+    const Point3 out=n;const float forward=out.z*cp-out.y*sp;const Point3 world{-out.x*sy+forward*cy,out.x*cy+forward*sy,out.y*cp+out.z*sp};
+    size_t side=0;float best=-2;for(size_t i=0;i<6;++i){const auto d=m_handNormals[i];const float a=world.x*d.x+world.y*d.y+world.z*d.z;if(a>best){best=a;side=i;}}
+    light=m_handLight[side]*handFloor;}
+   light+=game.muzzleFlash()*.65f;
+   for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
+   triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
+ };
+ auto draw=[&](Mesh&mesh,const Texture&texture,bool arms){
+  for(auto face:mesh.triangles){
+   if(!arms&&face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
+   if(&mesh==&m_handgunMesh&&face.part==5&&hold.magazine==3)continue;
+   for(auto&v:face.v){
+    if(arms)v.p=fromRig(v.p);
+    // The pistol's parts: slide (4), magazine (5), hammer (6) and trigger (7).
+    else if(&mesh==&m_handgunMesh){auto p=v.p;
+     if(face.part==4)p.z-=hold.slide;
+     else if(face.part==5)p=p+kPistolWell*hold.magazineDrop;
+     else if(face.part==6){auto q=p-kPistolHammerPivot;const float c=std::cos(hold.hammer),sn=std::sin(hold.hammer);p=Point3{q.x,q.y*c+q.z*sn,-q.y*sn+q.z*c}+kPistolHammerPivot;}
+     else if(face.part==7)p.z-=hold.trigger;
+     v.p=hold.point(p);if(face.part==5&&hold.magazine==2)v.p=v.p+hold.magazineShift;}
+    else{
+     auto local=gunLocal(face.part==2?v.p+Point3{0,0,motion.bolt/gunScale}:v.p);   // the pump slides along the bore
+     if(face.part==3){float t=game.shotAge()-.09f;local=local+Point3{t*1.8f,t*.85f-t*t*3.5f,-t*.3f};}
+     v.p=animated(local);
+    }
+   }
+   const int claire=arms?claireMaterial(m_armsMesh,face.part):-1;
+   shade(face,claire>=0?m_claireTextures[size_t(claire)]:texture);
+  }
+ };
+ if(fpShotgun){
+  for(auto face:m_fpShotgun.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
+   const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?m_claireTextures[size_t(claire)]:m_arms);}
+  for(auto face:m_weaponMesh.triangles){if(face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
+   for(auto&v:face.v)v.p=fpShotgunPoint(v.p,face.part==2);shade(face,m_weaponTexture);}
+ }else{draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);}
+ // The pack's slide is an open shell notched for the hammer: run back, its
+ // rear shows the hollow inside. A breech face, slide steel, closes it.
+ if(pistol&&hold.slide>.001f){const MeshTriangle*steel=nullptr;for(const auto&t:m_handgunMesh.triangles)if(t.part==4){steel=&t;break;}
+  if(steel){const float u=steel->v[0].u,v=steel->v[0].v,z=.006f-hold.slide,x=.0125f,y0=.024f,y1=.061f;
+   auto corner=[&](float cx,float cy){return MeshVertex{hold.point({cx,cy,z}),u,v};};
+   shade({{corner(-x,y0),corner(x,y0),corner(x,y1)},4},m_handgunTexture);shade({{corner(-x,y0),corner(x,y1),corner(-x,y1)},4},m_handgunTexture);}}
+ if(game.hasFlashlight()){
+  // A small rail torch follows the gun assembly; empty hands keep it strapped
+  // to the animated left forearm so neither fist loses its existing action.
+  auto unit=[](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,p.x*p.x+p.y*p.y+p.z*p.z)));};
+  // The imported gun is over eight source units long. Its narrow side rail
+  // needs a full source-unit offset to put the housing outside the receiver.
+  Point3 axis{0,0,1},side{1,0,0},up{0,1,0},mount=gunLocal({1.02f,1.25f,-1.45f}),forearm{};
+  // The pistol carries it under the barrel ahead of the guard, its clamp up
+  // into the dust cover: side points away from the gun, down.
+  if(pistol){const float a=0.f;axis=unit(hold.axis[2]);side=unit(unit(hold.axis[1])*-std::cos(a)+unit(hold.axis[0])*std::sin(a));up=unit(cross3(axis,side));mount=hold.point({0.f,0.f,.125f});}
+  if(fists){
+   auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
+   axis=unit(wrist-elbow);side=unit(cross3(std::fabs(axis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},axis));up=unit(cross3(axis,side));
+   // Anchor beside the visible wrist, not the elbow that leaves the desktop
+   // frustum in the guard pose. The inboard saddle keeps the fist clear.
+   forearm=wrist-axis*.025f;mount=wrist+axis*.035f+side*.105f+up*.025f;
+  }
+  float torchScale=fists?.60f:pistol?.45f:.68f;
+  auto point=[&](Point3 p){p=assembly(fists||pistol?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
+  auto tri=[&](Point3 a,Point3 b,Point3 c,const Texture&texture,float emission=0.f){
+   a=point(a);b=point(b);c=point(c);auto normal=unit(cross3(b-a,c-a));
+   float light=roomAmbient+.18f*handFloor;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
+   light=std::clamp(std::max(light,emission),.25f*handFloor,2.5f);
+   triangle3D({a,0,0,light},{b,1,0,light},{c,1,1,light},texture,1.f,&roomLights);
+  };
+  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&texture,float emission=0.f){tri(a,b,c,texture,emission);tri(a,c,d,texture,emission);};
+  constexpr int segments=10;
+  auto tube=[&](Point3 center,float start,float end,float radiusA,float radiusB,const Texture&texture,float size=1.f){
+   for(int i=0;i<segments;++i){float a=float(i)*kPi*2/segments,b=float(i+1)*kPi*2/segments;
+    auto radialA=side*std::cos(a)+up*std::sin(a),radialB=side*std::cos(b)+up*std::sin(b);
+    quad(center+(axis*start+radialA*radiusA)*size,center+(axis*start+radialB*radiusA)*size,center+(axis*end+radialB*radiusB)*size,center+(axis*end+radialA*radiusB)*size,texture);
+   }
+  };
+  const Texture&rubber=m_rubberTexture,&housing=m_darkMetalTexture,&strap=m_leatherTexture,&identification=m_idFabricTexture,&reflector=m_darkMetalTexture;
+  static const Texture lensOff{1,1,{0xff263834u}},lensOn{1,1,{0xffc8dec1u}};
+  if(fists){
+   for(float z:{-.025f,.025f})tube(forearm,z-.009f,z+.009f,.049f,.049f,strap);
+   // A short saddle connects the offset torch to its wrist straps.
+   auto back=forearm+up*.025f,edge=mount-up*.016f;
+   quad(back-axis*.022f,edge-axis*.022f,edge+axis*.022f,back+axis*.022f,m_panelMetal);
+  }
+  else{
+   // Closed side brackets join the receiver to the outboard housing.
+   const float reach=pistol?.016f:.094f,seat=pistol?.010f:.025f,width=pistol?.007f:.015f;
+   for(float z:{-.055f,.045f}){auto p=mount+axis*(z*torchScale);
+    auto a=p-side*reach-up*width,b=p-side*seat-up*width,c=p-side*seat+up*width,d=p-side*reach+up*width;
+    quad(a-axis*.009f,b-axis*.009f,c-axis*.009f,d-axis*.009f,m_panelMetal);
+    quad(d+axis*.009f,c+axis*.009f,b+axis*.009f,a+axis*.009f,m_panelMetal);
+    quad(a-axis*.009f,a+axis*.009f,b+axis*.009f,b-axis*.009f,m_metal);
+    quad(d-axis*.009f,c-axis*.009f,c+axis*.009f,d+axis*.009f,m_metal);
+    tube(mount,z-.009f,z+.009f,.038f,.038f,reflector,torchScale);
+   }
+  }
+  tube(mount,-.096f,-.074f,.028f,.032f,reflector,torchScale);
+  tube(mount,-.074f,.071f,.032f,.032f,housing,torchScale);
+  tube(mount,-.071f,-.061f,.033f,.033f,identification,torchScale);
+  for(float z:{-.034f,-.006f,.022f})tube(mount,z,z+.005f,.034f,.034f,m_panelMetal,torchScale);
+  tube(mount,.071f,.096f,.033f,.044f,reflector,torchScale);
+  tube(mount,.096f,.118f,.044f,.044f,housing,torchScale);
+  tube(mount,.118f,.122f,.044f,.038f,reflector,torchScale);
+  for(int i=0;i<segments;++i){float a=float(i)*kPi*2/segments,b=float(i+1)*kPi*2/segments;
+   auto radialA=side*std::cos(a)+up*std::sin(a),radialB=side*std::cos(b)+up*std::sin(b);
+   tri(mount-axis*(.097f*torchScale),mount+(axis*-.097f+radialB*.028f)*torchScale,mount+(axis*-.097f+radialA*.028f)*torchScale,rubber);
+   auto front=mount+axis*(.121f*torchScale);
+   quad(front+radialA*(.038f*torchScale),front+radialB*(.038f*torchScale),front+(axis*-.006f+radialB*.029f)*torchScale,front+(axis*-.006f+radialA*.029f)*torchScale,reflector);
+   tri(front-axis*(.005f*torchScale),front+(axis*-.005f+radialA*.029f)*torchScale,front+(axis*-.005f+radialB*.029f)*torchScale,game.flashlightOn()?lensOn:lensOff,game.flashlightOn()?1.8f:0.f);
+  }
+  // The small top switch remains visible from behind the forward-facing bezel.
+  auto toggle=mount+(axis*-.045f+up*.035f)*torchScale;
+  quad(toggle+(side*-.009f-axis*.012f)*torchScale,toggle+(side*.009f-axis*.012f)*torchScale,toggle+(side*.009f+axis*.012f)*torchScale,toggle+(side*-.009f+axis*.012f)*torchScale,game.flashlightOn()?lensOn:strap,game.flashlightOn()?1.4f:0.f);
+ }
+ // The source arms end in open shoulder rings. Continue those rings into dark
+ // sleeves behind the camera, closing the model rather than exposing its interior.
+ const Texture& sleeve=m_leatherTexture;
+ for(const auto&ring:fpShotgun?std::vector<std::vector<MeshVertex>>{}:m_armsMesh.openRings){
+  Point3 center{};for(auto v:ring)center=center+fromRig(v.p);center=center*(1.f/float(ring.size()));
+  // Only upper-arm openings are extended; small mesh boundaries are left intact.
+  float radius=0;for(auto v:ring){auto d=fromRig(v.p)-center;radius=std::max(radius,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}if(radius<.045f)continue;
+  auto sleeveEnd=[&](Point3 p){return p+Point3{(p.x<armOffset.x?-.08f:.08f),-.14f,-.7f};};
+  auto drawSleeve=[&](Point3 a,Point3 b,Point3 c){a=assembly(a);b=assembly(b);c=assembly(c);if(m_inspectRig){a=inspectionPoint(a);b=inspectionPoint(b);c=inspectionPoint(c);}triangle3D({a,0,0},{b,0,0},{c,0,0},sleeve,.8f);};
+  for(size_t i=0;i<ring.size();++i){auto a=fromRig(ring[i].p),b=fromRig(ring[(i+1)%ring.size()].p),A=sleeveEnd(a),B=sleeveEnd(b);
+   if(fists)drawSleeve(center,a,b);
+   else{drawSleeve(a,b,B);drawSleeve(a,B,A);drawSleeve(sleeveEnd(center),A,B);}
+  }
+ }
+ // Only a real shot (Game::muzzleFlash): a finished reload restarts the shot clock.
+ if(game.shotAge()<.10f&&game.muzzleFlash()>0&&!fists&&!m_inspectRig){
+  Point3 tip{};int count=0;float flashScale=1;
+  if(pistol){tip=hold.point(kPistolMuzzle+Point3{0,0,.012f});count=1;flashScale=.35f;}
+  else for(auto&t:m_weaponMesh.triangles)for(auto&v:t.v)if(v.p.z<m_weaponMesh.minimum.z+gunRange.z*.015f){tip=tip+v.p;++count;}
+  if(count){auto center=assembly(pistol?tip:fpShotgun?fpShotgunPoint(tip*(1.f/count),false):animated(gunLocal(tip*(1.f/count))));float age=game.shotAge(),size=(.13f+std::sin(std::min(1.f,age/.07f)*kPi)*.15f)*flashScale;
+   float rotation=std::floor(age*60)*1.7f;Point3 right{std::cos(rotation)*size,std::sin(rotation)*size,0},up{-std::sin(rotation)*size,std::cos(rotation)*size,0};
+   float intensity=2.4f*std::max(0.f,1-age/.10f);auto a=center-right-up,b=center+right-up,c=center+right+up,d=center-right+up;
+   triangle3D({a,0,1},{b,1,1},{c,1,0},m_muzzleFlash,intensity);triangle3D({a,0,1},{c,1,0},{d,0,0},m_muzzleFlash,intensity);
+  }
+ }
+}
+Point3 SoftwareRenderer::inspectionPoint(Point3 p)const{
+ p=p-m_inspectCenter;float x=p.x*std::cos(m_inspectYaw)+p.z*std::sin(m_inspectYaw),z=-p.x*std::sin(m_inspectYaw)+p.z*std::cos(m_inspectYaw);
+ return {x,p.y*std::cos(m_inspectPitch)-z*std::sin(m_inspectPitch),m_inspectDistance+z*std::cos(m_inspectPitch)+p.y*std::sin(m_inspectPitch)};
+}
+void SoftwareRenderer::inspectRig(const Game&game,float yaw,float pitch,Point3 center,float distance){
+ clear(0xff242529);m_inspectRig=true;m_inspectYaw=yaw;m_inspectPitch=pitch;m_inspectCenter=center;m_inspectDistance=distance;
+ drawViewModel(game);
+ text(10,10,"RAWMETAL / RIG INSPECTION",0xffeadcbb);
+ text(10,m_height-12,game.weaponKick()>.1f?"RECOIL POSE":"IDLE POSE",0xffbdad8d);
+ m_inspectRig=false;
+}
+}

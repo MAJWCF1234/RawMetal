@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.16 - Editable floors and native 3D handles (2026-11-09)
+
+Floors now have a dedicated layer dock, and selection and resizing work in the plan and native 3D picture. The game engine also builds upper-floor walls from the saved map.
+
+- Shift-click selects several objects. Move, copy and delete the selection with one Undo.
+- Drag real footprint corners, pipe/cable ends and highlighted height edges. Raise a cramped catwalk roof without moving its deck. Materials on native walls and floors retain their metre-based scale.
+- Drag props in 3D from the grabbed surface, with live movement and elevation changes. Hover outlines show what the selector will pick.
+- Manage named floors, groups, duplication, merging, stack order, footprint transforms, locks, view masks and opacity in the right dock. Other floors have reference outlines. View settings save with the project and leave playable geometry intact.
+- Floors accept native materials, including concrete upstairs. Local paint drags create stripes without repainting the surrounding floor. Open-space/erase tools cut the actual floor for ramp gaps, and ramp landings open automatic guardrails.
+- New floors reserve standing headroom. Player starts are placed on the selected floor. Upper '=' remains walkable deck, upper '.' remains empty, and upper '#' now has native wall rendering and collision.
+- Add maps by choosing their adjoining edge. Occupied edges are protected, a floor opening joins the maps, and the view switches to the new map. Distant custom maps are excluded from rendering.
+- The renderer clears cached geometry when replacing a game session. Edits and entering Play no longer risk showing the previous scene.
+- The custom-map guide explains the controls, floor semantics, roof clearance and export workflow. The matching game download is updated as well.
+
+Verified with editor mouse/command interaction tests, native rendered movement and layer-view checks, and an editor-authored export loaded and walked by the game engine.
+
+---
+
 ## v1.2.15 - Live editing and room dressing (2026-11-09)
 
 Moving or deleting furniture now updates the live 3D picture, including loose props.

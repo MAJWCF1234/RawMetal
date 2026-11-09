@@ -1198,6 +1198,16 @@ void World::buildLayers(std::span<const Staircase> stairs){
  };
  for(const auto& layer:m_layers){
   for(auto row:layer.rows)if(row.size()!=Width)throw std::runtime_error("Invalid map layer row width");
+  {const float z=layer.elevation;
+  // Upper-layer '.' remains empty, as the custom-map guide specifies.
+  // '=' is a catwalk; '#' is native wall geometry up to the map ceiling.
+  if(&layer!=&m_layers.front())for(int y=0;y<Height;++y)for(int x=0;x<Width;){
+   char tile=layer.rows[y][x];if(tile!='#'||this->tile(x,y)=='#'){++x;continue;}
+   int start=x;while(x<Width&&layer.rows[y][x]==tile&&this->tile(x,y)!='#')++x;
+   Structure slab{float(start),float(y),float(x),float(y+1),z,definition().ceiling};
+   slab.layerSurface=1;if(slab.top>slab.bottom)m_structures.push_back(slab);
+  }
+  }
   if(layer.thickness<=0)continue;
   const float z=layer.elevation, underside=z-layer.thickness;
   const bool collarWall=hasLift()&&z==0;
@@ -1221,11 +1231,21 @@ void World::buildLayers(std::span<const Staircase> stairs){
     // A guardrail across that connection seals otherwise walkable stairs.
     if(std::fabs(top-z)<.215f)return true;
    }
+   // PRIM ramps/stairs are expanded into solid proxy steps. A real landing
+   // within one legal step opens its edge rail, just like a STAIR record.
+   for(size_t i=0;i<authoredStructures;++i){const auto& p=m_structures[i];if(p.material==CollisionProxyMaterial&&p.solid&&x>=p.x1&&x<p.x2&&y>=p.y1&&y<p.y2&&std::abs(p.top-z)<.215f)return true;}
    return false;
   };
   for(int y=0;y<Height;++y)for(int x=0;x<Width;){
    if(!deck(x,y)){++x;continue;}int start=x;while(x<Width&&deck(x,y))++x;
-   m_structures.push_back({float(start),float(y),float(x),float(y+1),underside,z});
+   std::vector<Structure> deckPieces{{float(start),float(y),float(x),float(y+1),underside,z}};
+   for(size_t i=0;i<authoredStructures&&!deckPieces.empty();++i){const auto& f=m_structures[i];
+    if(!f.solid||f.shape!=ShapeBox||f.top<z-.03f||f.top>z+.06f||f.top-f.bottom>.55f)continue;
+    std::vector<Structure> next;for(auto part:deckPieces){float a=std::max(part.x1,f.x1),b=std::max(part.y1,f.y1),c=std::min(part.x2,f.x2),d=std::min(part.y2,f.y2);
+     if(a>=c||b>=d){next.push_back(part);continue;}auto add=[&](float x0,float y0,float x1,float y1){if(x1-x0>.0001f&&y1-y0>.0001f){auto piece=part;piece.x1=x0;piece.y1=y0;piece.x2=x1;piece.y2=y1;next.push_back(piece);}};
+     add(part.x1,part.y1,a,part.y2);add(c,part.y1,part.x2,part.y2);add(a,part.y1,c,b);add(a,d,c,part.y2);}
+    deckPieces.swap(next);}
+   m_structures.insert(m_structures.end(),deckPieces.begin(),deckPieces.end());
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
    // Legacy decks got thin posts; authored maps carry their own columns.

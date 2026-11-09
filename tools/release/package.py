@@ -104,6 +104,8 @@ def package_editor(out, name, tag, game):
         % (name, tag))
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.writestr('README-EDITOR.txt', readme)
+        if (EDITOR / 'EDITOR.md').is_file():
+            z.write(EDITOR / 'EDITOR.md', 'EDITOR.md')
         z.writestr(*PUBLIC_MARKER)
         z.write(program, 'RawMetal.exe')
         for header in editor_catalogues():

@@ -1375,10 +1375,10 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
- if(m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
+ if(m_lightingGame!=&game||m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};
   if(m_gpu)m_gpu->clearStaticCaches();
-  m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
+  m_lightingGame=&game;m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
  }
  int logicalWidth=m_width,logicalHeight=m_height;
  bool nativeTarget=directPresentation&&m_gpu&&(m_gpu->hasSurface()||m_gpu->vrActive());
@@ -1387,12 +1387,16 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  bool scaled=!nativeTarget&&game.renderScale()<1;
  int sceneWidth=m_width,sceneHeight=m_height;
  if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
+ m_renderedChunks.clear();
+ auto nearby=[&](int level){if(level==game.level())return true;if(!game.chunkResident(level))return false;if(game.worldId()!=WorldId::Custom)return true;
+  auto here=game.chunkOffset(game.level())+m_view.pos,other=game.chunkOffset(level);
+  float dx=std::max({other.x-here.x,0.f,here.x-other.x-24}),dy=std::max({other.y-here.y,0.f,here.y-other.y-24});return dx*dx+dy*dy<=48.f*48.f;};
  auto scene=[&]{bool parallel=!m_vrRendering&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
-   drawScene(game);for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&game.chunkResident(level))drawScene(game,false,level);
+   drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){drawScene(game,false,level);m_renderedChunks.push_back(level);}
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
@@ -1420,7 +1424,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   // of power/state so switching never invalidates geometry or shadows.
   bool pixelLighting=g_pixelLighting;
   for(int level=0;level<game.chunkCount()&&!pixelLighting;++level){
-   if(level!=game.level()&&!game.chunkResident(level))continue;
+   if(!nearby(level))continue;
    const auto&chunk=game.chunkWorld(level);
    pixelLighting=!chunk.darkZones().empty()||std::any_of(chunk.lights().begin(),chunk.lights().end(),[](const WorldLight&light){return light.switchable();});
   }
@@ -1428,7 +1432,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   // Switchable lamps keep their full intensity in the list (a stable key and
   // shadow maps) and their power goes in per frame beside it.
   {std::vector<std::array<float,16>> lamps;std::vector<float> powers;
-   for(int level=0;level<game.chunkCount();++level){if(level!=game.level()&&!game.chunkResident(level))continue;
+   for(int level=0;level<game.chunkCount();++level){if(!nearby(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
     for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,lamp.shadows?lamp.beamCode():-lamp.beamCode(),lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw,lamp.gel.x,lamp.gel.y,lamp.gel.z});powers.push_back(game.lampPower(lamp));}
    }
