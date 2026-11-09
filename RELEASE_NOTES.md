@@ -4,6 +4,14 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.14 - Look works in the picture (2026-11-09)
+
+Right mouse on the 3D picture looks around again. The picture was ignoring the mouse.
+
+The game download beside it is unchanged.
+
+---
+
 ## v1.2.13 - New campaign stays open (2026-11-09)
 
 New campaign opens a blank map and stays in the editor.
