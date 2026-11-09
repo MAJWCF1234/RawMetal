@@ -102,7 +102,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('tag')
     parser.add_argument('--name', default='DepthWorks', help='the name players see on the exe, zip and checksum files')
-    parser.add_argument('--exe', type=Path, default=ROOT / 'RawMetal.exe')
+    # The menu, the editor and Play are one program. That exe is the Level Editor
+    # build. The repo-root RawMetal.exe is the game alone and has no editor in it.
+    unified = EDITOR / 'RawMetal.exe'
+    parser.add_argument('--exe', type=Path, default=unified if unified.is_file() else ROOT / 'RawMetal.exe')
     parser.add_argument('--out', type=Path)
     parser.add_argument('--notes-tag', help="use this earlier version's notes (a patch with no section of its own)")
     parser.add_argument('--no-editor', action='store_true', help='skip the standalone campaign editor zip')

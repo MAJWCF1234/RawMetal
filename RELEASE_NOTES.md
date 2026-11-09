@@ -4,6 +4,12 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.11 - The editor is in the program (2026-11-09)
+
+The v1.2.10 download was the game on its own. The editor was not in that exe, so the menu had nowhere to go. This one is the whole program: the menu opens the editor, and Play inside the editor starts the game.
+
+---
+
 ## v1.2.10 - The rooms were there (2026-11-08)
 
 Opening a level from the official campaign showed an empty corner. Those rooms sit underground, and the picture was the empty space above the ceiling. The walls, lights and furniture are in the picture now.
