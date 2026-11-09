@@ -4,9 +4,11 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.2.11 - The editor is in the program (2026-11-09)
+## v1.2.11 - The editor download opens the editor (2026-11-09)
 
-The v1.2.10 download was the game on its own. The editor was not in that exe, so the menu had nowhere to go. This one is the whole program: the menu opens the editor, and Play inside the editor starts the game.
+The campaign editor download is the program that opens the editor. New campaign, a saved project, and Play live in that exe.
+
+The game download that ships next to it stays the game. The editor is not packed into that exe.
 
 ---
 

@@ -58,7 +58,19 @@ PUBLIC_MARKER = ('public-release.txt',
                  'This is a public release. Levels of chapters not yet released stay sealed.\r\n')
 
 
-def package_editor(out, name, tag):
+def contains(path, needle):
+    return needle.encode('ascii') in path.read_bytes()
+
+
+def require_split(game, editor):
+    """The editor download opens the editor. The game download stays the game."""
+    if not contains(editor, 'native-editor-error') or not contains(editor, 'NEW CAMPAIGN'):
+        raise SystemExit('editor exe has no editor in it: %s' % editor)
+    if contains(game, 'native-editor-error') or not contains(game, 'NEW GAME'):
+        raise SystemExit('game exe must stay the game, without the editor packed into it: %s' % game)
+
+
+def package_editor(out, name, tag, game):
     """Zip the standalone level editor beside the game.
 
     Players unzip it anywhere. It does not need the game folder. RawMetal.exe
@@ -69,8 +81,8 @@ def package_editor(out, name, tag):
     maps = EDITOR / 'custom maps'
     program = window if window.is_file() else engine
     if not program.is_file():
-        print('WARNING: editor skipped, missing %s' % program)
-        return None
+        raise SystemExit('editor exe is missing: %s' % program)
+    require_split(game, program)
     archive = out / ('%s-CampaignEditor-%s.zip' % (name, tag))
     readme = (
         '%s Campaign Editor (%s)\n\n'
@@ -102,10 +114,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('tag')
     parser.add_argument('--name', default='DepthWorks', help='the name players see on the exe, zip and checksum files')
-    # The menu, the editor and Play are one program. That exe is the Level Editor
-    # build. The repo-root RawMetal.exe is the game alone and has no editor in it.
-    unified = EDITOR / 'RawMetal.exe'
-    parser.add_argument('--exe', type=Path, default=unified if unified.is_file() else ROOT / 'RawMetal.exe')
+    # The game zip is the game. The editor zip, built separately, is the exe that opens the editor.
+    parser.add_argument('--exe', type=Path, default=ROOT / 'RawMetal.exe')
     parser.add_argument('--out', type=Path)
     parser.add_argument('--notes-tag', help="use this earlier version's notes (a patch with no section of its own)")
     parser.add_argument('--no-editor', action='store_true', help='skip the standalone campaign editor zip')
@@ -133,7 +143,7 @@ def main():
             z.write(source, entry)
     contents = ('the game, these notes, the Windows guide' if guide.is_file() else 'the game, these notes') + \
         ' and the custom maps folder (Starter Map and modding guide)'
-    editor_archive = None if args.no_editor else package_editor(out, name, tag)
+    editor_archive = None if args.no_editor else package_editor(out, name, tag, args.exe)
     checksums = out / ('%s-%s.sha256' % (name, tag))
     # LF endings: sha256sum -c on any platform reads them; Windows text mode would write CRLF.
     with open(checksums, 'w', encoding='ascii', newline='\n') as f:
