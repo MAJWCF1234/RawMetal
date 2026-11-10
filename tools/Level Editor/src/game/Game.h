@@ -115,6 +115,9 @@ struct Enemy {
     int schedule=0,scheduleStep=0,scheduleTask=0,scheduleStatus=0,scheduleMs=0,scheduleCursor=0,scheduleCursorSaved=0,scheduleTransitions=0;
     unsigned scheduleConditions=0;
     bool scriptSpawned=false; // Persistent population owned by a script, not the authored baseline.
+    // The locker it knows its prey is shut in (fixture+1), and the stun after
+    // being thrown off those doors (LockerCapture.cpp). Not archived.
+    int lockerHunt=0;float lockerStun=0;
     StateId wakeState=0;      // Dormant, blind and deaf until this state is set or it is hurt.
     float homeZ=-999;         // The floor it walks back to; -999 (an older save) uses its last known floor.
     float scale=1;            // Authored size: its body, hull and reach grow with it.
@@ -465,6 +468,12 @@ public:
     bool loading()const{return m_loadJob!=nullptr;}
     float loadProgress()const;
     unsigned sessionRevision()const{return m_sessionRevision;}
+    // What the renderer keys baked geometry and lighting by. The epoch changes
+    // when everything must be rebuilt (a restart, a load); a map's static
+    // revision also changes when that one map's content does (the campaign
+    // builder's live edits), so an edit rebuilds its own map and no other.
+    unsigned renderEpoch()const{return m_sessionRevision-m_liveEdits;}
+    unsigned staticRevision(int level)const{return renderEpoch()*40503u+(level>=0&&size_t(level)<m_mapEdits.size()?m_mapEdits[size_t(level)]:0u);}
     static bool testPickups();
     static bool testMovement();
     static bool testProgression();
@@ -709,6 +718,39 @@ public:
     // Every door motion a guard or a stow asks for goes through here, counted for the tests.
     void lockerDoorsMove(int level,int fixture,LockerMotion motion);int m_lockerDoorCalls=0;LockerMotion m_lockerDoorLast=LockerMotion::Enter;
     static bool testLockerGuards();
+    // Caught in a locker (LockerCapture.cpp). A humanoid creature that watched
+    // the player shut themselves in, or heard a knock from inside, tears the
+    // doors open and takes hold: USE, mashed, against its bites. A guard who
+    // hauls the player out pins their arms, walks them to open floor, puts them
+    // on their knees and calls his squad to talk it over; the same struggle
+    // breaks his grip. Not saved: a save mid-hold loads with the player loose.
+    struct LockerCapture {
+        enum class Kind {None,Creature,Guard};Kind kind=Kind::None;
+        enum class Stage {Pin,March,Kneel,Verdict};Stage stage=Stage::Pin;
+        int who=-1,locker=-1,line=0,teamLine=0,foot=0;
+        const char* caption=nullptr;float captionAge=10; // what was just said over the prisoner (actorCaption)
+        float age=0,stageAge=0,struggle=0,bite=0,talk=0,team=0,walked=0;
+        bool called=false,march=false,lastUse=true;
+        Vec2 spot{},dir{};
+    };
+    LockerCapture m_capture;
+    bool captured()const;
+    // 0..1 while held (the HUD's bar), -1 when not.
+    float captureStruggle()const;
+    const char* captureHint()const;
+    static bool lockerHunter(CreatureKind kind);
+    void creaturesWatchLocker(int index,const Player& before);
+    void creatureLockerSense(Enemy& e);
+    bool creatureLockerHold(Enemy& e,float dt);
+    void beginCreatureGrapple(int self,int index);
+    void beginGuardCapture(size_t actor,int index);
+    bool captorIntent(int level,size_t actor,ActorPose& pose,float dt,Vec2& goal,float& goalZ,bool& wantsMove);
+    void endGuardCapture(bool broke);
+    bool updateCapture(const InputState& input,float dt);
+    // The leaves a creature tore open stay on their stops while it holds its prey.
+    void holdLockerDoors(int fixture);
+    static bool testLockerCapture();
+    static Game lockerCaptureScene(int creature); // --locker-capture-shots
     // --map-shots "caught"/"stow": the nearest guard comes for the locker the
     // player just hid in, or is knocked out and dragged to the one they face.
     // staged: he starts a few steps off the doors ("reach"), and with nobody
@@ -948,6 +990,7 @@ private:
     std::string m_menuMessage;
     int m_pendingSlot=-1;
     unsigned m_sessionRevision=0;
+    unsigned m_liveEdits=0;std::vector<unsigned> m_mapEdits; // live edits so far, and how many touched each map
     void refreshSaveSlots();
     std::string savedLabel(const std::filesystem::path& path,const char* invalid)const;
     std::string encodeSave()const;

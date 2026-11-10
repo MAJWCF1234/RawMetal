@@ -1,4 +1,5 @@
 #include "EditorShots.h"
+#include "EditorPreview.h"
 #ifdef _WIN32
 #include "../world/CustomCampaign.h"
 #include "../game/Game.h"
@@ -50,7 +51,38 @@ int testEditorLiveRendering(){
   if(difference(before,guides)<30)throw std::runtime_error("Selection and hover guides are absent from the native picture");
   if(renderer->staticGeometryBuilds()!=builds)throw std::runtime_error("Layer preview controls rebuild geometry instead of updating the live view");
   report<<"PASS: native GPU opacity, masks and 3D selection/hover overlays change pixels without rebuilding geometry\n";
-  renderer->setEditorView({},{});return 0;
+  renderer->setEditorView({},{});
+  // A live edit rebuilds its own map and no other. Two maps side by side with the
+  // wall between them open; LiveCampaign reparses only the map that changed and
+  // shares the other's data, and the renderer keeps that other map's buffers.
+  {auto two=[](float ay,float by){
+    std::string out="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Live render two maps|0\nMAP|0|West|0|0|3.5|12|0|0|4.5|0.7|industrial_night|0|0|0|0|0\nMAP|1|East|24|0|3.5|12|0|0|4.5|0.7|industrial_night|0|0|0|0|0\n";
+    for(int map=0;map<2;++map){out+="LAYER|"+std::to_string(map)+"|0|Floor|0|0\n";
+     for(int y=0;y<24;++y)out+="ROW|"+std::to_string(map)+"|0|"+std::to_string(y)+"|"+(y==0||y==23?std::string(24,'#'):map==0?"#"+std::string(23,'.'):std::string(23,'.')+"#")+'\n';
+     out+="LIGHT|"+std::to_string(map)+"|12|12|4|0|0|2|18|4000\n";}
+    char records[160];std::snprintf(records,sizeof records,"FIXTURE|0|6|20|%.2f|0|2|1|1.5|0|1\nFIXTURE|1|6|4|%.2f|0|2|1|1.5|0|1\n",ay,by);
+    return out+records+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";};
+   LiveCampaign live;std::string how;const auto before0=renderer->staticGeometryBuilds();
+   auto pair=std::make_unique<Game>(live.load(two(10,10),0,"two.rmc",how));auto& both=*pair;
+   auto eye=both.player();eye.pos={15.f,12.f};eye.angle=0;eye.pitch=-6;both.restoreEditorCamera(eye);
+   auto show=[&]{for(int i=0;i<3;++i)both.update({},1.f/60);both.restoreEditorCamera(eye);for(int i=0;i<8;++i)renderer->render(both);return std::vector<std::uint32_t>(renderer->pixels(),renderer->pixels()+DisplayWidth*DisplayHeight);};
+   auto first=show();const auto firstBuilds=renderer->staticGeometryBuilds()-before0;auto built=renderer->staticGeometryBuilds();
+   auto edit=[&](float west,float east,std::string& path){both.adoptEditorCampaign(live.load(two(west,east),0,"two.rmc",path));auto picture=show();const auto n=renderer->staticGeometryBuilds()-built;built=renderer->staticGeometryBuilds();return std::pair{picture,n};};
+   std::string westHow,backHow;
+   auto [west,westBuilds]=edit(14,10,westHow);auto [back,backBuilds]=edit(10,10,backHow);auto still=show();
+   report<<"  two maps drawn with "<<firstBuilds<<" builds; edit ("<<westHow<<"): "<<westBuilds<<" rebuilt, "<<difference(first,west)<<" pixels; edit back ("<<backHow<<"): "<<backBuilds<<" rebuilt, "<<difference(back,first)<<" pixels from the start\n";
+   if(firstBuilds<2)throw std::runtime_error("The map beside the one shown was not drawn");
+   if(westHow!="map only"||backHow!="map only")throw std::runtime_error("A one-map edit was not parsed as one map");
+   if(difference(first,west)<100||difference(west,back)<100||difference(back,first)>50)throw std::runtime_error("A live edit in the shown map did not reach the picture exactly");
+   if(westBuilds!=1||backBuilds!=1)throw std::runtime_error("A live edit in one map rebuilt "+std::to_string(std::max(westBuilds,backBuilds))+" maps' geometry");
+   if(renderer->staticGeometryBuilds()!=built||difference(back,still)>50)throw std::runtime_error("The picture did not settle after a live edit");
+   // A new scene where the last one stood (another campaign opened) inherits nothing.
+   pair.reset();renderer->forgetScene();auto fresh=std::make_unique<Game>(loadCustomCampaignText(two(14,14),"two-b.rmc"));
+   {auto& scene2=*fresh;for(int i=0;i<3;++i)scene2.update({},1.f/60);scene2.restoreEditorCamera(eye);for(int i=0;i<8;++i)renderer->render(scene2);
+    std::vector<std::uint32_t> other(renderer->pixels(),renderer->pixels()+DisplayWidth*DisplayHeight);
+    if(renderer->staticGeometryBuilds()-built<2||difference(back,other)<100)throw std::runtime_error("A new scene reused the last scene's geometry");}
+   report<<"PASS: a live edit rebuilds only the map it changed (the map beside it keeps its geometry); a new scene rebuilds both\n";}
+  return 0;
  }catch(const std::exception& error){report<<"FAIL: "<<error.what()<<'\n';return 1;}
 }
 // One engine process renders the whole list offscreen; the editor caches the

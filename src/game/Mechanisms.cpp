@@ -124,6 +124,8 @@ bool Game::terminalConversationActive(int terminal)const{
  return false;
 }
 std::string_view Game::actorCaption()const{
+ // Held by a guard: what is being said over the prisoner (LockerCapture.cpp).
+ if(captured()&&m_capture.caption&&m_capture.captionAge<3.f)return m_capture.caption;
  for(int level=0;level<chunkCount();++level){if(!chunkResident(level))continue;const auto& world=level==m_level?m_world:m_chunks[level].world;
   for(const auto& cue:world.sequenceCues()){int clock=sequenceClock(world,cue.timerState),age=clock-cue.timeMs;if(!cue.caption.empty()&&clock>0&&age>=0&&age<2500)return cue.caption;} // A timer at 0 has not started.
  }return {};

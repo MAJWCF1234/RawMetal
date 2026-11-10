@@ -77,6 +77,8 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  perf::Scope mindProfile(perf::GuardMind);perf::count(perf::GuardIntents);
  // Caught at a locker's doors as they burst open: nothing he does is quicker than the leaves.
  if(npcIncapacitated(actor)||lockerBurstPending(actor)){wantsMove=false;return;}
+ // With a prisoner in his hands he thinks of nothing else (LockerCapture.cpp).
+ if(captorIntent(level,actor,pose,dt,goal,goalZ,wantsMove))return;
  {perf::Scope profile(perf::LockerWitness);lockerWitnessSense(level,actor,pose);}
  const auto&config=track.ai;auto ctx=makeGuardCtx(actor,level,track,pose);auto get=[&](const char*field){return ctx.get(field);};auto put=[&](const char*field,int value){ctx.put(field,value);};
  auto mode=GuardState(get("guard_mode"));int ms=npcMilliseconds(actor,dt,"guard_fraction"),recognition=get("guard_recognition");bool confirmed=get("guard_confirmed")!=0;

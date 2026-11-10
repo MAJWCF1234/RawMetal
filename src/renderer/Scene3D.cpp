@@ -966,7 +966,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   std::uint64_t key=1469598103934665603ull;
   auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
-  hash(std::uint64_t(game.worldId()));hash(game.sessionRevision());hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  hash(std::uint64_t(game.worldId()));hash(game.staticRevision(w.level()));hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
   // Revision: tile crates/barrels + authored props bake into the static VBO.
   hash(5);
   // Reusing a renderer across maps at the same address must not retain the
@@ -1360,10 +1360,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   box({door.right-.08f,door.y-.17f,base},{door.right+.08f,door.y+.17f,base+2.48f},doorFrame,1.f);
   box({door.left,door.y-.17f,base+2.35f},{door.right,door.y+.17f,base+2.55f},doorFrame,1.f);}
  if(buildStaticGeometry)for(const auto& sign:w.signs()){
+  // A designed sign (SignArt.h) is drawn at its own proportions, so its key carries them.
+  const bool designed=sign.style||sign.icon||sign.ink||sign.picture;
   std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
+  if(designed){unsigned long long pictureHash=1469598103934665603ull;if(sign.picture)for(auto p:sign.picture->pixels){pictureHash^=p;pictureHash*=1099511628211ull;}char extra[96];std::snprintf(extra,sizeof extra,"\n%d|%d|%u|%llx|%.3f",sign.style,sign.icon,unsigned(sign.ink),pictureHash,sign.width/sign.height);key+=extra;}
   auto found=m_authoredSigns.find(key);
   if(found==m_authoredSigns.end()){
-   found=m_authoredSigns.emplace(key,makeSign(sign.title.c_str(),sign.subtitle.c_str(),sign.accent)).first;
+   found=m_authoredSigns.emplace(key,makeSign(sign)).first;
    if(m_gpu)m_gpu->prepare(found->second);
   }
   Vec2 side{std::cos(sign.yaw),-std::sin(sign.yaw)};

@@ -90,6 +90,9 @@ void Game::updateLockerDoors(float dt){
  }
  std::erase_if(m_lockerDoors,[](const LockerDoor&d){return d.age>=d.length&&d.angle[0]<=0&&d.angle[1]<=0;});
 }
+// Held back on their stops (a creature has its prey in the open doorway): the
+// swing stays at the top of its hold, and drifts shut only once it is let go.
+void Game::holdLockerDoors(int fixture){for(auto&d:m_lockerDoors)if(d.level==m_level&&d.fixture==fixture&&d.motion==LockerMotion::Caught&&d.age>.6f)d.age=.6f;}
 void Game::startLockerView(LockerMotion motion,const Player& from,int fixture,float facePitch){
  if(m_vrInputActive)return; // the headset is the camera: no path ever moves it
  m_lockerView={true,motion,0,motion==LockerMotion::Enter?.9f:motion==LockerMotion::Exit?.5f:.45f,from,fixture,facePitch};
@@ -105,7 +108,7 @@ int Game::lockerViewFixture()const{return m_lockerView.active?m_lockerView.fixtu
 // the last fifth of a second in and the first fifth out. The leaves themselves
 // are drawn the same either way (Scene3D), so there is nothing to pop.
 float Game::lockerShutView()const{
- if(m_vrInputActive)return 0;const float t=m_lockerView.age;
+ if(m_vrInputActive||captured())return 0;const float t=m_lockerView.age; // (held in the open doorway, the HUD is all there: the health the bites take)
  // (While a way in or out plays, the hands may be on the real leaves: they are what is drawn.)
  float shut=!m_lockerView.active?(hiddenLocker()>=0?1.f:0.f):m_lockerView.motion==LockerMotion::Caught?0.f:std::min(.999f,m_lockerView.motion==LockerMotion::Enter?ease((t-.7f)/.2f):1-ease(t/.2f));
  const int index=lockerViewFixture();

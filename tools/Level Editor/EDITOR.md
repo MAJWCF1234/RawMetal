@@ -18,6 +18,46 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Sign designer
+
+Choosing the **Sign** tool opens a small **Sign designer** window beside the plan
+(picking any sign on the plan opens it too). The picture at the top is the
+engine's own sign, drawn by the same code the game uses (`src/renderer/SignArt.h`).
+
+- **Big words / Small words**, a **plate style** (enamel plate, hazard, notice,
+  stencil painted on the wall, route, chalkboard, picture), a **symbol**
+  (warning, electric, arrows, no entry, radiation, fire, exit), the
+  **colour**, the **lettering** colour (Auto uses the style's own) and the
+  **size** in metres.
+- **Place on wall**: click a wall face on the plan. The sign snaps 5 cm proud of
+  the nearest wall (paint sits flush), faces the room, stays on that run of wall
+  and hangs at eye height. Untick the snap to place it freely.
+- While a sign is picked every change applies to it at once; Ctrl+Z undoes.
+- **Library**: ready-made signs, every design already in this campaign, and
+  **My signs** (`.rmsign` files in `custom maps\signs`). Click one to use it.
+- **Import...** reads a `.rmsign` design or a picture (PNG, JPEG, BMP, TGA).
+  A picture becomes the sign's art: the whole plate for the Picture style, or a
+  logo in the symbol slot. It is saved inside the map (`SIGN_ART`), shrunk to
+  256 px at most, so a shared map carries it.
+- **Export...** writes a `.rmsign` design or a PNG of the sign. **Save to mine**
+  adds it to My signs; **Delete mine** moves one to the Recycle Bin.
+- The status line counts the signs on the map: the game's own maps keep to three.
+
+`RawMetal.exe --sign-designer-test` checks snapping, a designed sign with a
+picture through the engine, restyling, picture clean-up and the file round trips
+(`native-editor-sign-test.txt`).
+
+### Live edits rebuild one map
+
+An edit used to rebuild the baked geometry and light of every map the picture
+draws (up to 15 on the Starter Map: about two seconds before the change showed).
+The engine now keys each map's bakes by that map's own revision
+(`Game::staticRevision`), so an edit rebuilds the map it changed and the maps
+beside it keep their buffers. New, Open, Play and a change to the number of maps
+still rebuild everything. `--editor-live-render-test` checks it with two maps
+side by side; `--editor-perf-test --perf-trace` prints `static rebuilds N` for
+every edit in `.build/editor-preview-trace.txt`.
+
 ### Floors, selection and adjoining maps (v1.2.16)
 
 Use the selector and **Shift-click** to add or remove objects from the selection.

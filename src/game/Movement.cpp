@@ -232,6 +232,8 @@ bool Game::doorLocked(const Door& door)const{
 const char* Game::interactionHint()const{
  if(m_logTime>0){const bool paper=m_activeLog>=0&&size_t(m_activeLog)<m_world.terminals().size()&&m_world.terminals()[size_t(m_activeLog)].paper();
   return paper?(m_vrInputActive?"WRIST / PUT IT DOWN":"E / PUT IT DOWN"):(m_vrInputActive?"WRIST / CLOSE TERMINAL":"E / CLOSE TERMINAL");}
+ // Held at a locker's doors or by a guard: the struggle is all there is to do.
+ if(captured())return captureHint();
  // Someone in the leaves' swing who is not on to the player: the doors go into him.
  if(hiddenLocker()>=0)return lockerViewLocked()?nullptr:lockerBurstTarget()>=0?"E / BURST OUT   LMB / KNOCK":"E / STEP OUT   LMB / KNOCK";
  if(lockerViewLocked())return nullptr; // nothing to do mid-step: no hint for the frame that cannot take it
@@ -280,6 +282,8 @@ const char* Game::interactionHint()const{
 void Game::updateInteraction(const InputState& input,float dt){
  // E belongs to the conversation while one is open (updateDialogue).
  if(talking()){m_previousUse=input.use;m_world.updateDoors(dt);return;}
+ // Held: E is the struggle's (updateCapture).
+ if(captured()){m_previousUse=input.use;m_world.updateDoors(dt);return;}
  m_logTime=std::max(0.f,m_logTime-dt);
  // A computer stays up while its conversation is still arriving, and closes
  // when the player walks away from the desk.

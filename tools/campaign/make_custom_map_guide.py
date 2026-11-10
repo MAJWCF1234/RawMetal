@@ -386,7 +386,8 @@ RECORDS = [
         ('PICKUP|map|kind|x|y', 'Health (0), shotgun ammo (1) or handgun ammo (2).'),
         ('CREATURE|map|kind|x|y|z[|scale|health|wakeState]', 'A creature. scale 0.5-2, health 0 for the default. With a wakeState it sleeps (blind and deaf) until that state is set or it is hurt.'),
         ('TERMINAL|map|x|y|z|control|title|line1|line2[|activateState|toggle|requireState|yaw]', 'A computer you read with E. control 1 sets activateState (toggle 1 flips it on and off) and can switch lights, doors and events.'),
-        ('SIGN|map|x|y|z|width|height|yaw|title|subtitle|colour', 'A wall sign. z is its centre. colour is a 24-bit number (0x3c8cd8 = 3968216). Put it 0.05 m in front of a wall.')]),
+        ('SIGN|map|x|y|z|width|height|yaw|title|subtitle|colour[|style|icon|ink|art]', 'A wall sign, its bottom edge at z, facing (sin yaw, cos yaw). colour is a 24-bit number (0x3c8cd8 = 3968216). Put it 0.05 m in front of a wall. style: 0 enamel plate, 1 hazard, 2 notice, 3 stencil painted on the wall, 4 route, 5 chalkboard, 6 picture. icon: 0 none, 1 warning, 2 electric, 3-6 arrow left/right/up/down, 7 no entry, 8 radiation, 9 fire, 10 exit. ink is the lettering colour (0 = the style's own). art names a SIGN_ART picture. The Campaign Builder's Sign designer writes all of these.'),
+        ('SIGN_ART|name|width|height|pixels', 'A picture for signs: RGBA bytes in base64, at most 256 on a side and 65536 pixels. Signs name it in their art field. The Sign designer imports PNG and JPEG pictures and writes this for you.')]),
     ('Light and air', [
         ('LIGHT|map|x|y|z[|mount|yaw|intensity|range|kelvin|tint|state|value|invert|period|onTime|phase|flicker|fitting|w|d|h|gelR|gelG|gelB]',
          'A lamp. Only x, y, z are required. mount 0 ceiling, 1 wall (x,y on the wall face, yaw pointing out), 2 floor. intensity ~1, range in metres, kelvin 1000-12000 (3400 default), tint -1 magenta..1 green, '

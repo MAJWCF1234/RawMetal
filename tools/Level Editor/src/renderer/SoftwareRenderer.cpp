@@ -6,6 +6,9 @@
 #include "FrameWorker.h"
 #include "MinimapCache.h"
 #include "../world/ModelIds.h"
+#include "SignArt.h"
+#include "../world/CustomCampaign.h"
+#include <filesystem>
 #include <fstream>
 #include "../core/PackedResource.h"
 #include "../core/Math.h"
@@ -698,31 +701,11 @@ void SoftwareRenderer::text(int x,int y,const char* s,std::uint32_t c,int sc){fo
 // UI type: installed Windows faces rasterised once per size into grayscale
 // coverage, then alpha-blended. The HUD texture's alpha reaches the
 // composite pass, so translucent panels and soft glyph edges survive.
+// The cache is SignArt.h's, shared with the sign plates and the builder's designer.
 namespace {
-struct UiGlyph{int advance=0;std::vector<std::uint8_t> alpha;};
-struct UiFace{int width=0,height=0;std::array<UiGlyph,96> glyphs;};
-const UiFace& uiFace(int face,int size){
- static std::map<int,UiFace> faces;static std::mutex guard;std::lock_guard lock(guard);
- if(auto found=faces.find(face*1024+size);found!=faces.end())return found->second;
- auto& out=faces[face*1024+size];
- static const wchar_t* names[]={L"Bahnschrift SemiBold SemiConden",L"Bahnschrift Light SemiCondensed",L"Impact",L"Bahnschrift SemiCondensed"};
- HDC dc=CreateCompatibleDC(nullptr);
- HFONT font=CreateFontW(-size,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,OUT_TT_PRECIS,CLIP_DEFAULT_PRECIS,ANTIALIASED_QUALITY,DEFAULT_PITCH,names[std::clamp(face,0,3)]);
- auto oldFont=SelectObject(dc,font);TEXTMETRICW metrics{};GetTextMetricsW(dc,&metrics);
- out.height=metrics.tmHeight;out.width=size*2+8;
- BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=out.width;info.bmiHeader.biHeight=-out.height;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;info.bmiHeader.biCompression=BI_RGB;
- void* bits=nullptr;HBITMAP bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto oldBitmap=SelectObject(dc,bitmap);
- SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(255,255,255));
- for(int c=32;c<128;++c){
-  std::memset(bits,0,size_t(out.width)*out.height*4);wchar_t ch=wchar_t(c);
-  SIZE extent{};GetTextExtentPoint32W(dc,&ch,1,&extent);TextOutW(dc,4,0,&ch,1);GdiFlush();
-  auto& glyph=out.glyphs[size_t(c-32)];glyph.advance=extent.cx;glyph.alpha.resize(size_t(out.width)*out.height);
-  auto* pixels=static_cast<const std::uint32_t*>(bits);for(size_t i=0;i<glyph.alpha.size();++i)glyph.alpha[i]=std::uint8_t((pixels[i]>>8)&255);
- }
- SelectObject(dc,oldBitmap);SelectObject(dc,oldFont);DeleteObject(bitmap);DeleteObject(font);DeleteDC(dc);
- return out;
-}
-unsigned uiGlyphIndex(char c){unsigned v=(unsigned char)c;return v<32||v>127?'?'-32:v-32;}
+using UiFace=signart::Face;
+const UiFace& uiFace(int face,int size){return signart::face(std::clamp(face,0,3),size);}
+unsigned uiGlyphIndex(char c){return signart::glyphIndex(c);}
 }
 int SoftwareRenderer::uiTextWidth(const char* s,int face,int size,int tracking)const{auto&f=uiFace(face,size);int w=0;for(;*s;++s)w+=f.glyphs[uiGlyphIndex(*s)].advance+tracking;return w;}
 int SoftwareRenderer::uiText(int x,int y,const char* s,std::uint32_t c,int face,int size,float alpha,int tracking){
@@ -761,57 +744,20 @@ void SoftwareRenderer::uiPanel(int x,int y,int w,int h){
  fill(x,y,w,h,rgb(6,5,5),.78f);frame(x,y,w,h,rgb(236,228,214),.10f);
  const auto red=rgb(214,32,26);fill(x,y,6,1,red,1);fill(x,y,1,6,red,1);fill(x+w-6,y+h-1,6,1,red,1);fill(x+w-1,y+h-6,1,6,red,1);
 }
-// Facility signage: an enamelled graphite steel plate with a bevelled rim,
-// corner rivets and a safety-colour band, lettered in the UI's condensed face
-// (auto-fitted), with light chipping at the edges and grime toward the bottom.
+// Facility signage (SignArt.h): the enamelled graphite plate for plain words,
+// or any designed sign, the same pixels the campaign builder previews.
 SoftwareRenderer::Texture SoftwareRenderer::makeSign(const char* title,const char* subtitle,std::uint32_t accent){
- constexpr int W=512,H=144;
- Texture sign{W,H,std::vector<std::uint32_t>(size_t(W)*H)};
- auto channel=[](std::uint32_t c,int shift){return float((c>>shift)&255);};
- auto mixColour=[&](std::uint32_t a,std::uint32_t b,float t){t=std::clamp(t,0.f,1.f);
-  return rgb(int(channel(a,16)+(channel(b,16)-channel(a,16))*t),int(channel(a,8)+(channel(b,8)-channel(a,8))*t),int(channel(a,0)+(channel(b,0)-channel(a,0))*t));};
- auto hash=[](int x,int y,unsigned seed){unsigned h=unsigned(x)*374761393u+unsigned(y)*668265263u+seed*2246822519u;h=(h^(h>>13))*1274126177u;return float((h^(h>>16))&0xffffu)/65535.f;};
- auto noise=[&](float x,float y,unsigned seed){int ix=int(std::floor(x)),iy=int(std::floor(y));float fx=x-ix,fy=y-iy;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
-  float a=hash(ix,iy,seed),b=hash(ix+1,iy,seed),c=hash(ix,iy+1,seed),d=hash(ix+1,iy+1,seed);return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy;};
- unsigned seed=0;for(const char* c=title;*c;++c)seed=seed*31u+unsigned(char(*c));
- const std::uint32_t plate=rgb(36,39,42),plateHi=rgb(52,56,60),rim=rgb(18,19,21),bevel=rgb(88,92,96);
- const int band=30;
- for(int y=0;y<H;++y)for(int x=0;x<W;++x){
-  int edge=std::min({x,y,W-1-x,H-1-y});
-  float grain=noise(x*.9f,y*.06f,seed)*.06f+noise(x*.05f,y*.05f,seed+7)*.08f;
-  std::uint32_t c=mixColour(plate,plateHi,(1.f-y/float(H))*.55f+grain);
-  if(x>=6&&x<6+band&&edge>=6)c=mixColour(accent,rgb(0,0,0),.08f+grain);
-  if(x==6+band||x==7+band)c=rim;
-  if(edge<6)c=edge<2?rim:edge<4?mixColour(bevel,plate,y/float(H)):plateHi;
-  // Grime pooling toward the bottom edge, and chips where the enamel wore.
-  float grime=std::clamp((y/float(H)-.6f)*2.2f,0.f,1.f)*noise(x*.08f,y*.2f,seed+3);
-  c=mixColour(c,rgb(20,17,14),grime*.45f);
-  float chip=noise(x*.22f,y*.22f,seed+11);
-  if(edge<14&&chip>.86f-edge*.004f)c=mixColour(rgb(96,70,48),rgb(60,44,32),noise(x*.5f,y*.5f,seed+5));
-  sign.pixels[size_t(y)*W+x]=c;
- }
- // Lettering: the condensed UI face, sized to fit, blended over the enamel.
- auto letter=[&](const char* text,int face,int size,int x,int y,std::uint32_t colour,int tracking){
-  const auto& f=uiFace(face,size);int pen=x;
-  for(const char* c=text;*c;++c){const auto& g=f.glyphs[uiGlyphIndex(*c)];
-   for(int yy=0;yy<f.height;++yy)for(int xx=0;xx<f.width;++xx){int px=pen-4+xx,py=y+yy;if(px<0||py<0||px>=W||py>=H)continue;
-    float a=g.alpha[size_t(yy)*f.width+xx]/255.f;if(a<=0)continue;
-    // Worn paint: lettering thins where the enamel chipped.
-    a*=1.f-std::max(0.f,noise(px*.3f,py*.3f,seed+13)-.8f)*3.f;
-    auto& d=sign.pixels[size_t(py)*W+px];d=mixColour(d,colour,a);}
-   pen+=g.advance+tracking;}
- };
- const int textLeft=6+band+22,textWidth=W-textLeft-22;
- int titleSize=64;while(titleSize>24&&uiTextWidth(title,0,titleSize,2)>textWidth)titleSize-=2;
- int subtitleSize=26;while(subtitleSize>14&&uiTextWidth(subtitle,0,subtitleSize,2)>textWidth)subtitleSize-=1;
- const auto& titleFace=uiFace(0,titleSize);
- int titleY=std::max(8,(H-titleFace.height-uiFace(0,subtitleSize).height)/2-6);
- letter(title,0,titleSize,textLeft,titleY,rgb(236,232,222),2);
- letter(subtitle,0,subtitleSize,textLeft+2,titleY+titleFace.height-4,mixColour(accent,rgb(236,232,222),.35f),2);
- for(int rx:{14+band,W-14})for(int ry:{14,H-15})for(int dy=-4;dy<=4;++dy)for(int dx=-4;dx<=4;++dx){
-  float d=std::sqrt(float(dx*dx+dy*dy));if(d>4.2f)continue;
-  sign.pixels[size_t(ry+dy)*W+rx+dx]=mixColour(rgb(120,124,128),rgb(30,32,35),(dx+dy+6)/12.f*(d/4.2f)*1.4f);
- }
+ signart::Design design;design.title=title;design.subtitle=subtitle;design.accent=accent;return makeSign(design,0);
+}
+SoftwareRenderer::Texture SoftwareRenderer::makeSign(const AuthoredSign& sign){
+ signart::Design design;design.title=sign.title;design.subtitle=sign.subtitle;design.accent=sign.accent;design.style=sign.style;design.icon=sign.icon;design.ink=sign.ink;
+ signart::Image picture;if(sign.picture){picture.width=sign.picture->width;picture.height=sign.picture->height;picture.pixels=sign.picture->pixels;design.art=&picture;}
+ return makeSign(design,sign.height>0?sign.width/sign.height:0);
+}
+SoftwareRenderer::Texture SoftwareRenderer::makeSign(const signart::Design& design,float aspect){
+ auto art=signart::draw(design,aspect);
+ // Paint on a wall is an alpha cutout, so it takes the wall's own per-pixel lamp light.
+ Texture sign{art.width,art.height,std::move(art.pixels)};
  prepareDecal(sign);return sign;
 }
 
@@ -1014,6 +960,9 @@ void SoftwareRenderer::drawHud(const Game& game){
  // Shut in, the hint sits low on the steel under the vent band, off the
  // holes and the floor in front of the doors that they show.
  if(auto hint=game.interactionHint();hint&&game.logTime()<=0)promptPanel(shut&&locker?m_height-10:m_height-88,hint,paper);
+ // Held (LockerCapture.cpp): the struggle, a bar under the prompt that each press fills.
+ if(const float struggle=game.captureStruggle();struggle>=0&&game.interactionHint()){const int w=188,x=cx-w/2,y=std::min((shut&&locker?m_height-10:m_height-88)+4,m_height-10); // under the prompt, clear of a caption above it
+  fill(x,y,w,8,rgb(6,5,5),.78f);fill(x+1,y+1,int(std::round((w-2)*std::clamp(struggle,0.f,1.f))),6,struggle>.75f?amber:red,1);frame(x,y,w,8,rgb(236,228,214),.22f);}
  drawTerminal(game);
 }
 // A terminal open on screen: the personnel computer full screen, or the
@@ -1390,10 +1339,18 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
- if(m_lightingGame!=&game||m_lightingWorld!=game.worldId()||m_lightingSession!=game.sessionRevision()){
+ if(m_lightingGame!=&game||m_lightingWorld!=game.worldId()||m_lightingSession!=game.renderEpoch()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};
   if(m_gpu)m_gpu->clearStaticCaches();
-  m_lightingGame=&game;m_lightingWorld=game.worldId();m_lightingSession=game.sessionRevision();
+  m_lightingGame=&game;m_lightingWorld=game.worldId();m_lightingSession=game.renderEpoch();
+  for(int level=0;level<Game::MaxChunks;++level)m_chunkStaticSeen[size_t(level)]=game.staticRevision(level);
+ }
+ // One map's content changed (a live edit in the campaign builder): its baked
+ // light is stale and its geometry key (Scene3D) no longer matches, so that map
+ // rebuilds; every other map keeps its buffers and its bakes.
+ else for(int level=0;level<game.chunkCount()&&level<Game::MaxChunks;++level)if(m_chunkStaticSeen[size_t(level)]!=game.staticRevision(level)){
+  m_chunkStaticSeen[size_t(level)]=game.staticRevision(level);m_chunkLighting[size_t(level)].clear();m_chunkNormalLighting[size_t(level)].clear();
+  m_chunkLightCells[size_t(level)].clear();m_chunkLightCounts[size_t(level)]=0;m_chunkLightSourceKeys[size_t(level)]=0;
  }
  int logicalWidth=m_width,logicalHeight=m_height;
  bool nativeTarget=directPresentation&&m_gpu&&(m_gpu->hasSurface()||m_gpu->vrActive());
@@ -1575,5 +1532,56 @@ void SoftwareRenderer::drawEditorGuides(const Game& game){
   if(guide.kind==1||guide.kind==2||guide.kind==3){int endpoint=0;for(auto point:{std::pair{x0,y0},std::pair{x1,y1}}){bool clipped=endpoint++==0?clippedA:clippedB;if(clipped)continue;int x=int(point.first),y=int(point.second);
     if(x>=0&&x<m_width&&y>=0&&y<m_height){rect(x-5,y-5,11,11,0xff182428u);rect(x-3,y-3,7,7,color);}}}
  }
+}
+// --sign-render-test: a wall of designed signs (every plate style, symbols, lettering
+// colour and a SIGN_ART picture) beside an original plate, read from campaign text,
+// drawn by Vulkan and the CPU rasteriser into .build/sign-render, and the loader's
+// rejections. The original plate must keep its 512 x 144 enamel texture.
+bool SoftwareRenderer::testSigns(std::ostream& report){
+ bool ok=true;auto check=[&](bool pass,const std::string& what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
+ try{
+  signart::Image logo;logo.width=32;logo.height=16;logo.pixels.resize(512);
+  for(int y=0;y<16;++y)for(int x=0;x<32;++x)logo.pixels[size_t(y*32+x)]=((x/4+y/4)&1)?0xffd8302cu:0xfff0e8d8u;
+  auto room=[&](const std::string& records){
+   std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Sign render test|0\nMAP|0|Signs|0|0|2|12|0|0|4.5|0.7|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+   for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+(y==0||y==23?std::string(24,'#'):"#"+std::string(10,'.')+std::string(13,'#'))+'\n';
+   t+="LIGHT|0|7|8|3.2|0|0|2.4|12|4200\nLIGHT|0|7|12|3.2|0|0|2.4|12|4200\nLIGHT|0|7|16|3.2|0|0|2.4|12|4200\n";
+   return t+records+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";};
+  const char* designs[8]={"PUMP HALL|HIGH PRESSURE|10987878","DANGER|HIGH VOLTAGE|15907876|1|2","NO ENTRY|AUTHORISED STAFF ONLY|12853788|2|7","KEEP OUT||14210248|3|0",
+   "LIFT|FREIGHT|2056094|4|4","NIGHT SHIFT|pump 3 is leaking again|8368344|5|0","FIRST AID||2056094|6|0||logo","REACTOR|CONTROLLED AREA|15907876|0|8|16777215"};
+  std::string signs="SIGN_ART|logo|32|16|"+signart::base64(logo.pixels)+'\n';
+  for(int i=0;i<8;++i){char head[96];std::snprintf(head,sizeof head,"SIGN|0|%.2f|%.2f|%.2f|3|1.1|-1.5707964|",i==3?10.99:10.95,7.0+3.3*(i%4),i<4?.55:1.95);signs+=head+std::string(designs[i])+'\n';}
+  auto campaign=loadCustomCampaignText(room(signs),"sign-render.rmc");const auto& read=campaign->maps[0]->signs;
+  check(read.size()==8&&read[1].style==1&&read[1].icon==2&&read[3].style==3&&read[7].ink==0xffffffffu&&read[6].picture&&read[6].picture->width==32&&read[6].picture->pixels==logo.pixels,
+   "SIGN style, symbol, ink and SIGN_ART picture load");
+  SoftwareRenderer textures(64,64);
+  auto plain=textures.makeSign(read[0]);check(plain.width==512&&plain.height==144&&!plain.transparent,"the original plate stays a 512x144 enamel texture");
+  auto legacy=textures.makeSign(read[0].title.c_str(),read[0].subtitle.c_str(),read[0].accent);check(plain.pixels==legacy.pixels,"a SIGN record without design fields draws the original plate");
+  auto paint=textures.makeSign(read[3]);check(!paint.transparent&&(paint.pixels[0]>>24)==0,"a stencil sign is paint on the wall (an alpha cutout lit like the wall)");
+  auto shaped=textures.makeSign(read[1]);check(shaped.width==512&&std::abs(shaped.height-int(512/(3/1.1f)))<=1,"a designed sign is drawn at its own proportions");
+  // The loader refuses what it can not draw.
+  auto refuses=[&](const std::string& records){try{loadCustomCampaignText(room(records),"bad.rmc");return false;}catch(const std::exception&){return true;}};
+  check(refuses("SIGN|0|5|5|1|1|1|0|A|B|0|9\n")&&refuses("SIGN|0|5|5|1|1|1|0|A|B|0|0|11\n")&&refuses("SIGN|0|5|5|1|1|1|0|A|B|0|6|0|0|missing\n")&&
+        refuses("SIGN_ART|bad|2|2|AAAA\n")&&refuses("SIGN_ART|big|300|10|"+signart::base64(std::vector<std::uint32_t>(3000))+'\n'),
+   "unknown style/symbol, missing or malformed SIGN_ART are rejected");
+  // Both renderers draw the wall, and the signs change it.
+  std::filesystem::create_directories(".build/sign-render");
+  for(int hardware=1;hardware>=0;--hardware){
+   auto draw=[&](const std::shared_ptr<const CustomCampaign>& c,const char* file){
+    auto renderer=std::make_unique<SoftwareRenderer>(DisplayWidth*3/2,DisplayHeight*3/2);renderer->setEnvironmentInspection(true);
+    if(hardware&&!renderer->enableHardware(nullptr))throw std::runtime_error("offscreen Vulkan renderer did not start");
+    auto owned=std::make_unique<Game>(c);auto& scene=*owned;scene.update({},1.f/60);auto camera=scene.player();camera.pos={1.25f,11.95f};camera.angle=0;camera.pitch=0;scene.restoreEditorCamera(camera);
+    for(int i=0;i<8;++i)renderer->render(scene);
+    std::vector<std::uint32_t> pixels(renderer->pixels(),renderer->pixels()+size_t(renderer->m_width)*renderer->m_height);
+    std::ofstream ppm(std::string(".build/sign-render/")+file+".ppm",std::ios::binary);ppm<<"P6\n"<<renderer->m_width<<' '<<renderer->m_height<<"\n255\n";
+    for(auto p:pixels){char rgb[3]{char((p>>16)&255),char((p>>8)&255),char(p&255)};ppm.write(rgb,3);}
+    return pixels;};
+   auto bare=draw(loadCustomCampaignText(room("SIGN_ART|logo|32|16|"+signart::base64(logo.pixels)+'\n'),"bare.rmc"),hardware?"gpu-bare":"cpu-bare");
+   auto signed_=draw(campaign,hardware?"gpu-signs":"cpu-signs");
+   size_t changed=0;for(size_t i=0;i<bare.size();++i){auto p=bare[i],q=signed_[i];if(std::abs(int((p>>16)&255)-int((q>>16)&255))+std::abs(int((p>>8)&255)-int((q>>8)&255))+std::abs(int(p&255)-int(q&255))>24)++changed;}
+   check(changed>bare.size()/20,std::string(hardware?"Vulkan":"CPU")+": the sign wall changes "+std::to_string(changed)+" of "+std::to_string(bare.size())+" pixels");
+  }
+ }catch(const std::exception& error){check(false,std::string("error: ")+error.what());}
+ return ok;
 }
 }

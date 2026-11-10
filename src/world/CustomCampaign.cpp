@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cwctype>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -34,6 +35,17 @@ std::string decode(std::string_view value){
   if(value[i]=='%'&&i+2<value.size()){int a=hex(value[i+1]),b=hex(value[i+2]);if(a>=0&&b>=0){out.push_back(char(a*16+b));i+=2;continue;}}
   out.push_back(value[i]);
  }return out;
+}
+// SIGN_ART pixels: base64 of RGBA bytes, exactly width x height of them.
+bool signPicture(std::string_view text,int width,int height,SignPicture& out){
+ if(width<1||height<1||width>256||height>256||width*height>65536)return false;
+ auto value=[](char c)->int{if(c>='A'&&c<='Z')return c-'A';if(c>='a'&&c<='z')return c-'a'+26;if(c>='0'&&c<='9')return c-'0'+52;if(c=='+')return 62;if(c=='/')return 63;return -1;};
+ std::vector<unsigned char> bytes;bytes.reserve(text.size()*3/4);unsigned acc=0;int bits=0;
+ for(char c:text){if(c=='=')break;int v=value(c);if(v<0)return false;acc=(acc<<6)|unsigned(v);bits+=6;if(bits>=8){bits-=8;bytes.push_back((acc>>bits)&255);}}
+ if(bytes.size()!=size_t(width)*height*4)return false;
+ out.width=width;out.height=height;out.pixels.resize(size_t(width)*height);
+ for(size_t i=0;i<out.pixels.size();++i)out.pixels[i]=(std::uint32_t(bytes[i*4+3])<<24)|(std::uint32_t(bytes[i*4])<<16)|(std::uint32_t(bytes[i*4+1])<<8)|bytes[i*4+2];
+ return true;
 }
 int integer(const std::vector<std::string>& f,size_t index,const char* label){
  if(index>=f.size())throw std::runtime_error(std::string("missing ")+label);size_t used=0;int value=0;
@@ -91,6 +103,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  std::vector<std::pair<int,int>> guardTargets;std::shared_ptr<TerrainShape> terrain;
  // Test leads named by panel socket and prop terminal, seated once every fixture and prop is read.
  struct Seat{std::shared_ptr<AuthoredMapData> map;size_t lead;int panel;std::string socket,terminal;};std::vector<Seat> seats;
+ // Sign pictures by name, and the signs that wear one (resolved after the last record).
+ std::map<std::string,std::shared_ptr<const SignPicture>> art;std::vector<std::pair<std::shared_ptr<AuthoredMapData>,size_t>> artUsers;
  // Errors name the file line, counted from the top, so an author can find the record.
  // The stream opens on the rest of the start marker's line, so that first read brings this to the marker's line.
  int lineNumber=int(std::count(text.begin(),text.begin()+std::ptrdiff_t(start),'\n'));
@@ -234,11 +248,25 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    }else throw std::runtime_error("unknown script action type");
    if(event->actions.size()>=16)throw std::runtime_error("too many actions for script event");event->actions.push_back(action);
   }else if(tag=="SIGN"){
-   if(f.size()!=11)throw std::runtime_error("malformed SIGN record");auto map=mapAt(maps,f);
+   // SIGN|map|x|y|z|width|height|yaw|title|subtitle|colour[|style|icon|ink|art]: the
+   // designer's plate style, symbol, lettering colour (0 = the style's) and SIGN_ART picture.
+   if(f.size()<11||f.size()>15)throw std::runtime_error("malformed SIGN record");auto map=mapAt(maps,f);
    AuthoredSign sign;sign.position={number(f,2,"sign x"),number(f,3,"sign y")};sign.z=number(f,4,"sign z");
    sign.width=number(f,5,"sign width");sign.height=number(f,6,"sign height");sign.yaw=number(f,7,"sign yaw");
    sign.title=decode(f[8]);sign.subtitle=decode(f[9]);sign.accent=std::uint32_t(integer(f,10,"sign accent"))|0xff000000u;
-   if(sign.width<=0||sign.height<=0)throw std::runtime_error("invalid sign dimensions");map->signs.push_back(std::move(sign));
+   if(given(11))sign.style=integer(f,11,"sign style");if(given(12))sign.icon=integer(f,12,"sign symbol");
+   if(given(13))sign.ink=std::uint32_t(integer(f,13,"sign ink"))&0xffffffu;if(sign.ink)sign.ink|=0xff000000u;
+   if(given(14))sign.art=decode(f[14]);
+   if(sign.style<0||sign.style>6||sign.icon<0||sign.icon>10)throw std::runtime_error("invalid sign style or symbol");
+   if(sign.width<=0||sign.height<=0)throw std::runtime_error("invalid sign dimensions");
+   if(!sign.art.empty())artUsers.push_back({map,map->signs.size()});
+   map->signs.push_back(std::move(sign));
+  }else if(tag=="SIGN_ART"){
+   // SIGN_ART|name|width|height|pixels: a picture for signs, RGBA bytes in base64 (at most 256 a side, 65536 pixels).
+   if(f.size()!=5)throw std::runtime_error("malformed SIGN_ART record");auto name=decode(f[1]);if(name.empty())throw std::runtime_error("SIGN_ART needs a name");
+   int w=integer(f,2,"art width"),h=integer(f,3,"art height");auto picture=std::make_shared<SignPicture>();
+   if(!signPicture(f[4],w,h,*picture))throw std::runtime_error("invalid SIGN_ART picture (size or base64)");
+   if(!art.emplace(name,std::move(picture)).second)throw std::runtime_error("SIGN_ART "+name+" is defined twice");
   }else if(tag=="LAYER"){
    if(f.size()<6)throw std::runtime_error("malformed LAYER record");auto& layer=layerAt(maps,f);layer.name=decode(f[3]);layer.elevation=number(f,4,"layer elevation");layer.thickness=number(f,5,"layer thickness");
   }else if(tag=="ROW"){
@@ -574,6 +602,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else throw std::runtime_error("unknown custom campaign record: "+tag);
   }catch(const std::exception& error){throw std::runtime_error("line "+std::to_string(lineNumber)+" ("+tag+"): "+error.what());}
  }
+ for(auto& [map,index]:artUsers){auto& sign=map->signs[index];auto found=art.find(sign.art);
+  if(found==art.end())throw std::runtime_error("SIGN record names SIGN_ART "+sign.art+", which is not in the file");sign.picture=found->second;}
  for(auto& seat:seats)if(const auto error=seatTestLead(*seat.map,seat.map->leads[seat.lead],seat.panel,seat.socket,seat.terminal);!error.empty())throw std::runtime_error("LEAD record: "+error);
  for(const auto& map:maps)for(size_t i=0;i<map->leads.size();++i){const auto&l=map->leads[i];if(l.chain&&l.creature>=0&&l.creature>=int(map->creatureSpawns.size()))throw std::runtime_error("CHAIN record "+std::to_string(i)+" creature out of range");}
  for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");

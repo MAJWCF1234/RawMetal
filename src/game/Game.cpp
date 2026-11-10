@@ -168,7 +168,7 @@ void Game::crossChunkBoundary(){
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;auto pools=m_player.pools;
-    clearLockerMotion(true);m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_levelNav={};m_levelNavReady=false;m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
+    clearLockerMotion(true);m_capture={};m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_levelNav={};m_levelNavReady=false;m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;
     m_player.angle = m_world.definition().spawnYaw;
@@ -499,7 +499,7 @@ void Game::update(const InputState& input, float dt) {
     m_previousReload = input.reload;
     // Hidden in a locker, holding a guard or in a takedown the hands are busy:
     // the locker and the hold give the gun back themselves when they end.
-    const bool handsBusy=hiddenLocker()>=0||lockerViewLocked()||heldNpc()>=0||takedownActive();
+    const bool handsBusy=hiddenLocker()>=0||lockerViewLocked()||heldNpc()>=0||takedownActive()||captured();
     if(input.weaponScroll&&!handsBusy){selectWeapon(wheelWeapon(input.weaponScroll));m_suppressFire=true;}
     // 1/2/3 pick a weapon directly, but in a conversation the digits are replies.
     {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=3?input.choice:0;m_previousChoice=input.choice;
@@ -527,7 +527,7 @@ void Game::update(const InputState& input, float dt) {
         auto movement=input;if(heldNpc()>=0||takedownActive()||draggingBody()){movement.sprint=false;movement.jump=false;movement.crouch=false;}
         // Shut in a locker the body stays where it is; only the head turns.
         // Crates already sliding and the reset lever carry on without it.
-        {perf::Scope profile(perf::Movement);m_stepNoiseAge+=dt;if(hiddenLocker()<0&&!choreographed&&!talking()){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
+        {perf::Scope profile(perf::Movement);m_stepNoiseAge+=dt;if(hiddenLocker()<0&&!choreographed&&!talking()&&!captured()){updateMovement(movement,dt);updatePushCrates(movement,dt);}else updatePushCrates(InputState{},dt);}
         {perf::Scope profile(perf::Stealth);updateExposure(dt);
         updateStealth(input,dt);}
         if(m_world.hasLift()){perf::Scope profile(perf::Movement);

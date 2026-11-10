@@ -38,6 +38,18 @@
 #endif
 #include "../src/core/CampaignAdmin.h" // Open from campaign: admin unlock
 #include "../src/platform/EditorChannel.h"  // the picture's control and status, in memory when it runs in this process
+#include "../src/renderer/SignArt.h"        // sign plates: the Sign designer previews the engine's own pixels
+// Sign pictures (PNG, JPEG, BMP, TGA) for the Sign designer; static so it never
+// meets the engine's own copy when the builder is linked into RawMetal.exe.
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_ONLY_JPEG
+#define STBI_ONLY_BMP
+#define STBI_ONLY_TGA
+#pragma warning(push, 0)
+#include "../src/ThirdParty/stb/stb_image.h"
+#pragma warning(pop)
 
 namespace fs = std::filesystem;
 struct EditorDoor {
@@ -728,7 +740,7 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Erase", L"⌫", L"Paint empty space: no floor and no wall.", 0, "", 't'},
     {L"Balcony", L"☰", L"Paint walkable deck on an upper floor.", 0, "", 't'},
     {L"Lamp", L"☀", L"Click to hang a lamp.", 1, "LIGHT", 'p'},
-    {L"Sign", L"✎", L"Click to put up a sign. Its words are on the right.", 1, "SIGN", 'p'},
+    {L"Sign", L"✎", L"Click a wall to put up the sign shown in the Sign designer. Click a sign to change it.", 1, "SIGN", 'p'},
     {L"Furniture", L"⌂", L"Pick a model on the right, then click to place it.", 1, "FIXTURE", 'p'},
     {L"Shape", L"▲", L"Click to place an arch, pillar or dome. Pick which on the right.", 0, "PRIM", 'p'},
     {L"Pipe", L"═", L"Drag from one end of the pipe to the other.", 1, "PIPE", 'l'},
@@ -969,6 +981,7 @@ struct Editor {
 #include "NativeLayerRegression.inc"
 #include "NativeDressingRegression.inc"
 #include "NativeInteractionTests.inc"
+#include "NativeSignDesigner.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -2864,6 +2877,7 @@ struct Editor {
       }
     fillFields(false);
     InvalidateRect(plan, nullptr, FALSE);
+    if (!ghosting && window) signSelectionChanged();
   }
   int hitObject(float x, float y) const {
     int hit = -1;
@@ -3585,8 +3599,8 @@ struct Editor {
       float z = std::max(floorZ + .1f, std::min(floorZ + 3.2f, creationCeiling() - .2f));
       set("z", n(z)), set("mount", "0"), set("yaw", "0"), set("intensity", "1"), set("range", "8"), set("kelvin", "3200");
     } else if (k == "SIGN") {
-      set("z", n(floorZ + 2.15f)), set("width", "1.6"), set("height", "0.55"), set("yaw", "0");
-      set("title", "NEW SIGN"), set("subtitle", ""), set("colour", "14238785");
+      // The Sign designer's design, on the nearest wall (NativeSignDesigner.inc).
+      authorSign(f, bx, by, floorZ);
     } else if (k == "FIXTURE") {
       sized(selectedModel());
       set("base", n(lift-bottomLayerElevation())), set("yaw", "0"), set("solid", "1");
@@ -4181,6 +4195,10 @@ struct Editor {
     InvalidateRect(plan, nullptr, FALSE);
   }
   bool shortcut(const MSG &msg) {
+    // Keys typed in the Sign designer belong to it (Tab moves between its boxes), except F5 play.
+    if (signDesigner && (msg.hwnd == signDesigner || IsChild(signDesigner, msg.hwnd)) &&
+        !(msg.message == WM_KEYDOWN && (msg.wParam == VK_F5 || (msg.wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000)))))
+      return IsDialogMessageW(signDesigner, const_cast<MSG *>(&msg)) != FALSE;
     if (msg.message == WM_MOUSEWHEEL && plan && msg.hwnd != plan && IsWindowVisible(plan)) {
       POINT at{GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam)};
       if (WindowFromPoint(at) == plan) {
@@ -4518,7 +4536,9 @@ struct Editor {
     selectRecord(int(doc.records(f[0], map).back()));
     message(L"Added. Change its words on the right.");
   }
+  unsigned layoutCount = 0; // a press that already laid out (by picking) skips a second pass
   void layout() {
+    ++layoutCount;
     edperf::Scope perfScope("ui_layout");
     edperf::Laps laps;
     RECT r{};
@@ -7784,6 +7804,25 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     RECT centre{x - 2, y - 2, x + 3, y + 3};
     FillRect(dc, &centre, dot);
     DeleteObject(dot);
+    // A sign is drawn as its plate in its own colour, with a tick toward the side it faces.
+    if (f[0] == "SIGN" && f.size() > 10) {
+      float sx = Editor::number(f[2], 0), sy = Editor::number(f[3], 0), half = Editor::number(f[5], 1) * .5f, yaw = Editor::number(f[7], 0);
+      unsigned accent = unsigned(Editor::number(f[10], 0));
+      COLORREF plate = faded(RGB((accent >> 16) & 255, (accent >> 8) & 255, accent & 255), e->effectiveFloorView(e->floorLayer(e->recordFloor(index))).opacity);
+      float ax = std::cos(yaw), ay = -std::sin(yaw), nx = std::sin(yaw), ny = std::cos(yaw);
+      auto bar = pen(std::max(3, int(cell * .12f)), plate);
+      auto old = SelectObject(dc, bar);
+      MoveToEx(dc, int(ox + (sx - ax * half) * cell), int(oy + (sy - ay * half) * cell), nullptr);
+      LineTo(dc, int(ox + (sx + ax * half) * cell), int(oy + (sy + ay * half) * cell));
+      SelectObject(dc, old);
+      DeleteObject(bar);
+      auto tick = pen(1, ui::PlanText);
+      old = SelectObject(dc, tick);
+      MoveToEx(dc, int(ox + sx * cell), int(oy + sy * cell), nullptr);
+      LineTo(dc, int(ox + (sx + nx * .35f) * cell), int(oy + (sy + ny * .35f) * cell));
+      SelectObject(dc, old);
+      DeleteObject(tick);
+    }
   }
   for (auto index : e->doc.records("DOOR", e->map)) {
     if(!e->visibleFloorRecord(index))continue;
@@ -8124,6 +8163,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
       }
       if (e->tool == 0) {
+        const unsigned laidOut = e->layoutCount;
         bool extend=(w & MK_SHIFT)!=0;
         int corner=extend?-1:e->cornerAt(x,y);
         int hit=corner>=0?e->record:e->hitObject(x,y);
@@ -8149,7 +8189,8 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           e->viewDrag = false;
           e->captureMates();
         }
-        e->layout();
+        if (e->layoutCount == laidOut)
+          e->layout();
       }
       return 0;
     }
@@ -8952,6 +8993,11 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           e->tool = selected;
           if (*toolInfo[selected].kind)
             e->chooseKind(toolInfo[selected].kind);
+          // The Sign tool brings its designer; another tool puts it away unless a sign is picked.
+          if (selected == 7)
+            e->openSignDesigner();
+          else if (e->signDesigner && !e->pickedSign())
+            e->closeSignDesigner();
           if (selected == 8 || (selected == 14 && e->listIndex(e->clutterList) == 7))
             e->useModelSelection();
           e->message(toolInfo[selected].hint);
@@ -9385,6 +9431,20 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
           << (made == wanted ? "PASS: " : "PARTIAL: ") << made << " of " << wanted << " pictures in .build/thumbs\n";
       LocalFree(argv);
       return made == wanted ? 0 : 1;
+    }
+    // The Sign designer, headless: snapping, a designed sign through the engine, file round trips.
+    if (argc > 1 && std::wstring(argv[1]) == L"--sign-designer-test") {
+      e.backgroundTest = true;
+      std::string report;
+      bool ok = false;
+      try {
+        ok = e.signDesignerTest(report);
+      } catch (const std::exception &error) {
+        report += std::string("FAIL: ") + error.what() + "\n";
+      }
+      std::ofstream(e.root / L"native-editor-sign-test.txt") << (ok ? "PASS: sign designer\n" : "") << report;
+      LocalFree(argv);
+      return ok ? 0 : 1;
     }
     if (argc > 2 && std::wstring(argv[1]) == L"--script") {
       std::ofstream(e.root / L"native-editor-cli.txt") << "RUNNING\n";

@@ -1187,6 +1187,26 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--gameplay-fixes-test"))return retro::Game::testGameplayFixes()?0:21;
     if(commandArguments().find(L"--gameplay-rendering-test"))return retro::SoftwareRenderer::testGameplayRendering()?0:21;
     if(commandArguments().find(L"--carcass-test"))return retro::Carcass::test()?0:21;
+    // A creature at the locker (the knock, the doors torn open, the hold, thrown off) for
+    // each kind with hands, drawn from the player's eyes into .build/locker-capture.
+    if(commandArguments().find(L"--locker-capture-shots")){
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!commandArguments().find(L"--software")&&!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/locker-capture");std::ofstream log("locker-capture-shots.txt");
+     auto shot=[&](retro::Game& scene,const std::string& name){for(int i=0;i<3;++i)renderer->render(scene);std::ofstream out(".build/locker-capture/"+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";
+      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
+     retro::InputState use{};use.use=true;retro::InputState knock{};knock.fire=true;const float frame=1.f/60;
+     for(int kind:{int(retro::CreatureKind::Mutant),int(retro::CreatureKind::Transformed),int(retro::CreatureKind::Snatcher),int(retro::CreatureKind::Warden)}){
+      auto scene=retro::Game::lockerCaptureScene(kind);const std::string tag=retro::creatureTraits(retro::CreatureKind(kind)).name;
+      scene.update(use,frame);for(int i=0;i<75;++i)scene.update({},frame);scene.update(knock,frame);
+      int waited=0;for(;waited<60*20&&scene.captureStruggle()<0;++waited)scene.update({},frame);
+      log<<tag<<": hidden "<<(scene.hiddenLocker()>=0)<<", held after "<<waited*frame<<" s\n";if(scene.captureStruggle()<0)continue;
+      shot(scene,tag+"-0-grab");for(int i=0;i<20;++i)scene.update({},frame);shot(scene,tag+"-1-held");
+      for(int i=0;i<45;++i)scene.update(i%8<4?use:retro::InputState{},frame);shot(scene,tag+"-2-struggle");
+      int mashed=0;for(;mashed<60*10&&scene.captureStruggle()>=0;++mashed)scene.update(mashed%8<4?use:retro::InputState{},frame);
+      for(int i=0;i<30;++i)scene.update({},frame);shot(scene,tag+"-3-free");log<<"  thrown off after "<<mashed*frame<<" s more, health "<<scene.player().health<<"\n";}
+     return 0;
+    }
+    if(commandArguments().find(L"--sign-render-test")){std::ofstream report("sign-render-test.txt");return retro::SoftwareRenderer::testSigns(report)?0:21;}
     if(commandArguments().find(L"--gore-test")){std::ofstream report("gore-render-test.txt");return retro::Carcass::test()&&retro::SoftwareRenderer::testGore(report)?0:21;}
     if(commandArguments().find(L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
     if(commandArguments().find(L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
@@ -1737,6 +1757,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"caution",retro::Game::testCaution},
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
+         {"locker-capture",retro::Game::testLockerCapture},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
          {"stance",retro::Game::testStance},

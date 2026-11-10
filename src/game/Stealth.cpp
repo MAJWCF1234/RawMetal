@@ -145,8 +145,10 @@ void Game::releaseNpc(bool unconscious){
  if(playerFirearm(WeaponId(std::clamp(weapon,0,2)))&&ownsWeapon(WeaponId(weapon)))equipWeapon(WeaponId(weapon));
  m_pickupNotice=unconscious?"GUARD UNCONSCIOUS":"GUARD RELEASED / THEY KNOW YOU ARE HERE";m_pickupNoticeTime=2;m_suppressFire=true;
 }
-void Game::updateStealth(const InputState&input,float){
+void Game::updateStealth(const InputState&input,float dt){
  bool subdue=input.subdue&&!m_previousSubdue;m_previousSubdue=input.subdue;
+ // Held by a creature at the doors or by a guard: the frame is the hold's (LockerCapture.cpp).
+ if(updateCapture(input,dt))return;
  if(updateLocker(input))return;
  if(input.vrTracked){if(heldNpc()>=0)releaseNpc(true);return;}
  if(m_draggedNpc>=0){
@@ -233,8 +235,9 @@ int Game::lockerAhead()const{
 bool Game::enterLocker(){
  const int index=lockerAhead();if(index<0)return false;const auto&f=m_world.fixtures()[size_t(index)];const Player before=m_player;
  const Vec2 out=lockerOut(f),stand=lockerFront(f,LockerStand)+chunkOffset(m_level);const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
- // Who watches the body go in decides who comes for the doors (ai/guard/Lockers.cpp).
- watchLockerEntry(index);
+ // Who watches the body go in decides who comes for the doors (ai/guard/Lockers.cpp;
+ // the creatures with hands, LockerCapture.cpp).
+ watchLockerEntry(index);creaturesWatchLocker(index,before);
  setState(PlayerLocker,index+1);
  m_player.pos=lockerFront(f,LockerEye);m_player.z=floor;m_player.crouched=false;m_player.prone=false;m_player.eye=Player::StandingEye;m_player.grounded=true;m_player.verticalVelocity=0;
  m_player.angle=std::atan2(out.y,out.x);m_player.pitch=0;m_velocity={};m_stepDistance=0;m_jumpBuffer=0;m_suppressFire=true;m_playerExposure=0;
@@ -285,7 +288,8 @@ void Game::forgetLocker(){setState(PlayerLocker,0);for(size_t actor=0;actor<m_fr
 // The way out over: the gun put away for the way in comes up with its own
 // raise from below the view; empty hands stay down until they are wanted.
 void Game::lockerRearm(){
- if(hiddenLocker()>=0||dead())return;
+ // Arms pinned, the gun stays down until the hold ends (endGuardCapture).
+ if(hiddenLocker()>=0||dead()||captured())return;
  if(m_lockerRearm&&!m_weaponEquipped){m_weaponEquipped=true;m_handsLowered=false;m_holster=.97f;}
  else if(!m_weaponEquipped&&!draggingBody()&&heldNpc()<0&&!takedownActive())m_handsLowered=true;
  m_lockerRearm=false;
@@ -308,6 +312,7 @@ bool Game::updateLocker(const InputState& input){
 // hauls the player out in front of him. False, and he forgets the locker,
 // when the player is no longer in it or he never got to its doors.
 bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
+ if(captured())return false; // something else already has them
  const int saw=state(friendlyKey(actor,"guard_locker"))-1;setState(friendlyKey(actor,"guard_locker"),0);
  const int index=hiddenLocker();if(index<0||index!=saw||level<0||level>=chunkCount())return false;const auto&f=m_world.fixtures()[size_t(index)];
  const Vec2 shift=chunkOffset(m_level)-chunkOffset(level);Vec2 exit;float feet;
@@ -332,7 +337,9 @@ bool Game::pullFromLocker(int level,size_t actor,ActorPose& pose){
  // The doors bang back on their stops: anyone near hears it. The sting is the player's alone.
  m_sounds.push_back({Sound::LockerBang,lockerFront(f,0),.8f,1.f,true,12,feet+1.2f});m_sounds.push_back({Sound::LockerSting,{},.75f,1.f,false});m_alarmSting=std::max(m_alarmSting,.6f); // the locker's own sting is this detection's; no second one on his '!'
  m_lockerRearm|=m_weaponEquipped;equipWeapon(WeaponId::Fists);animateLockerDoor(m_level,index,LockerMotion::Caught);startLockerView(LockerMotion::Caught,before,index);
- m_pickupNotice="FOUND";m_pickupNoticeTime=1.5f;return true;
+ m_pickupNotice="FOUND";m_pickupNoticeTime=1.5f;
+ // He does not shoot: he takes them (LockerCapture.cpp).
+ beginGuardCapture(actor,index);return true;
 }
 bool Game::testStealth(){
  std::ofstream report("stealth-test.txt");int checks=0,failed=0;

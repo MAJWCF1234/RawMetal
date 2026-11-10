@@ -294,6 +294,7 @@ int runEditorPreview(const EditorPreviewOptions& options){
     else{
      sceneCurrent=true;
      auto next=std::make_unique<Game>(campaign);
+     renderer->forgetScene(); // a new game: nothing baked for the last one is this one's
      if(scene&&selected==map)next->restoreEditorCamera(scene->player());
      wchar_t local[32768]{};DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);
      if(n>0&&n<32768)next->loadSettings(std::wstring(local)+L"\\RawMetal\\settings.ini");

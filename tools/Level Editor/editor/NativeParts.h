@@ -83,7 +83,7 @@ inline bool has(const std::string &name, std::initializer_list<const char *> wor
 }
 inline std::wstring nice(std::string name) {
   for (auto prefix : {"lab_", "med_", "pwr_", "ind_", "cave_", "mine_", "scrap_", "psx_", "anl_", "office_",
-                      "prop_", "item_", "art_", "clinic_"})
+                      "prop_", "item_", "art_", "clinic_", "urb_"})
     if (name.rfind(prefix, 0) == 0 && name.size() > strlen(prefix) + 2) {
       name = name.substr(strlen(prefix));
       break;

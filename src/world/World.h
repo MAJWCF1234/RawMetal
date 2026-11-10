@@ -284,11 +284,23 @@ struct AuthoredTerminalData {
     // far above the floor; -1 gives the sheet a bench of its own.
     float surface=-1;
 };
+// A picture a sign carries (SIGN_ART record): ARGB, at most 256 on a side.
+struct SignPicture {
+    int width=0,height=0;
+    std::vector<std::uint32_t> pixels;
+};
+// z is the bottom edge; the sign faces (sin yaw, cos yaw). style, icon and ink
+// pick the plate, its symbol and its lettering (renderer/SignArt.h); art names
+// a SIGN_ART picture, resolved into picture when the campaign loads.
 struct AuthoredSign {
     Vec2 position{};
     float z=0,width=3,height=.9f,yaw=kPi;
     std::string title,subtitle;
     std::uint32_t accent=0xffca994du;
+    int style=0,icon=0;
+    std::uint32_t ink=0;
+    std::string art;
+    std::shared_ptr<const SignPicture> picture;
 };
 // A named region of a map (HUD location label). The first zone containing
 // the player wins; maps without zones show the map name. A zone with a title

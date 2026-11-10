@@ -163,6 +163,7 @@ std::string campaignChunkFileName(int chunk){
 
 RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSource>& sources,int startMap,const StormCycle& storm){
  RmcExport result;std::ostringstream data;auto& notes=result.notes;
+ std::map<std::string,std::shared_ptr<const SignPicture>> signArt; // written once each, after the maps
  // keep: how many fields (tag included) the record always has; 0 writes every field.
  auto line=[&](const Rec& r,size_t keep=0){data<<(keep?r.trimmed(keep):r.s)<<'\n';};
  data<<Rec("CAMPAIGN").t(campaignName).i(startMap).s<<'\n';
@@ -216,7 +217,10 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    if(z.name.size()>64||z.title.size()>64)note("zone \""+z.name+"\": names and titles over 64 characters do not load");line(r,7);}
   for(const auto& t:m.terminals){Rec r("TERMINAL");r.i(mi).n(t.position.x).n(t.position.y).n(t.z).b(t.control).t(t.title).t(t.line1).t(t.line2).st(t.activateState).b(t.toggleState).st(t.requireState).n(t.yaw)
     .f(t.readable!=Readable::Screen?std::to_string(int(t.readable)):"").f(t.taped?"1":"").f(t.surface!=-1?num(t.surface):"").f(t.reactorAction?std::to_string(t.reactorAction):"");line(r,13);}
-  for(const auto& s:m.signs)line(Rec("SIGN").i(mi).n(s.position.x).n(s.position.y).n(s.z).n(s.width).n(s.height).n(s.yaw).t(s.title).t(s.subtitle).i(s.accent&0xffffffu));
+  for(const auto& s:m.signs){Rec r("SIGN");r.i(mi).n(s.position.x).n(s.position.y).n(s.z).n(s.width).n(s.height).n(s.yaw).t(s.title).t(s.subtitle).i(s.accent&0xffffffu);
+   // The designer's fields only when used, so plain signs stay readable by older builds.
+   r.f(s.style?std::to_string(s.style):"").f(s.icon?std::to_string(s.icon):"").f(s.ink?std::to_string(s.ink&0xffffffu):"").f(s.picture?encode(s.art):"");
+   if(s.picture)signArt.emplace(s.art,s.picture);line(r,11);}
   {const auto& c=m.cargoLift;if(c.x1!=c.x2||c.y1!=c.y2||c.lower!=c.upper)
    line(Rec("CARGO_LIFT").i(mi).n(c.x1).n(c.y1).n(c.x2).n(c.y2).n(c.lower).n(c.upper).n(c.speed).sth(c.callState).sth(c.releaseState).sth(c.positionState).sth(c.downState).sth(c.arrivedState).sth(c.descendedState));}
   for(const auto& s:m.timedSequences){Rec r("TIMED_SEQUENCE");r.i(mi).sth(s.timerState).sth(s.finishState).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).i(s.durationMs).i(s.finishAtMs).i(s.soundIntervalMs).i(s.soundUntilMs).i(int(s.tickSound)).n(s.gain).n(s.pitch).b(s.loop);
@@ -320,6 +324,12 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
        "# state known only by its id. Edit it in the Campaign Builder like any custom map.\n";
  if(notes.empty())text<<"#\n# Nothing was left out: this file carries every record of its maps.\n";
  else{text<<"#\n# What this file cannot carry (custom C++ behaviour or data the format has no field for):\n";for(const auto& n:notes)text<<"#  - "<<n<<'\n';}
+ for(const auto& [name,picture]:signArt){std::string bytes;bytes.reserve(picture->pixels.size()*4);
+  for(auto p:picture->pixels){bytes+=char((p>>16)&255);bytes+=char((p>>8)&255);bytes+=char(p&255);bytes+=char((p>>24)&255);}
+  static const char* table="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";std::string b64;
+  for(size_t i=0;i<bytes.size();i+=3){unsigned v=unsigned((unsigned char)bytes[i])<<16;if(i+1<bytes.size())v|=unsigned((unsigned char)bytes[i+1])<<8;if(i+2<bytes.size())v|=(unsigned char)bytes[i+2];
+   b64+=table[(v>>18)&63];b64+=table[(v>>12)&63];b64+=i+1<bytes.size()?table[(v>>6)&63]:'=';b64+=i+2<bytes.size()?table[v&63]:'=';}
+  data<<Rec("SIGN_ART").t(name).i(picture->width).i(picture->height).f(b64).s<<'\n';}
  text<<"\n--- CUSTOM_CAMPAIGN_DATA_START ---\n"<<data.str()<<"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
  result.text=text.str();
  return result;

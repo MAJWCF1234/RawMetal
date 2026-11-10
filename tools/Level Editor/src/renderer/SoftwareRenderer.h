@@ -7,6 +7,7 @@
 #include <memory>
 #include <atomic>
 #include "Mesh.h"
+namespace retro::signart{struct Design;}
 #include "Carcass.h"
 #include "../core/EditorView.h"
 #include "../core/CleanupBodies.h"
@@ -68,6 +69,7 @@ public:
     static bool testElectricRendering(std::ostream& report);
     // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
     static bool testGore(std::ostream& report);
+    static bool testSigns(std::ostream& report); // --sign-render-test
     static bool testPresentationResize();
     static bool testCreatureAnimation();
     static bool testProjection();
@@ -108,6 +110,9 @@ public:
     // 0 = final attachment (ordinary gameplay).
     void setCleanupInspectionStage(int stage){m_cleanupInspectionStage=stage;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
+    // The next frame rebuilds every bake: a new scene may sit at the address the
+    // last one had, with the same epoch, and must not inherit its buffers.
+    void forgetScene(){m_lightingGame=nullptr;}
     // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
     std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
@@ -321,7 +326,8 @@ private:
         Mesh{2265},Mesh{2267},
         Mesh{2314},Mesh{2322},Mesh{2330},Mesh{2336},
         Mesh{2343},Mesh{2345},
-        Mesh{2350},Mesh{2352},Mesh{2354}};
+        Mesh{2350},Mesh{2352},Mesh{2354},
+        Mesh{2356},Mesh{2358},Mesh{2360},Mesh{2362},Mesh{2364},Mesh{2366},Mesh{2368}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
@@ -338,6 +344,8 @@ private:
     Texture m_terminalTexture,m_cautionSign;
     Texture m_logo;
     Texture makeSign(const char* title,const char* subtitle,std::uint32_t accent);
+    Texture makeSign(const signart::Design& design,float aspect);
+    Texture makeSign(const AuthoredSign& sign);
     // The sheet as seen lying in the world (letter, note, sticky), and the
     // same paper read in the hand.
     Texture makePaperProp(Readable kind);
@@ -418,6 +426,7 @@ private:
     std::array<std::vector<std::vector<size_t>>,Game::MaxChunks> m_chunkLightCells;
     std::array<size_t,Game::MaxChunks> m_chunkLightCounts{};
     std::array<std::uint64_t,Game::MaxChunks> m_chunkLightSourceKeys{};
+    std::array<unsigned,Game::MaxChunks> m_chunkStaticSeen{}; // each map's Game::staticRevision when its bakes were made
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
     const Game* m_lightingGame=nullptr;

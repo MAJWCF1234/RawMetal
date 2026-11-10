@@ -248,7 +248,11 @@ void Game::updateEnemies(float dt){
   else if(glimpsed){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else if(heard){e.lastKnown=heard->source;auto local=heard->source;const auto&sourceWorld=worldAt(local);e.lastKnownZ=sourceWorld.supportBelow(local.x,local.y,heard->z);e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
+  // A hunter with hands that knows which locker its prey is shut in goes to the
+  // doors, and at them takes hold (LockerCapture.cpp).
+  creatureLockerSense(e);
   senseProfile.stop();if(e.awareness>0)perf::count(perf::CreaturesHunting);
+  if(creatureLockerHold(e,dt))continue;
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
    // The real surface overhead: a service soffit or deck, not just the map roof.
    float floor=m_world.floorHeight(e.pos.x,e.pos.y),ceiling=std::min(m_world.clearanceHeight(e.pos.x,e.pos.y),m_world.clearanceAbove(e.pos.x,e.pos.y,std::max(e.z,floor)+.05f));
