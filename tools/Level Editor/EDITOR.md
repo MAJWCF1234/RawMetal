@@ -95,6 +95,25 @@ Undo restores the full corridor transaction.
 corridor placement, material/gap preservation, branching, save/reopen and Undo.
 `--corridor-export-test=LIST` walks the exported test routes in the actual game.
 
+### Editing and recovery (v1.2.18)
+
+Each opened project has its own Undo/Redo history. New, Open, Starter and campaign
+imports reset the previous project's editing history and selection. An unsaved
+import remains eligible for recovery even before the first edit.
+
+Escape and returning a dragged object to its starting point restore the clean
+state as well as the native geometry. Recovery waits until a gesture ends. A
+failed save keeps the previous file and recovery copy; recovery-write errors
+appear in the status bar.
+
+Floor duplication and Merge Down retain automatic furniture ownership and room
+dressing choices. Copying a cable with its owners attaches it to the new owners.
+Copying a cable alone resolves its native endpoints and makes an independent
+copy. The original cable and owners keep their relationships.
+
+The hidden `--editing-test` also runs persistence, selection, layer and dressing
+regressions, with separate `native-editor-*-regression*.txt` reports.
+
 ### Creation and ownership
 
 Autodressing is **on by default**. The left pane has an **Autodressing: on/off**

@@ -87,7 +87,7 @@
   }
   void moveLayerHeight(int id,float elevation) {
     auto a=floorLayer(id);if(effectiveFloorView(a).locked)throw std::runtime_error("Unlock this floor before moving it");
-    float delta=elevation-a.elevation;if(std::abs(delta)<.00001f)return;
+    float delta=elevation-a.elevation;if(std::abs(delta)<.00001f)return;bool topmost=!floorLayers().empty()&&floorLayers().back().id==id;
     for(const auto& other:floorLayers())if(other.id!=id&&((other.elevation<a.elevation&&elevation<=other.elevation+.25f)||(other.elevation>a.elevation&&elevation>=other.elevation-.25f)))throw std::runtime_error("Keep this floor between its neighboring floor elevations");
     bool moveSpawn=false;for(auto i:doc.records("MAP",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>7)moveSpawn=floorAtHeight(number(f[7],0))==id;}
     std::set<size_t> owned;auto content=layerContent({id});owned.insert(content.begin(),content.end());
@@ -97,12 +97,16 @@
       if(move!=0&&shiftNativeElevation(f,schemas[size_t(schema)].fields,move))doc.replace(i,f,true);}
     for(auto i:doc.records("LAYER",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>4&&int(number(f[2],-1))==id){f[4]=nativeNumber(elevation);doc.replace(i,f);}}
     for(auto i:doc.records("MAP",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>7&&moveSpawn){f[7]=nativeNumber(number(f[7],0)+delta);doc.replace(i,f);}}
+    // Raising the top storey must carry its existing headroom too. A minimum
+    // alone could leave the moved lights and tall furniture above the roof.
+    if(topmost&&delta>0)for(auto i:doc.records("MAP",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>9){f[9]=nativeNumber(number(f[9],4.5f)+delta);doc.replace(i,f);}}
     ensureLayerHeadroom(elevation);
   }
   std::vector<size_t> cloneNativeSet(const std::vector<size_t>& indices,float dx,float dy,float dz,const std::map<int,int>& layerMap={}) {
-    std::vector<std::vector<std::string>> copies;std::vector<int> copyFloors;std::map<int,int> fixtures,clutter,actors;std::map<std::string,std::string> events;
+    std::vector<std::vector<std::string>> copies;std::vector<int> copyFloors;std::vector<bool> copyAutomatic;std::map<int,int> fixtures,clutter,actors;std::map<std::string,std::string> events;
     auto allFixtures=doc.records("FIXTURE",map),allClutter=doc.records("CLUTTER",map);
-    int nextFixture=int(allFixtures.size()),nextClutter=int(allClutter.size()),nextActor=int(doc.records("ACTOR",map).size());
+    int nextFixture=int(allFixtures.size()),nextClutter=int(allClutter.size()),nextActor=0;
+    for(auto i:doc.records("ACTOR",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>7)nextActor=std::max(nextActor,int(number(f[7],-1))+1);}
     std::set<size_t> selected(indices.begin(),indices.end());
     for(auto i:indices){auto f=NativeDocument::fields(doc.lines[i]);if(f.empty())continue;
       if(f[0]=="FIXTURE")fixtures[int(std::find(allFixtures.begin(),allFixtures.end(),i)-allFixtures.begin())]=nextFixture++;
@@ -110,13 +114,30 @@
       if(f[0]=="ACTOR"&&f.size()>7)actors[int(number(f[7],-1))]=nextActor++;
       if(f[0]=="SCRIPT_EVENT"&&f.size()>2)events[f[2]]=uniqueName("SCRIPT_EVENT",2,f[2]+"_copy_");
     }
+    std::vector<std::array<float,6>> resolvedLeads;auto allLeads=doc.records("LEAD",map);
+    for(auto i:indices){auto f=NativeDocument::fields(doc.lines[i]);if(f[0]!="LEAD")continue;
+      bool missingOwner=(f.size()>13&&!f[13].empty()&&!clutter.count(int(number(f[13],-1))))||(f.size()>18&&!f[18].empty()&&!fixtures.count(int(number(f[18],-1))));
+      bool blankAnchor=f.size()>18&&!f[18].empty()&&(f[2].empty()||f[3].empty()||f[4].empty());
+      if(!missingOwner&&!blankAnchor)continue;
+#ifdef RAWMETAL_UNIFIED
+      resolvedLeads=retro::resolveEditorLeadEndpoints(doc.text(),map);break;
+#else
+      throw std::runtime_error("Copy this cable with its attached owners, or use the native engine editor to resolve its sockets before copying");
+#endif
+    }
     for(auto i:indices){auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;
+      if(f[0]=="LEAD"&&!resolvedLeads.empty()){auto ordinal=std::find(allLeads.begin(),allLeads.end(),i)-allLeads.begin();if(size_t(ordinal)>=resolvedLeads.size())throw std::runtime_error("Engine cable copy ordinal is invalid");for(size_t field=0;field<6;++field)f[2+field]=nativeNumber(resolvedLeads[size_t(ordinal)][field]);}
       if(nativeHandle(schemas[size_t(schema)].fields,f))translateNative(f,schemas[size_t(schema)].fields,dx,dy);
       shiftNativeElevation(f,schemas[size_t(schema)].fields,dz);
       auto rewrite=[&](size_t at,const auto& table){if(at<f.size()&&!f[at].empty()){auto found=table.find(int(number(f[at],-1)));if(found!=table.end())f[at]=std::to_string(found->second);}};
       if(f[0]=="FIXTURE"||f[0]=="CLUTTER"){} // ordinals come from native record order
-      if(f[0]=="LEAD"){rewrite(13,clutter);rewrite(18,fixtures);}
-      if(f[0]=="BREAKABLE"&&f.size()==15)rewrite(13,fixtures);
+      // A copied cable can only stay seated on a copied owner. Otherwise its
+      // new position would keep controlling the original object's socket.
+      auto attachment=[&](size_t at,const auto& table,size_t companion){if(at>=f.size()||f[at].empty())return;
+        auto found=table.find(int(number(f[at],-1)));if(found!=table.end())f[at]=std::to_string(found->second);
+        else{f[at].clear();if(companion<f.size())f[companion].clear();}};
+      if(f[0]=="LEAD"){attachment(13,clutter,20);attachment(18,fixtures,19);}
+      if(f[0]=="BREAKABLE"&&f.size()==15){auto found=fixtures.find(int(number(f[13],-1)));if(found!=fixtures.end())f[13]=std::to_string(found->second);else f.resize(13);}
       if(f[0]=="ACTOR")rewrite(7,actors);else if(f[0].starts_with("ACTOR_"))rewrite(2,actors);
       if(f[0]=="ACTOR_KEY")rewrite(10,actors);
       if(f[0].starts_with("SCRIPT_")&&f.size()>2){auto found=events.find(f[2]);if(found!=events.end())f[2]=found->second;}
@@ -124,10 +145,10 @@
       if(mapped!=layerMap.end())owner=mapped->second;
       else if(!layerMap.empty()){int original=layerMap.begin()->first;float height=0;if(auto box=creationBox(NativeDocument::fields(doc.lines[i])))height=box->bottom;
         for(const auto& [source,target]:layerMap)if(floorLayer(source).elevation<=height+.04f)original=source;owner=layerMap.at(original);}
-      copyFloors.push_back(owner<0?layer:owner);copies.push_back(std::move(f));
+      copyFloors.push_back(owner<0?layer:owner);copyAutomatic.push_back(!layerMap.empty()&&doc.automatic(i));copies.push_back(std::move(f));
     }
     std::vector<size_t> result;
-    for(size_t i=0;i<copies.size();++i){auto& f=copies[i];doc.addOnLayer(f,copyFloors[i]);result.push_back(doc.records(f[0],map).back());}
+    for(size_t i=0;i<copies.size();++i){auto& f=copies[i];if(copyAutomatic[i])doc.addAutomatic(f,copyFloors[i]);else doc.addOnLayer(f,copyFloors[i]);result.push_back(doc.records(f[0],map).back());}
     return result;
   }
   void eraseNativeSet(std::vector<size_t> indices) {
@@ -167,11 +188,16 @@
       cells.insert(cells.end(),existing.begin(),existing.end());copies.push_back({target,std::move(cells)});}
     for(const auto& [target,cells]:copies)storeLayerPassageMask(target,cells);
   }
+  void cloneLayerDressingSettings(const std::map<int,int>& mapping) {
+    std::vector<std::pair<int,std::vector<std::string>>> copies;
+    for(auto i:doc.records("# EDITOR_DRESS",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()!=5)continue;auto target=mapping.find(int(number(f[2],-1)));if(target!=mapping.end())copies.push_back({target->second,std::move(f)});}
+    int active=layer;for(const auto& [target,f]:copies){layer=target;rememberDressing(dressingCells(f[4]),int(number(f[3],-1)));}layer=active;
+  }
   int duplicateFloor(int source) {
     auto a=floorLayer(source);auto content=layerContent({source});int destination=createFloorLayer(a.name+" copy");auto b=floorLayer(destination);
     for(auto i:doc.records("ROW",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>4&&int(number(f[2],-1))==destination)
       {f[4]=std::string(24,'_');int y=int(number(f[3],0));for(int x=0;x<24;++x)f[4][size_t(x)]=doc.tile(map,source,x,y);doc.replace(i,f);}}
-    cloneNativeSet(content,0,0,b.elevation-a.elevation,{{source,destination}});cloneLayerPassageMasks({{source,destination}});
+    cloneNativeSet(content,0,0,b.elevation-a.elevation,{{source,destination}});cloneLayerPassageMasks({{source,destination}});cloneLayerDressingSettings({{source,destination}});
     b.group=a.group;b.opacity=a.opacity;b.mask=a.mask;storeLayerView(b);return destination;
   }
   void deleteFloorLayers(const std::vector<int>& ids) {
@@ -261,7 +287,7 @@
       if(groupName=="From visible"){auto effective=effectiveFloorView(a);b.opacity=effective.opacity;b.mask=effective.mask;b.visible=true;b.locked=false;}
       storeLayerView(b);ensureLayerHeadroom(elevation);mapping[a.id]=id;result.push_back(id);
     }
-    cloneNativeSet(content,0,0,delta,mapping);cloneLayerPassageMasks(mapping);layer=result.back();return result;
+    cloneNativeSet(content,0,0,delta,mapping);cloneLayerPassageMasks(mapping);cloneLayerDressingSettings(mapping);layer=result.back();return result;
   }
   struct FloorGroup {
     int id=-1;std::string name;float opacity=1;bool visible=true,locked=false;std::array<unsigned,24> mask{};

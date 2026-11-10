@@ -1,6 +1,6 @@
   bool mapHeightSelection=false,verticalDragging=false;
   float wallPickX=12,wallPickY=12,verticalX=0,verticalY=0,verticalNx=1,verticalNy=0,verticalStart=0;
-  int verticalKind=1;float heightOriginalCeiling=4.5f;bool wallEdgeAlongX=true;
+  int verticalKind=1;float heightOriginalCeiling=4.5f;std::string heightOriginalCeilingField;bool wallEdgeAlongX=true;
   std::vector<retro::EditorGuide> selectionGuides() const {
     std::vector<retro::EditorGuide> out;if(tool!=0||record<0||size_t(record)>=doc.lines.size())return out;
     if(floorTransformSelection){auto b=tileBounds();float z=layerElevation();std::vector<std::pair<float,float>> p{{float(b[0]),float(b[1])},{float(b[2]),float(b[1])},{float(b[2]),float(b[3])},{float(b[0]),float(b[3])}};
@@ -50,14 +50,20 @@
     verticalNx=dx/length;verticalNy=dy/length;
     if(!verticalRay(ox,oy,oz,dx,dy,dz,verticalStart))return false;
     if(effectiveFloorView(floorLayer(layer)).locked){message(L"Unlock this floor before resizing it.");return false;}
-    heightOriginalCeiling=ceilingHeight();verticalDragging=objectDrag=viewDrag=true;objectMoved=false;
-    objectOriginal=doc.lines[size_t(record)];objectFields=NativeDocument::fields(objectOriginal);dragDocument=doc.text();lastDragPublish=GetTickCount64();
+    heightOriginalCeiling=ceilingHeight();heightOriginalCeilingField=nativeNumber(heightOriginalCeiling);
+    for(auto i:doc.records("MAP",map)){auto m=NativeDocument::fields(doc.lines[i]);if(m.size()>9){heightOriginalCeilingField=m[9];break;}}
+    verticalDragging=objectDrag=viewDrag=true;objectMoved=false;
+    objectOriginal=doc.lines[size_t(record)];objectFields=NativeDocument::fields(objectOriginal);captureDragState();lastDragPublish=GetTickCount64();
     return true;
   }
   void applyHeightDelta(float delta) {
     delta=snap>0?std::round(delta/snap)*snap:delta;
     if(std::abs(delta)<.000001f){if(objectMoved)doc.loadText(dragDocument);objectMoved=false;updateInspector();return;}
     auto f=objectFields;int schema=schemaFor(f);if(schema<0)return;
+    // Every pointer update is relative to the press snapshot. A previous
+    // overshoot may have lifted the map roof; returning the mouse must lower
+    // that automatic expansion too, rather than leaving a permanently tall room.
+    if(f[0]!="MAP")for(auto i:doc.records("MAP",map)){auto m=NativeDocument::fields(doc.lines[i]);if(m.size()>9&&number(m[9],heightOriginalCeiling)!=heightOriginalCeiling){m[9]=heightOriginalCeilingField;doc.replace(i,m);}}
     const auto& names=schemas[size_t(schema)].fields;
     auto set=[&](size_t at,float value){f[at]=nativeNumber(value);};
     if(f[0]=="MAP"&&f.size()>9){set(9,std::max(layerElevation()+.25f,number(objectFields[9],4.5f)+delta));}

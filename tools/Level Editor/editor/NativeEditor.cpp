@@ -964,6 +964,10 @@ struct Editor {
 #include "NativeLayerDockMethods.inc"
 #include "NativeCampaignMethods.inc"
 #include "NativeCorridorTests.inc"
+#include "NativePersistenceRegression.inc"
+#include "NativeSelectionRegression.inc"
+#include "NativeLayerRegression.inc"
+#include "NativeDressingRegression.inc"
 #include "NativeInteractionTests.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
@@ -1481,8 +1485,9 @@ struct Editor {
   void scrubTo(int target) {
     if (scrubbing)
       return;
-    scrubbing = true;
     target = std::clamp(target, 0, int(history.size() + future.size()));
+    if(target==int(history.size()))return;
+    scrubbing = true;
     while (int(history.size()) > target) {
       future.push_back(doc.text());
       doc.loadText(history.back());
@@ -1493,7 +1498,8 @@ struct Editor {
       doc.loadText(future.back());
       future.pop_back();
     }
-    publish();
+    selectedRecords.clear();record=-1;
+    publish(true,false);
     refresh();
     scrubbing = false;
     message(L"Step " + std::to_wstring(history.size()) + L" of " + std::to_wstring(history.size() + future.size()) +
@@ -4150,7 +4156,13 @@ struct Editor {
       return;
     if (cancel) {
       doc.loadText(dragDocument);
-      publish();
+      dirty=dragWasDirty;changeCount=dragChanges;
+      publish(false,false);
+      updateInspector();
+    } else if (!objectMoved || doc.text()==dragDocument) {
+      doc.loadText(dragDocument);
+      dirty=dragWasDirty;changeCount=dragChanges;
+      publish(false,false);
       updateInspector();
     } else if (objectMoved) {
       if(floorTransformSelection){std::vector<int> walls;for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(doc.tile(map,layer,x,y)=='#')walls.push_back(y*24+x);clearCreationWalls(walls);
@@ -5319,7 +5331,7 @@ struct Editor {
                 "0.201", "0.406", "0", "0", "cell_broken"});
     auto lead = NativeDocument::fields(
         "LEAD|0||||0|0|0|0.8|0.007|8|1|record_red|1||||0|1|+|+");
-    linked.add(lead);
+    linked.addAutomatic(lead,0);
     auto authored = doc;
     doc = linked;
     require(validateDocument(),
@@ -5341,6 +5353,8 @@ struct Editor {
     eraseNativeObject(linked, linked.records("CLUTTER", 0).front());
     auto remapped =
         NativeDocument::fields(linked.lines[linked.records("LEAD", 0).front()]);
+    require(linked.automatic(linked.records("LEAD",0).front(),0),
+            "Native index remapping promoted generated content to user ownership");
     require(remapped.at(18) == "0" && remapped.at(13) == "0",
             "Native fixture/prop index references were not remapped");
     doc = linked;
@@ -5597,6 +5611,10 @@ struct Editor {
     require(validateDocument(),
             "Engine rejected furnish, outdoors, a surface set or 3D placement");
     verifyInteractions();
+    verifyPersistenceRegressions();
+    verifySelectionRegressions();
+    verifyLayerRegressions();
+    verifyDressingRegressions();
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -6156,13 +6174,20 @@ struct Editor {
   void saveTo(const fs::path &file) {
     waitAutosave();
     std::error_code ec;
-    fs::remove(autosavePath(), ec);
+    const auto recovery = autosavePath();
     fs::path temporary = file.wstring() + L".editor-tmp-" + std::to_wstring(GetCurrentProcessId());
-    doc.save(temporary);
-    if (!replaceEditorFile(temporary, file))
-      throw std::runtime_error("Could not finish saving. The previous file is safe.");
+    try {
+      doc.save(temporary);
+      if (!replaceEditorFile(temporary, file))
+        throw std::runtime_error("Could not finish saving. The previous file and recovery copy are safe.");
+    } catch (...) {
+      fs::remove(temporary, ec);
+      throw;
+    }
     path = file;
-    fs::remove(autosavePath(), ec);
+    // Remove only this project's recovery after the atomic save succeeds.
+    // A failed Save As must retain it, and another project's recovery is unrelated.
+    fs::remove(recovery, ec);
     dirty = false;
     autosavedAt = changeCount;
     showTitle();
@@ -6196,7 +6221,8 @@ struct Editor {
     autosaveFor = -1;
   }
   void autosave() {
-    if (!dirty || changeCount == autosavedAt || session.empty() || remakeTest || backgroundTest || demoMode)
+    if (!dirty || changeCount == autosavedAt || session.empty() || remakeTest || backgroundTest || demoMode ||
+        objectDrag || drag || brushing || viewRect || ghostShown)
       return;
     waitAutosave(); // the one before, fifteen seconds ago
     if (changeCount == autosavedAt)
@@ -6205,6 +6231,7 @@ struct Editor {
     autosaveTo(autosavePath());
   }
   void autosaveTo(const fs::path &file) {
+    waitAutosave();
     autosaveFor = changeCount, autosaveOk = false, autosaveError.clear();
     autosaveWorker = std::thread([this, file, text = doc.text()] {
       try {
@@ -6221,6 +6248,8 @@ struct Editor {
             throw std::runtime_error("Campaign save failed");
         }
         autosaveOk = replaceEditorFile(temporary, file);
+        if (!autosaveOk)
+          throw std::runtime_error("Could not finish the recovery save. The previous recovery copy is safe.");
       } catch (const std::exception &error) {
         autosaveError = error.what();
       }
@@ -6423,18 +6452,7 @@ struct Editor {
     }
     NativeDocument next;
     next.open(file);
-    remember();
-    doc = std::move(next);
-    path.clear();
-    map = layer = 0;
-    publish(false);
-    dirty = true;
-    autosavedAt = changeCount;
-    if (window) {
-      showTitle();
-      refresh();
-      relayout();
-    }
+    adoptDocument(std::move(next), {}, true);
     return true;
   }
   // The campaign level this map came from (its export header), or -1.
@@ -7012,16 +7030,7 @@ struct Editor {
       NativeDocument next;
       next.open(file);
       int clocks = repairRetiredEditorPeople(next);
-      remember();
-      doc = std::move(next);
-      path = file;
-      map = 0;
-      layer = 0;
-      publish(false);
-      dirty = clocks > 0;
-      autosavedAt = changeCount;
-      showTitle();
-      refresh();
+      adoptDocument(std::move(next), fs::path(file), clocks > 0);
       if (clocks)
         message(L"People from the old editor were missing their clock or guard post. Both are back; save to keep them.");
     }
@@ -8135,7 +8144,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           e->dragY = y;
           e->objectOriginal = e->doc.lines[size_t(hit)];
           e->objectFields = NativeDocument::fields(e->objectOriginal);
-          e->dragDocument = e->doc.text();
+          e->captureDragState();
           e->lastDragPublish = GetTickCount64();
           e->viewDrag = false;
           e->captureMates();
@@ -8958,15 +8967,12 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       case New:
         if (!e->confirmSave())
           break;
-        e->remember();
-        e->doc.newCampaign("New custom campaign");
-        e->doc.addBlankMap("Map");
-        e->path.clear();
-        e->map = e->layer = 0;
-        e->publish(false);
-        e->dirty = false;
-        e->showTitle();
-        e->refresh();
+        {
+          NativeDocument next;
+          next.newCampaign("New custom campaign");
+          next.addBlankMap("Map");
+          e->adoptDocument(std::move(next), {}, false);
+        }
         e->welcomeIfBlank();
         break;
       case Open:
@@ -9015,14 +9021,11 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       case Starter:
         if (!e->confirmSave())
           break;
-        e->remember();
-        e->doc.open(e->root / L"custom maps" / L"Starter Map.rmc");
-        e->path.clear();
-        e->map = e->layer = 0;
-        e->publish(false);
-        e->dirty = false;
-        e->showTitle();
-        e->refresh();
+        {
+          NativeDocument next;
+          next.open(e->root / L"custom maps" / L"Starter Map.rmc");
+          e->adoptDocument(std::move(next), {}, false);
+        }
         e->message(L"The finished example. Look around, change anything; saving asks for a new name.");
         break;
       case FlickerToggle:

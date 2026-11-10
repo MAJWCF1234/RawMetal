@@ -80,7 +80,7 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
     }
   }
   for (const auto &[line, fields] : updates)
-    doc.replace(line, fields);
+    doc.replace(line, fields, true); // Ordinal maintenance is not a user edit.
   doc.eraseRecord(index);
   doc.touch();
 }

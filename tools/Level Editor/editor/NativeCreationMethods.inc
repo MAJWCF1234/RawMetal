@@ -53,7 +53,7 @@
     auto occupied=creationObstacles(ignored);
     for(const auto& other:occupied)if(creation::overlaps(box,other,.08f))return false;
     // Doors need standing room on both sides, including their full opening.
-    for(auto i:doc.records("DOOR",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<6||!onCreationFloor(number(f[5],0)))continue;
+    for(auto i:doc.records("DOOR",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<6||!onCreationFloor(number(f[5],0)+bottomLayerElevation()))continue;
       creation::Box approach{(number(f[2],0)+number(f[3],0))*.5f,number(f[4],0),number(f[3],0)-number(f[2],0)+.5f,2.4f,floor,top};
       if(creation::overlaps(box,approach))return false;
     }
@@ -77,18 +77,20 @@
     return true;
   }
   void addCreationFloor(const std::vector<int>& cells,int material) {
-    const float floor=layerElevation();std::vector<char> covered(576,0),wanted(576,0);
+    const float floor=layerElevation();std::vector<char> wanted(576,0);
     auto supported=nativeWalkableCells();for(int c:cells)if(c>=0&&c<576&&supported[size_t(c)])wanted[size_t(c)]=1;
-    for(auto i:doc.records("STRUCT",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<10)continue;
-      if(!nativeFloorSlab(f))continue;
-      creation::Box slab{(number(f[2],0)+number(f[4],0))*.5f,(number(f[3],0)+number(f[5],0))*.5f,
-        number(f[4],0)-number(f[2],0),number(f[5],0)-number(f[3],0),floor,floor+.05f};
-      for(int c:cells)if(c>=0&&c<576&&creation::overlaps(slab,{float(c%24)+.5f,float(c/24)+.5f,1,1,floor,floor+.05f}))covered[size_t(c)]=1;
-    }
-    for(int y=0;y<24;++y)for(int x=0;x<24;){if(!wanted[size_t(y*24+x)]||covered[size_t(y*24+x)]){++x;continue;}
-      int start=x;while(x<24&&wanted[size_t(y*24+x)]&&!covered[size_t(y*24+x)])++x;
-      doc.addAutomatic({"STRUCT",std::to_string(map),std::to_string(start),std::to_string(y),std::to_string(x),std::to_string(y+1),
-               nativeNumber(floor),nativeNumber(floor+.02f),"0",std::to_string(material)},layer);
+    std::vector<creation::Box> existing;
+    for(auto i:doc.records("STRUCT",map)){auto f=NativeDocument::fields(doc.lines[i]);if(!nativeFloorSlab(f))continue;
+      // Subtract the exact patch footprint. A narrow painted stripe does not
+      // cover the rest of its metre-wide cell, and must remain unchanged.
+      existing.push_back({(number(f[2],0)+number(f[4],0))*.5f,(number(f[3],0)+number(f[5],0))*.5f,
+        number(f[4],0)-number(f[2],0),number(f[5],0)-number(f[3],0),floor-.6f,floor+.08f});}
+    for(int y=0;y<24;++y)for(int x=0;x<24;){if(!wanted[size_t(y*24+x)]){++x;continue;}
+      int start=x;while(x<24&&wanted[size_t(y*24+x)])++x;
+      std::vector<creation::Box> pieces{{(start+x)*.5f,y+.5f,float(x-start),1,floor,floor+.02f}};
+      for(const auto& patch:existing){std::vector<creation::Box> next;for(const auto& piece:pieces){auto remains=creation::subtract(piece,patch);next.insert(next.end(),remains.begin(),remains.end());}pieces=std::move(next);if(pieces.empty())break;}
+      for(const auto& piece:pieces)doc.addAutomatic({"STRUCT",std::to_string(map),nativeNumber(piece.x-piece.w*.5f),nativeNumber(piece.y-piece.d*.5f),
+        nativeNumber(piece.x+piece.w*.5f),nativeNumber(piece.y+piece.d*.5f),nativeNumber(piece.bottom),nativeNumber(piece.top),"0",std::to_string(material)},layer);
     }
   }
   int addCreationLights(const std::vector<int>& cells,const char* kelvin="3200"){

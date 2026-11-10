@@ -92,7 +92,10 @@
       SetWindowTextW(GetDlgItem(window,LayerCommit),L"Create");relayout();SetFocus(layerName);SendMessageW(layerName,EM_SETSEL,0,-1);return;
     }
     if(id==LayerHeight){layersDock=true;refreshLayerDock();relayout();SetFocus(layerElevationInput);SendMessageW(layerElevationInput,EM_SETSEL,0,-1);return;}
-    auto before=doc.text();auto previousFuture=future;auto historyCount=history.size();auto targets=layerTargets();remember();
+    auto before=doc.text();auto previousFuture=future,previousHistory=history;auto targets=layerTargets();
+    int previousLayer=layer,previousGroup=selectedLayerGroup,previousDraft=layerDraft,previousRecord=record;auto previousSelection=selectedRecords;
+    auto previousDirty=dirty;auto previousChanges=changeCount;bool previousMapHeight=mapHeightSelection,previousFootprint=floorTransformSelection;
+    auto draftName=label(layerName),draftElevation=label(layerElevationInput),draftThickness=label(layerThicknessInput);remember();
     try{
       if(id==LayerReferences)storeFloorReferences(!floorReferenceEnabled());
       else if(id==LayerVisible||id==LayerLock||id==LayerOpaque||id==LayerHalf||id==LayerGhost){
@@ -120,7 +123,7 @@
         auto content=layerContent({source.id});for(auto i:content){auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema>=0&&shiftNativeElevation(f,schemas[size_t(schema)].fields,dest.elevation-source.elevation))doc.replace(i,f,true);doc.setRecordLayer(i,dest.id);}
         for(int y=0;y<24;++y)for(int x=0;x<24;++x){char ch=doc.tile(map,source.id,x,y);if(ch!='_')doc.paint(map,dest.id,x,y,ch);}
         auto passage=layerPassageMask(doc,dest.id),sourcePassage=layerPassageMask(doc,source.id);passage.insert(passage.end(),sourcePassage.begin(),sourcePassage.end());storeLayerPassageMask(dest.id,passage);
-        deleteFloorLayers({source.id});layer=std::min(dest.id,int(floorLayers().size())-1);
+        cloneLayerDressingSettings({{source.id,dest.id}});deleteFloorLayers({source.id});layer=std::min(dest.id,int(floorLayers().size())-1);
       }else if(id==LayerRotate||id==LayerFlipX||id==LayerFlipY){for(int target:targets)transformFloor(target,id==LayerRotate?1:0,id==LayerFlipX?1:id==LayerFlipY?2:0);}
       else if(id==LayerMaskArea||id==LayerMaskInvert||id==LayerMaskClear){
         if(id==LayerMaskArea&&std::hypot(areaEndX-areaX,areaEndY-areaY)<.2f)throw std::runtime_error("Drag a selection box in the plan first");
@@ -134,5 +137,7 @@
         reorderFloorStack(layer,id==LayerRaise);
       }
       publish(true,false);refresh();refreshLayerDock();layersDock=true;relayout();message(L"Layer edit saved in the project. Ctrl+Z restores it.");
-    }catch(...){doc.loadText(before);history.resize(historyCount);future=std::move(previousFuture);refreshLayerDock();throw;}
+    }catch(...){doc.loadText(before);history=std::move(previousHistory);future=std::move(previousFuture);layer=previousLayer;selectedLayerGroup=previousGroup;record=previousRecord;selectedRecords=std::move(previousSelection);
+      dirty=previousDirty;changeCount=previousChanges;mapHeightSelection=previousMapHeight;floorTransformSelection=previousFootprint;refreshLayerDock();
+      if(previousDraft){layerDraft=previousDraft;SetWindowTextW(layerName,draftName.c_str());SetWindowTextW(layerElevationInput,draftElevation.c_str());SetWindowTextW(layerThicknessInput,draftThickness.c_str());SetWindowTextW(GetDlgItem(window,LayerCommit),L"Create");}throw;}
   }

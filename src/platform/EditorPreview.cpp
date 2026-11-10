@@ -10,6 +10,17 @@
 #include <iostream>
 
 namespace retro {
+std::vector<std::array<float,6>> resolveEditorLeadEndpoints(const std::string& text,int map){
+ auto loaded=loadCustomCampaignText(text,"editor-cable-copy.rmc");
+ if(map<0||map>=int(loaded->maps.size()))throw std::runtime_error("Cable copy map is outside this campaign");
+ auto campaign=std::make_shared<CustomCampaign>(*loaded);campaign->startMap=map;Game game(campaign);
+ const auto& world=game.world();const auto& leads=world.leads();const auto& ropes=world.leadRopes();
+ std::vector<std::array<float,6>> result;result.reserve(leads.size());
+ for(size_t i=0;i<leads.size();++i){const auto& lead=leads[i];auto end=lead.end;
+  if(!lead.loose&&lead.prop>=0&&i<ropes.size()&&!ropes[i].points.empty())end=ropes[i].points.back();
+  result.push_back({lead.anchor.x,lead.anchor.y,lead.anchor.z,end.x,end.y,end.z});}
+ return result;
+}
 int validateEditorCampaign(const std::filesystem::path& path){
  auto campaign=loadCustomCampaignFile(path);
  for(size_t i=0;i<campaign->maps.size();++i){World validated(int(i),campaign->maps[i]);}

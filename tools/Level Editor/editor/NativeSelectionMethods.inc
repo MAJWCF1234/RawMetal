@@ -1,3 +1,5 @@
+  bool dragWasDirty=false;long long dragChanges=0;
+  void captureDragState(){dragDocument=doc.text();dragWasDirty=dirty;dragChanges=changeCount;}
   std::vector<int> selectedRecords;
   std::vector<std::pair<size_t,std::string>> dragSelection;
   int resizeHandle=-1;
@@ -27,8 +29,10 @@
   void selectArea(float ax,float ay,float bx,float by,bool extend) {
     if(!extend)selectedRecords.clear();
     float l=std::min(ax,bx),r=std::max(ax,bx),t=std::min(ay,by),b=std::max(ay,by);
-    for(auto i:objects())if(activeFloorRecord(i)){auto h=handleFor(i);
-      if(h&&h->x+h->width*.5f>=l&&h->x-h->width*.5f<=r&&h->y+h->depth*.5f>=t&&h->y-h->depth*.5f<=b&&!selected(int(i)))selectedRecords.push_back(int(i));}
+    for(auto i:objects())if(activeFloorRecord(i)){auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;
+      auto corners=nativeCorners(schemas[size_t(schema)].fields,f);float left=1e9f,right=-1e9f,top=1e9f,bottom=-1e9f;
+      for(auto [x,y]:corners){left=std::min(left,x);right=std::max(right,x);top=std::min(top,y);bottom=std::max(bottom,y);}
+      if(!corners.empty()&&right>=l&&left<=r&&bottom>=t&&top<=b&&!selected(int(i)))selectedRecords.push_back(int(i));}
     selectRecord(selectedRecords.empty()?-1:selectedRecords.back(),true);
   }
   void captureSelectionDrag() {
@@ -53,42 +57,64 @@
     if(schema<0||!resizeNative(f,schemas[size_t(schema)].fields,resizeHandle,x,y,snap))return;
     doc.replace(size_t(record),f);objectMoved=f!=objectFields;updateInspector();
   }
+  // A rejected group operation must preserve the Redo branch and the oldest
+  // Undo entry even when the history is full. Keep only the displaced entry,
+  // rather than copying every saved map on each nudge.
+  template<class Operation> void editNativeSelection(Operation&& operation) {
+    auto original=doc;auto previousFuture=std::move(future);size_t previousHistory=history.size();
+    std::string displaced=previousHistory>=50?history.front():std::string{};
+    int previousRecord=record,previousKind=kind;auto previousSelection=selectedRecords;
+    bool previousDirty=dirty;auto previousChanges=changeCount;
+    remember();
+    try{operation();}
+    catch(...){doc=std::move(original);if(!history.empty())history.pop_back();
+      if(previousHistory>=50)history.insert(history.begin(),std::move(displaced));
+      future=std::move(previousFuture);record=previousRecord;kind=previousKind;selectedRecords=std::move(previousSelection);
+      dirty=previousDirty;changeCount=previousChanges;throw;}
+  }
   void moveMultiple(float dx,float dy) {
-    auto indices=selectedNativeSet();auto original=doc;remember();
-    try{
+    auto indices=selectedNativeSet();if(indices.empty()||(dx==0&&dy==0))return;
+    editNativeSelection([&]{
       for(auto i:indices){if(!editableRecord(i))throw std::runtime_error("Unlock the selected floor before moving its content");
         auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);
         if(schema>=0&&translateNative(f,schemas[size_t(schema)].fields,dx,dy))doc.replace(i,f);}
       publish();selectRecord(record,true);
-    }catch(...){doc=std::move(original);history.pop_back();throw;}
+    });
   }
   void copyMultiple() {
-    auto indices=selectedNativeSet();auto original=doc;remember();
-    try{auto copied=cloneNativeSet(indices,snap>0?snap:.25f,snap>0?snap:.25f,0);
+    auto indices=selectedNativeSet();if(indices.empty())return;
+    editNativeSelection([&]{for(auto i:indices)if(!editableRecord(i))throw std::runtime_error("Unlock selected floors before copying content");
+      auto copied=cloneNativeSet(indices,snap>0?snap:.25f,snap>0?snap:.25f,0);
       selectedRecords.clear();for(auto i:copied)if(handleFor(i))selectedRecords.push_back(int(i));
       record=selectedRecords.empty()?-1:selectedRecords.back();publish();selectRecord(record,true);
-    }catch(...){doc=std::move(original);history.pop_back();throw;}
+    });
   }
   void removeMultiple() {
-    auto indices=selectedNativeSet();auto original=doc;remember();
-    try{for(auto i:indices)if(!editableRecord(i))throw std::runtime_error("Unlock selected floors before deleting content");
+    auto indices=selectedNativeSet();if(indices.empty())return;
+    editNativeSelection([&]{for(auto i:indices)if(!editableRecord(i))throw std::runtime_error("Unlock selected floors before deleting content");
       eraseNativeSet(indices);selectedRecords.clear();record=-1;publish();refreshRecords();
-    }catch(...){doc=std::move(original);history.pop_back();throw;}
+    });
   }
   void rotateMultiple() {
-    auto indices=selectedNativeSet();for(auto i:indices)if(NativeDocument::fields(doc.lines[i])[0]=="DOOR")throw std::runtime_error("Native doors run horizontally. Move or resize this doorway separately before rotating the group.");float l=24,r=0,t=24,b=0;
-    for(auto i:indices)if(auto h=handleFor(i)){l=std::min(l,h->x-h->width*.5f);r=std::max(r,h->x+h->width*.5f);t=std::min(t,h->y-h->depth*.5f);b=std::max(b,h->y+h->depth*.5f);}
-    float cx=(l+r)*.5f,cy=(t+b)*.5f;auto original=doc;remember();
-    try{for(auto i:indices){if(!editableRecord(i))throw std::runtime_error("Unlock selected floors before rotating content");
+    auto indices=selectedNativeSet();if(indices.empty())return;
+    for(auto i:indices)if(NativeDocument::fields(doc.lines[i])[0]=="DOOR")throw std::runtime_error("Native doors run horizontally. Move or resize this doorway separately before rotating the group.");
+    float l=1e9f,r=-1e9f,t=1e9f,b=-1e9f;
+    for(auto i:indices){auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;
+      for(auto [x,y]:nativeCorners(schemas[size_t(schema)].fields,f)){l=std::min(l,x);r=std::max(r,x);t=std::min(t,y);b=std::max(b,y);}}
+    if(l>r||t>b)return;float cx=(l+r)*.5f,cy=(t+b)*.5f;
+    editNativeSelection([&]{for(auto i:indices){if(!editableRecord(i))throw std::runtime_error("Unlock selected floors before rotating content");
       auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;auto h=nativeHandle(schemas[size_t(schema)].fields,f);if(!h)continue;
       for(auto [x,y]:h->points){float px=number(f[x],0),py=number(f[y],0);f[x]=nativeNumber(cx+py-cy);f[y]=nativeNumber(cy-px+cx);}
       if(!nativeLineKind(f[0])&&h->points.size()==2){auto [ax,ay]=h->points[0];auto [bx,by]=h->points[1];if(number(f[ax],0)>number(f[bx],0))std::swap(f[ax],f[bx]);if(number(f[ay],0)>number(f[by],0))std::swap(f[ay],f[by]);}
       auto yaw=nativeField(schemas[size_t(schema)].fields,f,"yaw");if(yaw!=size_t(-1))f[yaw]=nativeNumber(std::remainder(number(f[yaw],0)+1.57079632679f,6.28318530718f));
       auto facing=nativeField(schemas[size_t(schema)].fields,f,"facing");if(facing!=size_t(-1))f[facing]=std::to_string((int(number(f[facing],0))+1)%4);
+      auto along=nativeField(schemas[size_t(schema)].fields,f,"alongY"),ascending=nativeField(schemas[size_t(schema)].fields,f,"ascending");
+      if(along!=size_t(-1)&&ascending!=size_t(-1)){int state=(f[along]=="1"?0:1)+(f[ascending]=="1"?0:2);state=(state+1)%4;f[along]=state&1?"0":"1";f[ascending]=state&2?"0":"1";}
       doc.replace(i,f);}
       publish();selectRecord(record,true);
-    }catch(...){doc=std::move(original);history.pop_back();throw;}
-  }  bool floorTransformSelection=false;
+    });
+  }
+  bool floorTransformSelection=false;
   std::array<int,4> floorDragBounds{};
   float resizePlane=0;
   std::array<int,4> tileBounds() const {
@@ -157,7 +183,7 @@
     if(!floorTransformSelection&&(schema<0||!resizeNative(test,schemas[size_t(schema)].fields,corner,corners[size_t(corner)].first,corners[size_t(corner)].second,0)))return false;
     float fx,fy;if(!floorPoint(ox,oy,oz,dx,dy,dz,z,fx,fy))return false;
     resizeHandle=corner;resizePlane=z;viewGrabX=fx-corners[size_t(corner)].first;viewGrabY=fy-corners[size_t(corner)].second;
-    objectOriginal=doc.lines[size_t(record)];objectFields=f;dragDocument=doc.text();objectDrag=viewDrag=true;objectMoved=false;captureMates();return true;
+    objectOriginal=doc.lines[size_t(record)];objectFields=f;captureDragState();objectDrag=viewDrag=true;objectMoved=false;captureMates();return true;
   }  float bodyAnchorX=0,bodyAnchorY=0,bodyAnchorZ=0,bodyNx=1,bodyNy=0,bodyNz=0;
   bool bodyDragging=false;
   bool bodyRayPoint(float ox,float oy,float oz,float dx,float dy,float dz,float& x,float& y,float& z) const {
@@ -170,7 +196,7 @@
     float t=0;if(!rayNativeBox(ox,oy,oz,dx,dy,dz,box->x,box->y,box->w,box->d,box->bottom,box->top,box->yaw,t))return false;
     float length=std::sqrt(dx*dx+dy*dy+dz*dz);if(length<.0001f)return false;
     bodyNx=dx/length;bodyNy=dy/length;bodyNz=dz/length;bodyAnchorX=ox+t*dx;bodyAnchorY=oy+t*dy;bodyAnchorZ=oz+t*dz;
-    objectOriginal=doc.lines[size_t(record)];objectFields=NativeDocument::fields(objectOriginal);dragDocument=doc.text();
+    objectOriginal=doc.lines[size_t(record)];objectFields=NativeDocument::fields(objectOriginal);captureDragState();
     objectDrag=viewDrag=bodyDragging=true;objectMoved=false;resizeHandle=-1;heightOriginalCeiling=ceilingHeight();captureMates();return true;
   }
   void applyBodyElevation(float delta) {

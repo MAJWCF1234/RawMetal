@@ -1,6 +1,6 @@
   int floorPaintMaterial=15;bool floorMaterialExplicit=false;
   bool nativeFloorSlab(const std::vector<std::string>& f) const {
-    if(f.size()<10||f[0]!="STRUCT")return false;float z=layerElevation(),b=number(f[6],-999),t=number(f[7],999);
+    if(f.size()<10||f[0]!="STRUCT"||(f.size()>10&&!f[10].empty()&&number(f[10],1)==0)||(f.size()>11&&!f[11].empty()&&number(f[11],0)!=0))return false;float z=layerElevation(),b=number(f[6],-999),t=number(f[7],999);
     return t>=z-.03f&&t<=z+.06f&&t>b&&t-b<=.55f;
   }
   void clearNativeFloor(float x0,float y0,float x1,float y1) {

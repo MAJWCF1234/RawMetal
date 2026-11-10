@@ -2,9 +2,10 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <filesystem>
-#include <memory>
+#include <array>
 #include <string>
 #include <vector>
+#include <memory>
 namespace retro {
 struct CustomCampaign;
 class Win32Window;
@@ -44,6 +45,9 @@ private:
 Win32Window* createEditorViewport(HWND parent, bool visible);
 void destroyEditorViewport(Win32Window* window);
 int runEditorPreview(const EditorPreviewOptions& options);
+// Native parser/socket placement and initial cable physics, used before detaching
+// a copied cable from owners that were not copied. Coordinates are ax,ay,az,bx,by,bz.
+std::vector<std::array<float,6>> resolveEditorLeadEndpoints(const std::string& text,int map);
 int validateEditorCampaign(const std::filesystem::path& path);
 int testCampaignEditingExport(const std::filesystem::path& path);
 int testLayerEditingExport(const std::filesystem::path& path);

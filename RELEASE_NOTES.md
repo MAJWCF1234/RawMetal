@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.18 - Editor reliability repairs (2026-11-09)
+
+This patch fixes editing, recovery, layer duplication and native cable-copy faults found while exercising the editor.
+
+- Failed saves retain the previous file and exact recovery copy. Recovery-write failures are reported and can be retried. Opening, starting or importing another project resets its editing history and selection so Undo cannot restore the previous project under the new filename.
+- Cancelled drags and drags returned to their starting point preserve the original clean state, change counter and Redo branch. Recovery waits for gestures to finish. The history slider clears obsolete object selections and ignores an unchanged position.
+- Group rotation keeps rectangular props centred correctly and turns the climbing direction of stairs. Marquee selection follows rotated footprints. Rejected locked-group operations preserve the full Undo/Redo history.
+- Invalid layer commands preserve the active floor and editable draft. Raising the top floor carries its existing roof clearance, keeping lamps and tall content below the roof.
+- Duplicating or merging floors preserves automatic furniture ownership and room dressing settings. Native index maintenance no longer turns generated cables into user content.
+- Cable copies use the engine's resolved sockets and terminal positions: copied owners receive the copied cable, while a cable copied without its owners becomes independent and leaves the originals untouched.
+- Automatic floor finishes fill around narrow painted stripes without overwriting them or leaving gaps. Door clearance follows raised base floors. Non-solid and shaped decorations no longer count as full rectangular floor support or get cut by floor painting.
+
+---
+
 ## v1.2.17 - Corridor placement repair (2026-11-09)
 
 Corridors now route a complete two-metre passage between rooms instead of cutting a fixed L-shaped strip.
