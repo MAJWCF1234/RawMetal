@@ -145,11 +145,34 @@
     auto eraseLines=[&](const std::vector<std::string>& lines){for(auto it=lines.rbegin();it!=lines.rend();++it){auto found=std::find(doc.lines.begin(),doc.lines.end(),*it);if(found!=doc.lines.end())eraseNativeObject(doc,size_t(found-doc.lines.begin()));}};
     eraseLines(dependencies);eraseLines(owners);
   }
+  std::vector<int> layerPassageMask(const NativeDocument& source,int id) const {
+    std::vector<int> cells;
+    for(auto i:source.records("# EDITOR_PASSAGE",map)){auto f=NativeDocument::fields(source.lines[i]);
+      if(f.size()<4||int(number(f[2],-1))!=id)continue;auto part=dressingCells(f[3]);cells.insert(cells.end(),part.begin(),part.end());}
+    std::sort(cells.begin(),cells.end());cells.erase(std::unique(cells.begin(),cells.end()),cells.end());return cells;
+  }
+  void storeLayerPassageMask(int id,const std::vector<int>& cells) {
+    std::vector<size_t> markers;
+    for(auto i:doc.records("# EDITOR_PASSAGE",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>2&&int(number(f[2],-1))==id)markers.push_back(i);}
+    std::vector<std::string> marker{"# EDITOR_PASSAGE",std::to_string(map),std::to_string(id),dressingMask(cells)};
+    if(markers.empty()){if(!marker[3].empty())doc.add(marker);return;}
+    // Keep an empty existing marker during a resize: native drag members refer
+    // to indices in the press snapshot, which must not shift between moves.
+    doc.replace(markers.front(),marker,true);
+    for(size_t n=markers.size();n>1;--n)doc.eraseRecord(markers[n-1]);
+  }
+  void cloneLayerPassageMasks(const std::map<int,int>& mapping) {
+    std::vector<std::pair<int,std::vector<int>>> copies;
+    for(const auto& [source,target]:mapping){auto cells=layerPassageMask(doc,source),existing=layerPassageMask(doc,target);
+      cells.insert(cells.end(),existing.begin(),existing.end());copies.push_back({target,std::move(cells)});}
+    for(const auto& [target,cells]:copies)storeLayerPassageMask(target,cells);
+  }
   int duplicateFloor(int source) {
     auto a=floorLayer(source);auto content=layerContent({source});int destination=createFloorLayer(a.name+" copy");auto b=floorLayer(destination);
     for(auto i:doc.records("ROW",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>4&&int(number(f[2],-1))==destination)
       {f[4]=std::string(24,'_');int y=int(number(f[3],0));for(int x=0;x<24;++x)f[4][size_t(x)]=doc.tile(map,source,x,y);doc.replace(i,f);}}
-    cloneNativeSet(content,0,0,b.elevation-a.elevation,{{source,destination}});b.group=a.group;b.opacity=a.opacity;b.mask=a.mask;storeLayerView(b);return destination;
+    cloneNativeSet(content,0,0,b.elevation-a.elevation,{{source,destination}});cloneLayerPassageMasks({{source,destination}});
+    b.group=a.group;b.opacity=a.opacity;b.mask=a.mask;storeLayerView(b);return destination;
   }
   void deleteFloorLayers(const std::vector<int>& ids) {
     auto layers=floorLayers();if(ids.size()>=layers.size())throw std::runtime_error("A map must retain at least one floor");
@@ -158,13 +181,14 @@
     float spawnZ=oldBase;bool removedSpawn=false;for(auto i:doc.records("MAP",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>7){spawnZ=number(f[7],oldBase);removedSpawn=std::find(ids.begin(),ids.end(),floorAtHeight(spawnZ))!=ids.end();}}
     eraseNativeSet(layerContent(ids));std::vector<size_t> remove;
     for(auto i:doc.onMap(map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<3)continue;
-      if((f[0]=="LAYER"||f[0]=="ROW"||f[0]=="# EDITOR_LAYER_VIEW"||f[0]=="# EDITOR_DRESS")&&std::find(ids.begin(),ids.end(),int(number(f[2],-1)))!=ids.end())remove.push_back(i);}
+      if((f[0]=="LAYER"||f[0]=="ROW"||f[0]=="# EDITOR_LAYER_VIEW"||f[0]=="# EDITOR_DRESS"||f[0]=="# EDITOR_PASSAGE")&&std::find(ids.begin(),ids.end(),int(number(f[2],-1)))!=ids.end())remove.push_back(i);}
     for(auto it=remove.rbegin();it!=remove.rend();++it)doc.eraseRecord(*it);
     // Compact only native layer indices; all other record fields are retained.
     auto remaining=floorLayers();std::map<int,int> remap;for(size_t i=0;i<remaining.size();++i)remap[remaining[i].id]=int(i);
     for(size_t i=0;i<doc.lines.size();++i){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<3||f[1]!=std::to_string(map))continue;
-      if(f[0]=="LAYER"||f[0]=="ROW"||f[0]=="# EDITOR_LAYER_VIEW"||f[0]=="# EDITOR_DRESS"||f[0]=="# EDITOR_AUTO"||f[0]=="# EDITOR_LAYER"){
+      if(f[0]=="LAYER"||f[0]=="ROW"||f[0]=="# EDITOR_LAYER_VIEW"||f[0]=="# EDITOR_DRESS"||f[0]=="# EDITOR_PASSAGE"||f[0]=="# EDITOR_AUTO"||f[0]=="# EDITOR_LAYER"){
         auto found=remap.find(int(number(f[2],-1)));if(found!=remap.end()){f[2]=std::to_string(found->second);doc.replace(i,f,true);}}}
+    for(const auto& a:floorLayers())storeLayerPassageMask(a.id,layerPassageMask(doc,a.id));
     // Relative native heights are measured from layer zero. Compensate when
     // deleting the old bottom floor so surviving furniture stays in world space.
     float baseDelta=oldBase-bottomLayerElevation();
@@ -190,6 +214,7 @@
     }
     for(auto i:doc.records("ROW",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>4&&int(number(f[2],-1))==id){f[4]=rows[size_t(int(number(f[3],0)))];doc.replace(i,f);}}
     for(auto i:doc.records("# EDITOR_DRESS",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>4&&int(number(f[2],-1))==id){std::vector<int> cells;for(int c:dressingCells(f[4])){auto [x,y]=stampCell(c%24,c/24,24,24,quarter,flip);cells.push_back(y*24+x);}f[4]=dressingMask(cells);doc.replace(i,f,true);}}
+    std::vector<int> passage;for(int c:layerPassageMask(doc,id)){auto [x,y]=stampCell(c%24,c/24,24,24,quarter,flip);passage.push_back(y*24+x);}storeLayerPassageMask(id,passage);
     auto a=floorLayer(id);auto old=a.mask;a.mask.fill(0);
     for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(old[size_t(y)]&(1u<<x)){auto [tx,ty]=stampCell(x,y,24,24,quarter,flip);a.mask[size_t(ty)]|=1u<<tx;}storeLayerView(a);
   }  bool showFloorReferences=true,layersDock=false;
@@ -236,7 +261,7 @@
       if(groupName=="From visible"){auto effective=effectiveFloorView(a);b.opacity=effective.opacity;b.mask=effective.mask;b.visible=true;b.locked=false;}
       storeLayerView(b);ensureLayerHeadroom(elevation);mapping[a.id]=id;result.push_back(id);
     }
-    cloneNativeSet(content,0,0,delta,mapping);layer=result.back();return result;
+    cloneNativeSet(content,0,0,delta,mapping);cloneLayerPassageMasks(mapping);layer=result.back();return result;
   }
   struct FloorGroup {
     int id=-1;std::string name;float opacity=1;bool visible=true,locked=false;std::array<unsigned,24> mask{};

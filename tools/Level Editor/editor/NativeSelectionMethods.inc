@@ -130,6 +130,12 @@
         auto cells=dressingCells(source[4]);std::set<int> wanted(cells.begin(),cells.end());std::vector<int> resized;
         for(int yy=b[1];yy<b[3];++yy)for(int xx=b[0];xx<b[2];++xx){int sx=old[0]+int(std::round(float(xx-b[0])*(old[2]-old[0]-1)/std::max(1,b[2]-b[0]-1))),sy=old[1]+int(std::round(float(yy-b[1])*(old[3]-old[1]-1)/std::max(1,b[3]-b[1]-1)));if(wanted.count(sy*24+sx))resized.push_back(yy*24+xx);}
         fields[4]=dressingMask(resized);doc.replace(i,fields,true);break;}}
+    // Passage reservations follow the original floor cells on every move,
+    // including any cells outside the resized rectangle that stay untouched.
+    auto passage=layerPassageMask(original,layer);std::set<int> passageSource(passage.begin(),passage.end());std::vector<int> passageResized;
+    for(int c:passage){int xx=c%24,yy=c/24;bool inOld=xx>=old[0]&&xx<old[2]&&yy>=old[1]&&yy<old[3],inNew=xx>=b[0]&&xx<b[2]&&yy>=b[1]&&yy<b[3];if(!inOld&&!inNew)passageResized.push_back(c);}
+    for(int yy=b[1];yy<b[3];++yy)for(int xx=b[0];xx<b[2];++xx){int sourceX=old[0]+int(std::round(float(xx-b[0])*(old[2]-old[0]-1)/std::max(1,b[2]-b[0]-1))),sourceY=old[1]+int(std::round(float(yy-b[1])*(old[3]-old[1]-1)/std::max(1,b[3]-b[1]-1)));if(passageSource.count(sourceY*24+sourceX))passageResized.push_back(yy*24+xx);}
+    storeLayerPassageMask(layer,passageResized);
     objectMoved=doc.text()!=dragDocument;updateInspector();
   }
   void captureFloorDrag() {

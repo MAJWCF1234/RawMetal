@@ -1233,7 +1233,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
    }
    // PRIM ramps/stairs are expanded into solid proxy steps. A real landing
    // within one legal step opens its edge rail, just like a STAIR record.
-   for(size_t i=0;i<authoredStructures;++i){const auto& p=m_structures[i];if(p.material==CollisionProxyMaterial&&p.solid&&x>=p.x1&&x<p.x2&&y>=p.y1&&y<p.y2&&std::abs(p.top-z)<.215f)return true;}
+   for(size_t i=0;i<authoredStructures;++i){const auto& p=m_structures[i];if(p.solid&&x>=p.x1&&x<p.x2&&y>=p.y1&&y<p.y2&&((p.material==CollisionProxyMaterial&&std::abs(p.top-z)<.215f)||(p.shape==ShapeBox&&p.top-p.bottom<=.55f&&std::abs(p.top-z)<.06f)))return true;}
    return false;
   };
   for(int y=0;y<Height;++y)for(int x=0;x<Width;){

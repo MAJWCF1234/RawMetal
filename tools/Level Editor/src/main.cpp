@@ -857,6 +857,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--editor-live-render-test"))return retro::testEditorLiveRendering();
     if(auto path=commandArguments().find(L"--campaign-export-test="))return retro::testCampaignEditingExport(path+23);
     if(auto path=commandArguments().find(L"--layer-export-test="))return retro::testLayerEditingExport(path+20);
+    if(auto path=commandArguments().find(L"--corridor-export-test="))return retro::testCorridorEditingExport(path+23);
     if(auto path=commandArguments().find(L"--editor-validate="))return retro::validateEditorCampaign(path+18);
     // Open from campaign: the builder asks this engine for the game's levels (--campaign-map-list,
     // --export-rmc; world/CampaignExport.cpp). -1: neither was asked for.

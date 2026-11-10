@@ -47,6 +47,7 @@ int runEditorPreview(const EditorPreviewOptions& options);
 int validateEditorCampaign(const std::filesystem::path& path);
 int testCampaignEditingExport(const std::filesystem::path& path);
 int testLayerEditingExport(const std::filesystem::path& path);
+int testCorridorEditingExport(const std::filesystem::path& list);
 // The same check on the document text itself (the builder in this process).
 int validateEditorCampaignText(const std::string& text);
 }

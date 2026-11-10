@@ -162,4 +162,5 @@
     std::ofstream report(root/L"native-editor-interaction-test.txt");
     for(const auto& message:passed)report<<"PASS: "<<message<<'\n';
     report<<"EXPORT: "<<utf8(path.wstring())<<'\n';
+    verifyCorridors();
   }

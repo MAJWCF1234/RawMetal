@@ -10,6 +10,7 @@
 #include "NativeParts.h"
 #include "NativeCreation.h"
 #include "NativeManipulation.h"
+#include "NativeCorridorRoute.h"
 #include "../src/core/EditorView.h"
 #include <algorithm>
 #include <cmath>
@@ -962,6 +963,7 @@ struct Editor {
 #include "NativeGizmoMethods.inc"
 #include "NativeLayerDockMethods.inc"
 #include "NativeCampaignMethods.inc"
+#include "NativeCorridorTests.inc"
 #include "NativeInteractionTests.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
@@ -1071,9 +1073,10 @@ struct Editor {
     for (int y = 0; y < 24; ++y)
       for (int x = 0; x < 24; ++x)
         b[size_t(y * 24 + x)] = doc.tile(map, layer, x, y) == '#';
+    for(const auto& a:floorLayers())if(a.elevation<layerElevation()-.01f)for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(doc.tile(map,a.id,x,y)=='#')b[size_t(y*24+x)]=1;
     for (auto i : doc.records("DOOR", map)) {
       auto f = NativeDocument::fields(doc.lines[i]);
-      if (f.size() < 6 || !onCreationFloor(number(f[5], -999)))
+      if (f.size() < 6 || !onCreationFloor(number(f[5], -999)+bottomLayerElevation()))
         continue;
       int row = cellOf(number(f[4], 0));
       for (int x = int(std::floor(number(f[2], 0))); x < int(std::ceil(number(f[3], 0))); ++x)
@@ -1083,7 +1086,7 @@ struct Editor {
     float floor = layerElevation();
     for (auto i : doc.records("STRUCT", map)) {
       auto f = NativeDocument::fields(doc.lines[i]);
-      if (f.size() < 8 || number(f[6], 0) >= creationCeiling() || number(f[7], 0) - std::max(floor, number(f[6], 0)) < 2.f)
+      if (f.size() < 8 || number(f[6], 0) >= creationCeiling() || number(f[7], 0) - std::max(floor, number(f[6], 0)) < std::min(2.f,creationCeiling()-floor-.01f))
         continue;
       for (int y = cellOf(number(f[3], 0)); y < std::min(24, int(std::ceil(number(f[5], 0)))); ++y)
         for (int x = cellOf(number(f[2], 0)); x < std::min(24, int(std::ceil(number(f[4], 0)))); ++x)
@@ -1095,6 +1098,7 @@ struct Editor {
   std::vector<int> roomAt(int x, int y, const std::vector<char> &b) const {
     if (x < 0 || y < 0 || x > 23 || y > 23 || b[size_t(y * 24 + x)])
       return {};
+    auto supported=nativeWalkableCells();if(!supported[size_t(y*24+x)])return {};
     std::vector<char> seen(576, 0);
     std::vector<int> stack{y * 24 + x}, cells;
     seen[size_t(y * 24 + x)] = 1;
@@ -1107,7 +1111,7 @@ struct Editor {
         return {};
       for (auto [dx, dy] : {std::pair{1, 0}, std::pair{-1, 0}, std::pair{0, 1}, std::pair{0, -1}}) {
         int n = (cy + dy) * 24 + cx + dx;
-        if (!seen[size_t(n)] && !b[size_t(n)])
+        if (!seen[size_t(n)] && !b[size_t(n)] && supported[size_t(n)])
           seen[size_t(n)] = 1, stack.push_back(n);
       }
     }
@@ -1288,60 +1292,7 @@ struct Editor {
     }
     InvalidateRect(plan, nullptr, FALSE);
   }
-  // ---- Corridor: a lit passage from one room to another.
-  void corridor(float ax, float ay, float bx, float by) {
-    int x0 = cellOf(ax), y0 = cellOf(ay), x1 = cellOf(bx), y1 = cellOf(by);
-    if (std::abs(x1 - x0) + std::abs(y1 - y0) < 3) {
-      message(L"Drag from inside one room to inside another.");
-      return;
-    }
-    auto b = barriers();
-    std::vector<char> outside(576, 0);
-    std::vector<int> stack;
-    for (int i = 0; i < 24; ++i)
-      for (int c : {i, 23 * 24 + i, i * 24, i * 24 + 23})
-        if (!b[size_t(c)] && !outside[size_t(c)])
-          outside[size_t(c)] = 1, stack.push_back(c);
-    while (!stack.empty()) {
-      int c = stack.back();
-      stack.pop_back();
-      for (auto [dx, dy] : {std::pair{1, 0}, std::pair{-1, 0}, std::pair{0, 1}, std::pair{0, -1}}) {
-        int x = c % 24 + dx, y = c / 24 + dy;
-        if (x >= 0 && y >= 0 && x < 24 && y < 24 && !b[size_t(y * 24 + x)] && !outside[size_t(y * 24 + x)])
-          outside[size_t(y * 24 + x)] = 1, stack.push_back(y * 24 + x);
-      }
-    }
-    std::set<int> path;
-    auto add = [&](int x, int y) {
-      for (int dy = 0; dy < 2; ++dy)
-        for (int dx = 0; dx < 2; ++dx)
-          if (x + dx >= 0 && x + dx < 24 && y + dy >= 0 && y + dy < 24)
-            path.insert((y + dy) * 24 + x + dx);
-    };
-    for (int x = std::min(x0, x1); x <= std::max(x0, x1); ++x)
-      add(x, y0);
-    for (int y = std::min(y0, y1); y <= std::max(y0, y1); ++y)
-      add(x1, y);
-    remember();
-    for (int c : path)
-      doc.paint(map, layer, c % 24, c / 24, '.');
-    for (int c : path)
-      for (int dy = -1; dy <= 1; ++dy)
-        for (int dx = -1; dx <= 1; ++dx) {
-          int x = c % 24 + dx, y = c / 24 + dy;
-          if (x < 0 || y < 0 || x > 23 || y > 23 || path.count(y * 24 + x))
-            continue;
-          if (outside[size_t(y * 24 + x)])
-            doc.paint(map, layer, x, y, '#');
-        }
-    float z = lampHeight();
-    for (auto [lx, ly] : {std::pair{(x0 + x1) * .5f + .5f, y0 + 1.f}, std::pair{x1 + 1.f, (y0 + y1) * .5f + .5f}})
-      if (std::abs(lx - (x1 + 1.f)) + std::abs(ly - (y0 + 1.f)) > 1.5f)
-        addAuthored({"LIGHT", std::to_string(map), nativeNumber(lx), nativeNumber(ly), nativeNumber(z), "0", "0", "1", "7", "3000"});
-    addAuthored({"LIGHT", std::to_string(map), nativeNumber(x1 + 1.f), nativeNumber(y0 + 1.f), nativeNumber(z), "0", "0", "1", "7", "3000"});
-    publish();
-    message(L"Corridor built and lit. Walk it with F5.");
-  }
+#include "NativeCorridorMethods.inc"
   // ---- Stamps: a copied area kept for good and stamped again from the Stamps tab.
   fs::path stampFolder() const { return root / L".build" / L"stamps"; }
   int stampCount() const {
@@ -5075,7 +5026,7 @@ struct Editor {
     size_t lampsBefore = doc.records("LIGHT", 0).size();
     tool = CorridorTool;
     gesture(9.5f, 7.5f, 17.5f, 8.5f);
-    require(doc.records("LIGHT", 0).size() > lampsBefore && doc.tile(0, 0, 12, 7) == '.', "a corridor is cut and lit between the rooms");
+    require(doc.records("LIGHT", 0).size() >= lampsBefore && cellIn(roomAt(9,7),17.5f,8.5f), "a corridor is cut and lit between the rooms");
     auto room = roomAt(17, 8);
     require(!room.empty(), "the far room is still a room");
     lastRoomX = 17, lastRoomY = 8;

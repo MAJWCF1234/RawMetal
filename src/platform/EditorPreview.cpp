@@ -162,3 +162,91 @@ int testCampaignEditingExport(const std::filesystem::path& file){
  }catch(const std::exception& error){report<<"FAIL: "<<error.what()<<'\n';return 1;}
 }
 }
+
+#ifdef _WIN32
+namespace retro {
+int testCorridorEditingExport(const std::filesystem::path& list){
+ std::ofstream report(list.wstring()+L".corridor-test.txt");
+ if(!report){std::cerr<<"Cannot create corridor export report\n";return 1;}
+ auto require=[](bool value,const std::string& message){if(!value)throw std::runtime_error(message);};
+ int fixtures=0,failures=0;
+ try{
+  std::ifstream paths(list);require(bool(paths),"Cannot open corridor fixture list");
+  std::string entry;
+  while(std::getline(paths,entry)){
+   if(!entry.empty()&&entry.back()=='\r')entry.pop_back();
+   if(fixtures==0&&entry.starts_with("\xef\xbb\xbf"))entry.erase(0,3);
+   if(entry.empty())continue;
+   ++fixtures;
+   try{
+    const auto file=std::filesystem::u8path(entry);require(file.is_absolute(),"Fixture path must be absolute");
+    auto loaded=loadCustomCampaignFile(file);require(!loaded->maps.empty(),"Fixture has no map zero");
+    World world(0,loaded->maps[0]);
+    auto integer=[&](const std::string& value){size_t used=0;int result=std::stoi(value,&used);require(used==value.size(),"Invalid integer in corridor test comment");return result;};
+    auto decimal=[&](const std::string& value){size_t used=0;float result=std::stof(value,&used);require(used==value.size()&&std::isfinite(result),"Invalid height in corridor test comment");return result;};
+    int routeCount=0,routeLayer=-1;float expectedZ=0;std::vector<int> anchors;std::vector<Point3> belowWalls;
+    std::ifstream input(file);require(bool(input),"Cannot read corridor fixture");
+    std::string line;
+    while(std::getline(input,line)){
+     if(!line.empty()&&line.back()=='\r')line.pop_back();
+     if(!line.starts_with("# EDITOR_CORRIDOR_ROUTE|")&&!line.starts_with("# EDITOR_CORRIDOR_WALL_BELOW|"))continue;
+     std::vector<std::string> fields;std::istringstream split(line);std::string field;while(std::getline(split,field,'|'))fields.push_back(field);
+     if(fields[0]=="# EDITOR_CORRIDOR_ROUTE"){
+      require(fields.size()==5,"Malformed corridor route test comment");require(++routeCount==1,"Fixture has multiple route test comments");
+      require(integer(fields[1])==0,"Corridor regression must test map zero");routeLayer=integer(fields[2]);expectedZ=decimal(fields[3]);
+      std::istringstream cells(fields[4]);while(std::getline(cells,field,',')){int anchor=integer(field);int x=anchor%24,y=anchor/24;
+       require(anchor>=0&&anchor<576&&x>=1&&x<=21&&y>=1&&y<=21,"Route anchor clips the passage or wall buffer");
+       if(!anchors.empty()){int previous=anchors.back();require(std::abs(x-previous%24)+std::abs(y-previous/24)==1,"Route anchors are not cardinal neighbors");}
+       anchors.push_back(anchor);
+      }
+     }else{
+      require(fields.size()==4,"Malformed wall-below test comment");belowWalls.push_back({decimal(fields[1]),decimal(fields[2]),decimal(fields[3])});
+     }
+    }
+    require(routeCount==1&&anchors.size()>=2,"Fixture needs a corridor route with at least two anchors");
+    require(routeLayer>=0&&routeLayer<int(loaded->maps[0]->layers.size()),"Route references an absent native layer");
+    require(std::abs(loaded->maps[0]->layers[size_t(routeLayer)].elevation-expectedZ)<.08f,"Route height differs from the native layer elevation");
+    auto center=[](int anchor){return Vec2{float(anchor%24)+1.f,float(anchor/24)+1.f};};
+    for(size_t i=0;i<anchors.size();++i){const auto p=center(anchors[i]);float support=world.supportBelow(p.x,p.y,expectedZ+.05f);
+     require(std::isfinite(support)&&std::abs(support-expectedZ)<.08f,"Anchor "+std::to_string(i)+" has no native floor support");
+     require(world.fits(p.x,p.y,expectedZ,Player::StandingHeight,false),"Anchor "+std::to_string(i)+" lacks standing clearance");
+    }
+    for(const auto& p:belowWalls)require(!world.fits(p.x,p.y,p.z,Player::StandingHeight,false),"Corridor opening removed a wall below the active floor");
+    auto game=std::make_unique<Game>(loaded);require(game->level()==0,"Fixture starts outside map zero");
+    auto camera=game->player();camera.pos=center(anchors.front());camera.z=expectedZ;camera.angle=0;camera.pitch=0;camera.crouched=false;camera.prone=false;camera.eye=Player::StandingEye;
+    // This is the only position assignment. Later camera restores change yaw
+    // at the current simulated position and never place the player at a waypoint.
+    game->restoreEditorCamera(camera);
+    float traveled=0;int frames=0;constexpr float tolerance=.13f,step=1.f/60.f;
+    auto standing=[&](){
+     const auto& player=game->player();
+     require(game->level()==0,"Player left the fixture map");
+     require(std::isfinite(player.pos.x)&&std::isfinite(player.pos.y)&&std::isfinite(player.z),"Player simulation produced a nonfinite position");
+     require(!game->dead()&&!player.crouched&&!player.prone,"Player could not remain standing");
+     require(std::abs(player.z-expectedZ)<.08f&&player.grounded,"Player fell or left the corridor floor");
+     require(game->world().fits(player.pos.x,player.pos.y,player.z,Player::StandingHeight,false),"Simulated player lost standing clearance");
+    };
+    for(size_t i=1;i<anchors.size();++i){
+     const auto target=center(anchors[i]);camera=game->player();auto delta=target-camera.pos;camera.angle=std::atan2(delta.y,delta.x);game->restoreEditorCamera(camera);
+     int segmentFrames=0;
+     while(length(target-game->player().pos)>tolerance&&segmentFrames<180){
+      const auto before=game->player().pos;delta=target-before;
+      InputState walk{};walk.forward=true;
+      // Ordinary mouse input corrects retained sideways momentum at elbows.
+      walk.mouseDx=wrapAngle(std::atan2(delta.y,delta.x)-game->player().angle)/(.0022f*std::max(.01f,game->settings().sensitivity));
+      game->update(walk,step);++segmentFrames;++frames;traveled+=length(game->player().pos-before);standing();
+     }
+     const auto& player=game->player();
+     require(length(target-player.pos)<=tolerance,"Blocked before waypoint "+std::to_string(i)+" at "+std::to_string(player.pos.x)+","+std::to_string(player.pos.y)+","+std::to_string(player.z));
+    }
+    standing();require(std::abs(game->player().z-expectedZ)<.08f,"Final player height differs from the corridor floor");
+    report<<"PASS: "<<entry<<" | waypoints="<<anchors.size()<<" | distance="<<traveled<<" | frames="<<frames<<" | final-z="<<game->player().z<<" | below-walls="<<belowWalls.size()<<'\n';
+   }catch(const std::exception& error){++failures;report<<"FAIL: "<<entry<<" | "<<error.what()<<'\n';}
+  }
+  require(fixtures>0,"Corridor fixture list is empty");
+  report<<"Fixtures: "<<fixtures<<"; passed: "<<fixtures-failures<<"; failed: "<<failures<<'\n';
+  return failures?1:0;
+ }catch(const std::exception& error){report<<"FAIL: "<<error.what()<<'\n';return 1;}
+}
+}
+#endif

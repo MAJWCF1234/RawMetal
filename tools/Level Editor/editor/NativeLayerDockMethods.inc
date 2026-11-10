@@ -119,6 +119,7 @@
         auto source=*at,dest=*(at-1);if(effectiveFloorView(source).locked||effectiveFloorView(dest).locked)throw std::runtime_error("Unlock both floors before merging them");
         auto content=layerContent({source.id});for(auto i:content){auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema>=0&&shiftNativeElevation(f,schemas[size_t(schema)].fields,dest.elevation-source.elevation))doc.replace(i,f,true);doc.setRecordLayer(i,dest.id);}
         for(int y=0;y<24;++y)for(int x=0;x<24;++x){char ch=doc.tile(map,source.id,x,y);if(ch!='_')doc.paint(map,dest.id,x,y,ch);}
+        auto passage=layerPassageMask(doc,dest.id),sourcePassage=layerPassageMask(doc,source.id);passage.insert(passage.end(),sourcePassage.begin(),sourcePassage.end());storeLayerPassageMask(dest.id,passage);
         deleteFloorLayers({source.id});layer=std::min(dest.id,int(floorLayers().size())-1);
       }else if(id==LayerRotate||id==LayerFlipX||id==LayerFlipY){for(int target:targets)transformFloor(target,id==LayerRotate?1:0,id==LayerFlipX?1:id==LayerFlipY?2:0);}
       else if(id==LayerMaskArea||id==LayerMaskInvert||id==LayerMaskClear){

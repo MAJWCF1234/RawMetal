@@ -76,6 +76,25 @@ the hidden editor. `--layer-export-test=FILE` checks the authored catwalk export
 in the engine; `--campaign-export-test=FILE` checks native seam traversal and
 nearby rendering. `--editor-live-render-test` also checks 3D view settings.
 
+### Corridors (v1.2.17)
+
+Choose **Corridor** and drag between clear floor inside two rooms. Routing checks
+the complete two-metre footprint and wall buffer, avoids authored furniture,
+uninvolved rooms and enclosed ramp openings, and stays inside the map. Reversed
+drags create the same corridor. A blocked route or an already open connection
+leaves the document unchanged.
+
+The tool opens native wall panels only through the active storey's height band.
+It preserves the wall above/below, adds physical upper-floor surfaces where
+needed, keeps existing concrete and stripe patches, and adds only missing light
+coverage. Managed dressing keeps its saved passage reservation clear. Duplicate,
+flip and footprint-resize operations transform that reservation with the floor.
+Undo restores the full corridor transaction.
+
+`TestCorridors.cmd` checks the grid router. `--editing-test` exercises native
+corridor placement, material/gap preservation, branching, save/reopen and Undo.
+`--corridor-export-test=LIST` walks the exported test routes in the actual game.
+
 ### Creation and ownership
 
 Autodressing is **on by default**. The left pane has an **Autodressing: on/off**

@@ -852,6 +852,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     applyRenderSwitches();
     if(auto path=commandArguments().find(L"--campaign-export-test="))return retro::testCampaignEditingExport(path+23);
     if(auto path=commandArguments().find(L"--layer-export-test="))return retro::testLayerEditingExport(path+20);
+    if(auto path=commandArguments().find(L"--corridor-export-test="))return retro::testCorridorEditingExport(path+23);
     if(auto path=commandArguments().find(L"--editor-validate="))return retro::validateEditorCampaign(path+18);
     // A custom campaign as the Custom Maps menu loads it (the folder report too), then played headless.
     if(auto path=commandArguments().find(L"--custom-map-smoke=")){retro::Game menu;menu.loadCustomCampaignDirectory(customMapsFolder());std::ofstream report("RawMetal-custom-map-smoke.txt");return retro::Game::customMapSmoke(path+19,report)?0:21;}

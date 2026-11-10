@@ -4,6 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.17 - Corridor placement repair (2026-11-09)
+
+Corridors now route a complete two-metre passage between rooms instead of cutting a fixed L-shaped strip.
+
+- Routing checks passage width and wall clearance, detours around authored furniture and uninvolved rooms, and gives identical results when dragged in reverse.
+- Native wall panels are opened along the route. Wall geometry above and below the active floor stays intact; corridor walls stay within that floor's height band.
+- Upstairs corridors have native walkable floors. Existing concrete, stripes and other materials are preserved, and authored ramp openings stay empty.
+- Lighting fills coverage gaps without duplicating lamps. Repeating a completed connection makes no changes, and one Undo restores the whole operation.
+- Managed furniture keeps the passage clear. Saved passage reservations follow duplicated, flipped and resized floors.
+- Invalid endpoints, insufficient headroom and blocked routes leave the map unchanged. The guide explains the revised tool.
+
+Verified with routing regressions, real editor operations, save/reopen and native game simulation walking exported corridors.
+
+---
+
 ## v1.2.16 - Editable floors and native 3D handles (2026-11-09)
 
 Floors now have a dedicated layer dock, and selection and resizing work in the plan and native 3D picture. The game engine also builds upper-floor walls from the saved map.

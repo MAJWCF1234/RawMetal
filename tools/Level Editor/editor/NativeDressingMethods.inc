@@ -116,7 +116,7 @@
       if(!box||!onCreationFloor(box->bottom)||!cellIn(cells,box->x,box->y))continue;
       int model=int(number(f[2],-1));if(dressingSeat(model)!=(pass==1))continue;
       bool compatible=std::find(theme.pieces.begin(),theme.pieces.end(),model)!=theme.pieces.end();
-      if(!compatible||!creationFits(*box,&cells,int(*it))||!dressingHasBacking(model,*box,walls)||
+      if(!compatible||passageIntersects(*box)||!creationFits(*box,&cells,int(*it))||!dressingHasBacking(model,*box,walls)||
          (dressingSeat(model)&&!dressingSeatHasAnchor(model,*box,cells))){
         try{eraseNativeObject(doc,*it);}catch(const std::exception&){doc.claimAutomatic(*it);}
       }
@@ -143,7 +143,7 @@
         auto consider=[&](const creation::Box& box,float relation){
           float score=30.f-float(p)*2.f+relation;
           score+=float(roomHash(map,layer,model,int(std::round(box.x*4)),int(std::round(box.y*4)))%997)/9970.f;
-          if(score<=best.score||!creationFits(box,&cells))return;
+          if(score<=best.score||passageIntersects(box)||!creationFits(box,&cells))return;
           if(!dressingSeat(model)&&model!=retro::model::lab_potted_plant){
             float sign=model<63?-1.f:1.f,fx=std::sin(box.yaw)*sign,fy=std::cos(box.yaw)*sign;
             creation::Box access{box.x+fx*(box.d*.5f+.38f),box.y+fy*(box.d*.5f+.38f),.65f,.6f,

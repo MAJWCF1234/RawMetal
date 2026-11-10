@@ -17,7 +17,7 @@
     if(f[0]=="CLUTTER"&&f.size()>=14&&f[2]=="7")return creation::Box{n(3),n(4),n(8),n(9),n(5),n(5)+n(10),n(6)};
     if(f[0]=="STRUCT"&&f.size()>=10){if(n(7)-n(6)<=.05f)return {};
       return creation::Box{(n(2)+n(4))*.5f,(n(3)+n(5))*.5f,n(4)-n(2),n(5)-n(3),n(6),n(7)};}
-    if(f[0]=="DOOR"&&f.size()>=6)return creation::Box{(n(2)+n(3))*.5f,n(4),n(3)-n(2),.3f,n(5),n(5)+2.2f};
+    if(f[0]=="DOOR"&&f.size()>=6)return creation::Box{(n(2)+n(3))*.5f,n(4),n(3)-n(2),.3f,n(5)+bottomLayerElevation(),n(5)+bottomLayerElevation()+2.2f};
     static const std::set<std::string> physical={"PRIM","STAIR","WATER","COMPACTOR","CREATURE","CLUTTER","ACTOR_KEY","ACTOR_IDLE_KEY","TERMINAL","PICKUP","SIGN","LIGHT","PIPE","LEAD","BREAKABLE"};
     if(!physical.count(f[0]))return {};
     int schema=schemaFor(f);if(schema<0)return {};
@@ -78,7 +78,7 @@
   }
   void addCreationFloor(const std::vector<int>& cells,int material) {
     const float floor=layerElevation();std::vector<char> covered(576,0),wanted(576,0);
-    for(int c:cells)if(c>=0&&c<576)wanted[size_t(c)]=1;
+    auto supported=nativeWalkableCells();for(int c:cells)if(c>=0&&c<576&&supported[size_t(c)])wanted[size_t(c)]=1;
     for(auto i:doc.records("STRUCT",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<10)continue;
       if(!nativeFloorSlab(f))continue;
       creation::Box slab{(number(f[2],0)+number(f[4],0))*.5f,(number(f[3],0)+number(f[5],0))*.5f,

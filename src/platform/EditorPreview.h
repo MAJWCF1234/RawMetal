@@ -11,5 +11,6 @@ int runEditorPreview(const EditorPreviewOptions& options);
 int validateEditorCampaign(const std::filesystem::path& path);
 int testCampaignEditingExport(const std::filesystem::path& path);
 int testLayerEditingExport(const std::filesystem::path& path);
+int testCorridorEditingExport(const std::filesystem::path& list);
 }
 #endif
