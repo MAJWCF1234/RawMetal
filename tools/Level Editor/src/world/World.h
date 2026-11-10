@@ -616,6 +616,8 @@ public:
     bool metalFloor(int x,int)const{return !outdoors()&&!m_mapData&&x>=7&&x<=16;}
     std::vector<Vec2> machines()const;
     float floorHeight(float x,float y)const;
+    // What a shot struck at a point on a solid surface (level-local) with that surface's normal.
+    ImpactMaterial impactMaterial(Point3 point,Point3 normal)const;
     float supportHeight(float x,float y,bool dynamic=true,bool shelfCavities=false)const;
     float ceilingHeight(float x,float y)const;
     // Headroom over the tile floor. A door's header caps it only for someone

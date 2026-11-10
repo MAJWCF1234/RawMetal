@@ -7,15 +7,19 @@
 #include <memory>
 #include <atomic>
 #include "Mesh.h"
+#include "Carcass.h"
 #include "../core/CleanupBodies.h"
 
 namespace retro {
 class GpuRenderer;
 class FrameWorker;
 struct ElectricFx;
+struct GoreFx;
 class SoftwareRenderer {
     // Sparks and arcs draw with the scene's own textures (ElectricFx.cpp).
     friend struct ElectricFx;
+    // Blood and debris draw with the scene's own textures too (GoreFx.cpp).
+    friend struct GoreFx;
 public:
     SoftwareRenderer(int width, int height);
     ~SoftwareRenderer();
@@ -56,6 +60,8 @@ public:
     static bool testGameplayRendering();
     // Sparks and arcs (ElectricFx.cpp): an arc lights the wall beside it and lets it go, frames repeat, budgets hold.
     static bool testElectricRendering(std::ostream& report);
+    // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
+    static bool testGore(std::ostream& report);
     static bool testPresentationResize();
     static bool testCreatureAnimation();
     static bool testProjection();
@@ -175,6 +181,21 @@ private:
     std::array<RagPoint,Ragdoll::Count> m_hazmatPoseJoints{};
     bool m_hazmatPoseValid=false;
     Texture m_blood;
+    // What a creature leaves: its body where it fell (Carcass), the wounds on it, and the blood its
+    // stumps throw. Kept by level and slot, rebuilt from the creature's own death clock when asked.
+    struct Remains {std::uint64_t signature=0;float seen=0,rayClock=0;int serial=-1,woundsSeen=0;Vec2 at{};Point3 pool{};bool pooled=false;
+     // A wound: the face it is on and where on it, which side shows, and the faces round it that carry its mark.
+     struct Wound {int face=0;float side=1,size=.06f,b1=.33f,b2=.33f;std::vector<int> patch;};std::vector<Wound> wounds;Carcass carcass;};
+    std::unordered_map<std::uint64_t,Remains> m_remains;float m_remainsClock=0;
+    std::vector<HitBurst> m_goreBursts;
+    // 0..1: how far the geometry being drawn has dissolved (a corpse on its way out).
+    float m_dissolve=0;
+    // The inside of a cut: red, and the green of the things that bleed it.
+    std::array<Texture,2> m_stump;
+    std::vector<MeshTriangle> m_creaturePose;
+    struct CreatureStance {Point3 range{};float scale=1;};
+    // A creature's mesh in level space as it stands now, or (corpse) as it stood when it died.
+    CreatureStance poseCreatureMesh(const Enemy& e,float elapsed,bool corpse,std::vector<MeshTriangle>& out);
     std::array<Texture,size_t(CreatureKind::Transformed)+1> m_bloodVariants;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;

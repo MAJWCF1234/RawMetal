@@ -7,6 +7,8 @@
 
 namespace retro {
 // A chunk index is local to a world. Never use it as a global content identity.
+// What a shot struck, for the dust, chips, splinters or blood it throws (World::impactMaterial).
+enum class ImpactMaterial:int {Concrete,Metal,Wood,Dirt,Rock,Tile,Plaster,Glass,Flesh,Fabric,Count};
 enum class PropMaterial:int {Paper,Cardboard,Plastic,Wood,Metal,Glass,Ceramic,Electronic,Cloth,Organic,Count};
 struct PropMaterialTraits {const char* name;float restitution,friction,breakSpeed;int shards;bool floats;Sound impact;float impactPitch,impactGain;Sound breakSound;float breakPitch,blockMass;};
 inline const PropMaterialTraits& propMaterialTraits(PropMaterial m){

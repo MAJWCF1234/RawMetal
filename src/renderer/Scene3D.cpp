@@ -11,6 +11,7 @@
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
 #include "ElectricFx.h"
+#include "GoreFx.h"
 #include "../vr/VrRuntime.h"
 #include <algorithm>
 #include <bit>
@@ -242,6 +243,23 @@ void SoftwareRenderer::previewModel(int model,float angle){
  for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;float x=p.x*std::cos(angle)+p.z*std::sin(angle),z=-p.x*std::sin(angle)+p.z*std::cos(angle);v.p={x,p.y*.94f-z*.34f,3.f+z*.94f+p.y*.34f};}triangle3D(face.v[0],face.v[1],face.v[2],model>=15?facilityTexture(model-15,face.part):texture,1.15f);}
 }
 static Point3 cross3(Point3 a,Point3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
+static float goreDot(Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+// Where a ray meets a triangle (either side), as a distance along it.
+static bool rayTriangle(const MeshTriangle&f,Point3 o,Point3 d,float&t){
+ Point3 e1=f.v[1].p-f.v[0].p,e2=f.v[2].p-f.v[0].p,h=cross3(d,e2);float a=goreDot(e1,h);if(std::fabs(a)<1e-9f)return false;
+ float inv=1.f/a;Point3 s=o-f.v[0].p;float u=goreDot(s,h)*inv;if(u<0||u>1)return false;
+ Point3 q=cross3(s,e1);float v=goreDot(d,q)*inv;if(v<0||u+v>1)return false;
+ t=goreDot(e2,q)*inv;return t>.01f;}
+// The point of a triangle nearest to a point.
+static Point3 closestOnTriangle(const MeshTriangle&f,Point3 p){
+ Point3 a=f.v[0].p,b=f.v[1].p,c=f.v[2].p,ab=b-a,ac=c-a,ap=p-a;
+ float d1=goreDot(ab,ap),d2=goreDot(ac,ap);if(d1<=0&&d2<=0)return a;
+ Point3 bp=p-b;float d3=goreDot(ab,bp),d4=goreDot(ac,bp);if(d3>=0&&d4<=d3)return b;
+ float vc=d1*d4-d3*d2;if(vc<=0&&d1>=0&&d3<=0){float v=d1/std::max(1e-12f,d1-d3);return a+ab*v;}
+ Point3 cp=p-c;float d5=goreDot(ab,cp),d6=goreDot(ac,cp);if(d6>=0&&d5<=d6)return c;
+ float vb=d5*d2-d1*d6;if(vb<=0&&d2>=0&&d6<=0){float w=d2/std::max(1e-12f,d2-d6);return a+ac*w;}
+ float va=d3*d6-d5*d4;if(va<=0&&(d4-d3)>=0&&(d5-d6)>=0){float w=(d4-d3)/std::max(1e-12f,(d4-d3)+(d5-d6));return b+(c-b)*w;}
+ float sum=va+vb+vc;if(std::fabs(sum)<1e-12f)return a;float denom=1.f/sum,v=vb*denom,w=vc*denom;return a+ab*v+ac*w;}
 Point3 SoftwareRenderer::cameraPoint(Point3 v,const Game&)const{return cameraPoint(v,m_view);}
 Point3 SoftwareRenderer::cameraPoint(Point3 v,const Player&p)const{
 float yaw=p.angle,pitch=p.pitch/140.f;
@@ -300,7 +318,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }
   }
  }
- if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale);return;}
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale,m_dissolve);return;}
  // Clip in camera space before perspective division; preserve UVs at intersections.
  const Projection projection{float(m_width)/m_height};
  MeshVertex input[8]={a,b,c},output[8];int count=3;
@@ -339,6 +357,8 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    float u=((B.x-px)*(C.y-py)-(B.y-py)*(C.x-px))*inverseArea,v=((C.x-px)*(A.y-py)-(C.y-py)*(A.x-px))*inverseArea,w=1.f-u-v;
    if(u<0||v<0||w<0)continue;float iz=A.iz*u+B.iz*v+C.iz*w,z=1.f/iz;size_t index=size_t(y*m_width+x);
    if(z>=m_zbuffer[index])continue;
+   // A corpse on its way out goes pixel by pixel.
+   if(m_dissolve>0){unsigned h=unsigned(x)*374761393u+unsigned(y)*668265263u;h=(h^(h>>13))*1274126177u;if(float((h>>16)&1023u)/1023.f<m_dissolve)continue;}
    float U=(A.u*u+B.u*v+C.u*w)*z,V=(A.v*u+B.v*v+C.v*w)*z,lod=0;
    if(normalActive)lod=normalLod;
    else if(!texture.mips.empty()){
@@ -362,6 +382,43 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }
   }
  }
+}
+// A creature's mesh put where it stands in its level: posed from its clips if it is a baked kind,
+// deformed here if it is not. For a corpse it is the pose it died in, held still: what its body is cut from.
+SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy& e,float elapsed,bool corpse,std::vector<MeshTriangle>& out){
+ const bool baked=creatureTraits(e.kind).baked,wasp=e.kind==Enemy::Kind::Wasp,brute=e.kind==Enemy::Kind::Brute||e.kind==Enemy::Kind::Warden;
+ auto&mesh=this->*creatureVisuals[size_t(e.kind)].mesh;
+ if(baked){
+  if(corpse){int clip=0;float phase=0;
+   // Not its death clip: the clip it was in when it was killed.
+   if(e.visualClip==4){if(e.previousVisualClip>=0&&e.previousVisualClip!=4){clip=e.previousVisualClip;phase=e.previousVisualPhase;}}
+   else if(e.visualClip>=0){clip=e.visualClip;phase=e.visualPhase;}
+   mesh.poseCreature(clip,phase);}
+  else{auto p=creatureAnimationSample(e,elapsed);
+   if(e.visualClip==p.clip&&e.visualTransition<1){float blend=e.visualTransition*e.visualTransition*(3-2*e.visualTransition);mesh.poseCreatureBlend(e.previousVisualClip,e.previousVisualPhase,p.clip,p.phase,blend);}
+   else mesh.poseCreature(p.clip,p.phase);}
+ }
+ Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+ float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
+ float angle=e.heading,wind=!corpse&&e.windup>0?std::sin(e.windup*5.f)*.12f:0;int surface=corpse?e.deathSurface:e.surfaceMode;
+ out=mesh.triangles;
+ for(auto&face:out)for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
+  if(!baked){
+   if(wasp){height+=.60f;if(!corpse){height+=.065f*std::sin(elapsed*4.f+e.pos.x);if(face.part==1)height+=std::sin(elapsed*36.f)*std::fabs(p.x)*.9f;}}
+   else if(!corpse){
+    if(brute){float sway=e.moving?std::sin(e.gait)*.07f:0;p.x+=sway*height;height+=std::fabs(sway)*.18f;}
+    else if(std::fabs(p.x)>.21f){
+     // Alternate leg groups rotate around their body attachment; feet lift only while walking.
+     float phase=e.gait+(p.x<0?3.14159f:0.f)+std::floor((p.z+.7f)*4.f)*3.14159f;float stride=e.moving?std::sin(phase)*.16f:0;
+     localY+=stride*(std::fabs(p.x)-.18f);height+=std::max(0.f,e.moving?std::cos(phase)*.10f:0.f);}
+   }
+   if(!corpse){height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;localY-=e.painFlash*.035f;}
+  }
+  if(e.kind==Enemy::Kind::Huntsman&&surface==1)v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};
+  else if(e.kind==Enemy::Kind::Huntsman&&surface==2)v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+1.05f-height};
+  else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
+ }
+ return {range,scale};
 }
 void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  perf::Scope frameProfile(perf::Scene);
@@ -2145,6 +2202,42 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.normalLevels.push_back(std::move(next));w=nw;h=nh;}
   t.parallaxScale=.12f;return t;}();
  // A blast leaves a broad scorch on the floor.
+ // A scar for each material a round can strike: pale spall off concrete and rock, a bright ring round
+ // a dark dent in metal, a split with splinters in wood, a soft dark pock in dirt, a chip with hairline
+ // cracks in tile, a wide white blowout in plaster, a star in glass, a torn dark hole in cloth.
+ static const std::array<Texture,size_t(ImpactMaterial::Count)> scars=[]{
+  struct Layer {float r,g,b,a,radius,rag;};struct Rays {int count;float r,g,b,length,width;};struct Rim {float r,g,b,a,at,width;};
+  struct Scar {Layer spall;Rays rays;Rim rim;Layer pit;};
+  static const Scar table[size_t(ImpactMaterial::Count)]={
+   {{.74f,.72f,.68f,.85f,.62f,.25f},{},{},{}},
+   {{.08f,.08f,.09f,.5f,.7f,.1f},{},{.82f,.84f,.88f,.9f,.3f,.08f},{.03f,.03f,.04f,1,.2f,0}},
+   {{.78f,.62f,.4f,.9f,.45f,.5f},{7,.82f,.68f,.46f,.95f,.09f},{},{.1f,.06f,.03f,1,.16f,0}},
+   {{.14f,.1f,.06f,.6f,.8f,.3f},{},{},{.07f,.05f,.03f,.9f,.35f,0}},
+   {{.5f,.48f,.45f,.8f,.55f,.4f},{},{},{}},
+   {{.93f,.93f,.9f,.9f,.4f,.3f},{6,.1f,.1f,.1f,.98f,.05f},{},{}},
+   {{.95f,.93f,.88f,.9f,.75f,.35f},{},{},{}},
+   {{.85f,.9f,.92f,.5f,.3f,.2f},{8,.9f,.94f,.96f,.9f,.045f},{},{.05f,.06f,.07f,.9f,.1f,0}},
+   {{.3f,.02f,.03f,.9f,.5f,.4f},{},{},{.1f,0,0,1,.2f,0}},
+   {{.8f,.78f,.72f,.5f,.5f,.6f},{},{},{.04f,.04f,.04f,1,.28f,0}},
+  };
+  std::array<Texture,size_t(ImpactMaterial::Count)> made;
+  for(size_t m=0;m<made.size();++m){const auto&s=table[m];constexpr int n=48;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;t.transparent=true;
+   for(int y=2;y<n-2;++y)for(int x=2;x<n-2;++x){float dx=(x+.5f)/n*2-1,dy=(y+.5f)/n*2-1,r=std::sqrt(dx*dx+dy*dy),angle=std::atan2(dy,dx);
+    unsigned h=unsigned(x)*73856093u^unsigned(y)*19349663u^unsigned(m+1)*83492791u;h=(h^(h>>13))*1274126177u;float noise=float((h>>16)&1023u)/1023.f;
+    float wobble=std::sin(angle*5.f+float(m)*1.7f)*.6f+std::sin(angle*11.f+float(m)*.9f)*.4f;
+    float A=0;Point3 C{};
+    auto over=[&](float cr,float cg,float cb,float a){a=std::clamp(a,0.f,1.f);if(a<=0)return;float out=a+A*(1-a);C=(Point3{cr,cg,cb}*a+C*(A*(1-a)))*(1.f/out);A=out;};
+    const float shade=.85f+.3f*noise;
+    if(s.spall.a>0)over(s.spall.r*shade,s.spall.g*shade,s.spall.b*shade,s.spall.a*std::clamp((s.spall.radius*(1+s.spall.rag*wobble*.5f)-r)*6.f,0.f,1.f)*(.7f+.3f*noise));
+    for(int k=0;k<s.rays.count;++k){unsigned q=unsigned(k+1)*2654435761u^unsigned(m+3)*40503u;q=(q^(q>>15))*2246822519u;float h1=float((q>>8)&255u)/255.f,h2=float((q>>16)&255u)/255.f;
+     float at=(float(k)+h1)*kTwoPi/float(s.rays.count),reach=s.rays.length*(.6f+.4f*h2),da=angle-at;da=std::atan2(std::sin(da),std::cos(da));
+     if(std::cos(da)<=0||r>=reach)continue;float width=s.rays.width*(1-r/reach);over(s.rays.r,s.rays.g,s.rays.b,.9f*std::clamp((width-r*std::fabs(std::sin(da)))/(s.rays.width*.5f),0.f,1.f));}
+    if(s.rim.a>0)over(s.rim.r,s.rim.g,s.rim.b,s.rim.a*std::clamp(1-std::fabs(r-s.rim.at)/s.rim.width,0.f,1.f));
+    if(s.pit.a>0)over(s.pit.r,s.pit.g,s.pit.b,s.pit.a*std::clamp((s.pit.radius*(1+.2f*wobble)-r)*10.f,0.f,1.f));
+    A*=std::clamp((1-r)*8.f,0.f,1.f);auto q8=[](float v){return std::uint32_t(std::clamp(v,0.f,1.f)*255.f+.5f);};
+    t.pixels[size_t(y*n+x)]=(q8(A)<<24)|(q8(C.x)<<16)|(q8(C.y)<<8)|q8(C.z);}
+   made[m]=std::move(t);}
+  return made;}();
  static const Texture scorch=[](){const int n=48;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.transparent=true;t.clampEdges=true;
   for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
    unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0x51f15e3bu);hash=(hash^(hash>>15))*3266489917u;float noise=float((hash>>24)&255u)/255.f;
@@ -2166,8 +2259,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    continue;}
   if(mark.blood){
    int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);float tint=creatureVisuals[size_t(species)].bloodLight;const Texture&blood=m_bloodVariants[size_t(species)];
-   if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}
-   float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
+   if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=mark.size>0?mark.size:.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}
+   float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=mark.size>0?mark.size:.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
    quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},blood,tint);continue;
   }
   if(mark.tint==-2){float size=.7f,z=mark.z;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},scorch,.9f);continue;}
@@ -2178,8 +2271,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)^unsigned(std::fabs(mark.pos.y)*613.f)^unsigned(std::fabs(mark.z)*977.f);float spin=float(seed%360u)*kPi/180.f;
   Point3 a,b;if(std::fabs(mark.normalZ)>.5f){p.z+=mark.normalZ*.012f;a={1,0,0};b={0,mark.normalZ>0?1.f:-1.f,0};}else{a={tangentX,tangentY,0};b={0,0,1};}
   auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
-  hole(p+impactNormal*.003f,.1f,impact,.9f);
-  hole(p+impactNormal*.005f,.042f,crater,.9f);
+  // What it was fired into decides the mark: how wide the scar is, and whether there is a pit in it.
+  static constexpr float ringSize[]={.11f,.05f,.1f,.085f,.08f,.13f,.14f,.08f,.05f,.035f},pitSize[]={.042f,0,0,0,.036f,.034f,.05f,0,0,0};
+  if(mark.material<0||mark.material>=int(ImpactMaterial::Count)){hole(p+impactNormal*.003f,.1f,impact,.9f);hole(p+impactNormal*.005f,.042f,crater,.9f);}
+  else{const size_t m=size_t(mark.material);hole(p+impactNormal*.003f,ringSize[m],scars[m],.9f);if(pitSize[m]>0)hole(p+impactNormal*.005f,pitSize[m],crater,.9f);}
   // Its sparks are drawn with all the electricity (ElectricFx).
  }
  // Barrel fire stays in world space, so walls and props occlude it. Every
@@ -2682,80 +2777,178 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  for(const auto&grenade:game.tacticalGrenades())if(grenade.level==level)drawTacticalGrenade(grenade.position,grenade.fuse);
  movingGeometry=false;
- for(const auto&e:game.chunkEnemies(level)){
+ // Creatures, living and dead. A living one is its mesh posed as it stands. A dead one is a body
+ // (Carcass): the pose it died in, let go, thrown by what killed it, lying where it falls, coming apart
+ // by section under fire or a blast, each cut closed with a cap. Rounds that struck it leave their
+ // wounds in its skin, alive or dead. At the end of its time it dissolves and is gone.
+ static const std::array<Texture,2> woundTextures=[]{std::array<Texture,2> made;
+  for(int tone=0;tone<2;++tone){constexpr int n=32;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;t.transparent=true;
+   for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x+.5f)/n*2-1,dy=(y+.5f)/n*2-1,angle=std::atan2(dy,dx),r=std::sqrt(dx*dx+dy*dy)/(.82f+.12f*std::sin(angle*5.f+1.3f)+.07f*std::sin(angle*11.f+.4f));
+    if(x<2||y<2||x>=n-2||y>=n-2||r>=.88f)continue;
+    float alpha=r<.28f?235.f:r<.6f?220.f-100.f*(r-.28f)/.32f:120.f*(1-(r-.6f)/.28f);
+    float mix=std::clamp((r-.12f)/.3f,0.f,1.f),dry=std::clamp((r-.5f)/.38f,0.f,1.f);
+    Point3 core=tone?Point3{30,45,8}:Point3{40,4,6},ring=tone?Point3{110,160,40}:Point3{120,10,14};Point3 c=(core+(ring-core)*mix)*(1-.45f*dry);
+    t.pixels[size_t(y*n+x)]=(std::uint32_t(alpha)<<24)|(std::uint32_t(c.x)<<16)|(std::uint32_t(c.y)<<8)|std::uint32_t(c.z);}
+   made[size_t(tone)]=std::move(t);}
+  return made;}();
+ const float goreNow=game.elapsed();
+ // The clock ran back (a load, a new game): nothing kept is true any more.
+ if(goreNow+.001f<m_remainsClock){m_remains.clear();m_goreBursts.clear();}m_remainsClock=goreNow;
+ std::erase_if(m_goreBursts,[&](const HitBurst&b){return b.time>goreNow+.01f||goreNow-b.time>7.f;});
+ auto unit3=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1.f/l):Point3{0,0,1};};
+ auto faceNormal=[](const MeshTriangle&f){return cross3(f.v[1].p-f.v[0].p,f.v[2].p-f.v[0].p);};
+ auto centroid=[](const MeshTriangle&f){return (f.v[0].p+f.v[1].p+f.v[2].p)*(1.f/3.f);};
+ // A wound is kept by the face it is on, so it rides the skin however the body moves after.
+ auto markWound=[&](Remains&slot,const std::vector<MeshTriangle>&faces,int face,Point3 at,float side,float size){
+  for(auto&wound:slot.wounds)if(wound.face==face){wound.size=std::max(wound.size,size);return;}
+  const auto&f=faces[size_t(face)];Remains::Wound wound;wound.face=face;wound.side=side;wound.size=size;
+  Point3 n=unit3(faceNormal(f))*side,e1=f.v[1].p-f.v[0].p,e2=f.v[2].p-f.v[0].p,d=at-f.v[0].p;
+  float a=goreDot(e1,e1),b=goreDot(e1,e2),c=goreDot(e2,e2),p=goreDot(d,e1),q=goreDot(d,e2),det=a*c-b*b;
+  if(std::fabs(det)>1e-12f){wound.b1=std::clamp((p*c-q*b)/det,0.f,1.f);wound.b2=std::clamp((q*a-p*b)/det,0.f,1.f-wound.b1);}
+  Point3 anchor=f.v[0].p+e1*wound.b1+e2*wound.b2;
+  for(size_t i=0;i<faces.size()&&wound.patch.size()<48;++i){const auto&g=faces[i];Point3 gap=closestOnTriangle(g,anchor)-anchor;if(goreDot(gap,gap)>size*size*2.1f)continue;
+   Point3 m=faceNormal(g);float ml=std::sqrt(goreDot(m,m));if(ml<1e-9f)continue;float facing=goreDot(m,n)/ml;if(std::fabs(facing)<.15f)continue;
+   if(goreDot(centroid(g)-anchor,n)<-size*.6f)continue;
+   wound.patch.push_back(int(i)*2+(facing<0?1:0));}
+  if(wound.patch.empty())wound.patch.push_back(face*2+(side<0?1:0));
+  if(slot.wounds.size()>=12)slot.wounds.erase(slot.wounds.begin());
+  slot.wounds.push_back(std::move(wound));
+ };
+ // Where a round went into a body, and where it came out the far side.
+ auto pierce=[&](Remains&slot,const std::vector<MeshTriangle>&faces,Point3 origin,Point3 direction,float range,float size){
+  int first=-1,last=-1;float nearest=1e9f,farthest=-1;
+  for(size_t i=0;i<faces.size();++i){float t;if(!rayTriangle(faces[i],origin,direction,t)||t>range)continue;if(t<nearest){nearest=t;first=int(i);}if(t>farthest){farthest=t;last=int(i);}}
+  if(first<0){float best=.09f;
+   // The round's line passes it by (the game's hit volume is fuller than the mesh): the face nearest the line.
+   for(size_t i=0;i<faces.size();++i){Point3 c=centroid(faces[i])-origin;float t=goreDot(c,direction);if(t<0||t>range)continue;Point3 off=c-direction*t;float d2=goreDot(off,off);if(d2<best){best=d2;first=int(i);}}
+   if(first<0)return false;
+   Point3 n=faceNormal(faces[size_t(first)]);markWound(slot,faces,first,centroid(faces[size_t(first)]),goreDot(n,direction)<0?1.f:-1.f,size);return true;}
+  Point3 n=faceNormal(faces[size_t(first)]);markWound(slot,faces,first,origin+direction*nearest,goreDot(n,direction)<0?1.f:-1.f,size);
+  if(last!=first&&farthest>nearest+.03f){Point3 m=faceNormal(faces[size_t(last)]);markWound(slot,faces,last,origin+direction*farthest,goreDot(m,direction)>0?1.f:-1.f,size*1.5f);}
+  return true;};
+ // Blood a body throws of itself: from a stump when a section comes off, from a round into a corpse.
+ auto emitGore=[&](const std::vector<Carcass::Event>&events,float time,const Enemy&e,bool stumpsOnly){
+  for(const auto&event:events){if(stumpsOnly&&!event.stump)continue;
+   bool repeat=false;for(const auto&b:m_goreBursts){Point3 gap=b.point-event.point;if(std::fabs(b.time-time)<1e-4f&&goreDot(gap,gap)<1e-4f){repeat=true;break;}}if(repeat)continue;
+   Point3 dir=unit3(event.direction),normal{};
+   HitBurst burst{event.point,dir,time,level,ImpactMaterial::Flesh,int(e.kind),event.power,false};burst.stump=event.stump;
+   burst.floor=w.supportBelow(event.point.x,event.point.y,event.point.z+.05f);
+   burst.reach=std::clamp(w.shotFraction(event.point+dir*.04f,event.point+dir*2.6f,normal),0.f,1.f)*2.6f;
+   if(m_goreBursts.size()>=32)m_goreBursts.erase(m_goreBursts.begin());
+   m_goreBursts.push_back(burst);}};
+ const auto&creatures=game.chunkEnemies(level);
+ for(size_t slotIndex=0;slotIndex<creatures.size();++slotIndex){const auto&e=creatures[slotIndex];
+  const std::uint64_t key=(std::uint64_t(std::uint32_t(level))<<32)|std::uint64_t(slotIndex);
+  if(!e.visible()){m_remains.erase(key);continue;}
+  Remains*slot=nullptr;
+  if(!e.alive||e.woundCount>0){slot=&m_remains[key];
+   const std::uint64_t signature=(std::uint64_t(std::uint32_t(int(e.kind)+1))<<56)^(std::uint64_t(std::uint32_t(std::lround(e.home.x*64.f)))<<36)^(std::uint64_t(std::uint32_t(std::lround(e.home.y*64.f)))<<16)^std::uint64_t(std::uint32_t(std::lround(e.scale*256.f)));
+   if(slot->signature!=signature||e.woundCount<slot->woundsSeen||(e.alive&&slot->carcass.built())){*slot=Remains{};slot->signature=signature;}
+   slot->seen=goreNow;}
   if(e.bodyTop()<dormantFloor)continue;
-  if(!e.visible())continue;
-  Point3 receiver{e.pos.x,e.pos.y,e.z+.85f};if(!sphereVisible(receiver,1.8f))continue;
+  const float woundSize=std::clamp(.05f*e.scale,.04f,.08f);
+  auto resolveWounds=[&](const std::vector<MeshTriangle>&faces){if(!slot)return;
+   for(int i=std::max(slot->woundsSeen,e.woundCount-int(e.wounds.size()));i<e.woundCount;++i){const auto&wound=e.wounds[size_t(i)%e.wounds.size()];pierce(*slot,faces,Point3{e.pos.x,e.pos.y,e.z}+wound.origin,unit3(wound.direction),80.f,woundSize);}
+   slot->woundsSeen=e.woundCount;};
+  const auto&visual=creatureVisuals[size_t(e.kind)];const bool wasp=e.kind==Enemy::Kind::Wasp;
+  auto&mesh=this->*visual.mesh;auto&texture=this->*visual.texture;
+  const std::vector<MeshTriangle>*faces=nullptr;Point3 receiver{e.pos.x,e.pos.y,e.z+.85f};float top=e.bodyTop();CreatureStance stance{};
+  if(e.alive){
+   const bool fresh=slot&&slot->woundsSeen<e.woundCount,seen=sphereVisible(receiver,1.8f);
+   if(!fresh&&!seen)continue;
+   stance=poseCreatureMesh(e,goreNow,false,m_creaturePose);resolveWounds(m_creaturePose);
+   if(!seen)continue;faces=&m_creaturePose;
+  }else{
+   auto&carcass=slot->carcass;const float deathMoment=goreNow-e.deathTime;std::vector<Carcass::Event> events;
+   if(!carcass.built()||slot->serial!=e.deathSerial||e.deathTime<carcass.age()-.05f||lengthSq(e.pos-slot->at)>.0004f){
+    poseCreatureMesh(e,goreNow,true,m_creaturePose);if(m_creaturePose.empty())continue;
+    resolveWounds(m_creaturePose);
+    carcass=Carcass{};carcass.build(m_creaturePose,w,e.deathPush,e.scale,unsigned(key*2654435761ull)+unsigned(e.deathSerial)*977u);
+    slot->serial=e.deathSerial;slot->at=e.pos;slot->rayClock=deathMoment-.25f;slot->pooled=false;
+    if(e.deathBlast){carcass.blast(e.blastOrigin,1.f,events);emitGore(events,deathMoment,e,false);events.clear();}
+   }
+   // Rounds fired since it was last looked at: the one that killed it, and any put into it after.
+   float newest=slot->rayClock;const Vec2 here=game.chunkOffset(level);
+   for(const auto&ray:game.shotRays()){if(ray.time<=slot->rayClock)continue;newest=std::max(newest,ray.time);
+    const Vec2 shift=game.chunkOffset(ray.level)-here;const Point3 origin{ray.origin.x+shift.x,ray.origin.y+shift.y,ray.origin.z};
+    Point3 to=carcass.centre()-origin;float along=std::clamp(goreDot(to,ray.direction),0.f,ray.range+.5f);Point3 off=to-ray.direction*along;float reach=carcass.radius()+.3f;
+    if(goreDot(off,off)>reach*reach)continue;
+    events.clear();int struck=-1;
+    if(carcass.strike(Carcass::Ray{origin,ray.direction,ray.range+.5f,ray.damage,ray.impulse},events,&struck)){
+     pierce(*slot,carcass.triangles(),origin,ray.direction,ray.range+.5f,woundSize);
+     // The killing round has thrown its own blood already (the game's hit): only what it severed bleeds here.
+     emitGore(events,ray.time,e,ray.time<=deathMoment+.05f);}
+   }
+   slot->rayClock=newest;
+   carcass.advance(w,e.deathTime);
+   if(!slot->pooled&&carcass.age()>=.9f){Point3 c=carcass.centre();slot->pool={c.x,c.y,w.supportBelow(c.x,c.y,c.z+.2f)};slot->pooled=true;}
+   if(!sphereVisible(carcass.centre(),carcass.radius()+.25f))continue;
+   receiver=carcass.centre();top=receiver.z+.3f;faces=&carcass.triangles();
+  }
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
-  if(!w.outdoors()&&length(e.pos-player.pos)<15.f)for(const auto&source:w.lights()){
-   auto emitter=source.emitter();float dx=emitter.x-e.pos.x,dy=emitter.y-e.pos.y,d2=dx*dx+dy*dy;
-   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>e.bodyTop()+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
+  if(!w.outdoors()&&length(Vec2{receiver.x,receiver.y}-player.pos)<15.f)for(const auto&source:w.lights()){
+   auto emitter=source.emitter();float dx=emitter.x-receiver.x,dy=emitter.y-receiver.y,d2=dx*dx+dy*dy;
+   if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>top+.2f&&d2<source.range*source.range&&d2<keyDistance){keyDistance=d2;keyLight=&source;}
   }
   movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
-  // Baked kinds are skinned bodies posed from their clips; the rest deform their meshes here.
-  const bool baked=creatureTraits(e.kind).baked;
-  bool wasp=e.kind==Enemy::Kind::Wasp,brute=e.kind==Enemy::Kind::Brute||e.kind==Enemy::Kind::Warden;
-  const auto&visual=creatureVisuals[size_t(e.kind)];
-  auto&mesh=this->*visual.mesh;
-  auto&texture=this->*visual.texture;
-  if(baked){auto p=creatureAnimationSample(e,game.elapsed());
-   if(e.visualClip==p.clip&&e.visualTransition<1){float blend=e.visualTransition*e.visualTransition*(3-2*e.visualTransition);mesh.poseCreatureBlend(e.previousVisualClip,e.previousVisualPhase,p.clip,p.phase,blend);}
-   else mesh.poseCreature(p.clip,p.phase);
-  }
   // The transformed wears the Worker's body, gloves (mano) and boots (pies).
   std::array<const Texture*,8> parts{};parts.fill(&texture);
   if(e.kind==Enemy::Kind::Transformed)for(size_t part=0;part<mesh.materialNames.size()&&part<parts.size();++part){const auto&name=mesh.materialNames[part];
    parts[part]=name.find("pies")!=std::string::npos?&m_transformedBoots:name.find("mano")!=std::string::npos?&m_transformedGloves:&m_transformedTexture;}
-  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
-  float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
-  float angle=e.heading,collapse=e.alive?0.f:std::min(1.f,e.deathTime/.65f);
-  float shrink=e.alive?1.f:1.f-std::clamp((e.deathTime-1.25f)/1.15f,0.f,1.f);
-  float wind=e.windup>0?std::sin(e.windup*5.f)*.12f:0;
-  // Mesh X is actor right; exteriorLight X points at yaw=(pi/2-heading).
-  auto enemyLights=exteriorLight(receiver,std::max(.2f,range.x*scale),std::max(.2f,range.z*scale),std::max(.2f,range.y*scale),kPi*.5f-angle,true);
-  for(auto face:mesh.triangles){
-   for(auto&v:face.v){Point3 p=(v.p-center)*scale;
-    float localY=p.z;
-    float height=p.y+range.y*scale*.5f;
-    if(e.alive&&!baked){
-     if(wasp){height+=.60f+.065f*std::sin(game.elapsed()*4.f+e.pos.x);if(face.part==1)height+=std::sin(game.elapsed()*36.f)*std::fabs(p.x)*.9f;}
-     else if(brute){float sway=e.moving?std::sin(e.gait)*.07f:0;p.x+=sway*height;height+=std::fabs(sway)*.18f;}
-     else if(std::fabs(p.x)>.21f){
-      // Alternate leg groups rotate around their body attachment; feet lift only while walking.
-      float phase=e.gait+(p.x<0?3.14159f:0.f)+std::floor((p.z+.7f)*4.f)*3.14159f;
-      float stride=e.moving?std::sin(phase)*.16f:0;
-      localY+=stride*(std::fabs(p.x)-.18f);height+=std::max(0.f,e.moving?std::cos(phase)*.10f:0.f);
-     }
-     height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;
-     localY-=e.painFlash*.035f;
-    }else if(!e.alive&&!baked){height*=1-.88f*collapse;p.x+=std::sin(collapse*3.14f)*.1f*(p.x<0?-1.f:1.f);}
-    p.x*=shrink;localY*=shrink;height*=shrink;
-    if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==1)
-     v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};
-    else if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode==2)
-     v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+1.05f-height};
-    else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
-   }
-   Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
-   selectFaceLight(enemyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
-   float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+e.painFlash*.22f;
+  // Mesh X is actor right; exteriorLight X points at yaw=(pi/2-heading). A body is lit as the low heap it is.
+  const float heap=e.alive?0.f:std::clamp(slot->carcass.radius(),.3f,1.2f);
+  auto enemyLights=e.alive?exteriorLight(receiver,std::max(.2f,stance.range.x*stance.scale),std::max(.2f,stance.range.z*stance.scale),std::max(.2f,stance.range.y*stance.scale),kPi*.5f-e.heading,true)
+                          :exteriorLight(receiver+Point3{0,0,.1f},heap,heap,.4f,kPi*.5f-e.heading,true);
+  if(!e.alive)m_dissolve=e.dissolve();
+  for(const auto&face:*faces){
+   Point3 n=faceNormal(face);float len=std::sqrt(goreDot(n,n));
+   selectFaceLight(enemyLights,n,centroid(face)-receiver);
+   float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+(e.alive?e.painFlash*.22f:0.f);
    // Thin wasp wings transmit light from the far side of the membrane.
    if(wasp&&face.part==1&&keyLight&&len>.00001f){auto toLamp=keyLight->emitter()-receiver;float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
-   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[size_t(std::clamp(face.part,0,int(parts.size())-1))],e.alive?light:.65f);
-   if(e.alive&&keyLight){
+   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[size_t(std::clamp(face.part,0,int(parts.size())-1))],light);
+   if(keyLight){
     static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
     MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
     for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
      if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;
      float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
-     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-e.pos.x,y-e.pos.y)>4.f){valid=false;break;}
+     if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-receiver.x,y-receiver.y)>4.f){valid=false;break;}
      cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};
     }
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadow,1.f);}
    }
   }
-  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
+  const size_t tone=visual.xenoblood?1u:0u;
+  if(!e.alive){auto&carcass=slot->carcass;
+   // What runs out of it: a pool that spreads under where it came to rest.
+   if(slot->pooled){float grow=std::clamp((carcass.age()-1.f)/5.f,0.f,1.f),half=.34f*e.scale*(.25f+.75f*grow*(2.f-grow));Point3 p=slot->pool;p.z+=.016f;
+    objectLight=illumination(Point3{p.x,p.y,p.z+.02f},Point3{0,0,1});objectNormalLighting=nullptr;const Texture&blood=m_bloodVariants[size_t(e.kind)];const float tint=visual.bloodLight;
+    tri({{p.x-half,p.y-half,p.z},0,1},{{p.x+half,p.y-half,p.z},1,1},{{p.x+half,p.y+half,p.z},1,0},blood,tint);tri({{p.x-half,p.y-half,p.z},0,1},{{p.x+half,p.y+half,p.z},1,0},{{p.x-half,p.y+half,p.z},0,0},blood,tint);}
+   // The cuts: each gap where a section came away is closed with meat and bone.
+   for(const auto&cap:carcass.caps()){Point3 n=faceNormal(cap);selectFaceLight(enemyLights,n,n);tri(cap.v[0],cap.v[1],cap.v[2],m_stump[tone],.95f);}
+  }
+  // The wounds: each a torn mark laid over the faces round where the round went in or came out.
+  if(slot)for(const auto&wound:slot->wounds){if(wound.face<0||size_t(wound.face)>=faces->size())continue;const auto&f=(*faces)[size_t(wound.face)];
+   Point3 c=f.v[0].p+(f.v[1].p-f.v[0].p)*wound.b1+(f.v[2].p-f.v[0].p)*wound.b2,n=unit3(faceNormal(f))*wound.side;
+   Point3 u=unit3(std::fabs(n.z)<.9f?cross3(n,Point3{0,0,1}):cross3(n,Point3{1,0,0})),v=cross3(n,u);const float k=.5f/wound.size;
+   selectFaceLight(enemyLights,n,n);
+   for(int packed:wound.patch){const size_t i=size_t(packed>>1);if(i>=faces->size())continue;const auto&g=(*faces)[i];Point3 out=unit3(faceNormal(g))*((packed&1)?-.008f:.008f);MeshVertex q[3];
+    for(int j=0;j<3;++j){Point3 p=g.v[j].p;q[j]={p+out,.5f+goreDot(p-c,u)*k,.5f+goreDot(p-c,v)*k};}
+    tri(q[0],q[1],q[2],woundTextures[tone],.95f);}}
+  m_dissolve=0;objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  }
+ std::erase_if(m_remains,[&](const auto&entry){const bool here=int(entry.first>>32)==level;return here?(entry.first&0xffffffffull)>=creatures.size()||entry.second.seen<goreNow-.5f:entry.second.seen<goreNow-20.f;});
+ // What hits throw: blood, chips, dust (GoreFx.cpp). The game's bursts, and the bodies' own.
+ {Point3 goreLit{1e9f,0,0};float goreLight=1;
+  auto goreHidden=[&](Point3 lo,Point3 hi){const Point3 half=(hi-lo)*.5f;return !sphereVisible(lo+half,std::sqrt(half.x*half.x+half.y*half.y+half.z*half.z))||hidden(lo,hi);};
+  auto goreQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light){objectLighting=true;objectNormalLighting=nullptr;
+   Point3 mid=(a+c)*.5f,gap=mid-goreLit;if(goreDot(gap,gap)>.16f){goreLit=mid;goreLight=illumination(mid+Point3{0,0,.02f},Point3{0,0,1});}
+   objectLight=goreLight;tri({a,0,1},{b,1,1},{c,1,0},t,light);tri({a,0,1},{c,1,0},{d,0,0},t,light);objectLighting=false;};
+  const bool moving=movingGeometry;movingGeometry=true;
+  GoreFx::draw(*this,game.hitBursts(),level,goreNow,eye,goreQuad,goreHidden);
+  GoreFx::draw(*this,m_goreBursts,level,goreNow,eye,goreQuad,goreHidden);
+  movingGeometry=moving;}
  // The player's body: Claire, posed from how the player moves. In first person
  // her head, hair and arms are left out (the viewmodel's arms stand in for
  // hers) and she stands a hand's width behind the eye, so looking down shows

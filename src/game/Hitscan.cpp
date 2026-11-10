@@ -87,6 +87,8 @@ void Game::startleScriptedActors(const ShotHit& hit,Point3 origin,Point3 directi
 }
 void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& inputDefinition,bool playerFired,float damageOverride,AiTargetRef attacker){
  if(playerFired)startleScriptedActors(hit,origin,direction);
+ // The bodies it passes through answer to the ray itself (Carcass): they block nothing.
+ m_shotRays.push_back({origin,direction,hit.kind==ShotKind::None?60.f:hit.distance,m_elapsed,damageOverride>0?damageOverride:hitscanDamageAt(inputDefinition,hit.distance),inputDefinition.ragdollImpulse,m_level});if(m_shotRays.size()>24)m_shotRays.erase(m_shotRays.begin());
  HitscanDef definition=inputDefinition;float attenuation=1;
  auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*propDamage/definition.dmgNear));damageClutter(level,size_t(index),propDamage,point,direction);};
  for(const auto&p:hit.passed)if(p.kind){if(p.kind==2)prop(p.level,p.index,p.point,p.distance);else{auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,hitscanDamageAt(definition,p.distance)*attenuation,p.point+Point3{shift.x,shift.y,0},direction);attenuation*=.8f;}}
@@ -95,23 +97,46 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
  if(hit.kind==ShotKind::Player){receiveDamage(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
  if(hit.kind==ShotKind::Drone){damageEngineerDrone(hit.index,damageOverride>0?damageOverride:definition.actorDamage,attacker);if(playerFired)m_hitFlash=1;return;}
- if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,0};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;return;}
+ if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,0};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,-1,.8f,false);return;}
  if(hit.kind==ShotKind::Actor){const auto&actor=world.actorTracks().at(size_t(hit.index));if(!actor.health)return;const auto&pose=world.actorPose(size_t(hit.index));int previous=std::clamp(state(actor.damageState),0,actor.health);int damage=previous+std::min(actor.health-previous,int(std::ceil(std::min(damageOverride>0?damageOverride:definition.actorDamage,float(actor.health)))));setState(actor.damageState,damage);if(playerFired)m_hitFlash=1;
+  hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,humanActorVisual(actor.visual)?-1:int(actor.visual==ActorVisual::Wasp?CreatureKind::Wasp:CreatureKind::Huntsman),damage>=actor.health?1.5f:.9f,damage>=actor.health);
   bool killed=damage>=actor.health;if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(pose.z*1000)));if(!humanActorVisual(actor.visual)){if(hit.level==m_level)++m_kills;else ++m_chunks[hit.level].kills;}}
   m_sounds.push_back({humanActorVisual(actor.visual)?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,pose.position-shift,.8f,1,true,17,pose.z+actor.scale*.7f});updateMechanisms(0);return;
  }
  if(hit.kind==ShotKind::Enemy){auto&enemy=(hit.level==m_level?m_enemies:m_chunks[hit.level].enemies).at(size_t(hit.index));
   // A gunshot wound is a stimulus: the creature turns on the shooter even if it never saw them.
   if(playerFired&&enemy.alive){enemy.recognition=1;enemy.lastKnown=m_player.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=m_player.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
-  bool killed=applyEnemyDamage(enemy,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
+  const float dealt=damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance);const Point3 local{shift.x,shift.y,0};const bool living=enemy.alive;
+  if(living)enemy.wound(origin+local,direction);
+  bool killed=applyEnemyDamage(enemy,dealt,playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);
+  // It goes down the way the round was travelling.
+  if(killed)enemy.deathPush={direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.4f};
+  if(living)hitBurst(hit.level,hit.point+local,direction,ImpactMaterial::Flesh,int(enemy.kind),std::clamp(dealt/34.f,.5f,2.f)*(killed?1.5f:1.f),killed);
+  auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
  if(hit.kind==ShotKind::Ragdoll){auto&rag=hit.index>=Ragdoll::Count&&size_t(m_level)<m_hungSuits.size()&&size_t(hit.index/Ragdoll::Count-1)<m_hungSuits[size_t(m_level)].size()?m_hungSuits[size_t(m_level)][size_t(hit.index/Ragdoll::Count-1)]:m_hazmat;
   rag.impulse(hit.index%Ragdoll::Count,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}
  if(hit.kind!=ShotKind::Solid)return;
- if(hit.breakable>=0){auto offset=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,hitscanDamageAt(definition,hit.damageDistance),hit.point+Point3{offset.x,offset.y,0},direction);return;}
+ if(hit.breakable>=0){auto offset=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,hitscanDamageAt(definition,hit.damageDistance),hit.point+Point3{offset.x,offset.y,0},direction);hitBurst(hit.level,hit.point+Point3{offset.x,offset.y,0},direction*-1.f,ImpactMaterial::Glass,-1,.8f,false);return;}
  auto point=hit.point+direction*.003f+Point3{shift.x,shift.y,0};int tx=int(std::floor(point.x)),ty=int(std::floor(point.y));char tile=world.tile(tx,ty);float base=world.floorHeight(tx+.5f,ty+.5f);if(point.z<base||point.z>base+(tile=='C'?.6f:tile=='B'?1.1f:0))tile='.';
  if(tile=='C'){world.destroyTile(tx,ty);auto&clutter=hit.level==m_level?m_clutter:m_chunks[hit.level].clutter;for(int i=0;i<4;++i){Clutter c;c.kind=6;c.pos={tx+.5f,ty+.5f};c.z=world.floorHeight(c.pos.x,c.pos.y);c.yaw=i*kPi*.5f;c.pitch=(i%2?-.18f:.18f);c.roll=(i%2?.12f:-.12f);c.velocity={std::cos(c.yaw)*3,std::sin(c.yaw)*3};c.vz=2;c.spin=(i%2?1.f:-1.f)*3;c.pitchSpeed=(i%2?1.f:-1.f)*2;c.rollSpeed=(i%2?-1.f:1.f)*2;clutter.push_back(c);}m_sounds.push_back({Sound::JunkSoft,Vec2{tx+.5f,ty+.5f}-shift,.9f,1,true,17,world.floorHeight(tx+.5f,ty+.5f)+.3f});return;}
  if(tile=='B'){detonateBarrel(hit.level,tx,ty);return;}
  auto impact=hit.point+hit.normal*.004f;if(hit.normal.z>.5f)impact.z=std::max(impact.z,world.floorHeight(impact.x+shift.x,impact.y+shift.y)+.004f);if(hit.normal.z<-.5f)impact.z=std::min(impact.z,world.ceilingHeight(impact.x+shift.x,impact.y+shift.y)-.004f);
- m_bulletImpacts.push_back({{impact.x+shift.x,impact.y+shift.y},impact.z,{hit.normal.x,hit.normal.y},m_elapsed,hit.level,false,0,hit.normal.z});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
+ // What it struck decides the mark it leaves and what it throws: sparks off metal, dust and chips off
+ // masonry, splinters off timber, clods off earth.
+ const Point3 struck{impact.x+shift.x,impact.y+shift.y,impact.z};const auto material=world.impactMaterial(struck,hit.normal);
+ m_bulletImpacts.push_back({{struck.x,struck.y},struck.z,{hit.normal.x,hit.normal.y},m_elapsed,hit.level,false,0,hit.normal.z,int(material)});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
+ if(material!=ImpactMaterial::Metal)hitBurst(hit.level,struck,hit.normal,material,-1,std::clamp(hitscanDamageAt(definition,hit.damageDistance)/34.f,.5f,1.6f),false);
+}
+void Game::hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial material,int species,float power,bool kill){
+ if(level<0||level>=chunkCount()||!chunkResident(level))return;const auto&world=friendlyWorld(level);
+ float size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);direction=size<.0001f?Point3{0,0,1}:direction*(1/size);
+ HitBurst burst{point,direction,m_elapsed,level,material,species,power,kill};
+ // Where what it throws comes down, and the wall that stops it short.
+ burst.floor=world.supportBelow(point.x+direction.x*.25f,point.y+direction.y*.25f,point.z+.05f);
+ const float far=2.6f;Point3 normal{},from=point+direction*.04f,to=point+direction*far;float fraction=std::clamp(world.shotFraction(from,to,normal),0.f,1.f);burst.reach=fraction*far;
+ m_hitBursts.push_back(burst);if(m_hitBursts.size()>48)m_hitBursts.erase(m_hitBursts.begin());
+ // A round through flesh paints the wall behind it.
+ if(material==ImpactMaterial::Flesh&&fraction<1&&std::fabs(normal.z)<.5f&&power>=.7f){auto at=from+(to-from)*fraction;unsigned seed=unsigned(m_bulletImpacts.size())*2654435761u^unsigned(m_elapsed*977.f);
+  m_bulletImpacts.push_back({{at.x,at.y},at.z,{normal.x,normal.y},m_elapsed,level,true,species<0?int(CreatureKind::Mutant):species,0,int(ImpactMaterial::Flesh),(.11f+.05f*float(seed>>24&255u)/255.f)*std::min(1.5f,power)*(1.15f-.25f*fraction)});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());}
 }
 }

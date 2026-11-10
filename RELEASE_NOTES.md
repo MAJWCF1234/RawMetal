@@ -4,6 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.3.0 - What stays on the floor (2026-11-10)
+
+This is an update, not a patch. Until now the things down here did the polite thing when they died: they shrank, and then they were not there. They have stopped being polite. What you kill falls, lies where it fell, and takes its time leaving.
+
+- **Deaths.** Every creature now dies as a body. It is thrown by whatever killed it, falls as a ragdoll, settles on the floor and stays there. After about eleven seconds it thins out grain by grain, and by fifteen it is gone. Nothing shrinks any more.
+- **Squibs.** A round into flesh throws a burst of mist and drops that fly, land and dry where they land. Red for what was once a person; green for what never was.
+- **Coming apart.** Bodies are built in sections. Heavy fire takes them off at the joint and a blast takes the whole thing to pieces. Each gap is closed with a cap of meat and bone computed for that cut, and a fresh cut pumps for a moment. This holds for all eight kinds of creature.
+- **Wounds.** A body keeps the holes you put in it, and a pool spreads under it once it is still.
+- **Materials.** The world answers a round by what it is made of: grey chips and dust from concrete, splinters from wood, clods from dirt, shards from tile, a white cloud from plaster, slivers from glass, lint that drifts down from fabric. Sparks are for metal and stone now.
+- Both renderers draw all of it, Vulkan and the CPU fallback. The Campaign Editor's engine is the same engine, so custom maps die the same way.
+
+Verified with a new death test over all eight creature kinds on both renderers (fall, rest, fade, despawn, squibs, sectioning and capped cuts under gunfire and blast, material hits), the carcass, creature-behaviour, creature-schedule, gameplay-fixes, chapter-route and campaign-map suites, and rebuilds of the game and Campaign Editor engines. Two older checks still fail exactly as they did in v1.2.19 and are not part of this work: a deck-over-door clearance case in the engine regression suite, and a repeated arc frame on the CPU renderer.
+
+---
+
 ## v1.2.19 - Free hanging physics chains (2026-11-10)
 
 The engine now supports free hanging metal chains as Verlet physics cables, including chains pinned to a living creature.

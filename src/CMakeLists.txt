@@ -215,6 +215,8 @@ add_executable(RawMetal WIN32
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
     renderer/ElectricFx.cpp
+    renderer/Carcass.cpp
+    renderer/GoreFx.cpp
     renderer/Impostors.cpp
     renderer/Performance.cpp
     renderer/GpuRenderer.cpp

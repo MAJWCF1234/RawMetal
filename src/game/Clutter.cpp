@@ -113,7 +113,7 @@ void Game::updateLeads(int level,float dt){
   // A free physics chain hung from a creature: pin its Verlet mount to the live
   // body's facing frame (mesh x right, y forward, z up from its feet).
   if(l.chain&&l.creature>=0&&l.creature<int(spawns.size())){const auto&spawn=spawns[size_t(l.creature)];const Enemy* bodyEnemy=nullptr;
-   for(const auto&e:enemies){const Vec2 home=e.originLevel==level?e.originHome:e.home;if(e.kind==spawn.kind&&lengthSq(home-spawn.position)<.01f&&e.visible()){bodyEnemy=&e;break;}}
+   for(const auto&e:enemies){const Vec2 home=e.originLevel==level?e.originHome:e.home;if(e.kind==spawn.kind&&lengthSq(home-spawn.position)<.01f&&(e.alive||e.deathTime<.2f)){bodyEnemy=&e;break;}}
    if(bodyEnemy){const float c=std::cos(bodyEnemy->heading),s=std::sin(bodyEnemy->heading);
     const Point3 mount={bodyEnemy->pos.x+l.offset.y*c-l.offset.x*s,bodyEnemy->pos.y+l.offset.y*s+l.offset.x*c,bodyEnemy->z+l.offset.z};
     if(r.anchorOverride){const auto d=mount-r.liveAnchor;if(d.x*d.x+d.y*d.y+d.z*d.z>1e-8f){r.sleeping=false;r.rest=0;}}

@@ -135,6 +135,7 @@
 244 RCDATA "assets/reactor/stalker-animation.bin"
 245 RCDATA "assets/reactor/hazmat.bin"
 246 RCDATA "assets/reactor/hazmat-body-q.webp"
+247 RCDATA "assets/library/gore_stump.png"
 249 RCDATA "assets/reactor/blood-splotch.png"
 250 RCDATA "assets/ai/water-x2.ntx"
 251 RCDATA "assets/materials/water-normal.png"

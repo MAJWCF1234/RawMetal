@@ -222,6 +222,21 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    t.pixels[size_t(y*n+x)]=(unsigned(a*255.f)<<24)|(r<<16)|(g<<8)|b;}
   t.transparent=true;t.glossStrength=.9f;return t;}();
  prepareDecal(m_glassTexture,false);
+ // A cut shows meat with bone at its middle.
+ {auto&red=m_stump[0];red=loadTexture(247);
+  for(int y=0;y<red.height;++y)for(int x=0;x<red.width;++x){auto&pixel=red.pixels[size_t(y*red.width+x)];float dx=(x+.5f)/red.width-.5f,dy=(y+.5f)/red.height-.5f,d=std::sqrt(dx*dx+dy*dy);
+   float r=float((pixel>>16)&255u),g=float((pixel>>8)&255u),b=float(pixel&255u);
+   float bone=std::clamp((.085f-d)/.02f,0.f,1.f),marrow=std::clamp((.04f-d)/.015f,0.f,1.f),ring=std::clamp(1.f-std::fabs(d-.115f)/.03f,0.f,1.f),rim=std::clamp((d-.36f)/.14f,0.f,1.f);
+   float grain=.85f+.15f*float(((x*7+y*13)^(x*3))&15)/15.f;
+   r*=1-.45f*ring-.35f*rim;g*=1-.45f*ring-.35f*rim;b*=1-.45f*ring-.35f*rim;
+   r+=(196.f*grain-r)*bone;g+=(178.f*grain-g)*bone;b+=(150.f*grain-b)*bone;
+   r+=(120.f-r)*marrow*.8f;g+=(34.f-g)*marrow*.8f;b+=(30.f-b)*marrow*.8f;
+   pixel=0xff000000u|(std::uint32_t(std::clamp(r,0.f,255.f))<<16)|(std::uint32_t(std::clamp(g,0.f,255.f))<<8)|std::uint32_t(std::clamp(b,0.f,255.f));}
+  auto&green=m_stump[1];green=red;
+  for(auto&pixel:green.pixels){float r=float((pixel>>16)&255u),g=float((pixel>>8)&255u),b=float(pixel&255u),wet=std::clamp((r-std::max(g,b))/90.f,0.f,1.f),value=std::max({r,g,b});
+   float nr=r+(value*.62f-r)*wet,ng=g+(value*.95f+18.f-g)*wet,nb=b+(value*.22f-b)*wet;
+   pixel=0xff000000u|(std::uint32_t(std::clamp(nr,0.f,255.f))<<16)|(std::uint32_t(std::clamp(ng,0.f,255.f))<<8)|std::uint32_t(std::clamp(nb,0.f,255.f));}
+ }
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
  for(int species=0;species<int(creatureVisuals.size());++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=creatureVisuals[size_t(species)].xenoblood;const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
   for(auto&pixel:variant.pixels){float intensity=float(std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u}))/255.f;auto r=std::uint32_t(tr*intensity),g=std::uint32_t(tg*intensity),b=std::uint32_t(tb*intensity);pixel=(pixel&0xff000000u)|(r<<16)|(g<<8)|b;}prepareDecal(variant);

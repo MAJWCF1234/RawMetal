@@ -93,6 +93,7 @@ bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeH
  if(enemy.hp>0&&creatureTraits(enemy.kind).rushSpeed>0&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
  if(enemy.hp>0)return false;
  // The dead fall from walls and ceilings and stop stalking (a Retreat must not outlive it).
+ enemy.deathSurface=enemy.surfaceMode;++enemy.deathSerial;enemy.deathPush={};enemy.deathBlast=false;
  enemy.hp=0;enemy.alive=false;enemy.deathTime=0;enemy.windup=0;enemy.strike=0;enemy.surfaceMode=0;enemy.stalkMode=Enemy::StalkMode::Watch;enemy.stalkTimer=0;if(level==m_level)++m_kills;else ++m_chunks[level].kills;
  if(bloodDecal)m_bulletImpacts.push_back({enemy.pos,friendlyWorld(level).floorHeight(enemy.pos.x,enemy.pos.y)+.012f,{0,0},m_elapsed,level,true,int(enemy.kind)});
  if(closeHitStop)m_hitStopRemaining=.03f;
@@ -246,7 +247,10 @@ bool Game::testCombat(){
  g.shoot();if(!g.m_enemies[0].alive||g.m_enemies[0].hp>=110)return false;
  g.shoot();g.shoot();if(!g.m_enemies[0].alive)return false;g.shoot();
  if(g.m_enemies[0].alive||g.m_kills!=1||!g.m_enemies[0].visible())return false;
- for(int i=0;i<160;++i)g.update({},1.f/60.f);
+ if(g.m_enemies[0].dissolve()!=0)return false;
+ for(int i=0;i<int((Enemy::CorpseLifetime-Enemy::CorpseFade*.5f)*60);++i)g.update({},1.f/60.f);
+ if(!g.m_enemies[0].visible()||g.m_enemies[0].dissolve()<=0||g.m_enemies[0].dissolve()>=1)return false;
+ for(int i=0;i<int(Enemy::CorpseFade*60);++i)g.update({},1.f/60.f);
  if(g.m_enemies[0].visible())return false;
  g.restart();g.m_enemies.resize(1);g.m_enemies[0].pos=g.m_player.pos+Vec2{.7f,0};
  g.update({},.05f);if(g.m_player.health!=100||g.m_enemies[0].windup<=0)return false;
@@ -297,7 +301,9 @@ void Game::detonateBarrel(int level,int tx,int ty){
  auto&clutter=level==m_level?m_clutter:m_chunks[level].clutter;
  for(int i=0;i<5;++i){Clutter c;c.kind=3;c.pos=at;c.z=floor+.5f;c.yaw=float(i)*1.2566f+.3f;c.pitch=(i%2?-.3f:.3f);c.velocity={std::cos(c.yaw)*(3.5f+float(i)*.4f),std::sin(c.yaw)*(3.5f+float(i)*.4f)};c.vz=3.5f+float(i%3);c.spin=(i%2?1.f:-1.f)*5;c.pitchSpeed=(i%2?1.f:-1.f)*4;c.rollSpeed=3;clutter.push_back(c);}
  auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
- for(auto&e:enemies)if(e.alive&&length(e.pos-at)<kUnarmedMelee.barrelRadius)applyEnemyDamage(e,kUnarmedMelee.barrelDamage,false,false,level);
+ // What the blast kills it takes apart.
+ for(auto&e:enemies)if(e.alive&&length(e.pos-at)<kUnarmedMelee.barrelRadius&&applyEnemyDamage(e,kUnarmedMelee.barrelDamage,false,false,level)){e.deathBlast=true;e.blastOrigin={at.x,at.y,floor+.3f};
+  hitBurst(level,{e.pos.x,e.pos.y,(e.bodyBottom()+e.bodyTop())*.5f},{(e.pos.x-at.x)*.5f,(e.pos.y-at.y)*.5f,.8f},ImpactMaterial::Flesh,int(e.kind),2.2f,true);}
  // Barrels within reach go up in turn.
  int fuse=0;
  for(int y=ty-3;y<=ty+3;++y)for(int x=tx-3;x<=tx+3;++x){if((x==tx&&y==ty)||world.tile(x,y)!='B'||length(Vec2{x+.5f,y+.5f}-at)>2.6f)continue;
@@ -319,6 +325,34 @@ void Game::shoot(){
  m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,1,false,17,origin.z});
  auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);
  resolveShot(hit,origin,direction,gun.hitscan,true);
+}
+Game Game::goreInspection(Enemy::Kind kind,int mode,float age,bool empty){
+ Game g=validationScene(kind,mode==4?-1.f:0.f);auto&e=g.m_enemies[0];auto&p=g.m_player;const int level=g.m_level;
+ p.pos={4.2f,4.5f};p.angle=0;p.z=g.m_world.floorHeight(p.pos.x,p.pos.y);p.pitch=-30;
+ e.pos={6.1f,4.5f};e.home=e.pos;e.z=g.m_world.floorHeight(e.pos.x,e.pos.y);e.heading=kPi;e.moving=false;e.deathSerial=1;e.deathSurface=0;
+ g.m_elapsed=1;g.m_inspectionCamera=true;
+ if(mode==3){p.pos={4.3f,4.5f};p.pitch=-122;}
+ if(empty||mode==3){e.alive=false;e.hp=0;e.deathTime=99;}
+ if(empty){g.m_elapsed=1+age;return g;}
+ if(mode==3){
+  for(int m=0;m<int(ImpactMaterial::Count);++m){float x=4.9f+.32f*float(m%5),y=4.5f+(m<5?-.3f:.3f),floor=g.m_world.floorHeight(x,y);
+   g.hitBurst(level,{x,y,floor+.01f},{0,0,1},ImpactMaterial(m),-1,1.f,false);
+   g.m_bulletImpacts.push_back({{x,y},floor,{0,0},1.f,level,false,0,1.f,m});}
+  g.m_elapsed=1+age;return g;}
+ if(mode==4){
+  e.pos={5.9f,4.5f};e.home=e.pos;e.hp=5;
+  p.pitch=std::atan2((e.bodyBottom()+e.bodyTop())*.5f-(p.z+p.eye),length(e.pos-p.pos))*140.f;
+  g.shoot();p.pitch=-30;
+  for(float t=0;t<age;t+=1.f/60)g.update(InputState{},1.f/60);
+  return g;}
+ e.alive=false;e.hp=0;e.deathTime=age;e.deathPush={1.6f,.2f,.5f};
+ if(mode==1){const float top=creatureTraits(kind).top*e.scale;const Point3 eye{p.pos.x,p.pos.y,p.z+p.eye};
+  static constexpr float aim[][2]={{.2f,-.1f},{.2f,.1f},{.65f,-.22f},{.65f,.22f},{.9f,0}};
+  for(const auto&a:aim){Point3 target{e.pos.x,e.pos.y+a[1]*std::max(1.f,top),e.bodyBottom()+a[0]*(e.bodyTop()-e.bodyBottom())},d=target-eye;
+   float distance=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);d=d*(1.f/distance);
+   g.m_shotRays.push_back({eye,d,distance,1.f,90.f,3.f,level});g.hitBurst(level,target,d,ImpactMaterial::Flesh,int(kind),1.2f,true);}}
+ if(mode==2){e.deathBlast=true;e.blastOrigin={e.pos.x-.4f,e.pos.y,e.z+.2f};e.deathPush={2.2f,0,1.4f};}
+ g.m_elapsed=1+age;return g;
 }
 Game Game::stalkerInspection(int clip,float phase,int view,Enemy::Kind kind){
  auto game=mapInspection({18.6f,18.5f},0,clip==4?-35.f:0.f,3,true,-9,false);
@@ -637,6 +671,8 @@ void Game::punchImpact(){
 void Game::applyPunchHit(Enemy&enemy){
  sound(Sound::PunchHit,.65f);m_verticalSpringVelocity+=.25f;enemy.recognition=1;
  bool killed=applyEnemyDamage(enemy,kUnarmedMelee.damage,true,true);
+ {Vec2 push=normalized(enemy.pos-m_player.pos);if(killed)enemy.deathPush={push.x*1.6f,push.y*1.6f,.3f};
+  hitBurst(m_level,{enemy.pos.x-push.x*.2f,enemy.pos.y-push.y*.2f,enemy.bodyBottom()+(enemy.bodyTop()-enemy.bodyBottom())*.7f},{push.x,push.y,.15f},ImpactMaterial::Flesh,int(enemy.kind),.45f,killed);}
  enemySound(enemy,killed?2:0,killed?.85f:.45f,killed?1.f:1.15f);
 }
 void Game::applyNpcPunchHit(size_t actor){

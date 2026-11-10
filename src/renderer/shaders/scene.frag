@@ -289,6 +289,9 @@ void main(){
  // The impostor's visible surface lies in front of or behind its card.
  if(impostorQuad)worldPos+=normalize(view.eyeYaw.xyz-worldPos)*impostorDepth*light1.x;
  if(color.a<(surface.z>0.5?0.01:0.5))discard;
+ // A corpse dissolving: the fraction rides above the normal-map flag in lighting.w.
+ float dissolveFade=clamp((fract(lighting.w+0.25)-0.25)/0.45,0.0,1.0);
+ if(dissolveFade>0.003&&lodDither(gl_FragCoord.xy)<dissolveFade)discard;
  // Wetness: a damp sheen everywhere plus puddles on level static ground.
  // Wet porous surfaces darken and their roughness collapses toward a mirror.
  float materialRoughness=clamp(1.0-fract(surface.z),0.18,1.0),wetness=0.0;

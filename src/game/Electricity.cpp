@@ -229,6 +229,8 @@ void Game::electricScene(int level,electric::Scene& out)const{
  // A round striking a solid throws a short, fast shower back off it; its embers glow on where they land.
  for(const auto&mark:m_bulletImpacts){if(mark.level!=level||mark.blood||mark.tint!=0)continue;const float age=now-mark.time;if(age<0)continue;
   Burst b;b.at={mark.pos.x,mark.pos.y,mark.z};b.along=unit({mark.normal.x,mark.normal.y,mark.normalZ});b.time=mark.time;b.speed=4.2f;b.spread=.95f;b.heat=.95f;b.count=14;b.embers=2;b.level=level;
+  // Metal showers; stone and tile give a flick; timber, earth, plaster, cloth and flesh give none (GoreFx throws their dust and chips).
+  if(mark.material>=0){const auto m=ImpactMaterial(mark.material);if(m==ImpactMaterial::Concrete||m==ImpactMaterial::Rock||m==ImpactMaterial::Tile){b.count=4;b.embers=0;b.speed=3.f;b.heat=.7f;}else if(m!=ImpactMaterial::Metal)continue;}
   if(age>burstLife(b))continue;b.seed=mix(bits(mark.pos.x)*3u^bits(mark.pos.y)*5u^bits(mark.z)*7u^bits(mark.time));out.bursts.push_back(b);}
  // A torn live lead arcs in time with its clip: from the end to the clip it came off while that is near,
  // else to the nearest thing that conducts, else a brush into the air.

@@ -22,6 +22,7 @@
 #include "world/CampaignExport.h"
 #pragma comment(lib,"shell32.lib")
 #include "renderer/SoftwareRenderer.h"
+#include "renderer/Carcass.h"
 #include "platform/Win32Window.h"
 #include "platform/EditorPreview.h"
 #include "audio/AudioEngine.h"
@@ -1185,6 +1186,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--engine-regression-test"))return retro::Game::testEngineRegression()?0:21;
     if(commandArguments().find(L"--gameplay-fixes-test"))return retro::Game::testGameplayFixes()?0:21;
     if(commandArguments().find(L"--gameplay-rendering-test"))return retro::SoftwareRenderer::testGameplayRendering()?0:21;
+    if(commandArguments().find(L"--carcass-test"))return retro::Carcass::test()?0:21;
+    if(commandArguments().find(L"--gore-test")){std::ofstream report("gore-render-test.txt");return retro::Carcass::test()&&retro::SoftwareRenderer::testGore(report)?0:21;}
     if(commandArguments().find(L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
     if(commandArguments().find(L"--civilian-schedule-test"))return retro::Game::testCivilianSchedule()?0:21;
     if(commandArguments().find(L"--guard-patient-test"))return retro::Game::testGuardPatient()?0:21;
@@ -1489,6 +1492,29 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(int view=0;view<2;++view)for(int clip=0;clip<5;++clip)for(int frame=0;frame<5;++frame){auto scene=retro::Game::stalkerInspection(clip,.01f+frame*.245f,view);renderer.render(scene);
       std::ofstream out(std::string(view?"stalker-side-":"stalker-")+std::to_string(clip)+"-"+std::to_string(frame)+".ppm",std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
+     }return 0;
+    }
+    if(auto arg=commandArguments().find(L"--gore-inspection=")){
+     // How deaths look: gore-K-M-N.ppm for kind K (0-7), mode M (0 fell, 1 shot apart, 2 blast, 4 a live kill) at
+     // successive ages; K=8 is one body through its fade (gore-fade-N) and a round into each material (gore-material-N).
+     const int kind=_wtoi(arg+18);if(kind<0||kind>8)return 1;
+     constexpr int inspectW=1280,inspectH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;
+     if(!commandArguments().find(L"--gore-software")&&!renderer.enableHardware())return 36;
+     const bool handsShown=commandArguments().find(L"--gore-hands")!=nullptr;
+     auto shot=[&](const retro::Game& scene,const std::string& name,bool play=false){renderer.setEnvironmentInspection(!handsShown&&!play);renderer.render(scene);
+      std::ofstream out(name+".ppm",std::ios::binary);out<<"P6\n"<<inspectW<<' '<<inspectH<<"\n255\n";
+      for(int i=0;i<inspectW*inspectH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
+     if(kind<8){
+      static constexpr float fell[]={.12f,.4f,1.f,3.f},apart[]={.15f,.6f,3.f},live[]={.05f,1.1f,2.6f};
+      const std::string stem="gore-"+std::to_string(kind)+"-";int n=0;
+      for(float age:fell)shot(retro::Game::goreInspection(retro::Enemy::Kind(kind),0,age),stem+"0-"+std::to_string(n++));n=0;
+      for(float age:apart)shot(retro::Game::goreInspection(retro::Enemy::Kind(kind),1,age),stem+"1-"+std::to_string(n++));n=0;
+      for(float age:apart)shot(retro::Game::goreInspection(retro::Enemy::Kind(kind),2,age),stem+"2-"+std::to_string(n++));n=0;
+      for(float age:live)shot(retro::Game::goreInspection(retro::Enemy::Kind(kind),4,age),stem+"4-"+std::to_string(n++),true);
+     }else{
+      static constexpr float fade[]={3.f,11.6f,12.5f,13.4f,14.3f,14.9f},chips[]={.08f,.3f,2.f};int n=0;
+      for(float age:fade)shot(retro::Game::goreInspection(retro::Enemy::Kind::Mutant,0,age),"gore-fade-"+std::to_string(n++));n=0;
+      for(float age:chips)shot(retro::Game::goreInspection(retro::Enemy::Kind::Mutant,3,age),"gore-material-"+std::to_string(n++));
      }return 0;
     }
     if(auto arg=commandArguments().find(L"--creature-inspection=")){

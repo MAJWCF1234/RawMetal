@@ -199,7 +199,7 @@ void Game::updateHazards(float dt){
   if(inside(m_player.pos)&&m_player.z<height&&m_player.z+m_player.hullHeight()>height){damage+=100*dt;loudest=Hazard::Kind::Crusher;}
   for(auto& e:m_enemies)if(e.alive&&inside(e.pos)){
    if(running&&e.z<c.bed+.25f)e.pos.y+=dt*.55f;
-   if(e.bodyTop()>height&&e.bodyBottom()<height){e.hp-=300*dt;e.painFlash=1;if(e.hp<=0){e.alive=false;e.deathTime=0;e.windup=0;e.surfaceMode=0;e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=0;++m_kills;enemySound(e,2);}}
+   if(e.bodyTop()>height&&e.bodyBottom()<height){e.hp-=300*dt;e.painFlash=1;if(e.hp<=0){e.deathSurface=e.surfaceMode;++e.deathSerial;e.deathPush={};e.deathBlast=false;e.alive=false;e.deathTime=0;e.windup=0;e.surfaceMode=0;e.stalkMode=Enemy::StalkMode::Watch;e.stalkTimer=0;++m_kills;enemySound(e,2);}}
   }
   for(int i=int(m_clutter.size())-1;i>=0;--i){auto& item=m_clutter[i];if(item.broken||!inside(item.pos)||i==m_heldClutter)continue;
    if(running&&item.z<c.bed+.3f){item.sleeping=false;item.velocity.y+=dt*2.f;}

@@ -780,6 +780,29 @@ float World::terrainSurfaceAbove(float x,float y,float feet)const{
  if(feet+.03f>=density.airTop())return 128.f;
  return terrainCeiling(feet,128.f,density);
 }
+ImpactMaterial World::impactMaterial(Point3 point,Point3 normal)const{
+ using M=ImpactMaterial;
+ auto finish=[](int surface,M legacy){switch(surface){case SurfaceConcrete:case SurfaceBrick:return M::Concrete;case SurfacePressure:case SurfaceLabPanel:case SurfaceCorrugated:return M::Metal;case SurfaceClinicTile:return M::Tile;case SurfaceRock:case SurfaceStone:return M::Rock;case SurfaceMineTimber:return M::Wood;case SurfaceOfficePlaster:case SurfacePaintedTeal:case SurfacePaintedGreen:case SurfacePaintedMaroon:return M::Plaster;default:return legacy;}};
+ // The smallest built thing the point lies on.
+ const Structure* struck=nullptr;float least=1e30f;const float skin=.035f;
+ for(const auto&s:m_structures){if(point.x<s.x1-skin||point.x>s.x2+skin||point.y<s.y1-skin||point.y>s.y2+skin||point.z<s.bottom-skin||point.z>s.top+skin)continue;float volume=(s.x2-s.x1)*(s.y2-s.y1)*(s.top-s.bottom);if(volume<least){least=volume;struck=&s;}}
+ if(struck)switch(struck->material){
+  case 2:case 7:case 8:case 11:case 12:case 13:case 18:case 19:case 20:case 28:case 29:return M::Metal;
+  case 9:case 17:case 35:return M::Glass;
+  case 10:case 32:return M::Wood;
+  case 25:case 26:case 33:case 34:return M::Rock;
+  case 24:case 27:return M::Tile;
+  case 21:case 22:case 36:case 37:case 38:return M::Plaster;
+  case 23:case 39:return M::Fabric;
+  case 3:return finish(wallSurface(),M::Concrete);
+  default:return M::Concrete;}
+ if(normal.z>.5f){
+  if(outdoors()){const auto o=definition().origin;return groundKind(point.x+o.x,point.y+o.y)==GroundGravel?M::Rock:M::Dirt;}
+  if(metalFloor(int(std::floor(point.x)),int(std::floor(point.y))))return M::Metal;
+  return finish(floorSurface(),M::Concrete);}
+ if(normal.z<-.5f)return finish(ceilingSurface(),M::Concrete);
+ return finish(wallSurface(),M::Concrete);
+}
 float World::floorHeight(float x,float y)const{
  if(outdoors())return hasTerrain()?terrainSurfaceBelow(x,y,float(TerrainMaxZ+1)):(m_layers.empty()?0.f:m_layers.front().elevation);
  for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2){

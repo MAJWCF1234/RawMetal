@@ -120,7 +120,15 @@ struct Enemy {
     // An authored creature that followed the player across a seam keeps the chunk
     // and home it was placed at, so a load matches it there instead of respawning it.
     int originLevel=-1;Vec2 originHome{};
-    static constexpr float CorpseLifetime=2.4f;
+    // Not saved: how it died, for the body it leaves (Carcass), and the shots that struck it
+    // (each ray's origin relative to pos and z), for the wounds drawn on it.
+    struct Wound {Point3 origin{},direction{};};
+    int deathSerial=0,deathSurface=0;Point3 deathPush{},blastOrigin{};bool deathBlast=false;
+    std::array<Wound,6> wounds{};int woundCount=0;
+    void wound(Point3 origin,Point3 direction){wounds[size_t(woundCount++)%wounds.size()]={origin-Point3{pos.x,pos.y,z},direction};}
+    // A body lies where it fell, then thins out to nothing over its last seconds.
+    static constexpr float CorpseLifetime=15.f,CorpseFade=3.5f;
+    float dissolve()const{return alive?0.f:std::clamp((deathTime-(CorpseLifetime-CorpseFade))/CorpseFade,0.f,1.f);}
     bool visible()const{return alive||deathTime<CorpseLifetime;}
     float bodyBottom()const{return z+(kind==Kind::Wasp?.55f:0.f);}
     float bodyTop()const{return z+creatureTraits(kind).top*scale;}
@@ -162,7 +170,16 @@ struct FriendlyActor {
 // current chunk, which way he looks, how far he sees and how wide (cone is the
 // half-angle in radians), and what he makes of the player.
 struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state=GuardState::Patrol;size_t actor=0;};
-struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;};
+// material: an ImpactMaterial, or -1 for marks made before shots knew what they struck. size: a
+// blood mark's half-width (0 for the usual).
+struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;int material=-1;float size=0;};
+// Every shot fired, for the bodies it passes through: a ray in the frame of `level` (the active
+// chunk when it was fired), as far as it flew.
+struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impulse=0;int level=0;};
+// What a hit throws off (GoreFx): blood from flesh (species: a CreatureKind, or -1 for a person),
+// dust and chips from masonry, splinters from wood, clods from earth. Level-local. floor: where
+// what it throws comes to rest; reach: how far along `direction` before a wall stops it.
+struct HitBurst {Point3 point{},direction{};float time=0;int level=0;ImpactMaterial material=ImpactMaterial::Concrete;int species=-1;float power=1;bool kill=false;float floor=0,reach=9;bool stump=false;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
 struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int level=0;PropMaterial material=PropMaterial::Glass;float width=.1f,height=.1f;bool pane=false;Vec2 along{};int index=-1;};
@@ -321,6 +338,8 @@ public:
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
+    const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
+    const std::vector<HitBurst>& hitBursts()const{return m_hitBursts;}
     const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
     bool holdingClutter()const{return m_heldClutter>=0;}
     int vrCarryHand()const{return m_vrCarryHand;}
@@ -846,6 +865,11 @@ public:
     bool musicEnabled()const{return m_musicEnabled;}
     static Game validationScene(Enemy::Kind kind,float deathTime=-1,float windup=0);
     static Game stalkerInspection(int clip,float phase,int view=0,Enemy::Kind kind=Enemy::Kind::Warden);
+    // One creature's death, looked at from in front of it, `age` seconds on. Mode 0: as it fell. 1: shot
+    // through at the moment it died. 2: killed by a blast. 3: no creature, a round into each material
+    // on the floor. 4: alive, then killed by the player's own weapon and the game run on. `empty` is the
+    // same view and clock with nothing in it.
+    static Game goreInspection(Enemy::Kind kind,int mode,float age,bool empty=false);
     static Game creaturePreview(Enemy::Kind kind,int view);
     void posePreviewCreature(int clip,float phase);
     static Game terminalInspection(int level,int terminal=0);
@@ -1195,6 +1219,9 @@ private:
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;
+    std::vector<ShotRay> m_shotRays;std::vector<HitBurst> m_hitBursts;
+    // point and direction level-local to `level`.
+    void hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial material,int species,float power,bool kill);
     std::vector<BarrelExplosion> m_barrelExplosions;
     std::vector<BreakEvent> m_breakEvents;
     std::vector<GlassBreak> m_glassBreaks;
