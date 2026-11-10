@@ -5,6 +5,7 @@
 #include "TerrainSurfaceCache.h"
 #include "../core/Ray.h"
 #include "CampaignMaps.h"
+#include "CampaignExport.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -424,7 +425,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
 World::World(int level,WorldId id):m_worldId(id) {
  if(worldChunkCount(id)<=0)throw std::invalid_argument("Custom worlds require authored map data");
  m_level=std::clamp(level,0,worldChunkCount(m_worldId)-1);
- if(campaign())if(auto map=campaignMap(m_level)){loadAuthoredMap(std::move(map));return;}
+ // A campaign override (campaign-overrides/NN.rmc) stands in for the C++ map.
+ if(campaign())if(auto map=campaignMapResolved(m_level)){loadAuthoredMap(std::move(map));return;}
  buildPopulation();
  if(horrorMode()){
   const char* regionNames[]={
@@ -1583,6 +1585,7 @@ constexpr float LeadStep=1.f/120,LeadGravity=9.81f,LeadDamping=1.8f,LeadBend=.8f
 int leadPointCount(float length){return std::clamp(int(std::lround(length/.08f))+1,10,16);}
 float leadSpan(Point3 a,Point3 b){auto d=b-a;return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);}
 float leadDot(Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
+Point3 ropeAnchor(const Lead& l,const LeadRope& r){return r.anchorOverride?r.liveAnchor:l.anchor;}
 // How far a plug's boot holds the cable off the clip's face before it bends away: about half a
 // segment, at most 5 cm.
 float leadBoot(float segment){return std::min(segment*.45f,.05f);}
@@ -1598,9 +1601,9 @@ Point3 leadBodyExit(const LeadBody& b,Point3 p,float grow){
 // level from there, swivelled toward `toward` (where the cable runs), so the cable leaves the
 // plug in line with its boot. Torn, the plug is still on the cable's end: that point carries its weight.
 struct LeadPins{bool gland=false,seated=false;Point3 glandAt{},plugAt{},up{};};
-LeadPins leadPins(const Lead& l,size_t n,float segment,const Point3* end,const LeadBody* body,Point3 toward){
+LeadPins leadPins(const Lead& l,size_t n,float segment,const Point3* end,const LeadBody* body,Point3 toward,Point3 anchor){
  LeadPins p;if(n<5)return p;
- if(const float g=std::sqrt(leadDot(l.socket,l.socket));g>1e-6f){p.gland=true;p.glandAt=l.anchor+l.socket*(segment/g);}
+ if(const float g=std::sqrt(leadDot(l.socket,l.socket));g>1e-6f){p.gland=true;p.glandAt=anchor+l.socket*(segment/g);}
  if(end&&l.plugged()){const auto&t=l.terminal;Point3 up=body?body->axis[0]*t.x+body->axis[1]*t.y+body->axis[2]*t.z:t;
   if(const float u=std::sqrt(leadDot(up,up));u>1e-6f){up=up*(1/u);auto side=toward-*end;side=side-up*leadDot(side,up);float s=std::sqrt(leadDot(side,side));
    if(s<1e-4f){side=std::fabs(up.z)<.9f?Point3{-up.y,up.x,0}:Point3{1,0,0};side=side-up*leadDot(side,up);s=std::sqrt(leadDot(side,side));}
@@ -1624,11 +1627,11 @@ void clearLeadBody(LeadRope& r,const LeadBody& prop,float radius,float segment,c
 // the pinned ends immovable), its bends to its stiffness and the cable off the clipped prop,
 // then the floor and solids under it.
 void stepLeadRope(const World& w,const Lead& l,LeadRope& r,float h,const Point3* end,const LeadBody* body,float damping){
- const size_t n=r.points.size();const float segment=l.length/float(n-1),keep=std::exp(-damping*h);
- const auto pins=leadPins(l,n,segment,end,body,r.points[n-3]);r.plugUp=pins.up;auto weight=[&](size_t k){return leadWeight(l,pins,k,n,end!=nullptr);};
- auto pin=[&]{r.points[0]=r.previous[0]=l.anchor;if(pins.gland)r.points[1]=r.previous[1]=pins.glandAt;if(pins.seated)r.points[n-2]=r.previous[n-2]=pins.plugAt;};pin();
+ const size_t n=r.points.size();const float segment=l.length/float(n-1),keep=std::exp(-damping*h);const Point3 anchor=ropeAnchor(l,r);
+ const auto pins=leadPins(l,n,segment,end,body,r.points[n-3],anchor);r.plugUp=pins.up;auto weight=[&](size_t k){return leadWeight(l,pins,k,n,end!=nullptr);};
+ auto pin=[&]{r.points[0]=r.previous[0]=anchor;if(pins.gland)r.points[1]=r.previous[1]=pins.glandAt;if(pins.seated)r.points[n-2]=r.previous[n-2]=pins.plugAt;};pin();
  // A clip pulled past the cable's length: the lead runs taut and straight between its boots, off its prop.
- if(end&&leadSpan(l.anchor,*end)>=l.length){const size_t a=pins.gland?1:0,b=pins.seated?n-2:n-1;const Point3 from=r.points[a],to=pins.seated?pins.plugAt:*end;
+ if(end&&leadSpan(anchor,*end)>=l.length){const size_t a=pins.gland?1:0,b=pins.seated?n-2:n-1;const Point3 from=r.points[a],to=pins.seated?pins.plugAt:*end;
   for(size_t k=a;k<=b;++k)r.points[k]=from+(to-from)*(float(k-a)/float(b-a));r.points[n-1]=*end;if(body)clearLeadBody(r,*body,l.radius,segment,pins);r.previous=r.points;return;}
  for(size_t k=1;k<n;++k)if(weight(k)>0){auto v=(r.points[k]-r.previous[k])*keep;r.previous[k]=r.points[k];r.points[k]=r.points[k]+v+Point3{0,0,-LeadGravity*h*h};}
  if(end){r.previous[n-1]=r.points[n-1];r.points[n-1]=*end;}
@@ -1652,10 +1655,10 @@ void stepLeadRope(const World& w,const Lead& l,LeadRope& r,float h,const Point3*
 }
 }
 void World::hangLead(int i,const Point3* end,const LeadBody* body){
- const auto&l=leads().at(size_t(i));auto&r=m_leadRopes.at(size_t(i));const int n=leadPointCount(l.length);const float segment=l.length/float(n-1);
+ const auto&l=leads().at(size_t(i));auto&r=m_leadRopes.at(size_t(i));const int n=leadPointCount(l.length);const float segment=l.length/float(n-1);const Point3 anchor=ropeAnchor(l,r);
  // A socketed lead hangs from the end of its boot, a segment out of the socket.
- const auto pins=leadPins(l,size_t(n),segment,end,body,l.socketed()?l.anchor+l.socket*segment:l.anchor);const int first=pins.gland?1:0;r.plugUp=pins.up;
- r.points.assign(size_t(n),l.anchor);if(pins.gland)r.points[1]=pins.glandAt;const Point3 a=r.points[size_t(first)];
+ const auto pins=leadPins(l,size_t(n),segment,end,body,l.socketed()?anchor+l.socket*segment:anchor,anchor);const int first=pins.gland?1:0;r.plugUp=pins.up;
+ r.points.assign(size_t(n),anchor);if(pins.gland)r.points[1]=pins.glandAt;const Point3 a=r.points[size_t(first)];
  // On a prop the cable leaves its clip straight out of the face (seated on a terminal, up out
  // of its plug) for a segment and hangs from there.
  Point3 b=end?*end:a;float cable=l.length-segment*float(first);

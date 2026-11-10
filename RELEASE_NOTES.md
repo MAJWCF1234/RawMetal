@@ -4,6 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.2.19 - Free hanging physics chains (2026-11-10)
+
+The engine now supports free hanging metal chains as Verlet physics cables, including chains pinned to a living creature.
+
+- New `CHAIN` map records and `kit::chain` / `kit::creatureChain` hang a steel cable with the same rope solver as electrical leads, without plugs or a live circuit.
+- A chain can mount to an authored creature spawn: its anchor follows that enemy's facing frame (right / forward / up from its feet) so hanging links swing with the body.
+- Chains draw as linked pale-steel segments. Existing lead cables are unchanged.
+- Boss chain assets leave their chain bones at rest so the engine owns the hang instead of baked sway.
+
+Verified with the custom physics parser (fixed and creature-hung chains), lead settle, and rebuilds of the game and Campaign Editor engines.
+
+---
+
 ## v1.2.18 - Editor reliability repairs (2026-11-09)
 
 This patch fixes editing, recovery, layer duplication and native cable-copy faults found while exercising the editor.

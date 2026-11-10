@@ -568,6 +568,15 @@ inline void lead(Map& m,Point3 anchor,int prop,Point3 offset,float length,int ma
 // A lead already pulled off what it held: it hangs from `anchor`, any of it that
 // reaches the floor lying off toward `toward`.
 inline void looseLead(Map& m,Point3 anchor,Point3 toward,float length,int material=7,bool live=false,float radius=.007f){Lead l;l.anchor=anchor;l.end=toward;l.loose=true;l.length=length;l.material=material;l.live=live;l.radius=radius;m.leads.push_back(l);}
+// A free hanging physics chain (CHAIN record): Verlet cable with no plugs. World-fixed
+// from `anchor`, or hung from CREATURE spawn `creature` at local `offset` (x right, y
+// forward, z up from its feet). Pale steel by default; thicker than a test lead.
+inline void chain(Map& m,Point3 anchor,float length,float radius=.014f,int material=5){
+ Lead l;l.chain=true;l.loose=true;l.anchor=anchor;l.end={anchor.x,anchor.y+.05f,anchor.z-length};l.length=length;l.radius=radius;l.material=material;m.leads.push_back(l);}
+inline void creatureChain(Map& m,int creature,Point3 offset,float length,float radius=.014f,int material=5){
+ if(creature<0||creature>=int(m.creatureSpawns.size()))throw std::runtime_error("kit::creatureChain: creature out of range");
+ const auto&s=m.creatureSpawns[size_t(creature)];Lead l;l.chain=true;l.loose=true;l.creature=creature;l.offset=offset;l.length=length;l.radius=radius;l.material=material;
+ l.anchor={s.position.x,s.position.y,(s.z==-999?0.f:s.z)+offset.z};l.end={l.anchor.x,l.anchor.y+.05f,l.anchor.z-length};m.leads.push_back(l);}
 // A test lead by name: from socket `socket` ("+" or "-") of the instrument fixture `panel`
 // (an index into m.fixtures: a lab_field_meter test set) to terminal post `terminal` of
 // clutter spawn `prop` (an anl_cell_charged or _spent: "+" or "-"), a plug seated at each end.

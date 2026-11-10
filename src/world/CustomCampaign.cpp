@@ -532,6 +532,18 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(panel!=!socket.empty()||(!terminal.empty()&&v.prop<0))throw std::runtime_error("a LEAD panel needs its socket, and a terminal its prop");
    if(panel||!terminal.empty()){if(panel&&v.loose)v.terminal={0,0,1};seats.push_back({map,map->leads.size(),panel?integer(f,18,"lead panel"):-1,socket,terminal});}
    map->leads.push_back(v);
+  }else if(tag=="CHAIN"){
+   // CHAIN|map|ax|ay|az|length|radius[|creature|ox|oy|oz]: a free hanging physics chain.
+   // Without creature it hangs from ax|ay|az. With a CREATURE spawn index it hangs from that
+   // creature at local offset (x right, y forward, z up from its feet).
+   if(f.size()!=7&&f.size()!=11)throw std::runtime_error("malformed CHAIN record");auto map=mapAt(maps,f);Lead v;
+   v.chain=true;v.loose=true;v.material=5;v.live=false;v.prop=-1;
+   v.anchor={number(f,2,"chain ax"),number(f,3,"chain ay"),number(f,4,"chain az")};
+   v.length=number(f,5,"chain length");v.radius=number(f,6,"chain radius");
+   if(v.length<=0||v.radius<=0)throw std::runtime_error("invalid chain length or radius");
+   if(f.size()==11){v.creature=integer(f,7,"chain creature");v.offset={number(f,8,"chain ox"),number(f,9,"chain oy"),number(f,10,"chain oz")};
+    if(v.creature<0)throw std::runtime_error("chain creature out of range");}
+   v.end={v.anchor.x,v.anchor.y+.05f,v.anchor.z-v.length};map->leads.push_back(v);
   }else if(tag=="WATER"){
    if(f.size()<8)throw std::runtime_error("malformed WATER record");auto map=mapAt(maps,f);map->waterVolumes.push_back({
     number(f,2,"water x1"),number(f,3,"water y1"),number(f,4,"water x2"),number(f,5,"water y2"),number(f,6,"water bed"),number(f,7,"water surface")});
@@ -563,6 +575,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }catch(const std::exception& error){throw std::runtime_error("line "+std::to_string(lineNumber)+" ("+tag+"): "+error.what());}
  }
  for(auto& seat:seats)if(const auto error=seatTestLead(*seat.map,seat.map->leads[seat.lead],seat.panel,seat.socket,seat.terminal);!error.empty())throw std::runtime_error("LEAD record: "+error);
+ for(const auto& map:maps)for(size_t i=0;i<map->leads.size();++i){const auto&l=map->leads[i];if(l.chain&&l.creature>=0&&l.creature>=int(map->creatureSpawns.size()))throw std::runtime_error("CHAIN record "+std::to_string(i)+" creature out of range");}
  for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");
  if(!sawCampaign||campaign->name.empty())throw std::runtime_error("missing CAMPAIGN record");
  if(maps.empty()||maps.size()>WorldChunkCapacity)throw std::runtime_error("custom campaign has no maps or exceeds engine capacity");

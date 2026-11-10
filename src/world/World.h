@@ -131,8 +131,13 @@ struct PipeRun {Vec2 start,end;float z,radius,endZ=-999;int material=0;};
 // top and its boot leaving level, swivelled round the post toward where the cable runs, so it
 // turns with the prop; torn, it stays on the cable's end and swings with its weight. Zero
 // socket or terminal: a bare post or clip, as before.
+// A free physics chain (CHAIN record, kit::chain) is the same Verlet cable with
+// `chain` set: no plugs or circuit. It hangs from `anchor`, or when `creature`
+// is a CREATURE spawn index (>=0) from that creature's live body at `offset` in
+// its facing frame (x right, y forward, z up from its feet) — the same axes the
+// enemy mesh uses. `loose` is always true for a chain.
 struct Lead {Point3 anchor{},end{},offset{};int prop=-1;bool loose=false;float length=1,radius=.006f;int material=7;bool live=false;StateId state=0;
- Point3 socket{},terminal{};int panel=-1,socketPort=-1,terminalPort=-1,lamp=-1;
+ Point3 socket{},terminal{};int panel=-1,socketPort=-1,terminalPort=-1,lamp=-1;int creature=-1;bool chain=false;
  bool socketed()const{return socket.x!=0||socket.y!=0||socket.z!=0;}bool plugged()const{return terminal.x!=0||terminal.y!=0||terminal.z!=0;}
  static constexpr float TearMargin=.3f,PlugHead=.018f;};
 // An empty suit hung by its hood from a hook (absolute), its front toward `facing`. Game
@@ -152,7 +157,9 @@ Point3 propPort(int model,float width,float depth,float height,const LeadPort& p
 // re-hung on load) and whether its clip has torn (saved). tornAt is the game
 // time it tore (its sparks), clutter the prop's last index in its chunk list,
 // plugUp the axis of the post a seated plug stands on (zero off its post).
-struct LeadRope {std::vector<Point3> points,previous;bool torn=false,sleeping=false;float rest=0,tornAt=-1e9f;int clutter=-1;Point3 plugUp{};};
+// `anchorOverride` / `liveAnchor`: a creature-hung chain's moving mount; when set,
+// Verlet pins to `liveAnchor` instead of the authored Lead::anchor.
+struct LeadRope {std::vector<Point3> points,previous;bool torn=false,sleeping=false;float rest=0,tornAt=-1e9f;int clutter=-1;Point3 plugUp{};bool anchorOverride=false;Point3 liveAnchor{};};
 // A test lead's right-angle plug at its cable's far end, as drawn: the tip its pin stands out of,
 // the axis up its body (the pin down it) and the way its boot leaves toward the cable. Seated, on
 // its post; torn, on the cable's end, hanging pin down, and laid on its side as the end comes to

@@ -260,7 +260,10 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   for(const auto& v:m.breakables){Rec r("BREAKABLE");r.i(mi).n(v.x1).n(v.y1).n(v.x2).n(v.y2).n(v.bottom).n(v.top).i(v.material).n(v.health).b(v.holds).sth(v.state).sth(v.trigger);if(v.fixture>=0)r.i(v.fixture).i((long long)v.part);line(r);}
   for(const auto& p:m.pipes)line(Rec("PIPE").i(mi).n(p.start.x).n(p.start.y).n(p.end.x).n(p.end.y).n(p.z).n(p.radius).n(p.endZ).i(p.material));
   {const auto ports=leadPorts();
-   for(size_t li=0;li<m.leads.size();++li){const auto& l=m.leads[li];Rec r("LEAD");
+   for(size_t li=0;li<m.leads.size();++li){const auto& l=m.leads[li];
+    if(l.chain){Rec r("CHAIN");r.i(mi).n(l.anchor.x).n(l.anchor.y).n(l.anchor.z).n(l.length).n(l.radius);
+     if(l.creature>=0)r.i(l.creature).n(l.offset.x).n(l.offset.y).n(l.offset.z);line(r,l.creature>=0?11:7);continue;}
+    Rec r("LEAD");
     r.i(mi).n(l.anchor.x).n(l.anchor.y).n(l.anchor.z).n(l.end.x).n(l.end.y).n(l.end.z).n(l.length).n(l.radius).i(l.material).b(l.live).st(l.state).f(l.prop>=0?std::to_string(l.prop):"").n(l.offset.x).n(l.offset.y).n(l.offset.z).b(l.loose);
     const bool panel=l.panel>=0&&l.socketPort>=0&&l.socketPort<int(ports.size());const bool terminal=l.terminalPort>=0&&l.terminalPort<int(ports.size())&&l.prop>=0;
     r.f(panel?std::to_string(l.panel):"").f(panel?verbatim(ports[size_t(l.socketPort)].name,notes,who+" lead"):"").f(terminal?verbatim(ports[size_t(l.terminalPort)].name,notes,who+" lead"):"");

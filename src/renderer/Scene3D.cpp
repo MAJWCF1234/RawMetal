@@ -1646,7 +1646,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float age=game.elapsed()-rope.tornAt;float sinceBurst=0;const float arc=lead.live&&rope.torn?leadArc(age,&sinceBurst):0.f;
   const auto span=hi-lo;if(!sphereVisible((lo+hi)*.5f,std::sqrt(span.x*span.x+span.y*span.y+span.z*span.z)*.5f+(arc>0?.6f:.05f))||(arc<=0&&hidden(lo-Point3{.05f,.05f,.05f},hi+Point3{.05f,.05f,.05f})))continue;
   static const Texture insulation[2]={Texture{1,1,{0xff202124u}},Texture{1,1,{0xffa1221au}}};
-  const Texture&finish=lead.material>=7?insulation[lead.material-7]:lead.material==6?iron:lead.material==5?m_paleSteel:lead.material==4?m_redSteel:lead.material==3?m_yellowSteel:lead.material==2?m_panelSteel:lead.material==1?m_metal:m_pipeTexture;
+  const Texture&finish=lead.chain?m_paleSteel:lead.material>=7?insulation[lead.material-7]:lead.material==6?iron:lead.material==5?m_paleSteel:lead.material==4?m_redSteel:lead.material==3?m_yellowSteel:lead.material==2?m_panelSteel:lead.material==1?m_metal:m_pipeTexture;
   movingGeometry=true;objectLighting=true;objectLight=1;objectNormalLighting=nullptr;
   // The tube follows the cable's curve through its points (leadCurve), three pieces a segment,
   // so a bend (out of a clip's boot, over a prop's edge, in a sag) is round rather than a
@@ -1657,7 +1657,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   std::array<float,24> pointLit{};std::array<float,24*pieces> lit{};std::array<Point3,24*pieces> curve{},across{},up{};
   for(size_t k=0;k<n;++k)pointLit[k]=illumination(rope.points[k],{0,0,1});
   // A seated plug's cable ends in its head, PlugHead up its post; a torn one's at the cable's end.
-  const bool seated=lead.plugged()&&!rope.torn&&(rope.plugUp.x!=0||rope.plugUp.y!=0||rope.plugUp.z!=0);const Point3 tail=seated?rope.points[n-1]+rope.plugUp*Lead::PlugHead:rope.points[n-1];
+  const bool seated=!lead.chain&&lead.plugged()&&!rope.torn&&(rope.plugUp.x!=0||rope.plugUp.y!=0||rope.plugUp.z!=0);const Point3 tail=seated?rope.points[n-1]+rope.plugUp*Lead::PlugHead:rope.points[n-1];
   for(size_t k=0;k+1<n;++k)for(size_t s=0;s<pieces;++s){const float t=float(s)/float(pieces);curve[k*pieces+s]=k==0&&lead.socketed()?rope.points[0]+(rope.points[1]-rope.points[0])*t:k+2==n&&lead.plugged()?rope.points[k]+(tail-rope.points[k])*t:leadCurve(rope.points,k,t);lit[k*pieces+s]=pointLit[k]+(pointLit[k+1]-pointLit[k])*t;}
   curve[m-1]=tail;lit[m-1]=pointLit[n-1];
   auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
@@ -1667,10 +1667,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const auto t=unit(curve[std::min(k+1,m-1)]-curve[k>0?k-1:0]);auto u=k?across[k-1]-t*(across[k-1].x*t.x+across[k-1].y*t.y+across[k-1].z*t.z):crossed(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
    u=unit(u);if(u.x==0&&u.y==0&&u.z==0)u=unit(crossed(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1}));across[k]=u;up[k]=crossed(t,u);}
   constexpr int sides=6;
-  auto ring=[&](size_t k,int side){const float a=float(side%sides)*kTwoPi/sides;const auto o=across[k]*std::cos(a)+up[k]*std::sin(a);return MeshVertex{curve[k]+o*lead.radius,float(side)/sides*.05f,float(k)*(.06f/float(pieces)),lit[k]*(.68f+.32f*(.5f+.5f*o.z))};};
-  for(size_t k=0;k+1<m;++k)for(int side=0;side<sides;++side){auto a=ring(k,side),b=ring(k,side+1),c=ring(k+1,side+1),d=ring(k+1,side);tri(a,b,c,finish,1.f);tri(a,c,d,finish,1.f);}
+  auto ring=[&](size_t k,int side,float radius){const float a=float(side%sides)*kTwoPi/sides;const auto o=across[k]*std::cos(a)+up[k]*std::sin(a);return MeshVertex{curve[k]+o*radius,float(side)/sides*.05f,float(k)*(.06f/float(pieces)),lit[k]*(.68f+.32f*(.5f+.5f*o.z))};};
+  for(size_t k=0;k+1<m;++k){const float radius=lead.chain&&(k%pieces==0)?lead.radius*1.55f:lead.radius;for(int side=0;side<sides;++side){auto a=ring(k,side,radius),b=ring(k,side+1,radius),c=ring(k+1,side+1,radius),d=ring(k+1,side,radius);tri(a,b,c,finish,1.f);tri(a,c,d,finish,1.f);}}
   objectLighting=false;
   auto cube=[&](Point3 c,float half,const Texture&t,float light){box(c-Point3{half,half,half},c+Point3{half,half,half},t,light);};
+  if(lead.chain){cube(rope.points[0],lead.radius*1.8f,m_paleSteel,1.05f);cube(rope.points[n-1],lead.radius*1.35f,m_paleSteel,1.05f);movingGeometry=false;objectNormalLighting=nullptr;continue;}
   // A test lead's plugs, in the tube's own lighting: from its tip a pin (hidden in the socket or
   // the post it is seated in, bare once torn), a steel ferrule, the moulded body in the lead's
   // colour and a tapering boot the cable leaves in line with (the rope holds the point beyond
