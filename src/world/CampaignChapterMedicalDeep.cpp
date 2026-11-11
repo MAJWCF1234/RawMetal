@@ -22,21 +22,32 @@ void ddModel(Map& m,int model,float x,float y,float z,float yaw,bool solid,float
 }
 // A body from the pack, on his back: model +z is the feet, so at yaw 0 they point +y. The air
 // hose loops under the back, so on a flat surface the base sits a little into it.
-// His boots stand up 0.4 m at the foot end, so every one gets the end of a sheet pulled over
-// shins and feet: low over the shins, tented on the toes, falling off at the sides and the end.
-void ddCorpse(Map& m,float x,float y,float z,float yaw,float s=1){
- ddModel(m,model::med_corpse_supine,x,y,z,yaw,false,s);
- const float dx=std::sin(yaw),dy=std::cos(yaw),L=.875f*s+.05f;   // the soles stand a little proud
- const bool alongX=std::fabs(dx)>std::fabs(dy);const float dir=(alongX?dx:dy)>0?1.f:-1.f;
- const float e=(alongX?x:y)+dir*L,lat=alongX?y+dy*L:x+dx*L;   // the feet end, and where they sit across
- auto box=[&](float u1,float u2,float hw,float lo,float hi){
-  const float a=std::min(e+dir*u1,e+dir*u2),b=std::max(e+dir*u1,e+dir*u2);
-  if(alongX)wall(m,a,lat-hw,b,lat+hw,lo,hi,39);else wall(m,lat-hw,a,lat+hw,b,lo,hi,39);};
- box(-.74f,-.3f,.2f*s,z+.12f*s,z+.21f*s);box(-.74f,-.3f,.31f*s,z+.03f,z+.12f*s);   // over the shins,
- box(-.3f,-.02f,.18f*s,z+.41f*s,z+.47f*s);                                        // tented on the toes
- box(-.3f,0.f,.3f*s,z+.21f*s,z+.41f*s);
- box(-.3f,.03f,.34f*s,z+.03f,z+.21f*s);
- box(.03f,.05f,.33f*s,z+.03f,z+.18f*s);                                           // and hanging off the end
+// He lies as the pack made him, boots and all: no sheet is built over him (boxes read as
+// bricks, rounded shapes as helmets; the body reads best bare).
+void ddCorpse(Map& m,float x,float y,float z,float yaw,float s=1){ddModel(m,model::med_corpse_supine,x,y,z,yaw,false,s);}
+// A collision-only cap that casts no shadow: the renderer never draws material 30, the light
+// pass takes only box shapes, and movement and the audit go by a structure's bounds.
+void ddCap(Map& m,float x1,float y1,float x2,float y2,float lo,float hi){wall(m,x1,y1,x2,y2,lo,hi,30);m.structures.back().shape=ShapeColumn;}
+// A tied-off sack slumped on the floor: half an ellipsoid with its knotted neck. A rounded
+// shape collides by its bounds and casts no shadow.
+void ddSack(Map& m,float x,float y,float f,float r,float h,int mat){
+ wall(m,x-r,y-r*.92f,x+r,y+r*.92f,f,f+h,mat);m.structures.back().shape=ShapeDome;
+ wall(m,x-.035f,y-.03f,x+.035f,y+.03f,f+h-.02f,f+h+.07f,mat);m.structures.back().solid=false;
+ wall(m,x+.03f,y-.02f,x+.13f,y+.02f,f+h-.03f,f+h+.01f,mat);m.structures.back().solid=false;
+}
+// The shut door of a pack washroom stall, picked out on its flat front (the face at px,py,
+// looking along x when faceX, toward dir): head rail, door edges, hinges, the gap under the
+// leaf, pull and bolt plate with its indicator. Trim only, nothing collides.
+void ddStallFront(Map& m,float px,float py,bool faceX,float dir,float f,bool engaged){
+ auto box=[&](float a1,float a2,float depth,float lo,float hi,int mat){
+  if(faceX)wall(m,px,py+a1,px+dir*depth,py+a2,f+lo,f+hi,mat);else wall(m,px+a1,py,px+a2,py+dir*depth,f+lo,f+hi,mat);
+  m.structures.back().solid=false;};
+ box(-1.05f,1.05f,.03f,2.f,2.07f,20);
+ for(float a:{-.4f,.375f})box(a,a+.025f,.015f,.14f,2.f,20);
+ box(-.375f,.375f,.012f,0.f,.14f,8);
+ for(float z:{.4f,1.1f,1.7f})box(-.375f,-.335f,.025f,z,z+.09f,20);
+ box(.25f,.34f,.02f,1.f,1.11f,20);box(.28f,.31f,.026f,1.04f,1.07f,engaged?19:21);
+ box(.19f,.215f,.04f,.93f,1.13f,20);
 }
 // Swinging doors and open doorways: kit::wallDoor and kit::doorwayY.
 // Clinic glazing in a straight wall: painted dado, steel sill and mullions, wired glass to
@@ -285,7 +296,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  for(float y:{15.6f,18.4f,21.4f}){
   wall(m,1.f,y-.25f,1.25f,y+.25f,f+1.38f,f+1.42f,20);wall(m,1.f,y-.02f,1.1f,y+.02f,f+1.28f,f+1.38f,20);
   kit::prop(m,model::med_vitals_monitor_dead,1.12f,y,f+1.42f,ddE);}   // every recovery monitor is dark, 31's included
- ddFix(m,model::med_ward_bed,2.04f,15.6f,f,1.984f,.944f,.842f,0,true);ddCorpse(m,2.f,15.6f,f+.57f,ddE,.95f);   // subject 31, his sheet clear of the foot rail
+ ddFix(m,model::med_ward_bed,2.04f,15.6f,f,1.984f,.944f,.842f,0,true);ddCorpse(m,2.f,15.6f,f+.57f,ddE,.95f);   // subject 31
  ddFix(m,model::med_ward_bed_tossed,2.1f,18.4f,f,2.097f,1.525f,.842f,0,true);
  ddFix(m,model::med_ward_bed,2.04f,21.4f,f,1.984f,.944f,.842f,0,true);
  for(float x:{1.6f,2.5f})wall(m,x,20.93f,x+.06f,21.87f,f+.6f,f+.608f,8);
@@ -468,8 +479,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  m.pipes.push_back({{9.9f,22.8f},{9.9f,22.8f},f+1.15f,.05f,roof,0});
  wall(m,6.f,19.f,6.32f,21.4f,f+1.3f,f+1.33f,20);wall(m,6.f,19.f,6.32f,21.4f,f+1.7f,f+1.73f,20);
  for(float y:{19.25f,19.75f,20.25f,20.75f,21.15f})wall(m,6.05f,y,6.28f,y+.2f,f+1.33f,f+1.5f,20);   // bowls drying
- for(auto [x,y,s]:{std::tuple{10.9f,18.7f,.5f},{11.4f,18.9f,.45f},{11.1f,19.4f,.55f},{11.5f,19.6f,.4f}})
-  wall(m,x-s*.5f,y-s*.4f,x+s*.5f,y+s*.4f,f,f+s*.9f,8);                                     // the bags
+ for(auto [x,y,r,h]:{std::tuple{11.35f,18.7f,.33f,.46f},{10.85f,18.85f,.3f,.4f},{11.3f,19.4f,.34f,.44f},{10.8f,19.5f,.26f,.32f}})ddSack(m,x,y,f,r,h,18);   // the night's clinical waste, yellow-bagged and tied, waiting on the porters
  ddFix(m,model::med_floor_drain,8.3f,21.f,f,.5f,.5f,.01f,0,false);
  kit::prop(m,model::trash_can,7.7f,20.3f,f,.6f);
  wall(m,7.55f,20.15f,7.85f,20.45f,f+.6f,f+.61f,16);
@@ -529,7 +539,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  m.lights.push_back(ddSw(ddTube(3.4f,6.6f,roof,.45f,5.f,3400,0),"med_blackout",true));                  // staff room
  m.lights.push_back(ddSw(ddTube(3.4f,16.8f,roof,.4f,5.5f,5400,.06f),"med_blackout",true));              // recovery
  m.lights.push_back(ddSw(ddTube(3.4f,21.f,roof,.35f,5.f,5400,.06f,.25f),"med_blackout",true));
- m.lights.push_back(ddSw(ddTube(8.9f,20.6f,roof,.4f,5.f,5000,.25f),"med_blackout",true));               // sluice
+ m.lights.push_back(ddSw(ddTube(8.9f,20.6f,roof,.55f,5.5f,5000,.25f),"med_blackout",true));             // sluice
  m.lights.push_back(ddSw(ddTube(14.7f,20.4f,roof,.4f,5.f,5200,.05f),"med_blackout",true));              // specimens
  m.lights.push_back(ddSw(ddTube(20.3f,20.6f,roof,.35f,5.f,4800,.06f),"med_blackout",true));             // porters
  // --- Rewards and names -----------------------------------------------------------------------------
@@ -683,10 +693,11 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  for(float y:{16.9f,19.3f,21.7f}){ddModel(m,model::med_autopsy_table,5.f,y,f,0,false);wall(m,3.95f,y-.42f,6.05f,y+.42f,f,f+.9f,30);ddFix(m,model::med_floor_drain,6.55f,y,f,.5f,.5f,.01f,0,false);}
  for(auto [y,dy,s]:{std::tuple{16.9f,.06f,.93f},{19.3f,-.05f,.9f},{21.7f,.03f,.95f}})ddCorpse(m,5.05f,y,f+.88f,ddW+dy,s);   // heads to the door
  ddBlood(m,6.1f,18.9f,6.9f,19.6f,f);
- for(float y:{18.1f,20.5f})ddFix(m,model::med_scrub_sink,1.268f,y,f,.488f,.536f,1.127f,ddE,true);
+ for(float y:{18.1f,20.5f}){ddFix(m,model::med_scrub_sink,1.268f,y,f,.488f,.536f,1.127f,ddE,true);ddCap(m,1.f,y-.26f,1.55f,y+.26f,f+1.2f,ceil);}   // nobody stands in a sink
  ddFix(m,model::med_supply_cabinet,1.222f,22.3f,f,1.1f,.444f,1.7f,ddE,true);
  for(float x:{6.6f,7.1f})ddFix(m,x>7.f?model::med_xray_viewer_chest:model::med_xray_viewer_skull,x,15.05f,f+1.3f,.408f,.1f,.5f,ddS,false);
  wall(m,8.9f,15.6f,9.6f,18.8f,f,f+.08f,8);wall(m,8.92f,15.6f,9.6f,18.8f,f+.08f,f+.86f,28);wall(m,8.86f,15.58f,9.6f,18.82f,f+.86f,f+.9f,20);
+ ddCap(m,8.86f,15.58f,9.6f,18.82f,f+1.46f,ceil);   // head-high over the counter and its scale: nobody climbs up beside the specimens
  for(float y:{16.f,16.25f,17.6f})kit::prop(m,model::med_specimen_jar,9.3f,y,f+.9f,y);
  wall(m,9.f,16.7f,9.45f,17.25f,f+.9f,f+.92f,20);for(float y=16.78f;y<17.2f;y+=.1f)wall(m,9.08f,y,9.38f,y+.02f,f+.92f,f+.935f,8);   // the tray, laid out
  wall(m,9.5f,18.f,9.6f,18.1f,f+1.5f,f+1.9f,20);wall(m,9.38f,18.02f,9.6f,18.08f,f+1.5f,f+1.53f,20);   // the hanging scale: bracket, arm,
@@ -755,7 +766,7 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.78f;m.terminals.back().yaw=ddN;
  for(float y:{14.f,14.86f})ddFix(m,model::psx_locker,16.32f,y,f,.64f,.85f,2.42f,0,true);
  // --- Suit-up room -------------------------------------------------------------------------------------
- for(float x:{18.4f,20.6f})ddFix(m,model::med_washroom_stall,x,22.229f,f,2.13f,1.542f,2.4f,ddN,true);
+ for(float x:{18.4f,20.6f}){ddFix(m,model::med_washroom_stall,x,22.229f,f,2.13f,1.542f,2.4f,ddN,true);ddStallFront(m,x,21.456f,false,-1,f,false);}
  ddFix(m,model::med_scrub_sink,22.732f,19.2f,f,.488f,.536f,1.127f,ddW,true);
  ddFix(m,model::med_first_aid_box,22.94f,20.2f,f+1.3f,.367f,.12f,.349f,ddW,false);
  bench(m,19.4f,19.f,f);

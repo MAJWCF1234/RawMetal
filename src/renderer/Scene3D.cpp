@@ -1477,10 +1477,19 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // a 20 cm wall's face), a column every 30 cm, and blended across the face. The leaf
    // is opaque, so only the face on the eye's side is lit and drawn.
    const Point3 lo{std::min(hinge.x,edge.x)-.05f,std::min(hinge.y,edge.y)-.05f,base},hi{std::max(hinge.x,edge.x)+.05f,std::max(hinge.y,edge.y)+.05f,base+2.35f};
-   static const bool jambLegacy=std::getenv("RM_DOOR_JAMB")!=nullptr;// TEMPORARY A/B switch, removed before the final build
-   if(jambLegacy){quad(point(hinge,-.045f,0),point(edge,-.045f,0),point(edge,-.045f,2.35f),point(hinge,-.045f,2.35f),doorLeaf,1.f,{width*.5f,1.175f});
-    quad(point(edge,.045f,0),point(hinge,.045f,0),point(hinge,.045f,2.35f),point(edge,.045f,2.35f),doorLeaf,1.f,{width*.5f,1.175f});
-    quad(point(edge,-.045f,0),point(edge,.045f,0),point(edge,.045f,2.35f),point(edge,-.045f,2.35f),doorLeaf,.9f,{.045f,1.175f});}
+   if(door.leaf==1){
+    // A grille gate (Door::seeThrough): a flat-bar frame, rails at the foot, the
+    // lock and the head, and round bars every 12 cm, each strip faced on both sides.
+    auto strip=[&](float a0,float a1,float z0,float z1,float t){
+     quad(point(hinge+axis*a0,-t,z0),point(hinge+axis*a1,-t,z0),point(hinge+axis*a1,-t,z1),point(hinge+axis*a0,-t,z1),iron,1.f);
+     quad(point(hinge+axis*a1,t,z0),point(hinge+axis*a0,t,z0),point(hinge+axis*a0,t,z1),point(hinge+axis*a1,t,z1),iron,1.f);
+     quad(point(hinge+axis*a1,-t,z0),point(hinge+axis*a1,t,z0),point(hinge+axis*a1,t,z1),point(hinge+axis*a1,-t,z1),iron,.9f);
+     quad(point(hinge+axis*a0,t,z0),point(hinge+axis*a0,-t,z0),point(hinge+axis*a0,-t,z1),point(hinge+axis*a0,t,z1),iron,.9f);};
+    for(float rail:{0.f,1.02f,2.28f})strip(0,width,rail,rail+.07f,.03f);
+    strip(0,.06f,0,2.35f,.035f);strip(width-.06f,width,0,2.35f,.035f);
+    const int bars=std::max(2,int((width-.12f)/.12f));
+    for(int b=1;b<bars;++b){const float a=.06f+(width-.12f)*float(b)/bars;strip(a-.012f,a+.012f,.07f,2.28f,.012f);}
+   }
    else if(sphereVisible((lo+hi)*.5f,width*.5f+1.2f)&&!hidden(lo,hi)){
     const float eyeSide=(eye.x-hinge.x)*normal.x+(eye.y-hinge.y)*normal.y;const int columns=std::clamp(int(std::ceil(width/.3f)),3,6);constexpr int rows=2;
     objectLighting=true;objectLight=1;
@@ -1519,10 +1528,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({x-half,y,headerTop},{x+half,y+1.f,headerTop+.02f},m_metal,.8f);
   }
   float bottom=base+door.open*2.65f;
-  box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},m_bulkhead,1.f);
-  float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
-  quad({door.right,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f+stripeHeight},{door.right,door.y-.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
-  quad({door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
+  if(door.leaf==1){
+   // A steel grille gate: a flat-bar frame with rails at the foot, the lock and
+   // the head, and round bars every 12 cm. It rises like a bulkhead; sight and
+   // sound pass between the bars (World::doorBlocks with sight).
+   const float l=door.left,r=door.right,top=bottom+2.48f;
+   for(float rail:{bottom,bottom+1.02f,top-.07f})box({l,door.y-.035f,rail},{r,door.y+.035f,rail+.07f},iron,1.f);
+   for(float post:{l,r-.06f})box({post,door.y-.04f,bottom},{post+.06f,door.y+.04f,top},iron,1.f);
+   const int bars=std::max(2,int((r-l-.12f)/.12f));
+   for(int b=1;b<bars;++b){const float bx=l+.06f+(r-l-.12f)*float(b)/bars;box({bx-.012f,door.y-.012f,bottom+.07f},{bx+.012f,door.y+.012f,top-.07f},iron,.95f);}
+  }else{
+   box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},door.leaf==2?doorLeaf:m_bulkhead,1.f);
+   // A painted panel is a clinic or office door: no hazard band across it.
+   if(door.leaf!=2){float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
+    quad({door.right,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f+stripeHeight},{door.right,door.y-.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
+    quad({door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);}
+  }
   for(float jamb:{door.left,door.right})box({jamb-.055f,y-.08f,base},{jamb+.055f,y+1.08f,base+2.75f},m_panelMetal,.85f);
   // Switch housings attach to the fixed wall on both sides, never to the moving leaf.
   for(float side:{-1.f,1.f}){const float switchX=door.left-.25f;
@@ -3136,7 +3157,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float inset=w.coast()?0.f:.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
    float left=basin.x1+inset,right=basin.x2-inset,near=basin.y1+inset,far=basin.y2-inset;
    float z=basin.surface+.004f;
-   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},water,1.05f,
+   // Standing water darkens and greys with its murk; the ripples still move on it.
+   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},basin.murk>0?m_murkWater:water,1.05f*(1-.55f*basin.murk),
         {(right-left)*.45f,(far-near)*.45f},{left+game.elapsed()*.014f,near-game.elapsed()*.008f});
   }
  }

@@ -9,6 +9,8 @@
 // See docs/Design/descent-campaign-20261025.md (Deep Research, The Investigator).
 #include "CampaignChapters.h"
 #include "CampaignKit.h"
+#include "CampaignExport.h"
+#include "Primitives.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -126,6 +128,28 @@ void drPendant(Map& m,Vec2 p,float roof,float z,float intensity,float range,floa
  m.pipes.push_back({p,p,z+.32f,.016f,roof,6});drFix(m,model::pendant_lamp,p.x,p.y,z,.5f,.5f,.34f,0,false);
  if(intensity>0){auto l=lamp(p,z-.05f,intensity,range,kelvin,0,WorldLightMount::Bare);l.flicker=flicker;m.lights.push_back(l);}}
 
+// A pack rock at s times its own size, and a core to walk into.
+void drRock(Map& m,int model,float x,float y,float z,float s,float yaw){
+ const auto& v=model::size[model];drFix(m,model,x,y,z,v[0]*s,v[1]*s,v[2]*s,yaw,false);
+ const float r=std::min(v[0],v[1])*s*.3f;wall(m,x-r,y-r,x+r,y+r,z,z+v[2]*s*.7f,30);
+}
+// A pack rock as a mass (a buttress to the roof, a course along a face) at s times its size, up to a
+// fifth taller or flatter: seen, never walked into, so it stands in front of a core built by the caller.
+void drRockFit(Map& m,int model,float x,float y,float z,float s,float tall,float yaw){
+ const auto& v=model::size[model];drFix(m,model,x,y,z,v[0]*s,v[1]*s,v[2]*s*tall,yaw,false);}
+void drPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=false){expandPrimitive({kind,x,y,z,w,d,h,facing,mat,solid},m.structures);}
+// A crystal shard from its foot at (x,y,z): a shaft w across and h high under a chisel tip, or
+// (lean 0 +y, 1 +x, 2 -y, 3 -x) a prism leaning out `reach` metres that way as it rises h.
+void drShard(Map& m,float x,float y,float z,float w,float h,int lean=-1,float reach=0){
+ if(lean<0){const float tip=std::min(h*.3f,w*1.5f);drPrim(m,"box",x,y,z,w,w*.85f,h-tip,0,35);drPrim(m,"ramp",x,y,z+h-tip,w,w*.85f,tip,int(x*7+y*3)&3,35);return;}
+ constexpr Vec2 fwd[4]={{0,1},{1,0},{0,-1},{-1,0}};drPrim(m,"strut",x+fwd[lean].x*reach*.5f,y+fwd[lean].y*reach*.5f,z,w,reach,h,lean,35);
+}
+// A knot of crystal h high: the shaft, three shards leaning out of its foot, the pack's bed of spikes round it.
+void drKnot(Map& m,float x,float y,float z,float h,int seed){
+ const float w=std::clamp(h*.15f,.1f,.55f);
+ drShard(m,x,y,z,w,h);drShard(m,x,y,z,w*.8f,h*.7f,seed&3,h*.45f);drShard(m,x,y,z,w*.7f,h*.55f,(seed+1)&3,h*.4f);drShard(m,x,y,z,w*.6f,h*.4f,(seed+2)&3,h*.38f);
+ drModel(m,model::cave_crystal_bed_blue,x,y,z,seed*.7f,false,std::clamp(h*.7f,.8f,2.6f));
+}
 // DEEP MATERIALS LAB (manifest 71). Through Emergency Containment's welded door the corridors turn
 // clean again: lab panel, cold tubes, the hum of a lab still running. The Force's last post on this
 // side is a barrier and a dead man in the vestibule. In the middle of the lab, behind glass that
@@ -153,7 +177,16 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  crewBarrier(m,8.4f,4.f,f);
  drBody(m,clock,ActorVisual::Cleanup,{15.f,3.4f},f,1.9f);
  kit::prop(m,model::item_walkie,14.2f,2.6f,f,.114f,.376f,.046f,2.1f);
- kit::prop(m,model::prop_cardboard_box_open,16.8f,1.6f,f,.5f,.5f,.5f,.3f);
+ kit::prop(m,model::prop_cardboard_box_open,17.2f,4.3f,f,.3f);
+ // their post: two road barriers turned to the welded door, what they carried in stacked behind
+ // them, bollards at the lab door, the notices nobody took down
+ drModel(m,model::urb_jersey_barrier,8.6f,1.95f,f,.15f,true);drModel(m,model::urb_jersey_barrier,15.3f,1.95f,f,-.15f,true);
+ for(auto [x,y,z,yaw]:{std::tuple{7.3f,3.5f,0.f,0.f},{8.2f,3.6f,0.f,.1f},{7.3f,3.5f,.367f,0.f}})kit::prop(m,model::prop_cardboard_box,x,y,f+z,yaw);
+ kit::prop(m,model::urb_cone,9.6f,3.3f,f,.4f);kit::prop(m,model::mine_hard_hat,14.6f,4.2f,f,.279f,.351f,.153f,1.1f);
+ for(float x:{10.8f,13.2f})drModel(m,model::pwr_safety_bollard,x,4.55f,f,0,true);
+ drFix(m,model::lab_notice_board,7.7f,1.035f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::lab_notice_board,16.2f,1.035f,f+1.3f,1.2f,.07f,.9f,drS,false);
+ drFix(m,model::lab_wall_clock,9.4f,1.02f,f+2.2f,.402f,.032f,.4f,drS,false);
+ extinguisher(m,6.2f,1.6f,f+.6f,drE);
  m.lights.push_back(drTube(12.f,3.f,R,.45f,5.f,4000,0,.4f));
  m.lights.push_back(drBeacon({10.4f,4.99f},f+2.5f,lN,0));
  // the suit room (west): lockers, three suits back on the rail
@@ -236,7 +269,7 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
   m.lights.push_back(lamp({s.x,s.y},beam-.7f,1.1f,7.f,5600,0,WorldLightMount::Bare,0,false));   // the key light, straight down on it
   m.lights.push_back(drGlow({s.x,s.y-.75f},cradle+.4f,.7f,2.2f));
   m.lights.push_back(drGlow({s.x,s.y},f+.3f,.3f,2.f));
-  for(auto [x,y]:{std::pair{12.f,9.2f},{12.f,12.8f},{9.7f,11.f},{14.3f,11.f}})m.lights.push_back(lamp({x,y},cradle+.5f,.7f,3.2f,5200,0,WorldLightMount::Bare,0,false));
+  for(float y:{9.2f,12.8f})m.lights.push_back(lamp({12.f,y},cradle+.5f,.85f,3.6f,5200,0,WorldLightMount::Bare,0,false));
   hazard(m,Hazard::Kind::Anomaly,s.x-1.5f,s.y-1.4f,s.x+1.5f,s.y+1.4f,f,f+3.f,4.f);}
  // the observation lines: a desk along the west glass and one along the east, screens on both and
  // every chair turned to D-7
@@ -257,12 +290,33 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  m.lights.push_back(drTube(5.f,20.f,R,.45f,5.f,5600,.04f,.6f));drDeadTube(m,3.f,18.4f,R);
  m.lights.push_back(drGlow({4.6f,22.65f},f+1.3f,.2f,2.4f));
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.5f,19.6f},-999,1,0});           // the prep tech, at the slices
+ // where D-7's slices were washed, mounted and logged: sinks, the mounting bench under its lamp, the
+ // cold box, the drain the saw water ran to
+ for(float y:{18.5f,19.45f})drModel(m,model::med_scrub_sink,8.5f,y,f,drW,true);
+ drModel(m,model::lab_clean_bench,2.6f,17.5f,f,drS,true);
+ kit::prop(m,model::lab_microscope,2.3f,17.5f,f+.81f,.3f);for(float x:{2.75f,2.95f})kit::prop(m,model::med_specimen_jar,x,17.45f,f+.81f,x);
+ kit::prop(m,model::lab_desk_lamp,3.05f,17.62f,f+.81f,2.2f,.6f);
+ m.lights.push_back(lamp({2.8f,17.65f},f+1.2f,.5f,3.2f,3000,0,WorldLightMount::Bare,0,false));
+ drModel(m,model::lab_sample_fridge,1.45f,20.5f,f,drE,true);
+ drFix(m,model::med_floor_drain,5.f,21.2f,f,.5f,.5f,.01f,0,false);
+ drFix(m,model::lab_notice_board,6.9f,17.035f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::lab_wall_clock,1.02f,21.6f,f+2.f,.402f,.032f,.4f,drE,false);
+ drFix(m,model::pallet,7.5f,21.3f,f,1.2f,1.15f,.16f,.2f,true);drModel(m,model::lab_specimen_crate,7.5f,21.3f,f+.16f,.2f,true,.7f);
+ paperDrift(m,2.f,18.4f,8.f,21.8f,f,5,1041);
  workstation(m,19.f,21.4f,f,-1,1,false);
  drModel(m,model::med_records_cabinet,22.5f,19.f,f,drW,true);
  terminal(m,{21.4f,18.2f},"MATERIALS / NIGHT LOG","02:40 THE DETAIL WELDED THE CONTAINMENT DOOR BEHIND US. WE ARE ON THE WRONG SIDE OF IT.",
   "03:15 THE INVESTIGATOR WANTS THE D-SERIES BOXED FOR THE LIFT. HE DID NOT SAY WHERE THE LIFT GOES.");
  m.lights.push_back(lamp({18.6f,21.2f},f+1.2f,.3f,3.f,3000,0,WorldLightMount::Bare,0,false));
- m.pickupSpawns.push_back({{16.4f,22.f},PickupKind::Health,f});
+ m.pickupSpawns.push_back({{17.4f,21.2f},PickupKind::Health,f});
+ // somebody has been sleeping here since the door was welded: a ward bed dragged in, the shelf of
+ // binders, a coffee machine on the records cabinet, the lamp left on
+ drFix(m,model::med_ward_bed,15.95f,19.7f,f,1.984f,.944f,.842f,kPi*.5f,true);
+ drModel(m,model::office_bookcase,17.05f,22.72f,f,kPi,true);
+ drFix(m,model::coffee_machine,22.5f,19.f,f+1.f,.3f,.35f,.42f,drW,false);
+ kit::prop(m,model::lab_desk_lamp,18.45f,21.3f,f+.75f,-.8f,.6f);kit::prop(m,model::item_walkie,19.5f,21.25f,f+.75f,.114f,.376f,.046f,.6f);
+ kit::prop(m,model::prop_cardboard_box,16.f,21.6f,f,.4f);kit::prop(m,model::lab_potted_plant,22.5f,22.4f,f,.3f);
+ drFix(m,model::lab_wall_clock,22.98f,20.6f,f+2.f,.402f,.032f,.4f,drW,false);drFix(m,model::art_painting_5,20.9f,22.95f,f+1.4f,1.156f,.08f,.983f,drN,false);
+ paperDrift(m,17.f,18.5f,20.4f,20.5f,f,4,1042);
  handCart(m,10.3f,19.4f,f);
  for(auto [x,y]:{std::pair{10.15f,19.2f},{10.45f,19.6f}})kit::prop(m,model::anl_cell_charged,x,y,f+.29f,x+y);
  m.lights.push_back(drGlow({10.3f,19.4f},f+.9f,.12f,1.8f));
@@ -277,6 +331,11 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  for(auto [x,y,fl]:{std::tuple{3.5f,7.6f,0.f},{3.5f,12.2f,.25f},{6.5f,15.2f,0.f},{17.5f,7.f,0.f},{19.5f,11.5f,0.f},{17.5f,15.2f,.35f},{12.f,6.8f,0.f},{12.f,15.2f,0.f}})
   m.lights.push_back(drTube(x,y,R,.62f,6.5f,6200,.04f,fl));
  drDeadTube(m,6.6f,9.6f,R);
+ // bench strips low on the long walls: light from the side, so the gantry's columns, the cell's posts,
+ // the instrument stands and the two men are modelled and not cut out
+ for(auto [x,y,face]:{std::tuple{1.06f,12.6f,drE},{1.06f,15.4f,drE},{22.94f,9.6f,drW},{22.94f,14.8f,drW}}){
+  drFix(m,model::med_fluoro_light,x,y,f+1.55f,.11f,1.2f,.127f,0,false);
+  m.lights.push_back(lamp({x+(x<12?.3f:-.3f),y},f+1.5f,.55f,8.f,5600,.03f,WorldLightMount::Bare,0,false));}
  recessedFittings(m);
  m.pickupSpawns.push_back({{22.f,13.6f},PickupKind::HandgunAmmo,f});
  zone(m,"DEEP MATERIALS LAB / HOT CELL",8.5f,8.6f,15.5f,13.4f,-1000,1000,CellAir);
@@ -483,11 +542,34 @@ std::shared_ptr<const Map> makeGeophysics(){
  // --- South: the squad's room, the plotter room, the corridor they hold ----------------------------
  bench(m,4.5f,21.8f,f);drFix(m,model::pallet,2.2f,19.f,f,1.2f,1.15f,.16f,0,true);drModel(m,model::lab_specimen_crate,2.2f,19.f,f+.16f,0,true,.7f);
  kit::prop(m,model::mine_hard_hat,6.6f,21.f,f,.279f,.351f,.153f,.5f);
- m.lights.push_back(lamp({6.6f,19.f},f+.6f,.3f,3.5f,3200,0,WorldLightMount::Bare,0,false));
+ // four days of two men living in one room: bedrolls against the walls, the table they eat and
+ // clean rifles at, ration boxes, the water, their rota on the board, one lantern
+ drFix(m,model::wooden_table,6.2f,18.5f,f,1.367f,.724f,.78f,0,true);
+ for(auto [x,y,yaw]:{std::tuple{6.f,17.75f,0.f},{6.5f,19.3f,kPi+.3f}})drFix(m,model::wooden_chair,x,y,f,.417f,.525f,.95f,yaw,true);
+ {const int lantern=int(m.clutterSpawns.size());kit::prop(m,model::scrap_lantern,6.6f,18.5f,f+.78f,.5f,.6f);
+  m.lights.push_back(lamp({6.6f,18.5f},f+1.25f,.55f,4.5f,2600,0,WorldLightMount::Bare,0,false));m.lights.back().prop=lantern;}
+ kit::prop(m,model::mug,5.9f,18.4f,f+.78f,.09f,.09f,.1f,0);kit::prop(m,model::mug,6.2f,18.7f,f+.78f,.09f,.09f,.1f,0);kit::prop(m,model::item_walkie,5.8f,18.65f,f+.78f,.114f,.376f,.046f,.9f);
+ kit::prop(m,model::scrap_bedroll,1.7f,21.2f,f,0);kit::prop(m,model::scrap_bedroll,7.95f,20.5f,f,.04f);
+ for(auto [x,y,z,yaw]:{std::tuple{3.5f,18.3f,0.f,0.f},{3.6f,19.5f,0.f,.1f},{3.5f,18.3f,.367f,0.f}})kit::prop(m,model::prop_cardboard_box,x,y,f+z,yaw);
+ kit::prop(m,model::prop_cardboard_box_open,2.6f,20.2f,f,.6f,.6f);
+ drFix(m,model::water_cooler,8.45f,17.5f,f,.35f,.35f,1.1f,drW,true);
+ drModel(m,model::pwr_tool_chest,1.5f,17.5f,f,drS,true,.2f);
+ drFix(m,model::lab_notice_board,2.8f,17.035f,f+1.3f,1.2f,.07f,.9f,drS,false);
  m.pickupSpawns.push_back({{7.6f,22.2f},PickupKind::Ammo,f});
- drModel(m,model::lab_photocopier,21.9f,19.f,f,drW,true);
+ drModel(m,model::lab_photocopier,21.9f,19.f,f,drW,true);drModel(m,model::lab_photocopier,21.9f,20.3f,f,drW,true);
+ // the plotters' room: the light table still on, the chart rack, the sections pinned over the machines
+ for(float y:{19.5f,20.7f})drFix(m,model::lab_clean_bench,15.75f,y,f,1.179f,.562f,.808f,kPi*.5f,true);
+ wall(m,15.5f,19.f,16.f,21.2f,f+.808f,f+.83f,27);
+ m.lights.push_back(lamp({15.8f,20.1f},f+1.05f,.5f,3.f,7000,0,WorldLightMount::Bare,0,false));
+ kit::prop(m,model::office_paper_sheet,15.75f,19.6f,f+.83f,.4f,.293f,.004f,.3f);kit::prop(m,model::office_paper_sheet,15.8f,20.6f,f+.83f,.4f,.293f,.004f,1.2f);
+ for(float z:{.1f,.62f,1.14f,1.66f})wall(m,16.9f,22.5f,19.5f,23.f,f+z-.04f,f+z,10);
+ for(float x:{16.9f,17.75f,18.6f,19.46f})wall(m,x,22.5f,x+.04f,23.f,f,f+1.66f,10);
+ for(int row=0;row<3;++row)for(int k=0;k<9;++k)if((k*5+row*3)%7){const float x=17.05f+k*.27f+(k/3)*.06f,z=f+.1f+row*.52f;wall(m,x-.045f,22.54f,x+.045f,22.98f,z,z+.09f,k%3?22:20);}
+ drModel(m,model::office_bookcase,21.5f,22.72f,f,kPi,true);
+ drModel(m,model::med_records_cabinet,21.6f,17.3f,f,drS,true);drFix(m,model::lab_scope_monitor,21.6f,17.3f,f+1.f,.468f,.345f,.446f,drS,false);
+ for(float y:{19.f,20.5f})drFix(m,model::lab_notice_board,22.965f,y,f+1.5f,1.2f,.07f,.9f,drW,false);
  drBody(m,clock,ActorVisual::LabTech,{19.5f,21.f},f,.8f);
- paperDrift(m,16.f,18.f,22.f,22.6f,f,8,1063);
+ paperDrift(m,16.6f,18.f,21.2f,21.8f,f,8,1063);
  m.lights.push_back(drTube(19.f,20.f,low,.45f,4.5f,4500,.02f,.5f));
  crewBarrier(m,11.f,18.6f,f,1.4f);
  drFix(m,model::pallet,14.f,19.4f,f,1.2f,1.15f,.16f,kPi*.5f,true);
@@ -529,7 +611,7 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
  m.name=CampaignMapNames[107];m.definition=CampaignChunks[107];m.definition.ambient=.13f;
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  const float pit=-25,g=-15,R=m.definition.ceiling;
- const StateId shut=stateId("core_shutdown");
+ const StateId shut=stateId("core_shutdown"),shed=stateId("dr_core_shed");
  m.layers.push_back(floorLayer(m.name.c_str(),pit));
  openEdge(m,{'N',10.f,14.f,g,false,0});
  openEdge(m,{'S',10.f,14.f,g,true,shut});                                     // door 0: held while the core runs
@@ -600,52 +682,115 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
  drModel(m,model::anl_switch_cabinet_1,18.62f,15.6f,pit,drW,true);drProxy(m,18.25f,14.95f,19.f,16.25f,pit+2.91f,g);
  drFix(m,model::lab_knife_switch,18.97f,13.8f,pit+1.3f,.31f,.2f,.32f,drW,false);
  drFix(m,model::lab_pressure_gauge,18.97f,13.2f,pit+1.5f,.29f,.11f,.41f,drW,false);
- terminal(m,{17.6f,16.9f},"CORE FEED / ISOLATION","FEED FROM THE 900 LEVEL: ORE IN SLURRY, FORTY TONNES AN HOUR. ISOLATE HERE.",
-  "WITH THE FEED SHUT THE CORE FALLS TO IDLE AND THE ACCESS DOOR RELEASES. DO NOT ISOLATE UNDER LOAD.",0,shut);
+ terminal(m,{17.6f,16.9f},"CORE FEED / ISOLATION","FEED FROM THE 900 LEVEL: ORE IN SLURRY, FORTY TONNES AN HOUR. ISOLATE HERE. THE ACCESS DOOR RELEASES WITH IT.",
+  "INTERLOCK: WILL NOT ISOLATE UNDER LOAD. SHED LOAD AT THE NORTH GALLERY FIRST. THE DUMP BANK HOLDS FIFTY SECONDS.",0,shut,shed);
+ // its interlock lamp: amber while the load is on the bank
+ drFix(m,model::pwr_ammeter_box,18.97f,14.4f,pit+1.5f,.229f,.102f,.366f,drW,false);
+ m.lights.push_back(drSwitched(lamp({18.6f,14.4f},pit+1.7f,.9f,4.f,2200,0,WorldLightMount::Bare,0,false,{1.f,.6f,.15f}),shed,false));
  // --- The north gallery: the observation desk, the status console ---------------------------------
  drCounter(m,14.f,1.f,18.f,1.7f,g);
  drFix(m,model::lab_control_board,16.f,1.05f,g+1.1f,1.32f,.19f,.6f,drS,false);
  kit::prop(m,model::crt_monitor,14.8f,1.35f,g+.9f,.42f,.4f,.38f,0);
  kit::prop(m,model::office_chair,15.6f,2.6f,g,.55f,.55f,.95f,.14f);
- terminal(m,{19.f,2.4f},"CORE / STATUS","LOAD 104%. FEED OPEN. ACCESS CONTROL HELD UNTIL THE FEED IS ISOLATED AT THE PIT FLOOR.",
-  "THE CORE DOES NOT ANALYSE THE ORE. THE ORE ANALYSES THE CORE. DO NOT WRITE THAT IN THE LOG. (PEN, UNDER THE PRINT)",g-pit);
- taped(m,{4.f,1.f},g+1.5f,drS,Readable::Note,"PIT / TWO AT A TIME","THE STAIRS ARE THE ONLY WAY DOWN. NOBODY ON THE PIT FLOOR WITHOUT A SECOND ON THE GALLERY.",
+ // --- The shutdown: two controls, 54 m and two flights of stairs apart ---------------------------
+ // The feed will not isolate under load. The load console on the north gallery sheds it to the dump
+ // bank beside it, and the bank holds for fifty seconds before it trips and the load comes back.
+ // So: clear the pit, come back up, shed, and run the stairs to the isolation station at the east
+ // wall, round the arcs or through them.
+ terminal(m,{19.f,2.4f},"CORE / LOAD CONTROL","LOAD 104%. FEED OPEN. E / SHED LOAD TO THE DUMP BANK. THE BANK HOLDS FIFTY SECONDS, THEN TRIPS.",
+  "ISOLATE THE FEED AT THE PIT FLOOR WHILE IT HOLDS. NOBODY HAS TIMED THE STAIRS.",g-pit,shed);
+ taped(m,{17.4f,1.f},g+1.5f,drS,Readable::Note,"CORE / STATUS PRINT","LOAD 104%. FEED OPEN. ACCESS CONTROL HELD UNTIL THE FEED IS ISOLATED AT THE PIT FLOOR.",
+  "THE CORE DOES NOT ANALYSE THE ORE. THE ORE ANALYSES THE CORE. DO NOT WRITE THAT IN THE LOG. (PEN, UNDER THE PRINT)");
+ for(float x:{20.75f,21.6f,22.45f})drModel(m,model::pwr_step_transformer,x,1.62f,g,0,true);
+ drProxy(m,20.4f,1.15f,22.8f,2.1f,g+1.68f,ov-.6f);
+ m.pipes.push_back({{19.5f,1.3f},{20.5f,1.3f},g+.12f,.05f,g+.12f,7});
+ m.lights.push_back(drSwitched(lamp({21.6f,2.4f},g+1.f,1.3f,5.f,1900,0,WorldLightMount::Bare,0,false,{1.f,.35f,.1f}),shed,false));
+ {TimedSequence t;t.timerState=stateId("dr_core_dump");t.finishState=stateId("dr_core_dump_trip");t.x1=-2;t.y1=-2;t.x2=-1;t.y2=-1;
+  t.durationMs=50200;t.finishAtMs=50000;t.soundIntervalMs=1000;t.soundUntilMs=50000;t.tickSound=Sound::Metal2;t.gain=.35f;t.pitch=1.3f;t.soundAt={21.6f,1.62f};t.soundZ=g+1.f;
+  m.timedSequences.push_back(t);
+  ScriptAction held;held.type=ScriptAction::Type::ShowMessage;held.text="LOAD ON THE DUMP BANK / 50 SECONDS";held.amount=4.f;
+  ScriptAction tripped;tripped.type=ScriptAction::Type::ShowMessage;tripped.text="DUMP BANK TRIPPED / CORE BACK UNDER LOAD";tripped.amount=4.f;
+  ScriptAction bang;bang.type=ScriptAction::Type::PlaySound;bang.sound=Sound::OneMetalBang;bang.amount=.7f;
+  ScriptCondition running;running.id=shut;running.op=ScriptCondition::Op::Equal;running.value=0;
+  ScriptEvent e;e.id=stateId("dr_core_shed_start");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=shed;e.once=false;e.rearm=true;e.conditions={running};
+  e.actions={drSet("dr_core_dump",1),held};m.scriptEvents.push_back(e);
+  e.id=stateId("dr_core_shed_trip");e.requireState=stateId("dr_core_dump_trip");e.actions={drSet("dr_core_shed",0),drSet("dr_core_dump_trip",0),drSet("dr_core_dump",0),tripped,bang};m.scriptEvents.push_back(e);}
+ taped(m,{3.4f,1.f},g+1.5f,drS,Readable::Note,"PIT / TWO AT A TIME","THE STAIRS ARE THE ONLY WAY DOWN. NOBODY ON THE PIT FLOOR WITHOUT A SECOND ON THE GALLERY.",
   "IF THE BASE STARTS SINGING, STAND STILL. IT ARCS AT WHAT MOVES.");
  drBody(m,"dr_core_clock",ActorVisual::Scientist,{16.f,4.f},g,1.2f);machineryClock(m,"dr_core_clock",60000);
  m.pickupSpawns.push_back({{21.6f,3.f},PickupKind::Ammo,g});
  m.pickupSpawns.push_back({{17.2f,10.f},PickupKind::Health,pit});
  m.pickupSpawns.push_back({{21.4f,20.5f},PickupKind::HandgunAmmo,g});
- m.creatureSpawns.push_back({CreatureKind::Transformed,{7.5f,16.8f},pit,1,0});
- m.creatureSpawns.push_back({CreatureKind::Transformed,{17.f,8.f},pit,1,0});
- m.creatureSpawns.push_back({CreatureKind::Mutant,{8.f,7.2f},pit,1,0});
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{6.4f,16.4f},pit,1,0});
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{16.8f,7.6f},pit,1,0});
+ m.creatureSpawns.push_back({CreatureKind::Mutant,{6.6f,9.6f},pit,1,0});
+ // --- The machine's body: what the concrete shell wears ------------------------------------------
+ // a yellow base course, steel collars under both ring gantries, a frame round every lens slot,
+ // conduit up the shell between the faces, and two drive housings bolted to its foot
+ m.pipes.push_back({c,c,pit+.35f,2.27f,pit+1.1f,3});
+ for(float z:{pit+5.f,g+4.5f}){m.pipes.push_back({c,c,z-.42f,2.55f,z-.1f,2});m.pipes.push_back({c,c,z-.5f,2.4f,z-.42f,6});}
+ m.pipes.push_back({c,c,crown-1.2f,2.45f,crown-.12f,2});
+ for(float sgn:{-1.f,1.f})for(float o:{-.3f,.3f}){
+  wall(m,c.x+o-.05f,c.y+sgn*2.3f-.06f,c.x+o+.05f,c.y+sgn*2.3f+.06f,pit+1.1f,crown-1.2f,20);
+  wall(m,c.x+sgn*2.3f-.06f,c.y+o-.05f,c.x+sgn*2.3f+.06f,c.y+o+.05f,pit+1.1f,crown-1.2f,20);}
+ {int k=0;for(auto [dx,dy]:{std::pair{.707f,.707f},{-.707f,.707f},{.707f,-.707f},{-.707f,-.707f}}){
+   for(float o:{-.16f,0.f,.16f})m.pipes.push_back({{c.x+dx*2.3f-dy*o,c.y+dy*2.3f+dx*o},{c.x+dx*2.3f-dy*o,c.y+dy*2.3f+dx*o},pit+1.1f,.05f,crown-1.2f,k%2?3:4});
+   for(float z=pit+3.f;z<crown-2.f;z+=4.f)m.pipes.push_back({{c.x+dx*2.32f,c.y+dy*2.32f},{c.x+dx*2.32f,c.y+dy*2.32f},z,.3f,z+.5f,6});++k;}}
+ for(auto [x,y]:{std::pair{14.9f,9.1f},{9.1f,14.9f}}){drFix(m,model::pwr_turbine_housing,x,y,pit,2.1f,2.1f,1.53f,0,true);drProxy(m,x-1.05f,y-1.05f,x+1.05f,y+1.05f,pit+1.53f,pit+4.f);
+  m.pipes.push_back({{x,y},{c.x+(x-c.x)*.6f,c.y+(y-c.y)*.6f},pit+1.f,.28f,pit+1.9f,6});}
+ // --- The pit floor: the slurry pumps under the feed mains, switchgear on the north face, the ----
+ // conduit risers and the tray on the east wall
+ for(float x:{9.2f,13.6f}){drModel(m,model::mine_dewatering_pump,x,17.45f,pit,0,true);drProxy(m,x-1.53f,16.98f,x+1.53f,17.92f,pit+1.75f,pit+4.f);}
+ for(float x:{10.5f,13.5f}){m.pipes.push_back({{x,17.6f},{x,17.6f},pit+1.6f,.2f,pit+5.5f,3});flange(m,{x,17.6f,pit+1.8f},{},.2f);}
+ gateValve(m,{10.5f,16.2f,pit+5.5f},{0,1},.35f,pit,-1);gateValve(m,{13.5f,16.2f,pit+5.5f},{0,1},.35f,pit,1);
+ drModel(m,model::pwr_control_cabinet,11.4f,17.75f,pit,drN,true);
+ for(float x:{8.5f,12.f})drModel(m,model::pwr_switchgear_cabinet,x,6.72f,pit,0,true);
+ drModel(m,model::pwr_tall_switch_cabinet,18.5f,10.25f,pit,0,true);
+ for(float y:{11.3f,11.6f,11.9f,12.2f,12.5f})m.pipes.push_back({{18.93f,y},{18.93f,y},pit,.045f,g-.05f,y<11.8f?4:6});
+ cableTray(m,{18.78f,6.5f},{18.78f,12.6f},pit+3.4f);cableTray(m,{7.4f,6.22f},{16.6f,6.22f},pit+3.4f);
+ drFix(m,model::drum,5.45f,17.45f,pit,.6f,.6f,.9f,0,true);drFix(m,model::drum,6.2f,17.55f,pit,.6f,.6f,.9f,0,true);
+ drFix(m,model::pallet,16.2f,13.f,pit,1.2f,1.15f,.16f,.3f,true);drModel(m,model::lab_specimen_crate,16.2f,13.f,pit+.16f,.3f,true,.8f);
+ kit::prop(m,model::mine_hard_hat,15.4f,16.6f,pit,.279f,.351f,.153f,.8f);
+ // --- The galleries: lockers and stores on the north, the staging for the feed work on the south --
+ for(int i=0;i<3;++i)drFix(m,model::psx_locker,4.55f+i*.86f,1.33f,g,.64f,.85f,2.42f,-kPi*.5f,true);
+ drProxy(m,4.1f,1.f,6.72f,1.7f,g+2.42f,R);
+ drFix(m,model::pallet,8.5f,2.f,g,1.2f,1.15f,.16f,.1f,true);drModel(m,model::lab_specimen_crate,8.5f,2.f,g+.16f,.1f,true,.8f);
+ drFix(m,model::lab_instrument_terminal,17.2f,1.35f,g+.9f,.92f,.47f,.68f,drS,false);
+ drFix(m,model::lab_status_display,15.f,1.03f,g+2.f,.693f,.058f,.2f,drS,false);
+ drFix(m,model::lab_notice_board,8.6f,1.035f,g+1.3f,1.2f,.07f,.9f,drS,false);
+ extinguisher(m,9.5f,1.f,g+.6f,drS);
+ for(float x:{5.6f,6.5f})drModel(m,model::pwr_safety_bollard,x,5.5f,g,0,true);
+ for(auto [x,y,yaw,sc]:{std::tuple{3.4f,20.2f,.1f,.9f},{5.3f,21.7f,-.2f,.8f}}){drFix(m,model::pallet,x,y,g,1.2f,1.15f,.16f,yaw,true);drModel(m,model::lab_specimen_crate,x,y,g+.16f,yaw,true,sc);}
+ drModel(m,model::pwr_sheet_steel_stack,7.6f,20.6f,g,.2f,false);
+ drModel(m,model::mine_portable_generator,8.4f,22.2f,g,.4f,true);
+ for(float x:{15.9f,19.3f})drModel(m,model::pwr_switchgear_cabinet,x,22.56f,g,0,true);
+ drFix(m,model::cable_reel,17.6f,20.3f,g,1.f,2.f,2.f,drE,true);drProxy(m,16.6f,19.8f,18.6f,20.8f,g+2.f,R);
+ bench(m,4.6f,19.f,g);
+ kit::prop(m,model::mine_hard_hat,4.f,19.f,g+.51f,.279f,.351f,.153f,0);kit::prop(m,model::prop_cardboard_box,6.4f,22.3f,g,.6f);
+ cableTray(m,{22.78f,14.4f},{22.78f,17.6f},g+2.9f);
  // --- Light: the core's violet (out at isolation), sodium on the galleries, red after ------------
  // The violet stays on the machine: short glows at the lenses, strongest at the base. The hall
  // round it is lit white and sodium so the concrete reads grey, and the column stands out against it.
- // Nothing here casts shadows (the pit's sweep has to finish).
- for(auto [z,i,r]:{std::tuple{pit+2.5f,1.f,3.4f},{g+1.f,.7f,2.8f},{g+7.f,.6f,2.8f}})for(auto [dx,dy]:{std::pair{0.f,-2.7f},{0.f,2.7f},{-2.7f,0.f},{2.7f,0.f}})
-  m.lights.push_back(drSwitched(drGlow({c.x+dx,c.y+dy},z,i,r),shut,true));
- // white floods from the roof straight down the shell: the column's shape, the rings, the arms
- for(auto [dx,dy]:{std::pair{0.f,-4.6f},{0.f,4.6f},{-4.6f,0.f},{4.6f,0.f}})
-  m.lights.push_back(lamp({c.x+dx,c.y+dy},R-.3f,1.1f,21.f,5600,0,WorldLightMount::Ceiling,0,false));
- // and white uplights in the pit's corners, thrown up the base and the lower ring
- for(auto [x,y]:{std::pair{6.f,7.f},{18.f,7.f},{6.f,17.f},{16.4f,17.3f}})m.lights.push_back(lamp({x,y},pit+.6f,.75f,11.f,5000,0,WorldLightMount::Bare,0,false));
- // floods on the upper walls over the galleries, thrown at the column's middle
- for(auto [x,y,yaw]:{std::tuple{16.f,1.f,lS},{8.f,23.f,lN},{1.f,12.f,lE},{23.f,9.f,lW}})
-  m.lights.push_back(lamp({x,y},g+6.f,1.1f,15.f,5400,0,WorldLightMount::Wall,yaw,false));
+ // Six lamps cast shadows, the ones that model the machine: two floods from the roof down the shell,
+ // two uplights in opposite corners of the pit that throw it up the walls, two floods over the galleries.
+ for(auto [dx,dy]:{std::pair{0.f,-2.7f},{0.f,2.7f},{-2.7f,0.f},{2.7f,0.f}})m.lights.push_back(drSwitched(drGlow({c.x+dx,c.y+dy},pit+2.5f,1.f,3.6f),shut,true));
+ for(float dy:{-2.7f,2.7f})m.lights.push_back(drSwitched(drGlow({c.x,c.y+dy},g+2.6f,.8f,4.6f),shut,true));
+ for(float dy:{-4.6f,4.6f})m.lights.push_back(lamp({c.x,c.y+dy},R-.3f,1.3f,22.f,5600,0,WorldLightMount::Ceiling,0,true));
+ for(auto [x,y]:{std::pair{6.f,7.2f},{16.6f,16.9f}})m.lights.push_back(lamp({x,y},pit+.6f,.95f,12.f,5000,0,WorldLightMount::Bare,0,true));
+ for(auto [x,y,yaw]:{std::tuple{16.f,1.f,lS},{8.f,23.f,lN}})m.lights.push_back(lamp({x,y},g+6.f,1.3f,16.f,5400,0,WorldLightMount::Wall,yaw,true));
  // floods on the pit faces at mid height, thrown at the shell
- for(auto [x,y,yaw]:{std::tuple{12.f,6.f,lS},{12.f,18.f,lN},{19.f,12.f,lW},{8.5f,6.f,lS},{17.f,18.f,lN}})
-  m.lights.push_back(lamp({x,y},g-3.f,1.f,12.f,5200,0,WorldLightMount::Wall,yaw,false));
- for(float x:{4.f,9.f,20.f})m.lights.push_back(lamp({x,1.f},g+2.6f,.75f,9.f,2100,0,WorldLightMount::Wall,lS,false));
- for(float x:{4.f,16.f,20.f})m.lights.push_back(lamp({x,23.f},g+2.6f,.75f,9.f,2100,0,WorldLightMount::Wall,lN,false));
+ for(auto [x,y,yaw]:{std::tuple{12.f,6.f,lS},{12.f,18.f,lN},{19.f,12.f,lW}})
+  m.lights.push_back(lamp({x,y},g-3.f,1.1f,12.f,5200,0,WorldLightMount::Wall,yaw,false));
+ for(float x:{4.f,20.f})m.lights.push_back(lamp({x,1.f},g+2.6f,.85f,10.f,2100,0,WorldLightMount::Wall,lS,false));
+ for(float x:{4.f,17.4f})m.lights.push_back(lamp({x,23.f},g+2.6f,.85f,10.f,2100,0,WorldLightMount::Wall,lN,false));
  m.lights.push_back(lamp({1.f,17.2f},pit+2.6f,.5f,7.f,2300,0,WorldLightMount::Wall,lE,false));
  m.lights.push_back(lamp({19.f,9.f},pit+2.6f,.5f,7.f,2300,0,WorldLightMount::Wall,lW,false));
  // the west stairwell and the ledge under the overlook stair, lit so the way down reads
- for(auto [y,z]:{std::pair{9.5f,g-2.f},{7.5f,pit+2.2f},{14.8f,g-3.6f}})m.lights.push_back(lamp({1.f,y},z,.7f,8.f,5000,0,WorldLightMount::Wall,lE,false));
+ for(auto [y,z]:{std::pair{9.5f,g-2.f},{7.5f,pit+2.2f}})m.lights.push_back(lamp({1.f,y},z,.8f,9.f,5000,0,WorldLightMount::Wall,lE,false));
  m.lights.push_back(lamp({23.f,13.6f},g+2.4f,.6f,8.f,2400,0,WorldLightMount::Wall,lW,false));
  m.lights.push_back(lamp({20.4f,1.f},ov+2.2f,.6f,7.f,2100,0,WorldLightMount::Wall,lS,false));       // the overlook
- for(auto [x,y,yaw]:{std::tuple{1.f,8.f,lE},{19.f,16.8f,lW},{1.f,12.f,lE}})m.lights.push_back(drSwitched(lamp({x,y},pit+3.2f,.6f,9.f,3000,0,WorldLightMount::Wall,yaw,false,{1.f,.12f,.06f}),shut,false));
+ for(auto [x,y,yaw]:{std::tuple{1.f,8.f,lE},{19.f,16.8f,lW}})m.lights.push_back(drSwitched(lamp({x,y},pit+3.2f,.7f,10.f,3000,0,WorldLightMount::Wall,yaw,false,{1.f,.12f,.06f}),shut,false));
  m.lights.push_back(drBeacon({9.4f,23.f},g+2.4f,lN,0,shut));m.lights.push_back(drBeacon({14.6f,23.f},g+2.4f,lN,.7f,shut));
- for(auto& l:m.lights)l.shadows=false;
  zone(m,"ENERGY CORE RESEARCH / NORTH GALLERY",0,0,24,6.f,g-.5f,1000);
  zone(m,"ENERGY CORE RESEARCH / SOUTH GALLERY",0,18.f,24,24,g-.5f,1000);
  zone(m,"ENERGY CORE RESEARCH / CORE PIT",0,0,24,24,-1000,g-.5f,PitAir);
@@ -680,7 +825,10 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  const int liftDoor=wallDoor(m,16.f,23.f,5.9f,6.1f,19.6f,20.8f,f,R,-1);         // door 1: the lift, his alone
  m.doors[size_t(liftDoor)].requireState=stateId("dr_lift_called");
  drGlaze(m,16.f,6.1f,16.2f,12.9f,f,R);
- wallDoor(m,15.f,23.f,12.9f,13.1f,17.6f,18.8f,f,R,-1);                          // door 2: into the booth
+ // door 2: into the booth. It stays locked until the hoist is down and the lift door has long shut
+ // behind him: while the lift door stands open nobody else can be in the booth to follow him through it.
+ const int boothDoor=wallDoor(m,15.f,23.f,12.9f,13.1f,17.6f,18.8f,f,R,-1);
+ m.doors[size_t(boothDoor)].requireState=stateId("dr_inv_gone");
  wall(m,15.f,13.1f,15.2f,19.f,f,R,3);doorwayY(m,19.f,20.2f,15.f,15.2f,f,R);wall(m,15.f,20.2f,15.2f,23.f,f,R,3);
  wallDoor(m,1.f,9.f,15.f,15.2f,3.f,4.2f,f,R,1);                                // door 3: the armoury
  wall(m,8.8f,15.2f,9.f,23.f,f,R,3);
@@ -688,18 +836,30 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  for(float x:{9.43f,12.f,14.57f}){drModel(m,model::lab_door_reader,x,15.1f,f,drN,true);}
  wall(m,9.f,14.95f,15.f,15.25f,f+2.45f,R,3);drProxy(m,9.f,14.84f,15.f,15.36f,f+2.39f,f+2.45f);
  floorLine(m,9.85f,14.4f,14.15f,14.52f,f,13);
- // the blast door, open: jambs, the lintel with the leaf drawn up into it, the sill
+ // the blast door, open: jambs, the lintel, the leaf drawn up into it with its foot showing, the
+ // screw jacks either side, the sill
  for(float x:{9.f,14.6f})wall(m,x,17.6f,x+.4f,18.4f,f,f+3.3f,8);
- wall(m,9.f,17.6f,15.f,18.4f,f+3.3f,R,8);wall(m,9.4f,17.85f,14.6f,18.15f,f+3.05f,f+3.3f,13);
+ wall(m,9.f,17.6f,15.f,18.4f,f+3.3f,R,8);
+ wall(m,9.4f,17.86f,14.6f,18.14f,f+2.55f,f+3.3f,7);wall(m,9.4f,17.84f,14.6f,18.16f,f+2.55f,f+2.75f,13);
+ for(float x:{9.52f,14.48f})m.pipes.push_back({{x,18.f},{x,18.f},f,.05f,f+2.55f,6});
  floorLine(m,9.4f,17.9f,14.6f,18.1f,f,13);
  m.lights.push_back(drBeacon({9.f,17.f},f+2.8f,lE,0));
- // --- The queue hall: lockers, the suits for below, the bollards ---------------------------------
+ // --- The queue hall: the lamp and dosimeter lockers in an island facing the door, the suits for ---
+ // below, the queue rails to the readers, and by the shaft rail what was boxed for the hoist
+ for(int i=0;i<4;++i){drFix(m,model::psx_locker,10.3f+i*.86f,5.6f,f,.64f,.85f,2.42f,kPi*.5f,true);drFix(m,model::psx_locker,10.3f+i*.86f,6.24f,f,.64f,.85f,2.42f,-kPi*.5f,true);}
+ drProxy(m,9.87f,5.28f,13.31f,6.56f,f+2.42f,R);
  for(int i=0;i<6;++i)drFix(m,model::psx_locker,1.33f,7.f+i*.86f,f,.64f,.85f,2.42f,0,true);
  drProxy(m,1.f,6.5f,1.7f,11.8f,f+2.42f,R);
  for(float y:{2.2f,3.2f,4.2f}){hungSuit(m,{1.32f,y,f+1.48f},0);}
  wall(m,1.f,1.9f,1.08f,4.5f,f+1.9f,f+1.94f,20);
  for(float x:{7.5f,8.7f})for(float y:{4.f,7.f,10.f})drModel(m,model::pwr_safety_bollard,x,y,f,0,true);
- bench(m,4.5f,13.8f,f);
+ bench(m,4.5f,13.8f,f);bench(m,3.6f,5.6f,f);
+ for(float x:{10.72f,13.28f}){drFix(m,model::pwr_handrail,x,12.6f,f,.08f,3.6f,1.1f,0,true);floorLine(m,x-.5f,10.8f,x-.38f,14.4f,f,14);}
+ for(auto [x,y,yaw,sc]:{std::tuple{14.3f,2.5f,.1f,.85f},{14.4f,7.4f,-.15f,.8f}}){drFix(m,model::pallet,x,y,f,1.2f,1.15f,.16f,yaw,true);drModel(m,model::lab_specimen_crate,x,y,f+.16f,yaw,true,sc);}
+ kit::prop(m,model::prop_cardboard_box,13.2f,1.7f,f,.4f);
+ drFix(m,model::lab_notice_board,5.f,1.035f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::lab_wall_clock,7.2f,1.02f,f+2.2f,.402f,.032f,.4f,drS,false);
+ extinguisher(m,1.f,5.4f,f+.6f,drE);
+ kit::prop(m,model::mine_hard_hat,3.9f,6.4f,f,.279f,.351f,.153f,.4f);kit::prop(m,model::item_dosimeter,5.1f,13.8f,f+.51f,1.1f);
  wallSign(m,12.f,14.89f,f+2.6f,"BADGE AT THE READER","ONE AT A TIME / DOSIMETER ON THE OUTSIDE OF THE SUIT",2.6f,drN);
  // --- The booth: his window on the hall --------------------------------------------------------
  drCounter(m,21.8f,7.f,22.9f,12.2f,f);
@@ -710,30 +870,38 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
   "04:10 THE PLANT GUARD IS BELOW CONTAINMENT. SHE HAS SEEN THE CORE. SHE DOES NOT COME UP.",f-sb);
  m.lights.push_back(drGlow({22.2f,9.5f},f+1.3f,.3f,3.5f,{.3f,.55f,1.f}));
  m.lights.push_back(drTube(19.f,9.5f,R,.35f,5.f,4000,0));
- // the lift: the cage hung in the open shaft at the landing, its headgear under the roof, the shaft
- // falling away round it nine metres to where the violet comes up the walls
- wall(m,18.97f,2.15f,21.03f,4.45f,f-.3f,f,20);                                      // the cage floor
- drModel(m,model::mine_lift,20.f,3.3f,f,drS,true);
+ // the shaft: two compartments. East, the old cage, dark and chained at the landing. West, by the
+ // hall's rail, the man hoist: an open deck on a rope, the one thing in the shaft that still runs.
+ // The shaft falls away round them nine metres to where the violet comes up the walls.
+ const Vec2 hoist{17.6f,3.05f};
+ wall(m,19.47f,2.05f,21.53f,4.35f,f-.3f,f,20);                                      // the cage floor
+ drModel(m,model::mine_lift,20.5f,3.2f,f,drS,true);
+ drFix(m,model::mine_cage_gate,20.5f,4.56f,f,2.1f,.066f,2.547f,0,true);
  wall(m,x1s-.12f,y2s-.04f,x2s+.12f,y2s+.12f,f-.01f,f+.01f,13);                      // the landing edge
- for(float x:{x1s+.1f,x2s-.1f})m.pipes.push_back({{x,1.2f},{x,1.2f},sb,.09f,R,6});       // guides down the back wall
- wall(m,x1s-.2f,1.f,x2s+.2f,1.3f,R-.6f,R,20);m.pipes.push_back({{20.f,1.6f},{20.f,3.3f},R-.35f,.28f,R-.35f,6});   // the sheave
- m.pipes.push_back({{20.f,3.3f},{20.f,3.3f},f+3.9f,.02f,R-.35f,7});
+ for(float x:{x1s+.1f,19.f,x2s-.1f})m.pipes.push_back({{x,1.2f},{x,1.2f},sb,.09f,R,6});  // guides down the back wall
+ wall(m,x1s-.2f,1.f,x2s+.2f,1.3f,R-.6f,R,20);
+ for(float x:{hoist.x,20.5f})m.pipes.push_back({{x,1.6f},{x,3.2f},R-.35f,.28f,R-.35f,6});   // the sheaves
+ m.pipes.push_back({{20.5f,3.2f},{20.5f,3.2f},f+3.9f,.02f,R-.35f,7});
  for(auto [x1,y1,x2,y2,lo,hi]:{std::tuple{x1s,y1s,x1s+.05f,y2s,sb,f-1.f},{x2s-.05f,y1s,x2s,y2s,sb,f-2.2f},{x1s,y1s,x2s,y1s+.05f,sb,f-1.6f},
                                {x1s,y2s-.05f,x2s,y2s,sb,f-3.f},{22.9f,1.f,23.f,3.2f,f,f+1.4f}})wall(m,x1,y1,x2,y2,lo,hi,34);
  // the headgear: four yellow legs from the shaft floor and the landing up to a head frame under
- // the roof that carries the sheave, braced across the shaft at the hall's eye level
+ // the roof that carries the sheaves, braced across the shaft at the hall's eye level
  for(auto [x,y]:{std::pair{x1s+.18f,1.45f},{x2s-.18f,1.45f}})steelColumn(m,x,y,sb,R-.62f,true);
  for(auto [x,y]:{std::pair{x1s+.18f,4.7f},{x2s-.18f,4.7f}})steelColumn(m,x,y,f,R-.62f,true);
  for(float y:{1.3f,4.6f})wall(m,x1s,y,x2s,y+.24f,R-.62f,R-.3f,18);
  for(float x:{x1s+.06f,x2s-.3f})wall(m,x,1.3f,x+.24f,4.84f,R-.62f,R-.3f,18);
  for(float z:{f+2.6f,f-3.f})wall(m,x1s,1.3f,x2s,1.42f,z,z+.18f,18);
+ // the hoist deck rides the scene's clock: at the landing until he is on it, then down the shaft
+ // to the bottom, where it stays
+ {ActorTrack deck;deck.timerState=stateId("dr_inv_scene");deck.visual=ActorVisual::Cargo;deck.platform=true;deck.footprint={2.f,2.3f};deck.thickness=.22f;
+  deck.suspensionTop=R-.4f;deck.keys={{0,hoist,f,0,0,0},{14500,hoist,f,0,0,0},{21500,hoist,sb+.75f,0,0,0},{30000,hoist,sb+.75f,0,0,0}};
+  m.actorTracks.push_back(std::move(deck));}
  // the shaft floor: the seam has come up through it, crystal and growth round the buffers
  wall(m,x1s,y1s,x2s,y2s,sb,sb+.4f,34);
- for(auto [x,y,w,h]:{std::tuple{16.9f,1.9f,.6f,1.8f},{17.6f,3.7f,.5f,1.2f},{21.2f,1.9f,.5f,2.4f},{21.1f,3.9f,.7f,1.5f},{18.4f,2.2f,.4f,.9f}})
-  wall(m,x-w*.5f,y-w*.5f,x+w*.5f,y+w*.5f,sb+.4f,sb+.4f+h,35);
+ drShard(m,19.2f,1.8f,sb+.4f,.5f,2.4f);drShard(m,21.3f,1.9f,sb+.4f,.4f,1.8f,3,.7f);drShard(m,21.2f,4.f,sb+.4f,.5f,1.5f);drShard(m,19.1f,4.1f,sb+.4f,.3f,1.1f,3,.5f);drShard(m,20.2f,2.9f,sb+.4f,.3f,.9f,0,.4f);
  for(auto [x,z,i,r]:{std::tuple{17.4f,sb+1.2f,1.4f,8.f},{20.6f,sb+1.2f,1.4f,8.f},{18.6f,f-6.f,1.1f,6.f},{18.6f,f-3.5f,1.f,5.f},{18.6f,f-1.2f,.8f,4.f},{17.3f,f-.5f,.9f,3.5f}})m.lights.push_back(drGlow({x,2.9f},z,i,r));
  m.lights.push_back(lamp({19.f,2.9f},R-.8f,.8f,8.f,4600,0,WorldLightMount::Bare,0,false));      // the work light on the headgear
- m.lights.push_back(drGlow({20.f,4.7f},f+.2f,.35f,3.f));
+ m.lights.push_back(lamp({18.2f,5.2f},f+2.7f,1.2f,5.f,3400,0,WorldLightMount::Bare,0,false));   // the landing
  for(float x:{x1s+.1f,x2s-.1f}){drFix(m,model::mine_cage_lamp,x,1.36f,f+2.5f,.206f,.201f,.362f,drS,false);
   m.lights.push_back(drGlow({x,1.6f},f+2.65f,.45f,5.5f,{1.f,.6f,.2f},2400));}
  // the control pedestal in the hall, turned to the cage
@@ -745,42 +913,79 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  // the hall's roof: deep beams across it, a hanger rod at every crossing of the lamp grid
  for(float y:{7.f,12.f}){wall(m,1.f,y-.18f,16.f,y+.18f,R-.7f,R,12);wall(m,1.f,y-.22f,16.f,y+.22f,R-.74f,R-.7f,8);}
  for(float x:{8.f,14.5f})wall(m,x-.12f,1.f,x+.12f,14.9f,R-.45f,R,12);
- // --- The armoury (southwest) and the ready room (southeast) ---------------------------------------
- drModel(m,model::lab_specimen_cabinet,4.5f,22.53f,f,drN,true);drProxy(m,3.8f,22.1f,5.2f,23.f,f+2.19f,R);
- for(int i=0;i<4;++i)drFix(m,model::psx_locker,1.33f,16.8f+i*.86f,f,.64f,.85f,2.42f,0,true);
- drProxy(m,1.f,16.3f,1.7f,19.9f,f+2.42f,R);
- m.pickupSpawns.push_back({{6.8f,17.f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{7.4f,18.f},PickupKind::HandgunAmmo,f});
- m.lights.push_back(drTube(5.f,19.f,R,.45f,5.f,4200,0,.3f));
- bench(m,19.f,21.6f,f);
- drFix(m,model::water_cooler,22.6f,15.f,f,.35f,.35f,1.1f,drW,true);
- m.pickupSpawns.push_back({{17.f,16.f},PickupKind::Health,f});
- m.lights.push_back(drTube(19.f,18.f,R,.4f,5.f,4000,0));
- // --- The detail he leaves behind ---------------------------------------------------------------
- drGuard(m,clock,"dr_acc_heavy",ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,"dr_acc",{{{12.f,13.8f},f,60000,drN}},14,1,1.f,0,130);
+ // --- The armoury (southwest): lockers, the cleaning bench, and behind a mesh cage what is left of ---
+ // the detail's issue. Most of the shelves are empty; they have been here four days.
+ for(int i=0;i<4;++i)drFix(m,model::psx_locker,1.33f,16.2f+i*.86f,f,.64f,.85f,2.42f,0,true);
+ drProxy(m,1.f,15.7f,1.7f,19.3f,f+2.42f,R);
+ drFix(m,model::mine_mesh_fence,2.6f,20.f,f,3.194f,.062f,2.779f,0,true);
+ drFix(m,model::mine_mesh_doorway,5.79f,20.f,f,3.194f,.062f,2.779f,0,false);
+ for(auto [x1,x2]:{std::pair{4.19f,5.25f},{6.33f,7.39f}})wall(m,x1,19.97f,x2,20.03f,f,f+2.78f,30);
+ wall(m,5.25f,19.97f,6.33f,20.03f,f+2.3f,f+2.78f,30);
+ drFix(m,model::psx_locker,8.f,20.36f,f,.64f,.85f,2.42f,kPi*.5f,true);drProxy(m,7.39f,19.9f,8.8f,20.9f,f+2.42f,R);
+ for(float x:{2.2f,4.4f,6.6f})shelf(m,{x,22.7f},kPi,f-sb);
+ drProxy(m,1.2f,22.4f,7.6f,23.f,f+1.8f,R);
+ drModel(m,model::lab_clean_bench,5.f,16.f,f,drS,true);
+ kit::prop(m,model::item_walkie,4.7f,16.f,f+.81f,.114f,.376f,.046f,.5f);kit::prop(m,model::mug,5.4f,16.05f,f+.81f,.09f,.09f,.1f,0);
+ kit::prop(m,model::office_paper_stack,5.05f,16.f,f+.81f,.33f,.44f,.03f,0);
+ drFix(m,model::wooden_chair,5.f,16.9f,f,.417f,.525f,.95f,.3f,true);
+ drModel(m,model::lab_specimen_crate,7.4f,17.6f,f,.3f,true,.7f);
+ drFix(m,model::lab_notice_board,3.6f,15.235f,f+1.3f,1.2f,.07f,.9f,drS,false);
+ extinguisher(m,8.8f,16.4f,f+.6f,drW);
+ m.pickupSpawns.push_back({{3.2f,21.4f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{6.4f,21.4f},PickupKind::HandgunAmmo,f});
+ drPendant(m,{5.f,17.6f},R,f+2.9f,.9f,6.f,4200,.2f);drPendant(m,{4.4f,21.4f},R,f+2.9f,.55f,4.5f,3600);
+ // --- The ready room (southeast): where two men have lived since the relief stopped coming --------
+ bench(m,20.3f,22.4f,f);
+ drFix(m,model::water_cooler,22.6f,14.2f,f,.35f,.35f,1.1f,drW,true);
+ drFix(m,model::wooden_table,19.2f,17.4f,f,1.367f,.724f,.78f,0,true);
+ for(auto [x,y,yaw]:{std::tuple{19.2f,16.6f,0.f},{18.6f,18.2f,kPi-.3f},{20.f,18.25f,kPi+.4f}})drFix(m,model::wooden_chair,x,y,f,.417f,.525f,.95f,yaw,true);
+ kit::prop(m,model::mug,18.9f,17.3f,f+.78f,.09f,.09f,.1f,0);kit::prop(m,model::mug,19.6f,17.55f,f+.78f,.09f,.09f,.1f,0);
+ kit::prop(m,model::item_walkie,19.4f,17.3f,f+.78f,.114f,.376f,.046f,1.9f);
+ drCounter(m,21.9f,15.2f,22.9f,18.2f,f);
+ drFix(m,model::coffee_machine,22.45f,15.8f,f+.9f,.3f,.35f,.42f,drW,false);kit::prop(m,model::mug,22.3f,16.6f,f+.9f,.09f,.09f,.1f,0);
+ for(int i=0;i<3;++i)drFix(m,model::psx_locker,22.665f,19.2f+i*.86f,f,.64f,.85f,2.42f,kPi,true);
+ drProxy(m,22.34f,18.75f,23.f,21.4f,f+2.42f,R);
+ for(auto [x,y,yaw]:{std::tuple{16.f,20.6f,.05f},{17.3f,20.9f,.12f}})kit::prop(m,model::scrap_bedroll,x,y,f,yaw);
+ kit::prop(m,model::prop_cardboard_box,15.9f,22.4f,f,.3f);kit::prop(m,model::mine_hard_hat,16.5f,19.4f,f,.279f,.351f,.153f,2.f);
+ drFix(m,model::lab_notice_board,19.f,13.135f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::med_first_aid_box,22.94f,13.6f,f+1.2f,.367f,.12f,.349f,drW,false);
+ m.pickupSpawns.push_back({{17.f,15.f},PickupKind::Health,f});
+ drPendant(m,{19.2f,17.4f},R,f+2.7f,.9f,6.f,2900);
+ // --- The detail he leaves behind: both turned to the glass while he speaks, their backs and the ---
+ // lockers between them and the door. They go to their posts when he has gone.
+ drGuard(m,clock,"dr_acc_heavy",ActorVisual::CleanupHeavy,GuardSquadRole::Heavy,"dr_acc",{{{13.4f,9.4f},f,26000,drE},{{12.f,13.8f},f,60000,drN}},14,1,1.f,0,130);
  drGuard(m,clock,"dr_acc_walk",ActorVisual::Cleanup,GuardSquadRole::Assault,"dr_acc",
-  {{{5.f,4.f},f,4000,drE},{{6.f,11.f},f,4000,drS},{{12.f,9.f},f,3000,drN},{{13.5f,3.f},f,3000,drW}},13,1,1.2f);
- // --- The Investigator: at the glass, his orders, the lift -------------------------------------
+  {{{12.6f,11.6f},f,24000,drE},{{5.f,8.f},f,4000,drE},{{6.f,12.f},f,4000,drS},{{12.f,9.f},f,3000,drN},{{14.f,7.6f},f,3000,drW}},13,1,1.2f);
+ // --- The Investigator: at the glass, his orders, the hoist --------------------------------------
+ // The scene runs from the door: he is in view over the lockers' end and across the shaft rail the
+ // whole way, from the glass to the landing to the deck, and then the deck takes him down the shaft
+ // and out of sight under the landing at the bottom. The lift door opens only for him and shuts 2.8 s
+ // later; the booth's own door (door 2) stays locked until dr_inv_gone, eleven seconds after that.
  drSequence(m,"dr_inv_scene","dr_inv_leaving",30000,7800,9.f,1.f,15.f,4.f);
- {const Vec2 glass{16.8f,9.5f},front{20.2f,7.f},inside{20.2f,4.9f},cage{20.f,3.6f};
-  const float toFront=std::atan2(front.x-glass.x,front.y-glass.y);
+ {const Vec2 glass{16.8f,9.5f},front{20.2f,7.f},inside{20.2f,5.2f},west{hoist.x,5.2f},under{hoist.x,6.2f};
+  const float toFront=std::atan2(front.x-glass.x,front.y-glass.y),bottom=sb+.75f;
   ActorTrack inv;inv.timerState=stateId("dr_inv_scene");inv.visual=ActorVisual::Investigator;inv.scale=1.8f;
   inv.keys={{0,glass,f,drW,0,0},{2000,glass,f,drW,0,2},{2200,glass,f,drW,8,0},{4800,glass,f,drW,8,1},
-   {5000,glass,f,toFront,1,0},{7800,front,f,drN,1,2.8f},{8400,front,f,drN,0,0},{9800,inside,f,drN,1,1.4f},{11000,cage,f,drN,1,2.6f},
-   {11200,cage,f,drS,0,0},{30000,cage,f,drS,0,1}};
+   {5000,glass,f,toFront,1,0},{7800,front,f,drN,1,2.8f},{8400,front,f,drN,0,0},{9800,inside,f,drN,1,1.4f},{9900,inside,f,drW,1,0},{11700,west,f,drW,1,1.8f},
+   {11800,west,f,drN,1,0},{13000,hoist,f,drN,1,1.2f},{13300,hoist,f,drW,0,0},{14500,hoist,f,drW,0,.5f},{21500,hoist,bottom,drW,0,3.f},
+   {22000,hoist,bottom,drS,1,0},{24400,under,bottom,drS,1,2.4f},{30000,under,bottom,drS,0,1}};
   m.actorTracks.push_back(std::move(inv));}
- drSequence(m,"dr_inv_exit","dr_inv_gone",6000,4400);
+ drSequence(m,"dr_inv_exit","dr_inv_shut",4000,2800);
+ drSequence(m,"dr_inv_down","dr_inv_gone",12500,11200);
  drEvent(m,"dr_inv_door_open",0,0,24,24,"dr_inv_leaving",{drDoor(liftDoor,true),drSet("dr_inv_exit",1)});
- {ScriptAction save;save.type=ScriptAction::Type::Checkpoint;drEvent(m,"dr_inv_door_shut",0,0,24,24,"dr_inv_gone",{drDoor(liftDoor,false),save});}
+ drEvent(m,"dr_inv_door_shut",0,0,24,24,"dr_inv_shut",{drDoor(liftDoor,false),drSet("dr_inv_down",1)});
+ {ScriptAction save;save.type=ScriptAction::Type::Checkpoint;drEvent(m,"dr_inv_gone_save",0,0,24,24,"dr_inv_gone",{save});}
  cue(m,"dr_inv_scene",600,Sound::Empty,{16.8f,9.5f},"INVESTIGATOR: Hold the readers. Nobody follows me down.",.7f,f+1.6f);
- cue(m,"dr_inv_scene",3200,Sound::Empty,{12.f,13.8f},"CLEANUP: Sir. The drill team has asked for relief twice.",.6f,f+1.6f);
+ cue(m,"dr_inv_scene",3200,Sound::Empty,{13.4f,9.4f},"CLEANUP: Sir. The drill team has asked for relief twice.",.6f,f+1.6f);
  cue(m,"dr_inv_scene",5600,Sound::Empty,{17.6f,8.6f},"INVESTIGATOR: They will be relieved when the seam is quiet.",.7f,f+1.6f);
  cue(m,"dr_inv_scene",8000,Sound::Door,{20.2f,6.f},"",.8f,f+1.2f);
- cue(m,"dr_inv_scene",10200,Sound::Empty,{20.2f,4.9f},"INVESTIGATOR: The cage will come back up for you.",.6f,f+1.6f);
- cue(m,"dr_inv_exit",4500,Sound::Door,{20.2f,6.f},"",.7f,f+1.2f);
- cue(m,"dr_inv_exit",5400,Sound::LiftMotor,{20.f,3.3f},"",.8f,f+1.5f);
- // --- Light: cold tubes over the hall, the reader lanes, red over the blast door ----------------
- for(auto [x,y,fl]:{std::tuple{4.5f,4.f,0.f},{11.f,4.f,0.f},{4.5f,10.f,0.f},{11.f,10.f,.25f},{12.f,13.4f,0.f},{12.f,20.5f,0.f}})
-  m.lights.push_back(drTube(x,y,R,.6f,6.f,5000,.03f,fl));
+ cue(m,"dr_inv_exit",2850,Sound::Door,{20.2f,6.f},"",.7f,f+1.2f);
+ cue(m,"dr_inv_scene",12600,Sound::Empty,hoist,"INVESTIGATOR: The hoist stays at the bottom.",.7f,f+1.6f);
+ cue(m,"dr_inv_scene",14500,Sound::LiftMotor,hoist,"",.9f,f+1.5f);
+ cue(m,"dr_inv_scene",18000,Sound::LiftCreak,hoist,"",.6f,f-4.f);
+ cue(m,"dr_inv_scene",21500,Sound::OneMetalBang,hoist,"",.6f,sb+1.f);
+ // --- Light: pendants hung low over the hall so the floor and the men are lit, the reader lanes, ---
+ // red over the blast door
+ for(auto [x,y,fl]:{std::tuple{4.5f,3.8f,0.f},{11.6f,3.3f,0.f},{4.5f,9.8f,0.f},{11.4f,9.6f,.2f},{12.f,13.f,0.f},{12.f,20.6f,0.f}})
+  drPendant(m,{x,y},R,f+3.6f,1.1f,8.f,4800,fl);
  recessedFittings(m);
  zone(m,"DEEP ACCESS CONTROL / BOOTH",16.2f,6.1f,23.f,12.9f);
  zone(m,"DEEP ACCESS CONTROL / LIFT",16.2f,1.f,23.f,5.9f,-1000,1000,ShaftAir);
@@ -791,142 +996,270 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  return p;
 }
 
-// EXTRACTION INTERFACE (manifest 76). The end of the labs. The head that research drove into the seam
-// sits in its ring at the south of a clean lab, and the rock has come up round it: through the south
-// wall, across the floor, crystal and violet growth climbing the panels. Past the ring the floor ends
-// at a painted rim over the seam: a void 8 m deep, a crystal formation climbing out of it, the drill
-// rig's derrick standing in it, one bridge across to the mine's timber. LAB 4's lamps are lit on the
-// far bank, one on a ledge, one at the mouth. South into Mine Access: Chapter 3.
+// EXTRACTION INTERFACE (manifest 76). The end of the labs, and of Chapter 2. The head that research
+// drove into the seam sits in its ring at the south of a clean lab, and the seam's own black rock has
+// come up round it: through the south wall, across the tiles, crystal and violet growth climbing the
+// panels. Through the ring the floor ends at a painted rim over the seam: a void 8 m deep, the drill
+// rig standing in it, crystal climbing out of it, one bridge across. On the far bank, dead ahead of
+// the ring, the mine head's gate stands open on a lit timber adit, and the Investigator is standing
+// in it. He looks across, says three words into his handset, and the gate comes down between them.
+// What is left is LAB 4's two lamps, a gate pinned from the mine side, and the way the story goes: down.
+// The gate (door 1) and the leaf behind it on the chunk edge (door 0, paired with Mine Access) both
+// wait on chapter3_open, which nothing sets until Chapter 3 is released (CampaignExport.h).
 std::shared_ptr<const Map> makeExtractionInterface(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[109];m.definition=CampaignChunks[109];m.definition.ambient=.12f;
+ m.name=CampaignMapNames[109];m.definition=CampaignChunks[109];m.definition.ambient=.10f;
+ m.definition.ceiling=-8.f;                                                   // the cavern's roof, 7 m over the banks
  m.wallSurface=SurfaceRock;m.floorSurface=SurfaceRock;m.ceilingSurface=SurfaceRock;
  // The lab stands on a slab over the seam: past the ring the floor ends at a steel threshold and a
- // rim, and the cave opens as a void 8 m deep. The extraction rig stands in it dead ahead of the
- // ring, black against the lit seam face on the far wall; one steel bridge crosses west of it.
+ // rim, and the cave opens as a void 8 m deep. The ring, the void and the mine gate are on one line.
  const float f=-15,R=m.definition.ceiling,slab=f+3.4f,sb=f-8.f;
+ const StateId ch3=stateId("chapter3_open"),sealed=stateId("dr_fin_sealed");
  m.layers.push_back(floorLayer(m.name.c_str(),sb));
- const float rimN=12.4f,rimS=17.f,bx1=7.f,bx2=10.6f;
+ const float rimN=12.4f,rimS=17.f,bx1=7.f,bx2=10.6f,gateY=21.5f;
  wall(m,0,0,24,rimN,sb,f,26);wall(m,0,rimS,24,24,sb,f,26);
  openEdge(m,{'N',9.f,15.f,f,false,0});
- openEdge(m,{'S',8.f,16.f,f,false,0});
+ openEdge(m,{'S',8.f,16.f,f,true,ch3});                                         // door 0: the edge leaf, sealed until Chapter 3
+ // door 1: the mine head gate, standing open until the Investigator has it dropped
+ {Door g{10.f,14.f,gateY,1.f,true,false,false,f-sb};g.requireState=ch3;m.doors.push_back(g);}
+ const int gate=int(m.doors.size())-1;
  // --- The lab: panel walls, tiled floor, the suspended ceiling breaking up to the south -------------
  wall(m,3.8f,1.f,4.f,9.2f,f,slab+.2f,28);wall(m,20.f,1.f,20.2f,9.2f,f,slab+.2f,28);
  wall(m,1.f,1.f,3.8f,9.2f,f,R,26);wall(m,20.2f,1.f,23.f,9.2f,f,R,26);
  wall(m,4.f,1.f,9.f,1.06f,f,slab,28);wall(m,15.f,1.f,20.f,1.06f,f,slab,28);
- wall(m,4.f,1.06f,20.f,8.8f,f,f+.012f,11);wall(m,9.33f,8.8f,14.67f,11.17f,f,f+.012f,11);   // the steel floor plate, out through the ring
- wall(m,4.f,1.f,20.f,6.6f,slab,slab+.2f,20);ceilingGrid(m,4.f,1.f,20.f,6.6f,slab);
- wall(m,4.f,6.6f,9.f,7.8f,slab,slab+.2f,20);wall(m,13.5f,6.6f,20.f,7.4f,slab,slab+.2f,20);   // ragged where the rock took it
- // the south wall either side of the ring, and the rock through it
- wall(m,4.f,9.f,9.33f,9.2f,f,slab+.2f,28);wall(m,14.67f,9.f,15.f,9.2f,f,slab+.2f,28);
- wall(m,15.f,6.4f,20.f,9.2f,f,f+1.6f,26);wall(m,16.2f,7.2f,20.f,9.2f,f+1.6f,R,26);wall(m,15.f,7.6f,16.2f,9.2f,f+1.6f,f+3.f,26);
- wall(m,4.f,7.8f,6.f,9.f,f,f+.9f,26);
- // growth climbing the panels and crystal at the rock's edge
- for(auto [x1,y1,x2,y2,lo,hi]:{std::tuple{4.f,7.f,4.06f,9.f,f,f+2.2f},{19.94f,4.5f,20.f,6.4f,f,f+2.8f},{14.9f,6.4f,15.f,7.6f,f+.4f,f+1.6f},{10.f,8.6f,14.f,8.8f,f,f+.02f}})
+ wall(m,4.f,1.06f,20.f,8.8f,f,f+.012f,27);wall(m,9.33f,8.8f,14.67f,11.17f,f,f+.012f,11);    // clean tile, and the steel plate out through the ring
+ wall(m,4.f,1.f,20.f,6.6f,slab,slab+.2f,22);ceilingGrid(m,4.f,1.f,20.f,6.6f,slab);
+ wall(m,4.f,6.6f,9.f,7.8f,slab,slab+.2f,22);wall(m,13.5f,6.6f,16.f,7.4f,slab,slab+.2f,22);    // ragged where the rock took it
+ // the south wall either side of the ring: panels standing, panels pushed in off their studs, panels down
+ wall(m,4.f,9.f,5.2f,9.2f,f,slab+.2f,28);wall(m,8.5f,9.f,9.33f,9.2f,f,slab+.2f,28);wall(m,14.67f,9.f,15.4f,9.2f,f,slab+.2f,28);
+ wall(m,5.2f,9.f,8.5f,9.2f,f,slab+.2f,30);                                         // where the rock stands in the gap
+ wall(m,5.15f,8.62f,6.3f,8.7f,f,f+2.5f,28);wall(m,7.5f,8.5f,8.55f,8.58f,f,f+1.7f,28);          // two panels shoved a foot into the room
+ wall(m,7.55f,8.5f,8.5f,8.58f,f+1.7f,f+1.76f,20);
+ wall(m,6.1f,6.3f,7.3f,8.1f,f+.012f,f+.07f,28);wall(m,16.4f,4.6f,17.3f,6.2f,f+.012f,f+.07f,28);   // panels face down on the tiles
+ wall(m,5.2f,9.f,8.5f,9.2f,f+2.9f,slab+.2f,28);drProxy(m,5.1f,8.4f,8.6f,9.f,f+2.55f,R);                                       // the head of the wall still spans it
+ // the seam's rock through the west panels, and the south-east corner of the room gone under it
+ drRockFit(m,model::cave_boulder_round,6.9f,9.5f,f-.5f,1.15f,1.f,.6f);wall(m,6.2f,8.8f,7.6f,10.2f,f,R,30);
+ drRockFit(m,model::cave_rock_slab,6.6f,8.2f,f-.3f,.62f,1.f,2.8f);
+ wall(m,15.4f,7.3f,20.f,9.2f,f,R,30);wall(m,17.f,6.2f,20.f,7.3f,f,R,30);
+ drRockFit(m,model::cave_rock_column,18.6f,8.f,f-.3f,1.4f,1.05f,.4f);
+ drRock(m,model::cave_boulder_a,16.3f,8.3f,f-.4f,1.05f,2.3f);
+ drRockFit(m,model::cave_rock_slab,15.7f,6.5f,f-.3f,.6f,1.f,.9f);wall(m,15.f,6.f,16.5f,7.f,f,f+.7f,30);
+ drRockFit(m,model::cave_stalactite,11.9f,8.3f,R-3.1f,.85f,1.05f,.6f);
+ drRockFit(m,model::cave_ceiling_rock,17.5f,8.f,R-2.7f,1.3f,.85f,1.2f);
+ // growth climbing the panels, crystal standing out of the rock's edge
+ for(auto [x1,y1,x2,y2,lo,hi]:{std::tuple{4.f,7.f,4.06f,9.f,f,f+2.2f},{19.94f,4.5f,20.f,6.4f,f,f+2.8f},{10.f,8.6f,14.f,8.8f,f,f+.02f},{5.2f,8.56f,6.2f,8.62f,f,f+1.4f}})
   wall(m,x1,y1,x2,y2,lo,hi,34);
- for(auto [x,y,h]:{std::tuple{15.3f,6.3f,.5f},{16.f,6.25f,.8f},{17.4f,6.3f,.4f},{4.3f,7.7f,.6f},{5.f,7.7f,.35f}})wall(m,x-.08f,y-.08f,x+.08f,y+.08f,f+(x>10?1.6f:.9f),f+(x>10?1.6f:.9f)+h,35);
- m.lights.push_back(drGlow({16.2f,6.1f},f+2.f,.3f,2.2f));m.lights.push_back(drGlow({4.8f,7.4f},f+1.2f,.25f,2.f));
+ drPrim(m,"dome",5.f,8.f,f,1.6f,1.3f,.14f,0,34);drPrim(m,"dome",16.6f,5.6f,f,2.2f,1.6f,.16f,0,34);
+ drShard(m,15.6f,6.3f,f+.5f,.16f,1.3f);drShard(m,16.3f,6.5f,f+.6f,.12f,1.f,2,.5f);drShard(m,17.2f,6.1f,f+1.f,.2f,2.1f,2,.9f);
+ drShard(m,5.3f,8.1f,f+.3f,.14f,1.1f);drShard(m,6.f,7.9f,f+.3f,.1f,.9f,2,.4f);
+ drKnot(m,7.3f,10.3f,f,1.3f,1);drKnot(m,16.f,10.2f,f,1.f,2);m.lights.push_back(drGlow({6.7f,10.8f},f+1.f,.5f,3.5f,{.5f,.6f,1.f}));
+ m.lights.push_back(drGlow({16.2f,5.7f},f+1.9f,1.7f,3.6f,{.5f,.75f,1.f}));m.lights.push_back(drGlow({5.6f,7.5f},f+1.3f,1.4f,3.2f,{.5f,.75f,1.f}));
  // the interface: the control benches either side of the way in, the analysers, the logger
  drCounter(m,4.f,1.06f,9.f,1.72f,f);drCounter(m,15.f,1.06f,20.f,1.72f,f);
  for(float x:{5.5f,17.5f})drFix(m,model::lab_control_board,x,1.08f,f+1.1f,1.32f,.19f,.6f,drS,false);
  kit::prop(m,model::crt_monitor,7.6f,1.4f,f+.9f,.42f,.4f,.38f,0);kit::prop(m,model::lab_field_meter,16.2f,1.4f,f+.9f,.25f,.328f,.148f,.4f);
  drModel(m,model::lab_analyzer_cabinet,5.17f,4.2f,f,drE,true);drProxy(m,4.f,3.25f,6.3f,5.15f,f+3.11f,slab);
- drModel(m,model::lab_mainframe,18.8f,4.f,f,drW,true);drProxy(m,17.65f,2.85f,20.f,5.15f,f+3.18f,slab);
+ drModel(m,model::lab_mainframe,18.8f,3.4f,f,drW,true);drProxy(m,17.65f,2.25f,20.f,4.55f,f+3.18f,slab);
  terminal(m,{8.6f,2.6f},"EXTRACTION INTERFACE / HEAD","THE HEAD WAS SET INTO THE SEAM AT 900 M AND THE LAB WAS BUILT ROUND IT. FEED TO THE CORE, SAMPLES TO THE ARCHIVE.",
   "02:40 THE SEAM MOVED. NOT THE HEAD: THE SEAM. IT CAME UP TO MEET US.",f-sb);
- for(float x:{6.f,18.f})servicePipe(m,{x,1.2f},{x,9.f},slab-.4f,.08f,3);
+ for(float x:{6.f,18.f})servicePipe(m,{x,1.2f},{x,x<12?9.f:7.3f},slab-.4f,.08f,3);
  kit::prop(m,model::office_chair,7.f,3.f,f+.012f,.55f,.55f,.95f,2.6f);
- propPose(m,model::office_chair,13.6f,5.8f,f+.012f,1.2f,kPi*.5f,0);
- drBody(m,"dr_ext_clock",ActorVisual::FemaleScientist,{11.f,6.4f},f+.012f,2.4f);machineryClock(m,"dr_ext_clock",60000);
+ propPose(m,model::office_chair,13.6f,5.4f,f+.012f,1.2f,kPi*.5f,0);
+ drBody(m,"dr_ext_clock",ActorVisual::FemaleScientist,{11.f,6.2f},f+.012f,2.4f);machineryClock(m,"dr_ext_clock",60000);
+ paperDrift(m,8.f,3.f,15.f,7.6f,f+.012f,7,1091);
  m.lights.push_back(drTube(8.f,3.4f,slab,.6f,6.f,5600,.03f,.15f));
  m.lights.push_back(drTube(16.f,3.4f,slab,.45f,5.f,5600,.03f,.7f));
- m.lights.push_back(drTube(12.f,5.6f,slab,.6f,6.f,5600,.03f));
+ m.lights.push_back(drTube(12.f,5.2f,slab,.6f,6.f,5600,.03f));
  drDeadTube(m,12.f,3.4f,slab);drDeadTube(m,8.f,6.f,slab);
- // the ring the head was driven through: the way on, the cable torn out of it still live
+ // the ring the head was driven through: the way on, two cage lamps clamped to it by whoever came
+ // through last, the cable torn out of it still live
  drModel(m,model::mine_shield_ring,12.f,9.6f,f,drS,false);
  for(float x:{9.33f,14.f})wall(m,x,8.03f,x+.67f,11.17f,f,f+3.79f,30);
  wall(m,10.f,8.03f,14.f,11.17f,f+3.f,f+3.79f,30);
+ for(float x:{10.2f,13.8f}){drFix(m,model::mine_cage_lamp,x,7.86f,f+2.3f,.206f,.201f,.362f,0,false);m.pipes.push_back({{x,7.86f},{x,8.05f},f+2.62f,.012f,f+2.9f,6});
+  m.lights.push_back(lamp({x,7.6f},f+2.25f,3.f,4.2f,3400,0,WorldLightMount::Bare,0,false));}
+ m.lights.push_back(lamp({12.f,9.6f},f+2.8f,1.2f,4.2f,4200,0,WorldLightMount::Bare,0,false));           // inside the bore
  looseLead(m,{11.f,8.1f,f+2.99f},{11.6f,7.6f,f},2.6f,7,true,.018f);
  {Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=10.6f;h.x2=12.2f;h.y1=7.f;h.y2=8.2f;h.bottom=f;h.top=f+2.2f;h.damagePerSecond=25;h.period=2.4f;h.onTime=.6f;m.hazards.push_back(h);}
- // --- The threshold: a steel deck out of the ring to a painted rim, rails, two work lights aimed ---
- // across the void at the bridge and the rig. The last clean thing in the chapter.
- wall(m,6.f,11.17f,17.4f,rimN,f,f+.02f,20);floorLine(m,6.f,rimN-.16f,19.5f,rimN,f+.02f,13);
+ // --- The threshold: a steel deck out of the ring to a painted rim, rails, two floods on stands ----
+ // aimed across the void at the far bank. The last clean thing in the chapter.
+ wall(m,6.f,11.17f,17.4f,rimN,f,f+.02f,20);floorLine(m,5.6f,rimN-.16f,18.4f,rimN,f+.02f,13);
  for(float x=6.6f;x<17.f;x+=1.2f)wall(m,x,11.17f,x+.03f,rimN-.16f,f+.02f,f+.025f,8);
- guardRail(m,6.f,rimN-.08f,bx1,rimN,f);guardRail(m,bx2,rimN-.08f,19.5f,rimN,f);
- for(float x:{6.5f,15.f}){m.pipes.push_back({{x,rimN-.3f},{x,rimN-.3f},f,.06f,f+3.2f,1});wall(m,x-.16f,rimN-.46f,x+.16f,rimN-.14f,f+3.15f,f+3.4f,20);
-  m.lights.push_back(lamp({x,rimN+.1f},f+3.1f,.9f,13.f,4200,0,WorldLightMount::Bare,0,false));}
- // --- The void: rock both sides falling to the seam floor, the bridge across it ------------------
- for(auto [x1,y1,x2,y2]:{std::tuple{1.f,9.2f,6.f,13.f},{1.f,13.f,4.5f,17.f},{1.f,17.f,6.8f,21.f},{1.f,21.f,7.6f,23.f},
-                         {18.f,9.2f,23.f,12.f},{19.5f,12.f,23.f,16.f},{17.2f,16.f,23.f,20.f},{16.4f,20.f,23.f,23.f}})wall(m,x1,y1,x2,y2,sb,R,26);
+ guardRail(m,5.6f,rimN-.08f,bx1,rimN,f);guardRail(m,bx2,rimN-.08f,18.4f,rimN,f);
+ for(float x:{6.5f,16.6f}){m.pipes.push_back({{x,rimN-.3f},{x,rimN-.3f},f,.06f,f+3.2f,1});wall(m,x-.16f,rimN-.46f,x+.16f,rimN-.14f,f+3.15f,f+3.4f,20);
+  for(float o:{-.5f,.5f})m.pipes.push_back({{x+o,rimN-.3f-.35f},{x,rimN-.3f},f,.025f,f+1.2f,6});
+  m.lights.push_back(lamp({x,rimN+.25f},f+3.05f,3.4f,15.f,4300,0,WorldLightMount::Bare,0,true));}
+ // --- The cavern: the masses either side are the seam's black rock, not walls. Their cores only ----
+ // collide; what is seen is the pack's columns, blocks and boulders standing in front of the dark.
+ for(auto [x1,y1,x2,y2,lo]:{std::tuple{1.f,9.2f,5.6f,rimN,f},{1.f,rimN,5.f,rimS,sb},{1.f,rimS,6.f,21.3f,f},
+                            {18.4f,9.2f,23.f,rimN,f},{19.f,rimN,23.f,rimS,sb},{18.f,rimS,23.f,21.3f,f}})wall(m,x1,y1,x2,y2,lo,R,30);
+ // west: the ledge beside the ring, the void's wall, the far bank
+ drRockFit(m,model::cave_rock_column,4.2f,10.7f,f-.2f,1.75f,1.17f,.3f);
+ drRock(m,model::cave_boulder_a,5.5f,9.8f,f-.4f,.85f,1.2f);
+ drRockFit(m,model::cave_rock_column,3.4f,14.6f,sb-.3f,2.2f,1.19f,.1f);
+ drRockFit(m,model::cave_rock_column,3.2f,15.f,f-1.8f,2.1f,1.18f,3.3f);
+ drRock(m,model::cave_boulder_round,5.3f,16.1f,sb-.4f,1.4f,1.1f);
+ drRockFit(m,model::cave_rock_block,4.6f,13.1f,f-3.4f,1.2f,1.f,.2f);
+ drRockFit(m,model::cave_rock_column,4.5f,19.4f,f-.2f,1.75f,1.16f,2.9f);
+ drRock(m,model::cave_boulder_a,5.9f,20.9f,f-.3f,.8f,.7f);
+ // east
+ drRockFit(m,model::cave_rock_column,19.8f,10.9f,f-.2f,1.75f,1.17f,3.4f);
+ drRock(m,model::cave_boulder_round,18.2f,9.9f,f-.4f,.8f,2.2f);
+ drRockFit(m,model::cave_rock_column,20.6f,14.4f,sb-.3f,2.2f,1.19f,3.3f);
+ drRockFit(m,model::cave_rock_column,20.8f,15.f,f-1.8f,2.1f,1.18f,.2f);
+ drRock(m,model::cave_boulder_a,18.8f,16.f,sb-.5f,1.5f,2.2f);
+ drRockFit(m,model::cave_rock_column,19.5f,19.3f,f-.2f,1.75f,1.16f,.3f);
+ drRock(m,model::cave_boulder_round,18.f,20.8f,f-.4f,.85f,2.f);
+ // the void's own faces under both banks: the slab's flat cut is behind boulders below and a
+ // course of bedrock blocks above, set back so the chasm keeps its width
+ drRockFit(m,model::cave_boulder_a,8.6f,10.9f,sb-.4f,2.1f,1.f,.1f);drRockFit(m,model::cave_boulder_a,15.4f,10.8f,sb-.5f,2.f,1.1f,3.3f);
+ for(auto [x,yaw,sc]:{std::tuple{6.6f,.1f,1.45f},{10.6f,3.2f,1.5f},{14.6f,.05f,1.4f},{17.8f,3.1f,1.35f}})drRockFit(m,model::cave_rock_block,x,11.6f,sb+4.f,sc,1.f,yaw);
+ drRockFit(m,model::cave_boulder_a,9.4f,18.6f,sb-.4f,2.1f,1.05f,3.2f);drRockFit(m,model::cave_boulder_a,15.8f,18.5f,sb-.5f,2.f,1.f,.2f);
+ for(auto [x,yaw,sc]:{std::tuple{6.2f,3.1f,1.4f},{9.8f,.1f,1.5f},{13.6f,3.2f,1.5f},{17.4f,.1f,1.4f}})drRockFit(m,model::cave_rock_block,x,17.8f,sb+3.8f,sc,1.f,yaw);
+ // the roof: bosses and stalactites where the floods reach
+ drRockFit(m,model::cave_ceiling_rock,8.f,18.8f,R-2.5f,1.15f,.9f,.4f);
+ drRockFit(m,model::cave_ceiling_rock,16.4f,18.4f,R-2.7f,1.3f,.9f,2.1f);
+ drRockFit(m,model::cave_stalactite,6.4f,14.9f,R-3.4f,.85f,1.1f,1.f);
+ drRockFit(m,model::cave_stalactite,17.9f,13.7f,R-2.9f,.75f,1.1f,2.4f);
+ drRockFit(m,model::cave_stalactite_cluster,11.f,14.6f,R-1.7f,.9f,1.f,.5f);
+ drRockFit(m,model::cave_stalactite,13.6f,10.6f,R-2.7f,.7f,1.1f,4.f);
+ // --- The bridge ---------------------------------------------------------------------------------
  wall(m,bx1,rimN,bx2,rimS,f-.32f,f,20);                                                       // the deck
  for(float x:{bx1+.25f,bx2-.25f})m.pipes.push_back({{x,rimN},{x,rimS},f-.55f,.12f,f-.55f,6});   // its girders
  for(float y:{13.6f,15.8f})m.pipes.push_back({{bx1+.25f,y},{bx2-.25f,y},f-.55f,.06f,f-.55f,6});
+ for(float x:{bx1+.25f,bx2-.25f}){m.pipes.push_back({{x,rimN+.05f},{x,rimN+1.5f},f-2.f,.06f,f-.6f,6});m.pipes.push_back({{x,rimS-.05f},{x,rimS-1.5f},f-2.f,.06f,f-.6f,6});}   // knee braces off both faces
  guardRail(m,bx1,rimN,bx1+.08f,rimS,f);guardRail(m,bx2-.08f,rimN,bx2,rimS,f);
  // nobody steps off: proxies along both rims and both sides of the deck; a rock lip on the far rim
- for(auto [x1,y1,x2,y2]:{std::tuple{6.f,rimN,bx1,rimN+.06f},{bx2,rimN,19.5f,rimN+.06f},{4.5f,rimS-.06f,bx1,rimS},{bx2,rimS-.06f,17.2f,rimS},
-                         {bx1,rimN,bx1+.06f,rimS},{bx2-.06f,rimN,bx2,rimS}})wall(m,x1,y1,x2,y2,f,f+2.6f,30);
- for(auto [x1,x2]:{std::pair{4.5f,bx1},{bx2,17.2f}})wall(m,x1,rimS,x2,rimS+.35f,f,f+.28f,26);
- // the crystal formation (east of the rig): prisms climbing out of the seam floor past the rim, lit from below
- for(auto [x,y,w,top]:{std::tuple{17.f,14.8f,.9f,f+3.6f},{18.f,13.9f,.6f,f+1.9f},{15.7f,15.7f,.7f,f+2.5f},{18.4f,15.6f,.5f,f+.9f},
-                       {15.2f,13.5f,.5f,f+1.2f},{17.5f,16.4f,.45f,f+.3f},{16.3f,13.2f,.4f,f-.6f},{14.7f,14.6f,.35f,f-1.8f}}){
-  wall(m,x-w*.5f,y-w*.5f,x+w*.5f,y+w*.5f,sb,top-1.2f,35);wall(m,x-w*.3f,y-w*.3f,x+w*.3f,y+w*.3f,top-1.2f,top,35);}
- wall(m,14.f,12.9f,19.4f,16.9f,sb,sb+.3f,34);wall(m,4.6f,12.9f,bx1-.2f,16.9f,sb,sb+.3f,34);
- for(auto [x,y]:{std::pair{18.f,15.2f},{15.4f,14.2f},{5.6f,14.6f}})drModel(m,model::cave_crystal_bed_blue,x,y,sb+.3f,x,false);
- m.lights.push_back(drGlow({16.6f,14.1f},sb+1.2f,1.2f,8.f));m.lights.push_back(drGlow({16.2f,16.5f},f+1.f,.5f,4.f));
- // the seam face: the far wall over the mine's mouth is the ore itself, growth with crystal veins
- // standing out of it, lit from the bank so the rig stands black against it from the ring
- wall(m,4.f,22.62f,20.f,23.f,f+3.25f,R,26);
- // straight behind the rig the seam is bare: a broad face of crystal, the brightest thing in the
- // chapter, so the derrick's black frame is drawn on it from the lab door
- for(auto [x1,x2,lo,hi]:{std::tuple{9.8f,15.4f,f+3.3f,R-1.2f},{10.6f,14.2f,R-1.2f,R-.3f},{11.6f,13.f,f+3.3f,R}})wall(m,x1,22.2f,x2,22.62f,lo,hi,35);
- for(auto [x1,x2,lo,hi]:{std::tuple{4.6f,7.6f,f+4.f,R-1.8f},{16.6f,18.8f,f+3.8f,R-.8f}})wall(m,x1,22.5f,x2,22.62f,lo,hi,34);
- for(auto [x1,x2]:{std::pair{7.6f,10.25f},{13.75f,16.4f}})wall(m,x1,22.62f,x2,23.f,f,f+3.25f,26);
- for(auto [x,h]:{std::pair{8.4f,2.6f},{9.6f,1.7f},{14.4f,2.2f},{15.6f,3.f}})wall(m,x-.22f,22.3f,x+.22f,22.62f,f,f+h,35);
- for(auto [x,lo,hi,w]:{std::tuple{5.2f,f+3.6f,R-.6f,.5f},{7.4f,f+4.4f,R-1.4f,.7f},{9.3f,f+3.4f,R-.2f,.45f},{11.f,f+5.f,R-.4f,.9f},
-                      {12.9f,f+3.5f,R-2.f,.5f},{14.6f,f+4.2f,R-.3f,.65f},{16.4f,f+3.6f,R-1.f,.5f},{18.4f,f+4.8f,R-.5f,.6f}})
-  wall(m,x-w*.5f,22.3f,x+w*.5f,22.62f,lo,hi,35);
- for(float x:{8.8f,12.f,15.2f})m.lights.push_back(drGlow({x,21.4f},f+5.f,1.f,6.5f,{.85f,.7f,1.f}));
- for(float x:{9.f,15.f})m.lights.push_back(drGlow({x,21.6f},f+1.4f,.6f,3.5f));
- // the extraction rig, dead ahead of the ring in the void: a derrick down into the seam, the drill
- // string, the head buried in ore. Backlit by the seam face so it reads as a silhouette from the ring.
- {const Vec2 d{12.6f,15.8f};
-  for(auto [dx,dy]:{std::pair{-1.2f,-1.2f},{1.2f,-1.2f},{-1.2f,1.2f},{1.2f,1.2f}})wall(m,d.x+dx-.1f,d.y+dy-.1f,d.x+dx+.1f,d.y+dy+.1f,sb,R-.4f,8);
-  for(float z:{sb+2.5f,f-2.5f,f+3.f,f+6.f}){wall(m,d.x-1.3f,d.y-1.3f,d.x+1.3f,d.y-1.1f,z,z+.14f,8);wall(m,d.x-1.3f,d.y+1.1f,d.x+1.3f,d.y+1.3f,z,z+.14f,8);
-   wall(m,d.x-1.3f,d.y-1.1f,d.x-1.1f,d.y+1.1f,z,z+.14f,8);wall(m,d.x+1.1f,d.y-1.1f,d.x+1.3f,d.y+1.1f,z,z+.14f,8);}
-  wall(m,d.x-1.3f,d.y-1.3f,d.x+1.3f,d.y+1.3f,R-.4f,R,8);
-  m.pipes.push_back({d,d,sb+2.4f,.3f,R-.4f,6});                                               // the string
-  m.pipes.push_back({d,d,sb+.6f,1.05f,sb+2.4f,8});m.pipes.push_back({d,d,sb+.2f,.8f,sb+.6f,6});   // the head
-  wall(m,d.x-.5f,d.y-.5f,d.x+.5f,d.y+.5f,f+3.3f,f+4.3f,19);                                   // the swivel and its motor
-  for(auto [x,y,h]:{std::tuple{d.x-1.1f,d.y+.2f,1.8f},{d.x+.9f,d.y-.8f,1.4f},{d.x+.3f,d.y+1.f,2.2f}})wall(m,x-.2f,y-.2f,x+.2f,y+.2f,sb,sb+h,35);
-  m.pipes.push_back({{17.f,11.75f},{d.x+1.f,d.y-1.2f},f+.15f,.07f,f+3.f,7});m.pipes.push_back({{17.3f,11.75f},{d.x+1.2f,d.y-1.f},f+.15f,.07f,f+3.07f,7});
-  drFix(m,model::cable_reel,16.6f,11.2f,f,1.f,2.f,2.f,drE,true);drProxy(m,15.6f,10.7f,17.6f,11.7f,f+2.f,R);
-  m.lights.push_back(drGlow({d.x,d.y},sb+3.4f,.7f,6.f));
-  m.lights.push_back(lamp({d.x,d.y},f+2.9f,.35f,5.f,3200,0,WorldLightMount::Bare,0,false));
-  hazard(m,Hazard::Kind::Anomaly,d.x-1.6f,13.6f,d.x+1.6f,16.9f,sb,sb+2.f,4.f);}                 // the live pool round its head
- // the far bank: rubble, the stalagmite, the muck pile, crystal beds
- for(auto [x1,y1,x2,y2,h]:{std::tuple{11.f,17.4f,12.4f,18.2f,.12f},{13.f,18.f,15.f,19.4f,.18f}})wall(m,x1,y1,x2,y2,f,f+h,26);
- drModel(m,model::cave_stalagmite,15.4f,20.2f,f,.4f,true,.6f);
- drModel(m,model::mine_muck_pile,10.f,20.6f,f,.3f,false);
- for(auto [x,y,z]:{std::tuple{9.f,15.f,sb},{7.4f,10.2f,f},{8.2f,19.6f,f}})drModel(m,model::cave_crystal_bed_blue,x,y,z,x,false);
- for(auto [x,y,h]:{std::tuple{6.2f,10.6f,.5f},{16.4f,17.6f,1.1f},{5.4f,18.6f,.7f}})wall(m,x-.1f,y-.1f,x+.1f,y+.1f,f,f+h,35);
- for(auto [x,y,z]:{std::tuple{9.f,15.f,sb+.8f},{6.4f,10.8f,f+.9f},{16.4f,17.6f,f+1.6f},{8.f,19.6f,f+.6f}})m.lights.push_back(drGlow({x,y},z,.45f,5.f));
- for(auto [x,y]:{std::pair{5.6f,19.2f},{19.f,12.6f}})drModel(m,model::cave_stalactite_cluster,x,y,R-2.f,x,false,.8f);
- // the mine's own timber at the mouth
- drModel(m,model::mine_timber_set,12.f,21.6f,f,drS,false);
- for(float x:{10.4f,13.3f})wall(m,x,21.47f,x+.3f,21.73f,f,f+3.09f,30);
- // LAB 4's lamps: one on a ledge at the bridge's far end, one at the mouth
- wall(m,6.8f,17.6f,7.8f,18.6f,f,f+.9f,26);
+ for(auto [x1,y1,x2,y2]:{std::tuple{5.6f,rimN,bx1,rimN+.06f},{bx2,rimN,18.4f,rimN+.06f},{5.f,rimS-.06f,bx1,rimS},{bx2,rimS-.06f,19.f,rimS},
+                         {bx1,rimN,bx1+.06f,rimS},{bx2-.06f,rimN,bx2,rimS}})wall(m,x1,y1,x2,y2,f,R,30);
+ drRockFit(m,model::cave_rock_slab,14.7f,17.5f,f-.55f,.62f,1.f,.05f);drRockFit(m,model::cave_rock_slab,16.9f,17.6f,f-.5f,.6f,1.f,3.f);wall(m,13.7f,rimS,18.f,17.5f,f,f+.5f,30);
+ // --- The seam floor: growth in blisters, crystal in knots, the tallest climbing past the rim -----
+ for(auto [x,y,w,d,h]:{std::tuple{12.f,14.8f,7.f,3.6f,.5f},{17.f,14.9f,4.f,3.4f,.7f},{7.f,14.8f,3.6f,3.4f,.4f},{14.2f,13.6f,2.6f,1.6f,.9f},{9.6f,16.f,2.4f,1.6f,.7f}})drPrim(m,"dome",x,y,sb,w,d,h,0,34);
+ drKnot(m,18.3f,15.5f,sb+.3f,9.2f,1);drKnot(m,17.2f,16.3f,sb+.3f,6.f,2);drKnot(m,18.5f,13.6f,sb+.2f,4.4f,3);
+ drKnot(m,6.1f,14.7f,sb+.2f,5.2f,0);drKnot(m,11.4f,14.3f,sb+.3f,2.8f,2);drKnot(m,13.f,16.f,sb+.3f,3.6f,1);drKnot(m,9.2f,13.6f,sb+.2f,2.2f,3);
+ for(auto [x,y,z,i,r,gel]:{std::tuple{12.f,14.9f,sb+1.6f,1.6f,9.f,Violet},{17.3f,14.6f,sb+3.f,1.3f,8.f,Point3{.55f,.5f,1.f}},{7.6f,14.9f,sb+1.4f,1.1f,6.5f,Violet},{17.6f,15.f,f+.4f,.9f,5.f,Point3{.5f,.6f,1.f}}})
+  m.lights.push_back(lamp({x,y},z,i,r,6500,0,WorldLightMount::Bare,0,true,gel));
+ // --- The rig, east of the line: the pack's headframe over the hole, the string, the head in ore ---
+ {const Vec2 d{15.2f,14.9f};
+  drFix(m,model::mine_headframe,d.x,d.y,sb,3.5f,3.46f,12.5f,0,false);
+  m.pipes.push_back({d,d,sb+2.4f,.22f,f+2.f,6});                                               // the string
+  m.pipes.push_back({d,d,sb+.6f,.9f,sb+2.4f,8});m.pipes.push_back({d,d,sb+.2f,.7f,sb+.6f,6});    // the head
+  m.pipes.push_back({{16.9f,11.75f},{d.x+.6f,d.y-1.f},f+.15f,.07f,f+1.6f,7});m.pipes.push_back({{17.2f,11.75f},{d.x+.8f,d.y-.8f},f+.15f,.07f,f+1.7f,7});
+  kit::prop(m,model::pwr_cable_bundle,16.9f,11.55f,f+.02f,.2f,.55f);
+  drFix(m,model::pwr_control_cabinet,17.6f,11.f,f,.8f,.4f,1.6f,drN,true);drProxy(m,17.2f,10.8f,18.f,11.2f,f+1.6f,R);
+  m.lights.push_back(lamp({d.x-.6f,d.y-.9f},sb+3.2f,1.8f,7.f,4600,0,WorldLightMount::Bare,0,false));
+  m.lights.push_back(lamp({d.x,d.y-1.9f},f+.6f,1.6f,6.f,3000,0,WorldLightMount::Bare,0,false));
+  hazard(m,Hazard::Kind::Anomaly,d.x-1.6f,13.3f,d.x+1.6f,16.6f,sb,sb+2.f,4.f);}                 // the live pool round its head
+ // --- The far bank and the mine head ------------------------------------------------------------
+ // the gate wall: rock either side and over a concrete portal; behind the gate a timber adit, two
+ // cage lamps and the edge leaf
+ wall(m,0.f,21.3f,10.f,24.f,f,R,26);wall(m,14.f,21.3f,24.f,24.f,f,R,26);wall(m,10.f,21.3f,14.f,24.f,f+3.3f,R,26);
+ // the mine head is a cast bulkhead across the cavern's end: concrete to the roof between the rock, ribbed
+ wall(m,5.f,21.2f,9.f,21.3f,f,R,15);wall(m,15.f,21.2f,19.f,21.3f,f,R,15);wall(m,9.f,21.2f,15.f,21.3f,f+4.02f,R,15);
+ for(float x:{6.4f,8.f,16.f,17.6f})wall(m,x-.22f,21.02f,x+.22f,21.2f,f,R,15);
+ wall(m,5.f,21.1f,19.f,21.2f,f+4.02f,f+4.3f,7);
+ for(float x:{9.f,14.f})wall(m,x,20.8f,x+1.f,21.3f,f,f+3.9f,15);                                  // piers
+ wall(m,9.f,20.8f,15.f,21.3f,f+2.65f,f+3.9f,15);                                                // the header
+ wall(m,9.f,20.78f,15.f,20.8f,f+2.65f,f+2.8f,13);wall(m,8.94f,20.74f,15.06f,21.3f,f+3.9f,f+4.02f,7);
+ for(float x:{9.f,14.92f})wall(m,x,20.78f,x+.08f,20.8f,f,f+2.65f,13);
+ wallSign(m,12.f,20.74f,f+3.05f,"NO LAMP, NO ENTRY","TALLY IN / TALLY OUT / BY ORDER OF THE MINE MANAGER",3.6f,drN);
+ drFix(m,model::lab_pa_horn,13.9f,20.6f,f+3.3f,.495f,.564f,.433f,drN,false);
+ for(float x:{10.03f,13.91f})wall(m,x,21.7f,x+.06f,23.4f,f,f+3.3f,32);                             // lagging
+ wall(m,10.f,21.7f,14.f,23.4f,f+3.24f,f+3.3f,32);
+ for(float y:{22.05f,23.05f})drFix(m,model::mine_timber_set,12.f,y,f,3.7f,.3f,3.2f,0,false);
+ drFix(m,model::mine_rail_straight,12.f,20.3f,f,1.5f,6.2f,.12f,0,false);
+ wall(m,11.1f,17.15f,12.9f,17.4f,f,f+.45f,32);for(float x:{11.2f,12.6f})wall(m,x,17.4f,x+.2f,17.7f,f,f+.6f,12);   // the buffer at the rim
+ for(float x:{11.f,13.f}){drFix(m,model::mine_cage_lamp,x,22.55f,f+2.85f,.206f,.201f,.362f,0,false);
+  m.lights.push_back(drSwitched(lamp({x,22.5f},f+2.7f,2.2f,7.5f,2500,0,WorldLightMount::Bare,0,false),sealed,true));}
+ m.lights.push_back(lamp({12.f,20.5f},f+2.45f,2.6f,8.f,3600,0,WorldLightMount::Bare,0,true));           // the lamp under the header
+ drFix(m,model::mine_cage_lamp,12.f,20.62f,f+2.29f,.206f,.201f,.362f,0,false);
+ for(auto [x,ph]:{std::pair{9.5f,0.f},{14.5f,.7f}}){auto l=lamp({x,20.8f},f+2.2f,1.8f,7.f,3000,0,WorldLightMount::Wall,lN,true,{1.f,.12f,.06f});
+  l.period=1.4f;l.onTime=.7f;l.phase=ph;l.enabledState=sealed;m.lights.push_back(l);}
+ // the rock round the portal and the seam showing through it: crystal out of the wall over the gate
+ drRockFit(m,model::cave_rock_column,7.f,22.4f,f-.2f,1.75f,1.16f,1.57f);
+ drRockFit(m,model::cave_rock_column,17.f,22.4f,f-.2f,1.75f,1.16f,4.71f);
+ drRockFit(m,model::cave_ceiling_rock,12.f,21.6f,R-3.1f,1.25f,.88f,0);drRockFit(m,model::cave_ceiling_rock,9.2f,21.9f,R-3.f,1.1f,.9f,2.f);drRockFit(m,model::cave_ceiling_rock,14.9f,22.f,R-3.f,1.15f,.9f,4.f);
+ for(auto [x,z,w,h,reach]:{std::tuple{9.4f,f+4.f,.3f,2.2f,1.3f},{10.6f,f+4.3f,.22f,1.6f,.8f},{12.4f,f+4.6f,.34f,2.f,1.5f},{13.8f,f+4.1f,.24f,1.8f,1.f},{15.f,f+3.6f,.3f,2.6f,1.2f},
+                           {8.3f,f+1.2f,.26f,2.4f,.9f},{15.9f,f+1.6f,.22f,2.f,.8f},{7.6f,f+3.f,.2f,1.6f,.7f},{16.8f,f+3.8f,.26f,1.9f,.9f}})drShard(m,x,21.12f,z,w,h,2,reach);
+ drShard(m,8.5f,20.5f,f,.2f,1.5f);drShard(m,15.6f,20.6f,f,.16f,1.1f);
+ drModel(m,model::cave_crystal_bed_blue,8.4f,20.5f,f,.4f,false,1.2f);drModel(m,model::cave_crystal_bed_blue,15.7f,20.5f,f,1.4f,false,1.f);
+ for(auto [x,z,i]:{std::tuple{8.4f,f+2.4f,.9f},{15.8f,f+2.8f,.9f},{12.f,f+5.4f,1.1f}})m.lights.push_back(lamp({x,20.35f},z,i,5.5f,6500,0,WorldLightMount::Bare,0,true,{.5f,.6f,1.f}));
+ // the bank: the tub left off the rails, spoil, two posts with the detail's lamps on them
+ drModel(m,model::mine_ore_cart,15.5f,18.6f,f,kPi*.5f+.3f,true);
+ drModel(m,model::mine_muck_pile,16.5f,19.6f,f,.3f,false);drModel(m,model::mine_muck_pile,7.6f,19.8f,f,2.f,false,1.3f);
+ kit::prop(m,model::mine_shovel,16.9f,19.f,f,.114f,.313f,1.514f,.6f);kit::prop(m,model::mine_hard_hat,14.3f,18.2f,f,.279f,.351f,.153f,1.9f);
+ for(auto [x,y]:{std::pair{6.6f,19.f},{17.3f,18.2f}}){drFix(m,model::mine_prop_post,x,y,f,.336f,.262f,2.889f,0,true);
+  drFix(m,model::mine_cage_lamp,x+(x<12?.24f:-.24f),y,f+2.3f,.206f,.201f,.362f,0,false);
+  m.lights.push_back(lamp({x+(x<12?.4f:-.4f),y},f+2.2f,2.f,6.5f,2300,0,WorldLightMount::Bare,0,true));}
+ // the detail's handset, on a crate by the east pier
+ drFix(m,model::wooden_crate,15.5f,20.3f,f,.8f,.8f,.8f,.2f,true);
+ const Vec2 radio{15.45f,20.25f};kit::prop(m,model::item_walkie,radio.x,radio.y,f+.8f,.114f,.376f,.046f,.9f);
+ // LAB 4's lamps: one on a block at the bridge's far end, one at the gate under her note
+ wall(m,6.8f,17.75f,7.8f,18.45f,f,f+.9f,30);drRockFit(m,model::cave_rock_block,7.3f,18.1f,f-.14f,.36f,1.f,.2f);
  {const int lamp1=int(m.clutterSpawns.size());kit::prop(m,model::scrap_lantern,7.3f,18.1f,f+.9f,.8f);
-  m.lights.push_back(drGlow({7.3f,18.1f},f+1.45f,.5f,5.f,{1,1,1},2600));m.lights.back().prop=lamp1;}
- {const int lamp2=int(m.clutterSpawns.size());kit::prop(m,model::scrap_lantern,14.9f,22.4f,f,2.2f);
-  m.lights.push_back(drGlow({14.9f,22.4f},f+.55f,.45f,5.f,{1,1,1},2600));m.lights.back().prop=lamp2;}
- m.creatureSpawns.push_back({CreatureKind::Transformed,{8.8f,13.6f},f,1,0});
- m.creatureSpawns.push_back({CreatureKind::Transformed,{14.6f,17.4f},f,1,0});
- m.creatureSpawns.push_back({CreatureKind::Mutant,{9.6f,21.f},f,1,0});
+  m.lights.push_back(drGlow({7.3f,18.1f},f+1.45f,.9f,5.5f,{1,1,1},2600));m.lights.back().prop=lamp1;}
+ {const int lamp2=int(m.clutterSpawns.size());kit::prop(m,model::scrap_lantern,9.5f,20.4f,f,2.2f);
+  m.lights.push_back(drGlow({9.5f,20.4f},f+.55f,.8f,4.5f,{1,1,1},2600));m.lights.back().prop=lamp2;}
+ taped(m,{9.5f,20.8f},f+1.45f,drN,Readable::Sticky,"LAB 4","I WENT DOWN BEFORE HE PINNED IT.","THE LAMPS ARE LIT ALL THE WAY TO THE BOTTOM. FOLLOW THEM WHEN IT OPENS.");
+ // the gate's own control, west of the portal
+ if(Chapter3Released){
+  terminal(m,{8.1f,19.6f},"MINE HEAD / GATE CONTROL","04:31 GATE DOWN AND PINNED FROM THE MINE SIDE. AUTHORITY: INTERNAL INVESTIGATIONS.",
+   "PIN WITHDRAWN AT THE 900 LEVEL. E / LOCAL RELEASE.",f-sb,stateId("dr_gate_release"),stateId("dr_fin_done"));
+  ScriptAction voice;voice.type=ScriptAction::Type::PlaySound;voice.sound=Sound::PaDoorsUnlocked;voice.amount=.8f;
+  drEvent(m,"dr_gate_released",0,0,24,24,"dr_gate_release",{drSet("chapter3_open",1),voice});
+ }else terminal(m,{8.1f,19.6f},"MINE HEAD / GATE CONTROL","04:31 GATE DOWN AND PINNED FROM THE MINE SIDE. AUTHORITY: INTERNAL INVESTIGATIONS.",
+  "LOCAL RELEASE REFUSED. THE PIN IS HELD AT THE DRILL TEAM'S KEY SWITCH, 900 LEVEL.",f-sb);
+ // --- The last beat ----------------------------------------------------------------------------
+ // He is standing in the gate from the moment the map loads, a pace behind the leaf's line. The scene
+ // starts as the player comes out of the ring onto the threshold, facing him: the order into his
+ // handset, the gate down, the adit's light pinched out, red on the piers, and what the noise wakes.
+ // Stepping onto the bridge before he has spoken drops the gate at once: nobody reaches it open.
+ const Vec2 inGate{12.f,22.35f},inAdit{12.f,23.f};
+ {ActorTrack inv;inv.timerState=stateId("dr_fin");inv.visual=ActorVisual::Investigator;inv.scale=1.8f;
+  inv.keys={{0,inGate,f,drN,0,0},{400,inGate,f,drN,6,0},{2500,inGate,f,drN,6,1},{2700,inGate,f,drN,0,0},{4300,inGate,f,drN,0,.6f},
+   {5000,inGate,f,drS,0,0},{5200,inGate,f,drS,1,0},{6100,inAdit,f,drS,1,1},{6300,inAdit,f-4.f,drS,0,0},{9000,inAdit,f-4.f,drS,0,1}};
+  m.actorTracks.push_back(std::move(inv));}
+ {TimedSequence s;s.timerState=stateId("dr_fin");s.finishState=stateId("dr_fin_order");s.x1=9.4f;s.y1=10.2f;s.x2=14.6f;s.y2=rimN;
+  s.durationMs=9000;s.finishAtMs=2500;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);}
+ drSequence(m,"dr_fin_drop","dr_fin_sealed",1600,1150);
+ cue(m,"dr_fin",500,Sound::RadioSquelch,inGate,"INVESTIGATOR: Mine head. She is at the interface.",.9f,f+1.6f);
+ cue(m,"dr_fin",2300,Sound::Empty,inGate,"INVESTIGATOR: Close it.",.9f,f+1.6f);
+ cue(m,"dr_fin_drop",1,Sound::OneMetalDrag,{12.f,gateY},"",1.f,f+1.6f);
+ cue(m,"dr_fin_drop",1150,Sound::OneMetalBang,{12.f,gateY},"",1.f,f+1.f);
+ {ScriptCondition notYet;notYet.id=stateId("dr_fin_drop");notYet.op=ScriptCondition::Op::Equal;notYet.value=0;
+  ScriptEvent e;e.id=stateId("dr_fin_close");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=stateId("dr_fin_order");e.conditions={notYet};
+  e.actions={drDoor(gate,false),drSet("dr_fin_drop",1)};m.scriptEvents.push_back(e);
+  e.id=stateId("dr_fin_rush");e.x1=5.f;e.y1=rimN;e.x2=19.f;e.y2=21.3f;e.requireState=0;m.scriptEvents.push_back(e);
+  ScriptCondition unseen;unseen.id=stateId("dr_fin");unseen.op=ScriptCondition::Op::Equal;unseen.value=0;
+  e.id=stateId("dr_fin_unseen");e.conditions={unseen};e.actions={drSet("dr_fin",2600)};m.scriptEvents.push_back(e);}
+ {ScriptAction shake;shake.type=ScriptAction::Type::Shake;shake.amount=.45f;
+  drEvent(m,"dr_fin_slam",0,0,24,24,"dr_fin_sealed",{shake});}
+ m.ambients.push_back({Sound::Sting,{12.f,18.f},f+2.f,.6f,30,AmbientEmitter::OnState,0,0,sealed,1});
+ m.ambients.push_back({Sound::PaDoorsLocked,{13.9f,20.6f},f+3.3f,.6f,26,AmbientEmitter::OnState,0,0,sealed,1});
+ // what the slam wakes: the mine head's own shift, still at the gate they were told to hold
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{8.8f,16.2f},f,1,0,sealed});
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{13.6f,18.9f},f,1,0,sealed});
+ m.creatureSpawns.push_back({CreatureKind::Mutant,{10.6f,19.6f},f,1,0,sealed});
+ // when the bank is quiet and the player is at the gate, the handset: where everyone is going
+ drSequence(m,"dr_fin_radio","dr_fin_done",15000,13600);
+ {ScriptEvent e;e.id=stateId("dr_fin_arrive");e.x1=8.6f;e.y1=18.2f;e.x2=16.4f;e.y2=21.3f;e.requireState=sealed;e.requireEnemiesClear=true;
+  e.actions={drSet("dr_fin_radio",1)};m.scriptEvents.push_back(e);}
+ cue(m,"dr_fin_radio",700,Sound::RadioSquelch,radio,"RADIO: Mine head to control. Gate is down and pinned.",.9f,f+.9f);
+ cue(m,"dr_fin_radio",3800,Sound::Empty,radio,"RADIO: Sir, there are lamps lit on the survey drift.",.9f,f+.9f);
+ cue(m,"dr_fin_radio",6500,Sound::Empty,radio,"RADIO: They are not ours.",.9f,f+.9f);
+ cue(m,"dr_fin_radio",9300,Sound::RadioSquelch,radio,"INVESTIGATOR (RADIO): They are hers. Leave them lit.",.9f,f+.9f);
+ cue(m,"dr_fin_radio",12000,Sound::Empty,radio,"INVESTIGATOR (RADIO): She is going where we are going.",.9f,f+.9f);
+ {ScriptAction save;save.type=ScriptAction::Type::Checkpoint;
+  ScriptAction sting;sting.type=ScriptAction::Type::PlaySound;sting.sound=Sound::StingPiano;sting.amount=.7f;
+  ScriptAction end;end.type=ScriptAction::Type::ShowMessage;end.text="END OF CHAPTER 2 / THE MINE HEAD IS SEALED";end.amount=9.f;
+  drEvent(m,"dr_fin_end",0,0,24,24,"dr_fin_done",{sting,end,save});
+  drEvent(m,"dr_ext_arrive",9.f,1.f,15.f,3.2f,"",{save});}
  m.pickupSpawns.push_back({{5.f,2.6f},PickupKind::Health,f+.012f});
- m.pickupSpawns.push_back({{9.8f,15.6f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{9.f,10.4f},PickupKind::Ammo,f});
+ m.pickupSpawns.push_back({{16.8f,20.2f},PickupKind::HandgunAmmo,f});
  zone(m,"EXTRACTION INTERFACE / THE HEAD",4.f,1.f,20.f,9.2f,-1000,1000,LabAir);
- zone(m,"EXTRACTION INTERFACE / THE SEAM",1.f,9.2f,23.f,24.f,-1000,1000,SeamAir);
+ zone(m,"EXTRACTION INTERFACE / MINE HEAD",1.f,rimS,23.f,24.f,-1000,1000,SeamAir);
+ zone(m,"EXTRACTION INTERFACE / THE SEAM",1.f,9.2f,23.f,rimS,-1000,1000,SeamAir);
  zone(m,"EXTRACTION INTERFACE",0,0,24,24,-1000,1000,DustAir);
  return p;
 }

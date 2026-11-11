@@ -4,6 +4,7 @@
 // docs/Design/descent-campaign-20261025.md for the brief.
 #include "CampaignChapters.h"
 #include "CampaignKit.h"
+#include "CampaignExport.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -858,7 +859,10 @@ std::shared_ptr<const Map> makeEnergyResearchGreatDoor(){
  {auto e=pbEvent("ere_finale_cleared",0,0,24,24,-100,100);e.requireEnemiesClear=true;e.actions={pbSet(clear),pbSave()};m.scriptEvents.push_back(e);}
  terminal(m,{18.f,20.6f},"GREAT DOOR / LOCAL CONTROL","E / OPEN THE GREAT DOOR TO ENERGY RESEARCH.","LOCKED OUT WHILE THE CLEANUP DETAIL HOLDS THE PODIUM.",top-f,door,clear);
  m.terminals.back().yaw=pbN;
- {auto e=pbEvent("ere_great_door_opens",0,0,24,24,-100,100,door);e.actions={pbShake(.3f),pbSound(Sound::LiftCreak,.8f),pbSave()};m.scriptEvents.push_back(e);}
+ {auto e=pbEvent("ere_great_door_opens",0,0,24,24,-100,100,door);e.actions={pbShake(.3f),pbSound(Sound::LiftCreak,.8f),pbSave()};
+  // Chapter 2's leaf (Research Intake's door 0) opens with this one once the chapter is released (CampaignExport.h).
+  if(Chapter2Released)e.actions.insert(e.actions.begin(),pbSet(stateId("chapter2_open")));
+  m.scriptEvents.push_back(e);}
  // --- Light: the door lit from below, the hall from above ----------------------------------------
  for(float x:{9.5f,14.5f}){m.lights.push_back(lamp({x,20.6f},top+.4f,2.2f,9.f,2400,-.1f,WorldLightMount::Bare));pbLampHead(m,x,20.6f,top+.25f);}
  for(Vec2 l:{Vec2{12.f,4.f},Vec2{4.f,12.f},Vec2{20.f,12.f},Vec2{12.f,18.f}})m.lights.push_back(lamp(l,roof-1.5f,4.f,20.f,5200,.05f));

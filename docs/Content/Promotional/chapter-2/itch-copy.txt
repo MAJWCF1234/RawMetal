@@ -1,0 +1,31 @@
+DEPTHWORKS - itch.io page copy (Chapter 2 update, spoiler-free)
+
+TITLE
+DepthWorks - Chapters 1 & 2
+
+TAGLINE (under 100 characters)
+Past the great door, the welcome film is still playing. Nobody came to watch it.
+
+ANNOUNCEMENT / DEVLOG HEADLINE
+Chapter 2: Energy Research is open.
+
+DESCRIPTION ADDITION (under the Chapter 1 description)
+CHAPTER 2 - ENERGY RESEARCH
+The great door was never meant to open for you. Beyond it, the plant's research
+levels keep their own hours: an intake theatre with its film on a loop, a
+screening hall still waiting on its morning queue, the suits hung where the
+staff left them. Lower down, the work they were doing is still going on
+without them.
+
+- Forty-two new areas, from the clean front offices to the flooded test halls
+  and what grew in Containment.
+- Steel grilles you can be seen through, time-locked cages, standing water you
+  cannot see the bottom of.
+- A new score for the laboratories and the clinic, and rooms that sound like
+  what they are made of.
+- Hide where you can. Lockers hold now, until something hears you knock.
+
+PAGE ASSETS (this folder)
+Cover: cover-630x500.png        Banner: banner-1920x540.png
+Screenshots, in order: shot-01.png .. shot-08.png (keep the Chapter 1 set after them)
+Logo: depthworks-logo-chapter2.png. Background: keep the Chapter 1 background-1920x1080.png.

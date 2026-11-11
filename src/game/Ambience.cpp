@@ -112,7 +112,8 @@ bool Game::testAmbience(){
  // 6. Chapter 2 has its sound: every research-level map carries emitters from the bank, inside its walls, and the big rooms their reverb.
  {int least=1000,most=0,total=0,loops=0,outside=0,quiet=0;
   for(int chunk=ChapterTwoSoundFirst;chunk<=ChapterTwoSoundLast;++chunk){const auto map=campaignMap(chunk);const int n=int(map->ambients.size());least=std::min(least,n);most=std::max(most,n);total+=n;quiet+=n==0;
-   for(const auto&a:map->ambients){loops+=a.mode==AmbientEmitter::Loop;outside+=a.position.x<0||a.position.y<0||a.position.x>24||a.position.y>24||!bankSound(a.sound)||a.gain>.6f||(a.mode==AmbientEmitter::Loop&&!bankSound(a.sound)->loop);}}
+   for(const auto&a:map->ambients){loops+=a.mode==AmbientEmitter::Loop;const bool bad=a.position.x<0||a.position.y<0||a.position.x>24||a.position.y>24||!bankSound(a.sound)||a.gain>.6f||(a.mode==AmbientEmitter::Loop&&!bankSound(a.sound)->loop);outside+=bad;
+    if(bad)report<<"  out of bounds: chunk "<<chunk<<" sound "<<int(a.sound)<<" at "<<a.position.x<<","<<a.position.y<<" gain "<<a.gain<<" mode "<<int(a.mode)<<(bankSound(a.sound)?"":" (not in bank)")<<'\n';}}
   const auto morgue=campaignMap(78),bay=campaignMap(86),foundry=campaignMap(0);
   bool breath=false,drone=false;for(const auto&a:morgue->ambients){breath|=a.sound==Sound::OneMonsterBreath&&a.mode==AmbientEmitter::Random;drone|=a.sound==Sound::AmbDrone;}
   report<<"  chunks 68-109: "<<total<<" emitters ("<<loops<<" beds), "<<least<<" to "<<most<<" a map\n";

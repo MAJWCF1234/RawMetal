@@ -28,6 +28,9 @@ void mdGlass(Map& m,float x1,float y1,float x2,float y2,float f,float top,int ma
 // Somebody left where they fell: a scripted track held in the dead pose.
 void mdBody(Map& m,const char* clock,ActorVisual visual,Vec2 p,float z,float yaw){actor(m,clock,visual,1.7f,{{0,p,z,yaw,4,1},{1000,p,z,yaw,4,1}});}
 void mdBlood(Map& m,float x1,float y1,float x2,float y2,float f){wall(m,x1,y1,x2,y2,f+.004f,f+.010f,16);}
+// Dressing nobody will carry off: stock on a shelf board, a sheet on the floor. kit::prop's
+// arguments, but it is part of the room (a fixture that does not block), not a loose prop.
+void mdSet(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw){mdFix(m,model,x,y,z,w,d,h,yaw,false);}
 void mdGuard(Map& m,const char* clock,const std::string& key,ActorVisual visual,GuardSquadRole role,const char* squad,std::vector<ActorPatrolPoint> beat,float sight,int weapon,float speed,int health=90){
  ActorTrack t;t.timerState=stateId(clock);t.visual=visual;t.scale=1.6f;t.health=health;
  t.damageState=stateId(key+"_damage");t.deadState=stateId(key+"_dead");
@@ -46,7 +49,7 @@ void mdSequence(Map& m,const char* timer,const char* finish,int durationMs,int f
 // A swinging clinic door: the renderer draws leaf, posts and head to 2.55 m; the wall closes above.
 void m71Swing(Map& m,float x1,float x2,float y,float f,float roof,float swing,float open=0){
  wall(m,x1,y-.1f,x2,y+.1f,f+2.55f,roof,3);
- Door d{x1,x2,y,open};d.swinging=true;d.swing=swing;d.opening=open>0;d.maxOpen=.9f;m.doors.push_back(d);
+ Door d{x1,x2,y,open};d.swinging=true;d.swing=swing;d.opening=open>0;d.maxOpen=.9f;d.label="DOOR";m.doors.push_back(d);
 }
 // An open doorway through a wall that runs along y: pale-steel jambs and head, wall above.
 void m71DoorwayY(Map& m,float y1,float y2,float x1,float x2,float f,float roof){
@@ -233,7 +236,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  for(float y:{3.2f,4.4f})mdFix(m,model::platform_chair,6.f,y,f,1.8f,.5f,.8f,(y==4.4f?-.2f:0),true);
  mdFix(m,model::platform_chair,5.9f,7.5f,f,1.8f,.5f,.8f,-.35f,true);              // shoved out of line in the rush
  mdFix(m,model::lab_status_display,2.6f,1.058f,f+2.15f,1.386f,.116f,.4f,kPi,false); // the call display
- m.lights.push_back(lamp({2.6f,1.15f},f+2.35f,.35f,2.5f,9000,0,WorldLightMount::Bare));m.lights.back().flicker=.1f;
+ m.lights.push_back(lamp({2.6f,1.7f},f+2.2f,.3f,3.f,9000,0,WorldLightMount::Bare));m.lights.back().flicker=.1f;   // its glow, held clear of the wall
  wall(m,5.3f,1.f,5.9f,1.45f,f+1.96f,f+2.f,20);wall(m,5.58f,1.f,5.62f,1.4f,f+1.7f,f+1.96f,20);
  mdFix(m,model::cctv_tv,5.6f,1.23f,f+2.f,.5f,.4f,.42f,0,false);                    // the safety film
  m.lights.push_back(lamp({5.6f,2.3f},f+2.15f,.35f,3.f,7000,.1f,WorldLightMount::Bare));m.lights.back().flicker=.15f;
@@ -250,9 +253,9 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  mdFix(m,model::wooden_table,4.2f,2.f,f,1.094f,.579f,.624f,.06f,true);
  kit::prop(m,model::office_paper_stack,4.f,1.95f,f+.624f,.33f,.44f,.03f,.06f);
  // What people were holding when they were called: bands, badges, a mug, a coat of paper.
- for(auto [x,y,yaw]:{std::tuple{4.05f,4.9f,.4f},{4.2f,5.05f,1.9f},{4.35f,4.85f,2.8f},{3.95f,5.15f,.9f},{4.5f,5.2f,2.2f},{4.25f,5.3f,.1f}})kit::prop(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{4.05f,4.9f,.4f},{4.2f,5.05f,1.9f},{4.35f,4.85f,2.8f},{3.95f,5.15f,.9f},{4.5f,5.2f,2.2f},{4.25f,5.3f,.1f}})mdSet(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
  for(auto [x,y,yaw]:{std::tuple{3.9f,3.8f,.7f},{4.6f,6.3f,2.4f},{2.2f,7.5f,1.3f}})kit::prop(m,model::item_dosimeter,x,y,f,.31f,.146f,.066f,yaw);
- for(auto [x,y,yaw]:{std::tuple{3.6f,6.1f,.3f},{4.8f,3.6f,2.1f},{4.4f,7.6f,1.f},{3.7f,8.2f,2.7f},{4.9f,5.8f,.6f}})kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{3.6f,6.1f,.3f},{4.8f,3.6f,2.1f},{4.4f,7.6f,1.f},{3.7f,8.2f,2.7f},{4.9f,5.8f,.6f}})mdSet(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
  kit::prop(m,model::mug,1.75f,3.05f,f+.42f,.09f,.09f,.1f,.0f);kit::prop(m,model::mug,4.75f,6.9f,f,.09f,.09f,.1f,1.f);
  kit::prop(m,model::office_file_binder,6.6f,3.15f,f+.42f,.093f,.301f,.424f,.2f);
  // --- N2, the cubicles: what the sweep did -----------------------------------------------------
@@ -300,27 +303,27 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  kit::prop(m,model::office_chair,11.1f,3.95f,f,.55f,.55f,.95f,-kPi*.5f+.6f);
  mdFix(m,model::lab_photocopier,7.98f,4.f,f,.826f,.752f,.967f,-kPi*.5f,true);
  for(float dz:{0.f,.03f})kit::prop(m,model::office_paper_stack,7.95f,3.95f+dz*3,f+.967f+dz,.33f,.44f,.03f,.2f+dz*10);
- for(auto [x,y,yaw]:{std::tuple{8.7f,4.3f,.4f},{9.1f,3.6f,1.7f},{8.9f,4.7f,2.6f}})kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{8.7f,4.3f,.4f},{9.1f,3.6f,1.7f},{8.9f,4.7f,2.6f}})mdSet(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
  kit::prop(m,model::prop_cardboard_box_open,10.5f,4.4f,f,.73f,.725f,.726f,.25f);
  // --- N5, the dosimeter store --------------------------------------------------------------------
  // Shelf boards (metal_shelf, 1.8 m): .306, .972 and 1.656. Band boxes below, loose bands on top,
  // the gaps where the detail took what it needed.
  for(float x:{13.7f,15.65f}){shelf(m,{x,1.27f},0);
-  for(int k=0;k<4;++k)if(!(x>15.f&&k==2))kit::prop(m,model::item_dosimeter,x-.6f+.4f*k,1.27f,f+1.65f,.31f,.146f,.066f,.05f*k);
-  for(int k=0;k<3;++k)if(!(x<15.f&&k==1))kit::prop(m,model::prop_cardboard_box,x-.5f+.5f*k,1.27f,f+.975f,.436f,.432f,.22f,.06f*k-.05f);
-  for(int k=0;k<3;++k)if(!(x>15.f&&k==0))kit::prop(m,model::prop_cardboard_box,x-.5f+.5f*k,1.27f,f+.306f,.436f,.432f,.22f,.04f-.05f*k);
-  for(int k=0;k<2;++k)kit::prop(m,model::item_dosimeter,x-.45f+.95f*k,1.25f,f+1.195f,.31f,.146f,.066f,.3f*k);}
+  for(int k=0;k<4;++k)if(!(x>15.f&&k==2))mdSet(m,model::item_dosimeter,x-.6f+.4f*k,1.27f,f+1.65f,.31f,.146f,.066f,.05f*k);
+  for(int k=0;k<3;++k)if(!(x<15.f&&k==1))mdSet(m,model::prop_cardboard_box,x-.5f+.5f*k,1.27f,f+.975f,.436f,.432f,.22f,.06f*k-.05f);
+  for(int k=0;k<3;++k)if(!(x>15.f&&k==0))mdSet(m,model::prop_cardboard_box,x-.5f+.5f*k,1.27f,f+.306f,.436f,.432f,.22f,.04f-.05f*k);
+  for(int k=0;k<2;++k)mdSet(m,model::item_dosimeter,x-.45f+.95f*k,1.25f,f+1.195f,.31f,.146f,.066f,.3f*k);}
  shelf(m,{16.95f,3.4f},-kPi*.5f);
- kit::prop(m,model::prop_cardboard_box,16.95f,3.f,f+1.65f,.436f,.432f,.22f,.1f);
- kit::prop(m,model::prop_cardboard_box,16.95f,3.75f,f+1.65f,.436f,.432f,.22f,-.15f);
- for(float y:{2.9f,3.4f,3.9f})kit::prop(m,model::prop_cardboard_box,16.95f,y,f+.306f,.436f,.432f,.22f,mdE);
- kit::prop(m,model::prop_cardboard_box,16.95f,3.15f,f+.975f,.436f,.432f,.22f,.05f);
+ mdSet(m,model::prop_cardboard_box,16.95f,3.f,f+1.65f,.436f,.432f,.22f,.1f);
+ mdSet(m,model::prop_cardboard_box,16.95f,3.75f,f+1.65f,.436f,.432f,.22f,-.15f);
+ for(float y:{2.9f,3.4f,3.9f})mdSet(m,model::prop_cardboard_box,16.95f,y,f+.306f,.436f,.432f,.22f,mdE);
+ mdSet(m,model::prop_cardboard_box,16.95f,3.15f,f+.975f,.436f,.432f,.22f,.05f);
  for(float y:{3.6f,3.95f})kit::prop(m,model::item_dosimeter,16.95f,y,f+.975f,.31f,.146f,.066f,kPi*.5f+.2f*y);
  for(auto [x,y,yaw]:{std::tuple{14.1f,1.85f,.6f},{14.35f,2.05f,2.1f},{15.9f,1.9f,1.3f},{16.4f,2.6f,2.7f}})kit::prop(m,model::item_dosimeter,x,y,f,.31f,.146f,.066f,yaw);
  mdFix(m,model::med_records_cabinet,12.85f,3.f,f,.9f,.493f,1.f,mdE,true);
  for(auto [x,y,yaw]:{std::tuple{13.9f,3.5f,.2f},{14.85f,2.75f,-.3f},{15.7f,3.6f,.5f}})kit::prop(m,model::prop_cardboard_box,x,y,f,.727f,.72f,.367f,yaw);
  kit::prop(m,model::prop_cardboard_box_open,16.f,4.55f,f,.73f,.725f,.726f,0);
- for(auto [x,y,yaw]:{std::tuple{15.3f,4.55f,.4f},{15.15f,4.3f,1.4f},{15.45f,4.75f,2.5f},{15.2f,4.85f,.9f}})kit::prop(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{15.3f,4.55f,.4f},{15.15f,4.3f,1.4f},{15.45f,4.75f,2.5f},{15.2f,4.85f,.9f}})mdSet(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
  // --- N6, records and the burn: burying the records ----------------------------------------------
  mdFix(m,model::office_bookcase,18.42f,1.25f,f,2.025f,.5f,2.5f,0,true);
  mdFix(m,model::office_file_cabinet_open,20.25f,1.35f,f,1.451f,.699f,1.054f,0,true);
@@ -333,9 +336,10 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  {auto l=lamp({20.f,3.4f},f+1.35f,1.1f,6.f,1800,-.3f,WorldLightMount::Bare);l.flicker=.35f;m.lights.push_back(l);}
  kit::prop(m,model::prop_cardboard_box_open,21.05f,3.95f,f,.73f,.725f,.726f,.35f);
  kit::prop(m,model::prop_cardboard_box_open,18.95f,2.75f,f,.73f,.725f,.726f,-.4f);
- for(auto [x,y,yaw]:{std::tuple{19.3f,3.9f,.3f},{19.0f,4.4f,1.2f},{20.5f,4.65f,2.f},{21.2f,4.9f,.7f},{19.6f,4.9f,2.6f},{18.6f,3.8f,1.f},
+ for(auto [x,y,yaw]:{std::tuple{19.3f,3.9f,.3f},{19.0f,4.4f,1.2f},{20.5f,4.65f,2.f},{21.2f,4.9f,.7f}})kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{19.6f,4.9f,2.6f},{18.6f,3.8f,1.f},
   {20.3f,5.4f,.2f},{21.6f,5.6f,1.5f},{19.1f,5.7f,2.3f},{18.4f,5.f,.5f},{20.9f,6.4f,1.9f},{19.8f,6.6f,.9f},{22.f,6.6f,.4f},{18.9f,7.3f,2.9f}})
-  kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
+  mdSet(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
  terminal(m,{20.25f,1.45f},"COUNT SHEET (CHARRED)","...TIER 3: 9 / ESCORT TO WARD C 02:50 / DETAIL 4...","...LAB 4 / BED...");
  {auto& t=m.terminals.back();t.readable=Readable::Note;t.surface=1.054f;t.yaw=0;}
  // Records, the south strip: what is still waiting for the barrel.
@@ -358,7 +362,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  kit::prop(m,model::prop_cardboard_box,20.35f,12.45f,f+.812f,.727f,.72f,.367f,.12f);
  kit::prop(m,model::prop_cardboard_box_open,20.85f,13.4f,f,.73f,.725f,.726f,.1f);          // the ammunition, gone
  kit::prop(m,model::wooden_chair,21.1f,12.35f,f,.417f,.525f,.95f,mdW);
- for(auto [x,y,yaw]:{std::tuple{19.6f,10.4f,.5f},{21.4f,10.9f,2.2f},{22.2f,12.6f,1.1f},{19.2f,12.3f,2.8f}})kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{19.6f,10.4f,.5f},{21.4f,10.9f,2.2f},{22.2f,12.6f,1.1f},{19.2f,12.3f,2.8f}})mdSet(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
  // --- S1, the reception office: the call list -------------------------------------------------
  mdFix(m,model::med_nurse_desk,1.75f,14.5f,f,1.179f,.562f,.808f,kPi,true);
  terminal(m,{3.2f,14.62f},"RECEPTION / CALL LIST","02:41 CUBICLE 2: LAB 4. 02:44 CUBICLE 2: RECOUNT.","03:10 CALLS SUSPENDED. HOLD THE ROOM. DO NOT ANSWER QUESTIONS.");m.terminals.back().yaw=0;
@@ -410,7 +414,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  pipeRoute(m,{P3{13.3f,21.8f,roof},P3{13.3f,21.8f,f+2.25f}},.025f,5,roof);
  wall(m,13.18f,21.68f,13.42f,21.92f,f+2.2f,f+2.24f,20);
  mdFix(m,model::med_floor_drain,13.3f,21.8f,f,.5f,.5f,.01f,0,false);
- for(auto [x,y,yaw]:{std::tuple{11.2f,20.6f,.6f},{12.4f,19.1f,2.f}})kit::prop(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{11.2f,20.6f,.6f},{12.4f,19.1f,2.f}})mdSet(m,model::office_paper_sheet,x,y,f+.001f,.4f,.293f,.004f,yaw);
  // --- S4, the nurses' station: the orders ------------------------------------------------------
  for(float x:{15.2f,16.6f})mdFix(m,model::med_nurse_desk,x,13.48f,f,1.179f,.562f,.808f,kPi,true);
  kit::prop(m,model::crt_monitor,15.55f,13.5f,f+.808f,.42f,.4f,.38f,0);
@@ -418,7 +422,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  m.lights.push_back(lamp({14.9f,13.65f},f+1.25f,.4f,2.5f,3000,0,WorldLightMount::Bare));m.lights.back().prop=nursesDeskLamp;
  terminal(m,{15.08f,13.58f},"STANDING ORDER / 03:20","SEDATE ALL TIER 3 FOR TRANSFER. WHOLE SHIFTS IF NECESSARY.","AUTH: INTERNAL INVESTIGATIONS. PHARMACY TO ISSUE ON SIGHT.");
  {auto& t=m.terminals.back();t.readable=Readable::Letter;t.surface=.808f;t.yaw=0;}
- for(int k=0;k<8;++k)kit::prop(m,model::med_pill_bottle,16.2f+.09f*k,13.4f+.12f*(k%2),f+.808f,.07f,.03f,.13f,.4f*k);
+ for(int k=0;k<5;++k)kit::prop(m,model::med_pill_bottle,16.2f+.14f*k,13.4f+.12f*(k%2),f+.808f,.07f,.03f,.13f,.4f*k);
  for(float x:{16.95f,17.08f})kit::prop(m,model::med_specimen_jar,x,13.55f,f+.808f,.102f,.102f,.172f,0);
  kit::prop(m,model::office_chair,14.95f,14.4f,f,.55f,.55f,.95f,.2f);
  kit::prop(m,model::office_chair,17.6f,14.7f,f,.55f,.55f,.95f,-.7f);
@@ -438,11 +442,11 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // --- S5, linen and O2 ----------------------------------------------------------------------
  shelf(m,{15.6f,22.73f},0);shelf(m,{14.45f,21.6f},kPi*.5f);
  // Shelf boards (metal_shelf, 1.8 m): .306, .972 and 1.656.
- for(float x:{15.f,15.6f,16.2f})kit::prop(m,model::prop_cardboard_box,x,22.73f,f+1.65f,.436f,.432f,.22f,.1f*x);
- for(float x:{15.05f,15.55f})kit::prop(m,model::prop_cardboard_box,x,22.73f,f+.975f,.436f,.432f,.22f,-.1f*x);
- for(float x:{15.1f,16.1f})kit::prop(m,model::prop_cardboard_box,x,22.73f,f+.306f,.436f,.432f,.22f,0);
- for(float y:{21.f,22.f})kit::prop(m,model::prop_cardboard_box,14.45f,y,f+1.656f,.436f,.432f,.22f,mdE);
- for(float y:{21.15f,21.65f,22.2f})kit::prop(m,model::prop_cardboard_box,14.45f,y,f+(y>22.f?.306f:.972f),.436f,.432f,.22f,mdE);
+ for(float x:{15.f,15.6f,16.2f})mdSet(m,model::prop_cardboard_box,x,22.73f,f+1.65f,.436f,.432f,.22f,.1f*x);
+ for(float x:{15.05f,15.55f})mdSet(m,model::prop_cardboard_box,x,22.73f,f+.975f,.436f,.432f,.22f,-.1f*x);
+ for(float x:{15.1f,16.1f})mdSet(m,model::prop_cardboard_box,x,22.73f,f+.306f,.436f,.432f,.22f,0);
+ for(float y:{21.f,22.f})mdSet(m,model::prop_cardboard_box,14.45f,y,f+1.656f,.436f,.432f,.22f,mdE);
+ for(float y:{21.15f,21.65f,22.2f})mdSet(m,model::prop_cardboard_box,14.45f,y,f+(y>22.f?.306f:.972f),.436f,.432f,.22f,mdE);
  m.lights.push_back(m71Tube(15.5f,20.6f,roof,.3f,4.f,4000,.05f));                    // linen, dim
  for(int k=0;k<3;++k)mdFix(m,model::med_mattress_stained,15.5f+.04f*k,19.05f-.02f*k,f+.106f*k,1.71f,.81f,.106f,.03f*k,true);
  for(float y:{20.95f,21.35f,21.75f,22.15f})mdFix(m,model::gas_cylinder,16.6f,y,f,.33f,.33f,1.58f,0,true);
@@ -467,23 +471,42 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // B, "the watcher", watches the spine and stares down at the door he is afraid of.
  mdGuard(m,clock,"md_screen_b",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"md_screen",
   {{{20.6f,11.5f},f,6000,-kPi*.5f},{{12.f,12.4f},f,7000,0},{{8.6f,11.2f},f,3000,kPi}},14,2,1.2f);
- {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("medf_b_hello");t.ai.dropsSidearm=true;}
- m.dialogue.push_back({stateId("medf_b_hello"),"MEDICAL DETAIL","Stop. Don't. I've got two rounds and a radio that won't stop talking.","",{
-  m71Reply("Who did the booths?","medf_b_booths"),m71Reply("What's behind the Ward C door?","medf_b_wardc"),
-  m71Reply("Go. Back the way I came.","","medf_screen_b_spared")}});
+ // He keeps a stance of his own: told to go, he gives his word, and the order turns only the burner.
+ {auto& t=m.actorTracks.back();t.ai.stance=stateId("medf_screen_b_stance");t.talk=stateId("medf_b_hello");t.ai.dropsSidearm=true;}
+ {auto go=m71Reply("Go. Back the way I came.","medf_b_go","medf_screen_b_spared");go.hide=stateId("medf_screen_b_spared");
+  m.dialogue.push_back({stateId("medf_b_hello"),"MEDICAL DETAIL","Stop. Don't. I've got two rounds and a radio that won't stop talking.","",{
+   m71Reply("Who did the booths?","medf_b_booths"),m71Reply("What's behind the Ward C door?","medf_b_wardc"),go}});}
+ m.dialogue.push_back({stateId("medf_b_go"),"MEDICAL DETAIL","He counts the radios on the hour. I walk, he hears it. But I'm not raising this at you. Whatever he says next.","",{m71Reply("Then you didn't see me.")}});
  m.dialogue.push_back({stateId("medf_b_booths"),"MEDICAL DETAIL","Us. He said they were exposed. They were reading the counts out loud, so somebody stopped them reading.","",{m71Reply("Back.","medf_b_hello")}});
  m.dialogue.push_back({stateId("medf_b_wardc"),"MEDICAL DETAIL","Nine tier threes. Ten to three. Something's been knocking since four.","",{m71Reply("Back.","medf_b_hello")}});
  // --- The Investigator, over their radio: his order turns them ----------------------------------
- mdSequence(m,"md_screen_radio","md_screen_radio_done",16000,14000,1.f,9.f,3.f,14.f);
+ // It starts as the player leaves the lobby, by the spine or by the waiting room: near enough to
+ // hear it, and with time to reach the watcher before the order lands.
+ mdSequence(m,"md_screen_radio","md_screen_radio_done",16000,14000,-9,-9,-8,-8);
+ for(auto [id,x1,y1,x2,y2]:{std::tuple{"medf_screen_radio_spine",5.6f,10.f,8.2f,13.f},{"medf_screen_radio_wait",1.8f,6.4f,4.8f,8.7f}}){
+  m71Event(m,id,x1,y1,x2,y2,"",{m71Set("md_screen_radio",1)});
+  for(const char* idle:{"md_screen_radio","md_screen_radio_done"})m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stateId(idle),ScriptCondition::Op::Equal,0});}
  const Vec2 radio{20.6f,11.5f};
  cue(m,"md_screen_radio",900,Sound::Empty,radio,"INVESTIGATOR (RADIO): Medical detail. The screening floor is closed. Anyone walking it is exposed.",.9f,f+1.5f,"inv_screen_1");
  cue(m,"md_screen_radio",6200,Sound::Empty,radio,"RADIO: Sir, we did the booths. There's nobody left to walk it.",.9f,f+1.5f,"md_screen_a_1");
  cue(m,"md_screen_radio",11000,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then you will not be busy.",.9f,f+1.5f,"inv_screen_2");
  // Walking in: frightened men without orders about you. The order: shoot on sight. A falls: B breaks.
- m71Event(m,"medf_screen_truce",0,9.f,3.f,14.f,"",{m71Set("medf_screen_stance",int(SquadStance::Truce))});
+ m71Event(m,"medf_screen_truce",0,9.f,3.f,14.f,"",{m71Set("medf_screen_stance",int(SquadStance::Truce)),m71Set("medf_screen_b_stance",int(SquadStance::Truce))});
+ // A save from before he had a stance of his own: he takes up the squad's, once.
+ for(auto [id,value]:{std::pair{"medf_screen_b_sync_truce",int(SquadStance::Truce)},{"medf_screen_b_sync_hostile",int(SquadStance::Hostile)}}){
+  m71Event(m,id,0,0,24,24,"",{m71Set("medf_screen_b_stance",value)});auto& c=m.scriptEvents.back().conditions;
+  c.push_back({ScriptCondition::Source::State,stance,ScriptCondition::Op::Equal,value});c.push_back({ScriptCondition::Source::State,stateId("medf_screen_b_stance"),ScriptCondition::Op::Equal,0});}
  m71Event(m,"medf_screen_moot",0,0,24,24,"md_screen_a_dead",{m71Set("md_screen_radio_done",2)},false);   // an order to a dead man is moot
  m71Event(m,"medf_screen_order",0,0,24,24,"md_screen_radio_done",{m71Set("medf_screen_stance",int(SquadStance::Hostile))});
- m71Event(m,"medf_screen_break",0,0,24,24,"md_screen_a_dead",{m71Set("medf_screen_stance",int(SquadStance::Truce))});
+ // The watcher turns with him unless he was told to go: then he answers for himself, and stands where he is.
+ m71Event(m,"medf_screen_order_b",0,0,24,24,"md_screen_radio_done",{m71Set("medf_screen_b_stance",int(SquadStance::Hostile))});
+ m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stateId("medf_screen_b_spared"),ScriptCondition::Op::NotEqual,1});
+ m71Event(m,"medf_screen_b_refuse",0,0,24,24,"md_screen_radio_done",{m71Set("medf_b_refuse",1)});
+ m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stateId("medf_screen_b_spared"),ScriptCondition::Op::Equal,1});
+ mdSequence(m,"medf_b_refuse","medf_b_refused",3000,2500,-9,-9,-8,-8);
+ cue(m,"medf_b_refuse",700,Sound::RadioSquelch,radio,"",.7f,f+1.5f);
+ cue(m,"medf_b_refuse",1100,Sound::Empty,radio,"MEDICAL DETAIL: Nobody's walked it, sir. I'd have seen.",.9f,f+1.5f);
+ m71Event(m,"medf_screen_break",0,0,24,24,"md_screen_a_dead",{m71Set("medf_screen_stance",int(SquadStance::Truce)),m71Set("medf_screen_b_stance",int(SquadStance::Truce))});
  // Back from Ward C with the override: the screen leaf stands open and the hold wakes.
  {ScriptAction open;open.type=ScriptAction::Type::OpenDoor;open.index=12;
   m71Event(m,"medf_hold_wake_go",10.f,17.f,14.f,23.f,"med_override",{m71Set("medf_hold_wake",1),open});}
@@ -511,7 +534,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
 // A swinging clinic door: the renderer draws leaf, posts and head to 2.55 m; the wall closes above.
 void m72Swing(Map& m,float x1,float x2,float y,float f,float roof,float swing,float open=0){
  wall(m,x1,y-.1f,x2,y+.1f,f+2.55f,roof,3);
- Door d{x1,x2,y,open};d.swinging=true;d.swing=swing;d.opening=open>0;d.maxOpen=.9f;m.doors.push_back(d);
+ Door d{x1,x2,y,open};d.swinging=true;d.swing=swing;d.opening=open>0;d.maxOpen=.9f;d.label="DOOR";m.doors.push_back(d);
 }
 // An open doorway through a wall that runs along y: pale-steel jambs and head, wall above.
 void m72DoorwayY(Map& m,float y1,float y2,float x1,float x2,float f,float roof){
@@ -546,7 +569,7 @@ void m72Shelf(Map& m,float x,float wallY,float dir,float f,bool monitor=true){
  const float y1=wallY,y2=wallY+dir*.25f;
  wall(m,x-.25f,std::min(y1,y2),x+.25f,std::max(y1,y2),f+1.38f,f+1.42f,20);
  wall(m,x-.02f,std::min(y1,y1+dir*.1f),x+.02f,std::max(y1,y1+dir*.1f),f+1.28f,f+1.38f,20);
- if(monitor)kit::prop(m,model::med_vitals_monitor,x,wallY+dir*.12f,f+1.42f,.38f,.18f,.28f,dir>0?mdS:mdN);
+ if(monitor)mdSet(m,model::med_vitals_monitor,x,wallY+dir*.12f,f+1.42f,.38f,.18f,.28f,dir>0?mdS:mdN);
 }
 // An IV stand built from parts: weighted base, pole, hook, and the bag hanging from it.
 void m72Drip(Map& m,float x,float y,float f,bool bag=true){
@@ -557,6 +580,12 @@ void m72Drip(Map& m,float x,float y,float f,bool bag=true){
 // A fitting with its tube dead: the single-tube housing alone, flush to the ceiling.
 void m72DeadBedLight(Map& m,float x,float y,float roof){mdFix(m,model::med_fluoro_light,x,y,roof-.13f,.11f,1.2f,.13f,0,false);}
 void m72DeadTube(Map& m,float x,float y,float roof){mdFix(m,model::clinic_ceiling_lamp_2,x,y,roof-.17f,.44f,1.04f,.17f,0,false);}
+// Paper that has drifted down stays down: the sheets a drift scattered (from clutter spawn `from` on)
+// become part of the floor, placed where the drift found clear floor; its stacks stay loose.
+void m72Settle(Map& m,size_t from){const float f=m.layers.front().elevation;
+ for(size_t i=m.clutterSpawns.size();i-->from;){const auto c=m.clutterSpawns[i];if(c.model!=model::office_paper_sheet)continue;
+  m.fixtures.push_back({c.model,c.position,c.z-f,c.width,c.depth,c.height,-c.yaw,false});m.clutterSpawns.erase(m.clutterSpawns.begin()+std::ptrdiff_t(i));}
+}
 // The bed-head tube: a single fluorescent fitting over the head of the bed.
 WorldLight m72BedLight(float x,float y,float roof,float intensity,float kelvin,float tint){
  auto l=lamp({x,y},roof-.30f,intensity,3.6f,kelvin,tint);l.fitting=model::med_fluoro_light;l.fittingWidth=.11f;l.fittingDepth=1.2f;l.fittingHeight=.13f;return l;
@@ -692,7 +721,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::med_notice_board,2.4f,13.965f,f+1.2f,1.2f,.07f,.9f,mdN,false);
  for(auto [x,y,yaw]:{std::tuple{1.8f,13.6f,.4f},{3.f,13.75f,2.1f}})kit::prop(m,model::mine_hard_hat,x,y,f,.28f,.35f,.15f,yaw);
  for(auto [x,y,yaw]:{std::tuple{2.f,11.8f,.7f},{3.7f,12.6f,2.4f}})kit::prop(m,model::item_dosimeter,x,y,f,.31f,.146f,.066f,yaw);
- paperDrift(m,1.3f,10.8f,4.8f,13.2f,f,5,7202);
+ {const size_t from=m.clutterSpawns.size();paperDrift(m,1.3f,10.8f,4.8f,13.2f,f,5,7202);m72Settle(m,from);}
  extinguisher(m,5.f,9.6f,f,-kPi*.5f);
  mdFix(m,model::lab_status_display,4.97f,11.5f,f+2.66f,.69f,.06f,.2f,kPi*.5f,false);
  // --- Band office: the hatch counter, her, the log desk, the window onto bay 1 ----------------------
@@ -713,13 +742,13 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  kit::prop(m,model::office_paper_stack,1.38f,5.3f,f+.75f,.33f,.44f,.03f,0);
  kit::prop(m,model::mug,1.6f,5.1f,f+.75f,.09f,.09f,.1f,0);
  mdFix(m,model::med_wall_clock,1.03f,5.7f,f+2.05f,.24f,.02f,.23f,mdE,false);
- shelf(m,{2.1f,4.67f},0,0);
- for(float x:{1.6f,2.45f})kit::prop(m,model::prop_cardboard_box,x,4.67f,f+1.656f,.436f,.432f,.22f,0);
+ shelf(m,{2.1f,4.67f},0,0);wall(m,1.2f,4.42f,3.f,4.92f,f+2.1f,roof,CollisionProxyMaterial);
+ for(float x:{1.6f,2.45f})mdSet(m,model::prop_cardboard_box,x,4.67f,f+1.656f,.436f,.432f,.22f,0);
  kit::prop(m,model::prop_cardboard_box_open,3.45f,5.f,f,.73f,.72f,.73f,0);
  mdFix(m,model::med_records_cabinet,4.755f,5.85f,f,.9f,.49f,1.f,mdW,true);
  kit::prop(m,model::desk_phone,4.72f,5.55f,f+1.f,.2f,.2f,.1f,-kPi*.5f);
  mdFix(m,model::med_notice_board,4.965f,6.5f,f+1.25f,1.2f,.07f,.9f,mdW,false);
- paperDrift(m,1.9f,5.2f,4.4f,7.9f,f,6,7201);
+ {const size_t from=m.clutterSpawns.size();paperDrift(m,1.9f,5.2f,4.4f,7.9f,f,6,7201);m72Settle(m,from);}
  // Staff WC and lockers.
  mdFix(m,model::med_ward_toilet,1.55f,1.36f,f,.4f,.7f,.82f,0,true);
  mdFix(m,model::med_scrub_sink,2.65f,1.28f,f,.49f,.54f,1.13f,0,true);
@@ -735,7 +764,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  // --- Resus: the bed under its panel, the cart, oxygen, what they used up ---------------------------
  kit::prop(m,model::med_ward_bed,18.3f,7.9f,f,1.98f,.94f,.84f,mdW);
  kit::prop(m,model::med_crash_cart,17.3f,7.4f,f,.74f,.48f,1.f,.25f);
- for(float x:{17.15f,17.5f})mdFix(m,model::gas_cylinder,x,5.8f,f,.33f,.33f,1.58f,0,true);
+ for(float x:{17.15f,17.5f})mdFix(m,model::gas_cylinder,x,5.8f,f,.33f,.33f,1.58f,0,true);wall(m,16.95f,5.6f,17.7f,6.f,f+1.58f,roof,CollisionProxyMaterial);   // nobody stands on the valves
  wall(m,16.95f,5.97f,17.7f,6.f,f+1.08f,f+1.13f,2);
  mdFix(m,model::med_supply_cabinet,17.02f,9.3f,f,1.1f,.44f,1.7f,mdE,true);
  m72Drip(m,19.3f,7.1f,f,true);
@@ -751,7 +780,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  taped(m,{20.f,14.3f},f+1.5f,mdE,Readable::Note,"HOLD / TRANSFER","02:40 NINE RED TO WARD C UNDER ESCORT. HOLD EMPTY.","HOSE IT DOWN BEFORE THE NEXT ONES.");
  kit::prop(m,model::prop_cardboard_box_open,21.f,15.3f,f,.73f,.72f,.73f,.2f);
  mdFix(m,model::med_notice_board,21.75f,15.965f,f+1.25f,1.2f,.07f,.9f,mdN,false);           // the transfer roster
- for(auto [x,y,yaw]:{std::tuple{21.6f,15.1f,.6f},{20.5f,14.7f,2.f},{21.9f,14.5f,1.1f},{20.4f,15.6f,2.8f}})kit::prop(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
+ for(auto [x,y,yaw]:{std::tuple{21.6f,15.1f,.6f},{20.5f,14.7f,2.f},{21.9f,14.5f,1.1f},{20.4f,15.6f,2.8f}})mdSet(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
  wall(m,22.93f,15.25f,23.f,15.35f,f+.86f,f+.94f,4);
  m.pipes.push_back({{22.96f,15.3f},{22.96f,15.3f},f+.88f,.02f,f+.03f,3});
  m.pipes.push_back({{22.96f,15.3f},{22.2f,15.05f},f+.03f,.02f,f+.03f,3});m.pipes.push_back({{22.2f,15.05f},{21.6f,12.f},f+.03f,.02f,f+.03f,3});
@@ -774,12 +803,12 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  m.pipes.push_back({{19.76f,13.6f},{19.f,14.1f},f+.03f,.02f,f+.03f,3});m.pipes.push_back({{19.f,14.1f},{18.5f,14.75f},f+.03f,.02f,f+.03f,3});
  kit::prop(m,model::prop_cardboard_box_open,19.35f,15.45f,f,.73f,.72f,.73f,-.2f);
  // --- Stock (clean supply) ---------------------------------------------------------------------------
- shelf(m,{6.3f,1.27f},0,0);shelf(m,{8.4f,1.27f},0,0);
- for(float x:{5.85f,6.7f,8.f,8.85f})kit::prop(m,model::prop_cardboard_box,x,1.27f,f+1.656f,.436f,.432f,.22f,0);
+ shelf(m,{6.3f,1.27f},0,0);shelf(m,{8.4f,1.27f},0,0);wall(m,5.4f,1.02f,9.3f,1.52f,f+2.1f,roof,CollisionProxyMaterial);
+ for(float x:{5.85f,6.7f,8.f,8.85f})mdSet(m,model::prop_cardboard_box,x,1.27f,f+1.656f,.436f,.432f,.22f,0);
  mdFix(m,model::med_supply_cabinet,5.42f,3.2f,f,1.1f,.44f,1.7f,mdE,true);
- for(float x:{5.85f,6.75f,8.0f,8.85f})kit::prop(m,model::prop_cardboard_box,x,1.27f,f+.306f,.436f,.432f,.22f,0);
- for(float x:{6.f,8.6f})kit::prop(m,model::prop_cardboard_box,x,1.27f,f+.972f,.436f,.432f,.22f,0);
- for(float x:{6.6f,6.72f,6.84f,6.96f})kit::prop(m,model::office_file_binder,x,1.27f,f+.972f,.09f,.3f,.42f,0);
+ for(float x:{5.85f,6.75f,8.0f,8.85f})mdSet(m,model::prop_cardboard_box,x,1.27f,f+.306f,.436f,.432f,.22f,0);
+ for(float x:{6.f,8.6f})mdSet(m,model::prop_cardboard_box,x,1.27f,f+.972f,.436f,.432f,.22f,0);
+ for(float x:{6.6f,6.72f,6.84f,6.96f})mdSet(m,model::office_file_binder,x,1.27f,f+.972f,.09f,.3f,.42f,0);
  for(float x:{7.9f,8.f,8.1f})kit::prop(m,model::med_pill_bottle,x,1.2f,f+.972f,.07f,.03f,.13f,x);
  mdFix(m,model::lab_specimen_crate,8.6f,3.6f,f,.9f,.9f,.9f,.2f,true);
  rectangle(m.layers[0],5,5,6,6,'C');rectangle(m.layers[0],6,6,7,7,'C');
@@ -803,15 +832,15 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  wall(m,12.6f,6.25f,15.4f,6.8f,f,f+.1f,8);wall(m,12.6f,6.2f,15.4f,6.8f,f+.1f,f+.86f,20);wall(m,12.6f,6.14f,15.4f,6.8f,f+.86f,f+.9f,20);
  for(auto [x,yaw]:{std::pair{12.9f,0.f},{13.15f,.7f},{14.6f,1.5f},{14.85f,.2f}})kit::prop(m,model::med_specimen_jar,x,6.5f,f+.9f,.15f,.15f,.24f,yaw);
  for(auto [x,yaw]:{std::pair{13.6f,.3f},{13.72f,1.9f},{13.85f,.9f},{14.f,2.6f}})kit::prop(m,model::med_pill_bottle,x,6.45f,f+.9f,.07f,.03f,.13f,yaw);
- shelf(m,{16.35f,4.6f},kPi*.5f,0);
+ shelf(m,{16.35f,4.6f},kPi*.5f,0);wall(m,16.1f,3.7f,16.6f,5.5f,f+2.1f,roof,CollisionProxyMaterial);                      // nor lies along a shelf top
  for(float y:{3.95f,4.25f,4.55f,4.85f,5.2f})kit::prop(m,model::med_specimen_jar,16.35f,y,f+.972f,.15f,.15f,.24f,y*2);
- for(float y:{4.1f,4.9f})kit::prop(m,model::prop_cardboard_box,16.35f,y,f+.306f,.436f,.432f,.22f,mdE);
+ for(float y:{4.1f,4.9f})mdSet(m,model::prop_cardboard_box,16.35f,y,f+.306f,.436f,.432f,.22f,mdE);
  kit::prop(m,model::med_crash_cart,14.9f,3.3f,f,.74f,.48f,1.f,.4f);
  for(auto [x,y,yaw]:{std::tuple{14.75f,3.25f,.3f},{14.95f,3.4f,1.6f},{15.05f,3.2f,2.4f}})kit::prop(m,model::med_pill_bottle,x,y,f+.809f,.07f,.03f,.13f,yaw);
  kit::prop(m,model::prop_cardboard_box_open,12.5f,3.6f,f,.73f,.72f,.73f,-.2f);
  mdBlood(m,13.75f,3.3f,14.35f,3.75f,f);
  mdFix(m,model::med_first_aid_box,14.2f,6.74f,f+1.45f,.37f,.12f,.35f,mdN,false);
- for(float y:{4.2f,4.95f})kit::prop(m,model::med_specimen_jar,16.35f,y,f+1.656f,.15f,.15f,.24f,y);
+ for(float y:{4.2f,4.95f})mdSet(m,model::med_specimen_jar,16.35f,y,f+1.656f,.15f,.15f,.24f,y);
  mdFix(m,model::lab_specimen_crate,16.05f,6.25f,f,.9f,.9f,.9f,0,true);
  m.pipes.push_back({{11.9f,1.12f},{16.6f,1.12f},f+2.6f,.03f,-999,0});
  for(float x:{12.7f,13.3f})m.pipes.push_back({{x,1.12f},{x,1.12f},f+2.6f,.015f,f+1.13f,0});
@@ -844,8 +873,8 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::cctv_tv,8.f,16.42f,f+2.02f,.5f,.4f,.42f,0,false);
  kit::fixturePart(m,int(m.fixtures.size())-1,1,7.82f,16.59f,8.18f,16.65f,f+2.1f,f+2.37f);
  for(float y:{17.2f,17.8f})kit::prop(m,model::wooden_chair,16.1f,y,f,.417f,.525f,.95f,kPi*.5f+(y-17.5f));
- paperDrift(m,5.6f,16.5f,16.2f,22.8f,f,8,7203);
- for(auto [x,y,yaw]:{std::tuple{9.4f,17.6f,.5f},{11.8f,20.8f,2.f},{6.4f,20.9f,1.f},{15.2f,18.f,2.7f}})kit::prop(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
+ {const size_t from=m.clutterSpawns.size();paperDrift(m,5.6f,16.5f,16.2f,22.8f,f,8,7203);m72Settle(m,from);}
+ for(auto [x,y,yaw]:{std::tuple{9.4f,17.6f,.5f},{11.8f,20.8f,2.f},{6.4f,20.9f,1.f},{15.2f,18.f,2.7f}})mdSet(m,model::item_id_card,x,y,f,.132f,.085f,.002f,yaw);
  // The pharmacy pass-through, shuttered from the other side: frame, slats, dispensing tray.
  for(float x:{11.6f,13.36f})wall(m,x,22.9f,x+.04f,23.f,f+.9f,f+2.f,20);
  wall(m,11.6f,22.9f,13.4f,23.f,f+1.96f,f+2.f,20);wall(m,11.64f,22.99f,13.36f,23.f,f+.95f,f+1.96f,8);
@@ -856,12 +885,12 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::lab_photocopier,4.62f,16.6f,f,.83f,.75f,.97f,kPi*.5f,true);
  mdFix(m,model::office_file_cabinet_open,2.8f,18.25f,f,1.45f,.7f,1.05f,kPi,true);
  for(float y:{14.75f,16.65f})kit::prop(m,model::office_paper_stack,1.25f,y,f+1.f,.33f,.44f,.03f,0);
- for(float y:{15.55f,15.65f,15.75f})kit::prop(m,model::office_file_binder,1.25f,y,f+1.f,.09f,.3f,.42f,mdE);
+ for(float y:{15.55f,15.65f,15.75f})mdSet(m,model::office_file_binder,1.25f,y,f+1.f,.09f,.3f,.42f,mdE);
  terminal(m,{4.62f,16.6f},"BAND PRINT / REISSUE SLIP","02:14 LAB 4 / ENERGY DIAGNOSTICS. ISSUED AMBER.","02:15 RE-ISSUED RED. BY ORDER. NO NAME GIVEN.");
  m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.97f;m.terminals.back().yaw=mdW;
  // --- Linen and janitor ------------------------------------------------------------------------------
- shelf(m,{1.27f,21.4f},kPi*.5f,0);
- for(float y:{20.85f,21.85f})kit::prop(m,model::prop_cardboard_box,1.27f,y,f+1.656f,.436f,.432f,.22f,mdE);
+ shelf(m,{1.27f,21.4f},kPi*.5f,0);wall(m,1.02f,20.5f,1.52f,22.3f,f+2.1f,roof,CollisionProxyMaterial);
+ for(float y:{20.85f,21.85f})mdSet(m,model::prop_cardboard_box,1.27f,y,f+1.656f,.436f,.432f,.22f,mdE);
  mdFix(m,model::med_scrub_sink,3.f,22.73f,f,.49f,.54f,1.13f,kPi,true);
  kit::prop(m,model::trash_can,4.45f,22.6f,f,.45f,.45f,.56f,.3f);
  kit::prop(m,model::prop_cardboard_box_open,2.2f,19.5f,f,.73f,.72f,.73f,.25f);
@@ -872,7 +901,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::pwr_duct_fan_unit,20.65f,17.75f,f+.1f,.79f,1.49f,1.95f,0,true);
  wall(m,21.6f,17.45f,22.2f,18.05f,f+2.82f,roof,2);wall(m,20.35f,17.45f,20.95f,18.05f,f+2.15f,roof,2);
  wall(m,20.35f,17.5f,22.2f,18.f,roof-.5f,roof,2);
- for(float y:{20.3f,20.7f,21.1f,21.5f})mdFix(m,model::gas_cylinder,22.75f,y,f,.33f,.33f,1.58f,0,true);
+ for(float y:{20.3f,20.7f,21.1f,21.5f})mdFix(m,model::gas_cylinder,22.75f,y,f,.33f,.33f,1.58f,0,true);wall(m,22.55f,20.1f,23.f,21.7f,f+1.58f,roof,CollisionProxyMaterial);
  for(float z:{.4f,1.1f})wall(m,22.5f,20.05f,22.55f,21.75f,f+z,f+z+.05f,2);
  for(float y:{20.f,21.75f})wall(m,22.5f,y,22.98f,y+.05f,f,f+1.3f,2);
  pipeRoute(m,{{22.4f,23.f,f+2.35f},{22.4f,16.2f,f+2.35f}},.03f,5,roof,f);
@@ -1001,6 +1030,17 @@ void m73LeadDoor(Map& m,float y1,float y2,float x1,float x2,float face,float dir
  const float t1=face,t2=face+dir*.12f;
  wall(m,std::min(t1,t2),y1-w-.05f,std::max(t1,t2),y2+.05f,f+2.18f,f+2.25f,20);          // the track
 }
+// A viewing bank on the wall face at y=`face`, looking toward +y (dir 1) or -y (-1): pale backing
+// and film ledge, a dark hood and cheeks that keep its glow off the wall above, and a cold lamp a
+// hand's width off the films at each x in `lamps`, so the bank is the brightest thing in its room.
+void m73Bank(Map& m,float x1,float x2,float face,float dir,float f,std::initializer_list<float> lamps,float power=.45f){
+ wall(m,x1,face,x2,face+dir*.04f,f+1.16f,f+1.84f,20);wall(m,x1,face,x2,face+dir*.18f,f+1.12f,f+1.16f,20);
+ wall(m,x1-.04f,face,x2+.04f,face+dir*.34f,f+1.84f,f+1.9f,8);wall(m,x1-.04f,face+dir*.3f,x2+.04f,face+dir*.34f,f+1.76f,f+1.84f,8);
+ for(float x:{x1-.04f,x2})wall(m,x,face,x+.04f,face+dir*.34f,f+1.12f,f+1.9f,8);
+ wall(m,x1-.04f,face,x2+.04f,face+dir*.34f,f+1.9f,m.definition.ceiling,CollisionProxyMaterial);      // nobody lies on the hood
+ for(float x:lamps)m.lights.push_back(lamp({x,face+dir*.32f},f+1.46f,power,3.f,7800,-.3f,WorldLightMount::Bare));
+}
+void m73Viewer(Map& m,int model,float x,float face,float dir,float f){mdFix(m,model,x,face+dir*.09f,f+1.2f,.41f,.1f,.5f,dir>0?mdS:mdN,false);}
 // A film left where it fell: a dark sheet on the floor or a bench.
 void m73Film(Map& m,float x,float y,float z,bool alongX=false){if(alongX)wall(m,x,y,x+.43f,y+.35f,z+.002f,z+.005f,8);else wall(m,x,y,x+.35f,y+.43f,z+.002f,z+.005f,8);}
 
@@ -1079,6 +1119,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.pipes.push_back({{6.4f,3.2f},{6.4f,3.2f},f+1.72f,.065f,roof-.14f,5});                                  // column
  m.pipes.push_back({{6.4f,2.92f},{6.4f,3.48f},f+1.62f,.13f,f+1.62f,5});                                   // tube head
  wall(m,6.25f,3.05f,6.55f,3.35f,f+1.3f,f+1.5f,20);wall(m,6.2f,3.15f,6.25f,3.25f,f+1.36f,f+1.44f,8);       // collimator, handle
+ wall(m,6.15f,2.85f,6.65f,3.55f,f+1.5f,roof-.14f,30);                                                     // nobody rides the tube head
  for(float y:{2.97f,3.43f})m.pipes.push_back({{6.4f,y},{6.4f,y},f+1.7f,.022f,roof-.14f,8});   // HT cables to the carriage
  wall(m,3.6f,4.2f,4.2f,5.1f,f,f+.03f,8);wall(m,3.6f,4.5f,3.76f,4.8f,f+.03f,f+2.25f,20);wall(m,3.76f,4.25f,3.94f,5.05f,f+1.05f,f+1.6f,20); // chest stand
  for(float y:{4.28f,4.97f})wall(m,3.94f,y,4.06f,y+.05f,f+1.35f,f+1.4f,20);
@@ -1088,7 +1129,8 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.pipes.push_back({{7.75f,1.22f},{7.75f,1.22f},f+1.89f,.035f,roof,8});m.pipes.push_back({{8.9f,1.22f},{8.9f,1.22f},f+1.89f,.03f,roof,8});
  mdFix(m,model::med_supply_cabinet,4.6f,5.98f,f,1.1f,.44f,1.7f,mdN,true);
  wall(m,9.72f,4.6f,9.8f,6.f,f+1.62f,f+1.66f,20);for(float y:{4.7f,5.15f,5.58f})wall(m,9.66f,y,9.74f,y+.36f,f+.82f,f+1.62f,23); // lead aprons
- for(float x:{4.6f,5.1f})mdFix(m,model::med_xray_viewer_skull,x,1.05f,f+1.2f,.41f,.1f,.5f,mdS,false);
+ m73Bank(m,4.35f,5.35f,1.f,1,f,{4.85f},.4f);
+ m73Viewer(m,model::med_xray_viewer_chest,4.6f,1.f,1,f);m73Viewer(m,model::med_xray_viewer_skull,5.1f,1.f,1,f);
  mdFix(m,model::med_wheelchair,8.55f,4.9f,f,.48f,.9f,.79f,2.f,true);
  mdFix(m,model::trash_can,8.25f,5.85f,f,.45f,.45f,.56f,0,true);
  kit::prop(m,model::office_paper_sheet,5.95f,3.15f,f+.761f,.4f,.293f,.004f,.3f);
@@ -1126,6 +1168,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.pipes.push_back({{1.f,5.08f},{1.27f,5.08f},f+1.25f,.015f,f+1.25f,5});m.pipes.push_back({{1.25f,5.08f},{1.25f,5.08f},f+1.1f,.015f,f+1.265f,5});
  m.pipes.push_back({{1.04f,5.25f},{1.04f,5.25f},f+.9f,.02f,roof,0});
  wall(m,1.f,2.6f,1.26f,5.4f,f+1.55f,f+1.58f,20);for(float y:{2.8f,5.1f})wall(m,1.f,y,1.2f,y+.03f,f+1.4f,f+1.55f,20);
+ for(auto [a,b]:{std::pair{2.6f,3.95f},{4.25f,5.4f}})wall(m,1.f,a,1.26f,b,f+2.f,roof,30);                    // clear of the safelight
  wall(m,2.8f,1.9f,3.4f,4.6f,f+.1f,f+.88f,20);wall(m,2.84f,1.94f,3.4f,4.56f,f,f+.1f,8);wall(m,2.78f,1.88f,3.4f,4.62f,f+.88f,f+.92f,8); // dry bench
  kit::prop(m,model::prop_cardboard_box,3.1f,3.3f,f+.92f,.33f,.32f,.17f,.2f);                              // a box of unexposed film
  m73Film(m,2.9f,2.6f,f+.92f);wall(m,2.9f,3.75f,3.3f,4.2f,f+.92f,f+.94f,20);                               // a film, a cassette
@@ -1148,8 +1191,10 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  wall(m,6.7f,12.1f,6.76f,12.7f,f+.6f,f+1.02f,20);                                                         // footboard
  for(float x:{5.f,6.1f})wall(m,x,12.04f,x+.06f,12.76f,f+.84f,f+.848f,8);
  wall(m,5.45f,11.62f,5.75f,11.82f,f,f+1.98f,20);wall(m,5.45f,11.62f,5.75f,12.4f,f+1.86f,f+1.98f,20);       // tower and arm
+ wall(m,5.4f,11.57f,5.8f,12.45f,f+1.98f,roof,30);
  m.pipes.push_back({{5.6f,12.4f},{5.6f,12.4f},f+1.34f,.2f,f+1.87f,5});wall(m,5.3f,12.1f,5.9f,12.7f,f+1.3f,f+1.36f,8);wall(m,5.35f,12.15f,5.85f,12.65f,f+1.05f,f+1.3f,30); // intensifier
- for(float x:{5.2f,5.7f,6.2f})mdFix(m,model::med_xray_viewer_skull,x,14.95f,f+1.2f,.41f,.1f,.5f,mdN,false);
+ m73Bank(m,4.95f,6.45f,15.f,-1,f,{5.7f});
+ for(float x:{5.2f,5.7f,6.2f})m73Viewer(m,model::med_xray_viewer_skull,x,15.f,-1,f);
  for(float y:{11.85f,12.85f})wall(m,3.35f,y,3.85f,y+.1f,f,f+.1f,8);                                        // the mobile lead screen
  wall(m,3.55f,11.8f,3.65f,13.f,f+.1f,f+1.25f,8);wall(m,3.55f,11.8f,3.65f,13.f,f+1.75f,f+1.9f,8);
  for(auto [a,b]:{std::pair{11.8f,12.f},{12.8f,13.f}})wall(m,3.55f,a,3.65f,b,f+1.25f,f+1.75f,8);
@@ -1172,7 +1217,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  shelf(m,{9.53f,21.4f},kPi*.5f,0);
  for(float y:{20.95f,21.85f})kit::prop(m,model::prop_cardboard_box,9.53f,y,f+.306f,.436f,.432f,.22f,mdE);   // lead bricks, boxed
  for(float y:{20.85f,21.3f,21.8f})kit::prop(m,model::lab_field_meter,9.5f,y,f+.972f,.25f,.33f,.15f,mdW+y*.1f);        // survey meters
- for(int i=0;i<5;++i)kit::prop(m,model::office_file_binder,9.53f,20.75f+i*.11f,f+1.656f,.09f,.3f,.42f,kPi*.5f);
+ for(int i=0;i<5;++i)mdSet(m,model::office_file_binder,9.53f,20.75f+i*.11f,f+1.656f,.09f,.3f,.42f,kPi*.5f);
  wall(m,7.f,19.2f,7.7f,19.75f,f,f+.85f,8);m.pipes.push_back({{7.35f,19.75f},{7.35f,19.8f},f+.55f,.04f,f+.55f,6});   // source safe
  mdFix(m,model::wooden_chair,7.55f,21.9f,f,.417f,.525f,.95f,mdE,true);
  {const float px=7.5f,py=21.9f;
@@ -1216,8 +1261,21 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  mdBlood(m,4.3f,17.8f,5.5f,18.7f,f);mdBlood(m,3.5f,18.95f,4.1f,19.45f,f);
  mdFix(m,model::item_walkie,5.55f,17.55f,f,.11f,.38f,.05f,1.2f,false);
  // --- The reading room: the viewer bank, nine skulls the same, and hers ----------------------------
- wall(m,15.f,1.f,22.45f,1.04f,f+1.16f,f+1.82f,20);wall(m,15.f,1.f,22.45f,1.18f,f+1.12f,f+1.16f,20);
- for(int i=0;i<15;++i)mdFix(m,i==13?model::med_xray_viewer_chest:model::med_xray_viewer_skull,15.25f+i*.5f,1.09f,f+1.2f,.41f,.1f,.5f,mdS,false);
+ // Nine boxes in a row, every one flagged in red grease pencil; and one on its own bank at the
+ // end of the wall, unmarked, over the only note in the room.
+ m73Bank(m,15.f,19.5f,1.f,1,f,{15.75f,17.25f,18.75f});
+ for(int i=0;i<9;++i){const float x=15.25f+i*.5f;m73Viewer(m,model::med_xray_viewer_skull,x,1.f,1,f);
+  wall(m,x+.08f,1.141f,x+.17f,1.147f,f+1.615f,f+1.675f,19);}
+ m73Bank(m,21.5f,22.f,1.f,1,f,{21.75f},.4f);
+ m73Viewer(m,model::med_xray_viewer_skull,21.75f,1.f,1,f);
+ // Between the banks: the jackets waiting for a report nobody will write, the clock he read them by.
+ mdFix(m,model::med_records_cabinet,20.5f,1.245f,f,.9f,.49f,1.f,mdS,true);
+ kit::prop(m,model::office_paper_stack,20.42f,1.25f,f+1.f,.33f,.44f,.03f,.12f);
+ mdFix(m,model::med_wall_clock,20.5f,1.016f,f+2.05f,.378f,.032f,.373f,0,false);
+ // The east wall: the reported jackets, shelved to the ceiling; the week's reporting list.
+ mdFix(m,model::office_bookcase,22.75f,2.2f,f,2.025f,.5f,2.5f,mdW,true);
+ mdFix(m,model::med_notice_board,22.965f,4.75f,f+1.25f,1.2f,.07f,.9f,mdW,false);
+ kit::prop(m,model::wooden_chair,22.45f,4.85f,f,.417f,.525f,.95f,mdE+.2f);
  taped(m,{21.75f,1.f},f+.95f,0,Readable::Note,"LAB 4 / ENERGY DIAGNOSTICS / 02:31","SKULL AP: CLEAR. NO GROWTH. THE ONLY CLEAN FILM TONIGHT.",
   "SENT ON TO WARD C ANYWAY. I.I. ASKED FOR HER FILM BY NAME.");
  for(auto [x,turn]:{std::pair{16.5f,0.f},{20.3f,.6f}}){
@@ -1252,10 +1310,24 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  paperDrift(m,14.4f,7.f,22.f,8.6f,f,6,7302);
  // --- Reception: the hatch, the seats the nine were called from, the way on to Pharmacy -----------
  wall(m,15.f,9.f,17.4f,9.32f,f+.95f,f+.99f,20);for(float x:{15.3f,17.05f})wall(m,x,9.f,x+.04f,9.28f,f+.75f,f+.95f,20);
- wall(m,15.f,9.29f,17.4f,9.32f,f+.99f,f+2.f,30);
+ wall(m,15.f,9.29f,17.4f,9.32f,f+.99f,roof,30);
  for(auto [x,yaw]:{std::pair{15.6f,.3f},{16.1f,1.9f},{16.9f,.8f}})kit::prop(m,model::item_id_card,x,9.18f,f+.99f,.132f,.085f,.002f,yaw);
- bench(m,15.75f,13.55f,f);bench(m,18.45f,13.55f,f);
+ // Seats down both walls, the call display over the far row, a table of what was left to read.
+ for(float x:{15.3f,17.2f})mdFix(m,model::platform_chair,x,13.72f,f,1.8f,.5f,.8f,0,true);
+ mdFix(m,model::platform_chair,18.55f,9.3f,f,1.8f,.5f,.8f,kPi,true);
+ mdFix(m,model::platform_chair,20.38f,9.42f,f,1.8f,.5f,.8f,kPi+.16f,true);                  // shoved back when the nine stood up
+ mdFix(m,model::lab_status_display,19.45f,9.058f,f+2.15f,1.386f,.116f,.4f,0,false);
+ mdFix(m,model::wooden_table,18.85f,13.62f,f,1.094f,.579f,.624f,0,true);
+ kit::prop(m,model::office_paper_stack,18.65f,13.6f,f+.624f,.33f,.44f,.03f,.3f);
+ kit::prop(m,model::mug,19.15f,13.55f,f+.624f,.09f,.09f,.1f,0);
+ mdFix(m,model::med_wall_clock,18.85f,13.984f,f+2.05f,.378f,.032f,.373f,mdN,false);
+ mdFix(m,model::med_crutches,19.72f,13.95f,f,.17f,.057f,1.196f,mdN,false);                    // left against the wall by the library door
  mdFix(m,model::med_notice_board,16.2f,13.965f,f+1.3f,1.2f,.07f,.9f,mdN,false);
+ // The way on: a route plate hung over the seam, read from the corridor.
+ wallSign(m,22.6f,11.5f,f+2.2f,"PHARMACY","WARD ORDERS / COLLECTIONS",1.8f,-kPi*.5f);
+ {auto& s=m.signs.back();s.style=4;s.icon=5;s.accent=0xff2f7f6du;}
+ wall(m,22.655f,10.6f,22.82f,12.4f,f+2.18f,f+2.87f,2);                                              // the plate's box
+ for(float y:{10.9f,12.1f})m.pipes.push_back({{22.6f,y},{22.6f,y},f+2.85f,.012f,roof,6});
  mdFix(m,model::water_cooler,14.5f,9.4f,f,.35f,.35f,1.1f,0,true);
  mdFix(m,model::lab_potted_plant,22.55f,13.6f,f,.37f,.43f,.69f,0,true);
  mdFix(m,model::med_wheelchair,21.6f,13.15f,f,.48f,.9f,.79f,kPi,true);
@@ -1266,7 +1338,9 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  for(auto [x,y]:{std::pair{14.47f,15.25f},{14.47f,17.1f},{16.f,15.6f},{16.f,17.4f},{16.5f,15.6f},{16.5f,17.4f},{18.f,15.6f},{18.f,17.4f},{18.5f,15.6f},{18.5f,17.4f}}){
   shelf(m,{x,y},kPi*.5f,0);const int seed=int(x*10+y*3);
   for(int t=0;t<3;++t){const float z=f+(t==0?.306f:t==1?.972f:1.656f);
-   for(int i=0;i<14;++i){if((i*7+t*5+seed)%9<3)continue;kit::prop(m,model::office_file_binder,x,y-.8f+i*.123f,z,.09f,.3f,.42f,kPi*.5f);}}}
+   for(int i=0;i<14;++i){if((i*7+t*5+seed)%9<3)continue;mdSet(m,model::office_file_binder,x,y-.8f+i*.123f,z,.09f,.3f,.42f,kPi*.5f);}}
+  wall(m,x-.25f,y-.9f,x+.25f,y+.9f,f+2.1f,roof,30);}                                              // nobody lies along a shelf top
+ for(auto [x,y,yaw]:{std::tuple{20.55f,18.4f,.2f},{20.68f,18.42f,.25f},{20.95f,18.7f,1.4f}})kit::prop(m,model::office_file_binder,x,y,f+.9f,.09f,.3f,.42f,yaw);
  mdFix(m,model::pallet,21.6f,16.6f,f,1.2f,1.15f,.16f,0,true);
  for(int i=0;i<4;++i)kit::prop(m,model::prop_cardboard_box,21.34f+(i%2)*.52f,16.34f+(i/2)*.52f,f+.16f,.5f,.495f,.252f,0);
  for(int i=0;i<2;++i)kit::prop(m,model::prop_cardboard_box,21.34f+i*.52f,16.34f,f+.412f,.5f,.495f,.252f,0);
@@ -1314,7 +1388,6 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  {auto l=m71Tube(19.4f,7.4f,roof,.45f,5.f,4200,.04f);l.fitting=model::clinic_ceiling_lamp_1;l.fittingWidth=1.05f;l.fittingDepth=1.04f;l.fittingHeight=.16f;m.lights.push_back(l);}
  m.lights.push_back(lamp({15.75f,8.45f},f+1.2f,.3f,2.2f,3000,0,WorldLightMount::Bare));m.lights.back().prop=bookingDeskLamp;                      // the clerk's lamp
  m.lights.push_back(m71Tube(18.6f,3.6f,roof,.22f,5.f,4000,.05f));                                            // reading room, dimmed
- for(float x:{17.f,20.6f})m.lights.push_back(lamp({x,1.5f},f+1.5f,.7f,4.f,7800,-.3f,WorldLightMount::Bare)); // off the viewers
  m.lights.push_back(m71Tube(17.25f,16.6f,roof,.45f,5.f,4400,.06f));m.lights.push_back(m71Tube(21.2f,16.6f,roof,.4f,5.f,4400,.06f,.3f));
  m.lights.push_back(m71Tube(18.6f,21.3f,roof,.5f,5.f,3100,0));                                               // staff room, warm
  m.lights.push_back(m71Tube(5.f,4.6f,roof,.5f,5.f,5600,.04f));
@@ -1324,7 +1397,6 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.lights.push_back(lamp({1.02f,4.1f},f+2.15f,.55f,5.f,1000,-.45f,WorldLightMount::Wall,0));                   // the safelight
  m.lights.push_back(lamp({3.62f,8.45f},f+2.05f,.25f,2.5f,1000,-.45f,WorldLightMount::Wall,0));                 // and the trap's
  m.lights.push_back(m71Tube(4.f,12.f,roof,.5f,5.5f,5400,.05f));
- m.lights.push_back(lamp({5.7f,14.6f},f+1.5f,.4f,3.f,7800,-.3f,WorldLightMount::Bare));                       // X-ray 2's viewers
  m.lights.push_back(m71Tube(8.3f,17.8f,roof,.4f,4.f,5000,.08f));
  m.lights.push_back(m71Tube(8.3f,21.4f,roof,.5f,4.5f,5600,.1f));
  m.lights.push_back(m71Tube(4.6f,17.2f,roof,.4f,5.f,5200,.05f));
@@ -1355,7 +1427,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
 // A swinging door held shut until `lock` is set (none: an ordinary door); `head` closes above the leaf.
 void m74Door(Map& m,float x1,float x2,float y,float f,float roof,float swing,const char* lock,int head=3){
  wall(m,x1,y-.1f,x2,y+.1f,f+2.55f,roof,head);
- Door d{x1,x2,y,0};d.swinging=true;d.swing=swing;d.maxOpen=.9f;if(*lock)d.requireState=stateId(lock);m.doors.push_back(d);
+ Door d{x1,x2,y,0};d.swinging=true;d.swing=swing;d.maxOpen=.9f;d.label="DOOR";if(*lock)d.requireState=stateId(lock);m.doors.push_back(d);
 }
 // One bay of the controlled-drugs cage: the steel grille standing on the floor, a proxy behind it.
 void m74Bars(Map& m,float cx,float cy,bool alongX,float f){
@@ -1375,8 +1447,10 @@ void m74Stock(Map& m,float x,float y,int seed){
  shelf(m,{x,y},kPi*.5f,0);const float f=m.layers.front().elevation;
  for(int t=0;t<3;++t){const float z=f+(t==0?.306f:t==1?.972f:1.656f);
   for(int i=0;i<3;++i){if((i+t+seed)%4==3)continue;const float yy=y-.58f+i*.58f;
-   if((i*3+t+seed)%5==1)for(int b=0;b<2;++b)kit::prop(m,model::med_pill_bottle,x-.08f+b*.16f,yy+(b?.1f:-.08f),z,.07f,.03f,.13f,b*.7f+seed);
-   else kit::prop(m,model::prop_cardboard_box,x,yy,z,.436f,.432f,.22f,(i+t)%2?0.f:.06f);}}
+   // The top board is out of reach: its stock is part of the shelf, not something to carry.
+   auto put=[&](int model,float px,float py,float w,float d,float h,float yaw){if(t==2)mdSet(m,model,px,py,z,w,d,h,yaw);else kit::prop(m,model,px,py,z,w,d,h,yaw);};
+   if((i*3+t+seed)%5==1)for(int b=0;b<2;++b)put(model::med_pill_bottle,x-.08f+b*.16f,yy+(b?.1f:-.08f),.07f,.03f,.13f,b*.7f+seed);
+   else put(model::prop_cardboard_box,x,yy,.436f,.432f,.22f,(i+t)%2?0.f:.06f);}}
 }
 
 // MEDICAL / PHARMACY (manifest 48). The dead end off Imaging's reception: the collection hall
@@ -1418,7 +1492,15 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  // The goods-in shutter, jammed at knee height on the trolley that came back: crouch under it.
  for(float x:{15.85f,19.f})wall(m,x,10.72f,x+.15f,11.08f,f,f+2.6f,8);                                    // guides
  wall(m,16.f,10.86f,19.f,10.94f,f+.84f,f+2.6f,20);
- for(float z=f+1.05f;z<f+2.55f;z+=.22f)for(float y:{10.85f,10.94f})wall(m,16.f,y,19.f,y+.01f,z,z+.025f,8);    // slat joints
+ // Slat laths standing proud of the curtain, a dark joint under each: they catch the tube in front
+ // of them. The lath behind the taped note is left off.
+ for(float z=f+1.05f;z<f+2.55f;z+=.22f){
+  wall(m,16.f,10.835f,19.f,10.86f,z,z+.04f,20);wall(m,16.f,10.85f,19.f,10.86f,z-.02f,z,8);
+  const bool note=z>f+1.2f&&z<f+1.7f;
+  for(auto [a,b]:{std::pair{16.f,note?17.28f:17.5f},{note?17.72f:17.5f,19.f}}){wall(m,a,10.94f,b,10.965f,z,z+.04f,20);wall(m,a,10.94f,b,10.95f,z-.02f,z,8);}}
+ floorLine(m,16.f,11.f,19.f,11.14f,f,13);floorLine(m,16.f,10.66f,19.f,10.8f,f,13);                          // hazard thresholds, both sides
+ taped(m,{17.5f,10.94f},f+1.46f,0,Readable::Note,"GOODS IN SHUTTER / 03:44","JAMMED ON TROLLEY 3. IT WILL NOT LIFT AND IT WILL NOT DROP.",
+  "PORTERS: UNDER IT ON YOUR BELLY. PASS THE BOXES THROUGH AFTER YOU. -R.");
  wall(m,16.f,10.83f,19.f,10.97f,f+.78f,f+.84f,13);                                                          // the bottom bar
  wall(m,15.85f,10.45f,19.15f,10.8f,f+2.6f,f+2.95f,8);wall(m,15.85f,10.8f,19.15f,11.f,f+2.6f,roof,3);        // coil box, wall over
  // The cage: grille bays south and east, the gate (door 2, on the time lock), a steel fascia above.
@@ -1426,7 +1508,16 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  wall(m,3.5f,3.45f,3.6f,3.55f,f,f+2.55f,20);wall(m,4.6f,3.45f,4.9f,3.55f,f,f+2.55f,20);wall(m,7.35f,3.45f,7.45f,3.55f,f,f+2.4f,20);
  wall(m,1.f,3.46f,3.5f,3.54f,f+2.4f,roof,20);wall(m,4.9f,3.46f,7.45f,3.54f,f+2.4f,roof,20);wall(m,7.36f,1.f,7.44f,3.46f,f+2.4f,roof,20);
  m74Door(m,3.6f,4.6f,3.5f,f,roof,-1,"medf_cage_open",20);
+ {auto& gate=m.doors.back();gate.leaf=1;gate.label="GATE";gate.locked="TIME LOCK / KEY THE PAD, WAIT 20 S";}
  wall(m,3.5f,3.45f,3.6f,3.55f,f+2.55f,roof,20);wall(m,4.6f,3.45f,4.9f,3.55f,f+2.55f,roof,20);
+ // The time lock says what it is doing: its plate over the leaf, and on the post a signal pair,
+ // red held, red winking while the delay runs, green when the bolts draw.
+ m.signs.push_back({{4.1f,3.612f},f+2.59f,.96f,.37f,0,"TIME LOCK","KEY THE PAD / RELEASES IN 20 S"});
+ {auto& s=m.signs.back();s.style=2;s.accent=0xffb23a2eu;}
+ {const StateId keyed=stateId("medf_cage_keyed"),running=stateId("medf_cage_running"),open=stateId("medf_cage_open");
+  auto held=lamp({4.75f,3.55f},f+2.3f,.5f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{1,.1f,.06f});held.enabledState=keyed;held.invert=true;m.lights.push_back(held);
+  auto wink=held;wink.enabledState=running;wink.invert=false;wink.period=1.f;wink.onTime=.5f;m.lights.push_back(wink);
+  auto go=lamp({4.75f,3.55f},f+2.02f,.55f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{.15f,1,.3f});go.enabledState=open;m.lights.push_back(go);}
  // The walk-in cold room: insulated panels to the ceiling, its door shut, a small window on the dark.
  wall(m,10.f,1.f,10.1f,3.5f,f,roof,28);
  wall(m,10.f,3.5f,11.35f,3.6f,f,roof,28);wall(m,11.65f,3.5f,13.f,3.6f,f,roof,28);
@@ -1507,6 +1598,13 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  for(auto [x,y,yaw]:{std::tuple{17.6f,8.7f,.3f},{16.9f,7.3f,2.f}})kit::prop(m,model::prop_cardboard_box_open,x,y,f,.5f,.5f,.5f,yaw);
  kit::prop(m,model::trash_can,13.55f,9.f,f,.27f,.27f,.34f,0);
  extinguisher(m,13.2f,9.9f,f,mdE);
+ // What shows the way under: the lamp R. worked the jam by, left burning on a carton just inside,
+ // throwing its light out along the floor; and what trolley 3 shed as it was dragged clear.
+ kit::prop(m,model::prop_cardboard_box,18.45f,9.95f,f,.727f,.72f,.367f,.1f);
+ const int shutterLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,18.4f,9.98f,f+.367f,.18f,.398f,.521f,kPi);
+ m.lights.push_back(lamp({18.4f,10.05f},f+.81f,.9f,7.f,2900,0,WorldLightMount::Bare));m.lights.back().prop=shutterLamp;
+ for(auto [x,y,yaw]:{std::tuple{16.75f,11.35f,.6f},{17.05f,10.7f,2.3f},{16.6f,10.2f,1.1f}})kit::prop(m,model::med_pill_bottle,x,y,f,.07f,.03f,.13f,yaw);
+ for(auto [a,b]:{std::pair{16.55f,16.59f},{17.03f,17.07f}})wall(m,a,9.7f,b,12.3f,f+.016f,f+.021f,8);     // its wheels, dragged through
  // The cold room's condensing unit on this side of its wall, piped up through the ceiling.
  mdFix(m,model::pwr_duct_fan_unit,13.605f,2.25f,f,.79f,1.49f,1.95f,0,true);
  for(float y:{1.75f,2.f})m.pipes.push_back({{13.45f,y},{13.45f,y},f+1.95f,.03f,roof,8});
@@ -1614,8 +1712,8 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
   s.durationMs=1500;s.finishAtMs=800;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);}
  cue(m,"medf_cage_slam",800,Sound::LockerBang,knock,"(THE COLD ROOM DOOR, SLAMMED FROM INSIDE)",1.f,f+1.3f);
  cue(m,"medf_cage_slam",800,Sound::JunkMetal,knock,"",.9f,f+1.f);
- m71Event(m,"medf_cage_key_go",0,0,24,24,"medf_cage_keyed",{m71Set("medf_cage_timer",1)});      // keyed once: pressing again replays nothing
- m71Event(m,"medf_cage_slam_go",0,0,24,24,"medf_cage_open",{m71Set("medf_cage_slam",1)});
+ m71Event(m,"medf_cage_key_go",0,0,24,24,"medf_cage_keyed",{m71Set("medf_cage_timer",1),m71Set("medf_cage_running",1)});      // keyed once: pressing again replays nothing
+ m71Event(m,"medf_cage_slam_go",0,0,24,24,"medf_cage_open",{m71Set("medf_cage_slam",1),m71Set("medf_cage_running",0)});
  {ScriptAction k;k.type=ScriptAction::Type::Shake;k.amount=.12f;m71Event(m,"medf_cage_slam_hit",0,0,24,24,"medf_cage_slammed",{k});}
  // The staff door opens from the inside: the way back out to the hall.
  m71Event(m,"medf_staff_release",7.3f,7.3f,9.f,8.8f,"",{m71Set("medf_staff_door",1)});
@@ -1629,8 +1727,9 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  m.lights.push_back(m71Tube(3.2f,11.5f,roof,.5f,5.5f,5200,.05f));
  m.lights.push_back(m71Tube(7.f,11.5f,roof,.45f,5.5f,5200,.05f,.2f));
  m.lights.push_back(m71Tube(11.8f,12.5f,roof,.42f,5.f,5000,.05f));
- m.lights.push_back(m71Tube(15.2f,12.5f,roof,.3f,4.5f,5000,.05f,.5f));
- m71DeadTube(m,19.f,12.5f,f,roof);
+ m71DeadTube(m,14.6f,12.5f,f,roof);
+ m.lights.push_back(m71Tube(17.5f,12.6f,roof,.38f,4.5f,5000,.05f,.45f));                                    // failing, in front of the shutter
+ m71DeadTube(m,20.f,12.5f,f,roof);
  m.lights.push_back(lamp({20.9f,11.3f},f+1.32f,.1f,1.2f,1000,-.45f,WorldLightMount::Bare));                     // the call button, still red
  m.lights.push_back(m71Tube(15.6f,2.6f,roof,.5f,5.5f,4600,.03f));
  m.lights.push_back(m71Tube(18.4f,4.f,roof,.45f,5.5f,4600,.03f,.2f));

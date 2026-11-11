@@ -1034,9 +1034,10 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
  case 'T':return floor+2.62f;default:return floor;
  }
 }
-bool World::doorBlocks(float x,float y,float feet,float height)const{
+bool World::doorBlocks(float x,float y,float feet,float height,bool sight)const{
  perf::count(perf::DoorBlocks);
  for(size_t index=0;index<m_doors.size();++index){const auto&door=m_doors[index];
+  if(sight&&door.seeThrough())continue;
   float open=m_doorPlan.open&&index<m_doorPlan.open->size()&&(*m_doorPlan.open)[index]?door.maxOpen:door.open;
   if(door.swinging){
    float angle=open*kPi*.5f*door.swing,width=door.right-door.left;
@@ -1138,11 +1139,11 @@ bool World::lightRayClear(Vec2 a,float az,Vec2 b,float bz)const{
   }
  }return true;
 }
-bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic,bool shelfCavities)const{
+bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic,bool shelfCavities,bool sight)const{
  auto delta=b-a;float dz=bz-az;int steps=std::max(1,int(std::ceil(std::sqrt(lengthSq(delta)+dz*dz)/.12f)));
  perf::count(perf::RayClear);perf::count(perf::RayClearSteps,uint64_t(steps-1));
  for(int i=1;i<steps;++i){float t=float(i)/steps;auto p=a+delta*t;float z=az+(bz-az)*t;
-  if(!fits(p.x,p.y,z,.015f,dynamic,shelfCavities)|| (doors&&doorBlocks(p.x,p.y,z,.015f)))return false;
+  if(!fits(p.x,p.y,z,.015f,dynamic,shelfCavities)|| (doors&&doorBlocks(p.x,p.y,z,.015f,sight)))return false;
  }return true;
 }
 bool World::navigable(int x,int y,int nx,int ny,float height)const{

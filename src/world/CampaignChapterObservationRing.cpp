@@ -1,4 +1,4 @@
-// ENERGY TEST COMPLEX (chapter 2, manifest 58): the Observation Ring, chunks 87-90, blocked out.
+// ENERGY TEST COMPLEX (chapter 2, manifest 58): the Observation Ring, chunks 87-90.
 // Four stitched chunks round one test pit 16 m deep: the ring walkway at -12 round its rim, the
 // glazed galleries behind it, a room in each outer corner. See docs/Design/descent-campaign-20261025.md.
 // The pit is where the ring test ran at 01:30. At 01:58 its field went self-sustaining; every feed
@@ -108,12 +108,12 @@ void rgQuadrant(Map& m,bool mx,bool my,int seed){
   for(auto [x1,y1,x2,y2]:{std::tuple{10.f,8.f,10.2f,10.4f},{14.8f,8.f,15.f,10.4f},{10.2f,10.2f,14.8f,10.4f}})glazing(m,x1,y1,x2,y2,G,top,3,.75f,3.f,true);   // seed 0 is unmirrored
   box(9.9f,7.8f,15.1f,10.5f,top,top+.25f,3);box(9.9f,10.4f,15.1f,10.5f,top-.2f,top,12);
   for(auto [x,y]:{std::pair{9.92f,10.12f},{14.78f,10.12f}})box(x,y,x+.3f,y+.38f,G,top,12);
-  rgCounter(m,10.5f,9.3f,14.5f,10.1f,G);
-  for(float x:{11.1f,13.3f}){kit::prop(m,model::crt_monitor,x,9.84f,G+.9f,.42f,.4f,.38f,anN);kit::prop(m,model::keyboard,x,9.45f,G+.9f,.45f,.16f,.03f,anN);
+  rgCounter(m,10.5f,9.3f,12.9f,10.1f,G);                                                         // the east end of the bay is the floods desk (the builder's)
+  for(float x:{11.1f}){kit::prop(m,model::crt_monitor,x,9.84f,G+.9f,.42f,.4f,.38f,anN);kit::prop(m,model::keyboard,x,9.45f,G+.9f,.45f,.16f,.03f,anN);
    kit::prop(m,model::office_chair,x+.1f,8.75f,G,.55f,.55f,.95f,kPi+(x<12?.25f:-.3f));}
   anModel(m,model::lab_scope_monitor,12.2f,9.84f,G+.9f,anN,false);
   anModel(m,model::lab_status_display,12.4f,10.16f,G+2.7f,anN,false);anModel(m,model::lab_status_display,11.f,10.16f,G+2.7f,anN,false);
-  kit::prop(m,model::office_paper_stack,14.1f,9.8f,G+.9f,.33f,.44f,.03f,.3f);
+  kit::prop(m,model::office_paper_stack,12.66f,9.62f,G+.9f,.33f,.44f,.03f,.3f);
   m.lights.push_back(lamp({12.5f,9.f},top-.25f,.8f,6.5f,3000,0,WorldLightMount::Bare));
   m.lights.push_back(lamp({12.2f,10.f},G+1.2f,.25f,2.6f,9000,-.15f,WorldLightMount::Bare,0,false));m.lights.back().flicker=.1f;}
  box(15.f,7.8f,15.4f,8.f,G,roof,3);
@@ -135,8 +135,105 @@ void rgQuadrant(Map& m,bool mx,bool my,int seed){
  box(1.f,7.8f,3.4f,8.f,G,top,3);swingDoor(m,lo(X(3.4f),X(4.6f)),hi(X(3.4f),X(4.6f)),Y(7.9f),G,top,my?-1.f:1.f);box(4.6f,7.8f,7.8f,8.f,G,top,3);
  // the galleries' slab and their lamps; benches along the glass
  box(1.f,1.f,24.f,7.8f,top,top+.2f,3);box(1.f,7.8f,7.8f,24.f,top,top+.2f,3);
- for(auto [x,y,fl]:{std::tuple{12.f,4.5f,0.f},{20.f,4.5f,seed==2?.4f:0.f},{4.5f,12.f,0.f},{4.5f,20.f,0.f},{4.5f,4.5f,0.f}})m.lights.push_back(rgTube(X(x),Y(y),top,.45f,6.f,3300,0,fl));
+ for(auto [x,y,fl]:{std::tuple{12.f,4.5f,0.f},{20.f,4.5f,seed==2?.4f:0.f},{4.5f,12.f,0.f},{4.5f,20.f,0.f},{4.5f,4.5f,0.f}})m.lights.push_back(rgTube(X(x),Y(y),top,.62f,7.f,3300,0,fl));
  for(float x:{11.6f,20.4f})if(seed!=0||x>15)bench(m,X(x),Y(7.1f),G);
+ // --- The galleries, as each quarter's people left them at 01:58. Written in the frame: the north gallery
+ // is x 8-24 by y 1-7.8, the west gallery x 1-7.8 by y 8-24; the lane down the middle of each stays clear.
+ auto fx=[&](int model,float x,float y,float z,float yaw,bool solid,float s=1.f){anModel(m,model,X(x),Y(y),z,Yaw(yaw),solid,s);};
+ auto fit=[&](int model,float x,float y,float z,float w,float d,float h,float yaw,bool solid){anFix(m,model,X(x),Y(y),z,w,d,h,Yaw(yaw),solid);};
+ // models whose front is their +x or -x side, turned so that front faces `yaw` like the others (side +1/-1)
+ auto fxSide=[&](int model,float x,float y,float z,float yaw,int side,bool solid,float s=1.f){anModel(m,model,X(x),Y(y),z,Yaw(yaw)-side*kPi*.5f,solid,s);};
+ auto pr=[&](int model,float x,float y,float z,float yaw,float s=1.f){kit::prop(m,model,X(x),Y(y),z,Yaw(yaw),s);};
+ auto worktop=[&](float x1,float y1,float x2,float y2){rgCounter(m,lo(X(x1),X(x2)),lo(Y(y1),Y(y2)),hi(X(x1),X(x2)),hi(Y(y1),Y(y2)),G);};
+ auto drift=[&](float x1,float y1,float x2,float y2,int count,unsigned s){paperDrift(m,lo(X(x1),X(x2)),lo(Y(y1),Y(y2)),hi(X(x1),X(x2)),hi(Y(y1),Y(y2)),G,count,s);};
+ auto chair=[&](float x,float y,float yaw){kit::prop(m,model::office_chair,X(x),Y(y),G,.55f,.55f,.95f,Yaw(yaw));};
+ auto cup=[&](float x,float y,float z){kit::prop(m,model::mug,X(x),Y(y),z,.09f,.09f,.1f,x*3.f);};
+ if(seed==0){
+  // north: the recording gallery. Two tape frames and the relay cabinets on the back wall, their trunking
+  // over the lane to pit control's bay; the observers' bench along the open bay, square on the mast
+  fxSide(model::lab_mainframe,17.3f,2.03f,G,anS,-1,true,.9f);fxSide(model::lab_mainframe,19.5f,2.03f,G,anS,-1,true,.9f);
+  fx(model::anl_switch_cabinet_1,21.3f,1.36f,G,anS,true);for(float x:{22.5f,23.4f})fx(model::pwr_control_cabinet,x,1.23f,G,anS,true);
+  cableTray(m,{15.f,1.1f},{15.f,7.7f},top-.5f);cableTray(m,{15.2f,3.4f},{23.9f,3.4f},top-.5f);
+  worktop(17.6f,6.6f,22.4f,7.3f);
+  fx(model::lab_scope_monitor,18.4f,7.f,G+.9f,anN,false);fx(model::lab_instrument_terminal,20.f,6.98f,G+.9f,anN,false);fx(model::lab_scope_monitor,21.6f,7.f,G+.9f,anN,false);
+  pr(model::lab_field_meter,19.2f,6.9f,G+.9f,.4f);pr(model::office_paper_stack,20.9f,6.85f,G+.9f,.2f);cup(17.9f,6.85f,G+.9f);
+  chair(18.4f,5.9f,kPi);chair(21.5f,5.8f,kPi-.5f);kit::propPose(m,model::office_chair,19.9f,5.3f,G,.55f,.55f,.95f,1.2f,0,kPi*.5f);
+  fx(model::lab_notice_board,15.6f,1.04f,G+1.1f,anS,false);
+  handCart(m,9.2f,6.7f,G);pr(model::prop_cardboard_box,9.2f,6.7f,G+.29f,.2f,.7f);
+  drift(15.2f,2.6f,23.f,6.2f,7,8701);
+  // west: the relay gallery, on the way out to the corridor. Switchgear down the back wall where they were
+  // pulling links at 01:58; a detector on its bench at the open bay, its cables across the floor
+  for(float y:{15.5f,17.1f,18.7f})fx(model::pwr_switchgear_cabinet,1.44f,y,G,anE,true);
+  fx(model::anl_switch_cabinet_2,1.44f,20.3f,G,anE,true);fx(model::pwr_disconnect_switch,1.2f,21.7f,G+1.f,anE,false);
+  fx(model::pwr_cable_bundle,4.3f,18.9f,G,0,false);fx(model::pwr_cable_bundle,4.4f,20.5f,G,.12f,false);
+  fx(model::lab_clean_bench,7.45f,19.3f,G,anW,true);fx(model::lab_test_chamber,7.45f,19.3f,G+.808f,anW,false,.7f);
+  fx(model::lab_clean_bench,7.45f,21.5f,G,anW,true);fx(model::lab_scope_monitor,7.45f,21.5f,G+.808f,anW,false);
+  chair(6.6f,19.4f,-kPi*.5f);chair(6.4f,21.6f,-kPi*.5f-.4f);
+  fx(model::lab_specimen_crate,7.1f,10.4f,G,.1f,true);fx(model::lab_specimen_crate,7.15f,11.7f,G,-.2f,true,.8f);
+  pr(model::lab_field_meter,2.5f,17.4f,G,.6f);pr(model::mine_hard_hat,2.7f,19.4f,G,1.1f);
+ }
+ if(seed==1){
+  // north, behind the shutters: where the visitors were received. The hats they were issued, the cases
+  // of what the company wanted seen, the desk their passes were written at, the spare chairs
+  shelf(m,{X(15.6f),Y(1.3f)},Yaw(0),G-F);box(14.7f,1.05f,16.5f,1.55f,G+1.95f,top,30);
+  pr(model::mine_hard_hat,15.1f,1.3f,G+.972f,.3f);pr(model::mine_hard_hat,15.7f,1.32f,G+.972f,1.4f);pr(model::mine_hard_hat,16.1f,1.3f,G+1.656f,2.2f);pr(model::prop_cardboard_box,15.3f,1.3f,G+.306f,0,.6f);
+  for(float x:{17.6f,18.7f,19.8f})fx(model::office_display_cabinet,x,1.3f,G,anS,true);
+  box(17.1f,1.03f,20.3f,1.6f,G+2.1f,top,30);
+  fx(model::art_painting_6,21.3f,1.03f,G+1.5f,anS,false);fx(model::lab_notice_board,9.1f,1.04f,G+1.1f,anS,false);
+  fx(model::lab_exec_desk,21.2f,4.3f,G,anE,true);fx(model::lab_boardroom_chair,22.6f,4.3f,G,anW,true);
+  pr(model::office_paper_stack,21.1f,4.f,G+.891f,.3f);fx(model::lab_desk_lamp,21.3f,3.55f,G+.891f,anW,false);
+  for(auto [x,y]:{std::pair{21.f,4.5f},{21.3f,4.75f},{20.9f,4.8f}})pr(model::item_id_card,x,y,G+.891f,x*7.f);
+  fx(model::lab_boardroom_chair,22.5f,1.62f,G,anS,true);fx(model::lab_boardroom_chair,23.4f,1.66f,G,anS,true);
+  pr(model::prop_cardboard_box,17.8f,7.2f,G,.1f);pr(model::prop_cardboard_box_open,18.6f,6.9f,G,.5f,.7f);
+  fit(model::water_cooler,8.6f,7.3f,G,.35f,.35f,1.1f,anN,true);fx(model::lab_potted_plant,14.5f,7.4f,G,0,true);
+  drift(15.f,2.f,23.f,7.f,8,8811);
+  // west (the east gallery): the exhibition's store. The model of the ring in its case, the cases not
+  // put out, the crated exhibits, the copier that ran the brochures, the carpet that was not laid
+  fit(model::wooden_table,4.4f,12.2f,G,1.367f,.724f,.78f,0,true);
+  box(3.95f,11.95f,4.85f,12.45f,G+.78f,G+.83f,15);box(4.28f,12.08f,4.52f,12.32f,G+.83f,G+.84f,8);box(4.385f,12.185f,4.415f,12.215f,G+.83f,G+1.22f,18);
+  for(float z:{G+.98f,G+1.1f}){box(4.25f,12.05f,4.55f,12.065f,z,z+.012f,20);box(4.25f,12.335f,4.55f,12.35f,z,z+.012f,20);box(4.25f,12.05f,4.265f,12.35f,z,z+.012f,20);box(4.535f,12.05f,4.55f,12.35f,z,z+.012f,20);}
+  box(3.95f,11.95f,4.85f,12.45f,G+.83f,G+1.36f,17);
+  for(float y:{11.2f,12.3f})fx(model::office_display_cabinet,1.3f,y,G,anE,true);
+  box(1.03f,10.7f,1.6f,12.8f,G+2.1f,top,30);
+  fxSide(model::lab_photocopier,1.45f,15.9f,G,anE,-1,true);
+  fx(model::lab_specimen_crate,2.f,19.f,G,.05f,true);fx(model::lab_specimen_crate,2.05f,20.3f,G,-.1f,true);fx(model::lab_specimen_crate,3.3f,19.7f,G,.3f,true,.85f);fx(model::lab_specimen_crate,2.05f,19.05f,G+1.12f,.2f,true,.8f);
+  box(1.4f,18.4f,2.7f,20.9f,G+1.13f,top,30);box(2.8f,19.2f,3.8f,20.2f,G+.96f,top,30);
+  fx(model::office_bookcase,1.28f,22.f,G,anE,true);
+  box(5.5f,21.2f,7.5f,21.55f,G,G+.34f,23);
+  pr(model::prop_cardboard_box,5.6f,13.9f,G,.4f);pr(model::prop_cardboard_box_open,6.9f,13.3f,G,.9f,.7f);
+  drift(3.6f,14.9f,6.6f,20.8f,6,8813);
+ }
+ if(seed==2){
+  // north (the south gallery): the pit crew's rigging store. Rope on its reels, drums, the fitters'
+  // bench with a pump stripped on it, spare ladders, the bridge's spare gratings on a pallet
+  fx(model::cable_reel,10.4f,2.1f,G,0,true);fx(model::cable_reel,11.9f,2.2f,G,.15f,true);
+  for(auto [x,y]:{std::pair{13.4f,1.4f},{14.1f,1.38f},{13.8f,2.f}})fx(model::ind_barrel,x,y,G,x,true);
+  worktop(17.2f,1.03f,21.6f,1.73f);
+  pr(model::pwr_gate_valve,17.9f,1.4f,G+.9f,.3f);pr(model::pwr_pipe_elbow,18.7f,1.35f,G+.9f,1.2f);fx(model::pwr_circulation_pump,19.9f,1.4f,G+.9f,anS,false);
+  pr(model::item_walkie,20.9f,1.4f,G+.9f,.5f);pr(model::mine_hard_hat,21.2f,1.45f,G+.9f,2.f);chair(19.4f,2.5f,0);
+  for(float x:{22.4f,23.2f})fx(model::pwr_wall_ladder,x,1.06f,G,anE,false);
+  fit(model::pallet,9.6f,6.5f,G,1.2f,1.15f,.16f,0,true);fx(model::scrap_catwalk_grate,9.6f,6.5f,G+.16f,.04f,false);fx(model::scrap_catwalk_grate,10.9f,6.7f,G,.3f,false);
+  fx(model::mine_portable_generator,22.7f,6.9f,G,.3f,true);fx(model::urb_cone,17.7f,7.2f,G,0,false);fx(model::urb_cone,18.3f,7.3f,G,.5f,false);
+  // west: the lamp room. The crew's lockers down the back wall, the changing benches under the glass,
+  // hats and dosimeters on the issue shelf, a drum on the cart for the winch
+  for(int i=0;i<5;++i)fxSide(model::psx_locker,1.35f,10.2f+i*.92f,G,anE,1,true);
+  for(float y:{11.2f,13.4f})fit(model::bench,7.3f,y,G,1.86f,.44f,.63f,anE,true);
+  shelf(m,{X(1.3f),Y(16.2f)},Yaw(anE),G-F);box(1.05f,15.3f,1.55f,17.1f,G+1.95f,top,30);
+  pr(model::mine_hard_hat,1.3f,15.8f,G+.972f,.4f);pr(model::mine_hard_hat,1.3f,16.5f,G+.972f,1.8f);pr(model::mine_hard_hat,1.3f,16.1f,G+1.656f,.9f);
+  pr(model::item_dosimeter,1.3f,16.8f,G+.972f,.3f);pr(model::prop_cardboard_box,1.3f,16.2f,G+.306f,0,.6f);
+  fx(model::lab_notice_board,1.04f,18.4f,G+1.1f,anE,false);fx(model::radiator_panel,1.15f,20.5f,G,anE,false);
+  fit(model::pallet,2.2f,22.4f,G,1.2f,1.15f,.16f,0,true);fx(model::lab_specimen_crate,2.2f,22.4f,G+.16f,.1f,true,.85f);
+  handCart(m,X(5.f),Y(19.6f),G);fx(model::ind_barrel,5.f,19.6f,G+.29f,0,false);
+  fx(model::scrap_lantern,6.6f,9.9f,G,0,false);
+ }
+ if(seed==3){
+  // north (the south gallery): where the people from Containment sleep, behind their own line
+  fx(model::med_mattress_stained,10.2f,2.f,G,0,false);fx(model::med_mattress_stained,12.6f,2.1f,G,.12f,false);fx(model::med_mattress_stained,19.4f,1.7f,G,-.05f,false);
+  fx(model::scrap_bedroll,21.6f,2.3f,G,.1f,false);
+  fx(model::ind_crate,18.6f,4.8f,G,.2f,true);fit(model::wooden_chair,17.7f,5.f,G,.45f,.45f,.9f,anW,true);fit(model::wooden_chair,19.5f,4.9f,G,.45f,.45f,.9f,anE,true);
+  fx(model::scrap_lantern,18.7f,4.85f,G+.812f,0,false);cup(18.4f,4.65f,G+.812f);
+  pr(model::prop_cardboard_box,14.f,1.5f,G,.2f);pr(model::prop_cardboard_box_open,15.f,1.6f,G,.6f,.7f);
+ }
  // Each quarter's own silhouette in the pit, so a glance across it says where on the ring you are.
  if(seed==0){
   // north-west: the instrument boom, a lattice girder from pit control's face out to the mast head
@@ -199,6 +296,10 @@ std::shared_ptr<Map> rgChunk(int index,bool mx,bool my,int seed){
 // OBSERVATION RING / NORTH-WEST (manifest 58). Pit control: the desk the ring test was run from,
 // its log, and the board that still shows the field up with nothing feeding it. In from the
 // High-Energy Test Bay (N); out west to the Shielding Corridor (W).
+// The beat: the floods desk in the observation bay (rg_pit_floods, a toggle). The note in pit control
+// says not to shine anything into the pit. Lit, the pit can be read to its floor from the rail, the field
+// turns to the light, the electrodes come round with it and strike the rim every 2.7 s, and what was
+// standing in the dark of the relay gallery comes out to the light. Off again, the rim is safe.
 std::shared_ptr<const Map> makeObservationRingNorthWest(){
  auto p=rgChunk(87,false,false,0);auto& m=*p;const float top=G+3.6f;
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=G;
@@ -222,6 +323,34 @@ std::shared_ptr<const Map> makeObservationRingNorthWest(){
  // the north seam's mouth from the test bay, the west passage's to the corridor
  wall(m,10.f,0.f,14.f,1.f,G+2.8f,top,28);wall(m,0.f,9.f,1.f,14.f,G+2.8f,top,28);
  m.pickupSpawns.push_back({{6.5f,6.6f},PickupKind::Ammo,G});
+ // --- The pit floods: the one control on the ring that still answers ------------------------------
+ const StateId floods=stateId("rg_pit_floods");
+ terminal(m,{13.8f,9.55f},"PIT FLOODS / RING LIGHTING","FLOODS 1-4 PUT OUT BY PIT CONTROL 02:12. THE FIELD TRACKS LIGHT. THE ELECTRODES TRACK THE FIELD.",
+  "E / FLOODS ON, FLOODS OFF. KEEP OFF THE RAIL WHILE THEY ARE LIT.",G-F,floods);
+ m.terminals.back().toggleState=true;
+ // the floods themselves: one under the boom's pod, one on the lining halfway down
+ {const Vec2 pod{12.2f+(22.85f-12.2f)*.55f,8.2f+(22.85f-8.2f)*.55f};
+  auto l=lamp(pod,-8.7f,2.2f,22.f,6800,0,WorldLightMount::Bare,0,true);l.enabledState=floods;m.lights.push_back(l);}
+ anFix(m,model::mine_cage_lamp,16.12f,20.f,-18.f,.21f,.2f,.36f,anE,false);
+ {auto l=lamp({16.4f,20.f},-18.f,1.4f,13.f,6800,0,WorldLightMount::Bare,0,true);l.enabledState=floods;m.lights.push_back(l);}
+ // what the field does about it: the electrodes' strike carried up to the rim, a metre in from the rail
+ for(auto [x1,y1,x2,y2]:{std::tuple{14.9f,14.9f,16.3f,24.f},{16.3f,14.9f,24.f,16.3f}}){
+  Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=x1;h.y1=y1;h.x2=x2;h.y2=y2;h.bottom=G-.6f;h.top=G+2.2f;h.damagePerSecond=30;
+  h.period=2.7f;h.onTime=.6f;h.enabledFlag=floods;m.hazards.push_back(h);}
+ {auto l=rgGlow({15.4f,15.4f},G+1.4f,.9f,7.f,rgArcBlue);l.period=2.7f;l.onTime=.6f;l.flicker=.6f;l.enabledState=floods;m.lights.push_back(l);}
+ for(float t:{17.f,20.f,23.f}){floorLine(m,14.9f,t-.2f,15.75f,t+.2f,G,13);floorLine(m,t-.2f,14.9f,t+.2f,15.75f,G,13);}   // the rim's keep-back marks
+ anModel(m,model::lab_pa_horn,12.5f,8.3f,G+4.4f,anS,false);
+ {TimedSequence s;s.timerState=stateId("rg_floods_seq");s.finishState=stateId("rg_floods_seq_done");s.x1=-9;s.y1=-9;s.x2=-8;s.y2=-8;
+  s.durationMs=9000;s.finishAtMs=8000;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);}
+ cue(m,"rg_floods_seq",100,Sound::Machine,{18.f,16.3f},"",1.f,-8.f);
+ cue(m,"rg_floods_seq",1500,Sound::OneMetalMoan,{20.f,20.f},"",1.f,-16.f);
+ cue(m,"rg_floods_seq",3400,Sound::PaCautionHazard,{12.5f,8.3f},"PA: CAUTION. FIELD ACTIVITY AT THE RIM. STAND CLEAR OF THE RAIL.",.9f,G+4.4f);
+ {ScriptEvent e;e.id=stateId("rg_floods_on");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.bottom=-100;e.top=100;e.requireState=floods;
+  ScriptAction seq;seq.type=ScriptAction::Type::SetState;seq.id=stateId("rg_floods_seq");seq.value=1;
+  ScriptAction shake;shake.type=ScriptAction::Type::Shake;shake.amount=.3f;
+  ScriptAction sting;sting.type=ScriptAction::Type::PlaySound;sting.sound=Sound::StingScratch;sting.amount=.7f;
+  ScriptAction comes;comes.type=ScriptAction::Type::SpawnEnemy;comes.enemyKind=CreatureKind::Transformed;comes.position={4.6f,21.6f};comes.z=G;comes.amount=6;
+  e.actions={seq,shake,sting,comes};m.scriptEvents.push_back(std::move(e));}
  zone(m,"OBSERVATION RING / PIT CONTROL",1.f,1.f,7.8f,7.8f);
  zone(m,"OBSERVATION RING / NORTH GALLERY",8.f,1.f,24.f,7.8f);
  zone(m,"OBSERVATION RING / WEST GALLERY",1.f,8.f,7.8f,24.f);
@@ -231,6 +360,11 @@ std::shared_ptr<const Map> makeObservationRingNorthWest(){
 }
 // OBSERVATION RING / NORTH-EAST (manifest 58). The visitors' gallery: where the board watched the
 // first cell filled, couches and a carpet of brochures. Up north to the Resonance Laboratory.
+// The beat: Sweep Two, a Cleanup pair sent down from the Laboratory to clear the visitors' rail, stood
+// covering the shutters; and two of the visitors, stood up in the dark behind them and deaf until
+// somebody steps onto the walk (rg_sweep_contact). Then a shot at the shutters and the two sides find
+// each other across the rail, in plain view over the pit corner from the south arm. Watch it, use it, or
+// go round by the east gallery; whoever is left comes for you.
 std::shared_ptr<const Map> makeObservationRingNorthEast(){
  auto p=rgChunk(88,true,false,1);auto& m=*p;const float top=G+3.6f;
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=G;
@@ -291,7 +425,7 @@ std::shared_ptr<const Map> makeObservationRingNorthEast(){
   anModel(m,model::lab_notice_board,x,y,G+1.f,yaw,false);
   m.lights.push_back(lamp({alongX?x:x+1.f,alongX?y-1.f:y},G+2.5f,.5f,3.6f,2800,0,WorldLightMount::Bare,0,true));}
  // the board's chairs, carried out to the rail for the opening and left where the alarm found them
- for(auto [x,y]:{std::pair{2.f,15.1f},{5.f,15.1f},{8.9f,18.f},{8.9f,21.4f}})m.lights.push_back(lamp({x,y},G+2.8f,.45f,4.f,2700,0,WorldLightMount::Bare,0,true));   // the exhibit spots along the runner
+ for(auto [x,y]:{std::pair{3.4f,15.1f},{8.9f,19.6f}})m.lights.push_back(lamp({x,y},G+2.8f,.6f,5.5f,2700,0,WorldLightMount::Bare,0,true));   // the exhibit spots along the runner
  kit::prop(m,model::lab_boardroom_chair,1.6f,15.15f,G,kPi*.5f+.2f);kit::propPose(m,model::lab_boardroom_chair,5.3f,14.95f,G,1.9f,0,kPi*.5f);
  kit::prop(m,model::lab_boardroom_chair,9.f,19.f,G,-.3f);kit::propPose(m,model::lab_boardroom_chair,9.1f,21.9f,G,.4f,kPi*.5f,0);
  kit::propPose(m,model::office_armchair_green,11.6f,15.f,G,2.6f,0,kPi*.5f,.9f);
@@ -302,6 +436,20 @@ std::shared_ptr<const Map> makeObservationRingNorthEast(){
  kit::prop(m,model::prop_cardboard_box_open,7.65f,15.4f,G+.012f,.4f,.4f,.4f,.3f);
  kit::prop(m,model::item_walkie,2.7f,14.75f,G+.012f,.11f,.38f,.05f,2.4f);
  paperDrift(m,.5f,14.45f,8.f,15.7f,G+.012f,8,8812);paperDrift(m,8.25f,16.f,9.55f,23.5f,G+.012f,6,8803);
+ // --- Sweep Two and the visitors ------------------------------------------------------------------
+ {const StateId contact=stateId("rg_sweep_contact");
+  rgGuard(m,"rg_clock_88","rg_sweep_a",ActorVisual::Cleanup,GuardSquadRole::Assault,"rg_sweep",{{{5.3f,11.7f},G,60000,kPi}},11,2,1.f,90);
+  m.actorTracks.back().ai.dropsSidearm=true;
+  rgGuard(m,"rg_clock_88","rg_sweep_b",ActorVisual::CleanupRusher,GuardSquadRole::Rusher,"rg_sweep",{{{10.4f,12.2f},G,60000,kPi}},11,1,1.1f,80);
+  m.creatureSpawns.push_back({CreatureKind::Transformed,{18.4f,3.3f},G,1,0,contact});          // in the visitors' room, by the couch
+  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.f,5.6f},G,1,0,contact});            // behind the torn shutter
+  TimedSequence s;s.timerState=stateId("rg_sweep_seq");s.finishState=contact;s.x1=0;s.y1=8.2f;s.x2=16.f;s.y2=24.f;
+  s.durationMs=14000;s.finishAtMs=400;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);
+  cue(m,"rg_sweep_seq",700,Sound::Empty,{5.3f,11.7f},"RADIO: Sweep Two. They're stood up behind the shutters. The visitors. All of them.",.9f,G+1.f);
+  cue(m,"rg_sweep_seq",3200,Sound::Shot,{5.3f,10.9f},"",1.f,G+1.3f);
+  cue(m,"rg_sweep_seq",3900,Sound::Empty,{5.3f,11.7f},"RADIO: Contact! Visitors' rail!",.9f,G+1.f);
+  cue(m,"rg_sweep_seq",9000,Sound::Empty,{5.3f,11.7f},"INVESTIGATOR (RADIO): Then put them down. Nobody leaves the ring wearing a pass.",.9f,G+1.f);
+  m.pickupSpawns.push_back({{2.2f,12.9f},PickupKind::Ammo,G});}
  zone(m,"OBSERVATION RING / VISITORS' GALLERY",16.2f,1.f,23.f,7.8f,-1000,1000,{.16f,.13f,.10f,.005f});
  zone(m,"OBSERVATION RING / NORTH GALLERY",0,1.f,16.f,7.8f);
  zone(m,"OBSERVATION RING / EAST GALLERY",16.2f,8.f,23.f,24.f);
@@ -311,6 +459,10 @@ std::shared_ptr<const Map> makeObservationRingNorthEast(){
 }
 // OBSERVATION RING / SOUTH-WEST (manifest 58). The pit crew's room: their suits on the wall and
 // the shower they used coming up. One of them never took his off.
+// There is no way down into the pit tonight, and the quarter says so three times: the hoist's cage
+// stopped halfway with its motor tripped (the note on the winch), the ladder head caged and chained
+// (the plate on it), the bridge let go behind its gate. The crew's note in their room says who chained
+// them and why. Nothing here is required; the quarter is the ring's quiet end, and Molloy's.
 std::shared_ptr<const Map> makeObservationRingSouthWest(){
  auto p=rgChunk(89,false,true,2);auto& m=*p;
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=G;
@@ -324,14 +476,24 @@ std::shared_ptr<const Map> makeObservationRingSouthWest(){
  wall(m,2.95f,22.1f,6.7f,23.f,G+2.3f,G+3.6f,30);
  anModel(m,model::med_scrub_sink,7.5f,17.f,G,anW,true);
  kit::prop(m,model::item_dosimeter,4.7f,19.62f,G+.51f,.31f,.146f,.066f,.4f);
- m.lights.push_back(lamp({4.f,19.6f},G+3.2f,.4f,5.f,4200,0));m.lights.back().flicker=.3f;
+ m.lights.push_back(lamp({4.f,19.6f},G+3.2f,.95f,7.f,4200,0));m.lights.back().flicker=.08f;
  m.creatureSpawns.push_back({CreatureKind::Transformed,{11.f,19.5f},G,1,0});                    // Molloy, still in his suit
  // the decontamination shower they came up through, its tiles still wet; their hats on the shelf
  wall(m,6.2f,19.9f,7.8f,21.7f,G,G+.012f,20);anModel(m,model::med_floor_drain,7.f,20.8f,G+.012f,0,false);
  wall(m,5.f,16.2f,7.4f,16.62f,G+1.6f,G+1.64f,2);wall(m,5.f,16.2f,7.4f,16.62f,G+1.85f,G+3.6f,30);for(float x:{5.f,7.36f})wall(m,x,16.2f,x+.04f,16.62f,G+1.3f,G+1.64f,2);
  for(auto [x,yaw]:{std::pair{5.4f,.2f},{6.1f,.1f}})kit::prop(m,model::mine_hard_hat,x,16.42f,G+1.64f,.279f,.351f,.153f,yaw);
- m.lights.push_back(lamp({6.9f,20.6f},G+3.2f,.35f,4.f,5200,0));
+ m.lights.push_back(lamp({6.9f,20.6f},G+3.2f,.6f,5.f,5200,0));
  m.pickupSpawns.push_back({{6.4f,17.2f},PickupKind::Health,G});
+ taped(m,{2.3f,16.21f},G+1.5f,anS,Readable::Note,"PIT CREW / 02:20","MOLLOY CAME UP THE LADDER ON HIS OWN AT 02:14. HE HAS NOT TAKEN HIS SUIT OFF. HE WILL NOT COME AWAY FROM THE RAIL.",
+  "WE CHAINED THE LADDER HEAD AND THE BRIDGE GATE. THE CAGE IS STUCK AT 9 M AND CAN STAY THERE. NOBODY ELSE GOES DOWN. LEAVE HIM AT THE RAIL.");
+ // --- No way down: the hoist's note on the winch, the ladder head caged off at the rail --------------
+ taped(m,{19.97f,11.6f},G+1.45f,anW,Readable::Note,"HOIST / 02:05","CAGE STOPPED AT 9 M WITH NOBODY IN IT. MOTOR TRIPPED, WILL NOT RESET. THE ROPES ARE CARRYING FIELD CURRENT.",
+  "DO NOT WIND IT BY HAND. LADDER AND BRIDGE ARE CHAINED BY PIT CONTROL. THERE IS NO WAY DOWN TONIGHT.");
+ anModel(m,model::mine_cage_gate,15.7f,6.6f,G,kPi*.5f,false);wall(m,15.62f,5.5f,15.95f,7.7f,G,G+3.f,30);
+ for(float y:{5.52f,7.6f})wall(m,15.64f,y,15.76f,y+.08f,G,G+2.55f,12);                               // the cage's posts
+ wall(m,15.2f,5.5f,15.3f,7.7f,G,G+.012f,13);floorLine(m,14.7f,5.4f,15.6f,7.8f,G,13);
+ taped(m,{15.61f,6.6f},G+1.45f,anW,Readable::Note,"LADDER HEAD / 02:16","CHAINED BY PIT CONTROL. THE FIELD IS LIVE BELOW 4 M AND THE LADDER IS IN IT.",
+  "MOLLOY CAME UP THIS. NOBODY GOES DOWN IT.");
  // --- The observation bridge: it crossed from this quarter's rim to the mast, for the crew to read the
  // cradle from above. At 01:58 it let go in the middle. The near half hangs from its hinge at the rail
  // straight down the pit, its work lamp still lit at the bottom of it; the far half hangs off the mast.

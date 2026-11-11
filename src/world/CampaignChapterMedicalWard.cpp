@@ -78,11 +78,29 @@ void mwTrack(Map& m,Vec2 a,Vec2 b,float f,float roof){
  m.pipes.push_back({a,b,f+2.40f,.015f,-999,5});
  for(Vec2 q:{a,b})m.pipes.push_back({q,q,f+2.40f,.007f,roof,5});
 }
+// A collision-only cap that casts no shadow: the renderer never draws material 30, the light
+// pass takes only box shapes, and movement and the audit go by a structure's bounds.
+void mwCap(Map& m,float x1,float y1,float x2,float y2,float lo,float hi){wall(m,x1,y1,x2,y2,lo,hi,30);m.structures.back().shape=ShapeColumn;}
+// The shut door of a pack washroom stall, picked out on its flat front (the face at px,py,
+// looking along x when faceX, toward dir): head rail, door edges, hinges, the gap under the
+// leaf, pull and bolt plate with its indicator. Trim only, nothing collides.
+void mwStallFront(Map& m,float px,float py,bool faceX,float dir,float f,bool engaged){
+ auto box=[&](float a1,float a2,float depth,float lo,float hi,int mat){
+  if(faceX)wall(m,px,py+a1,px+dir*depth,py+a2,f+lo,f+hi,mat);else wall(m,px+a1,py,px+a2,py+dir*depth,f+lo,f+hi,mat);
+  m.structures.back().solid=false;};
+ box(-1.05f,1.05f,.03f,2.f,2.07f,20);
+ for(float a:{-.4f,.375f})box(a,a+.025f,.015f,.14f,2.f,20);
+ box(-.375f,.375f,.012f,0.f,.14f,8);
+ for(float z:{.4f,1.1f,1.7f})box(-.375f,-.335f,.025f,z,z+.09f,20);
+ box(.25f,.34f,.02f,1.f,1.11f,20);box(.28f,.31f,.026f,1.04f,1.07f,engaged?19:21);
+ box(.19f,.215f,.04f,.93f,1.13f,20);
+}
 // A bed-head shelf on a wall along y (face at wallX, the bay toward dir) with its monitor;
 // dead: the bed-head circuit is out (or the patient is gone), the screen dark and grimed.
 void mwShelf(Map& m,float wallX,float y,float dir,float f,bool monitor,bool dead=false){
  const float a=wallX,b=wallX+dir*.25f;
  wall(m,std::min(a,b),y-.25f,std::max(a,b),y+.25f,f+1.38f,f+1.42f,20);
+ mwCap(m,std::min(a,b),y-.25f,std::max(a,b),y+.25f,f+1.72f,m.definition.ceiling);   // clear of the monitor, to the ceiling: nobody crouches on a bed-head shelf
  wall(m,std::min(a,a+dir*.1f),y-.02f,std::max(a,a+dir*.1f),y+.02f,f+1.28f,f+1.38f,20);
  if(monitor)kit::prop(m,dead?model::med_vitals_monitor_dead:model::med_vitals_monitor,wallX+dir*.12f,y,f+1.42f,.38f,.181f,.28f,dir>0?mwE:mwW);
 }
@@ -90,6 +108,7 @@ void mwShelf(Map& m,float wallX,float y,float dir,float f,bool monitor,bool dead
 void mwShelfX(Map& m,float x,float wallY,float dir,float f,bool monitor,bool dead=false){
  const float a=wallY,b=wallY+dir*.25f;
  wall(m,x-.25f,std::min(a,b),x+.25f,std::max(a,b),f+1.38f,f+1.42f,20);
+ mwCap(m,x-.25f,std::min(a,b),x+.25f,std::max(a,b),f+1.72f,m.definition.ceiling);
  wall(m,x-.02f,std::min(a,a+dir*.1f),x+.02f,std::max(a,a+dir*.1f),f+1.28f,f+1.38f,20);
  if(monitor)kit::prop(m,dead?model::med_vitals_monitor_dead:model::med_vitals_monitor,x,wallY+dir*.12f,f+1.42f,.38f,.181f,.28f,dir>0?mwS:mwN);
 }
@@ -222,6 +241,7 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  wall(m,6.8f,6.f,7.f,11.1f,f,roof,3);mwDoorwayY(m,11.1f,12.3f,6.8f,7.f,f,roof);wall(m,6.8f,12.3f,7.f,20.3f,f,roof,3);
  mwDoorwayY(m,20.3f,21.5f,6.8f,7.f,f,roof);wall(m,6.8f,21.5f,7.f,24.f,f,roof,3);
  wall(m,1.f,10.4f,2.8f,10.6f,f,roof,3);mwGlaze(m,2.8f,10.4f,4.1f,10.6f,f,roof,1.1f,1.75f,true);wall(m,4.1f,10.4f,4.4f,10.6f,f,roof,3);
+ const int seclusionDoor=int(m.doors.size());
  mwSwing(m,4.4f,5.3f,10.5f,f,roof,-1,0,dark);wall(m,5.3f,10.4f,6.8f,10.6f,f,roof,3);                               // door 1: seclusion 1
  wall(m,1.f,12.4f,2.8f,12.6f,f,roof,3);mwGlaze(m,2.8f,12.4f,4.1f,12.6f,f,roof,1.1f,1.75f,true);wall(m,4.1f,12.4f,4.4f,12.6f,f,roof,3);
  mwSwing(m,4.4f,5.3f,12.5f,f,roof,1,0,dark);wall(m,5.3f,12.4f,6.8f,12.6f,f,roof,3);                              // door 2: seclusion 2
@@ -320,7 +340,7 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  // --- The bathroom: two stalls, the basins, the shower ---------------------------------------------
  wall(m,1.f,17.6f,6.8f,17.7f,f,f+2.1f,27);wall(m,1.f,17.6f,1.1f,23.9f,f,f+2.1f,27);wall(m,1.f,23.8f,6.8f,23.9f,f,f+2.1f,27);
  wall(m,6.7f,17.7f,6.8f,20.24f,f,f+2.1f,27);wall(m,6.7f,21.56f,6.8f,23.8f,f,f+2.1f,27);
- for(float y:{18.8f,21.f})mwFix(m,model::med_washroom_stall,1.87f,y,f,2.13f,1.54f,2.4f,mwE,true);
+ for(float y:{18.8f,21.f}){mwFix(m,model::med_washroom_stall,1.87f,y,f,2.13f,1.54f,2.4f,mwE,true);mwStallFront(m,2.642f,y,true,1,f,y>20);}   // the far one bolted from inside, nobody in it
  for(float x:{3.7f,4.6f,5.5f}){mwFix(m,model::med_scrub_sink,x,17.97f,f,.49f,.54f,1.13f,mwS,true);}   // no mirrors on this ward: nothing to break, nothing to look into
  mwTrack(m,{4.5f,22.f},{6.7f,22.f},f,roof);mwCurtain(m,4.55f,5.5f,22.f,true,f);mwBunch(m,5.58f,22.f,f,true);
  m.pipes.push_back({{6.62f,22.9f},{6.62f,22.9f},f+1.f,.015f,f+2.1f,5});m.pipes.push_back({{6.62f,22.9f},{6.4f,22.9f},f+2.1f,.012f,f+2.1f,5});
@@ -408,12 +428,12 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
   "OBS 6 IS MINE. NOBODY SPEAKS TO HER. SHE GOES LAST, AND I WILL BE THERE.");
  m.terminals.back().readable=Readable::Letter;m.terminals.back().surface=.75f;m.terminals.back().yaw=mwE;
  kit::prop(m,model::wooden_chair,20.15f,20.9f,f,.417f,.525f,.95f,-kPi*.5f+.2f);
- mwFix(m,model::office_file_cabinet_open,19.7f,18.15f,f,1.451f,.699f,1.054f,0,true);
+ for(float x:{19.25f,20.16f})mwFix(m,model::med_records_cabinet,x,18.045f,f,.9f,.49f,1.f,mwS,true);   // the charge nurse's own files
  mwFix(m,model::office_bookcase,19.9f,23.64f,f,2.025f,.5f,2.5f,mwN,true);
  for(float y:{18.7f,19.62f})mwFix(m,model::med_records_cabinet,17.445f,y,f,.9f,.49f,1.f,mwE,true);   // the ward's files, under I.I.'s rule
  mwFix(m,model::med_wall_clock,22.98f,19.f,f+2.05f,.24f,.02f,.23f,mwW,false);
  mwFix(m,model::med_notice_board,17.235f,22.7f,f+1.25f,1.2f,.07f,.9f,mwE,false);
- kit::prop(m,model::office_paper_stack,19.7f,18.1f,f+1.054f,.33f,.44f,.03f,.3f);
+ kit::prop(m,model::office_file_binder,19.05f,18.045f,f+1.f,.09f,.3f,.42f,mwS);
  paperDrift(m,18.f,18.8f,22.5f,23.f,f,5,7503);
  // --- Light (27): cold ward tubes, the bed-heads, the station, and the reds that wait ------------------
  m.lights.push_back(mwTube(12.f,3.f,roof,.55f,6.f,5200,.05f));                                               // corridor
@@ -436,6 +456,13 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  m.darkZones.push_back({0,0,24,24,-1000,1000,dark,1,false,true});
  // Whoever crosses the ward in the dark brings seclusion 1 off his panel.
  mwEvent(m,"medw_n_dark_walk",7.f,6.f,17.f,24.f,"med_blackout",1,{mwSet("medw_wake_n",1)});
+ // Door control's promise kept: the seclusion maglocks dropped with the ward's power (76 sets
+ // medw_maglocks_out as its tubes die), so both cells stand open to whoever comes back up
+ // here, in the dark or after it. The patients need no help with a door that is not locked.
+ {ScriptEvent e;e.id=stateId("medw_n_locks_drop");e.scope=ScriptEvent::Scope::Map;e.x2=24;e.y2=24;e.once=true;
+  e.requireState=stateId("medw_maglocks_out");e.requireValue=1;
+  for(int d:{seclusionDoor,seclusionDoor+1})e.actions.push_back(mwDo(ScriptAction::Type::OpenDoor,Sound::Exit,0,d));
+  m.scriptEvents.push_back(std::move(e));}
  // Breathing behind the curtains, the drip in the bathroom.
  for(int t:{4000,21000,38000})cue(m,"medw_n_clock",t,Sound::WorkerDying,{15.6f,15.4f},"",.1f,f+1.5f);
  for(int t:{12000,47000})cue(m,"medw_n_clock",t,Sound::WorkerDying,{3.45f,9.6f},"",.08f,f+1.5f);
@@ -494,6 +521,7 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  wall(m,5.8f,19.2f,6.f,23.f,f,roof,3);
  // Theatres sit behind wired glass; the way through is recovery, and recovery's theatre door is
  // a maglock (door control: they fail open on power loss). The ward has to go dark first.
+ // Once dropped they never hold shut again: see medw_maglocks_hold below.
  wall(m,17.f,0.f,17.2f,7.75f,f,roof,3);mwDoorwayY(m,7.75f,8.75f,17.f,17.2f,f,roof);wall(m,17.f,8.75f,17.2f,10.4f,f,roof,3);
  wall(m,17.f,12.6f,17.2f,23.f,f,roof,3);
  mwGlaze(m,17.f,10.4f,17.2f,12.6f,f,roof,.95f,2.1f,true);                                                       // the theatre screen
@@ -550,7 +578,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  kit::prop(m,model::item_id_card,8.9f,20.6f,f,.132f,.085f,.002f,1.1f);
  kit::prop(m,model::med_blood_bag,9.45f,21.75f,f,.11f,.02f,.14f,.6f);
  for(auto [x,y]:{std::pair{8.25f,20.9f},{8.4f,20.4f},{8.1f,19.9f}})wall(m,x-.03f,y-.03f,x+.03f,y+.03f,f+.004f,f+.007f,16);
- for(float y:{20.f,20.25f,20.5f,20.75f})wall(m,9.79f,y,9.8f,y+.18f,f+1.1f,f+1.5f,16);                       // four fingers' worth on the glass wall
  terminal(m,{7.08f,21.66f},"PATIENT: LAB 4 / OBS 6","SUBJECT LEFT WARD UNASSISTED.","DOORS OPENED FROM INSIDE.");
  m.terminals.back().readable=Readable::Note;m.terminals.back().surface=mwDeck+.02f;m.terminals.back().yaw=mwW;
  // The drip, pulled over on her way out; the lock box by the door, its cover off.
@@ -563,14 +590,28 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  // Step up to her bed (to read her chart) and the checkpoint is taken; the tubes buzz, and
  // while she is still being read about the ward's power goes. Every way on (recovery to
  // theatre, the mortuary) is a maglock that only the dark lets go, so this is the one trigger.
+ const auto openDoor=[](int door){return mwDo(ScriptAction::Type::OpenDoor,Sound::Exit,0,door);};
  const std::vector<ScriptAction> dying={mwDo(ScriptAction::Type::PlaySound,Sound::Machine,.95f),mwDo(ScriptAction::Type::Shake),
-  mwSet("med_blackout",1),mwSet("medw_dark_clock",1),mwDo(ScriptAction::Type::OpenDoor,Sound::Exit,0,obs5Door),
-  mwDo(ScriptAction::Type::OpenDoor,Sound::Exit,0,recoveryDoor),mwDo(ScriptAction::Type::OpenDoor,Sound::Exit,0,mortuaryDoor)};
+  mwSet("med_blackout",1),mwSet("medw_maglocks_out",1),mwSet("medw_dark_clock",1),openDoor(obs5Door),openDoor(recoveryDoor),openDoor(mortuaryDoor)};
+ // The trigger is gated by its state alone, never by the fired-event latch. A once-event is
+ // latched before its actions run and the checkpoint is its first action, so a latched trigger
+ // would be saved as spent with medw_dark_done and medw_fail still 0: loading that save gave a
+ // lit ward whose blackout could never start. Unlatched, the save holds a player standing in
+ // the box with medw_dark_done 0, and the trigger simply fires again on load.
  mwEvent(m,"medw_blackout",6.1f,20.5f,9.7f,22.9f,"medw_dark_done",0,{mwDo(ScriptAction::Type::Checkpoint),mwSet("medw_dark_done",1),mwSet("medw_fail",1)});
+ m.scriptEvents.back().once=false;
  mwSequence(m,"medw_fail","medw_fail_done",4000,2600);
  cue(m,"medw_fail",900,Sound::Machine,{12.f,16.6f},"",.35f,roof-.3f);
  cue(m,"medw_fail",1900,Sound::Machine,{12.f,10.5f},"",.5f,roof-.3f);
  mwEvent(m,"medw_blackout_fall",0.f,0.f,24.f,24.f,"medw_fail_done",1,dying);
+ // The maglocks wait on med_blackout, which Surgery's transfer puts back to 0: a door somebody
+ // shut in the dark would lock again for good, with Surgery or the Morgue behind it. So a lock
+ // that has dropped once (medw_maglocks_out, never cleared) is held open whenever the ward has
+ // power: its leaf is driven back and, being locked, cannot be shut again. In the dark the
+ // doors work by hand, for the player and for the patients.
+ {ScriptEvent e;e.id=stateId("medw_maglocks_hold");e.scope=ScriptEvent::Scope::Map;e.x2=24;e.y2=24;e.once=false;
+  e.requireState=stateId("medw_maglocks_out");e.requireValue=1;e.conditions.push_back({ScriptCondition::Source::State,dark,ScriptCondition::Op::Equal,0});
+  e.actions={openDoor(obs5Door),openDoor(recoveryDoor),openDoor(mortuaryDoor)};m.scriptEvents.push_back(std::move(e));}
  // --- OBS 5: maglocked on its patient -----------------------------------------------------------
  mwPad(m,14.2f,19.2f,14.3f,23.f,f);mwPad(m,16.9f,19.2f,17.f,23.f,f);mwPad(m,14.3f,22.9f,16.9f,23.f,f);
  kit::prop(m,model::med_mattress_stained,15.6f,22.2f,f,1.9f,.9f,.118f,.04f);
@@ -687,9 +728,12 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  for(auto [x,y]:{std::pair{4.6f,21.9f}}){wall(m,x-.3f,y-.3f,x+.3f,y+.3f,f+.12f,f+.16f,20);
   for(float dx:{-.28f,.25f})for(float dy:{-.28f,.25f})wall(m,x+dx,y+dy,x+dx+.03f,y+dy+.03f,f+.06f,f+.9f,20);
   wall(m,x-.27f,y-.27f,x+.27f,y+.27f,f+.16f,f+.82f,23);}
- // The night's bags, tied off and left for a porter who did not come.
- for(auto [x1,y1,x2,y2,h]:{std::tuple{4.5f,19.75f,5.15f,20.35f,.34f},{4.75f,20.4f,5.45f,20.95f,.3f},{3.95f,19.9f,4.45f,20.4f,.26f}})wall(m,x1,y1,x2,y2,f,f+h,23);
- wall(m,4.62f,19.88f,5.05f,20.25f,f+.34f,f+.5f,23);
+ // The night's bags, tied off and left for a porter who did not come: slumped sacks of ward
+ // fabric, each with its neck knotted. A rounded shape collides by its bounds and casts no shadow.
+ for(auto [x,y,r,h]:{std::tuple{4.95f,20.f,.36f,.5f},{5.2f,20.72f,.34f,.44f},{4.3f,20.25f,.3f,.38f},{4.55f,20.85f,.27f,.32f}}){
+  wall(m,x-r,y-r*.92f,x+r,y+r*.92f,f,f+h,39);m.structures.back().shape=ShapeDome;
+  wall(m,x-.035f,y-.03f,x+.035f,y+.03f,f+h-.02f,f+h+.07f,39);m.structures.back().solid=false;                 // the knot
+  wall(m,x+.03f,y-.02f,x+.13f,y+.02f,f+h-.03f,f+h+.01f,39);m.structures.back().solid=false;}                  // and its tail
  kit::prop(m,model::med_crash_cart,3.25f,22.35f,f,.74f,.48f,1.f,.1f);                                          // the linen round's cart
  kit::prop(m,model::prop_cardboard_box,3.25f,22.35f,f+.809f,.436f,.432f,.22f,.12f);
  // --- Light (28): the bays, the end, the rooms; the two reds; theatre's own cold light --------------
@@ -699,7 +743,7 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  m.lights.push_back(mwTube(3.9f,4.5f,roof,.55f,5.5f,5600,.04f));                                             // treatment
  m.lights.push_back(mwTube(3.9f,12.f,roof,.4f,5.f,5400,.28f,.2f));                                           // sluice
  m.lights.push_back(mwTube(3.4f,17.f,roof,.45f,5.5f,5000,.05f));                                             // service corridor
- m.lights.push_back(mwTube(3.4f,21.1f,roof,.3f,4.f,4800,.05f));                                              // linen
+ m.lights.push_back(mwTube(3.4f,21.1f,roof,.5f,5.f,4800,.05f));                                              // linen
  m.lights.push_back(mwTube(8.f,20.4f,roof,.35f,4.f,5200,.05f));                                              // OBS 6
  m.lights.push_back(mwTube(15.6f,21.1f,roof,.3f,4.f,5200,.05f));                                             // OBS 5
  m.lights.push_back(mwTube(12.f,21.5f,roof,.4f,5.f,6000,.08f,.3f));                                          // mortuary corridor

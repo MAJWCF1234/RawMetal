@@ -50,7 +50,7 @@ bool Game::soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim,
   if(dynamic||!world.doors().empty()){
    int steps=std::max(1,int(std::ceil((next-begin)*distance/.2f)));
    for(int i=0;i<=steps;++i){float t=begin+(next-begin)*float(i)/steps;auto p=from+delta*t+shift;float z=fromZ+dz*t;
-    if(world.doorBlocks(p.x,p.y,z,.015f)||(dynamic&&!world.fits(p.x,p.y,z,.015f,true,true)))return false;
+    if(world.doorBlocks(p.x,p.y,z,.015f,true)||(dynamic&&!world.fits(p.x,p.y,z,.015f,true,true)))return false;
    }
   }begin=next;
  }return true;

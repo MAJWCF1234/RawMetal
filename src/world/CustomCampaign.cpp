@@ -270,7 +270,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    AmbientEmitter a;a.sound=row->sound;a.position={number(f,3,"ambient x"),number(f,4,"ambient y")};a.z=number(f,5,"ambient z");a.gain=number(f,6,"ambient gain");a.radius=number(f,7,"ambient radius");
    a.mode=given(8)?integer(f,8,"ambient mode"):row->loop?AmbientEmitter::Loop:AmbientEmitter::Random;
    if(given(9))a.every=number(f,9,"ambient every");if(given(10))a.spread=number(f,10,"ambient spread");if(given(11))a.state=stateField(f[11]);if(given(12))a.value=integer(f,12,"ambient value");
-   if(a.gain<=0||a.gain>4||a.radius<=0||a.radius>60||a.mode<AmbientEmitter::Loop||a.mode>AmbientEmitter::OnState||a.every<.5f||a.every>3600||a.spread<0||a.spread>3600)throw std::runtime_error("invalid AMBIENT gain, radius, mode or timing");
+   if(a.gain<=0||a.gain>4||a.radius<=0||a.radius>60||a.mode<AmbientEmitter::Loop||a.mode>AmbientEmitter::OnState||(a.mode==AmbientEmitter::Random&&(a.every<.5f||a.every>3600||a.spread<0||a.spread>3600)))throw std::runtime_error("invalid AMBIENT gain, radius, mode or timing");
    if(a.mode==AmbientEmitter::Loop&&!row->loop)throw std::runtime_error("AMBIENT sound "+std::string(row->name)+" is a single sound, not a loop (use mode 1 or 2)");
    if(a.mode==AmbientEmitter::OnState&&!a.state)throw std::runtime_error("AMBIENT mode 2 needs a state");
    map->ambients.push_back(a);
@@ -293,7 +293,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    Door d;d.left=number(f,2,"door left");d.right=number(f,3,"door right");d.y=number(f,4,"door y");d.z=number(f,5,"door z");
    d.entry=boolean(f,6,"door entry");d.transfer=boolean(f,7,"door transfer");d.swinging=boolean(f,8,"door swinging");d.requireEnemiesClear=boolean(f,9,"door clear flag");d.sign=integer(f,10,"door sign");
    if(f.size()>=12&&!f[11].empty())d.requireState=stateField(f[11]);
-   if(f.size()>=13)d.requireValue=integer(f,12,"door require value");
+   if(given(12))d.requireValue=integer(f,12,"door require value");
    // |control|swing|maxOpen|open|opening: the plant's control gate, the side a swinging
    // leaf opens to (1 or -1), how far it opens (0-1), and how open it starts and whether it is opening.
    if(given(13))d.requireControl=boolean(f,13,"door control gate");
@@ -301,7 +301,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(given(15))d.maxOpen=number(f,15,"door max open");
    if(given(16))d.open=number(f,16,"door open");
    if(given(17))d.opening=boolean(f,17,"door opening");
-   if(f.size()>18||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1)throw std::runtime_error("malformed DOOR record");
+   // |leaf|label|locked: 0 standard, 1 steel grille, 2 painted panel; the prompt's
+   // name for it; what the prompt says while it is locked.
+   if(given(18))d.leaf=integer(f,18,"door leaf");
+   if(f.size()>19)d.label=decode(f[19]);
+   if(f.size()>20)d.locked=decode(f[20]);
+   if(f.size()>21||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1||d.leaf<0||d.leaf>2||d.label.size()>24||d.locked.size()>40)throw std::runtime_error("malformed DOOR record");
    map->doors.push_back(d);
   }else if(tag=="STRUCT"){
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
@@ -590,8 +595,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(v.creature<0)throw std::runtime_error("chain creature out of range");}
    v.end={v.anchor.x,v.anchor.y+.05f,v.anchor.z-v.length};map->leads.push_back(v);
   }else if(tag=="WATER"){
-   if(f.size()<8)throw std::runtime_error("malformed WATER record");auto map=mapAt(maps,f);map->waterVolumes.push_back({
+   // WATER|map|x1|y1|x2|y2|bed|surface[|murk]: murk 0 clear to 1 black, standing water.
+   if(f.size()<8||f.size()>9)throw std::runtime_error("malformed WATER record");auto map=mapAt(maps,f);map->waterVolumes.push_back({
     number(f,2,"water x1"),number(f,3,"water y1"),number(f,4,"water x2"),number(f,5,"water y2"),number(f,6,"water bed"),number(f,7,"water surface")});
+   if(given(8)){const float murk=number(f,8,"water murk");if(!(murk>=0&&murk<=1))throw std::runtime_error("water murk is 0 to 1");map->waterVolumes.back().murk=murk;}
   }else if(tag=="COMPACTOR"){
    if(f.size()<9)throw std::runtime_error("malformed COMPACTOR record");auto map=mapAt(maps,f);map->compactors.push_back({
     number(f,2,"compactor x1"),number(f,3,"compactor y1"),number(f,4,"compactor x2"),number(f,5,"compactor y2"),number(f,6,"compactor bed"),number(f,7,"compactor raised"),number(f,8,"compactor period"),0});

@@ -16,10 +16,20 @@ namespace {
 enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5, Authored=6 };
 // Loops that crossfade their tail into their head (no click on wrap).
 // Area score: the loop for each MusicCue after Default (Freight keeps its
-// original track and resource; the rest follow the zone sounds in order).
-static_assert(int(MusicCue::Count)==9,"AudioEngine::AreaScores must match MusicCue");
-Sound areaSound(int cue){return cue==int(MusicCue::Freight)?Sound::FreightMusic:Sound(int(Sound::MusicUndercover)+cue-int(MusicCue::Undercover));}
-int areaCue(Sound sound){if(sound==Sound::FreightMusic)return int(MusicCue::Freight);if(sound>=Sound::MusicUndercover&&sound<=Sound::MusicDeathClose)return int(MusicCue::Undercover)+int(sound)-int(Sound::MusicUndercover);return 0;}
+// original track and resource; the rest follow the zone sounds in order, and
+// Chapter 2's Research and Clinic follow the sound bank).
+static_assert(int(MusicCue::Count)==11,"AudioEngine::AreaScores must match MusicCue");
+Sound areaSound(int cue){
+ if(cue==int(MusicCue::Freight))return Sound::FreightMusic;
+ if(cue>=int(MusicCue::Research))return Sound(int(Sound::MusicResearch)+cue-int(MusicCue::Research));
+ return Sound(int(Sound::MusicUndercover)+cue-int(MusicCue::Undercover));
+}
+int areaCue(Sound sound){
+ if(sound==Sound::FreightMusic)return int(MusicCue::Freight);
+ if(sound>=Sound::MusicUndercover&&sound<=Sound::MusicDeathClose)return int(MusicCue::Undercover)+int(sound)-int(Sound::MusicUndercover);
+ if(sound>=Sound::MusicResearch&&sound<=Sound::MusicClinic)return int(MusicCue::Research)+int(sound)-int(Sound::MusicResearch);
+ return 0;
+}
 // The alert loop is the library's boss track, which no map plays as its area
 // score (every packed score is heard somewhere in Chapter 1): hits of -12 to
 // -16 dBFS on the half bar over a dense, bright beat at about -21,
@@ -335,7 +345,7 @@ void AudioEngine::update(const Game& game,bool focused){
  auto sceneLoop=[&](Sound cue,int id){if(std::none_of(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==id;}))play({cue,{},1,1,false},id,true);};
  if(m_motorTarget>0)sceneLoop(Sound::LiftMotor,-2);
  for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
- for(int c=1;c<AreaScores;++c)if(m_areaTarget[size_t(c)]>0)sceneLoop(areaSound(c),-20-c);
+ for(int c=1;c<AreaScores;++c)if(m_areaTarget[size_t(c)]>0)sceneLoop(areaSound(c),AreaEmitter-c);
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
  std::erase_if(m_voices,[&](const auto&voice){if(voice.speech<0)return false;if(!voice.speaker||voice.speaker>game.npcActors().size())return true;
   size_t actor=voice.speaker-1;const auto&npc=game.npcActors()[actor];return !game.chunkResident(npc.level)||(voice.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(npc.track().deadState)));});
@@ -628,7 +638,8 @@ bool AudioEngine::test(){
    if(cue==0)continue;++scored;
    int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;
     const bool wrapped=cursor[size_t(cue)]+double(level-heard[size_t(cue)])*Rate>=double(district.m_samples[size_t(areaSound(cue))].frames());
-    if(v.cursor<=cursor[size_t(cue)]&&!wrapped)return failure("area score restarts at a seam");cursor[size_t(cue)]=v.cursor;heard[size_t(cue)]=level;}
+    if(v.cursor<=cursor[size_t(cue)]&&!wrapped){diagnostic<<"Chunk "<<level<<" cue "<<cue<<" cursor "<<v.cursor<<" after "<<cursor[size_t(cue)]<<" at chunk "<<heard[size_t(cue)]<<" of "<<district.m_samples[size_t(areaSound(cue))].frames()<<" frames\n";return failure("area score restarts at a seam");}
+    cursor[size_t(cue)]=v.cursor;heard[size_t(cue)]=level;}
    if(count!=1)return failure("duplicated area score voice");
   }
   std::array<bool,AreaScores> used{};for(int level=0;level<CampaignChunkCount;++level)used[size_t(int(game.chunkView(level).world().definition().musicCue))]=true;
@@ -694,7 +705,8 @@ bool AudioEngine::testAlertMusic(){
   for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);
    if(same(cue?areaSound(cue):Sound::Music))heard+=" "+std::to_string(level);if(level<=67||level==PrologueChunk)chapter[size_t(cue)]=true;}
   check(loop.size()>size_t(Rate*2*30)&&heard.empty()&&!same(Sound::ReactorMusic),"The alert loop ("+std::to_string(loop.size()/2/Rate)+" s) is no map's area score"+(heard.empty()?std::string():", but maps"+heard+" play it"));
-  check(std::count(chapter.begin(),chapter.end(),true)==AreaScores,"Chapter 1 already plays every packed score, so the alert loop is one of its own");}
+  const int chapterOneScores=int(MusicCue::Research);
+  check(std::count(chapter.begin(),chapter.begin()+chapterOneScores,true)==chapterOneScores,"Chapter 1 already plays every score up to Chapter 2's, so the alert loop is one of its own");}
  // Played twice round, through the wrap's crossfade as mix plays it: three whole
  // phrases a lap, and no rest left in them (the quietest 50 ms near the rest of it).
  {const auto&s=audio.m_samples[size_t(Sound::MusicAlert)];const size_t n=s.frames(),fade=std::min(size_t(2205),n/4),length=2*n-fade,window=Rate/20;
@@ -715,14 +727,14 @@ bool AudioEngine::testAlertMusic(){
   while(n<most&&!done()){audio.mix(block.data(),441);audio.alertScore(alarm);++n;
    if(curve&&n%5==0)report<<"  "<<curve<<' '<<n*10<<" ms: alert "<<loud()<<" score "<<score()<<'\n';}
   return n;};
- check(voice(-20-dark)&&audio.m_areaBlend[size_t(dark)]==1&&!voice(AlertEmitter),"Map 59 plays Darkness and no alert loop while nobody has the player");
+ check(voice(AreaEmitter-dark)&&audio.m_areaBlend[size_t(dark)]==1&&!voice(AlertEmitter),"Map 59 plays Darkness and no alert loop while nobody has the player");
  run(0,100,[]{return false;});audio.alertScore(Game::CautionMs);
  check(!voice(AlertEmitter)&&audio.m_alertTarget==0&&score()==1,"Caution with no hunt behind it, and peace, leave the area score alone");
- const double areaCursor=cursor(-20-dark);int calls=0;float at100=0;
+ const double areaCursor=cursor(AreaEmitter-dark);int calls=0;float at100=0;
  int in=run(Game::AlarmAlert,200,[&]{if(calls++==10)at100=loud();return audio.m_alertIn>=1;},"ALERT");
  check(in>=39&&in<=41&&voice(AlertEmitter)&&voice(AlertEmitter)->sound==Sound::MusicAlert&&voice(AlertEmitter)->gain==AlertTrim&&cursor(AlertEmitter)<Rate*.5&&score()<.001f&&loud()>.999f&&at100>.35f,
   "ALERT: the loop in from a phrase's downbeat and Darkness out in "+ms(in)+", equal power, the loop at "+std::to_string(at100).substr(0,4)+" after 100 ms");
- check(cursor(-20-dark)>areaCursor,"Darkness keeps its place under the alert loop");
+ check(cursor(AreaEmitter-dark)>areaCursor,"Darkness keeps its place under the alert loop");
  double alertCursor=cursor(AlertEmitter);
  int ease=run(Game::AlarmEvasion,300,[&]{return audio.m_alertLevel<=EvasionLevel;});
  check(ease>=99&&ease<=101&&audio.m_alertIn==1&&cursor(AlertEmitter)>alertCursor&&std::fabs(loud()-EvasionLevel)<.001f,"EVASION keeps the loop going, eased to "+std::to_string(EvasionLevel).substr(0,4)+" over "+ms(ease));

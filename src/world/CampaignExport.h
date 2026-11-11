@@ -9,14 +9,24 @@
 #include <vector>
 
 namespace retro {
-// THE RELEASE SWITCH. Everything past the great door (chunk 68, Research Intake,
-// behind the chapter2_open seal) is Chapter 2 and is not released yet. While this
-// is false a released copy of the game or the Campaign Builder neither lists nor
-// exports those levels; set it true when Chapter 2 ships and they appear by
-// themselves. The source workspace (or --dev-campaign) always sees every level.
-inline constexpr bool Chapter2Released=false;
-inline constexpr int FirstSealedChunk=68;
-inline bool campaignChunkSealed(int chunk){return !Chapter2Released&&chunk>=FirstSealedChunk&&chunk<CampaignChunkCount&&chunk!=PrologueChunk;}
+// THE RELEASE SWITCHES, one per chapter boundary.
+// Chapter 2 is everything past the great door (chunk 68, Research Intake, behind
+// the chapter2_open seal) up to the Extraction Interface (109). Chapter 3 begins
+// at Mine Access (110), behind the chapter3_open seal on 109's south door.
+// While a chapter's switch is false: its seal door has no way to open in play
+// (the great door's own script sets chapter2_open only when Chapter 2 is
+// released; nothing sets chapter3_open yet), and a released copy of the game or
+// the Campaign Builder neither lists nor exports its levels. Set a switch true
+// when that chapter ships and its door and its levels open by themselves. The
+// source workspace (or --dev-campaign) always sees every level.
+inline constexpr bool Chapter2Released=true;
+inline constexpr bool Chapter3Released=false;
+inline constexpr int FirstSealedChunk=68;      // Chapter 2's first level
+inline constexpr int FirstChapter3Chunk=110;   // Chapter 3's first level
+inline bool campaignChunkSealed(int chunk){
+ if(chunk<FirstSealedChunk||chunk>=CampaignChunkCount||chunk==PrologueChunk)return false;
+ return chunk>=FirstChapter3Chunk?!(Chapter2Released&&Chapter3Released):!Chapter2Released;
+}
 // The source workspace the exe runs from (src/world/CampaignChapters.cpp in its folder or
 // up to two above it: the owner's own build), or empty for a released copy.
 std::filesystem::path campaignWorkspace();

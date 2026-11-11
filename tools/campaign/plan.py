@@ -39,7 +39,7 @@ TRAILING_CHUNKS = 1
 # tracks are wired into AudioEngine (see NEW_CUES).
 NEW_CUES = {'Research': 'Subliminal', 'Clinic': 'DeathClose', 'Mines': 'Heat',
             'Depths': 'Darkness', 'Haven': 'Undercover', 'Boss': 'DeathClose'}
-WIRED_CUES = set()  # cues from NEW_CUES that AudioEngine already plays
+WIRED_CUES = {'Research', 'Clinic'}  # cues from NEW_CUES that AudioEngine already plays
 
 def E(side, a, b, z, kind='seam', state=None):
     return dict(side=side, a=float(a), b=float(b), z=float(z), kind=kind, state=state)
@@ -481,7 +481,7 @@ chunk(108, 1, 30, 'DEEP ACCESS CONTROL', -15, -9, 51,
       [E('N', 10, 14, -15, 'door'), E('S', 9, 15, -15)],
       """High-clearance gate linking research staff to the mining lines.""", manifest='75')
 chunk(109, 1, 31, 'EXTRACTION INTERFACE', -15, -5, 51,
-      [E('N', 9, 15, -15), E('S', 8, 16, -15)],
+      [E('N', 9, 15, -15), E('S', 8, 16, -15, 'door', 'chapter3_open')],
       """Clean lab architecture physically swallowed by heavy rock: white panels cracked by stone.""", manifest='76')
 
 # =============================================================================
@@ -491,7 +491,7 @@ district('Minehead', 'MINEHEAD', 3, '77-79', 'Mines', """
 Brutal industry. A staging depot, the heavy equipment depot, and the Personnel
 Descent: a cage lift down the main shaft (24 m drop) to the upper mine.""")
 chunk(110, 1, 32, 'MINE ACCESS', -15, 2, 52,
-      [E('N', 8, 16, -15), E('W', 9, 15, -15), E('S', 9, 15, -4)],
+      [E('N', 8, 16, -15, 'door'), E('W', 9, 15, -15), E('S', 9, 15, -4)],
       """Industrial staging depot between the lab sector and the minehead; stairs up to the -4 cage deck.""", manifest='77')
 chunk(111, 0, 32, 'EQUIPMENT DEPOT', -15, -2, 52,
       [E('E', 9, 15, -15)],

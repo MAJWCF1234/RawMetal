@@ -24,6 +24,13 @@ struct Door {
  // says why it is shut); -1, none. Doors carry no area names.
  int sign=-1;
  float maxOpen=1.f;
+ // The leaf: 0 the engine's own (the bulkhead slab, or the enamel leaf of a
+ // swinging door), 1 a steel grille that sight and sound pass through (a cage
+ // gate; drawn on sliding doors), 2 a clean painted panel. label names the door
+ // in its prompt ("GATE": E / OPEN GATE); locked is the prompt while it is locked.
+ int leaf=0;
+ std::string label,locked;
+ bool seeThrough()const{return leaf==1;}
 };
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 // core: the fraction of the footprint that collides when solid (a tree blocks
@@ -203,7 +210,9 @@ struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<flo
 inline constexpr int ClutterModelKind=7;
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
-struct WaterVolume {float x1,y1,x2,y2,bed,surface;};
+// murk: 0 the plant's clear coolant, up to 1 for standing water in the dark (a
+// pool in a cold store reads as still and black, not as a lit swimming bath).
+struct WaterVolume {float x1,y1,x2,y2,bed,surface;float murk=0;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.
 struct ParticleEmitter {Vec2 position;float z;Vec2 drift;float rise=1.05f,rate=.55f,radius=.07f,growth=.2f;int count=7;};
 struct Hazard {
@@ -650,14 +659,15 @@ public:
     // Headroom over the tile floor. A door's header caps it only for someone
     // below that header (a deck or catwalk over the door line passes above it).
     float clearanceHeight(float x,float y,float feet=-1e9f)const;
-    bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false)const;
+    // sight: a see-through door (a grille, Door::seeThrough) does not stop the ray.
+    bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false,bool sight=false)const;
     // Static optical visibility: exact solid intersections, separate from player hull clearance.
     bool lightRayClear(Vec2 a,float az,Vec2 b,float bz)const;
     // Nearest physical shot obstruction on a finite 3D segment. Actor hulls
     // are resolved by Game; this includes static and moving world geometry.
     float shotFraction(Point3 from,Point3 to,Point3&normal,ShotTrace* trace=nullptr)const;
     static bool testCollisionCandidates();
-    bool doorBlocks(float x,float y,float feet,float height)const;
+    bool doorBlocks(float x,float y,float feet,float height,bool sight=false)const;
     // While a plan is alive, the doors it marks count as standing at maxOpen to
     // doorBlocks, so route planning for an actor that operates doors passes them.
     struct DoorPlan {

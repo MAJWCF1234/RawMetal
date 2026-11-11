@@ -199,7 +199,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    line(Rec("LAYER").i(mi).i((long long)l).t(layer.name).n(layer.elevation).n(layer.thickness));
    for(size_t row=0;row<24;++row)line(Rec("ROW").i(mi).i((long long)l).i((long long)row).f(verbatim(layer.rows[row],notes,who+" layer "+std::to_string(l)+" row "+std::to_string(row))));}
   for(const auto& door:m.doors){Rec r("DOOR");r.i(mi).n(door.left).n(door.right).n(door.y).n(door.z).b(door.entry).b(door.transfer).b(door.swinging).b(door.requireEnemiesClear).i(door.sign).st(door.requireState).i(door.requireValue);
-   r.f(door.requireControl?"1":"").f(door.swing!=1?num(door.swing):"").f(door.maxOpen!=1?num(door.maxOpen):"").f(door.open!=0?num(door.open):"").f(door.opening?"1":"");line(r,13);}
+   r.f(door.requireControl?"1":"").f(door.swing!=1?num(door.swing):"").f(door.maxOpen!=1?num(door.maxOpen):"").f(door.open!=0?num(door.open):"").f(door.opening?"1":"");
+   r.f(door.leaf?std::to_string(door.leaf):"").f(door.label.empty()?"":encode(door.label)).f(door.locked.empty()?"":encode(door.locked));line(r,13);}
   for(const auto& s:m.structures){Rec r("STRUCT");r.i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).b(s.rail).i(s.material).f(s.solid?"":"0").f(s.shape?std::to_string(s.shape):"").f(s.facing?std::to_string(s.facing):"");line(r,10);}
   for(const auto& x:m.fixtures){Rec r("FIXTURE");r.i(mi).i(x.model).n(x.position.x).n(x.position.y).n(x.base).n(x.width).n(x.depth).n(x.height).n(x.yaw).b(x.solid);
    if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
@@ -281,7 +282,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   for(const auto& c:m.pushCrates)line(Rec("CRATE").i(mi).n(c.position.x).n(c.position.y).n(c.z).n(c.size));
   for(const auto& p:m.cratePlates)line(Rec("CRATE_PLATE").i(mi).n(p.position.x).n(p.position.y).st(p.state));
   if(m.crateReset)line(Rec("CRATE_RESET").i(mi).st(m.crateReset));
-  for(const auto& w:m.waterVolumes)line(Rec("WATER").i(mi).n(w.x1).n(w.y1).n(w.x2).n(w.y2).n(w.bed).n(w.surface));
+  for(const auto& w:m.waterVolumes){Rec r("WATER");r.i(mi).n(w.x1).n(w.y1).n(w.x2).n(w.y2).n(w.bed).n(w.surface);if(w.murk>0)r.n(w.murk);line(r);}
   for(const auto& c:m.compactors)line(Rec("COMPACTOR").i(mi).n(c.x1).n(c.y1).n(c.x2).n(c.y2).n(c.bed).n(c.raised).n(c.period).st(c.stopState),9);
   for(const auto& h:m.navHints)line(Rec("NAV_HINT").i(mi).n(h.position.x).n(h.position.y).n(h.z).i(h.hint));
   for(const auto& s:m.shelters)line(Rec("SHELTER").i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top));

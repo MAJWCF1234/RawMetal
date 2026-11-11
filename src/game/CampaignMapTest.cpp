@@ -1,3 +1,4 @@
+#include "../world/CampaignExport.h"
 #include "Game.h"
 #include "../renderer/SoftwareRenderer.h"
 #include "../world/CustomCampaign.h"
@@ -204,13 +205,43 @@ bool Game::testCampaignMaps(){
  std::ofstream out("freight-district-test.txt");bool pass=true;
  auto check=[&](bool ok,const char* name){out<<name<<": "<<(ok?"PASS":"FAIL")<<'\n';pass&=ok;};
  check(FreightDistrictEnd==32&&CampaignChunkCount>=FreightDistrictEnd+2,"Eight freight areas allocated across 22 additional stitched chunks");
- // Chapter 2 is sealed behind the great door until it ships; UNLOCK while
- // looking at the seal opens it for a playtester.
+ // The chapter seals (CampaignExport.h). Research Intake's inner door waits on
+ // chapter2_open. Unreleased, nothing in play sets it and UNLOCK while looking at
+ // the seal opens it for a playtester; released, the great door's own opening sets it.
  {Game g;g.m_level=68;g.restart();const auto&doors=g.world().doors();
-  bool sealed=!doors.empty()&&doors[0].requireState==stateId("chapter2_open")&&g.doorLocked(doors[0]);check(sealed,"Research Intake's inner door is sealed in an ordinary playthrough");
+  bool sealed=!doors.empty()&&doors[0].requireState==stateId("chapter2_open")&&g.doorLocked(doors[0]);check(sealed,"Research Intake's inner door waits on chapter2_open");
   if(sealed){g.m_player.pos={12.f,1.6f};g.m_player.z=g.world().floorHeight(12.f,1.6f);g.m_player.angle=-kPi*.5f;
    g.executeConsole("unlock");check(!g.doorLocked(g.world().doors()[0])&&g.state(stateId("chapter2_open"))==1,"UNLOCK while facing the seal opens Chapter 2");}}
- {Game g;g.m_level=67;g.restart();g.ensureChunk(68);int i=int(g.world().doors().size())-1;g.useDoor(i);g.updateStreaming(.1f);check(!g.state(stateId("chapter2_open"))&&g.m_chunks[68].world.doors()[0].open==0&&!g.m_chunks[68].world.doors()[0].opening,"opening chunk 67 never mirrors through the locked Chapter 2 seal");}
+ {Game g;g.m_level=67;g.restart();g.ensureChunk(68);int i=int(g.world().doors().size())-1;g.useDoor(i);g.updateStreaming(.1f);check(!g.state(stateId("chapter2_open"))&&g.m_chunks[68].world.doors()[0].open==0&&!g.m_chunks[68].world.doors()[0].opening,"opening chunk 67's leaf alone never mirrors through the locked Chapter 2 seal");}
+ {Game g;g.m_level=67;g.restart();g.m_god=true;g.ensureChunk(68);g.setState(stateId("ere_great_door"),1);for(int i=0;i<30;++i)g.update({},1.f/60);
+  const bool open=g.state(stateId("chapter2_open"))==1;
+  check(open==Chapter2Released,Chapter2Released?"Chapter 2 is released: the great door's opening sets chapter2_open":"Chapter 2 is not released: the great door's opening leaves chapter2_open unset");
+  check(campaignChunkSealed(68)==!Chapter2Released&&campaignChunkSealed(109)==!Chapter2Released&&campaignChunkSealed(110)==!(Chapter2Released&&Chapter3Released)&&!campaignChunkSealed(67)&&!campaignChunkSealed(PrologueChunk),"the tools hide exactly the chapters that are not released");}
+ // Chapter 2's late gates as the district owners left them (2026-11-11): the chapter's end sealed on
+ // chapter3_open from both sides, the locks that hold until their states, and what those states release.
+ {auto fresh=[](Game& g,int level){g.m_level=level;g.restart();g.m_god=true;g.setState(stateId("chapter2_open"));};
+  auto run=[](Game& g,float seconds){for(int i=0,n=int(seconds*60+.5f);i<n;++i)g.update({},1.f/60);};
+  auto lockedOn=[](const Game& g,const char* state){int n=0;for(const auto& d:g.world().doors())if(d.requireState==stateId(state)&&g.doorLocked(d))++n;return n;};
+  auto terminalGate=[](const Game& g,const char* activate,const char* require){for(const auto& t:g.world().terminals())if(t.activateState==stateId(activate))return t.requireState==stateId(require);return false;};
+  auto dormant=[](const Game& g){int n=0;for(const auto& e:g.enemies())n+=e.alive&&e.wakeState!=0;return n;};
+  {Game g;fresh(g,109);check(lockedOn(g,"chapter3_open")>=1,"Extraction Interface: the mine head edge waits on chapter3_open");
+   const int before=dormant(g);g.setState(stateId("dr_fin_sealed"));run(g,.5f);
+   out<<"  109 dormant before the gate drops "<<before<<", after "<<dormant(g)<<'\n';
+   check(before>=3&&dormant(g)<=before-3,"Extraction Interface: the gate's drop wakes what waits on the bank");}
+  {Game g;fresh(g,110);const auto& d=g.world().doors();
+   check(!d.empty()&&d[0].requireState==stateId("chapter3_open")&&g.doorLocked(d[0]),"Mine Access: its north door waits on chapter3_open");}
+  {Game g;fresh(g,108);check(lockedOn(g,"dr_inv_gone")==1,"Deep Access Control: the booth stays locked while the Investigator goes down");
+   g.setState(stateId("dr_inv_gone"));check(lockedOn(g,"dr_inv_gone")==0,"Deep Access Control: dr_inv_gone unlocks the booth");}
+  {Game g;fresh(g,107);check(terminalGate(g,"core_shutdown","dr_core_shed"),"Energy Core Research: the isolator refuses until the load is shed");}
+  {Game g;fresh(g,103);check(terminalGate(g,"cont_barricade","conb_ec_pressure"),"Emergency Containment: the barricade needs the pump set charged");
+   g.setState(stateId("conb_ec_stance"),int(SquadStance::Truce));g.setState(stateId("conb_ec_radio_done"));run(g,.3f);
+   check(g.state(stateId("conb_ec_stance"))==int(SquadStance::Ally),"Emergency Containment: a squad on truce, written off over the radio, sides with the player");}
+  {Game g;fresh(g,98);g.setState(stateId("cona_b_stance"),int(SquadStance::Hostile));g.setState(stateId("cona_b_radio_done"));run(g,.3f);
+   check(g.state(stateId("cona_b_stance"))==int(SquadStance::Hostile),"Containment B: a hostile squad stays hostile after the radio");}
+  {Game g;fresh(g,100);check(lockedOn(g,"conb_iso_barred")==5,"Isolation Wing: the five barred cells stay shut");}
+  {Game g;fresh(g,74);int gate=-1;for(size_t i=0;i<g.world().doors().size();++i)if(g.world().doors()[i].leaf==1)gate=int(i);
+   check(gate>=0&&g.world().doors()[size_t(gate)].label=="GATE"&&g.world().doors()[size_t(gate)].requireState==stateId("medf_cage_open")&&g.doorLocked(g.world().doors()[size_t(gate)]),"Pharmacy: the drugs cage gate is a grille on the time lock");}
+ }
  // Chapter 2's first beats, played on their clocks.
  {Game g;g.m_level=68;g.restart();g.m_player.pos={12.f,2.2f};g.m_player.z=g.world().floorHeight(12.f,2.2f);g.m_god=true;
   for(int i=0;i<60*15;++i)g.update({},1.f/60);

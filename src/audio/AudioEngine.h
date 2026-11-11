@@ -54,7 +54,7 @@ private:
  float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0;
  float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0;
  // Area score, one entry per MusicCue (0, the original track, is m_main*).
- static constexpr int AreaScores=9;
+ static constexpr int AreaScores=11;
  std::array<float,AreaScores> m_areaBlend{},m_areaTarget{};
  // Alert / Evasion music: while a guard has the player (ALERT) or still hunts
  // him (EVASION) the area score gives way to the alert loop (Sound::MusicAlert).
@@ -65,6 +65,9 @@ private:
  // StingDuck for StingHold s, released over StingRelease s.
  static constexpr float AlertRise=.4f,AlertFall=3.f,EvasionLevel=.8f,EvasionEase=1.f,StingDuck=.5f,StingHold=.5f,StingRelease=.35f;
  static constexpr std::int64_t AlertEmitter=-30;
+ // Area scores are AreaEmitter-cue (-101 on), clear of the fixed ids above:
+ // at -20-cue the tenth cue (Clinic) was the alert loop's -30 and was cut every frame.
+ static constexpr std::int64_t AreaEmitter=-100;
  float m_alertIn=0,m_alertTarget=0,m_alertLevel=1,m_alertLevelTarget=1;int m_stingFrames=0;
  void alertScore(int alarm);
  void duckForSting(){m_stingFrames=int((StingHold+StingRelease)*Rate);}

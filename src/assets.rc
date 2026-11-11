@@ -1287,3 +1287,5 @@
 2409 RCDATA "assets/library/audio/hsfx_pa_system_lockdown.sfx"
 2410 RCDATA "assets/library/audio/hsfx_pa_backup_generators.sfx"
 2411 RCDATA "assets/library/audio/hsfx_pa_hostile_detected.sfx"
+2412 RCDATA "assets/library/audio/music_research.mp3"
+2413 RCDATA "assets/library/audio/music_clinic.mp3"

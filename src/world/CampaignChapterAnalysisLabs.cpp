@@ -16,6 +16,13 @@ void lbDeadTube(Map& m,float x,float y,float roof,float yaw=0){anFix(m,model::cl
 WorldLight lbBeacon(Vec2 p,float z,float yaw,float phase,const char* state,bool amber=false){
  auto l=lamp(p,z,amber?.36f:.32f,amber?3.6f:4.f,3000,0,WorldLightMount::Wall,yaw,true,amber?Point3{1.f,.5f,.06f}:Point3{1.f,.12f,.06f});
  l.period=amber?1.f:1.4f;l.onTime=.5f*l.period;l.phase=phase;l.enabledState=stateId(state);l.invert=true;return l;}
+// A lamp that comes on, steady and green, once `state` is set: the purge has run.
+WorldLight lbClear(Vec2 p,float z,float yaw,const char* state){
+ auto l=lamp(p,z,.34f,4.5f,5200,0,WorldLightMount::Wall,yaw,true,{.2f,1.f,.35f});l.enabledState=stateId(state);return l;}
+// A sound of the building's own (World.h AmbientEmitter, from the bank): a bed that loops, or a sound that
+// plays once each time `state` takes its value. A state on a bed gates it: heard only while the state is set.
+void lbAmbient(Map& m,Sound sound,Vec2 p,float z,float gain,float radius,int mode,const char* state){
+ AmbientEmitter a;a.sound=sound;a.position=p;a.z=z;a.gain=gain;a.radius=radius;a.mode=mode;a.state=stateId(state);m.ambients.push_back(a);}
 // Somebody who did not get out: a posed body on the map's clock.
 void lbBody(Map& m,const char* clock,ActorVisual visual,Vec2 p,float z,float yaw){actor(m,clock,visual,1.7f,{{0,p,z,yaw,4,1},{1000,p,z,yaw,4,1}});}
 // An industrial pendant: a drop rod from the roof to its reflector head at z, lit unless intensity is 0.
@@ -44,18 +51,18 @@ void lbIsland(Map& m,float x1,float x2,float y,float f,float roof,bool sinkEast)
 }
 // Reagents on a spine's two shelves from x1 to x2 (spine centre y): jars and bottles in runs with gaps.
 void lbReagents(Map& m,float x1,float x2,float y,float f,int seed){
- int k=seed;for(float x=x1;x<x2;x+=.4f,++k)for(int t=0;t<2;++t){const float z=f+(t?1.83f:1.35f);
+ int k=seed;for(float x=x1;x<x2;x+=.62f,++k)for(int t=0;t<2;++t){const float z=f+(t?1.83f:1.35f);
   switch((k+t*3)%5){case 0:case 3:kit::prop(m,model::med_specimen_jar,x,y+(k%2?.125f:-.125f),z,0);break;
-   case 1:for(int b=0;b<2;++b)kit::prop(m,model::med_pill_bottle,x-.05f+b*.1f,y+(b?.12f:-.12f),z,.07f,.03f,.13f,b*.2f);break;default:break;}}
+   case 1:kit::prop(m,model::med_pill_bottle,x,y+(k%2?-.12f:.12f),z,.07f,.03f,.13f,k*.2f);break;default:break;}}
 }
 // Bulk stock on a metal shelf at (x,y), along y or along x: boxes, bottles and jars on its three boards.
 void lbStock(Map& m,float x,float y,bool alongY,int seed){
  shelf(m,{x,y},alongY?kPi*.5f:0.f,0);const float f=m.layers.front().elevation;
  wall(m,x-(alongY?.25f:.9f),y-(alongY?.9f:.25f),x+(alongY?.25f:.9f),y+(alongY?.9f:.25f),f+1.95f,m.definition.ceiling,30);   // nobody sits on its top board
  for(int t=0;t<3;++t){const float z=f+(t==0?.306f:t==1?.972f:1.656f);
-  for(int i=0;i<3;++i){if((i+t+seed)%4==3)continue;const float a=-.58f+i*.58f,px=alongY?x:x+a,py=alongY?y+a:y;
+  for(int i=0;i<3;++i){if((i+t+seed)%2==1)continue;const float a=-.58f+i*.58f,px=alongY?x:x+a,py=alongY?y+a:y;
    switch((i*3+t+seed)%5){
-    case 1:for(int b=0;b<3;++b)kit::prop(m,model::med_pill_bottle,px+(alongY?0.f:(b-1)*.13f),py+(alongY?(b-1)*.13f:0.f),z,.07f,.03f,.13f,b*.7f+seed);break;
+    case 1:kit::prop(m,model::med_pill_bottle,px,py,z,.07f,.03f,.13f,.7f+seed);break;
     case 3:for(int b=0;b<2;++b)kit::prop(m,model::med_specimen_jar,px+(alongY?0.f:(b?.11f:-.11f)),py+(alongY?(b?.11f:-.11f):0.f),z,b*.9f+seed);break;
     default:kit::prop(m,model::prop_cardboard_box,px,py,z,.436f,.432f,.22f,(i+t)%2?0.f:.06f);}}}
 }
@@ -64,7 +71,7 @@ void lbCellShelf(Map& m,float x,float y,bool alongY,int seed){
  shelf(m,{x,y},alongY?kPi*.5f:0.f,0);const float f=m.layers.front().elevation;
  wall(m,x-(alongY?.25f:.9f),y-(alongY?.9f:.25f),x+(alongY?.25f:.9f),y+(alongY?.9f:.25f),f+2.1f,m.definition.ceiling,30);
  for(int t=0;t<3;++t){const float z=f+(t==0?.306f:t==1?.972f:1.656f);
-  for(int i=0;i<4;++i){if((i*2+t+seed)%3==0)continue;const float a=-.54f+i*.36f;
+  for(int i=0;i<3;++i){if((i*2+t+seed)%2==0)continue;const float a=-.54f+i*.36f;
    kit::prop(m,model::anl_cell_charged,alongY?x:x+a,alongY?y+a:y,z,(i+t+seed)*.9f);}}
 }
 // Glass on the floor where something was dropped: slivers scattered round (x,y).
@@ -90,9 +97,14 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
- openEdge(m,{'N',10.f,14.f,f,true,0});                                                      // door 0: in from intake
+ openEdge(m,{'N',10.f,14.f,f,false,0});                                                     // the open seam from intake's teal passage, as planned: no leaf to stop anyone arriving
  openEdge(m,{'W',9.f,14.f,f,false,0});
+ wallDoor(m,1.f,10.8f,4.8f,5.f,4.15f,5.35f,f,roof,-1);                                        // door 0: the suit room's, hung first so the lockdown stays door 1
  openEdge(m,{'S',10.f,14.f,f,true,stateId("lab_chem_seal")});                               // door 1: the lockdown
+ // the seam's frame: the passage's three-metre soffit carried through, pale-steel posts and head
+ wall(m,10.f,0.f,14.f,1.f,f+3.f,roof,3);
+ for(float x:{10.f,13.92f})doorTrim(m,x,.86f,x+.08f,1.04f,f,f+3.f);
+ doorTrim(m,10.f,.86f,14.f,1.04f,f+2.94f,f+3.f);
  machineryClock(m,"anl_chem_clock",60000);
  auto crash=[&](float x1,float x2,float y1,float y2){wall(m,x1,y1,x2,y2,f+.86f,f+.96f,20);};
  // the room's own walls where things hang on them
@@ -105,7 +117,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  // shut from the lab by its own door in the lab's wall (a leaf hangs only in a wall along x).
  wall(m,9.f,1.f,9.2f,2.4f,f,roof,3);doorwayY(m,2.4f,3.6f,9.f,9.2f,f,roof);wall(m,9.f,3.6f,9.2f,5.f,f,roof,3);
  wall(m,14.8f,1.f,15.f,2.4f,f,roof,3);doorwayY(m,2.4f,3.6f,14.8f,15.f,f,roof);wall(m,14.8f,3.6f,15.f,5.f,f,roof,3);
- wallDoor(m,1.f,10.8f,4.8f,5.f,4.15f,5.35f,f,roof,-1);wallDoor(m,13.2f,23.f,4.8f,5.f,18.6f,19.8f,f,roof,-1);wall(m,10.8f,4.8f,13.2f,5.f,f+2.4f,roof,3);
+ wallDoor(m,13.2f,23.f,4.8f,5.f,18.6f,19.8f,f,roof,-1);wall(m,10.8f,4.8f,13.2f,5.f,f+2.4f,roof,3);
  for(float x:{10.72f,13.2f})wall(m,x,4.76f,x+.08f,5.04f,f,f+2.4f,20);
  wall(m,10.72f,4.76f,13.28f,5.04f,f+2.36f,f+2.4f,20);
  for(float x:{11.1f,11.7f,12.3f,12.9f})wall(m,x,4.86f,x+.06f,4.94f,f+2.3f,f+2.36f,8);      // the air curtain's heads, dry since the fans stalled
@@ -133,8 +145,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  kit::prop(m,model::item_dosimeter,3.1f,3.15f,f+.51f,.31f,.146f,.066f,.4f);
  kit::prop(m,model::item_walkie,5.9f,3.4f,f,.114f,.376f,.046f,2.1f);
  kit::prop(m,model::item_id_card,2.5f,3.75f,f,.132f,.085f,.002f,.9f);
- m.lights.push_back(lbTube(5.4f,2.9f,roof,.55f,5.5f,3800,0));
- m.lights.push_back(lbTube(2.3f,2.6f,roof,.4f,4.5f,3800,0));
+ m.lights.push_back(lbTube(4.2f,2.9f,roof,.6f,6.5f,3800,0));
  taped(m,{8.99f,1.9f},f+1.5f,anW,Readable::Note,"SUIT COUNT / 02:30","FOUR SUITS OUT AFTER THE VENT. THREE BACK. MORAN WENT BACK IN FOR HER NOTEBOOK.",
   "SHE TOOK HER HOOD OFF IN THERE. SHE SAID THE AIR WAS FINE. SHE SAID IT TWICE, THE SAME WAY.");
  m.pickupSpawns.push_back({{7.8f,4.2f},PickupKind::Health,f});
@@ -170,7 +181,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  // the cycle lamp over the lab door: amber, and it never cleared
  m.lights.push_back(lbBeacon({18.1f,4.78f},f+2.45f,-kPi*.5f,.2f,"lab_chem_seal",true));
  wallSign(m,16.4f,4.79f,f+2.2f,"HOOD ON UNTIL THE LAMP CLEARS","RINSE UNDER THE ROSE / SUIT IN THE BIN / THEN UNHOOD",1.6f,anN);
- m.lights.push_back(lbTube(17.7f,2.4f,roof,.7f,6.f,6000,.05f));m.lights.push_back(lbTube(21.f,2.4f,roof,.6f,5.5f,6000,.05f,.3f));
+ m.lights.push_back(lbTube(19.3f,2.4f,roof,.75f,7.f,6000,.05f,.3f));
  // --- The lab: the instrument wall, two island pairs, the hoods ---------------------------------
  // The instrument wall (north): bench runs either side of both doors and the R-41 terminal, lab-panel
  // splashbacks, an instrument shelf or wall cupboards over them, a cable tray over all of it.
@@ -276,7 +287,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  // Moran's notebook, where she went back for it
  kit::prop(m,model::office_file_binder,21.6f,10.4f,f+.94f,.6f);
  // The way they left it: paper off the benches, a chair over in the aisle, a flask dropped and stepped in.
- paperDrift(m,2.f,5.9f,20.4f,15.7f,f,14,8101);
+ paperDrift(m,2.f,5.9f,20.4f,15.7f,f,6,8101);
  paperDrift(m,3.6f,8.15f,10.f,8.6f,f+.9f,3,8102,false);paperDrift(m,14.8f,13.f,18.6f,13.45f,f+.9f,2,8103,false);
  propPose(m,model::office_chair,12.4f,10.6f,f,.55f,.55f,.95f,2.2f,kPi*.5f,0);
  lbShards(m,11.3f,11.6f,f,81);propPose(m,model::med_specimen_jar,11.75f,11.35f,f,.5f,kPi*.5f,0);
@@ -284,11 +295,10 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  kit::prop(m,model::item_id_card,11.4f,6.4f,f,.132f,.085f,.002f,.4f);kit::prop(m,model::item_dosimeter,19.6f,6.9f,f,.31f,.146f,.066f,1.4f);
  // Light: cold over the islands, the one by hood 3 failing, warmer down the aisle, one fitting dead;
  // the beacons and hood 3's violet are the only colour in it.
- for(auto [x,y]:{std::pair{5.f,8.8f},{8.6f,8.8f},{5.f,12.8f},{8.6f,12.8f},{16.7f,8.8f}})m.lights.push_back(lbTube(x,y,roof,.6f,6.f,6000,.04f));
+ for(auto [x,y]:{std::pair{6.8f,8.8f},{6.8f,12.8f},{16.7f,8.8f}})m.lights.push_back(lbTube(x,y,roof,.68f,7.f,6000,.04f));   // one long fitting over each island
  m.lights.push_back(lbTube(16.7f,12.8f,roof,.5f,5.5f,6000,.04f,.35f));
  for(float y:{7.1f,13.6f})m.lights.push_back(lbTube(12.4f,y,roof,.52f,5.5f,4600,.02f));
- m.lights.push_back(lbTube(19.7f,7.2f,roof,.48f,5.f,5200,.03f));
- for(float y:{7.2f,11.5f,14.7f})m.lights.push_back(lbTube(2.2f,y,roof,.45f,5.f,5200,.03f));   // the west aisle and its cabinets
+ for(float y:{7.4f,13.6f})m.lights.push_back(lbTube(2.2f,y,roof,.5f,6.f,5200,.03f));   // the west aisle and its cabinets
  lbDeadTube(m,19.7f,11.f,roof);
  m.lights.push_back(lamp({15.95f,5.45f},f+1.35f,.3f,2.2f,2800,0,WorldLightMount::Bare));m.lights.back().prop=deskLamp;
  m.lights.push_back(lbBeacon({11.f,5.02f},f+2.6f,kPi*.5f,.35f,"lab_chem_seal"));
@@ -316,10 +326,23 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  anModel(m,model::lab_status_display,9.23f,20.3f,f+2.1f,anE,false);
  floorLine(m,10.f,22.45f,14.f,22.7f,f,13);
  anFix(m,model::lab_id_scanner,14.77f,22.3f,f+1.1f,.3f,.06f,.41f,anW,false);
+ // THE PURGE'S PAYOFF, this side (lab_chem_seal, set at Instrumentation's console). The beacons go out, and in
+ // their place: the extract fans over the hoods run up and stay up, the inlets here and the grille on the west
+ // wall start to pull, green comes on either side of the held door; and the first time anyone walks into this
+ // lobby with the air clean, the horn says so, the bolts go back and the door opens itself.
+ for(auto [x,yaw]:{std::pair{9.22f,0.f},{14.78f,kPi}})m.lights.push_back(lbClear({x,21.5f},f+2.3f,yaw,"lab_chem_seal"));
+ lbAmbient(m,Sound::AmbFan,{21.8f,10.4f},f+3.1f,.55f,16,AmbientEmitter::Loop,"lab_chem_seal");
+ lbAmbient(m,Sound::AmbVent,{12.f,18.6f},f+2.8f,.5f,10,AmbientEmitter::Loop,"lab_chem_seal");
+ lbAmbient(m,Sound::AmbVent,{1.2f,6.f},f+2.7f,.5f,10,AmbientEmitter::Loop,"lab_chem_seal");
+ {ScriptEvent e;e.id=stateId("anl_chem_release");e.x1=9.2f;e.y1=16.6f;e.x2=14.8f;e.y2=22.6f;e.bottom=-100;e.top=100;e.once=true;e.requireState=stateId("lab_chem_seal");
+  ScriptAction set;set.type=ScriptAction::Type::SetState;set.id=stateId("anl_chem_released");set.value=1;e.actions.push_back(set);
+  ScriptAction open;open.type=ScriptAction::Type::OpenDoor;open.index=1;e.actions.push_back(open);m.scriptEvents.push_back(std::move(e));}
+ lbAmbient(m,Sound::PaDoorsUnlocked,{9.48f,16.6f},f+2.5f,.55f,16,AmbientEmitter::OnState,"anl_chem_released");
+ lbAmbient(m,Sound::OneMetalBang,{12.f,22.6f},f+1.4f,.5f,14,AmbientEmitter::OnState,"anl_chem_released");
  for(auto [x,yaw]:{std::pair{9.22f,anE},{14.78f,anW}})anFix(m,model::pwr_vent_grille,x,18.6f,f+2.4f,.819f,.04f,.8f,yaw,false);
  anFix(m,model::lab_pa_horn,9.48f,16.6f,f+2.5f,.495f,.564f,.433f,anE,false);
  servicePipe(m,{14.45f,16.25f},{14.45f,22.8f},roof-.3f,.05f,3);
- paperDrift(m,9.6f,16.5f,14.4f,22.2f,f,5,8104);
+ paperDrift(m,9.6f,16.5f,14.4f,22.2f,f,3,8104);
  kit::prop(m,model::item_dosimeter,13.2f,21.1f,f,.31f,.146f,.066f,.8f);
  // the solvent store (west): block-built, the drums on their bund, the stock, the yellow cabinet, the fourth suit
  wall(m,1.f,16.2f,5.5f,16.26f,f,roof,31);wall(m,6.9f,16.2f,9.f,16.26f,f,roof,31);wall(m,5.5f,16.2f,6.9f,16.26f,f+2.55f,roof,31);
@@ -329,15 +352,15 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  propPose(m,model::ind_barrel,4.5f,18.7f,f,.4f,kPi*.5f,0);                                       // knocked over on the way out
  lbStock(m,1.36f,19.2f,true,3);lbStock(m,1.36f,21.4f,true,8);
  lbStock(m,4.5f,22.6f,false,5);lbStock(m,6.5f,22.6f,false,11);
- wall(m,8.36f,17.9f,8.94f,19.1f,f,f+1.75f,18);wall(m,8.35f,18.49f,8.36f,18.51f,f+.1f,f+1.65f,8);   // the flammables cabinet
- wall(m,8.345f,17.95f,8.36f,19.05f,f+1.2f,f+1.3f,13);for(float y:{18.35f,18.6f})wall(m,8.32f,y,8.35f,y+.05f,f+.9f,f+1.1f,8);
+ anFix(m,model::med_supply_cabinet,8.69f,18.5f,f,1.2f,.484f,1.75f,anW,true);                       // the flammables cabinet: steel, its hazard band across both doors
+ wall(m,8.432f,17.92f,8.448f,19.08f,f+1.18f,f+1.3f,13);m.structures.back().solid=false;
  wall(m,8.36f,17.9f,8.94f,19.1f,f+1.75f,roof,30);
  anFix(m,model::med_first_aid_box,4.5f,16.32f,f+1.3f,.367f,.12f,.349f,anS,false);
  m.pipes.push_back({{1.06f,22.86f},{8.94f,22.86f},f+2.6f,.035f,-999,3});                         // the solvent main along the back wall
  for(float x:{3.1f,5.5f,7.5f}){m.pipes.push_back({{x,22.86f},{x,22.86f},f+2.1f,.02f,f+2.6f,3});anFix(m,model::pwr_gate_valve,x,22.8f,f+2.05f,.245f,.14f,.165f,anN,false);}
  anFix(m,model::pwr_fire_cabinet,8.84f,20.6f,f+1.1f,.252f,.203f,.559f,anW,false);
- for(auto [x,fl]:{std::pair{3.f,0.f},{7.7f,.5f}}){m.lights.push_back(lamp({x,16.28f},f+2.3f,.65f,6.5f,3600,0,WorldLightMount::Wall,kPi*.5f));m.lights.back().flicker=fl;}
- m.lights.push_back(lbTube(3.f,21.f,roof,.52f,5.5f,4000,0));m.lights.push_back(lbTube(7.3f,21.6f,roof,.42f,4.5f,4000,0));
+ {m.lights.push_back(lamp({4.6f,16.28f},f+2.3f,.7f,7.f,3600,0,WorldLightMount::Wall,kPi*.5f));m.lights.back().flicker=.25f;}
+ m.lights.push_back(lbTube(3.6f,21.2f,roof,.56f,6.5f,4000,0));
  m.lights.push_back(lbTube(5.f,20.4f,roof,.3f,4.f,4000,0,.6f));                                 // stuttering over her
  m.pickupSpawns.push_back({{7.6f,20.6f},PickupKind::Ammo,f});
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.f,20.f},-999,1,0});                // Moran, still in her suit
@@ -354,8 +377,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  handCart(m,16.1f,19.6f,f);kit::prop(m,model::prop_cardboard_box_open,16.1f,19.55f,f+.29f,.4f,.4f,.4f,.2f);
  anFix(m,model::med_first_aid_box,15.12f,21.f,f+1.3f,.367f,.12f,.349f,anE,false);
  anFix(m,model::pwr_fire_cabinet,20.6f,16.36f,f+1.1f,.252f,.203f,.559f,anS,false);
- m.lights.push_back(lbTube(18.8f,19.8f,roof,.6f,6.f,4200,0));m.lights.push_back(lbTube(21.4f,21.f,roof,.45f,5.f,4200,0,.2f));
- m.lights.push_back(lbTube(16.9f,21.9f,roof,.4f,4.5f,4200,0));
+ m.lights.push_back(lbTube(19.4f,20.4f,roof,.66f,7.f,4200,0,.2f));
  m.lights.push_back(lamp({21.f,16.28f},f+2.3f,.55f,6.f,3600,0,WorldLightMount::Wall,kPi*.5f));
  m.pickupSpawns.push_back({{16.f,21.8f},PickupKind::HandgunAmmo,f});
  extinguisher(m,15.06f,17.f,f,anE);
@@ -406,6 +428,22 @@ std::shared_ptr<const Map> makeInstrumentation(){
  wallDoor(m,17.2f,22.9f,14.6f,14.8f,17.7f,18.9f,f,roof,-1);                                   // control room / back corridor
  terminal(m,{18.f,7.f},"FUME PURGE / ANALYTICAL CHEMISTRY","HOOD 3 RELEASE 02:22. CHEMISTRY SEALED ON THE FOUL-AIR READING. EXTRACT FANS 1-3 STALLED.",
   "RUN THE PURGE: FANS TO BOOST, MAKE-UP AIR OPEN. THE SOUTH DOOR RELEASES ON THE CLEAN READING.",0,stateId("lab_chem_seal"));
+ // THE PURGE'S PAYOFF, this side. E at the console sets lab_chem_seal, and the room answers: the board's pilot
+ // goes from a stalled amber blink to green, the console logs the fans to boost and then the clean reading, the
+ // floor jumps as the dampers go over, the horn grants it, and out on the test floor the stalled extract fan
+ // runs up and the duct along the south wall starts to pull. (The fan and duct beds are silent until then.)
+ {auto l=lamp({20.5f,6.36f},f+1.78f,.3f,2.8f,3000,0,WorldLightMount::Bare,0,false,{1.f,.5f,.06f});l.period=1.f;l.onTime=.5f;l.enabledState=stateId("lab_chem_seal");l.invert=true;m.lights.push_back(l);}
+ {auto l=lamp({20.5f,6.36f},f+1.78f,.34f,3.2f,5200,0,WorldLightMount::Bare,0,false,{.2f,1.f,.35f});l.enabledState=stateId("lab_chem_seal");m.lights.push_back(l);}
+ {ScriptEvent e;e.id=stateId("anl_purge_go");e.x1=17.2f;e.y1=6.2f;e.x2=22.9f;e.y2=14.6f;e.bottom=-100;e.top=100;e.once=true;e.requireState=stateId("lab_chem_seal");
+  ScriptAction run;run.type=ScriptAction::Type::SetState;run.id=stateId("anl_purge_run");run.value=1;e.actions.push_back(run);
+  ScriptAction jolt;jolt.type=ScriptAction::Type::Shake;jolt.amount=.35f;e.actions.push_back(jolt);m.scriptEvents.push_back(std::move(e));}
+ {TimedSequence q;q.timerState=stateId("anl_purge_run");q.finishState=stateId("anl_purge_done");q.x1=q.y1=q.x2=q.y2=0;q.durationMs=9000;q.finishAtMs=8000;q.soundIntervalMs=0;q.soundUntilMs=0;m.timedSequences.push_back(q);}
+ cue(m,"anl_purge_run",300,Sound::Machine,{18.f,7.f},"PURGE RUNNING. EXTRACT FANS 1-3 TO BOOST. MAKE-UP AIR OPEN.",0,f+1.f);
+ cue(m,"anl_purge_run",4400,Sound::Machine,{18.f,7.f},"CHEMISTRY READS CLEAN. SOUTH DOOR RELEASED. ZONE 3 AIRLOCK RELEASED.",0,f+1.f);
+ lbAmbient(m,Sound::PaAccessGranted,{20.5f,6.5f},f+2.3f,.55f,14,AmbientEmitter::OnState,"lab_chem_seal");
+ lbAmbient(m,Sound::OneMetalMoan,{12.f,15.9f},roof-.4f,.55f,22,AmbientEmitter::OnState,"lab_chem_seal");
+ lbAmbient(m,Sound::AmbFan,{1.6f,16.1f},f+1.4f,.58f,18,AmbientEmitter::Loop,"lab_chem_seal");
+ lbAmbient(m,Sound::AmbVent,{9.f,15.9f},roof-.5f,.5f,12,AmbientEmitter::Loop,"lab_chem_seal");
  // the purge board on its steel plate, the knife switches, the clock over them
  wall(m,19.7f,6.2f,21.3f,6.215f,f+.92f,f+1.68f,20);
  anModel(m,model::lab_control_board,20.5f,6.31f,f+1.f,anS,false);
@@ -437,7 +475,7 @@ std::shared_ptr<const Map> makeInstrumentation(){
  wall(m,22.5f,6.7f,22.9f,8.3f,f+1.7f,f+1.74f,20);for(float y:{6.75f,8.21f})wall(m,22.82f,y,22.9f,y+.04f,f+1.5f,f+1.7f,8);
  for(float y:{7.f,7.5f,8.f})anFix(m,model::cctv_tv,22.7f,y,f+1.74f,.5f,.4f,.42f,anW,false);
  m.lights.push_back(lamp({22.3f,7.5f},f+1.95f,.22f,2.2f,8000,-.15f,WorldLightMount::Bare,0,false));m.lights.back().flicker=.12f;
- paperDrift(m,18.2f,7.6f,22.f,14.f,f,8,8202);
+ paperDrift(m,18.2f,7.6f,22.f,14.f,f,2,8202);
  m.lights.push_back(lbTube(20.f,7.4f,roof,.5f,5.f,5200,.05f));                                // on the purge board
  m.lights.push_back(lbTube(20.2f,12.2f,roof,.45f,5.5f,4600,.03f));
  m.lights.push_back(lamp({21.25f,10.15f},f+1.15f,.3f,2.2f,2800,0,WorldLightMount::Bare));m.lights.back().prop=dutyLamp;
@@ -497,14 +535,14 @@ std::shared_ptr<const Map> makeInstrumentation(){
   else anFix(m,model::pwr_breaker_panel,x+.7f,1.091f,f+1.3f,.183f,.102f,.457f,anS,false);
   anFix(m,model::pwr_ammeter_box,x+1.1f,1.091f,f+1.35f,.229f,.102f,.366f,anS,false);
   anFix(m,model::lab_status_display,x+.6f,1.084f,f+2.f,1.04f,.087f,.3f,anS,false);
-  if(i!=2){m.lights.push_back(lamp({x+.6f,1.25f},f+2.12f,.2f,2.f,9000,-.1f,WorldLightMount::Bare,0,false));m.lights.back().flicker=.1f;
+  if(i!=2){if(i==0){m.lights.push_back(lamp({x+.6f,1.25f},f+2.12f,.2f,2.f,9000,-.1f,WorldLightMount::Bare,0,false));m.lights.back().flicker=.1f;}
    lbPendant(m,{x+.6f,2.05f},roof,f+2.45f,.55f,3.6f,3200);                                      // the stand's work light
    kit::prop(m,model::office_chair,x+.55f,2.3f,f,.55f,.55f,.95f,.2f-i*.15f);}
   else{lbPendant(m,{x+.6f,2.05f},roof,f+2.45f,0,0,0);                                            // dead with the breaker
    m.lights.push_back(lamp({x-.25f,1.06f},f+2.35f,.22f,2.6f,3400,0,WorldLightMount::Wall,kPi*.5f,true,{1.f,.1f,.06f}));   // the emergency lamp on it
    for(auto [a,b,lo,hi]:{std::tuple{-.72f,-.42f,1.2f,2.05f},{-.66f,-.5f,2.05f,2.4f},{-.8f,-.58f,1.05f,1.3f}})wall(m,x+a,1.04f,x+b,1.046f,f+lo,f+hi,8);   // soot over its terminals
    propPose(m,model::office_chair,x+.35f,2.85f,f,.55f,.55f,.95f,1.2f,kPi*.5f,0);                // the chair he went over
-   paperDrift(m,x-.9f,2.5f,x+1.f,3.6f,f,5,8203);}
+   paperDrift(m,x-.9f,2.5f,x+1.f,3.6f,f,2,8203);}
   if(i==3){kit::prop(m,model::mug,x+1.1f,1.5f,f+.85f,.09f,.09f,.1f,.3f);kit::prop(m,model::office_file_binder,x+.75f,1.5f,f+.85f,.093f,.301f,.424f,kPi*.5f);
    kit::prop(m,model::item_dosimeter,x+.2f,3.1f,f,.31f,.146f,.066f,2.4f);}                      // the night tech's
   kit::prop(m,model::prop_cardboard_box_open,x+1.25f,2.1f,f,.36f,.36f,.36f,.12f*i);}              // each bench's reject tote
@@ -561,7 +599,7 @@ std::shared_ptr<const Map> makeInstrumentation(){
  kit::prop(m,model::anl_cell_spent,11.f,16.62f,f+.9f,.4f);kit::prop(m,model::anl_cell_cap,11.45f,16.7f,f+.9f,1.9f);kit::prop(m,model::anl_cell_core,13.9f,16.6f,f+.9f,.4f);
  kit::prop(m,model::lab_field_meter,12.3f,16.6f,f+.9f,.25f,.328f,.148f,.2f);kit::prop(m,model::lab_microscope,14.7f,16.62f,f+.9f,.1f);
  kit::prop(m,model::office_paper_stack,12.95f,16.65f,f+.9f,.33f,.44f,.03f,-.3f);kit::prop(m,model::item_dosimeter,15.2f,16.6f,f+.9f,.31f,.146f,.066f,.9f);
- for(int i=0;i<6;++i)kit::prop(m,model::office_file_binder,10.6f+i*.1f,16.84f,f+1.58f,.093f,.301f,.424f,0);
+ for(int i=0;i<3;++i)kit::prop(m,model::office_file_binder,10.6f+i*.1f,16.84f,f+1.58f,.093f,.301f,.424f,0);
  for(float x:{12.4f,12.8f,14.2f})kit::prop(m,model::anl_cell_charged,x,16.84f,f+1.58f,x);
  anFix(m,model::pallet,3.4f,16.2f,f,1.2f,1.15f,.16f,0,true);anModel(m,model::lab_specimen_crate,3.4f,16.2f,f+.16f,.2f,true,.85f);
  anFix(m,model::pallet,4.95f,16.2f,f,1.2f,1.15f,.16f,kPi*.5f,true);anModel(m,model::lab_specimen_crate,4.95f,16.25f,f+.16f,-.15f,true,.75f);
@@ -575,7 +613,7 @@ std::shared_ptr<const Map> makeInstrumentation(){
  kit::prop(m,model::lab_field_meter,5.55f,13.9f,f+.8f,.25f,.328f,.148f,.6f);
  handCart(m,15.8f,13.8f,f);kit::prop(m,model::anl_cell_charged,15.7f,13.6f,f+.29f,.8f);
  floorLine(m,7.94f,15.2f,8.06f,17.2f,f,14);floorLine(m,8.06f,15.2f,17.f,15.32f,f,14);           // the route to the control room
- paperDrift(m,3.5f,3.2f,16.5f,15.f,f,10,8201);
+ paperDrift(m,3.5f,3.2f,16.5f,15.f,f,2,8201);
  // the east wall: the calibration bench where the read-outs were checked against a meter, the logger
  // cabinet the stands wrote to
  lbCounter(m,16.3f,3.2f,17.f,5.8f,f,.9f,28);wall(m,16.97f,3.2f,17.f,5.8f,f+.9f,f+1.55f,28);
@@ -584,7 +622,7 @@ std::shared_ptr<const Map> makeInstrumentation(){
  kit::prop(m,model::crt_monitor,16.72f,4.1f,f+.9f,.42f,.4f,.38f,anW);kit::prop(m,model::keyboard,16.44f,4.1f,f+.9f,.45f,.16f,.03f,anW);
  kit::prop(m,model::lab_field_meter,16.62f,3.5f,f+.9f,.25f,.328f,.148f,anW+.2f);kit::prop(m,model::lab_field_meter,16.6f,5.05f,f+.9f,.25f,.328f,.148f,anW-.15f);
  kit::prop(m,model::anl_cell_spent,16.62f,5.5f,f+.9f,.8f);kit::prop(m,model::office_paper_stack,16.55f,4.65f,f+.9f,.33f,.44f,.03f,.2f);
- for(int i=0;i<7;++i)kit::prop(m,model::office_file_binder,16.84f,3.4f+i*.1f,f+1.63f,.093f,.301f,.424f,kPi*.5f);
+ for(int i=0;i<3;++i)kit::prop(m,model::office_file_binder,16.84f,3.4f+i*.1f,f+1.63f,.093f,.301f,.424f,kPi*.5f);
  for(float y:{4.6f,4.95f})kit::prop(m,model::med_specimen_jar,16.84f,y,f+1.63f,y);
  kit::prop(m,model::office_chair,15.75f,4.3f,f,.55f,.55f,.95f,anW+.4f);
  anModel(m,model::pwr_control_cabinet,16.8f,6.6f,f,anW,true);wall(m,16.6f,6.2f,17.f,7.f,f+1.6f,roof,30);
@@ -618,7 +656,7 @@ std::shared_ptr<const Map> makeInstrumentation(){
  anFix(m,model::lab_id_scanner,21.2f,5.97f,f+1.1f,.3f,.06f,.41f,anN,false);
  anModel(m,model::lab_specimen_cabinet,18.5f,5.6f,f,anN,true);wall(m,17.83f,5.23f,19.17f,5.97f,f+2.19f,roof,30);
  handCart(m,20.7f,4.3f,f);for(auto [x,y]:{std::pair{20.6f,4.05f},{20.85f,4.4f}})kit::prop(m,model::anl_cell_charged,x,y,f+.29f,x+y);
- m.lights.push_back(lbTube(20.f,3.2f,roof,.62f,5.5f,4000,0));m.lights.push_back(lbTube(21.4f,4.7f,roof,.4f,4.5f,4000,0));
+ m.lights.push_back(lbTube(20.3f,3.6f,roof,.66f,6.f,4000,0));
  m.lights.push_back(lamp({18.95f,3.95f},f+.5f,.2f,2.2f,6500,0,WorldLightMount::Bare,0,false,{.15f,1.f,.2f}));m.lights.back().prop=storeGlow;
  // --- The south: the corridor on to Field Measurement --------------------------------------------
  wall(m,1.f,17.f,6.f,17.2f,f,roof,3);wall(m,10.f,17.f,17.f,17.2f,f,roof,3);
@@ -629,7 +667,8 @@ std::shared_ptr<const Map> makeInstrumentation(){
  anFix(m,model::med_notice_board,6.035f,20.6f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anFix(m,model::med_wall_clock,9.99f,21.6f,f+2.05f,.24f,.02f,.23f,anW,false);
  shelf(m,{9.72f,18.9f},kPi*.5f,0);wall(m,9.47f,18.f,9.97f,19.8f,f+1.95f,roof,30);             // the PPE rack
- m.lights.push_back(lamp({9.45f,18.9f},f+2.2f,.25f,2.f,4000,0,WorldLightMount::Bare,0,false));
+ wall(m,9.945f,18.02f,9.96f,19.78f,f+.05f,f+1.9f,20);m.structures.back().solid=false;          // its pale back sheet, so what is on it shows against something
+ m.lights.push_back(lamp({9.25f,18.9f},f+1.95f,.5f,3.f,4200,0,WorldLightMount::Bare,0,false));
  for(auto [y,z]:{std::pair{18.3f,.306f},{18.9f,.306f},{19.5f,.972f},{18.4f,1.656f}})kit::prop(m,model::mine_hard_hat,9.72f,y,f+z,.279f,.351f,.153f,y);
  for(auto [y,z]:{std::pair{18.5f,.972f},{18.85f,.972f},{19.3f,1.656f}})kit::prop(m,model::item_dosimeter,9.72f,y,f+z,.31f,.146f,.066f,kPi*.5f);
  anFix(m,model::lab_id_scanner,6.04f,22.4f,f+1.1f,.3f,.06f,.41f,anE,false);

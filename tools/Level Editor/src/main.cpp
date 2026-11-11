@@ -42,6 +42,7 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
+namespace retro{bool testDoorLeaves();} // game/Movement.cpp
 
 // Own argv strings for the lifetime of every dispatch, including exception handling.
 struct CommandArguments {
@@ -1795,6 +1796,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
+         {"door-leaf",retro::testDoorLeaves},
          {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},

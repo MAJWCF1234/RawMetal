@@ -6,8 +6,9 @@
 namespace retro {
 namespace {
 using namespace kit;
-// MINE ACCESS (manifest 77)
-std::shared_ptr<const Map> makeMineAccess(){return placeholderChunk(110,{{'N',8.f,16.f,-15.f,false,0},{'W',9.f,15.f,-15.f,false,0},{'S',9.f,15.f,-4.f,false,0}});}
+// MINE ACCESS (manifest 77). Its north edge is Chapter 3's seal: an entry door that waits on
+// chapter3_open, the other leaf of the Extraction Interface's edge door (CampaignExport.h).
+std::shared_ptr<const Map> makeMineAccess(){return placeholderChunk(110,{{'N',8.f,16.f,-15.f,true,stateId("chapter3_open")},{'W',9.f,15.f,-15.f,false,0},{'S',9.f,15.f,-4.f,false,0}});}
 // EQUIPMENT DEPOT (manifest 78)
 std::shared_ptr<const Map> makeEquipmentDepot(){return placeholderChunk(111,{{'E',9.f,15.f,-15.f,false,0}});}
 // PERSONNEL DESCENT (manifest 79)

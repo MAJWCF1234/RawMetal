@@ -55,7 +55,7 @@ inline constexpr BankSound BankSounds[]={
  {Sound::PaBackupGenerators,"pa_backup_generators",false,0.7f,18,"Voice: backup generators online"},
  {Sound::PaHostileDetected,"pa_hostile_detected",false,0.7f,20,"Voice: hostile creature detected"},
 };
-static_assert(sizeof(BankSounds)/sizeof(BankSounds[0])==size_t(Sound::Count)-size_t(Sound::AmbVent),"one SoundBank row per bank sound, in Sound.h's order");
+static_assert(sizeof(BankSounds)/sizeof(BankSounds[0])==size_t(Sound::PaHostileDetected)+1-size_t(Sound::AmbVent),"one SoundBank row per bank sound, in Sound.h's order");
 inline const BankSound* bankSound(Sound sound){
  const int index=int(sound)-int(Sound::AmbVent);
  return index>=0&&index<int(sizeof(BankSounds)/sizeof(BankSounds[0]))?&BankSounds[index]:nullptr;

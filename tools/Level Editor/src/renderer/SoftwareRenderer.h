@@ -183,6 +183,8 @@ private:
     int m_vrHealthShown=-1,m_vrAmmoShown=-1;float m_vrTitleShown=-1;std::string m_vrCaptionShown,m_vrObjective;float m_vrObjectiveTime=0;
     Texture m_muzzleFlash;
     Texture m_water,m_coastWater;
+    // Standing water (WaterVolume::murk): the coolant greyed and darkened, nearly opaque.
+    Texture m_murkWater;
     Texture m_terrainDirt,m_terrainRock,m_coastSand,m_coastRock;
     Texture m_ashfallSky,m_coastSky;
     Mesh m_consoleMesh{240};

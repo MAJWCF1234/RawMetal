@@ -1,4 +1,4 @@
-// CONTAINMENT (chapter 2, manifest 61-65): chunks 94, 95, 96, 97, 98. BLOCK-OUT: the real rooms,
+// CONTAINMENT (chapter 2, manifest 61-65): chunks 94, 95, 96, 97, 98: the real rooms,
 // route, heights, doors and light at final scale, the story staged coarsely with library models.
 // Polish (dressing density, pipework, writing passes, voice) comes later.
 // See docs/Design/descent-campaign-20261025.md (Containment) for the brief.
@@ -12,6 +12,7 @@
 // have their orders, B's detail is what is left of Kessler's team, and the Investigator writes it off.
 #include "CampaignChapters.h"
 #include "CampaignKit.h"
+#include "Primitives.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -122,10 +123,44 @@ void caTrail(Map& m,std::initializer_list<Vec2> points,float f,unsigned seed){
    if(std::fabs(d.x)>std::fabs(d.y))wall(m,c.x-r,c.y-s,c.x+r,c.y+s,f+.004f,f+.008f,16);else wall(m,c.x-s,c.y-r,c.x+s,c.y+r,f+.004f,f+.008f,16);}}
   prev=&p;}
 }
-// Resonance growth: a crust on a surface, a mound on the floor, a self-lit crystal knot.
+void caPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=true){expandPrimitive({kind,x,y,z,w,d,h,facing,mat,solid},m.structures);}
+void caModel(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,bool solid=false){m.fixtures.push_back({model,{x,y},z-m.layers.front().elevation,w,d,h,yaw,solid});}
+unsigned caSeed(float x,float y){unsigned h=unsigned(x*97.f)*2654435761u^unsigned(y*131.f)*40503u;h^=h>>13;h*=1274126177u;return h^(h>>16);}
+// Resonance growth and crystal. The growth is true rounded geometry in its own finish with the cave
+// pack's pods budding on it; the crystal is chisel-tipped prisms in the self-lit finish, standing in
+// the pack's bed of spikes. Nothing here is a stack of boxes.
+// A crust on a surface: a flat sheet.
 void caCrust(Map& m,float x1,float y1,float x2,float y2,float lo,float hi){wall(m,x1,y1,x2,y2,lo,hi,34);}
-void caMound(Map& m,float x,float y,float f,float r,float h){wall(m,x-r,y-r*.7f,x+r,y+r*.7f,f,f+h*.5f,34);wall(m,x-r*.6f,y-r*.45f,x+r*.6f,y+r*.45f,f+h*.5f,f+h,34);}
-void caKnot(Map& m,float x,float y,float f,float h){wall(m,x-.12f,y-.1f,x+.12f,y+.1f,f,f+h,35);wall(m,x+.06f,y-.18f,x+.2f,y-.04f,f,f+h*.6f,35);wall(m,x-.22f,y+.02f,x-.08f,y+.16f,f,f+h*.45f,35);}
+// A blister of crust on a floor: round, a hand high, walked over.
+void caLens(Map& m,float x,float y,float f,float w,float d,float h=.09f){caPrim(m,"dome",x,y,f,w,d,h,0,34,false);}
+// A crystal shard from its foot at (x,y,z): a shaft w across and h high under a chisel tip, or
+// (lean 0 +y, 1 +x, 2 -y, 3 -x) a prism leaning out `reach` metres that way as it rises h.
+void caShard(Map& m,float x,float y,float z,float w,float h,int lean=-1,float reach=0){
+ if(lean<0){const float tip=std::min(h*.3f,w*1.5f);caPrim(m,"box",x,y,z,w,w*.85f,h-tip,0,35,false);caPrim(m,"ramp",x,y,z+h-tip,w,w*.85f,tip,int(caSeed(x,y)&3u),35,false);return;}
+ constexpr Vec2 fwd[4]={{0,1},{1,0},{0,-1},{-1,0}};caPrim(m,"strut",x+fwd[lean].x*reach*.5f,y+fwd[lean].y*reach*.5f,z,w,reach,h,lean,35,h>=1.6f);
+}
+// The cave pack's bed of crystal spikes at scale s, and its black rock fang at scale s (1 is 3.7 m tall).
+void caBed(Map& m,float x,float y,float z,float s,float yaw){caModel(m,model::cave_crystal_bed_blue,x,y,z,1.22f*s,1.22f*s,.245f*s,yaw);}
+void caFang(Map& m,float x,float y,float z,float s,float yaw){caModel(m,model::cave_stalagmite,x,y,z,1.83f*s,2.55f*s,4.05f*s,yaw);}
+// A mound of growth: a blister risen off the floor with a second on its shoulder, pods budding on it.
+void caMound(Map& m,float x,float y,float f,float r,float h){
+ const unsigned s=caSeed(x,y);
+ caPrim(m,"dome",x,y,f,r*2.f,r*1.5f,h,0,34,true);
+ caPrim(m,"dome",x+r*.5f*((s&1u)?1.f:-1.f),y+r*.32f*((s&2u)?1.f:-1.f),f,r*1.15f,r*.95f,h*.62f,0,34,false);
+ for(int i=0;i<2+int(h>.9f);++i){const float a=float((s>>(4+i*5))%628u)*.01f,k=.38f+.14f*i,sc=.5f+.22f*float((s>>(i*3))&3u)/3.f;
+  caModel(m,model::cave_nest_pod,x+std::cos(a)*r*k,y+std::sin(a)*r*.75f*k,f+h*std::sqrt(std::max(0.f,1-k*k))*.82f-.05f,.7f*sc,.7f*sc,.56f*sc,a);}
+}
+// A knot of crystal: a chisel-tipped shaft, shards leaning out of its foot three ways, the bed of spikes round it.
+void caKnot(Map& m,float x,float y,float f,float h){
+ const unsigned s=caSeed(x,y);const int d=int(s&3u);const float w=std::clamp(h*.16f,.09f,.3f);
+ caShard(m,x,y,f,w,h);
+ caShard(m,x,y,f,w*.8f,h*.72f,d,h*.5f);caShard(m,x,y,f,w*.7f,h*.55f,(d+1)&3,h*.45f);
+ if(h>.75f)caShard(m,x,y,f,w*.6f,h*.42f,(d+2)&3,h*.4f);
+ caBed(m,x,y,f,std::max(.5f,h*.9f),float(s%628u)*.01f);
+ wall(m,x-w,y-w,x+w,y+w,f,f+h*.8f,CollisionProxyMaterial);
+}
+// A trunk of growth between two heights: where it ran down a face or reached the roof.
+void caTrunk(Map& m,float x,float y,float lo,float hi,float w){caPrim(m,"column",x,y,lo,w,w,hi-lo,0,34,false);}
 // A seam portal: pilasters either side of a wall-to-wall opening along y at x (the chunk side),
 // with a lintel at head height up to the roof.
 void caPortalY(Map& m,float x1,float x2,float y1,float y2,float f,float roof,float head){
@@ -403,12 +438,25 @@ std::shared_ptr<const Map> makeContainmentIntake(){
  cue(m,"cona_hub_radio",7000,Sound::Empty,radio,"RADIO: Sir, we're four men on a door. We can't hold it and chase a guard.",.9f,f+1.5f);
  cue(m,"cona_hub_radio",12500,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then hold the door.",.9f,f+1.5f);
  cue(m,"cona_hub_radio",17000,Sound::Empty,radio,"RADIO: ...Copy.",.9f,f+1.5f);
+ // The order was to hold the door. While door B had no feed there was nothing to hold it against;
+ // the first time she comes back through with the feed on, he repeats it, and this time they obey.
+ caSequence(m,"cona_hub_order","cona_hub_order_done",10000,8500,-9.f,-9.f,-8.f,-8.f);
+ caEvent(m,"cona_hub_order_go",0,0,24,24,"cona_hub_radio_done",{caSet("cona_hub_order",1)});
+ for(auto [id,value]:{std::pair{"cont_power",1},{"cona_hub_stance",int(SquadStance::Truce)},{"cona_hub_order",0}})
+  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stateId(id),ScriptCondition::Op::Equal,value});
+ cue(m,"cona_hub_order",600,Sound::Empty,radio,"INVESTIGATOR (RADIO): Intake detail. Door B has its feed. Nobody goes through it. Her least of all.",.9f,f+1.5f);
+ cue(m,"cona_hub_order",5200,Sound::Empty,radio,"RADIO: ...Copy. Sorry, miss. Hands where we can see them.",.9f,f+1.5f);
+ {ScriptAction pa;pa.type=ScriptAction::Type::PlaySound;pa.sound=Sound::PaUnauthorized;pa.amount=.7f;
+  caEvent(m,"cona_hub_order_turn",0,0,24,24,"cona_hub_order_done",{caSet("cona_hub_stance",int(SquadStance::Hostile)),pa});
+  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stance,ScriptCondition::Op::Equal,int(SquadStance::Truce)});}
  // --- Light: pendants over the hall (one dead, one going), the barricade's lamp, door B's red ------
  caPendant(m,{9.f,8.f},roof,f+4.2f,1.5f,11.f,4200);caPendant(m,{16.f,8.f},roof,f+4.2f,1.4f,11.f,4200);
  caPendant(m,{9.5f,13.f},roof,f+4.2f,0,0,0);caPendant(m,{16.f,13.f},roof,f+4.2f,1.2f,10.f,4200,.3f);
  caPendant(m,{12.f,19.6f},roof,f+4.2f,.8f,8.f,4200,.15f);
  for(float y:{5.6f,21.f})m.lights.push_back(lamp({23.f,y},f+3.f,.7f,8.f,3400,0,WorldLightMount::Wall,clW));
  m.lights.push_back(caBeacon({23.f,18.f},f+2.8f,clW,.4f,"cont_power"));
+ m.lights.push_back(lamp({3.5f,20.f},f+2.3f,.55f,6.f,3200,0,WorldLightMount::Wall,clS));               // the gallery's foot, and the pocket under it
+ m.fixtures.push_back({model::mine_cage_lamp,{3.5f,20.1f},f+2.1f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  m.pickupSpawns.push_back({{19.6f,13.f},PickupKind::Health,f});
  zone(m,"",6.f,18.f,18.f,24.f,-1000,1000,{.15f,.12f,.11f,.008f});
  zone(m,"CONTAINMENT INTAKE / GALLERY",0,3.f,6.f,20.f,g-.5f,1000,{.13f,.13f,.14f,.010f});
@@ -468,8 +516,8 @@ std::shared_ptr<const Map> makeContainmentA(){
  caCrust(m,18.1f,1.f,22.5f,1.2f,up,roof);caCrust(m,22.75f,1.f,23.f,6.5f,up,roof);caCrust(m,18.1f,1.f,22.5f,6.4f,up,up+.08f);
  caMound(m,20.6f,3.f,up+.08f,1.2f,1.1f);caKnot(m,20.f,4.4f,up+.08f,1.6f);caKnot(m,21.4f,2.4f,up+.08f,1.2f);
  m.lights.push_back(caGlow({20.3f,4.2f},up+1.6f,1.3f,8.f,6500,{.72f,.5f,1.f},.12f));
- caCrust(m,18.4f,6.5f,21.7f,6.74f,up,up+.84f);caCrust(m,18.3f,6.74f,21.8f,7.56f,up,up+.1f);       // over the sill and onto the gantry
- for(auto [x1,x2,lo]:{std::tuple{18.5f,19.1f,0.f},{19.9f,20.6f,.9f},{21.f,21.5f,.3f}})caCrust(m,x1,7.56f,x2,7.66f,f+lo,up+.06f);   // the run down off the edge
+ caPrim(m,"dome",20.05f,6.62f,up,3.3f,1.1f,1.f,0,34,false);caLens(m,20.05f,7.1f,up,3.5f,.9f,.12f);      // over the sill and onto the gantry
+ for(auto [x,lo,w]:{std::tuple{18.8f,0.f,.36f},{20.2f,.5f,.3f},{21.2f,.3f,.26f},{19.5f,1.3f,.2f}})caTrunk(m,x,7.62f,f+lo,up+.06f,w);   // the run down off the edge
  for(auto [x1,x2]:{std::pair{17.6f,18.1f},{22.5f,22.75f}})caCrust(m,x1,6.7f,x2,6.78f,f,up);
  caMound(m,19.9f,7.45f,f,1.f,.55f);caKnot(m,19.4f,7.4f,f+.2f,.9f);caKnot(m,20.7f,7.9f,f+.15f,.7f);
  m.lights.push_back(caGlow({20.f,7.9f},f+.9f,.7f,5.f,6500,{.72f,.5f,1.f},.2f));
@@ -504,6 +552,8 @@ std::shared_ptr<const Map> makeContainmentA(){
  wall(m,14.6f,17.3f,15.1f,17.5f,f,roof,15);wall(m,22.5f,17.3f,23.f,17.5f,f,roof,15);caGlaze(m,15.1f,17.3f,22.5f,17.5f,f,roof,.6f,2.7f,true,15);
  wall(m,9.4f,17.3f,9.6f,23.f,f,roof,15);wall(m,14.4f,17.3f,14.6f,23.f,f,roof,15);
  wall(m,9.6f,22.9f,14.4f,24.f,f+3.4f,roof,15);                                                  // the service ceiling starts here
+ m.lights.push_back(lamp({14.4f,20.2f},f+2.4f,.5f,5.5f,4200,0,WorldLightMount::Wall,clW));
+ m.fixtures.push_back({model::mine_cage_lamp,{14.3f,20.2f},f+2.2f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  for(float y:{19.5f,21.6f})caFix(m,model::med_ward_bed,2.05f,y,f,0,true);
  m.lights.push_back(lamp({5.f,23.f},f+2.9f,.6f,6.f,6500,.02f,WorldLightMount::Wall,clN));
  // S2: they sealed one of their own in. He asked them to.
@@ -599,8 +649,8 @@ std::shared_ptr<const Map> makeContainmentService(){
  for(float x:{4.2f,7.1f}){gateValve(m,{x,2.1f,f+.55f},{1,0},.16f,f,1);caFix(m,model::lab_pressure_gauge,x+.5f,2.36f,f+1.62f,caS,false);}
  wall(m,2.5f,1.6f,10.f,2.6f,f,f+1.6f,CollisionProxyMaterial);
  for(auto [y,r,paint]:{std::tuple{3.45f,.12f,3},{3.85f,.09f,2},{7.15f,.13f,4},{7.55f,.08f,1}})servicePipe(m,{1.f,y},{13.4f,y},roof-.32f,r,paint);
- m.pipes.push_back({{12.9f,2.f},{12.9f,2.f},f,.2f,roof,1});flange(m,{12.9f,2.f,f+.1f},{},.2f);flange(m,{12.9f,2.f,roof-.15f},{},.2f);
- wall(m,12.65f,1.75f,13.15f,2.25f,f,roof,CollisionProxyMaterial);
+ m.pipes.push_back({{13.1f,5.2f},{13.1f,5.2f},f,.2f,roof,1});flange(m,{13.1f,5.2f,f+.1f},{},.2f);flange(m,{13.1f,5.2f,roof-.15f},{},.2f);
+ wall(m,12.85f,4.95f,13.35f,5.45f,f,roof,CollisionProxyMaterial);
  m.emitters.push_back({{6.5f,2.35f},f+.6f,{.1f,.7f},.45f,.7f,.05f,.4f,7});                           // the old bank weeps too
  wall(m,4.3f,hy-.32f,9.05f,hy+.72f,f,roof,CollisionProxyMaterial);
  m.emitters.push_back({{8.96f,hy+.1f},f+1.7f,{.25f,.9f},.55f,.85f,.06f,.45f,9});                      // the gasket
@@ -616,18 +666,30 @@ std::shared_ptr<const Map> makeContainmentService(){
  m.lights.push_back(lamp({5.f,10.f},f+2.5f,.5f,5.5f,3000,0,WorldLightMount::Wall,clN));
  m.pickupSpawns.push_back({{8.8f,8.6f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{2.6f,8.8f},PickupKind::Health,f});
  // --- The slot spur (east): three slots into the cell the growth took ----------------------------
- wall(m,13.6f,6.4f,15.f,6.6f,f,roof,15);caGlaze(m,15.f,6.4f,16.2f,6.6f,f,roof,1.35f,1.65f,true,15);
- wall(m,16.2f,6.4f,17.8f,6.6f,f,roof,15);caGlaze(m,17.8f,6.4f,19.f,6.6f,f,roof,1.35f,1.65f,true,15);
- wall(m,19.f,6.4f,20.6f,6.6f,f,roof,15);caGlaze(m,20.6f,6.4f,21.8f,6.6f,f,roof,1.35f,1.65f,true,15);
- wall(m,21.8f,6.4f,23.f,6.6f,f,roof,15);wall(m,13.6f,8.4f,23.f,8.6f,f,roof,15);
- m.lights.push_back(lamp({23.f,7.5f},f+2.2f,.22f,3.5f,2700,0,WorldLightMount::Wall,clW));
- // the cell: crust over everything, knots of crystal lit from inside, a suit hung from the lamp hook
+ // The slots are the reason anybody came down this spur: three wired panes two metres wide at eye
+ // height, each in a steel surround, and the spur kept dim so the cell behind them is the light.
+ wall(m,13.6f,6.4f,14.6f,6.6f,f,roof,15);
+ for(float x:{14.6f,17.4f,20.2f}){caGlaze(m,x,6.4f,x+2.f,6.6f,f,roof,1.f,2.f,true,15);
+  wall(m,x-.08f,6.6f,x+2.08f,6.66f,f+.92f,f+1.f,11);wall(m,x-.08f,6.6f,x+2.08f,6.66f,f+2.f,f+2.08f,11);
+  for(float e:{x-.08f,x+2.f})wall(m,e,6.6f,e+.08f,6.66f,f+1.f,f+2.f,11);
+  if(x<20.f)wall(m,x+2.f,6.4f,x+2.8f,6.6f,f,roof,15);}
+ wall(m,22.2f,6.4f,23.f,6.6f,f,roof,15);wall(m,13.6f,8.4f,23.f,8.6f,f,roof,15);
+ m.lights.push_back(lamp({23.f,7.5f},f+2.2f,.32f,4.5f,2700,0,WorldLightMount::Wall,clW));
+ m.lights.push_back(lamp({14.3f,8.4f},f+2.3f,.3f,4.f,2700,0,WorldLightMount::Wall,clN));
+ for(auto [x,y]:{std::pair{22.9f,7.5f},{14.3f,8.3f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.05f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+ for(auto [y,r,paint]:{std::tuple{8.1f,.09f,3},{7.85f,.06f,1}})servicePipe(m,{13.6f,y},{23.f,y},roof-.3f,r,paint);
+ // The cell: crust over everything, trunks of it up to the roof, knots of crystal lit from inside,
+ // what is left of the bed, and a suit hung from the lamp hook with the light behind it.
  caCrust(m,13.6f,1.f,23.f,6.4f,f,f+.06f);caCrust(m,13.6f,1.f,23.f,1.25f,f,roof);caCrust(m,22.75f,1.f,23.f,6.4f,f,roof);
  caMound(m,15.6f,3.f,f,1.f,.9f);caMound(m,20.8f,2.4f,f,1.2f,1.3f);caMound(m,18.2f,5.3f,f,.7f,.5f);
- for(auto [x,y,h]:{std::tuple{16.4f,4.4f,.8f},{21.6f,4.f,1.1f},{14.6f,1.8f,.6f}})caKnot(m,x,y,f+.06f,h);
- hungSuit(m,{18.4f,3.4f,f+2.3f},caS);
- m.lights.push_back(caGlow({18.4f,3.8f},f+1.1f,.6f,5.f,6500,{.72f,.5f,1.f},.35f));
- m.lights.push_back(caGlow({21.6f,4.f},f+1.45f,.3f,2.6f,6500,{.3f,.6f,1.f}));
+ for(auto [x,y,h]:{std::tuple{16.4f,4.4f,.8f},{21.6f,4.f,1.1f},{14.6f,1.8f,.6f},{19.3f,2.f,1.5f}})caKnot(m,x,y,f+.06f,h);
+ for(auto [x,y,w]:{std::tuple{14.3f,4.6f,.42f},{17.5f,1.6f,.5f},{22.3f,5.5f,.36f}})caTrunk(m,x,y,f,roof,w);
+ caKnot(m,20.1f,4.9f,f+.06f,.9f);                                                                       // (no black rock here: through the glass it read as a hole)
+ caFix(m,model::med_bed_frame_wrecked,15.3f,5.3f,f,.5f,false);
+ hungSuit(m,{18.4f,3.9f,f+2.3f},caS);
+ m.lights.push_back(caGlow({18.4f,2.5f},f+1.7f,1.7f,9.f,6500,{.72f,.5f,1.f},.2f));
+ m.lights.push_back(caGlow({21.6f,4.2f},f+1.45f,.8f,5.f,6500,{.3f,.6f,1.f}));
+ m.lights.push_back(caGlow({15.2f,3.9f},f+1.3f,.8f,5.f,6500,{.6f,.45f,1.f},.3f));
  hazard(m,Hazard::Kind::Anomaly,13.7f,1.f,22.9f,6.3f,f,f+2.6f,6);
  caHum(m,"cona_svc_hum",13.6f,6.6f,23.f,8.4f,f,f+3.f,.55f);
  // --- The plenum (east, past the bulkhead): the air handlers, and the tech who stayed with them --
@@ -636,6 +698,27 @@ std::shared_ptr<const Map> makeContainmentService(){
  wall(m,17.4f,13.3f,23.f,14.7f,f+2.7f,f+3.2f,2);wall(m,17.4f,16.9f,23.f,18.3f,f+2.7f,f+3.2f,2);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{21.f,16.f},f,1,0});
  m.lights.push_back(lamp({23.f,18.8f},f+2.2f,.3f,5.f,1000,-.45f,WorldLightMount::Wall,clW));m.lights.back().flicker=.4f;
+ // The plenum is plant like the junction is: the supply and return along its walls, the handlers'
+ // starter cabinets by the door, a caged lamp each end, so the tech's room is a room and not a void.
+ for(auto [y,r,paint]:{std::tuple{12.35f,.1f,3},{19.65f,.08f,4}})servicePipe(m,{13.6f,y},{23.f,y},roof-.32f,r,paint);
+ for(float y:{14.f,17.6f}){m.pipes.push_back({{17.f,y},{17.f,y},f+2.62f,.12f,roof,2});flange(m,{17.f,y,roof-.15f},{},.12f);}
+ for(float y:{18.3f,19.3f})caFix(m,model::pwr_control_cabinet,13.82f,y,f,caE,true);
+ caFix(m,model::pwr_disconnect_switch,13.78f,17.3f,f+1.f,caE,false);
+ caFix(m,model::pwr_vent_grille,20.f,12.03f,f+1.9f,caS,false);caFix(m,model::pwr_vent_grille,20.f,19.97f,f+1.9f,caN,false);
+ for(auto [x,y]:{std::pair{22.5f,12.6f},{22.4f,19.4f}})caFix(m,model::ind_barrel,x,y,f,x,true);
+ m.lights.push_back(lamp({19.f,12.f},f+2.4f,.5f,6.f,3000,0,WorldLightMount::Wall,clS));
+ m.lights.push_back(lamp({15.2f,20.f},f+2.4f,.42f,5.5f,3000,0,WorldLightMount::Wall,clN));m.lights.back().flicker=.3f;
+ for(auto [x,y]:{std::pair{19.f,12.1f},{15.2f,19.9f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+ // --- The south run to the theater: the junction's mains carried on down it ----------------------
+ for(auto [x,r,paint]:{std::tuple{10.95f,.11f,3},{11.22f,.07f,1},{13.05f,.09f,4}})servicePipe(m,{x,11.05f},{x,24.f},roof-.3f,r,paint);
+ m.pipes.push_back({{10.82f,22.2f},{10.82f,22.2f},f,.07f,roof-.3f,3});flange(m,{10.82f,22.2f,f+.06f},{},.07f);
+ wall(m,10.6f,22.f,11.05f,22.4f,f,roof,CollisionProxyMaterial);
+ caFix(m,model::pwr_gate_valve,10.86f,22.2f,f+1.05f,caE,false);caFix(m,model::lab_pressure_gauge,10.66f,21.6f,f+1.5f,caE,false);
+ cableTray(m,{13.18f,16.1f},{13.18f,23.9f},roof-.62f);
+ m.lights.push_back(lamp({13.4f,22.f},f+2.4f,.45f,5.f,3000,0,WorldLightMount::Wall,clW));
+ for(auto [x,y]:{std::pair{10.72f,13.f},{10.72f,20.f},{13.28f,22.f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+ for(auto [x,y]:{std::pair{11.f,19.5f},{11.05f,20.6f}})caFix(m,model::ind_barrel,x,y,f,x+y,true);
+ caFix(m,model::pwr_fire_cabinet,13.3f,12.6f,f+1.1f,caW,false);
  // --- The west spur to B: the growth comes the other way to meet you ---------------------------
  wall(m,1.f,15.f,10.4f,15.2f,f,roof,15);wall(m,1.f,18.8f,10.4f,19.f,f,roof,15);
  crewBarrier(m,5.f,16.f,f,1.4f);
@@ -644,6 +727,13 @@ std::shared_ptr<const Map> makeContainmentService(){
  caCrust(m,1.f,15.2f,3.2f,15.32f,f,f+2.f);caCrust(m,1.f,18.68f,2.6f,18.8f,f,f+1.4f);
  m.lights.push_back(caGlow({1.8f,17.f},f+.35f,.3f,3.f,6500,{.72f,.5f,1.f}));
  m.lights.push_back(lamp({8.f,18.8f},f+2.4f,.4f,5.f,3000,0,WorldLightMount::Wall,clN));m.lights.back().flicker=.5f;
+ for(auto [y,r,paint]:{std::tuple{15.52f,.1f,3},{15.8f,.06f,1}})servicePipe(m,{0.f,y},{10.4f,y},roof-.3f,r,paint);
+ m.pipes.push_back({{7.2f,15.4f},{7.2f,15.4f},f,.07f,roof-.3f,3});flange(m,{7.2f,15.4f,f+.06f},{},.07f);
+ wall(m,7.f,15.2f,7.4f,15.65f,f,roof,CollisionProxyMaterial);
+ caFix(m,model::pwr_gate_valve,7.2f,15.45f,f+1.05f,caS,false);
+ m.lights.push_back(lamp({4.6f,15.2f},f+2.4f,.42f,5.f,3000,0,WorldLightMount::Wall,clS));
+ for(auto [x,y]:{std::pair{4.6f,15.3f},{8.f,18.7f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+ caMound(m,2.1f,17.7f,f,.8f,.7f);caTrunk(m,1.25f,15.45f,f,roof,.4f);caLens(m,2.6f,16.8f,f,3.4f,2.8f,.08f);
  zone(m,"CONTAINMENT SERVICE / VALVE JUNCTION",1.f,1.f,13.4f,10.9f,-1000,1000,{.16f,.15f,.13f,.01f});
  zone(m,"CONTAINMENT SERVICE / SLOTS",13.6f,6.6f,23.f,8.4f,-1000,1000,{.14f,.13f,.15f,.008f});
  zone(m,"",13.6f,1.f,23.f,6.4f,-1000,1000,{.17f,.13f,.2f,.012f});
@@ -693,7 +783,11 @@ std::shared_ptr<const Map> makeContainmentB(){
  caCrust(m,1.f,1.f,1.25f,8.8f,f,f+3.5f);caMound(m,3.f,6.6f,f,.9f,.7f);caFix(m,model::med_bed_frame_wrecked,6.7f,2.f,f,.4f,true);
  caMound(m,3.4f,3.6f,f,1.6f,1.2f);
  for(auto [x,y,w,h]:{std::tuple{3.4f,3.6f,.34f,4.8f},{2.8f,3.1f,.22f,3.3f},{4.f,4.15f,.24f,2.7f},{3.95f,3.f,.18f,3.8f},{2.75f,4.2f,.2f,2.2f}})
-  wall(m,x-w,y-w*.8f,x+w,y+w*.8f,f+1.f,f+h,35);
+  caShard(m,x,y,f+.85f,w*1.7f,h-.85f);
+ for(auto [x,y,w,h,lean,reach]:{std::tuple{3.6f,3.6f,.3f,2.8f,1,1.6f},{3.2f,3.6f,.26f,2.3f,3,1.3f},{3.4f,3.8f,.28f,2.5f,0,1.4f},{3.4f,3.4f,.22f,1.9f,2,1.1f}})caShard(m,x,y,f+.8f,w,h,lean,reach);
+ for(auto [x,y,sc,yaw]:{std::tuple{2.5f,3.9f,1.2f,.4f},{4.4f,3.3f,1.1f,1.7f},{3.5f,4.7f,1.f,2.9f}})caBed(m,x,y,f+.7f,sc,yaw);
+ caFang(m,2.1f,2.5f,f,.6f,.9f);caFang(m,5.f,4.6f,f,.48f,3.1f);
+ wall(m,3.f,3.2f,3.8f,4.f,f,f+4.6f,CollisionProxyMaterial);
  m.lights.push_back(caGlow({4.2f,4.6f},f+2.2f,1.2f,10.f,6500,{.72f,.5f,1.f},.18f));
  m.lights.push_back(caGlow({3.4f,3.6f},f+5.2f,.7f,8.f,6500,{.6f,.45f,1.f},.1f));
  hazard(m,Hazard::Kind::Anomaly,1.6f,1.8f,5.2f,5.4f,f,f+3.f,10);
@@ -704,12 +798,18 @@ std::shared_ptr<const Map> makeContainmentB(){
  // on is the detour Kessler's men lamped: over the heave into E1, through the hole the growth
  // punched in E1's back wall, through the detail's booth and out by its door to the south passage.
  caCrust(m,1.f,9.f,9.3f,14.f,f,f+.04f);caCrust(m,1.f,9.f,9.3f,9.25f,f,roof);caCrust(m,1.f,13.75f,6.f,14.f,f,f+3.f);
- wall(m,2.6f,9.25f,9.5f,12.4f,f,f+1.1f,34);wall(m,3.2f,9.25f,9.f,11.9f,f+1.1f,f+2.3f,34);wall(m,4.4f,9.25f,7.4f,11.2f,f+2.3f,f+2.9f,34);
- wall(m,9.5f,10.f,14.5f,12.5f,f,f+1.5f,34);wall(m,9.5f,10.15f,14.5f,12.35f,f+1.5f,f+2.9f,34);
- wall(m,9.9f,10.4f,14.3f,12.1f,f+2.9f,f+4.1f,34);wall(m,10.6f,10.7f,13.7f,11.8f,f+4.1f,f+5.2f,34);
- wall(m,9.5f,10.f,14.5f,12.5f,f,roof,CollisionProxyMaterial);wall(m,2.6f,9.25f,9.5f,12.4f,f+1.1f,roof,CollisionProxyMaterial);
- for(auto [x,y,z,h]:{std::tuple{4.6f,10.4f,2.9f,1.f},{7.8f,10.6f,2.3f,.8f},{3.6f,11.6f,2.3f,.7f},{11.2f,11.3f,5.2f,1.2f},{12.9f,11.f,4.1f,.9f},{8.8f,12.1f,1.1f,.6f},
-  {13.6f,9.9f,0.f,1.4f},{10.2f,9.9f,0.f,1.1f},{12.f,12.65f,0.f,.9f},{14.1f,12.2f,1.5f,.8f}})caKnot(m,x,y,f+z,h);
+ // The mass is one body, grown not built: lobes swollen against each other from the passage mouth
+ // across the aisle, trunks of it into the roof, pods on its shoulders, the black rock it carried up
+ // standing through it and the crystal seated in its folds. It collides as the wall it is.
+ for(auto [x,y,w,d,h]:{std::tuple{6.f,10.8f,7.f,3.2f,2.9f},{3.9f,10.6f,3.f,2.7f,2.1f},{8.3f,10.9f,3.f,2.9f,3.4f},{5.6f,11.6f,3.6f,1.6f,1.5f}})caPrim(m,"dome",x,y,f,w,d,h,0,34,false);
+ for(auto [x,y,w,d,h]:{std::tuple{12.1f,11.25f,3.6f,2.6f,5.7f},{10.5f,11.2f,3.f,2.8f,4.3f},{13.5f,11.3f,2.9f,2.6f,3.8f},{11.5f,10.3f,2.4f,1.3f,1.7f},{12.9f,12.2f,2.6f,1.2f,1.5f},{9.7f,11.9f,1.6f,1.4f,2.4f}})caPrim(m,"dome",x,y,f,w,d,h,0,34,false);
+ for(auto [x,y,lo,w]:{std::tuple{11.1f,11.2f,3.6f,.6f},{13.f,11.4f,3.f,.5f},{12.1f,10.9f,5.2f,.75f},{7.9f,10.6f,2.9f,.5f},{4.8f,10.2f,1.8f,.4f}})caTrunk(m,x,y,f+lo,roof,w);
+ for(auto [x,y,z,s,yaw]:{std::tuple{10.2f,10.5f,2.9f,.9f,.3f},{13.9f,10.6f,2.4f,.8f,1.4f},{11.6f,9.95f,1.2f,.75f,2.2f},{12.8f,12.5f,.9f,.7f,.8f},{6.9f,12.f,1.f,.8f,2.9f},{4.4f,11.8f,.9f,.7f,1.9f},{9.5f,12.3f,1.5f,.65f,.2f}})
+  caModel(m,model::cave_nest_pod,x,y,f+z,.7f*s,.7f*s,.56f*s,yaw);
+ caFang(m,10.9f,10.2f,f+.4f,.8f,.6f);caFang(m,13.4f,12.2f,f+.3f,.62f,2.2f);caFang(m,6.4f,12.f,f+.2f,.55f,1.3f);
+ wall(m,9.5f,10.f,14.5f,12.5f,f,roof,CollisionProxyMaterial);wall(m,2.6f,9.25f,9.5f,12.4f,f,roof,CollisionProxyMaterial);
+ for(auto [x,y,z,h]:{std::tuple{4.6f,10.4f,2.f,1.f},{7.8f,10.6f,2.9f,.8f},{3.6f,11.6f,1.3f,.7f},{11.2f,11.3f,5.1f,1.2f},{12.9f,11.f,4.5f,.9f},{8.8f,12.1f,1.3f,.6f},
+  {13.6f,9.9f,0.f,1.4f},{10.2f,9.9f,0.f,1.1f},{12.f,12.65f,0.f,.9f},{14.1f,12.2f,1.2f,.8f}})caKnot(m,x,y,f+z,h);
  caKnot(m,1.6f,10.2f,f+.04f,.9f);
  hazard(m,Hazard::Kind::Anomaly,2.6f,12.25f,9.5f,12.6f,f,f+2.4f,6);hazard(m,Hazard::Kind::Anomaly,9.5f,9.75f,14.5f,12.75f,f,f+2.4f,5);
  caHum(m,"cona_b_hum",1.f,9.f,9.5f,14.f,f,f+3.f,.6f);
@@ -720,10 +820,14 @@ std::shared_ptr<const Map> makeContainmentB(){
   const int lampProp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,x,y,f+.04f,.18f,.4f,.52f,yaw);
   auto l=caGlow({x,y},f+.5f,.42f,3.8f,3000);l.prop=lampProp;m.lights.push_back(l);}
  // E1's blown front is half grown over: a heave of growth you can climb, over the sill, into E1.
- wall(m,13.3f,4.5f,14.5f,6.45f,f,f+.42f,34);wall(m,14.42f,4.5f,14.78f,6.45f,f,f+.92f,34);wall(m,14.78f,4.5f,15.6f,6.45f,f,f+.44f,34);
- caKnot(m,13.6f,4.7f,f+.42f,.5f);
+ // (A tongue of it lies over the sill: up one side, down the other, no jump. The detail's lamp is at its foot.)
+ caPrim(m,"ramp",13.66f,5.5f,f,1.9f,1.68f,.92f,1,34);wall(m,14.5f,4.55f,14.7f,6.45f,f+.9f,f+.92f,34);caPrim(m,"ramp",15.4f,5.5f,f,1.9f,1.4f,.92f,3,34);
+ caPrim(m,"dome",13.5f,4.3f,f,1.5f,1.f,.8f,0,34,false);caPrim(m,"dome",15.5f,6.7f,f,1.4f,1.f,.7f,0,34,false);
+ caKnot(m,13.f,4.2f,f,.5f);
  // W2: bars bent out from inside, and the growth came out after him: the doorway is grown shut.
- wall(m,9.24f,15.15f,9.58f,17.65f,f,f+2.4f,34);wall(m,9.58f,15.4f,9.8f,17.3f,f,f+1.3f,34);wall(m,9.f,15.5f,9.24f,17.2f,f,f+1.8f,34);
+ caPrim(m,"dome",9.42f,16.4f,f,1.1f,2.5f,2.5f,0,34,false);caPrim(m,"dome",9.7f,16.f,f,.9f,1.3f,1.2f,0,34,false);
+ caModel(m,model::cave_nest_pod,9.75f,16.9f,f+.9f,.5f,.5f,.4f,.7f);
+ wall(m,9.24f,15.15f,9.58f,17.65f,f,f+2.4f,CollisionProxyMaterial);
  caMound(m,4.8f,16.4f,f,1.2f,1.f);caKnot(m,6.6f,15.4f,f,.9f);
  hazard(m,Hazard::Kind::Anomaly,3.4f,15.f,6.2f,17.8f,f,f+2.f,8);
  m.lights.push_back(caGlow({6.6f,15.4f},f+1.2f,.3f,3.f,6500,{.72f,.5f,1.f}));
@@ -782,12 +886,17 @@ std::shared_ptr<const Map> makeContainmentB(){
  cue(m,"cona_b_radio",6500,Sound::Empty,radio,"RADIO (B): Sir, this is B. We're not exposed. We're shut in. Kessler's dead.",.9f,f+1.5f);
  cue(m,"cona_b_radio",12500,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then you know what exposed looks like.",.9f,f+1.5f);
  cue(m,"cona_b_radio",18000,Sound::Empty,radio,"B DETAIL: He's not coming. Nobody's coming. Sit down, Doc.",.9f,f+1.5f);
+ cue(m,"cona_b_radio",21000,Sound::Empty,radio,"B DETAIL: You. Anything comes through that hole while you're here, we've got it.",.9f,f+1.5f);
+ // Written off, they are hers: anything that comes at the booth while she is in it, they shoot.
+ caEvent(m,"cona_b_written_off",0,0,24,24,"cona_b_radio_done",{caSet("cona_b_stance",int(SquadStance::Ally))});
+ m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stance,ScriptCondition::Op::Equal,int(SquadStance::Truce)});
  // --- The aisle: the third one, the alarm, the tubes that are left --------------------------------
  m.creatureSpawns.push_back({CreatureKind::Transformed,{12.f,20.6f},f,1,0});
  for(auto [x,y,yaw,ph]:{std::tuple{9.5f,18.9f,clE,0.f},{14.5f,9.8f,clW,.8f},{9.5f,22.7f,clE,1.5f}})m.lights.push_back(caAlarm({x,y},f+2.9f,yaw,ph));
  m.lights.push_back(caTube(12.f,14.f,roof,.75f,7.5f,6000,.04f,.5f));m.lights.push_back(caTube(12.f,21.6f,roof,.7f,7.f,6000,.04f,.6f));
  caDeadTube(m,12.f,6.f,roof);caDeadTube(m,12.f,16.8f,roof);
  m.lights.push_back(caTube(12.f,2.4f,roof,.4f,5.f,5600,.03f));
+ m.lights.push_back(lamp({9.5f,3.5f},f+2.5f,.45f,4.5f,4200,0,WorldLightMount::Wall,clE));                // the suit rail's own lamp: the vestibule's west wall is a wall, not a void
  m.lights.push_back(lamp({20.f,19.f},f+2.4f,.35f,5.f,4200,.2f,WorldLightMount::Wall,clN));
  m.pickupSpawns.push_back({{20.2f,12.8f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{16.f,17.6f},PickupKind::Health,f});
  recessedFittings(m);

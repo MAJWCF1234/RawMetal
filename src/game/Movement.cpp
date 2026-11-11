@@ -4,6 +4,8 @@
 #include <cmath>
 #include <fstream>
 #include <queue>
+#include "../world/CampaignExport.h"
+#include "../world/CustomCampaign.h"
 namespace retro {
 Sound Game::stepSoundAt(const World& world,Vec2 position){
  const auto origin=world.definition().origin;
@@ -243,7 +245,14 @@ const char* Game::interactionHint()const{
  if(!m_vrInputActive&&nearbyTakedown()>=0)return "Q / REAR KNOCKOUT    E / GRAB    FISTS / KILL";
  if(nearReactorDisk())return m_vrInputActive?"GRIP / TAKE AUTH FLOPPY":"E / TAKE AUTH FLOPPY";
  int door=nearbyInteractionDoor();
- if(door>=0){auto&d=m_world.doors()[door];if(doorLocked(d))return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";
+ if(door>=0){auto&d=m_world.doors()[door];
+  // A named door (a GATE, a DOOR) says so: E / OPEN GATE, DOOR / LOCKED.
+  // (Held here: the hint is read once a frame, before the next call writes it.)
+  static thread_local std::string named;
+  if(doorLocked(d)){if(!d.locked.empty())return d.locked.c_str();
+   if(!d.label.empty()&&!d.transfer){named=d.label+" / LOCKED";return named.c_str();}
+   return d.transfer?"TRANSFER INTERLOCK / LOCKED":"BULKHEAD / LOCKED";}
+  if(!d.label.empty()){named=std::string(m_vrInputActive?"GRIP / ":"E / ")+(d.opening?"CLOSE ":d.transfer?"TRANSFER ":"OPEN ")+d.label;return named.c_str();}
   if(m_vrInputActive)return d.swinging?(d.opening?"GRIP / CLOSE SERVICE DOOR":"GRIP / OPEN SERVICE DOOR"):d.opening?"GRIP / CLOSE BULKHEAD":d.transfer?"GRIP / TRANSFER BULKHEAD":"GRIP / OPEN BULKHEAD";
   return d.swinging?(d.opening?"E / CLOSE SERVICE DOOR":"E / OPEN SERVICE DOOR"):d.opening?"E / CLOSE BULKHEAD":d.transfer?"E / TRANSFER BULKHEAD":"E / OPEN BULKHEAD";}
  if(int terminal=nearbyTerminal();terminal>=0){auto&t=m_world.terminals()[terminal];
@@ -459,5 +468,44 @@ bool Game::testProgression(){
   }else if(game.level()!=2)return false;
  }
  std::ofstream("progression-test.txt")<<"Three connected chunks; locked transfer; continuous boundary crossing and return; health/ammo/door/pickup persistence; first two maps traversed with player controls; arrival in Turbine Gantry: PASS\n";return true;
+}
+// Door leaves (--each-test=door-leaf): a GATE with a grille leaf, a name and a
+// locked caption reads from the file, writes back the same, stops the body but
+// not the eye or the ear, and says its caption, then its name, in the prompt.
+bool testDoorLeaves(){
+ std::ofstream report("door-leaf-test.txt");int failed=0;
+ auto check=[&](bool ok,const std::string&text){failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<text<<'\n';report.flush();};
+ auto campaign=[](const std::string& door){
+  std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Door leaves|0\nMAP|0|Cage|0|0|11|11.2|0|0|3.5|0.7|industrial_night|0|0|0|0|0|-1|0|0|1.571\nLAYER|0|0|Floor|0|0\n";
+  for(int y=0;y<24;++y){std::string row=y<8||y>16?std::string(24,'#'):"#"+std::string(22,'.')+"#";if(y==12){row=std::string(24,'#');row[10]=row[11]='.';}t+="ROW|0|0|"+std::to_string(y)+"|"+row+'\n';}
+  return loadCustomCampaignText(t+door+"\n--- CUSTOM_CAMPAIGN_DATA_END ---\n","door-leaf.rmc");};
+ const std::string locked="DOOR|0|10|12|12.5|0|0|0|0|0|-1|gate_lock|1||||||1|GATE|TIME LOCK / 20 S\nWATER|0|2|9|5|11|-0.2|-0.03|0.8";
+ try{
+  auto parsed=campaign(locked);const auto& door=parsed->maps.at(0)->doors.at(0);
+  check(door.leaf==1&&door.seeThrough()&&door.label=="GATE"&&door.locked=="TIME LOCK / 20 S","The record's leaf, name and locked caption are read");
+  auto written=exportRmc("Door leaves",{{parsed->maps.at(0)}}).text;
+  check(written.find("|1|GATE|TIME LOCK / 20 S")!=std::string::npos,"The exporter writes them back");
+  // (The same fixture carries standing water: WATER's murk reads, writes back, and is refused past 1.)
+  check(parsed->maps.at(0)->waterVolumes.size()==1&&std::fabs(parsed->maps.at(0)->waterVolumes[0].murk-.8f)<.001f&&written.find("|-0.03|0.8\n")!=std::string::npos,"Standing water keeps its murk through a write");
+  {bool refused=false;try{campaign("WATER|0|2|9|5|11|-0.2|-0.03|1.5");}catch(const std::exception&){refused=true;}check(refused,"Murk past 1 is refused");}
+  auto again=loadCustomCampaignText(written,"door-leaf-again.rmc");const auto& back=again->maps.at(0)->doors.at(0);
+  check(back.leaf==1&&back.label=="GATE"&&back.locked=="TIME LOCK / 20 S","A written door reads back the same");
+  Game game(parsed);game.update({},1.f/60);const auto& w=game.world();
+  check(w.doorBlocks(11,12.5f,0,1.7f)&&!w.doorBlocks(11,12.5f,0,1.7f,true),"The grille stops a body, not a line of sight");
+  check(!w.rayClear({11,10},1.5f,{11,15},1.5f)&&w.rayClear({11,10},1.5f,{11,15},1.5f,true,true,false,true),"Sight passes between the bars; a plain ray does not");
+  check(game.soundRayClear({11,10},1.5f,{11,15},1.5f,.25f,.25f),"Sound passes between the bars");
+  const char* hint=game.interactionHint();
+  check(hint&&std::string(hint)=="TIME LOCK / 20 S","Locked, the prompt is the authored caption ("+std::string(hint?hint:"none")+")");
+  Game open(campaign("DOOR|0|10|12|12.5|0|0|0|0|0|-1||||||||0|GATE"));open.update({},1.f/60);
+  hint=open.interactionHint();
+  check(hint&&std::string(hint)=="E / OPEN GATE","Unlocked, the prompt names it ("+std::string(hint?hint:"none")+")");
+  check(!open.world().doors().at(0).seeThrough()&&open.world().doorBlocks(11,12.5f,0,1.7f,true),"A standard leaf still stops a line of sight");
+  Game shut(campaign("DOOR|0|10|12|12.5|0|0|0|1|0|-1|gate_lock|1||||||2|DOOR"));shut.update({},1.f/60);
+  hint=shut.interactionHint();
+  check(hint&&std::string(hint)=="DOOR / LOCKED","A named door with no caption says it is locked by its name ("+std::string(hint?hint:"none")+")");
+  bool rejected=false;try{campaign("DOOR|0|10|12|12.5|0|0|0|0|0|-1||||||||3");}catch(const std::exception&){rejected=true;}
+  check(rejected,"An unknown leaf is refused");
+ }catch(const std::exception&e){check(false,std::string("fixture: ")+e.what());}
+ report<<(failed?"FAILED\n":"PASSED\n");return failed==0;
 }
 }
