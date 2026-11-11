@@ -876,7 +876,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // The builder's hidden test modes, run here so the engine picture is this process
     // (in-memory document and status) rather than RawMetalEditor.exe's separate engine.
     {const auto& values=commandArguments().values;
-     if(!values.empty())for(const wchar_t* mode:{L"--sign-designer-test",L"--selftest",L"--background-test",L"--layout-test",L"--editing-test",L"--fun-test",L"--simulate-test",L"--remake-test"})
+     if(!values.empty())for(const wchar_t* mode:{L"--sound-tool-test",L"--sign-designer-test",L"--selftest",L"--background-test",L"--layout-test",L"--editing-test",L"--fun-test",L"--simulate-test",L"--remake-test"})
       if(values[0]==mode)return runNativeEditor(GetModuleHandleW(nullptr));}
     // The game menu's New campaign path, headless: the editor session as the menu opens it.
     if(auto arg=commandArguments().find(L"--menu-editor-test")){
@@ -1239,6 +1239,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<30;++i)scene.update({},frame);shot(scene,tag+"-3-free");log<<"  thrown off after "<<mashed*frame<<" s more, health "<<scene.player().health<<"\n";}
      return 0;
     }
+    // A campaign map's own sound, mixed to a WAV (ambience-preview-CHUNK.wav); several chunks as a,b,c.
+    if(auto arg=commandArguments().find(L"--ambience-preview=")){std::ofstream report("ambience-preview.txt");bool ok=true;std::wstringstream list(arg+19);std::wstring item;
+     while(std::getline(list,item,L',')){const int chunk=_wtoi(item.c_str());if(chunk<0||chunk>=retro::CampaignChunkCount){ok=false;continue;}ok&=retro::AudioEngine::previewAmbience(chunk,report);report.flush();}
+     return ok?0:21;}
     if(commandArguments().find(L"--sign-render-test")){std::ofstream report("sign-render-test.txt");return retro::SoftwareRenderer::testSigns(report)?0:21;}
     if(commandArguments().find(L"--gore-test")){std::ofstream report("gore-render-test.txt");return retro::Carcass::test()&&retro::SoftwareRenderer::testGore(report)?0:21;}
     if(commandArguments().find(L"--creature-schedule-test"))return retro::Game::testCreatureSchedule()?0:21;
@@ -1791,6 +1795,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
+         {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
          {"stance",retro::Game::testStance},

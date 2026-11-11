@@ -1,6 +1,7 @@
 #include "CampaignExport.h"
 #include "CampaignMaps.h"
 #include "CustomCampaign.h"
+#include "../audio/SoundBank.h"
 #include "../core/CampaignAdmin.h"
 #include <algorithm>
 #include <array>
@@ -221,6 +222,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    // The designer's fields only when used, so plain signs stay readable by older builds.
    r.f(s.style?std::to_string(s.style):"").f(s.icon?std::to_string(s.icon):"").f(s.ink?std::to_string(s.ink&0xffffffu):"").f(s.picture?encode(s.art):"");
    if(s.picture)signArt.emplace(s.art,s.picture);line(r,11);}
+  for(const auto& a:m.ambients)if(const auto* row=bankSound(a.sound)){Rec r("AMBIENT");r.i(mi).f(row->name).n(a.position.x).n(a.position.y).n(a.z).n(a.gain).n(a.radius).i(a.mode).n(a.every).n(a.spread).st(a.state).f(a.state?std::to_string(a.value):"");line(r,8);}
+  if(m.reverbWet>=0)line(Rec("REVERB").i(mi).n(m.reverbWet).n(m.reverbSeconds));
   {const auto& c=m.cargoLift;if(c.x1!=c.x2||c.y1!=c.y2||c.lower!=c.upper)
    line(Rec("CARGO_LIFT").i(mi).n(c.x1).n(c.y1).n(c.x2).n(c.y2).n(c.lower).n(c.upper).n(c.speed).sth(c.callState).sth(c.releaseState).sth(c.positionState).sth(c.downState).sth(c.arrivedState).sth(c.descendedState));}
   for(const auto& s:m.timedSequences){Rec r("TIMED_SEQUENCE");r.i(mi).sth(s.timerState).sth(s.finishState).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).i(s.durationMs).i(s.finishAtMs).i(s.soundIntervalMs).i(s.soundUntilMs).i(int(s.tickSound)).n(s.gain).n(s.pitch).b(s.loop);

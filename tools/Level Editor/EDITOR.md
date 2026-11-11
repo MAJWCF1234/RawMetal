@@ -47,6 +47,26 @@ engine's own sign, drawn by the same code the game uses (`src/renderer/SignArt.h
 picture through the engine, restyling, picture clean-up and the file round trips
 (`native-editor-sign-test.txt`).
 
+### Sound tool and room reverb
+
+**Sound** (Decor page) places a sound from the engine's sound bank: pick it in
+the list on the right and click where it comes from. Beds (vents, fans, a
+buzzing tube, dripping water, drones) are placed as loops; every other sound
+(creaks, bangs, distant yells, groans, stingers, the announcement voice) is
+placed to play now and then. The inspector changes its loudness, how far it is
+heard, the seconds between plays, and a switch: a loop or a now-and-then sound
+with a switch runs only while the switch is set, and mode 2 plays the sound once
+each time the switch is set (a voice over a door, a stinger on a trigger).
+Creatures and guards never hear these. They are `AMBIENT` records in the map.
+
+The game gives every room a reverb by measuring the space the player stands in.
+A `REVERB` record (one per map, under Advanced) sets it by hand: how much, and
+how long it rings.
+
+The list is read from `src/audio/SoundBank.h`, so it is always the engine's.
+`RawMetal.exe --sound-tool-test` places a bed and a single sound and a reverb and
+has the engine validate them (`native-editor-sound-test.txt`).
+
 ### Live edits rebuild one map
 
 An edit used to rebuild the baked geometry and light of every map the picture

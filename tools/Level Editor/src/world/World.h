@@ -366,6 +366,15 @@ struct StormCycle {int calmMs=0,warningMs=0,stormMs=0;float damage=0,ambientAsh=
 // A roof the storm cannot reach (SHELTER record), in map metres; on terrain its
 // bottom and top are heights above the ground at its centre.
 struct Shelter {float x1=0,y1=0,x2=0,y2=0,bottom=-1000,top=1000;};
+// A sound placed in the map from the bank (AMBIENT record; audio/SoundBank.h,
+// game/Ambience.cpp). A loop is a bed heard within its radius; Random plays the
+// sound every..every+spread seconds; OnState plays it once each time the state
+// takes the value. A loop or a Random emitter with a state runs only while the
+// state has the value. z -999 is a metre and a half over the floor there.
+struct AmbientEmitter {
+    enum Mode {Loop,Random,OnState};
+    Sound sound=Sound::Count;Vec2 position{};float z=-999,gain=1,radius=10;int mode=Loop;float every=8,spread=8;StateId state=0;int value=1;
+};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -394,6 +403,9 @@ struct AuthoredMapData {
     std::vector<Staircase> stairs;
     std::vector<AuthoredTerminalData> terminals;
     std::vector<AuthoredSign> signs;
+    std::vector<AmbientEmitter> ambients;
+    // The room's reverb (REVERB record): how much of it and how long it rings; below 0 the game measures the space.
+    float reverbWet=-1,reverbSeconds=-1;
     CargoLift cargoLift;
     std::vector<TimedSequence> timedSequences;
     std::vector<ActorTrack> actorTracks;
@@ -507,6 +519,9 @@ public:
      return {21.5f,22.5f};}
     const std::vector<WorldProp>& props()const{return m_props;}
     const std::vector<Fixture>& fixtures()const{return m_fixtures;}
+    const std::vector<AmbientEmitter>& ambients()const{static const std::vector<AmbientEmitter> empty;return m_mapData?m_mapData->ambients:empty;}
+    float reverbWet()const{return m_mapData?m_mapData->reverbWet:-1.f;}
+    float reverbSeconds()const{return m_mapData?m_mapData->reverbSeconds:-1.f;}
     const std::vector<AuthoredSign>& signs()const{static const std::vector<AuthoredSign> empty;return m_mapData?m_mapData->signs:empty;}
     const std::vector<AuthoredZone>& zones()const{static const std::vector<AuthoredZone> empty;return m_mapData?m_mapData->zones:empty;}
     const std::vector<PipeRun>& pipes()const{return m_pipes;}

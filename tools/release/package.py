@@ -110,6 +110,11 @@ def package_editor(out, name, tag, game):
         z.write(program, 'RawMetal.exe')
         for header in editor_catalogues():
             z.write(header, 'src/world/' + header.name)
+        # The Sound tool's list is the engine's sound bank, read from this header.
+        bank = EDITOR / 'src' / 'audio' / 'SoundBank.h'
+        if not bank.is_file():
+            raise SystemExit('editor download is missing the sound bank: %s' % bank)
+        z.write(bank, 'src/audio/SoundBank.h')
         if maps.is_dir():
             for entry in sorted(maps.rglob('*')):
                 # The editor's unsaved-work copies stay on the author's machine.

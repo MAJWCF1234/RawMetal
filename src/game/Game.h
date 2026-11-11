@@ -723,6 +723,17 @@ public:
     // The leaves a creature tore open stay on their stops while it holds its prey.
     void holdLockerDoors(int fixture);
     static bool testLockerCapture();
+    // Authored sound and the room's acoustics (Ambience.cpp): the map's AMBIENT
+    // emitters that play now and then or on a state, and what the audio
+    // engine's reverb should sound like where the player stands.
+    struct Acoustics {float wet=.12f,seconds=.8f;};
+    Acoustics acoustics()const;
+    void updateAmbience(float dt);
+    static bool testAmbience();
+    struct AmbientTimer {float at=0;int count=0;};
+    std::unordered_map<std::uint64_t,AmbientTimer> m_ambientNext;std::unordered_map<std::uint64_t,bool> m_ambientLatch;
+    struct AcousticsCache {Acoustics value{};float at=-1;int level=-1;};
+    mutable AcousticsCache m_acoustics;
     static Game lockerCaptureScene(int creature); // --locker-capture-shots
     // --map-shots "caught"/"stow": the nearest guard comes for the locker the
     // player just hid in, or is knocked out and dragged to the one they face.

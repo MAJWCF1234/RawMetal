@@ -1,4 +1,7 @@
 #include "AudioEngine.h"
+#include "SoundBank.h"
+#include "../world/CustomCampaign.h"
+#include "../world/CampaignMaps.h"
 #include "NpcVoiceCatalog.h"
 #include "../core/PackedResource.h"
 #include "../game/Game.h"
@@ -10,7 +13,7 @@
 #include <chrono>
 namespace retro {
 namespace {
-enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5 };
+enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5, Authored=6 };
 // Loops that crossfade their tail into their head (no click on wrap).
 // Area score: the loop for each MusicCue after Default (Freight keeps its
 // original track and resource; the rest follow the zone sounds in order).
@@ -50,7 +53,9 @@ void shapeAlertLoop(std::vector<int16_t>& pcm){
   for(size_t f=from;f<to;++f){const float w=std::min({1.f,float(f-from)/Edge,float(to-f)/Edge});for(size_t c=0;c<2;++c)pcm[f*2+c]=int16_t(std::lround(pcm[f*2+c]*(1-w)+pcm[(f-bar)*2+c]*w));}}
  pcm=std::vector<int16_t>(pcm.begin()+std::ptrdiff_t((downbeat[0]-Fade)*2),pcm.begin()+std::ptrdiff_t(downbeat[3]*2));
 }
-bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::MusicAlert||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum);}
+// The bank's beds (SoundBank.h): loops a map places.
+bool bankLoop(Sound sound){return sound>=Sound::AmbVent&&sound<=Sound::AmbMetalTapping;}
+bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::MusicAlert||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum)||bankLoop(sound);}
 // Open-zone sounds live in the library resources from 720, in enum order.
 constexpr int ZoneSoundResource=720;
 constexpr int AreaTitleResource=2125;
@@ -60,6 +65,8 @@ constexpr int LockerSoundResource=2140;
 constexpr int DetectionSoundResource=2180;
 // A torn lead's arc: ROT Horror Audio Bundle, electric_shock_mx_1, +5 dB, trimmed to 2.7 s.
 constexpr int LeadArcResource=2347;
+// The sound bank (SoundBank.h): Horror SFX by YourPalRob, purchased; tools/audio/import_horror_sfx.py.
+constexpr int BankSoundResource=2370;
 std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
@@ -110,7 +117,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i>=size_t(Sound::AmbVent)?BankSoundResource+int(i-size_t(Sound::AmbVent)):i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   auto&sample=m_samples[i];
@@ -161,6 +168,84 @@ AudioEngine::~AudioEngine(){
  if(m_device){waveOutReset(m_device);for(auto&buffer:m_buffers)waveOutUnprepareHeader(m_device,&buffer.header,sizeof(WAVEHDR));waveOutClose(m_device);}
  if(m_wake)CloseHandle(m_wake);
 }
+// ---- Room reverb -------------------------------------------------------------
+namespace {
+// Freeverb's comb and all-pass lengths at 44.1 kHz; the right side's are 23 samples longer.
+constexpr int CombLength[4]={1116,1188,1277,1356},PassLength[2]={556,441},ReverbSpread=23;
+}
+AudioEngine::Reverb::Reverb(){
+ for(int side=0;side<2;++side){
+  for(int i=0;i<Combs;++i)comb[size_t(side*Combs+i)].assign(size_t(CombLength[i]+side*ReverbSpread),0.f);
+  for(int i=0;i<Passes;++i)pass[size_t(side*Passes+i)].assign(size_t(PassLength[i]+side*ReverbSpread),0.f);}
+}
+void AudioEngine::Reverb::clear(){for(auto&line:comb)std::fill(line.begin(),line.end(),0.f);for(auto&line:pass)std::fill(line.begin(),line.end(),0.f);damped.fill(0);}
+// The mean comb is 28 ms long: the feedback that takes `seconds` to fall 60 dB.
+float AudioEngine::Reverb::feedbackFor(float seconds){return std::clamp(std::pow(10.f,-3.f*.028f/std::clamp(seconds,.1f,6.f)),0.f,.97f);}
+void AudioEngine::Reverb::run(float in,float feedback,float& left,float& right){
+ // The input is scaled so that noise comes back at the same level from a long
+ // room as from a short one (the combs' power gain is 1/(1-g^2)): only for longer.
+ const float fed=in*std::sqrt(1-feedback*feedback);float out[2]{};
+ for(int side=0;side<2;++side){float sum=0;
+  for(int i=0;i<Combs;++i){const size_t k=size_t(side*Combs+i);auto&line=comb[k];const float y=line[combAt[k]];
+   // The walls take the top off each pass round (and the tiny bias keeps a dying tail off denormals).
+   damped[k]=y*.72f+damped[k]*.28f;line[combAt[k]]=fed+damped[k]*feedback+1e-18f;if(++combAt[k]>=line.size())combAt[k]=0;sum+=y;}
+  sum*=.45f;
+  for(int i=0;i<Passes;++i){const size_t k=size_t(side*Passes+i);auto&line=pass[k];const float buffered=line[passAt[k]],y=buffered-sum*.5f;
+   line[passAt[k]]=sum+buffered*.5f;if(++passAt[k]>=line.size())passAt[k]=0;sum=y;}
+  out[side]=sum;}
+ left=out[0];right=out[1];
+}
+// --ambience-preview=CHUNK: what a campaign map's own sound is like, standing a
+// step from its first bed for 24 seconds with the score off: written as
+// ambience-preview-CHUNK.wav beside the exe, with the levels it reaches.
+bool AudioEngine::previewAmbience(int chunk,std::ostream& report){
+ const auto map=campaignMap(chunk);Vec2 at=map->definition.playerStart;int beds=0,others=0;bool placed=false;
+ for(const auto&a:map->ambients){if(a.mode==AmbientEmitter::Loop){++beds;if(!placed){at=a.position+Vec2{1.5f,0};placed=true;}}else ++others;}
+ auto game=Game::mapInspection(at,0,0,chunk,true,-999,true);
+ AudioEngine audio(false);std::vector<int16_t> out;const auto room=game.acoustics();
+ for(int i=0;i<60*24;++i){game.update({},1.f/60);audio.update(game);audio.m_musicGain=0;std::array<int16_t,1470> block{};audio.mix(block.data(),735);out.insert(out.end(),block.begin(),block.end());}
+ int peak=0;double square=0;for(auto s:out){peak=std::max(peak,std::abs(int(s)));square+=double(s)*s;}
+ const double rms=std::sqrt(square/std::max<size_t>(1,out.size()));
+ const std::string path="ambience-preview-"+std::to_string(chunk)+".wav";const bool wrote=writeVoicePreview(out,path.c_str());
+ report<<"chunk "<<chunk<<" ("<<map->name<<"): "<<beds<<" beds, "<<others<<" now-and-then or state sounds; reverb "<<room.wet<<" for "<<room.seconds<<" s"<<(map->reverbWet>=0?" (authored)":" (measured)")
+       <<"; peak "<<20*std::log10(std::max(1,peak)/32767.0)<<" dBFS, RMS "<<20*std::log10(std::max(1.0,rms)/32767.0)<<" dBFS; "<<(wrote?path:std::string("could not write the WAV"))<<'\n';
+ // Heard, and nowhere near clipping: a room is quieter than a footstep.
+ return wrote&&beds+others>0&&peak>60&&peak<20000;
+}
+bool AudioEngine::testReverb(){
+ std::ofstream report("reverb-test.txt");bool ok=true;
+ auto check=[&](bool pass,const std::string& what){report<<(pass?"PASS ":"FAIL ")<<what<<'\n';report.flush();ok&=pass;};
+ // The energy of an impulse's tail between two moments, for a room of this decay.
+ auto tail=[](float seconds,float from,float to){Reverb room;const float g=Reverb::feedbackFor(seconds);double energy=0;float l=0,r=0;
+  for(int n=0;n<int(to*Rate);++n){room.run(n<64?1.f:0.f,g,l,r);if(n>=int(from*Rate))energy+=double(l)*l+double(r)*r;}return energy;};
+ const double longEarly=tail(1.6f,.05f,.25f),longLate=tail(1.6f,1.f,1.2f),shortEarly=tail(.4f,.05f,.25f),shortLate=tail(.4f,1.f,1.2f);
+ report<<"  1.6 s room: "<<longEarly<<" early, "<<longLate<<" at 1 s; 0.4 s room: "<<shortEarly<<" early, "<<shortLate<<" at 1 s\n";
+ check(longEarly>longLate&&longLate>1e-9&&longLate>shortLate*200&&shortEarly>shortLate*1000,"An impulse decays, and a 1.6 s room still rings at a second where a 0.4 s room is silent");
+ const double drop=10*std::log10(tail(1.f,.1f,.2f)/std::max(1e-30,tail(1.f,1.1f,1.2f)));
+ report<<"  a 1 s room falls "<<drop<<" dB in one second\n";
+ check(drop>40&&drop<85,"The decay asked for is the decay heard (about 60 dB in the time given)");
+ {Reverb room;float l=0,r=0;double apart=0,all=0;for(int n=0;n<Rate;++n){room.run(n<64?1.f:0.f,.85f,l,r);apart+=double(l-r)*(l-r);all+=double(l)*l+double(r)*r;}
+  check(apart>all*.2,"The tail is wide: left and right are different rooms' worth");}
+ {Reverb room;float l=0,r=0,peak=0;for(int n=0;n<3*Rate;++n){room.run(std::sin(n*.05f),Reverb::feedbackFor(2.4f),l,r);peak=std::max({peak,std::fabs(l),std::fabs(r)});}
+  room.clear();float sl=1,sr=1;room.run(0,.9f,sl,sr);
+  report<<"  held tone in a 2.4 s room peaks at "<<peak<<"\n";
+  check(std::isfinite(peak)&&peak>.2f&&peak<4.f&&sl==0&&sr==0&&Reverb::feedbackFor(.2f)<Reverb::feedbackFor(1.f)&&Reverb::feedbackFor(1.f)<Reverb::feedbackFor(3.f),"A held sound stays bounded, a cleared room is silent, and longer rooms feed back more");}
+ // In the engine: a bang in a map with a long REVERB rings on after the sample ends; with none it stops.
+ auto ring=[&](const char* reverb){
+  std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Reverb validation|0\nMAP|0|Hall|0|0|3.5|12|0|0|4.5|0.7|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+  for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+(y<8||y>16?std::string(24,'#'):"#"+std::string(22,'.')+"#")+'\n';
+  Game game(loadCustomCampaignText(t+reverb+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","reverb.rmc"));game.update({},1.f/60);
+  AudioEngine audio(false);audio.update(game);
+  {std::lock_guard lock(audio.m_mutex);audio.play({Sound::OneMetalFall,game.player().pos+Vec2{3,0},1,1,true,16,1.5f});}
+  audio.update(game);audio.m_reverbWet=audio.m_reverbWetTarget;audio.m_reverbFeedback=audio.m_reverbFeedbackTarget;audio.m_musicGain=0;
+  float last=0;std::array<int16_t,1470> block{};
+  for(int n=0;n<60*8;++n){audio.mix(block.data(),735);int peak=0;for(auto s:block)peak=std::max(peak,std::abs(int(s)));if(peak>40)last=float(n+1)/60;}
+  return last;};
+ const float dry=ring("REVERB|0|0|0.1\n"),wet=ring("REVERB|0|0.34|2.4\n");
+ report<<"  a 1.2 s clatter is heard for "<<dry<<" s dry and "<<wet<<" s in a 2.4 s room\n";
+ check(dry>.5f&&dry<1.6f&&wet>dry+.3f&&wet<6,"In the engine a positional sound rings on in a reverberant map and stops dead in a dry one");
+ report<<(ok?"PASSED\n":"FAILED\n");return ok;
+}
 void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  // Authored cues reach here unvalidated: a non-finite or non-positive pitch
  // would never finish (or read backwards), a wild gain would clip everything.
@@ -180,7 +265,7 @@ void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  m_voices.back().radius=std::max(.1f,event.radius);
  m_voices.back().z=event.z;
  m_voices.back().speech=event.speech;m_voices.back().speaker=event.speaker;m_voices.back().speechPriority=event.speechPriority;
- if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn||event.sound==Sound::FireCrackle||event.sound==Sound::AnomalyHum||event.sound==Sound::ZoneFrogs))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
+ if(loop&&(event.sound==Sound::Machine||event.sound==Sound::WaterReturn||event.sound==Sound::FireCrackle||event.sound==Sound::AnomalyHum||event.sound==Sound::ZoneFrogs||bankLoop(event.sound)))m_voices.back().cursor=double((unsigned(-emitter)*7919u)%m_samples[size_t(event.sound)].frames());
 }
 void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  if(!voice.spatial){voice.left=voice.right=1;voice.filterTarget=1;return;}
@@ -195,12 +280,15 @@ void AudioEngine::spatialize(Voice& voice,const Game& game,float dt){
  // Three rays and a slower occlusion envelope prevent abrupt volume pumping at corners.
  Vec2 side=planar>.001f?Vec2{-delta.y/planar,delta.x/planar}:Vec2{};float blocked=0;
  // Generator origins sit inside their enclosures; retain the horizontal exemption.
- float farTrim=voice.sound==Sound::Machine&&planar>.001f?std::max(.25f,1.7f*distance/planar):.25f;
+ // (A map's bed sits in the thing that makes it: the sink, the fridge, the fitting.)
+ float farTrim=voice.sound==Sound::Machine&&planar>.001f?std::max(.25f,1.7f*distance/planar):bankLoop(voice.sound)?.9f:.25f;
  if(distance>.5f)for(float offset:{-.18f,0.f,.18f})if(!game.soundRayClear(game.player().pos+side*offset,listenerZ,voice.position+side*offset,sourceZ,.25f,farTrim))blocked+=1;
  float target=1-blocked*(.68f/3.f);voice.occlusion+=(target-voice.occlusion)*(1-std::exp(-dt*7.f));gain*=voice.occlusion;
  // Walls absorb treble as well as level. Compute the pole on the game
  // thread, never exponentials in the per-sample spatial filter.
  float openness=std::clamp((voice.occlusion-.32f)/.68f,0.f,1.f);
+ // Air takes the top off a far sound as well: at the edge of its reach a third of the openness is gone.
+ openness*=1-.32f*std::clamp(distance/voice.radius,0.f,1.f);
  // Shut in a locker the room comes through the steel quieter and dull; its
  // own latch and knock, at arm's length, stay as they are (music never passes here).
  if(distance>.9f&&game.hiddenLocker()>=0){gain*=.55f;openness=std::min(openness,.28f);}
@@ -224,7 +312,7 @@ void AudioEngine::update(const Game& game,bool focused){
  float dt=std::clamp(game.elapsed()-m_lastTime,0.f,.1f);
  bool newSession=game.sessionRevision()!=m_lastRevision||int(game.worldId())!=m_lastWorld;
  m_lastWorld=int(game.worldId());
- if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;m_areaBlend.fill(0);m_alertIn=0;m_stingFrames=0;}m_lastRevision=game.sessionRevision();
+ if(game.elapsed()<m_lastTime||newSession){m_voices.clear();m_reverb.clear();m_lastChunk=-1;play({Sound::Music,{},1,1,false},-1,true);m_mainBlend=1;m_reactorBlend=m_motorBlend=0;m_areaBlend.fill(0);m_alertIn=0;m_stingFrames=0;}m_lastRevision=game.sessionRevision();
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=game.chunkOffset(m_lastChunk)-game.chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_submergedTarget=game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f?1.f:0.f;
@@ -260,9 +348,11 @@ void AudioEngine::update(const Game& game,bool focused){
  }
  for(auto&voice:m_voices)if(voice.speech>=0&&voice.speaker&&voice.speaker<=game.npcActors().size()){
   const auto&npc=game.npcActors()[voice.speaker-1];if(voice.mask.kind<0)configureMask(voice.mask,maskForVisual(npc.track().visual));voice.position=npc.pose.position+game.chunkOffset(npc.level)-game.chunkOffset(game.level());voice.z=npc.pose.z+npc.track().scale*.85f;}
- auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain,float z=std::numeric_limits<float>::quiet_NaN()){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
-  if(it==m_voices.end()){play({sound,pos,gain,1,true,17,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;}
+ auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain,float z=std::numeric_limits<float>::quiet_NaN(),float radius=17.f){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
+  if(it==m_voices.end()){play({sound,pos,gain,1,true,radius,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;it->radius=radius;}
  };
+ // The room answers: the reverb eases toward what the game measures or the map sets.
+ {const auto room=game.acoustics();m_reverbWetTarget=std::clamp(room.wet,0.f,1.f);m_reverbFeedbackTarget=Reverb::feedbackFor(room.seconds);}
  std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});
  // Wing loops are keyed by a wasp's place in its chunk's list; one that crosses a
  // seam leaves that list, so loops not refreshed this update are dropped below.
@@ -273,6 +363,10 @@ void AudioEngine::update(const Game& game,bool focused){
   }
   float machineGain=.30f;if(world.hasLift()&&game.world().hasLift())machineGain/=1.f+(game.player().z+8)*(game.player().z+8)*.1f;
   size_t index=0;for(auto emitter:world.machines())loop(ambientEmitter(AmbientKind::Machine,level,index++),Sound::Machine,emitter+shift,machineGain);
+  // The map's own beds (AMBIENT loops), each while its state allows.
+  index=0;for(const auto& a:world.ambients()){const auto id=ambientEmitter(AmbientKind::Authored,level,index++);
+   if(a.mode==AmbientEmitter::Loop&&bankLoop(a.sound)&&(!a.state||game.state(a.state)==a.value))loop(id,a.sound,a.position+shift,a.gain,a.z<=-900?world.floorHeight(a.position.x,a.position.y)+1.5f:a.z,a.radius);
+   else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});}
   // Zone ponds carry frogs; a creek is many thin slices, so only every sixth
   // one runs a flowing-water loop rather than flooding the mixer.
   index=0;for(const auto& basin:world.waterVolumes()){size_t slot=index++;
@@ -303,7 +397,7 @@ void AudioEngine::update(const Game& game,bool focused){
 }
 void AudioEngine::mix(int16_t* output,size_t frames){
  std::fill(output,output+frames*2,int16_t(0));
- for(size_t frame=0;frame<frames;++frame){float left=0,right=0;
+ for(size_t frame=0;frame<frames;++frame){float left=0,right=0,send=0;
   // Per-sample envelopes: main track fades over roughly 2 seconds, motor
   // takes over quickly, and the reactor bed arrives slowly after the impact.
   m_mainBlend+=(m_mainTarget-m_mainBlend)/(.65f*Rate);
@@ -331,13 +425,17 @@ void AudioEngine::mix(int16_t* output,size_t frames){
     if(v.mask.kind>0)mono=v.mask.run(mono);
     v.filter+=(v.filterTarget-v.filter)*.0015f;
     v.filtered+=(mono-v.filtered)*v.filter;
-    left+=v.filtered*v.smoothLeft;right+=v.filtered*v.smoothRight;
+    left+=v.filtered*v.smoothLeft;right+=v.filtered*v.smoothRight;send+=v.filtered*(v.smoothLeft+v.smoothRight)*.5f;
    }else{left+=sample(0)*v.smoothLeft;right+=sample(s.channels-1)*v.smoothRight;}
    v.cursor+=v.pitch;
    if(v.loop&&seamlessLoop(v.sound)&&v.cursor>=n)v.cursor=std::min(size_t(2205),n/4)+v.cursor-n;
   }
+  // The room: what the positional voices sent comes back as its tail.
+  {m_reverbWet+=(m_reverbWetTarget-m_reverbWet)*.0003f;m_reverbFeedback+=(m_reverbFeedbackTarget-m_reverbFeedback)*.0003f;
+   if(!std::isfinite(send)){send=0;m_reverb.clear();}
+   float tailLeft=0,tailRight=0;m_reverb.run(m_paused?0.f:send,m_reverbFeedback,tailLeft,tailRight);left+=tailLeft*m_reverbWet;right+=tailRight*m_reverbWet;}
   // One non-finite sample would poison the underwater filter for good: drop it.
-  if(!std::isfinite(left)||!std::isfinite(right)){left=right=0;m_underwaterLeft=m_underwaterRight=0;}
+  if(!std::isfinite(left)||!std::isfinite(right)){left=right=0;m_underwaterLeft=m_underwaterRight=0;m_reverb.clear();}
   m_master+=(m_targetMaster-m_master)*.002f;
   m_submerged+=(m_submergedTarget-m_submerged)*.0006f;
   m_underwaterLeft+=(left-m_underwaterLeft)*.055f;

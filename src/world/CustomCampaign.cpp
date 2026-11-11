@@ -1,5 +1,6 @@
 #include "CustomCampaign.h"
 #include "Primitives.h"
+#include "../audio/SoundBank.h"
 #include "../core/PackedResource.h"
 #include <algorithm>
 #include <cctype>
@@ -261,6 +262,22 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(sign.width<=0||sign.height<=0)throw std::runtime_error("invalid sign dimensions");
    if(!sign.art.empty())artUsers.push_back({map,map->signs.size()});
    map->signs.push_back(std::move(sign));
+  }else if(tag=="AMBIENT"){
+   // AMBIENT|map|sound|x|y|z|gain|radius[|mode|every|spread|state|value]: a bank sound (audio/SoundBank.h) placed
+   // in the map. mode 0 a looping bed, 1 now and then (every..every+spread seconds), 2 once each time state = value.
+   if(f.size()<8||f.size()>13)throw std::runtime_error("malformed AMBIENT record");auto map=mapAt(maps,f);
+   const auto* row=bankSound(decode(f[2]));if(!row)throw std::runtime_error("unknown AMBIENT sound "+decode(f[2]));
+   AmbientEmitter a;a.sound=row->sound;a.position={number(f,3,"ambient x"),number(f,4,"ambient y")};a.z=number(f,5,"ambient z");a.gain=number(f,6,"ambient gain");a.radius=number(f,7,"ambient radius");
+   a.mode=given(8)?integer(f,8,"ambient mode"):row->loop?AmbientEmitter::Loop:AmbientEmitter::Random;
+   if(given(9))a.every=number(f,9,"ambient every");if(given(10))a.spread=number(f,10,"ambient spread");if(given(11))a.state=stateField(f[11]);if(given(12))a.value=integer(f,12,"ambient value");
+   if(a.gain<=0||a.gain>4||a.radius<=0||a.radius>60||a.mode<AmbientEmitter::Loop||a.mode>AmbientEmitter::OnState||a.every<.5f||a.every>3600||a.spread<0||a.spread>3600)throw std::runtime_error("invalid AMBIENT gain, radius, mode or timing");
+   if(a.mode==AmbientEmitter::Loop&&!row->loop)throw std::runtime_error("AMBIENT sound "+std::string(row->name)+" is a single sound, not a loop (use mode 1 or 2)");
+   if(a.mode==AmbientEmitter::OnState&&!a.state)throw std::runtime_error("AMBIENT mode 2 needs a state");
+   map->ambients.push_back(a);
+  }else if(tag=="REVERB"){
+   // REVERB|map|wet|seconds: this map's reverb, instead of the measure the game takes of the space.
+   if(f.size()!=4)throw std::runtime_error("malformed REVERB record");auto map=mapAt(maps,f);map->reverbWet=number(f,2,"reverb wet");map->reverbSeconds=number(f,3,"reverb seconds");
+   if(map->reverbWet<0||map->reverbWet>1||map->reverbSeconds<.1f||map->reverbSeconds>6)throw std::runtime_error("invalid REVERB (wet 0-1, seconds 0.1-6)");
   }else if(tag=="SIGN_ART"){
    // SIGN_ART|name|width|height|pixels: a picture for signs, RGBA bytes in base64 (at most 256 a side, 65536 pixels).
    if(f.size()!=5)throw std::runtime_error("malformed SIGN_ART record");auto name=decode(f[1]);if(name.empty())throw std::runtime_error("SIGN_ART needs a name");

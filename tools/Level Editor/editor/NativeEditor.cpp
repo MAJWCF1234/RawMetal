@@ -536,6 +536,8 @@ static std::wstring plainKind(const std::string &kind) {
                              {"PIPE", L"Pipe"},
                              {"PRIM", L"Architecture"},
                              {"SIGN", L"Sign"},
+                             {"AMBIENT", L"Sound"},
+                             {"REVERB", L"Room reverb"},
                              {"STAIR", L"Stairs"},
                              {"STRUCT", L"Block"},
                              {"SURFACE", L"Room surfaces"},
@@ -721,7 +723,8 @@ enum {
   InspectorTab=520,LayerTab,LayerStack,LayerPreview,LayerMenu,LayerVisible,LayerLock,
   LayerName,LayerElevationField,LayerThicknessField,LayerOpacity,LayerGroupField,LayerCommit,LayerReferences,
   LayerNew,LayerFromVisible,LayerNewGroup,LayerDuplicate,LayerMerge,LayerDelete,LayerRaise,LayerLower,
-  LayerMaskArea,LayerMaskInvert,LayerMaskClear,LayerOpaque,LayerHalf,LayerGhost,LayerRotate,LayerFlipX,LayerFlipY,LayerHeight,LayerFootprint
+  LayerMaskArea,LayerMaskInvert,LayerMaskClear,LayerOpaque,LayerHalf,LayerGhost,LayerRotate,LayerFlipX,LayerFlipY,LayerHeight,LayerFootprint,
+  SoundList=640
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -775,10 +778,11 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Draw shape", L"✐", L"Paint any outline, then make it walls, a block or terraces on the right. Alt rubs out.", 0, "", 'F'},
     {L"Corridor", L"⇄", L"Drag from one room to another. A lit corridor joins them.", 0, "", 'K'},
     {L"Raise & lower", L"⇕", L"Paint to raise the floor into platforms, lower it again, or climb in steps. Pick how on the right.", 4, "", 'H'},
+    {L"Sound", L"♪", L"Pick a sound on the right, then click where it comes from. Loops hum on; the rest play now and then.", 1, "AMBIENT", 'p'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
-                     HeightTool = 41;
+                     HeightTool = 41, SoundTool = 42;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -795,6 +799,15 @@ static constexpr Friendly friendlyFields[] = {
     {"LIGHT", "intensity", L"Brightness"},
     {"LIGHT", "range", L"Reach (m)"},
     {"LIGHT", "kelvin", L"Warmth (2000 warm - 6500 cold)"},
+    {"AMBIENT", "sound", L"Sound (bank name)"},
+    {"AMBIENT", "gain", L"Loudness"},
+    {"AMBIENT", "radius", L"Heard within (m)"},
+    {"AMBIENT", "mode", L"0 loop, 1 now and then, 2 on a switch"},
+    {"AMBIENT", "every", L"Seconds between"},
+    {"AMBIENT", "spread", L"...and up to this many more"},
+    {"AMBIENT", "state", L"Switch (any name)"},
+    {"REVERB", "wet", L"Reverb amount (0 - 1)"},
+    {"REVERB", "seconds", L"Rings for (seconds)"},
     {"SIGN", "title", L"Big words"},
     {"SIGN", "subtitle", L"Small words"},
     {"TERMINAL", "title", L"Screen title"},
@@ -950,6 +963,11 @@ struct Editor {
   std::wstring notice =
       L"Drag on the plan or the picture to draw a room. Right mouse looks. WASD moves.";
   // Friendly state: which palette page, brush shape, hover/ghost, autosave, play.
+  // The Sound tool's bank (src/audio/SoundBank.h, read like the model list): name, label, loop, gain, radius.
+  struct BankRow { std::string name; std::wstring label; bool loop; std::string gain, radius; };
+  std::vector<BankRow> bankSounds;
+  HWND soundList = nullptr;
+  int soundPick = -1; // tests: the bank row to place, instead of the list's
   HWND hazardList = nullptr, pickupList = nullptr, creatureList = nullptr,
        tileList = nullptr, primList = nullptr, brushList = nullptr,
        behaviourList = nullptr, actionList = nullptr, clutterList = nullptr, linkList = nullptr,
@@ -982,6 +1000,7 @@ struct Editor {
 #include "NativeDressingRegression.inc"
 #include "NativeInteractionTests.inc"
 #include "NativeSignDesigner.inc"
+#include "NativeSoundTool.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -2295,6 +2314,13 @@ struct Editor {
                          {"CAMPAIGN", "name", "startMap"}, 3, false});
     std::stable_sort(schemas.begin(), schemas.end(),
                      [](auto &a, auto &b) { return a.kind < b.kind; });
+    {
+      std::ifstream bankFile(root / L"src" / L"audio" / L"SoundBank.h");
+      std::string bankText(std::istreambuf_iterator<char>(bankFile), {});
+      std::regex bankRow("\\{Sound::\\w+,\"([a-z0-9_]+)\",(true|false),([0-9.]+)f?,([0-9.]+)f?,\"([^\"]+)\"\\}");
+      for (std::sregex_iterator it(bankText.begin(), bankText.end(), bankRow), end; it != end; ++it)
+        bankSounds.push_back({(*it)[1], wide((*it)[5]), (*it)[2] == "true", (*it)[3], (*it)[4]});
+    }
     std::ifstream ids(root / L"src" / L"world" / L"ModelIds.h");
     std::string catalog(std::istreambuf_iterator<char>(ids), {});
     std::regex model("inline constexpr int ([A-Za-z0-9_]+)=([0-9]+);");
@@ -3598,6 +3624,13 @@ struct Editor {
     if (k == "LIGHT") {
       float z = std::max(floorZ + .1f, std::min(floorZ + 3.2f, creationCeiling() - .2f));
       set("z", n(z)), set("mount", "0"), set("yaw", "0"), set("intensity", "1"), set("range", "8"), set("kelvin", "3200");
+    } else if (k == "AMBIENT") {
+      // The sound picked in the Sound tool's list, with its own loudness and reach: a bed loops, the rest play now and then.
+      if (bankSounds.empty())
+        throw std::runtime_error("The sound bank (src/audio/SoundBank.h) was not found");
+      const auto &pick = bankSounds[size_t(std::clamp(soundPick >= 0 ? soundPick : listIndex(soundList), 0, int(bankSounds.size()) - 1))];
+      set("sound", pick.name), set("z", n(floorZ + 1.5f)), set("gain", pick.gain), set("radius", pick.radius);
+      set("mode", pick.loop ? "0" : "1"), set("every", "20"), set("spread", "20");
     } else if (k == "SIGN") {
       // The Sign designer's design, on the nearest wall (NativeSignDesigner.inc).
       authorSign(f, bx, by, floorZ);
@@ -4644,7 +4677,7 @@ struct Editor {
     for(HWND c:{layerStack,layerPreview,layerName,layerElevationInput,layerThicknessInput,layerOpacity,layerGroupList})if(c)ShowWindow(c,SW_HIDE);
     for(int id:{LayerMenu,LayerVisible,LayerLock,LayerCommit,LayerReferences})ShowWindow(GetDlgItem(window,id),SW_HIDE);
     for (HWND list : {upperFloorTiles, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
-                      surfaceList, hazardList, pickupList, creatureList, tileList, primList, brushList,
+                      surfaceList, hazardList, soundList, pickupList, creatureList, tileList, primList, brushList,
                       clutterList, actionList, linkList, kindList, recordList})
       if (list)
         ShowWindow(list, SW_HIDE);
@@ -4751,6 +4784,8 @@ struct Editor {
       row(pickupList, L"Leave");
     if (tool == 22)
       row(hazardList, L"Hurts with");
+    if (tool == SoundTool)
+      row(soundList, L"Sound");
     if (tool == 23)
       row(groundList, L"Ground");
     if (tool == 26)
@@ -9432,6 +9467,20 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       LocalFree(argv);
       return made == wanted ? 0 : 1;
     }
+    // The Sound tool, headless: a bed and a single sound placed from the bank, and a room reverb, through the engine.
+    if (argc > 1 && std::wstring(argv[1]) == L"--sound-tool-test") {
+      e.backgroundTest = true;
+      std::string report;
+      bool ok = false;
+      try {
+        ok = e.soundToolTest(report);
+      } catch (const std::exception &error) {
+        report += std::string("FAIL: ") + error.what() + "\n";
+      }
+      std::ofstream(e.root / L"native-editor-sound-test.txt") << (ok ? "PASS: sound tool\n" : "") << report;
+      LocalFree(argv);
+      return ok ? 0 : 1;
+    }
     // The Sign designer, headless: snapping, a designed sign through the engine, file round trips.
     if (argc > 1 && std::wstring(argv[1]) == L"--sign-designer-test") {
       e.backgroundTest = true;
@@ -9706,6 +9755,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     };
     // Plain names in the engine's own order: the list position is the native kind.
     e.hazardList = choices(HazardList, {L"Electricity", L"Steam", L"Crusher", L"Toxic gas", L"Fire", L"Falling debris", L"Pressure", L"Anomaly"});
+    e.soundList = choices(SoundList, {});
+    for (const auto &row : e.bankSounds)
+      SendMessageW(e.soundList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>((row.label + (row.loop ? L"  (loop)" : L"")).c_str()));
+    SendMessageW(e.soundList, CB_SETCURSEL, 0, 0);
     e.pickupList = choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets"});
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});

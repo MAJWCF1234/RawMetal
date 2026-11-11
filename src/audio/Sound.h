@@ -24,13 +24,22 @@ enum class Sound {
  // The player's handgun: the shot, the dry click, the magazine out and in, the slide released.
  PistolShot, PistolDry, PistolMagOut, PistolMagIn, PistolRack,
  // A live lead's clip arcing as it tears off, and the crackle after (leadArc keeps its sparks in time).
- LeadArc, Count
+ LeadArc,
+ // The sound bank (SoundBank.h): sounds a map places by name. Beds that loop,
+ // then single sounds, stingers and the plant's announcement voice. Resources
+ // 2370 on, in this order (tools/audio/import_horror_sfx.py).
+ AmbVent, AmbAirConditioner, AmbFan, AmbLightBuzz, AmbFluorescent, AmbStatic, AmbRadioStatic, AmbWaterDrip, AmbGasLeak, AmbDrone, AmbHaunting, AmbCrying, AmbMechanical, AmbMetalTapping,
+ OneMetalCreak, OneMetalMoan, OneMetalBang, OneMetalDrag, OneMetalFall, OneGlassBang, OneDistantYell, OneDistantYell2, OneHouseCreak, OneDebris, OneMonsterGroan, OneMonsterBreath, OneMonsterGrowl,
+ Sting, StingPiano, StingScratch,
+ PaAccessDenied, PaAccessGranted, PaDoorsLocked, PaDoorsUnlocked, PaContainmentBreach, PaEvacuate, PaCautionHazard, PaVentilationOffline, PaUnauthorized, PaSystemLockdown, PaBackupGenerators, PaHostileDetected,
+ Count
 };
 // AudioEngine maps every sound from ZoneWind on to consecutive library resources
 // and AreaTitle, the locker sounds, the detection sounds and the alert loop to their own: a sound appended after them
 // needs its resource mapped there explicitly, or it would load an unrelated file.
-// GlassShatter to PistolRack take consecutive resources from 2255 (the pistol from 2260); LeadArc is mapped on its own.
-static_assert(int(Sound::Count)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
+// GlassShatter to PistolRack take consecutive resources from 2255 (the pistol from 2260); LeadArc is mapped on its own;
+// the bank block (AmbVent on) takes consecutive resources from 2370.
+static_assert(int(Sound::Count)==int(Sound::PaHostileDetected)+1&&int(Sound::AmbVent)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
 inline bool gunshotSound(Sound s){return s==Sound::Shot||s==Sound::PistolShot;}
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}

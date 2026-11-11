@@ -1,3 +1,4 @@
+#include "CampaignSoundscape.h"
 #include "CampaignMaps.h"
 #include "CampaignKit.h"
 #include "CampaignChapters.h"
@@ -2953,6 +2954,8 @@ std::shared_ptr<const AuthoredMapData> campaignMap(int level){
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();
   // Chunks 34 on: the descent chapters, one file per district.
   buildCampaignChapters(result);
+  // Chapter 2 gets its sound from the bank once its maps are built (CampaignSoundscape.cpp).
+  dressChapterTwoSound(result);
   // The Security Office prologue is written in the custom map format; on the
   // grid it takes the campaign's own definition for its chunk.
   {auto office=std::make_shared<Map>(*loadEmbeddedPrologueCampaign()->maps.front());office->definition=CampaignChunks[PrologueChunk];office->name=CampaignMapNames[PrologueChunk];result[PrologueChunk]=std::move(office);}

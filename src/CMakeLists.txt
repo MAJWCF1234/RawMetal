@@ -168,6 +168,7 @@ add_executable(RawMetal WIN32
     game/Stealth.cpp
     game/LockerDoors.cpp
     game/LockerCapture.cpp
+    game/Ambience.cpp
     game/Crates.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
@@ -176,6 +177,7 @@ add_executable(RawMetal WIN32
     audio/DecodeMusic.cpp
     world/World.cpp
     world/CampaignMaps.cpp
+    world/CampaignSoundscape.cpp
     world/CampaignChapters.cpp
     world/CampaignChapterPower.cpp
     world/CampaignChapterMachineHall.cpp

@@ -9,6 +9,7 @@
 #include <thread>
 #include <atomic>
 #include <cstdint>
+#include <iosfwd>
 namespace retro {
 class Game;
 class AudioEngine {
@@ -23,6 +24,8 @@ public:
  static bool testDevice();
  static bool testLiftMix();
  static bool testAlertMusic();
+ static bool testReverb();
+ static bool previewAmbience(int chunk,std::ostream& report); // --ambience-preview=CHUNK
 private:
  struct Sample {std::vector<int16_t> pcm; int channels=1; size_t frames()const{return pcm.size()/channels;}};
  // NPC speech is coloured live by what the speaker wears over the mouth,
@@ -67,6 +70,22 @@ private:
  void duckForSting(){m_stingFrames=int((StingHold+StingRelease)*Rate);}
  float stingDuck()const{if(m_stingFrames<=0)return 1;const float left=m_stingFrames/float(Rate);return 1-StingDuck*std::min(1.f,left/StingRelease);}
  float m_submerged=0,m_submergedTarget=0,m_underwaterLeft=0,m_underwaterRight=0;
+ // Room reverb. Every positional voice sends to it; listener beds and the score
+ // stay dry. Four damped combs into two all-passes a side (the right side's
+ // lines a little longer, so the tail is wide); the feedback sets how long it
+ // rings, from Game::acoustics (the map's REVERB or a measure of the space).
+ struct Reverb {
+  static constexpr int Combs=4,Passes=2;
+  std::array<std::vector<float>,Combs*2> comb;std::array<std::vector<float>,Passes*2> pass;
+  std::array<size_t,Combs*2> combAt{};std::array<size_t,Passes*2> passAt{};std::array<float,Combs*2> damped{};
+  Reverb();
+  void run(float in,float feedback,float& left,float& right);
+  void clear();
+  // The comb feedback that takes `seconds` to fall 60 dB.
+  static float feedbackFor(float seconds);
+ };
+ Reverb m_reverb;
+ float m_reverbWet=.12f,m_reverbWetTarget=.12f,m_reverbFeedback=.8f,m_reverbFeedbackTarget=.8f;
  bool m_paused=false;
   int m_lastChunk=-1;
   int m_lastWorld=-1;
