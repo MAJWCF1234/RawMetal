@@ -1207,6 +1207,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<30;++i)scene.update({},frame);shot(scene,tag+"-3-free");log<<"  thrown off after "<<mashed*frame<<" s more, health "<<scene.player().health<<"\n";}
      return 0;
     }
+    // R-117's staged kill in Containment A (chunk 96), stepped at 60 Hz and drawn every quarter
+    // second from the player's way in, then up close on the body: .build/chimera-kill/NNN.ppm.
+    if(commandArguments().find(L"--chimera-kill-frames")){
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!commandArguments().find(L"--software")&&!renderer->enableHardware())return 36;
+     std::filesystem::create_directories(".build/chimera-kill");std::ofstream log("chimera-kill-frames.txt");
+     auto shot=[&](retro::Game& scene,int n){renderer->render(scene);char name[64];std::snprintf(name,sizeof name,".build/chimera-kill/%03d.ppm",n);std::ofstream out(name,std::ios::binary);out<<"P6\n960 540\n255\n";
+      for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
+     auto scene=retro::Game::chimeraStage(96,{6.4f,12.6f},-15,-.07f,-6);int n=0;const float frame=1.f/60;
+     for(int i=0;i<60*24;++i){scene.chimeraFilm(scene.elapsed()>15.5f);scene.update({},frame);if(i%15==0){shot(scene,n++);log<<n-1<<' '<<scene.chimeraFilmLine()<<'\n';}}
+     return 0;
+    }
     // A campaign map's own sound, mixed to a WAV (ambience-preview-CHUNK.wav); several chunks as a,b,c.
     if(auto arg=commandArguments().find(L"--ambience-preview=")){std::ofstream report("ambience-preview.txt");bool ok=true;std::wstringstream list(arg+19);std::wstring item;
      while(std::getline(list,item,L',')){const int chunk=_wtoi(item.c_str());if(chunk<0||chunk>=retro::CampaignChunkCount){ok=false;continue;}ok&=retro::AudioEngine::previewAmbience(chunk,report);report.flush();}
@@ -1753,7 +1764,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
          {"radar",retro::Game::testRadar},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
-         {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
+         {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"chimera-hunt",retro::Game::testChimeraHunt},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
          {"engine-regression",retro::Game::testEngineRegression},{"gameplay-fixes",retro::Game::testGameplayFixes},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
          {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"physics-stages",retro::Game::testPhysicsStages},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},

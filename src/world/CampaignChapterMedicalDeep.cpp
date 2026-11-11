@@ -290,7 +290,6 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  for(auto [x,y]:{std::pair{3.75f,4.95f},{4.f,4.85f}})kit::prop(m,model::mug,x,y,f+.9f,x);
  for(auto [x,y]:{std::pair{3.4f,6.9f},{4.3f,7.1f}})kit::prop(m,model::mug,x,y,f+.78f,y);
  kit::prop(m,model::office_paper_sheet,3.85f,6.85f,f+.78f,.4f);
- ddFix(m,model::med_notice_board,4.3f,8.565f,f+1.2f,1.2f,.07f,.9f,ddN,false);
  taped(m,{2.9f,8.6f},f+1.5f,ddN,Readable::Note,"THEATRE 1 / NIGHT ROTA","SURGEON: THE DIRECTOR. SCRUB: K. ADEYEMI. PORTER: ON CALL.",
   "ANAESTHETIST: NOT REQUIRED. (DIRECTOR'S HAND.)");
  // --- Recovery: three bays, one still occupied --------------------------------------------------------
@@ -346,7 +345,6 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  ddCap(m,20.6f,1.f,21.4f,1.42f,f+1.62f,roof);                                                           // nobody crouches up on the cabinet
  for(float x:{18.85f,19.15f})ddFix(m,model::pwr_breaker_panel,x,1.051f,f+1.4f,.183f,.102f,.457f,ddS,false);
  wall(m,18.75f,1.f,21.f,1.06f,f+2.05f,f+2.11f,8);
- ddFix(m,model::med_notice_board,17.9f,1.035f,f+1.2f,1.2f,.07f,.9f,ddS,false);
  for(float y:{2.05f,3.f,3.95f})ddFix(m,model::med_records_cabinet,16.847f,y,f,.9f,.493f,1.f,ddE,true);
  for(auto [y,i]:{std::pair{2.f,0},{2.95f,1},{3.9f,2}})for(int k=0;k<3;++k)kit::prop(m,model::office_file_binder,16.84f,y-.25f+k*.11f+i*.05f,f+1.f,ddE);
  for(float y:{2.25f,4.15f}){shelf(m,{22.75f,y},kPi*.5f,0);const int seed=int(y*10);
@@ -526,7 +524,6 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  // Nobody lies along a shelf top: a cap over every shelf in the map, clear of its top board's stock.
  for(auto [x,y,alongX]:{std::tuple{1.27f,3.25f,false},{10.f,1.25f,true},{13.5f,1.25f,true},{15.3f,1.25f,true},{22.75f,2.25f,false},{22.75f,4.15f,false},
   {16.25f,18.47f,true},{21.9f,22.75f,true}}){const float a=alongX?.9f:.25f,b=alongX?.25f:.9f;ddCap(m,x-a,y-b,x+a,y+b,f+2.1f,roof);}
- ddFix(m,model::med_notice_board,22.1f,18.235f,f+1.2f,1.2f,.07f,.9f,ddS,false);
  wall(m,17.6f,20.6f,17.72f,20.95f,f+1.3f,f+1.6f,8);wall(m,17.72f,20.68f,17.76f,20.87f,f+1.42f,f+1.56f,20);
  wall(m,17.65f,18.4f,17.8f,18.85f,f+.85f,f+1.75f,23);                                     // a porter's jacket
  // --- Light (29): the theatre generator keeps the route lit; the ward board feeds the side rooms ----
@@ -624,7 +621,6 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  taped(m,{13.52f,2.895f},up+1.5f,ddN,Readable::Note,"BODY LIFT","OUT SINCE 02:50. BRING THEM DOWN BY THE STAIR, TWO PORTERS TO A TROLLEY.",
   "NOBODY COMES DOWN ALONE. NOBODY GOES IN THE STORE ALONE.");
  ddTrolley(m,13.9f,1.95f,up,true,true,roof-up);
- wallSign(m,10.055f,1.4f,up+1.35f,"MORTUARY","THE WAY TO QUARANTINE IS THROUGH IT",2.f,kPi*.5f);
  // --- Lower plan (walls .2 m to the slab) ---------------------------------------------------------------
  wall(m,9.f,7.f,9.2f,9.4f,f,up,3);doorwayY(m,9.4f,11.f,9.f,9.2f,f,up);wall(m,9.f,11.f,9.2f,15.2f,f,up,3);  // receiving / body store
  wallDoor(m,1.f,9.2f,14.8f,15.f,3.4f,4.6f,f,up,1);                                      // door 1: store to post-mortem
@@ -758,7 +754,6 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  for(int i=0;i<4;++i)kit::prop(m,model::office_file_binder,18.1f+i*.12f,7.05f,f+1.f,0);
  shelf(m,{22.75f,9.6f},kPi*.5f,0);
  for(auto [y,t]:{std::pair{9.15f,0},{10.f,0},{9.3f,1},{9.9f,2}})kit::prop(m,model::prop_cardboard_box,22.75f,y,f+(t==0?.306f:t==1?.972f:1.656f),ddE,.62f);
- ddFix(m,model::med_notice_board,20.6f,12.365f,f+1.15f,1.2f,.07f,.9f,ddN,false);
  workstation(m,20.4f,10.9f,f,1,2);
  ddFix(m,model::water_cooler,22.6f,7.3f,f,.35f,.35f,1.1f,ddW,true);
  ddFix(m,model::med_wall_clock,20.6f,6.81f,f+2.1f,.236f,.02f,.233f,ddS,false);

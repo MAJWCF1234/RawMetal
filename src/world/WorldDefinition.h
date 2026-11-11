@@ -58,7 +58,12 @@ struct CreatureTraits {const char* name;float health,hull,top,speed,damage,windu
  // floor it treads (Game::stepSoundAt) at this gain and pitch, a limp's every
  // other one at stepLimp of the gain (0: an even gait; 0 gain: no feet); and
  // while unaware, its idle sound about every idlePeriod seconds (0: none).
- float stepGain,stepPitch,stepLimp;Sound idleSound;float idleGain,idlePitch,idlePeriod;};
+ float stepGain,stepPitch,stepLimp;Sound idleSound;float idleGain,idlePitch,idlePeriod;
+ // A kind that bites: a strike that kills a person takes his head, and it
+ // stays over the body this many seconds (0: neither), worrying it with the
+ // span of its attack clip between these phases. Feeding is a window to slip
+ // past; a hurt, or the player close in its view, ends it at once.
+ float feedSeconds=0,worryFrom=0,worryTo=0;};
 inline const CreatureTraits& creatureTraits(CreatureKind kind){
  static constexpr CreatureTraits table[]={
   // Senses: the huntsman sees well enough in the dark; the wasp hunts by eye
@@ -79,7 +84,7 @@ inline const CreatureTraits& creatureTraits(CreatureKind kind){
   // circles to the side they are not watching and comes at 5.8 m/s on all
   // fours; caught circling, it charges rather than freezing. A long reach and a
   // slam that lands hard; it takes a lot of killing. Sharp eyes, a heavy tread.
-   {"CHIMERA",        560,2.35f,2.4f, 2.8f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.8f,1.7f, 5.8f,.35f,2.f,false, 13,-.25f,400,.5f,1,    .5f, .66f,0,  Sound::BruteCall, .18f,.48f,9},
+   {"CHIMERA",        560,1.9f, 2.f, 2.8f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.8f,1.7f, 5.8f,.35f,2.f,false, 13,-.25f,400,.5f,1,    .5f, .66f,0,  Sound::BruteCall, .18f,.48f,9, 7.f,.6f,.78f},
   // A worker the zone's energy changed, still in its suit and still at its
   // habits: it clutches its head in its idle, then comes at a run as fast as a
   // walking player (its lunge run covers 3 m a cycle at 3.6 m/s). It leaps on and

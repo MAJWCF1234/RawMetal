@@ -836,6 +836,8 @@ static constexpr Friendly friendlyFields[] = {
     {"DOOR", "maxOpen", L"Opens this far (0-1)"},
     {"DOOR", "swing", L"Swings to side (1 or -1)"},
     {"CREATURE", "wakeState", L"Sleeps until switch"},
+    {"CREATURE", "hunter", L"Recurring animal (any name)"},
+    {"CREATURE", "prey", L"Comes out for actor number"},
     {"CREATURE", "scale", L"Size (0.5 - 2)"},
     {"HAZARD", "damage", L"Hurts per second"},
     {"STRUCT", "top", L"Top (m)"},

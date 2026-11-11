@@ -124,6 +124,16 @@ struct Enemy {
     // An authored creature that followed the player across a seam keeps the chunk
     // and home it was placed at, so a load matches it there instead of respawning it.
     int originLevel=-1;Vec2 originHome{};
+    // A recurring hunter (CreatureSpawn::hunter, prey) and, while it comes after
+    // the player through a seam, the seconds it still has to cover to the
+    // crossing it walks in at (waypoint). Archived from version 22.
+    StateId hunter=0;int prey=-1;float arrive=0;
+    // Not saved: feeding on a kill (seconds left, the body's actor, its hp when it
+    // began, so a wound ends it), a hunter's flight (seconds) and the last noise
+    // of the player's it went to by ear (Game elapsed).
+    float feeding=0,feedHp=0,fleeTime=0,earTime=-1;int feedActor=-1;
+    // A hunter that got away: not dead, gone (alive off, its hp kept).
+    bool gone()const{return !alive&&hp>0&&hunter!=0;}
     // Not saved: how it died, for the body it leaves (Carcass), and the shots that struck it
     // (each ray's origin relative to pos and z), for the wounds drawn on it.
     struct Wound {Point3 origin{},direction{};};
@@ -349,6 +359,15 @@ public:
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
     const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
+    // A man a creature's bite took the head off, and seconds since (saved: a
+    // reload shows him headless; the age is large after a load).
+    bool npcHeadless(size_t actor)const;
+    float npcHeadlessAge(size_t actor)const;
+    static bool testChimeraHunt();
+    // Chapter 2 as the player arrives in `level`, the god camera at pos/z/yaw, for staging R-117
+    // (--chimera-kill-frames and the chimera-hunt content checks).
+    static Game chimeraStage(int level,Vec2 pos,float z,float yaw,float pitch=0);
+    void chimeraFilm(bool close);std::string chimeraFilmLine()const;
     NpcWeaponPose npcWeaponPose(size_t actor)const;
     // Set by the CCTV patch in Perimeter Ops; from then on the minimap shows
     // the hostile guards in the current chunk (empty before it).
@@ -601,7 +620,7 @@ public:
     static bool testHandgunSaves(std::ostream& report);
     // 20: how far each creature has made the player out (Enemy::recognition).
     // 21: each chunk's torn leads.
-    static constexpr int SaveVersion=21;
+    static constexpr int SaveVersion=22;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1141,6 +1160,18 @@ private:
     void updateVrMelee(const InputState& input,float dt);
     void receiveDamage(float amount,Vec2 source,bool blockable=true);
     void updateEnemies(float dt);
+    // Hunter.cpp: the bite that takes a man's head, feeding on him, the
+    // recurring hunter's flight, return and ear, and its walk in after the
+    // player through a seam.
+    void biteKill(Enemy& e,size_t actor);void headlessPool(size_t actor);
+    bool updateFeeding(Enemy& e,float dt);
+    int hunterPrey(const Enemy& e)const;
+    void wakeHunter(Enemy& e);
+    void vanishHunter(Enemy& e);
+    bool hunterFlight(Enemy& e,Vec2& goal,float& goalZ,float dt);
+    void hunterArrive(Enemy& e,float dt);
+    void hearPlayerNoise(const std::vector<AiStimulus>& stimuli);
+    struct PlayerNoise {Vec2 pos{};float z=0,time=-1;} m_playerNoise;
     unsigned creatureConditions(const Enemy& enemy,bool visible,bool heard,bool canMelee,bool hurt)const;
     CreatureScheduleChoice creatureScheduleChoice(const Enemy& enemy,unsigned conditions,bool arrive)const;
     bool creatureTaskAllows(const Enemy& enemy,CreatureTask task)const;

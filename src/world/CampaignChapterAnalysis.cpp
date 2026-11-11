@@ -127,7 +127,6 @@ std::shared_ptr<const Map> makeMaterialsIntake(){
  terminal(m,{18.9f,2.75f},"NIGHT PORTER / RECEIVING","02:14 CRATE 6 KNOCKING ON THE PALLET. TOLD THE BOOTH. THE BOOTH SAID SIGN IT AND CAGE IT. SIGNED, CAGED.",
   "02:31 CAGE ALARM. IT IS PROBABLY THE LATCH. GOING DOWN TO LOOK. KETTLE IS ON.");
  {auto& t=m.terminals.back();t.readable=Readable::Note;t.surface=.75f;t.yaw=kPi;}
- anModel(m,model::lab_notice_board,15.055f,3.3f,f+1.25f,anE,false);
  anFix(m,model::med_wall_clock,19.4f,1.01f,f+2.1f,.24f,.02f,.23f,anS,false);
  anFix(m,model::wooden_table,21.8f,1.5f,f,1.367f,.724f,.78f,0,true);
  kit::prop(m,model::coffee_machine,21.5f,1.45f,f+.78f,anS);
@@ -156,7 +155,6 @@ std::shared_ptr<const Map> makeMaterialsIntake(){
  m.pickupSpawns.push_back({{3.75f,8.55f},PickupKind::HandgunAmmo,f+.76f});                  // 9 mm in the porter's drawer
  anModel(m,model::med_records_cabinet,2.6f,5.245f,f,anS,true);
  anModel(m,model::office_file_cabinet_open,4.25f,5.35f,f,anS,true);
- anModel(m,model::lab_notice_board,4.25f,5.035f,f+1.3f,anS,false);
  wall(m,2.1f,5.f,5.05f,5.75f,f+1.05f,f+2.6f,30);                                           // nobody on the cabinets into the roof
  anModel(m,model::lab_wall_clock,1.6f,5.015f,f+1.95f,anS,false);
  anModel(m,model::lab_sample_fridge,5.55f,6.f,f,anW,true);wall(m,5.1f,5.6f,6.f,6.4f,f+1.15f,f+2.6f,30);   // the sample fridge, brought in off the hall
@@ -167,7 +165,6 @@ std::shared_ptr<const Map> makeMaterialsIntake(){
  wall(m,5.64f,7.f,6.f,8.9f,f+1.52f,f+1.55f,20);                                               // the manifest shelf: tonight's binders, one gone
  for(int i=0;i<7;++i){if(i==4)continue;kit::prop(m,model::office_file_binder,5.82f,7.15f+i*.105f,f+1.55f,.093f,.301f,.424f,kPi*.5f+(i%3-1)*.04f);}
  // its outside: the booking board and the first-aid box on the hall face, the overflow archive on its roof
- anModel(m,model::lab_notice_board,6.235f,6.6f,f+1.25f,anE,false);
  anModel(m,model::med_first_aid_box,6.26f,7.8f,f+1.35f,anE,false);
  anFix(m,model::med_wall_clock,6.21f,8.9f,f+1.95f,.24f,.02f,.23f,anE,false);
  for(auto [x,y,z,yaw]:{std::tuple{1.9f,5.9f,0.f,0.f},{2.45f,5.95f,0.f,.06f},{1.95f,6.45f,0.f,-.05f},{1.9f,5.9f,.252f,0.f},{5.1f,9.f,0.f,.3f}})
@@ -209,7 +206,6 @@ std::shared_ptr<const Map> makeMaterialsIntake(){
  cableTray(m,{6.4f,5.25f},{22.6f,5.25f},f+3.3f);
  for(float x:{7.2f,7.5f}){anFix(m,model::pwr_breaker_panel,x,5.051f,f+1.3f,.183f,.102f,.457f,anS,false);m.pipes.push_back({{x,5.06f},{x,5.06f},f+1.76f,.02f,f+3.3f,6});}
  anModel(m,model::lab_wall_clock,8.3f,5.015f,f+2.2f,anS,false);
- anFix(m,model::med_notice_board,22.965f,14.f,f+1.25f,1.2f,.07f,.9f,anW,false);
  extinguisher(m,23.f,15.4f,f,anW);extinguisher(m,8.6f,23.f,f,anN);
  anModel(m,model::lab_pa_horn,22.69f,13.5f,f+3.95f,anW,false);
  for(float x:{7.f,12.f,17.f})anModel(m,model::pwr_vent_grille,x,22.95f,f+3.4f,anN,false);
@@ -298,7 +294,6 @@ std::shared_ptr<const Map> makeMaterialsIntake(){
  crash(10.f,10.04f,17.f,23.f);crash(13.96f,14.f,17.f,23.f);
  wall(m,9.8f,17.f,14.2f,23.f,f+3.2f,roof,30);                                              // nobody on its roof
  extinguisher(m,10.f,18.4f,f,anE);
- anFix(m,model::med_notice_board,13.965f,20.4f,f+1.25f,1.2f,.07f,.9f,anW,false);
  m.pickupSpawns.push_back({{13.6f,21.6f},PickupKind::Health,f});
  m.lights.push_back(inTube(12.f,19.6f,f+3.f,.5f,5.5f,5600,.05f,0,kPi*.5f));
  // --- Light: mercury and sodium high-bays under the sheet, one dead; the dock's flood and beacon; the
@@ -370,7 +365,6 @@ std::shared_ptr<const Map> makeSampleStorage(){
  terminal(m,{22.75f,8.f},"COLD STORE / CONTROL","PLANT FAULT 02:10. LN2 FEED LOST. FREEZERS 1-12 ON BATTERY. BATTERY 0% 02:58.",
   "FREEZER 6 STILL RUNNING. FREEZER 6 INTERNAL +4 C AND RISING. COMPRESSOR DRAW NORMAL. NO FAULT FOUND.",up-f);
  anFix(m,model::med_wall_clock,18.2f,7.06f,up+2.1f,.24f,.02f,.23f,anS,false);
- anFix(m,model::med_notice_board,22.f,15.965f,up+1.25f,1.2f,.07f,.9f,anN,false);
  anFix(m,model::water_cooler,17.5f,15.7f,up,.35f,.35f,1.1f,anN,true);
  kit::prop(m,model::office_chair,18.7f,11.9f,up,.55f,.55f,.95f,2.3f);                       // shoved back from the mimic
  kit::prop(m,model::trash_can,21.8f,7.4f,up,.27f,.27f,.34f,.4f);
@@ -435,7 +429,6 @@ std::shared_ptr<const Map> makeSampleStorage(){
  for(auto [x,y,yaw]:{std::tuple{4.4f,5.92f,kPi+.3f},{7.1f,6.15f,2.4f},{5.6f,8.55f,1.f}})kit::prop(m,model::wooden_chair,x,y,f,.417f,.525f,.95f,yaw);
  // the hall's walls: the sink, the board, first aid, the LN2 dewars on their chain
  anFix(m,model::med_scrub_sink,1.268f,8.2f,f,.488f,.536f,1.127f,anE,true);wall(m,1.f,7.9f,1.6f,8.5f,f+1.13f,ceil,30);   // nobody on the sink under the slab
- anFix(m,model::med_notice_board,1.035f,10.6f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anModel(m,model::med_first_aid_box,1.07f,12.2f,f+1.35f,anE,false);
  extinguisher(m,1.f,13.4f,f,anE);
  for(float x:{2.25f,2.8f,3.35f})ssDewar(m,x,14.5f,f);
@@ -836,7 +829,6 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
  // the drive rack, its drives pulled onto the floor; her printout on the board
  anModel(m,model::anl_switch_cabinet_2,19.3f,5.43f,f,anS,true);wall(m,18.5f,5.f,20.1f,5.86f,f+2.7f,roof,30);
  for(auto [x,y,yaw]:{std::tuple{18.7f,6.35f,.3f},{19.55f,6.5f,-.2f},{19.9f,7.f,1.2f}})propPose(m,model::office_pc_tower,x,y,f,.26f,.61f,.61f,yaw,0,kPi*.5f);
- anModel(m,model::lab_notice_board,22.86f,10.55f,f+1.3f,anW,false);
  taped(m,{22.89f,10.4f},f+1.45f,anW,Readable::Note,"ARRAY / 01:58:04 / PRINTOUT","DEEP FACE SENSOR (LEVEL 9). CELL BENCH, 14 CELLS. CELL STORE, INSTRUMENTATION. ONE TRACE.",
   "zero delay over 900 m. nothing travelled. it was already here.");
  // the cut cell: refined ore, opened, and what it was cut from looking back
@@ -915,7 +907,6 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
   "SHE LEFT HER BOX ON THE DESK. I SAID I WOULD BRING IT DOWN. -R. HALE");
  anModel(m,model::lab_id_scanner,21.f,14.78f,f+1.2f,anN,false);
  taped(m,{21.5f,14.79f},f+1.2f,anN,Readable::Note,"WARD C SERVICE DOOR / READER","MEDICAL OVERRIDE ONLY. EVERY OPENING LOGGED TO I.I.","LAST: 03:24 IN, R. HALE.");
- wallSign(m,20.f,14.75f,f+2.62f,"WARD C / SERVICE DOOR","MEDICAL OVERRIDE ONLY",1.8f,anN);
  m.pickupSpawns.push_back({{18.9f,14.4f},PickupKind::HandgunAmmo,f});
  // --- The service corridor to Ward C: the way they brought her --------------------------------------
  wall(m,14.2f,19.f,22.9f,22.9f,f,roof,3);
@@ -934,7 +925,6 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
  anFix(m,model::med_wheelchair,14.75f,17.6f,f,.482f,.9f,.787f,anE+.25f,true);
  for(auto [x,y,z]:{std::tuple{14.75f,15.55f,0.f},{15.4f,15.5f,0.f},{14.75f,15.55f,.252f}})kit::prop(m,model::prop_cardboard_box,x,y,f+z,.5f,.495f,.252f,z>0?0.f:x-14.75f);
  for(float x:{18.2f,21.6f})anFix(m,model::radiator_panel,x,18.84f,f,1.23f,.24f,.91f,anN,true);
- anFix(m,model::med_notice_board,19.9f,18.965f,f+1.25f,1.2f,.07f,.9f,anN,false);
  anFix(m,model::med_wall_clock,17.6f,15.01f,f+2.05f,.24f,.02f,.23f,anS,false);
  anFix(m,model::med_floor_drain,17.6f,17.f,f,.5f,.5f,.01f,0,false);
  anFix(m,model::med_first_aid_box,22.3f,15.06f,f+1.3f,.367f,.12f,.349f,anS,false);
@@ -955,7 +945,6 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
  wall(m,10.f,19.f,14.f,19.2f,f+2.6f,roof,3);
  m.lights.push_back(lamp({12.f,18.9f},f+2.95f,.3f,4.f,1000,-.5f,WorldLightMount::Wall,-kPi*.5f,true,{1.f,.12f,.06f}));
  taped(m,{10.01f,18.2f},f+1.45f,anE,Readable::Note,"BACK DOOR / RESONANCE LAB","SEALED FROM THEIR SIDE AT 01:58. IT OPENS WHEN THEY OPEN THEIRS.","IF YOU ARE READING THIS FROM IN HERE, THEY HAVEN'T.");
- wallSign(m,12.f,18.94f,f+2.65f,"TEST COMPLEX PASSAGE","SEALED FROM THE RESONANCE LABORATORY SIDE",2.4f,anN);
  m.pickupSpawns.push_back({{13.4f,17.6f},PickupKind::Ammo,f});
  m.lights.push_back(inTube(12.f,21.f,roof,.3f,4.5f,5000,0,.2f,kPi*.5f));
  // --- Array Power: the breakers left open ------------------------------------------------------------
@@ -1043,7 +1032,6 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  for(float x:{2.6f,2.95f,3.65f,4.f})kit::prop(m,model::item_dosimeter,x,4.62f,f+.9f,.31f,.146f,.066f,kPi*.5f);
  dgPaper(m,{3.3f,4.4f},.9f,kPi,Readable::Note,"FIELD KIT / SIGN-OUT","01:50 LAB 4: R-47 ON LOAN FOR THE BENCH TEST. 1 HAND LAMP. IN HER HAND: BACK BY THREE.",
   "02:05 DUNNE: 2 METERS, 1 RECORDER, CHASE RIG KEY. NOTHING SIGNED BACK IN.");
- anModel(m,model::lab_notice_board,1.04f,2.85f,f+1.25f,anE,false);
  taped(m,{1.01f,3.75f},f+1.45f,anE,Readable::Note,"BODY SURVEY / THIS WEEK","LAB 4 (ENERGY DIAG.): MON 0.03, WED 0.04, FRI 0.06 CELL EQ. TIER 2 STOPS AT 0.05. SCREENING DUE.",
   "PER I.I. FORMAT: ALL STAFF FIELDS IN CELL EQUIVALENTS. NAMES ON THE COPY THAT GOES UP ONLY.");
  m.lights.push_back(inTube(3.4f,2.9f,f+3.f,.5f,5.f,4200,0));
@@ -1063,7 +1051,6 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  // the techs' office: the survey mirrored up to I.I. as it was taken
  workstation(m,13.f,2.35f,f,1,3);workstation(m,16.f,2.35f,f,1,1);
  dgDeskTerminal(m,20.6f,2.35f,f,1,0,"SURVEY / MIRROR TO I.I.","EVERY READING COPIED TO INTERNAL INVESTIGATIONS AS TAKEN. 214 STAFF ON FILE.","03:02 FILE CALLED UP IN FULL BY I.I. 03:02 LOCAL COPY DELETED.");
- anModel(m,model::lab_notice_board,18.2f,1.04f,f+1.3f,anS,false);
  taped(m,{19.3f,1.01f},f+1.45f,anS,Readable::Note,"PAN MAP / 01:50","R-46 TURNS TO A LIGHT BEFORE THE METERS DO. ONLY A LIGHT THAT MOVES. THE PLANT'S OWN LAMPS IT IGNORES.",
   "WE STOPPED CALIBRATING THE METERS. WE CALIBRATE THE DOG.");
  paperDrift(m,10.6f,3.f,21.2f,4.2f,f,6,8401);
@@ -1102,7 +1089,6 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  {const int d=swingDoor(m,19.4f,20.6f,8.9f,f,roof,1);m.doors[size_t(d)].requireState=stateId("lab_chem_seal");}   // the airlock, held on Chemistry's reading
  wall(m,20.6f,8.8f,22.9f,9.f,f,roof,3);
  wallSign(m,20.f,8.74f,f+2.62f,"ZONE 3 AIRLOCK","HELD ON THE CHEMISTRY READING. PURGE AT INSTRUMENTATION",2.4f,anN);
- wallSign(m,16.f,8.74f,f+2.62f,"CALIBRATION PAN","LIVE WATER. NO LIGHTS IN THE PAN",1.9f,anN);
  taped(m,{15.2f,8.79f},f+1.45f,anN,Readable::Note,"PAN ENTRY / 02:10","DUNNE WENT IN FOR HIS SECOND METER WITH THE TORCH IN HIS TEETH. R-46 IS OUT OF ITS PEN.",
   "NOBODY GOES IN. IF YOU HAVE TO, GO DARK AND GO SLOW. IT HEARS BOOTS.");
  // Dunne's desk: he faced the glass. His hand lamp, the recorder, the last tape in the machine

@@ -19,7 +19,7 @@ namespace retro {
 // the Campaign Builder neither lists nor exports its levels. Set a switch true
 // when that chapter ships and its door and its levels open by themselves. The
 // source workspace (or --dev-campaign) always sees every level.
-inline constexpr bool Chapter2Released=true;
+inline constexpr bool Chapter2Released=false;
 inline constexpr bool Chapter3Released=false;
 inline constexpr int FirstSealedChunk=68;      // Chapter 2's first level
 inline constexpr int FirstChapter3Chunk=110;   // Chapter 3's first level

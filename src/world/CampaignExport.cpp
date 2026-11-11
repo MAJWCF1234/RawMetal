@@ -259,7 +259,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   for(const auto& e:m.emitters){line(Rec("EMITTER").i(mi).n(e.position.x).n(e.position.y).n(e.z).n(e.drift.x).n(e.drift.y).n(e.rise).n(e.rate).n(e.radius).n(e.growth).i(e.count));
    if(e.rate<=0||e.rate>5||e.radius<=0||e.radius>3||e.growth<0||e.growth>5||e.count<1||e.count>32||e.rise<0||e.rise>20)note("an emitter is outside the EMITTER ranges and will not load");}
   for(const auto& s:m.stairs)line(Rec("STAIR").i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).i(s.steps).b(s.alongY).b(s.ascending).f(s.openUnderside?"1":"").f(s.treadThickness!=.12f?num(s.treadThickness):"").f(s.sideRails?"1":""),11);
-  for(const auto& c:m.creatureSpawns)line(Rec("CREATURE").i(mi).i(int(c.kind)).n(c.position.x).n(c.position.y).n(c.z).f(c.scale!=1?num(c.scale):"").f(c.health?num(c.health):"").st(c.wakeState),6);
+  for(const auto& c:m.creatureSpawns)line(Rec("CREATURE").i(mi).i(int(c.kind)).n(c.position.x).n(c.position.y).n(c.z).f(c.scale!=1?num(c.scale):"").f(c.health?num(c.health):"").st(c.wakeState).st(c.hunter).f(c.prey>=0?std::to_string(c.prey):""),6);
   for(const auto& p:m.pickupSpawns)line(Rec("PICKUP").i(mi).i(int(p.kind)).n(p.position.x).n(p.position.y).f(p.z!=-999?num(p.z):""),5);
   for(size_t c=0;c<m.clutterSpawns.size();++c){const auto& v=m.clutterSpawns[c];Rec r("CLUTTER");r.i(mi).i(v.kind).n(v.position.x).n(v.position.y).n(v.z).n(v.yaw);
    if(v.kind==ClutterModelKind)r.i(v.model).n(v.width).n(v.depth).n(v.height).n(v.pitch).n(v.roll).sth(v.breakState);
@@ -444,7 +444,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  d.count("hungSuits",a.hungSuits.size(),b.hungSuits.size());
  for(size_t i=0;i<std::min(a.hungSuits.size(),b.hungSuits.size());++i){d.eq(at("hungSuit",i)+".hook",a.hungSuits[i].hook,b.hungSuits[i].hook);d.eq(at("hungSuit",i)+".facing",a.hungSuits[i].facing,b.hungSuits[i].facing);}
  d.count("creatures",a.creatureSpawns.size(),b.creatureSpawns.size());
- for(size_t i=0;i<std::min(a.creatureSpawns.size(),b.creatureSpawns.size());++i){const auto&p=a.creatureSpawns[i];const auto&q=b.creatureSpawns[i];auto w=at("creature",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".position",p.position,q.position);d.eq(w+".z",p.z,q.z);d.eq(w+".scale",p.scale,q.scale);d.eq(w+".health",p.health,q.health);d.eq(w+".wakeState",p.wakeState,q.wakeState);}
+ for(size_t i=0;i<std::min(a.creatureSpawns.size(),b.creatureSpawns.size());++i){const auto&p=a.creatureSpawns[i];const auto&q=b.creatureSpawns[i];auto w=at("creature",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".position",p.position,q.position);d.eq(w+".z",p.z,q.z);d.eq(w+".scale",p.scale,q.scale);d.eq(w+".health",p.health,q.health);d.eq(w+".wakeState",p.wakeState,q.wakeState);d.eq(w+".hunter",p.hunter,q.hunter);d.eq(w+".prey",p.prey,q.prey);}
  d.count("pickups",a.pickupSpawns.size(),b.pickupSpawns.size());
  for(size_t i=0;i<std::min(a.pickupSpawns.size(),b.pickupSpawns.size());++i){const auto&p=a.pickupSpawns[i];const auto&q=b.pickupSpawns[i];auto w=at("pickup",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".position",p.position,q.position);d.eq(w+".z",p.z,q.z);}
  d.count("clutter",a.clutterSpawns.size(),b.clutterSpawns.size());

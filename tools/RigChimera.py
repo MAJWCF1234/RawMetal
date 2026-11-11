@@ -3,29 +3,42 @@
   blender -b --python tools/RigChimera.py -- CHIMERA.glb OUT.fbx
 
 The Chimera (O:/retro official/chimera.zip) ships as eleven rigid parts and no
-skeleton: a horse-like lower body with its four legs in one mesh, a torso with
-arms, a petalled flower-mouth head, a tail. This builds a skeleton with knees
-and elbows (each leg split out of the lower body below its barrel and again at
-the knee; each arm at the elbow), weights every part rigidly to its bone, and
-keys five clips at 30 fps for RawMetalAuthoredCreatureBake:
+skeleton: a four-legged lower body with its legs in one mesh, a torso with
+arms, a petalled flower-mouth head, a tail. This builds a skeleton with three
+joints a leg (each leg split out of the lower body below its barrel, at the
+knee and again at the hock or wrist; each arm at the elbow), weights every part
+rigidly to its bone, and keys five clips at 30 fps for
+RawMetalAuthoredCreatureBake.
 
-  Chimera_Idle    2.5 s loop: laboured breathing, the head jerking round in
-                  twitches, a forehoof pawing, the petals fluttering
-  Chimera_Walk    1.25 s loop: a wolf's gait (the CC0 Quaternius wolf's walk,
-                  tools/data/wolf_walk.json from ExtractWolfGait.py) under a
-                  hunched torso that claws forward, head low and thrusting
-  Chimera_Attack  1.2 s: it dips, rears onto its hind legs with the petals
-                  flaring open, and slams down arms first
-  Chimera_Pain    0.7 s: a jolt back, the petals snapping shut, an overshoot
+It moves like a predator, not a horse: it never stands up on straight legs. It
+holds low on bent, loaded legs (the hind legs folded at the hock like a big
+cat's), shoulders under its haunches, the human torso thrown out over its
+forelegs with the arms hanging to claw at the floor, and the flower-mouth
+aimed at what it watches. Every foot that is on the ground is solved onto it
+(a two-bone solve to the hock plus the pastern at a set angle), so nothing
+skates or floats.
+
+  Chimera_Idle    2.5 s loop: crouched and still but for the breathing, the
+                  maw held on its prey and jerking to a sound, the tail
+                  lashing, the haunches shifting as it loads for a spring
+  Chimera_Walk    1.25 s loop: a low stalking prowl, the feet planted for the
+                  1.745 m the game moves it each cycle (gaitPerMetre 3.6), the
+                  arms reaching ahead and dragging back like a second pair of
+                  forelegs, the head held level and steady while the body rolls
+  Chimera_Attack  1.2 s: it coils, springs, lands on its prey arms first at
+                  .58 of the clip (the game's contact time), bites and worries
+                  it, and backs into its crouch
+  Chimera_Pain    0.7 s: a recoil back onto its haunches, the petals snapping
+                  shut, a hiss forward
   Chimera_Death   1.8 s: it rears in agony, buckles at the front knees and
                   rolls onto its side
 
-Blender axes: Z up, the creature faces -Y. For a bone hanging down (legs,
-arms) a negative X rotation swings it forward; for the torso, positive leans
-it forward; for the body, negative lifts the nose.
+Blender axes: Z up, the creature faces -Y. Every bone here turns about X only
+in the side view, with one convention: a positive X turn tips an upward bone
+(torso, head) forward and swings a hanging bone (legs, arms) back; for the
+body, positive drops the nose.
 """
-import bpy, sys, math, json
-from pathlib import Path
+import bpy, sys, math
 from mathutils import Vector
 
 glb, out = sys.argv[sys.argv.index('--') + 1], sys.argv[sys.argv.index('--') + 2]
@@ -38,14 +51,18 @@ for o in parts.values():
 bpy.context.view_layer.objects.active = next(iter(parts.values()))
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 
-LEG_TOP, KNEE, ELBOW = .68, .36, 1.62
+LEG_TOP, KNEE, FOOT, ELBOW = .68, .36, .14, 1.62
 LEGS = {'FL': (.22, .30), 'FR': (-.22, .30), 'BL': (.27, 1.35), 'BR': (-.27, 1.35)}
+HIP_Z = .75
+L1, L2, L3 = HIP_Z - KNEE, KNEE - FOOT, FOOT
+PIVOT = (.75, .95)                       # the Body bone's head (y, z): the body pitches about it
 BONES = {'Root': ((0, .70, 0), (0, 1.0, 0), None), 'Body': ((0, .75, .95), (0, 1.25, .95), 'Root')}
 for leg, (x, y) in LEGS.items():
-    BONES['Thigh' + leg] = ((x, y, .75), (x, y, KNEE), 'Body')
-    BONES['Shin' + leg] = ((x, y, KNEE), (x, y, 0), 'Thigh' + leg)
+    BONES['Thigh' + leg] = ((x, y, HIP_Z), (x, y, KNEE), 'Body')
+    BONES['Shin' + leg] = ((x, y, KNEE), (x, y, FOOT), 'Thigh' + leg)
+    BONES['Foot' + leg] = ((x, y, FOOT), (x, y, 0), 'Shin' + leg)
 BONES.update({
-    # The torso pivots on the ring where it meets the horse body (z 1.55-1.6),
+    # The torso pivots on the ring where it meets the lower body (z 1.55-1.6),
     # so leaning never lifts its base off the barrel.
     'Torso': ((0, .1, 1.57), (0, .05, 2.0), 'Body'),
     'UpperArmL': ((.24, .05, 2.0), (.28, .03, ELBOW), 'Torso'), 'ForearmL': ((.28, .03, ELBOW), (.30, 0, 1.2), 'UpperArmL'),
@@ -80,7 +97,7 @@ def bone_for(part, p):
         return 'Torso'
     if part == 'LowerBody' and p.z < LEG_TOP:
         leg = ('F' if p.y < .7 else 'B') + ('L' if p.x > 0 else 'R')
-        return ('Thigh' if p.z >= KNEE else 'Shin') + leg
+        return ('Thigh' if p.z >= KNEE else 'Shin' if p.z >= FOOT else 'Foot') + leg
     return 'Body'
 
 WAIST = (1.45, 1.75)
@@ -118,7 +135,7 @@ def put(action, frame, pose):
             pb.keyframe_insert(path, frame=frame)
 
 clips = {}
-def sampled(name, frames, pose_at, step=2):
+def sampled(name, frames, pose_at, step=1):
     """Keys pose_at(t) for t in [0,1] every `step` frames (and the last)."""
     action = bpy.data.actions.new(name); action.use_fake_user = True
     keys = list(range(1, frames + 1, step))
@@ -134,126 +151,196 @@ def ease(w):
     w = min(1, max(0, w)); return w * w * (3 - 2 * w)
 def ramp(t, t0, t1):
     return ease((t - t0) / max(1e-6, t1 - t0))
-BUD = .55
-S = math.sin; TAU = 2 * math.pi
-
 def snap(t, at, hold):
     """A twitch: 0 until `at`, snaps to 1 in a frame or two, holds, eases back."""
     return ramp(t, at, at + .03) * (1 - ramp(t, at + hold, at + hold + .12))
+S = math.sin; C = math.cos; TAU = 2 * math.pi
+BUD = .55
 
+# ---- the legs: planted feet ------------------------------------------------------------------
+# Side-view angles: a segment at absolute angle a runs from its top by L*(sin a, -cos a) in (y, z),
+# the same sense as a bone's X turn (positive swings a hanging bone's tip back, toward +y).
+
+def hip(leg, root, pitch):
+    """Where a leg's hip is once the root has moved by root (dy, dz) and the body pitched."""
+    ry, rz = root
+    y0 = LEGS[leg][1]
+    dy, dz = y0 - PIVOT[0], HIP_Z - PIVOT[1]
+    return (PIVOT[0] + dy * C(pitch) - dz * S(pitch) + ry, PIVOT[1] + dy * S(pitch) + dz * C(pitch) + rz)
+
+# The pastern's angle off vertical: the hind feet stand on their toes with the hock behind
+# (a cat's), the forefeet on a short wrist, paw a little ahead of it.
+PASTERN = {'F': -.18, 'B': -.42}
+# Which way the first joint bends: the hind stifle forward, the fore elbow back.
+BEND = {'F': -1, 'B': 1}
+
+def solve(leg, root, pitch, foot):
+    """Thigh, shin and foot turns that put the leg's toe at foot (y, z)."""
+    hy, hz = hip(leg, root, pitch)
+    a3 = PASTERN[leg[0]]
+    ay, az = foot[0] - L3 * S(a3), foot[1] + L3 * C(a3)            # the hock / wrist
+    vy, vz = ay - hy, az - hz
+    d = min(max(math.hypot(vy, vz), abs(L1 - L2) + 1e-3), L1 + L2 - 1e-3)
+    alpha = math.atan2(vy, -vz)                                     # the hip-to-hock line's angle
+    beta = math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))
+    a1 = alpha - BEND[leg[0]] * beta
+    ky, kz = hy + L1 * S(a1), hz - L1 * C(a1)
+    a2 = math.atan2(ay - ky, -(az - kz))
+    return {'Thigh' + leg: {'rot': (a1 - pitch, 0, 0)}, 'Shin' + leg: {'rot': (a2 - a1, 0, 0)},
+            'Foot' + leg: {'rot': (a3 - a2, 0, 0)}}
+
+# The crouch every clip comes from: the barrel dropped, the nose down so the shoulders sit under
+# the haunches, the paws set a little wide of the hips front and back.
+CROUCH = {'root': (0., -.2), 'pitch': .14, 'torso': .95, 'head': .05, 'yaw': 0., 'roll': 0.}
+STANCE = {'FL': -.02, 'FR': .04, 'BL': 1.5, 'BR': 1.44}
+
+def body(p, feet, extra=None):
+    """A whole pose from body parameters p and each foot's (y, z), the arms, head, petals and
+    tail from p as well; extra overrides bones last."""
+    root, pitch, torso = p['root'], p['pitch'], p['torso']
+    pose = {'Root': {'loc': (0, root[0], root[1])},
+            'Body': {'rot': (pitch, p.get('roll', 0.), p.get('yaw', 0.))},
+            'Torso': {'rot': (torso - pitch * .5, p.get('torso_roll', 0.), p.get('torso_yaw', 0.))},
+            'Head': {'rot': (p.get('head', 0.), p.get('cock', 0.), p.get('look', 0.))},
+            'Petals': {'scale': p.get('petals', BUD)},
+            'Tail': {'rot': (p.get('tail_lift', .15), 0, p.get('tail', 0.))}}
+    # The arms hang toward the floor ahead of the forefeet: absolute angles, so a torso that
+    # pitches does not throw them back behind it.
+    lean = pitch + torso - pitch * .5
+    for side, reach in (('L', p.get('reachL', 0.)), ('R', p.get('reachR', 0.))):
+        spread = p.get('spread', .12) * (1 if side == 'L' else -1)
+        upper = p.get('arm', -.35) - .55 * reach
+        fore = upper + p.get('elbow', -.45) + .5 * reach
+        pose['UpperArm' + side] = {'rot': (upper - lean, 0, spread)}
+        pose['Forearm' + side] = {'rot': (fore - upper, 0, 0)}
+    for leg, foot in feet.items():
+        pose.update(solve(leg, root, pitch, foot))
+    for bone, q in (extra or {}).items():
+        pose[bone] = q
+    return pose
+
+def planted(p, lift=None):
+    lift = lift or {}
+    return {leg: (STANCE[leg] + lift.get(leg, (0, 0))[0], lift.get(leg, (0, 0))[1]) for leg in LEGS}
+
+def with_(p, **kw):
+    q = dict(p); q.update(kw); return q
+
+# ---- Idle: crouched, watching -------------------------------------------------------------
 def idle(t):
     a = TAU * t
-    breath = S(2 * a) * .5 + .5  # two heaving breaths a loop
-    # The head does not look round smoothly: it jerks to a bearing, holds, jerks on.
-    look = .45 * snap(t, .12, .22) - .55 * snap(t, .52, .2) + .2 * snap(t, .83, .06)
-    cock = .3 * snap(t, .15, .18) - .25 * snap(t, .55, .16)
-    paw = max(0, S(TAU * ramp(t, .62, .9))) if .62 < t < .9 else 0
-    return {'Root': {'loc': (0, 0, .02 * breath)},
-            'Body': {'rot': (.03 * breath, 0, .02 * S(a))},
-            'Torso': {'rot': (.32 + .07 * breath, 0, .05 * S(a + 1))},
-            'Head': {'rot': (.18 - .1 * breath + .12 * snap(t, .4, .05), cock, look)},
-            'Petals': {'scale': BUD + .08 * breath + .25 * snap(t, .4, .05) + .03 * S(13 * a)},
-            'UpperArmL': {'rot': (-.35 + .06 * breath, 0, .12)}, 'UpperArmR': {'rot': (-.3 + .06 * S(2 * a + .7), 0, -.12)},
-            'ForearmL': {'rot': (-.55 - .25 * snap(t, .3, .1), 0, 0)}, 'ForearmR': {'rot': (-.5 - .2 * snap(t, .7, .08), 0, 0)},
-            'ThighFR': {'rot': (-.55 * paw, 0, 0)}, 'ShinFR': {'rot': (.9 * paw, 0, 0)},
-            'Tail': {'rot': (.15, 0, .5 * S(a) * .5 + .25 * S(3 * a))}}
-sampled('Chimera_Idle', 75, idle, step=1)
+    breath = S(2 * a) * .5 + .5                                  # two slow heaves a loop
+    # The maw stays on its prey; a sound jerks it to a bearing, it holds, it snaps back.
+    look = .4 * snap(t, .14, .2) - .5 * snap(t, .55, .18) + .18 * snap(t, .84, .05)
+    cock = .28 * snap(t, .16, .16) - .22 * snap(t, .57, .14)
+    # Loading for a spring: the haunches rise and shift side to side, a cat's wiggle.
+    load = ramp(t, .3, .42) * (1 - ramp(t, .62, .8))
+    wiggle = .07 * S(TAU * 3 * t) * load
+    p = with_(CROUCH, root=(0, -.2 + .015 * breath - .03 * load), pitch=.14 + .05 * load,
+              torso=.95 + .05 * breath, head=.05 - .06 * breath + .1 * snap(t, .4, .05),
+              look=look, cock=cock, yaw=wiggle * .6, roll=wiggle,
+              petals=BUD + .1 * breath + .3 * snap(t, .4, .05) + .03 * S(13 * a),
+              tail=.6 * S(a) + .25 * S(3 * a + .4), tail_lift=.25 + .1 * S(2 * a),
+              reachL=.15 * snap(t, .3, .1), reachR=.12 * snap(t, .72, .08), arm=-.3 + .04 * breath)
+    return body(p, planted(p))
+sampled('Chimera_Idle', 75, idle)
 
-WOLF = json.load(open(Path(__file__).resolve().parent / 'data' / 'wolf_walk.json'))['frames']
-def wolf(t, key):
-    """The wolf's swing for `key` at loop phase t, interpolated between frames."""
-    f = (t % 1) * len(WOLF); i = int(f) % len(WOLF); w = f - int(f)
-    return mix(WOLF[i][key], WOLF[(i + 1) % len(WOLF)][key], w)
+# ---- Walk: a low stalking prowl, feet planted -------------------------------------------------
+CYCLE = 2 * math.pi / 3.6          # metres the game moves it per walk cycle (gaitPerMetre 3.6)
+DUTY = .7                          # a slow, deliberate gait: each foot is down 70% of the cycle
+STRIDE = DUTY * CYCLE              # how far a planted foot slides back under the body per step
+# A lateral-sequence walk, the way a cat or a dog stalks: hind left, fore left, hind right, fore right.
+PHASE = {'BL': 0., 'FL': .25, 'BR': .5, 'FR': .75}
+
+def foot_on_cycle(leg, t):
+    """(dy, dz) of a foot about its stance spot at walk phase t: back along the floor while down
+    (the body moving over it), then lifted and carried forward low, the hind feet higher."""
+    u = (t - PHASE[leg]) % 1
+    if u < DUTY:
+        return (-STRIDE * .5 + STRIDE * (u / DUTY), 0.)     # -y is forward: it lands ahead, ends behind
+    s = (u - DUTY) / (1 - DUTY)
+    w = ease(s)
+    return (STRIDE * .5 - STRIDE * w, (.16 if leg[0] == 'B' else .12) * S(math.pi * s))
 
 def walk(t):
-    pose = {}
-    # Legs from the wolf: a negative X swings a hanging bone's tip forward, and
-    # the hind legs are scaled down to the horse-length legs they now drive.
-    for leg, scale in (('FL', 1.0), ('FR', 1.0), ('BL', .8), ('BR', .8)):
-        pose['Thigh' + leg] = {'rot': (-scale * wolf(t, 'Thigh' + leg), 0, 0)}
-        pose['Shin' + leg] = {'rot': (-scale * wolf(t, 'Shin' + leg), 0, 0)}
     a = TAU * t
-    # Weight drops onto each forefoot: a hard double bob and a pitching back.
-    fall = abs(S(2 * a + .4)) ** .6
-    pose['Root'] = {'loc': (0, 0, .07 * fall - .05)}
-    pose['Body'] = {'rot': (.06 * S(2 * a + 1.1), 0, .06 * S(a))}
-    # The human torso rides hunched over the forelegs, swaying, clawing ahead
-    # of itself in a fast reach and a slow drag.
-    pose['Torso'] = {'rot': (.5 + .08 * S(2 * a + .6), .08 * S(a + .3), -.1 * S(a))}
-    reachL = ramp(t % 1, 0, .2) * (1 - ramp(t % 1, .2, .75))
-    reachR = ramp((t + .5) % 1, 0, .2) * (1 - ramp((t + .5) % 1, .2, .75))
-    pose['UpperArmL'] = {'rot': (-.55 - .75 * reachL, 0, .1)}; pose['ForearmL'] = {'rot': (-.7 + .45 * reachL, 0, 0)}
-    pose['UpperArmR'] = {'rot': (-.55 - .75 * reachR, 0, -.1)}; pose['ForearmR'] = {'rot': (-.7 + .45 * reachR, 0, 0)}
-    # Head low and thrust out, snapping side to side once a stride.
-    pose['Head'] = {'rot': (.35 + .1 * S(2 * a + 2.2), .12 * S(a), .2 * (snap(t, .3, .08) - snap(t, .78, .06)))}
-    pose['Petals'] = {'scale': BUD + .18 * fall + .06 * S(11 * a)}
-    pose['Tail'] = {'rot': (.1 + .1 * S(2 * a), 0, .45 * S(a + .8))}
-    return pose
-sampled('Chimera_Walk', 38, walk, step=1)
+    feet = {leg: (STANCE[leg] + foot_on_cycle(leg, t)[0], foot_on_cycle(leg, t)[1]) for leg in LEGS}
+    # The body rolls over each forefoot as it takes the weight and sinks a little at each footfall.
+    sink = .025 * abs(S(2 * a))
+    reachL = ramp((t + .1) % 1, 0, .25) * (1 - ramp((t + .1) % 1, .3, .8))
+    reachR = ramp((t + .6) % 1, 0, .25) * (1 - ramp((t + .6) % 1, .3, .8))
+    p = with_(CROUCH, root=(0, -.21 - sink), pitch=.15 + .02 * S(2 * a + .8), roll=.05 * S(a + .3),
+              yaw=.04 * S(a), torso=1.0 + .04 * S(2 * a), torso_roll=-.06 * S(a + .3),
+              # the head stays level and dead ahead while everything under it rolls
+              head=.02 - .02 * S(2 * a + .8), cock=-.05 * S(a + .3), look=-.04 * S(a),
+              petals=BUD + .1 * abs(S(2 * a + .4)), tail=.35 * S(a + 1.2), tail_lift=.08 + .05 * S(2 * a),
+              reachL=reachL, reachR=reachR, arm=-.2, elbow=-.55)
+    return body(p, feet)
+sampled('Chimera_Walk', 38, walk)
 
-def blend(a, b, w):
-    """Pose a toward pose b by w, bone by bone (missing bones are at rest)."""
-    out = {}
-    for bone in set(a) | set(b):
-        pa, pb = a.get(bone, {}), b.get(bone, {})
-        q = {}
-        for key, rest in (('rot', (0, 0, 0)), ('loc', (0, 0, 0))):
-            x, y = pa.get(key, rest), pb.get(key, rest)
-            q[key] = tuple(mix(i, j, w) for i, j in zip(x, y))
-        q['scale'] = mix(pa.get('scale', BUD if bone == 'Petals' else 1.0), pb.get('scale', BUD if bone == 'Petals' else 1.0), w)
-        out[bone] = q
-    return out
-
-REST = {'Petals': {'scale': BUD}}
-DIP = {'Root': {'loc': (0, 0, -.05)}, 'Body': {'rot': (.08, 0, 0)}, 'Torso': {'rot': (.2, 0, 0)}, 'Head': {'rot': (.3, 0, 0)},
-       'UpperArmL': {'rot': (.25, 0, .1)}, 'UpperArmR': {'rot': (.25, 0, -.1)}, 'ThighFL': {'rot': (.1, 0, 0)}, 'ThighFR': {'rot': (.1, 0, 0)},
-       'Petals': {'scale': .45}, 'Tail': {'rot': (.2, 0, 0)}}
-REAR = {'Root': {'loc': (0, .12, .28)}, 'Body': {'rot': (-.5, 0, 0)},
-        'ThighFL': {'rot': (-1.0, 0, 0)}, 'ShinFL': {'rot': (1.3, 0, 0)}, 'ThighFR': {'rot': (-.8, 0, 0)}, 'ShinFR': {'rot': (1.15, 0, 0)},
-        'ThighBL': {'rot': (.4, 0, 0)}, 'ShinBL': {'rot': (-.15, 0, 0)}, 'ThighBR': {'rot': (.4, 0, 0)}, 'ShinBR': {'rot': (-.15, 0, 0)},
-        'Torso': {'rot': (-.35, 0, 0)}, 'Head': {'rot': (-.4, 0, 0)},
-        'UpperArmL': {'rot': (-1.7, 0, .25)}, 'UpperArmR': {'rot': (-1.7, 0, -.25)}, 'ForearmL': {'rot': (-.7, 0, 0)}, 'ForearmR': {'rot': (-.7, 0, 0)},
-        'Petals': {'scale': 1.18}, 'Tail': {'rot': (-.5, 0, 0)}}
-SLAM = {'Root': {'loc': (0, 0, -.06)}, 'Body': {'rot': (.18, 0, 0)},
-        'ThighFL': {'rot': (.3, 0, 0)}, 'ThighFR': {'rot': (.25, 0, 0)}, 'ThighBL': {'rot': (-.1, 0, 0)}, 'ThighBR': {'rot': (-.1, 0, 0)},
-        'Torso': {'rot': (.4, 0, 0)}, 'Head': {'rot': (.35, 0, 0)},
-        'UpperArmL': {'rot': (-.6, 0, .1)}, 'UpperArmR': {'rot': (-.6, 0, -.1)}, 'ForearmL': {'rot': (-.2, 0, 0)}, 'ForearmR': {'rot': (-.2, 0, 0)},
-        'Petals': {'scale': 1.2}, 'Tail': {'rot': (.3, 0, 0)}}
+# ---- Attack: coil, spring, land on it, bite and worry ------------------------------------------
 def attack(t):
-    pose = blend(REST, DIP, ramp(t, 0, .18))
-    pose = blend(pose, REAR, ramp(t, .15, .45))
-    pose = blend(pose, SLAM, ramp(t, .45, .58))
-    return blend(pose, {'Petals': {'scale': .8}}, ramp(t, .65, 1))
+    coil = ramp(t, 0, .3) * (1 - ramp(t, .32, .4))
+    air = ramp(t, .32, .46) * (1 - ramp(t, .46, .58))
+    land = ramp(t, .5, .58) * (1 - ramp(t, .8, 1))
+    back = ramp(t, .78, 1)
+    reach = ramp(t, .32, .46)                                       # how far forward it has thrown itself
+    fwd = -1.0 * reach * (1 - back)                                 # -y is forward
+    worry = (snap(t, .62, .04) - snap(t, .7, .04) + snap(t, .76, .03)) * (1 - back)
+    p = with_(CROUCH,
+              root=(fwd + .12 * coil, -.2 - .14 * coil + .22 * air - .06 * land),
+              pitch=.14 + .12 * coil - .12 * air + .22 * land,
+              torso=.95 - .1 * coil - .02 * air + .35 * land,
+              head=.05 + .2 * coil - .2 * air + .25 * land + .15 * worry,
+              look=.35 * worry, cock=-.2 * worry,
+              petals=mix(mix(mix(BUD, .3, coil), 1.45, air), .5, land) if t < .8 else mix(.5, BUD, back),
+              tail=.1 * S(30 * t) * coil, tail_lift=.15 + .4 * coil - .2 * air,
+              spread=.12 + .55 * air - .3 * land, arm=-.35 + .45 * coil - 1.1 * air + .55 * land,
+              elbow=-.45 - .4 * coil + .3 * air - .5 * land)
+    # The hind feet stay where it coiled until it leaves them; the forefeet leave the floor in the
+    # spring and come down ahead of it on landing.
+    feet = {}
+    for leg in LEGS:
+        y0 = STANCE[leg]
+        if leg[0] == 'B':
+            push = ramp(t, .34, .46)                                 # the hind feet trail as it leaves
+            feet[leg] = (y0 + fwd * (1 - push) + .1 * coil, .18 * air)
+        else:
+            feet[leg] = (y0 + fwd - .18 * air, .45 * air)
+    return body(p, feet)
 sampled('Chimera_Attack', 36, attack)
 
+# ---- Pain: recoil onto the haunches, a hiss ---------------------------------------------------
 def pain(t):
     hit = ramp(t, 0, .12) * (1 - ramp(t, .12, .55)); over = ramp(t, .4, .6) * (1 - ramp(t, .6, 1))
-    return {'Body': {'rot': (0, 0, .12 * hit)}, 'Torso': {'rot': (-.4 * hit + .12 * over, 0, .15 * hit)},
-            'Head': {'rot': (-.55 * hit + .15 * over, 0, -.35 * hit)},
-            'Petals': {'scale': mix(BUD, .3, hit)},
-            'UpperArmL': {'rot': (-.6 * hit, 0, .2 * hit)}, 'UpperArmR': {'rot': (-.4 * hit, 0, -.25 * hit)},
-            'ForearmL': {'rot': (-.6 * hit, 0, 0)}, 'ForearmR': {'rot': (-.5 * hit, 0, 0)},
-            'ThighFL': {'rot': (.2 * hit, 0, 0)}, 'ThighFR': {'rot': (-.15 * hit, 0, 0)},
-            'Root': {'loc': (0, .06 * hit, -.03 * hit)}, 'Tail': {'rot': (.3 * hit, 0, 0)}}
-sampled('Chimera_Pain', 21, pain, step=1)
+    p = with_(CROUCH, root=(.12 * hit - .04 * over, -.2 - .06 * hit), pitch=.14 - .22 * hit + .08 * over,
+              torso=.95 - .5 * hit + .15 * over, head=.05 - .5 * hit + .2 * over, look=-.3 * hit, cock=.2 * hit,
+              petals=mix(BUD, .25, hit) + .4 * over, roll=.1 * hit, arm=-.35 - .5 * hit, elbow=-.45 - .5 * hit,
+              tail_lift=.15 + .3 * hit)
+    return body(p, planted(p))
+sampled('Chimera_Pain', 21, pain)
 
+# ---- Death: from the crouch, a rear in agony, the forelegs buckle, it rolls -------------------
 def death(t):
     agony = ramp(t, 0, .18) * (1 - ramp(t, .2, .4)); buckle = ramp(t, .25, .5); roll = ramp(t, .45, .78); limp = ramp(t, .7, 1)
-    return {
-        'Root': {'loc': (0, .1 * buckle, -.35 * buckle - .2 * roll), 'rot': (0, 1.4 * roll, 0)},
-        'Body': {'rot': (.35 * buckle - .2 * agony, 0, 0)},
-        'ThighFL': {'rot': (1.05 * buckle - .3 * roll, 0, .2 * roll)}, 'ShinFL': {'rot': (-1.7 * buckle + .9 * roll, 0, 0)},
-        'ThighFR': {'rot': (1.0 * buckle - .2 * roll, 0, 0)}, 'ShinFR': {'rot': (-1.6 * buckle + .8 * roll, 0, 0)},
-        'ThighBL': {'rot': (.25 * buckle + .4 * roll, 0, .25 * roll)}, 'ShinBL': {'rot': (.3 * roll, 0, 0)},
-        'ThighBR': {'rot': (.2 * buckle - .3 * roll, 0, 0)}, 'ShinBR': {'rot': (.5 * roll, 0, 0)},
-        'Torso': {'rot': (-.45 * agony + .55 * buckle + .2 * limp, 0, .35 * roll)},
-        'Head': {'rot': (-.7 * agony + .45 * buckle + .2 * limp, 0, .5 * roll)},
-        'Petals': {'scale': mix(BUD, 1.2, agony) * (1 - buckle) + 1.0 * buckle},
-        'UpperArmL': {'rot': (-1.4 * agony + .6 * buckle, 0, .5 * roll)}, 'UpperArmR': {'rot': (-1.2 * agony + .4 * buckle, 0, -.3 * roll)},
-        'ForearmL': {'rot': (-.8 * agony - .2 * limp, 0, 0)}, 'ForearmR': {'rot': (-.6 * agony - .3 * limp, 0, 0)},
-        'Tail': {'rot': (-.4 * agony + .5 * roll, 0, 0)},
-    }
-sampled('Chimera_Death', 54, death)
+    p = with_(CROUCH, root=(.05 * buckle, -.2 + .15 * agony - .25 * buckle - .15 * roll),
+              pitch=.14 - .45 * agony + .4 * buckle, torso=.95 - .7 * agony + .1 * buckle + .2 * limp,
+              head=.05 - .7 * agony + .3 * buckle + .2 * limp, petals=mix(BUD, 1.25, agony) * (1 - buckle) + 1.0 * buckle,
+              arm=-.35 - 1.2 * agony + .6 * buckle, elbow=-.45 - .5 * agony - .3 * limp, tail_lift=.15 - .5 * agony + .4 * roll)
+    feet = {leg: (STANCE[leg] - (.25 * agony if leg[0] == 'F' else 0), (.35 * agony if leg[0] == 'F' else 0)) for leg in LEGS}
+    pose = body(p, feet)
+    # Once it goes over, the legs give up the floor: fold them and let them fall with the roll.
+    for leg in LEGS:
+        fold = buckle if leg[0] == 'F' else roll
+        for bone, k in (('Thigh', .6), ('Shin', -1.0), ('Foot', .5)):
+            q = pose[bone + leg]['rot']
+            pose[bone + leg] = {'rot': (mix(q[0], q[0] + k, fold), 0, .25 * roll * (1 if leg.endswith('L') else -1))}
+    pose['Root']['rot'] = (0, 1.4 * roll, 0)
+    pose['Body']['rot'] = (pose['Body']['rot'][0], 0, 0)
+    pose['Torso']['rot'] = (pose['Torso']['rot'][0], 0, .35 * roll)
+    pose['Head']['rot'] = (pose['Head']['rot'][0], 0, .5 * roll)
+    return pose
+sampled('Chimera_Death', 54, death, step=2)
 
 ad = rig.animation_data
 ad.action = None
@@ -266,8 +353,30 @@ for name, (action, first, last) in clips.items():
 for pb in rig.pose.bones:
     pb.rotation_euler, pb.location, pb.scale = (0, 0, 0), (0, 0, 0), (1, 1, 1)
 
-bpy.ops.export_scene.fbx(filepath=out, use_selection=False, object_types={'ARMATURE', 'MESH'},
-                         add_leaf_bones=False, bake_anim=True, bake_anim_use_all_actions=False,
-                         bake_anim_use_nla_strips=True, bake_anim_force_startend_keying=True,
-                         path_mode='COPY', embed_textures=False)
-print('CHIMERA exported', out, 'clips', list(clips))
+if '--preview' in sys.argv:
+    # side-view stills of every clip for checking poses before a bake: OUT is a folder
+    import os
+    os.makedirs(out, exist_ok=True)
+    cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); bpy.context.scene.collection.objects.link(cam)
+    cam.data.type = 'ORTHO'; cam.data.ortho_scale = 4.6
+    cam.location = (6, .2, 1.3); cam.rotation_euler = (math.radians(90), 0, math.radians(90))
+    sc = bpy.context.scene; sc.camera = cam
+    sc.render.engine = 'BLENDER_WORKBENCH'; sc.display.shading.color_type = 'TEXTURE'; sc.display.shading.light = 'STUDIO'
+    sc.render.resolution_x, sc.render.resolution_y = 300, 300
+    floor = bpy.data.meshes.new('floor'); floor.from_pydata([(-2, -3, 0), (2, -3, 0), (2, 4, 0), (-2, 4, 0)], [], [(0, 1, 2, 3)])
+    bpy.context.scene.collection.objects.link(bpy.data.objects.new('floor', floor))
+    for track in ad.nla_tracks:
+        track.mute = True
+    for name, (action, first, last) in clips.items():
+        rig.animation_data.action = action
+        for i, q in enumerate((0, .25, .45, .58, .75)):
+            sc.frame_set(int(first + q * (last - first)))
+            sc.render.filepath = os.path.join(out, '%s_%d.png' % (name, i))
+            bpy.ops.render.render(write_still=True)
+    print('CHIMERA preview', out)
+else:
+    bpy.ops.export_scene.fbx(filepath=out, use_selection=False, object_types={'ARMATURE', 'MESH'},
+                             add_leaf_bones=False, bake_anim=True, bake_anim_use_all_actions=False,
+                             bake_anim_use_nla_strips=True, bake_anim_force_startend_keying=True,
+                             path_mode='COPY', embed_textures=False)
+    print('CHIMERA exported', out, 'clips', list(clips))

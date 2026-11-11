@@ -544,7 +544,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>6&&!f[6].empty())spawn.scale=number(f,6,"creature scale");
    if(f.size()>7&&!f[7].empty())spawn.health=number(f,7,"creature health");
    if(f.size()>8&&!f[8].empty())spawn.wakeState=stateField(f[8]);
-   if(f.size()>9||spawn.scale<.5f||spawn.scale>2||spawn.health<0||spawn.health>5000)throw std::runtime_error("creature parameters out of range");
+   // A hunter name makes it a recurring animal (it cannot die; it runs, is
+   // gone, and spawns sharing the name are it coming back); prey names an
+   // actor on this map (track index) it comes out for first.
+   if(f.size()>9&&!f[9].empty())spawn.hunter=stateField(f[9]);
+   if(f.size()>10&&!f[10].empty())spawn.prey=integer(f,10,"creature prey");
+   if(f.size()>11||spawn.scale<.5f||spawn.scale>2||spawn.health<0||spawn.health>5000||spawn.prey<-1||spawn.prey>4096)throw std::runtime_error("creature parameters out of range");
    map->creatureSpawns.push_back(spawn);
   }else if(tag=="PICKUP"){
    if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::HandgunAmmo))throw std::runtime_error("invalid pickup kind");

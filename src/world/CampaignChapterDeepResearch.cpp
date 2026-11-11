@@ -862,6 +862,12 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{6.4f,16.4f},pit,1,0});
  m.creatureSpawns.push_back({CreatureKind::Transformed,{16.8f,7.6f},pit,1,0});
  m.creatureSpawns.push_back({CreatureKind::Mutant,{6.6f,9.6f},pit,1,0});
+ // R-117's last showing in Chapter 2: the feed it came up with at the 900 level stops, and it comes up
+ // out of the slurry mains between the pumps at the pit's south face, into the red. It is not killed
+ // here (hunter r117): it runs, or follows the player out, and is left for what is under the mine.
+ {ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Chimera;a.position={11.6f,16.3f};a.z=pit;a.amount=8;a.id=stateId("r117");
+  ScriptAction g;g.type=ScriptAction::Type::PlaySound;g.sound=Sound::OneMonsterGrowl;g.amount=1.f;
+  drEvent(m,"dr_core_r117",0,0,24,24,"core_shutdown",{a,g});}
  // --- The machine's body: what the concrete shell wears ------------------------------------------
  // a yellow base course, steel collars under both ring gantries, a frame round every lens slot,
  // conduit up the shell between the faces, and two drive housings bolted to its foot

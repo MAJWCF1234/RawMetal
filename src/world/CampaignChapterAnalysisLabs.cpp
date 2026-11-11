@@ -137,7 +137,6 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  wall(m,1.f,3.8f,1.16f,4.4f,f+1.42f,f+1.45f,20);for(float y:{3.85f,4.37f})wall(m,1.f,y,1.16f,y+.02f,f+1.32f,f+1.42f,8);   // the shelf over the sink
  for(auto [y,yaw]:{std::pair{3.95f,.3f},{4.05f,1.1f},{4.25f,2.f}})kit::prop(m,model::med_pill_bottle,1.08f,y,f+1.45f,.07f,.03f,.13f,yaw);
  anFix(m,model::med_floor_drain,3.4f,4.15f,f,.5f,.5f,.01f,0,false);
- anFix(m,model::med_notice_board,1.035f,2.75f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anFix(m,model::med_wall_clock,8.99f,4.25f,f+2.05f,.24f,.02f,.23f,anW,false);
  wall(m,5.6f,4.74f,8.4f,4.8f,f+2.38f,f+2.42f,20);                                           // the suit rail, high on the wall
  for(float x:{5.95f,6.65f,7.35f,8.05f}){wall(m,x-.012f,4.5f,x+.012f,4.8f,f+2.36f,f+2.39f,8);m.structures.back().solid=false;}   // its four pegs
@@ -226,7 +225,6 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  anModel(m,model::lab_specimen_cabinet,1.37f,15.2f,f,anE,true);wall(m,1.f,14.53f,1.74f,15.87f,f+2.19f,roof,30);
  // The south wall: crash rails, the boards, the safety shower and eyewash, the extinguishers.
  crash(1.8f,5.5f,15.96f,16.f);crash(6.9f,7.2f,15.96f,16.f);crash(8.f,10.f,15.96f,16.f);crash(14.f,16.5f,15.96f,16.f);crash(17.9f,20.7f,15.96f,16.f);
- anFix(m,model::med_notice_board,3.4f,15.965f,f+1.25f,1.2f,.07f,.9f,anN,false);
  anFix(m,model::med_scrub_sink,7.6f,15.73f,f,.49f,.54f,1.13f,anN,true);
  m.pipes.push_back({{7.6f,15.94f},{7.6f,15.94f},f+1.13f,.03f,f+2.25f,3});
  wall(m,7.35f,15.5f,7.85f,16.f,f+2.25f,f+2.3f,20);wall(m,7.35f,15.5f,7.85f,16.f,f+2.3f,roof,30);   // the shower's head; nobody stands on it
@@ -235,7 +233,6 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  extinguisher(m,9.6f,16.f,f,anN);
  m.lights.push_back(lbBeacon({9.6f,15.98f},f+2.3f,-kPi*.5f,.7f,"lab_chem_seal"));
  anFix(m,model::med_first_aid_box,14.75f,15.94f,f+1.3f,.367f,.12f,.349f,anN,false);
- anFix(m,model::lab_notice_board,19.25f,15.965f,f+1.25f,1.2f,.07f,.9f,anN,false);
  extinguisher(m,20.4f,16.f,f,anN);
  // The islands: two pairs either side of the aisle from the line to the lockdown.
  lbIsland(m,3.4f,10.2f,8.1f,f,roof,true);lbIsland(m,3.4f,10.2f,12.1f,f,roof,false);
@@ -486,7 +483,6 @@ std::shared_ptr<const Map> makeInstrumentation(){
  m.lights.push_back(lbTube(20.f,15.9f,roof,.42f,4.5f,4200,.02f));
  taped(m,{22.89f,15.6f},f+1.5f,anW,Readable::Note,"STAND LOG / NIGHT","STAND 3 TRIPPED 01:52 ON CELL 0451. RATED 40. GAVE 212 BEFORE THE BREAKER WENT. READS FULL.",
   "NO CELL HAS EVER READ LOWER AFTER A TEST. WE HAVE STOPPED WRITING DOWN WHERE THE EXTRA COMES FROM.");
- anFix(m,model::med_notice_board,21.f,14.835f,f+1.25f,1.2f,.07f,.9f,anS,false);
  anFix(m,model::pwr_fire_cabinet,22.79f,16.5f,f+1.1f,.252f,.203f,.559f,anW,false);
  crash(19.f,20.3f,14.8f,14.84f);crash(21.7f,22.9f,16.96f,17.f);
  // the locker room (southeast, off the back corridor): somewhere to stand still
@@ -502,7 +498,6 @@ std::shared_ptr<const Map> makeInstrumentation(){
  kit::prop(m,model::mug,20.2f,19.5f,f+.78f,.09f,.09f,.1f,.4f);kit::prop(m,model::office_paper_stack,20.7f,19.65f,f+.78f,.33f,.44f,.03f,1.1f);
  {int n=0;for(auto [x,h]:{std::pair{17.45f,.95f},{18.f,1.f},{20.55f,.9f},{21.1f,1.05f},{21.65f,.95f}}){wall(m,x,17.2f,x+.4f,17.24f,f+h,f+1.62f,n++%2?23:39);wall(m,x+.04f,17.2f,x+.36f,17.25f,f+1.62f,f+1.7f,8);wall(m,x+.18f,17.2f,x+.22f,17.27f,f+1.7f,f+1.75f,20);}}   // coats on their pegs, collars up
  kit::prop(m,model::mine_hard_hat,17.55f,20.95f,f,.279f,.351f,.153f,.6f);kit::prop(m,model::item_dosimeter,19.9f,21.5f,f+.51f,.31f,.146f,.066f,2.f);
- anFix(m,model::med_notice_board,17.235f,20.1f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anFix(m,model::med_wall_clock,17.21f,21.9f,f+2.05f,.24f,.02f,.23f,anE,false);
  m.lights.push_back(lbTube(20.f,20.f,roof,.55f,5.5f,3100,0));
  m.pickupSpawns.push_back({{22.3f,18.f},PickupKind::Health,f});
@@ -634,11 +629,9 @@ std::shared_ptr<const Map> makeInstrumentation(){
  // the south wall over the crates: the floor's own distribution boards, the test schedule
  for(float x:{2.35f,2.75f}){anFix(m,model::pwr_breaker_panel,x,16.949f,f+1.4f,.183f,.102f,.457f,anN,false);m.pipes.push_back({{x,16.95f},{x,16.95f},f+1.86f,.02f,roof,8});}
  anFix(m,model::pwr_ammeter_box,3.25f,16.949f,f+1.45f,.229f,.102f,.366f,anN,false);
- anFix(m,model::lab_notice_board,4.9f,16.965f,f+1.25f,1.2f,.07f,.9f,anN,false);
  // the walls: rails, boards, the clock, the PA, the reader at the control room's door
  crash(1.f,1.04f,2.8f,9.7f);crash(1.9f,6.f,16.96f,17.f);crash(15.7f,17.f,16.96f,17.f);crash(16.96f,17.f,1.2f,3.15f);crash(16.96f,17.f,7.05f,7.8f);
  anModel(m,model::pwr_disconnect_switch,16.93f,2.2f,f+1.2f,anW,false);m.pipes.push_back({{16.9f,2.2f},{16.9f,2.2f},f+1.75f,.025f,roof,8});   // the floor's isolator
- anFix(m,model::med_notice_board,1.035f,6.2f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anFix(m,model::lab_pa_horn,1.29f,4.4f,f+2.6f,.495f,.564f,.433f,anE,false);
  anFix(m,model::med_wall_clock,12.f,16.99f,f+2.05f,.24f,.02f,.23f,anN,false);
  anFix(m,model::med_first_aid_box,16.1f,16.94f,f+1.3f,.367f,.12f,.349f,anN,false);
@@ -667,7 +660,6 @@ std::shared_ptr<const Map> makeInstrumentation(){
  wall(m,1.f,17.2f,5.8f,23.f,f,roof,3);wall(m,10.2f,17.2f,17.f,23.f,f,roof,3);
  crash(6.f,6.04f,17.2f,23.f);crash(9.96f,10.f,17.2f,23.f);
  floorLine(m,7.94f,17.2f,8.06f,23.f,f,14);
- anFix(m,model::med_notice_board,6.035f,20.6f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anFix(m,model::med_wall_clock,9.99f,21.6f,f+2.05f,.24f,.02f,.23f,anW,false);
  shelf(m,{9.72f,18.9f},kPi*.5f,0);wall(m,9.47f,18.f,9.97f,19.8f,f+1.95f,roof,30);             // the PPE rack
  wall(m,9.945f,18.02f,9.96f,19.78f,f+.05f,f+1.9f,20);m.structures.back().solid=false;          // its pale back sheet, so what is on it shows against something

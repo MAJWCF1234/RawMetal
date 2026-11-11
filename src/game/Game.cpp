@@ -89,6 +89,10 @@ bool Game::applyEnemyDamage(Enemy&enemy,float amount,bool bloodDecal,bool closeH
  // start it again, so a stream of fire cannot hold it still.
  const bool staggering=enemy.kind==Enemy::Kind::Transformed&&enemy.painFlash>.5f;
  enemy.hp-=amount;if(!staggering)enemy.painFlash=1;m_hitFlash=1;
+ // A recurring hunter cannot be finished here: below its threshold it runs
+ // (Hunter.cpp), dropping whatever it was doing, and no wound is its last.
+ if(enemy.hunter){enemy.hp=std::max(enemy.hp,1.f);
+  if(enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;enemy.fleeTime=0;enemy.windup=0;enemy.strike=0;enemy.feeding=0;enemy.hideSet=false;if(level==m_level)enemySound(enemy,0,.95f,.78f);}}
  // A badly hurt stalker breaks off to hide before it comes back.
  if(enemy.hp>0&&creatureTraits(enemy.kind).rushSpeed>0&&enemy.hp<enemy.maxHp*.4f&&enemy.stalkMode!=Enemy::StalkMode::Retreat){enemy.stalkMode=Enemy::StalkMode::Retreat;enemy.stalkTimer=2.4f;}
  if(enemy.hp>0)return false;
@@ -134,16 +138,26 @@ void Game::crossChunkBoundary(){
  // this, changing the active chunk froze an alerted creature one metre behind
  // an invisible ownership boundary even though the terrain itself was seamless.
  std::vector<Enemy> followers;std::vector<AiTargetRef> moved;
- if(m_worldId==WorldId::Ashfall){
+ // A recurring hunter on the player's heels comes through after them in any
+ // world: it keeps its place behind the seam and walks in at the crossing
+ // (Game::hunterArrive), taking as long as the distance it had to cover.
+ const bool open=m_worldId==WorldId::Ashfall;
+ auto hunting=[&](const Enemy&e){return e.hunter&&e.alive&&e.awareness>0&&e.arrive<=0&&e.feeding<=0&&!e.wakeState&&e.stalkMode!=Enemy::StalkMode::Retreat&&length(e.pos-m_player.pos)<12.f;};
+ if(open||std::any_of(m_enemies.begin(),m_enemies.end(),hunting)){
   moved.assign(m_enemies.size(),{});std::vector<Enemy> staying;
+  const Vec2 crossing=m_player.pos+shift;
   for(size_t i=0;i<m_enemies.size();++i){auto enemy=m_enemies[i];
    auto local=enemy.pos+shift;
    float outsideX=local.x<0?-local.x:local.x>=World::Width?local.x-World::Width:0;
    float outsideY=local.y<0?-local.y:local.y>=World::Height?local.y-World::Height:0;
-   if(enemy.alive&&enemy.awareness>0&&std::max(outsideX,outsideY)<1.6f){
+   const bool hunter=!open&&hunting(enemy);
+   if(hunter||(open&&enemy.alive&&enemy.awareness>0&&std::max(outsideX,outsideY)<1.6f)){
     if(enemy.originLevel<0&&!enemy.scriptSpawned){enemy.originLevel=previous;enemy.originHome=enemy.home;}
-    enemy.pos={std::clamp(local.x,.24f,23.76f),std::clamp(local.y,.24f,23.76f)};
-    enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;moved[i]={ShotKind::Enemy,next,-1-int(followers.size())};followers.push_back(enemy);
+    if(hunter){Vec2 in=crossing.y<1?Vec2{0,1}:crossing.y>World::Height-1?Vec2{0,-1}:crossing.x<1?Vec2{1,0}:crossing.x>World::Width-1?Vec2{-1,0}:normalized(crossing-local);
+     enemy.pos=local;enemy.waypoint=crossing+in*.7f;enemy.arrive=std::clamp(length(local-enemy.waypoint)/std::max(1.f,creatureTraits(enemy.kind).speed*1.3f),.5f,8.f)+.5f;
+     enemy.lastKnown=crossing;enemy.home=enemy.waypoint;}
+    else{enemy.pos={std::clamp(local.x,.24f,23.76f),std::clamp(local.y,.24f,23.76f)};enemy.lastKnown+=shift;enemy.waypoint+=shift;enemy.home=enemy.pos;}
+    moved[i]={ShotKind::Enemy,next,-1-int(followers.size())};followers.push_back(enemy);
    }else{moved[i]={ShotKind::Enemy,previous,int(staying.size())};staying.push_back(enemy);}
   }
   if(!followers.empty())m_enemies=std::move(staying);else moved.clear();
@@ -159,7 +173,8 @@ void Game::crossChunkBoundary(){
  if(carried){held.pos+=shift;m_heldClutter=int(m_clutter.size());m_clutter.push_back(held);}
  m_clutter.insert(m_clutter.end(),following.begin(),following.end());
  int firstFollower=int(m_enemies.size());
- for(auto&enemy:followers){enemy.z=m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.homeZ=enemy.z;m_enemies.push_back(enemy);}
+ for(auto&enemy:followers){enemy.z=enemy.arrive>0?m_world.supportBelow(enemy.waypoint.x,enemy.waypoint.y,m_player.z+.25f):m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.homeZ=enemy.z;m_enemies.push_back(enemy);}
+ m_playerNoise.pos+=shift;
  for(auto&ref:moved)if(ref.index<0)ref.index=firstFollower-1-ref.index;
  if(!moved.empty())remapEnemyRefs(previous,moved);
  for(auto&event:m_sounds)if(event.spatial||std::isfinite(event.z))event.position+=shift;

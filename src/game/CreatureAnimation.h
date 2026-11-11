@@ -12,6 +12,9 @@ inline CreatureAnimationSample creatureAnimationSample(const Enemy&e,float elaps
  else if(e.strike>0)p={2,contact+(1-e.strike)*(1-contact)};
  else if(e.painFlash>0)p={3,1-e.painFlash};
  else if(e.moving)p={1,std::fmod(e.gait/(2*kPi),1.f)};
+ // Over a kill it stays down on the body, worrying it: the bite span of its
+ // attack swung back and forth.
+ if(e.alive&&e.feeding>0&&t.feedSeconds>0&&e.painFlash<=0)p={2,t.worryFrom+(t.worryTo-t.worryFrom)*(.5f-.5f*std::cos(elapsed*4.4f+e.home.y))};
  if(e.kind==Enemy::Kind::Transformed&&e.alive){
   if(e.stalkMode==Enemy::StalkMode::Rush)p={2,.15f*(1-std::clamp(e.stalkTimer/TransformedLeap,0.f,1.f))};
   else if(e.stalkMode==Enemy::StalkMode::Grab)p={2,.15f+.85f*(1-std::clamp(e.stalkTimer/TransformedHold,0.f,1.f))};

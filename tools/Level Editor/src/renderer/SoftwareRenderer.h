@@ -201,6 +201,9 @@ private:
      struct Wound {int face=0;float side=1,size=.06f,b1=.33f,b2=.33f;std::vector<int> patch;};std::vector<Wound> wounds;Carcass carcass;};
     std::unordered_map<std::uint64_t,Remains> m_remains;float m_remainsClock=0;
     std::vector<HitBurst> m_goreBursts;
+    // A headless man's neck (where the stump is, and the way the neck runs), by actor emit slot, kept for frames
+    // whose body replays a cached emit; and how many of its stump's pumps have been thrown.
+    std::unordered_map<std::uint64_t,std::array<Point3,2>> m_neckStumps;std::unordered_map<std::uint64_t,int> m_neckPulses;
     // 0..1: how far the geometry being drawn has dissolved (a corpse on its way out).
     float m_dissolve=0;
     // The inside of a cut: red, and the green of the things that bleed it.

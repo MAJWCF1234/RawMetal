@@ -43,6 +43,7 @@ void Game::rebuildFriendlyActors(){
    if(track.deadState&&state(track.deadState)){auto&pose=m_friendlyActors[index].pose;pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;}
    else if(restraint){auto&pose=m_friendlyActors[index].pose;pose.lookAtActor=-1;pose.clip=restraint==2?0:4;float duration=cleanupAnimationDuration(track.visual,4);pose.phase=restraint==2?0:std::clamp(restraintMs/(duration>0?duration*1000:1000.f),0.f,1.f);}
    if(track.ai.mode==ActorAiMode::Guard&&(npcIncapacitated(index)||m_friendlyActors[index].pose.clip==4||!autonomousActor(track)))clearGuardSchedule(index);
+   if(track.deadState&&state(track.deadState))headlessPool(index); // a man a bite took the head of still lies in his pool
   }
  }
  // A legacy partial kit is evidence that its wound was already admitted.

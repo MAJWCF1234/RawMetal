@@ -17,6 +17,7 @@
 #include <bit>
 #include <map>
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <mutex>
@@ -2384,6 +2385,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(track.platform){float x=pose.position.x,y=pose.position.y,halfWidth=track.footprint.x*.5f,d=track.footprint.y*.5f;box({x-halfWidth,y-d,pose.z-track.thickness},{x+halfWidth,y+d,pose.z},m_pressureMetal,1.f);quad({x-halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d,pose.z+.004f},{x+halfWidth,y-d+.12f,pose.z+.004f},{x-halfWidth,y-d+.12f,pose.z+.004f},m_hazard,1.f);return;}
   if(track.visual==ActorVisual::Cargo){prop(m_crateMesh,m_crateTexture,pose.position.x,pose.position.y,track.scale,pose.yaw,track.scale,pose.z);return;}
   bool human=humanActorVisual(track.visual),cleanup=cleanupActorVisual(track.visual),wasp=track.visual==ActorVisual::Wasp;
+  // A man a creature's bite took the head from: nothing above the neck, a
+  // stump that pumps for its first seconds and a pool spreading under it.
+  const bool headless=human&&actor>=0&&game.npcHeadless(size_t(actor));
   // Civilians share the Worker path; civilianBody picks the Worker or a staff model.
   const int civilianBody=std::max(0,civilianActorBody(track.visual));const auto&rig=kCivilianRigs[size_t(civilianBody)];
   int cleanupRole=cleanup?cleanupActorBody(track.visual):0;auto& mesh=cleanup?*cleanupMeshes()[size_t(cleanupRole)]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
@@ -2586,7 +2590,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   mixFloat(emitIdentity,dormantFloor);mixFloat(emitIdentity,m_emissionScale);
   mixBits(emitIdentity,std::uint32_t(track.visual));mixFloat(emitIdentity,track.scale);mixFloat(emitIdentity,pose.position.x);mixFloat(emitIdentity,pose.position.y);
   mixFloat(emitIdentity,pose.z);mixFloat(emitIdentity,pose.yaw);mixBits(emitIdentity,std::uint32_t(pose.clip));mixBits(emitIdentity,std::uint32_t(m_cleanupInspectionStage));
-  mixFloat(emitIdentity,pose.phase);if(wasp)mixFloat(emitIdentity,game.elapsed());
+  mixFloat(emitIdentity,pose.phase);if(wasp)mixFloat(emitIdentity,game.elapsed());mixBits(emitIdentity,headless?1u:0u);
   if(weapon){mixBits(emitIdentity,weapon->armed);mixBits(emitIdentity,weapon->handgun);mixBits(emitIdentity,weapon->crouched);mixBits(emitIdentity,weapon->maintenance);
    mixBits(emitIdentity,weapon->supportAnimation);mixBits(emitIdentity,weapon->padVisible);mixBits(emitIdentity,weapon->pistolVisible);mixBits(emitIdentity,std::uint32_t(weapon->supportClip));
    mixBits(emitIdentity,std::uint32_t(weapon->action));mixFloat(emitIdentity,weapon->supportPhase);mixFloat(emitIdentity,weapon->treatment);mixFloat(emitIdentity,weapon->engineering);
@@ -2612,12 +2616,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   static thread_local std::vector<unsigned char> attachmentReady;
   if(reuseAttachment){attachmentPositions.resize(attachmentGroups);attachmentReady.assign(attachmentGroups,0);}
   size_t actorFace=0;
+  // The neck in the bind pose: the head is everything above it.
+  const float bindHeight=mesh.maximum.y-mesh.minimum.y,neckY=mesh.minimum.y+bindHeight*.855f;
+  Point3 ring{},chest{};int ringCount=0,chestCount=0;
   const bool streamBody=gpuActor>=0&&m_actorStreamWriting;
   GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(mesh.triangles.size());
   uint32_t emitted=0,runStart=0;int runMaterial=-1;
   auto flushRun=[&]{if(runMaterial>=0)m_gpu->actorStreamRun(stream.start+runStart,emitted-runStart,gpuMaterials[runMaterial]);runStart=emitted;};
   {perf::ActorScope profile(1);
   for(auto face:mesh.triangles){
+   float bindCentre=0;if(headless){const auto&rest=mesh.bindTriangles()[actorFace];bindCentre=(rest.v[0].p.y+rest.v[1].p.y+rest.v[2].p.y)/3.f;if(bindCentre>neckY){++actorFace;continue;}}
    int vertex=0;for(auto& v:face.v){
     uint32_t group=reuseAttachment?(*armedVertices)[actorFace][vertex].group:0;
     if(reuseAttachment&&attachmentReady[group]){v.p=attachmentPositions[group];++vertex;continue;}
@@ -2646,6 +2654,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     ++vertex;}
    if(m_environmentInspection&&posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
    if(m_environmentInspection&&cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
+   if(headless){const Point3 centre=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
+    if(bindCentre>neckY-.045f*bindHeight){ring=ring+centre;++ringCount;}else if(bindCentre>neckY-.24f*bindHeight&&bindCentre<neckY-.14f*bindHeight){chest=chest+centre;++chestCount;}}
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
    if(streamBody){
     if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
@@ -2658,6 +2668,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    ++actorFace;
   }
   if(streamBody){flushRun();m_gpu->endActorStream(stream,emitted);}
+  if(headless&&ringCount&&chestCount){const Point3 neck=ring*(1.f/float(ringCount)),down=chest*(1.f/float(chestCount));m_neckStumps[emitSlot]={neck,neck-down};}
   }
   if(armed){
    auto gunPoint=[&](Point3 source){auto p=(source-Point3{.02f,.70f,1.10f})*gunScale;return gunGrip+gunRight*p.x+gunUp*p.y-gunForward*p.z;};
@@ -2676,6 +2687,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   if(armed&&weapon->grenadeThrow>0)drawTacticalGrenade(arms[0].targetHand+Point3{0,0,.025f},2.4f);
   objectLighting=false;objectNormalLighting=nullptr;
+  if(headless)if(auto found=m_neckStumps.find(emitSlot);found!=m_neckStumps.end()){
+   const Point3 neck=found->second[0];Point3 axis=found->second[1];const float along=std::sqrt(axis.x*axis.x+axis.y*axis.y+axis.z*axis.z);axis=along>.001f?axis*(1.f/along):Point3{0,0,1};
+   const float age=game.npcHeadlessAge(size_t(actor)),body=track.scale/1.7f;
+   // The cut: a dark wet disc across the neck.
+   const Point3 side=std::fabs(axis.z)<.9f?cross3(axis,Point3{0,0,1}):cross3(axis,Point3{1,0,0});const float sl=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);const Point3 u=side*(.07f*body/std::max(sl,.001f)),v=cross3(axis,u);
+   const Point3 cap=neck+axis*(.012f*body);quad(cap-u-v,cap+u-v,cap+u+v,cap-u+v,m_stump[0],.95f);quad(cap-u+v,cap+u+v,cap+u-v,cap-u-v,m_stump[0],.95f);
+   // The stump pumps a few times while the heart still goes.
+   constexpr float pumps[]={.25f,.85f,1.6f,2.5f};int&thrown=m_neckPulses[emitSlot];
+   while(thrown<4&&age>=pumps[thrown]&&age<pumps[thrown]+3.f){HitBurst burst{neck,axis*.8f+Point3{0,0,.35f},game.elapsed(),level,ImpactMaterial::Flesh,-1,1.4f-.25f*float(thrown),false};burst.stump=true;burst.floor=w.supportBelow(neck.x,neck.y,neck.z+.05f);burst.reach=9;
+    if(m_goreBursts.size()>=32)m_goreBursts.erase(m_goreBursts.begin());m_goreBursts.push_back(burst);++thrown;}
+   if(age>=pumps[3]+3.f)thrown=4;
+  }
   if(engineer&&(!mesh.hasDirectCreatureMotion()||(directSupport&&weapon->padVisible))){
    const Texture&terminalCase=m_rubberTexture,&terminalRubber=m_leatherTexture,&terminalStrap=m_leatherTexture;
    static const Texture terminalGlass{1,1,{0xff071b1cu}};

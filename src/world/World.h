@@ -203,7 +203,12 @@ inline float leadArc(float age,float* since=nullptr){constexpr float bursts[][2]
 // scale and health (0 = the kind's default) make variants and bosses. A
 // non-zero wakeState keeps the creature dormant and deaf until that state is
 // set: patients on their beds, a nest that wakes when the lights fail.
-struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;};
+// A non-zero hunter makes it a recurring animal under that name: it cannot be
+// killed, below its retreat threshold it runs, and once out of sight and away
+// it is gone and the hunter state counts one more escape. Every spawn sharing
+// the name is the same animal: when one wakes, any other still about leaves.
+// prey: an actor on its own map (track index) it comes out for and takes first.
+struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;StateId hunter=0;int prey=-1;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
 struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;int fixture=-1;unsigned part=0;};
 struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<float,2> passedAt{1,1};std::array<Point3,2> passedNormal{};};

@@ -153,6 +153,8 @@ struct ScriptAction {
  enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign,EnterMainCampaign,AddState,ShowMessage};
  Type type=Type::SetState;StateId id=0;int value=0,index=0;CreatureKind enemyKind=CreatureKind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
  std::string text; // ShowMessage: {name} is replaced by that state's value when it fires.
+ // SpawnEnemy: amount is its awareness; id, when set, makes it a recurring hunter under that name
+ // (CreatureSpawn::hunter) and value-1, when above 0, the actor on the map it comes out for.
 };
 // SCRIPT_REQUIRE: one test of a named state or of a live game value.
 struct ScriptCondition {

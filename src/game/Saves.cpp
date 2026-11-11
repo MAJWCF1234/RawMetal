@@ -110,6 +110,8 @@ template<class A> int Game::archiveSave(A& a,int version){
    if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid enemy");}
    // Before version 20 the recognition meter was not kept: a creature on a Chase has the player made out.
    if(version>=20)a(e.recognition);else if constexpr(A::reading)e.recognition=e.state==Enemy::State::Chase&&e.awareness>0?1.f:0.f;
+   // Version 22: a recurring hunter's name and prey, and its walk in through a seam.
+   if(version>=22){a(e.hunter,e.prey,e.arrive);if(e.prey<-1||e.prey>4096||!(e.arrive>=0&&e.arrive<=30))throw std::runtime_error("invalid enemy");}
    if(int(e.kind)>(version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0||!(e.recognition>=0&&e.recognition<=1))throw std::runtime_error("invalid enemy");});
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>3.f;})))throw std::runtime_error("invalid prop");}});
@@ -187,7 +189,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
     for(const auto&enemy:list)if(enemy.originLevel==level&&enemy.kind==spawn.kind&&samePosition(enemy.originHome,spawn.home))return true;}return false;};
    for(const auto&spawn:fresh.enemies){
     int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&!oldEnemies[i].scriptSpawned&&oldEnemies[i].originLevel<0&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
-    if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;state.scale=spawn.scale;if(state.alive)state.hp=std::min(state.hp,state.maxHp);
+    if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;state.scale=spawn.scale;state.hunter=spawn.hunter;state.prey=spawn.prey;if(state.alive)state.hp=std::min(state.hp,state.maxHp);
      if(state.homeZ<=-999)state.homeZ=spawn.homeZ;
      // Saves before dormancy kept no wake state: an untouched creature sleeps again.
      if(version<15&&state.alive&&state.hp>=state.maxHp&&state.awareness<=0)state.wakeState=spawn.wakeState;
@@ -558,7 +560,7 @@ bool Game::testHandgunSaves(std::ostream& report){
  auto raw=[](Game g,int version){g.storeChunk();Writer writer;g.archiveSave(writer,version);auto payload=writer.stream.str();return "RAWMETAL_SAVE "+std::to_string(version)+" "+std::to_string(checksum(payload))+"\n"+payload;};
  {Game g(campaign);g.grantHandgun(12);g.m_player.pool(WeaponId::Shotgun)={40,3};g.m_player.pool(WeaponId::Handgun)={30,7};g.equipWeapon(WeaponId::Handgun);g.m_itemCells[3]=4;
   const auto bytes=g.encodeSave();Game loaded(campaign);const bool ok=loaded.decodeSave(bytes);
-  check(ok&&bytes.rfind("RAWMETAL_SAVE 21 ",0)==0,"A current save is version 21");
+  check(ok&&bytes.rfind("RAWMETAL_SAVE 22 ",0)==0,"A current save is version 22");
   check(ok&&loaded.player().pools==g.player().pools&&loaded.activeFirearm()==WeaponId::Handgun&&loaded.weaponEquipped()&&loaded.hasHandgun()&&loaded.itemCell(3)==4,"Version 19 round-trips both pools, the handgun in hand, its ownership and the 9 mm cell");
   check(ok&&loaded.encodeSave()==bytes,"The version 21 save is byte-exact on re-encoding");
   g.selectWeapon(WeaponId::Shotgun);g.m_holster=.4f;Game mid(campaign);check(mid.decodeSave(g.encodeSave())&&mid.weaponSwitchPhase()==1&&mid.weaponSwitchTarget()==WeaponId::Shotgun&&mid.activeFirearm()==WeaponId::Handgun,"A switch under way is saved");

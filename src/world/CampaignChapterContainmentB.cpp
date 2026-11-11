@@ -71,6 +71,9 @@ void cbEvent(Map& m,const char* id,float x1,float y1,float x2,float y2,const cha
  ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=-100;e.top=100;e.once=once;
  if(*require)e.requireState=stateId(require);e.actions=std::move(actions);m.scriptEvents.push_back(std::move(e));
 }
+// R-117, Chapter 2's one recurring animal (Containment A brings it out): it comes back here, as
+// itself (the hunter r117; it cannot be killed, it runs when badly hurt and is gone).
+ScriptAction cbR117(Vec2 p,float z,float awareness){ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Chimera;a.position=p;a.z=z;a.amount=awareness;a.id=stateId("r117");return a;}
 DialogueReply cbReply(const char* text,const char* next="",const char* sets="",int stance=-1){
  DialogueReply r;r.text=text;r.next=*next?stateId(next):0;if(*sets)r.sets.push_back({stateId(sets),1});r.stance=stance;return r;
 }
@@ -438,6 +441,13 @@ std::shared_ptr<const Map> makeSpecimenHandling(){
  // what came out of cage 7, and a handler who stayed at his post
  m.creatureSpawns.push_back({CreatureKind::Transformed,{13.9f,16.8f},fl,1,0});
  m.creatureSpawns.push_back({CreatureKind::Transformed,{10.1f,21.4f},fl,1,0});
+ // R-117 again: down on the floor among the cages the player hears it in bay 2, behind the bars that
+ // hang open, and it comes out of the dark there across the sodium of the transfer line. The stair
+ // back up to the gallery and the deck east to the theater are the ways out.
+ {SequenceCue c;c.timerState=stateId("conb_sh_r117");c.timeMs=0;c.sound=Sound::OneMetalDrag;c.position={11.6f,21.6f};c.gain=.9f;c.z=fl+1.f;m.sequenceCues.push_back(c);
+  c.timeMs=1700;c.sound=Sound::OneMonsterGrowl;c.position={10.6f,20.6f};m.sequenceCues.push_back(c);}
+ cbSequence(m,"conb_sh_r117","conb_sh_r117_out",6000,2600,3.f,11.f,15.f,18.6f);
+ cbEvent(m,"conb_sh_r117_comes",0,0,24,24,"conb_sh_r117_out",{cbR117({11.8f,21.9f},fl,6.f)});
  cbBody(m,clock,ActorVisual::Worker,{13.3f,9.3f},fl,1.9f);
  m.pickupSpawns.push_back({{2.2f,18.2f},PickupKind::Health,fl});
  // --- Light: sodium only down the transfer line; the cages under cold service light, one out, the bays green
@@ -707,6 +717,12 @@ std::shared_ptr<const Map> makeObservationTheater(){
  m.terminals.back().yaw=0;
  kit::prop(m,model::office_chair,17.5f,11.4f,fl,.55f,.55f,.95f,0);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.f,20.f},fl,1,0});
+ // R-117 again, from backstage: something drags the crates there as the player comes down to the
+ // stage, and it comes round the vessel into the rig's light. The aisle stair is the way back up.
+ {SequenceCue c;c.timerState=stateId("conb_th_r117");c.timeMs=0;c.sound=Sound::OneMetalFall;c.position={15.6f,21.8f};c.gain=.9f;c.z=fl+.6f;m.sequenceCues.push_back(c);
+  c.timeMs=1500;c.sound=Sound::OneMonsterBreath;c.position={15.f,20.8f};c.gain=.8f;m.sequenceCues.push_back(c);}
+ cbSequence(m,"conb_th_r117","conb_th_r117_out",6000,2400,5.f,8.6f,19.f,12.8f);
+ cbEvent(m,"conb_th_r117_comes",0,0,24,24,"conb_th_r117_out",{cbR117({16.2f,21.6f},fl,6.f)});
  m.pickupSpawns.push_back({{21.6f,21.8f},PickupKind::Health,fl});m.pickupSpawns.push_back({{2.4f,12.6f},PickupKind::HandgunAmmo,up});
  m.lights.push_back(lamp({1.f,20.f},fl+2.6f,.3f,5.f,1000,-.45f,WorldLightMount::Wall,blE));
  for(float x:{6.f,18.f})m.lights.push_back(lamp({x,23.f},fl+2.8f,.55f,7.f,3000,0,WorldLightMount::Wall,blN));
@@ -1018,6 +1034,8 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  {ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Transformed;a.position={11.f,3.f};a.z=f;a.amount=8;
   ScriptAction b=a;b.position={14.f,4.2f};ScriptAction s;s.type=ScriptAction::Type::Shake;s.amount=.5f;
   cbEvent(m,"conb_ec_raised",0,0,24,24,"cont_barricade",{a,b,s});}
+ // and R-117 with them, last: in at the tear in panel 6, behind the control room, and into the detail's flood.
+ cbEvent(m,"conb_ec_r117",0,0,24,24,"cont_barricade",{cbR117({20.35f,7.15f},f,10.f)});
  // --- The south door and the Emergency detail -----------------------------------------------------
  wall(m,8.6f,22.4f,10.f,23.f,f,roof,15);wall(m,14.f,22.4f,15.4f,23.f,f,roof,15);wall(m,10.f,22.4f,14.f,23.f,f+3.2f,roof,15);
  floorLine(m,9.f,21.5f,15.f,21.7f,f,13);

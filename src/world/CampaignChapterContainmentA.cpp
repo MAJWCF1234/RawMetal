@@ -804,8 +804,26 @@ std::shared_ptr<const Map> makeContainmentA(){
  // --- Detail A: two men, short of rounds, still on their orders ----------------------------------
  caGuard(m,clock,"cona_a_walk",ActorVisual::Cleanup,GuardSquadRole::Assault,"cona_a",
   {{{3.f,13.f},f,3000,caE},{{20.5f,13.f},f,4000,caN},{{20.5f,8.4f},f,3000,caW},{{3.f,8.4f},f,3000,caS}},12,1,1.1f);
+ const int post=int(m.actorTracks.size());
  caGuard(m,clock,"cona_a_post",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"cona_a",{{{19.6f,15.4f},f,60000,caW}},14,1,1.f);
+ // his post is under the one tube on this side that still works, unsteady: what happens to him is seen
+ m.lights.push_back(caTube(19.2f,15.4f,roof,.85f,6.5f,4300,.12f,.2f));
  m.pickupSpawns.push_back({{16.6f,12.4f},PickupKind::Ammo,f});
+ // --- R-117: what came out of A8. It went into the walls, down the service run behind the cells,
+ // and it is heard before it is seen: a bang in the run as the player steps onto the floor, its
+ // breath, a growl at the service door. Then it comes out of the door across the floor for the man at the post,
+ // takes his head and stays down on him: the window to cross the floor to the service door, or to
+ // watch. It is Chapter 2's one recurring animal (hunter r117): it cannot be killed here, it runs
+ // when badly hurt, and it comes back (Specimen Handling, the theater, the barricade, the core).
+ {CreatureSpawn r{CreatureKind::Chimera,{12.f,21.6f},f};r.wakeState=stateId("cona_r117_out");r.hunter=stateId("r117");r.prey=post;m.creatureSpawns.push_back(r);}
+ caSequence(m,"cona_r117","cona_r117_out",8000,3800,2.6f,8.f,7.f,16.6f);
+ cue(m,"cona_r117",0,Sound::OneMetalBang,{12.f,22.6f},"",1.f,f+2.6f);
+ cue(m,"cona_r117",1500,Sound::OneMonsterBreath,{12.f,21.f},"",.85f,f+.9f);
+ cue(m,"cona_r117",3000,Sound::OneMonsterGrowl,{12.f,18.6f},"",1.f,f+.8f);
+ taped(m,{22.99f,12.3f},f+1.5f,caW,Readable::Letter,"A8 / R-117 / HOLDING LOG","R-117. FOUR LEGS. TAKEN AT THE 900 LEVEL ON THE 2ND. HELD IN A8. FED TWICE DAILY, LIVE. WILL NOT TAKE IT DEAD.",
+  "02:00 A8 FRONT OUT FROM INSIDE. 02:35 HEARD IN THE SERVICE RUN BEHIND A4. A4 CLEARED. DETAIL A TO HOLD THE FLOOR. NOT TO FIRE FIRST.");
+ taped(m,{22.99f,14.3f},f+1.45f,caW,Readable::Note,"(PENCIL, ON THE BACK OF A DUTY ROSTER)","IT WAITS TILL ONE OF US IS ON HIS OWN. WHEN IT HAS ONE IT STAYS DOWN ON HIM A WHILE.",
+  "THAT IS YOUR TIME. YOU WALK. YOU DON'T LOOK AT IT AND YOU DON'T SHOOT IT. IT GETS UP.");
  // --- Light: the cells bright, the floor dimmer, one fitting dead ---------------------------------
  for(auto [x,y,fl]:{std::tuple{5.f,8.8f,0.f},{19.f,8.8f,0.f},{5.f,14.6f,.2f},{12.f,14.6f,0.f},{19.f,14.6f,0.f}})m.lights.push_back(caTube(x,y,roof,.5f,6.f,5000,.03f,fl));
  caDeadTube(m,12.f,8.8f,roof);

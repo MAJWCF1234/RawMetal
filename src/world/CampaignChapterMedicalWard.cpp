@@ -257,7 +257,6 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  for(auto [x1,y1,x2,y2]:{std::tuple{10.f,0.f,14.f,6.f},{1.f,1.f,9.8f,5.8f},{14.2f,1.f,20.6f,5.8f},{2.2f,7.4f,6.8f,10.4f},{1.f,10.6f,6.8f,12.4f},
   {2.2f,12.6f,6.8f,15.8f},{1.f,17.6f,6.8f,23.9f},{7.f,6.f,17.f,24.f},{17.2f,6.f,23.f,12.4f},{17.2f,12.6f,23.f,17.6f},{17.2f,17.8f,23.f,23.9f}})ceilingGrid(m,x1,y1,x2,y2,roof);
  // --- The corridor in: the last of Imaging's scuffs, the ward's one sign ---------------------------
- wallSign(m,12.f,5.745f,f+2.42f,"WARD C","TIER 3 OBSERVATION / LIGHTS ON AT ALL TIMES",2.2f,kPi);
  extinguisher(m,10.f,4.6f,f,mwE);
  mwFix(m,model::med_notice_board,13.965f,5.f,f+1.25f,1.2f,.07f,.9f,mwW,false);
  for(float x:{11.55f,12.45f})floorLine(m,x,0.f,x+.04f,24.f,f,8);                                          // wheel scuffs, all the way down
@@ -314,7 +313,6 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  m.pipes.push_back({{20.55f,4.12f},{20.55f,4.12f},f+1.6f,.02f,roof,6});
  mwFix(m,model::med_records_cabinet,15.35f,5.555f,f,.9f,.49f,1.f,mwN,true);
  for(float x:{15.2f,15.34f})kit::prop(m,model::office_file_binder,x,5.56f,f+1.f,.09f,.3f,.42f,mwS);
- mwFix(m,model::med_notice_board,17.6f,5.765f,f+1.25f,1.2f,.07f,.9f,mwN,false);
  mwFix(m,model::med_wall_clock,16.4f,5.78f,f+2.05f,.24f,.02f,.23f,mwN,false);
  // --- Seclusion 1 and 2: padded cells 4.5 by 3 m, a mattress each, a patient each ----------------
  // Behind them the walls are solid: the risers and the ward's plant.
@@ -403,7 +401,6 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.95f;m.terminals.back().yaw=mwE;
  for(float y:{6.75f,7.65f})mwFix(m,model::med_records_cabinet,22.755f,y,f,.9f,.49f,1.f,mwW,true);
  for(float y:{6.6f,6.72f,6.84f})kit::prop(m,model::office_file_binder,22.75f,y,f+1.f,.09f,.3f,.42f,mwE);
- mwFix(m,model::med_notice_board,21.f,6.035f,f+1.25f,1.2f,.07f,.9f,mwS,false);
  mwFix(m,model::pwr_breaker_panel_open,22.88f,10.2f,f+1.2f,.318f,.225f,.457f,mwW,false);                         // ward lighting
  m.pipes.push_back({{22.94f,10.2f},{22.94f,10.2f},f+1.66f,.02f,roof,6});
  taped(m,{23.f,10.85f},f+1.45f,mwW,Readable::Sticky,"WARD LIGHTS","NIGHT CIRCUIT FROM THE MAIN BOARD. NOT FROM HERE.","IF IT GOES, SURGERY HAS THE ONLY RESET.");
@@ -443,7 +440,6 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  mwFix(m,model::office_bookcase,19.9f,23.64f,f,2.025f,.5f,2.5f,mwN,true);
  for(float y:{18.7f,19.62f})mwFix(m,model::med_records_cabinet,17.445f,y,f,.9f,.49f,1.f,mwE,true);   // the ward's files, under I.I.'s rule
  mwFix(m,model::med_wall_clock,22.98f,19.f,f+2.05f,.24f,.02f,.23f,mwW,false);
- mwFix(m,model::med_notice_board,17.235f,22.7f,f+1.25f,1.2f,.07f,.9f,mwE,false);
  kit::prop(m,model::office_file_binder,19.05f,18.045f,f+1.f,.09f,.3f,.42f,mwS);
  paperDrift(m,18.f,18.8f,22.5f,23.f,f,5,7503);
  // --- Light (27): cold ward tubes, the bed-heads, the station, and the reds that wait ------------------
@@ -572,7 +568,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{13.7f,16.95f},-999,1,0,stateId("medw_wake_b")});        // bed 12, where it stopped
  kit::prop(m,model::med_crash_cart,16.1f,14.9f,f,.74f,.48f,1.f,mwW);
  for(auto [x,y,yaw]:{std::tuple{16.f,14.8f,.2f},{16.2f,15.f,1.3f}})kit::prop(m,model::med_pill_bottle,x,y,f+.809f,.07f,.03f,.13f,yaw);
- mwFix(m,model::med_notice_board,16.965f,16.6f,f+1.25f,1.2f,.07f,.9f,mwW,false);
  // Her way out: bare feet, from her door to the mortuary corridor and down it.
  for(int i=0;i<12;++i){const float t=float(i)/11.f;const float x=6.9f+t*(12.f-6.9f),y=18.3f+t*.55f+((i%2)?.1f:-.1f);
   wall(m,x-.1f,y-.05f,x+.1f,y+.05f,f+.004f,f+.007f,16);}
@@ -629,13 +624,11 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{16.1f,20.f},-999,1,0,dark});
  taped(m,{14.25f,19.f},f+1.5f,kPi,Readable::Note,"OBS 5","04:00 STANDING AT THE GLASS. 04:15 STANDING AT THE GLASS.","WATCHING OBS 6'S DOOR. DO NOT OPEN.");
  // --- The mortuary corridor: the trolley that came back, the drain ---------------------------------
- wallSign(m,12.f,18.945f,f+2.32f,"MORTUARY","STAIR DOWN / COLD ROOMS",2.f,kPi);
  mwFix(m,model::med_ward_bed,13.32f,21.6f,f,1.984f,.944f,.842f,mwW,true);
  mwStraps(m,21.6f-.87f,13.32f,1.f,f,1,true);
  mwFix(m,model::med_floor_drain,11.4f,21.f,f,.5f,.5f,.01f,0,false);
  m.pipes.push_back({{10.05f,19.4f},{10.05f,23.f},f+2.6f,.03f,-999,0});
  // --- The theatre transfer bay: a patient waiting in the only light left ----------------------------
- wallSign(m,16.945f,11.5f,f+2.32f,"THEATRES","TRANSFER / SCRUBS ONLY PAST THIS LINE",1.9f,-kPi*.5f);
  floorLine(m,17.3f,9.05f,17.42f,13.95f,f,13);
  mwFix(m,model::med_ward_bed,21.85f,12.95f,f,1.984f,.944f,.842f,0,true);
  mwStraps(m,22.84f,12.95f,-1.f,f,1);
@@ -643,7 +636,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{21.4f,11.6f},-999,1,0,stateId("medw_wake_d")});
  for(float x:{18.f,18.4f})mwFix(m,model::gas_cylinder,x,9.2f,f,.33f,.33f,1.58f,0,true);
  wall(m,17.8f,9.f,18.6f,9.04f,f+1.08f,f+1.13f,2);wall(m,17.8f,9.f,18.6f,9.4f,f+1.58f,roof,30);   // nobody stands on the bottles
- mwFix(m,model::med_notice_board,18.6f,13.965f,f+1.25f,1.2f,.07f,.9f,mwN,false);
  taped(m,{19.35f,14.f},f+1.45f,kPi,Readable::Note,"THEATRE LIST / PROCEDURE 14","04:00 BED 4. 04:30 BED 9. 05:00 BED 12.",
   "05:30 OBS 6, LAB 4. I.I. TO ATTEND IN PERSON.");
  kit::prop(m,model::desk_phone,22.68f,9.25f,f+1.f,.2f,.2f,.1f,mwS);
@@ -686,7 +678,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  mwFix(m,model::office_couch_green,17.9f,21.2f,f,2.242f,1.364f,1.192f,mwE,true);
  for(float y:{20.2f,21.1f,22.f})mwFix(m,model::psx_locker,22.68f,y,f,.64f,.88f,2.25f,kPi,true);
  mwFix(m,model::lab_sample_fridge,20.f,22.57f,f,.7f,.85f,1.f,mwN,true);
- mwFix(m,model::med_notice_board,17.235f,16.3f,f+1.25f,1.2f,.07f,.9f,mwE,false);
  mwFix(m,model::med_wall_clock,21.2f,14.22f,f+2.05f,.24f,.02f,.23f,mwS,false);
  wall(m,21.1f,22.6f,21.5f,23.f,f+1.98f,f+2.02f,20);wall(m,21.28f,22.8f,21.32f,23.f,f+2.02f,f+2.3f,20);
  mwFix(m,model::cctv_tv,21.3f,22.75f,f+1.56f,.5f,.4f,.42f,mwN,false);
@@ -711,7 +702,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  kit::prop(m,model::wooden_chair,2.4f,4.6f,f,.417f,.525f,.95f,kPi*.8f);
  kit::prop(m,model::med_crash_cart,4.9f,6.9f,f,.74f,.48f,1.f,mwE+.2f);
  for(auto [x,y,yaw]:{std::tuple{4.85f,6.8f,.6f},{4.95f,7.f,2.f}})kit::prop(m,model::med_specimen_jar,x,y,f+.809f,.15f,.15f,.24f,yaw);
- mwFix(m,model::med_notice_board,1.035f,5.4f,f+1.25f,1.2f,.07f,.9f,mwE,false);
  mwFix(m,model::med_first_aid_box,4.f,.16f,f+1.45f,.37f,.12f,.35f,mwS,false);
  // --- The sluice ----------------------------------------------------------------------------------
  for(float y:{10.3f,10.9f})mwFix(m,model::med_scrub_sink,1.27f,y,f,.49f,.54f,1.13f,mwE,true);
@@ -734,7 +724,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  kit::prop(m,model::med_wheelchair,5.5f,15.55f,f,.55f,1.04f,.91f,kPi*.5f+.2f);
  extinguisher(m,4.6f,19.f,f,mwN);
  for(float y:{16.6f,17.4f})floorLine(m,0.f,y,7.f,y+.04f,f,8);
- mwFix(m,model::med_notice_board,1.6f,15.035f,f+1.25f,1.2f,.07f,.9f,mwS,false);
  titleCard(m,"WARD C",0.f,15.f,5.f,19.f);
  // --- Linen ---------------------------------------------------------------------------------------
  for(float y:{20.15f,22.f}){shelf(m,{1.27f,y},kPi*.5f,0);
@@ -753,7 +742,6 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  // board by the door.
  wall(m,5.76f,21.15f,5.8f,21.95f,f+.75f,f+1.55f,20);wall(m,5.74f,21.22f,5.76f,21.88f,f+.82f,f+1.48f,28);
  wall(m,5.7f,21.45f,5.74f,21.65f,f+1.36f,f+1.42f,8);
- mwFix(m,model::med_notice_board,4.3f,19.235f,f+1.25f,1.2f,.07f,.9f,mwS,false);
  kit::prop(m,model::prop_cardboard_box,3.25f,22.35f,f+.809f,.436f,.432f,.22f,.12f);
  // --- Light (28): the bays, the end, the rooms; the two reds; theatre's own cold light --------------
  for(auto [y,i,fl]:{std::tuple{1.5f,.55f,0.f},{4.5f,.55f,0.f},{7.5f,.5f,.25f},{10.5f,.55f,0.f}})m.lights.push_back(mwTube(12.f,y,roof,i,6.5f,5600,.06f,fl));

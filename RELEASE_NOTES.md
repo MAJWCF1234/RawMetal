@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.0 - It gets up (2026-11-11)
+
+This is an update, not a chapter. The great door at the bottom of Chapter 1 is still shut; what is behind it is not ready to be looked at yet, and it will not be shown until it is.
+
+- **R-114.** The specimen in Research Receiving's cold hold used to carry itself like a horse that had been told about people. It does not any more. It waits low on folded legs with its weight in its haunches and its mouth on you; it walks the way something walks when it has decided which of you it wants, feet set down where it means them; and when it comes, it comes all at once, off the floor and onto you. It still takes a lot of killing.
+- **What it does to people.** Anything down here with a mouth for it can now take a man's head and stay down on him to feed. While it feeds it is busy. That is your time. Walk.
+- **Lockers.** Climbing into one is no longer the end of it. A thing with hands that saw you go in, or hears you knock, tears the doors open and takes hold, and you fight its grip. A Cleanup man who finds you hauls you out, puts you on your knees and calls his squad over to talk about it; the struggle breaks his hold, if you are quick.
+- **Sound.** Rooms have their own air now. Every voice and every footfall is carried by the space it happens in: a tiled washroom rings, a plant hall swallows, distance takes the top off. Maps can lay their own beds of sound, near and far, steady or now and then.
+- **Campaign Builder.** A Sign designer (plates, symbols, colours, pictures, a library, import and export, snapped to the wall). A Sound tool that places ambient emitters from the engine's own bank. Doors take a leaf (a steel grille that sight and sound pass through, or a painted panel), a label and a locked caption; standing water takes murk. Creatures take a hunter name and a prey, so a map can stage an animal that takes one man first and comes back for the rest. A live edit now rebuilds only the map it changed.
+
+Verified with the full test suite (two older checks fail exactly as they do on the v1.3.0 build: a deck-over-door clearance case and a reactor lamp that hangs without a ceiling over it), the new hunter test (the bite, the feed, flight and return, save and load), the chapter route over all 170 passages, and rebuilds of the game and Campaign Builder engines.
+
+---
+
 ## v1.3.0 - What stays on the floor (2026-11-10)
 
 This is an update, not a patch. Until now the things down here did the polite thing when they died: they shrank, and then they were not there. They have stopped being polite. What you kill falls, lies where it fell, and takes its time leaving.

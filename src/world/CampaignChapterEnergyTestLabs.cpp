@@ -588,7 +588,6 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  wall(m,9.f,17.6f,10.5f,18.4f,f,roof,15);wall(m,13.5f,17.6f,15.f,18.4f,f,roof,15);wall(m,10.5f,17.6f,13.5f,18.4f,f+2.6f,roof,15);
  m.doors.push_back(Door{10.5f,13.5f,18.f,0});
  floorLine(m,9.f,17.3f,15.f,17.45f,f,13);floorLine(m,9.f,18.55f,15.f,18.7f,f,13);
- wallSign(m,12.f,17.58f,f+2.65f,"SHIELDED CORRIDOR","DOSIMETERS ON BEYOND THIS DOOR",2.2f,anN);
  // --- The dosimetry post: the Shielding detail's room ------------------------------------------
  wall(m,14.f,8.9f,16.4f,9.f,f,roof,3);swingDoor(m,16.4f,17.6f,8.95f,f,roof,-1);wall(m,17.6f,8.9f,19.4f,9.f,f,roof,3);
  glazing(m,19.4f,8.9f,20.6f,9.f,f,roof,3,.95f,2.1f);wall(m,20.6f,8.9f,21.f,9.f,f,roof,3);                    // the post's window on the corridor, east of bulkhead 2
