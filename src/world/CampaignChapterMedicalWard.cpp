@@ -147,7 +147,7 @@ void mwSequence(Map& m,const char* timer,const char* finish,int durationMs,int f
 }
 // A padded seclusion lining: quilted fabric over the walls from the floor to 2.3 m.
 // Above its cap a proxy to the ceiling: nobody perches on the lining.
-void mwPad(Map& m,float x1,float y1,float x2,float y2,float f){wall(m,x1,y1,x2,y2,f,f+2.3f,23);wall(m,std::min(x1,x2),std::min(y1,y2),std::max(x1,x2),std::max(y1,y2),f+2.3f,f+2.34f,20);
+void mwPad(Map& m,float x1,float y1,float x2,float y2,float f){wall(m,x1,y1,x2,y2,f,f+2.3f,39);wall(m,std::min(x1,x2),std::min(y1,y2),std::max(x1,x2),std::max(y1,y2),f+2.3f,f+2.34f,20);
  wall(m,std::min(x1,x2),std::min(y1,y2),std::max(x1,x2),std::max(y1,y2),f+2.34f,f+3.f,30);}
 // Restraints on a bed running along x from its head at hx toward dir, centred on y.
 // 0: unbuckled, the straps hanging off both sides; 1: buckled across, nobody in them;
@@ -216,7 +216,7 @@ void mwBay(Map& m,float wallX,float dir,const MwBay& b,float f,float roof){
 // The ward runs on through the open seam into 76. Route: N seam -> doors -> the aisle south.
 std::shared_ptr<const Map> makeMedicalWardCNorth(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[75];m.definition=CampaignChunks[75];m.definition.ambient=.21f;
+ m.name=CampaignMapNames[75];m.definition=CampaignChunks[75];m.definition.ambient=.22f;
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  m.definition.playerStart={12.f,1.7f};m.definition.spawnYaw=kPi*.5f;m.definition.spawnHeight=-12;
  const float f=-12,roof=m.definition.ceiling;
@@ -326,7 +326,7 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
   // and the door wall, round its door and under its panel
   const float a=y1<8?y2-.1f:y1,b=a+.1f;
   for(auto [x1,x2]:{std::pair{2.3f,2.8f},{4.1f,4.28f},{5.42f,6.7f}})mwPad(m,x1,a,x2,b,f);
-  wall(m,2.8f,a,4.1f,b,f,f+1.07f,23);}
+  wall(m,2.8f,a,4.1f,b,f,f+1.07f,39);}
  kit::prop(m,model::med_mattress_stained,3.75f,8.25f,f,1.9f,.9f,.118f,.05f);
  kit::prop(m,model::med_mattress_stained,4.3f,14.5f,f,1.9f,.9f,.118f,-.12f);
  mwFix(m,model::med_floor_drain,5.75f,8.3f,f,.5f,.5f,.01f,0,false);mwFix(m,model::med_floor_drain,6.f,15.2f,f,.5f,.5f,.01f,0,false);
@@ -339,6 +339,7 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  kit::prop(m,model::trash_can,6.4f,10.95f,f,.27f,.27f,.34f,.3f);
  // --- The bathroom: two stalls, the basins, the shower ---------------------------------------------
  wall(m,1.f,17.6f,6.8f,17.7f,f,f+2.1f,27);wall(m,1.f,17.6f,1.1f,23.9f,f,f+2.1f,27);wall(m,1.f,23.8f,6.8f,23.9f,f,f+2.1f,27);
+ for(auto [x1,y1,x2,y2]:{std::tuple{1.f,17.6f,6.8f,17.7f},{1.f,17.6f,1.1f,23.9f},{1.f,23.8f,6.8f,23.9f}})mwCap(m,x1,y1,x2,y2,f+2.1f,roof);   // no ledge over the tiling
  wall(m,6.7f,17.7f,6.8f,20.24f,f,f+2.1f,27);wall(m,6.7f,21.56f,6.8f,23.8f,f,f+2.1f,27);
  for(float y:{18.8f,21.f}){mwFix(m,model::med_washroom_stall,1.87f,y,f,2.13f,1.54f,2.4f,mwE,true);mwStallFront(m,2.642f,y,true,1,f,y>20);}   // the far one bolted from inside, nobody in it
  for(float x:{3.7f,4.6f,5.5f}){mwFix(m,model::med_scrub_sink,x,17.97f,f,.49f,.54f,1.13f,mwS,true);}   // no mirrors on this ward: nothing to break, nothing to look into
@@ -349,6 +350,16 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
  kit::prop(m,model::wooden_chair,5.9f,22.7f,f,.417f,.525f,.95f,2.4f);
  for(auto [x,y,w,d]:{std::tuple{4.1f,19.1f,.6f,.45f},{3.3f,21.4f,.5f,.3f}})wall(m,x,y,x+w,y+d,f,f+.03f,23);    // towels on the floor
  mwBlood(m,5.1f,22.5f,5.7f,23.3f,f);
+ // The stalls' plumbing boxed in behind the far one, tiled with the room, its access panel screwed
+ // shut; by it the towel skip, full, and the bin; the bathroom's second lamp over them.
+ mwCap(m,1.1f,17.7f,2.66f,22.08f,f+2.42f,roof);                                                        // nobody perches on the stall tops
+ wall(m,1.1f,22.08f,2.66f,23.8f,f,f+2.1f,27);wall(m,1.1f,22.08f,2.66f,23.8f,f+2.1f,roof,3);
+ wall(m,2.66f,22.65f,2.68f,23.35f,f+.3f,f+1.f,20);for(float y:{22.7f,23.27f})for(float z:{.36f,.92f})wall(m,2.68f,y,2.685f,y+.03f,f+z,f+z+.03f,8);
+ {const float x=3.3f,y=23.2f;wall(m,x-.3f,y-.3f,x+.3f,y+.3f,f+.12f,f+.16f,20);
+  for(float dx:{-.28f,.25f})for(float dy:{-.28f,.25f})wall(m,x+dx,y+dy,x+dx+.03f,y+dy+.03f,f+.06f,f+.9f,20);
+  wall(m,x-.27f,y-.27f,x+.27f,y+.27f,f+.16f,f+.84f,39);}
+ kit::prop(m,model::trash_can,4.1f,23.45f,f,.45f,.45f,.56f,.2f);
+ m.lights.push_back(mwOut(lamp({3.7f,23.8f},f+2.05f,.42f,4.5f,5800,.08f,WorldLightMount::Wall,-kPi*.5f)));
  // --- The ward: eleven bays here, the aisle the gurneys came down --------------------------------
  const MwBay west[]={{6.2f,8.65f,0,0,1,true,true,true},{8.65f,11.f,1,1,0,true,false,false},{12.4f,15.05f,2,0,1,false,false,true},
   {15.05f,17.55f,1,2,1,true,true,false},{17.55f,20.1f,3,1,0,false,false,false},{21.7f,24.f,0,0,1,true,true,true}};
@@ -495,7 +506,7 @@ std::shared_ptr<const Map> makeMedicalWardCNorth(){
 // THEATRES -> E seam; later, lit again, the ward end -> MORTUARY -> S seam.
 std::shared_ptr<const Map> makeMedicalWardCSouth(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[76];m.definition=CampaignChunks[76];m.definition.ambient=.21f;
+ m.name=CampaignMapNames[76];m.definition=CampaignChunks[76];m.definition.ambient=.22f;
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  m.definition.playerStart={1.7f,17.f};m.definition.spawnYaw=0;m.definition.spawnHeight=-12;
  const float f=-12,roof=m.definition.ceiling;
@@ -689,9 +700,12 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  kit::prop(m,model::item_bandage,5.62f,2.3f,f+.809f,.075f,.148f,.061f,.5f);
  wall(m,1.f,8.4f,4.6f,9.f,f,f+.86f,21);wall(m,1.f,8.36f,4.64f,9.f,f+.86f,f+.9f,20);
  for(auto [x,yaw]:{std::pair{1.8f,.4f},{2.f,1.6f},{2.15f,2.7f},{3.3f,.9f}})kit::prop(m,model::med_pill_bottle,x,8.7f,f+.9f,.07f,.03f,.13f,yaw);
- kit::prop(m,model::trash_can,4.2f,8.7f,f+.9f,.2f,.2f,.25f,0);
- for(float x:{1.4f,1.8f,2.2f}){wall(m,x,8.96f,x+.05f,9.f,f+1.6f,f+1.65f,20);wall(m,x+.005f,8.97f,x+.045f,8.99f,f+1.05f,f+1.6f,8);}  // restraints on their hooks
- mwFix(m,model::psx_locker,1.33f,6.4f,f,.64f,.88f,2.25f,0,true);
+ kit::prop(m,model::trash_can,5.1f,8.7f,f,.35f,.35f,.6f,.2f);
+ for(float x:{1.4f,1.8f,2.2f}){wall(m,x,8.96f,x+.05f,9.f,f+1.6f,f+1.65f,20);wall(m,x+.005f,8.97f,x+.045f,8.99f,f+1.05f,f+1.6f,39);}  // canvas restraints on their hooks
+ mwFix(m,model::lab_sample_fridge,1.45f,6.4f,f,.7f,.85f,1.f,mwE,true);                                    // the drug fridge, emptied
+ kit::prop(m,model::prop_cardboard_box_open,1.45f,6.4f,f+1.f,.36f,.36f,.36f,.3f);
+ mwCap(m,1.02f,6.05f,1.88f,6.75f,f+1.4f,roof);                                                           // nobody sits up on the fridge
+ m.lights.push_back(mwOut(lamp({3.4f,9.f},f+1.95f,.38f,4.f,4600,.04f,WorldLightMount::Wall,-kPi*.5f)));   // the drawing-up light over the counter
  for(float x:{5.9f,6.3f})mwFix(m,model::gas_cylinder,x,8.75f,f,.33f,.33f,1.58f,0,true);
  mwFix(m,model::med_wall_clock,6.78f,3.2f,f+2.05f,.24f,.02f,.23f,mwW,false);
  kit::prop(m,model::wooden_chair,2.4f,4.6f,f,.417f,.525f,.95f,kPi*.8f);
@@ -735,6 +749,11 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
   wall(m,x-.035f,y-.03f,x+.035f,y+.03f,f+h-.02f,f+h+.07f,39);m.structures.back().solid=false;                 // the knot
   wall(m,x+.03f,y-.02f,x+.13f,y+.02f,f+h-.03f,f+h+.01f,39);m.structures.back().solid=false;}                  // and its tail
  kit::prop(m,model::med_crash_cart,3.25f,22.35f,f,.74f,.48f,1.f,.1f);                                          // the linen round's cart
+ // The chute down to the laundry in the east wall, its hatch shut, and the round's sheet on the
+ // board by the door.
+ wall(m,5.76f,21.15f,5.8f,21.95f,f+.75f,f+1.55f,20);wall(m,5.74f,21.22f,5.76f,21.88f,f+.82f,f+1.48f,28);
+ wall(m,5.7f,21.45f,5.74f,21.65f,f+1.36f,f+1.42f,8);
+ mwFix(m,model::med_notice_board,4.3f,19.235f,f+1.25f,1.2f,.07f,.9f,mwS,false);
  kit::prop(m,model::prop_cardboard_box,3.25f,22.35f,f+.809f,.436f,.432f,.22f,.12f);
  // --- Light (28): the bays, the end, the rooms; the two reds; theatre's own cold light --------------
  for(auto [y,i,fl]:{std::tuple{1.5f,.55f,0.f},{4.5f,.55f,0.f},{7.5f,.5f,.25f},{10.5f,.55f,0.f}})m.lights.push_back(mwTube(12.f,y,roof,i,6.5f,5600,.06f,fl));
@@ -760,9 +779,9 @@ std::shared_ptr<const Map> makeMedicalWardCSouth(){
  cue(m,"medw_dark_clock",350,Sound::JunkGlass,{12.f,13.5f},"",.7f,roof-.3f);
  cue(m,"medw_dark_clock",1300,Sound::Door,{14.95f,19.1f},"",.9f,f+1.2f);
  cue(m,"medw_dark_clock",2600,Sound::RadioSquelch,{13.25f,16.4f},"",.8f,f+.1f);
- cue(m,"medw_dark_clock",3000,Sound::Empty,{13.25f,16.4f},"INVESTIGATOR (RADIO): Ward C is dark.",.9f,f+.1f);
+ cue(m,"medw_dark_clock",3000,Sound::Empty,{13.25f,16.4f},"INVESTIGATOR (RADIO): Ward C is dark.",.9f,f+.1f,"medw_dark_1");
  cue(m,"medw_dark_clock",5300,Sound::RadioSquelch,{13.25f,16.4f},"",.8f,f+.1f);
- cue(m,"medw_dark_clock",5700,Sound::Empty,{13.25f,16.4f},"INVESTIGATOR (RADIO): Leave it dark. They know what to do.",.9f,f+.1f);
+ cue(m,"medw_dark_clock",5700,Sound::Empty,{13.25f,16.4f},"INVESTIGATOR (RADIO): Leave it dark. They know what to do.",.9f,f+.1f,"medw_dark_2");
  cue(m,"medw_dark_clock",6900,Sound::WorkerDying,{13.7f,16.95f},"",.8f,f+1.4f);
  // Into the ward's south bays in the dark: bed 4 comes through its curtain. Into the transfer bay:
  // the one waiting for theatre turns round.

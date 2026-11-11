@@ -30,6 +30,16 @@ for i in (60, 61): ARRIVE[i] = R
 ARRIVE[62] = ARRIVE[63] = R + ['delta_override']
 ARRIVE[64] = ARRIVE[65] = R + ['delta_override', 'ere_util_damper', 'ere_util_supply']
 ARRIVE[66] = ARRIVE[67] = ARRIVE[64] + ['decon_cycle']
+# Chapter 2, along its critical path: through the great door, the clearance pass, the chemistry
+# purge, Hale's override into the clinic, the mortuary release, Conversion's feed, the barricade
+# and the core isolation. (Without the first two, 67's red door lamp floods 68's interlock.)
+C2 = ['ere_great_door', 'chapter2_open']
+for i in range(68, 71): ARRIVE[i] = C2
+for i in range(79, 85): ARRIVE[i] = C2 + ['proc_clearance', 'lab_chem_seal']
+for i in range(71, 79): ARRIVE[i] = ARRIVE[79] + ['med_override']
+for i in range(85, 104): ARRIVE[i] = ARRIVE[71] + ['med_morgue_release']
+for i in range(104, 108): ARRIVE[i] = ARRIVE[85] + ['cont_power', 'cont_barricade']
+for i in (108, 109): ARRIVE[i] = ARRIVE[104] + ['core_shutdown']
 
 COUNT, W_PX, H_PX = 6, 480, 270
 

@@ -20,8 +20,16 @@ using namespace kit;
 constexpr float cbS=0,cbN=kPi,cbE=kPi*.5f,cbW=-kPi*.5f;
 // Light yaw (a wall lamp's way into the room): 0 east, kPi*.5 south, kPi west, -kPi*.5 north.
 constexpr float blE=0,blS=kPi*.5f,blW=kPi,blN=-kPi*.5f;
+// The cave pack's standing stones bake their texture into tiny islands and render as flat dark lumps;
+// in these levels every standing stone is one of the modelled outcrops of the bedrock instead, at the
+// size it was placed at (the hanging stalactites and ceiling rock keep the pack's own).
+int cbBedrock(int mdl){
+ if(mdl==model::cave_boulder_round||mdl==model::cave_boulder_a||mdl==model::cave_rock_block)return model::res_rock_crag;
+ if(mdl==model::cave_rock_slab)return model::res_rock_low;
+ if(mdl==model::cave_rock_column||mdl==model::cave_stalagmite)return model::res_rock_spire;
+ return mdl;}
 void cbFix(Map& m,int model,float x,float y,float z,float yaw,bool solid,float s=1){
- const auto& v=model::size[model];m.fixtures.push_back({model,{x,y},z-m.layers.front().elevation,v[0]*s,v[1]*s,v[2]*s,yaw,solid});
+ const auto& v=model::size[model];m.fixtures.push_back({cbBedrock(model),{x,y},z-m.layers.front().elevation,v[0]*s,v[1]*s,v[2]*s,yaw,solid});
 }
 WorldLight cbTube(float x,float y,float roof,float intensity,float range,float kelvin,float tint=0,float flicker=0){
  auto l=lamp({x,y},roof-.30f,intensity,range,kelvin,tint);l.flicker=flicker;return l;}
@@ -31,7 +39,10 @@ WorldLight cbBeacon(Vec2 p,float z,float yaw,float phase,const char* state){
  l.period=1.4f;l.onTime=.7f;l.phase=phase;l.enabledState=stateId(state);l.invert=true;return l;}
 WorldLight cbAlarm(Vec2 p,float z,float yaw,float phase){
  auto l=lamp(p,z,.42f,6.f,3000,0,WorldLightMount::Wall,yaw,true,{1.f,.1f,.05f});l.period=2.2f;l.onTime=1.3f;l.phase=phase;return l;}
+// Resonance light (the violet gel) is keyed cold, as in CampaignChapterContainmentA.cpp: the growth
+// sits dark under a blue-white key and the crystal's own cyan is the accent.
 WorldLight cbGlow(Vec2 p,float z,float intensity,float range,float kelvin,Point3 gel={1,1,1},float flicker=0){
+ if(gel.x>.55f&&gel.y<.56f&&gel.z>.9f){gel={.5f,.72f,1.f};kelvin=std::max(kelvin,8000.f);intensity*=.8f;}
  auto l=lamp(p,z,intensity,range,kelvin,0,WorldLightMount::Bare,0,false,gel);l.flicker=flicker;return l;}
 void cbPendant(Map& m,Vec2 p,float roof,float z,float intensity,float range,float kelvin,float flicker=0,float tint=0){
  m.pipes.push_back({p,p,z+.32f,.016f,roof,6});m.fixtures.push_back({model::pendant_lamp,p,z-m.layers.front().elevation,.5f,.5f,.34f,0,false});
@@ -75,40 +86,225 @@ void cbGlaze(Map& m,float x1,float y1,float x2,float y2,float f,float roof,float
  if(alongX)wall(m,x1,y1-.03f,x2,y2+.03f,f+sill,f+head,CollisionProxyMaterial);else wall(m,x1-.03f,y1,x2+.03f,y2,f+sill,f+head,CollisionProxyMaterial);
 }
 void cbPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=true){expandPrimitive({kind,x,y,z,w,d,h,facing,mat,solid},m.structures);}
-void cbModel(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,bool solid=false){m.fixtures.push_back({model,{x,y},z-m.layers.front().elevation,w,d,h,yaw,solid});}
+void cbModel(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,bool solid=false){m.fixtures.push_back({cbBedrock(model),{x,y},z-m.layers.front().elevation,w,d,h,yaw,solid});}
 unsigned cbSeed(float x,float y){unsigned h=unsigned(x*97.f)*2654435761u^unsigned(y*131.f)*40503u;h^=h>>13;h*=1274126177u;return h^(h>>16);}
-// Resonance growth and crystal, the same as CampaignChapterContainmentA.cpp builds them: the
-// growth is true rounded geometry in its own finish with the cave pack's pods budding on it, the
-// crystal chisel-tipped prisms in the self-lit finish over the pack's bed of spikes.
-// A crust on a surface: a flat sheet.
-void cbCrust(Map& m,float x1,float y1,float x2,float y2,float lo,float hi){wall(m,x1,y1,x2,y2,lo,hi,34);}
-// A blister of crust on a floor: round, a hand high, walked over.
-void cbLens(Map& m,float x,float y,float f,float w,float d,float h=.09f){cbPrim(m,"dome",x,y,f,w,d,h,0,34,false);}
-// A crystal shard from its foot at (x,y,z): a shaft w across and h high under a chisel tip, or
-// (lean 0 +y, 1 +x, 2 -y, 3 -x) a prism leaning out `reach` metres that way as it rises h.
-void cbShard(Map& m,float x,float y,float z,float w,float h,int lean=-1,float reach=0){
- if(lean<0){const float tip=std::min(h*.3f,w*1.5f);cbPrim(m,"box",x,y,z,w,w*.85f,h-tip,0,35,false);cbPrim(m,"ramp",x,y,z+h-tip,w,w*.85f,tip,int(cbSeed(x,y)&3u),35,false);return;}
- constexpr Vec2 fwd[4]={{0,1},{1,0},{0,-1},{-1,0}};cbPrim(m,"strut",x+fwd[lean].x*reach*.5f,y+fwd[lean].y*reach*.5f,z,w,reach,h,lean,35,h>=1.6f);
+// Resonance growth and crystal, the same as CampaignChapterContainmentA.cpp builds them. Rock first: what came up through the floors and the walls is the
+// cave pack's black rock, and the growth lives in it, its magenta only in the seams between the
+// rocks, in the cracks it opened in the concrete and where it is wet. Nothing of the growth's finish
+// is a shape stood flat on a wall or a dome stretched over a heap: it is in narrow boxes, struts and
+// columns, all drawn at the finish's own repeat. The crystal is clusters of narrow hexagonal prisms,
+// glass over a lit core with the bright points of the self-lit finish, leaning out of one root half
+// buried in rock and rubble, the cave pack's bed of spikes at their feet.
+void cbSeam(Map& m,float x1,float y1,float x2,float y2,float lo,float hi,int mat=34){wall(m,x1,y1,x2,y2,lo,hi,mat);m.structures.back().solid=false;}
+// A floor (the chunk's or a deck's) at height z, under (x,y).
+bool cbOnFloor(const Map& m,float x,float y,float z){
+ const int tx=std::clamp(int(std::floor(x)),0,23),ty=std::clamp(int(std::floor(y)),0,23);
+ for(const auto& l:m.layers){if(std::fabs(l.elevation-z)>.3f)continue;if(&l==&m.layers.front()||l.rows[size_t(ty)][size_t(tx)]=='=')return true;}
+ return false;
 }
-// The cave pack's bed of crystal spikes at scale s, and its black rock fang at scale s (1 is 4 m tall).
+// Which side of a strip laid along a wall the wall stands: -1 at its low edge (y1, or x1), +1 at its high edge.
+int cbWallSide(const Map& m,float x1,float y1,float x2,float y2,float z){
+ const bool alongX=x2-x1>=y2-y1;
+ auto blocked=[&](float px,float py){const int tx=int(std::floor(px)),ty=int(std::floor(py));
+  if(tx<0||ty<0||tx>23||ty>23||m.layers.front().rows[size_t(ty)][size_t(tx)]=='#')return true;
+  for(const auto& s:m.structures)if(s.solid&&px>s.x1&&px<s.x2&&py>s.y1&&py<s.y2&&z>s.bottom&&z<s.top)return true;return false;};
+ int low=0,high=0;
+ for(float k:{.2f,.5f,.8f}){if(alongX){const float px=x1+(x2-x1)*k;low+=blocked(px,y1-.07f);high+=blocked(px,y2+.07f);}
+  else{const float py=y1+(y2-y1)*k;low+=blocked(x1-.07f,py);high+=blocked(x2+.07f,py);}}
+ return high>low?1:-1;
+}
+// The pack's rock fitted to a w by d by h box standing at (x,y) from z: of `models`, the one whose own
+// shape is nearest the box (turned a quarter where that fits better), scaled alike on every axis to
+// within a few percent, so no rock is ever drawn stretched, and never standing taller than the box.
+void cbFit(Map& m,std::initializer_list<int> models,float x,float y,float z,float w,float d,float h,float yaw){
+ int best=*models.begin();float bestSpread=1e9f;bool turn=false;
+ for(int mdl:models)for(int q=0;q<2;++q){const auto& v=model::size[mdl];const float r0=(q?d:w)/v[0],r1=(q?w:d)/v[1],r2=h/v[2];
+  const float spread=std::max({r0,r1,r2})/std::min({r0,r1,r2});if(spread<bestSpread-.02f){bestSpread=spread;best=mdl;turn=q==1;}}
+ // never taller than the box: a rock too tall for its footprint is drawn narrower, not higher
+ const auto& v=model::size[best];const float r0=(turn?d:w)/v[0],r1=(turn?w:d)/v[1],r2=h/v[2],s=std::min(std::cbrt(r0*r1*r2),r2/.93f);
+ auto k=[&](float a){return std::clamp(a/s,.93f,1.075f)*s;};
+ cbModel(m,best,x,y,z,v[0]*k(r0),v[1]*k(r1),v[2]*k(r2),yaw+(turn?kPi*.5f:0.f));
+}
+// One prism from its foot at (x,y,z): h long, r across, leaning (lx,ly) metres per metre of rise.
+// Upright, it is one hexagonal shaft of glass round a thread of the self-lit finish (lit: a thick
+// core of it); leaning, a slimmer shaft of the self-lit finish laid in short courses, each set over by
+// the lean (short shards only: a long one would show its courses). Its point steps in, broad and
+// bright where it is bright.
+void cbPrism(Map& m,float x,float y,float z,float lx,float ly,float h,float r,bool lit=false,bool bright=false){
+ const float lean=std::sqrt(lx*lx+ly*ly),tip=std::min(h*.3f,r*1.7f),body=h-tip;
+ auto ring=[&](float lo,float hi,float rr,int mat){const float d=(lo+hi)*.5f-z,cx=x+lx*d,cy=y+ly*d;wall(m,cx-rr,cy-rr,cx+rr,cy+rr,lo,hi,mat);auto& s=m.structures.back();s.shape=ShapeColumn;s.solid=false;};
+ if(lean<.1f){lx=ly=0;ring(z,z+body,r,17);ring(z,z+body,r*(lit?.55f:.4f),35);}
+ else{const int n=std::clamp(int(body*lean/(r*.35f))+1,1,4);const float seg=body/float(n);for(int i=0;i<n;++i)ring(z+seg*float(i),z+seg*float(i+1),r*.55f,35);}
+ ring(z+body-.002f,z+h,r*(lit||bright?.55f:.38f),35);
+}
+// A crag of the rock too big for any of the pack's stones (their black finish only reads where a
+// lamp is close): the rock's own finish in faces leaning back from a ridge and from both its ends,
+// so it takes the light the way the heaved bedrock of the Breach Sector does.
+void cbCrag(Map& m,float x,float y,float z,float w,float d,float h,unsigned seed,bool solid=false){
+ // a modelled outcrop of the bedrock (res_rock_*): broad, tall or low by the crag's proportions, laid
+ // along its long side and turned end for end by its seed, sunk a little so it grows out of the floor
+ const bool alongX=w>=d;const float lng=alongX?w:d,sht=alongX?d:w;
+ const int mdl=h>lng*1.25f?model::res_rock_spire:h<lng*.5f?model::res_rock_low:model::res_rock_crag;
+ const float yaw=(alongX?0.f:kPi*.5f)+(((seed>>3)&1u)?kPi:0.f);
+ cbModel(m,mdl,x,y,z-h*.04f,lng,sht,h*1.04f,yaw,solid);
+}
+// A fang of the rock come up from below at scale s (1 is 3.7 m tall): a tall narrow crag in the rock's
+// own finish, so it takes the light (the pack's stalagmite is too black to read but under a lamp).
+void cbFang(Map& m,float x,float y,float z,float s,float yaw){cbCrag(m,x,y,z,1.5f*s,1.1f*s,3.7f*s,cbSeed(x,y+yaw),true);}
+// A crack the growth opened in a wall face along x (alongX) or y at `face`, from (t,z1) up to z2:
+// a zig-zag of thin struts with the magenta in it, now and then a fork.
+void cbCrack(Map& m,bool alongX,float face,float t,float z1,float z2,unsigned seed){
+ unsigned g=seed|1u;auto next=[&g]{g^=g<<13;g^=g>>17;g^=g<<5;return float(g&0xffffu)/65535.f;};
+ auto leg=[&](float a,float z,float run,float rise,float w){
+  if(std::fabs(run)<.03f){if(alongX)cbSeam(m,a-w*.5f,face-w*.5f,a+w*.5f,face+w*.5f,z,z+rise);else cbSeam(m,face-w*.5f,a-w*.5f,face+w*.5f,a+w*.5f,z,z+rise);return;}
+  const float c=a+run*.5f;
+  if(alongX)cbPrim(m,"strut",c,face,z,w,std::fabs(run),rise,run>0?1:3,34,false);else cbPrim(m,"strut",face,c,z,w,std::fabs(run),rise,run>0?0:2,34,false);};
+ float a=t,z=z1,w=.035f+next()*.025f;
+ while(z<z2-.1f){const float rise=std::min(.18f+next()*.4f,z2-z),run=(next()-.5f)*.36f;leg(a,z,run,rise,w);
+  if(next()<.16f&&z+rise<z2-.4f){const float fr=(next()<.5f?-1.f:1.f)*(.12f+next()*.2f);leg(a+run,z+rise-.02f,fr,.2f+next()*.35f,w*.7f);}
+  a+=run;z+=rise-.01f;w=std::max(.018f,w*.93f);}
+}
+// A crust on a surface. On a floor: a film of the rock with wet sheen on it, the growth in small wet
+// patches and in the cracks across it, a stone or two. Against a wall: the rock heaped up the face
+// in pieces half buried in it, the growth in the seams between them, and cracks with the growth in
+// them running on up the concrete from their shoulders, wet staining down from the cracks.
+void cbCrust(Map& m,float x1,float y1,float x2,float y2,float lo,float hi){
+ unsigned h=cbSeed(x1*3.f+x2,y1*5.f+y2+lo*.37f)|1u;auto next=[&h]{h^=h<<13;h^=h>>17;h^=h<<5;return float(h&0xffffu)/65535.f;};
+ if(hi-lo<.3f){
+  wall(m,x1,y1,x2,y2,lo,lo+.012f,26);
+  const int nx=std::max(1,int((x2-x1)/.8f+.5f)),ny=std::max(1,int((y2-y1)/.8f+.5f));const float cw=(x2-x1)/nx,cd=(y2-y1)/ny;
+  for(int i=0;i<nx;++i)for(int j=0;j<ny;++j){const float r=next(),cx=x1+(i+.5f)*cw,cy=y1+(j+.5f)*cd,sx=cw*(.18f+next()*.2f),sy=cd*(.18f+next()*.2f);
+   if(r<.2f){cbSeam(m,cx-sx,cy-sy*.5f,cx+sx,cy+sy*.5f,lo+.012f,lo+.02f);cbSeam(m,cx-sx*.5f,cy-sy,cx+sx*.5f,cy+sy,lo+.012f,lo+.024f);}
+   else if(r<.55f)cbSeam(m,cx-sx*1.4f,cy-sy*1.4f,cx+sx*1.4f,cy+sy*1.4f,lo+.013f,lo+.016f,17);
+   else if(r>.9f){const float s=.05f+next()*.06f;cbModel(m,model::cave_boulder_round,cx,cy,lo-.06f,3.15f*s,2.17f*s,2.98f*s,next()*6.28f);}}
+  // the cracks across it the growth came up through
+  for(int k=0;k<1+int((x2-x1)*(y2-y1)>6.f);++k){float cx=x1+(x2-x1)*(.2f+next()*.6f),cy=y1+(y2-y1)*(.2f+next()*.6f);const bool ax=next()<.5f;
+   for(int s=0;s<5;++s){const float run=.25f+next()*.45f,w=.03f+next()*.03f,jog=(next()-.5f)*.3f;
+    if(ax){const float nx2=std::min(x2,cx+run);if(nx2-cx>.05f)cbSeam(m,cx,cy-w*.5f,nx2,cy+w*.5f,lo+.012f,lo+.02f);cx=nx2;cy=std::clamp(cy+jog,y1+.05f,y2-.05f);}
+    else{const float ny2=std::min(y2,cy+run);if(ny2-cy>.05f)cbSeam(m,cx-w*.5f,cy,cx+w*.5f,ny2,lo+.012f,lo+.02f);cy=ny2;cx=std::clamp(cx+jog,x1+.05f,x2-.05f);}}}
+  return;}
+ const bool alongX=x2-x1>=y2-y1;const float len=alongX?x2-x1:y2-y1,span=hi-lo;
+ const int side=cbWallSide(m,x1,y1,x2,y2,lo+1.f);
+ const float face=alongX?(side<0?y1:y2):(side<0?x1:x2),out=-float(side);   // out: the way into the room
+ auto at=[&](float t,float o){return alongX?Vec2{x1+t,face+o*out}:Vec2{face+o*out,y1+t};};
+ auto across=[&](float t0,float t1,float o0,float o1,float z1,float z2,int mat=34){const Vec2 a=at(t0,o0),b=at(t1,o1);cbSeam(m,std::min(a.x,b.x),std::min(a.y,b.y),std::max(a.x,b.x),std::max(a.y,b.y),z1,z2,mat);};
+ const float yawBase=alongX?0.f:kPi*.5f;
+ if(len<.9f){
+  // a narrow face: one buttress of the rock at its foot, the growth run down it in two veins
+  const float ph=std::min(span,.8f+next()*.6f);const Vec2 c=at(len*.5f,.12f);
+  cbFit(m,{model::cave_rock_column,model::cave_stalagmite},c.x,c.y,lo-.04f,len*1.1f,.5f,ph,yawBase+(next()-.5f)*.4f);
+  for(int k=0;k<2;++k){const float t=len*(.25f+.5f*float(k))+(next()-.5f)*.1f,w=.03f+next()*.03f;across(t-w*.5f,t+w*.5f,-.01f,.012f,lo+ph*.5f,lo+std::min(span,ph+.4f+next()*span*.6f));}
+  return;}
+ float prevTop=0,prevEnd=-1;
+ for(float a=0;a<len-.15f;){
+  const float pw=std::min(.75f+next()*.95f,len-a+.25f),ph=std::min(span,.45f+next()*std::min(1.8f,span*.45f)),pd=.55f+next()*.55f,t=a+pw*.5f;
+  const Vec2 c=at(t,pd*.12f);const float yaw=yawBase+(next()-.5f)*.5f+(next()<.5f?kPi:0.f);
+  if(ph>1.1f){const int fc=alongX?(out>0?0:2):(out>0?1:3);const Vec2 b=at(t,pd*.32f);(void)fc;cbCrag(m,b.x,b.y,lo,alongX?pw:pd*.64f,alongX?pd*.64f:pw,ph,h^unsigned(t*977.f),true);
+   const Vec2 f2=at(t+(next()-.5f)*pw*.4f,pd*.7f);cbFit(m,{model::cave_boulder_a,model::cave_rock_slab},f2.x,f2.y,lo-.04f,.7f,.55f,.42f,yaw);}
+  else if(next()<.5f)cbFit(m,{model::cave_boulder_round,model::cave_rock_column,model::cave_boulder_a,model::cave_rock_slab},c.x,c.y,lo-.05f,pw,pd,ph,yaw);
+  else cbFit(m,{model::cave_boulder_a,model::cave_rock_block,model::cave_rock_slab,model::cave_stalagmite},c.x,c.y,lo-.05f,pw,pd,ph,yaw);
+  // the seam where it meets the one before: the growth in the crevice between them
+  if(prevEnd>0){const float s=(prevEnd+a)*.5f,st=.07f+next()*.08f;across(s-st*.5f,s+st*.5f,0,pd*.22f,lo,lo+std::min(ph,prevTop)*.55f);}
+  // a crack on up the concrete from its shoulder, and the wet coming down out of it
+  if(span>ph+.5f&&next()<.6f){const float ct=t+(next()-.5f)*pw*.5f,z2=std::min(hi-.05f,lo+ph+.5f+next()*std::min(3.4f,span-ph));
+   cbCrack(m,alongX,face+out*.004f,alongX?x1+ct:y1+ct,lo+ph*.75f,z2,h^unsigned(ct*977.f));
+   if(next()<.5f){const float w=.05f+next()*.07f;across(ct-w*.5f,ct+w*.5f,.002f,.006f,lo+ph*.6f,lo+ph+.4f+next()*.9f,8);}}
+  prevTop=ph;prevEnd=a+pw;a+=pw*.78f;}
+}
+// A patch of crust on a floor: the rock's film, cracked, wet, a hand high at most.
+void cbLens(Map& m,float x,float y,float f,float w,float d,float h=.09f){(void)h;cbCrust(m,x-w*.45f,y-d*.45f,x+w*.45f,y+d*.45f,f,f+.04f);}
+// A modelled crystal cluster (tools/library/build_resonance_crystals.py) whose prisms stand from z,
+// at scale s, its rock root sunk below z so only the root's crown shows. res_crystal_l is 2.9 m tall
+// at 1, res_crystal_m 1.6, res_crystal_s .7; the prisms burn from their bright tips (a *_glow finish).
+void cbCrystal(Map& m,int mdl,float x,float y,float z,float s,float yaw){
+ const auto& v=model::size[mdl];const float sink=mdl==model::res_crystal_l?.52f:mdl==model::res_crystal_m?.34f:.17f;
+ cbModel(m,mdl,x,y,z-sink*s,v[0]*s,v[1]*s,v[2]*s,yaw);
+}
+// The cluster that stands about h high from z: the big knot, the middle one or the scatter.
+void cbCrystalTo(Map& m,float x,float y,float z,float h,float yaw){
+ const int mdl=h>=1.7f?model::res_crystal_l:h>=.85f?model::res_crystal_m:model::res_crystal_s;
+ const float tall=mdl==model::res_crystal_l?2.36f:mdl==model::res_crystal_m?1.22f:.52f;   // the leader's height at scale 1
+ cbCrystal(m,mdl,x,y,z,h/tall,yaw);
+}
+// A crystal from its foot at (x,y,z): one prism w across and h high, or (lean 0 +y, 1 +x, 2 -y, 3 -x)
+// leaning out `reach` metres that way as it rises h.
+void cbShard(Map& m,float x,float y,float z,float w,float h,int lean=-1,float reach=0){
+ (void)w;(void)reach;constexpr float yaws[4]={kPi*.5f,0.f,-kPi*.5f,kPi};
+ cbCrystalTo(m,x,y,z,h,lean<0?cbSeed(x,y)%628u*.01f:yaws[lean]);
+}
+// The cave pack's bed of crystal spikes at scale s.
 void cbBed(Map& m,float x,float y,float z,float s,float yaw){cbModel(m,model::cave_crystal_bed_blue,x,y,z,1.22f*s,1.22f*s,.245f*s,yaw);}
-void cbFang(Map& m,float x,float y,float z,float s,float yaw){cbModel(m,model::cave_stalagmite,x,y,z,1.83f*s,2.55f*s,4.05f*s,yaw);}
-// A mound of growth: a blister risen off the floor with a second on its shoulder, pods budding on it.
+// A body of growth w by d by h: the rock it came up on, in pieces of the pack's rock kept near their
+// own proportions, the growth in the seams between them and wet at their foot. (back: kept for the
+// callers that once used it to turn the growth from the player; the rock now faces every way.)
+void cbGrowth(Map& m,float x,float y,float z,float w,float d,float h,bool solid=false,float back=0){
+ (void)back;unsigned g=cbSeed(x+z,y)|1u;auto next=[&g]{g^=g<<13;g^=g>>17;g^=g<<5;return float(g&0xffffu)/65535.f;};
+ const bool alongX=w>=d;const float lng=alongX?w:d,sht=alongX?d:w;
+ const int pieces=std::clamp(int(lng/(sht*1.3f)+.5f),1,4);const float step=lng/float(pieces);
+ const float yawBase=alongX?0.f:kPi*.5f;Vec2 prev{};float prevTop=0;
+ for(int i=0;i<pieces;++i){
+  const float t=-lng*.5f+step*(float(i)+.5f)+(next()-.5f)*step*.15f;
+  const float ph=h*(i==pieces/2?1.f:.6f+next()*.3f),pw=step*1.28f,pd=sht*(.88f+next()*.18f);
+  const Vec2 c=alongX?Vec2{x+t,y+(next()-.5f)*sht*.1f}:Vec2{x+(next()-.5f)*sht*.1f,y+t};const float yaw=yawBase+(next()-.5f)*.5f+(next()<.5f?kPi:0.f);
+  if(ph>.9f||std::max(pw,pd)>1.4f){cbCrag(m,c.x,c.y,z,alongX?pw:pd,alongX?pd:pw,ph,g^unsigned(i*7919));
+   const float q=std::min(ph*.32f,.55f);cbFit(m,{model::cave_boulder_a,model::cave_rock_slab},c.x+(next()-.5f)*pw*.6f,c.y+(next()-.5f)*pd*.6f,z-.04f,q*1.7f,q*1.3f,q,yaw);}
+  else if(next()<.5f)cbFit(m,{model::cave_boulder_round,model::cave_rock_column,model::cave_boulder_a,model::cave_rock_slab},c.x,c.y,z-.06f,pw,pd,ph,yaw);
+  else cbFit(m,{model::cave_rock_block,model::cave_stalagmite,model::cave_rock_slab,model::cave_boulder_a},c.x,c.y,z-.06f,pw,pd,ph,yaw);
+  if(i>0){const Vec2 s=(c+prev)*.5f;const float sh=std::min(ph,prevTop)*.58f,sw=sht*.36f,st=.08f+next()*.08f;
+   if(alongX)cbSeam(m,s.x-st*.5f,s.y-sw*.5f,s.x+st*.5f,s.y+sw*.5f,z,z+sh);else cbSeam(m,s.x-sw*.5f,s.y-st*.5f,s.x+sw*.5f,s.y+st*.5f,z,z+sh);}
+  prev=c;prevTop=ph;}
+ // wet at its foot, where it stands on a floor: sheen, and the growth out of the cracks
+ if(cbOnFloor(m,x,y,z))for(int k=0;k<3;++k){const float a=next()*6.28f,r=.5f+next()*.2f,px=x+std::cos(a)*w*r,py=y+std::sin(a)*d*r,s=.12f+next()*.2f;
+  cbSeam(m,px-s*1.6f,py-s*1.2f,px+s*1.6f,py+s*1.2f,z+.002f,z+.005f,17);
+  cbSeam(m,px-s*.5f,py-.025f,px+s*.5f,py+.025f,z+.002f,z+.012f);cbSeam(m,px-.025f,py-s*.4f,px+.025f,py+s*.4f,z+.002f,z+.012f);}
+ if(solid)wall(m,x-w*.3f,y-d*.3f,x+w*.3f,y+d*.3f,z,z+h*.75f,CollisionProxyMaterial);
+}
+// A mound of growth: a heap of the rock, a boulder it brought up broken off at its foot, the pods
+// budding in its seams.
 void cbMound(Map& m,float x,float y,float f,float r,float h){
  const unsigned s=cbSeed(x,y);
- cbPrim(m,"dome",x,y,f,r*2.f,r*1.5f,h,0,34,true);
- cbPrim(m,"dome",x+r*.5f*((s&1u)?1.f:-1.f),y+r*.32f*((s&2u)?1.f:-1.f),f,r*1.15f,r*.95f,h*.62f,0,34,false);
- for(int i=0;i<2+int(h>.9f);++i){const float a=float((s>>(4+i*5))%628u)*.01f,k=.38f+.14f*i,sc=.5f+.22f*float((s>>(i*3))&3u)/3.f;
-  cbModel(m,model::cave_nest_pod,x+std::cos(a)*r*k,y+std::sin(a)*r*.75f*k,f+h*std::sqrt(std::max(0.f,1-k*k))*.82f-.05f,.7f*sc,.7f*sc,.56f*sc,a);}
+ cbGrowth(m,x,y,f,r*2.f,r*1.5f,h,true);
+ cbModel(m,model::cave_boulder_round,x-r*((s&8u)?1.05f:-1.05f),y+r*.55f,f-.12f,.63f*r,.434f*r,.596f*r,float(s%628u)*.01f);
+ for(int i=0;i<1+int(h>.9f);++i){const float a=float((s>>(4+i*5))%628u)*.01f,k=.62f+.1f*float(i),sc=.42f+.18f*float((s>>(i*3))&3u)/3.f;
+  cbModel(m,model::cave_nest_pod,x+std::cos(a)*r*k,y+std::sin(a)*r*.75f*k,f-.04f,.7f*sc,.7f*sc,.56f*sc,a);}
 }
-// A knot of crystal: a chisel-tipped shaft, shards leaning out of its foot three ways, the bed of spikes round it.
+// A cluster of crystal, h at its tallest, from a root at (x,y) on the floor f: the root a crown of
+// rock with the rest of it under the floor where there is ground for it, rubble and the bed of
+// spikes round it, the prisms fanned out of it, the leader nearly upright, most of them short.
+// A cluster a metre or more high has its own cold light in among the prisms.
 void cbKnot(Map& m,float x,float y,float f,float h){
- const unsigned s=cbSeed(x,y);const int d=int(s&3u);const float w=std::clamp(h*.16f,.09f,.3f);
- cbShard(m,x,y,f,w,h);
- cbShard(m,x,y,f,w*.8f,h*.72f,d,h*.5f);cbShard(m,x,y,f,w*.7f,h*.55f,(d+1)&3,h*.45f);
- if(h>.75f)cbShard(m,x,y,f,w*.6f,h*.42f,(d+2)&3,h*.4f);
- cbBed(m,x,y,f,std::max(.5f,h*.9f),float(s%628u)*.01f);
- wall(m,x-w,y-w,x+w,y+w,f,f+h*.8f,CollisionProxyMaterial);
+ unsigned g=cbSeed(x,y)|1u;auto next=[&g]{g^=g<<13;g^=g>>17;g^=g<<5;return float(g&0xffffu)/65535.f;};
+ const bool ground=std::fabs(f-m.layers.front().elevation)<.35f;
+ const float rw=std::clamp(.6f+h*.3f,.7f,2.2f),show=std::clamp(.16f+h*.09f,.18f,.5f);
+ const int root=(g&2u)?model::cave_rock_block:model::cave_boulder_a;const auto& v=model::size[root];const float k=rw/v[0],rh=v[2]*k;
+ if(ground)cbModel(m,root,x,y,f+show-rh,rw,v[1]*k,rh,next()*6.28f);
+ else{const auto& sl=model::size[model::cave_rock_slab];const float q=(show+.04f)/sl[2];cbModel(m,model::cave_rock_slab,x,y,f-.02f,sl[0]*q,sl[1]*q,sl[2]*q,next()*6.28f);}
+ const float top=f+show;
+ {const float q=rw*.34f;cbModel(m,model::cave_oldcity_rubble,x+(next()-.5f)*rw*.9f,y+(next()-.5f)*rw*.7f,f,1.71f*q,1.71f*q,.3f*q,next()*6.28f);}
+ cbBed(m,x+(next()-.5f)*.3f,y+(next()-.5f)*.3f,f,std::clamp(rw*.95f,.7f,1.9f),next()*6.28f);
+ {const float b=next()*6.28f;cbBed(m,x+std::cos(b)*rw*.6f,y+std::sin(b)*rw*.6f,f,.5f+next()*.4f,next()*6.28f);}
+ // the crystal itself: the modelled cluster out of the root's crown, a smaller one beside it on a big knot
+ const float a0=next()*6.28f;
+ cbCrystalTo(m,x,y,top-.05f,h,a0);
+ if(h>=.9f)cbCrystalTo(m,x+std::cos(a0+2.4f)*rw*.42f,y+std::sin(a0+2.4f)*rw*.42f,f,h*(.35f+next()*.15f),a0+1.3f);
+ wall(m,x-rw*.28f,y-rw*.28f,x+rw*.28f,y+rw*.28f,f,f+std::min(h,1.6f)*.8f,CollisionProxyMaterial);
+ // its light in among the prisms, lifted clear of anything solid it would sit in
+ if(h>=1.f){const Vec2 lp{x+std::cos(a0)*rw*.42f,y+std::sin(a0)*rw*.42f};float lz=top+h*.3f;
+  for(int pass=0;pass<3;++pass)for(const auto& s:m.structures)if(s.solid&&lp.x>s.x1-.05f&&lp.x<s.x2+.05f&&lp.y>s.y1-.05f&&lp.y<s.y2+.05f&&lz>s.bottom-.05f&&lz<s.top+.05f)lz=s.top+.08f;
+  if(lz<f+h+.4f)m.lights.push_back(cbGlow(lp,lz,.5f+h*.16f,3.4f+h*1.3f,9000,{.55f,.85f,1.f},.06f));}
+}
+// A trunk of growth between two heights, where it ran down a face or reached the roof: the pack's
+// rock buttress stacked in pieces near its own proportions, wandering a little, the growth running
+// up it in veins and wet at its foot.
+void cbTrunk(Map& m,float x,float y,float lo,float hi,float w){
+ unsigned g=cbSeed(x,y+lo)|1u;auto next=[&g]{g^=g<<13;g^=g>>17;g^=g<<5;return float(g&0xffffu)/65535.f;};
+ const float pw=w*1.5f;const int n=std::max(2,int((hi-lo)/1.6f+.5f));const float step=(hi-lo)/float(n);
+ auto col=[&](float cx,float cy,float z1,float z2,float r,int mat){wall(m,cx-r,cy-r,cx+r,cy+r,z1,z2,mat);auto& s=m.structures.back();s.shape=ShapeColumn;s.solid=false;};
+ // the rock's own finish in courses that wander a hand off the line, broad at the foot and the head
+ for(int i=0;i<n;++i){const float r=w*.5f*((i==0||i==n-1)?1.2f:.85f+next()*.25f);col(x+(next()-.5f)*w*.22f,y+(next()-.5f)*w*.22f,lo+step*float(i)-(i?.12f:0.f),lo+step*float(i+1)+(i+1<n?.12f:0.f),r,26);}
+ for(int k=0;k<2+int(w>.45f);++k){const float a=next()*6.28f,rr=w*.42f,z1=lo+(hi-lo)*next()*.35f,z2=std::min(hi-.05f,z1+(hi-lo)*(.2f+next()*.45f));col(x+std::cos(a)*rr,y+std::sin(a)*rr,z1,z2,.025f+next()*.03f,34);}
+ if(cbOnFloor(m,x,y,lo)){const float q=std::min(w*.6f,.5f);cbFit(m,{model::cave_boulder_a,model::cave_rock_slab},x+(next()-.5f)*w,y+(next()-.5f)*w,lo-.04f,q*1.7f,q*1.3f,q,next()*6.28f);
+  const float s=pw*.9f;cbSeam(m,x-s,y-s*.7f,x+s,y+s*.7f,lo+.002f,lo+.005f,17);cbSeam(m,x-s*.8f,y-.02f,x+s*.8f,y+.02f,lo+.002f,lo+.012f);}
 }
 void cbPortalY(Map& m,float x1,float x2,float y1,float y2,float f,float roof,float head){
  wall(m,x1,y1-.6f,x2,y1,f,roof,15);wall(m,x1,y2,x2,y2+.6f,f,roof,15);wall(m,x1,y1,x2,y2,f+head,roof,15);
@@ -332,6 +528,17 @@ std::shared_ptr<const Map> makeIsolationWing(){
   cbFix(m,model::lab_pa_horn,doors[i][1]+1.1f,9.02f,f+2.5f,cbN,false);cbFix(m,model::lab_pa_horn,doors[i][1]+1.1f,13.98f,f+2.5f,cbS,false);
   if(i!=0&&i!=2)m.fixtures.push_back({model::med_mattress_stained,{a+1.05f,1.5f},.45f,1.9f,.9f,.118f,0,false});
   if(i!=3)m.fixtures.push_back({model::med_mattress_stained,{a+1.05f,22.5f},.45f,1.9f,.9f,.118f,0,false});}
+ // What each occupant was left, and left behind when they were moved at 04:10: the stool by the door
+ // they sat on to listen, the meal tray pushed back under it, a blanket, the days and hours scored
+ // on the wall over the slab, and a clock high on the wall where they could see it and not reach it.
+ // (5-8 spare, 1 and 4 dressed below, 3 hers.)
+ for(int row=0;row<2;++row)for(int k=0;k<4;++k){const char* n=numbers[row][k];if(*n=='1'||*n=='3'||*n=='4')continue;
+  const float a=bays[k][0],b=bays[k][1],door=row?14.6f:8.2f,slab=row?22.5f:1.5f,dir=row?-1.f:1.f,wallY=row?22.99f:1.01f;const unsigned s=cbSeed(a,door);
+  if(*n!='2'){cbModel(m,model::office_chair,doors[k][0]-.75f,door+dir*.1f,f,.55f,.55f,.95f,row?.4f:kPi-.3f,true);
+   m.clutterSpawns.push_back({1,{doors[k][0]-.6f,door+dir*.75f},f,float(s%628u)*.01f});}
+  if(s&1u)cbFix(m,model::scrap_bedroll,a+1.05f,slab,f+.45f,0,false,.95f);
+  for(int i=0;i<4+int(s%5u);++i)wall(m,a+.25f+i*.09f,wallY-.006f,a+.28f+i*.09f,wallY+.006f,f+1.15f,f+1.48f,8);
+  cbFix(m,model::med_wall_clock,(a+b)*.5f+.6f,row?22.98f:1.02f,f+2.55f,row?cbN:cbS,false,1.4f);}
  // 1 was emptied at 04:10: the mattress pulled off the slab, the chair they took him out in left where it stopped.
  cbFix(m,model::med_wheelchair,4.3f,7.2f,f,.4f,true);cbFix(m,model::med_crutches,1.12f,6.f,f,cbE,false);
  m.fixtures.push_back({model::med_mattress_stained,{2.5f,3.4f},0,1.9f,.9f,.118f,.5f,false});
@@ -453,12 +660,19 @@ std::shared_ptr<const Map> makeObservationTheater(){
  for(float x:{11.f,13.f,14.8f}){wall(m,x-.16f,12.14f,x+.16f,12.46f,fl+5.85f,fl+6.4f,8);
   m.lights.push_back(cbGlow({x,12.6f},fl+5.8f,1.45f,11.f,3300));}
  paperDrift(m,6.f,9.f,10.f,12.8f,fl,6,1031);
- wall(m,10.3f,14.3f,13.7f,17.7f,fl,fl+.3f,15);
+ // The vessel: a round steel plinth with a hazard ring, the glass on it, four tie rods up to a round
+ // crown that carries its extract and the feed cables to the roof.
+ cbPrim(m,"column",12.f,16.f,fl,4.3f,4.3f,.3f,0,15);cbPrim(m,"column",12.f,16.f,fl+.2f,4.36f,4.36f,.07f,0,13,false);
+ cbPrim(m,"column",12.f,16.f,fl+.3f,3.9f,3.9f,.012f,0,8,false);
  for(auto [x1,y1,x2,y2]:{std::tuple{10.6f,14.55f,13.4f,14.61f},{10.6f,17.39f,13.4f,17.45f},{10.55f,14.61f,10.61f,17.39f},{13.39f,14.61f,13.45f,17.39f}})
   breakable(m,x1,y1,x2,y2,fl+.3f,fl+3.8f,17,true);
- for(auto [x,y]:{std::pair{10.45f,14.45f},{13.35f,14.45f},{10.45f,17.35f},{13.35f,17.35f}})wall(m,x,y,x+.2f,y+.2f,fl+.3f,fl+3.8f,12);
- wall(m,10.3f,14.3f,13.7f,17.7f,fl+3.8f,fl+4.2f,12);
- for(auto [x,y]:{std::pair{10.9f,15.f},{13.1f,17.f}})m.pipes.push_back({{x,y},{x,y},fl+4.2f,.08f,roof,2});
+ for(auto [x,y]:{std::pair{10.55f,14.55f},{13.45f,14.55f},{10.55f,17.45f},{13.45f,17.45f}}){m.pipes.push_back({{x,y},{x,y},fl+.3f,.1f,fl+3.8f,5});
+  flange(m,{x,y,fl+.4f},{},.1f);flange(m,{x,y,fl+3.7f},{},.1f);}
+ wall(m,10.45f,14.45f,13.55f,17.55f,fl+3.8f,fl+3.9f,12);
+ cbPrim(m,"column",12.f,16.f,fl+3.9f,4.2f,4.2f,.32f,0,12,false);cbPrim(m,"column",12.f,16.f,fl+3.98f,4.26f,4.26f,.12f,0,13,false);
+ cbPrim(m,"dome",12.f,16.f,fl+4.22f,3.4f,3.4f,.7f,0,2,false);
+ m.pipes.push_back({{12.f,16.f},{12.f,16.f},fl+4.8f,.32f,roof,2});flange(m,{12.f,16.f,fl+4.9f},{},.32f);
+ for(auto [x,y]:{std::pair{10.9f,15.f},{13.1f,17.f}})m.pipes.push_back({{x,y},{x,y},fl+3.86f,.06f,roof,6});
  actor(m,clock,ActorVisual::Worker,1.7f,{{0,{12.f,16.f},fl+.3f,cbN,0,0},{9000,{12.f,16.f},fl+.3f,cbN,0,4}},true);   // the subject: he stood up
  m.lights.push_back(cbGlow({12.f,16.f},fl+2.6f,.55f,4.5f,6500,{.72f,.5f,1.f},.25f));
  hazard(m,Hazard::Kind::Anomaly,10.62f,14.62f,13.38f,17.38f,fl+.3f,fl+3.8f,0);
@@ -470,6 +684,23 @@ std::shared_ptr<const Map> makeObservationTheater(){
  // One of the rig's cans came down at 02:40 and still burns, on its side on the stage, raking the boards.
  wall(m,8.4f,15.4f,8.9f,15.75f,fl+.3f,fl+.62f,8);wall(m,8.9f,15.45f,8.93f,15.7f,fl+.34f,fl+.58f,20);
  m.lights.push_back(lamp({8.9f,15.57f},fl+.48f,.9f,6.f,3000,0,WorldLightMount::Wall,0,true));
+ // The demonstration's instrument bay, east of the stage: the analyser and the recorder that ran
+ // the field, their leads over the floor to the vessel, a trolley of meters, the operator's stool
+ // kicked back; and up by the glass, the two chairs Investigations had brought down to sit closer.
+ cbFix(m,model::lab_analyzer_cabinet,21.82f,13.4f,fl,cbW,true);cbFix(m,model::lab_mainframe,21.8f,16.9f,fl,cbW,true);
+ cbFix(m,model::lab_clean_bench,18.9f,15.2f,fl,cbW,true);
+ kit::prop(m,model::lab_scope_monitor,18.95f,15.f,fl+.81f,cbW);kit::prop(m,model::lab_field_meter,18.85f,15.6f,fl+.81f,cbW+.3f);
+ cbFix(m,model::lab_instrument_terminal,20.6f,19.4f,fl,cbN,true);kit::prop(m,model::lab_scope_monitor,20.6f,19.45f,fl+.68f,cbN);
+ kit::propPose(m,model::office_chair,19.6f,17.4f,fl,2.2f,0.f,1.5f);
+ for(auto [y,x1]:{std::pair{15.7f,20.6f},{16.25f,20.6f}}){wall(m,16.5f,y-.025f,x1,y+.025f,fl,fl+.03f,8);m.structures.back().solid=false;}
+ for(auto [x,y]:{std::pair{13.1f,11.5f},{14.4f,11.6f}})cbFix(m,model::lab_boardroom_chair,x,y,fl,cbS+(x-13.7f)*.3f,true);
+ kit::prop(m,model::office_paper_stack,13.75f,11.7f,fl,.33f,.44f,.03f,.4f);
+ m.lights.push_back(cbGlow({20.3f,15.f},fl+1.3f,.45f,4.f,9000,{.6f,.8f,1.f},.05f));                       // the scopes, still tracing
+ m.lights.push_back(lamp({23.f,15.f},fl+3.2f,.6f,7.f,4300,.25f,WorldLightMount::Wall,blW));
+ // Backstage: the cart they wheeled him on, the crates the rig came in.
+ cbFix(m,model::lab_specimen_crate,5.f,21.6f,fl,.2f,true);cbFix(m,model::lab_specimen_crate,6.2f,21.9f,fl,-.15f,true,.8f);
+ handCart(m,9.2f,21.f,fl);
+ m.lights.push_back(lamp({12.f,23.f},fl+2.8f,.45f,6.f,3000,0,WorldLightMount::Wall,blN));
  wall(m,16.f,10.f,19.f,10.7f,fl,fl+.88f,20);wall(m,15.95f,9.95f,19.05f,10.75f,fl+.88f,fl+.92f,28);
  terminal(m,{17.5f,10.35f},"THEATER / DEMONSTRATION 7","AUDIENCE: THE BOARD, AND INTERNAL INVESTIGATIONS. SUBJECT R-31, FORMERLY A FITTER, BAY 2. FIELD STABLE.",
   "02:40 SUBJECT STOOD UP. DEMONSTRATION HALTED. AUDIENCE LEFT BY THE WEST GALLERY. INVESTIGATIONS STAYED TO WATCH.",.92f);
@@ -509,33 +740,25 @@ std::shared_ptr<const Map> makeBreachSector(){
  openEdge(m,{'S',10.f,14.f,up,false,0});
  machineryClock(m,"conb_br_clock",60000);const char* clock="conb_br_clock";
  const StateId dark=stateId("conb_br_dark");
- auto rock=[&](const char* kind,float x,float y,float z,float w,float d,float h,int facing,bool solid=true){cbPrim(m,kind,x,y,z,w,d,h,facing,26,solid);};
+ // The crater's rock. The heaved bedrock against the sides (batters) and the scree (ramps) keep their
+ // own faces; a dome is the black rock come up from below, the collision of the boulders of the cave
+ // pack laid over it in pieces near their own proportions.
+ auto heap=[&](float x,float y,float z,float w,float d,float h,bool round){
+  // the rock's own finish in faces leaning back from a ridge, so it takes the crater's light
+  (void)round;cbCrag(m,x,y,z-.1f,w*1.04f,d*1.04f,h+.1f,cbSeed(x*1.7f,y+z*.3f));
+ };
+ auto rock=[&](const char* kind,float x,float y,float z,float w,float d,float h,int facing,bool solid=true){
+  if(std::string(kind)!="dome"){cbPrim(m,kind,x,y,z,w,d,h,facing,26,solid);return;}
+  if(solid)cbPrim(m,kind,x,y,z,w,d,h,facing,CollisionProxyMaterial,true);
+  heap(x,y,z,w,d,h,std::string(kind)=="dome");};
  // A stone of the black rock that came up: the pack model, and a core to walk into.
  auto stone=[&](int mdl,float x,float y,float z,float s,float yaw,bool block=true){const auto& v=model::size[mdl];cbModel(m,mdl,x,y,z,v[0]*s,v[1]*s,v[2]*s,yaw);
   if(block){const float r=std::min(v[0],v[1])*s*.34f;wall(m,x-r,y-r,x+r,y+r,z,z+v[2]*s*.8f,CollisionProxyMaterial);}};
  // Plant that went down with the floor: the model sunk into the crater, a core to walk into.
  auto sunk=[&](int mdl,float x,float y,float sink,float yaw,float hx,float hy){const auto& v=model::size[mdl];cbModel(m,mdl,x,y,fl-sink,v[0],v[1],v[2],yaw);
   wall(m,x-hx,y-hy,x+hx,y+hy,fl,fl-sink+v[2],CollisionProxyMaterial);};
- // Crust on a floor: a patch a finger thick with a stepped edge, walked over.
- auto crust=[&](float x,float y,float w,float d,float z){const unsigned s=cbSeed(x,y);const float ox=(float(s&15u)/15.f-.5f)*w*.14f,oy=(float((s>>4)&15u)/15.f-.5f)*d*.14f;
-  wall(m,x-w*.5f,y-d*.3f+oy,x+w*.5f,y+d*.3f+oy,z,z+.02f,34);wall(m,x-w*.3f+ox,y-d*.5f,x+w*.3f+ox,y+d*.5f,z,z+.026f,34);wall(m,x-w*.41f-ox,y-d*.41f-oy,x+w*.41f-ox,y+d*.41f-oy,z,z+.032f,34);};
- // The growth up a wall face ('N': the face at y 1, along x; 'W': the face at x 1, along y): a sheet
- // of crust from `lo` over the floor, risen in round-tipped fingers to the heights given along it
- // ({where, how high}), some of them running on up the concrete in a tendril.
- auto creep=[&](char side,std::initializer_list<Vec2> env,float lo,unsigned seed){
-  unsigned h=seed*2654435761u+7;auto next=[&h]{h^=h<<13;h^=h>>17;h^=h<<5;return float(h&0xffffu)/65535.f;};
-  const Vec2* e=env.begin();const size_t n=env.size();
-  auto top=[&](float t){for(size_t i=1;i<n;++i)if(t<=e[i].x){const float k=(t-e[i-1].x)/(e[i].x-e[i-1].x);return e[i-1].y+(e[i].y-e[i-1].y)*k;}return e[n-1].y;};
-  for(float a=e[0].x;a<e[n-1].x-.25f;){
-   const float w=std::min(.4f+next()*1.f,e[n-1].x-a),c=a+w*.5f,hi=fl+top(c)*(.66f+next()*.5f),cap=w*(.45f+next()*.5f),t=.05f+next()*.07f;
-   const bool tendril=next()<.34f;const float r=.07f+next()*.1f,run=.8f+next()*3.6f;
-   if(hi-cap>fl+lo+.1f){
-    if(side=='N'){wall(m,a,1.f,a+w,1.f+t,fl+lo,hi-cap,34);cbPrim(m,"dome",c,1.f,hi-cap,w,t*2.f+.32f,cap,0,34,false);}
-    else{wall(m,1.f,a,1.f+t,a+w,fl+lo,hi-cap,34);cbPrim(m,"dome",1.f,c,hi-cap,t*2.f+.32f,w,cap,0,34,false);}
-    m.structures[m.structures.size()-2].solid=false;
-    if(tendril&&hi+.4f<roof){const float z2=std::min(hi+run,roof);if(side=='N')wall(m,c-r,1.f,c+r,1.035f,hi-.12f,z2,34);else wall(m,1.f,c-r,1.035f,c+r,hi-.12f,z2,34);m.structures.back().solid=false;}}
-   a+=w;}
- };
+ // Crust on a floor: the rock's film over the crater floor, cracked and wet, the growth in its cracks.
+ auto crust=[&](float x,float y,float w,float d,float z){cbCrust(m,x-w*.5f,y-d*.5f,x+w*.5f,y+d*.5f,z,z+.03f);};
  // --- What is left of the sector floor: the east ledge, the south ledge, the lift core between ---
  wall(m,18.f,1.f,24.f,17.f,fl,up,15);wall(m,1.f,19.f,18.f,24.f,fl,up,15);
  wall(m,18.f,17.f,23.f,23.f,fl,roof,15);
@@ -568,20 +791,22 @@ std::shared_ptr<const Map> makeBreachSector(){
  // --- At the bottom, the source: the heave, the black rock standing out of it, the spire ----------
  const float sx=8.6f,sy=7.2f;
  rock("dome",sx,sy,fl,5.4f,4.6f,1.5f,0);
- for(auto [dx,dy,w,d,h]:{std::tuple{-.9f,.5f,2.4f,2.2f,1.9f},{1.f,.2f,2.6f,2.f,2.3f},{.1f,-1.f,2.2f,1.8f,1.7f},{.2f,1.3f,1.8f,1.4f,1.5f}})cbPrim(m,"dome",sx+dx,sy+dy,fl,w,d,h,0,34,false);
- for(auto [dx,dy,sc,yaw]:{std::tuple{1.9f,-1.3f,.8f,1.9f},{-.6f,-2.f,.62f,5.1f}})
-  cbFang(m,sx+dx,sy+dy,fl+.25f,sc,yaw);
- for(auto [dx,dy,w,h]:{std::tuple{0.f,0.f,.86f,8.6f},{-.7f,-.5f,.5f,5.f},{.7f,.6f,.58f,6.f},{.8f,-.6f,.4f,3.9f},{-.8f,.6f,.44f,3.5f},{.3f,1.1f,.36f,2.9f},{-.35f,.15f,.34f,6.9f},{.4f,-.3f,.3f,7.5f}})
-  cbShard(m,sx+dx,sy+dy,fl+1.f,w,h-1.f);
- for(auto [dx,dy,w,h,lean,reach]:{std::tuple{.5f,.1f,.42f,4.4f,1,2.4f},{-.5f,-.1f,.36f,3.6f,3,2.f},{0.f,.5f,.4f,3.9f,0,2.2f},{.1f,-.5f,.32f,3.f,2,1.7f},{.9f,.9f,.26f,2.4f,1,1.5f},{-.9f,.4f,.28f,2.6f,0,1.4f},{-.3f,-.9f,.24f,2.f,3,1.3f}})
-  cbShard(m,sx+dx,sy+dy,fl+1.1f,w,h,lean,reach);
+ for(auto [dx,dy,w,d,h]:{std::tuple{-.9f,.5f,2.4f,2.2f,1.9f},{1.f,.2f,2.6f,2.f,2.3f},{.1f,-1.f,2.2f,1.8f,1.7f},{.2f,1.3f,1.8f,1.4f,1.5f}})cbGrowth(m,sx+dx,sy+dy,fl,w,d,h*.8f);
+ // The spire: the tallest prisms, lit through, out of the heave's crown; round them the rest of it,
+ // shorter and leaning further out the lower they stand, and the clusters at its foot.
+ // (modelled clusters: the hero knot scaled up out of the crown, two more leaning off it, smaller round its foot)
+ cbCrystal(m,model::res_crystal_l,sx,sy,fl+1.f,2.6f,.3f);
+ cbCrystal(m,model::res_crystal_l,sx-.75f,sy+.55f,fl+.85f,1.55f,2.4f);
+ cbCrystal(m,model::res_crystal_m,sx+.8f,sy-.5f,fl+.9f,2.1f,4.1f);
+ for(auto [dx,dy,h,yaw]:{std::tuple{1.15f,.6f,1.1f,1.f},{-1.2f,-.4f,.95f,3.3f},{.3f,-1.25f,.8f,5.f},{-.2f,1.3f,.75f,.6f}})cbCrystalTo(m,sx+dx,sy+dy,fl+.6f,h,yaw);
+ for(auto [dx,dy,h]:{std::tuple{-2.3f,.7f,.9f},{3.1f,-.7f,1.1f},{.7f,-2.1f,.8f},{-1.f,2.1f,1.f},{1.9f,1.7f,.6f}})cbKnot(m,sx+dx,sy+dy,fl,h);
  for(auto [dx,dy,sc,z,yaw]:{std::tuple{-1.5f,.9f,1.6f,1.f,.4f},{1.6f,.2f,1.4f,1.1f,1.3f},{.9f,-1.5f,1.3f,1.f,2.2f},{-1.2f,-1.3f,1.5f,.9f,2.9f},{.1f,1.8f,1.2f,.9f,3.6f},{2.3f,1.3f,1.1f,.2f,.9f},{-2.4f,-.2f,1.2f,.25f,2.f}})
   cbBed(m,sx+dx,sy+dy,fl+z,sc,yaw);
  wall(m,sx-1.f,sy-1.f,sx+1.f,sy+1.f,fl,fl+8.f,CollisionProxyMaterial);wall(m,9.6f,7.05f,11.5f,7.55f,fl,fl+3.f,CollisionProxyMaterial);
  stone(model::cave_stalagmite_cluster,11.7f,5.6f,fl,.85f,.6f,false);stone(model::cave_stalagmite_cluster,5.9f,9.f,fl,.75f,2.3f,false);
  m.lights.push_back(cbGlow({sx,sy+1.7f},fl+2.4f,2.5f,18.f,6500,{.72f,.5f,1.f},.12f));
  m.lights.push_back(cbGlow({sx,sy-.8f},fl+9.f,1.3f,12.f,6500,{.6f,.45f,1.f},.08f));
- m.lights.push_back(cbGlow({sx+2.7f,sy-.9f},fl+1.f,.9f,7.f,7000,{.45f,.6f,1.f},.1f));                // its base, cold
+ m.lights.push_back(cbGlow({sx+2.7f,sy-.9f},fl+1.f,1.5f,9.f,7000,{.45f,.6f,1.f},.1f));               // its base, cold
  {auto l=cbGlow({sx-.4f,sy+1.9f},fl+3.4f,3.4f,17.f,6500,{.8f,.6f,1.f});l.enabledState=dark;l.period=3.2f;l.onTime=.45f;m.lights.push_back(l);}   // its pulse, once the flood is gone
  hazard(m,Hazard::Kind::Anomaly,6.2f,4.8f,11.f,9.6f,fl,fl+3.f,0);hazard(m,Hazard::Kind::Anomaly,7.f,5.6f,10.2f,8.8f,fl,fl+3.f,14);
  // --- The crater floor: rock, and the crust over it in blisters; mounds, knots, the black stones ---
@@ -589,21 +814,16 @@ std::shared_ptr<const Map> makeBreachSector(){
  for(auto [x,y,r,h]:{std::tuple{5.6f,7.7f,1.1f,1.f},{10.9f,3.9f,.9f,.7f},{3.7f,13.5f,1.f,1.2f},{12.9f,17.2f,.9f,.7f},{10.f,16.4f,.7f,.5f}})cbMound(m,x,y,fl,r,h);
  stone(model::cave_boulder_a,13.f,7.9f,fl-.15f,.55f,1.1f);stone(model::cave_boulder_round,14.4f,3.6f,fl-.2f,.6f,.4f);
  stone(model::cave_rock_block,8.2f,15.3f,fl-.2f,.5f,.8f);stone(model::cave_boulder_round,2.3f,12.6f,fl-.3f,.7f,1.4f);
- stone(model::cave_rock_block,5.4f,2.3f,fl+.3f,1.1f,.2f,false);
- // the growth going up the walls it reached: blisters on the north and west faces
- creep('N',{{1.f,7.6f},{3.f,6.f},{5.f,5.2f},{7.5f,7.6f},{9.6f,10.8f},{11.5f,7.6f},{13.f,5.f},{14.6f,3.6f}},2.2f,11);
- creep('W',{{1.f,7.6f},{4.f,5.6f},{7.f,5.4f},{9.f,8.4f},{10.6f,11.2f},{12.5f,7.2f},{14.6f,5.f},{16.4f,3.6f}},2.2f,23);
- // where it is thickest it stands off the wall in swellings a metre deep, seated on the heaved rock
- for(auto [x,z,w,d,h]:{std::tuple{9.4f,2.7f,3.2f,2.2f,2.6f},{7.3f,2.6f,2.2f,1.6f,1.7f},{11.5f,2.5f,2.f,1.5f,1.5f},{2.2f,2.9f,2.4f,2.f,2.2f}})cbPrim(m,"dome",x,std::max(1.f,d*.5f),fl+z,w,d,h,0,34,false);
- for(auto [y,z,w,d,h]:{std::tuple{10.4f,3.1f,3.4f,2.4f,2.8f},{8.3f,2.8f,2.f,1.6f,1.6f},{12.6f,2.7f,2.2f,1.6f,1.8f}})cbPrim(m,"dome",std::max(1.f,d*.5f),y,fl+z,d,w,h,0,34,false);
- // and over the rock under it: the heave behind the spire is grown over, top to foot
- for(auto [a,b,d,h]:{std::tuple{7.f,10.5f,2.f,3.3f},{10.5f,13.2f,1.3f,2.9f}})cbPrim(m,"batter",(a+b)*.5f,1.f+d*.5f+.04f,fl,b-a-.16f,d+.08f,h+.05f,0,34,false);
- cbPrim(m,"batter",1.f+2.1f*.5f+.04f,10.f,fl,3.2f-.16f,2.1f+.08f,3.75f,1,34,false);
- for(auto [x,lo,w]:{std::tuple{9.f,8.2f,.34f},{10.3f,8.6f,.5f},{8.4f,6.f,.26f}}){wall(m,x-w*.5f,1.f,x+w*.5f,1.05f,fl+lo,roof,34);m.structures.back().solid=false;}
- for(auto [y,lo,w]:{std::tuple{10.f,9.2f,.5f},{11.2f,9.f,.3f},{9.2f,7.f,.28f}}){wall(m,1.f,y-w*.5f,1.05f,y+w*.5f,fl+lo,roof,34);m.structures.back().solid=false;}
+ stone(model::cave_rock_block,5.4f,2.3f,fl+.3f,1.1f,.2f,false);wall(m,4.f,1.3f,6.8f,3.3f,fl,fl+2.8f,CollisionProxyMaterial);
+ // the growth up the walls it reached: the rock heaved up the faces over the heave, and over that the
+ // concrete cracked toward the roof, the growth in the cracks and the wet run down out of them
+ for(auto [x,z2]:{std::pair{2.1f,5.2f},{3.6f,6.8f},{5.3f,4.6f},{6.4f,7.4f},{12.4f,6.2f},{13.6f,4.4f},{15.1f,5.6f},{16.6f,4.2f}})cbCrack(m,true,1.004f,x,fl+2.9f,fl+z2,cbSeed(x,z2+.5f));
+ for(auto [y,z2]:{std::pair{3.6f,5.8f},{5.2f,4.4f},{6.6f,7.f},{7.9f,5.4f},{12.6f,6.4f},{14.f,4.8f},{15.6f,6.f},{17.2f,4.2f}})cbCrack(m,false,1.004f,y,fl+3.f,fl+z2,cbSeed(z2+.5f,y));
+ // behind the spire, where it came up hardest, the cracks run nearly to the roof
+ for(auto [x,z2]:{std::pair{8.4f,9.6f},{9.1f,12.f},{10.3f,11.2f},{11.4f,8.8f}})cbCrack(m,true,1.004f,x,fl+3.f,std::min(roof-.3f,fl+z2),cbSeed(x,z2));
+ for(auto [y,z2]:{std::pair{9.2f,9.4f},{10.f,12.2f},{11.2f,10.6f}})cbCrack(m,false,1.004f,y,fl+3.1f,std::min(roof-.3f,fl+z2),cbSeed(z2,y));
  const Vec2 knots[4]={{10.6f,13.9f},{8.2f,11.4f},{11.5f,8.f},{3.3f,15.9f}};
  for(int i=0;i<4;++i){const Vec2 k=knots[i];cbKnot(m,k.x,k.y,fl,1.2f+.3f*(i%2));
-  m.lights.push_back(cbGlow({k.x+.3f,k.y+.3f},fl+1.5f,.6f,5.5f,6500,i%2?Point3{.3f,.6f,1.f}:Point3{.72f,.5f,1.f},.25f));
   hazard(m,Hazard::Kind::Anomaly,k.x-1.4f,k.y-1.4f,k.x+1.4f,k.y+1.4f,fl,fl+2.4f,0);                // the shimmer first
   hazard(m,Hazard::Kind::Anomaly,k.x-.7f,k.y-.7f,k.x+.7f,k.y+.7f,fl,fl+2.4f,10);}                 // then it bites
  cbHum(m,"conb_br_hum",1.f,1.f,18.f,19.f,fl,fl+4.f,.7f);
@@ -629,9 +849,9 @@ std::shared_ptr<const Map> makeBreachSector(){
  // one high-bay still burns on its drop over the plant; two hang dead
  cbPendant(m,{5.6f,6.4f},roof,fl+3.f,2.4f,9.f,1900,.12f,-.2f);cbPendant(m,{14.f,6.2f},roof,fl+3.6f,0,0,0);cbPendant(m,{10.6f,15.6f},roof,fl+4.2f,0,0,0);
  m.lights.push_back(cbGlow({10.f,10.5f},-9.5f,4.6f,19.f,7500));                                       // the hole in the roof the light comes down
- // round it the roof slab is down and the rock over it has sagged through
- for(auto [x,y,sc,yaw]:{std::tuple{8.2f,9.3f,1.2f,.4f},{11.9f,10.f,1.f,2.1f},{9.6f,12.6f,1.1f,3.6f}}){const auto& v=model::size[model::cave_ceiling_rock];cbModel(m,model::cave_ceiling_rock,x,y,roof-v[2]*sc*.8f,v[0]*sc,v[1]*sc,v[2]*sc,yaw);}
- for(auto [x,y,sc,yaw]:{std::tuple{10.6f,8.4f,.7f,1.f},{7.6f,11.6f,.55f,2.6f}}){const auto& v=model::size[model::cave_stalactite];cbModel(m,model::cave_stalactite,x,y,roof-v[2]*sc*.88f,v[0]*sc,v[1]*sc,v[2]*sc,yaw);}
+ // the crystal's own light thrown about the crater floor, cold, so the black rock it came up with
+ // shows its shape against the beige of the heave: low fills off the clusters, no shadows of their own
+ for(auto [x,y]:{std::pair{5.2f,12.4f},{12.6f,14.6f}})m.lights.push_back(cbGlow({x,y},fl+1.3f,1.15f,9.5f,9000,{.55f,.85f,1.f},.04f));
  m.lights.push_back(cbGlow({4.4f,10.6f},fl+1.75f,.45f,4.f,6500,{.72f,.5f,1.f},.3f));                  // in the cage
  // --- The tall one. It stands under the east ledge, its back to you, where the flood throws its
  // shadow across the floor; it does not move until the flood is gone.
@@ -679,6 +899,8 @@ std::shared_ptr<const Map> makeBreachSector(){
  cbMound(m,2.3f,21.6f,up,1.f,.9f);crust(3.2f,21.2f,3.8f,3.f,up);
  cbFix(m,model::pwr_generator_unit,16.2f,21.6f,up,.2f,true);cbFix(m,model::pwr_step_transformer,15.f,22.3f,up,0,true);
  cbFix(m,model::lab_status_display,18.f-.04f,20.1f,up+2.f,cbW,false);
+ m.lights.push_back(lamp({18.f,21.3f},up+2.4f,.55f,6.f,4200,0,WorldLightMount::Wall,blW));             // the ledge's own lamp on the lift core
+ m.fixtures.push_back({model::mine_cage_lamp,{17.9f,21.3f},up+2.2f-m.layers.front().elevation,.21f,.2f,.36f,cbW,false});
  m.pickupSpawns.push_back({{2.8f,20.2f},PickupKind::Health,up});
  {ScriptAction save;save.type=ScriptAction::Type::Checkpoint;cbEvent(m,"conb_br_out",9.5f,20.6f,14.5f,23.6f,"conb_br_dark",{save});}
  // --- Light: the Force's work lamps mark the line; red on the walls; the way on is the one warm door
@@ -756,7 +978,14 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  for(auto [x,y,v,yaw]:{std::tuple{8.f,7.6f,ActorVisual::Cleanup,.2f},{11.6f,8.4f,ActorVisual::CleanupRusher,2.7f},{15.6f,7.6f,ActorVisual::Cleanup,1.4f}})cbBody(m,clock,v,{x,y},f,yaw);
  m.fixtures.push_back({model::med_corpse_supine,{20.f,9.6f},0,.744f,1.753f,.411f,cbE,false});
  // --- The welded room (west): it knocks -----------------------------------------------------------
- wall(m,1.f,7.8f,6.2f,8.f,f,roof,15);wall(m,6.f,8.f,6.2f,13.f,f,roof,15);
+ wall(m,1.f,7.8f,6.2f,8.f,f,roof,38);wall(m,6.f,8.f,6.2f,13.f,f,roof,38);
+ // its outside: the store it was, the main along it, the hose point, a lamp over the gap behind line A
+ pipeRoute(m,{{1.f,7.62f,f+2.75f},{5.6f,7.62f,f+2.75f},{5.6f,7.97f,f+2.75f}},.07f,4,roof);pipeRoute(m,{{1.f,7.4f,f+3.05f},{4.4f,7.4f,f+3.05f},{4.4f,7.97f,f+3.05f}},.045f,1,roof);
+ extinguisher(m,2.6f,7.8f,f+.3f,cbN);cbFix(m,model::pwr_fire_cabinet,5.3f,7.78f,f+1.1f,cbN,false);
+ cbFix(m,model::lab_notice_board,3.9f,7.77f,f+1.3f,cbN,false);
+ m.lights.push_back(lamp({1.8f,7.8f},f+2.35f,.55f,5.5f,4600,.04f,WorldLightMount::Wall,blN));
+ m.fixtures.push_back({model::mine_cage_lamp,{1.8f,7.7f},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,kPi,false});
+ cbFix(m,model::lab_specimen_crate,4.7f,7.18f,f,.1f,true,.55f);kit::prop(m,model::prop_cardboard_box,4.7f,7.18f,f+.62f,.3f,.7f);
  {const int d=wallDoor(m,1.f,6.2f,13.f,13.2f,3.f,4.2f,f,roof,1);m.doors[size_t(d)].requireState=stateId("conb_ec_welded");}   // never: welded
  for(float x:{3.f,4.15f})wall(m,x,13.2f,x+.05f,13.26f,f,f+2.4f,13);
  taped(m,{2.f,13.2f},f+1.5f,cbS,Readable::Note,"WELDED 03:30","DO NOT OPEN. WHATEVER IT SAYS. IT KNOWS OUR NAMES NOW.","");
@@ -768,8 +997,14 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  for(float x:{7.f,8.7f,15.5f,17.2f})cbFix(m,model::barrier,x,15.5f,f,0,true);
  for(float x:{10.2f,11.4f,12.6f,13.8f,18.6f,19.8f,21.f,22.2f})cbFix(m,model::lab_specimen_crate,x,15.5f,f,(x-16.f)*.006f,true);
  // --- The control room (east): the release -------------------------------------------------------
- wall(m,17.f,7.8f,23.f,8.f,f,roof,15);
- wall(m,16.8f,8.f,17.f,8.6f,f,roof,15);cbGlaze(m,16.8f,8.6f,17.f,12.4f,f,roof);wall(m,16.8f,12.4f,17.f,13.2f,f,roof,15);
+ wall(m,17.f,7.8f,23.f,8.f,f,roof,36);
+ wall(m,16.8f,8.f,17.f,8.6f,f,roof,36);cbGlaze(m,16.8f,8.6f,17.f,12.4f,f,roof,.95f,2.4f,true,36);wall(m,16.8f,12.4f,17.f,13.2f,f,roof,36);
+ // its back, on the gap behind line A: the room's feeds coming in, the breakers for the hall, a lamp
+ cableTray(m,{17.f,7.52f},{23.f,7.52f},f+2.6f);
+ for(float x:{18.2f,18.6f,19.f})cbFix(m,model::pwr_breaker_panel,x,7.75f,f+1.4f,cbN,false);
+ cbFix(m,model::pwr_disconnect_switch,21.4f,7.62f,f+1.f,cbN,false);cbFix(m,model::pwr_ammeter_box,22.1f,7.74f,f+1.5f,cbN,false);
+ m.lights.push_back(lamp({20.f,7.8f},f+2.35f,.55f,5.5f,4600,.04f,WorldLightMount::Wall,blN));
+ m.fixtures.push_back({model::mine_cage_lamp,{20.f,7.7f},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,kPi,false});
  wallDoor(m,17.f,23.f,13.f,13.2f,19.6f,20.8f,f,roof,-1);
  cbFix(m,model::lab_control_board,22.9f,10.6f,f+.95f,cbW,false);
  terminal(m,{22.2f,10.6f},"EMERGENCY BARRICADE / SOUTH","LOWERED 03:20 ON SECTOR LOSS. ACCUMULATOR BLED DOWN 03:41 BY ORDER. RAISE NEEDS 180 BAR.",
@@ -777,7 +1012,7 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  m.terminals.back().yaw=cbW;
  cbFix(m,model::lab_status_display,22.95f,12.f,f+1.8f,cbW,false);
  for(float x:{18.2f,19.2f})cbFix(m,model::med_records_cabinet,x,8.27f,f,cbS,true);
- m.lights.push_back(cbTube(20.f,10.6f,roof,.5f,5.f,4200,.03f));
+ m.lights.push_back(cbTube(20.f,10.6f,roof,.8f,6.5f,4200,.03f));
  m.lights.push_back(cbGlow({22.4f,10.6f},f+1.4f,.25f,2.4f,9000,{.6f,.8f,1.f},.08f));
  // raising it brings the sector's things to the noise
  {ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Transformed;a.position={11.f,3.f};a.z=f;a.amount=8;
@@ -788,7 +1023,7 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  floorLine(m,9.f,21.5f,15.f,21.7f,f,13);
  wallSign(m,12.f,22.38f,f+3.35f,"BARRICADE DOWN","RAISED FROM THE CONTROL ROOM / EAST",3.f,cbN);
  for(auto [x,ph]:{std::pair{9.3f,0.f},{14.7f,.7f}})m.lights.push_back(cbBeacon({x,22.4f},f+2.9f,blN,ph,"cont_barricade"));
- {auto l=cbGlow({12.f,22.1f},f+3.f,.6f,5.f,5000,{.2f,1.f,.3f});l.enabledState=stateId("cont_barricade");m.lights.push_back(l);}
+ {auto l=cbGlow({12.f,21.5f},f+3.5f,.6f,5.f,5000,{.2f,1.f,.3f});l.enabledState=stateId("cont_barricade");m.lights.push_back(l);}
  cbFix(m,model::lab_specimen_crate,20.6f,20.4f,f,.3f,true);
  {const int lampProp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,20.6f,20.4f,f+1.12f,.18f,.4f,.52f,-2.f);
   auto l=cbGlow({20.6f,20.2f},f+1.5f,.85f,7.f,3200);l.prop=lampProp;m.lights.push_back(l);}
@@ -796,16 +1031,16 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  m.actorTracks.back().ai.stance=stance;
  cbGuard(m,clock,"conb_ec_lead",ActorVisual::Cleanup,GuardSquadRole::Assault,"conb_ec",{{{16.4f,19.2f},f,60000,cbN}},12,1,1.f);
  {auto& t=m.actorTracks.back();t.ai.stance=stance;t.talk=stateId("conb_ec_hello");}
- m.dialogue.push_back({stateId("conb_ec_hello"),"EMERGENCY DETAIL","We've been on this door since three. Raise it and we go down with you, or ahead of you. Your choice.","",{
+ m.dialogue.push_back({stateId("conb_ec_hello"),"EMERGENCY DETAIL","We've been on this door since three. Raise it and we go down with you, or ahead of you. Your choice.","conb_ec_hello",{
   cbReply("Cover the north. I'll raise it.","","conb_ec_allied",int(SquadStance::Ally)),cbReply("What's down there?","conb_ec_down"),cbReply("Stay here.")}});
- m.dialogue.push_back({stateId("conb_ec_down"),"EMERGENCY DETAIL","Deep research. Bore samples. Whatever they were digging toward. He says nothing goes down. He didn't say why.","",{cbReply("Back.","conb_ec_hello")}});
+ m.dialogue.push_back({stateId("conb_ec_down"),"EMERGENCY DETAIL","Deep research. Bore samples. Whatever they were digging toward. He says nothing goes down. He didn't say why.","conb_ec_down",{cbReply("Back.","conb_ec_hello")}});
  cbEvent(m,"conb_ec_truce",8.f,0,16.f,5.f,"",{cbSet("conb_ec_stance",int(SquadStance::Truce))});
  cbSequence(m,"conb_ec_radio","conb_ec_radio_done",22000,20000,8.f,16.f,17.f,23.f);
  const Vec2 radio{12.f,19.6f};
- cue(m,"conb_ec_radio",900,Sound::Empty,radio,"INVESTIGATOR (RADIO): Emergency detail. Hold the barricade. Nothing goes down to Deep Research.",.9f,f+1.5f);
- cue(m,"conb_ec_radio",7000,Sound::Empty,radio,"RADIO: Sir, we've held it four hours. There's nobody left out there to keep out.",.9f,f+1.5f);
- cue(m,"conb_ec_radio",13000,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then you are keeping something in.",.9f,f+1.5f);
- cue(m,"conb_ec_radio",18000,Sound::Empty,radio,"EMERGENCY DETAIL: He means us.",.9f,f+1.5f);
+ cue(m,"conb_ec_radio",900,Sound::Empty,radio,"INVESTIGATOR (RADIO): Emergency detail. Hold the barricade. Nothing goes down to Deep Research.",.9f,f+1.5f,"conb_ec_radio_1");
+ cue(m,"conb_ec_radio",7000,Sound::Empty,radio,"RADIO: Sir, we've held it four hours. There's nobody left out there to keep out.",.9f,f+1.5f,"conb_ec_radio_2");
+ cue(m,"conb_ec_radio",13000,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then you are keeping something in.",.9f,f+1.5f,"conb_ec_radio_3");
+ cue(m,"conb_ec_radio",18000,Sound::Empty,radio,"EMERGENCY DETAIL: Oh. He means us.",.9f,f+1.5f,"conb_ec_radio_4");
  // Written off ("He means us"), they are hers, if she has kept her side of the truce.
  cbEvent(m,"conb_ec_written_off",0,0,24,24,"conb_ec_radio_done",{cbSet("conb_ec_stance",int(SquadStance::Ally))});
  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stance,ScriptCondition::Op::Equal,int(SquadStance::Truce)});
@@ -829,13 +1064,44 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
   flange(m,{x,22.22f,f+.2f},{},.11f);flange(m,{x,22.22f,f+2.85f},{},.11f);
   for(float z:{.1f,2.86f})wall(m,x-.16f,22.06f,x+.16f,22.4f,f+z,f+z+.12f,8);                          // its strapped feet and head
   wall(m,x-.14f,22.08f,x+.14f,22.4f,f,f+3.f,CollisionProxyMaterial);}
+ // The two crash beams the rams carry: down across the opening at knee and chest while the
+ // accumulator is empty; when the barricade is raised the rams take them up under the head one after
+ // the other (conb_ec_ram, started by the raise), the pump set's line banging as each one seats.
+ // Two clocks, so nothing stands in the doorway until somebody is here to see it: conb_ec_ram_held
+ // starts as the player walks in and sets the lowered beams across the door (it is pushed past its
+ // last key, where they are gone, the moment the barricade is raised); conb_ec_ram carries the
+ // raised pair up the rams from where the lowered pair was.
+ {TimedSequence s;s.timerState=stateId("conb_ec_ram");s.finishState=stateId("conb_ec_ram_up");s.x1=-9.f;s.y1=-9.f;s.x2=-8.f;s.y2=-8.f;
+  s.durationMs=9000;s.finishAtMs=8000;s.soundIntervalMs=0;s.soundUntilMs=0;m.timedSequences.push_back(s);
+  s.timerState=stateId("conb_ec_ram_held");s.finishState=stateId("conb_ec_ram_held_end");s.x1=0;s.y1=0;s.x2=24.f;s.y2=24.f;s.durationMs=3600000;s.finishAtMs=3600000;m.timedSequences.push_back(s);}
+ const float gone=f-25.f;
+ for(auto [y,lo,hi,thick,t0,t1]:{std::tuple{22.12f,f+.98f,f+2.98f,.34f,1400,6200},{22.16f,f+1.82f,f+3.3f,.3f,500,4600}}){
+  ActorTrack b;b.timerState=stateId("conb_ec_ram_held");b.visual=ActorVisual::Cargo;b.scale=1.f;b.platform=true;b.footprint={4.9f,.3f};b.thickness=thick;
+  b.keys={{0,{12.f,y},gone,0},{1,{12.f,y},lo,0},{3000000,{12.f,y},lo,0},{3000001,{12.f,y},gone,0}};m.actorTracks.push_back(b);
+  b.timerState=stateId("conb_ec_ram");b.keys={{0,{12.f,y},gone,0},{1,{12.f,y},lo,0},{t0,{12.f,y},lo,0},{t1,{12.f,y},hi,0},{9000,{12.f,y},hi,0}};m.actorTracks.push_back(std::move(b));}
+ for(auto [t,snd,gain]:{std::tuple{200,Sound::LiftMotor,.8f},{700,Sound::OneMetalCreak,.7f},{4600,Sound::OneMetalBang,.9f},{6200,Sound::OneMetalBang,1.f}}){
+  SequenceCue c;c.timerState=stateId("conb_ec_ram");c.timeMs=t;c.sound=snd;c.position={12.f,21.6f};c.gain=gain;c.z=f+2.f;m.sequenceCues.push_back(c);}
+ {ScriptAction a;a.type=ScriptAction::Type::PlaySound;a.sound=Sound::PaDoorsUnlocked;a.amount=.7f;
+  cbEvent(m,"conb_ec_ram_go",0,0,24,24,"cont_barricade",{cbSet("conb_ec_ram",1),cbSet("conb_ec_ram_held",3100000),a});}
  m.pickupSpawns.push_back({{21.6f,22.2f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{3.4f,21.8f},PickupKind::Health,f});
  // --- Light: tubes mostly out, the flood by the detail, red on the lines and the door -------------
  m.lights.push_back(cbTube(6.f,3.f,roof,.6f,6.5f,5200,.03f,.4f));m.lights.push_back(cbTube(12.f,11.f,roof,.65f,7.f,5200,.03f));m.lights.push_back(cbTube(12.f,3.f,roof,.6f,6.5f,5200,.03f));m.lights.push_back(cbTube(4.f,11.f,roof,.4f,5.f,5200,.03f,.3f));
- m.lights.push_back(cbTube(4.f,18.f,roof,.4f,5.f,5200,.03f,.3f));
  // the detail's half kept its own tubes on, so the second line and the way to the door read
  for(auto [x,y,i]:{std::tuple{8.6f,17.4f,.55f},{16.f,17.4f,.55f},{8.5f,11.6f,.4f},{19.f,22.f,.4f}})m.lights.push_back(cbTube(x,y,roof,i,6.5f,5200,.03f,0));
  m.lights.push_back(cbTube(18.f,3.f,roof,.45f,6.f,5200,.03f,.35f));cbDeadTube(m,12.f,18.f,roof);cbDeadTube(m,7.f,11.f,roof);
+ // The detail's floodlight: on a mast behind the second line, thrown hard north through the gap in
+ // it at the tear, so whatever comes through panel 6 comes into the light. From the north the line
+ // reads as a lit firing position; behind it the detail's own lamps, warm and low.
+ {const float mx=12.f,my=16.6f;
+  wall(m,mx-.05f,my-.05f,mx+.05f,my+.05f,f,f+3.1f,12);wall(m,mx-.35f,my-.35f,mx+.35f,my+.35f,f,f+.05f,8);
+  for(auto [dx,dy]:{std::pair{-.33f,0.f},{.33f,0.f}})m.pipes.push_back({{mx+dx,my+dy},{mx,my},f+.05f,.018f,f+1.4f,6});
+  wall(m,mx-.34f,my-.36f,mx+.34f,my-.02f,f+3.1f,f+3.5f,8);wall(m,mx-.3f,my-.37f,mx+.3f,my-.36f,f+3.14f,f+3.46f,20);
+  m.lights.push_back(lamp({mx,my-.38f},f+3.3f,2.2f,14.f,5600,0,WorldLightMount::Wall,blN,true));
+  wall(m,mx-.02f,my+.05f,mx+.02f,my+2.2f,f,f+.03f,8);m.structures.back().solid=false;}
+ cbPendant(m,{12.f,20.4f},roof,f+3.4f,1.1f,7.f,2600);                                                 // over the door they held
+ cbPendant(m,{20.f,10.6f},roof,f+2.9f,.9f,6.f,3800);                                                  // the control room's desk light
+ m.lights.push_back(cbGlow({3.6f,13.4f},f+.08f,.35f,3.f,2000,{1.f,.3f,.15f},.5f));                     // under the welded door: something lit in there
+ m.lights.push_back(lamp({22.98f,2.4f},f+2.6f,.5f,6.f,6500,.02f,WorldLightMount::Wall,blW));m.lights.back().flicker=.3f;   // the north bay's emergency fitting
  recessedFittings(m);
  zone(m,"EMERGENCY CONTAINMENT / CONTROL ROOM",17.f,8.f,23.f,13.f);
  // The hall's frame: downstand beams across the roof, two columns in the detail's half, pilasters.

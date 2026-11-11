@@ -1698,6 +1698,716 @@
    "voice_id": "onwK4e9ZLuTAKqWW03F9",
    "text": "[dry, without warmth] Then you will not be busy.",
    "line": "inv_screen_2"
+  },
+  {
+   "id": "dlg-rf_intake_pa",
+   "role": 13,
+   "cue": "Talk",
+   "voice_id": "XrExE9yKIg1WjnnlVkGX",
+   "text": "[pleasant, unhurried public-address voice] Tier two staff... to the intake desk.",
+   "line": "rf_intake_pa",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rf_intake_film_1",
+   "role": 13,
+   "cue": "Talk",
+   "voice_id": "EfLCrolwnAOzY85BpnIX",
+   "text": "[warm, upbeat newsreel narrator] Welcome to Energy Research. [proudly] Your work powers the world!",
+   "line": "rf_intake_film_1",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rf_intake_film_2",
+   "role": 13,
+   "cue": "Talk",
+   "voice_id": "EfLCrolwnAOzY85BpnIX",
+   "text": "[bright, reassuring] Every shift below brings light above. [cheerfully] Wear your band.",
+   "line": "rf_intake_film_2",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-medf_b_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[breathless, scared, low] Stop. Don't. [shaky] I've got two rounds... and a radio that won't stop talking.",
+   "line": "medf_b_hello",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-medf_b_go",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[quiet and fast, glancing over his shoulder] He counts the radios on the hour. I walk, he hears it. [steadier] But I'm not raising this at you. [grim] Whatever he says next.",
+   "line": "medf_b_go",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-medf_b_booths",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[hollow, quiet] Us. [swallows] He said they were exposed. They were reading the counts out loud... [bitter, barely above a whisper] so somebody stopped them reading.",
+   "line": "medf_b_booths",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-medf_b_wardc",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[flat, exhausted] Nine tier threes. Ten to three. [uneasy, quieter] Something's been knocking since four.",
+   "line": "medf_b_wardc",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-medf_b_refuse_1",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[into his radio, voice tight, lying] Nobody's walked it, sir. [a little too quickly] I'd have seen.",
+   "line": "medf_b_refuse_1",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-md_triage_hush_1",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[faint, feverish whisper] ...keep the lights on. [pleading] They don't get up... while the lights are on.",
+   "line": "md_triage_hush_1",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-md_triage_radio_1",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[urgent, hushed] Shots in triage. Somebody's moving in triage.",
+   "line": "md_triage_radio_1",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-md_triage_radio_2",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, final] Triage is closed. [beat] Leave it.",
+   "line": "md_triage_radio_2",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-md_triage_radio_3",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[uneasy pause] ...Copy. [quietly] Leaving it.",
+   "line": "md_triage_radio_3",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-md_imaging_radio_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, measured] Imaging detail. Report.",
+   "line": "md_imaging_radio_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-md_imaging_radio_2",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[slower, patient, a little colder] Imaging detail.",
+   "line": "md_imaging_radio_2",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-md_imaging_radio_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[quiet, unbothered] Log them with the tier threes.",
+   "line": "md_imaging_radio_3",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-medw_dark_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, almost satisfied] Ward C is dark.",
+   "line": "medw_dark_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-medw_dark_2",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[soft, cold] Leave it dark. [beat] They know what to do.",
+   "line": "medw_dark_2",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_floods_pa",
+   "role": 13,
+   "cue": "Talk",
+   "voice_id": "XrExE9yKIg1WjnnlVkGX",
+   "text": "[calm, clipped public-address announcement] Caution. Field activity at the rim. Stand clear of the rail.",
+   "line": "rg_floods_pa",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_sweep_1",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[hushed, unnerved] Sweep Two. They're stood up behind the shutters. [sharp breath] The visitors. [whispers] All of them.",
+   "line": "rg_sweep_1",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rg_sweep_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[shouting, panicked] Contact! Visitors' rail!",
+   "line": "rg_sweep_2",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_sweep_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[cold, unhurried] Then put them down. [beat] Nobody leaves the ring wearing a pass.",
+   "line": "rg_sweep_3",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_nine_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[weary but firm] That's far enough. Weapon down and we've no quarrel. [tired, dry] We've no anything, any more.",
+   "line": "rg_nine_hello",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_nine_who",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[bitter] Him. The Investigator. [flat, reciting orders] Hold the ring, nobody up from Containment. [quieter] Nobody's come up. Not since B went.",
+   "line": "rg_nine_who",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_nine_west",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[matter-of-fact, low] Shielding detail's in the corridor. Two men, still on his orders. Past them, Experimental Power... then Conversion.",
+   "line": "rg_nine_west",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rg_nine_power",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[low and careful, a man who has done the sums] Somebody had Conversion taken off the containment feed at half two. B's fields went quarter of an hour later. [beat] Put it back and the intake doors run again.",
+   "line": "rg_nine_power",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_nine_radio_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[even, measured] Detail nine. Hold the ring. Nothing comes up from Containment.",
+   "line": "rg_nine_radio_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_nine_radio_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[tired] Copy. [hesitant] Sir, there's nothing left down there to come up.",
+   "line": "rg_nine_radio_2",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rg_nine_radio_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[flat, cold] Then hold it... anyway.",
+   "line": "rg_nine_radio_3",
+   "model": "eleven_v3",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-et_shield_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[cold, precise] Shielding detail. Anything that comes west from the ring, you burn.",
+   "line": "et_shield_1",
+   "model": "eleven_v3",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-et_shield_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[strained, frightened] Sir. We've got one mag each. [voice cracking] The wall's moving.",
+   "line": "et_shield_2",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-et_shield_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[dry] Then be accurate.",
+   "line": "et_shield_3",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-et_conv_pa",
+   "role": 13,
+   "cue": "Talk",
+   "voice_id": "XrExE9yKIg1WjnnlVkGX",
+   "text": "[calm, automated announcement] Conversion output on the containment feed. Intake fields on main power. Doors released.",
+   "line": "et_conv_pa",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_hub_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "EkK5I93UQWFDigLMpZcX",
+   "text": "[tense, low, steady] Gun down, stay out of our line, and we never saw each other. [beat] That door's all we're here for.",
+   "line": "cona_hub_hello",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_hub_b",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "EkK5I93UQWFDigLMpZcX",
+   "text": "[grim, quiet] Kessler's detail went in... at TWO. Feed dropped at quarter past and the door held. [pause] We hear them on the radio. [bitter] Not to us.",
+   "line": "cona_hub_b",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_hub_power",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "EkK5I93UQWFDigLMpZcX",
+   "text": "[gruff, giving directions] Conversion lab. Up the gallery, round the ring, west. Somebody has to turn its output to containment. [flat] Not us.",
+   "line": "cona_hub_power",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-cona_hub_radio_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, clinical] Intake detail. A contract security officer is loose in your sector. Female, armed, no clearance. [beat] Detain her.",
+   "line": "cona_hub_radio_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_hub_radio_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "EkK5I93UQWFDigLMpZcX",
+   "text": "[exasperated, tired] Sir, we're four men on a door. We can't hold it AND chase a guard.",
+   "line": "cona_hub_radio_2",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-cona_hub_radio_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[cold] Then hold the door.",
+   "line": "cona_hub_radio_3",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-cona_hub_radio_4",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "EkK5I93UQWFDigLMpZcX",
+   "text": "[long pause, resigned] ...Copy.",
+   "line": "cona_hub_radio_4",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_hub_order_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, unhurried] Intake detail. Door B has its feed. Nobody goes through it. [quiet] Her least of all.",
+   "line": "cona_hub_order_1",
+   "model": "eleven_v3",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_hub_order_2",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "EkK5I93UQWFDigLMpZcX",
+   "text": "[reluctant] ...Copy. [apologetic but firm] Sorry, miss. Hands where we can see them.",
+   "line": "cona_hub_order_2",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_b_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[gravelly, bitter] So the hub got its power and not us. [hard] Hands where I can see them.",
+   "line": "cona_b_hello",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_b_what",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[low, haunted] Every cell let go at two. Same second. [pause] Kessler held the inner door... and the door held him.",
+   "line": "cona_b_what",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_b_come",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[weary] Doc can't walk. And you heard the radio. [dry, bleak] Out there we're exposed. In here we're just stuck.",
+   "line": "cona_b_come",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_b_way",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[urgent, low] West is where it started. Don't. The aisle's grown shut; out our door and round is the only way south. [steadier] Handling floor, then the theater. The spur east loops back to A.",
+   "line": "cona_b_way",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-cona_b_radio_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, clinical] Intake detail. Containment B detail is compromised. [beat] Treat them as exposed.",
+   "line": "cona_b_radio_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_b_radio_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[angry, holding it together] Sir, this is B. We're not exposed. We're shut in. [voice catching] Kessler's dead.",
+   "line": "cona_b_radio_2",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-cona_b_radio_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[quiet, without sympathy] Then you know what exposed looks like.",
+   "line": "cona_b_radio_3",
+   "model": "eleven_v3",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_b_radio_4",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[defeated, quiet] He's not coming. Nobody's coming. [gently] Sit down, Doc.",
+   "line": "cona_b_radio_4",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-cona_b_radio_5",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[gruff, to her] You. Anything comes through that hole while you're here... we've got it.",
+   "line": "cona_b_radio_5",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-conb_ec_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[hoarse, steady] We've been on this door since three. Raise it and we go down with you... or ahead of you. [beat] Your choice.",
+   "line": "conb_ec_hello",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-conb_ec_down",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[low, uneasy] Deep research. Bore samples. Whatever they were digging toward. [pause] He says nothing goes down. [quieter] He didn't say why.",
+   "line": "conb_ec_down",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-conb_ec_radio_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[measured, firm] Emergency detail. Hold the barricade. Nothing goes down to Deep Research.",
+   "line": "conb_ec_radio_1",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-conb_ec_radio_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[tired, hoarse] Sir, we've held it four hours. There's nobody left out there to keep out.",
+   "line": "conb_ec_radio_2",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-conb_ec_radio_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[soft, cold] Then you are keeping... something in.",
+   "line": "conb_ec_radio_3",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-conb_ec_radio_4",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[quiet, the penny dropping] Oh. [to himself] He means us.",
+   "line": "conb_ec_radio_4",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_geo_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, brisk] Geophysics detail. Burn the charts and fall back to the drill.",
+   "line": "dr_geo_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_geo_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[uneasy] Sir, nobody has come back up from the interface since three.",
+   "line": "dr_geo_2",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-dr_geo_3",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[cold, slow] Then... you will be the first.",
+   "line": "dr_geo_3",
+   "model": "eleven_v3",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_geo_4",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[quiet, decided] You heard him. [firm] We're not going.",
+   "line": "dr_geo_4",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_inv_scene_1",
+   "role": 12,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[quiet, unhurried] Hold the readers. Nobody follows me down.",
+   "line": "dr_inv_scene_1",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_inv_scene_2",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[hesitant, respectful] Sir. The drill team has asked for relief twice.",
+   "line": "dr_inv_scene_2",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-dr_inv_scene_3",
+   "role": 12,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[mild, almost kind] They will be relieved when the seam is quiet.",
+   "line": "dr_inv_scene_3",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_inv_scene_4",
+   "role": 12,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[softly, final] The hoist stays at the bottom.",
+   "line": "dr_inv_scene_4",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_fin_1",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, measured] Mine head. She is at the interface.",
+   "line": "dr_fin_1",
+   "model": "eleven_v3",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-dr_fin_2",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[quiet, final] Close it.",
+   "line": "dr_fin_2",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_fin_radio_1",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "YMMNvweRQDxdO49d23hj",
+   "text": "[clipped, businesslike] Mine head to control. Gate is down and pinned.",
+   "line": "dr_fin_radio_1",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_fin_radio_2",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "YMMNvweRQDxdO49d23hj",
+   "text": "[uncertain, lowering his voice] Sir, there are lamps lit on the survey drift.",
+   "line": "dr_fin_radio_2",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_fin_radio_3",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "YMMNvweRQDxdO49d23hj",
+   "text": "[pause, uneasy] They are not ours.",
+   "line": "dr_fin_radio_3",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_fin_radio_4",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[calm, almost tender] They are hers. Leave them lit.",
+   "line": "dr_fin_radio_4",
+   "model": "eleven_v3",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_fin_radio_5",
+   "role": 11,
+   "cue": "Talk",
+   "voice_id": "onwK4e9ZLuTAKqWW03F9",
+   "text": "[softly, slowly, with certainty] She is going... where we are going.",
+   "line": "dr_fin_radio_5",
+   "model": "eleven_v3",
+   "seed": 2202
   }
  ]
 }

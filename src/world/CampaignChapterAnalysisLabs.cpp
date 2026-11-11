@@ -139,9 +139,12 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  anFix(m,model::med_floor_drain,3.4f,4.15f,f,.5f,.5f,.01f,0,false);
  anFix(m,model::med_notice_board,1.035f,2.75f,f+1.25f,1.2f,.07f,.9f,anE,false);
  anFix(m,model::med_wall_clock,8.99f,4.25f,f+2.05f,.24f,.02f,.23f,anW,false);
- wall(m,5.6f,4.74f,8.4f,4.8f,f+1.9f,f+1.94f,20);                                            // the suit rail
- for(float x:{5.95f,6.65f,7.35f,8.05f})wall(m,x-.015f,4.66f,x+.015f,4.8f,f+1.82f,f+1.94f,8);  // its four hooks
- for(auto [x,turn]:{std::pair{5.95f,-.16f},{6.65f,.1f},{7.35f,-.06f}}){hungSuit(m,{x,4.58f,f+1.48f},-kPi*.5f+turn);wall(m,x-.012f,4.6f,x+.012f,4.64f,f+1.66f,f+1.83f,8);m.structures.back().solid=false;}   // three back, hung by their hood loops; the fourth hook bare
+ wall(m,5.6f,4.74f,8.4f,4.8f,f+2.38f,f+2.42f,20);                                           // the suit rail, high on the wall
+ for(float x:{5.95f,6.65f,7.35f,8.05f}){wall(m,x-.012f,4.5f,x+.012f,4.8f,f+2.36f,f+2.39f,8);m.structures.back().solid=false;}   // its four pegs
+ // three back, each on a steel hanger off its peg, boots clear of the floor; the fourth peg bare
+ for(auto [x,turn]:{std::pair{5.95f,-.16f},{6.65f,.1f},{7.35f,-.06f}}){hungSuit(m,{x,4.5f,f+2.2f},kPi+turn);
+  wall(m,x-.006f,4.494f,x+.006f,4.506f,f+2.f,f+2.36f,2);m.structures.back().solid=false;
+  wall(m,x-.012f,4.29f,x+.012f,4.71f,f+1.985f,f+2.f,2);m.structures.back().solid=false;}
  kit::prop(m,model::item_dosimeter,3.1f,3.15f,f+.51f,.31f,.146f,.066f,.4f);
  kit::prop(m,model::item_walkie,5.9f,3.4f,f,.114f,.376f,.046f,2.1f);
  kit::prop(m,model::item_id_card,2.5f,3.75f,f,.132f,.085f,.002f,.9f);

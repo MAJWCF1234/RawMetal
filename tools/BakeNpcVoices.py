@@ -27,12 +27,16 @@ ROOT = Path(__file__).resolve().parents[1]
 # [grunts]...) as performance direction rather than words. Its stability is
 # one of 0 (creative), .5 (natural) or 1 (robust).
 MODEL = 'eleven_v3'
+# Chapter 2's later lines were auditioned (several seeded takes, each checked by speech-to-text) on
+# eleven_v4, which follows the tags more reliably; their catalog entries carry model and seed.
 SETTINGS = {'stability': .5, 'similarity_boost': .75}
 # What a speaker wears over the mouth is applied live by the audio engine from
 # the speaker's model (bare face, face plate, respirator, sealed hood). The bake
 # only adds the radio channel the squad roles and checkpoint soldiers call over.
 # 11 is the Investigator heard over a squad's radio; 12 is the Investigator in person.
 RADIO = {1, 3, 4, 6, 8, 11}
+# 13 is a public-address horn or a film soundtrack heard through the facility's own speakers.
+PA = {13}
 # Clips ship as MP3, 22050 Hz mono, LAME VBR q6 (about 40 kbps): Half-Life 2's
 # speech bandwidth (~10 kHz) at under half the size of the IMA ADPCM they
 # replaced. The engine decodes them with miniaudio like the music.
@@ -59,6 +63,14 @@ def radio_channel(samples, rate=22050):
     coarse = resample_poly(samples, 1, 2)
     samples = np.repeat(coarse, 2)[:len(samples)]
     return np.round(samples * 2048) / 2048
+
+
+def pa_channel(samples, rate=22050):
+    """Public address: a horn speaker's band (no bass, a peaky upper mid), lightly driven, no crush."""
+    samples = sosfilt(butter(3, [260, 4800], btype='bandpass', fs=rate, output='sos'), samples)
+    samples = samples + .6 * sosfilt(butter(2, [1800, 3200], btype='bandpass', fs=rate, output='sos'), samples)
+    peak = max(np.max(np.abs(samples)), 1e-6)
+    return np.tanh(samples / peak * 1.4) / np.tanh(1.4)
 
 
 def master_voice(samples, rate=22050):
@@ -126,8 +138,12 @@ def main():
 
     def bake(indexed):
         index, entry = indexed
+        # A line may name its own model, settings and seed (the take chosen in an audition);
+        # lines that do not keep the original identity, so their masters and clips never change.
         identity = {'voice_id': entry['voice_id'], 'text': entry['text'],
-                    'model_id': MODEL, 'voice_settings': SETTINGS}
+                    'model_id': entry.get('model', MODEL), 'voice_settings': entry.get('settings', SETTINGS)}
+        if 'seed' in entry:
+            identity['seed'] = entry['seed']
         digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
         master = args.masters / (digest + '.mp3')
         if not master.exists() and index < len(shipped) and shipped_proof[index]['id'] == entry['id']                 and shipped_proof[index].get('generation_identity') == digest:
@@ -166,6 +182,8 @@ def main():
         samples = samples[max(0, active[0]-1102):min(len(samples), active[-1]+2205)]
         if entry['role'] in RADIO:
             samples = radio_channel(samples)
+        elif entry['role'] in PA:
+            samples = pa_channel(samples)
         samples = master_voice(samples)
         rms = np.sqrt(np.mean(samples*samples))
         samples *= min(.15 / max(rms, 1e-6), .88 / max(np.max(np.abs(samples)), 1e-6))
@@ -177,6 +195,8 @@ def main():
         result = {'id': entry['id'], 'master_sha256': hashlib.sha256(master.read_bytes()).hexdigest(),
                   'generation_identity': digest, 'seconds': round(len(samples)/22050, 4),
                   'clip_bytes': clip.stat().st_size, 'radio': entry['role'] in RADIO}
+        if 'seed' in entry:
+            result.update(model=identity['model_id'], seed=entry['seed'], public_address=entry['role'] in PA)
         print('Ready:', entry['id'], result['seconds'], 'seconds', flush=True)
         return clip.read_bytes(), result
 

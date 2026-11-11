@@ -42,6 +42,9 @@ void Ragdoll::hang(const World& world,RagPoint head,float facing,float empty){
  for(int i=0;i<Count;++i){const auto v=asset().rest[i]-top;p[i]=head+RagPoint{v.x*s+v.y*c,v.y*s-v.x*c,v.z};}
  // Nothing inside it: the shoulders drop and fall in, the hands hang a little forward.
  for(int i:{3,6})p[i]=p[i]+RagPoint{0,0,-.08f};for(int i:{10,13})p[i]=p[i]+RagPoint{c*.04f,s*.04f,0};   // the knees a little forward, slackfor(int i:{5,8})p[i]=p[i]+RagPoint{c*.04f,s*.04f,-.03f};
+ // On a hanger by its shoulders, not by the hood: hung by the hood a row of suits reads as hanged men.
+ // The hanger's hook is where the hood was; the hood, with nothing in it, falls back off the hanger.
+ pin=3;pinAt=p[3];pin2=6;pinAt2=p[6];hook=head;p[2]=p[2]+RagPoint{-c*.06f,-s*.06f,-.02f};
  previous=p;for(int i=0;i<360&&!sleeping;++i)update(world,1.f/120);sleeping=true;previous=p;quiet=1;accumulator=0;
 }
 void Ragdoll::impulse(int joint,RagPoint velocity){if(!initialized||joint<0||joint>=Count)return;sleeping=false;quiet=0;previous[joint]=previous[joint]-velocity*(1.f/120);}
@@ -66,9 +69,9 @@ void Ragdoll::update(const World&w,float dt){
     bool fits=true;for(float x:{-r,r})for(float y:{-r,r})fits&=w.fits(p[i].x+x,p[i].y+y,p[i].z-support[i],support[i]+r)&&!w.doorBlocks(p[i].x+x,p[i].y+y,p[i].z-support[i],support[i]+r);
     if(!fits){p[i].x=before[i].x;p[i].y=before[i].y;previous[i].x=p[i].x;previous[i].y=p[i].y;}
    }
-   if(pin>=0)p[pin]=pinAt;
+   if(pin>=0)p[pin]=pinAt;if(pin2>=0)p[pin2]=pinAt2;
   }
-  if(pin>=0)previous[pin]=pinAt;
+  if(pin>=0)previous[pin]=pinAt;if(pin2>=0)previous[pin2]=pinAt2;
   float motion=0;for(int i=0;i<Count;++i){float floor=w.supportBelow(p[i].x,p[i].y,p[i].z+.01f);if(p[i].z<=floor+support[i]+.003f){previous[i].x=p[i].x-(p[i].x-previous[i].x)*.65f;previous[i].y=p[i].y-(p[i].y-previous[i].y)*.65f;previous[i].z=p[i].z;}
    motion=std::max(motion,lenR(p[i]-before[i]));}
   quiet=motion<.0015f?quiet+step:0;if(quiet>.6f){sleeping=true;previous=p;accumulator=0;break;}
@@ -96,11 +99,12 @@ bool Ragdoll::test(){World world(3);Ragdoll rag;rag.seed(world);auto initial=rag
  for(int i=0;i<240;++i)fast.update(world,1.f/60);for(int i=0;i<480;++i)slow.update(world,1.f/120);
  float drift=0;for(int i=0;i<Count;++i)drift=std::max(drift,lenR(fast.p[i]-slow.p[i]));report<<"60/120 Hz drift "<<drift<<'\n';
  const RagPoint hook{8.9f,8.2f,1.47f};Ragdoll hung;hung.hang(world,hook,.6f);float lowest=100;for(auto v:hung.skin())lowest=std::min(lowest,v.z);
- const bool hangs=hung.sleeping&&lenR(hung.p[2]-hook)<.001f&&hung.p[0].z>.75f&&hung.p[0].z<1.1f&&lowest>-.005f;const auto hand=hung.p[5];
- hung.impulse(5,{1.5f,0,.2f});for(int i=0;i<30;++i)hung.update(world,1.f/120);const bool swings=lenR(hung.p[5]-hand)>.02f&&lenR(hung.p[2]-hook)<.001f;
+ auto onHanger=[&]{return lenR(hung.p[3]-hung.pinAt)<.001f&&lenR(hung.p[6]-hung.pinAt2)<.001f&&hung.pinAt.z<hook.z&&hung.pinAt2.z<hook.z;};
+ const bool hangs=hung.sleeping&&onHanger()&&hung.p[2].z<hook.z-.05f&&hung.p[0].z>.75f&&hung.p[0].z<1.1f&&lowest>-.005f;const auto hand=hung.p[5];
+ hung.impulse(5,{1.5f,0,.2f});for(int i=0;i<30;++i)hung.update(world,1.f/120);const bool swings=lenR(hung.p[5]-hand)>.02f&&onHanger();
  for(int i=0;i<2400&&!hung.sleeping;++i)hung.update(world,1.f/120);
- report<<"hung suit: pelvis "<<hung.p[0].z<<" lowest "<<lowest<<" hangs "<<hangs<<" swings "<<swings<<" settles "<<hung.sleeping<<" head on hook "<<lenR(hung.p[2]-hook)<<'\n';
- return error<.035f&&minimum>-.005f&&lenR(initial[5]-rag.p[5])>.02f&&rag.sleeping&&drift<.001f&&hangs&&swings&&hung.sleeping&&lenR(hung.p[2]-hook)<.001f;
+ report<<"hung suit: pelvis "<<hung.p[0].z<<" lowest "<<lowest<<" hangs "<<hangs<<" swings "<<swings<<" settles "<<hung.sleeping<<" shoulders on hanger "<<onHanger()<<" hood "<<hook.z-hung.p[2].z<<" below the hook"<<'\n';
+ return error<.035f&&minimum>-.005f&&lenR(initial[5]-rag.p[5])>.02f&&rag.sleeping&&drift<.001f&&hangs&&swings&&hung.sleeping&&onHanger();
 }
 void Game::updateHungSuits(float dt){
  if(m_hungSuits.size()<size_t(chunkCount()))m_hungSuits.resize(size_t(chunkCount()));m_suitPushCooldown=std::max(0.f,m_suitPushCooldown-dt);

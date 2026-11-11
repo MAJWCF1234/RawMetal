@@ -28,19 +28,19 @@ LOGO.save(os.path.join(OUT, 'depthworks-logo-chapter2.png'))
 SHOTS = [
     ('shot-01.png', 'ch2_theatre', 1.0, 'Intake theatre: the welcome film, seats for a shift that never came (chunk 68)'),
     ('shot-02.png', 'ch2_hall69', 1.0, 'Screening hall: the gates to the laboratories (chunk 69)'),
-    ('shot-03.png', 'ch2_suits', 1.05, 'Suit room: the hazmat rack where the staff hung up their shift (chunk 69)'),
-    ('shot-04.png', 'ch2_pan', 1.3, 'Calibration pan: standing water under the gantry (chunk 84)'),
-    ('shot-05.png', 'ch2_plantbus', 1.15, 'The 11 kV plant bus, live and arcing on the floor (chunk 92)'),
-    ('shot-06.png', 'ch2_towers', 1.1, 'Test bay: the tower rig over its pit (chunk 86)'),
-    ('shot-07.png', 'ch2_breach2', 1.0, 'Containment breach: the growth and the crystals it feeds (chunk 102)'),
-    ('shot-08.png', 'ch2_breach3', 1.0, 'Containment breach, the far wall (chunk 102)'),
+    ('shot-03.png', 'ch2_suitsb', 1.0, 'Suit room: the hazmat suits on their hangers where the staff left them (chunk 69)'),
+    ('shot-04.png', 'ch2_pan', 1.2, 'Calibration pan: standing water under the gantry (chunk 84)'),
+    ('shot-05.png', 'ch2_towers', 1.05, 'Test bay: the tower rig over its pit (chunk 86)'),
+    ('shot-06.png', 'ch2_plantbus', 1.1, 'The 11 kV plant bus, banks live behind the barrier (chunk 92)'),
+    ('shot-07.png', 'ch2_breach1', 1.0, 'Containment breach: the ore grown up through the floor (chunk 102)'),
+    ('shot-08.png', 'ch2_breach3', 1.0, 'Containment breach, the far wall: the bedrock heaved into the room (chunk 102)'),
 ]
 for fn, name, exp, what in SHOTS:
     im = look.grade(src2x(name), exposure=exp, seed=11, grain=.03, scan=.05)
     im.save(os.path.join(OUT, fn))
 
-# ---- cover 630x500: the breach crystals, wordmark over the dark growth --------------------------
-src = src2x('ch2_breach2')
+# ---- cover 630x500: the breach crystals and the heaved bedrock, wordmark over the dark growth --------------------------
+src = src2x('ch2_breach3')
 ch = 1040; cw = int(ch * 630 / 500)
 x0 = int(.62 * 1920 - cw * .5); x0 = max(0, min(1920 - cw, x0)); y0 = 1080 - ch
 cov = crop_to(src, (x0, y0, x0 + cw, y0 + ch), (630, 500))

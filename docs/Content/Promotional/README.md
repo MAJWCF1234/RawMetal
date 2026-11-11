@@ -46,22 +46,24 @@ Render lists and scripts: `.build/promo-1.0/` (`trailer_shots.py`,
 
 Made 2026-11-11 from the v1.3.0 build with Chapter 2 released. Same grade and
 wordmark as the 1.0 set (`look.wordmark(label='CHAPTER 2')`). Nothing from the
-chapter's ending (chunks 108-109) or its last speaker is shown.
+chapter's ending (chunks 108-109) or its last speaker is shown. Reshot the same
+day after the defect pass (`docs/Design/chapter2-defects-20261111.md`): modelled
+crystals and bedrock in the breach, suits on hangers, the test bay stairs lit.
 
 | File | Size | What it shows |
 |---|---|---|
-| cover-630x500.png | 630x500 | the breach crystals under the wordmark, CHAPTER 2 · ENERGY RESEARCH |
+| cover-630x500.png | 630x500 | the breach crystals and heaved bedrock under the wordmark, CHAPTER 2 · ENERGY RESEARCH |
 | cover-check-315x250.png | 315x250 | the cover at half size |
 | banner-1920x540.png | 1920x540 | wordmark + CHAPTER 2 over the breach's far wall |
 | depthworks-logo-chapter2.png | 2400 wide, transparent | the wordmark with CHAPTER 2 |
 | shot-01.png | 1920x1080 | Intake theatre: the welcome film (chunk 68) |
 | shot-02.png | 1920x1080 | Screening hall: the gates to the laboratories (chunk 69) |
-| shot-03.png | 1920x1080 | Suit room: the hazmat rack (chunk 69) |
+| shot-03.png | 1920x1080 | Suit room: the hazmat suits on their hangers (chunk 69) |
 | shot-04.png | 1920x1080 | Calibration pan: standing water under the gantry (chunk 84) |
-| shot-05.png | 1920x1080 | The 11 kV plant bus, arcing on the floor (chunk 92) |
-| shot-06.png | 1920x1080 | Test bay: the tower rig over its pit (chunk 86) |
-| shot-07.png | 1920x1080 | Containment breach: the growth and its crystals (chunk 102) |
-| shot-08.png | 1920x1080 | Containment breach, the far wall (chunk 102) |
+| shot-05.png | 1920x1080 | Test bay: the tower rig over its pit (chunk 86) |
+| shot-06.png | 1920x1080 | The 11 kV plant bus, banks live behind the barrier (chunk 92) |
+| shot-07.png | 1920x1080 | Containment breach: the ore grown up through the floor (chunk 102) |
+| shot-08.png | 1920x1080 | Containment breach, the far wall: the bedrock heaved into the room (chunk 102) |
 | itch-copy.txt | text | tagline, devlog headline and the description's Chapter 2 section |
 | review-board.png | 1920x3220 | everything above on one sheet |
 

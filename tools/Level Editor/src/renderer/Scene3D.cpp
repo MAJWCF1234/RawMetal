@@ -2000,6 +2000,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(size_t i=0;i+2<vertices.size();i+=3){MeshVertex face[3];for(int j=0;j<3;++j){auto p=m_suitPose[i+j];face[j]={{p.x,p.y,p.z},vertices[i+j].u,vertices[i+j].v};}
    tri(face[0],face[1],face[2],m_hazmatTextures[vertices[i].material],.95f);}
   objectLighting=false;
+  // its wire hanger: the hook down from the rail, the two arms out to the shoulders, the bar between them
+  if(suit.pin>=0&&suit.pin2>=0){const Point3 hook{suit.hook.x,suit.hook.y,suit.hook.z},l{suit.pinAt.x,suit.pinAt.y,suit.pinAt.z+.03f},r{suit.pinAt2.x,suit.pinAt2.y,suit.pinAt2.z+.03f};
+   const Point3 neck{(l.x+r.x)*.5f,(l.y+r.y)*.5f,std::max(l.z,r.z)+.07f};
+   cylinder(hook,neck,.006f,m_paleSteel);cylinder(neck,l,.006f,m_paleSteel);cylinder(neck,r,.006f,m_paleSteel);cylinder(l,r,.005f,m_paleSteel);}
  }
  if(w.campaign()&&w.hasLift()){
   // The shaft, cab and the hazmat casualty belong to every lift map.

@@ -268,6 +268,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  for(float x:{7.75f,8.35f})for(float y:{1.75f,2.55f})wall(m,x-.02f,y-.02f,x+.02f,y+.02f,f,f+.9f,20);
  wall(m,7.73f,1.73f,8.37f,2.57f,f+.88f,f+.92f,20);wall(m,7.78f,1.78f,8.32f,2.52f,f+.35f,f+.88f,39);
  extinguisher(m,8.6f,6.4f,f,ddW);
+ ddFix(m,model::med_notice_board,8.565f,3.3f,f+1.2f,1.2f,.07f,.9f,ddW,false);                             // the theatre list board, by the scrub door
  wall(m,6.f,5.f,6.12f,5.35f,f+1.3f,f+1.6f,8);wall(m,6.12f,5.08f,6.16f,5.27f,f+1.42f,f+1.56f,20);          // wall phone
  kit::prop(m,model::med_crash_cart,8.3f,14.35f,f,ddE);
  ddFix(m,model::med_first_aid_box,6.06f,13.2f,f+1.3f,.367f,.12f,.349f,ddE,false);
@@ -342,6 +343,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
   "ON RELEASE THE WAY THROUGH TO QUARANTINE OPENS. 06:02 PORTER ON THE PHONE: KNOCKING IN DRAWER 9. TOLD HIM LEAVE IT SHUT.",0,stateId("med_morgue_release"),stateId("medd_ward_transfer"));
  m.terminals.back().yaw=ddS;
  ddModel(m,model::pwr_control_cabinet,21.f,1.21f,f,ddS,true);m.pipes.push_back({{21.f,1.12f},{21.f,1.12f},f+1.6f,.03f,roof,8});
+ ddCap(m,20.6f,1.f,21.4f,1.42f,f+1.62f,roof);                                                           // nobody crouches up on the cabinet
  for(float x:{18.85f,19.15f})ddFix(m,model::pwr_breaker_panel,x,1.051f,f+1.4f,.183f,.102f,.457f,ddS,false);
  wall(m,18.75f,1.f,21.f,1.06f,f+2.05f,f+2.11f,8);
  ddFix(m,model::med_notice_board,17.9f,1.035f,f+1.2f,1.2f,.07f,.9f,ddS,false);
@@ -353,7 +355,8 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
    for(int i=0;i<12;++i){if((i*5+t*3+seed)%7<3)continue;kit::prop(m,model::office_file_binder,22.75f,y-.75f+i*.13f,z,ddE);}}
   kit::prop(m,model::prop_cardboard_box,22.75f,y,f+.306f,ddE,.62f);}
  ddFix(m,model::wooden_table,19.5f,4.7f,f,1.367f,.724f,.78f,0,true);kit::prop(m,model::wooden_chair,19.2f,5.45f,f,.2f);
- kit::prop(m,model::prop_cardboard_box_open,19.15f,4.72f,f+.78f,.15f,.55f);kit::prop(m,model::office_paper_stack,19.7f,4.72f,f+.78f,.1f);
+ kit::prop(m,model::prop_cardboard_box_open,19.15f,4.72f,f+.78f,.15f,.55f);kit::prop(m,model::office_paper_stack,19.53f,4.72f,f+.78f,.05f);
+ const int strongLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,19.9f,4.84f,f+.78f,ddW);   // the lamp he went through the files by
  for(auto [x,y,yaw]:{std::tuple{20.f,5.4f,.3f},{18.7f,3.9f,1.6f}})kit::prop(m,model::office_paper_sheet,x,y,f,yaw);
  wall(m,16.7f,5.75f,17.55f,6.95f,f,f+1.1f,8);wall(m,17.55f,6.05f,17.6f,6.65f,f+.45f,f+.65f,20);   // the safe
  wall(m,16.6f,4.8f,16.72f,5.2f,f+1.35f,f+1.7f,20);wall(m,16.72f,4.88f,16.73f,5.12f,f+1.45f,f+1.6f,8);   // intercom to the mortuary
@@ -483,6 +486,13 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  ddFix(m,model::med_floor_drain,8.3f,21.f,f,.5f,.5f,.01f,0,false);
  kit::prop(m,model::trash_can,7.7f,20.3f,f,.6f);
  wall(m,7.55f,20.15f,7.85f,20.45f,f+.6f,f+.61f,16);
+ // The porters' side of it: gloves and aprons in the cabinet by the door, the theatre's linen skip
+ // waiting to go down with the bags, a lamp over the hopper end.
+ ddFix(m,model::med_supply_cabinet,7.6f,18.422f,f,1.1f,.444f,1.7f,ddS,true);
+ {const float x=11.25f,y=21.65f;wall(m,x-.3f,y-.3f,x+.3f,y+.3f,f+.12f,f+.16f,20);
+  for(float dx:{-.28f,.25f})for(float dy:{-.28f,.25f})wall(m,x+dx,y+dy,x+dx+.03f,y+dy+.03f,f+.06f,f+.9f,20);
+  wall(m,x-.27f,y-.27f,x+.27f,y+.27f,f+.16f,f+.8f,39);ddBlood(m,x-.15f,y-.1f,x+.1f,y+.12f,f+.8f);}
+ for(auto [x,y,yaw]:{std::tuple{10.6f,21.9f,.5f},{8.9f,19.4f,2.2f}})kit::prop(m,model::item_bandage,x,y,f,yaw);
  // --- Specimens: the two lumps that came out of them ---------------------------------------------------
  for(float x:{13.3f,14.55f})ddFix(m,model::lab_clean_bench,x,22.69f,f,1.179f,.562f,.808f,0,true);
  kit::prop(m,model::office_chair,13.4f,21.95f,f,ddN-.2f);
@@ -509,9 +519,13 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
   "31 STAYS IN RECOVERY TILL THE NIGHT PORTER ANSWERS HIS PHONE. HE DOESN'T.");
  m.terminals.back().readable=Readable::Note;m.terminals.back().surface=.78f;m.terminals.back().yaw=ddE;
  kit::prop(m,model::desk_phone,18.55f,19.3f,f+.78f,ddE);
+ const int porterLamp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,18.6f,19.55f,f+.78f,ddE);
  for(float x:{22.35f})for(float y:{19.3f,20.1f})kit::prop(m,model::med_wheelchair,x,y,f,ddW);
  for(float y:{18.6f})wall(m,17.62f,y,17.7f,y+.04f,f+1.75f,f+1.8f,20);
  shelf(m,{21.9f,22.75f},0,0);for(auto [x,t]:{std::pair{21.4f,0},{22.25f,0},{21.6f,1},{22.3f,2}})kit::prop(m,model::prop_cardboard_box,x,22.75f,f+(t==0?.306f:t==1?.972f:1.656f),ddS,.6f);
+ // Nobody lies along a shelf top: a cap over every shelf in the map, clear of its top board's stock.
+ for(auto [x,y,alongX]:{std::tuple{1.27f,3.25f,false},{10.f,1.25f,true},{13.5f,1.25f,true},{15.3f,1.25f,true},{22.75f,2.25f,false},{22.75f,4.15f,false},
+  {16.25f,18.47f,true},{21.9f,22.75f,true}}){const float a=alongX?.9f:.25f,b=alongX?.25f:.9f;ddCap(m,x-a,y-b,x+a,y+b,f+2.1f,roof);}
  ddFix(m,model::med_notice_board,22.1f,18.235f,f+1.2f,1.2f,.07f,.9f,ddS,false);
  wall(m,17.6f,20.6f,17.72f,20.95f,f+1.3f,f+1.6f,8);wall(m,17.72f,20.68f,17.76f,20.87f,f+1.42f,f+1.56f,20);
  wall(m,17.65f,18.4f,17.8f,18.85f,f+.85f,f+1.75f,23);                                     // a porter's jacket
@@ -525,6 +539,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  m.lights.push_back(ddTube(10.6f,4.2f,roof,.5f,5.f,5600,.05f));                           // scrub
  m.lights.push_back(ddTube(14.5f,4.2f,roof,.45f,5.f,5400,.05f,.12f));                     // lay-up
  m.lights.push_back(ddTube(19.8f,4.4f,roof,.45f,5.5f,4600,.05f));                         // strongroom
+ m.lights.push_back(lamp({19.9f,4.84f},f+1.24f,.5f,4.2f,3000,0,WorldLightMount::Bare));m.lights.back().prop=strongLamp;   // and the desk lamp, on
  m.lights.push_back(ddPanel(ddTube(20.6f,9.2f,roof,.4f,6.f,3600,0)));                     // office
  m.lights.push_back(lamp({19.45f,12.2f},f+1.28f,.45f,3.2f,3000,0,WorldLightMount::Bare));m.lights.back().prop=directorLamp;   // his desk lamp, on
  m.lights.push_back(ddTube(12.3f,16.9f,roof,.45f,5.5f,5200,.06f));
@@ -540,8 +555,10 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  m.lights.push_back(ddSw(ddTube(3.4f,16.8f,roof,.4f,5.5f,5400,.06f),"med_blackout",true));              // recovery
  m.lights.push_back(ddSw(ddTube(3.4f,21.f,roof,.35f,5.f,5400,.06f,.25f),"med_blackout",true));
  m.lights.push_back(ddSw(ddTube(8.9f,20.6f,roof,.55f,5.5f,5000,.25f),"med_blackout",true));             // sluice
+ m.lights.push_back(ddSw(lamp({11.8f,20.4f},f+2.2f,.4f,5.f,4200,.1f,WorldLightMount::Wall,kPi),"med_blackout",true));   // its bulkhead over the bags
  m.lights.push_back(ddSw(ddTube(14.7f,20.4f,roof,.4f,5.f,5200,.05f),"med_blackout",true));              // specimens
  m.lights.push_back(ddSw(ddTube(20.3f,20.6f,roof,.35f,5.f,4800,.06f),"med_blackout",true));             // porters
+ {auto l=ddSw(lamp({18.6f,19.55f},f+1.24f,.4f,3.6f,3000,0,WorldLightMount::Bare),"med_blackout",true);l.prop=porterLamp;m.lights.push_back(l);}   // and their desk lamp
  // --- Rewards and names -----------------------------------------------------------------------------
  m.pickupSpawns={{{16.06f,2.6f},PickupKind::Health,f+.9f},{{4.f,7.f},PickupKind::Ammo,f+.78f},{{21.3f,13.95f},PickupKind::Health,f},{{18.9f,19.25f},PickupKind::Ammo,f+.78f}};
  m.pickupSpawns.push_back({{19.95f,4.55f},PickupKind::HandgunAmmo,f+.78f});   // 9 mm by the open carton: the strongroom kept the director's sidearm
@@ -581,7 +598,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
 // porter's room; off the lock, the suit-up room.
 std::shared_ptr<const Map> makeMedicalMorgue(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[78];m.definition=CampaignChunks[78];m.definition.ambient=.2f;
+ m.name=CampaignMapNames[78];m.definition=CampaignChunks[78];m.definition.ambient=.22f;
  m.definition.playerStart={12.f,1.5f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi*.5f;
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceConcrete;
  const float f=-15,up=-12,roof=m.definition.ceiling,ceil=-12.2f;
@@ -602,7 +619,7 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  // the body lift, dead, at both levels
  for(auto [y,z,dir]:{std::tuple{2.945f,up,-1.f},{7.f,f,1.f}}){
   const float a=std::min(y,y+dir*.04f),b=std::max(y,y+dir*.04f);
-  wall(m,12.5f,a,14.5f,b,z,z+2.2f,8);for(float x:{12.6f,13.52f})wall(m,x,std::min(y,y+dir*.05f),x+.88f,std::max(y,y+dir*.05f),z,z+2.12f,20);
+  wall(m,12.5f,a,14.5f,b,z,z+2.2f,8);for(float x:{12.6f,13.52f})wall(m,x,std::min(y,y+dir*.05f),x+.88f,std::max(y,y+dir*.05f),z,z+2.12f,28);
   wall(m,14.65f,std::min(y,y+dir*.06f),14.85f,std::max(y,y+dir*.06f),z+1.1f,z+1.4f,20);}
  taped(m,{13.52f,2.895f},up+1.5f,ddN,Readable::Note,"BODY LIFT","OUT SINCE 02:50. BRING THEM DOWN BY THE STAIR, TWO PORTERS TO A TROLLEY.",
   "NOBODY COMES DOWN ALONE. NOBODY GOES IN THE STORE ALONE.");
@@ -777,6 +794,15 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  taped(m,{21.5f,17.6f},f+1.5f,ddS,Readable::Note,"SUIT-UP / MORTUARY 2","NO SUIT, NO QUARANTINE DOOR. HOOD, GLOVES, TAPE AT THE WRISTS. FOUR ON THE PEGS AT ALL TIMES.",
   "04:10 ALL FOUR SIGNED OUT TO THE QUARANTINE WARD. NONE BACK.");
  kit::prop(m,model::prop_cardboard_box_open,20.2f,18.05f,f,.2f,.7f);
+ // The stalls' plumbing boxed in at both ends of the row, painted with the room, a panel on each.
+ ddCap(m,17.32f,21.46f,21.68f,23.f,f+2.42f,up);                                                         // nobody perches on the stall tops
+ for(auto [x1,x2]:{std::pair{16.f,17.32f},{21.68f,23.f}}){wall(m,x1,21.46f,x2,23.f,f,up,3);
+  const float c=(x1+x2)*.5f;wall(m,c-.35f,21.44f,c+.35f,21.46f,f+.3f,f+1.f,20);}
+ // By them: the bin the used suits went in, empty but for one glove, its lid back.
+ {const float x=22.4f,y=20.75f;wall(m,x-.3f,y-.3f,x+.3f,y+.3f,f+.12f,f+.16f,20);
+  for(float dx:{-.28f,.25f})for(float dy:{-.28f,.25f})wall(m,x+dx,y+dy,x+dx+.03f,y+dy+.03f,f+.06f,f+.9f,20);
+  wall(m,x-.27f,y-.27f,x+.27f,y+.27f,f+.16f,f+.2f,39);wall(m,x-.12f,y-.05f,x+.04f,y+.08f,f+.2f,f+.23f,18);}
+ kit::prop(m,model::prop_cardboard_box,22.55f,19.82f,f,ddW+.1f,.6f);
  for(auto [x,y,yaw]:{std::tuple{19.6f,18.3f,.4f},{20.9f,18.6f,2.1f}})kit::prop(m,model::office_paper_sheet,x,y,f,yaw);
  // --- Light (24): cold tubes under the slab; three reds and the door's own lamps in the dark --------------
  m.lights.push_back(lamp({10.f,1.6f},up+2.35f,.6f,6.5f,4800,.05f,WorldLightMount::Wall,0));      // landing
@@ -791,6 +817,7 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  m.lights.push_back(ddTube(19.6f,15.f,ceil,.35f,4.5f,3600,0));
  m.lights.push_back(lamp({20.05f,16.5f},f+1.f,.22f,2.5f,7500,.2f,WorldLightMount::Bare));m.lights.back().prop=porterTv;
  m.lights.push_back(ddTube(19.6f,20.3f,ceil,.45f,5.f,5400,.06f));
+ m.lights.push_back(lamp({23.f,20.9f},f+2.15f,.42f,4.5f,5000,.05f,WorldLightMount::Wall,kPi));                 // the suit-up's wall lamp, past the stalls
  for(auto& l:m.lights)if(!l.enabledState)l=ddSw(l,"med_blackout",true);
  // The reds: over the store doorway at the stair foot, over drawer 9 (the store's own emergency lamp), the door's interlock.
  m.lights.push_back(ddSw(lamp({9.22f,10.2f},f+2.55f,.22f,4.5f,1100,-.45f,WorldLightMount::Wall,0),"med_blackout",false));

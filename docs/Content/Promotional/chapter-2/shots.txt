@@ -1,20 +1,8 @@
-ch2_theatre 68 18.2 7.4 -12 35 -2 set rf_intake_film_loud_done
-ch2_theatre2 68 21.2 8.4 -12 150 -4 set rf_intake_film_loud_done
-ch2_lobby 68 12 19.0 -12 90 -2
-ch2_intake 68 12 3.2 -12 90 -3
-ch2_suits 69 8.9 18.4 -12 200 -3
-ch2_hall69 69 12 4.6 -12 90 -2
-ch2_cage 74 4.1 6.2 -12 -90 -3
-ch2_cage2 74 5.6 6.6 -12 -118 -3
-ch2_pan 84 4.5 10.5 -11.38 40 -12
-ch2_pan2 84 9 8.2 -12 90 -8
-ch2_plantbus 92 12 14 -16 90 6
-ch2_plantbus2 92 12 13 -16 90 -6
-ch2_towers 86 20 20 -12 225 -14
-ch2_breach1 102 6 20.4 -15 290 -10
-ch2_breach2 102 12.6 10.8 -18 160 0
-ch2_breach3 102 18.6 14.5 -15 200 -30
-ch2_contb 98 7.5 4 -15 180 6
-ch2_emerg 103 6 19 -15 180 -4
-ch2_lab4 83 12 12 -12 0 -4
-ch2_lab4b 83 12 12 -12 180 -4
+ch2_theatre 68 18.2 7.4 -12 35 -2 set ere_great_door,chapter2_open,rf_intake_film_loud_done
+ch2_hall69 69 12 4.6 -12 90 -2 set ere_great_door,chapter2_open
+ch2_suitsb 69 3.2 17.4 -12 50 0 set ere_great_door,chapter2_open
+ch2_pan 84 4.5 10.5 -11.38 40 -12 set ere_great_door,chapter2_open,proc_clearance,lab_chem_seal
+ch2_plantbus 92 12 14 -16 90 6 set ere_great_door,chapter2_open,proc_clearance,lab_chem_seal,med_override,med_morgue_release
+ch2_towers 86 20 20 -12 225 -14 set ere_great_door,chapter2_open,proc_clearance,lab_chem_seal,med_override,med_morgue_release
+ch2_breach1 102 6 20.4 -15 290 -10 set ere_great_door,chapter2_open,proc_clearance,lab_chem_seal,med_override,med_morgue_release
+ch2_breach3 102 18.6 14.5 -15 200 -30 set ere_great_door,chapter2_open,proc_clearance,lab_chem_seal,med_override,med_morgue_release

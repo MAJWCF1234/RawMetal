@@ -248,6 +248,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  taped(m,{7.4f,4.6f},f+1.45f,-kPi*.5f,Readable::Note,"ROUTINE MONITORING / A NOTE FOR STAFF","YOUR BAND KEEPS YOU SAFE. A SCREENING CALL IS ROUTINE, NOT A CONCERN.",
   "IF YOU ARE ASKED TO STAY FOR OBSERVATION, YOUR SHIFT PAY CONTINUES. YOUR FAMILY WILL BE CALLED.");
  mdFix(m,model::water_cooler,7.2f,1.6f,f,.35f,.35f,1.1f,mdW,true);
+ mdFix(m,model::med_notice_board,7.365f,2.75f,f+1.3f,1.2f,.07f,.9f,mdW,false);      // the screening rota over the bin
  kit::prop(m,model::trash_can,7.1f,2.45f,f,.45f,.45f,.56f,.2f);
  mdFix(m,model::lab_potted_plant,6.97f,8.4f,f,.498f,.578f,.927f,.4f,true);
  mdFix(m,model::wooden_table,4.2f,2.f,f,1.094f,.579f,.624f,.06f,true);
@@ -474,11 +475,11 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  // He keeps a stance of his own: told to go, he gives his word, and the order turns only the burner.
  {auto& t=m.actorTracks.back();t.ai.stance=stateId("medf_screen_b_stance");t.talk=stateId("medf_b_hello");t.ai.dropsSidearm=true;}
  {auto go=m71Reply("Go. Back the way I came.","medf_b_go","medf_screen_b_spared");go.hide=stateId("medf_screen_b_spared");
-  m.dialogue.push_back({stateId("medf_b_hello"),"MEDICAL DETAIL","Stop. Don't. I've got two rounds and a radio that won't stop talking.","",{
+  m.dialogue.push_back({stateId("medf_b_hello"),"MEDICAL DETAIL","Stop. Don't. I've got two rounds and a radio that won't stop talking.","medf_b_hello",{
    m71Reply("Who did the booths?","medf_b_booths"),m71Reply("What's behind the Ward C door?","medf_b_wardc"),go}});}
- m.dialogue.push_back({stateId("medf_b_go"),"MEDICAL DETAIL","He counts the radios on the hour. I walk, he hears it. But I'm not raising this at you. Whatever he says next.","",{m71Reply("Then you didn't see me.")}});
- m.dialogue.push_back({stateId("medf_b_booths"),"MEDICAL DETAIL","Us. He said they were exposed. They were reading the counts out loud, so somebody stopped them reading.","",{m71Reply("Back.","medf_b_hello")}});
- m.dialogue.push_back({stateId("medf_b_wardc"),"MEDICAL DETAIL","Nine tier threes. Ten to three. Something's been knocking since four.","",{m71Reply("Back.","medf_b_hello")}});
+ m.dialogue.push_back({stateId("medf_b_go"),"MEDICAL DETAIL","He counts the radios on the hour. I walk, he hears it. But I'm not raising this at you. Whatever he says next.","medf_b_go",{m71Reply("Then you didn't see me.")}});
+ m.dialogue.push_back({stateId("medf_b_booths"),"MEDICAL DETAIL","Us. He said they were exposed. They were reading the counts out loud, so somebody stopped them reading.","medf_b_booths",{m71Reply("Back.","medf_b_hello")}});
+ m.dialogue.push_back({stateId("medf_b_wardc"),"MEDICAL DETAIL","Nine tier threes. Ten to three. Something's been knocking since four.","medf_b_wardc",{m71Reply("Back.","medf_b_hello")}});
  // --- The Investigator, over their radio: his order turns them ----------------------------------
  // It starts as the player leaves the lobby, by the spine or by the waiting room: near enough to
  // hear it, and with time to reach the watcher before the order lands.
@@ -505,7 +506,7 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stateId("medf_screen_b_spared"),ScriptCondition::Op::Equal,1});
  mdSequence(m,"medf_b_refuse","medf_b_refused",3000,2500,-9,-9,-8,-8);
  cue(m,"medf_b_refuse",700,Sound::RadioSquelch,radio,"",.7f,f+1.5f);
- cue(m,"medf_b_refuse",1100,Sound::Empty,radio,"MEDICAL DETAIL: Nobody's walked it, sir. I'd have seen.",.9f,f+1.5f);
+ cue(m,"medf_b_refuse",1100,Sound::Empty,radio,"MEDICAL DETAIL: Nobody's walked it, sir. I'd have seen.",.9f,f+1.5f,"medf_b_refuse_1");
  m71Event(m,"medf_screen_break",0,0,24,24,"md_screen_a_dead",{m71Set("medf_screen_stance",int(SquadStance::Truce)),m71Set("medf_screen_b_stance",int(SquadStance::Truce))});
  // Back from Ward C with the override: the screen leaf stands open and the hold wakes.
  {ScriptAction open;open.type=ScriptAction::Type::OpenDoor;open.index=12;
@@ -899,8 +900,9 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  equipmentPad(m,19.6f,16.6f,22.8f,19.f,f);
  mdFix(m,model::pwr_air_handler,21.9f,17.75f,f+.1f,.81f,1.64f,2.62f,0,true);
  mdFix(m,model::pwr_duct_fan_unit,20.65f,17.75f,f+.1f,.79f,1.49f,1.95f,0,true);
- wall(m,21.6f,17.45f,22.2f,18.05f,f+2.82f,roof,2);wall(m,20.35f,17.45f,20.95f,18.05f,f+2.15f,roof,2);
- wall(m,20.35f,17.5f,22.2f,18.f,roof-.5f,roof,2);
+ wall(m,21.6f,17.45f,22.2f,18.05f,f+2.72f,roof,20);wall(m,20.35f,17.45f,20.95f,18.05f,f+2.05f,roof,20);   // each duct seated on its unit's top
+ wall(m,20.35f,17.5f,22.2f,18.f,roof-.5f,roof,20);
+ for(float z:{f+2.3f,roof-.55f})wall(m,20.32f,17.42f,20.98f,18.08f,z,z+.05f,8);                                       // the duct's flange joints
  for(float y:{20.3f,20.7f,21.1f,21.5f})mdFix(m,model::gas_cylinder,22.75f,y,f,.33f,.33f,1.58f,0,true);wall(m,22.55f,20.1f,23.f,21.7f,f+1.58f,roof,CollisionProxyMaterial);
  for(float z:{.4f,1.1f})wall(m,22.5f,20.05f,22.55f,21.75f,f+z,f+z+.05f,2);
  for(float y:{20.f,21.75f})wall(m,22.5f,y,22.98f,y+.05f,f,f+1.3f,2);
@@ -909,6 +911,15 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  for(float y:{20.3f,20.7f,21.1f,21.5f}){m.pipes.push_back({{22.75f,y},{22.75f,y},f+1.58f,.008f,f+2.35f,5});m.pipes.push_back({{22.75f,y},{22.43f,y},f+2.35f,.008f,f+2.35f,5});}
  mdFix(m,model::pwr_control_cabinet,18.6f,22.78f,f,.8f,.4f,1.6f,kPi,true);
  kit::prop(m,model::prop_cardboard_box_open,21.1f,22.4f,f,.73f,.72f,.73f,0);kit::prop(m,model::prop_cardboard_box_open,21.885f,22.4f,f,.7f,.69f,.7f,0); // spare filter media
+ // The night's filter change, never finished: the fitter's chest rolled in by the door, the ward's
+ // board on the wall over it, the spent filter pulled and stood against the pad, the caged lamp.
+ mdFix(m,model::pwr_tool_chest,17.55f,16.45f,f,.746f,.446f,.97f,mdS,true);
+ kit::prop(m,model::mine_hard_hat,17.4f,16.45f,f+.97f,.28f,.35f,.15f,.6f);
+ kit::prop(m,model::item_walkie,17.72f,16.45f,f+.97f,.114f,.376f,.046f,.15f);
+ mdFix(m,model::pwr_breaker_panel,18.9f,16.252f,f+1.3f,.183f,.102f,.457f,mdS,false);mdFix(m,model::pwr_breaker_panel,19.2f,16.252f,f+1.3f,.183f,.102f,.457f,mdS,false);
+ for(float x:{18.9f,19.2f})m.pipes.push_back({{x,16.24f},{x,16.24f},f+1.76f,.02f,roof,6});
+ wall(m,20.13f,17.2f,20.23f,18.3f,f+.1f,f+1.12f,20);wall(m,20.12f,17.26f,20.24f,18.24f,f+.16f,f+1.06f,39);   // the spent filter, stood against the fan unit
+ m.lights.push_back(lamp({18.f,16.2f},f+2.25f,.5f,6.f,3400,0,WorldLightMount::Wall,kPi*.5f));            // the plant's caged lamp
  // --- The two of them: the nurse (above) and the man in bay 1 (actor 1) -------------------------------
  // He lies along the window side of bay 1. When his timer runs he comes up off
  // the floor (the fall played backwards, stopping on his knees), turned to the
@@ -936,7 +947,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
   m72Set("md_triage_dark_t1",1),m72Set("md_triage_dark_t2",1),m72Set("md_triage_dark_t3",1),m72Set("md_triage_dark_t4",1)});
  mdSequence(m,"md_triage_hush","md_triage_hush_done",6000,5000,-9,-9,-8,-8);
  cue(m,"md_triage_hush",0,Sound::WorkerDying,patient,"",.3f,f+.9f);
- cue(m,"md_triage_hush",400,Sound::Empty,patient,"PATIENT: ...keep the lights on. They don't get up while the lights are on.",.9f,f+.9f);
+ cue(m,"md_triage_hush",400,Sound::Empty,patient,"PATIENT: ...keep the lights on. They don't get up while the lights are on.",.9f,f+.9f,"md_triage_hush_1");
  const char* darkFlag[4]={"md_triage_dark_1","md_triage_dark_2","md_triage_dark_3","md_triage_dark"};
  const char* darkTimer[4]={"md_triage_dark_t1","md_triage_dark_t2","md_triage_dark_t3","md_triage_dark_t4"};
  const float darkX[4]={18.2f,14.6f,10.9f,7.f};
@@ -954,10 +965,10 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdSequence(m,"md_triage_radio","md_triage_radio_done",14000,12000,-9,-9,-8,-8);
  {const Vec2 radio{22.2f,13.9f};
   cue(m,"md_triage_radio",0,Sound::RadioSquelch,radio,"",.8f,f+.7f);
-  cue(m,"md_triage_radio",500,Sound::Empty,radio,"RADIO: Shots in triage. Somebody's moving in triage.",.9f,f+.7f);
+  cue(m,"md_triage_radio",500,Sound::Empty,radio,"RADIO: Shots in triage. Somebody's moving in triage.",.9f,f+.7f,"md_triage_radio_1");
   cue(m,"md_triage_radio",4300,Sound::RadioSquelch,radio,"",.8f,f+.7f);
-  cue(m,"md_triage_radio",4700,Sound::Empty,radio,"INVESTIGATOR (RADIO): Triage is closed. Leave it.",.9f,f+.7f);
-  cue(m,"md_triage_radio",8600,Sound::Empty,radio,"RADIO: ...Copy. Leaving it.",.9f,f+.7f);}
+  cue(m,"md_triage_radio",4700,Sound::Empty,radio,"INVESTIGATOR (RADIO): Triage is closed. Leave it.",.9f,f+.7f,"md_triage_radio_2");
+  cue(m,"md_triage_radio",8600,Sound::Empty,radio,"RADIO: ...Copy. Leaving it.",.9f,f+.7f,"md_triage_radio_3");}
  // --- Light (29): cold clinic tubes, one warm desk, the reds that only burn in the dark -----------------
  m.lights.push_back(lamp({3.f,11.6f},roof-.3f,.55f,5.f,5000,.08f));                                         // queue
  {auto l=lamp({3.f,6.6f},roof-.3f,.6f,5.f,5200,.06f);l.flicker=.08f;m.lights.push_back(l);}                  // band office
@@ -1057,7 +1068,7 @@ void m73Film(Map& m,float x,float y,float z,bool alongX=false){if(alongX)wall(m,
 // reception; booth -> light trap -> darkroom; changing -> counter, and the counter store.
 std::shared_ptr<const Map> makeMedicalImaging(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[73];m.definition=CampaignChunks[73];m.definition.ambient=.20f;
+ m.name=CampaignMapNames[73];m.definition=CampaignChunks[73];m.definition.ambient=.22f;
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
@@ -1229,12 +1240,14 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  taped(m,{9.35f,19.2f},f+1.5f,0,Readable::Note,"COUNTER / SOURCES","02:00 CHECK SOURCE IN RANGE. 02:05 PHANTOM COUNT IN RANGE.",
   "03:50 SUBJECT 9 READ HIGHER THAN THE CHECK SOURCE. NOTHING IN A MAN SHOULD.");
  // The whole-body counter: a steel room in the room, its door open on subject nine.
- wall(m,1.f,19.6f,2.2f,19.8f,f,f+2.3f,8);wall(m,3.2f,19.6f,4.4f,19.8f,f,f+2.3f,8);wall(m,2.2f,19.6f,3.2f,19.8f,f+2.1f,f+2.3f,8);
- wall(m,4.2f,19.8f,4.4f,23.f,f,f+2.3f,8);wall(m,1.f,19.6f,4.4f,23.f,f+2.3f,f+2.5f,8);
- for(auto [a,b]:{std::pair{1.02f,2.2f},{3.2f,4.18f}})wall(m,a,19.8f,b,19.82f,f,f+2.28f,20);
- wall(m,4.18f,19.82f,4.2f,23.f,f,f+2.28f,20);wall(m,1.f,19.82f,1.02f,23.f,f,f+2.28f,20);wall(m,1.02f,22.98f,4.18f,23.f,f,f+2.28f,20);
- wall(m,1.f,19.8f,4.2f,23.f,f+2.28f,f+2.3f,20);
- wall(m,3.2f,18.6f,3.4f,19.6f,f+.02f,f+2.08f,8);m.pipes.push_back({{3.4f,19.f},{3.52f,19.f},f+1.1f,.025f,f+1.1f,6});   // the door, open
+ // The shell is painted steel in the clinic's colours outside and in; only its door is bare.
+ wall(m,1.f,19.6f,2.2f,19.8f,f,f+2.3f,3);wall(m,3.2f,19.6f,4.4f,19.8f,f,f+2.3f,3);wall(m,2.2f,19.6f,3.2f,19.8f,f+2.1f,f+2.3f,3);
+ wall(m,4.2f,19.8f,4.4f,23.f,f,f+2.3f,3);wall(m,1.f,19.6f,4.4f,23.f,f+2.3f,f+2.5f,20);
+ for(auto [a,b]:{std::pair{1.02f,2.2f},{3.2f,4.18f}})wall(m,a,19.8f,b,19.82f,f,f+2.28f,3);
+ wall(m,4.18f,19.82f,4.2f,23.f,f,f+2.28f,3);wall(m,1.f,19.82f,1.02f,23.f,f,f+2.28f,3);wall(m,1.02f,22.98f,4.18f,23.f,f,f+2.28f,3);
+ wall(m,1.f,19.8f,4.2f,23.f,f+2.28f,f+2.3f,22);
+ for(float x:{1.f,4.38f})wall(m,x,19.58f,x+.04f,19.62f,f,f+2.5f,20);wall(m,4.38f,19.58f,4.42f,23.f,f+2.28f,f+2.32f,20);   // the shell's corner angles
+ wall(m,3.2f,18.6f,3.4f,19.6f,f+.02f,f+2.08f,28);m.pipes.push_back({{3.4f,19.f},{3.52f,19.f},f+1.1f,.025f,f+1.1f,6});   // the door, open
  wall(m,1.3f,21.9f,3.7f,22.6f,f+.55f,f+.62f,20);wall(m,1.35f,21.95f,3.65f,22.55f,f+.62f,f+.66f,23);       // counting bed
  for(float x:{1.4f,3.55f})wall(m,x,21.95f,x+.06f,22.55f,f,f+.55f,20);
  mdFix(m,model::lab_test_chamber,2.5f,22.25f,f+1.28f,1.14f,.68f,.64f,0,false);                              // the detector over the bed
@@ -1376,11 +1389,11 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  mdSequence(m,"md_imaging_radio","md_imaging_radio_done",14000,12000,-9,-9,-8,-8);
  {const Vec2 w{5.55f,17.55f};
   cue(m,"md_imaging_radio",0,Sound::RadioSquelch,w,"",.8f,f+.1f);
-  cue(m,"md_imaging_radio",500,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail. Report.",.9f,f+.1f);
+  cue(m,"md_imaging_radio",500,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail. Report.",.9f,f+.1f,"md_imaging_radio_1");
   cue(m,"md_imaging_radio",4600,Sound::RadioSquelch,w,"",.8f,f+.1f);
-  cue(m,"md_imaging_radio",5000,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail.",.9f,f+.1f);
+  cue(m,"md_imaging_radio",5000,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail.",.9f,f+.1f,"md_imaging_radio_2");
   cue(m,"md_imaging_radio",9000,Sound::RadioSquelch,w,"",.8f,f+.1f);
-  cue(m,"md_imaging_radio",9400,Sound::Empty,w,"INVESTIGATOR (RADIO): Log them with the tier threes.",.9f,f+.1f);}
+  cue(m,"md_imaging_radio",9400,Sound::Empty,w,"INVESTIGATOR (RADIO): Log them with the tier threes.",.9f,f+.1f,"md_imaging_radio_3");}
  // --- Light (27): cold corridor tubes, dim reading light off the films, the red safelight, the vault ---
  for(auto [y,i]:{std::pair{2.8f,.55f},{7.8f,.5f},{12.f,.55f},{21.6f,.5f}})m.lights.push_back(m71Tube(12.f,y,roof,i,5.5f,5200,.05f));
  m.lights.push_back(m71Tube(12.f,17.f,roof,.5f,5.5f,5200,.05f,.35f));
@@ -1401,6 +1414,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  m.lights.push_back(m71Tube(8.3f,21.4f,roof,.5f,4.5f,5600,.1f));
  m.lights.push_back(m71Tube(4.6f,17.2f,roof,.4f,5.f,5200,.05f));
  m.lights.push_back(lamp({2.6f,20.9f},f+2.16f,.45f,3.5f,6000,.1f,WorldLightMount::Bare));                     // inside the counter
+ m.lights.push_back(lamp({1.02f,21.4f},f+1.7f,.3f,3.f,6000,.1f,WorldLightMount::Wall,0));                      // and its wall lamp, on the detector's face
  // --- Rewards and names -------------------------------------------------------------------------
  m.pickupSpawns={{{21.5f,22.7f},PickupKind::Health,f+.9f},{{3.1f,4.25f},PickupKind::Health,f+.92f},{{5.75f,18.85f},PickupKind::Ammo,f},{{20.3f,15.9f},PickupKind::Ammo,f}};
  // 9 mm by the detail's dead man, and on the desk beside the phone he never reached.
@@ -1469,7 +1483,7 @@ void m74Stock(Map& m,float x,float y,int seed){
 // opens from inside -> back out west. No combat: the quiet before Ward C.
 std::shared_ptr<const Map> makeMedicalPharmacy(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[74];m.definition=CampaignChunks[74];m.definition.ambient=.20f;
+ m.name=CampaignMapNames[74];m.definition=CampaignChunks[74];m.definition.ambient=.22f;
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceClinicTile;
  const float f=-12,roof=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
@@ -1518,10 +1532,11 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
   auto held=lamp({4.75f,3.55f},f+2.3f,.5f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{1,.1f,.06f});held.enabledState=keyed;held.invert=true;m.lights.push_back(held);
   auto wink=held;wink.enabledState=running;wink.invert=false;wink.period=1.f;wink.onTime=.5f;m.lights.push_back(wink);
   auto go=lamp({4.75f,3.55f},f+2.02f,.55f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{.15f,1,.3f});go.enabledState=open;m.lights.push_back(go);}
- // The walk-in cold room: insulated panels to the ceiling, its door shut, a small window on the dark.
- wall(m,10.f,1.f,10.1f,3.5f,f,roof,28);
- wall(m,10.f,3.5f,11.35f,3.6f,f,roof,28);wall(m,11.65f,3.5f,13.f,3.6f,f,roof,28);
- wall(m,11.35f,3.5f,11.65f,3.6f,f,f+1.45f,28);wall(m,11.35f,3.5f,11.65f,3.6f,f+1.75f,roof,28);
+ // The walk-in cold room: built into the dispensary's corner and painted with it, its door shut, a
+ // small window on the dark.
+ wall(m,10.f,1.f,10.1f,3.5f,f,roof,3);
+ wall(m,10.f,3.5f,11.35f,3.6f,f,roof,3);wall(m,11.65f,3.5f,13.f,3.6f,f,roof,3);
+ wall(m,11.35f,3.5f,11.65f,3.6f,f,f+1.45f,3);wall(m,11.35f,3.5f,11.65f,3.6f,f+1.75f,roof,3);
  wall(m,9.96f,1.f,10.f,3.64f,f,f+.12f,20);wall(m,10.f,3.6f,10.92f,3.64f,f,f+.12f,20);wall(m,12.08f,3.6f,13.f,3.64f,f,f+.12f,20); // steel kerb
  breakable(m,11.35f,3.54f,11.65f,3.56f,f+1.45f,f+1.75f,17,true);
  for(auto [a,b]:{std::pair{10.95f,11.35f},{11.65f,12.05f}})wall(m,a,3.6f,b,3.68f,f+.02f,f+2.05f,20);
@@ -1566,7 +1581,7 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  bench(m,19.3f,13.55f,f);
  // The service lift to the morgue level, out of service: doors, frame, call panel, dead indicator.
  for(float y:{11.55f,13.35f})wall(m,20.9f,y,21.f,y+.1f,f,f+2.2f,20);wall(m,20.9f,11.55f,21.f,13.45f,f+2.1f,f+2.2f,20);
- wall(m,20.95f,11.65f,21.f,12.49f,f,f+2.1f,20);wall(m,20.95f,12.51f,21.f,13.35f,f,f+2.1f,20);wall(m,20.96f,12.49f,21.f,12.51f,f,f+2.1f,8);
+ wall(m,20.95f,11.65f,21.f,12.49f,f,f+2.1f,28);wall(m,20.95f,12.51f,21.f,13.35f,f,f+2.1f,28);wall(m,20.96f,12.49f,21.f,12.51f,f,f+2.1f,8);
  for(float y:{11.95f,13.05f})wall(m,20.93f,y,20.95f,y+.04f,f+.95f,f+1.25f,8);                               // pulls
  wall(m,20.93f,11.65f,20.95f,13.35f,f,f+.04f,20);
  mdFix(m,model::lab_id_scanner,20.97f,11.3f,f+1.1f,.3f,.06f,.41f,mdW,false);
@@ -1735,6 +1750,14 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  m.lights.push_back(m71Tube(18.4f,4.f,roof,.45f,5.5f,4600,.03f,.2f));
  m.lights.push_back(m71Tube(17.5f,9.2f,roof,.55f,5.f,4600,.03f));
  m.lights.push_back(m71Tube(14.8f,7.4f,roof,.4f,4.5f,4600,.03f));
+ // The racking: the tubes light only its top boards, so the porters left caged work lamps burning on
+ // the middle boards to pick by (thrown wide, past the boards, as the pale stock would throw it; the
+ // riser and the store's own walls bound them), and a caged lamp at each aisle's end lights the fronts.
+ for(auto [x,y]:{std::pair{19.6f,1.52f},{19.6f,5.8f},{16.38f,4.6f}}){
+  mdSet(m,model::mine_cage_lamp,x,y,f+.972f,.206f,.201f,.362f,x>18.f?mdW:mdE);
+  m.lights.push_back(lamp({x-.2f,y},f+1.16f,.42f,3.4f,3800,0,WorldLightMount::Bare,0,false));}   // just proud of the board, on the aisle side
+ m.lights.push_back(lamp({18.95f,1.f},f+2.2f,.45f,6.f,3600,0,WorldLightMount::Wall,kPi*.5f));
+ m.lights.push_back(lamp({19.7f,10.8f},f+2.2f,.4f,6.f,3600,0,WorldLightMount::Wall,-kPi*.5f));
  // --- Rewards and names -------------------------------------------------------------------------
  m.pickupSpawns={{{2.7f,2.2f},PickupKind::Health,f},{{5.6f,2.25f},PickupKind::Health,f},{{16.f,1.75f},PickupKind::Health,f}};
  // 9 mm: the security box signed into the cage with the drugs, on the register desk behind the time
