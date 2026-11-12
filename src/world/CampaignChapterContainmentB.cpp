@@ -446,7 +446,11 @@ std::shared_ptr<const Map> makeSpecimenHandling(){
  // back up to the gallery and the deck east to the theater are the ways out.
  {SequenceCue c;c.timerState=stateId("conb_sh_r117");c.timeMs=0;c.sound=Sound::OneMetalDrag;c.position={11.6f,21.6f};c.gain=.9f;c.z=fl+1.f;m.sequenceCues.push_back(c);
   c.timeMs=1700;c.sound=Sound::OneMonsterGrowl;c.position={10.6f,20.6f};m.sequenceCues.push_back(c);}
- cbSequence(m,"conb_sh_r117","conb_sh_r117_out",6000,2600,3.f,11.f,15.f,18.6f);
+ // Not on top of the fight with what came out of cage 7: it waits till the floor has gone quiet
+ // (both of them down) and the player is out on it, then the drag in bay 2.
+ cbSequence(m,"conb_sh_r117","conb_sh_r117_out",6000,2600,-9.f,-9.f,-8.f,-8.f);
+ cbEvent(m,"conb_sh_r117_quiet",3.f,11.f,15.f,18.6f,"",{cbSet("conb_sh_r117",1)});
+ m.scriptEvents.back().requireEnemiesClear=true;m.scriptEvents.back().bottom=fl-.5f;m.scriptEvents.back().top=fl+2.5f;
  cbEvent(m,"conb_sh_r117_comes",0,0,24,24,"conb_sh_r117_out",{cbR117({11.8f,21.9f},fl,6.f)});
  cbBody(m,clock,ActorVisual::Worker,{13.3f,9.3f},fl,1.9f);
  m.pickupSpawns.push_back({{2.2f,18.2f},PickupKind::Health,fl});
@@ -497,6 +501,7 @@ std::shared_ptr<const Map> makeIsolationWing(){
    const int door=swingDoor(m,d0,d1,(y1+y2)*.5f,f,roof,swing);a=d1;
    if(n==3){m.doors[size_t(door)].open=.9f;m.doors[size_t(door)].opening=true;}                        // 03:52: hers stands open
    if(n==2||n>=5)m.doors[size_t(door)].requireState=stateId("conb_iso_barred");                        // never: the bar is down and nobody is lifting it
+   if(n==4)m.doors[size_t(door)].requireState=stateId("conb_iso_four");                                  // shut from inside; its lock is on the wing panel
    onFace(d0-.18f,d0,0,2.86f,.1f,11);onFace(d1,d1+.18f,0,2.86f,.1f,11);onFace(d0-.18f,d1+.18f,2.55f,2.86f,.1f,11);
    onFace(v0,v1,sill-.06f,sill,.08f,20);
    if(n==2){
@@ -572,6 +577,38 @@ std::shared_ptr<const Map> makeIsolationWing(){
  m.terminals.back().yaw=cbW;
  taped(m,{11.75f,13.49f},f+1.95f,cbN,Readable::Note,"ISOLATION / BY ORDER 04:10","OCCUPANTS RELOCATED TO THE HUB FOR TRANSFER. EXCEPT 2. 2 DOES NOT ANSWER.",
   "DO NOT OPEN 2 TO ASK.");
+ // --- Bunker 4: one of the Cleanup shut himself in at 04:20 --------------------------------------
+ // Its lock is the wing's, on the wing panel at the corridor's end, and the panel went dark with the
+ // wing's maintenance supply when the occupants were moved at 04:10. The maintenance breaker is in
+ // bunker 1, emptied and open: put the wing back on it (the dead corridor tube and the dead lamps
+ // over 6 and 8 come up, the panel's screen lights), then release 4 from the panel.
+ const StateId maint=stateId("conb_iso_maint"),four=stateId("conb_iso_four");
+ taped(m,{21.95f,13.49f},f+1.5f,cbN,Readable::Note,"ON 4, IN MARKER","SHUT FROM INSIDE 04:20. CLEANUP. LOCK IS ON THE WING PANEL.",
+  "WING PANEL'S ON MAINTENANCE SUPPLY. MAINTENANCE WENT OFF WITH THE MOVE.");
+ terminal(m,{22.45f,12.75f},"WING PANEL / DOOR LOCKS","NO SUPPLY. PANEL ON WING MAINTENANCE, OFF SINCE THE MOVE 04:10. BREAKER: BUNKER 1.",
+  "WITH SUPPLY: 4 HELD FROM INSIDE (MANUAL). E / RELEASE 4. 2 AND 5-8: BARRED. NO RELEASE.",0,four,maint);
+ m.terminals.back().yaw=cbW;
+ {auto l=cbGlow({21.85f,12.75f},f+1.35f,.3f,2.6f,9000,{.6f,.8f,1.f},.05f);l.enabledState=maint;m.lights.push_back(l);}           // its screen, lit on the supply
+ cbFix(m,model::pwr_disconnect_switch,1.18f,4.6f,f+.95f,cbE,false);cbFix(m,model::pwr_breaker_panel,1.06f,5.3f,f+1.35f,cbE,false);
+ terminal(m,{1.75f,5.f},"WING MAINTENANCE / SUPPLY","OFF 04:10, FOR THE MOVE. CARRIES: CORRIDOR LIGHTING (PART), CELL LAMPS 6 AND 8, THE WING PANEL.",
+  "E / ON.",0,maint);
+ m.terminals.back().yaw=cbE;
+ {ScriptAction s;s.type=ScriptAction::Type::PlaySound;s.sound=Sound::OneMetalBang;s.amount=.5f;ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="WING MAINTENANCE SUPPLY ON";say.amount=3.f;
+  cbEvent(m,"conb_iso_maint_on",0,0,24,24,"conb_iso_maint",{s,say});}
+ {ScriptAction s;s.type=ScriptAction::Type::PlaySound;s.sound=Sound::Door;s.amount=.6f;ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="4 RELEASED";say.amount=2.5f;
+  cbEvent(m,"conb_iso_four_open",0,0,24,24,"conb_iso_four",{s,say});}
+ // what came on with it: the corridor's dead tube and the cage lamps over 6 and 8
+ m.lights.push_back([&]{auto l=cbTube(7.f,11.5f,roof,.5f,6.f,5600,.05f,.15f);l.enabledState=maint;return l;}());
+ for(auto [x,y,yaw]:{std::tuple{10.6f+.42f,9.52f,blS},{21.6f+.42f,9.52f,blS}}){auto l=lamp({x,y},f+2.75f,.38f,5.5f,4200,0,WorldLightMount::Wall,yaw,true);l.enabledState=maint;m.lights.push_back(l);}
+ m.objectiveTexts.push_back({stateId("conb_iso_obj_four"),"4 IS LOCKED FROM THE WING PANEL. THE PANEL HAS NO SUPPLY: THE MAINTENANCE BREAKER IS IN BUNKER 1."});
+ {auto goal=[](const char* id,ObjectiveStatus s){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(s);return a;};
+  cbEvent(m,"conb_iso_obj_seen",19.6f,11.6f,22.6f,13.4f,"",{goal("conb_iso_obj_four",ObjectiveStatus::Active)});
+  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,four,ScriptCondition::Op::Equal,0});
+  cbEvent(m,"conb_iso_obj_done",0,0,24,24,"conb_iso_four",{goal("conb_iso_obj_four",ObjectiveStatus::Complete)});m.scriptEvents.back().scope=ScriptEvent::Scope::Map;}
+ // inside 4: what he wrote before the walkie went flat, and what he had left
+ taped(m,{22.99f,16.6f},f+1.4f,cbW,Readable::Note,"ON A DUTY ROSTER, IN PENCIL","04:20. SHUT IT MYSELF. NOT FOR THEM. FOR ME. THE BOY IN 2 HASN'T MOVED SINCE THREE.",
+  "HE ISN'T BREATHING AND HE ISN'T FALLING DOWN. IF IT'S ME NEXT I'D RATHER BE BEHIND A DOOR.");
+ m.pickupSpawns.push_back({{19.9f,19.6f},PickupKind::HandgunAmmo,f});
  // --- Isolation 3: hers ------------------------------------------------------------------------
  m.fixtures.push_back({model::med_mattress_stained,{14.15f,1.5f},.45f,1.9f,.9f,.118f,0,false});
  // Her hand, on the concrete, in the pen they left her: big where she wanted it found, on three
@@ -644,7 +681,7 @@ std::shared_ptr<const Map> makeObservationTheater(){
   m.fixtures.push_back({model::mine_cage_lamp,{22.9f,y},z+1.45f-m.layers.front().elevation,.21f,.2f,.36f,0,false});}
  // the two who did not leave
  cbBody(m,clock,ActorVisual::SeniorScientist,{7.f,6.05f},up-1.5f,.3f);
- cbBody(m,clock,ActorVisual::Scientist,{18.6f,4.45f},up-.5f,2.8f);
+ cbBody(m,clock,ActorVisual::Scientist,{18.9f,4.45f},up-.5f,2.8f);   // between the bench legs, not in the end one
  for(float x:{5.f,19.f})m.lights.push_back(lamp({x,1.f},up+2.4f,.35f,5.f,3000,0,WorldLightMount::Wall,blS));
  for(int i=0;i<4;++i){m.lights.push_back(cbGlow({11.05f,4.4f+i*.9f},up-.5f*(i+1)+.15f,.12f,1.8f,2800));}   // the aisle's step lights
  // --- The viewing glass: the audience sat behind it, the stage below. It went at 02:40 in three
@@ -747,7 +784,7 @@ std::shared_ptr<const Map> makeObservationTheater(){
 // across between the knots -> up the scree to the south ledge -> S seam to Emergency Containment.
 std::shared_ptr<const Map> makeBreachSector(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[102];m.definition=CampaignChunks[102];m.definition.ambient=.15f;
+ m.name=CampaignMapNames[102];m.definition=CampaignChunks[102];m.definition.ambient=.15f;m.definition.musicCue=MusicCue::Silence;   // no score: the breach, the gas and whatever is breathing in it
  m.definition.playerStart={22.f,11.5f};m.definition.spawnHeight=-15.f;m.definition.spawnYaw=kPi;
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceRock;m.ceilingSurface=SurfaceConcrete;
  const float fl=-18,up=-15,roof=m.definition.ceiling;
@@ -1034,8 +1071,16 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  {ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Transformed;a.position={11.f,3.f};a.z=f;a.amount=8;
   ScriptAction b=a;b.position={14.f,4.2f};ScriptAction s;s.type=ScriptAction::Type::Shake;s.amount=.5f;
   cbEvent(m,"conb_ec_raised",0,0,24,24,"cont_barricade",{a,b,s});}
- // and R-117 with them, last: in at the tear in panel 6, behind the control room, and into the detail's flood.
- cbEvent(m,"conb_ec_r117",0,0,24,24,"cont_barricade",{cbR117({20.35f,7.15f},f,10.f)});
+ // and R-117 with them, last: in at the tear in panel 6 and into the detail's flood. Heard first, as
+ // the player comes out of the control room onto the hall: the slats of the tear bang, something
+ // drags along the gap behind the control room, it growls at the corner; then it is round the
+ // corner (16.3,7.2) and coming down the hall into the floodlight, with the hall west round line B
+ // and the door it is raising still the way out.
+ cbSequence(m,"conb_ec_r117_in","conb_ec_r117_out",8000,3000,-9.f,-9.f,-8.f,-8.f);
+ cbEvent(m,"conb_ec_r117",6.5f,13.2f,17.f,15.4f,"cont_barricade",{cbSet("conb_ec_r117_in",1)});
+ for(auto [t,snd,x,y,z,gain]:{std::tuple{0,Sound::OneMetalBang,20.35f,6.4f,1.6f,1.f},{900,Sound::OneMetalDrag,18.6f,7.1f,.5f,.85f},{2300,Sound::OneMonsterGrowl,16.9f,7.2f,.8f,1.f}}){
+  SequenceCue c;c.timerState=stateId("conb_ec_r117_in");c.timeMs=t;c.sound=snd;c.position={x,y};c.gain=gain;c.z=f+z;m.sequenceCues.push_back(c);}
+ cbEvent(m,"conb_ec_r117_comes",0,0,24,24,"conb_ec_r117_out",{cbR117({16.3f,7.15f},f,10.f)});
  // --- The south door and the Emergency detail -----------------------------------------------------
  wall(m,8.6f,22.4f,10.f,23.f,f,roof,15);wall(m,14.f,22.4f,15.4f,23.f,f,roof,15);wall(m,10.f,22.4f,14.f,23.f,f+3.2f,roof,15);
  floorLine(m,9.f,21.5f,15.f,21.7f,f,13);
@@ -1069,9 +1114,44 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  // the accumulator's line: up off the vessel's head, along the wall, into the high run to the rams
  m.pipes.push_back({{1.62f,17.2f},{1.62f,17.2f},f+2.3f,.05f,f+3.05f,4});m.pipes.push_back({{1.62f,17.2f},{1.16f,17.2f},f+3.05f,.05f,f+3.05f,4});
  m.pipes.push_back({{1.16f,17.2f},{1.16f,22.6f},f+3.05f,.05f,f+3.05f,4});m.pipes.push_back({{1.16f,22.6f},{1.2f,22.6f},f+3.05f,.05f,f+3.05f,4});
- terminal(m,{1.75f,18.55f},"BARRICADE HYDRAULICS / PUMP SET","ACCUMULATOR 0 BAR. BLED 03:41, ORDER OF THE INVESTIGATOR. PUMP SET ON LOCAL. CHARGE TO 180 BAR?",
-  "03:41 MANUAL ANNOTATION: IF YOU ARE READING THIS AND YOU ARE NOT HIM, CHARGE IT.",0,stateId("conb_ec_pressure"));
+ // The charge is three steps the hall shows: the pump set has no supply (its isolator was locked
+ // out with the bleed, at the breakers behind the control room, by the tear); with supply its lamp
+ // comes on and it will run; run, it labours twelve seconds to 180 bar and the CHARGED lamp lights;
+ // then the console raises the barricade (cont_barricade, as before).
+ const StateId supply=stateId("conb_ec_supply"),charged=stateId("conb_ec_pressure");
+ terminal(m,{1.75f,18.55f},"BARRICADE HYDRAULICS / PUMP SET","ACCUMULATOR 0 BAR. BLED 03:41, ORDER OF THE INVESTIGATOR. PUMP SET ON LOCAL. NO SUPPLY: ISOLATOR LOCKED OUT.",
+  "ISOLATOR: BREAKER ROW BEHIND THE CONTROL ROOM, BY THE TEAR. WITH SUPPLY, E / CHARGE TO 180 BAR. (PEN) IF YOU ARE NOT HIM, CHARGE IT.",0,stateId("conb_ec_charge_go"),supply);
  m.terminals.back().yaw=cbE;
+ {TimedSequence s;s.timerState=stateId("conb_ec_charge");s.finishState=charged;s.x1=-9.f;s.y1=-9.f;s.x2=-8.f;s.y2=-8.f;s.durationMs=12500;s.finishAtMs=12000;
+  s.soundIntervalMs=1500;s.soundUntilMs=11000;s.tickSound=Sound::LiftMotor;s.gain=.5f;s.pitch=.62f;s.soundAt={1.52f,20.9f};s.soundZ=f+.6f;m.timedSequences.push_back(s);}
+ cbEvent(m,"conb_ec_charge_start",0,0,24,24,"conb_ec_charge_go",{cbSet("conb_ec_charge",1)});
+ for(auto [t,snd,x,y,z,gain]:{std::tuple{0,Sound::OneMetalCreak,1.5f,20.9f,.8f,.7f},{400,Sound::Machine,1.5f,20.9f,.6f,.8f},{6200,Sound::OneMetalBang,1.16f,21.f,3.f,.5f},{9800,Sound::OneMetalBang,6.f,22.6f,3.f,.55f}}){
+  SequenceCue c;c.timerState=stateId("conb_ec_charge");c.timeMs=t;c.sound=snd;c.position={x,y};c.gain=gain;c.z=f+z;m.sequenceCues.push_back(c);}
+ {auto l=cbGlow({1.9f,18.2f},f+1.3f,.28f,2.4f,2400,{1.f,.6f,.15f});l.enabledState=supply;m.lights.push_back(l);}                 // SUPPLY: amber
+ // the isolator, at the east end of the gap behind the control room, past the tear: its tag, its lamp
+ terminal(m,{22.45f,7.15f},"PUMP SET ISOLATOR / BREAKER ROW","LOCKED OUT 03:41 BY ORDER: BARRICADE ACCUMULATOR BLED, PUMP SET ISOLATED. THE TAG IS SIGNED FOR THE INVESTIGATOR.",
+  "E / CLOSE THE ISOLATOR. THE PUMP SET IS ON THE SOUTH WALL, WEST OF THE SECOND LINE.",0,supply);
+ m.terminals.back().yaw=cbW;
+ {auto l=cbGlow({21.4f,7.45f},f+1.5f,.3f,2.2f,9000,{.3f,1.f,.4f});l.enabledState=supply;m.lights.push_back(l);}                    // CLOSED: green, on the switch
+ {ScriptAction a;a.type=ScriptAction::Type::PlaySound;a.sound=Sound::OneMetalBang;a.amount=.6f;ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="PUMP SET ISOLATOR CLOSED / SUPPLY ON";say.amount=3.5f;
+  cbEvent(m,"conb_ec_supplied",0,0,24,24,"conb_ec_supply",{a,say});}
+ // The steps, as the HUD keeps them.
+ m.objectiveTexts.push_back({stateId("conb_ec_obj_bar"),"THE SOUTH DOOR IS BARRICADED. IT IS RAISED FROM THE CONTROL ROOM, EAST."});
+ m.objectiveTexts.push_back({stateId("conb_ec_obj_pump"),"THE RAMS NEED 180 BAR. CHARGE THE ACCUMULATOR AT THE PUMP SET, SOUTH WALL, WEST."});
+ m.objectiveTexts.push_back({stateId("conb_ec_obj_supply"),"THE PUMP SET HAS NO SUPPLY. ITS ISOLATOR IS IN THE BREAKER ROW BEHIND THE CONTROL ROOM."});
+ m.objectiveTexts.push_back({stateId("conb_ec_obj_raise"),"CHARGED. RAISE THE BARRICADE FROM THE CONTROL ROOM."});
+ {auto goal=[](const char* id,ObjectiveStatus s){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(s);return a;};
+  auto when=[&](const char* id,float x1,float y1,float x2,float y2,std::initializer_list<std::pair<const char*,int>> conds,std::vector<ScriptAction> acts){
+   ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=-100;e.top=100;
+   for(auto [s,v]:conds)e.conditions.push_back({ScriptCondition::Source::State,stateId(s),ScriptCondition::Op::Equal,v});
+   e.actions=std::move(acts);m.scriptEvents.push_back(std::move(e));};
+  when("conb_ec_obj_seen",1.f,13.2f,23.f,23.f,{{"cont_barricade",0}},{goal("conb_ec_obj_bar",ObjectiveStatus::Active)});
+  when("conb_ec_obj_console",17.f,8.f,23.f,13.f,{{"cont_barricade",0},{"conb_ec_pressure",0}},{goal("conb_ec_obj_bar",ObjectiveStatus::Complete),goal("conb_ec_obj_pump",ObjectiveStatus::Active)});
+  when("conb_ec_obj_dead",1.f,16.f,4.6f,21.6f,{{"conb_ec_supply",0}},{goal("conb_ec_obj_bar",ObjectiveStatus::Complete),goal("conb_ec_obj_pump",ObjectiveStatus::Hidden),goal("conb_ec_obj_supply",ObjectiveStatus::Active)});
+  when("conb_ec_obj_live",0,0,24,24,{{"conb_ec_supply",1},{"conb_ec_charge_go",0}},{goal("conb_ec_obj_supply",ObjectiveStatus::Complete),goal("conb_ec_obj_pump",ObjectiveStatus::Active)});
+  when("conb_ec_obj_full",0,0,24,24,{{"conb_ec_pressure",1},{"cont_barricade",0}},{goal("conb_ec_obj_pump",ObjectiveStatus::Complete),goal("conb_ec_obj_supply",ObjectiveStatus::Complete),goal("conb_ec_obj_raise",ObjectiveStatus::Active)});
+  when("conb_ec_obj_done",0,0,24,24,{{"cont_barricade",1}},{goal("conb_ec_obj_bar",ObjectiveStatus::Complete),goal("conb_ec_obj_pump",ObjectiveStatus::Complete),goal("conb_ec_obj_supply",ObjectiveStatus::Complete),goal("conb_ec_obj_raise",ObjectiveStatus::Complete)});
+  for(auto& e:m.scriptEvents)if(e.x1==0&&e.y1==0&&e.x2==24&&e.y2==24&&(e.id==stateId("conb_ec_obj_live")||e.id==stateId("conb_ec_obj_full")||e.id==stateId("conb_ec_obj_done")))e.scope=ScriptEvent::Scope::Map;}
  m.lights.push_back(lamp({1.f,19.15f},f+2.45f,.6f,6.f,3400,0,WorldLightMount::Wall,blE));
  m.fixtures.push_back({model::mine_cage_lamp,{1.1f,19.15f},f+2.25f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  {auto l=cbGlow({1.9f,18.55f},f+1.3f,.3f,2.6f,9000,{.5f,1.f,.6f});l.enabledState=stateId("conb_ec_pressure");m.lights.push_back(l);}   // CHARGED

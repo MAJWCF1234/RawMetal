@@ -106,12 +106,17 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  if(hit.kind==ShotKind::Enemy){auto&enemy=(hit.level==m_level?m_enemies:m_chunks[hit.level].enemies).at(size_t(hit.index));
   // A gunshot wound is a stimulus: the creature turns on the shooter even if it never saw them.
   if(playerFired&&enemy.alive){enemy.recognition=1;enemy.lastKnown=m_player.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=m_player.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
-  const float dealt=damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance);const Point3 local{shift.x,shift.y,0};const bool living=enemy.alive;
+  // A hide (the cursed equipment's steel) turns most of a round; a blast is not a round.
+  const float armour=m_blastShot?1.f:creatureTraits(enemy.kind).armour;
+  const float dealt=(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance))*armour;const Point3 local{shift.x,shift.y,0};const bool living=enemy.alive;
   if(living)enemy.wound(origin+local,direction);
+  const float flinch=enemy.painFlash;
   bool killed=applyEnemyDamage(enemy,dealt,playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);
+  // What a hide turns sparks off it as off any steel, and it does not flinch at it.
+  if(armour<1&&living){enemy.painFlash=killed?enemy.painFlash:flinch;sparkBurst(hit.level,hit.point+local,direction*-1.f,.95f,14,false);}
   // It goes down the way the round was travelling.
   if(killed)enemy.deathPush={direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.4f};
-  if(living)hitBurst(hit.level,hit.point+local,direction,ImpactMaterial::Flesh,int(enemy.kind),std::clamp(dealt/34.f,.5f,2.f)*(killed?1.5f:1.f),killed);
+  if(living)hitBurst(hit.level,hit.point+local,direction,ImpactMaterial::Flesh,int(enemy.kind),std::clamp(dealt/(34.f*armour),.5f,2.f)*(killed?1.5f:1.f)*(armour<1&&!killed?.6f:1.f),killed);
   auto audible=enemy;audible.pos=audible.pos-shift;enemySound(audible,killed?2:0,killed?.85f:.55f,killed?.9f:1.22f);return;}
  if(hit.kind==ShotKind::Ragdoll){auto&rag=hit.index>=Ragdoll::Count&&size_t(m_level)<m_hungSuits.size()&&size_t(hit.index/Ragdoll::Count-1)<m_hungSuits[size_t(m_level)].size()?m_hungSuits[size_t(m_level)][size_t(hit.index/Ragdoll::Count-1)]:m_hazmat;
   rag.impulse(hit.index%Ragdoll::Count,{direction.x*definition.ragdollImpulse,direction.y*definition.ragdollImpulse,direction.z*definition.ragdollImpulse+.7f});m_sounds.push_back({Sound::PunchHit,{hit.point.x,hit.point.y},.55f,.8f,true,17,hit.point.z});return;}

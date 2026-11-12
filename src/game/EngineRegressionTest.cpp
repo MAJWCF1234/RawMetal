@@ -123,9 +123,10 @@ bool Game::testEngineRegression(){
   bool crossed=e.pos.y>8.35f;
   check(scenario==0?crossed&&opened>.8f:!crossed&&opened==0,scenario==0?"4 Mutant opens and crosses within 8s":scenario==1?"4 Huntsman blocked by door":"4 state locked door stays closed","end="+std::to_string(e.pos.x)+","+std::to_string(e.pos.y)+" max open="+std::to_string(opened)+" crossed="+std::to_string(crossed));
  }
- {auto m=regression::doorRoom();AuthoredLayerData deck;deck.elevation=3;deck.thickness=.2f;for(auto&row:deck.rows)row=std::string(24,'.');for(int y=5;y<=11;++y)for(int x=6;x<=10;++x)deck.rows[y][x]='#';m->layers.push_back(deck);World w(0,m);
-  float base=w.floorHeight(8.5f,8);float high=w.clearanceHeight(8.5f,8,3),low=w.clearanceHeight(8.5f,8,base);bool fits=w.fits(8.5f,8,3,1.85f);
-  check(fits&&std::fabs(low-base-2.5f)<.001f&&!w.fits(8.5f,8,base,2.6f),"5 deck above door header","deck fits="+std::to_string(fits)+" high clearance="+std::to_string(high)+" floor="+std::to_string(base)+" low clearance="+std::to_string(low));
+ // Upper-layer '=' is walkable deck; '#' is a wall to the ceiling (custom-map guide, v1.2.16).
+ {auto m=regression::doorRoom();AuthoredLayerData deck;deck.elevation=3;deck.thickness=.2f;for(auto&row:deck.rows)row=std::string(24,'.');for(int y=5;y<=11;++y)for(int x=6;x<=10;++x)deck.rows[y][x]='=';m->layers.push_back(deck);World w(0,m);
+  float base=w.floorHeight(8.5f,8);float high=w.clearanceHeight(8.5f,8,3),low=w.clearanceHeight(8.5f,8,base),support=w.structureSupportBelow(8.5f,8,.2f,3);bool fits=w.fits(8.5f,8,3,1.85f);
+  check(fits&&std::fabs(support-3)<.001f&&std::fabs(low-base-2.5f)<.001f&&!w.fits(8.5f,8,base,2.6f),"5 deck above door header","deck fits="+std::to_string(fits)+" deck top="+std::to_string(support)+" high clearance="+std::to_string(high)+" floor="+std::to_string(base)+" low clearance="+std::to_string(low));
  }
  for(bool openFirst:{true,false}){auto m=regression::doorRoom();m->actorTracks.push_back(regression::guard({8.5f,5.5f},{8.5f,11}));Game g(regression::campaign(m));g.m_player.pos={20,20};
   const auto&graph=g.navGraph(0,1.6f);size_t links=graph.links.size();bool builtClosed=g.m_world.doors()[0].open==0;
@@ -158,7 +159,7 @@ bool Game::testEngineRegression(){
    check(ok&&matches==1&&living==int(!kill)&&atOrigin==0,kill?"7 migrated follower stays dead after load":"7 migrated follower no origin duplicate","playerCrossing="+std::to_string(playerCrossing)+" decoded="+std::to_string(ok)+" matches="+std::to_string(matches)+" alive="+std::to_string(living)+" atOrigin="+std::to_string(atOrigin));
   }
  }
- {auto m=regression::room();AuthoredLayerData deck;deck.elevation=3;deck.thickness=.15f;for(auto&row:deck.rows)row=std::string(24,'.');for(int y=10;y<16;++y)for(int x=4;x<12;++x)deck.rows[y][x]='#';m->layers.push_back(deck);
+ {auto m=regression::room();AuthoredLayerData deck;deck.elevation=3;deck.thickness=.15f;for(auto&row:deck.rows)row=std::string(24,'.');for(int y=10;y<16;++y)for(int x=4;x<12;++x)deck.rows[y][x]='=';m->layers.push_back(deck);
   m->stairs.push_back({4,4,7,10,0,3,20,true,true});Game g(regression::campaign(m));g.m_player.pos={20,20};g.spawnCreature({Enemy::Kind::Mutant,{5.5f,12},3},0,false);
   auto&e=g.m_enemies[0];e.home={5.5f,3};e.homeZ=0;e.lastKnown={6.5f,12};e.lastKnownZ=3;e.awareness=.016f;e.heading=-kPi*.5f;
   float start=e.z;for(int i=0;i<1250;++i){g.m_sounds.clear();g.updateEnemies(.016f);}float distance=length(e.pos-e.home);

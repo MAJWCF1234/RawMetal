@@ -1,0 +1,52 @@
+DEPTHWORKS - itch.io page copy (Chapter 2 reveal, promo v2, spoiler-free)
+Chapter 2 is still sealed in the build. This is the reveal, not the release: no date.
+
+TAGLINE (under 100 characters)
+The research levels kept working after the staff stopped. So did the thing in Containment A.
+
+DEVLOG HEADLINE
+Chapter 2: Energy Research. Coming soon.
+
+DEVLOG / ANNOUNCEMENT
+The great door at the bottom of Chapter 1 is still shut. Behind it, the plant's
+research levels are keeping their own hours. The welcome film in the intake
+theatre is still running for a shift that never came in. The mortuary tables in
+Medical Deep are still occupied. The chambers in the Energy Test Labs are still
+lit, and nobody is reading the instruments.
+
+Containment kept the specimens. Mostly.
+
+R-117 is an animal that was given a number and a cell. It is not in its cell.
+It moves low, with its feet set down where it means them, and when it comes it
+comes all at once. It takes a man's head and stays down on him to feed, and while
+it feeds it is busy. That is your time. It does not stay busy, and it does not
+stay in one room. It comes back.
+
+Some of the equipment down there is awake as well. It sleeps until something
+wakes it, and only the plant's own current puts it down.
+
+Chapter 2 is coming. Chapter 1 is free now.
+
+DESCRIPTION ADDITION (under the Chapter 1 description, replaces the v1 Chapter 2 block while sealed)
+CHAPTER 2 - ENERGY RESEARCH (coming soon)
+Past the great door: an intake theatre with its film on a loop, the clinic and
+the mortuary under it, the test labs, the observation ring, and Containment,
+where the ore came up through the floor. Something in there was numbered, kept,
+and fed. Now it feeds itself.
+
+- Forty-two areas below the great door.
+- R-117: a hunter that takes one man first and comes back for the rest.
+- Equipment that wakes, and dies only to live current.
+- Bodies stay where they fall. The floor keeps the blood, in whatever colour it was.
+- Lockers hold until something hears you knock. Then they open.
+
+PAGE ASSETS (this folder)
+Cover: cover-630x500.png (check: cover-check-315x250.png)
+Banner: banner-1920x540.png
+Screenshots, in order: shot-01.png .. shot-08.png, then the Chapter 1 set
+Logo: depthworks-logo-chapter2-v2.png
+Trailer: upload trailer-1080p.mp4 to YouTube (see youtube-upload.txt) and embed it.
+Background: keep the Chapter 1 background-1920x1080.png.
+
+PAGE COLOURS (the trailer's cold hold, if the page is restyled for the reveal)
+Background #0E0E0F   Text #E2E4E2   Links #96100C (blood)   Buttons #3BB267 (the wordmark)

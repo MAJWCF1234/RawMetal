@@ -602,6 +602,16 @@ void m72Event(Map& m,const char* id,float x1,float y1,float x2,float y2,const ch
  ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=-100;e.top=100;e.once=true;e.requireEnemiesClear=clear;
  if(*require)e.requireState=stateId(require);e.actions=std::move(actions);m.scriptEvents.push_back(std::move(e));
 }
+// Pass 4: an event anywhere on the map (scope Map) while every state test holds. once=false fires
+// it each frame its tests hold, for a press that resets its own state (a switch that trips).
+void mdWhen(Map& m,const char* id,std::initializer_list<std::pair<const char*,int>> tests,std::vector<ScriptAction> actions,bool once=true){
+ ScriptEvent e;e.id=stateId(id);e.scope=ScriptEvent::Scope::Map;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.once=once;
+ for(auto [state,value]:tests)e.conditions.push_back({ScriptCondition::Source::State,stateId(state),ScriptCondition::Op::Equal,value});
+ e.actions=std::move(actions);m.scriptEvents.push_back(std::move(e));
+}
+ScriptAction mdGoal(const char* id,ObjectiveStatus status){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(status);return a;}
+ScriptAction mdSay(const char* text,float seconds=4.f){ScriptAction a;a.type=ScriptAction::Type::ShowMessage;a.text=text;a.amount=seconds;return a;}
+ScriptAction mdSound(Sound s,float gain){ScriptAction a;a.type=ScriptAction::Type::PlaySound;a.sound=s;a.amount=gain;return a;}
 
 // MEDICAL / TRIAGE (manifest 48). Where the plant's workers queued to be given
 // a colour: the queue, the band office behind its hatch, eight curtained bays
@@ -814,9 +824,15 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  mdFix(m,model::pwr_breaker_panel_open,10.55f,1.115f,f+1.25f,.32f,.23f,.46f,0,false);
  mdFix(m,model::pwr_disconnect_switch,11.3f,1.175f,f+.95f,.43f,.35f,.85f,0,false);
  m.pipes.push_back({{10.55f,1.06f},{10.55f,1.06f},f+1.71f,.02f,roof,6});m.pipes.push_back({{11.3f,1.08f},{11.3f,1.08f},f+1.8f,.025f,roof,6});
- taped(m,{10.9f,1.f},f+1.45f,0,Readable::Note,"WARD LIGHTING / BAYS 1-8 / AISLE","NIGHT CIRCUIT. IF IT DROPS: LIFT ALL BREAKERS, THEN THE MAIN.",
-  "DO NOT LEAVE THE WARD DARK. NOT EVEN FOR A MINUTE.");
- m.terminals.back().activateState=stateId("md_triage_restore");m.terminals.back().requireState=stateId("md_triage_dark");
+ // Pass 4: the night circuit comes back in the order its card gives. Board A (bays 1-4) is the open
+ // panel here, board B (bays 5-8 and the aisle) is the plant room's, over the fitter's chest; the
+ // main, the disconnect beside board A, holds only with both boards up and trips otherwise.
+ taped(m,{10.1f,2.4f},f+1.45f,mdE,Readable::Note,"WARD LIGHTING / NIGHT CIRCUIT","IF IT DROPS: LIFT BOTH BOARDS, THEN CLOSE THE MAIN. A IS HERE. B IS IN THE PLANT ROOM.",
+  "THE MAIN WILL NOT HOLD ON A BOARD THAT IS DOWN. DO NOT LEAVE THE WARD DARK. NOT EVEN FOR A MINUTE.");
+ taped(m,{10.55f,1.f},f+.98f,0,Readable::Sticky,"BOARD A / BAYS 1-4","LIFT ALL BREAKERS.","THEN THE MAIN.");
+ m.terminals.back().activateState=stateId("md_triage_board_a");m.terminals.back().requireState=stateId("md_triage_dark");
+ taped(m,{11.3f,1.f},f+.72f,0,Readable::Sticky,"WARD LIGHTING / MAIN","CLOSE ONLY WITH BOARDS A AND B UP.","IT TRIPS ON A DEAD BOARD.");
+ m.terminals.back().activateState=stateId("md_triage_main_try");
  kit::prop(m,model::prop_cardboard_box,11.32f,3.4f,f,.58f,.58f,.3f,0);kit::prop(m,model::prop_cardboard_box,11.32f,3.4f,f+.3f,.58f,.58f,.3f,0);
  extinguisher(m,11.7f,8.4f,f,-kPi*.5f);
  // --- Sluice (dirty utility) -------------------------------------------------------------------------
@@ -911,6 +927,8 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  kit::prop(m,model::item_walkie,17.72f,16.45f,f+.97f,.114f,.376f,.046f,.15f);
  mdFix(m,model::pwr_breaker_panel,18.9f,16.252f,f+1.3f,.183f,.102f,.457f,mdS,false);mdFix(m,model::pwr_breaker_panel,19.2f,16.252f,f+1.3f,.183f,.102f,.457f,mdS,false);
  for(float x:{18.9f,19.2f})m.pipes.push_back({{x,16.24f},{x,16.24f},f+1.76f,.02f,roof,6});
+ taped(m,{19.05f,16.2f},f+1.05f,mdS,Readable::Sticky,"BOARD B / BAYS 5-8, AISLE","LIFT ALL BREAKERS.","THEN THE MAIN, AT THE SERVICE CORRIDOR.");   // pass 4: the second board
+ m.terminals.back().activateState=stateId("md_triage_board_b");m.terminals.back().requireState=stateId("md_triage_dark");
  wall(m,20.13f,17.2f,20.23f,18.3f,f+.1f,f+1.12f,20);wall(m,20.12f,17.26f,20.24f,18.24f,f+.16f,f+1.06f,39);   // the spent filter, stood against the fan unit
  m.lights.push_back(lamp({18.f,16.2f},f+2.25f,.5f,6.f,3400,0,WorldLightMount::Wall,kPi*.5f));            // the plant's caged lamp
  // --- The two of them: the nurse (above) and the man in bay 1 (actor 1) -------------------------------
@@ -953,6 +971,19 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  {ScriptAction clunk;clunk.type=ScriptAction::Type::PlaySound;clunk.sound=Sound::Machine;clunk.amount=.8f;
   m72Event(m,"md_triage_restored",10.1f,1.f,11.7f,3.4f,"md_triage_restore",{m72Set("md_triage_dark_1",0),m72Set("md_triage_dark_2",0),
    m72Set("md_triage_dark_3",0),m72Set("md_triage_dark",0),clunk});}
+ // Pass 4: the boards and the main. Each board answers with its contactors; the main closes
+ // (md_triage_restore, the lights back) only on both, and trips, naming the dead board, otherwise.
+ m.objectiveTexts.push_back({stateId("md_obj_lights"),"WARD LIGHTS: LIFT BOARDS A AND B, THEN CLOSE THE MAIN."});
+ mdWhen(m,"md_triage_obj_on",{{"md_triage_dark",1}},{mdGoal("md_obj_lights",ObjectiveStatus::Active)});
+ mdWhen(m,"md_triage_a_up",{{"md_triage_board_a",1}},{mdSound(Sound::Machine,.7f),mdSay("BOARD A / BREAKERS UP")});
+ mdWhen(m,"md_triage_b_up",{{"md_triage_board_b",1}},{mdSound(Sound::Machine,.7f),mdSay("BOARD B / BREAKERS UP")});
+ mdWhen(m,"md_triage_main_close",{{"md_triage_main_try",1},{"md_triage_dark",1},{"md_triage_board_a",1},{"md_triage_board_b",1}},
+  {m72Set("md_triage_main_try",0),m72Set("md_triage_restore",1),mdGoal("md_obj_lights",ObjectiveStatus::Complete),mdSay("MAIN CLOSED / WARD LIGHTING ON")},false);
+ mdWhen(m,"md_triage_main_trip_a",{{"md_triage_main_try",1},{"md_triage_dark",1},{"md_triage_board_a",0}},
+  {m72Set("md_triage_main_try",0),mdSound(Sound::LeadArc,.8f),mdSay("THE MAIN TRIPS / BOARD A IS DOWN")},false);
+ mdWhen(m,"md_triage_main_trip_b",{{"md_triage_main_try",1},{"md_triage_dark",1},{"md_triage_board_a",1},{"md_triage_board_b",0}},
+  {m72Set("md_triage_main_try",0),mdSound(Sound::LeadArc,.8f),mdSay("THE MAIN TRIPS / BOARD B IS DOWN: THE PLANT ROOM")},false);
+ mdWhen(m,"md_triage_main_idle",{{"md_triage_main_try",1},{"md_triage_dark",0}},{m72Set("md_triage_main_try",0)},false);
  // After the fight, the walkie in the hold: the detail asks, the Investigator says leave it.
  m72Event(m,"md_triage_radio_go",15.f,7.6f,23.f,16.f,"md_triage_woke",{m72Set("md_triage_radio",1)},true);
  mdSequence(m,"md_triage_radio","md_triage_radio_done",14000,12000,-9,-9,-8,-8);
@@ -1381,6 +1412,37 @@ std::shared_ptr<const Map> makeMedicalImaging(){
   cue(m,"md_imaging_radio",5000,Sound::Empty,w,"INVESTIGATOR (RADIO): Imaging detail.",.9f,f+.1f,"md_imaging_radio_2");
   cue(m,"md_imaging_radio",9000,Sound::RadioSquelch,w,"",.8f,f+.1f);
   cue(m,"md_imaging_radio",9400,Sound::Empty,w,"INVESTIGATOR (RADIO): Log them with the tier threes.",.9f,f+.1f,"md_imaging_radio_3");}
+ // --- Pass 4, the scene in X-ray 2: the radiographer who switched the tube off ----------------------
+ // Seen through X-ray 2's open lead door from the corridor: she kneels facing the door, a detail man
+ // behind her with his rifle on her back. He makes her face the door, she says what she did, he
+ // fires, and she goes down. Then he reports it and comes out of the room after whoever saw it.
+ {const Vec2 her{7.3f,13.55f},him{5.8f,13.05f};const float aim=std::atan2(her.x-him.x,her.y-him.y);
+  const int patient=int(m.actorTracks.size());
+  actor(m,"md_imaging_exec",ActorVisual::FemaleScientist,1.7f,{{0,her,f,mdE,5,0},{3400,her,f,mdE,5,2.6f},{3450,her,f,mdE+.15f,4,0},{4700,her,f,mdE+.15f,4,1},{8000,her,f,mdE+.15f,4,1}});
+  mdGuard(m,"md_imaging_exec","md_imaging_exec_man",ActorVisual::Cleanup,GuardSquadRole::Default,nullptr,
+   {{him,f,3000,aim},{{8.6f,13.3f},f,1500,mdE},{{11.6f,13.3f},f,2500,mdN},{{12.f,6.5f},f,3000,mdS},{{12.f,19.5f},f,3000,mdN},{{11.6f,13.3f},f,2000,mdW}},11,1,1.3f,100);
+  m.actorTracks.back().ai.enableState=stateId("md_imaging_exec_done");
+  {TimedSequence s;s.timerState=stateId("md_imaging_exec");s.finishState=stateId("md_imaging_exec_done");s.x1=10.05f;s.y1=10.6f;s.x2=13.95f;s.y2=14.6f;
+   s.durationMs=8000;s.finishAtMs=6200;s.soundIntervalMs=0;s.soundUntilMs=0;s.sightActor=patient;s.sightDistance=9.f;m.timedSequences.push_back(s);}
+  // The room's own exam lamp over the door, so the two of them read from the corridor.
+  m.lights.push_back(lamp({9.78f,12.3f},f+2.25f,1.05f,6.5f,5200,.04f,WorldLightMount::Wall,kPi));
+  cue(m,"md_imaging_exec",200,Sound::Empty,him,"CLEANUP: Face the door. Hands on your head.",.8f,f+1.55f,"md_imaging_exec_200");
+  cue(m,"md_imaging_exec",1800,Sound::Empty,her,"RADIOGRAPHER: I switched the tube off. That's all I did.",.8f,f+1.05f,"md_imaging_exec_1800");
+  cue(m,"md_imaging_exec",3400,Sound::Shot,{6.45f,13.4f},"",1.f,f+1.3f);m.sequenceCues.back().aiRadius=-1;
+  cue(m,"md_imaging_exec",4500,Sound::Land,her,"",.55f,f+.2f);
+  cue(m,"md_imaging_exec",5000,Sound::RadioSquelch,him,"",.7f,f+1.3f);
+  cue(m,"md_imaging_exec",5300,Sound::Empty,him,"CLEANUP (RADIO): Imaging. One more for the tier threes.",.8f,f+1.4f,"md_imaging_exec_5300");
+  // Not seen through the door: stepping into the room starts it, and so does walking on past the
+  // doorway without looking (the shot behind you, and then he comes out).
+  auto start=[&](const char* id,float x1,float y1,float x2,float y2,const char* passed){
+   ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=-100;e.top=100;e.requireState=stateId("md_imaging_exec");e.requireValue=0;
+   if(*passed)e.conditions.push_back({ScriptCondition::Source::State,stateId(passed),ScriptCondition::Op::Equal,1});
+   e.actions={m72Set("md_imaging_exec",1)};m.scriptEvents.push_back(std::move(e));};
+  start("md_imaging_exec_in",1.f,9.4f,9.8f,15.f,"");
+  m72Event(m,"md_imaging_exec_north",10.f,1.f,14.f,10.f,"",{m72Set("md_imaging_exec_n",1)});
+  m72Event(m,"md_imaging_exec_south",10.f,15.f,14.f,23.f,"",{m72Set("md_imaging_exec_s",1)});
+  start("md_imaging_exec_past_s",10.f,15.f,14.f,23.f,"md_imaging_exec_n");
+  start("md_imaging_exec_past_n",10.f,1.f,14.f,10.f,"md_imaging_exec_s");}
  // --- Light (27): cold corridor tubes, dim reading light off the films, the red safelight, the vault ---
  for(auto [y,i]:{std::pair{2.8f,.55f},{7.8f,.5f},{12.f,.55f},{21.6f,.5f}})m.lights.push_back(m71Tube(12.f,y,roof,i,5.5f,5200,.05f));
  m.lights.push_back(m71Tube(12.f,17.f,roof,.5f,5.5f,5200,.05f,.35f));
@@ -1509,7 +1571,7 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  wall(m,3.5f,3.45f,3.6f,3.55f,f,f+2.55f,20);wall(m,4.6f,3.45f,4.9f,3.55f,f,f+2.55f,20);wall(m,7.35f,3.45f,7.45f,3.55f,f,f+2.4f,20);
  wall(m,1.f,3.46f,3.5f,3.54f,f+2.4f,roof,20);wall(m,4.9f,3.46f,7.45f,3.54f,f+2.4f,roof,20);wall(m,7.36f,1.f,7.44f,3.46f,f+2.4f,roof,20);
  m74Door(m,3.6f,4.6f,3.5f,f,roof,-1,"medf_cage_open",20);
- {auto& gate=m.doors.back();gate.leaf=1;gate.label="GATE";gate.locked="TIME LOCK / KEY THE PAD, WAIT 20 S";}
+ {auto& gate=m.doors.back();gate.leaf=1;gate.label="GATE";gate.locked="TIME LOCK / KEY THE PAD, WAIT 20 S";gate.lock=1;}   // its lamp: red on the time lock, green once it lets go
  wall(m,3.5f,3.45f,3.6f,3.55f,f+2.55f,roof,20);wall(m,4.6f,3.45f,4.9f,3.55f,f+2.55f,roof,20);
  // The time lock says what it is doing: its plate over the leaf, and on the post a signal pair,
  // red held, red winking while the delay runs, green when the bolts draw.

@@ -18,6 +18,8 @@ layout(location=1) in vec4 lighting;
 layout(location=2) in vec4 light0;
 layout(location=3) in vec4 light1;
 layout(location=4) in vec4 surface;
+// The open-air point that joins this face to its lamps' rooms: its height (scene.vert).
+layout(location=5) in float bounceAir;
 layout(location=6) in vec3 inWorldPos;
 // The shaded point: the interpolated position, moved onto the recorded
 // surface for Painterly Horizon LOD impostors.
@@ -54,6 +56,17 @@ float lampShadow(int slot,vec3 d,float range,float bias){
  for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x)
   sum+=texture(lampShadows,vec4(clamp(st+vec2(x,y)*texel,texel*0.5,1.0-texel*0.5),layer,reference));
  return sum/9.0;
+}
+
+// One bilinear comparison: is a point in open air (no surface of its own) lit
+// by this lamp? Bounce asks it of the room in front of a face.
+float lampVisible(int slot,vec3 d,float range,float bias){
+ vec3 a=abs(d);
+ int face=a.x>=a.y&&a.x>=a.z?(d.x>0.0?0:1):a.y>=a.z?(d.y>0.0?2:3):(d.z>0.0?4:5);
+ vec3 forward=ShadowFace[face],up=ShadowUp[face],right=cross(forward,up);
+ vec2 st=vec2(dot(d,right),dot(d,up))/dot(d,forward)*0.5+0.5;
+ vec2 texel=1.0/vec2(textureSize(lampShadows,0).xy);
+ return texture(lampShadows,vec4(clamp(st,texel*0.5,1.0-texel*0.5),float(slot*6+face),min(length(d)/range-bias,0.995)));
 }
 
 // Close-up detail: a procedural grain layer in texture space, about four
@@ -320,6 +333,7 @@ void main(){
  vec3 sunLight=vec3(0.0); // coloured direct sun on static geometry
  float directLight=-1.0,ambientLight=0.0; // for the post pass (AO on indirect only)
  vec3 lampOut=vec3(0.0),lampSpecularOut=vec3(0.0); // coloured lamp light on static geometry
+ vec3 bounceOut=vec3(0.0); // lamp light returned by the room (indirect, under AO)
  vec3 sunDebug=vec3(0.0);
  vec3 n=vec3(0.0,0.0,1.0);float normalLength=1.0;vec3 baseNormalDebug=vec3(0.0,0.0,1.0);
 
@@ -380,7 +394,12 @@ void main(){
   float concentration=clamp(normalLength,0.0,1.0);
   float roughness=clamp(materialRoughness,0.03,0.96);
   roughness=sqrt(clamp(roughness*roughness+(1.0-concentration)/max(concentration,0.05),0.0324,1.0));
-  vec3 lampLight=vec3(0.0),lampSpecularRGB=vec3(0.0);float lampSpecular=0.0;
+  vec3 lampLight=vec3(0.0),lampSpecularRGB=vec3(0.0),bounceLight=vec3(0.0);float lampSpecular=0.0;
+  // Bounce (WorldLight::bounce): each lamp's room returns a share of its light
+  // to every face in it, whichever way the face turns. The room is reached
+  // through the open air in front of the face, lifted toward its ceiling on the
+  // CPU (bounceAir); the lamp must see that point, so walls and decks stop it.
+  vec3 bouncePoint=worldPos+Ng*0.3;if(bounceAir>-1.0e8)bouncePoint.z=bounceAir;
   ivec3 cell=ivec3(floor((worldPos-lampGrid.origin.xyz)/lampGrid.origin.w));
   if(lampGrid.size.w>0&&all(greaterThanEqual(cell,ivec3(0)))&&all(lessThan(cell,lampGrid.size.xyz))){
    int base=((cell.z*lampGrid.size.y+cell.y)*lampGrid.size.x+cell.x)*16;
@@ -391,6 +410,11 @@ void main(){
     if(d2>=r2||d2<0.0001)continue;
     // Same falloff as WorldLight::falloff and the CPU bake.
     float t=1.0-d2/r2,falloff=params.x*3.2*t*t/(1.0+d2*0.12);
+    float bounce=params.x*0.2*t*t;
+    if(bounce>0.002){
+     vec3 q=bouncePoint-lamp.xyz;float texelQ=length(q)*2.0/float(textureSize(lampShadows,0).x);
+     bounceLight+=lampTone(params)*bounce*(params.y>=0.0?lampVisible(int(params.y),q,lamp.w,texelQ*2.0/lamp.w):1.0);
+    }
     float distance=sqrt(d2);vec3 L=toLamp/distance;
     float geometric=dot(Ng,L);if(geometric<=0.0)continue;
     falloff*=lampBeam(params,-L);
@@ -461,10 +485,12 @@ void main(){
   // many lamps (Intake sums to ~10x ambient); unbounded, they flattened rooms
   // and drowned each lamp's shadows in its neighbours' light. Cores stay hot.
   lampOut=2.4*(1.0-exp(-lampLight*0.62/2.4));
+  // Its own soft shoulder: a room of many lamps fills, it never floods.
+  bounceOut=0.6*(1.0-exp(-bounceLight/0.6))*relief;
   vertexLight=lighting.y*relief;
   specularLight=lampSpecular*0.7;lampSpecularOut=lampSpecularRGB*0.7;
   float lampLuma=dot(lampOut,vec3(0.2126,0.7152,0.0722));
-  directLight=lampLuma+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief;
+  directLight=lampLuma+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief+dot(bounceOut,vec3(0.2126,0.7152,0.0722));
  }
 
  if(surface.z>0.5&&surface.z<1.5){
@@ -479,7 +505,7 @@ void main(){
  // would crush both midtones and minified material detail.
  // Per-pixel scenes: ambient is a cool dim fill, lamps carry their own colour.
  vec3 ambientTone=lampGrid.flags.x!=0&&directLight>=0.0&&lampGrid.sun.w<=0.0?vec3(0.78,0.88,1.12):vec3(1.0);
- vec3 result=color.rgb*lighting.x*(vertexLight*ambientTone+lampOut)*0.96/(1+surface.x*0.018);
+ vec3 result=color.rgb*lighting.x*(vertexLight*ambientTone+lampOut+bounceOut)*0.96/(1+surface.x*0.018);
  result+=color.rgb*lighting.x*sunLight*0.96;
 
  if(surface.z<0.5&&surface.w<1.5&&directLight<0.0){

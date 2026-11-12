@@ -25,9 +25,9 @@ struct Groups {std::vector<int> parent;explicit Groups(int n):parent(size_t(n)){
 int Carcass::joints(bool seamsOnly)const{int n=0;for(auto&j:m_joints)if(!seamsOnly||j.seam)++n;return n;}
 Point3 Carcass::carry(const Section& s,Point3 rest)const{Point3 d=rest-s.restCentre;return s.centre+s.axes[0]*d.x+s.axes[1]*d.y+s.axes[2]*d.z;}
 
-void Carcass::build(const std::vector<MeshTriangle>& posed,const World& world,Point3 push,float scale,unsigned seed){
+void Carcass::build(const std::vector<MeshTriangle>& posed,const World& world,Point3 push,float scale,unsigned seed,float reach){
  *this=Carcass{};if(posed.empty())return;
- m_triangles=posed;m_scale=scale;m_seed=seed*2654435761u|1u;
+ m_triangles=posed;m_scale=scale;m_seed=seed*2654435761u|1u;m_reach=std::max(0.f,reach);
  const int T=int(posed.size());m_corner.resize(size_t(T)*3);
  // Corners that share a place are one vertex, whatever the UV seams say.
  {std::unordered_map<std::uint64_t,int> cells;cells.reserve(size_t(T)*2);
@@ -136,6 +136,9 @@ void Carcass::fit(){
 
 void Carcass::step(const World& world){
  const size_t count=m_particles.size();
+ // A point is clear where it is free, and, with a reach, free that far round it.
+ auto clear=[&](Point3 at){if(!world.fits(at.x,at.y,at.z+.01f,.04f,false))return false;if(m_reach<=0)return true;
+  for(auto [dx,dy]:{std::pair{m_reach,0.f},{-m_reach,0.f},{0.f,m_reach},{0.f,-m_reach}})if(!world.fits(at.x+dx,at.y+dy,at.z+.01f,.04f,false))return false;return true;};
  for(auto&p:m_particles){if(p.region==-2)continue;Point3 v=(p.x-p.previous)*.992f;float speed=span(v);if(speed>.3f)v=v*(.3f/speed);p.previous=p.x;p.x=p.x+v;p.x.z-=14.f*Tick*Tick;p.grounded=false;}
  static thread_local std::vector<Point3> goal;static thread_local std::vector<float> share;
  for(int pass=0;pass<3;++pass){
@@ -149,7 +152,7 @@ void Carcass::step(const World& world){
    float dx=p.x.x-p.safe.x,dy=p.x.y-p.safe.y;
    if(dx*dx+dy*dy>.03f*.03f){
     // A point that began inside a wall is let out before walls start holding it.
-    if(world.fits(p.x.x,p.x.y,p.x.z+.01f,.04f,false)){p.safe=p.x;p.loose=true;}
+    if(clear(p.x)){p.safe=p.x;p.loose=true;}
     else if(p.loose){p.x.x=p.safe.x;p.x.y=p.safe.y;p.previous.x=p.x.x;p.previous.y=p.x.y;}
    }
    dx=p.x.x-p.probe.x;dy=p.x.y-p.probe.y;

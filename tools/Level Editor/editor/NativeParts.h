@@ -82,6 +82,13 @@ inline bool has(const std::string &name, std::initializer_list<const char *> wor
   return false;
 }
 inline std::wstring nice(std::string name) {
+  // res_crystal_l..res_rock_low (slots 374-380): resonance crystals and bedrock outcrops.
+  if (name.rfind("res_crystal_", 0) == 0 || name.rfind("res_rock_", 0) == 0) {
+    bool crystal = name.rfind("res_crystal_", 0) == 0;
+    std::string size = name.substr(crystal ? 12 : 9);
+    size = size == "l" ? "large" : size == "m" ? "medium" : size == "s" ? "small" : size;
+    name = (crystal ? "resonance_crystal_" : "bedrock_") + size;
+  }
   for (auto prefix : {"lab_", "med_", "pwr_", "ind_", "cave_", "mine_", "scrap_", "psx_", "anl_", "office_",
                       "prop_", "item_", "art_", "clinic_", "urb_"})
     if (name.rfind(prefix, 0) == 0 && name.size() > strlen(prefix) + 2) {
@@ -110,7 +117,8 @@ inline int tabOf(const std::string &n) {
     return Lights;
   if (has(n, {"sign", "billboard", "notice", "metro_map", "status_display", "pa_horn", "painting", "clock"}))
     return Signs;
-  if (n.rfind("cave_", 0) == 0)
+  // Resonance crystals and the bedrock they grow from belong underground.
+  if (n.rfind("cave_", 0) == 0 || n.rfind("res_", 0) == 0)
     return Caves;
   if (n.rfind("mine_", 0) == 0)
     return Mine;

@@ -22,6 +22,13 @@ class SoftwareRenderer {
     // Blood and debris draw with the scene's own textures too (GoreFx.cpp).
     friend struct GoreFx;
 public:
+    // What runs out of a creature, by kind (CreatureVisual::fluid): blood, a bug's goo, the resonance
+    // creatures' ichor, a machine's oil. Each fluid tints the stumps, the mist, the drops and the decals.
+    enum class Fluid:int {Blood,Goo,Ichor,Oil,Count};
+    // The blood decals (resources 2435-2440, tools/library/build_blood_decals.py), one set a job: pools
+    // under bodies, splats where a gout lands, a round's burst on a wall, thrown streaks, wall drips,
+    // drop scatter. Each cell's grey is how wet it is; tinted per fluid at load.
+    enum class BloodJob:int {Pool,Splat,Burst,Streak,Drip,Drops,Count};
     SoftwareRenderer(int width, int height);
     ~SoftwareRenderer();
     bool enableHardware(void* window=nullptr);
@@ -45,7 +52,7 @@ public:
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
-    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_transformedMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_nineMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
+    std::string modelReport()const{auto report=m_weaponMesh.description+m_armsMesh.description+m_enemyMesh.description+m_waspMesh.description+m_bruteMesh.description+m_wardenMesh.description+m_mutantMesh.description+m_snatcherMesh.description+m_chimeraMesh.description+m_cursedMesh.description+m_transformedMesh.description+m_barrelMesh.description+m_crateMesh.description+m_medkitMesh.description+m_shellsMesh.description+m_nineMesh.description+m_pumpMesh.description+m_compressorMesh.description+m_pipeMesh.description+m_gateMesh.description;for(auto&mesh:m_facilityMeshes)report+=mesh.description;return report;}
     void previewModel(int model,float angle);
     bool validate3D();
     static bool testPerformance();
@@ -63,6 +70,7 @@ public:
     static bool testElectricRendering(std::ostream& report);
     // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
     static bool testGore(std::ostream& report);
+    static bool testHumanRagdoll(); // --each-test=human-ragdoll
     static bool testSigns(std::ostream& report); // --sign-render-test
     static bool testPresentationResize();
     static bool testCreatureAnimation();
@@ -142,6 +150,11 @@ private:
     bool m_staticGeometryBuild=false;
     // Static caches bake ambient only; Vulkan adds lamps per pixel.
     bool m_pixelLighting=false;
+    // Per vertex of the next triangle3D in a per-pixel static bake: the height of
+    // the open-air point that joins the face to its lamps' rooms (bounce light,
+    // scene.frag). NoBounceAir: the shader takes the point in front of the face.
+    static constexpr float NoBounceAir=-1.e9f;
+    std::array<float,3> m_triangleAir{NoBounceAir,NoBounceAir,NoBounceAir};
     std::uint64_t m_staticGeometryBuilds=0,m_propGeometryBuilds=0,m_breakableGeometryBuilds=0;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
@@ -194,6 +207,12 @@ private:
      // A wound: the face it is on and where on it, which side shows, and the faces round it that carry its mark.
      struct Wound {int face=0;float side=1,size=.06f,b1=.33f,b2=.33f;std::vector<int> patch;};std::vector<Wound> wounds;Carcass carcass;};
     std::unordered_map<std::uint64_t,Remains> m_remains;float m_remainsClock=0;
+    // A dead man: his mesh as a body (Carcass) that falls from where he died, rolls off what it lies
+    // over and comes to rest, and the face of the posed mesh each of its faces is. Kept by actor emit
+    // slot; `base` is the session time he died at, for a fall that is still being watched.
+    struct Corpse {std::uint64_t signature=0;float seen=0,base=0;bool live=false;std::vector<int> faces;Carcass carcass;};
+    std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
+    Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
     std::vector<HitBurst> m_goreBursts;
     // A headless man's neck (where the stump is, and the way the neck runs), by actor emit slot, kept for frames
     // whose body replays a cached emit; and how many of its stump's pumps have been thrown.
@@ -201,12 +220,15 @@ private:
     // 0..1: how far the geometry being drawn has dissolved (a corpse on its way out).
     float m_dissolve=0;
     // The inside of a cut: red, and the green of the things that bleed it.
-    std::array<Texture,2> m_stump;
+    static constexpr std::array<std::array<int,3>,size_t(Fluid::Count)> fluidTint{{{118,14,18},{190,204,78},{52,126,138},{66,56,44}}};
+    std::array<Texture,size_t(Fluid::Count)> m_stump;
+    std::array<std::array<std::vector<Texture>,size_t(BloodJob::Count)>,size_t(Fluid::Count)> m_bloodDecals;
+    const Texture& bloodDecal(Fluid fluid,BloodJob job,unsigned pick)const{const auto&set=m_bloodDecals[size_t(fluid)][size_t(job)];return set[pick%set.size()];}
     std::vector<MeshTriangle> m_creaturePose;
     struct CreatureStance {Point3 range{};float scale=1;};
     // A creature's mesh in level space as it stands now, or (corpse) as it stood when it died.
     CreatureStance poseCreatureMesh(const Enemy& e,float elapsed,bool corpse,std::vector<MeshTriangle>& out);
-    std::array<Texture,size_t(CreatureKind::Transformed)+1> m_bloodVariants;
+    std::array<Texture,size_t(CreatureKindCount)> m_bloodVariants;
     Mesh m_pumpMesh{140},m_compressorMesh{142},m_pipeMesh{144},m_gateMesh{146};
     Texture m_pumpTexture,m_compressorTexture,m_pipeTexture,m_gateTexture,m_pressureWall,m_pressureFloor,m_pressureMetal;
     Texture m_transferSign,m_pumpSign,m_controlSign,m_surfaceSign,m_liftSign,m_liftDispatch;
@@ -237,7 +259,7 @@ private:
     std::array<Point3,6> m_handNormals{};std::array<float,6> m_handLight{};bool m_handLightReady=false;
     struct FpClip{const char*name;float phase;};FpClip fpShotgunClip(const Game&game)const;
     Point3 fpShotgunPoint(Point3 remington,bool pump)const;
-    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131};
+    Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131},m_cursedMesh{2441,"",2443};
     // The transformed: the Worker's body (277) on its own six baked clips.
     Mesh m_transformedMesh{277,"",2185};
     Mesh m_workerMesh{277,"",278};
@@ -307,6 +329,8 @@ private:
     Vec2 finishRepeat(const Texture& texture)const;
     Texture m_missingTexture,m_ironTexture,m_darkMetalTexture,m_rubberTexture,m_leatherTexture,m_idFabricTexture,m_medkitCaseTexture,m_medkitLabelTexture;
     Texture m_waspTexture,m_bruteTexture,m_wingTexture,m_wardenTexture,m_mutantTexture,m_snatcherTexture,m_chimeraTexture;
+    // The cursed equipment's sheet, and the same with its lamp's bright texels lit (its *_glow material only).
+    Texture m_cursedTexture,m_cursedGlow;
     // The Worker's body, gloves and boots, scorched and drained by the zone.
     Texture m_transformedTexture,m_transformedGloves,m_transformedBoots;
     Mesh m_barrelMesh{121},m_crateMesh{123};
@@ -438,17 +462,20 @@ private:
     float m_inspectYaw=0,m_inspectPitch=0,m_inspectDistance=1.3f;Point3 m_inspectCenter{.12f,-.20f,.83f};
     Point3 inspectionPoint(Point3 p)const;
     void wornPanel(int x,int y,int width,int height,bool recess=false,bool materialPanel=false);
-    struct CreatureVisual {Mesh SoftwareRenderer::*mesh;Texture SoftwareRenderer::*texture;bool xenoblood;float bloodLight;};
+    // glow: the sheet its *_glow material draws with, lit by its own bright texels (none: no material glows).
+    struct CreatureVisual {Mesh SoftwareRenderer::*mesh;Texture SoftwareRenderer::*texture;Fluid fluid;float bloodLight;Texture SoftwareRenderer::*glow=nullptr;};
     static constexpr std::array creatureVisuals{
-     CreatureVisual{&SoftwareRenderer::m_enemyMesh,&SoftwareRenderer::m_enemyTexture,true,1.f},
-     CreatureVisual{&SoftwareRenderer::m_waspMesh,&SoftwareRenderer::m_waspTexture,true,1.f},
-     CreatureVisual{&SoftwareRenderer::m_bruteMesh,&SoftwareRenderer::m_bruteTexture,false,.9f},
-     CreatureVisual{&SoftwareRenderer::m_wardenMesh,&SoftwareRenderer::m_wardenTexture,false,.9f},
-     CreatureVisual{&SoftwareRenderer::m_mutantMesh,&SoftwareRenderer::m_mutantTexture,false,.9f},
-     CreatureVisual{&SoftwareRenderer::m_snatcherMesh,&SoftwareRenderer::m_snatcherTexture,false,.9f},
-     CreatureVisual{&SoftwareRenderer::m_chimeraMesh,&SoftwareRenderer::m_chimeraTexture,false,.9f},
-     CreatureVisual{&SoftwareRenderer::m_transformedMesh,&SoftwareRenderer::m_transformedTexture,false,.9f}};
-    static_assert(creatureVisuals.size()==size_t(CreatureKind::Transformed)+1);
+     CreatureVisual{&SoftwareRenderer::m_enemyMesh,&SoftwareRenderer::m_enemyTexture,Fluid::Goo,1.f},
+     CreatureVisual{&SoftwareRenderer::m_waspMesh,&SoftwareRenderer::m_waspTexture,Fluid::Goo,1.f},
+     CreatureVisual{&SoftwareRenderer::m_bruteMesh,&SoftwareRenderer::m_bruteTexture,Fluid::Ichor,.9f},
+     CreatureVisual{&SoftwareRenderer::m_wardenMesh,&SoftwareRenderer::m_wardenTexture,Fluid::Ichor,.9f},
+     CreatureVisual{&SoftwareRenderer::m_mutantMesh,&SoftwareRenderer::m_mutantTexture,Fluid::Blood,.9f},
+     CreatureVisual{&SoftwareRenderer::m_snatcherMesh,&SoftwareRenderer::m_snatcherTexture,Fluid::Blood,.9f},
+     CreatureVisual{&SoftwareRenderer::m_chimeraMesh,&SoftwareRenderer::m_chimeraTexture,Fluid::Ichor,.9f},
+     CreatureVisual{&SoftwareRenderer::m_transformedMesh,&SoftwareRenderer::m_transformedTexture,Fluid::Blood,.9f},
+     CreatureVisual{&SoftwareRenderer::m_cursedMesh,&SoftwareRenderer::m_cursedTexture,Fluid::Oil,.75f,&SoftwareRenderer::m_cursedGlow}};
+    static_assert(creatureVisuals.size()==size_t(CreatureKindCount));
+    static_assert(creatureVisuals[size_t(CreatureKind::Machine)].fluid==Fluid::Oil,"the cursed equipment bleeds oil");
 };
 }
 

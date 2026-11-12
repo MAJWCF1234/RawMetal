@@ -31,6 +31,53 @@ overview says so.
 - **Exposure.** Workers absorb it. Medical Screening was never a clinic for
   injuries: it graded staff by exposure tier and moved high readers into
   observation. Depthworks knew, and kept the shifts running.
+- **What the ore is (canon, 2026-11-04 and 2026-11-12).** Resonance is a
+  cursed ore mined from the Dark Below; cells are filled with the refined ore
+  and sold as power, not charged. The ore is **crystallized angel ichor**: the
+  blood of the beings below. Their fluids carry exotic, energy-rich minerals,
+  and with time spilled ichor sets into crystal. Every seam Depthworks mines
+  is where something bled.
+
+### The angels (canon, 2026-11-12)
+
+- **What they are.** Extra-dimensional beings coming through a gate (a
+  portal) from their own dimension, deep in the Dark Below. They are not
+  angels. Humans call them that because nothing else they know fits: they are
+  simply very powerful creatures. The gate at the Dark Heart, where LAB 4 goes
+  on alone, is that portal.
+- **Their order.** A primordial, feudal hierarchy: kill or be killed, and
+  become the strongest. To them a human is far less than an insect.
+- **Clairvoyance.** Angels foresee the attacks that might come at them. That
+  is why they are so hard to kill. With time, space and nothing threatening
+  it, an angel's grasp of that sight grows deeper.
+- **Known so far:**
+  - **The Celestial Angel.**
+  - **The Death Angel.**
+  - **The Outcast** (the Forsaken Angel), below.
+
+#### The Outcast: shopkeeper and fortune teller
+
+- **Why forsaken.** He will not follow the hierarchy. Among angels pacifism
+  gets you killed: he is strong enough to kill many of them, but he will not
+  stay where he could show any weakness, because sharks smell blood. So he
+  exiled himself.
+- **What he does.** Keeps a shop and tells fortunes. He sells the player the
+  tools to kill his own kind.
+- **How he looks and moves.** Six arms, seated in his chair. Two arms run the
+  shop, two gesture at the player, two reach for masks. His face is blank.
+  Masks hang on cables above him; to speak he pulls one down over the blank
+  face to show an expression, lets it go, and grabs the next.
+- **Why the masks.** Angels have no faces in the human sense. He loves human
+  entertainment, stories, silliness and antics, and he uses the masks to
+  empathize with people and to comfort them.
+- **How he talks.** Not quite human: something struggling to pretend to be
+  one. Speech, tone and emotion never quite line up, and the mask he holds may
+  not match what he says. An excited salesman crossed with an oracle. He hints
+  at what he foresees but never says too much, lest saying it solidify one
+  possibility; that would be no fun.
+- **Voice direction.** Salesman's patter and an oracle's weight with the
+  seams showing: emphasis on the wrong word, delight arriving a beat late,
+  sudden flat calm mid-pitch.
 
 ### The friend (handle LAB 4)
 

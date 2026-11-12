@@ -31,6 +31,50 @@ struct Door {
  int leaf=0;
  std::string label,locked;
  bool seeThrough()const{return leaf==1;}
+ // The door's axis. Along X (the default) the leaf spans x from left to right
+ // in a wall at y; along Y (alongY) it spans y from left to right in a wall at
+ // x = this->y. hingeRight hangs a swinging leaf from `right` instead of `left`.
+ // Seam doors (entry, transfer) stand on a north or south edge: along X only.
+ bool alongY=false,hingeRight=false;
+ // A swinging leaf's state in play (not authored). velocity: open per second.
+ // rest: where a hand left it (0..maxOpen), or -1 while it follows `opening`.
+ // hit: what it struck this step (Hit bits), taken by Game for the sound.
+ float velocity=0,rest=-1;int hit=0;
+ // coasting: shoved, the leaf swings free on its own way and friction (no hand on it).
+ bool coasting=false;
+ enum Hit{HitStart=1,HitStop=2,HitLatch=4,HitSlam=8};
+ // strength: how much battering a swinging leaf takes before it gives (0, it
+ // never does: Brute, Chimera and Machine plan only through doors that give).
+ // damage taken and broken are play state (saved since version 24).
+ float strength=0,damage=0;bool broken=false;
+ // The lock it shows: 0 none drawn, 1 a keycard reader, 2 a key cylinder,
+ // 3 a powered release; a reader's lamp is red while the door is locked.
+ int lock=0;
+ bool breakable()const{return swinging&&strength>0&&!entry&&!transfer;}
+ // The door's own frame, the one place its orientation is read: `along` runs
+ // the span (left..right), `across` through the wall (the wall line is y;
+ // swing 1 opens toward +across: +y along X, +x along Y). The frame swaps x and
+ // y, a mirror, so a face wound in it must be wound back (mirrored()).
+ bool mirrored()const{return alongY;}
+ Vec2 local(Vec2 p)const{return alongY?Vec2{p.y,p.x}:p;}
+ Vec2 world(float along,float across)const{return alongY?Vec2{across,along}:Vec2{along,across};}
+ Point3 world(float along,float across,float height)const{Vec2 p=world(along,across);return {p.x,p.y,height};}
+ float along(Vec2 p)const{return alongY?p.y:p.x;}
+ float across(Vec2 p)const{return alongY?p.x:p.y;}
+ float width()const{return right-left;}
+ Vec2 centre()const{return world((left+right)*.5f,y);}
+ Vec2 tangent()const{return world(1,0);}
+ Vec2 normal()const{return world(0,1);}
+ // Within the span, `inset` in from each jamb (negative reaches past them).
+ bool spans(Vec2 p,float inset=0)const{float a=along(p);return a>left+inset&&a<right-inset;}
+ // The point of the door line nearest p, kept `inset` in from the jambs.
+ Vec2 nearestOnLine(Vec2 p,float inset=0)const{return world(std::clamp(along(p),left+inset,std::max(left+inset,right-inset)),y);}
+ // A swinging leaf: its hinge, and the unit direction from hinge to latch
+ // when `open` (0 shut, 1 a quarter turn toward the swing side).
+ Vec2 hinge()const{return world(hingeRight?right:left,y);}
+ Vec2 leafAxis(float opened)const{float a=opened*kPi*.5f*swing;return world((hingeRight?-1.f:1.f)*std::cos(a),std::sin(a));}
+ // The world box spanning along [a0,a1] and across [c0,c1] (either order).
+ void box(float a0,float a1,float c0,float c1,Vec2& lo,Vec2& hi)const{Vec2 p=world(a0,c0),q=world(a1,c1);lo={std::min(p.x,q.x),std::min(p.y,q.y)};hi={std::max(p.x,q.x),std::max(p.y,q.y)};}
 };
 struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSize;float base=0;};
 // core: the fraction of the footprint that collides when solid (a tree blocks
@@ -97,6 +141,14 @@ struct WorldLight {
   if(mount==WorldLightMount::Ceiling)return .2f+.8f*smooth01((-out.z-.42f)/.45f);
   if(mount==WorldLightMount::Wall)return .12f+.88f*smooth01((out.x*std::cos(yaw)+out.y*std::sin(yaw)+.25f)/.75f);
   return 1.f;
+ }
+ // Bounce: the share of this lamp's light its room returns to every face in
+ // it, whichever way the face turns. Softer than falloff (the whole lit room
+ // is the source) and without the beam. scene.frag mirrors it (lampBounce).
+ static constexpr float BounceShare=.2f;
+ float bounce(float squaredDistance)const{
+  float radiusSquared=range*range;if(squaredDistance>=radiusSquared)return 0.f;
+  float t=1.f-squaredDistance/radiusSquared;return intensity*BounceShare*t*t;
  }
  // falloff and beam together; toLamp runs from the receiver to emitter().
  float reach(Point3 toLamp,float squaredDistance)const{
@@ -689,7 +741,20 @@ public:
     bool openDoor(int index);
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
-    void setDoor(int index,float open,bool opening){m_doors.at(index).open=open;m_doors.at(index).opening=opening;}
+    void setDoor(int index,float open,bool opening){auto&d=m_doors.at(index);d.open=open;d.opening=opening;d.rest=-1;d.velocity=0;d.coasting=false;}
+    // Leave a swinging leaf where it stands (a hand let go of it mid-swing), or
+    // (-1) let it follow `opening` again.
+    void restDoor(int index,float rest){auto&d=m_doors.at(index);d.rest=rest<0?-1.f:std::clamp(rest,0.f,d.maxOpen);}
+    // The Door::Hit bits a door struck since the last call, cleared.
+    int takeDoorHit(int index){auto&d=m_doors.at(index);const int hit=d.hit;d.hit=0;return hit;}
+    // A shove: the leaf swings open on its own way (speed, open per second).
+    void shoveDoor(int index,float speed){auto&d=m_doors.at(index);d.opening=true;d.rest=-1;d.coasting=true;d.velocity=std::max(d.velocity,speed);d.hit|=Door::HitStart;}
+    // A blow at a breakable leaf from the side it opens away from (push) or
+    // toward. It jolts in its frame; past its strength it gives and is flung
+    // open on torn hinges. True when this blow broke it.
+    bool batterDoor(int index,float blow,bool push){auto&d=m_doors.at(index);if(!d.breakable()||d.broken)return false;d.damage+=blow;
+     if(d.damage>=d.strength){d.broken=true;d.opening=true;d.rest=-1;d.coasting=true;d.velocity=3.2f;return true;}
+     if(push&&d.open<.2f){d.coasting=true;d.velocity=std::max(d.velocity,.45f);}return false;}
     void unloadGeometry(){m_fixtureRotation.clear();m_collisionCells={};m_collisionAll={};std::vector<LightSolid>{}.swap(m_lightSolids);std::vector<LightNode>{}.swap(m_lightNodes);std::vector<MapLayer>{}.swap(m_layers);std::vector<Structure>{}.swap(m_structures);std::vector<TerrainTriangle>{}.swap(m_terrain);std::vector<std::int8_t>{}.swap(m_terrainDensity);std::vector<std::uint8_t>{}.swap(m_terrainTops);std::vector<std::uint8_t>{}.swap(m_terrainMaterial);std::vector<std::vector<uint16_t>>{}.swap(m_structureCells);std::vector<WorldProp>{}.swap(m_props);std::vector<Fixture>{}.swap(m_fixtures);std::vector<PipeRun>{}.swap(m_pipes);std::vector<WorldLight>{}.swap(m_lights);std::vector<Hazard>{}.swap(m_hazards);std::vector<Compactor>{}.swap(m_compactors);std::vector<Terminal>{}.swap(m_terminals);}
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}

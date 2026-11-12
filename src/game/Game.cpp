@@ -355,7 +355,7 @@ Game Game::goreInspection(Enemy::Kind kind,int mode,float age,bool empty){
    g.m_bulletImpacts.push_back({{x,y},floor,{0,0},1.f,level,false,0,1.f,m});}
   g.m_elapsed=1+age;return g;}
  if(mode==4){
-  e.pos={5.9f,4.5f};e.home=e.pos;e.hp=5;
+  e.pos={5.9f,4.5f};e.home=e.pos;e.hp=5*creatureTraits(kind).armour; // one round finishes it (through any hide)
   p.pitch=std::atan2((e.bodyBottom()+e.bodyTop())*.5f-(p.z+p.eye),length(e.pos-p.pos))*140.f;
   g.shoot();p.pitch=-30;
   for(float t=0;t<age;t+=1.f/60)g.update(InputState{},1.f/60);
@@ -385,7 +385,7 @@ void Game::posePreviewCreature(int clip,float phase){
  const auto& traits=creatureTraits(e.kind);m_elapsed=(phase-e.home.x*.1f)*traits.idleSeconds;
  if(clip==1){e.moving=true;e.gait=phase*2*kPi;}
  if(clip==2&&e.kind==Enemy::Kind::Transformed){if(phase<.15f){e.stalkMode=Enemy::StalkMode::Rush;e.stalkTimer=(1-phase/.15f)*TransformedLeap;}else{e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=(1-(phase-.15f)/.85f)*TransformedHold;}}
-  else if(clip==2){float contact=e.kind==Enemy::Kind::Chimera?.58f:.4f;if(phase<contact)e.windup=(1-phase/contact)*creatureTraits(e.kind).windup;else e.strike=1-(phase-contact)/(1-contact);}
+  else if(clip==2){float contact=creatureTraits(e.kind).contact;if(phase<contact)e.windup=(1-phase/contact)*creatureTraits(e.kind).windup;else e.strike=1-(phase-contact)/(1-contact);}
  if(clip==5){if(phase<.55f)e.windup=(1-phase/.55f)*traits.windup;else e.strike=std::max(.001f,1-(phase-.55f)/.45f);}
  if(clip==3)e.painFlash=1-phase;
  if(clip==4){e.alive=false;e.deathTime=phase*traits.deathSeconds;}
@@ -561,7 +561,7 @@ void Game::update(const InputState& input, float dt) {
         updateDarkness(dt);}
         {perf::Scope profile(perf::Hazards);updateHazards(dt);updateStorm(dt);
         for(size_t i=0;i<m_pendingBarrels.size();){if(m_elapsed>=m_pendingBarrels[i].time){auto b=m_pendingBarrels[i];m_pendingBarrels.erase(m_pendingBarrels.begin()+long(i));detonateBarrel(b.level,int(std::floor(b.pos.x)),int(std::floor(b.pos.y)));}else ++i;}}
-        {perf::Scope profile(perf::Interaction);updateInteraction(input,dt);}
+        {perf::Scope profile(perf::Interaction);updateInteraction(input,dt);updateDoorPlay(input,dt);}
         perf::Scope streamingProfile(perf::Streaming);updateStreaming(dt);
         // Resident NPCs can operate ordinary doors without the player entering
         // their chunk. Transfer leaves are mirrored by the streamer instead.

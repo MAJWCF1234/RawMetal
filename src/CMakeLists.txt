@@ -86,6 +86,8 @@ add_executable(RawMetal WIN32
     game/Inventory.cpp
     game/Handgun.cpp
     game/Movement.cpp
+    game/DoorAxisTest.cpp
+    game/DoorPlay.cpp
     game/GantryTest.cpp
     game/EngineRegressionTest.cpp
     game/GameplayRegressionTest.cpp
@@ -104,6 +106,7 @@ add_executable(RawMetal WIN32
     game/ai/enemy/Schedule.cpp
     game/ai/enemy/ScheduleTest.cpp
     game/ai/enemy/Hunter.cpp
+    game/ai/enemy/Machine.cpp
     game/ai/friendly/FriendlyAI.cpp
     game/ai/friendly/Voices.cpp
     game/ai/friendly/Dialogue.cpp

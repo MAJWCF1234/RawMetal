@@ -17,7 +17,7 @@
     if(f[0]=="CLUTTER"&&f.size()>=14&&f[2]=="7")return creation::Box{n(3),n(4),n(8),n(9),n(5),n(5)+n(10),n(6)};
     if(f[0]=="STRUCT"&&f.size()>=10){if(n(7)-n(6)<=.05f)return {};
       return creation::Box{(n(2)+n(4))*.5f,(n(3)+n(5))*.5f,n(4)-n(2),n(5)-n(3),n(6),n(7)};}
-    if(f[0]=="DOOR"&&f.size()>=6)return creation::Box{(n(2)+n(3))*.5f,n(4),n(3)-n(2),.3f,n(5)+bottomLayerElevation(),n(5)+bottomLayerElevation()+2.2f};
+    if(f[0]=="DOOR"&&f.size()>=6){auto b=nativeDoorBox(*nativeDoor(f),0,.3f);return creation::Box{b[0],b[1],b[2],b[3],n(5)+bottomLayerElevation(),n(5)+bottomLayerElevation()+2.2f};}
     static const std::set<std::string> physical={"PRIM","STAIR","WATER","COMPACTOR","CREATURE","CLUTTER","ACTOR_KEY","ACTOR_IDLE_KEY","TERMINAL","PICKUP","SIGN","LIGHT","PIPE","LEAD","BREAKABLE"};
     if(!physical.count(f[0]))return {};
     int schema=schemaFor(f);if(schema<0)return {};
@@ -54,7 +54,7 @@
     for(const auto& other:occupied)if(creation::overlaps(box,other,.08f))return false;
     // Doors need standing room on both sides, including their full opening.
     for(auto i:doc.records("DOOR",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()<6||!onCreationFloor(number(f[5],0)+bottomLayerElevation()))continue;
-      creation::Box approach{(number(f[2],0)+number(f[3],0))*.5f,number(f[4],0),number(f[3],0)-number(f[2],0)+.5f,2.4f,floor,top};
+      auto b=nativeDoorBox(*nativeDoor(f),.5f,2.4f);creation::Box approach{b[0],b[1],b[2],b[3],floor,top};
       if(creation::overlaps(box,approach))return false;
     }
     for(auto i:doc.records("MAP",map)){auto f=NativeDocument::fields(doc.lines[i]);if(f.size()>7&&onCreationFloor(number(f[7],0))){

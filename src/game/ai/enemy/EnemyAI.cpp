@@ -20,9 +20,10 @@ static bool navCellPoint(const World&w,int x,int y,float floor,float height,floa
  // point farther from its wall can leave adjacent grid nodes on the jamb side
  // of a narrow opening, with no edge that actually passes through it.
  for(const auto&door:w.doors()){
-  float center=(door.left+door.right)*.5f,base=w.floorHeight(center,door.y)+door.z;
-  if(center<x||center>=x+1||std::fabs(y+.5f-door.y)>1.25f||std::fabs(floor-base)>.24f)continue;
-  p={center,y+.5f};z=navSupport(w,p,floor+.215f,radius);
+  // In the door's frame: the cell its centre's span falls in, across the wall.
+  const Vec2 cell{x+.5f,y+.5f},mid=door.centre();const float center=(door.left+door.right)*.5f,cellAlong=door.along(cell),cellAcross=door.across(cell),base=w.floorHeight(mid.x,mid.y)+door.z;
+  if(center<cellAlong-.5f||center>=cellAlong+.5f||std::fabs(cellAcross-door.y)>1.25f||std::fabs(floor-base)>.24f)continue;
+  p=door.world(center,cellAcross);z=navSupport(w,p,floor+.215f,radius);
   if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius))return true;
  }
  for(float dx:{0.f,-.25f,.25f})for(float dy:{0.f,-.25f,.25f}){
@@ -198,6 +199,8 @@ void Game::updateEnemies(float dt){
   struct Footfall {Game&g;Enemy&e;float stride;~Footfall(){const auto&t=creatureTraits(e.kind);const float now=std::floor(e.gait/kPi);if(now==stride||t.stepGain<=0||!e.alive)return;
    const unsigned n=unsigned(now)&3u;const bool drag=t.stepLimp>0&&(n&1u);
    SoundEvent step{Sound(int(stepSoundAt(g.m_world,e.pos))+int(n)),e.pos,t.stepGain*(drag?t.stepLimp:1.f),t.stepPitch*(drag?.86f:.97f+.02f*float(n)),true,17,e.z+.04f};step.aiRadius=-1;g.m_sounds.push_back(step);}} footfall{*this,e,std::floor(e.gait/kPi)};
+  // The cursed equipment: asleep, starting up or seized by live current, it does nothing else (Machine.cpp).
+  if(traits.dormant&&machineUpdate(e,stimuli,dt))continue;
   // A dormant creature does nothing until its state is set or it is hurt; then
   // it knows where the player is (has them made out) and calls out.
   if(e.wakeState){if(!state(e.wakeState)&&e.hp>=e.maxHp){e.moving=false;continue;}
@@ -299,6 +302,8 @@ void Game::updateEnemies(float dt){
   Vec2 goal=e.awareness>0?e.lastKnown:e.home;
   // Going home means its own floor, not the one it last saw the player on.
   float goalZ=e.awareness>0||e.homeZ<=-999?e.lastKnownZ:e.homeZ;
+  // Nothing to go on, the cursed equipment goes to the nearest live lamp or live circuit.
+  if(traits.dormant&&e.awareness<=0)machineAttraction(e,goal,goalZ);
   if(fleeing&&hunterFlight(e,goal,goalZ,dt))continue; // out of sight and away: gone
   bool wantsMove=fleeing||e.state!=Enemy::State::Search&&!(e.windup>0||e.strike>0)&&!canMelee&&length(goal-e.pos)>=.3f&&!(!stalker&&visible&&dist<range*.82f);
   int ms=std::max(1,int(std::round(dt*1000)));
@@ -371,6 +376,8 @@ void Game::updateEnemies(float dt){
    e.heading=std::atan2(to.y,to.x);e.windup=traits.windup;enemySound(e,1,.9f);continue;
   }
   if(e.awareness>0&&creatureTraits(e.kind).opensDoors)requestAiDoor(m_world,m_level,e.pos,e.z,goal);
+  // A Brute, a Chimera or the Machine at a door that gives stands and beats it (DoorPlay.cpp).
+  if(e.awareness>0&&battersDoors(e.kind)&&batterDoor(e,goal)){enemySound(e,1,.85f);continue;}
   // Its pace scales every stalking speed and shortens its stare-downs.
   const float pace=traits.rushSpeed/3.8f;
   float stalkSpeed=traits.speed;bool watching=false;
@@ -586,8 +593,10 @@ void Game::updateEnemies(float dt){
   std::vector<char> operable;std::optional<World::DoorPlan> doorPlan;
   const bool keepWaypoint=!direct&&e.repathTimer>0&&(e.lostPath||lengthSq(e.waypoint-e.pos)>.04f);
   if(direct)e.lostPath=false;
-  if(!direct&&!keepWaypoint&&traits.opensDoors&&e.awareness>0){perf::Scope doorProfile(perf::EnemyDoorPlan);perf::count(perf::DoorPlans);bool any=false;operable.assign(m_world.doors().size(),0);
-   for(size_t i=0;i<m_world.doors().size();++i){const auto&d=m_world.doors()[i];if(d.open<d.maxOpen&&!aiDoorLocked(m_world,m_level,d)){operable[i]=1;any=true;}}
+  // One that batters doors plans through those that give (Door::strength), locked or not.
+  const bool batters=battersDoors(e.kind);
+  if(!direct&&!keepWaypoint&&(traits.opensDoors||batters)&&e.awareness>0){perf::Scope doorProfile(perf::EnemyDoorPlan);perf::count(perf::DoorPlans);bool any=false;operable.assign(m_world.doors().size(),0);
+   for(size_t i=0;i<m_world.doors().size();++i){const auto&d=m_world.doors()[i];if(d.open<d.maxOpen&&((traits.opensDoors&&!aiDoorLocked(m_world,m_level,d))||(batters&&d.breakable()&&!d.broken))){operable[i]=1;any=true;}}
    if(any)doorPlan.emplace(m_world,operable);}
   // A fast mover reaches a one-metre waypoint before the repath clock runs out.
   if(keepWaypoint)destination=e.waypoint;
@@ -635,7 +644,9 @@ void Game::updateEnemies(float dt){
   Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
   // Unaware, or creeping up on something it has only glimpsed, at half pace.
-  float speed=fleeing?std::max(traits.speed,traits.rushSpeed*.75f):stalker?stalkSpeed:traits.speed;if(e.awareness==0||glimpsed)speed*=.5f;if(e.strike>0)speed*=.35f;
+  float speed=fleeing?std::max(traits.speed,traits.rushSpeed*.75f):stalker?stalkSpeed:traits.speed;if(e.awareness==0||glimpsed)speed*=.5f;
+   // A heavy thing's short lurch at prey close in front of it.
+   if(traits.lurchSpeed>0&&visible&&sameLevel&&dist<3.2f*e.scale)speed=traits.lurchSpeed;if(e.strike>0)speed*=.35f;
    auto old=e.pos;
    auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight,radius),height=hull;
     bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);

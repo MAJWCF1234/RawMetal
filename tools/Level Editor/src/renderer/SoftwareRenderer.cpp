@@ -155,7 +155,7 @@ bool SoftwareRenderer::enableHardware(void* window){
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
   for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_murkWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_nineTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel,&m_panelSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_cursedTexture,&m_cursedGlow,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel,&m_panelSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
@@ -184,6 +184,11 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(auto&pixel:m_serviceCeiling.pixels)liftCeiling(pixel);for(auto&level:m_serviceCeiling.mips)for(auto&pixel:level)liftCeiling(pixel);
  deriveSurfaceNormal(m_serviceCeiling,.75f);m_serviceCeiling.glossStrength=.24f;
  m_consoleTexture=loadTexture(241);m_wardenTexture=loadTexture(243);m_mutantTexture=loadTexture(273);m_snatcherTexture=loadTexture(2127);m_chimeraTexture=loadTexture(2130);
+ // The cursed equipment: rusted steel with a little sheen; its lamp's lens (the *_glow material) lights
+ // itself from its bright texels as a library *_glow finish does, and nothing else on the sheet glows.
+ m_cursedTexture=loadTexture(2442);m_cursedTexture.glossStrength=.22f;m_cursedGlow=m_cursedTexture;m_cursedGlow.emission.resize(m_cursedGlow.pixels.size());
+ for(size_t i=0;i<m_cursedGlow.pixels.size();++i){auto p=m_cursedGlow.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
+  float k=std::clamp((y-.28f)/.4f,0.f,1.f);unsigned r=unsigned(((p>>16)&255)*k),g=unsigned(((p>>8)&255)*k),b=unsigned((p&255)*k);m_cursedGlow.emission[i]=0xff000000u|(r<<16)|(g<<8)|b;}
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
  for(int i=0;i<10;++i){auto&texture=m_claireTextures[size_t(i)];texture=loadTexture(2302+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=i==3||i==4||i==7?.18f:.05f;}
@@ -235,13 +240,32 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    r+=(196.f*grain-r)*bone;g+=(178.f*grain-g)*bone;b+=(150.f*grain-b)*bone;
    r+=(120.f-r)*marrow*.8f;g+=(34.f-g)*marrow*.8f;b+=(30.f-b)*marrow*.8f;
    pixel=0xff000000u|(std::uint32_t(std::clamp(r,0.f,255.f))<<16)|(std::uint32_t(std::clamp(g,0.f,255.f))<<8)|std::uint32_t(std::clamp(b,0.f,255.f));}
-  auto&green=m_stump[1];green=red;
-  for(auto&pixel:green.pixels){float r=float((pixel>>16)&255u),g=float((pixel>>8)&255u),b=float(pixel&255u),wet=std::clamp((r-std::max(g,b))/90.f,0.f,1.f),value=std::max({r,g,b});
-   float nr=r+(value*.62f-r)*wet,ng=g+(value*.95f+18.f-g)*wet,nb=b+(value*.22f-b)*wet;
-   pixel=0xff000000u|(std::uint32_t(std::clamp(nr,0.f,255.f))<<16)|(std::uint32_t(std::clamp(ng,0.f,255.f))<<8)|std::uint32_t(std::clamp(nb,0.f,255.f));}
+  // The other fluids: the wet of the cut takes the fluid's hue (bone stays bone).
+  static constexpr float hue[size_t(Fluid::Count)][3]={{1,1,1},{.86f,.95f,.34f},{.30f,.78f,.88f},{.42f,.36f,.30f}};
+  for(size_t fluid=1;fluid<size_t(Fluid::Count);++fluid){auto&cut=m_stump[fluid];cut=red;const float lift=fluid==size_t(Fluid::Goo)?18.f:0.f;
+   // A machine's cut is torn steel, not meat: a grey of the meat's grain, bright at the rim and the bore,
+   // the wet in it black-brown oil.
+   if(fluid==size_t(Fluid::Oil)){for(int y=0;y<cut.height;++y)for(int x=0;x<cut.width;++x){auto&pixel=cut.pixels[size_t(y*cut.width+x)];
+     const float dx=(x+.5f)/cut.width-.5f,dy=(y+.5f)/cut.height-.5f,d=std::sqrt(dx*dx+dy*dy);
+     const float r=float((pixel>>16)&255u),g=float((pixel>>8)&255u),b=float(pixel&255u),grain=(r+g+b)/3.f,wet=std::clamp((r-std::max(g,b))/90.f,0.f,1.f);
+     const float bore=std::clamp((.09f-d)/.03f,0.f,1.f),rim=std::clamp(1.f-std::fabs(d-.42f)/.06f,0.f,1.f);
+     float steel=46.f+.45f*grain+90.f*rim+70.f*bore;const float oil=.55f*wet*(1-rim);
+     const float nr=steel*(1-oil)+40.f*oil,ng=steel*(1-oil)+33.f*oil,nb=(steel+6.f)*(1-oil)+26.f*oil;
+     pixel=0xff000000u|(std::uint32_t(std::clamp(nr,0.f,255.f))<<16)|(std::uint32_t(std::clamp(ng,0.f,255.f))<<8)|std::uint32_t(std::clamp(nb,0.f,255.f));}
+    continue;}
+   for(auto&pixel:cut.pixels){float r=float((pixel>>16)&255u),g=float((pixel>>8)&255u),b=float(pixel&255u),wet=std::clamp((r-std::max(g,b))/90.f,0.f,1.f),value=std::max({r,g,b});
+    float nr=r+(value*hue[fluid][0]-r)*wet,ng=g+(value*hue[fluid][1]+lift-g)*wet,nb=b+(value*hue[fluid][2]-b)*wet;
+    pixel=0xff000000u|(std::uint32_t(std::clamp(nr,0.f,255.f))<<16)|(std::uint32_t(std::clamp(ng,0.f,255.f))<<8)|std::uint32_t(std::clamp(nb,0.f,255.f));}}
  }
+ // The blood decals: each sheet cut into its cells, every cell tinted once per fluid (its grey is wetness).
+ {static constexpr int cell[size_t(BloodJob::Count)]={128,96,96,128,32,64};
+  for(int job=0;job<int(BloodJob::Count);++job){const Texture sheet=loadTexture(2435+job);const int w=cell[job],h=sheet.height,count=std::max(1,sheet.width/w);
+   for(int c=0;c<count;++c)for(size_t fluid=0;fluid<size_t(Fluid::Count);++fluid){Texture t;t.width=w;t.height=h;t.pixels.resize(size_t(w*h));const auto&tint=fluidTint[fluid];
+    for(int y=0;y<h;++y)for(int x=0;x<w;++x){const auto src=sheet.pixels[size_t(y*sheet.width+c*w+x)];const float wet=float((src>>16)&255u)/255.f;
+     t.pixels[size_t(y*w+x)]=(src&0xff000000u)|(std::uint32_t(tint[0]*wet)<<16)|(std::uint32_t(tint[1]*wet)<<8)|std::uint32_t(tint[2]*wet);}
+    t.transparent=true;prepareDecal(t);m_bloodDecals[fluid][size_t(job)].push_back(std::move(t));}}}   // alpha-blended, as every other mark on a surface
  m_blood=loadTexture(249);for(auto&pixel:m_blood.pixels)if((pixel&0xffffffu)<0x100000u)pixel=0;prepareDecal(m_blood);
- for(int species=0;species<int(creatureVisuals.size());++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const bool xenoblood=creatureVisuals[size_t(species)].xenoblood;const int tr=xenoblood?128:74,tg=xenoblood?191:12,tb=xenoblood?48:16;
+ for(int species=0;species<int(creatureVisuals.size());++species){auto&variant=m_bloodVariants[size_t(species)];variant=m_blood;const auto&fluidColour=fluidTint[size_t(creatureVisuals[size_t(species)].fluid)];const int tr=fluidColour[0],tg=fluidColour[1],tb=fluidColour[2];
   for(auto&pixel:variant.pixels){float intensity=float(std::max({(pixel>>16)&255u,(pixel>>8)&255u,pixel&255u}))/255.f;auto r=std::uint32_t(tr*intensity),g=std::uint32_t(tg*intensity),b=std::uint32_t(tb*intensity);pixel=(pixel&0xff000000u)|(r<<16)|(g<<8)|b;}prepareDecal(variant);
  }
  m_facilityTextures.emplace("pc_1",loadTexture(192));m_facilityTextures.emplace("keyboard_1",loadTexture(193));

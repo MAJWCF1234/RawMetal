@@ -79,10 +79,10 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal,ShotTrace* trace)
   if(campaign()&&level()>=6&&!t.control&&t.reactorAction<2){box({t.position.x-.48f,t.position.y-.36f,base+.74f},{t.position.x+.42f,t.position.y+.36f,base+.815f});oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6&&!authored()?-kPi*.5f:t.yaw);}
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
  }
- for(const auto&door:m_doors){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
-  if(door.swinging){float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;oriented({door.left+std::cos(angle)*width*.5f,door.y+std::sin(angle)*width*.5f},width,.30f,base+.015f,base+2.35f,-angle);}
-  else box({door.left,door.y-.13f,base+door.open*2.65f+.015f},{door.right,door.y+.13f,base+door.open*2.65f+2.48f});
-  if(shapedGround)box({door.left,door.y-.1f,base+2.5f},{door.right,door.y+.1f,ceilingHeight((door.left+door.right)*.5f,door.y)});
+ for(const auto&door:m_doors){const Vec2 centre=door.centre();float base=floorHeight(centre.x,centre.y)+door.z;
+  if(door.swinging){const Vec2 axis=door.leafAxis(door.open),hinge=door.hinge();const float width=door.width();oriented(hinge+axis*(width*.5f),width,.30f,base+.015f,base+2.35f,-std::atan2(axis.y,axis.x));}
+  else{Vec2 lo,hi;door.box(door.left,door.right,door.y-.13f,door.y+.13f,lo,hi);box({lo.x,lo.y,base+door.open*2.65f+.015f},{hi.x,hi.y,base+door.open*2.65f+2.48f});}
+  if(shapedGround){Vec2 lo,hi;door.box(door.left,door.right,door.y-.1f,door.y+.1f,lo,hi);box({lo.x,lo.y,base+2.5f},{hi.x,hi.y,ceilingHeight(centre.x,centre.y)});}
  }
  for(size_t i=0;i<actorTracks().size();++i)if(actorTracks()[i].platform){const auto&t=actorTracks()[i];const auto&p=m_actorPoses[i];box({p.position.x-t.footprint.x*.5f,p.position.y-t.footprint.y*.5f,p.z-t.thickness},{p.position.x+t.footprint.x*.5f,p.position.y+t.footprint.y*.5f,p.z});}
  if(m_cargoLift.x2>m_cargoLift.x1){box({m_cargoLift.x1,m_cargoLift.y1,m_cargoLiftHeight-.18f},{m_cargoLift.x2,m_cargoLift.y2,m_cargoLiftHeight});box({m_cargoLift.x1,m_cargoLift.y1,m_cargoLiftHeight+2.4f},{m_cargoLift.x2,m_cargoLift.y2,m_cargoLiftHeight+2.52f});}

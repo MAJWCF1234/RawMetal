@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.1 - What it leaves behind (2026-11-12)
+
+An update, not a chapter. The great door at the bottom of Chapter 1 stays shut. Work behind it goes on: people to talk to, things to work out, and in the machine rooms something that was never alive has started to move. The research levels have stopped humming a nursery tune to themselves and the static has been taken off the walls; some rooms down there now have no music at all, and are worse for it. It is not ready to be looked at yet.
+
+- **Blood.** What comes out of things down here was a red smear that sat in the air. It is now laid from real spatter: pools that spread and keep their edges, splats where drops land, bursts on the wall behind a wound with a run trickling down from them, a scatter of drops where something staggered. It is coloured by what bled: red from what was once a person, a sour yellow-green from the things with too many legs, a cold blue-green from the large ones, and black oil from anything that should not have been bleeding at all. It takes the light of the room it lies in. Blood on a tiled floor used to sink under the tiles and vanish; it stays on top now.
+- **The dead.** People used to die the way an actor does, and then stay on the floor in the last pose they struck, stiff, held a hand's width off the ground. They fall now. A man who is shot goes down from where he stood, away from what hit him, and lies the way a weight lies: on the floor, over the edge of whatever was under him, an arm off the step. The dead you find were left that way too.
+- **What the animal leaves.** A man whose head has been taken lies in what ran out of his neck, and it spreads past where his head was.
+- **Doors.** A door could only stand in a wall that ran one way. It stands in either now, and it has weight. Tap the handle and it swings through and knocks its stop; hold it and it eases open under your hand and stays where you leave it, a hand's width or wide. A shut door is latched. A door left ajar gives when you walk into it, and bangs if you run. Every door has a lever, hinges, a kick plate, a frame and a threshold. A locked one shows how it is locked: a key cylinder, or a reader on the wall that is red until it lets you through. A slammed door is heard sixteen metres off by things that listen.
+- **Talking.** A person you can speak to now says so ("E / TALK"), and talking to someone comes before picking up the mug at their feet.
+- **Light.** Models take the room's light properly; furniture and stone no longer sit dark in a lit room. Lamps throw a little bounce.
+- **Campaign Builder.** Doors stand either way: R turns one a quarter, and the inspector sets how it opens, which side its hinge is, which way it swings, the lock it shows, how much battering it takes before something heavy breaks it down, and whether it starts ajar. The plan draws every one of them as it will swing. The builder's engine is brought up to this build with a merge tool (`tools/editor/sync_engine.py`), so custom maps get the new blood, doors and light, and a map's music can now be Silence; model thumbnails were mended, and Turn copy, Flip copy and upper floors no longer spoil doors.
+
+Verified with the full test suite on the release build (all 63 checks pass, including the two that failed on v1.3.0 and v1.4.0, which are now fixed), a new test that lays all 37 of the research levels' dead and finds every one at rest on the floor, the door, hunter, machine, gore and carcass tests, the chapter route over all 170 passages, and the Campaign Builder's self-tests and map round-trips.
+
+---
+
 ## v1.4.0 - It gets up (2026-11-11)
 
 This is an update, not a chapter. The great door at the bottom of Chapter 1 is still shut; what is behind it is not ready to be looked at yet, and it will not be shown until it is.

@@ -200,7 +200,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    for(size_t row=0;row<24;++row)line(Rec("ROW").i(mi).i((long long)l).i((long long)row).f(verbatim(layer.rows[row],notes,who+" layer "+std::to_string(l)+" row "+std::to_string(row))));}
   for(const auto& door:m.doors){Rec r("DOOR");r.i(mi).n(door.left).n(door.right).n(door.y).n(door.z).b(door.entry).b(door.transfer).b(door.swinging).b(door.requireEnemiesClear).i(door.sign).st(door.requireState).i(door.requireValue);
    r.f(door.requireControl?"1":"").f(door.swing!=1?num(door.swing):"").f(door.maxOpen!=1?num(door.maxOpen):"").f(door.open!=0?num(door.open):"").f(door.opening?"1":"");
-   r.f(door.leaf?std::to_string(door.leaf):"").f(door.label.empty()?"":encode(door.label)).f(door.locked.empty()?"":encode(door.locked));line(r,13);}
+   r.f(door.leaf?std::to_string(door.leaf):"").f(door.label.empty()?"":encode(door.label)).f(door.locked.empty()?"":encode(door.locked));
+   r.f(door.alongY?"1":"").f(door.hingeRight?"1":"").f(door.strength>0?num(door.strength):"").f(door.lock?std::to_string(door.lock):"");line(r,13);}
   for(const auto& s:m.structures){Rec r("STRUCT");r.i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).b(s.rail).i(s.material).f(s.solid?"":"0").f(s.shape?std::to_string(s.shape):"").f(s.facing?std::to_string(s.facing):"");line(r,10);}
   for(const auto& x:m.fixtures){Rec r("FIXTURE");r.i(mi).i(x.model).n(x.position.x).n(x.position.y).n(x.base).n(x.width).n(x.depth).n(x.height).n(x.yaw).b(x.solid);
    if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
@@ -417,7 +418,8 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  for(size_t i=0;i<std::min(a.doors.size(),b.doors.size());++i){const auto&p=a.doors[i];const auto&q=b.doors[i];auto w=at("door",i);
   d.eq(w+".left",p.left,q.left);d.eq(w+".right",p.right,q.right);d.eq(w+".y",p.y,q.y);d.eq(w+".z",p.z,q.z);d.eq(w+".open",p.open,q.open);d.eq(w+".opening",p.opening,q.opening);d.eq(w+".transfer",p.transfer,q.transfer);d.eq(w+".entry",p.entry,q.entry);
   d.eq(w+".requireEnemiesClear",p.requireEnemiesClear,q.requireEnemiesClear);d.eq(w+".requireControl",p.requireControl,q.requireControl);d.eq(w+".requireState",p.requireState,q.requireState);d.eq(w+".requireValue",p.requireValue,q.requireValue);
-  d.eq(w+".swinging",p.swinging,q.swinging);d.eq(w+".swing",p.swing,q.swing);d.eq(w+".sign",p.sign,q.sign);d.eq(w+".maxOpen",p.maxOpen,q.maxOpen);}
+  d.eq(w+".swinging",p.swinging,q.swinging);d.eq(w+".swing",p.swing,q.swing);d.eq(w+".sign",p.sign,q.sign);d.eq(w+".maxOpen",p.maxOpen,q.maxOpen);
+  d.eq(w+".leaf",p.leaf,q.leaf);d.eq(w+".label",p.label,q.label);d.eq(w+".locked",p.locked,q.locked);d.eq(w+".alongY",p.alongY,q.alongY);d.eq(w+".hingeRight",p.hingeRight,q.hingeRight);d.eq(w+".strength",p.strength,q.strength);d.eq(w+".lock",p.lock,q.lock);}
  d.count("props",a.props.size(),b.props.size());
  for(size_t i=0;i<std::min(a.props.size(),b.props.size());++i){const auto&p=a.props[i];const auto&q=b.props[i];auto w=at("prop",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".position",p.position,q.position);d.eq(w+".height",p.height,q.height);d.eq(w+".footprint",p.footprint,q.footprint);d.eq(w+".yaw",p.yaw,q.yaw);d.eq(w+".halfSize",p.halfSize,q.halfSize);d.eq(w+".base",p.base,q.base);}
  d.count("fixtures",a.fixtures.size(),b.fixtures.size());
@@ -623,7 +625,7 @@ std::vector<std::string> compareWorlds(const World& a,const World& b,size_t limi
   for(const auto& l:b.lights())y.push_back(num(l.position.x)+","+num(l.position.y)+","+num(l.z)+" "+std::to_string(int(l.mount))+" "+num(l.intensity));
   std::sort(x.begin(),x.end());std::sort(y.begin(),y.end());d.eq("world lights (positions, mounts, intensities)",x==y,true);}
  d.count("world doors",a.doors().size(),b.doors().size());
- for(size_t i=0;i<std::min(a.doors().size(),b.doors().size());++i){d.eq(at("world door",i),Point3{a.doors()[i].left,a.doors()[i].right,a.doors()[i].y},Point3{b.doors()[i].left,b.doors()[i].right,b.doors()[i].y});}
+ for(size_t i=0;i<std::min(a.doors().size(),b.doors().size());++i){d.eq(at("world door",i),Point3{a.doors()[i].left,a.doors()[i].right,a.doors()[i].y},Point3{b.doors()[i].left,b.doors()[i].right,b.doors()[i].y});d.eq(at("world door",i)+" axis",a.doors()[i].alongY,b.doors()[i].alongY);}
  d.count("world terminals",a.terminals().size(),b.terminals().size());
  for(size_t i=0;i<std::min(a.terminals().size(),b.terminals().size());++i)d.eq(at("world terminal",i),a.terminals()[i].position,b.terminals()[i].position);
  d.count("world layers",a.layers().size(),b.layers().size());

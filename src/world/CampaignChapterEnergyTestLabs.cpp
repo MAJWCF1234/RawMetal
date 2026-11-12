@@ -76,6 +76,18 @@ ScriptAction etSound(Sound sound,float gain){ScriptAction a;a.type=ScriptAction:
 ScriptAction etShake(float amount){ScriptAction a;a.type=ScriptAction::Type::Shake;a.amount=amount;return a;}
 ScriptAction etSave(){ScriptAction a;a.type=ScriptAction::Type::Checkpoint;return a;}
 ScriptAction etSpawn(CreatureKind kind,Vec2 p,float z,float awareness){ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=kind;a.position=p;a.z=z;a.amount=awareness;return a;}
+ScriptAction etObjective(const char* id,ObjectiveStatus status){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(status);return a;}
+// A script event in its box, once, when every state test holds (a value of 0 asks for a state still unset).
+void etWhen(Map& m,const char* id,float x1,float y1,float x2,float y2,std::initializer_list<std::pair<const char*,int>> when,std::vector<ScriptAction> actions){
+ ScriptEvent e;e.id=stateId(id);e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=-100;e.top=100;
+ for(auto [s,v]:when){ScriptCondition c;c.id=stateId(s);c.value=v;e.conditions.push_back(c);}
+ e.actions=std::move(actions);m.scriptEvents.push_back(std::move(e));
+}
+// A reply: where it goes, the state it sets (to 1), and the state that hides it once set.
+DialogueReply etReply(const char* text,const char* next="",const char* sets="",const char* hide=""){
+ DialogueReply r;r.text=text;r.next=*next?stateId(next):0;if(*sets)r.sets.push_back({stateId(sets),1});r.hide=*hide?stateId(hide):0;return r;}
+// A walk between two points on the actor's clock: yaw toward where it goes, the walk cycle's phase by distance.
+float etHeading(Vec2 from,Vec2 to){return std::atan2(to.x-from.x,to.y-from.y);}
 // A suit cabinet on a wall: an open steel bay with a canopy and a valance, the suits on their
 // hangers from a rail under it with their feet clear of the boot tray, a lamp under the canopy.
 // a..b is the bay's span along the wall, `face` the wall face (y for a wall along x, x for one
@@ -493,6 +505,9 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
  propPose(m,model::anl_cell_spent,5.2f,12.4f,f,1.7f,kPi*.5f,0);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{6.2f,15.f},f,1,0});
  m.creatureSpawns.push_back({CreatureKind::Transformed,{9.6f,2.6f},f,1,0});
+ // A charging unit stood dead among the step-up set: a fight on the floor wakes it, and between it and the
+ // stair foot is the shot chamber's pad, live every 3.2 s. Brought across it, it does not get off it.
+ m.creatureSpawns.push_back({CreatureKind::Machine,{4.4f,9.f},f});
  // light: sodium high-bays far overhead, two of them out; the towers' blue; the chamber's violet
  etHighBay(m,{5.f,6.f},roof,-6.f,2.2f,22.f,2000);etHighBay(m,{12.f,6.f},roof,-4.f,0,0,0);
  etHighBay(m,{5.f,13.f},roof,-6.f,2.f,22.f,4300,.25f);etHighBay(m,{12.f,13.f},roof,-4.f,1.4f,18.f,2100);   // one metal-halide refit among the sodium
@@ -586,8 +601,19 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
   "WE TRIED TO SCRUB THEM OFF AT 02:30. BY 02:40 THEY WERE BACK. THEY ARE A LITTLE FURTHER WEST EACH TIME.");
  // the bend's blast door, a real leaf, and the line nobody crossed without a badge
  wall(m,9.f,17.6f,10.5f,18.4f,f,roof,15);wall(m,13.5f,17.6f,15.f,18.4f,f,roof,15);wall(m,10.5f,17.6f,13.5f,18.4f,f+2.6f,roof,15);
- m.doors.push_back(Door{10.5f,13.5f,18.f,0});
+ // Held shut from the post since 02:25 (et_shield_blast): its board is in the dosimetry post, among the detail, and
+ // its repeater is in the shielding store, with the one man of the detail who has stopped.
+ {Door d{10.5f,13.5f,18.f,0};d.requireState=stateId("et_shield_blast");d.label="BLAST DOOR";d.locked="BLAST DOOR / HELD FROM THE POST";m.doors.push_back(d);}
  floorLine(m,9.f,17.3f,15.f,17.45f,f,13);floorLine(m,9.f,18.55f,15.f,18.7f,f,13);
+ taped(m,{14.25f,17.6f},f+1.5f,anN,Readable::Note,"BLAST DOOR / 02:25","SHUT FROM THE POST BOARD. NOTHING FROM THE RING GOES WEST. NOTHING FROM THE WEST GOES EAST.",
+  "THE STORE HAS THE REPEATER AND THE STORE IS HARRIS'S. NOBODY GOES IN THE STORE.");
+ m.lights.push_back(etBeacon({12.f,17.58f},f+2.75f,-kPi*.5f,.3f,stateId("et_shield_blast")));
+ {auto l=etWall({12.f,17.58f},f+2.75f,-kPi*.5f,.3f,4.f,4000,0,etGreen);l.enabledState=stateId("et_shield_blast");m.lights.push_back(l);}
+ m.ambients.push_back({Sound::OneMetalBang,{12.f,18.f},f+1.6f,.6f,18.f,AmbientEmitter::OnState,8,8,stateId("et_shield_blast"),1});
+ m.ambients.push_back({Sound::OneMetalFall,{12.f,18.f},f+2.f,.55f,14.f,AmbientEmitter::OnState,8,8,stateId("et_shield_blast"),1});
+ m.objectiveTexts.push_back({stateId("et_obj_blast"),"THE BLAST DOOR IS HELD FROM THE POST. ITS BOARD IS IN THE DOSIMETRY POST, WITH THE DETAIL."});
+ etWhen(m,"et_shield_obj_door",9.f,14.f,15.f,17.6f,{{"et_shield_blast",0}},{etObjective("et_obj_blast",ObjectiveStatus::Active)});
+ etWhen(m,"et_shield_obj_open",0,0,24,24,{{"et_shield_blast",1}},{etObjective("et_obj_blast",ObjectiveStatus::Complete)});
  // --- The dosimetry post: the Shielding detail's room ------------------------------------------
  wall(m,14.f,8.9f,16.4f,9.f,f,roof,3);swingDoor(m,16.4f,17.6f,8.95f,f,roof,-1);wall(m,17.6f,8.9f,19.4f,9.f,f,roof,3);
  glazing(m,19.4f,8.9f,20.6f,9.f,f,roof,3,.95f,2.1f);wall(m,20.6f,8.9f,21.f,9.f,f,roof,3);                    // the post's window on the corridor, east of bulkhead 2
@@ -615,6 +641,9 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  anFix(m,model::lab_id_scanner,16.2f,8.88f,f+1.1f,.3f,.06f,.41f,anN,false);
  etPaper(m,{20.2f,4.35f},.9f,0,Readable::Letter,"I.I. / SHIELDING DETAIL / 02:20","HOLD THE CORRIDOR. NOTHING FROM THE RING GOES WEST. NOTHING FROM THE WEST GOES EAST.",
   "ANYONE WITHOUT A DEPTHWORKS BADGE ISSUED TONIGHT IS EXPOSED. CONTRACT SECURITY INCLUDED. YOU KNOW WHAT TO DO.");
+ terminal(m,{17.2f,4.75f},"POST / BLAST DOOR BOARD","BLAST DOOR AT THE BEND: SHUT 02:25 ON I.I. ORDER. REPEATER IN THE SHIELDING STORE, LOCKED TO THIS BOARD.",
+  "E / RELEASE THE BLAST DOOR.",0,stateId("et_shield_blast"));
+ m.terminals.back().yaw=0;
  m.lights.push_back(etTube(17.5f,6.5f,roof,.75f,6.f,4600,0));m.lights.push_back(etTube(19.9f,7.1f,roof,.5f,5.f,4600,0,.1f));
  m.lights.push_back(lamp({20.3f,4.6f},f+1.3f,.22f,2.2f,8000,-.15f,WorldLightMount::Bare,0,false));m.lights.back().flicker=.12f;
  m.pickupSpawns.push_back({{15.4f,8.f},PickupKind::HandgunAmmo,f});
@@ -644,7 +673,7 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  kit::prop(m,model::mine_hard_hat,4.4f,17.1f,f,.279f,.351f,.153f,2.f);
  taped(m,{7.1f,15.01f},f+1.5f,anS,Readable::Note,"SHIELDING STORE / ISSUE","PANELS 14-19 FOR THE POST WALL: DRAWN 01:40, NOT FITTED. BRICK: 3 PALLETS, ONE OPEN.",
   "APRONS BACK ON THE RAIL AFTER USE. HARRIS HAS NOT BROUGHT HIS BACK. HARRIS IS STILL IN HERE.");
- m.creatureSpawns.push_back({CreatureKind::Transformed,{4.05f,20.7f},-999,1,0});                // the fitter, still in his apron
+ m.creatureSpawns.push_back({CreatureKind::Transformed,{4.05f,20.7f},-999,1,0,stateId("et_store_harris")});   // the fitter, still in his apron: quiet while Kemp talks to him
  m.lights.push_back(etTube(5.4f,18.4f,roof,.7f,6.f,4000,.03f,.12f));
  anFix(m,model::mine_cage_lamp,2.06f,18.8f,f+2.2f,.21f,.2f,.36f,kPi*.5f,false);
  m.lights.push_back(etWall({2.04f,18.8f},f+2.35f,0,.45f,5.f,3000,.05f));
@@ -679,6 +708,41 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  cue(m,"et_shield_radio",6000,Sound::Empty,{19.f,4.4f},"RADIO: Sir. We've got one mag each. The wall's moving.",.9f,f+1.f,"et_shield_2");
  cue(m,"et_shield_radio",10500,Sound::Empty,{19.f,4.4f},"INVESTIGATOR (RADIO): Then be accurate.",.9f,f+1.f,"et_shield_3");
  etEvent(m,"et_shield_order",0,0,24,24,"et_shield_radio_done",{etSet("et_shield_stance",int(SquadStance::Hostile))});
+ // KEMP STOPS. The detail's third man, on his knees at the second of the four, scrubbing him off the lead with a wire
+ // brush, seen down the corridor from the ring as the player comes in. The order comes over the post's radio; he hears
+ // it out, says the one word back to the wall, drops the brush, and walks: through bulkhead 1, down the leg, into the
+ // store, where Harris is. He crouches by Harris and stays (et_desert_free: from then on he can be talked to).
+ {const char* scene="et_desert_scene";
+  etSequence(m,scene,"et_desert_free",40000,28000,21.f,9.f,24.f,14.f);
+  const Vec2 wallAt{15.75f,9.65f},p1{13.4f,11.5f},p2{10.4f,12.6f},p3{10.2f,16.f},p4{9.6f,17.25f},p5{8.f,17.4f},p6{4.f,17.5f},by{4.f,19.f};
+  ActorTrack t;t.timerState=stateId(scene);t.visual=ActorVisual::CleanupEngineer;t.scale=1.6f;t.health=70;
+  t.damageState=stateId("et_desert_damage");t.deadState=stateId("et_desert_dead");
+  t.keys={{0,wallAt,f,kPi,5,0},{11800,wallAt,f,kPi,5,7.f},{12000,wallAt,f,kPi,0,0},{12800,wallAt,f,etHeading(wallAt,p1),0,.5f},
+   {12900,wallAt,f,etHeading(wallAt,p1),1,0},{15300,p1,f,etHeading(p1,p2),1,1.6f},{17900,p2,f,etHeading(p2,p3),1,3.3f},{20600,p3,f,etHeading(p3,p4),1,5.2f},
+   {21700,p4,f,etHeading(p4,p5),1,5.9f},{23000,p5,f,etHeading(p5,p6),1,6.8f},{26200,p6,f,etHeading(p6,by),1,9.f},{27400,by,f,0,1,9.8f},
+   {27600,by,f,0,5,0},{40000,by,f,0,5,9.f}};
+  t.ai.mode=ActorAiMode::Civilian;t.ai.faction=AiFaction::Neutral;t.ai.enableState=stateId("et_desert_free");t.talk=stateId("et_desert_hello");
+  m.actorTracks.push_back(std::move(t));
+  for(int at=300;at<11400;at+=1650)cue(m,scene,at,Sound::OneMetalDrag,{15.75f,9.2f},"",.22f,f+.6f);                            // the brush on the lead
+  cue(m,scene,11300,Sound::Empty,{15.75f,9.5f},"SHIELDING (TO THE WALL): ...Accurate.",.8f,f+1.f,"et_desert_scene_11300");
+  cue(m,scene,12100,Sound::JunkMetal,{15.6f,9.7f},"",.6f,f+.2f);                                                               // the brush, dropped
+  // walked into the store before he got there, the player finds him already sat with Harris
+  etWhen(m,"et_desert_found",5.8f,15.2f,9.6f,19.2f,{{scene,0}},{etSet(scene,27700)});
+  anFix(m,model::mine_hard_hat,15.3f,9.75f,f,.279f,.351f,.153f,.8f,false);                                                   // his helmet, left where he knelt
+  wall(m,15.55f,9.072f,16.05f,9.078f,f+.4f,f+1.5f,20);m.structures.back().solid=false;}                                         // the patch he had scrubbed back to the lead
+ // the repeater: the blast door's second board, on the store's north wall, locked to the post
+ anModel(m,model::pwr_breaker_panel,6.3f,15.06f,f+1.35f,anS,false);m.pipes.push_back({{6.3f,15.06f},{6.3f,15.06f},f+1.81f,.02f,roof,8});
+ // What Kemp says, crouched by Harris. Nothing he says is about the post; he has not been on its radio since 02:47.
+ m.dialogue.push_back({stateId("et_desert_hello"),"KEMP","Don't. My magazine's in the brick. I'm off his radio. Keep your voice down; he settles while somebody talks.","et_desert_hello",{
+  etReply("Who is he?","et_desert_harris"),etReply("The blast door's shut.","et_desert_door","","et_shield_blast"),etReply("Come west with me.","et_desert_west"),etReply("Stay out of sight.")}});
+ m.dialogue.push_back({stateId("et_desert_harris"),"KEMP","Harris. Fitter. Taught me to lay brick, course on course. He still goes to the shelves. He still knows where everything is.","et_desert_harris",{
+  etReply("Back.","et_desert_hello"),etReply("That isn't Harris any more.","et_desert_wake","et_store_harris")}});
+ m.dialogue.push_back({stateId("et_desert_wake"),"KEMP","...Harris? No. No, he's listening. Harris, it's me. It's-","et_desert_wake",{etReply("...")}});
+ m.dialogue.push_back({stateId("et_desert_door"),"KEMP","Their board shut it. The repeater's on that wall, locked to the board, and the locks on this detail are a screwdriver. I'll throw it. You go west and you never saw me.","et_desert_door",{
+  etReply("Throw it.","et_desert_thrown","et_shield_blast"),etReply("Back.","et_desert_hello")}});
+ m.dialogue.push_back({stateId("et_desert_thrown"),"KEMP","Done. Go on. Don't come back through here with that light on.","et_desert_thrown",{etReply("...")}});
+ m.dialogue.push_back({stateId("et_desert_west"),"KEMP","And leave him? He'd come looking. He always comes looking for whoever had the radio on.","et_desert_west",{etReply("Back.","et_desert_hello")}});
+ etWhen(m,"et_store_wake_dead",0,0,24,24,{{"et_desert_dead",1}},{etSet("et_store_harris",1)});
  m.pickupSpawns.push_back({{13.6f,22.f},PickupKind::Health,f});
  zone(m,"SHIELDING CORRIDOR / DOSIMETRY POST",14.f,4.f,21.f,9.f,-1000,1000,{.15f,.13f,.10f,.005f});
  zone(m,"SHIELDING CORRIDOR / SHIELDING STORE",2.f,15.f,9.f,22.f);
@@ -836,6 +900,12 @@ std::shared_ptr<const Map> makeExperimentalPower(){
  m.lights.push_back(etArcLight({12.f,19.9f},f+.5f,1.4f,8.f,2.6f,.75f,.3f));
  m.lights.push_back(etArcLight({9.4f,19.9f},f+.5f,.7f,5.f,2.6f,.75f,.3f));m.lights.push_back(etArcLight({14.6f,19.9f},f+.5f,.7f,5.f,2.6f,.75f,.3f));
  floorLine(m,8.f,18.55f,16.f,18.7f,f,13);floorLine(m,8.f,21.1f,16.f,21.25f,f,13);
+ // THE PARKED UNIT: a bus receiver they wheeled to the exit at 02:20 and isolated, stood dead in the mouth of
+ // the way out. It wakes to a shot, a torch in its face or a wound, and nothing the gun does stops it; the
+ // split feed between it and the stair does, on its beat, if it can be brought north across it.
+ m.creatureSpawns.push_back({CreatureKind::Machine,{12.6f,21.45f},f});
+ taped(m,{1.01f,18.6f},f+1.5f,anE,Readable::Note,"EXIT / THE RECEIVER UNIT","02:20 PARKED IN THE EXIT AND ISOLATED. 02:31 RUNNING AGAIN, NOTHING CONNECTED. IT WOULD NOT STAY OFF.",
+  "IT CAME AT THE TORCH, NOT AT US, AND WALKED ONTO THE SPLIT FEED. IT STOOD THERE BURNING UNTIL THE FEED LET GO OF IT.");
  // --- Light: sodium over the hall, red on the walls, the arcs and the converter --------------------
  etHighBay(m,{4.5f,9.f},roof,-8.6f,1.f,10.f,2000);etHighBay(m,{12.f,16.f},roof,-8.6f,1.1f,11.f,2000,.2f);
  etHighBay(m,{20.f,9.f},roof,-8.6f,0,0,0);etHighBay(m,{8.f,21.f},roof,-8.6f,.6f,8.f,2000);
@@ -881,10 +951,13 @@ std::shared_ptr<const Map> makeConversionLab(){
  kit::prop(m,model::office_chair,17.7f,2.7f,g,.55f,.55f,.95f,kPi*.5f+.3f);
  wall(m,18.6f,1.f,21.4f,1.015f,g+.92f,g+1.68f,20);anModel(m,model::lab_control_board,20.f,1.11f,g+1.f,anS,false);
  for(float x:{18.9f,21.1f})anModel(m,model::lab_knife_switch,x,1.1f,g+1.85f,anS,false);
- terminal(m,{20.f,1.75f},"OUTPUT ROUTING / CONVERSION","OUTPUT: PLANT BUS ONLY, BY I.I. ORDER 02:31. CONTAINMENT FEED: OPEN. CONTAINMENT FIELDS ON STANDBY POWER.",
-  "E / ROUTE CONVERSION OUTPUT TO CONTAINMENT.",g-f,routed);
+ // The board routes nothing while the containment feeder at the bank stands open: its handle went off the bank at
+ // 02:31 (et_conv_handle: Holt's spare, by column four, or the night engineer's own, up at the ring); the feeder is
+ // closed at the bank face between its arcs (et_conv_feed); then this switch puts the output back (cont_power).
+ terminal(m,{20.f,1.75f},"OUTPUT ROUTING / CONVERSION","OUTPUT: PLANT BUS ONLY, BY I.I. ORDER 02:31. CONTAINMENT FEEDER: OPEN AT THE BANK, HANDLE PULLED. FIELDS ON STANDBY.",
+  "E / ROUTE CONVERSION OUTPUT TO CONTAINMENT.",g-f,routed,stateId("et_conv_feed"));
  m.terminals.back().yaw=0;
- taped(m,{19.5f,8.79f},g+1.5f,anN,Readable::Letter,"I.I. / CONVERSION / 02:31","CONVERSION OUTPUT OFF THE CONTAINMENT FEED. PLANT BUS ONLY UNTIL FURTHER ORDER. THE INVESTIGATOR WILL ADVISE.",
+ taped(m,{19.5f,8.79f},g+1.5f,anN,Readable::Letter,"I.I. / CONVERSION / 02:31","CONVERSION OUTPUT OFF THE CONTAINMENT FEED. FEEDER HANDLE OFF THE BANK, HELD BY THE NIGHT ENGINEER. PLANT BUS ONLY UNTIL THE INVESTIGATOR ADVISES.",
   "CONTAINMENT ASKED AT 02:35 AND AT 02:40. B'S FIELDS WENT AT 02:44. NOBODY ADVISED. -NIGHT ENGINEER");
  anModel(m,model::lab_mainframe,21.8f,6.6f,g,anW,true);wall(m,20.66f,5.5f,22.94f,7.7f,g+3.18f,c,30);
  m.lights.push_back(etTube(19.f,4.f,c,.45f,5.f,3200,0));
@@ -953,6 +1026,35 @@ std::shared_ptr<const Map> makeConversionLab(){
  taped(m,{14.4f,22.99f},f+1.5f,anN,Readable::Note,"BANK / 02:50","WE RAN THE COLUMNS DOWN AT 02:46. THE BANK KEPT SENDING. THE COLUMNS KEPT FILLING.",
   "WHATEVER IS IN THE CELLS DOES NOT WANT TO BE SWITCHED OFF. IT WILL GO WHERE IT IS ROUTED. ROUTE IT SOMEWHERE THAT HELPS.");
  for(auto [x,ph]:{std::pair{2.f,0.f},{16.f,.7f}})m.lights.push_back(etBeacon({x,22.98f},f+3.2f,-kPi*.5f,ph,routed));
+ // THE CONTAINMENT FEEDER: its desk at the bank face between cubicle 3 and the tall cabinet, inside the bank's reach.
+ // The bank throws to the floor every 3.6 s for most of a second and the feeder's own bay throws further out, to the
+ // floor plate; walk in on the dark, fit the handle, close it, walk out. Closed, the bay's amber comes on with a bang.
+ {const StateId feed=stateId("et_conv_feed");
+  terminal(m,{9.6f,21.72f},"BANK / CONTAINMENT FEEDER","FEEDER OPEN 02:31 BY I.I. ORDER. HANDLE REMOVED AND TAGGED. CUBICLE LIVE: THE BAY THROWS TO THE PLATE.",
+   "E / FIT THE HANDLE AND CLOSE THE FEEDER.",0,feed,stateId("et_conv_handle"));
+  etArc(m,8.4f,19.5f,10.8f,20.7f,f,f+2.2f,30,3.6f,.8f);m.hazards.back().enabledFlag=routed;m.hazards.back().invertFlag=true;
+  {auto l=etArcLight({9.6f,20.2f},f+.4f,.8f,5.f,3.6f,.8f);l.enabledState=routed;l.invert=true;m.lights.push_back(l);}
+  wall(m,8.4f,19.5f,10.8f,20.7f,f,f+.006f,8);m.structures.back().solid=false;                                            // the plate it throws to, burnt
+  floorLine(m,8.3f,19.32f,10.9f,19.44f,f,13);
+  {auto l=lamp({9.6f,21.95f},f+1.55f,.7f,4.5f,2600,0,WorldLightMount::Bare,0,false,{1.f,.55f,.08f});l.enabledState=feed;m.lights.push_back(l);}   // FEEDER CLOSED
+  m.ambients.push_back({Sound::OneMetalBang,{9.6f,22.2f},f+1.4f,.6f,16.f,AmbientEmitter::OnState,8,8,feed,1});}
+ // Holt, who went for the feeder with the spare handle on the light, at the mouth of column four's cage; the handle's tag
+ // by his hand, inside the column's throw: the fire reaches the stripes and the stripes are where he lies.
+ etBody(m,"et_conv_clock",ActorVisual::Worker,{9.25f,16.95f},f,1.75f);
+ wall(m,8.7f,16.5f,9.9f,17.5f,f+.004f,f+.008f,16);m.structures.back().solid=false;
+ {AuthoredTerminalData t;t.position={9.95f,16.75f};t.z=0;t.yaw=.4f;t.title="FEEDER HANDLE / BANK 4 / SPARE";
+  t.line1="IN HOLT'S GLOVE. A T-HANDLE OFF THE CONTAINMENT FEEDER, TAGGED BY I.I. 02:31: NOT TO BE REFITTED.";t.line2="E / TAKE THE HANDLE.";
+  t.readable=Readable::Letter;t.surface=0;t.activateState=stateId("et_conv_handle");m.terminals.push_back(std::move(t));}
+ etArc(m,8.f,14.9f,10.1f,18.6f,f,f+2.2f,40,2.2f,.45f,1.1f);m.hazards.back().enabledFlag=routed;m.hazards.back().invertFlag=true;   // column four's throw, to its stripes
+ // The steps, in the plant's words: what the board wants, then the handle, then the feeder, then the switch.
+ m.objectiveTexts.push_back({stateId("et_obj_feeder"),"THE CONTAINMENT FEEDER IS OPEN AT THE BANK. ITS HANDLE WENT WITH HOLT, ON THE FLOOR BY COLUMN FOUR."});
+ m.objectiveTexts.push_back({stateId("et_obj_bank"),"FIT THE HANDLE AT THE BANK FACE. THE BANK THROWS EVERY FOUR SECONDS: GO IN ON THE DARK."});
+ m.objectiveTexts.push_back({stateId("et_obj_route"),"FEEDER CLOSED. ROUTE THE OUTPUT TO CONTAINMENT FROM THE CONTROL ROOM."});
+ etWhen(m,"et_conv_obj_look",16.f,1.f,23.f,9.f,{{"et_conv_handle",0},{"cont_power",0}},{etObjective("et_obj_feeder",ObjectiveStatus::Active)});
+ etWhen(m,"et_conv_obj_look2",3.f,18.6f,13.f,23.f,{{"et_conv_handle",0},{"cont_power",0}},{etObjective("et_obj_feeder",ObjectiveStatus::Active)});
+ etWhen(m,"et_conv_obj_handle",0,0,24,24,{{"et_conv_handle",1},{"et_conv_feed",0}},{etObjective("et_obj_feeder",ObjectiveStatus::Complete),etObjective("et_obj_bank",ObjectiveStatus::Active)});
+ etWhen(m,"et_conv_obj_feed",0,0,24,24,{{"et_conv_feed",1}},{etObjective("et_obj_feeder",ObjectiveStatus::Complete),etObjective("et_obj_bank",ObjectiveStatus::Complete),etObjective("et_obj_route",ObjectiveStatus::Active),etShake(.15f)});
+ etWhen(m,"et_conv_obj_done",0,0,24,24,{{"cont_power",1}},{etObjective("et_obj_feeder",ObjectiveStatus::Complete),etObjective("et_obj_bank",ObjectiveStatus::Complete),etObjective("et_obj_route",ObjectiveStatus::Complete)});
  // --- The switch lands: the board answers, the bank drops off the plant bus with a bang that comes up
  // through the mezzanine, the columns stop firing, the PA says what it opened, and the game saves. On the
  // way back down the stair something that was quiet while the hall was live is not quiet any more.

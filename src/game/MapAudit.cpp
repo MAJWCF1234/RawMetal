@@ -257,16 +257,17 @@ bool Game::auditMapScene(Game& game,int level){
  }
  // Every door must be walkable straight through: a prop in front of a doorway
  // can leave the rooms connected some other way and still block the door.
- for(size_t i=0;i<w.doors().size();++i){const auto& d=w.doors()[i];float cx=(d.left+d.right)*.5f,base=w.floorHeight(cx,d.y)+d.z;bool clear=true;
+ for(size_t i=0;i<w.doors().size();++i){const auto& d=w.doors()[i];const float cx=(d.left+d.right)*.5f;const Vec2 centre=d.centre();const float base=w.floorHeight(centre.x,centre.y)+d.z;bool clear=true;
   // Like the flood fill, assess a lift landing with the cage at that landing.
   // A called platform is a support; a temporarily lowered cage is not a pit.
   float previousCage=w.cargoLiftHeight();const auto& cage=w.cargoLift();
   if(cage.upper>cage.lower){if(std::fabs(base-cage.upper)<=Step)game.m_world.setCargoLiftHeight(cage.upper);else if(std::fabs(base-cage.lower)<=Step)game.m_world.setCargoLiftHeight(cage.lower);}
-  for(float dy=-1.f;dy<=1.f;dy+=.25f)if(d.y+dy>0&&d.y+dy<24)clear&=reachable({cx,d.y+dy},base,.15f);
-  if(!clear)fail("BLOCKED door["+std::to_string(i)+"] x "+std::to_string(d.left)+"-"+std::to_string(d.right)+" at y "+std::to_string(d.y)+" base "+std::to_string(base));
-  for(float side:{-1.f,1.f}){float y=d.y+side*.35f;if(y<0||y>=24)continue;
-   float surface=w.supportBelow(cx,y,base+.45f);
-   if(!std::isfinite(surface)||std::fabs(surface-base)>.45f||!w.fits(cx,y,surface+.02f,Player::ProneHeight,false))fail("DOOR STEP door["+std::to_string(i)+"] at "+at({cx,d.y})+" left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" relativeZ="+std::to_string(d.z)+" side="+std::to_string(side)+" base="+std::to_string(base)+" surface="+std::to_string(surface));
+  // The door's own frame: through it is across its wall, whichever way that runs.
+  for(float dy=-1.f;dy<=1.f;dy+=.25f)if(d.y+dy>0&&d.y+dy<24)clear&=reachable(d.world(cx,d.y+dy),base,.15f);
+  if(!clear)fail("BLOCKED door["+std::to_string(i)+"] "+(d.alongY?"y ":"x ")+std::to_string(d.left)+"-"+std::to_string(d.right)+" at "+(d.alongY?"x ":"y ")+std::to_string(d.y)+" base "+std::to_string(base));
+  for(float side:{-1.f,1.f}){float y=d.y+side*.35f;if(y<0||y>=24)continue;const Vec2 step=d.world(cx,y);
+   float surface=w.supportBelow(step.x,step.y,base+.45f);
+   if(!std::isfinite(surface)||std::fabs(surface-base)>.45f||!w.fits(step.x,step.y,surface+.02f,Player::ProneHeight,false))fail("DOOR STEP door["+std::to_string(i)+"] at "+at(centre)+(d.alongY?" alongY":"")+" left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" relativeZ="+std::to_string(d.z)+" side="+std::to_string(side)+" base="+std::to_string(base)+" surface="+std::to_string(surface));
   }
   game.m_world.setCargoLiftHeight(previousCage);
  }
@@ -485,10 +486,13 @@ bool Game::auditMapScene(Game& game,int level){
   for(float u:{-.5f,0.f,.5f})for(float v:{-.5f,0.f,.5f}){float x=u*(f.width-inset*2),y=v*(f.depth-inset*2);p[size_t(k++)]={f.position.x+x*c+y*s,f.position.y-x*s+y*c};}
   return p;};
  const auto& fixtures=w.fixtures();
+ // Bedrock outcrops (res_rock_*) are shapeless stone: they take any proportions, they grow into one
+ // another and out of floors and walls, so only stone with air under it fails (FLOATING).
+ auto bedrock=[](int m){return m==model::res_rock_crag||m==model::res_rock_spire||m==model::res_rock_low;};
  // A pack model is drawn stretched to the box it is given: one scaled further
  // along one axis than another looks right from one side only.
  for(const auto& f:fixtures){
-  if(f.model<0||f.model>=int(std::size(model::size))||model::size[f.model][0]<=0)continue;
+  if(f.model<0||f.model>=int(std::size(model::size))||model::size[f.model][0]<=0||bedrock(f.model))continue;
   // Panels thinner than 10 cm (mesh, mirrors, webs) may take any thickness, and
   // a run (cable, pipe) four times longer than it is thick may take any length.
   const float* own=model::size[f.model];const float given[]={f.width,f.depth,f.height};
@@ -504,14 +508,14 @@ bool Game::auditMapScene(Game& game,int level){
   float base=w.floorHeight(f.position.x,f.position.y)+f.base,top=base+f.height;
   std::string name="prop model "+std::to_string(f.model)+" at "+at(f.position);
   float support=w.supportBelow(f.position.x,f.position.y,base+.05f);
-  if(std::fabs(support-base)>.06f)fail("FLOATING "+name+" base "+std::to_string(base)+" support "+std::to_string(support));
-  for(auto p:corners(f,.06f)){
+  if(bedrock(f.model)?base-support>.06f:std::fabs(support-base)>.06f)fail("FLOATING "+name+" base "+std::to_string(base)+" support "+std::to_string(support));
+  if(!bedrock(f.model))for(auto p:corners(f,.06f)){
    if(w.tile(int(std::floor(p.x)),int(std::floor(p.y)))=='#'&&base<w.floorHeight(p.x,p.y)+3.f){fail("BURIED "+name+" in wall at "+at(p));break;}
    bool hit=false;
    for(const auto& s:w.structures())if(s.solid&&!s.rail&&s.material!=CollisionProxyMaterial&&p.x>s.x1&&p.x<s.x2&&p.y>s.y1&&p.y<s.y2&&s.top>base+.08f&&s.bottom<std::min(top-.08f,base+2.2f)){hit=true;break;}
    if(hit){fail("BURIED "+name+" in structure at "+at(p));break;}
   }
-  for(size_t j=i+1;j<fixtures.size();++j){const auto& g=fixtures[j];if(!g.solid)continue;
+  for(size_t j=i+1;j<fixtures.size();++j){const auto& g=fixtures[j];if(!g.solid||(bedrock(f.model)&&bedrock(g.model)))continue;
    float gb=w.floorHeight(g.position.x,g.position.y)+g.base;if(gb>=top-.02f||base>=gb+g.height-.02f)continue;
    int inside=0;for(auto p:corners(g,.08f)){float c=std::cos(f.yaw),s=std::sin(f.yaw),dx=p.x-f.position.x,dy=p.y-f.position.y;
     if(std::fabs(dx*c-dy*s)<f.width*.5f-.02f&&std::fabs(dx*s+dy*c)<f.depth*.5f-.02f)++inside;}

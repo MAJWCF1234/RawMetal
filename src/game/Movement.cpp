@@ -200,9 +200,9 @@ int Game::nearbyInteractionDoor()const{
  if(!m_vrInputActive)return m_world.nearbyDoor(m_player.pos,{std::cos(m_player.angle),std::sin(m_player.angle)},m_player.z);
  if(!m_vrHandValid[m_vrInteractionHand])return -1;
  int best=-1;float nearest=1.8f;auto hand=m_vrHandPosition[m_vrInteractionHand];
- for(int i=0;i<int(m_world.doors().size());++i){const auto&d=m_world.doors()[i];float base=m_world.floorHeight((d.left+d.right)*.5f,d.y)+d.z;
+ for(int i=0;i<int(m_world.doors().size());++i){const auto&d=m_world.doors()[i];const Vec2 centre=d.centre();float base=m_world.floorHeight(centre.x,centre.y)+d.z;
   if(std::fabs(m_player.z-base)>1.25f)continue;
-  Point3 target{std::clamp(hand.x,d.left+.2f,d.right-.2f),d.y,std::clamp(hand.z,base+.45f,base+2.f)};
+  const Vec2 on=d.nearestOnLine({hand.x,hand.y},.2f);Point3 target{on.x,on.y,std::clamp(hand.z,base+.45f,base+2.f)};
   float distance=vrInteractionDistance(target,.15f);if(distance<nearest){best=i;nearest=distance;}
  }return best;
 }
@@ -284,6 +284,8 @@ const char* Game::interactionHint()const{
   return t.control?(m_world.hasLift()?"E / LIFT DISPATCH":"E / GANTRY CONTROL"):"E / READ SHIFT LOG";}
  if(lockerAhead()>=0)return "E / HIDE";
  if(!m_vrInputActive&&nearbyBody()>=0)return "E / DRAG BODY"; // E's own test: a body in reach that the player faces, never one out of view
+ // Someone who will talk is named as that, and comes before anything loose at their feet.
+ if(nearbyTalker()>=0)return m_vrInputActive?"GRIP / TALK":"E / TALK";
  if(int item=nearbyClutter();item>=0){if(m_clutter[item].mass()>25)return "TOO HEAVY TO LIFT";return m_vrInputActive?"GRIP / LIFT":"E / LIFT";}
  if(nearbyFriendly()>=0)return m_vrInputActive?"GRIP / FOLLOW OR WAIT":"E / FOLLOW OR WAIT";
  return nullptr;
@@ -326,12 +328,16 @@ void Game::updateInteraction(const InputState& input,float dt){
  if(usePressed&&nearReactorDisk()&&m_world.takeReactorDisk()){giveQuestItem(ReactorAuthDisk);setObjective(stateId("restore_reactor_circulation"),ObjectiveStatus::Active);m_pickupNotice="REACTOR AUTH DISK ACQUIRED";m_pickupNoticeTime=4;sound(Sound::Pickup,.65f);m_previousUse=true;return;}
  if(usePressed){int door=nearbyInteractionDoor();
   if(holdingClutter()){interactClutter();}
-  else if(door>=0){if(!doorLocked(m_world.doors()[door]))useDoor(door);}
-  else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
+  else if(door>=0){if(!doorLocked(m_world.doors()[door])){useDoor(door);m_doorHand=input.vrTracked?-1:door;m_doorHandTime=0;}
+   // A locked door's handle gives a turn and stops: heard, not a hint alone.
+   else if(m_doorRattle<=0){const auto&d=m_world.doors()[door];const Vec2 c=d.centre();m_sounds.push_back({d.swinging?Sound::LockerLatch:Sound::Door,c,d.swinging?.4f:.3f,d.swinging?.72f:.6f,true,7,m_world.floorHeight(c.x,c.y)+d.z+1.f});m_doorRattle=.6f;}}
+  else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;
+   // A screen worked wakes the cursed equipment round about (Machine.cpp); paper does not.
+   if(!m_world.terminals()[terminal].paper())wakeMachinesNear(m_world.terminals()[terminal].position,m_player.z,8.f);if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
-  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!interactClutter()&&!openDialogue()&&!commandFriendly())knockOnWall();
+  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!openDialogue()&&!interactClutter()&&!commandFriendly())knockOnWall();
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
 }

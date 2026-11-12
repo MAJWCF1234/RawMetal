@@ -79,7 +79,7 @@ static_assert(std::size(counterNames)==CounterCount,"every counter has a name");
 inline thread_local std::array<uint64_t,CounterCount> counts{};
 inline void count(Counter counter,uint64_t amount=1){counts[counter]+=amount;}
 // One creature's whole updateEnemies body, by CreatureKind.
-inline constexpr int CreatureKinds=8;
+inline constexpr int CreatureKinds=9;
 inline thread_local std::array<double,CreatureKinds> creatureCosts{};
 inline thread_local std::array<uint32_t,CreatureKinds> creatureRuns{};
 struct CreatureScope {

@@ -129,16 +129,24 @@ std::optional<Game::DialogueView> Game::dialogueView()const{
  if(view.replies.empty())view.replies.push_back("[Leave]");
  return view;
 }
+// The voiced take for a line: the catalog clip its record names, or, when it names none, the clip
+// catalogued under the node's own state name, so a line voices itself once its take is baked.
+static int dialogueVoiceClip(const DialogueNode& node){
+ if(!node.voice.empty()){for(size_t clip=0;clip<NpcVoiceClips.size();++clip)if(node.voice==NpcVoiceClips[clip].line)return int(clip);return -1;}
+ static const auto byName=[]{std::vector<StateId> ids(NpcVoiceClips.size());for(size_t clip=0;clip<ids.size();++clip)ids[clip]=*NpcVoiceClips[clip].line?stateId(NpcVoiceClips[clip].line):0;return ids;}();
+ for(size_t clip=0;clip<byName.size();++clip)if(byName[clip]&&byName[clip]==node.id)return int(clip);
+ return -1;
+}
 bool Game::openDialogue(){
  int actor=nearbyTalker();if(actor<0)return false;
  m_talk={};m_talk.actor=actor;m_talk.node=m_friendlyActors[size_t(actor)].track().talk;m_talk.previous.use=true;
  if(!dialogueNode()){m_talk={};return false;}
  setState(friendlyKey(size_t(actor),"talking"),1);m_suppressFire=true;sound(Sound::Exit,.35f);
  // The speaker's voiced take, if one was recorded for this line.
- if(const auto*node=dialogueNode();node&&!node->voice.empty())for(size_t clip=0;clip<NpcVoiceClips.size();++clip)if(node->voice==NpcVoiceClips[clip].line){
+ if(const auto*node=dialogueNode())if(const int clip=dialogueVoiceClip(*node);clip>=0){
   const auto&npc=m_friendlyActors[size_t(actor)];
   std::erase_if(m_sounds,[&](const auto&event){return event.speech>=0&&event.speaker==size_t(actor)+1;});
-  m_sounds.push_back({Sound::WorkerDying,npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.95f,1,true,22,npc.pose.z+npc.track().scale*.85f,int(clip),size_t(actor)+1,3});break;}
+  m_sounds.push_back({Sound::WorkerDying,npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.95f,1,true,22,npc.pose.z+npc.track().scale*.85f,clip,size_t(actor)+1,3});}
  return true;
 }
 void Game::closeDialogue(){
@@ -175,9 +183,9 @@ void Game::updateDialogue(const InputState& input,float dt){
  if(!talking())return; // the stance ended it
  if(!next){closeDialogue();return;}
  m_talk.node=next;m_talk.selected=0;m_talk.age=0;
- if(const auto*node=dialogueNode();node&&!node->voice.empty())for(size_t clip=0;clip<NpcVoiceClips.size();++clip)if(node->voice==NpcVoiceClips[clip].line){
+ if(const auto*node=dialogueNode())if(const int clip=dialogueVoiceClip(*node);clip>=0){
   std::erase_if(m_sounds,[&](const auto&event){return event.speech>=0&&event.speaker==speaker+1;});
-  m_sounds.push_back({Sound::WorkerDying,at,.95f,1,true,22,npc.pose.z+track.scale*.85f,int(clip),speaker+1,3});break;}
+  m_sounds.push_back({Sound::WorkerDying,at,.95f,1,true,22,npc.pose.z+track.scale*.85f,clip,speaker+1,3});}
  sound(Sound::Exit,.25f,1.2f);
 }
 }

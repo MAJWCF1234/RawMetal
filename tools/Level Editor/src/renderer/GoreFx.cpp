@@ -45,8 +45,9 @@ const Debris debris[Materials]={
 };
 constexpr int MistLevels=6,DustLevels=4;
 struct Kit {
- std::array<std::array<Texture,MistLevels>,2> mist;
- std::array<Texture,2> drop,splat;
+ static constexpr int Fluids=int(SoftwareRenderer::Fluid::Count);
+ std::array<std::array<Texture,MistLevels>,Fluids> mist;
+ std::array<Texture,Fluids> drop,splat;
  std::array<std::array<Texture,DustLevels>,Materials> dust;
  std::array<Texture,Materials> chip;
 };
@@ -56,8 +57,9 @@ Texture puff(Point3 tone,float strength,unsigned salt){constexpr int n=24;Textur
   t.pixels[size_t(y*n+x)]=pack(tone*(.85f+.3f*noise),fall*fall*(3-2*fall)*strength*(.75f+.25f*noise));}
  return t;}
 const Kit& kit(){static const Kit made=[]{Kit k;
- const Point3 blood[2]={{.42f,.02f,.03f},{.45f,.70f,.15f}};
- for(int tone=0;tone<2;++tone){
+ // blood, a bug's goo, ichor, oil (SoftwareRenderer::Fluid)
+ const Point3 blood[Kit::Fluids]={{.42f,.02f,.03f},{.58f,.66f,.20f},{.10f,.30f,.34f},{.10f,.085f,.065f}};
+ for(int tone=0;tone<Kit::Fluids;++tone){
   for(int level=0;level<MistLevels;++level)k.mist[size_t(tone)][size_t(level)]=puff(blood[tone],float(level+1)/MistLevels*.8f,unsigned(tone*7+level));
   // A drop: a hard round bead, lighter where the room catches it.
   constexpr int n=12;auto&d=k.drop[size_t(tone)];d=blank(n,n,false);
@@ -91,7 +93,7 @@ Fate fly(const HitBurst&b,Point3 from,Point3 v,float t,float gravity){Fate f;if(
  f.at=from+v*landing;f.at.z=b.floor;f.since=t-landing;return f;}
 }
 
-GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& bursts,int level,float now,Point3 eye,const Quad& quad,const Hidden& hidden){
+GoreStats GoreFx::draw(const SoftwareRenderer& renderer,const std::vector<HitBurst>& bursts,int level,float now,Point3 eye,const Quad& quad,const Hidden& hidden){
  GoreStats stats;if(bursts.empty())return stats;const Kit&k=kit();
  auto put=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light){++stats.quads;quad(a,b,c,d,t,light);};
  // A card that faces the eye, one drawn out along the way it is moving, and a spot lying on the floor.
@@ -109,8 +111,10 @@ GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& burs
   ++stats.bursts;Rng rng{seedOf(b)};
   if(b.material==ImpactMaterial::Flesh){
    const int species=b.species>=0&&b.species<int(SoftwareRenderer::creatureVisuals.size())?b.species:int(CreatureKind::Mutant);
-   const auto&visual=SoftwareRenderer::creatureVisuals[size_t(species)];const size_t tone=visual.xenoblood?1u:0u;
-   const Texture&stain=k.splat[tone];const float stainLight=1.f;
+   const auto&visual=SoftwareRenderer::creatureVisuals[size_t(species)];const size_t tone=size_t(visual.fluid);const float stainLight=1.f;
+   // A drop lands as one of the pack's spatters: a big one as a splat, a small one as a scatter of drops.
+   auto stain=[&](int index,float mark)->const Texture&{const unsigned pick=seedOf(b)*31u+unsigned(index)*7u;
+    return mark>=.08f?renderer.bloodDecal(visual.fluid,SoftwareRenderer::BloodJob::Splat,pick):renderer.bloodDecal(visual.fluid,SoftwareRenderer::BloodJob::Drops,pick);};
    const float power=std::clamp(b.power,.3f,2.5f),root=std::sqrt(power);
    const Point3 dir=unit(b.direction),side=unit(cross(dir,Up),{1,0,0}),lift=cross(side,dir);
    // A puff of mist: it swells, drifts and thins.
@@ -120,7 +124,7 @@ GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& burs
    auto droplet=[&](int index,Point3 from,Point3 velocity,float born,float size,float mark,float turn){const Fate f=fly(b,from,velocity,age-born,9.8f);if(f.gone)return;
     if(f.flying){streak(f.at,f.velocity,size,std::min(2.5f,span(f.velocity)*.35f),k.drop[tone],1.f);return;}
     const float half=mark*std::min(1.f,f.since/.08f)*(1-std::clamp((age-5.2f)/1.f,0.f,1.f));if(half<.004f)return;
-    spot({f.at.x,f.at.y,b.floor+.012f+float(index)*.0004f},half,turn,1,stain,stainLight);};
+    spot({f.at.x,f.at.y,b.floor+.03f+float(index)*.0004f},half*1.6f,turn,1,stain(index,mark),stainLight);};
    if(b.stump){
     // A cut pumps: mist at once, then drops thrown on a falling pressure for most of a second.
     mist(b.point,dir*.5f+Up*.2f,.14f*root,.6f,0);
@@ -159,8 +163,8 @@ GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& burs
 
 bool SoftwareRenderer::testGore(std::ostream& report){
  bool passed=true;auto check=[&](bool ok,const std::string&text){report<<(ok?"PASS":"FAIL")<<": "<<text<<'\n';report.flush();passed&=ok;};
- static const char*const names[]={"Huntsman","Wasp","Brute","Warden","Mutant","Snatcher","Chimera","Transformed"};
- constexpr int W=480,H=270,Kinds=int(CreatureKind::Transformed)+1;
+ static const char*const names[]={"Huntsman","Wasp","Brute","Warden","Mutant","Snatcher","Chimera","Transformed","Cursed equipment"};
+ constexpr int W=480,H=270,Kinds=CreatureKindCount;static_assert(std::size(names)==size_t(Kinds));
  auto number=[](float v){char text[32];std::snprintf(text,sizeof text,"%.3f",double(v));return std::string(text);};
  {auto storage=std::make_unique<SoftwareRenderer>(W,H);auto&d=*storage;
   // 1. Every kind: its body is cut into sections, falls and lies on the floor; shot, it comes apart

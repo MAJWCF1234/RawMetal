@@ -110,6 +110,47 @@
     auto sourceRows=doc.records("ROW",0);for(size_t i=0;i<sourceRows.size();++i)require(doc.lines[sourceRows[i]]==untouchedRows[i],"Adding a map without a passage changed user tiles");joinMapPassage=true;
     passed.push_back("optional adjoining-map passage leaves original walls and map settings intact when disabled");
 
+    // A creature's quarry and hunter name (CREATURE fields 10 and 9) through the inspector's own boxes:
+    // the picker lists the map's people, the plan draws the line, deleting people renumbers or clears it.
+    reset();SendMessageW(roleList,CB_SETCURSEL,2,0);placePerson(5.5f,5.5f);placePerson(9.5f,5.5f);
+    tool=CreatureTool;SendMessageW(creatureList,CB_SETCURSEL,6,0);place(16.5f,16.5f);tool=0;
+    auto creatureAt=[&]{return doc.records("CREATURE",0).front();};
+    selectRecord(int(creatureAt()));layout();syncCreatureControls();
+    require(creaturePicked()&&SendMessageW(preyList,CB_GETCOUNT,0,0)==3,"The quarry picker does not list nobody plus the map's two people");
+    historyCount=history.size();
+    for(LRESULT i=0;i<SendMessageW(preyList,CB_GETCOUNT,0,0);++i)if(SendMessageW(preyList,CB_GETITEMDATA,i,0)==1)SendMessageW(preyList,CB_SETCURSEL,i,0);
+    SendMessageW(window,WM_COMMAND,MAKEWPARAM(PreyList,CBN_SELCHANGE),reinterpret_cast<LPARAM>(preyList));
+    auto beast=NativeDocument::fields(doc.lines[creatureAt()]);
+    require(beast.size()==11&&beast[10]=="1"&&beast[9].empty()&&history.size()==historyCount+1,"Picking a quarry did not write CREATURE field 10 as one Undo");
+    SetWindowTextW(hunterList,L"old_tom");SendMessageW(window,WM_COMMAND,MAKEWPARAM(HunterList,CBN_KILLFOCUS),reinterpret_cast<LPARAM>(hunterList));
+    beast=NativeDocument::fields(doc.lines[creatureAt()]);require(beast.size()==11&&beast[9]=="old_tom"&&beast[10]=="1","Naming the hunter did not write CREATURE field 9");
+    require(validateDocument(),"The engine rejected a creature with a quarry and a hunter name");
+    {
+      RECT r{};GetClientRect(plan,&r);HDC dc=CreateCompatibleDC(nullptr);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+      void* bits=nullptr;auto bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(dc,bitmap);SendMessageW(plan,WM_PRINTCLIENT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT);
+      auto v=planView();int red=0;
+      for(float t=.25f;t<=.75f;t+=.01f){float x=16.5f+(9.5f-16.5f)*t,y=16.5f+(5.5f-16.5f)*t;
+        for(int dx=-1;dx<=1;++dx)for(int dy=-1;dy<=1;++dy)red+=GetPixel(dc,int(v.ox+x*v.cell)+dx,int(v.oy+y*v.cell)+dy)==ui::Creature;}
+      SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);
+      require(red>8,"The plan does not draw the line from the creature to its quarry");
+    }
+    {
+      auto beforeCopy=doc.text();int quarryKey=-1;
+      for(auto i:doc.records("ACTOR_KEY",0))if(NativeDocument::fields(doc.lines[i])[2]=="1"){quarryKey=int(i);break;}
+      selectRecord(int(creatureAt()));selectionPick(quarryKey,true);copySelected();
+      auto copiesOf=doc.records("CREATURE",0);require(copiesOf.size()==2&&doc.records("ACTOR",0).size()==3,"Copying a creature with its quarry lost one of them");
+      require(NativeDocument::fields(doc.lines[copiesOf.back()])[10]=="2","A creature copied with its quarry does not hunt the copied person");
+      SendMessageW(window,WM_COMMAND,Undo,0);require(doc.text()==beforeCopy,"Undo did not take the copied creature and person back");
+    }
+    selectRecord(int(doc.records("ACTOR_KEY",0).front()));removeSelected();
+    beast=NativeDocument::fields(doc.lines[creatureAt()]);require(beast.size()==11&&beast[10]=="0","Deleting an earlier person did not renumber the quarry");
+    auto quarryKept=doc.text();
+    selectRecord(int(doc.records("ACTOR_KEY",0).front()));removeSelected();
+    beast=NativeDocument::fields(doc.lines[creatureAt()]);require(beast.size()==10&&beast[9]=="old_tom","Deleting the quarry did not clear CREATURE field 10");
+    require(validateDocument(),"The engine rejected the creature after its quarry was deleted");
+    SendMessageW(window,WM_COMMAND,Undo,0);require(doc.text()==quarryKept,"Undo did not bring the quarry back");
+    passed.push_back("creature quarry picker (people by name and place), hunter name box, plan line, renumbered and cleared on delete, engine-valid, one-step Undo");
+
     reset();createFloorLayer();refresh();tool=2;SendMessageW(upperFloorTiles,CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(UpperFloorTiles,CBN_SELCHANGE),reinterpret_cast<LPARAM>(upperFloorTiles));gestureNow(6,6,7,7);
     require(doc.tile(0,1,6,6)=='.',"The upper-floor open-space brush cannot reproduce native empty cells");SendMessageW(upperFloorTiles,CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(UpperFloorTiles,CBN_SELCHANGE),reinterpret_cast<LPARAM>(upperFloorTiles));
     tool=5;gestureNow(5,5,18,14);doc.addOnLayer({"STRUCT","0","5","5","18","14","4.5","4.75","0","3"},1);tool=0;selectRecord(int(doc.records("STRUCT",0).back()));
@@ -158,9 +199,156 @@
     NativeDocument roundtrip;roundtrip.open(path);require(roundtrip.text()==doc.text(),"The saved export differs from the editable document");
     std::ofstream(exportFolder/L"latest-export.txt")<<utf8(path.wstring())<<'\n';
     passed.push_back("new-floor headroom, actual 3D edge drag, unchanged deck, player start and native export/reopen");
+    verifyDoorRotation(passed,mouse,reset);
 
     std::ofstream report(root/L"native-editor-interaction-test.txt");
     for(const auto& message:passed)report<<"PASS: "<<message<<'\n';
     report<<"EXPORT: "<<utf8(path.wstring())<<'\n';
     verifyCorridors();
+  }
+  // Doors that stand either way (DOOR field 21 axis, 22 hinge): the Door tool
+  // fits a north-south gap along Y, R turns a picked door home in four, each
+  // inspector box is one Undo, save/reopen keeps every byte, Turn copy and Flip
+  // copy carry the frame, and the plan draws all eight leaves where they swing.
+  template <class Mouse, class Reset> void verifyDoorRotation(std::vector<std::string> &passed, Mouse &mouse, Reset &reset) {
+    auto require=[](bool okay,const char* message){if(!okay)throw std::runtime_error(message);};
+    auto exportPath=path;
+    auto lastDoor=[&]{return doc.records("DOOR",0).back();};
+    auto firstDoor=[&]{return doc.records("DOOR",0).front();}; // the door the click fitted
+    auto fieldsOf=[&](size_t i){return NativeDocument::fields(doc.lines[i]);};
+    auto shown=[](HWND h){return (GetWindowLongW(h,GWL_STYLE)&WS_VISIBLE)!=0;};
+    auto box=[&](HWND list,int id,int choice){SendMessageW(list,CB_SETCURSEL,choice,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(list));};
+    reset();
+    for(int y=1;y<23;++y)if(y!=7&&y!=8)doc.paint(0,0,10,y,'#'); // a north-south wall with a two-cell gap
+    refresh();
+    tool=DoorTool;doorTurn=0;doorToolSwings=false;layout();
+    auto ghost=plannedDoor(10.5f,7.5f,10.5f,7.5f);require(ghost.alongY&&ghost.left==7&&ghost.right==9&&ghost.line==10.5f,"The Door ghost does not take the north-south wall's axis");
+    MSG turnKey{plan,WM_KEYDOWN,'R',0};shortcut(turnKey);require(!plannedDoor(10.5f,7.5f,10.5f,7.5f).alongY,"R does not turn the Door tool's ghost");shortcut(turnKey);shortcut(turnKey);shortcut(turnKey);
+    require(doorTurn==0&&plannedDoor(10.5f,7.5f,10.5f,7.5f).alongY,"Four turns of the ghost do not bring it back to the wall");
+    size_t doorsBefore=doc.records("DOOR",0).size();
+    mouse(WM_LBUTTONDOWN,10.5f,7.5f);mouse(WM_LBUTTONUP,10.5f,7.5f);
+    require(doc.records("DOOR",0).size()==doorsBefore+1,"A click in a wall gap with the Door tool fitted no door");
+    auto f=fieldsOf(firstDoor());
+    require(f.size()==22&&f[21]=="1"&&number(f[2],0)==7&&number(f[3],0)==9&&number(f[4],0)==10.5f&&f[10]=="-1","A click in a north-south gap did not fit a door along Y");
+    tool=DoorTool;gestureNow(4.5f,12.f,4.5f,15.f);auto dragged=fieldsOf(lastDoor());
+    require(dragged.size()==22&&dragged[21]=="1"&&number(dragged[2],0)==12&&number(dragged[3],0)==15&&number(dragged[4],0)==4.5f,"A drag down the plan did not fit a door along Y");
+    gestureNow(13,5.5f,16,5.7f);auto across=fieldsOf(lastDoor());
+    require(across.size()==11&&number(across[2],0)==13&&number(across[3],0)==16&&number(across[4],0)==5.5f,"A drag across the plan no longer fits a plain door along X");
+    tool=0;
+    passed.push_back("Door tool: a click in a north-south gap and a drag down the plan fit doors along Y, a drag across stays along X, R turns the ghost");
+
+    // R on the picked door: four quarter turns about its centre, each one Undo, home again.
+    selectRecord(int(firstDoor()));layout();require(doorPicked()&&shown(doorKindList)&&shown(doorAxisList),"A picked door shows no door boxes");
+    auto historyCount=history.size();box(doorKindList,DoorKindList,1);
+    f=fieldsOf(firstDoor());require(f[8]=="1"&&history.size()==historyCount+1,"Opens by: Swings did not write a swinging door as one Undo");
+    layout();require(shown(doorSwingList)&&shown(doorHingeList),"A swinging door shows no swing side or hinge boxes");
+    auto home=doc.lines[firstDoor()];auto start=*nativeDoor(f);historyCount=history.size();
+    std::set<std::tuple<bool,bool,bool>> seen;
+    for(int turn=1;turn<=4;++turn){MSG key{plan,WM_KEYDOWN,'R',0};shortcut(key);
+      auto d=*nativeDoor(fieldsOf(firstDoor()));auto c=d.centre();
+      require(std::abs(c.first-start.centre().first)<1e-4f&&std::abs(c.second-start.centre().second)<1e-4f&&std::abs((d.right-d.left)-(start.right-start.left))<1e-4f,"Turning a door moved its centre or changed its width");
+      require(d.alongY==(turn%2==0),"A quarter turn did not stand the door the other way");
+      seen.insert({d.alongY,d.hingeRight,d.swing<0});}
+    require(seen.size()==4,"Four turns did not pass through four different orientations");
+    require(doc.lines[firstDoor()]==home,"Four quarter turns did not bring the door home byte for byte");
+    require(history.size()>=historyCount+4,"Each turn is not its own Undo");
+    passed.push_back("R turns a picked swinging door a quarter about its centre: four orientations, same width, home byte for byte");
+
+    // The inspector's boxes, one Undo each, and Undo all the way back.
+    auto boxesFrom=doc.text();historyCount=history.size();
+    box(doorSwingList,DoorSwingList,1);f=fieldsOf(firstDoor());require(f.size()==22&&f[14]=="-1","Swings to: the other side did not write swing -1");
+    box(doorHingeList,DoorHingeList,1);f=fieldsOf(firstDoor());require(f.size()==23&&f[22]=="1","Hinge at: the other end did not write hinge 1");
+    box(doorAxisList,DoorAxisList,0);f=fieldsOf(firstDoor());auto flat=*nativeDoor(f);
+    require(!flat.alongY&&f.size()==23&&f[21].empty()&&number(f[2],0)==9.5f&&number(f[3],0)==11.5f&&number(f[4],0)==8,"Stands: Along X did not turn the door about its centre");
+    require(history.size()==historyCount+3,"The door boxes do not make one Undo each");
+    require(validateDocument(),"The engine rejected a door edited through its boxes");
+    box(doorAxisList,DoorAxisList,1);require(nativeFlag(fieldsOf(firstDoor()),21),"Stands: Along Y did not stand the door along Y again");
+    for(int i=0;i<4;++i)SendMessageW(window,WM_COMMAND,Undo,0);
+    require(doc.text()==boxesFrom,"Undo did not take the door boxes back exactly");
+    // Entry and exit doors stay along X: the box and R both refuse.
+    doc.addOnLayer({"DOOR","0","3","5","1.5","0","1","0","0","0","-1"},0);size_t seam=lastDoor();refresh();selectRecord(int(seam));layout();
+    auto seamLine=doc.lines[seam];box(doorAxisList,DoorAxisList,1);rotateSelected();
+    require(doc.lines[seam]==seamLine&&SendMessageW(doorAxisList,CB_GETCURSEL,0,0)==0,"An entry door was stood along Y");
+    eraseNativeObject(doc,seam);refresh();
+    passed.push_back("door boxes: opens by, swing side, hinge end and axis about the centre, one Undo each, exact Undo, entry doors kept along X");
+
+    // Lock shown, Breaks down and Starts open (DOOR fields 24, 23, 16) through their controls.
+    {
+      selectRecord(int(firstDoor()));layout();
+      require(shown(doorLockList)&&shown(doorStrengthList)&&shown(doorOpenSlider),"A swinging door shows no lock, strength or starts-open controls");
+      auto playFrom=doc.text();auto doorBefore=doc.lines[firstDoor()];historyCount=history.size();
+      box(doorLockList,DoorLockList,1);f=fieldsOf(firstDoor());require(f.size()==25&&f[24]=="1"&&f[23].empty(),"Lock shown: Keycard reader did not write DOOR field 24");
+      box(doorStrengthList,DoorStrengthList,1);f=fieldsOf(firstDoor());require(f.size()==25&&f[23]=="150"&&f[24]=="1","Breaks down: 150 did not write DOOR field 23");
+      SetWindowTextW(doorStrengthList,L"275");SendMessageW(window,WM_COMMAND,MAKEWPARAM(DoorStrengthList,CBN_KILLFOCUS),reinterpret_cast<LPARAM>(doorStrengthList));
+      f=fieldsOf(firstDoor());require(f[23]=="275","A strength typed in Breaks down was not kept");
+      SendMessageW(doorOpenSlider,TBM_SETPOS,TRUE,35);SendMessageW(window,WM_HSCROLL,MAKEWPARAM(TB_ENDTRACK,0),reinterpret_cast<LPARAM>(doorOpenSlider));
+      f=fieldsOf(firstDoor());require(std::abs(number(f[16],0)-.35f)<1e-4f&&!nativeFlag(f,17)&&nativeDoor(f)->breakable(),"Starts open did not leave the door ajar");
+      require(history.size()==historyCount+4,"Lock, strength and starts-open changes are not one Undo each");
+      require(validateDocument(),"The engine rejected a door with a lock, a strength and an ajar leaf");
+      auto playFolder=root/L".build"/L"interaction";fs::create_directories(playFolder);auto playSaved=playFolder/L"doors-locks.rmc";saveTo(playSaved);
+      NativeDocument back;back.open(playSaved);require(back.text()==doc.text(),"Save/reopen changed a door's lock, strength or open amount");path=exportPath;
+      box(doorLockList,DoorLockList,0);box(doorStrengthList,DoorStrengthList,0);SendMessageW(doorOpenSlider,TBM_SETPOS,TRUE,0);SendMessageW(window,WM_HSCROLL,MAKEWPARAM(TB_ENDTRACK,0),reinterpret_cast<LPARAM>(doorOpenSlider));
+      require(doc.lines[firstDoor()]==doorBefore,"Clearing lock, strength and open did not give back the exact short record");
+      for(int i=0;i<7;++i)SendMessageW(window,WM_COMMAND,Undo,0);
+      require(doc.text()==playFrom,"Undo did not take the lock, strength and open amount back exactly");
+    }
+    passed.push_back("door play fields through the controls: Lock shown (24), Breaks down by list and typed (23), Starts open slider (16, not opening), one Undo each, save/reopen byte-identical, engine-valid, exact Undo");
+
+    // Save and reopen keep every byte; the engine reads the doors.
+    require(validateDocument(),"The engine rejected doors along Y");
+    auto folder=root/L".build"/L"interaction";fs::create_directories(folder);auto saved=folder/L"doors-either-way.rmc";saveTo(saved);
+    NativeDocument reopened;reopened.open(saved);require(reopened.text()==doc.text(),"Save/reopen changed a door along Y");
+    path=exportPath;
+
+    // Area copy: Turn copy stands the door along X, Flip copy swings it the other way.
+    selectRecord(-1);auto source=*nativeDoor(fieldsOf(firstDoor()));
+    regionStamp=captureRegion(9,6,11,9);require(std::any_of(regionStamp.objects.begin(),regionStamp.objects.end(),[](auto& o){return o.fields[0]=="DOOR";}),"Copy area left the door behind");
+    rotation=1;mirror=0;pasteRegion(14,14);auto turned=*nativeDoor(fieldsOf(lastDoor()));
+    require(!turned.alongY&&turned.left==15&&turned.right==17&&turned.line==15.5f&&!turned.hingeRight&&turned.swing<0&&turned.swinging,"Turn copy did not turn the door into a wall along X");
+    rotation=0;mirror=1;pasteRegion(6,16);auto flipped=*nativeDoor(fieldsOf(lastDoor()));
+    require(flipped.alongY&&flipped.left==17&&flipped.right==19&&flipped.line==7.5f&&flipped.swing==-source.swing&&flipped.hingeRight==source.hingeRight,"Flip copy did not mirror the door's swing");
+    rotation=2;mirror=0;pasteRegion(2,2);auto half=*nativeDoor(fieldsOf(lastDoor()));
+    require(half.alongY&&half.hingeRight!=source.hingeRight&&half.swing==-source.swing,"A half-turned copy did not turn hinge and swing with it");
+    rotation=0;
+    require(validateDocument(),"The engine rejected turned and flipped door copies");
+    passed.push_back("save/reopen byte-identical with doors along Y; Turn copy, Flip copy and a half turn carry axis, hinge and swing; engine-valid");
+
+    // The plan: all eight swinging doors (axis x swing side x hinge end) and two sliding ones.
+    reset();
+    for(int x=1;x<18;++x)doc.paint(0,0,x,6,'#');
+    for(int y=1;y<23;++y)doc.paint(0,0,19,y,'#');
+    for(int x=1;x<18;++x)doc.paint(0,0,x,15,'#');
+    std::vector<NativeDoor> drawn;
+    for(int i=0;i<8;++i){NativeDoor d;d.swinging=true;d.alongY=i>=4;d.left=float(2+(i%4)*4);d.right=d.left+2;d.line=d.alongY?19.5f:6.5f;d.swing=(i%4)<2?1.f:-1.f;d.hingeRight=i%2==1;d.lock=i%4;if(i==4)d.open=.35f;if(i==5)d.strength=150;
+      for(int a=int(d.left);a<int(d.right);++a)doc.paint(0,0,d.alongY?19:a,d.alongY?a:6,'.');
+      std::vector<std::string> record={"DOOR","0","0","1","0","0","0","0","0","0","-1"};storeNativeDoor(record,d);doc.addOnLayer(record,0);drawn.push_back(d);}
+    for(int i=0;i<2;++i){NativeDoor d;d.alongY=i==1;d.left=i?18:6;d.right=d.left+3;d.line=i?19.5f:15.5f;
+      for(int a=int(d.left);a<int(d.right);++a)doc.paint(0,0,d.alongY?19:a,d.alongY?a:15,'.');
+      std::vector<std::string> record={"DOOR","0","0","1","0","0","0","0","0","0","-1"};storeNativeDoor(record,d);doc.addOnLayer(record,0);drawn.push_back(d);}
+    tool=0;selectRecord(-1);refresh();layout();InvalidateRect(plan,nullptr,TRUE);
+    require(validateDocument(),"The engine rejected the eight door orientations");
+    RECT r{};GetClientRect(plan,&r);HDC dc=CreateCompatibleDC(nullptr);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+    void* bits=nullptr;auto bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(dc,bitmap);SendMessageW(plan,WM_PRINTCLIENT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT);GdiFlush();
+    auto v=planView();
+    auto hits=[&](std::pair<float,float> from,std::pair<float,float> axis,float width){int n=0;
+      for(float t=.45f;t<=.81f;t+=.05f){int x=int(v.ox+(from.first+axis.first*width*t)*v.cell),y=int(v.oy+(from.second+axis.second*width*t)*v.cell);
+        for(int dx=-1;dx<=1;++dx)for(int dy=-1;dy<=1;++dy)n+=GetPixel(dc,x+dx,y+dy)==ui::Door;}
+      return n;};
+    for(size_t i=0;i<8;++i){auto d=drawn[i];float w=d.right-d.left,angle=d.open>0?d.open:1.f;
+      require(hits(d.hinge(),d.leafAxis(angle),w)>=(d.breakable()?4:8),"The plan does not draw a swinging leaf from its hinge toward its swing side, at its open angle");
+      if(d.open>0)require(hits(d.hinge(),d.leafAxis(1),w)<4,"The plan draws an ajar leaf wide open");
+      auto wrongSide=d;wrongSide.swing=-d.swing;auto wrongEnd=d;wrongEnd.hingeRight=!d.hingeRight;
+      // (an ajar leaf and its other-end twin cross mid-way, so that one is checked shut-drawn doors only)
+      require(hits(wrongSide.hinge(),wrongSide.leafAxis(angle),w)<4&&(d.open>0||hits(wrongEnd.hinge(),wrongEnd.leafAxis(angle),w)<4),"The plan draws a leaf on the wrong side or at the wrong end");
+      // The lock glyph on the wall beside the latch post, and none where no lock is shown.
+      auto latch=d.latch(),hinge=d.hinge();float ux=(latch.first-hinge.first)/w,uy=(latch.second-hinge.second)/w;
+      int gx=int(v.ox+(latch.first+ux*.3f)*v.cell),gy=int(v.oy+(latch.second+uy*.3f)*v.cell),r2=std::max(3,int(v.cell*.12f)),glyph=0;
+      for(int dx=-r2;dx<=r2;++dx)for(int dy=-r2;dy<=r2;++dy)glyph+=GetPixel(dc,gx+dx,gy+dy)==ui::Door;
+      require(d.lock?glyph>=6:glyph<3,d.lock?"The plan does not mark a door's lock beside the latch":"The plan marks a lock on a door that shows none");}
+    for(size_t i=8;i<10;++i){auto d=drawn[i];require(hits(d.world(d.left,d.line),d.world(1,0),d.right-d.left)>=8,"The plan does not draw a sliding door along its axis");}
+    {std::ofstream out(folder/L"doors-plan.bmp",std::ios::binary);BITMAPFILEHEADER head{};head.bfType=0x4D42;head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
+      head.bfSize=DWORD(head.bfOffBits+size_t(r.right)*size_t(r.bottom)*4);out.write(reinterpret_cast<const char*>(&head),sizeof head);
+      out.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof info.bmiHeader);out.write(static_cast<const char*>(bits),std::streamsize(size_t(r.right)*size_t(r.bottom)*4));}
+    SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);
+    passed.push_back("plan draws all eight swinging doors (leaf from the hinge toward the swing side, never the other side or end, an ajar leaf at its angle, a breakable leaf cracked), lock glyphs beside the latch only where shown, and sliding doors along their axis; picture in .build/interaction/doors-plan.bmp");
   }

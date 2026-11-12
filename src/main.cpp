@@ -635,8 +635,8 @@ __declspec(noinline) static int windowPerformance(const wchar_t* commandLine,int
             scenes.clear();sceneNames.clear();
             for(int level:{0,2,6,7,8,9}){
                 auto world=std::make_unique<retro::World>(level);if(world->doors().empty())continue;const auto& door=world->doors().front();
-                retro::Vec2 camera{(door.left+door.right)*.5f,door.y+2.f};
-                scenes.push_back({nullptr,retro::Game::mapInspection(camera,-retro::kPi*.5f,0,level,false,world->floorHeight(camera.x,camera.y)+door.z,true),240,false,false});
+                const retro::Vec2 normal=door.normal(),camera=door.centre()+normal*2.f;
+                scenes.push_back({nullptr,retro::Game::mapInspection(camera,std::atan2(-normal.y,-normal.x),0,level,false,world->floorHeight(camera.x,camera.y)+door.z,true),240,false,false});
                 sceneNames.push_back("Door cycle / map "+std::to_string(level));
             }
             report<<"Door diagnostic: fixed camera, all leaves cycle closed/open/closed; no AI simulation.\n";
@@ -776,6 +776,9 @@ static LONG WINAPI writeCrashReport(EXCEPTION_POINTERS* info){
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
+// Frame spacing for the film flags (--chimera-kill-frames, --machine-frames): RM_FILM_STEP 60 Hz
+// ticks between frames, 1-60; unset, every quarter second as the tests expect.
+static int filmStep(){const char* env=std::getenv("RM_FILM_STEP");const int v=env?std::atoi(env):15;return v>=1&&v<=60?v:15;}
 static bool commandArgumentsTest(){
  std::ofstream report("command-arguments-test.txt");bool ok=true;
  CommandArguments args(L"RawMetal.exe --nopost \"--map-shots=folder with spaces/views.txt\" --zone-shots=\"another path/list.txt\" --each-test=movement --nopixel");
@@ -938,7 +941,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      for(const auto& l:w.lights())out<<"L "<<l.position.x<<' '<<l.position.y<<" z "<<l.z<<" mount "<<int(l.mount)<<" yaw "<<l.yaw<<'\n';
      for(const auto& p:w.pipes())out<<"P "<<p.start.x<<' '<<p.start.y<<" -> "<<p.end.x<<' '<<p.end.y<<" z "<<p.z<<" r "<<p.radius<<" endZ "<<p.endZ<<'\n';
      for(size_t i=0;i<w.leads().size();++i){const auto& l=w.leads()[i];const auto& r=w.leadRopes()[i];out<<"LEAD "<<l.anchor.x<<' '<<l.anchor.y<<" z "<<l.anchor.z<<" prop "<<l.prop<<" length "<<l.length<<" live "<<l.live<<" torn "<<r.torn;if(!r.points.empty())out<<" tip "<<r.points.back().x<<' '<<r.points.back().y<<' '<<r.points.back().z;out<<'\n';}
-     for(const auto& d:w.doors())out<<"D "<<d.left<<'-'<<d.right<<" y "<<d.y<<" z "<<d.z<<" transfer "<<d.transfer<<" entry "<<d.entry<<" swing "<<d.swinging<<'\n';
+     for(const auto& d:w.doors())out<<"D "<<d.left<<'-'<<d.right<<(d.alongY?" x ":" y ")<<d.y<<" z "<<d.z<<" transfer "<<d.transfer<<" entry "<<d.entry<<" swing "<<d.swinging<<'\n';
      for(const auto& t:w.terminals())out<<"T "<<t.position.x<<' '<<t.position.y<<" z "<<t.z<<" '"<<t.title<<"'\n";
      for(size_t i=0;i<w.layers().size();++i){out<<"LAYER "<<w.layers()[i].name<<" z "<<w.layers()[i].elevation<<'\n';for(auto& r:w.layers()[i].rows)out<<r<<'\n';}
      return 0;
@@ -1215,7 +1218,49 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      auto shot=[&](retro::Game& scene,int n){renderer->render(scene);char name[64];std::snprintf(name,sizeof name,".build/chimera-kill/%03d.ppm",n);std::ofstream out(name,std::ios::binary);out<<"P6\n960 540\n255\n";
       for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
      auto scene=retro::Game::chimeraStage(96,{6.4f,12.6f},-15,-.07f,-6);int n=0;const float frame=1.f/60;
-     for(int i=0;i<60*24;++i){scene.chimeraFilm(scene.elapsed()>15.5f);scene.update({},frame);if(i%15==0){shot(scene,n++);log<<n-1<<' '<<scene.chimeraFilmLine()<<'\n';}}
+     const int step=filmStep();   // RM_FILM_STEP: 60 Hz ticks between frames (15 = four a second; 2 = 30 fps, for the trailer)
+     for(int i=0;i<60*24;++i){scene.chimeraFilm(scene.elapsed()>15.5f);scene.update({},frame);if(i%step==0){shot(scene,n++);log<<n-1<<' '<<scene.chimeraFilmLine()<<'\n';}}
+     return 0;
+    }
+    // --film=LIST (capture only, for the trailers): one live scene stepped at 60 Hz with the player held at an
+    // anchor, each frame drawn clean from its own camera into .build/film/NAME.ppm, with film-log.txt naming
+    // where every creature of the chunk is. Lines: "stage LEVEL X Y FEET YAW PITCH [a,b,c]" (Game::chimeraStage,
+    // the anchor) or "machine N" (Game::machineScene) first; then "anchor X Y FEET YAW PITCH", "set a,b,c",
+    // "torch", "shut", "door I OPEN [swing]", "tick N", and "f NAME TICKS X Y FEET YAW PITCH" (step, then draw).
+    if(auto arg=commandArguments().find(L"--film=")){
+     std::ifstream list{std::filesystem::path(arg+7)};if(!list)return 21;std::vector<std::string> lines;for(std::string l;std::getline(list,l);)lines.push_back(l);
+     if(lines.empty())return 21;
+     std::istringstream head(lines[0]);std::string kind;int level=0;float hx=0,hy=0,hz=0,hyaw=0,hpitch=0;std::string sets;head>>kind;
+     if(kind=="machine")head>>level;else if(!(head>>level>>hx>>hy>>hz>>hyaw>>hpitch))return 21;head>>sets;
+     retro::Game scene=kind=="machine"?retro::Game::machineScene(level):retro::Game::chimeraStage(level,{hx,hy},hz,hyaw*retro::kPi/180.f,hpitch);
+     auto apply=[&](const std::string& states){std::istringstream each(states);std::string s;while(std::getline(each,s,',')){auto eq=s.find('=');if(!s.empty())scene.setState(retro::stateId(s.substr(0,eq)),eq==std::string::npos?1:std::stoi(s.substr(eq+1)));}};
+     apply(sets);
+     float ax=scene.player().pos.x,ay=scene.player().pos.y,az=scene.player().z,ayaw=scene.player().angle,apitch=scene.player().pitch;
+     auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!commandArguments().find(L"--software")&&!renderer->enableHardware())return 36;
+     renderer->setEnvironmentInspection(true);std::filesystem::create_directories(".build/film");std::ofstream log("film-log.txt");
+     auto hold=[&]{scene.inspectLockerWatch({ax,ay},az,ayaw,apitch);};
+     auto tick=[&](int n){for(int i=0;i<n;++i){hold();scene.update({},1.f/60.f);}};
+     for(size_t li=1;li<lines.size();++li){std::istringstream f(lines[li]);std::string op;if(!(f>>op)||op[0]=='#')continue;
+      if(op=="anchor"){float yaw=0;f>>ax>>ay>>az>>yaw>>apitch;ayaw=yaw*retro::kPi/180.f;}
+      else if(op=="set"){std::string s;f>>s;apply(s);}
+      else if(op=="torch"){scene.giveQuestItem(retro::Game::Flashlight);scene.setState(retro::stateId("flashlight_on"),1);}
+      else if(op=="shut")scene.shutDoors();
+      // Film lighting (capture only): "lights S" scales every lamp, "ambient A" sets the room's fill,
+      // "lamp X Y Z POWER RANGE KELVIN [R G B]" hangs a bare key or rim lamp (a gel in R G B).
+      else if(op=="lights"){float s=1;f>>s;for(auto&l:const_cast<std::vector<retro::WorldLight>&>(scene.world().lights()))l.intensity*=s;}
+      else if(op=="ambient"){float a=0;f>>a;const_cast<float&>(scene.world().definition().ambient)=a;}
+      // "dark": the whole chunk a true-dark zone (no ambient fill, exposure never metered up), torch left working.
+      else if(op=="dark"){retro::DarkZone z{};z.x1=z.y1=-100;z.x2=z.y2=200;z.jamFlashlight=false;const_cast<std::vector<retro::DarkZone>&>(scene.world().darkZones()).push_back(z);}
+      else if(op=="lamp"){retro::WorldLight l{};float x=0,y=0;f>>x>>y>>l.z>>l.intensity>>l.range>>l.kelvin;l.position={x,y};l.mount=retro::WorldLightMount::Bare;float r=1,g=1,b=1;if(f>>r>>g>>b)l.gel={r,g,b};
+       const_cast<std::vector<retro::WorldLight>&>(scene.world().lights()).push_back(l);}
+      else if(op=="door"){int i=0;float open=0;std::string swing;f>>i>>open>>swing;auto&world=const_cast<retro::World&>(scene.world());if(i>=0&&i<int(world.doors().size()))world.setDoor(i,open,swing=="swing");}
+      else if(op=="tick"){int n=0;f>>n;tick(n);}
+      else if(op=="f"){std::string name;int n=0;float x=0,y=0,z=0,yaw=0,pitch=0;if(!(f>>name>>n>>x>>y>>z>>yaw>>pitch))continue;tick(n);
+       scene.inspectLockerWatch({x,y},z,yaw*retro::kPi/180.f,pitch);renderer->render(scene);hold();
+       std::ofstream out(".build/film/"+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+       log<<name<<" t="<<scene.elapsed();const auto&foes=scene.chunkEnemies(scene.level());
+       for(size_t e=0;e<foes.size();++e){const auto&q=foes[e];log<<" | e"<<e<<' '<<q.name()<<' '<<q.pos.x<<' '<<q.pos.y<<' '<<q.z<<" alive="<<q.alive<<" sleep="<<q.sleeping()<<" feed="<<q.feeding<<" clip="<<q.visualClip<<" head="<<q.heading;}
+       log<<'\n';}}
      return 0;
     }
     // A campaign map's own sound, mixed to a WAV (ambience-preview-CHUNK.wav); several chunks as a,b,c.
@@ -1531,16 +1576,17 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      }return 0;
     }
     if(auto arg=commandArguments().find(L"--gore-inspection=")){
-     // How deaths look: gore-K-M-N.ppm for kind K (0-7), mode M (0 fell, 1 shot apart, 2 blast, 4 a live kill) at
-     // successive ages; K=8 is one body through its fade (gore-fade-N) and a round into each material (gore-material-N).
-     const int kind=_wtoi(arg+18);if(kind<0||kind>8)return 1;
+     // How deaths look: gore-K-M-N.ppm for kind K (0-8), mode M (0 fell, 1 shot apart, 2 blast, 4 a live kill) at
+     // successive ages; K=9 (or "fade") is one body through its fade (gore-fade-N) and a round into each material
+     // (gore-material-N). Before the cursed equipment (kind 8) that was K=8.
+     const bool fade=std::wstring(arg+18).rfind(L"fade",0)==0;const int kind=fade?retro::CreatureKindCount:_wtoi(arg+18);if(kind<0||kind>retro::CreatureKindCount)return 1;
      constexpr int inspectW=1280,inspectH=720;auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(inspectW,inspectH);auto& renderer=*rendererStorage;
      if(!commandArguments().find(L"--gore-software")&&!renderer.enableHardware())return 36;
      const bool handsShown=commandArguments().find(L"--gore-hands")!=nullptr;
      auto shot=[&](const retro::Game& scene,const std::string& name,bool play=false){renderer.setEnvironmentInspection(!handsShown&&!play);renderer.render(scene);
       std::ofstream out(name+".ppm",std::ios::binary);out<<"P6\n"<<inspectW<<' '<<inspectH<<"\n255\n";
       for(int i=0;i<inspectW*inspectH;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}};
-     if(kind<8){
+     if(kind<retro::CreatureKindCount){
       static constexpr float fell[]={.12f,.4f,1.f,3.f},apart[]={.15f,.6f,3.f},live[]={.05f,1.1f,2.6f};
       const std::string stem="gore-"+std::to_string(kind)+"-";int n=0;
       for(float age:fell)shot(retro::Game::goreInspection(retro::Enemy::Kind(kind),0,age),stem+"0-"+std::to_string(n++));n=0;
@@ -1555,7 +1601,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     if(auto arg=commandArguments().find(L"--creature-inspection=")){
      // Any kind's clips (five; the transformed's six) at four phases, front and side: creature-K-clip-frame[-side].ppm.
-     const int kind=_wtoi(arg+22);if(kind<0||kind>int(retro::CreatureKind::Transformed))return 1;
+     const int kind=_wtoi(arg+22);if(kind<0||kind>=retro::CreatureKindCount)return 1;
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
      const int clips=kind==int(retro::CreatureKind::Transformed)?6:5;
      for(int view=0;view<2;++view)for(int clip=0;clip<clips;++clip)for(int frame=0;frame<4;++frame){
@@ -1564,18 +1610,32 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}
      }return 0;
     }
+    if(commandArguments().find(L"--machine-frames")){
+     // The cursed equipment's electrical death (0) and the lure across chunk 92's split feed (1), every
+     // quarter second: machine-frames/S-NN.ppm, and machine-frames/log.txt with where it is and how it fares.
+     auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
+     std::filesystem::create_directories("machine-frames");std::ofstream log("machine-frames/log.txt");
+     const int step=filmStep();   // RM_FILM_STEP, as --chimera-kill-frames
+     for(int which=0;which<2;++which){auto g=retro::Game::machineScene(which);const int frames=(which?60:36)*15/step;
+      for(int frame=0;frame<frames;++frame){if(frame)for(int i=0;i<step;++i)g.update({},1.f/60);renderer.render(g);
+       const auto&list=g.chunkEnemies(g.level());log<<which<<' '<<frame<<' '<<g.elapsed();
+       if(!list.empty()){const auto&e=list[0];log<<" pos "<<e.pos.x<<','<<e.pos.y<<" alive "<<e.alive<<" asleep "<<e.sleeping()<<" shorted "<<e.shorted<<" hp "<<e.hp<<" clip "<<e.visualClip;}
+       log<<'\n';char file[64];std::snprintf(file,sizeof(file),"machine-frames/%d-%02d.ppm",which,frame);
+       std::ofstream out(file,std::ios::binary);out<<"P6\n"<<W<<" "<<H<<"\n255\n";for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}}
+     return 0;
+    }
     if(auto arg=commandArguments().find(L"--creature-video=")){
      // Every clip of one kind on a single 30 fps timeline, front and side, at
      // the timing the game plays it: creature-video/K-front-NNNN.ppm and
      // K-side-NNNN.ppm, with creature-video/K-timeline.txt naming each frame's clip.
-     const int kind=_wtoi(arg+17);if(kind<0||kind>int(retro::CreatureKind::Transformed))return 1;
+     const int kind=_wtoi(arg+17);if(kind<0||kind>=retro::CreatureKindCount)return 1;
      const auto& traits=retro::creatureTraits(retro::CreatureKind(kind));
      auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;if(!renderer.enableHardware())return 36;
      renderer.setEnvironmentInspection(true);std::filesystem::create_directories("creature-video");
      retro::Game views[2]={retro::Game::creaturePreview(retro::Enemy::Kind(kind),0),retro::Game::creaturePreview(retro::Enemy::Kind(kind),1)};
      struct Segment{const char* name;int clip;float seconds;};
       const float attack=traits.windup+traits.strikeSeconds;
-      const float contact=kind==int(retro::CreatureKind::Chimera)?.58f:.4f;
+      const float contact=traits.contact;
      const float pain=1.f/traits.painDecay;
      // The transformed's attack is its leap and two-second pin; its overhead
      // blow is a sixth clip, its wind-up then the strike.
@@ -1764,7 +1824,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
          {"radar",retro::Game::testRadar},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
-         {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"chimera-hunt",retro::Game::testChimeraHunt},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
+         {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"chimera-hunt",retro::Game::testChimeraHunt},{"machine",retro::Game::testMachine},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
          {"engine-regression",retro::Game::testEngineRegression},{"gameplay-fixes",retro::Game::testGameplayFixes},{"saves",retro::Game::testSaves},{"systems",retro::Game::testSystems},{"console",retro::Game::testConsole},
          {"lift-mix",retro::AudioEngine::testLiftMix},{"glass",retro::Game::testGlass},{"physics-stages",retro::Game::testPhysicsStages},{"props",retro::Game::testProps},{"clutter",retro::Game::testClutter},{"service-maps",retro::Game::testServiceMaps},
          {"streaming",retro::Game::testStreaming},{"unarmed",retro::Game::testUnarmed},{"npc-voices",retro::Game::testNpcVoices},
@@ -1774,7 +1834,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
-         {"door-leaf",retro::testDoorLeaves},
+         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"doors",retro::Game::testDoors},
          {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
@@ -1783,12 +1843,14 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"storm",retro::Game::testStorm},
          {"zone-people",retro::Game::testZonePeople},
          {"handgun",retro::Game::testHandgun},
+         {"human-ragdoll",retro::SoftwareRenderer::testHumanRagdoll},
          {"scripting",retro::Game::testScripting},
          {"primitives",retro::testPrimitives}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){
-         if(only){std::wstring wanted(only+12);if(std::wstring(name,name+std::strlen(name))!=wanted)continue;}
+         // --each-test=a,b,c runs just those (lanes of the suite in parallel processes)
+         if(only){const std::wstring wanted=L","+std::wstring(only+12)+L",",mine=L","+std::wstring(name,name+std::strlen(name))+L",";if(wanted.find(mine)==std::wstring::npos)continue;}
          auto start=std::chrono::steady_clock::now();bool ok=false;
          try{ok=run();}catch(const std::exception& e){report<<name<<" threw "<<e.what()<<'\n';}
          failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<name<<" "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<"s\n";report.flush();

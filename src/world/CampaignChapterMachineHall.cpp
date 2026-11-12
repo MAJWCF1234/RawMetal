@@ -644,7 +644,7 @@ void mhTakeQuarter(Map& m,int qx,int qy){
  for(auto z:h.zones)if(clipBox(z))m.zones.push_back(z);
  for(auto z:h.hazards)if(clipBox(z))m.hazards.push_back(z);
  for(auto z:h.darkZones)if(clipBox(z))m.darkZones.push_back(z);
- for(auto d:h.doors)if(inside({(d.left+d.right)*.5f,d.y})){d.left-=ox;d.right-=ox;d.y-=oy;m.doors.push_back(d);}
+ for(auto d:h.doors)if(inside(d.centre())){const float along=d.alongY?oy:ox,across=d.alongY?ox:oy;d.left-=along;d.right-=along;d.y-=across;m.doors.push_back(d);}
  for(auto p:h.pipes){
   Vec2 a=p.start,b=p.end,d=b-a;
   if(lengthSq(d)<1e-8f){if(inside(a)){p.start=p.end=local(a);m.pipes.push_back(p);}continue;}

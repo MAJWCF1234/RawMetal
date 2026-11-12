@@ -1,6 +1,7 @@
 // Stance and dialogue validation: --stance-test, --dialogue-test.
 #include "../../Game.h"
 #include "../../../world/CustomCampaign.h"
+#include "../../../world/ModelIds.h"
 #include <cmath>
 #include <fstream>
 
@@ -105,6 +106,13 @@ bool Game::testDialogue(){
   run(g,.5f);InputState down{};down.menuDown=true;press(g,down);press(g,down);check(g.dialogueView()->selected==2,"The arrows move the selection");
   press(g,use);check(!g.talking()&&g.state(stateId("sq_deal"))==1&&g.state(stateId("sq_stance"))==int(SquadStance::Ally),"Picking a reply sets its states and the squad's stance, and ends the talk");
   run(g,.5f);press(g,use);check(g.talking(),"He talks again");run(g,.5f);InputState escape{};escape.escape=true;press(g,escape);check(!g.talking()&&!g.paused(),"Escape leaves the conversation, not into the menu");}
+ // A man with something to say is offered as that, not as someone to order about, and a mug at
+ // his feet does not take the E that should open the talk.
+ {auto g=stanceRoom(int(SquadStance::Truce));g.m_player.pos={6.5f,5.f};run(g,.2f);
+  const char* hint=g.interactionHint();check(hint&&std::string(hint)=="E / TALK","A man who will talk reads E / TALK");
+  Clutter mug;mug.kind=7;mug.model=model::mug;mug.dims=propTraits(model::mug).size;mug.pos=g.m_player.pos+Vec2{std::cos(g.m_player.angle),std::sin(g.m_player.angle)}*.6f;mug.z=g.world().floorHeight(mug.pos.x,mug.pos.y);mug.sleeping=true;g.m_clutter.push_back(mug);
+  hint=g.interactionHint();check(hint&&std::string(hint)=="E / TALK","A loose prop at his feet does not hide the talk");
+  press(g,use);check(g.talking()&&!g.holdingClutter(),"E talks rather than lifting the prop at his feet");}
  {auto g=stanceRoom(int(SquadStance::Truce),true);g.m_player.pos={6.5f,5.f};run(g,.1f);press(g,use);auto at=g.m_friendlyActors[0].pose.position;
   bool held=g.talking();run(g,3.f);held&=length(g.m_friendlyActors[0].pose.position-at)<.05f;
   check(held&&g.talking(),"A guard on his route stops while he is spoken to");

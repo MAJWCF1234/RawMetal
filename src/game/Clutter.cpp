@@ -186,8 +186,8 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    if(m_vrInputActive&&level==m_level)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]){auto p=m_vrHandPosition[hand],v=m_vrHandVelocity[hand];if(p.z>=c.z-.08f&&p.z<=c.z+c.height()+.08f&&std::fabs(p.x-c.pos.x)<e[0]+.08f&&std::fabs(p.y-c.pos.y)<e[1]+.08f){knockClutter(level,index,p,v*(std::min(2.f,c.mass())*.35f));c.soundOwner=-1;}}
   }
   if(c.model>=0){const auto&w=level==m_level?m_world:m_chunks[level].world;auto e=c.extent();
-   for(const auto&door:w.doors()){if(!door.opening&&door.open<=0)continue;float base=w.floorHeight((door.left+door.right)*.5f,door.y)+door.z;if(c.z>=base+2.5f||c.z+c.height()<=base)continue;
-    float angle=door.swinging?door.open*kPi*.5f*door.swing:0;Vec2 axis{std::cos(angle),std::sin(angle)},hinge{door.left,door.y},nearest=hinge+axis*std::clamp(dot(c.pos-hinge,axis),0.f,door.right-door.left);auto d=c.pos-nearest;float radius=std::max(e[0],e[1])+.16f;
+   for(const auto&door:w.doors()){if(!door.opening&&door.open<=0)continue;const Vec2 centre=door.centre();float base=w.floorHeight(centre.x,centre.y)+door.z;if(c.z>=base+2.5f||c.z+c.height()<=base)continue;
+    Vec2 axis=door.swinging?door.leafAxis(door.open):door.tangent(),hinge=door.swinging?door.hinge():door.world(door.left,door.y),nearest=hinge+axis*std::clamp(dot(c.pos-hinge,axis),0.f,door.width());auto d=c.pos-nearest;float radius=std::max(e[0],e[1])+.16f;
     if(lengthSq(d)>=radius*radius||!w.doorBlocks(nearest.x,nearest.y,c.z,c.height()))continue;Vec2 normal=lengthSq(d)>.00001f?d*(1/length(d)):Vec2{-axis.y,axis.x};auto next=nearest+normal*(radius+.02f);
     bool clear=true;for(auto offset:c.footprintOffsets())clear&=w.fits(next.x+offset.x,next.y+offset.y,c.z,c.height(),true,true)&&!w.doorBlocks(next.x+offset.x,next.y+offset.y,c.z,c.height());
     if(clear)c.pos=next;c.velocity+=normal*.8f;c.sleeping=false;c.restTime=0;

@@ -38,6 +38,9 @@ layout(location=1) out vec4 outLighting;
 layout(location=2) out vec4 outLight0;
 layout(location=3) out vec4 outLight1;
 layout(location=4) out vec4 outSurface;
+// Static per-pixel geometry: the height of the open-air point that joins the
+// face to its lamps' rooms (bounce, scene.frag); -1e9 where none was baked.
+layout(location=5) out float outAir;
 layout(location=6) out vec3 outWorldPos;
 layout(location=7) out float outParallax;
 // Painterly Horizon LOD impostors: fractional atlas column and row, packed
@@ -77,6 +80,7 @@ void main(){
  vec3 worldPos=position.xyz;
  vec4 adjustedLight0=light0,adjustedLight1=light1;
  vec2 vertexUV=uv;vec4 impostorFrame=vec4(0.0);bool collapse=false;
+ float air=-1.0e9;
 
  if(surface.w>=3.0){
   int index=int(surface.w)-3;
@@ -142,7 +146,7 @@ void main(){
    // The real mesh of an impostor model: gone well past its crossfade band.
    collapse=length(position.xyz-view.eyeYaw.xyz)>-worldNormal.w*1.6;
   }
-  worldPos=vertexPos;
+  worldPos=vertexPos;air=surface.x;
   vec3 delta=vertexPos-view.eyeYaw.xyz;
   float right=-delta.x*view.basis.x+delta.y*view.eyeYaw.w;
   float forward=delta.x*view.eyeYaw.w+delta.y*view.basis.x;
@@ -222,6 +226,7 @@ void main(){
  outLight0=adjustedLight0;
  outLight1=adjustedLight1;
  outSurface=adjustedSurface;
+ outAir=air;
  outWorldPos=worldPos;
  outParallax=worldNormal.w;
 }

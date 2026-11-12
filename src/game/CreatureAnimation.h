@@ -5,9 +5,11 @@ namespace retro {
 struct CreatureAnimationSample {int clip=0;float phase=0;};
 inline CreatureAnimationSample creatureAnimationSample(const Enemy&e,float elapsed){
  const auto&t=creatureTraits(e.kind);CreatureAnimationSample p{0,std::fmod(elapsed/t.idleSeconds+e.home.x*.1f,1.f)};
- // The Chimera's authored slam reaches contact at 58% of its attack clip.
- const float contact=e.kind==Enemy::Kind::Chimera?.58f:.4f;
+ // Where in its attack clip the blow lands (the Chimera's slam at 58%, the machine's swing at a third).
+ const float contact=t.contact;
  if(!e.alive)p={4,std::min(1.f,e.deathTime/t.deathSeconds)};
+ // Asleep among the plant it stands frozen on the first frame of its idle.
+ else if(e.sleeping())p={0,0};
  else if(e.windup>0)p={2,(1-std::clamp(e.windup/t.windup,0.f,1.f))*contact};
  else if(e.strike>0)p={2,contact+(1-e.strike)*(1-contact)};
  else if(e.painFlash>0)p={3,1-e.painFlash};

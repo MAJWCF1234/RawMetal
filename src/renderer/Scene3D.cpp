@@ -319,7 +319,8 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }
   }
  }
- if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale,m_dissolve);return;}
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale,m_dissolve,&m_triangleAir);m_triangleAir.fill(NoBounceAir);return;}
+ m_triangleAir.fill(NoBounceAir);
  // Clip in camera space before perspective division; preserve UVs at intersections.
  const Projection projection{float(m_width)/m_height};
  MeshVertex input[8]={a,b,c},output[8];int count=3;
@@ -420,6 +421,66 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
   else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
  }
  return {range,scale};
+}
+// A dead man is a body (Carcass), as a dead creature is: his mesh in the pose he died in, let go
+// under its own weight. A man killed in play falls from where the death clip had him when he went
+// (on his feet, or already down), thrown away from what hit him, on the death clip's clock while it
+// runs and the session's after. A body the map lays down (a track that ends lying dead) is let go
+// from its lying pose a little above the floor and has come to rest before it is first seen, so a
+// level opens on bodies lying as they fell, limbs on the floor, off the edge of whatever they were
+// laid over. The same body from the same start comes to rest the same way, so a reload or a second
+// look shows it as it was. Nothing for the living, the restrained or the hung.
+SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot){
+ static const bool enabled=[]{const char* v=std::getenv("RM_RAGDOLL");return !v||v[0]!='0';}();
+ if(!enabled||!humanActorVisual(track.visual)||pose.clip!=4||track.platform||track.suspensionTop>pose.z)return nullptr;
+ const float now=game.elapsed();
+ // The clock ran back (a load, a new game): nothing kept is true any more.
+ if(now+.001f<m_corpseClock)m_corpses.clear();m_corpseClock=now;
+ bool headless=false,live=false;float from=1,age=1e4f;Point3 push{};
+ if(actor>=0){
+  const auto death=game.npcDeath(size_t(actor));if(!death.dead)return nullptr;
+  headless=game.npcHeadless(size_t(actor));from=death.from;push=death.push;if(!death.done){age=death.age;live=true;}
+ }else if(!(track.deadState&&game.state(track.deadState))){
+  // Laid down by the map: the track ends with him lying dead. One that dies on its track has lain
+  // as long as its clock has run since the clip reached its end; one that starts dead, for ever.
+  const auto&keys=track.keys;auto down=[](const ActorKey&k){return k.clip==4&&k.phase>=.999f;};
+  if(pose.phase<.999f||keys.empty()||!down(keys.back()))return nullptr;
+  for(size_t k=keys.size()-1;k>0;--k)if(down(keys[k])&&!down(keys[k-1])){const float since=float(game.state(track.timerState)-keys[k].timeMs)*.001f;if(since>=0&&since<8.f){age=since;live=true;}break;}
+ }
+ const bool cleanup=cleanupActorVisual(track.visual);const int role=cleanup?cleanupActorBody(track.visual):0,body=std::max(0,civilianActorBody(track.visual));
+ Mesh& mesh=cleanup?*cleanupMeshes()[size_t(role)]:civilianMesh(body);
+ auto mix=[](std::uint64_t h,float v){return (h^(std::uint64_t(std::bit_cast<std::uint32_t>(v))+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2)));};
+ std::uint64_t signature=mix(mix(mix(mix(mix(mix(std::uint64_t(level)*1315423911ull+std::uint64_t(track.visual),track.scale),pose.position.x),pose.position.y),pose.z),pose.yaw),from)^(headless?0x5bd1e995ull:0);
+ auto&corpse=m_corpses[slot];corpse.seen=now;
+ if(corpse.signature!=signature||!corpse.carcass.built()){
+  corpse=Corpse{};corpse.signature=signature;corpse.seen=now;
+  mesh.poseCreature(4,from);
+  const float scale=track.scale/std::max(.01f,mesh.maximum.y-mesh.minimum.y),c=std::cos(pose.yaw),s=std::sin(pose.yaw);
+  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  // A head a bite took is not part of him.
+  const float neckY=mesh.minimum.y+(mesh.maximum.y-mesh.minimum.y)*.855f;const auto&rest=mesh.bindTriangles();
+  std::vector<MeshTriangle> posed;posed.reserve(mesh.triangles.size());corpse.faces.reserve(mesh.triangles.size());
+  for(size_t i=0;i<mesh.triangles.size();++i){
+   if(headless&&i<rest.size()&&(rest[i].v[0].p.y+rest[i].v[1].p.y+rest[i].v[2].p.y)/3.f>neckY)continue;
+   MeshTriangle face=mesh.triangles[i];for(auto&v:face.v)v.p=transform(v.p);posed.push_back(face);corpse.faces.push_back(int(i));}
+  if(posed.empty()){m_corpses.erase(slot);return nullptr;}
+  // Clear of the floor under him before he is let go: a clip's last frame can have a hand or a heel
+  // through it, and a body that starts in the floor is pushed out of it, not laid on it.
+  float rise=0;for(size_t i=0;i<posed.size();i+=3)for(const auto&v:posed[i].v){const float floor=w.supportBelow(v.p.x,v.p.y,std::max(v.p.z,pose.z)+.05f);if(floor>-50.f)rise=std::max(rise,floor+.03f-v.p.z);}
+  rise=std::min(rise,.25f);if(!live&&actor<0)rise=std::max(rise,.03f);
+  for(auto&face:posed)for(auto&v:face.v)v.p.z+=rise;
+  corpse.carcass.build(posed,w,push,track.scale/1.7f,unsigned(slot*2654435761ull)^unsigned(slot>>32)*40503u^0x2545f491u,.05f);
+  corpse.live=live;corpse.base=now-(live?age:0.f);
+ }
+ // A fall still being watched runs on its clock; one first seen after it ended has already ended.
+ auto&carcass=corpse.carcass;
+ if(live)corpse.base=now-age;
+ const float target=live||corpse.live?now-corpse.base:1e4f;
+ if(target>=1e3f){for(int guard=0;guard<4&&!carcass.asleep();++guard)carcass.advance(w,carcass.age()+5.f);}
+ else carcass.advance(w,target);
+ // Bodies no longer drawn are let go after a while: the same one is made the same way again.
+ if(m_corpses.size()>64)std::erase_if(m_corpses,[&](const auto&entry){return entry.second.seen<now-30.f;});
+ return &corpse;
 }
 void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  perf::Scope frameProfile(perf::Scene);
@@ -582,12 +643,29 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   return electric>0?total+ElectricShoulder*(1.f-std::exp(-electric/ElectricShoulder)):total;
  };
+ // Bounce (WorldLight::bounce): a lamp lights its room and the room returns a
+ // share to every face in it, even one turned from the lamp, so a model's far
+ // side or a wall under an overhead lamp is never pitch black. The face joins
+ // the room through the air in front of it, lifted toward its own ceiling;
+ // the lamp must see that point, so no bounce passes a wall, a deck or a slab,
+ // and a room with no lit lamp stays dark. scene.frag tests the same point.
+ auto bounceProbe=[&](Point3 point,Point3 normal){
+  Point3 p=point+normal*.3f;
+  if(w.outdoors()||!w.fits(p.x,p.y,p.z,.01f,false,false))return p;
+  p.z=std::max(p.z,std::min(w.clearanceAbove(p.x,p.y,p.z)-.6f,p.z+3.f));return p;
+ };
+ // The open-air bounce point's height for the last static per-pixel sample (GPU vertex data).
+ float illuminationAir=SoftwareRenderer::NoBounceAir;
  auto illumination=[&](Point3 point,Point3 normal){
   float normalLength=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);if(normalLength<.00001f)return .7f;normal=normal*(1/normalLength);
+  illuminationAir=SoftwareRenderer::NoBounceAir;
   if(movingGeometry){
    const float dark=ambientDarkness();
    float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
+   Point3 room{};bool roomReady=false;
    for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
+    if(float bounce=fixture.bounce(d2)*lampPower(source);bounce>.002f){if(!roomReady){room=bounceProbe(point,normal);roomReady=true;}
+     auto target=lightFrames[source].target;if(!fixture.shadows||w.lightRayClear({room.x,room.y},room.z,{target.x,target.y},target.z))brightness+=bounce;}
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
     auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
     brightness+=visibility*facing*weight;
@@ -636,6 +714,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     accessibility=1.f-.68f*occlusion*.25f;
    }
    ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
+   Point3 room{};bool roomReady=false;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
     auto delta=light-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2);if(weight<=0||d2<.001f)continue;
@@ -644,6 +723,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float visibility=0;
     for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=!fixture.shadows||w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
     float contribution=(visibility/3.f)*(.04f+.96f*facing)*weight;
+    if(float bounce=fixture.bounce(d2);bounce>.002f&&shadowBudget>0){if(!roomReady){room=bounceProbe(point,normal);roomReady=true;}auto target=lightFrames[source].target;
+     --shadowBudget;if(!fixture.shadows||w.lightRayClear({room.x,room.y},room.z,{target.x,target.y},target.z))contribution+=bounce;}
     if(!lampSwitchable[source])brightness+=contribution;
     else{switched+=lampPower(source)*contribution;if(shadowBudget>0)m_lightingCache.emplace(key|lampTag(source),contribution);}
    }
@@ -651,6 +732,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // A per-pixel static bake never darkens on the CPU (the shader scales it).
    if(shadowBudget>0){m_lightingCache.emplace(key,brightness);if(!pixelLamps)m_lightingCache.emplace(key|AmbientTag,ambient);}
   }
+  // The shader lights a per-pixel bake's bounce from this open-air point's height.
+  if(pixelLamps){Point3 out=normal;if(!w.outdoors()&&!w.fits(point.x+out.x*.09f,point.y+out.y*.09f,point.z+out.z*.09f,.01f,false,false)&&w.fits(point.x-out.x*.09f,point.y-out.y*.09f,point.z-out.z*.09f,.01f,false,false))out=out*-1.f;
+   illuminationAir=bounceProbe(point,out).z;}
   brightness=std::clamp(brightness-ambient*dark+switched,.075f*(1.f-dark),1.4f);
   float carried=0;
   if(!m_staticGeometryBuild)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(!fixture.cargoLift)continue;
@@ -693,7 +777,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(!w.fits(point.x+normal.x*.09f,point.y+normal.y*.09f,point.z+normal.z*.09f,.01f,false,true)&&w.fits(point.x-normal.x*.09f,point.y-normal.y*.09f,point.z-normal.z*.09f,.01f,false,true))normal=normal*-1.f;
   return cameraPoint(point+normal,game)-cameraPoint(point,game);
  };
- bool objectLighting=false;float objectLight=1;const NormalLighting*objectNormalLighting=nullptr;
+ bool objectLighting=false;float objectLight=1,objectAir=SoftwareRenderer::NoBounceAir;const NormalLighting*objectNormalLighting=nullptr;
  // While a ceiling lamp's fitting draws: its tone, which its glowing parts take.
  const Point3*fittingTone=nullptr;
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
@@ -704,8 +788,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   Point3 worldCenter{},worldNormal{};
   if(needsNormalLighting)worldCenter=(a.p+b.p+c.p)*(1.f/3.f);
   if(!objectLighting&&(light<1.5f||needsNormalLighting))worldNormal=cross3(b.p-a.p,c.p-a.p);
-  if(objectLighting)light*=objectLight;
-  else if(light<1.5f){a.light=illumination(a.p,worldNormal);b.light=illumination(b.p,worldNormal);c.light=illumination(c.p,worldNormal);}
+  // A per-pixel static bake carries only ambient in objectLight; the shader
+  // multiplies its lamps by the face light, so the bake rides in the vertex
+  // light as it does for walls (scaling the face light cut models' lamps ~12x).
+  if(objectLighting){if(m_pixelLighting&&m_staticGeometryBuild&&light<1.5f){a.light*=objectLight;b.light*=objectLight;c.light*=objectLight;m_triangleAir.fill(objectAir);}else light*=objectLight;}
+  else if(light<1.5f){std::array<float,3> air;a.light=illumination(a.p,worldNormal);air[0]=illuminationAir;b.light=illumination(b.p,worldNormal);air[1]=illuminationAir;c.light=illumination(c.p,worldNormal);air[2]=illuminationAir;m_triangleAir=air;}
   a.p=A;b.p=B;c.p=C;
   if(objectNormalLighting&&(!t.normalLevels.empty()||t.glossStrength>0))triangle3D(a,b,c,t,light,objectNormalLighting);
   else if(needsNormalLighting){auto lights=normalLightingAt(worldCenter);lights.surfaceNormal=surfaceNormal(worldCenter,worldNormal);triangle3D(a,b,c,t,light,&lights);}
@@ -721,7 +808,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto emitQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
   if(!m_staticGeometryBuild&&std::max({a.z,b.z,c.z,d.z})<dormantFloor)return;
   if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
-  if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),std::min({a.z,b.z,c.z,d.z})},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),std::max({a.z,b.z,c.z,d.z})}))return;
+  // A flat face (a floor decal a hand's breadth above the floor) is tested as a box at least 5 cm
+  // tall, or the occlusion test calls it hidden behind the very floor it lies on.
+  {const float low=std::min({a.z,b.z,c.z,d.z}),high=std::max({std::max({a.z,b.z,c.z,d.z}),low+.05f});
+   if(hidden({std::min({a.x,b.x,c.x,d.x}),std::min({a.y,b.y,c.y,d.y}),low},{std::max({a.x,b.x,c.x,d.x}),std::max({a.y,b.y,c.y,d.y}),high}))return;}
   auto size=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
   // Sample large architectural surfaces on a regular grid so light and shadow
   // gradients do not expose the two triangles of an entire wall or door.
@@ -745,13 +835,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
    }
   }
-  auto normal=cross3(b-a,c-a);std::array<MeshVertex,289> vertices;
+  auto normal=cross3(b-a,c-a);std::array<MeshVertex,289> vertices;std::array<float,289> airs;airs.fill(NoBounceAir);
   for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){float u=float(x)/columns,v=float(y)/rows;auto p=a+(b-a)*u+(d-a)*v;
    vertices[size_t(y*(columns+1)+x)]={cameraPoint(p,game),u*uvScale.x+uvOffset.x,(1-v)*uvScale.y+uvOffset.y,-1.f};
   }
   for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto &A=vertices[i],&B=vertices[i+1],&C=vertices[i+columns+2],&D=vertices[i+columns+1];
    if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
-   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal):1.f;
+   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal):1.f;if(light<1.5f)airs[size_t(&v-vertices.data())]=illuminationAir;
     if(floorFace&&light<1.5f){bool nearWall=false;
      for(auto offset:{Vec2{-.24f,0},Vec2{.24f,0},Vec2{0,-.24f},Vec2{0,.24f}})
       nearWall|=w.tile(int(std::floor(p.x+offset.x)),int(std::floor(p.y+offset.y)))=='#';
@@ -761,7 +851,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    illuminate(A,x,y);illuminate(B,x+1,y);illuminate(C,x+1,y+1);illuminate(D,x,y+1);
    NormalLighting lights;const NormalLighting* normalState=nullptr;
    if((!t.normalLevels.empty()||t.glossStrength>0)){auto center=a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows);lights=normalLightingAt(center);lights.surfaceNormal=surfaceNormal(center,normal);normalState=&lights;}
-   triangle3D(A,B,C,t,light,normalState);triangle3D(A,C,D,t,light,normalState);}
+   m_triangleAir={airs[size_t(i)],airs[size_t(i+1)],airs[size_t(i+columns+2)]};triangle3D(A,B,C,t,light,normalState);
+   m_triangleAir={airs[size_t(i)],airs[size_t(i+columns+2)],airs[size_t(i+columns+1)]};triangle3D(A,C,D,t,light,normalState);}
  };
  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
   if(!clipArchitecture){emitQuad(a,b,c,d,t,light,uvScale,uvOffset);return;}
@@ -810,6 +901,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(b.z>a.z+texture.band){boxFaces({a.x,a.y,a.z+texture.band},b,*texture.above,light);b.z=a.z+texture.band;}
   boxFaces(a,b,texture,light);
  };
+ // A door's parts are written in its own frame (x along the span, y across the
+ // wall, z up: Door::world). Boxes map straight across; a face's corners are
+ // wound back when the frame is mirrored (a door along Y), so it faces the same
+ // side and its picture reads the right way round.
+ auto doorBox=[&](const Door& d,float a0,float a1,float c0,float c1,float z0,float z1,const Texture&texture,float light){Vec2 lo,hi;d.box(a0,a1,c0,c1,lo,hi);box({lo.x,lo.y,z0},{hi.x,hi.y,z1},texture,light);};
+ auto doorFace=[](const Door& d,Point3 a,Point3 b,Point3 c,Point3 e){std::array<Point3,4> q{d.world(a.x,a.y,a.z),d.world(b.x,b.y,b.z),d.world(c.x,c.y,c.z),d.world(e.x,e.y,e.z)};if(d.mirrored()){std::swap(q[0],q[1]);std::swap(q[2],q[3]);}return q;};
+ auto doorQuad=[&](const Door& d,Point3 a,Point3 b,Point3 c,Point3 e,const Texture&t,float light){const auto q=doorFace(d,a,b,c,e);quad(q[0],q[1],q[2],q[3],t,light);};
  // Low-sided, capped pipes retain a cylindrical silhouette without dense meshes.
  static const auto cylinderRing=[](){std::array<Vec2,11> ring{};for(int i=0;i<10;++i){float angle=i*kTwoPi/10;ring[i]={std::cos(angle),std::sin(angle)};}ring[10]=ring[0];return ring;}();
  auto cylinder=[&](Point3 a,Point3 b,float radius,const Texture&texture){
@@ -828,12 +926,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tri({b,.5f,.5f},{b+p,uvP.x,uvP.y},{b+q,uvQ.x,uvQ.y},texture,.8f);
   }
  };
- struct ExteriorLight {std::array<Point3,6> normals;std::array<float,6> brightness{};std::array<NormalLighting,6> gloss{};bool hasGloss;};
+ struct ExteriorLight {std::array<Point3,6> normals;std::array<float,6> brightness{};std::array<NormalLighting,6> gloss{};bool hasGloss;std::array<float,6> air{};};
  auto exteriorLight=[&](Point3 center,float width,float depth,float height,float yaw,bool gloss){
   float c=std::cos(yaw),s=std::sin(yaw);ExteriorLight result{{{{c,-s,0},{-c,s,0},{s,c,0},{-s,-c,0},{0,0,1},{0,0,-1}}},{},{},gloss};
   // Probes outside the oriented hull avoid self-shadowing at a solid centre.
   for(size_t i=0;i<6;++i){float extent=i<2?width*.5f:i<4?depth*.5f:height*.5f;auto probe=center+result.normals[i]*(extent+.035f);
-   result.brightness[i]=illumination(probe,result.normals[i]);if(gloss){result.gloss[i]=normalLightingAt(probe);result.gloss[i].surfaceNormal=cameraPoint(probe+result.normals[i],game)-cameraPoint(probe,game);}
+   result.brightness[i]=illumination(probe,result.normals[i]);result.air[i]=illuminationAir;if(gloss){result.gloss[i]=normalLightingAt(probe);result.gloss[i].surfaceNormal=cameraPoint(probe+result.normals[i],game)-cameraPoint(probe,game);}
   }return result;
  };
  auto selectFaceLight=[&](const ExteriorLight& lights,Point3 normal,Point3 outward){
@@ -841,7 +939,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // lighting rather than letting an inward face borrow the opposite side.
   if(normal.x*outward.x+normal.y*outward.y+normal.z*outward.z<0)normal=normal*-1.f;
   size_t side=0;float alignment=-1.e30f;for(size_t i=0;i<6;++i){auto n=lights.normals[i];float dot=normal.x*n.x+normal.y*n.y+normal.z*n.z;if(dot>alignment){alignment=dot;side=i;}}
-  objectLight=lights.brightness[side];objectNormalLighting=lights.hasGloss?&lights.gloss[side]:nullptr;
+  objectLight=lights.brightness[side];objectAir=lights.air[side];objectNormalLighting=lights.hasGloss?&lights.gloss[side]:nullptr;
  };
  if(level==game.level()){const auto&v=m_view;auto hands=exteriorLight({v.pos.x,v.pos.y,v.z+v.eye-.25f},.45f,.45f,.5f,kPi*.5f-v.angle,false);
   m_handNormals=hands.normals;m_handLight=hands.brightness;m_handLightReady=true;}
@@ -864,7 +962,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(auto face:mesh.triangles){for(auto&vertex:face.v){auto p=(vertex.p-center)*scale;vertex.p={x+p.x*cosine+p.z*sine,y-p.x*sine+p.z*cosine,base+p.y+range.y*scale*.5f};}
    auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],texture,light);
   }
-  objectLighting=false;objectNormalLighting=nullptr;
+  objectLighting=false;objectNormalLighting=nullptr;objectAir=SoftwareRenderer::NoBounceAir;
  };
  // Repeated fixtures share source meshes and material parts. Resolve each
  // used part once per draw, preserving the documented fallback bindings.
@@ -916,7 +1014,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(const auto&piece:pieces){for(int k=0;k<3;++k)face.v[k]=piece[k];drawFace(face);
    }
   }
-  objectLighting=false;objectNormalLighting=nullptr;
+  objectLighting=false;objectNormalLighting=nullptr;objectAir=SoftwareRenderer::NoBounceAir;
  };
  // parts: 1 the backing and guard, 2 the diffuser, 3 both. A switchable lamp
  // keeps its body in the static chunk and draws its diffuser per frame, lit
@@ -975,7 +1073,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int surface:{w.wallSurface(),w.floorSurface(),w.ceilingSurface()})hash(std::uint64_t(surface+1));
   for(size_t i=0;i<w.structures().size();++i)if(!w.isBreakableStructure(int(i)))hash(std::uint64_t(w.structures()[i].material));
   for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)hash(static_cast<unsigned char>(w.tile(x,y)));
-  for(const auto&door:w.doors())for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);
+  for(const auto&door:w.doors()){for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);hash(std::uint64_t(door.alongY)|std::uint64_t(door.hingeRight)<<1);}
   // Authored lamp power may change independently of the map/session. Use exact
   // float bits so even a small power change refreshes emission and baked light.
   hash(fixedLightSourceKey);
@@ -1356,10 +1454,28 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // A swinging door's posts and head never move, so they bake with the wall they
  // stand in (per-pixel lamps on Vulkan): lit like that wall from the first frame,
  // not left at ambient while a per-frame shadow budget catches up.
- if(buildStaticGeometry)for(const auto&door:w.doors())if(door.swinging){const float base=w.floorHeight((door.left+door.right)*.5f,door.y)+door.z;
-  box({door.left-.09f,door.y-.17f,base},{door.left+.09f,door.y+.17f,base+2.48f},doorFrame,1.f);
-  box({door.right-.08f,door.y-.17f,base},{door.right+.08f,door.y+.17f,base+2.48f},doorFrame,1.f);
-  box({door.left,door.y-.17f,base+2.35f},{door.right,door.y+.17f,base+2.55f},doorFrame,1.f);}
+ if(buildStaticGeometry)for(const auto&door:w.doors())if(door.swinging){const Vec2 mid=door.centre();const float base=w.floorHeight(mid.x,mid.y)+door.z;
+  // The hinge post is the heavier one, at whichever end the leaf hangs from.
+  const float hingeHalf=.09f,latchHalf=.08f,atLeft=door.hingeRight?latchHalf:hingeHalf,atRight=door.hingeRight?hingeHalf:latchHalf;
+  // The wall's faces either side, read beside the jambs: the frame stands 2 cm
+  // proud of each, whatever the wall's thickness, and an architrave laps from
+  // it onto the wall, so the frame meets the wall it is set in. Where no wall
+  // is found (a frame standing free) it keeps the old 17 cm.
+  float face[2]={.15f,.15f};
+  for(int s=0;s<2;++s){const float side=s?1.f:-1.f;float best=1;
+   for(float at:{door.left-atLeft-.3f,door.right+atRight+.3f})for(float d=.02f;d<.66f;d+=.02f){const Vec2 p=door.world(at,door.y+side*d);if(w.fits(p.x,p.y,base+1.2f,.02f,false)){if(d>.03f)best=std::min(best,d-.01f);break;}}
+   if(best<1)face[s]=std::clamp(best,.05f,.4f);}
+  const float back=door.y-face[0]-.02f,front=door.y+face[1]+.02f;
+  doorBox(door,door.left-atLeft,door.left+atLeft,back,front,base,base+2.48f,doorFrame,1.f);
+  doorBox(door,door.right-atRight,door.right+atRight,back,front,base,base+2.48f,doorFrame,1.f);
+  doorBox(door,door.left,door.right,back,front,base+2.35f,base+2.55f,doorFrame,1.f);
+  for(int s=0;s<2;++s){const float c0=s?front:back-.018f,c1=s?front+.018f:back,l=door.left-atLeft,r=door.right+atRight;
+   doorBox(door,l-.075f,l,c0,c1,base,base+2.625f,doorFrame,.95f);
+   doorBox(door,r,r+.075f,c0,c1,base,base+2.625f,doorFrame,.95f);
+   doorBox(door,l-.075f,r+.075f,c0,c1,base+2.55f,base+2.625f,doorFrame,.95f);}
+  // A brushed threshold strip across the opening: the leaf's foot clears it by a
+  // finger, so the gap under a shut door reads as a dark line over bright metal.
+  doorBox(door,door.left+atLeft,door.right-atRight,back+.02f,front-.02f,base,base+.008f,m_metal,1.1f);}
  if(buildStaticGeometry)for(const auto& sign:w.signs()){
   // A designed sign (SignArt.h) is drawn at its own proportions, so its key carries them.
   const bool designed=sign.style||sign.icon||sign.ink||sign.picture;
@@ -1451,7 +1567,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   float height=w.floorHeight((left+right)*.5f,centerY)+offset+.009f;
   quad({left,centerY-halfWidth,height},{right,centerY-halfWidth,height},{right,centerY+halfWidth,height},{left,centerY+halfWidth,height},m_hazard,.85f);
  };
- for(auto&door:w.doors())if(!door.swinging)stripeBand(door.left,door.right,door.y,door.z);
+ for(auto&door:w.doors())if(!door.swinging){const float halfWidth=door.width()*m_hazard.height/m_hazard.width*.5f;const Vec2 mid=door.centre();const float height=w.floorHeight(mid.x,mid.y)+door.z+.009f;
+  doorQuad(door,{door.left,door.y-halfWidth,height},{door.right,door.y-halfWidth,height},{door.right,door.y+halfWidth,height},{door.left,door.y+halfWidth,height},m_hazard,.85f);}
  for(int y=1;y<World::Height-1;++y)for(int x=1;x<World::Width-1;){
   if(w.tile(x,y)!='G'){++x;continue;}
   int start=x;while(x<World::Width-1&&w.tile(x,y)=='G')++x;
@@ -1459,17 +1576,33 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // Door lintels and signs are geometry in the world, visible along both routes.
  for(auto&door:w.doors()){
+  // x, y: the door's own frame (Door::world), x along its span, y across its wall.
+  const Vec2 mid=door.centre();
   float x=(door.left+door.right)*.5f,y=door.y-.5f,half=(door.right-door.left)*.5f;
-  float base=w.floorHeight(x,door.y)+door.z;
+  float base=w.floorHeight(mid.x,mid.y)+door.z;
   if(door.swinging){
    // The frame is static (above). The leaf moves, so it is lit as moving
    // geometry every frame, as locker leaves are: a cached receiver drawn after
    // the frame's shadow budget ran out took ambient alone and went black. Each
    // face is wound outward, so it takes the light on its own side of the wall.
-   float angle=door.open*kPi*.5f*door.swing,width=door.right-door.left;
-   Vec2 axis{std::cos(angle),std::sin(angle)},normal{-axis.y,axis.x};
-   Vec2 hinge{door.left,door.y},edge=hinge+axis*width;
+   const float width=door.width();
+   Vec2 axis=door.leafAxis(door.open),normal{-axis.y,axis.x};
+   Vec2 hinge=door.hinge(),edge=hinge+axis*width;
    auto point=[&](Vec2 p,float side,float z){return Point3{p.x+normal.x*side,p.y+normal.y*side,base+z};};
+   // A reader (lock 1, a keycard slot) or a power release (lock 3) on the wall
+   // beside the latch post, on both faces: its lamp is red (amber, unpowered)
+   // while the door is locked and green once it is not, so a locked door reads
+   // as locked before the prompt says so.
+   if((door.lock==1||door.lock==3)&&length(mid-player.pos)<18.f){
+    static const Texture green{1,1,{0xff49c46au}},dark{1,1,{0xff23272au}};
+    const bool locked=game.doorLocked(door);const float at=door.hingeRight?door.left-.33f:door.right+.33f;
+    for(float side:{-1.f,1.f}){float face=-1;
+     for(float d=.02f;d<.66f;d+=.02f){const Vec2 p=door.world(at,door.y+side*d);if(w.fits(p.x,p.y,base+1.2f,.02f,false)){if(d>.03f)face=d-.005f;break;}}
+     if(face<0)continue;const float c0=door.y+side*face,c1=door.y+side*(face+.03f);
+     doorBox(door,at-.05f,at+.05f,std::min(c0,c1),std::max(c0,c1),base+1.05f,base+1.25f,door.lock==1?dark:m_panelMetal,.9f);
+     if(door.lock==1)doorBox(door,at-.03f,at+.03f,std::min(c1,c1+side*.004f),std::max(c1,c1+side*.004f),base+1.10f,base+1.115f,iron,.8f);
+     doorBox(door,at-.012f,at+.012f,std::min(c1,c1+side*.006f),std::max(c1,c1+side*.006f),base+1.19f,base+1.215f,locked?(door.lock==3?amber:red):green,1.7f);}
+   }
    movingGeometry=true;
    // A shut leaf's jambs sit on the wall's end faces and its faces inside the wall's
    // thickness, so a ray from a corner toward a lamp beyond that jamb started in the
@@ -1511,22 +1644,41 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      tri(a,b,c,doorLeaf,1.f);tri(a,c,d,doorLeaf,1.f);}
     objectLighting=false;
    }
-   // The latch block stands proud of both faces.
-   Vec2 latch=hinge+axis*(width-.18f);
-   box({latch.x-.065f,latch.y-.065f,base+1.02f},{latch.x+.065f,latch.y+.065f,base+1.13f},iron,1.1f);
+   // Its ironmongery, in the leaf's own frame (a from the hinge, s off the leaf's
+   // middle toward `normal`), so it turns with the leaf: a lever on a rose at the
+   // latch edge on both faces, a kick plate low on both faces, three hinge
+   // knuckles on the hinge edge, and a key cylinder under the lever of a door
+   // that locks with a key (lock 2, or any lockable leaf that shows no reader).
+   auto part=[&](float a0,float a1,float s0,float s1,float z0,float z1,const Texture&t,float light){
+    auto P=[&](float a,float s,float z){return point(hinge+axis*a,s,z);};
+    quad(P(a0,s0,z0),P(a1,s0,z0),P(a1,s0,z1),P(a0,s0,z1),t,light);quad(P(a1,s1,z0),P(a0,s1,z0),P(a0,s1,z1),P(a1,s1,z1),t,light);
+    quad(P(a1,s0,z0),P(a1,s1,z0),P(a1,s1,z1),P(a1,s0,z1),t,light*.9f);quad(P(a0,s1,z0),P(a0,s0,z0),P(a0,s0,z1),P(a0,s1,z1),t,light*.9f);
+    quad(P(a0,s0,z1),P(a1,s0,z1),P(a1,s1,z1),P(a0,s1,z1),t,light*1.1f);quad(P(a0,s1,z0),P(a1,s1,z0),P(a1,s0,z0),P(a0,s0,z0),t,light*.8f);};
+   if(door.leaf!=1&&sphereVisible((lo+hi)*.5f,width*.5f+1.2f)){
+    const float latchAt=width-.085f;
+    // Satin stainless for the lever, rose and kick plate; brass for a key cylinder.
+    static const Texture satin=[]{Texture t{1,1,{0xff7f8a94u}};t.glossStrength=.4f;return t;}(),plate=[]{Texture t{1,1,{0xffa7adb2u}};t.glossStrength=.4f;return t;}(),brass=[]{Texture t{1,1,{0xffb89a5cu}};t.glossStrength=.5f;return t;}();
+    for(float side:{-1.f,1.f}){auto off=[&](float a,float b){return side<0?std::pair{-b,-a}:std::pair{a,b};};
+     {auto [s0,s1]=off(.045f,.058f);part(latchAt-.035f,latchAt+.035f,s0,s1,.98f,1.10f,satin,1.f);}
+     {auto [s0,s1]=off(.058f,.082f);part(latchAt-.15f,latchAt+.012f,s0,s1,1.025f,1.05f,satin,1.05f);}
+     {auto [s0,s1]=off(.044f,.053f);part(.03f,width-.03f,s0,s1,.02f,.27f,plate,.95f);}
+     if(door.lock==2||(door.lock==0&&(door.requireState||door.requireEnemiesClear||door.requireControl))){auto [s0,s1]=off(.045f,.06f);part(latchAt-.022f,latchAt+.022f,s0,s1,.86f,.92f,brass,1.f);}
+    }
+    for(float z:{.22f,1.12f,2.02f})part(-.012f,.02f,-.035f,.035f,z,z+.11f,satin,.85f);
+   }
    movingGeometry=false;continue;
   }
-  float headerTop=std::min(base+3.f,w.ceilingHeight(x,door.y)),headerBottom=std::min(base+2.5f,headerTop-.44f);
-  box({x-half,y-.12f,headerBottom},{x+half,y+1.12f,headerTop},m_metal,.8f);
+  float headerTop=std::min(base+3.f,w.ceilingHeight(mid.x,mid.y)),headerBottom=std::min(base+2.5f,headerTop-.44f);
+  doorBox(door,x-half,x+half,y-.12f,y+1.12f,headerBottom,headerTop,m_metal,.8f);
   // Tall walls: the wall continues over the opening up to the roof, so the
   // header and its sign are set in the wall instead of hanging under a slot.
-  if(float roof=w.ceilingHeight(x,door.y);roof>headerTop+.05f){
+  if(float roof=w.ceilingHeight(mid.x,mid.y);roof>headerTop+.05f){
    const auto&fill=w.campaign()&&w.level()<3?m_areaWalls[size_t(w.level())]:m_pressureWall;
-   for(float face:{y,y+1.f}){
-    if(wallFinish)finishQuad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.9f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);
-    else quad({x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof},fill,.9f,{half*.5f,(roof-headerTop)/3.f});
+   for(float face:{y,y+1.f}){const auto q=doorFace(door,{x-half,face,headerTop},{x+half,face,headerTop},{x+half,face,roof},{x-half,face,roof});
+    if(wallFinish)finishQuad(q[0],q[1],q[2],q[3],wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.9f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);
+    else quad(q[0],q[1],q[2],q[3],fill,.9f,{half*.5f,(roof-headerTop)/3.f});
    }
-   box({x-half,y,headerTop},{x+half,y+1.f,headerTop+.02f},m_metal,.8f);
+   doorBox(door,x-half,x+half,y,y+1.f,headerTop,headerTop+.02f,m_metal,.8f);
   }
   float bottom=base+door.open*2.65f;
   if(door.leaf==1){
@@ -1534,37 +1686,37 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // the head, and round bars every 12 cm. It rises like a bulkhead; sight and
    // sound pass between the bars (World::doorBlocks with sight).
    const float l=door.left,r=door.right,top=bottom+2.48f;
-   for(float rail:{bottom,bottom+1.02f,top-.07f})box({l,door.y-.035f,rail},{r,door.y+.035f,rail+.07f},iron,1.f);
-   for(float post:{l,r-.06f})box({post,door.y-.04f,bottom},{post+.06f,door.y+.04f,top},iron,1.f);
+   for(float rail:{bottom,bottom+1.02f,top-.07f})doorBox(door,l,r,door.y-.035f,door.y+.035f,rail,rail+.07f,iron,1.f);
+   for(float post:{l,r-.06f})doorBox(door,post,post+.06f,door.y-.04f,door.y+.04f,bottom,top,iron,1.f);
    const int bars=std::max(2,int((r-l-.12f)/.12f));
-   for(int b=1;b<bars;++b){const float bx=l+.06f+(r-l-.12f)*float(b)/bars;box({bx-.012f,door.y-.012f,bottom+.07f},{bx+.012f,door.y+.012f,top-.07f},iron,.95f);}
+   for(int b=1;b<bars;++b){const float bx=l+.06f+(r-l-.12f)*float(b)/bars;doorBox(door,bx-.012f,bx+.012f,door.y-.012f,door.y+.012f,bottom+.07f,top-.07f,iron,.95f);}
   }else{
-   box({door.left,door.y-.11f,bottom},{door.right,door.y+.11f,bottom+2.48f},door.leaf==2?doorLeaf:m_bulkhead,1.f);
+   doorBox(door,door.left,door.right,door.y-.11f,door.y+.11f,bottom,bottom+2.48f,door.leaf==2?doorLeaf:m_bulkhead,1.f);
    // A painted panel is a clinic or office door: no hazard band across it.
    if(door.leaf!=2){float stripeHeight=(door.right-door.left)*m_hazard.height/m_hazard.width;
-    quad({door.right,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f+stripeHeight},{door.right,door.y-.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
-    quad({door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);}
+    doorQuad(door,{door.right,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f},{door.left,door.y-.115f,bottom+.20f+stripeHeight},{door.right,door.y-.115f,bottom+.20f+stripeHeight},m_hazard,.95f);
+    doorQuad(door,{door.left,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f},{door.right,door.y+.115f,bottom+.20f+stripeHeight},{door.left,door.y+.115f,bottom+.20f+stripeHeight},m_hazard,.95f);}
   }
-  for(float jamb:{door.left,door.right})box({jamb-.055f,y-.08f,base},{jamb+.055f,y+1.08f,base+2.75f},m_panelMetal,.85f);
+  for(float jamb:{door.left,door.right})doorBox(door,jamb-.055f,jamb+.055f,y-.08f,y+1.08f,base,base+2.75f,m_panelMetal,.85f);
   // Switch housings attach to the fixed wall on both sides, never to the moving leaf.
   for(float side:{-1.f,1.f}){const float switchX=door.left-.25f;
    float h=base;
    // Mount on the real face of the wall beside the opening, however thick it
    // is; where there is no wall there is no switch, rather than one in the air.
    float face=door.y;bool wallThere=false;
-   for(float d=.02f;d<.66f;d+=.02f)if(w.fits(switchX,door.y+side*d,h+1.05f,.02f,false)){face=door.y+side*(d-.005f);wallThere=d>.03f;break;}
+   for(float d=.02f;d<.66f;d+=.02f){const Vec2 probe=door.world(switchX,door.y+side*d);if(w.fits(probe.x,probe.y,h+1.05f,.02f,false)){face=door.y+side*(d-.005f);wallThere=d>.03f;break;}}
    if(!wallThere)continue;
-   box({switchX-.17f,face-.035f,h+.86f},{switchX+.17f,face+.035f,h+1.27f},m_panelMetal,.9f);
-   if(side<0)quad({switchX+.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+1.24f},{switchX+.14f,face-.04f,h+1.24f},m_terminalTexture,.85f);
-   else quad({switchX-.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+1.24f},{switchX-.14f,face+.04f,h+1.24f},m_terminalTexture,.85f);
-   box({switchX-.025f,face+side*.042f-.005f,h+1.17f},{switchX+.025f,face+side*.042f+.005f,h+1.20f},door.opening?blue:amber,1.55f);
+   doorBox(door,switchX-.17f,switchX+.17f,face-.035f,face+.035f,h+.86f,h+1.27f,m_panelMetal,.9f);
+   if(side<0)doorQuad(door,{switchX+.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+.89f},{switchX-.14f,face-.04f,h+1.24f},{switchX+.14f,face-.04f,h+1.24f},m_terminalTexture,.85f);
+   else doorQuad(door,{switchX-.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+.89f},{switchX+.14f,face+.04f,h+1.24f},{switchX-.14f,face+.04f,h+1.24f},m_terminalTexture,.85f);
+   doorBox(door,switchX-.025f,switchX+.025f,face+side*.042f-.005f,face+side*.042f+.005f,h+1.17f,h+1.20f,door.opening?blue:amber,1.55f);
   }
   // Doors carry no area-name plates: title cards announce areas. Only an
   // explicit notice (a door that says why it is shut) is bolted to the header.
   if(door.sign>=CampaignChunkCount&&door.sign<CampaignChunkCount+int(m_noticeSigns.size())){const auto& notice=m_noticeSigns[size_t(door.sign-CampaignChunkCount)];
    float plateHalf=std::min(.8f,half-.05f),plateTop=headerBottom+.06f+plateHalf*2.f/3.56f;
-   quad({x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},notice,.9f);
-   quad({x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},notice,.9f);}
+   doorQuad(door,{x+plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,headerBottom+.06f},{x-plateHalf,y-.125f,plateTop},{x+plateHalf,y-.125f,plateTop},notice,.9f);
+   doorQuad(door,{x-plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,headerBottom+.06f},{x+plateHalf,y+1.125f,plateTop},{x-plateHalf,y+1.125f,plateTop},notice,.9f);}
  }
  if(!m_gpuFrame||!staticFixtures)for(const auto&p:w.props()){Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);}
  // Original square fixture proportions, with its top 2 cm below its support.
@@ -2287,10 +2439,34 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     for(float side:{-.014f,.014f})quad(planePoint(f,a-n,side),planePoint(f,e-n,side),planePoint(f,e+n,side),planePoint(f,a+n,side),line,1.3f);}
    continue;}
   if(mark.blood){
-   int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);float tint=creatureVisuals[size_t(species)].bloodLight;const Texture&blood=m_bloodVariants[size_t(species)];
-   if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){float size=mark.size>0?mark.size:.28f;float z=w.floorHeight(mark.pos.x,mark.pos.y)+.014f;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},blood,tint);continue;}
-   float tangentX=-mark.normal.y,tangentY=mark.normal.x,size=mark.size>0?mark.size:.045f;Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
-   quad({p.x-tangentX*size,p.y-tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z-size},{p.x+tangentX*size,p.y+tangentY*size,p.z+size},{p.x-tangentX*size,p.y-tangentY*size,p.z+size},blood,tint);continue;
+   // Blood comes after the map's static geometry is baked (a kill, a feed, a round), so it is drawn as
+   // moving geometry, as the gore effects are; drawn static it never reached the baked frame.
+   struct Moving{bool&flag;bool was;~Moving(){flag=was;}} moving{movingGeometry,movingGeometry};movingGeometry=true;
+   // Drawn the way the gore effects draw their spots on the floor (lit once at the middle, as an object):
+   // the architecture's quad path never put a mark laid after the map was built on screen.
+   auto lay=[&](Point3 qa,Point3 qb,Point3 qc,Point3 qd,const Texture&t,float light,Point3 facing){objectLighting=true;objectNormalLighting=nullptr;
+    objectLight=illumination((qa+qc)*.5f+facing*.02f,facing);tri({qa,0,1},{qb,1,1},{qc,1,0},t,light);tri({qa,0,1},{qc,1,0},{qd,0,0},t,light);objectLighting=false;};
+   // The pack's spatters (m_bloodDecals), each mark its own: which cell and which way it lies come from
+   // where it is, so no two marks are stamped from one die. Tinted by the creature's fluid.
+   const int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);const auto&visual=creatureVisuals[size_t(species)];const float tint=visual.bloodLight;
+   unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)*2654435761u^unsigned(std::fabs(mark.pos.y)*613.f)*2246822519u^unsigned(std::fabs(mark.z)*977.f);seed^=seed>>15;seed*=2654435761u;
+   const float spin=float(seed%628u)*.01f,cs=std::cos(spin),sn=std::sin(spin);
+   if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){
+    // On the floor it lies on (a deck or a raised floor as much as the ground): a pool under a body, a splat where a gout lands.
+    const float size=mark.size>0?mark.size:.28f,z=w.supportBelow(mark.pos.x,mark.pos.y,mark.z+.3f)+.03f;   // above a relief floor's drawn surface
+    const Texture&t=bloodDecal(visual.fluid,size>=.34f?BloodJob::Pool:BloodJob::Splat,seed>>8);
+    const Point3 c{mark.pos.x,mark.pos.y,z},u{cs*size,sn*size,0},v{-sn*size,cs*size,0};
+    lay(c-u-v,c+u-v,c+u+v,c-u+v,t,tint,Point3{0,0,1});continue;}
+   // On a wall: a round's burst, turned in the wall's plane, and on two hits in three a run that creeps
+   // down from it over the first seconds and stops at the floor.
+   const Point3 along{-mark.normal.y,mark.normal.x,0},up{0,0,1};const float size=mark.size>0?mark.size:.045f;
+   const Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
+   {const float half=size*2.6f;const Point3 u=(along*cs+up*sn)*half,v=(up*cs-along*sn)*half;lay(p-u-v,p+u-v,p+u+v,p-u+v,bloodDecal(visual.fluid,BloodJob::Burst,seed>>8),tint,Point3{mark.normal.x,mark.normal.y,0});}
+   if(seed%3u){const float age=std::max(0.f,game.elapsed()-mark.time),run=std::pow(std::clamp(age/2.5f,0.f,1.f),.6f),floorZ=w.floorHeight(mark.pos.x,mark.pos.y)+.03f;
+    const float top=p.z-size*.2f,length=std::min(size*(4.f+float((seed>>4)%5u)),top-floorZ)*run,width=size*.55f;
+    if(length>.01f){const Point3 q{p.x+mark.normal.x*.002f,p.y+mark.normal.y*.002f,top};const Point3 side=along*width;
+     lay(q-side-up*length,q+side-up*length,q+side,q-side,bloodDecal(visual.fluid,BloodJob::Drip,seed>>12),tint,Point3{mark.normal.x,mark.normal.y,0});}}
+   continue;
   }
   if(mark.tint==-2){float size=.7f,z=mark.z;quad({mark.pos.x-size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y-size,z},{mark.pos.x+size,mark.pos.y+size,z},{mark.pos.x-size,mark.pos.y+size,z},scorch,.9f);continue;}
   float tangentX=-mark.normal.y,tangentY=mark.normal.x;
@@ -2388,6 +2564,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // A man a creature's bite took the head from: nothing above the neck, a
   // stump that pumps for its first seconds and a pool spreading under it.
   const bool headless=human&&actor>=0&&game.npcHeadless(size_t(actor));
+  // A dead man is drawn from his body (humanCorpse), not from the death clip's last frame.
+  Corpse* corpse=human&&pose.clip==4&&m_cleanupInspectionStage==0?humanCorpse(game,w,level,track,pose,actor,emitSlot):nullptr;
+  if(corpse&&!sphereVisible(corpse->carcass.centre(),corpse->carcass.radius()+.1f))return;
   // Civilians share the Worker path; civilianBody picks the Worker or a staff model.
   const int civilianBody=std::max(0,civilianActorBody(track.visual));const auto&rig=kCivilianRigs[size_t(civilianBody)];
   int cleanupRole=cleanup?cleanupActorBody(track.visual):0;auto& mesh=cleanup?*cleanupMeshes()[size_t(cleanupRole)]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
@@ -2398,7 +2577,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   bool engineering=engineer&&(weapon->engineering>0||weapon->maintenance||directSupport);
   auto terminal=fieldTerminalFrame(pose,track.scale,engineering);
   float terminalTouch=engineering?std::sin((weapon->maintenance?game.elapsed()*5.f:weapon->engineering*3.f)*kPi):0;
-  if(human){
+  if(human&&!corpse){
    if(directSupport)mesh.poseCreature(weapon->supportClip,weapon->supportPhase);
    else if(treating&&track.visual==ActorVisual::CleanupMedic)mesh.poseCreature(6,weapon->treatment);
    else if(cleanup&&pose.clip!=4&&m_cleanupInspectionStage!=1){
@@ -2559,11 +2738,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=true;objectNormalLighting=nullptr;
   ExteriorLight actorLights;
-  {perf::ActorScope profile(0);actorLights=exteriorLight({pose.position.x,pose.position.y,pose.z+track.scale*.5f},track.scale*.5f,track.scale*.5f,track.scale,pose.yaw,true);}
+  // A body is lit as the low heap it is, where it came to rest.
+  const Point3 actorCenter=corpse?corpse->carcass.centre()+Point3{0,0,.12f}:Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
+  {perf::ActorScope profile(0);if(corpse){const float heap=std::clamp(corpse->carcass.radius(),.3f,1.2f);actorLights=exteriorLight(actorCenter,heap,heap,.4f,pose.yaw,true);}
+   else actorLights=exteriorLight(actorCenter,track.scale*.5f,track.scale*.5f,track.scale,pose.yaw,true);}
   // Preserve the existing per-triangle distance rejection near a chunk's
   // far limit; ordinary nearby actors use hardware projection and clipping.
   const bool nearFarLimit=cameraPoint({pose.position.x,pose.position.y,pose.z+radius*.5f},game).z+radius*4.f>=farPlane;
-  const Point3 actorCenter{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
   const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos,actorCenter):-1;
   std::array<GpuRenderer::ActorMaterial,4> gpuMaterials{};
   std::array<bool,4> gpuMaterialReady{};
@@ -2591,6 +2772,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   mixBits(emitIdentity,std::uint32_t(track.visual));mixFloat(emitIdentity,track.scale);mixFloat(emitIdentity,pose.position.x);mixFloat(emitIdentity,pose.position.y);
   mixFloat(emitIdentity,pose.z);mixFloat(emitIdentity,pose.yaw);mixBits(emitIdentity,std::uint32_t(pose.clip));mixBits(emitIdentity,std::uint32_t(m_cleanupInspectionStage));
   mixFloat(emitIdentity,pose.phase);if(wasp)mixFloat(emitIdentity,game.elapsed());mixBits(emitIdentity,headless?1u:0u);
+  // A body moves until it comes to rest; at rest it is the same body every frame.
+  if(corpse){mixBits(emitIdentity,std::uint32_t(corpse->signature));mixBits(emitIdentity,std::uint32_t(corpse->signature>>32));mixFloat(emitIdentity,corpse->carcass.asleep()?-1.f:corpse->carcass.age());}
   if(weapon){mixBits(emitIdentity,weapon->armed);mixBits(emitIdentity,weapon->handgun);mixBits(emitIdentity,weapon->crouched);mixBits(emitIdentity,weapon->maintenance);
    mixBits(emitIdentity,weapon->supportAnimation);mixBits(emitIdentity,weapon->padVisible);mixBits(emitIdentity,weapon->pistolVisible);mixBits(emitIdentity,std::uint32_t(weapon->supportClip));
    mixBits(emitIdentity,std::uint32_t(weapon->action));mixFloat(emitIdentity,weapon->supportPhase);mixFloat(emitIdentity,weapon->treatment);mixFloat(emitIdentity,weapon->engineering);
@@ -2620,13 +2803,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float bindHeight=mesh.maximum.y-mesh.minimum.y,neckY=mesh.minimum.y+bindHeight*.855f;
   Point3 ring{},chest{};int ringCount=0,chestCount=0;
   const bool streamBody=gpuActor>=0&&m_actorStreamWriting;
-  GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(mesh.triangles.size());
+  // A body's faces are already where it lies, in the posed mesh's order less any it lost.
+  const auto&faces=corpse?corpse->carcass.triangles():mesh.triangles;
+  GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(faces.size());
   uint32_t emitted=0,runStart=0;int runMaterial=-1;
   auto flushRun=[&]{if(runMaterial>=0)m_gpu->actorStreamRun(stream.start+runStart,emitted-runStart,gpuMaterials[runMaterial]);runStart=emitted;};
   {perf::ActorScope profile(1);
-  for(auto face:mesh.triangles){
+  for(size_t faceIndex=0;faceIndex<faces.size();++faceIndex){auto face=faces[faceIndex];
+   if(corpse)actorFace=size_t(corpse->faces[faceIndex]);
    float bindCentre=0;if(headless){const auto&rest=mesh.bindTriangles()[actorFace];bindCentre=(rest.v[0].p.y+rest.v[1].p.y+rest.v[2].p.y)/3.f;if(bindCentre>neckY){++actorFace;continue;}}
-   int vertex=0;for(auto& v:face.v){
+   if(!corpse){int vertex=0;for(auto& v:face.v){
     uint32_t group=reuseAttachment?(*armedVertices)[actorFace][vertex].group:0;
     if(reuseAttachment&&attachmentReady[group]){v.p=attachmentPositions[group];++vertex;continue;}
     auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
@@ -2651,9 +2837,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      auto sleeve=upper+(lower-upper)*bind.lower;auto attached=rigidHand?hand:sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*(rigidHand?1.f:bind.influence);
     }}
     if(reuseAttachment){attachmentPositions[group]=v.p;attachmentReady[group]=1;}
-    ++vertex;}
-   if(m_environmentInspection&&posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
-   if(m_environmentInspection&&cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
+    ++vertex;}}
+   if(m_environmentInspection&&posedArms&&armedVertices&&!corpse)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
+   if(m_environmentInspection&&cleanup&&!corpse){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
    if(headless){const Point3 centre=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
     if(bindCentre>neckY-.045f*bindHeight){ring=ring+centre;++ringCount;}else if(bindCentre>neckY-.24f*bindHeight&&bindCentre<neckY-.14f*bindHeight){chest=chest+centre;++chestCount;}}
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
@@ -2693,6 +2879,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // The cut: a dark wet disc across the neck.
    const Point3 side=std::fabs(axis.z)<.9f?cross3(axis,Point3{0,0,1}):cross3(axis,Point3{1,0,0});const float sl=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);const Point3 u=side*(.07f*body/std::max(sl,.001f)),v=cross3(axis,u);
    const Point3 cap=neck+axis*(.012f*body);quad(cap-u-v,cap+u-v,cap+u+v,cap-u+v,m_stump[0],.95f);quad(cap-u+v,cap+u+v,cap+u-v,cap-u-v,m_stump[0],.95f);
+   // What ran out of him: a pool spreading from the neck along the way it points, on the floor under it.
+   {const Point3 lies=corpse?corpse->carcass.centre():Point3{pose.position.x,pose.position.y,pose.z};
+    Point3 flat{neck.x-lies.x,neck.y-lies.y,0};if(flat.x*flat.x+flat.y*flat.y<.01f)flat={axis.x,axis.y,0};   // from where he lies out through the neck
+    {const float fl=std::sqrt(flat.x*flat.x+flat.y*flat.y);flat=fl>.05f?flat*(1.f/fl):Point3{1,0,0};}
+    const float grow=std::sqrt(std::clamp(age/6.f,0.f,1.f)),half=std::max(.14f,.8f*body*grow);
+    // centred on the cut: it runs under his shoulders and out past where his head was
+    const Point3 c{neck.x+flat.x*half*.5f,neck.y+flat.y*half*.5f,w.supportBelow(neck.x,neck.y,neck.z+.05f)+.03f};   // 3 cm: clear of a relief floor's drawn surface
+    const float turn=float((unsigned(actor)*2654435761u>>9)%628u)*.01f,cs=std::cos(turn)*half,sn=std::sin(turn)*half;
+    const Point3 a{c.x-cs+sn,c.y-sn-cs,c.z},bb{c.x+cs+sn,c.y+sn-cs,c.z},cc{c.x+cs-sn,c.y+sn+cs,c.z},d{c.x-cs-sn,c.y-sn+cs,c.z};
+    static constexpr unsigned heavy[]={0,2,3,4};const Texture&pool=bloodDecal(Fluid::Blood,BloodJob::Pool,heavy[unsigned(actor)%4u]);
+    objectLighting=true;objectNormalLighting=nullptr;objectLight=illumination(c+Point3{0,0,.02f},Point3{0,0,1});
+    tri({a,0,1},{bb,1,1},{cc,1,0},pool,.9f);tri({a,0,1},{cc,1,0},{d,0,0},pool,.9f);objectLighting=false;}
    // The stump pumps a few times while the heart still goes.
    constexpr float pumps[]={.25f,.85f,1.6f,2.5f};int&thrown=m_neckPulses[emitSlot];
    while(thrown<4&&age>=pumps[thrown]&&age<pumps[thrown]+3.f){HitBurst burst{neck,axis*.8f+Point3{0,0,.35f},game.elapsed(),level,ImpactMaterial::Flesh,-1,1.4f-.25f*float(thrown),false};burst.stump=true;burst.floor=w.supportBelow(neck.x,neck.y,neck.z+.05f);burst.reach=9;
@@ -2832,13 +3030,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // (Carcass): the pose it died in, let go, thrown by what killed it, lying where it falls, coming apart
  // by section under fire or a blast, each cut closed with a cap. Rounds that struck it leave their
  // wounds in its skin, alive or dead. At the end of its time it dissolves and is gone.
- static const std::array<Texture,2> woundTextures=[]{std::array<Texture,2> made;
-  for(int tone=0;tone<2;++tone){constexpr int n=32;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;t.transparent=true;
+ // One wound per fluid (Fluid): its dark core and its wet ring.
+ static const std::array<Texture,size_t(Fluid::Count)> woundTextures=[]{std::array<Texture,size_t(Fluid::Count)> made;
+  static constexpr Point3 cores[]={{40,4,6},{30,45,8},{6,22,26},{14,11,8}},rings[]={{120,10,14},{110,160,40},{24,74,84},{52,44,34}};
+  static_assert(std::size(cores)==size_t(Fluid::Count)&&std::size(rings)==size_t(Fluid::Count));
+  for(int tone=0;tone<int(Fluid::Count);++tone){constexpr int n=32;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;t.transparent=true;
    for(int y=0;y<n;++y)for(int x=0;x<n;++x){float dx=(x+.5f)/n*2-1,dy=(y+.5f)/n*2-1,angle=std::atan2(dy,dx),r=std::sqrt(dx*dx+dy*dy)/(.82f+.12f*std::sin(angle*5.f+1.3f)+.07f*std::sin(angle*11.f+.4f));
     if(x<2||y<2||x>=n-2||y>=n-2||r>=.88f)continue;
     float alpha=r<.28f?235.f:r<.6f?220.f-100.f*(r-.28f)/.32f:120.f*(1-(r-.6f)/.28f);
     float mix=std::clamp((r-.12f)/.3f,0.f,1.f),dry=std::clamp((r-.5f)/.38f,0.f,1.f);
-    Point3 core=tone?Point3{30,45,8}:Point3{40,4,6},ring=tone?Point3{110,160,40}:Point3{120,10,14};Point3 c=(core+(ring-core)*mix)*(1-.45f*dry);
+    Point3 core=cores[tone],ring=rings[tone];Point3 c=(core+(ring-core)*mix)*(1-.45f*dry);
     t.pixels[size_t(y*n+x)]=(std::uint32_t(alpha)<<24)|(std::uint32_t(c.x)<<16)|(std::uint32_t(c.y)<<8)|std::uint32_t(c.z);}
    made[size_t(tone)]=std::move(t);}
   return made;}();
@@ -2944,6 +3145,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
   // The transformed wears the Worker's body, gloves (mano) and boots (pies).
   std::array<const Texture*,8> parts{};parts.fill(&texture);
+  // A kind with a lamp (its *_glow material) lights it from its glow sheet while it is awake and alive;
+  // asleep the lamp is dark, starting up it catches and drops out, and the dead one's is out.
+  std::array<float,8> partLight{};partLight.fill(1.f);
+  if(visual.glow){const bool starting=e.alive&&e.stalkMode==Enemy::StalkMode::Recover&&creatureTraits(e.kind).dormant;
+   const bool lit=e.alive&&!e.sleeping()&&!(starting&&std::fmod(goreNow*6.3f+e.home.x*.37f,1.f)<.4f);
+   for(size_t part=0;part<mesh.materialNames.size()&&part<parts.size();++part)if(mesh.materialNames[part].ends_with("_glow")){if(lit)parts[part]=&(this->*visual.glow);else partLight[part]=.35f;}}
   if(e.kind==Enemy::Kind::Transformed)for(size_t part=0;part<mesh.materialNames.size()&&part<parts.size();++part){const auto&name=mesh.materialNames[part];
    parts[part]=name.find("pies")!=std::string::npos?&m_transformedBoots:name.find("mano")!=std::string::npos?&m_transformedGloves:&m_transformedTexture;}
   // Mesh X is actor right; exteriorLight X points at yaw=(pi/2-heading). A body is lit as the low heap it is.
@@ -2957,7 +3164,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+(e.alive?e.painFlash*.22f:0.f);
    // Thin wasp wings transmit light from the far side of the membrane.
    if(wasp&&face.part==1&&keyLight&&len>.00001f){auto toLamp=keyLight->emitter()-receiver;float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
-   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[size_t(std::clamp(face.part,0,int(parts.size())-1))],light);
+   const size_t part=size_t(std::clamp(face.part,0,int(parts.size())-1));
+   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[part],light*partLight[part]);
    if(keyLight){
     static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
     MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
@@ -2970,12 +3178,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadow,1.f);}
    }
   }
-  const size_t tone=visual.xenoblood?1u:0u;
+  const size_t tone=size_t(visual.fluid);
   if(!e.alive){auto&carcass=slot->carcass;
    // What runs out of it: a pool that spreads under where it came to rest.
-   if(slot->pooled){float grow=std::clamp((carcass.age()-1.f)/5.f,0.f,1.f),half=.34f*e.scale*(.25f+.75f*grow*(2.f-grow));Point3 p=slot->pool;p.z+=.016f;
-    objectLight=illumination(Point3{p.x,p.y,p.z+.02f},Point3{0,0,1});objectNormalLighting=nullptr;const Texture&blood=m_bloodVariants[size_t(e.kind)];const float tint=visual.bloodLight;
-    tri({{p.x-half,p.y-half,p.z},0,1},{{p.x+half,p.y-half,p.z},1,1},{{p.x+half,p.y+half,p.z},1,0},blood,tint);tri({{p.x-half,p.y-half,p.z},0,1},{{p.x+half,p.y+half,p.z},1,0},{{p.x-half,p.y+half,p.z},0,0},blood,tint);}
+   if(slot->pooled){float grow=std::clamp((carcass.age()-1.f)/5.f,0.f,1.f),half=.34f*e.scale*(.25f+.75f*grow*(2.f-grow));Point3 p=slot->pool;p.z+=.03f;
+    objectLight=illumination(Point3{p.x,p.y,p.z+.02f},Point3{0,0,1});objectNormalLighting=nullptr;const Texture&blood=bloodDecal(visual.fluid,BloodJob::Pool,(unsigned(e.deathSerial)*2654435761u)>>7);const float tint=visual.bloodLight;
+    const float turn=float((unsigned(e.deathSerial)*40503u+unsigned(e.kind)*977u)%628u)*.01f,cs=std::cos(turn)*half,sn=std::sin(turn)*half;const Point3 a{p.x-cs+sn,p.y-sn-cs,p.z},bb{p.x+cs+sn,p.y+sn-cs,p.z},c{p.x+cs-sn,p.y+sn+cs,p.z},d{p.x-cs-sn,p.y-sn+cs,p.z};
+    tri({a,0,1},{bb,1,1},{c,1,0},blood,tint);tri({a,0,1},{c,1,0},{d,0,0},blood,tint);}
    // The cuts: each gap where a section came away is closed with meat and bone.
    for(const auto&cap:carcass.caps()){Point3 n=faceNormal(cap);selectFaceLight(enemyLights,n,n);tri(cap.v[0],cap.v[1],cap.v[2],m_stump[tone],.95f);}
   }

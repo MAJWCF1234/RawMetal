@@ -80,9 +80,20 @@ BANK = [
 ]
 
 
-def decode(source, start, length):
+# Beds that grated in play (the user on Chapter 2, 2026-11-12): white hiss at full width is a
+# sound nobody stands next to for long. Each is taken down to (low-pass Hz, dBFS RMS): a muffled
+# crackle behind a panel, not a detuned radio held to the ear.
+TAME = {
+    'static_electrical': (2200, -27.0),
+    'radio_static':      (2800, -25.0),
+    'gas_leak':          (2600, -26.0),
+}
+
+
+def decode(source, start, length, lowpass=None):
     """Mono 44.1 kHz 16-bit samples of the chosen stretch."""
-    raw = subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(start), '-t', str(length), '-i', str(source),
+    shape = ['-af', f'lowpass=f={lowpass}:p=2,lowpass=f={lowpass}:p=2'] if lowpass else []
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(start), '-t', str(length), '-i', str(source), *shape,
                           '-ac', '1', '-ar', '44100', '-f', 's16le', '-'], capture_output=True, check=True).stdout
     samples = array.array('h')
     samples.frombytes(raw[:len(raw)//2*2])
@@ -133,21 +144,29 @@ def write_wav(path, samples):
 
 
 def main():
-    pack = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('O:/retro official/Audio/Horror SFX Complete (ogg files).zip')
+    # --only NAME [NAME ...]: re-make just those sounds in place (assets.rc is left alone).
+    args = sys.argv[1:]
+    only = set(args[args.index('--only')+1:]) if '--only' in args else None
+    if only is not None:
+        args = args[:args.index('--only')]
+    pack = Path(args[0]) if args else Path('O:/retro official/Audio/Horror SFX Complete (ogg files).zip')
     WORK.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     lines = []
     with zipfile.ZipFile(pack) as archive:
         members = {name.lower(): name for name in archive.namelist()}
         for index, (name, loop, member, start, length, peak) in enumerate(BANK):
+            if only is not None and name not in only:
+                continue
             found = members.get((PACK+member).lower())
             if not found:
                 raise SystemExit(f'not in the pack: {member}')
             source = WORK/f'{name}.ogg'
             source.write_bytes(archive.read(found))
-            samples = decode(source, start, length)
+            lowpass, rms_db = TAME.get(name, (None, -18.0))
+            samples = decode(source, start, length, lowpass)
             if loop:
-                samples = level_bed(samples)
+                samples = level_bed(samples, rms_db)
                 master = WORK/f'{name}.wav'
                 write_wav(master, samples)
                 out = OUT/f'hsfx_{name}.mp3'
@@ -163,6 +182,9 @@ def main():
             print(f'{FIRST_RESOURCE+index} {out.name}: {seconds:.2f} s, {out.stat().st_size} bytes')
             lines.append(f'{FIRST_RESOURCE+index} RCDATA "assets/library/audio/{out.name}"')
             source.unlink()
+    if only is not None:
+        print(f'{len(lines)} bank sounds re-made; assets.rc unchanged')
+        return
     text = RC.read_text()
     text = re.sub(r'^\d+ RCDATA "assets/library/audio/hsfx_[^"]+"\n', '', text, flags=re.M)
     if not text.endswith('\n'):

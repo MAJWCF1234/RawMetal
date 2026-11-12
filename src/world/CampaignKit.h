@@ -545,8 +545,22 @@ inline int wallDoor(Map& m,float a,float b,float y1,float y2,float x1,float x2,f
  if(x1>a)wall(m,a,y1,x1,y2,f,top,3);if(b>x2)wall(m,x2,y1,b,y2,f,top,3);
  return swingDoor(m,x1,x2,(y1+y2)*.5f,f,top,swing);
 }
-// An open doorway y1..y2 through a wall along y (x1..x2), where no leaf can
-// hang: pale-steel jambs in the wall's ends, a head, the wall above.
+// A swinging door hinged at y1 in a wall along y at x, opening toward +x
+// (swing 1) or -x (-1); hingeAtY2 hangs it from y2 instead. Door::alongY: the
+// same leaf, posts and head as swingDoor, turned a quarter. Returns its index.
+inline int swingDoorY(Map& m,float y1,float y2,float x,float f,float top,float swing,bool hingeAtY2=false){
+ wall(m,x-.1f,y1,x+.1f,y2,f+2.55f,top,3);
+ Door d{y1,y2,x,0};d.alongY=true;d.hingeRight=hingeAtY2;d.swinging=true;d.swing=swing;d.maxOpen=.9f;d.z=f-m.layers.front().elevation;m.doors.push_back(d);
+ return int(m.doors.size())-1;
+}
+// A wall along y (x1..x2 thick) from a to b with a swinging door y1..y2 in it.
+inline int wallDoorY(Map& m,float a,float b,float x1,float x2,float y1,float y2,float f,float top,float swing,bool hingeAtY2=false){
+ if(y1>a)wall(m,x1,a,x2,y1,f,top,3);if(b>y2)wall(m,x1,y2,x2,b,f,top,3);
+ return swingDoorY(m,y1,y2,(x1+x2)*.5f,f,top,swing,hingeAtY2);
+}
+// An open doorway y1..y2 through a wall along y (x1..x2) with no leaf:
+// pale-steel jambs in the wall's ends, a head, the wall above. Where a door
+// belongs, swingDoorY hangs one.
 inline void doorwayY(Map& m,float y1,float y2,float x1,float x2,float f,float top,float head=2.3f){
  wall(m,x1,y1,x2,y2,f+head,top,3);
  for(float y:{y1-.06f,y2})wall(m,x1-.03f,y,x2+.03f,y+.06f,f,f+head,20);

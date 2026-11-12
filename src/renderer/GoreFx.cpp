@@ -1,10 +1,12 @@
 #include "GoreFx.h"
 #include "GpuRenderer.h"
+#include "../game/EngineRegressionScene.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -45,8 +47,9 @@ const Debris debris[Materials]={
 };
 constexpr int MistLevels=6,DustLevels=4;
 struct Kit {
- std::array<std::array<Texture,MistLevels>,2> mist;
- std::array<Texture,2> drop,splat;
+ static constexpr int Fluids=int(SoftwareRenderer::Fluid::Count);
+ std::array<std::array<Texture,MistLevels>,Fluids> mist;
+ std::array<Texture,Fluids> drop,splat;
  std::array<std::array<Texture,DustLevels>,Materials> dust;
  std::array<Texture,Materials> chip;
 };
@@ -56,8 +59,9 @@ Texture puff(Point3 tone,float strength,unsigned salt){constexpr int n=24;Textur
   t.pixels[size_t(y*n+x)]=pack(tone*(.85f+.3f*noise),fall*fall*(3-2*fall)*strength*(.75f+.25f*noise));}
  return t;}
 const Kit& kit(){static const Kit made=[]{Kit k;
- const Point3 blood[2]={{.42f,.02f,.03f},{.45f,.70f,.15f}};
- for(int tone=0;tone<2;++tone){
+ // blood, a bug's goo, ichor, oil (SoftwareRenderer::Fluid)
+ const Point3 blood[Kit::Fluids]={{.42f,.02f,.03f},{.58f,.66f,.20f},{.10f,.30f,.34f},{.10f,.085f,.065f}};
+ for(int tone=0;tone<Kit::Fluids;++tone){
   for(int level=0;level<MistLevels;++level)k.mist[size_t(tone)][size_t(level)]=puff(blood[tone],float(level+1)/MistLevels*.8f,unsigned(tone*7+level));
   // A drop: a hard round bead, lighter where the room catches it.
   constexpr int n=12;auto&d=k.drop[size_t(tone)];d=blank(n,n,false);
@@ -91,7 +95,7 @@ Fate fly(const HitBurst&b,Point3 from,Point3 v,float t,float gravity){Fate f;if(
  f.at=from+v*landing;f.at.z=b.floor;f.since=t-landing;return f;}
 }
 
-GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& bursts,int level,float now,Point3 eye,const Quad& quad,const Hidden& hidden){
+GoreStats GoreFx::draw(const SoftwareRenderer& renderer,const std::vector<HitBurst>& bursts,int level,float now,Point3 eye,const Quad& quad,const Hidden& hidden){
  GoreStats stats;if(bursts.empty())return stats;const Kit&k=kit();
  auto put=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light){++stats.quads;quad(a,b,c,d,t,light);};
  // A card that faces the eye, one drawn out along the way it is moving, and a spot lying on the floor.
@@ -109,8 +113,10 @@ GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& burs
   ++stats.bursts;Rng rng{seedOf(b)};
   if(b.material==ImpactMaterial::Flesh){
    const int species=b.species>=0&&b.species<int(SoftwareRenderer::creatureVisuals.size())?b.species:int(CreatureKind::Mutant);
-   const auto&visual=SoftwareRenderer::creatureVisuals[size_t(species)];const size_t tone=visual.xenoblood?1u:0u;
-   const Texture&stain=k.splat[tone];const float stainLight=1.f;
+   const auto&visual=SoftwareRenderer::creatureVisuals[size_t(species)];const size_t tone=size_t(visual.fluid);const float stainLight=1.f;
+   // A drop lands as one of the pack's spatters: a big one as a splat, a small one as a scatter of drops.
+   auto stain=[&](int index,float mark)->const Texture&{const unsigned pick=seedOf(b)*31u+unsigned(index)*7u;
+    return mark>=.08f?renderer.bloodDecal(visual.fluid,SoftwareRenderer::BloodJob::Splat,pick):renderer.bloodDecal(visual.fluid,SoftwareRenderer::BloodJob::Drops,pick);};
    const float power=std::clamp(b.power,.3f,2.5f),root=std::sqrt(power);
    const Point3 dir=unit(b.direction),side=unit(cross(dir,Up),{1,0,0}),lift=cross(side,dir);
    // A puff of mist: it swells, drifts and thins.
@@ -120,7 +126,7 @@ GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& burs
    auto droplet=[&](int index,Point3 from,Point3 velocity,float born,float size,float mark,float turn){const Fate f=fly(b,from,velocity,age-born,9.8f);if(f.gone)return;
     if(f.flying){streak(f.at,f.velocity,size,std::min(2.5f,span(f.velocity)*.35f),k.drop[tone],1.f);return;}
     const float half=mark*std::min(1.f,f.since/.08f)*(1-std::clamp((age-5.2f)/1.f,0.f,1.f));if(half<.004f)return;
-    spot({f.at.x,f.at.y,b.floor+.012f+float(index)*.0004f},half,turn,1,stain,stainLight);};
+    spot({f.at.x,f.at.y,b.floor+.03f+float(index)*.0004f},half*1.6f,turn,1,stain(index,mark),stainLight);};
    if(b.stump){
     // A cut pumps: mist at once, then drops thrown on a falling pressure for most of a second.
     mist(b.point,dir*.5f+Up*.2f,.14f*root,.6f,0);
@@ -159,8 +165,8 @@ GoreStats GoreFx::draw(const SoftwareRenderer&,const std::vector<HitBurst>& burs
 
 bool SoftwareRenderer::testGore(std::ostream& report){
  bool passed=true;auto check=[&](bool ok,const std::string&text){report<<(ok?"PASS":"FAIL")<<": "<<text<<'\n';report.flush();passed&=ok;};
- static const char*const names[]={"Huntsman","Wasp","Brute","Warden","Mutant","Snatcher","Chimera","Transformed"};
- constexpr int W=480,H=270,Kinds=int(CreatureKind::Transformed)+1;
+ static const char*const names[]={"Huntsman","Wasp","Brute","Warden","Mutant","Snatcher","Chimera","Transformed","Cursed equipment"};
+ constexpr int W=480,H=270,Kinds=CreatureKindCount;static_assert(std::size(names)==size_t(Kinds));
  auto number=[](float v){char text[32];std::snprintf(text,sizeof text,"%.3f",double(v));return std::string(text);};
  {auto storage=std::make_unique<SoftwareRenderer>(W,H);auto&d=*storage;
   // 1. Every kind: its body is cut into sections, falls and lies on the floor; shot, it comes apart
@@ -272,5 +278,85 @@ bool SoftwareRenderer::testGore(std::ostream& report){
    check(follows&&!g.chunkEnemies(g.level())[0].alive,backend+": the "+name+"'s body keeps the game's clock");}
  }
  return passed;
+}
+// Dead men are bodies: every man Chapter 2 lays dead has come to rest on the floor under him by the
+// time he is first seen (his lowest point on it, nothing of him through it), the same way each time;
+// a guard killed in play falls where he stood and settles, and a reload shows him lying as he fell;
+// a man laid over the edge of a table goes off it.
+bool SoftwareRenderer::testHumanRagdoll(){
+ std::ofstream report("human-ragdoll-test.txt");bool passed=true;
+ auto check=[&](bool ok,const std::string&text){report<<(ok?"PASS":"FAIL")<<": "<<text<<'\n';report.flush();passed&=ok;};
+ auto number=[](float v){char text[32];std::snprintf(text,sizeof text,"%.3f",double(v));return std::string(text);};
+ auto storage=std::make_unique<SoftwareRenderer>(320,180);auto&d=*storage;
+ // How a body lies: its lowest point over the floor under it, the deepest any of it goes into that
+ // floor, and how much of it there is.
+ // The floor under a point is the lowest within 5 cm of it: a hand that hangs down the face of a step
+ // is over the floor below the step, not in the step, and one under a bench seat is over the floor under
+ // the bench (the floor is looked for from 6 cm above it). One that is in the side of a step or a slab by
+ // more than a centimetre is counted apart (grazing): the body holds its points, not every vertex,
+ // off walls.
+ struct Lie {float lowest=1e9f,deepest=1e9f,top=-1e9f;int under=0,grazing=0,count=0;bool finite=true;};
+ auto lie=[](Carcass&c,const World&w){Lie l;for(const auto&t:c.triangles())for(const auto&v:t.v){
+   if(!std::isfinite(v.p.x+v.p.y+v.p.z)){l.finite=false;continue;}
+   const float own=w.supportBelow(v.p.x,v.p.y,v.p.z+.06f);float floor=own;
+   for(auto [dx,dy]:{std::pair{.05f,0.f},{-.05f,0.f},{0.f,.05f},{0.f,-.05f}})floor=std::min(floor,w.supportBelow(v.p.x+dx,v.p.y+dy,v.p.z+.06f));
+   const float gap=v.p.z-floor;l.lowest=std::min(l.lowest,gap);l.deepest=std::min(l.deepest,v.p.z-own);l.under+=gap<-.01f;l.grazing+=gap>=-.01f&&v.p.z-own<-.01f;++l.count;l.top=std::max(l.top,v.p.z);}
+  return l;};
+ auto same=[](Carcass&a,const std::vector<MeshTriangle>&b){const auto&t=a.triangles();if(t.size()!=b.size())return false;
+  for(size_t i=0;i<t.size();++i)for(int k=0;k<3;++k)if(t[i].v[k].p.x!=b[i].v[k].p.x||t[i].v[k].p.y!=b[i].v[k].p.y||t[i].v[k].p.z!=b[i].v[k].p.z)return false;return true;};
+ // 1. Every body Chapter 2 lays down.
+ int bodies=0,resting=0,onFloor=0,clean=0,repeat=0,grazed=0;float worstLow=0,worstDeep=0;
+ for(int level=68;level<=109;++level){
+  Game g=Game::mapInspection({12,12},0,0,level,false,-999,true);const World&w=g.chunkWorld(level);
+  for(size_t i=0;i<w.actorTracks().size();++i){const auto&track=w.actorTracks()[i];if(g.autonomousActor(track))continue;
+   const ActorPose pose=w.actorPose(i);const std::uint64_t slot=0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i;
+   auto started=std::chrono::steady_clock::now();
+   Corpse*corpse=d.humanCorpse(g,w,level,track,pose,-1,slot);if(!corpse)continue;
+   const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+   ++bodies;auto&c=corpse->carcass;const Lie l=lie(c,w);const std::vector<MeshTriangle> first=c.triangles();const Point3 centre=c.centre();const float age=c.age();
+   const bool asleep=c.asleep(),down=l.finite&&l.lowest<=.06f&&l.lowest>=-.01f,whole=l.finite&&l.under==0;
+   d.m_corpses.erase(slot);Corpse*again=d.humanCorpse(g,w,level,track,pose,-1,slot);const bool repeats=again&&same(again->carcass,first);
+   resting+=asleep;onFloor+=down;clean+=whole;repeat+=repeats;grazed+=l.grazing>0;worstLow=std::max(worstLow,std::fabs(l.lowest));worstDeep=std::min(worstDeep,l.deepest);
+   report<<(asleep&&down&&whole&&repeats?"  ok ":"  BAD ")<<"map "<<level<<" actor "<<i<<" visual "<<int(track.visual)<<" at "<<number(pose.position.x)<<','<<number(pose.position.y)<<','<<number(pose.z)
+         <<": lowest "<<number(l.lowest)<<" deepest "<<number(l.deepest)<<" under "<<l.under<<" grazing "<<l.grazing<<'/'<<l.count<<" top "<<number(l.top-pose.z)<<" centre "<<number(centre.x)<<','<<number(centre.y)<<','<<number(centre.z)
+         <<" asleep "<<asleep<<" age "<<number(age)<<" repeats "<<repeats<<" built in "<<number(float(ms))<<" ms\n";}
+ }
+ check(bodies>=10,"Chapter 2 lays down bodies ("+std::to_string(bodies)+")");
+ check(resting==bodies,"every one has come to rest before he is first seen ("+std::to_string(resting)+" of "+std::to_string(bodies)+")");
+ check(onFloor==bodies,"every one lies with his lowest point on the floor under him, within 6 cm ("+std::to_string(onFloor)+" of "+std::to_string(bodies)+", worst "+number(worstLow)+" m)");
+ check(clean==bodies,"nothing of any of them goes through the floor ("+std::to_string(clean)+" of "+std::to_string(bodies)+"; "+std::to_string(grazed)+" touch the side of a step or slab, at most "+number(-worstDeep)+" m in)");
+ check(repeat==bodies,"the same body comes to rest the same way when it is made again ("+std::to_string(repeat)+" of "+std::to_string(bodies)+")");
+ // 2. A guard killed in play, and the same guard after a reload.
+ {auto m=regression::room();m->structures.push_back({14.f,9.f,15.f,13.f,0.f,.78f});
+  auto guard=regression::guard({13.4f,11.f},{13.4f,11.f});guard.visual=ActorVisual::Cleanup;guard.ai.armed=true;guard.ai.weapon=2;guard.ai.dropsSidearm=true;guard.keys[0].yaw=guard.keys[1].yaw=kPi*.5f;m->actorTracks.push_back(guard);
+  const auto campaign=regression::campaign(m);Game g(campaign);const_cast<Player&>(g.player()).pos={6.f,11.f};g.update({},1.f/60);
+  const auto&npc=g.npcActors()[0];const Point3 stood{npc.pose.position.x,npc.pose.position.y,npc.pose.z};
+  g.downSidearmCarriers();const auto death=g.npcDeath(0);
+  check(death.dead&&!death.done&&death.age<.05f,"the guard is killed and his death clip starts ("+number(death.age)+" s)");
+  const World&w=g.chunkWorld(g.level());const std::uint64_t slot=0xA000000000000000ull;d.m_corpses.clear();
+  Corpse*corpse=nullptr;float fellAt=-1,startTop=0;
+  for(int frame=0;frame<60*10;++frame){g.update({},1.f/60);const auto&n=g.npcActors()[0];corpse=d.humanCorpse(g,w,g.level(),n.track(),n.pose,0,slot);if(!corpse)break;
+   if(frame==0)startTop=lie(corpse->carcass,w).top-stood.z;if(fellAt<0&&lie(corpse->carcass,w).top-stood.z<.6f)fellAt=float(frame)/60;}
+  check(corpse!=nullptr,"his body is made from him");
+  if(corpse){auto&c=corpse->carcass;const Lie l=lie(c,w);const std::vector<MeshTriangle> live=c.triangles();
+   const float moved=std::hypot(c.centre().x-stood.x,c.centre().y-stood.y);
+   report<<"  killed: stood "<<number(startTop)<<" m tall at first, down below 0.6 m at "<<number(fellAt)<<" s, lowest "<<number(l.lowest)<<" deepest "<<number(l.deepest)<<" top "<<number(l.top)<<" asleep "<<c.asleep()<<" at "<<number(c.age())<<" s, "<<number(moved)<<" m from where he stood\n";
+   check(startTop>1.2f&&fellAt>0&&fellAt<2.5f,"he falls from his feet ("+number(startTop)+" m tall, below 0.6 m at "+number(fellAt)+" s)");
+   check(c.asleep()&&l.finite&&l.lowest<=.06f&&l.lowest>=-.01f&&l.under==0&&l.top<1.f&&moved<1.6f,"he comes to rest down, against the table he fell at, where he fell (lowest "+number(l.lowest)+", top "+number(l.top)+", "+number(moved)+" m away)");
+   // A reload: the game's state is his (the death clock run out), the renderer has nothing kept.
+   d.m_corpses.clear();Corpse*after=d.humanCorpse(g,w,g.level(),g.npcActors()[0].track(),g.npcActors()[0].pose,0,slot);
+   check(after&&after->carcass.asleep()&&same(after->carcass,live),"seen first after his fall (a reload) he lies exactly as he fell");}}
+ // 3. A man laid over the edge of a table goes off it.
+ {auto m=regression::room();m->structures.push_back({10.f,9.f,11.f,13.f,0.f,.8f});
+  ActorTrack body;body.timerState=stateId("reg_guard_clock");body.visual=ActorVisual::Cleanup;body.scale=1.7f;body.keys={{0,{11.05f,11.f},.8f,kPi*.5f,4,1},{60000,{11.05f,11.f},.8f,kPi*.5f,4,1}};m->actorTracks.push_back(body);
+  Game g(regression::campaign(m));g.update({},1.f/60);const World&w=g.chunkWorld(g.level());d.m_corpses.clear();
+  Corpse*corpse=d.humanCorpse(g,w,g.level(),w.actorTracks()[0],w.actorPose(0),-1,0xB0000000000000ffull);
+  if(!corpse)check(false,"the man on the table is a body");
+  else{auto&c=corpse->carcass;const Lie l=lie(c,w);float low=1e9f;int inside=0;
+   for(const auto&t:c.triangles())for(const auto&v:t.v){low=std::min(low,v.p.z);inside+=v.p.x>10.02f&&v.p.x<10.98f&&v.p.y>9.02f&&v.p.y<12.98f&&v.p.z<.79f;}
+   report<<"  table: lowest point "<<number(low)<<" m, lowest over what is under it "<<number(l.lowest)<<", "<<inside<<" points inside the table, asleep "<<c.asleep()<<" centre "<<number(c.centre().x)<<','<<number(c.centre().y)<<','<<number(c.centre().z)<<'\n';
+   check(c.asleep()&&low<.25f&&l.under==0,"laid over a table's edge he goes off it to the floor ("+number(low)+" m, "+std::to_string(l.under)+" points through what he lies on)");
+   check(inside<=l.count/100,"he does not lie inside the table ("+std::to_string(inside)+" points)");}}
+ report<<(passed?"PASS":"FAIL")<<'\n';return passed;
 }
 }

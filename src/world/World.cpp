@@ -313,7 +313,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   std::string record="map "+std::to_string(m_level)+" ("+map->name+") "+kind+"["+std::to_string(index)+"] "+values;
   invalid<<record<<'\n';
  };
- for(size_t i=0;i<map->doors.size();++i){const auto& d=map->doors[i];if(!(d.left>=0&&d.left<d.right&&d.right<=24&&d.maxOpen>0&&d.maxOpen<=1))reject("door",i,"left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" maxOpen="+std::to_string(d.maxOpen));}
+ for(size_t i=0;i<map->doors.size();++i){const auto& d=map->doors[i];if(!(d.left>=0&&d.left<d.right&&d.right<=24&&d.maxOpen>0&&d.maxOpen<=1))reject("door",i,"left="+std::to_string(d.left)+" right="+std::to_string(d.right)+" maxOpen="+std::to_string(d.maxOpen));
+  else if(d.alongY&&(d.entry||d.transfer))reject("door",i,"a seam door (entry or transfer) stands on a north or south edge, along X");}
  for(size_t i=0;i<map->structures.size();++i){const auto& v=map->structures[i];if(!(v.bottom<=v.top&&v.x2>v.x1&&v.y2>v.y1))reject("structure",i,"bounds="+std::to_string(v.x1)+","+std::to_string(v.y1)+","+std::to_string(v.x2)+","+std::to_string(v.y2)+" bottom="+std::to_string(v.bottom)+" top="+std::to_string(v.top));}
  for(size_t i=0;i<map->compactors.size();++i)if(!(map->compactors[i].period>0))reject("compactor",i,"period="+std::to_string(map->compactors[i].period));
  for(size_t i=0;i<map->fixtures.size();++i)if(!(map->fixtures[i].core>=0&&map->fixtures[i].core<=1))reject("fixture",i,"core="+std::to_string(map->fixtures[i].core));
@@ -383,7 +384,10 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_actorPoses.clear();for(const auto& track:m_mapData->actorTracks)m_actorPoses.push_back(track.idleKeys.empty()?sampleActor(track,0):sampleActorKeys(track.idleKeys,0,true));
  m_openNorthBoundary=m_mapData->openNorth;m_openSouthBoundary=m_mapData->openSouth;
  m_openWestBoundary=m_mapData->openWest;m_openEastBoundary=m_mapData->openEast;
- m_doors=m_mapData->doors;m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;for(auto&l:m_lights)if(l.prop>=0)l.propLevel=level();
+ m_doors=m_mapData->doors;
+ // A swinging leaf authored ajar (open, not opening) is left where it stands.
+ for(auto&d:m_doors)if(d.swinging&&!d.opening&&d.open>0&&d.rest<0)d.rest=std::min(d.open,d.maxOpen);
+ m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;for(auto&l:m_lights)if(l.prop>=0)l.propLevel=level();
  m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;
@@ -395,7 +399,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // solid structure, not a second route over a locked door into another floor.
  for(const auto& door:m_doors)if(door.entry||door.transfer){
   float base=m_mapData->layers.front().elevation+door.z,top=m_mapData->definition.ceiling;
-  if(top>base+2.65f)m_structures.push_back({door.left,door.y-.14f,door.right,door.y+.14f,base+2.65f,top,false,3});
+  Vec2 lo,hi;door.box(door.left,door.right,door.y-.14f,door.y+.14f,lo,hi);
+  if(top>base+2.65f)m_structures.push_back({lo.x,lo.y,hi.x,hi.y,base+2.65f,top,false,3});
  }
  for(const auto& source:m_mapData->layers){
   MapRows rows{};for(size_t row=0;row<rows.size();++row)rows[row]=source.rows[row];
@@ -1037,26 +1042,26 @@ float World::supportHeight(float x,float y,bool dynamic,bool shelfCavities)const
 bool World::doorBlocks(float x,float y,float feet,float height,bool sight)const{
  perf::count(perf::DoorBlocks);
  for(size_t index=0;index<m_doors.size();++index){const auto&door=m_doors[index];
-  if(sight&&door.seeThrough())continue;
+  if((sight&&door.seeThrough())||door.broken)continue;
   float open=m_doorPlan.open&&index<m_doorPlan.open->size()&&(*m_doorPlan.open)[index]?door.maxOpen:door.open;
   if(door.swinging){
-   float angle=open*kPi*.5f*door.swing,width=door.right-door.left;
-   Vec2 hinge{door.left,door.y},axis{std::cos(angle),std::sin(angle)};
+   const float width=door.width();
+   const Vec2 hinge=door.hinge(),axis=door.leafAxis(open);
    Vec2 delta=Vec2{x,y}-hinge;
    float along=std::clamp(dot(delta,axis),0.f,width);
    Vec2 nearest=hinge+axis*along;
-   if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+   if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f){const Vec2 c=door.centre();float base=floorHeight(c.x,c.y)+door.z;
     if(feet+height>base+.015f&&feet<base+2.35f)return true;
    }
-  }else if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.13f){float base=floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+  }else if(door.spans({x,y})&&std::fabs(door.across({x,y})-door.y)<.13f){const Vec2 c=door.centre();float base=floorHeight(c.x,c.y)+door.z;
    if(feet+height>base+open*2.65f+.015f&&feet<base+open*2.65f+2.48f)return true;
   }
  }
  return false;
 }
 float World::clearanceHeight(float x,float y,float feet)const{
- float height=ceilingHeight(x,y);for(auto&door:m_doors)if(x>door.left&&x<door.right&&std::fabs(y-door.y)<.62f){
-  float header=floorHeight((door.left+door.right)*.5f,door.y)+door.z+2.5f;if(feet<header-.05f)height=std::min(height,header);}
+ float height=ceilingHeight(x,y);for(auto&door:m_doors)if(door.spans({x,y})&&std::fabs(door.across({x,y})-door.y)<.62f){
+  const Vec2 c=door.centre();float header=floorHeight(c.x,c.y)+door.z+2.5f;if(feet<header-.05f)height=std::min(height,header);}
  return height;
 }
 void World::buildLightOcclusion()const{
@@ -1110,7 +1115,7 @@ void World::buildLightOcclusion()const{
   else if(benchTerminal(*this,t)){box(t.position.x-.48f,t.position.y-.36f,t.position.x+.42f,t.position.y+.36f,base+.74f,base+.815f);oriented(t.position,.386509f,.53235f,base+.815f,base+1.32005f,level()==6?-kPi*.5f:t.yaw);}
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
  }
- for(const auto&d:m_doors){float base=floorHeight((d.left+d.right)*.5f,d.y)+d.z;box(d.left,d.y-.10f,d.right,d.y+.10f,base+2.5f,ceilingHeight((d.left+d.right)*.5f,d.y));}
+ for(const auto&d:m_doors){const Vec2 c=d.centre();Vec2 lo,hi;d.box(d.left,d.right,d.y-.10f,d.y+.10f,lo,hi);float base=floorHeight(c.x,c.y)+d.z;box(lo.x,lo.y,hi.x,hi.y,base+2.5f,ceilingHeight(c.x,c.y));}
  auto bounds=[](const LightSolid&s){float hx=std::fabs(s.cosine)*s.half.x+std::fabs(s.sine)*s.half.y,hy=std::fabs(s.sine)*s.half.x+std::fabs(s.cosine)*s.half.y;return std::pair{s.center-Point3{hx,hy,s.half.z},s.center+Point3{hx,hy,s.half.z}};};
  auto build=[&](auto&&self,int begin,int end)->int{int index=int(m_lightNodes.size());LightNode node;node.begin=begin;node.end=end;node.minimum={10000,10000,10000};node.maximum={-10000,-10000,-10000};
   for(int i=begin;i<end;++i){auto [lo,hi]=bounds(m_lightSolids[i]);node.minimum={std::min(node.minimum.x,lo.x),std::min(node.minimum.y,lo.y),std::min(node.minimum.z,lo.z)};node.maximum={std::max(node.maximum.x,hi.x),std::max(node.maximum.y,hi.y),std::max(node.maximum.z,hi.z)};}
@@ -1152,13 +1157,44 @@ bool World::navigable(int x,int y,int nx,int ny,float height)const{
  float floor=floorHeight(nx+.5f,ny+.5f);
  return std::fabs(floor-floorHeight(x+.5f,y+.5f))<=.45f&&clearanceHeight(nx+.5f,ny+.5f)-floor>=height&&!doorBlocks(nx+.5f,ny+.5f,floor,height);
 }
-void World::updateDoors(float dt,bool includeTransfers){for(auto&door:m_doors)if(includeTransfers||(!door.entry&&!door.transfer))door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,door.maxOpen);}
-bool World::openDoor(int index){if(index<0||size_t(index)>=m_doors.size()||m_doors[index].opening)return false;m_doors[index].opening=true;return true;}
-bool World::toggleDoor(int index){if(index<0||size_t(index)>=m_doors.size())return false;m_doors[index].opening=!m_doors[index].opening;return true;}
+// A swinging leaf has weight. A hand eases it off the latch, it carries, and it
+// is braked short of where it is going so it arrives with a little way on: an
+// opening leaf knocks its stop and settles back onto it, a closing one latches
+// (a slam when it comes in hard), and one left mid-swing (rest) eases to a halt
+// there. Steps of at most 1/120 s, so one long step (a test's updateDoors(2))
+// lands where the frames would. Sliding doors keep their steady drive.
+static void swingStep(Door& d,float dt){
+ constexpr float Top=1.35f,Accel=5.f,Brake=3.f,Arrive=.25f,Rebound=.35f,SlamSpeed=1.15f;
+ const float target=std::clamp(d.rest>=0?d.rest:d.opening?d.maxOpen:0.f,0.f,d.maxOpen);
+ const bool toStop=d.rest<0;
+ for(float left=dt;left>1e-6f;){const float h=std::min(left,1.f/120);left-=h;
+  const float gap=target-d.open,distance=std::fabs(gap);
+  if(d.coasting){
+   // Shoved: no hand on it, it runs on and slows; it bangs off a stop, and comes
+   // back under the hand (opening) once it is all but still.
+   d.velocity-=std::copysign(std::min(std::fabs(d.velocity),1.4f*h),d.velocity);d.open+=d.velocity*h;
+   if(d.open>=d.maxOpen&&d.velocity>0){d.open=d.maxOpen;d.hit|=d.velocity>1.1f?Door::HitSlam:Door::HitStop;d.velocity=-d.velocity*Rebound;}
+   if(d.open<=0&&d.velocity<0){d.open=0;d.hit|=d.velocity<-SlamSpeed?Door::HitSlam:Door::HitLatch;d.velocity=0;}
+   if(std::fabs(d.velocity)<.08f)d.coasting=false;
+   continue;}
+  if(distance<.0005f&&std::fabs(d.velocity)<.03f){d.open=target;d.velocity=0;continue;}
+  if(d.velocity==0&&distance>.01f)d.hit|=Door::HitStart;
+  const float arrive=toStop?Arrive:0.f,want=(gap>0?1.f:-1.f)*std::min(Top,std::sqrt(arrive*arrive+2*Brake*distance));
+  const float rate=(std::fabs(want)>std::fabs(d.velocity)&&want*d.velocity>=0)?Accel:Brake*3;
+  d.velocity+=std::clamp(want-d.velocity,-rate*h,rate*h);d.open+=d.velocity*h;
+  if(d.open>=d.maxOpen&&d.velocity>0){d.open=d.maxOpen;if(d.velocity>.15f)d.hit|=Door::HitStop;d.velocity=d.velocity>.15f?-d.velocity*Rebound:0.f;}
+  if(d.open<=0&&d.velocity<0){d.open=0;d.hit|=d.velocity<-SlamSpeed?Door::HitSlam:Door::HitLatch;d.velocity=0;}
+ }
+}
+void World::updateDoors(float dt,bool includeTransfers){for(auto&door:m_doors)if(includeTransfers||(!door.entry&&!door.transfer)){
+ if(door.swinging&&!door.entry&&!door.transfer)swingStep(door,dt);
+ else door.open=std::clamp(door.open+(door.opening?1.f:-1.f)*dt*.85f,0.f,door.maxOpen);}}
+bool World::openDoor(int index){if(index<0||size_t(index)>=m_doors.size()||(m_doors[index].opening&&m_doors[index].rest<0))return false;m_doors[index].opening=true;m_doors[index].rest=-1;return true;}
+bool World::toggleDoor(int index){if(index<0||size_t(index)>=m_doors.size())return false;m_doors[index].opening=!m_doors[index].opening;m_doors[index].rest=-1;return true;}
 int World::nearbyDoor(Vec2 position,Vec2 forward,float feet)const{
  int best=-1;float distance=2.f;
- for(size_t i=0;i<m_doors.size();++i){auto&d=m_doors[i];Vec2 closest{std::clamp(position.x,d.left+.2f,d.right-.2f),d.y};auto delta=closest-position;float lengthTo=length(delta);
-  if(std::fabs(feet-floorHeight((d.left+d.right)*.5f,d.y)-d.z)>1.25f)continue;
+ for(size_t i=0;i<m_doors.size();++i){auto&d=m_doors[i];Vec2 closest=d.nearestOnLine(position,.2f);auto delta=closest-position;float lengthTo=length(delta);
+  const Vec2 c=d.centre();if(std::fabs(feet-floorHeight(c.x,c.y)-d.z)>1.25f)continue;
   if(lengthTo<distance&&dot(delta,forward)>-.15f){best=int(i);distance=lengthTo;}
  }return best;
 }
@@ -1264,7 +1300,10 @@ void World::buildLayers(std::span<const Staircase> stairs){
    if(!deck(x,y)){++x;continue;}int start=x;while(x<Width&&deck(x,y))++x;
    std::vector<Structure> deckPieces{{float(start),float(y),float(x),float(y+1),underside,z}};
    for(size_t i=0;i<authoredStructures&&!deckPieces.empty();++i){const auto& f=m_structures[i];
-    if(!f.solid||f.shape!=ShapeBox||f.top<z-.03f||f.top>z+.06f||f.top-f.bottom>.55f)continue;
+    // A floor slab or landing built down into the deck replaces it there. A
+    // plate resting on the deck (a column base, a mat, a floor line) does not:
+    // cutting under it opened a pocket through the deck below the plate.
+    if(!f.solid||f.shape!=ShapeBox||f.top<z-.03f||f.top>z+.06f||f.top-f.bottom>.55f||f.bottom>=z-.01f)continue;
     std::vector<Structure> next;for(auto part:deckPieces){float a=std::max(part.x1,f.x1),b=std::max(part.y1,f.y1),c=std::min(part.x2,f.x2),d=std::min(part.y2,f.y2);
      if(a>=c||b>=d){next.push_back(part);continue;}auto add=[&](float x0,float y0,float x1,float y1){if(x1-x0>.0001f&&y1-y0>.0001f){auto piece=part;piece.x1=x0;piece.y1=y0;piece.x2=x1;piece.y2=y1;next.push_back(piece);}};
      add(part.x1,part.y1,a,part.y2);add(c,part.y1,part.x2,part.y2);add(a,part.y1,c,b);add(a,d,c,part.y2);}

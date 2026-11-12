@@ -47,7 +47,7 @@ std::vector<TacticalGrenadePose> Game::tacticalGrenades(bool dangerOnly)const{
 void Game::explodeTacticalGrenade(int slot,Point3 globalPosition,AiTargetRef attacker){
  setState(grenadeKey(slot,"active"),0);auto active=chunkOffset(m_level);Point3 origin=globalPosition-Point3{active.x,active.y,0};int level=friendlyChunkAt({globalPosition.x,globalPosition.y},m_level);if(level<0)return;
  auto blast=[&](ShotKind kind,int targetLevel,int index,Vec2 position,float feet,float height){auto shift=chunkOffset(targetLevel)-active;Point3 point{position.x+shift.x,position.y+shift.y,feet+height*.5f},delta=point-origin;float range=size3(delta);if(range>=BlastRadius)return;
-  if(range>.05f&&tacticalGrenadeTrace(origin,point).kind==ShotKind::Solid)return;float damage=64.f*(1-range/BlastRadius);auto direction=range>.001f?delta*(1/range):Point3{0,0,1};resolveShot({kind,targetLevel,index,range,range,point,{}},origin,direction,weaponDef(WeaponId::Shotgun).hitscan,attacker.kind==ShotKind::Player,damage,attacker);
+  if(range>.05f&&tacticalGrenadeTrace(origin,point).kind==ShotKind::Solid)return;float damage=64.f*(1-range/BlastRadius);auto direction=range>.001f?delta*(1/range):Point3{0,0,1};m_blastShot=true;resolveShot({kind,targetLevel,index,range,range,point,{}},origin,direction,weaponDef(WeaponId::Shotgun).hitscan,attacker.kind==ShotKind::Player,damage,attacker);m_blastShot=false;
  };
  blastProps(origin,true);
  if(!dead())blast(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight());

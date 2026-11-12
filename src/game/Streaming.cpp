@@ -35,7 +35,8 @@ void Game::useDoor(int index){
   if(door.transfer&&m_level+1<chunkCount()){ensureChunk(m_level+1);auto&next=m_chunks[m_level+1].world;if(!next.doors().empty()&&!doorLocked(next.doors()[0]))next.setDoor(0,door.open,opening);}
   if(door.entry&&m_level>0){ensureChunk(m_level-1);auto&previous=m_chunks[m_level-1].world;if(!previous.doors().empty()&&!doorLocked(previous.doors().back()))previous.setDoor(int(previous.doors().size())-1,door.open,opening);}
  }
- sound(Sound::Door,.65f);
+ // A swinging leaf's own sounds come from it as it moves (updateDoorPlay).
+ if(!door.swinging)sound(Sound::Door,.65f);
 }
 void Game::updateStreaming(float dt){
  std::vector<char> friendlyNeeded;friendlyChunksNeeded(friendlyNeeded);
@@ -43,7 +44,7 @@ void Game::updateStreaming(float dt){
   if(bool(friendlyNeeded[size_t(level)])!=friendlyChunkNeeded(level))perf::count(perf::StreamingMismatches);
  if(m_world.definition().residencyGroup>=0){
   for(int index=0;index<int(m_world.doors().size());++index){const auto& door=m_world.doors()[index];
-   if(!door.opening&&door.open>0&&m_player.pos.x>door.left-.25f&&m_player.pos.x<door.right+.25f&&std::fabs(m_player.pos.y-door.y)<.55f)m_world.openDoor(index);
+   if(!door.opening&&door.open>0&&door.rest<0&&door.spans(m_player.pos,-.25f)&&std::fabs(door.across(m_player.pos)-door.y)<.55f)m_world.openDoor(index);
   }
   // Authored residency groups keep a contiguous hall loaded in either campaign.
   auto origin=chunkOffset(m_level);auto global=origin+m_player.pos;
@@ -111,15 +112,16 @@ void Game::updateStreaming(float dt){
  // Doors form a short transfer vestibule. Keep both geometries until the
  // opaque leaves fully close, then release static geometry, retaining state.
  for(int index=0;index<int(m_world.doors().size());++index){auto door=m_world.doors()[index];
-  if(!door.opening&&door.open>0&&m_player.pos.x>door.left-.25f&&m_player.pos.x<door.right+.25f&&std::fabs(m_player.pos.y-door.y)<.55f){m_world.openDoor(index);door=m_world.doors()[index];}
+  if(!door.opening&&door.open>0&&door.rest<0&&door.spans(m_player.pos,-.25f)&&std::fabs(door.across(m_player.pos)-door.y)<.55f){m_world.openDoor(index);door=m_world.doors()[index];}
   if(door.transfer&&m_level+1<chunkCount()){auto&next=m_chunks[m_level+1].world;if(!next.doors().empty()&&!doorLocked(next.doors()[0]))next.setDoor(0,door.open,door.opening);}
   if(door.entry&&m_level>0){auto&previous=m_chunks[m_level-1].world;if(!previous.doors().empty()&&!doorLocked(previous.doors().back()))previous.setDoor(int(previous.doors().size())-1,door.open,door.opening);}
  }
  for(int level=0;level<chunkCount();++level)if(level!=m_level){bool needed=friendlyNeeded[size_t(level)];
   auto approaching=[&](const Door& door){
-   float dx=std::max({door.left-m_player.pos.x,0.f,m_player.pos.x-door.right});
-   float dy=std::fabs(m_player.pos.y-door.y);
-   float base=m_world.floorHeight((door.left+door.right)*.5f,door.y)+door.z;
+   const Vec2 at=door.local(m_player.pos),centre=door.centre();
+   float dx=std::max({door.left-at.x,0.f,at.x-door.right});
+   float dy=std::fabs(at.y-door.y);
+   float base=m_world.floorHeight(centre.x,centre.y)+door.z;
    return dx*dx+dy*dy<20.25f&&std::fabs(m_player.z-base)<2.f;
   };
   if(level==m_level+1){

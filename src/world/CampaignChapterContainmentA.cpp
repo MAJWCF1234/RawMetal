@@ -479,6 +479,19 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  for(float y:{15.2f,17.8f,20.6f})wall(m,1.f,y,1.03f,y+.9f,f+.6f,f+2.f,16);                  // on the wall, hand height
  m.lights.push_back(caGlow({5.f,18.f},f+2.6f,.22f,4.f,1000,{1.f,.15f,.08f},.5f));
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.6f,18.8f},f,1,0});                 // the one who still says his name
+ // Walking past Q2's glass: one of the nine is still a man. He comes up out of the dark at the back of
+ // the ward to the glass, puts his hand flat on it where the corridor tube lights him, and says his
+ // name, twice, the way you give it at a gate; then he stays there, at the glass, watching the corridor.
+ {const char* t="cona_qw_q2";caSequence(m,t,"cona_qw_q2_done",30000,29000,10.2f,15.3f,13.8f,19.4f);
+  const Vec2 back{3.6f,17.9f},glass{9.43f,17.25f};const float toGlass=std::atan2(glass.x-back.x,glass.y-back.y);
+  actor(m,t,ActorVisual::LabTech,1.7f,{{0,back,f,toGlass,0,0},{500,back,f,toGlass,0,.4f},{600,back,f,toGlass,1,0},{4600,glass,f,kPi*.5f,1,4.4f},
+   {4700,glass,f,kPi*.5f,0,0},{30000,glass,f,kPi*.5f,0,14.f}});
+  cue(m,t,4750,Sound::OneGlassBang,{9.8f,17.25f},"",.55f,f+1.4f);
+  cue(m,t,5300,Sound::Empty,glass,"Q2 (THROUGH THE GLASS): Dawes. Peter Dawes. Bench tech, B shift.",.75f,f+1.5f,"cona_qw_q2_5300");
+  cue(m,t,9000,Sound::OneGlassBang,{9.8f,17.25f},"",.5f,f+1.3f);
+  cue(m,t,9600,Sound::Empty,glass,"Q2 (THROUGH THE GLASS): Dawes. Write it down. Somebody write it down.",.7f,f+1.5f,"cona_qw_q2_9600");
+  // a low cold light inside the glass on his side, so his face is not just a shape against the red
+  m.lights.push_back(lamp({8.6f,17.25f},f+.5f,.35f,3.f,5200,0,WorldLightMount::Bare,0,false));}
  // --- Nurses' station: the counter onto the corridor, the board, the kettle ---------------------
  wall(m,14.2f,6.2f,23.f,6.4f,f,roof,3);
  wallDoor(m,14.2f,23.f,9.f,9.2f,16.f,17.2f,f,roof,-1);                                       // door 2: station from the passage
@@ -701,7 +714,7 @@ std::shared_ptr<const Map> makeContainmentIntake(){
 // Route: W seam from the hub -> the observation floor -> S through the service door to 97.
 std::shared_ptr<const Map> makeContainmentA(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[96];m.definition=CampaignChunks[96];m.definition.ambient=.25f;
+ m.name=CampaignMapNames[96];m.definition=CampaignChunks[96];m.definition.ambient=.25f;m.definition.musicCue=MusicCue::Silence;   // no score: what happens at the post is heard, not scored
  m.definition.playerStart={2.2f,11.5f};m.definition.spawnHeight=-15.f;m.definition.spawnYaw=0;
  m.wallSurface=SurfaceClinicTile;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceLabPanel;
  const float f=-15,roof=m.definition.ceiling;
@@ -805,9 +818,12 @@ std::shared_ptr<const Map> makeContainmentA(){
  caGuard(m,clock,"cona_a_walk",ActorVisual::Cleanup,GuardSquadRole::Assault,"cona_a",
   {{{3.f,13.f},f,3000,caE},{{20.5f,13.f},f,4000,caN},{{20.5f,8.4f},f,3000,caW},{{3.f,8.4f},f,3000,caS}},12,1,1.1f);
  const int post=int(m.actorTracks.size());
- caGuard(m,clock,"cona_a_post",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"cona_a",{{{19.6f,15.4f},f,60000,caW}},14,1,1.f);
- // his post is under the one tube on this side that still works, unsteady: what happens to him is seen
- m.lights.push_back(caTube(19.2f,15.4f,roof,.85f,6.5f,4300,.12f,.2f));
+ // His post is the service passage: he stands on the west side of the floor watching its mouth, the
+ // thing was heard behind it, under a work lamp the detail hung off the girder, his back to the way
+ // in. So what comes out of the passage for him does it five metres from the player, against the
+ // lit glass of the south cells, and the passage's own mouth is the frame it comes through.
+ caGuard(m,clock,"cona_a_post",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"cona_a",{{{8.3f,15.4f},f,60000,.7f}},14,1,1.f);
+ caPendant(m,{8.6f,15.6f},roof,f+3.25f,1.7f,7.5f,3400,.06f);
  m.pickupSpawns.push_back({{16.6f,12.4f},PickupKind::Ammo,f});
  // --- R-117: what came out of A8. It went into the walls, down the service run behind the cells,
  // and it is heard before it is seen: a bang in the run as the player steps onto the floor, its
@@ -1040,13 +1056,21 @@ std::shared_ptr<const Map> makeContainmentB(){
  caMound(m,3.4f,3.6f,f,1.6f,1.2f);
  // the spire: the leaders lit through, the rest fanned out of the same root, shorter the further they lean
  // (modelled clusters: the big knot scaled up out of the mound, a middle one leaning off it)
- caCrystal(m,model::res_crystal_l,3.4f,3.6f,f+.75f,1.6f,.8f);
- caCrystal(m,model::res_crystal_m,3.f,3.9f,f+.6f,1.25f,3.4f);
+ // (a spire of knots, not one big prism: the leader at a size its facets hold up close, the rest
+ // smaller and leaning out of the same root, so no face is big enough for the glow to flatten)
+ caCrystal(m,model::res_crystal_l,3.4f,3.6f,f+.75f,.95f,.8f);
+ caCrystal(m,model::res_crystal_m,2.85f,4.05f,f+.62f,.95f,3.4f);
+ caCrystal(m,model::res_crystal_m,4.05f,3.15f,f+.66f,.72f,5.1f);
+ for(auto [x,y,z,sc,yaw]:{std::tuple{2.55f,3.2f,.55f,1.1f,1.2f},{4.2f,4.25f,.58f,.95f,2.6f},{3.7f,2.75f,.6f,.8f,4.4f},{2.9f,4.7f,.4f,.75f,.3f},{4.75f,3.7f,.35f,.7f,5.7f}})
+  caCrystal(m,model::res_crystal_s,x,y,f+z,sc,yaw);
  for(auto [x,y,sc,yaw]:{std::tuple{2.5f,3.9f,1.2f,.4f},{4.4f,3.3f,1.1f,1.7f},{3.5f,4.7f,1.f,2.9f}})caBed(m,x,y,f+.7f,sc,yaw);
  caFang(m,2.1f,2.5f,f,.6f,.9f);caFang(m,5.f,4.6f,f,.48f,3.1f);
- wall(m,3.f,3.2f,3.8f,4.f,f,f+4.6f,CollisionProxyMaterial);
- m.lights.push_back(caGlow({4.2f,4.6f},f+2.2f,1.2f,10.f,6500,{.72f,.5f,1.f},.18f));
- m.lights.push_back(caGlow({3.4f,3.6f},f+5.2f,.7f,8.f,6500,{.6f,.45f,1.f},.1f));
+ wall(m,3.f,3.2f,3.8f,4.f,f,f+3.f,CollisionProxyMaterial);
+ // lit from low and to one side, off the mound, so the facets take a gradient and one face goes
+ // dark, instead of the whole cluster burning flat in a lamp set in among the prisms
+ m.lights.push_back(caGlow({5.2f,5.4f},f+.5f,.75f,8.f,6500,{.72f,.5f,1.f},.18f));
+ m.lights.push_back(caGlow({3.4f,3.6f},f+4.4f,.3f,5.f,6500,{.6f,.45f,1.f},.1f));
+ m.lights.push_back(lamp({6.6f,6.2f},f+2.4f,.45f,6.f,4200,0,WorldLightMount::Bare,0,false));          // a warm fill from the cell's side
  hazard(m,Hazard::Kind::Anomaly,1.6f,1.8f,5.2f,5.4f,f,f+3.f,10);
  m.creatureSpawns.push_back({CreatureKind::Transformed,{5.6f,6.2f},f,1,0});
  // The west passage to the Breach Sector is grown shut but for one lane along its south wall, lit
@@ -1061,7 +1085,7 @@ std::shared_ptr<const Map> makeContainmentB(){
  for(auto [x,y,w,d,h]:{std::tuple{6.f,10.8f,7.f,3.2f,2.9f},{3.9f,10.6f,3.f,2.7f,2.1f},{8.3f,10.9f,3.f,2.9f,3.4f},{5.6f,11.6f,3.6f,1.6f,1.5f}})caGrowth(m,x,y,f,w,d,h);
  for(auto [x,y,w,d,h]:{std::tuple{12.1f,11.25f,3.6f,2.6f,5.7f},{10.5f,11.2f,3.f,2.8f,4.3f},{13.5f,11.3f,2.9f,2.6f,3.8f},{11.5f,10.3f,2.4f,1.3f,1.7f},{12.9f,12.2f,2.6f,1.2f,1.5f},{9.7f,11.9f,1.6f,1.4f,2.4f}})caGrowth(m,x,y,f,w,d,h,false,1.f);
  for(auto [x,y,lo,w]:{std::tuple{11.1f,11.2f,3.6f,.6f},{13.f,11.4f,3.f,.5f},{12.1f,10.9f,5.2f,.75f},{7.9f,10.6f,2.9f,.5f},{4.8f,10.2f,1.8f,.4f}})caTrunk(m,x,y,f+lo,roof,w);
- caFang(m,10.9f,10.2f,f+.4f,.8f,.6f);caFang(m,13.4f,12.2f,f+.3f,.62f,2.2f);caFang(m,6.4f,12.f,f+.2f,.55f,1.3f);
+ caFang(m,10.9f,10.2f,f,.8f,.6f);caFang(m,13.4f,12.2f,f,.62f,2.2f);caFang(m,6.4f,12.f,f,.55f,1.3f);   // rooted in the floor, up through the growth
  wall(m,9.5f,10.f,14.5f,12.5f,f,roof,CollisionProxyMaterial);wall(m,2.6f,9.25f,9.5f,12.4f,f,roof,CollisionProxyMaterial);
  for(auto [x,y,z,h]:{std::tuple{4.6f,10.4f,2.f,1.f},{7.8f,10.6f,2.9f,.8f},{3.6f,11.6f,1.3f,.7f},{11.2f,11.3f,5.1f,1.2f},{12.9f,11.f,4.5f,.9f},{8.8f,12.1f,1.3f,.6f},
   {13.6f,9.9f,0.f,1.4f},{10.2f,9.9f,0.f,1.1f},{12.f,12.65f,0.f,.9f},{14.1f,12.2f,1.2f,.8f}})caKnot(m,x,y,f+z,h);

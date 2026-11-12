@@ -1411,7 +1411,7 @@ void GpuRenderer::actorStreamRun(uint32_t start,uint32_t count,const ActorMateri
 void GpuRenderer::endActorStream(const ActorStream&stream,uint32_t count){
  m->actorVertices.resize(size_t(stream.start)+count);m->actorTriangles+=count;
 }
-void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale,float dissolve){
+void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale,float dissolve,const std::array<float,3>* bounceAir){
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
@@ -1421,9 +1421,9 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  Point3 impostorCentre{};
  if(m->capturing&&m->lodTag&&m->lodTag->impostor){const MeshVertex* v[3]={&a,&b,&c};
   for(int i=0;i<3;++i)for(int j=i+1;j<3;++j)if(std::fabs(v[i]->u+v[j]->u)<.01f&&std::fabs(v[i]->v+v[j]->v)<.01f)impostorCentre=(worldPoint(v[i]->p)+worldPoint(v[j]->p))*.5f;}
- for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{const Projection projection{float(m->width)/m->height};out.position[0]=v.p.x*Projection::horizontal;out.position[1]=-v.p.y*projection.vertical();out.position[2]=v.p.z-Projection::nearPlane;out.position[3]=v.p.z;}
+ int corner=0;for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{const Projection projection{float(m->width)/m->height};out.position[0]=v.p.x*Projection::horizontal;out.position[1]=-v.p.y*projection.vertical();out.position[2]=v.p.z-Projection::nearPlane;out.position[3]=v.p.z;}
   out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=(normals?1.f:0.f)+dissolve*.45f;
-  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=v.p.z;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
+  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=m->capturing?(bounceAir?(*bounceAir)[size_t(corner)]:SoftwareRenderer::NoBounceAir):v.p.z;++corner;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
   // Painterly Horizon LOD markers ride in the parallax slot (negative values).
   if(const auto*tag=m->capturing?m->lodTag:nullptr){
    if(tag->impostor){out.position[0]=impostorCentre.x;out.position[1]=impostorCentre.y;out.position[2]=impostorCentre.z;out.position[3]=1.f;

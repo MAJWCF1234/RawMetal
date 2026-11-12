@@ -2408,6 +2408,456 @@
    "line": "dr_fin_radio_5",
    "model": "eleven_v3",
    "seed": 2202
+  },
+  {
+   "id": "dlg-rf_dir_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+   "text": "[whispered from the floor, relief cracking through] Are they still down there? You're not his. He sends two.",
+   "line": "rf_dir_hello",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rf_dir_card",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+   "text": "[bitter, tired, handing it over] Countersign. Thirty years for that word. Take it. The desk reads it as me, and I'm already on his list.",
+   "line": "rf_dir_card",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rf_dir_lab4",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+   "text": "[flat, not meeting your eye] Energy Diagnostics. Tier two. Medical put her in red at two fifteen. He asked for her by name. I didn't ask why.",
+   "line": "rf_dir_lab4",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rf_dir_list",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+   "text": "[quiet, a confession he has rehearsed] The board's list. I chaired the board. Ninety days between screenings. It read well in a quarter.",
+   "line": "rf_dir_list",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-md_imaging_exec_200",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[low and even, a man doing a job] Face the door. Hands on your head.",
+   "line": "md_imaging_exec_200",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-md_imaging_exec_1800",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[shaking, pleading, fast] I switched the tube off. That's all I did.",
+   "line": "md_imaging_exec_1800",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-md_imaging_exec_5300",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[into the handset, deadpan] Imaging. One more for the tier threes.",
+   "line": "md_imaging_exec_5300",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-medd_porter_250",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "Xb3zeLrTi6F4ziIcXdwk",
+   "text": "[hissed over his shoulder, backing off] Kath. Kath, there's someone in the corridor.",
+   "line": "medd_porter_250",
+   "model": "eleven_v3",
+   "seed": 4404
+  },
+  {
+   "id": "dlg-medd_porter_5200",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[muffled through the door, firm] Leave it. That's not one of theirs. Let her in.",
+   "line": "medd_porter_5200",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-medd_ade_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[low, urgent, still in theatre voice] Shut it behind you. Is it dark all the way up the ward?",
+   "line": "medd_ade_hello",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-medd_ade_key",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[brisk, unclipping it from her lanyard] He gave me the spare so I could fetch him between cases. Take it. Throw the transfer and the ward lights come back.",
+   "line": "medd_ade_key",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-medd_ade_lab4",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[defiant, then quieter at the end] I cut her straps at half five and left OBS 6 open. I wasn't scrubbing for her. She walked out like she knew the way.",
+   "line": "medd_ade_lab4",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-medd_ade_morgue",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[matter-of-fact, a warning she means] Forty. Certified on the table, still talking. Drawer nine. If the store's tubes go, he's up. Don't stop in the west aisle.",
+   "line": "medd_ade_morgue",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-et_desert_scene_11300",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[to the wall, under his breath, after the order] ...Accurate.",
+   "line": "et_desert_scene_11300",
+   "model": "eleven_v3",
+   "seed": 5505
+  },
+  {
+   "id": "dlg-et_desert_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[whispered, crouched, not looking up] Don't. My magazine's in the brick. I'm off his radio. Keep your voice down; he settles while somebody talks.",
+   "line": "et_desert_hello",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-et_desert_harris",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[fond, almost proud] Harris. Fitter. Taught me to lay brick, course on course. He still goes to the shelves. He still knows where everything is.",
+   "line": "et_desert_harris",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-et_desert_wake",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[rising panic, cut off] ...Harris? No. No, he's listening. Harris, it's me. It's-",
+   "line": "et_desert_wake",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-et_desert_door",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[low, quick, a bargain] Their board shut it. The repeater's on that wall, locked to the board, and the locks on this detail are a screwdriver. I'll throw it. You go west and you never saw me.",
+   "line": "et_desert_door",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-et_desert_thrown",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[flat, already turned back to Harris] Done. Go on. Don't come back through here with that light on.",
+   "line": "et_desert_thrown",
+   "model": "eleven_v4",
+   "seed": 4404
+  },
+  {
+   "id": "dlg-et_desert_west",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[tired, certain] And leave him? He'd come looking. He always comes looking for whoever had the radio on.",
+   "line": "et_desert_west",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_trade_8700",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[gruff, winded, hurt] Two cans. Same as last night.",
+   "line": "rg_trade_8700",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rg_trade_10600",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[dry, careful] Tell your sergeant thank you.",
+   "line": "rg_trade_10600",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_trade_12300",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[half a laugh, no humour] Tell him yourself. He won't hear it either.",
+   "line": "rg_trade_12300",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_eng_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[weary, matter-of-fact] Conversion, night shift. What's left of it. Nine gives us the fire. Not the door.",
+   "line": "rg_eng_hello",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_eng_what",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[confession, steady] I.I. had the output off containment at half two. I pulled the feeder handle off the bank myself. Holt took the spare back down at three to put it right.",
+   "line": "rg_eng_what",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-rg_eng_holt",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[quiet, an instruction] On the floor by column four, I'd think. He crossed on the light. You cross on the dark.",
+   "line": "rg_eng_holt",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_eng_handle",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[handing it over, relieved] Then you'll want this. The bank's feeder handle. I've carried it since half two like it was mine. The bank throws every four seconds: go in on the dark.",
+   "line": "rg_eng_handle",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-rg_eng_given",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[curt, looking away] Don't thank me. Put it on the bank.",
+   "line": "rg_eng_given",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-rg_eng_nine",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "text": "[bitter, low] Anyone up from below is exposed, the sergeant says. We came up from Conversion, not Containment. He doesn't ask which.",
+   "line": "rg_eng_nine",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-cona_qw_q2_5300",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[flat, careful, a man giving his name at a gate, muffled by glass] Dawes. Peter Dawes. Bench tech, B shift.",
+   "line": "cona_qw_q2_5300",
+   "model": "eleven_v3",
+   "seed": 5505
+  },
+  {
+   "id": "dlg-cona_qw_q2_9600",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[quieter, pleading under the calm, muffled by glass] Dawes. Write it down. Somebody write it down.",
+   "line": "cona_qw_q2_9600",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_lab_exec_600",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "TX3LPaxmHKxFdv7VOQHJ",
+   "text": "[running, breathless, terrified, shouted up the lab] Help me! I did what he said, I boxed them!",
+   "line": "dr_lab_exec_600",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_lab_exec_2400",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[level, tired, not raised] Doctor. Stop.",
+   "line": "dr_lab_exec_2400",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_lab_exec_7800",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[into a handset, flat, after a pause, looking at her] Materials. One more. The lab's clear but the two of ours.",
+   "line": "dr_lab_exec_7800",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_lab_okafor",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[whispered fast, shaking, from the floor] Shut the door. Did he see you? The one who did Hale.",
+   "line": "dr_lab_okafor",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_lab_okafor_hale",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[low, bitter, holding it together] Materials. He boxed the D-series for the lift, like he was told. Then he asked where the lift goes.",
+   "line": "dr_lab_okafor_hale",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_lab_okafor_two",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[wry, unsure, a little hope] Mendez and the boy. They drink my coffee. They might take my word.",
+   "line": "dr_lab_okafor_two",
+   "model": "eleven_v4",
+   "seed": 5505
+  },
+  {
+   "id": "dlg-dr_lab_okafor_stay",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[dry, frightened humour] Past that? I'll keep the bed warm. Go on.",
+   "line": "dr_lab_okafor_stay",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_lab_call_300",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[shouted through a door, voice cracking] Mendez! The guard's with me. She's not his. Let her by!",
+   "line": "dr_lab_call_300",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "dlg-dr_lab_call_3300",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[reluctant, to his partner, across the lab] ...Doc says let her by. Lower it.",
+   "line": "dr_lab_call_3300",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_geo_hello",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[guarded, rifle low, worn out] That's close enough. We hold this corridor. Not you. Say what you want.",
+   "line": "dr_geo_hello",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_geo_core",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[matter-of-fact briefing, darkening at the end] Core hall. Shed the load on the gallery, then isolate on the pit floor. Fifty seconds between. Something came up the feed at four. It takes whoever's alone.",
+   "line": "dr_geo_core",
+   "model": "eleven_v4",
+   "seed": 3303
+  },
+  {
+   "id": "dlg-dr_geo_bank",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[quiet decision, half a smile at the last line] Our board's on the dump bank's line. It trips, I throw it back from here. Every time, while you're down. Then I forget I did.",
+   "line": "dr_geo_bank",
+   "model": "eleven_v3",
+   "seed": 5505
+  },
+  {
+   "id": "dlg-dr_geo_room_say",
+   "role": 10,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[weary, giving up something] Take it. Rounds on the bunk. Nothing left down here to shoot at that shoots back.",
+   "line": "dr_geo_room_say",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "dlg-dr_core_relay_say_900",
+   "role": 1,
+   "cue": "Talk",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[clipped, over a handset, urgent] Bank's tripped. Throwing it back. Go.",
+   "line": "dr_core_relay_say_900",
+   "model": "eleven_v4",
+   "seed": 1101
   }
  ]
 }

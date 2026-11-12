@@ -18,6 +18,63 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Doors stand either way
+
+A door stands in whichever wall it is put in. With **Door**, click in a gap
+(open cells with wall tiles at both ends, up to four wide) and the door fills
+it: a gap between walls above and below makes a door along Y, one between walls
+left and right a door along X. A drag runs along the gap, across or down the
+plan. **R** turns the door the tool is about to fit; the right pane chooses
+whether it slides or swings. Pick a door and **R** (or Turn) turns it a quarter
+about its centre, hinge and swing side with it; the boxes under Turn choose
+**Opens by** (slides, swings), **Stands** (along X, along Y), **Swings to** and
+**Hinge at**, one Ctrl+Z each. Entry and exit doors stay along X. The plan
+draws a swinging door as its leaf standing open from the hinge block, with the
+arc its latch sweeps. Turn copy, Flip copy, group turns and floor turns carry
+doors round. It is `DOOR` field 21 (axis) and 22 (hinge).
+
+Below them: **Lock shown** (none, keycard reader, key, power release: field
+24), **Breaks down** for a swinging door (Never, or how much battering it takes
+before a Brute, Chimera or the Machine breaks it: field 23; pick 150 or type a
+number) and **Starts open** (field 16; an ajar door does not start opening).
+The plan marks the lock beside the latch post, draws a door that breaks down
+with a dashed, cracked leaf, and an ajar leaf at its angle. `--editing-test`
+drives all of it and leaves the plan picture in
+`.build/interaction/doors-plan.bmp`.
+
+### Creatures that hunt (v1.4.0)
+
+Pick a creature and the inspector shows two boxes under Turn, Copy and Delete:
+
+- **Hunts first** lists the people on the creature's map by number, name (the
+  Person tool's name, and the name they speak under when they talk) and where
+  they stand. The creature comes out for that person before anyone else. The
+  plan draws a dashed red line from the creature to them, ringed at their end.
+  It is `CREATURE` field 10, the person's actor index.
+- **Recurring as** names a recurring animal (`CREATURE` field 9): it cannot
+  die, it runs and is gone, and creatures with the same name anywhere in the
+  campaign are that animal coming back. The list offers the names already
+  given in this campaign; type a new one and leave the box.
+
+Each change is one Ctrl+Z. Deleting a person renumbers every quarry after
+them, and a creature whose quarry was deleted hunts the player again. Copying
+a creature together with its quarry points the copy at the copied person.
+Both raw fields stay under Advanced. `--editing-test` drives both boxes, the
+plan line, deletion and Undo through the real controls
+(`native-editor-interaction-test.txt`); `--demo 11` shows a Chimera after a
+scientist.
+
+### Parts palette pictures
+
+The resonance crystals (`res_crystal_l/m/s/wall`, slots 374-377) and bedrock
+outcrops (`res_rock_crag/spire/low`, 378-380) sit on the **Caves** tab as
+"Resonance crystal large" ... "Bedrock low". `RawMetalEditor.exe
+--make-thumbs` now makes every picture (`native-editor-thumbs.txt`, 389 of
+389): paper-thin pieces (the corner web, a sheet of paper, an ID card) are
+staged a centimetre thick and the Arch at its usual 2.4 x 3.4 m, since the
+engine refuses a 2 m arch. Delete a `.build/thumbs/*.failed` marker to have a
+picture tried again.
+
 ### Sign designer
 
 Choosing the **Sign** tool opens a small **Sign designer** window beside the plan
@@ -349,6 +406,36 @@ cmake --build .build/vs2022 --config Release --target RawMetal
 
 The plan, the people list and the engine view author the records the game
 loads. Dialogue and script records stay on the field list.
+
+## Engine sync
+
+`src/` is the builder's own copy of the game's engine, with the builder's
+code in it (adoptEditorCampaign, EditorView, observer mode, the unified
+build, EditorShots). Bring it up to the game with
+
+```text
+python tools/editor/sync_engine.py --dry     what it would do
+python tools/editor/sync_engine.py           sync to the game's HEAD
+```
+
+`ENGINE_SYNC` (beside this file) records the game commit the copy was last
+synced to. For each file: if the builder's copy equals the game's at that
+commit, the game's current file is copied; if it already equals the game's
+now, nothing happens; otherwise `git merge-file` merges the game's change into
+the builder's file (base: the game at the last sync). A conflicting merge is
+reported and left alone (`--force` writes it with conflict markers), and
+ENGINE_SYNC then stays where it was. Files only the builder has are never
+touched; files the game deleted are reported. CRLF and LF count as the same;
+merged files keep the builder file's line endings.
+
+It also copies new game sources (and any source the builder's CMakeLists
+names that the copy lacks), the game's tracked `custom maps/` files (GUIDE.html
+is where the builder reads every record's fields), and assets: every file
+`src/assets.rc` embeds (the voice bank among them) and everything new or newer
+under the gitignored `src/assets/library/`. `--to REV` syncs to another
+commit, `--worktree` takes the game's uncommitted files (and leaves
+ENGINE_SYNC alone), `--editor DIR` runs it against a scratch copy. After a
+sync, run `Build.cmd`; an `assets.rc` change repacks for ten minutes or more.
 
 ## Open from campaign
 

@@ -203,7 +203,9 @@ void drCrystalTo(Map& m,float x,float y,float z,float h,float yaw){
 // out the way `face` points (fixture facing: 0 is +y), at uniform scale s. The model's prisms point
 // to its back (-y at yaw 0), so it is turned half round; its root lump is sunk into the face.
 void drCrystalWall(Map& m,float x,float y,float zc,float s,float face){
- const auto& v=model::size[model::res_crystal_wall];const float out=v[1]*s*.5f-.4f*s;
+ // set deep: most of the knot's depth inside the face, so the prisms read as grown out of it
+ // rather than a spray stood off it
+ const auto& v=model::size[model::res_crystal_wall];const float out=v[1]*s*.5f-.72f*s;
  drFix(m,model::res_crystal_wall,x+std::sin(face)*out,y+std::cos(face)*out,zc-v[2]*s*.5f,v[0]*s,v[1]*s,v[2]*s,face+kPi,false);
 }
 // A crag of the rock in its own finish (the pack's stones are near black unless a lamp is close):
@@ -392,9 +394,69 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  m.lights.push_back(drTube(12.f,19.8f,R,.5f,6.f,4400,.02f));
  floorLine(m,11.94f,17.f,12.06f,23.f,f,14);
  // --- The detail: two men, frightened, short of rounds -----------------------------------------
+ // (their stance is a state: hostile as declared, until Okafor in the night office vouches for her)
+ const StateId labStance=stateId("dr_lab_stance");
  drGuard(m,clock,"dr_lab_a",ActorVisual::Cleanup,GuardSquadRole::Assault,"dr_lab",
-  {{{5.f,11.2f},f,5000,drE},{{7.2f,15.4f},f,3000,drS},{{18.4f,15.3f},f,4000,drN},{{18.4f,8.f},f,4000,drW}},13,1,1.2f);
- drGuard(m,clock,"dr_lab_b",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"dr_lab",{{{21.f,11.5f},f,60000,drW}},15,2,1.1f);
+  {{{5.f,11.2f},f,5000,drE},{{7.2f,15.4f},f,3000,drS},{{18.4f,15.3f},f,4000,drN},{{18.4f,8.f},f,4000,drW}},13,1,1.2f,labStance);
+ drGuard(m,clock,"dr_lab_b",ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,"dr_lab",{{{21.f,11.5f},f,60000,drW}},15,2,1.1f,labStance);
+ // --- What the player walks in on: as she comes along the bench run toward the east aisle, a man from
+ // the night office runs up the aisle toward her, toward the door she came in by, for help or for the way out;
+ // the detail's third comes out of the south corridor after him and shoots him in the back seven
+ // metres from her, in the open under the aisle's tubes. He walks up to the body, looks up the lab
+ // at her in the doorway, says it into his handset, and goes back south. Nobody else moves.
+ {const char* t="dr_lab_exec";drSequence(m,t,"dr_lab_exec_done",15000,14000,13.4f,5.3f,20.5f,8.6f);   // the north aisle's east half: looking down the east aisle
+  drEvent(m,"dr_lab_exec_west",3.4f,8.6f,8.4f,15.f,"",{drSet(t,1)});m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,stateId(t),ScriptCondition::Op::Equal,0});   // or round the west, seen through the cell
+  const Vec2 office{19.3f,16.25f},mid{18.75f,13.1f},fall{18.4f,10.3f},back{12.f,19.8f},mouth{12.9f,16.9f},aim{15.5f,14.7f},over{17.65f,11.7f},out{12.f,23.6f},door{12.f,5.5f};
+  auto face=[](Vec2 a,Vec2 b){return std::atan2(b.x-a.x,b.y-a.y);};
+  const float gone=f-25.f;
+  {ActorTrack hale;hale.timerState=stateId(t);hale.visual=ActorVisual::Scientist;hale.scale=1.72f;
+   hale.keys={{0,office,gone,kPi,0,0},{10,office,f,face(office,mid),1,0},{1900,mid,f,face(mid,fall),1,2.2f},{3900,fall,f,face(mid,fall),1,4.4f},
+    {4000,fall,f,face(mid,fall),4,0},{15000,fall,f,face(mid,fall),4,1.f}};
+   m.actorTracks.push_back(std::move(hale));}
+  {ActorTrack shot;shot.timerState=stateId(t);shot.visual=ActorVisual::CleanupRusher;shot.scale=1.6f;
+   shot.keys={{0,back,gone,kPi,0,0},{900,back,gone,kPi,0,0},{910,back,f,face(back,mouth),1,0},{2200,mouth,f,face(mouth,aim),1,1.5f},{3300,aim,f,face(aim,fall),1,2.8f},
+    {3400,aim,f,face(aim,fall),2,0},{4100,aim,f,face(aim,fall),2,.7f},{4200,aim,f,face(aim,fall),0,0},{4900,aim,f,face(aim,over),1,0},{6400,over,f,face(over,fall),1,1.6f},
+    {6500,over,f,face(over,fall),0,0},{7600,over,f,face(over,door),0,1.1f},{9800,over,f,face(over,door),0,3.2f},{9900,over,f,face(over,back),1,0},{12900,back,f,face(back,out),1,3.4f},
+    {13900,out,f,0,1,4.6f},{13910,out,gone,0,0,0},{15000,out,gone,0,0,0}};
+   m.actorTracks.push_back(std::move(shot));}
+  cue(m,t,250,Sound::Door,office,"",.7f,f+1.2f);
+  cue(m,t,600,Sound::Empty,mid,"HALE: Help me! I did what he said, I boxed them!",.85f,f+1.5f,"dr_lab_exec_600");
+  cue(m,t,2400,Sound::Empty,mouth,"CLEANUP: Doctor. Stop.",.8f,f+1.5f,"dr_lab_exec_2400");
+  cue(m,t,3900,Sound::Shot,aim,"",1.f,f+1.3f);
+  cue(m,t,7800,Sound::Empty,over,"CLEANUP (HANDSET): Materials. One more. The lab's clear but the two of ours.",.75f,f+1.5f,"dr_lab_exec_7800");
+  // the detail's work light on a stand by their post, turned up the east aisle: where he falls is lit
+  wall(m,19.97f,9.17f,20.03f,9.23f,f,f+2.f,8);wall(m,19.82f,9.02f,20.18f,9.38f,f,f+.03f,8);
+  drFix(m,model::mine_cage_lamp,20.f,9.2f,f+2.f,.206f,.201f,.362f,-kPi*.75f,false);
+  m.lights.push_back(lamp({19.8f,9.5f},f+2.05f,1.1f,6.5f,4300,0,WorldLightMount::Bare,0,true));
+  // the corridor's mouth lit, so it reads down the lab from the door: a cage lamp on the south wall
+  drFix(m,model::mine_cage_lamp,14.85f,16.75f,f+2.5f,.206f,.201f,.362f,kPi,false);
+  m.lights.push_back(lamp({14.7f,16.55f},f+2.45f,1.f,5.5f,3600,0,WorldLightMount::Bare,0,true));}
+ // --- D. Okafor, materials: in the night office since the door was welded, on the floor by the bed.
+ // He saw it through the office glass. The two outside take his coffee; they may take his word.
+ {ActorTrack t;t.timerState=stateId(clock);t.visual=ActorVisual::SeniorScientist;t.scale=1.72f;
+  const Vec2 at{17.25f,21.35f};const float face=std::atan2(19.3f-17.25f,17.f-21.35f);
+  t.keys={{0,at,f,face,5,0},{60000,at,f,face,5,1}};
+  t.ai.mode=ActorAiMode::Civilian;t.ai.faction=AiFaction::Neutral;t.ai.dangerRange=2.f;t.ai.speed=1.f;t.talk=stateId("dr_lab_okafor");
+  m.actorTracks.push_back(std::move(t));
+  auto line=[&](const char* node,const char* text,std::vector<DialogueReply> replies){DialogueNode n;n.id=stateId(node);n.speaker="D. OKAFOR, MATERIALS";n.line=text;n.replies=std::move(replies);m.dialogue.push_back(std::move(n));};
+  auto reply=[](const char* text,const char* next,const char* sets="",const char* hide=""){DialogueReply r;r.text=text;r.next=*next?stateId(next):0;if(*sets)r.sets.push_back({stateId(sets),1});r.hide=*hide?stateId(hide):0;return r;};
+  line("dr_lab_okafor","Shut the door. Did he see you? The one who did Hale.",{
+   reply("Who was Hale?","dr_lab_okafor_hale","","dr_lab_heard_hale"),
+   reply("The two out there. Will they let me pass?","dr_lab_okafor_two","","dr_lab_word"),
+   reply("Come with me.","dr_lab_okafor_stay","","dr_lab_heard_stay"),
+   reply("Stay down.","")});
+  line("dr_lab_okafor_hale","Materials. He boxed the D-series for the lift, like he was told. Then he asked where the lift goes.",{
+   reply("Back.","dr_lab_okafor","dr_lab_heard_hale")});
+  line("dr_lab_okafor_two","Mendez and the boy. They drink my coffee. They might take my word.",{
+   reply("Tell them.","","dr_lab_word"),reply("Back.","dr_lab_okafor")});
+  line("dr_lab_okafor_stay","Past that? I'll keep the bed warm. Go on.",{
+   reply("Back.","dr_lab_okafor","dr_lab_heard_stay")});}
+ // his word: he calls it through the office door, and they lower their guns (dr_lab_stance: Truce)
+ drSequence(m,"dr_lab_call","dr_lab_call_done",7600,7000);
+ drEvent(m,"dr_lab_call_go",0,0,24,24,"dr_lab_word",{drSet("dr_lab_call",1)});
+ cue(m,"dr_lab_call",300,Sound::Empty,{18.9f,17.6f},"OKAFOR (CALLING OUT): Mendez! The guard's with me. She's not his. Let her by!",.85f,f+1.4f,"dr_lab_call_300");
+ cue(m,"dr_lab_call",4950,Sound::Empty,{21.f,11.5f},"CLEANUP: ...Doc says let her by. Lower it.",.8f,f+1.6f,"dr_lab_call_3300");
+ drEvent(m,"dr_lab_vouched",0,0,24,24,"dr_lab_call_done",{drSet("dr_lab_stance",int(SquadStance::Truce))});
  // --- Light: cold tubes over the benches, one dead, the cell's violet through the glass ---------
  // Only the bench runs keep their tubes; the aisles round the cell were switched off to save the
  // cell's own light, so the floor between is dark and D-7 is the brightest thing in the room.
@@ -438,7 +500,7 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
 // out in a row and came up as ore. A miner's lamp is still lit on the table. LAB 4 was here.
 std::shared_ptr<const Map> makeBoreSampleArchive(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[105];m.definition=CampaignChunks[105];m.definition.ambient=.2f;m.definition.wetness=.5f;
+ m.name=CampaignMapNames[105];m.definition=CampaignChunks[105];m.definition.ambient=.2f;m.definition.wetness=.5f;m.definition.musicCue=MusicCue::Silence;   // no score in the dark
  m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
  const float f=-15,R=m.definition.ceiling;
  m.layers.push_back(floorLayer(m.name.c_str(),f));
@@ -510,6 +572,47 @@ std::shared_ptr<const Map> makeBoreSampleArchive(){
  for(auto [x,i,fl]:{std::tuple{3.5f,.55f,0.f},{7.f,.55f,.12f},{10.5f,.6f,0.f},{14.f,.62f,.3f}})drPendant(m,{x,11.5f},R,f+3.6f,i,6.f,2900,fl);
  drPendant(m,{10.f,4.f},R,f+3.6f,.28f,5.f,3000);
  drPendant(m,{10.f,19.5f},R,f+3.6f,0,0,0);
+ // --- The night circuit: the far half of the store is dark ---------------------------------------
+ // The east racks, the far aisle pendants and the table's lamps are on the night circuit, and it
+ // tripped at 03:31 on an earth fault where row 4's junction got wet: the junction still arcs on
+ // its post at the row's end, blue in the dark, the one thing moving out there. The panel by the
+ // door will not reset with the fault on the line. Isolate row 4 at its junction (between the arcs),
+ // then reset at the door: the far half comes up, and the torch is not the only light by the table.
+ // Until then only bore 7's own glow and the miner's lantern show where the table is.
+ {const StateId lit=stateId("dr_arc_lit"),row=stateId("dr_arc_row4");
+  for(auto& l:m.lights){const bool far=(std::fabs(l.position.y-11.5f)<.05f&&(std::fabs(l.position.x-10.5f)<.05f||std::fabs(l.position.x-14.f)<.05f||std::fabs(l.position.x-21.6f)<.05f||std::fabs(l.position.x-19.8f)<.05f)&&l.z>f+2.f);
+   if(far){l.enabledState=lit;l.enabledValue=1;}}
+  m.darkZones.push_back({9.2f,1.f,23.f,23.f,-1000,1000,lit,1,true,false});
+  // the panel, on the west wall by the way in
+  drFix(m,model::pwr_breaker_panel_open,1.06f,7.9f,f+1.25f,.32f,.23f,.46f,drE,false);
+  terminal(m,{1.75f,7.9f},"ARCHIVE LIGHTING / NIGHT CIRCUIT","TRIPPED 03:31. EARTH FAULT: RACK ROW 4. WILL NOT RESET WITH THE FAULT ON THE LINE.",
+   "ISOLATE ROW 4 AT ITS JUNCTION, THE ROW'S EAST END, THEN E / RESET.",0,lit,row);
+  m.terminals.back().yaw=drE;
+  {auto l=drGlow({1.4f,7.9f},f+1.55f,.1f,1.1f,{1.f,.15f,.08f},2000);l.enabledState=lit;l.invert=true;m.lights.push_back(l);}      // TRIPPED: red
+  // row 4's junction: a post at the row's east end, its box open, water down the rack onto it, arcing
+  wall(m,16.55f,16.12f,16.65f,16.22f,f,f+1.9f,8);wall(m,16.5f,15.85f,16.7f,16.55f,f,f+.04f,8);
+  drFix(m,model::pwr_breaker_panel_open,16.75f,16.17f,f+1.25f,.32f,.23f,.46f,drE,false);
+  wall(m,16.45f,15.9f,16.55f,16.5f,f+.002f,f+.006f,17);m.structures.back().solid=false;               // the wet on the floor under it
+  {Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=16.5f;h.y1=15.85f;h.x2=17.1f;h.y2=16.5f;h.bottom=f+.7f;h.top=f+2.f;h.damagePerSecond=30;
+   h.enabledFlag=row;h.invertFlag=true;h.period=1.7f;h.onTime=.55f;m.hazards.push_back(h);
+   auto arc=lamp({16.95f,16.17f},f+1.45f,1.6f,6.5f,8000,0,WorldLightMount::Bare,0,false,{.55f,.72f,1.f});
+   arc.period=1.7f;arc.onTime=.55f;arc.flicker=.55f;arc.enabledState=row;arc.invert=true;m.lights.push_back(arc);}
+  terminal(m,{17.55f,16.95f},"RACK ROW 4 / JUNCTION ISOLATOR","ROW 4 LIVE. EARTH FAULT. THE DRIP OFF BORE 3'S TRAYS RUNS DOWN THE RACK INTO THE BOX.",
+   "E / ISOLATE ROW 4. MIND THE BOX WHILE IT ARCS.",0,row);
+  m.terminals.back().yaw=drW;
+  m.ambients.push_back({Sound::AmbWaterDrip,{16.6f,16.f},f+1.8f,.5f,6.f,AmbientEmitter::Random,3.f,3.f});
+  {ScriptAction s;s.type=ScriptAction::Type::PlaySound;s.sound=Sound::OneMetalBang;s.amount=.6f;ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="ROW 4 ISOLATED / RESET THE NIGHT CIRCUIT AT THE DOOR";say.amount=3.5f;
+   drEvent(m,"dr_arc_row4_done",0,0,24,24,"dr_arc_row4",{s,say});}
+  {ScriptAction s;s.type=ScriptAction::Type::PlaySound;s.sound=Sound::PaBackupGenerators;s.amount=.6f;drEvent(m,"dr_arc_lit_done",0,0,24,24,"dr_arc_lit",{s});}
+  m.objectiveTexts.push_back({stateId("dr_arc_obj_dark"),"THE ARCHIVE'S NIGHT CIRCUIT HAS TRIPPED. ITS PANEL IS BY THE DOOR."});
+  m.objectiveTexts.push_back({stateId("dr_arc_obj_fault"),"EARTH FAULT ON RACK ROW 4. ISOLATE IT AT THE ROW'S EAST END, THEN RESET AT THE DOOR."});
+  auto goal=[](const char* id,ObjectiveStatus s){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(s);return a;};
+  drEvent(m,"dr_arc_obj_in",0,8.f,6.f,15.f,"",{goal("dr_arc_obj_dark",ObjectiveStatus::Active)});
+  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,lit,ScriptCondition::Op::Equal,0});
+  drEvent(m,"dr_arc_obj_panel",1.f,6.6f,3.4f,9.2f,"",{goal("dr_arc_obj_dark",ObjectiveStatus::Complete),goal("dr_arc_obj_fault",ObjectiveStatus::Active)});
+  m.scriptEvents.back().conditions.push_back({ScriptCondition::Source::State,lit,ScriptCondition::Op::Equal,0});
+  drEvent(m,"dr_arc_obj_done",0,0,24,24,"dr_arc_lit",{goal("dr_arc_obj_dark",ObjectiveStatus::Complete),goal("dr_arc_obj_fault",ObjectiveStatus::Complete)});
+  m.scriptEvents.back().scope=ScriptEvent::Scope::Map;}
  zone(m,"BORE SAMPLE ARCHIVE / LOGGING TABLE",17.f,8.f,23.f,15.f,-1000,1000,TableAir);
  zone(m,"BORE SAMPLE ARCHIVE",0,0,24,24,-1000,1000,DustAir);
  return p;
@@ -536,7 +639,8 @@ std::shared_ptr<const Map> makeGeophysics(){
  wall(m,8.8f,1.f,9.f,5.f,f,R,3);wall(m,15.f,1.f,15.2f,5.f,f,R,3);
  wallDoor(m,1.f,8.8f,5.f,5.2f,3.f,4.2f,f,R,-1);                            // door 0: the chart store
  wallDoor(m,15.2f,23.f,5.f,5.2f,19.4f,20.6f,f,R,-1);                        // door 1: the server room
- wallDoor(m,1.f,8.8f,16.8f,17.f,4.f,5.2f,f,R,1);                            // door 2: the squad's room
+ {const int d=wallDoor(m,1.f,8.8f,16.8f,17.f,4.f,5.2f,f,R,1);                // door 2: the squad's room, theirs: asked, or off a dead man
+  m.doors[size_t(d)].requireState=stateId("dr_geo_room");}
  wallDoor(m,15.2f,23.f,16.8f,17.f,18.6f,19.8f,f,R,1);                        // door 3: the plotter room
  wall(m,8.8f,17.f,9.f,23.f,f,R,3);wall(m,15.f,17.f,15.2f,23.f,f,R,3);
  // the soffits: a dropped ceiling over every side room and both corridors, the hall open to the slab
@@ -665,6 +769,7 @@ std::shared_ptr<const Map> makeGeophysics(){
  // the detail: two men holding their corridor, a truce while the player keeps the weapon down
  const StateId stance=stateId("dr_geo_stance");
  drGuard(m,clock,"dr_geo_a",ActorVisual::Cleanup,GuardSquadRole::Assault,"dr_geo",{{{10.6f,20.6f},f,60000,drN}},12,1,1.1f,stance);
+ m.actorTracks.back().talk=stateId("dr_geo_hello");                                       // the corridor man: he will talk, under the truce
  drGuard(m,clock,"dr_geo_b",ActorVisual::CleanupMedic,GuardSquadRole::Medic,"dr_geo",{{{13.6f,21.6f},f,8000,drN},{{13.f,17.8f},f,4000,drN}},12,1,1.f,stance);
  drEvent(m,"dr_geo_truce",9.f,1.f,15.f,5.f,"",{drSet("dr_geo_stance",int(SquadStance::Truce))});
  drSequence(m,"dr_geo_radio","dr_geo_radio_done",16500,15500,8.f,14.f,16.f,17.f);
@@ -673,6 +778,29 @@ std::shared_ptr<const Map> makeGeophysics(){
  cue(m,"dr_geo_radio",5900,Sound::Empty,radio,"RADIO: Sir, nobody has come back up from the interface since three.",.9f,f+.4f,"dr_geo_2");
  cue(m,"dr_geo_radio",10000,Sound::Empty,radio,"INVESTIGATOR (RADIO): Then you will be the first.",.9f,f+.4f,"dr_geo_3");
  cue(m,"dr_geo_radio",12900,Sound::Empty,{10.6f,20.6f},"CLEANUP: You heard him. We're not going.",.8f,f+1.6f,"dr_geo_4");
+ // The corridor man, under the truce: what is past the core; their room (the rounds in it); and,
+ // once he has told her about the bank, the offer that changes the core hall: their board is on the
+ // dump bank's line, and while she is down there he throws it back every time it trips (dr_geo_second,
+ // read by Energy Core Research).
+ {auto line=[&](const char* node,const char* text,std::vector<DialogueReply> replies){DialogueNode n;n.id=stateId(node);n.speaker="GEOPHYSICS DETAIL";n.line=text;n.replies=std::move(replies);m.dialogue.push_back(std::move(n));};
+  auto reply=[](const char* text,const char* next,const char* sets="",const char* need="",const char* hide=""){DialogueReply r;r.text=text;r.next=*next?stateId(next):0;
+   if(*sets)r.sets.push_back({stateId(sets),1});r.require=*need?stateId(need):0;r.hide=*hide?stateId(hide):0;return r;};
+  line("dr_geo_hello","That's close enough. We hold this corridor. Not you. Say what you want.",{
+   reply("What's past the core?","dr_geo_core","","","dr_geo_heard_core"),
+   reply("The bank won't hold me fifty seconds.","dr_geo_bank","","dr_geo_heard_core","dr_geo_second"),
+   reply("Your room. You're not using it.","dr_geo_room_say","","","dr_geo_room"),
+   reply("I'll go round.","")});
+  line("dr_geo_core","Core hall. Shed the load on the gallery, then isolate on the pit floor. Fifty seconds between. Something came up the feed at four. It takes whoever's alone.",{
+   reply("Back.","dr_geo_hello","dr_geo_heard_core")});
+  line("dr_geo_bank","Our board's on the dump bank's line. It trips, I throw it back from here. Every time, while you're down. Then I forget I did.",{
+   reply("Do it.","","dr_geo_second"),reply("Back.","dr_geo_hello")});
+  line("dr_geo_room_say","Take it. Rounds on the bunk. Nothing left down here to shoot at that shoots back.",{
+   reply("Thanks.","","dr_geo_room")});}
+ // the room's door: theirs, so a sticker on it; off a dead man's belt if it comes to that
+ taped(m,{5.75f,16.79f},f+1.5f,drN,Readable::Sticky,"BY THE DOOR, IN MARKER","DETAIL. OURS. ASK.","");
+ {ScriptEvent e;e.id=stateId("dr_geo_room_taken");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.bottom=-100;e.top=100;e.requireState=stateId("dr_geo_a_dead");
+  e.conditions.push_back({ScriptCondition::Source::State,stateId("dr_geo_b_dead"),ScriptCondition::Op::Equal,1});e.actions={drSet("dr_geo_room",1)};m.scriptEvents.push_back(std::move(e));}
+ {ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="THE DETAIL'S ROOM / UNLOCKED";say.amount=3.f;drEvent(m,"dr_geo_room_open",0,0,24,24,"dr_geo_room",{say});}
  // --- Light ----------------------------------------------------------------------------------------
  // two of the four hall pendants are out: the hall is lit in pools, the section and the scanner carry it
  for(auto [x,y,i,fl]:{std::tuple{4.4f,7.f,.62f,0.f},{4.4f,14.f,0.f,0.f},{19.6f,7.f,0.f,0.f},{19.6f,14.f,.62f,.2f}}){
@@ -758,15 +886,20 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
    wall(m,px-.05f-ty*.06f,py-.05f-tx*.06f,px+.05f+ty*.06f,py+.05f+tx*.06f,pit+1.2f,crown-.6f,20);}
   wall(m,c.x+nx*2.21f-tx*.19f-ty*.03f,c.y+ny*2.21f-ty*.19f-tx*.03f,c.x+nx*2.21f+tx*.19f+ty*.03f,c.y+ny*2.21f+ty*.19f+tx*.03f,pit+1.2f,crown-.6f,8);}
  {int k=0;for(auto [nx,ny,face]:{std::tuple{0.f,-1.f,drN},{1.f,0.f,drE},{0.f,1.f,drS},{-1.f,0.f,drW}}){
-   for(float z:{pit+2.6f,g-1.6f,g+1.6f,g+8.f,g+12.f,g+16.5f}){
-    if(((int(z*3.f)+k)&1)&&z>g)continue;                                                 // high up, every other face
-    const float s=z<g?1.15f:z<g+9.f?1.35f:1.6f,slide=(((k*5+int(z))%3)-1)*.06f;
+   // few, and small for the shell: one low on every face, one at gallery height on two faces, one
+   // high on the other two, and one near the crown; the rest of the slot is the standing knots below
+   for(float z:{pit+2.6f,g+1.6f,g+8.f,g+16.5f}){
+    if(z==g+1.6f&&(k&1))continue;if(z==g+8.f&&!(k&1))continue;if(z==g+16.5f&&k)continue;
+    const float s=(z<g?1.f:z<g+9.f?1.1f:1.25f)*.85f,slide=(((k*5+int(z))%3)-1)*.06f;
     drCrystalWall(m,c.x+nx*2.27f+std::fabs(ny)*slide,c.y+ny*2.27f+std::fabs(nx)*slide,z,s,face);}
    ++k;}}
  // and where it has broken out through the concrete itself, between the slots, clear of the arms
- for(auto [dx,dy,z,s]:{std::tuple{-.707f,-.707f,g-2.5f,1.4f},{-.707f,-.707f,g+2.5f,1.2f},{-.707f,-.707f,g+12.f,1.5f},{.707f,-.707f,g-.2f,1.3f},{.707f,-.707f,g+10.5f,1.4f},
-                       {.707f,.707f,g-2.f,1.3f},{.707f,.707f,g+2.f,1.5f},{-.707f,.707f,g+1.f,1.3f},{-.707f,.707f,g+13.f,1.4f},{.707f,.707f,pit+2.8f,1.2f}})
+ for(auto [dx,dy,z,s]:{std::tuple{-.707f,-.707f,g-2.5f,1.2f},{.707f,-.707f,g+10.5f,1.2f},{.707f,.707f,g+2.f,1.25f},{-.707f,.707f,g+13.f,1.2f},{.707f,.707f,pit+2.8f,1.f}})
   drCrystalWall(m,c.x+dx*2.3f,c.y+dy*2.3f,z,s,std::atan2(dx,dy));
+ // and standing knots among them: crystal grown up off the collars and the base course, prisms
+ // upright from a ledge rather than fanned flat off a face
+ for(auto [dx,dy,z,h,yaw]:{std::tuple{-.66f,-.66f,pit+1.1f,1.1f,.4f},{.66f,.66f,pit+1.1f,.9f,2.6f},{-.66f,.66f,pit+5.f-.42f+.32f,.8f,4.1f},{.66f,-.66f,g+4.5f-.42f+.32f,.75f,1.3f},{-.66f,-.66f,g+4.5f-.42f+.32f,.6f,5.2f}})
+  drCrystalTo(m,c.x+dx*2.45f,c.y+dy*2.45f,z,h,yaw);
  for(float x:{10.5f,13.5f})pipeRoute(m,{{x,17.98f,pit+5.5f},{x,14.1f,pit+5.5f}},.35f,3,NoRoof);
  for(auto [dx,dy]:{std::pair{-1.f,-1.f},{1.f,-1.f},{0.f,1.2f}})m.pipes.push_back({{c.x+dx,c.y+dy},{c.x+dx,c.y+dy},crown,.22f,R,2});
  wall(m,c.x-2.5f,c.y-2.5f,c.x+2.5f,c.y+2.5f,crown,crown+.35f,8);wall(m,c.x-2.6f,c.y-2.6f,c.x+2.6f,c.y+2.6f,crown-.12f,crown,13);
@@ -852,7 +985,19 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
   ScriptCondition running;running.id=shut;running.op=ScriptCondition::Op::Equal;running.value=0;
   ScriptEvent e;e.id=stateId("dr_core_shed_start");e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=shed;e.once=false;e.rearm=true;e.conditions={running};
   e.actions={drSet("dr_core_dump",1),held};m.scriptEvents.push_back(e);
-  e.id=stateId("dr_core_shed_trip");e.requireState=stateId("dr_core_dump_trip");e.actions={drSet("dr_core_shed",0),drSet("dr_core_dump_trip",0),drSet("dr_core_dump",0),tripped,bang};m.scriptEvents.push_back(e);}
+  e.id=stateId("dr_core_shed_trip");e.requireState=stateId("dr_core_dump_trip");e.actions={drSet("dr_core_shed",0),drSet("dr_core_dump_trip",0),drSet("dr_core_dump",0),tripped,bang};m.scriptEvents.push_back(e);
+  // If the Geophysics detail's man said he would (dr_geo_second, his board is on the bank's line),
+  // a trip once the player has shed is thrown back from up there: the bank holds again, and the run
+  // to the pit floor is not against the clock. His voice on the gallery handset says so.
+  ScriptEvent once;once.id=stateId("dr_core_held_once");once.x1=0;once.y1=0;once.x2=24;once.y2=24;once.requireState=shed;once.actions={drSet("dr_core_held",1)};m.scriptEvents.push_back(once);
+  ScriptCondition second;second.id=stateId("dr_geo_second");second.op=ScriptCondition::Op::Equal;second.value=1;
+  ScriptCondition dropped;dropped.id=shed;dropped.op=ScriptCondition::Op::Equal;dropped.value=0;
+  e.id=stateId("dr_core_relay");e.requireState=stateId("dr_core_held");e.conditions={running,second,dropped};
+  e.actions={drSet("dr_core_shed",1),drSet("dr_core_relay_say",1)};m.scriptEvents.push_back(e);}
+ drSequence(m,"dr_core_relay_say","dr_core_relay_said",4000,3000);
+ drEvent(m,"dr_core_relay_rearm",0,0,24,24,"dr_core_relay_said",{drSet("dr_core_relay_say",0),drSet("dr_core_relay_said",0)});
+ m.scriptEvents.back().once=false;m.scriptEvents.back().rearm=true;
+ cue(m,"dr_core_relay_say",900,Sound::Empty,{21.6f,1.62f},"GEOPHYSICS (HANDSET): Bank's tripped. Throwing it back. Go.",.75f,g+1.f,"dr_core_relay_say_900");
  taped(m,{3.4f,1.f},g+1.5f,drS,Readable::Note,"PIT / TWO AT A TIME","THE STAIRS ARE THE ONLY WAY DOWN. NOBODY ON THE PIT FLOOR WITHOUT A SECOND ON THE GALLERY.",
   "IF THE BASE STARTS SINGING, STAND STILL. IT ARCS AT WHAT MOVES.");
  drBody(m,"dr_core_clock",ActorVisual::Scientist,{16.f,4.f},g,1.2f);machineryClock(m,"dr_core_clock",60000);
@@ -865,9 +1010,16 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
  // R-117's last showing in Chapter 2: the feed it came up with at the 900 level stops, and it comes up
  // out of the slurry mains between the pumps at the pit's south face, into the red. It is not killed
  // here (hunter r117): it runs, or follows the player out, and is left for what is under the mine.
- {ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Chimera;a.position={11.6f,16.3f};a.z=pit;a.amount=8;a.id=stateId("r117");
-  ScriptAction g;g.type=ScriptAction::Type::PlaySound;g.sound=Sound::OneMonsterGrowl;g.amount=1.f;
-  drEvent(m,"dr_core_r117",0,0,24,24,"core_shutdown",{a,g});}
+ // Not out of thin air at the player's elbow: the mains slam as the feed stops, something drags
+ // through them under the south face and on round under the pit floor, growls at the north face, and
+ // it comes out between the switchgear there, behind the core from the station, into the red: three
+ // seconds of warning and the core between it and the player, the walkway north and the stairs open.
+ drSequence(m,"dr_core_r117_in","dr_core_r117_out",8000,3400);
+ drEvent(m,"dr_core_r117",0,0,24,24,"core_shutdown",{drSet("dr_core_r117_in",1)});
+ for(auto [t,snd,x,y,z,gain]:{std::tuple{0,Sound::OneMetalBang,12.f,16.2f,5.5f,1.f},{1100,Sound::OneMetalDrag,11.4f,17.6f,1.2f,.9f},{2300,Sound::OneMetalDrag,9.6f,7.2f,.6f,.8f},{2900,Sound::OneMonsterGrowl,8.f,7.6f,.9f,1.f}}){
+  SequenceCue c;c.timerState=stateId("dr_core_r117_in");c.timeMs=t;c.sound=snd;c.position={x,y};c.gain=gain;c.z=pit+z;m.sequenceCues.push_back(c);}
+ {ScriptAction a;a.type=ScriptAction::Type::SpawnEnemy;a.enemyKind=CreatureKind::Chimera;a.position={8.1f,8.1f};a.z=pit;a.amount=8;a.id=stateId("r117");
+  drEvent(m,"dr_core_r117_comes",0,0,24,24,"dr_core_r117_out",{a});}
  // --- The machine's body: what the concrete shell wears ------------------------------------------
  // a yellow base course, steel collars under both ring gantries, a frame round every lens slot,
  // conduit up the shell between the faces, and two drive housings bolted to its foot
@@ -1359,7 +1511,8 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  for(auto [x,ph]:{std::pair{9.5f,0.f},{14.5f,.7f}}){auto l=lamp({x,20.8f},f+2.2f,1.1f,5.f,3000,0,WorldLightMount::Wall,lN,true,{1.f,.12f,.06f});
   l.period=1.4f;l.onTime=.7f;l.phase=ph;l.enabledState=sealed;m.lights.push_back(l);}
  // the rock round the portal and the seam showing through it: crystal out of the wall over the gate
- drCrag(m,6.6f,20.85f,f-.05f,2.4f,.8f,6.4f,1161u,true);drCrag(m,17.4f,20.85f,f-.05f,2.4f,.8f,6.4f,1162u,true);
+ // the pillars of rock either side of the gate stand on the shaft floor 8 m down and rise past the deck
+ drCrag(m,6.6f,20.85f,f-8.f,2.4f,.8f,14.4f,1161u,true);drCrag(m,17.4f,20.85f,f-8.f,2.4f,.8f,14.4f,1162u,true);
  for(auto [x,z,s]:{std::tuple{9.4f,f+4.9f,1.5f},{10.7f,f+5.1f,1.1f},{12.4f,f+5.3f,1.4f},{13.8f,f+4.9f,1.2f},{15.f,f+4.6f,1.6f},
                    {8.4f,f+2.2f,1.3f},{15.9f,f+2.5f,1.2f},{7.9f,f+3.9f,1.f},{16.6f,f+4.f,1.1f}})drCrystalWall(m,x,21.18f,z,s,drN);
  drShard(m,8.5f,20.5f,f,.2f,1.5f);drShard(m,15.6f,20.6f,f,.16f,1.1f);

@@ -140,6 +140,7 @@
       if(f[0]=="BREAKABLE"&&f.size()==15){auto found=fixtures.find(int(number(f[13],-1)));if(found!=fixtures.end())f[13]=std::to_string(found->second);else f.resize(13);}
       if(f[0]=="ACTOR")rewrite(7,actors);else if(f[0].starts_with("ACTOR_"))rewrite(2,actors);
       if(f[0]=="ACTOR_KEY")rewrite(10,actors);
+      if(f[0]=="CREATURE")rewrite(10,actors); // a creature copied with its quarry hunts the copy
       if(f[0].starts_with("SCRIPT_")&&f.size()>2){auto found=events.find(f[2]);if(found!=events.end())f[2]=found->second;}
       int owner=recordFloor(i);auto mapped=layerMap.find(owner);
       if(mapped!=layerMap.end())owner=mapped->second;

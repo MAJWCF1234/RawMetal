@@ -2,6 +2,8 @@
 #include "../../CreatureAnimation.h"
 #include "../../EngineRegressionScene.h"
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <sstream>
@@ -15,13 +17,19 @@ float Game::npcHeadlessAge(size_t actor)const{
  // Kept on the session clock; one that went back (a load) shows it long done.
  const float age=m_elapsed-state(friendlyKey(actor,"headless_at"))*.001f;return age<0?1e4f:age;
 }
-// The pool he lies in: under where his neck comes to rest as he goes over backwards. A blood
-// mark, so it is drawn with the rest; a load lays it again (rebuildFriendlyActors).
+// The pool he lies in: where it runs out of the neck, past his shoulders, not under his chest. The
+// dead clip lays the neck .57 m behind where he stood and a hand to his left (measured off the
+// renderer's stump at rest, --chimera-kill-frames); the pool's middle is a little further on, so
+// its near edge meets the stump. A blood mark, drawn with the rest; a load lays it again.
 void Game::headlessPool(size_t actor){
+ // The renderer lays his pool from the stump itself (Scene3D, the neck stump), where the body really
+ // lies; a mark worked out from where he stood fell under the furniture once the post moved.
+ (void)actor;return;
  if(!npcHeadless(actor))return;const auto&npc=m_friendlyActors[actor];if(npc.level<0||npc.level>=chunkCount()||!chunkResident(npc.level))return;
- const Vec2 at=npc.pose.position-Vec2{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)}*(.42f*npc.track().scale/1.6f);
+ const float s=npc.track().scale/1.6f;const Vec2 facing{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)},side{std::cos(npc.pose.yaw),-std::sin(npc.pose.yaw)};
+ const Vec2 at=npc.pose.position-facing*(.86f*s)-side*(.14f*s);
  for(const auto&mark:m_bulletImpacts)if(mark.blood&&mark.level==npc.level&&lengthSq(mark.pos-at)<.04f&&mark.size>=.4f)return;
- m_bulletImpacts.push_back({at,friendlyWorld(npc.level).floorHeight(at.x,at.y)+.012f,{0,0},m_elapsed,npc.level,true,int(CreatureKind::Mutant),0,int(ImpactMaterial::Flesh),.58f});
+ m_bulletImpacts.push_back({at,friendlyWorld(npc.level).supportBelow(at.x,at.y,npc.pose.z+.3f)+.012f,{0,0},m_elapsed,npc.level,true,int(CreatureKind::Mutant),0,int(ImpactMaterial::Flesh),.46f});
  if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
 }
 int Game::hunterPrey(const Enemy& e)const{
@@ -67,7 +75,7 @@ void Game::biteKill(Enemy& e,size_t actor){
 }
 bool Game::updateFeeding(Enemy& e,float dt){
  const auto&traits=creatureTraits(e.kind);
- auto stop=[&](bool roused){e.feeding=0;e.feedActor=-1;
+ auto stop=[&](bool roused){if(e.feedActor>=0&&size_t(e.feedActor)<m_friendlyActors.size())headlessPool(size_t(e.feedActor));e.feeding=0;e.feedActor=-1;
   // The tail of its attack lifts it off the body.
   e.strike=.47f;
   if(roused){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=std::max(e.awareness,12.f);e.recognition=1;e.state=Enemy::State::Chase;e.attackCooldown=std::min(e.attackCooldown,.4f);enemySound(e,0,1.f,.85f);}
@@ -87,6 +95,8 @@ bool Game::updateFeeding(Enemy& e,float dt){
   const float reach=1.05f*e.scale;Point3 mouth{e.pos.x+facing.x*reach,e.pos.y+facing.y*reach,m_world.floorHeight(e.pos.x+facing.x*reach,e.pos.y+facing.y*reach)+.28f};
   const unsigned beat=unsigned(turn(m_elapsed))&3u;
   hitBurst(m_level,mouth,{facing.x*-.4f,facing.y*-.4f,.7f},ImpactMaterial::Flesh,-1,.7f+.15f*float(beat&1u),false);
+  // the worry throws enough spatter to push the oldest marks out of the ring: keep his pool in it
+  if(e.feedActor>=0&&size_t(e.feedActor)<m_friendlyActors.size())headlessPool(size_t(e.feedActor));
   SoundEvent chew{Sound::PunchHit,{mouth.x,mouth.y},.42f,.5f+.06f*float(beat),true,14,mouth.z};chew.aiRadius=-1;m_sounds.push_back(chew);
   if(beat==3u){SoundEvent growl{Sound::OneMonsterGrowl,e.pos,.35f,.82f,true,15,e.z+.6f};growl.aiRadius=-1;m_sounds.push_back(growl);}
  }
@@ -247,22 +257,37 @@ bool Game::testChimeraHunt(){
   check(followed&&arrive>0&&inside,"7 it comes through the seam after the player and walks in",v.str());}
  report<<(passed?"ALL PASSED":"FAILED")<<'\n';return passed;
 }
+// RM_CHIMERA_STAGE="level x y feet yawDeg pitch [a,b,c] [track]" re-aims --chimera-kill-frames at
+// another of R-117's scenes (its returns): that place, those states on first; "track" turns the
+// camera after the animal once it is out. Unset (the tests), the call's own scene is used.
+namespace {const char* chimeraStageOverride(){static const char* env=std::getenv("RM_CHIMERA_STAGE");return env&&*env?env:nullptr;}}
 Game Game::chimeraStage(int level,Vec2 pos,float z,float yaw,float pitch){
+ std::string sets;
+ if(const char* env=chimeraStageOverride()){std::istringstream in(env);float degrees=0;int lv=0;Vec2 at{};float feet=0,tilt=0;
+  if(in>>lv>>at.x>>at.y>>feet>>degrees>>tilt){level=lv;pos=at;z=feet;yaw=degrees*kPi/180.f;pitch=tilt;in>>sets;if(sets=="track")sets.clear();}}
  Game g;g.m_level=level;g.restart();
  for(const char* s:{"ere_great_door","chapter2_open","proc_clearance","lab_chem_seal","med_override","med_morgue_release"})g.setState(stateId(s),1);
+ for(size_t a=0;a<sets.size();){size_t b=sets.find(',',a);if(b==std::string::npos)b=sets.size();if(b>a)g.setState(stateId(sets.substr(a,b-a)),1);a=b+1;}
  g.m_god=true;g.m_inspectionCamera=true;g.m_player.pos=pos;g.m_player.z=z;g.m_player.angle=yaw;g.m_player.pitch=pitch;g.m_player.grounded=true;return g;
 }
 // --chimera-kill-frames: the camera holds at the way in, then (close) stands over the post man.
 void Game::chimeraFilm(bool close){
+ if(const char* env=chimeraStageOverride();env&&std::strstr(env,"track")){
+  for(const auto&e:m_enemies)if(e.hunter&&e.alive&&!e.wakeState){const Vec2 to=e.pos-m_player.pos;if(lengthSq(to)>.01f)m_player.angle=std::atan2(to.y,to.x);break;}
+  return;}
  if(!close)return;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&n=m_friendlyActors[i];if(n.homeLevel!=m_level||n.track().deadState!=stateId("cona_a_post_dead")||!state(n.track().deadState))continue;
-  const Vec2 at=n.pose.position,from=at+Vec2{-1.6f,-1.1f};m_player.pos=from;m_player.z=n.pose.z;m_player.angle=std::atan2(at.y-from.y,at.x-from.x);m_player.pitch=-75;
+  // Back far enough to have him in the picture where his body comes to rest: thrown from the
+  // animal's jaws, he falls most of his length toward the way in.
+  const Vec2 at=n.pose.position,from=at+Vec2{-2.5f,-1.7f};m_player.pos=from;m_player.z=n.pose.z;m_player.angle=std::atan2(at.y-from.y,at.x-from.x);m_player.pitch=-75;
   if(!hasQuestItem(Flashlight))giveQuestItem(Flashlight,1);setState(stateId("flashlight_on"),1);return;}
 }
 std::string Game::chimeraFilmLine()const{
  std::ostringstream o;o.setf(std::ios::fixed);o.precision(2);o<<"t="<<m_elapsed;
  for(const auto&e:m_enemies)if(e.hunter)o<<" r117 "<<(e.alive?"alive":e.gone()?"gone":"dead")<<" at "<<e.pos.x<<','<<e.pos.y<<" wake="<<(e.wakeState!=0)<<" feeding="<<e.feeding<<" hp="<<e.hp;
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&n=m_friendlyActors[i];if(n.homeLevel!=m_level||!n.track().health)continue;o<<" | actor "<<i<<" dead="<<(n.track().deadState&&state(n.track().deadState))<<" headless="<<npcHeadless(i)<<" at "<<n.pose.position.x<<','<<n.pose.position.y;}
+ int marks=0;for(const auto&mark:m_bulletImpacts)if(mark.blood&&mark.level==m_level){++marks;if(mark.size>=.4f)o<<" | pool "<<mark.pos.x<<','<<mark.pos.y<<" size "<<mark.size;}
+ o<<" | blood marks "<<marks;
  return o.str();
 }
 }

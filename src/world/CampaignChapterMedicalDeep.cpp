@@ -213,8 +213,8 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  wallDoor(m,10.5f,19.6f,18.f,18.2f,14.2f,15.1f,f,roof,1);                               // door 6: specimens
  wallDoor(m,15.1f,23.f,18.f,18.2f,19.6f,20.8f,f,roof,1);                                // door 7: porters
  // West column: changing, staff room, the transfer bay, recovery.
- wall(m,5.8f,1.f,6.f,2.4f,f,roof,3);doorwayY(m,2.4f,3.4f,5.8f,6.f,f,roof);wall(m,5.8f,3.4f,6.f,6.8f,f,roof,3);
- doorwayY(m,6.8f,7.8f,5.8f,6.f,f,roof);wall(m,5.8f,7.8f,6.f,8.8f,f,roof,3);
+ wall(m,5.8f,1.f,6.f,2.4f,f,roof,3);wall(m,5.8f,3.4f,6.f,6.8f,f,roof,3);   // changing and staff room doors: hung last (doors 8, 9)
+ wall(m,5.8f,7.8f,6.f,8.8f,f,roof,3);
  wall(m,1.f,4.4f,5.8f,4.6f,f,roof,3);wall(m,1.f,8.6f,6.f,8.8f,f,roof,3);wall(m,1.f,14.2f,6.f,14.4f,f,roof,3);
  wall(m,5.8f,14.4f,6.f,15.f,f,roof,3);doorwayY(m,15.f,17.2f,5.8f,6.f,f,roof);wall(m,5.8f,17.2f,6.f,23.f,f,roof,3);
  // The theatre corridor's east wall: scrub entry, the theatre's double doors on the seam axis.
@@ -526,6 +526,63 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
   {16.25f,18.47f,true},{21.9f,22.75f,true}}){const float a=alongX?.9f:.25f,b=alongX?.25f:.9f;ddCap(m,x-a,y-b,x+a,y+b,f+2.1f,roof);}
  wall(m,17.6f,20.6f,17.72f,20.95f,f+1.3f,f+1.6f,8);wall(m,17.72f,20.68f,17.76f,20.87f,f+1.42f,f+1.56f,20);
  wall(m,17.65f,18.4f,17.8f,18.85f,f+.85f,f+1.75f,23);                                     // a porter's jacket
+ // --- Pass 4: the office is locked, and the spare key is in the porters' hold -----------------------
+ // The director locked his office at 05:40 and went down with the mortuary list. The spare is on
+ // K. Adeyemi's lanyard (the scrub nurse on the rota, who would not scrub for LAB 4); she and the
+ // night porter are holed up in the porters' hold. Step into the disposal corridor and the porter,
+ // keeping watch at its far end, bolts for the hold and drags something across the door; then she
+ // tells him to let you in. She gives up the key (medd_office_open), and the transfer is reachable.
+ int office=-1,porters=-1;for(size_t i=0;i<m.doors.size();++i){const auto& d=m.doors[i];
+  if(std::fabs(d.left-17.4f)<.05f&&std::fabs(d.y-15.7f)<.05f)office=int(i);if(std::fabs(d.left-19.6f)<.05f&&std::fabs(d.y-18.1f)<.05f)porters=int(i);}
+ if(office>=0){auto& d=m.doors[size_t(office)];d.requireState=stateId("medd_office_open");d.locked="LOCKED / THE DIRECTOR'S KEY";d.lock=2;}
+ taped(m,{18.95f,15.8f},f+1.5f,ddS,Readable::Note,"MEDICAL DIRECTOR","LOCKED 05:40. KEY: THE DIRECTOR. SPARE: THE SCRUB NURSE ON THE NIGHT ROTA.",
+  "THE WARD TRANSFER IS IN HERE. NOBODY THROWS IT BUT HIM.");
+ ddSequence(m,"medd_porter","medd_porter_in",7000,3500);
+ {ActorTrack t;t.timerState=stateId("medd_porter");t.visual=ActorVisual::Worker;t.scale=1.7f;
+  const Vec2 watch{21.5f,16.75f},door{20.2f,17.55f},through{20.2f,18.8f},hide{21.2f,19.45f};
+  t.keys={{0,watch,f,ddW,0,0},{700,watch,f,ddW,0,.3f},{900,watch,f,std::atan2(door.x-watch.x,door.y-watch.y),1,0},{1700,door,f,0,1,1.2f},
+   {2500,through,f,0,1,2.4f},{3200,hide,f,std::atan2(hide.x-through.x,hide.y-through.y),1,3.4f},{3400,hide,f,-2.5f,5,0},{7000,hide,f,-2.5f,5,3.f}};
+  m.actorTracks.push_back(std::move(t));}
+ {ScriptEvent e;e.id=stateId("medd_porter_go");e.x1=8.8f;e.y1=15.8f;e.x2=17.4f;e.y2=18.f;e.bottom=-100;e.top=100;e.requireState=stateId("medd_porter");e.requireValue=0;
+  e.actions={ddSet("medd_porter",1)};if(porters>=0){ScriptAction open;open.type=ScriptAction::Type::OpenDoor;open.index=porters;e.actions.push_back(open);}
+  m.scriptEvents.push_back(std::move(e));}
+ if(porters>=0){ddEvent(m,"medd_porter_shut",0,0,24,24,"medd_porter_in",1,{ddShut(porters)});m.scriptEvents.back().scope=ScriptEvent::Scope::Map;}
+ cue(m,"medd_porter",250,Sound::Empty,{21.5f,16.75f},"PORTER: Kath. Kath, there's someone in the corridor.",.8f,f+1.5f,"medd_porter_250");
+ cue(m,"medd_porter",3600,Sound::OneMetalDrag,{20.6f,18.7f},"",.85f,f+.6f);
+ cue(m,"medd_porter",5200,Sound::Empty,{21.6f,21.2f},"ADEYEMI (BEHIND THE DOOR): Leave it. That's not one of theirs. Let her in.",.8f,f+1.4f,"medd_porter_5200");
+ // K. Adeyemi: a civilian on nobody's side, who cannot be killed (the key cannot be lost).
+ {ActorTrack t;t.timerState=stateId("medd_porter");t.visual=ActorVisual::FemaleDoctor;t.scale=1.7f;
+  const Vec2 at{21.6f,21.15f};const float face=-2.72f;
+  t.keys={{0,at,f,face,0,0},{7000,at,f,face,0,1}};
+  t.ai.mode=ActorAiMode::Civilian;t.ai.faction=AiFaction::Neutral;t.ai.dangerRange=2.f;t.ai.speed=1.1f;t.talk=stateId("medd_ade_hello");
+  m.actorTracks.push_back(std::move(t));}
+ auto line=[&](const char* node,const char* text,std::vector<DialogueReply> replies){DialogueNode n;n.id=stateId(node);n.speaker="K. ADEYEMI, SCRUB NURSE";n.line=text;n.replies=std::move(replies);m.dialogue.push_back(std::move(n));};
+ auto reply=[](const char* text,const char* next,const char* sets="",const char* hide=""){DialogueReply r;r.text=text;r.next=*next?stateId(next):0;if(*sets)r.sets.push_back({stateId(sets),1});r.hide=*hide?stateId(hide):0;return r;};
+ line("medd_ade_hello","Shut it behind you. Is it dark all the way up the ward?",{
+  reply("The director's office. I need the transfer.","medd_ade_key","","medd_office_open"),
+  reply("LAB 4. She was on your list.","medd_ade_lab4","","medd_ade_heard_lab4"),
+  reply("What did they take down to the morgue?","medd_ade_morgue","","medd_ade_heard_morgue"),
+  reply("Stay here. Keep the door shut.","")});
+ line("medd_ade_key","He gave me the spare so I could fetch him between cases. Take it. Throw the transfer and the ward lights come back.",{
+  reply("Thanks.","","medd_office_open")});
+ line("medd_ade_lab4","I cut her straps at half five and left OBS 6 open. I wasn't scrubbing for her. She walked out like she knew the way.",{
+  reply("Back.","medd_ade_hello","medd_ade_heard_lab4")});
+ line("medd_ade_morgue","Forty. Certified on the table, still talking. Drawer nine. If the store's tubes go, he's up. Don't stop in the west aisle.",{
+  reply("Back.","medd_ade_hello","medd_ade_heard_morgue")});
+ // The steps, as the HUD keeps them.
+ m.objectiveTexts.push_back({stateId("medd_obj_transfer"),"WARD C IS DARK. ITS TRANSFER IS IN THE DIRECTOR'S OFFICE."});
+ m.objectiveTexts.push_back({stateId("medd_obj_key"),"THE OFFICE IS LOCKED. THE SPARE KEY: THE SCRUB NURSE ON THE ROTA."});
+ {auto goal=[](const char* id,ObjectiveStatus s){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(s);return a;};
+  ddEvent(m,"medd_obj_dark",0,0,24,24,"med_blackout",1,{goal("medd_obj_transfer",ObjectiveStatus::Active)});
+  {ScriptEvent e;e.id=stateId("medd_office_tried");e.x1=16.9f;e.y1=15.8f;e.x2=19.2f;e.y2=16.9f;e.bottom=-100;e.top=100;e.requireState=stateId("medd_office_open");e.requireValue=0;e.once=false;e.rearm=true;
+   ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="LOCKED / THE DIRECTOR'S KEY. THE SPARE: THE SCRUB NURSE";say.amount=3.5f;
+   e.actions={say,goal("medd_obj_transfer",ObjectiveStatus::Hidden),goal("medd_obj_key",ObjectiveStatus::Active)};m.scriptEvents.push_back(std::move(e));}
+  {ScriptEvent e;e.id=stateId("medd_office_keyed");e.scope=ScriptEvent::Scope::Map;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.requireState=stateId("medd_office_open");
+   ScriptAction say;say.type=ScriptAction::Type::ShowMessage;say.text="THE DIRECTOR'S SPARE KEY / HIS OFFICE";say.amount=3.5f;
+   e.actions={say,goal("medd_obj_key",ObjectiveStatus::Complete),goal("medd_obj_transfer",ObjectiveStatus::Active)};m.scriptEvents.push_back(std::move(e));}
+  ddEvent(m,"medd_obj_done",0,0,24,24,"medd_transfer_thrown",1,{goal("medd_obj_transfer",ObjectiveStatus::Complete),goal("medd_obj_key",ObjectiveStatus::Complete)});
+  m.scriptEvents.back().scope=ScriptEvent::Scope::Map;
+  for(auto& e:m.scriptEvents)if(e.id==stateId("medd_obj_dark"))e.scope=ScriptEvent::Scope::Map;}
  // --- Light (29): the theatre generator keeps the route lit; the ward board feeds the side rooms ----
  // Essential circuit: lit through the blackout.
  m.lights.push_back(ddTube(3.f,11.5f,roof,.65f,7.5f,5600,.06f));                           // the transfer bay: light out to the ward
@@ -577,6 +634,12 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  zone(m,"MEDICAL / SURGERY / DISPOSAL CORRIDOR",8.8f,15.8f,23.f,18.f);
  zone(m,"MEDICAL / SURGERY / THEATRE CORRIDOR",6.f,1.f,8.8f,18.f);
  zone(m,"MEDICAL / SURGERY",0,0,24,24);
+ // The changing room and the staff room shut on the theatre corridor: doors along
+ // the corridor's west wall, opening into the rooms: the changing room's hangs from
+ // its south post so the open leaf lies against the bench end, clear of the way in.
+ // Hung after the rest so the earlier doors keep their numbers (saves, scripts).
+ swingDoorY(m,2.4f,3.4f,5.9f,f,roof,-1,true);                                          // door 8: changing
+ swingDoorY(m,6.8f,7.8f,5.9f,f,roof,-1);                                               // door 9: staff room
  recessedFittings(m);freightFinish(m,-1);
  return p;
 }
@@ -595,7 +658,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
 // porter's room; off the lock, the suit-up room.
 std::shared_ptr<const Map> makeMedicalMorgue(){
  auto p=std::make_shared<Map>();auto& m=*p;
- m.name=CampaignMapNames[78];m.definition=CampaignChunks[78];m.definition.ambient=.22f;
+ m.name=CampaignMapNames[78];m.definition=CampaignChunks[78];m.definition.ambient=.22f;m.definition.musicCue=MusicCue::Silence;   // no score: tile, steel and the drone
  m.definition.playerStart={12.f,1.5f};m.definition.spawnHeight=-12.f;m.definition.spawnYaw=kPi*.5f;
  m.wallSurface=SurfacePaintedTeal;m.floorSurface=SurfaceClinicTile;m.ceilingSurface=SurfaceConcrete;
  const float f=-15,up=-12,roof=m.definition.ceiling,ceil=-12.2f;
@@ -622,7 +685,7 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
   "NOBODY COMES DOWN ALONE. NOBODY GOES IN THE STORE ALONE.");
  ddTrolley(m,13.9f,1.95f,up,true,true,roof-up);
  // --- Lower plan (walls .2 m to the slab) ---------------------------------------------------------------
- wall(m,9.f,7.f,9.2f,9.4f,f,up,3);doorwayY(m,9.4f,11.f,9.f,9.2f,f,up);wall(m,9.f,11.f,9.2f,15.2f,f,up,3);  // receiving / body store
+ wall(m,9.f,7.f,9.2f,9.4f,f,up,3);wall(m,9.f,11.f,9.2f,15.2f,f,up,3);  // receiving / body store: its door is hung last (door 4)
  wallDoor(m,1.f,9.2f,14.8f,15.f,3.4f,4.6f,f,up,1);                                      // door 1: store to post-mortem
  wall(m,9.2f,14.8f,9.8f,15.4f,f,up,3);
  wall(m,9.2f,15.2f,10.6f,15.4f,f,up,3);ddGlaze(m,10.6f,15.2f,14.6f,15.4f,f,up,.95f,2.2f,true);wall(m,14.6f,15.2f,16.f,15.4f,f,up,3);
@@ -835,6 +898,10 @@ std::shared_ptr<const Map> makeMedicalMorgue(){
  zone(m,"MEDICAL / MORTUARY / NIGHT PORTER",16.f,12.6f,23.f,17.4f);
  zone(m,"MEDICAL / MORTUARY / SUITS",16.f,17.6f,23.f,23.f);
  zone(m,"MEDICAL / MORTUARY",0,0,24,24);
+ // The body store's door, standing open into receiving as the porters left it. Shut,
+ // it is a door between you and drawer 9. Hung after the rest so the earlier doors
+ // keep their numbers (saves, scripts).
+ {const int d=swingDoorY(m,9.4f,11.f,9.1f,f,up,1);m.doors[size_t(d)].open=m.doors[size_t(d)].maxOpen;m.doors[size_t(d)].opening=true;}  // door 4: body store
  recessedFittings(m);freightFinish(m,-1);
  return p;
 }

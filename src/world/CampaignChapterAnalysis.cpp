@@ -607,6 +607,14 @@ void dgPaper(Map& m,Vec2 p,float surface,float yaw,Readable kind,const char* tit
 void dgAmbient(Map& m,Sound sound,Vec2 p,float z,float gain,float radius,int mode,float every=8,float spread=8,const char* state=nullptr,int value=1){
  AmbientEmitter a;a.sound=sound;a.position=p;a.z=z;a.gain=gain;a.radius=radius;a.mode=mode;a.every=every;a.spread=spread;a.state=state?stateId(state):0;a.value=value;m.ambients.push_back(a);
 }
+// A script event: in its box (or anywhere on the map with `map`), once, when every state test holds.
+void dgEvent(Map& m,const char* id,bool map,float x1,float y1,float x2,float y2,std::initializer_list<std::pair<const char*,int>> when,std::vector<ScriptAction> actions){
+ ScriptEvent e;e.id=stateId(id);e.scope=map?ScriptEvent::Scope::Map:ScriptEvent::Scope::Box;e.x1=x1;e.y1=y1;e.x2=x2;e.y2=y2;e.bottom=-100;e.top=100;
+ for(auto [s,v]:when){ScriptCondition c;c.id=stateId(s);c.value=v;e.conditions.push_back(c);}
+ e.actions=std::move(actions);m.scriptEvents.push_back(std::move(e));
+}
+ScriptAction dgSetState(const char* id,int value){ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=stateId(id);a.value=value;return a;}
+ScriptAction dgObjective(const char* id,ObjectiveStatus status){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(status);return a;}
 // A crash rail on a wall face (a thin strip x1..y2 against it), the way the labs north of here carry theirs.
 void dgCrash(Map& m,float x1,float y1,float x2,float y2,float f){wall(m,x1,y1,x2,y2,f+.86f,f+.96f,20);}
 // A slatted bench along x, its back to the north (toward -y) or the south.
@@ -892,7 +900,7 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
  dgAmbient(m,Sound::OneMetalDrag,{18.f,10.6f},roof-.2f,.5f,14,AmbientEmitter::Random,3.2f,1.6f,"anl_l4_rig");
  dgAmbient(m,Sound::OneMetalCreak,{20.4f,10.3f},roof-.2f,.42f,14,AmbientEmitter::Random,5.f,3.f,"anl_l4_rig");
  dgAmbient(m,Sound::OneMetalBang,{16.5f,10.4f},roof-.2f,.55f,16,AmbientEmitter::OnState,0,0,"anl_l4_rig",0);
- dgAmbient(m,Sound::AmbStatic,{8.f,9.4f},f+1.6f,.4f,9,AmbientEmitter::Loop,0,0,"anl_l4_rig");
+ dgAmbient(m,Sound::AmbStatic,{8.f,9.4f},f+1.6f,.24f,7,AmbientEmitter::Loop,0,0,"anl_l4_rig");
  taped(m,{15.21f,7.4f},f+1.5f,anE,Readable::Sticky,"ON THE RIG","it follows light that walks and stops where the light stops.","it has never once looked at me.");
  // Hale, by the service door, his hand lamp still burning beside him; the disk on him
  dgBody(m,"anl_diag_clock",ActorVisual::CleanupMedic,{20.1f,14.1f},f,kPi*.5f);
@@ -902,7 +910,20 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
  m.lights.push_back(lamp({19.3f,13.4f},f+.25f,1.1f,5.5f,5600,0,WorldLightMount::Bare));m.lights.back().prop=haleLamp;
  dgPaper(m,{20.9f,13.8f},0,.4f,Readable::Letter,"DETAIL 4 / ORDER 03:20","R. HALE: RETURN TO LAB 4 BY THE SERVICE DOOR. CLEAR THE ANALYST'S DESK. ALL MEDIA TO I.I. BY HAND. DO NOT READ IT.",
   "THE DIAGNOSTICS DETAIL WILL NOT GO IN. YOU HAVE THE DISK.");
- dgPaper(m,{20.5f,14.4f},0,-.3f,Readable::Letter,"WARD C OVERRIDE / R. HALE","DEPTHWORKS MEDICAL. EVERY MEDICAL LOCK ANSWERS IT: THE SERVICE DOOR, THE WARD, SCREENING SOUTH.","E / TAKE THE DISK.",stateId("med_override"));
+ dgPaper(m,{20.5f,14.4f},0,-.3f,Readable::Letter,"WARD C OVERRIDE / SLEEVE / R. HALE","DEPTHWORKS MEDICAL. EVERY MEDICAL LOCK ANSWERS IT: THE SERVICE DOOR, THE WARD, SCREENING SOUTH.","THE SLEEVE IS EMPTY. THE DISK IS STILL IN THE READER.");
+ // THE READER KEPT THE DISK. Hale came in on it at 03:24 with the reader on its battery, and the battery went flat
+ // with the disk in the slot. The panel says where its mains went: the LAB 4 board in Array Power, off the hall,
+ // isolated at 02:27. Close the board (the hall comes up, the arrays bang on, and the detail comes to see what
+ // did it), then eject the disk here. The door itself still answers med_override alone.
+ terminal(m,{22.3f,14.3f},"SERVICE DOOR / READER PANEL","DISK IN THE SLOT: WARD C OVERRIDE, R. HALE, 03:24. READER ON BATTERY UNTIL 03:25. BATTERY FLAT: THE SLOT HOLDS.",
+  "MAINS: LAB 4 BOARD, ARRAY POWER. ISOLATED 02:27. E / EJECT THE DISK.",0,stateId("med_override"),stateId("anl_l4_mains"));
+ {auto l=lamp({21.f,14.7f},f+1.5f,.16f,1.6f,2200,0,WorldLightMount::Bare,0,false,{1.f,.55f,.08f});l.enabledState=stateId("anl_l4_mains");m.lights.push_back(l);}   // the reader's pilot: live
+ {auto l=lamp({21.f,14.7f},f+1.38f,.18f,1.8f,5200,0,WorldLightMount::Bare,0,false,{.2f,1.f,.35f});l.enabledState=stateId("med_override");m.lights.push_back(l);} // override accepted
+ m.objectiveTexts.push_back({stateId("anl_obj_reader"),"THE READER KEPT HALE'S DISK. IT HAS NO POWER: LAB 4 MAINS, ARRAY POWER, OFF THE HALL."});
+ m.objectiveTexts.push_back({stateId("anl_obj_eject"),"LAB 4 BOARD CLOSED. EJECT THE DISK AT THE READER PANEL."});
+ dgEvent(m,"anl_l4_obj_reader",false,18.4f,12.2f,22.9f,14.8f,{{"med_override",0},{"anl_l4_mains",0}},{dgObjective("anl_obj_reader",ObjectiveStatus::Active)});
+ dgEvent(m,"anl_l4_obj_mains",true,0,0,24,24,{{"anl_l4_mains",1}},{dgObjective("anl_obj_reader",ObjectiveStatus::Complete),dgObjective("anl_obj_eject",ObjectiveStatus::Active),dgSetState("anl_l4_mains_seq",1)});
+ dgEvent(m,"anl_l4_obj_disk",true,0,0,24,24,{{"med_override",1}},{dgObjective("anl_obj_reader",ObjectiveStatus::Complete),dgObjective("anl_obj_eject",ObjectiveStatus::Complete)});
  taped(m,{19.25f,14.79f},f+1.45f,anN,Readable::Note,"ESCORT / LAB 4 / 02:55","COLLECTED FROM SCREENING 02:50. VIA LAB 4 FOR HER THINGS, AS SHE ASKED. THROUGH TO WARD C.",
   "SHE LEFT HER BOX ON THE DESK. I SAID I WOULD BRING IT DOWN. -R. HALE");
  anModel(m,model::lab_id_scanner,21.f,14.78f,f+1.2f,anN,false);
@@ -961,7 +982,20 @@ std::shared_ptr<const Map> makeEnergyDiagnosticsLab4(){
  for(float x:{2.6f,4.6f,6.6f})m.pipes.push_back({{x,22.4f},{x,22.4f},f+2.7f,.045f,roof-.38f,8});
  cableTray(m,{4.6f,15.1f},{4.6f,22.6f},roof-.5f);for(float y=16.f;y<22.5f;y+=1.8f)for(float o:{-.17f,.17f})m.pipes.push_back({{4.6f+o,y},{4.6f+o,y},roof-.4f,.01f,roof,6});
  for(float x:{2.6f,6.6f})m.pipes.push_back({{x,22.4f},{4.6f,22.4f},roof-.38f,.045f,roof-.38f,8});
- m.lights.push_back(lamp({4.6f,21.5f},f+1.9f,.3f,3.4f,1000,-.5f,WorldLightMount::Bare,0,false,{1.f,.12f,.06f}));   // OPEN, three times, in red
+ {auto l=lamp({4.6f,21.5f},f+1.9f,.3f,3.4f,1000,-.5f,WorldLightMount::Bare,0,false,{1.f,.12f,.06f});l.enabledState=stateId("anl_l4_mains");l.invert=true;m.lights.push_back(l);}   // OPEN, three times, in red
+ // THE LAB 4 BOARD: its desk on the mat in front of the three breakers. Closed, the red goes to green, the hall's tubes
+ // come up for the first time since 02:27, the arrays bang on and spin up, and the bang carries: the detail comes to see.
+ terminal(m,{4.6f,21.35f},"ARRAY POWER / LAB 4 BOARD","LAB 4 CIRCUITS: ARRAYS 1-6, HER BENCH, THE WARD C SERVICE DOOR READER. ISOLATED 02:27 BY I.I. TAG 5 OF 5.",
+  "E / CLOSE THE BOARD. THE ARRAYS COME UP WITH IT, AND THE HALL HEARS.",0,stateId("anl_l4_mains"));
+ {auto l=lamp({4.6f,21.5f},f+1.9f,.3f,3.4f,5200,0,WorldLightMount::Bare,0,false,{.2f,1.f,.35f});l.enabledState=stateId("anl_l4_mains");m.lights.push_back(l);}
+ for(auto [x,y]:{std::pair{4.2f,6.5f},{9.4f,6.5f},{9.4f,12.6f}}){auto l=inTube(x,y,roof,.6f,6.5f,5600,.02f,.06f);l.enabledState=stateId("anl_l4_mains");m.lights.push_back(l);}   // the hall, lit
+ for(float x:{6.8f,9.3f}){auto l=lamp({x,9.4f},f+2.3f,.9f,5.f,7200,0,WorldLightMount::Bare,0,false,{.62f,.75f,1.f});l.flicker=.3f;l.enabledState=stateId("anl_l4_mains");m.lights.push_back(l);}   // the arrays, logging hard
+ dgSequence(m,"anl_l4_mains_seq","anl_l4_mains_seq_done",9000,8000);
+ dgSay(m,"anl_l4_mains_seq",200,Sound::OneMetalBang,{4.6f,22.f},f+1.4f,"",1.f);m.sequenceCues.back().aiRadius=26.f;          // the breakers, heard through the hall
+ dgSay(m,"anl_l4_mains_seq",900,Sound::Machine,{8.f,9.4f},f+1.5f,"",.9f);m.sequenceCues.back().aiRadius=18.f;                   // the arrays spinning up
+ dgSay(m,"anl_l4_mains_seq",2600,Sound::AmbLightBuzz,{9.4f,9.f},f+3.f,"",.5f);
+ dgSay(m,"anl_l4_mains_seq",5200,Sound::StingScratch,{16.6f,14.4f},roof-.3f,"",.45f);                                            // and over Lab 4, in the duct, something turns
+ dgAmbient(m,Sound::AmbMechanical,{8.f,9.4f},f+1.5f,.35f,9,AmbientEmitter::Loop,0,0,"anl_l4_mains");
  equipmentPad(m,8.7f,16.5f,9.78f,19.7f,f);
  for(float y:{17.2f,19.f}){anFix(m,model::pwr_step_transformer,9.25f,y,f+.1f,.64f,.886f,1.673f,anW,true);wall(m,8.8f,y-.33f,9.7f,y+.33f,f+2.1f,roof,30);
   m.pipes.push_back({{9.45f,y},{9.45f,y},f+1.773f,.035f,roof,8});}
@@ -1309,7 +1343,7 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  {auto l=lamp({22.6f,18.8f},f+2.05f,.3f,3.2f,5200,0,WorldLightMount::Bare,0,false,{.2f,1.f,.35f});l.enabledState=stateId("anl_fm_bus");m.lights.push_back(l);}
  {Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=22.6f;h.y1=18.45f;h.x2=22.86f;h.y2=19.15f;h.bottom=f+1.45f;h.top=f+1.9f;h.damagePerSecond=0;h.enabledFlag=stateId("anl_fm_bus");h.period=11.f;h.onTime=.35f;m.hazards.push_back(h);}
  dgAmbient(m,Sound::OneMetalBang,{22.5f,18.8f},f+1.6f,.55f,14,AmbientEmitter::OnState,0,0,"anl_fm_bus");
- dgAmbient(m,Sound::AmbStatic,{22.5f,19.4f},f+2.3f,.38f,7,AmbientEmitter::Loop,0,0,"anl_fm_bus");
+ dgAmbient(m,Sound::AmbStatic,{22.5f,19.4f},f+2.3f,.22f,6,AmbientEmitter::Loop,0,0,"anl_fm_bus");
  m.pickupSpawns.push_back({{22.2f,22.2f},PickupKind::HandgunAmmo,f});m.pickupSpawns.push_back({{18.8f,22.4f},PickupKind::Health,f});
  // --- Names and air: the pan's air thick and cold, the airlock's amber ---------------------------------
  zone(m,"FIELD MEASUREMENT / CALIBRATION PAN",1.f,9.f,17.8f,23.f,-1000,1000,{.07f,.07f,.09f,.005f});

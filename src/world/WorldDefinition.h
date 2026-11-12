@@ -31,7 +31,8 @@ enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
 inline constexpr int FacilityModelCount=381;
-enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed };
+enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed, Machine };
+inline constexpr int CreatureKindCount=int(CreatureKind::Machine)+1;
 // One record per creature kind: what it is called, how much it takes, the
 // standing height navigation and hits use (hull) against its visible top, its
 // pace, bite, wind-up before a strike and the step it can climb; its call set
@@ -63,16 +64,22 @@ struct CreatureTraits {const char* name;float health,hull,top,speed,damage,windu
  // stays over the body this many seconds (0: neither), worrying it with the
  // span of its attack clip between these phases. Feeding is a window to slip
  // past; a hurt, or the player close in its view, ends it at once.
- float feedSeconds=0,worryFrom=0,worryTo=0;};
+ float feedSeconds=0,worryFrom=0,worryTo=0;
+ // Its body: where in its attack clip the blow lands, how wide it stands (navigation
+ // and collision) and how close it lets a body come; a heavy thing's short lurch at
+ // prey close by (m/s, 0 none); the share of a round's damage that gets through its
+ // hide (a blast, a blow or the plant's current is not a round); and whether it
+ // stands dead among the plant until something wakes it (Machine.cpp).
+ float contact=.4f,radius=.2f,contactRadius=.38f,lurchSpeed=0,armour=1;bool dormant=false;};
 inline const CreatureTraits& creatureTraits(CreatureKind kind){
  static constexpr CreatureTraits table[]={
   // Senses: the huntsman sees well enough in the dark; the wasp hunts by eye
   // (its wings are its idle sound); the scissor fiend is slow to make a shape
   // out; the reactor's thing and the chimera are quick and need little light;
   // the mutated human sees less far and hunts by ear.
-   {"HUNTSMAN",       110,1.05f,1.05f,2.2f, 9,.32f,.62f,0,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.f,false, 11,-.25f,500,.8f,1,    .2f, 1.45f,0,  Sound::SpiderCall,.12f,.62f,7},
+   {"HUNTSMAN",       110,1.05f,1.05f,2.2f, 9,.32f,.62f,0,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.f,false, 11,-.25f,500,.8f,1,    .2f, 1.45f,0,  Sound::SpiderCall,.12f,.62f,7, 0,0,0,.4f,.2f,.4f},
    {"XENOWASP",        85,1.6f, 1.55f,2.7f,9,.32f,.46f,1,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,.8f,false, 11,-.25f,450,1,  1,    0,   1,    0,  Sound::Wings,     0,   1,   0},
-   {"SCISSOR FIEND",  280,1.85f,1.85f,1.35f,18,.8f, .34f,2,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.25f,0.f, .25f,1.6f,false, 11,-.25f,700,1,  1,    .55f,.62f,0,  Sound::BruteCall, .16f,.6f, 8},
+   {"SCISSOR FIEND",  280,1.85f,1.85f,1.35f,18,.8f, .34f,2,1.f,  false,false,2.5f,7.f, 5.f,1.15f,1.25f,0.f, .25f,1.6f,false, 11,-.25f,700,1,  1,    .55f,.62f,0,  Sound::BruteCall, .16f,.6f, 8, 0,0,0,.4f,.3f,.55f},
   {"REACTOR STALKER",320,1.85f,1.85f,1.4f,30,.55f,.38f,2,.78f, true, true, 2.5f,7.f, 5.f,1.15f,1.1f, 3.8f,.45f,1.05f,true, 11,-.25f,600,.6f,1,    .42f,.7f, 0,  Sound::BruteCall, .12f,.5f, 10},
    {"MUTATED HUMAN",  180,1.85f,1.85f,2.7f,16,.55f,.34f,2,1.f,  true, true, 2.5f,7.f, 5.f,1.15f,1.05f,0.f, .25f,1.6f,false, 9, -.25f,800,.3f,1.25f,.36f,.88f,0,  Sound::BruteCall, .14f,.78f,6},
   // A transformed worker that ambushes rather than chases: it limps at 1.1 m/s
@@ -84,21 +91,30 @@ inline const CreatureTraits& creatureTraits(CreatureKind kind){
   // circles to the side they are not watching and comes at 5.8 m/s on all
   // fours; caught circling, it charges rather than freezing. A long reach and a
   // slam that lands hard; it takes a lot of killing. Sharp eyes, a heavy tread.
-   {"CHIMERA",        560,1.9f, 2.f, 2.8f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.8f,1.7f, 5.8f,.35f,2.f,false, 13,-.25f,400,.5f,1,    .5f, .66f,0,  Sound::BruteCall, .18f,.48f,9, 7.f,.6f,.78f},
+   {"CHIMERA",        560,1.9f, 2.f, 2.8f,28,.9f, .5f, 2,.62f, true, true, 2.5f,3.6f, 2.2f,1.8f,1.7f, 5.8f,.35f,2.f,false, 13,-.25f,400,.5f,1,    .5f, .66f,0,  Sound::BruteCall, .18f,.48f,9, 7.f,.6f,.78f,.58f,.45f,1.f},
   // A worker the zone's energy changed, still in its suit and still at its
   // habits: it clutches its head in its idle, then comes at a run as fast as a
   // walking player (its lunge run covers 3 m a cycle at 3.6 m/s). It leaps on and
   // pins its prey to bite (14 a bite) or, slower and readable, raises both
   // fists for an overhead blow (the wind-up below, 26 when it lands). Every
   // faction's squads are prey too. A hard hit staggers it; it dies on its back.
-  {"TRANSFORMED",    150,1.85f,1.85f,3.6f,26,1.05f,.34f,2,1.12f,true, true, 3.7f,2.1f, 1.1f,2.5f,1.5f, 0.f,.7f, 1.6f,false, 11,-.25f,600,.8f,1,    .4f, .9f, 0,  Sound::BruteCall, .12f,.95f,7}};
+  {"TRANSFORMED",    150,1.85f,1.85f,3.6f,26,1.05f,.34f,2,1.12f,true, true, 3.7f,2.1f, 1.1f,2.5f,1.5f, 0.f,.7f, 1.6f,false, 11,-.25f,600,.8f,1,    .4f, .9f, 0,  Sound::BruteCall, .12f,.95f,7},
+  // The plant's own equipment, a pressure vessel on a piston leg and a crutch, run
+  // by the ore's current. It stands dead among the real plant until power, a used
+  // terminal, a torch in its face or a loud noise wakes it (Machine.cpp); then it
+  // hunts by ear and toward light at a heavy 1 m/s (one limp cycle a metre), with a
+  // 2.3 m/s lurch at prey close by and a slow, wide swing of the lantern on its
+  // chain that lands at a third of the clip. Rounds mostly spark off it (an eighth
+  // gets through); live current takes it apart in a second or two. Loud on its feet.
+  {"CURSED EQUIPMENT",420,2.f, 2.1f,1.f, 34,1.15f,.26f,2,.45f, true, true, 2.5f,6.28f,1.7f,1.8f,1.75f,0.f,.67f,2.4f,false, 7, -.1f, 1100,1,  1.6f, .62f,.55f,.6f,Sound::Machine,.12f,.55f,6, 0,0,0,.33f,.42f,.75f,2.3f,.125f,true}};
  return table[int(kind)];
 }
 // The transformed's leap (seconds in the air), its pin and the stumble after a
 // miss or being knocked off; the AI and the renderer's clip timing share them.
 inline constexpr float TransformedLeap=.4f,TransformedHold=2.f,TransformedStumble=.9f;
 // The area score a map plays; stitched maps share one so the loop carries on.
-enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Research, Clinic, Count };
+// Silence: the map plays no score at all (held quiet for effect; its ambience carries it).
+enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Research, Clinic, Silence, Count };
 enum class PickupKind { Health, Ammo, HandgunAmmo }; // Values retain the existing save format (HandgunAmmo from version 19).
 // The air of a map or zone: linear RGB haze colour (0-1) and density per metre
 // (0-.1). A negative density leaves it to the environment, today's look:

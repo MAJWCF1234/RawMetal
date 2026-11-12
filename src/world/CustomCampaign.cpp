@@ -243,7 +243,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(f.size()!=15)throw std::runtime_error("malformed RAW SCRIPT_ACTION record");int type=integer(f,4,"action type");
     if(type<0||type>int(ScriptAction::Type::ShowMessage))throw std::runtime_error("invalid RAW action type");action.type=ScriptAction::Type(type);
     if(given(5))action.id=stateField(f[5]);action.value=integer(f,6,"action value");action.index=integer(f,7,"action index");
-    int creature=integer(f,8,"action creature");if(creature<0||creature>int(CreatureKind::Transformed))throw std::runtime_error("invalid RAW action creature");action.enemyKind=CreatureKind(creature);
+    int creature=integer(f,8,"action creature");if(creature<0||creature>=CreatureKindCount)throw std::runtime_error("invalid RAW action creature");action.enemyKind=CreatureKind(creature);
     action.position={number(f,9,"action x"),number(f,10,"action y")};action.z=number(f,11,"action z");action.amount=number(f,12,"action amount");
     int sound=integer(f,13,"action sound");if(sound<0||sound>=int(Sound::Count))throw std::runtime_error("invalid RAW action sound");action.sound=Sound(sound);action.text=decode(f[14]);
    }else throw std::runtime_error("unknown script action type");
@@ -306,7 +306,16 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(given(18))d.leaf=integer(f,18,"door leaf");
    if(f.size()>19)d.label=decode(f[19]);
    if(f.size()>20)d.locked=decode(f[20]);
-   if(f.size()>21||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1||d.leaf<0||d.leaf>2||d.label.size()>24||d.locked.size()>40)throw std::runtime_error("malformed DOOR record");
+   // |axis|hinge: 1 stands the door in a wall along Y (left/right are then y,
+   // and y is the wall's x); 1 hangs a swinging leaf from `right`. Blank, 0.
+   if(given(21))d.alongY=boolean(f,21,"door axis");
+   if(given(22))d.hingeRight=boolean(f,22,"door hinge");
+   if(d.alongY&&(d.entry||d.transfer))throw std::runtime_error("a seam DOOR (entry or transfer) stands along X");
+   // |strength|lock: how much battering a swinging leaf takes before it gives
+   // (blank, never); the lock it shows (0 none, 1 keycard, 2 key, 3 power).
+   if(given(23))d.strength=number(f,23,"door strength");
+   if(given(24))d.lock=integer(f,24,"door lock");
+   if(f.size()>25||!(d.strength>=0&&d.strength<=10000)||d.lock<0||d.lock>3||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1||d.leaf<0||d.leaf>2||d.label.size()>24||d.locked.size()>40)throw std::runtime_error("malformed DOOR record");
    map->doors.push_back(d);
   }else if(tag=="STRUCT"){
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
@@ -537,7 +546,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending"),f.size()>11&&!f[11].empty()?boolean(f,11,"stair open underside"):false,f.size()>12&&!f[12].empty()?number(f,12,"stair tread thickness"):.12f,f.size()>13&&!f[13].empty()?boolean(f,13,"stair side rails"):false});
   }else if(tag=="CREATURE"){
-   if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>int(CreatureKind::Transformed))throw std::runtime_error("invalid creature kind");
+   if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>=CreatureKindCount)throw std::runtime_error("invalid creature kind");
    CreatureSpawn spawn{CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")};
    // Optional: size (.5-2), health (0 the kind's own) and a wake state that
    // keeps it dormant, blind and deaf until set or until it is hurt.

@@ -708,7 +708,7 @@ std::shared_ptr<const Map> makePersonnelProcessing(){
  m.lights.push_back(rfiTube({3.f,6.3f},roof-.16f,.6f,5.f,3300,.04f,kPi*.5f));
  m.lights.push_back([&]{auto l=rfiTube({6.4f,6.3f},roof-.16f,.7f,5.f,3500,.04f,kPi*.5f);l.flicker=.3f;return l;}());
  // His radio, on the floor where he put it down: still open, nobody answering it.
- m.ambients.push_back({Sound::AmbRadioStatic,{2.55f,5.95f},f+.1f,.3f,7,AmbientEmitter::Loop});
+ m.ambients.push_back({Sound::AmbRadioStatic,{2.55f,5.95f},f+.1f,.16f,5,AmbientEmitter::Loop});
  // The washroom: two stalls, the scrub sinks under one long mirror.
  for(float x:{2.07f,4.22f})rfFix(m,model::med_washroom_stall,x,1.78f,f,2.13f,1.54f,2.4f,rfS,true);
  for(float x:{6.1f,6.9f,7.7f})rfFix(m,model::med_scrub_sink,x,1.29f,f,.49f,.54f,1.13f,rfS,true);
@@ -916,6 +916,20 @@ void rfaChair(Map& m,float x,float y,float z,float face){kit::prop(m,model::lab_
 // Something set down on a shelf, a ledge or a table top and never to be picked up:
 // baked into the room as a fixture rather than left as a loose prop.
 void rfaSet(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw){rfFix(m,model,x,y,z,w,d,h,yaw,false);}
+// Pass 4: script plumbing for the clearance desk and the director. An event anywhere on the
+// map (scope Map) once every state test holds; actions set states, objectives and messages.
+ScriptAction rfaSetA(const char* id,int value){ScriptAction a;a.type=ScriptAction::Type::SetState;a.id=stateId(id);a.value=value;return a;}
+ScriptAction rfaGoal(const char* id,ObjectiveStatus status){ScriptAction a;a.type=ScriptAction::Type::SetObjective;a.id=stateId(id);a.value=int(status);return a;}
+ScriptAction rfaSay(const char* text,float seconds=4.f){ScriptAction a;a.type=ScriptAction::Type::ShowMessage;a.text=text;a.amount=seconds;return a;}
+void rfaWhen(Map& m,const char* id,std::initializer_list<std::pair<const char*,int>> tests,std::vector<ScriptAction> actions,bool once=true){
+ ScriptEvent e;e.id=stateId(id);e.scope=ScriptEvent::Scope::Map;e.x1=0;e.y1=0;e.x2=24;e.y2=24;e.once=once;
+ for(auto [state,value]:tests)e.conditions.push_back({ScriptCondition::Source::State,stateId(state),ScriptCondition::Op::Equal,value});
+ e.actions=std::move(actions);m.scriptEvents.push_back(std::move(e));
+}
+// A new, unvoiced line (the lead voices it later from new-lines.txt).
+void rfaLine(Map& m,const char* node,const char* speaker,const char* line,std::vector<DialogueReply> replies){
+ DialogueNode n;n.id=stateId(node);n.speaker=speaker;n.line=line;n.replies=std::move(replies);m.dialogue.push_back(std::move(n));
+}
 
 // RESEARCH ADMINISTRATION (manifest 47). Where the company kept score: the
 // executive floor of the research front. A two-storey atrium where visitors
@@ -1057,10 +1071,11 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  rfaSet(m,model::office_paper_stack,15.1f,4.05f,ledge,.329f,.443f,.03f,1.5f);     // the visitors' book
  kit::prop(m,model::item_walkie,18.7f,4.05f,ledge,.114f,.376f,.046f,rfE);              // the detail's radio, left on the ledge
  for(auto [x,yaw]:{std::pair{16.4f,.4f},{16.62f,-.3f},{17.f,1.2f}})rfaSet(m,model::item_id_card,x,4.08f,ledge,.132f,.085f,.002f,yaw);
- // The pass terminal, staff side: it issues proc_clearance once the floor is quiet again.
- // Its log has to read true both ways: held while he is on the floor, issuing once he has gone.
- terminal(m,{21.6f,1.45f},"CLEARANCE DESK / LABORATORY ACCESS","ISSUES LABORATORY CLEARANCE TO THE BAND PRESENTED. THE PROCESSING DOOR SOUTH READS IT.",
-  "03:41 II: DESK HELD WHILE THE INVESTIGATOR IS ON THIS FLOOR. RELEASES WHEN HE SIGNS OUT.",0,clearance,gone);m.terminals.back().yaw=rfS;
+ // The pass terminal, staff side: it issues proc_clearance once the floor is quiet again and a
+ // director's card countersigns it (rf_admin_desk_ready: he has gone, and the player has the
+ // research director's card, handed over upstairs). Its log reads true at every step.
+ terminal(m,{21.6f,1.45f},"CLEARANCE DESK / LABORATORY ACCESS","ISSUES LABORATORY CLEARANCE ON A DIRECTOR'S COUNTERSIGNING CARD. NO CARD, NO ISSUE.",
+  "03:41 II: DESK HELD WHILE THE INVESTIGATOR IS ON THIS FLOOR. 03:44 DIRECTOR'S CARD OUT TO THE SUITE. DIRECTOR NOT SIGNED OUT.",0,clearance,stateId("rf_admin_desk_ready"));m.terminals.back().yaw=rfS;
  kit::prop(m,model::trash_can,14.1f,1.35f,f,.5f,.5f,.62f,0);
  for(Vec2 l:{Vec2{14.8f,3.f},Vec2{21.8f,3.f}})m.lights.push_back(lamp(l,f+2.5f,.85f,5.f,5200,.04f));
  m.lights.push_back(lamp({18.6f,1.f},f+2.f,.9f,5.f,4200,.04f,WorldLightMount::Wall,kPi*.5f));    // a sconce over the clerks: the soffit and the wall read
@@ -1296,6 +1311,38 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  cue(m,"rf_admin_scene",15400,Sound::Empty,{9.15f,14.6f},"INVESTIGATOR: Not this one. This one comes with me.",.7f,f+1.6f,"inv_admin_3");
  cue(m,"rf_admin_scene",21100,Sound::Door,{6.8f,19.1f},"",.8f,f+1.2f);
  cue(m,"rf_admin_exit",4100,Sound::Door,{6.8f,19.1f},"",.7f,f+1.2f);
+
+ // --- The research director, hiding in his own office (pass 4) --------------------------------------
+ // His card countersigns the clearance desk. The detail swept his office before he was found in
+ // it; he has been on the floor behind the couch since 03:44 with his card in his hand, and he
+ // gives it up to anyone who is not the Investigator's. A civilian on nobody's side: the detail
+ // below does not see him as a target, and he cannot be killed (his card cannot be lost).
+ {ActorTrack t;t.timerState=stateId("rf_admin_clock");t.visual=ActorVisual::SeniorScientist;t.scale=1.7f;
+  const Vec2 at{2.6f,7.05f};const float face=1.9f;
+  t.keys={{0,at,dz,face,0,0},{60000,at,dz,face,0,1}};
+  t.ai.mode=ActorAiMode::Civilian;t.ai.faction=AiFaction::Neutral;t.ai.dangerRange=2.f;t.ai.speed=1.1f;t.talk=stateId("rf_dir_hello");
+  m.actorTracks.push_back(std::move(t));}
+ rfaLine(m,"rf_dir_hello","RESEARCH DIRECTOR","Are they still down there? You're not his. He sends two.",{
+  rfReply("The clearance desk wants your card.","rf_dir_card",{},-1,"","rf_admin_card"),
+  rfReply("He took LAB 4's card. Why her?","rf_dir_lab4",{},-1,"","rf_dir_heard_lab4"),
+  rfReply("The tier two list. That was you.","rf_dir_list",{},-1,"","rf_dir_heard_list"),
+  rfReply("Stay down. I'm going.")});
+ rfaLine(m,"rf_dir_card","RESEARCH DIRECTOR","Countersign. Thirty years for that word. Take it. The desk reads it as me, and I'm already on his list.",{
+  rfReply("Thanks.","",{{"rf_admin_card",1}})});
+ rfaLine(m,"rf_dir_lab4","RESEARCH DIRECTOR","Energy Diagnostics. Tier two. Medical put her in red at two fifteen. He asked for her by name. I didn't ask why.",{
+  rfReply("Back.","rf_dir_hello",{{"rf_dir_heard_lab4",1}})});
+ rfaLine(m,"rf_dir_list","RESEARCH DIRECTOR","The board's list. I chaired the board. Ninety days between screenings. It read well in a quarter.",{
+  rfReply("Back.","rf_dir_hello",{{"rf_dir_heard_list",1}})});
+ // The desk: held while he is on the floor (rf_admin_gone), then on the countersigning card.
+ m.objectiveTexts.push_back({stateId("rf_obj_card"),"CLEARANCE DESK: FIND THE DIRECTOR'S CARD. HE NEVER SIGNED OUT."});
+ m.objectiveTexts.push_back({stateId("rf_obj_issue"),"CLEARANCE DESK: PRESENT THE CARD."});
+ {ScriptEvent e;e.id=stateId("rf_admin_desk_read");e.x1=19.6f;e.y1=1.f;e.x2=23.f;e.y2=3.6f;e.bottom=f-.5f;e.top=f+1.f;
+  e.conditions={{ScriptCondition::Source::State,gone,ScriptCondition::Op::Equal,1},{ScriptCondition::Source::State,stateId("rf_admin_card"),ScriptCondition::Op::Equal,0}};
+  e.actions={rfaGoal("rf_obj_card",ObjectiveStatus::Active)};m.scriptEvents.push_back(std::move(e));}
+ rfaWhen(m,"rf_admin_card_taken",{{"rf_admin_card",1}},{rfaGoal("rf_obj_card",ObjectiveStatus::Complete),rfaSay("DIRECTOR'S CARD / COUNTERSIGNS THE CLEARANCE DESK")});
+ rfaWhen(m,"rf_admin_desk_armed",{{"rf_admin_gone",1},{"rf_admin_card",1}},{rfaSetA("rf_admin_desk_ready",1),rfaGoal("rf_obj_issue",ObjectiveStatus::Active)});
+ rfaWhen(m,"rf_admin_issued",{{"proc_clearance",1}},{rfaGoal("rf_obj_issue",ObjectiveStatus::Complete),rfaGoal("rf_obj_card",ObjectiveStatus::Complete),
+  rfaSay("LABORATORY CLEARANCE ISSUED / PROCESSING SOUTH DOOR")});
 
  // --- Rewards and names ---------------------------------------------------------------------------
  m.pickupSpawns={{{12.6f,18.3f},PickupKind::Ammo,f},{{10.f,6.4f},PickupKind::Health,f},{{2.5f,18.2f},PickupKind::Health,f},

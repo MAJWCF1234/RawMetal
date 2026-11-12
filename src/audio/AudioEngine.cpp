@@ -18,7 +18,8 @@ enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, An
 // Area score: the loop for each MusicCue after Default (Freight keeps its
 // original track and resource; the rest follow the zone sounds in order, and
 // Chapter 2's Research and Clinic follow the sound bank).
-static_assert(int(MusicCue::Count)==11,"AudioEngine::AreaScores must match MusicCue");
+// MusicCue::Silence comes after the scores: a map that sets it plays none (the update's loops never reach it).
+static_assert(int(MusicCue::Silence)==11&&int(MusicCue::Count)==12,"AudioEngine::AreaScores (11) must match MusicCue's scores");
 Sound areaSound(int cue){
  if(cue==int(MusicCue::Freight))return Sound::FreightMusic;
  if(cue>=int(MusicCue::Research))return Sound(int(Sound::MusicResearch)+cue-int(MusicCue::Research));
@@ -634,6 +635,8 @@ bool AudioEngine::test(){
   for(int level=0;level<CampaignChunkCount;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
    const int cue=int(view.world().definition().musicCue);
    if(view.world().hasLift()&&view.world().liftPhase()!=World::LiftPhase::Ready)continue;
+   // A map held in silence plays no score at all: neither an area loop nor the original track.
+   if(cue==int(MusicCue::Silence)){if(district.m_mainTarget!=0||std::any_of(district.m_areaTarget.begin(),district.m_areaTarget.end(),[](float t){return t>0;}))return failure("a silent map plays a score");cursor.fill(-1);continue;}   // and the silence breaks the carry: a score may begin again after it
    if(cue==0?district.m_mainTarget!=1:(district.m_areaTarget[size_t(cue)]!=1||district.m_mainTarget!=0))return failure("area score coverage");
    if(cue==0)continue;++scored;
    int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;
@@ -642,7 +645,7 @@ bool AudioEngine::test(){
     cursor[size_t(cue)]=v.cursor;heard[size_t(cue)]=level;}
    if(count!=1)return failure("duplicated area score voice");
   }
-  std::array<bool,AreaScores> used{};for(int level=0;level<CampaignChunkCount;++level)used[size_t(int(game.chunkView(level).world().definition().musicCue))]=true;
+  std::array<bool,AreaScores> used{};for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);if(cue<AreaScores)used[size_t(cue)]=true;}
   if(std::count(used.begin(),used.end(),true)<8)return failure("campaign soundtrack lacks variety");
   district.update(game);if(game.world().definition().musicCue==MusicCue::Default&&district.m_mainTarget!=1)return failure("original soundtrack return");
   diagnostic<<"Area score: "<<scored<<" scored maps, "<<std::count(used.begin(),used.end(),true)<<" distinct scores, loops carry on across seams: PASS\n";
@@ -702,7 +705,7 @@ bool AudioEngine::testAlertMusic(){
  // Told apart by their decoded audio, not their names: the same file packed twice would be caught.
  {const auto&loop=audio.m_samples[size_t(Sound::MusicAlert)].pcm;auto same=[&](Sound s){return audio.m_samples[size_t(s)].pcm==loop;};
   auto game=Game::validationScene(Enemy::Kind::Brute);std::string heard;std::array<bool,AreaScores> chapter{};
-  for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);
+  for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);if(cue>=AreaScores)continue;   // held in silence
    if(same(cue?areaSound(cue):Sound::Music))heard+=" "+std::to_string(level);if(level<=67||level==PrologueChunk)chapter[size_t(cue)]=true;}
   check(loop.size()>size_t(Rate*2*30)&&heard.empty()&&!same(Sound::ReactorMusic),"The alert loop ("+std::to_string(loop.size()/2/Rate)+" s) is no map's area score"+(heard.empty()?std::string():", but maps"+heard+" play it"));
   const int chapterOneScores=int(MusicCue::Research);

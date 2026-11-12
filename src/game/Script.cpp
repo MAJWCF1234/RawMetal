@@ -65,6 +65,7 @@ void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announc
  if(m_peaceful)return;
  Enemy e{};e.kind=spawn.kind;e.pos=spawn.position;e.home=e.pos;e.lastKnown=e.pos;
  e.hp=e.maxHp=spawn.health>0?spawn.health:creatureTraits(e.kind).health;e.wakeState=spawn.wakeState;e.hunter=spawn.hunter;e.prey=spawn.prey;
+ if(creatureTraits(e.kind).dormant&&!e.wakeState)e.wakeState=machineAsleepState(); // it sleeps among the plant until something wakes it
  e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.homeZ=e.z;e.heading=kPi;e.scale=spawn.scale>0?spawn.scale:1;
  e.awareness=std::max(0.f,awareness);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;
  e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;e.idleTimer=e.voiceTimer;m_enemies.push_back(e);
@@ -126,7 +127,7 @@ void Game::updateReceivingBreach(){
  if(state("receiving_breach")&&!state("receiving_retreat_sealed")){
   int track=state("receiving_survivor")-1;
   for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.homeLevel!=14||int(npc.homeActor)!=track||state(npc.track().deadState)||npc.level!=15||npc.pose.position.y<.8f)continue;
-   for(size_t door=0;door<m_world.doors().size();++door)if(std::fabs(m_world.doors()[door].y-23.5f)<.01f)m_world.setDoor(int(door),0,false);
+   for(size_t door=0;door<m_world.doors().size();++door)if(!m_world.doors()[door].alongY&&std::fabs(m_world.doors()[door].y-23.5f)<.01f)m_world.setDoor(int(door),0,false);
    setState(stateId("receiving_retreat_sealed"),1);m_pickupNotice="ONE CONTACT RETREATING / PRESSURE DOOR CLOSED";m_pickupNoticeTime=3;
   }
  }

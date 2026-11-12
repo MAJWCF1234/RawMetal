@@ -100,7 +100,7 @@ public:
  void clearActorEmitCache();
  void setActorEmitCaching(bool enabled);
  std::array<std::uint64_t,3> actorStatistics()const;
- void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f,float dissolve=0.f);
+ void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f,float dissolve=0.f,const std::array<float,3>* bounceAir=nullptr);
  void finish(std::vector<std::uint32_t>& pixels);
  bool hasSurface()const;
  bool vrActive()const;

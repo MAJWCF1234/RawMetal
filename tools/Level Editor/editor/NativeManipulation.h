@@ -26,7 +26,8 @@ inline bool resizeNative(std::vector<std::string>& f,const std::vector<std::stri
   if(nativeLineKind(f[0])){
     if(corner<0||size_t(corner)>=h->points.size())return false;
     auto [xi,yi]=h->points[size_t(corner)];
-    if(f[0]=="DOOR"){float other=std::stof(f[h->points[size_t(1-corner)].first]);x=corner==0?std::min(x,other-.9f):std::max(x,other+.9f);}
+    // A door end slides along its own axis (y for a door along Y) and keeps 0.9 m of leaf.
+    if(f[0]=="DOOR"){bool alongY=h->points[0].first==h->points[1].first;auto [ox,oy]=h->points[size_t(1-corner)];float& v=alongY?y:x;float other=std::stof(f[alongY?oy:ox]);v=corner==0?std::min(v,other-.9f):std::max(v,other+.9f);}
     f[xi]=nativeNumber(x);f[yi]=nativeNumber(y);return true;
   }
   if(corner<0||corner>3)return false;

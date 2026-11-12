@@ -724,7 +724,8 @@ enum {
   LayerName,LayerElevationField,LayerThicknessField,LayerOpacity,LayerGroupField,LayerCommit,LayerReferences,
   LayerNew,LayerFromVisible,LayerNewGroup,LayerDuplicate,LayerMerge,LayerDelete,LayerRaise,LayerLower,
   LayerMaskArea,LayerMaskInvert,LayerMaskClear,LayerOpaque,LayerHalf,LayerGhost,LayerRotate,LayerFlipX,LayerFlipY,LayerHeight,LayerFootprint,
-  SoundList=640
+  SoundList=640,PreyList,HunterList,
+  DoorToolList=660,DoorKindList,DoorAxisList,DoorSwingList,DoorHingeList,DoorLockList,DoorStrengthList,DoorOpenSlider
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -757,7 +758,7 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Turn copy", L"⟳", L"Turns the copied area a quarter.", 4, "", 'a'},
     {L"Flip copy", L"⇋", L"Mirrors the copied area.", 4, "", 'a'},
     {L"Block", L"■", L"Drag a solid block: a plinth, platform or wall piece.", 0, "STRUCT", 'r'},
-    {L"Door", L"⌸", L"Drag along a gap in a wall to fit a door.", 0, "DOOR", 'd'},
+    {L"Door", L"⌸", L"Click in a gap in a wall, or drag along it, to fit a door. It takes the wall's direction. R turns it.", 0, "DOOR", 'd'},
     {L"Hazard", L"☢", L"Drag an area that hurts. Pick fire, gas or shock on the right.", 3, "HAZARD", 'r'},
     {L"Grass & dirt", L"▒", L"Drag to paint the ground outdoors.", 4, "GROUND", 'r'},
     {L"Flatten", L"▤", L"Drag to level the ground for a road or a building.", 4, "TERRAIN_FLAT", 'r'},
@@ -782,7 +783,7 @@ static constexpr ToolInfo toolInfo[] = {
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
-                     HeightTool = 41, SoundTool = 42;
+                     HeightTool = 41, SoundTool = 42, DoorTool = 21;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -834,10 +835,7 @@ static constexpr Friendly friendlyFields[] = {
     {"DOOR", "label", L"Name in the prompt (GATE)"},
     {"DOOR", "locked", L"Says when locked"},
     {"DOOR", "maxOpen", L"Opens this far (0-1)"},
-    {"DOOR", "swing", L"Swings to side (1 or -1)"},
     {"CREATURE", "wakeState", L"Sleeps until switch"},
-    {"CREATURE", "hunter", L"Recurring animal (any name)"},
-    {"CREATURE", "prey", L"Comes out for actor number"},
     {"CREATURE", "scale", L"Size (0.5 - 2)"},
     {"HAZARD", "damage", L"Hurts per second"},
     {"STRUCT", "top", L"Top (m)"},
@@ -975,6 +973,7 @@ struct Editor {
   struct BankRow { std::string name; std::wstring label; bool loop; std::string gain, radius; };
   std::vector<BankRow> bankSounds;
   HWND soundList = nullptr;
+  HWND preyList = nullptr, hunterList = nullptr; // a picked creature's quarry and hunter name (NativeCreatureMethods.inc)
   int soundPick = -1; // tests: the bank row to place, instead of the list's
   HWND hazardList = nullptr, pickupList = nullptr, creatureList = nullptr,
        tileList = nullptr, primList = nullptr, brushList = nullptr,
@@ -1008,6 +1007,8 @@ struct Editor {
 #include "NativeDressingRegression.inc"
 #include "NativeInteractionTests.inc"
 #include "NativeSignDesigner.inc"
+#include "NativeCreatureMethods.inc"
+#include "NativeDoorMethods.inc"
 #include "NativeSoundTool.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
@@ -1122,10 +1123,12 @@ struct Editor {
       auto f = NativeDocument::fields(doc.lines[i]);
       if (f.size() < 6 || !onCreationFloor(number(f[5], -999)+bottomLayerElevation()))
         continue;
-      int row = cellOf(number(f[4], 0));
-      for (int x = int(std::floor(number(f[2], 0))); x < int(std::ceil(number(f[3], 0))); ++x)
+      // The door's cells along its own axis: a row, or a column for a door along Y.
+      auto door = *nativeDoor(f);
+      int row = cellOf(door.line);
+      for (int x = int(std::floor(door.left)); x < int(std::ceil(door.right)); ++x)
         if (x >= 0 && x < 24)
-          b[size_t(row * 24 + x)] = 2;
+          b[size_t(door.alongY ? x * 24 + row : row * 24 + x)] = 2;
     }
     float floor = layerElevation();
     for (auto i : doc.records("STRUCT", map)) {
@@ -1923,7 +1926,9 @@ struct Editor {
       if (!needed("model-" + std::to_string(id)))
         continue;
       NativeDocument doc2 = base;
-      doc2.add({"FIXTURE", "0", std::to_string(id), "12", "12", "0", trimmed(w), trimmed(d), trimmed(h), "0", "0"});
+      // Paper-thin pieces (a web, a sheet, a card) keep a centimetre: "0" is not a size the engine takes.
+      doc2.add({"FIXTURE", "0", std::to_string(id), "12", "12", "0", trimmed(std::max(w, .01f)), trimmed(std::max(d, .01f)),
+                trimmed(std::max(h, .01f)), "0", "0"});
       // Small things close up, big things from further back.
       float s = std::max({w, d, h}), dist = std::clamp(s * 1.45f + .3f, .55f, 10.5f);
       doc2.add({"LIGHT", "0", "14", "10", trimmed(std::max(3.f, h + 1.5f)), "0", "0", "1.8", "18", "4400"});
@@ -1935,10 +1940,13 @@ struct Editor {
       if (!needed("prim-" + std::to_string(k)))
         continue;
       NativeDocument doc2 = base;
-      doc2.add({"PRIM", "0", primKinds[k], "12", "12", "0", "2", "2", "2", "0", "5"});
+      // An arch must clear a standing player: the engine refuses a 2 m one, so it is shown at its usual 2.4 x 3.4 m.
+      bool arch = std::string(primKinds[k]) == "arch";
+      doc2.add({"PRIM", "0", primKinds[k], "12", "12", "0", arch ? "2.4" : "2", arch ? "0.6" : "2", arch ? "3.4" : "2", "0", "5"});
       doc2.add({"LIGHT", "0", "14", "10", "4", "0", "0", "1.8", "14", "4400"});
       doc2.add({"LIGHT", "0", "14.4", "14.4", "3", "0", "0", "1.2", "12", "5200"});
-      shot("prim-" + std::to_string(k), doc2, 12 + 3.6f * .7071f, 12 + 3.6f * .7071f, 2.3f, 225, 1.f, 3.6f);
+      float away = arch ? 6.6f : 3.6f;
+      shot("prim-" + std::to_string(k), doc2, 12 + away * .7071f, 12 + away * .7071f, arch ? 2.6f : 2.3f, 225, arch ? 1.7f : 1.f, away);
     }
     for (auto &[id, name] : structureMaterials) {
       if (!parts::paintable(name))
@@ -2965,6 +2973,8 @@ struct Editor {
     if(selectedRecords.size()>1){rotateMultiple();return;}
     if (record < 0)
       return;
+    if (rotateDoor())
+      return;
     auto f = NativeDocument::fields(doc.lines[size_t(record)]);
     auto &names = schemas[size_t(kind)].fields;
     auto yaw = std::find(names.begin(), names.end(), "yaw");
@@ -3858,21 +3868,9 @@ struct Editor {
       publish();
       return;
     }
-    case 'd': {
-      if (std::fabs(by - ay) > std::fabs(bx - ax) + .5f) {
-        message(L"Doors fit walls that run left to right. Drag sideways along the gap.");
-        return;
-      }
-      float left = snapped(std::min(ax, bx)), right = snapped(std::max(ax, bx));
-      if (right - left < .9f)
-        left = std::floor(std::min(ax, bx)), right = left + 1;
-      float y = std::floor(ay) + .5f;
-      int previous = tool;
-      tool = 21;
-      authorBox(left, y - .5f, right, y + .5f);
-      tool = previous;
+    case 'd':
+      authorDoor(plannedDoor(ax, ay, bx, by));
       return;
-    }
     case 'p':
       if (tool == 13) {
         placePerson(snapped(bx), snapped(by));
@@ -4034,12 +4032,15 @@ struct Editor {
       if (door.size() < 6 || !onCreationFloor(number(door[5],-999)))
         continue;
       float x = 0, y = 0;
+      bool alongY = nativeFlag(door, 21);
       try {
         x = (std::stof(door[2]) + std::stof(door[3])) * .5f;
         y = std::stof(door[4]);
       } catch (...) {
         continue;
       }
+      if (alongY)
+        std::swap(x, y);
       bool signedAlready = false;
       for (auto signIndex : doc.records("SIGN", map)) {
         auto sign = NativeDocument::fields(doc.lines[signIndex]);
@@ -4054,7 +4055,7 @@ struct Editor {
       if (signedAlready)
         continue;
       doc.addAutomatic({"SIGN", std::to_string(map), nativeNumber(x), nativeNumber(y),
-               nativeNumber(layerElevation()+2.15f), "1.6", "0.55", "0", title, "", "14238785"},layer);
+               nativeNumber(layerElevation()+2.15f), "1.6", "0.55", alongY ? "1.5707964" : "0", title, "", "14238785"},layer);
       ++signs;
     }
     publish();
@@ -4337,7 +4338,10 @@ struct Editor {
       return true;
     }
     if (msg.wParam == 'R') {
-      rotateSelected();
+      if (tool == DoorTool)
+        turnDoorGhost(); // the Door tool turns the door it is about to fit
+      else
+        rotateSelected();
       return true;
     }
     if (msg.wParam == 'V' && !ctrl) {
@@ -4685,7 +4689,8 @@ struct Editor {
     for(HWND c:{layerStack,layerPreview,layerName,layerElevationInput,layerThicknessInput,layerOpacity,layerGroupList})if(c)ShowWindow(c,SW_HIDE);
     for(int id:{LayerMenu,LayerVisible,LayerLock,LayerCommit,LayerReferences})ShowWindow(GetDlgItem(window,id),SW_HIDE);
     for (HWND list : {upperFloorTiles, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
-                      surfaceList, hazardList, soundList, pickupList, creatureList, tileList, primList, brushList,
+                      surfaceList, hazardList, soundList, preyList, hunterList, doorToolList, doorKindList, doorAxisList,
+                      doorSwingList, doorHingeList, doorLockList, doorStrengthList, doorOpenSlider, pickupList, creatureList, tileList, primList, brushList,
                       clutterList, actionList, linkList, kindList, recordList})
       if (list)
         ShowWindow(list, SW_HIDE);
@@ -4794,6 +4799,8 @@ struct Editor {
       row(hazardList, L"Hurts with");
     if (tool == SoundTool)
       row(soundList, L"Sound");
+    if (tool == DoorTool)
+      row(doorToolList, L"Door");
     if (tool == 23)
       row(groundList, L"Ground");
     if (tool == 26)
@@ -4841,6 +4848,28 @@ struct Editor {
       SetWindowTextW(flicker, number(lightField(17), 0) > 0 ? L"\u2734 Flicker: on" : L"\u2734 Flicker: off");
       placeControl(flicker, rx, y, 312, 34, TRUE);
       y += 44;
+    }
+    if (creaturePicked() && preyList && hunterList) {
+      syncCreatureControls();
+      row(preyList, L"Hunts first");
+      row(hunterList, L"Recurring as");
+    }
+    if (doorPicked() && doorKindList) {
+      syncDoorControls();
+      row(doorKindList, L"Opens by");
+      row(doorAxisList, L"Stands");
+      bool swings = nativeFlag(NativeDocument::fields(doc.lines[size_t(record)]), 8);
+      if (swings)
+        row(doorSwingList, L"Swings to"), row(doorHingeList, L"Hinge at");
+      row(doorLockList, L"Lock shown");
+      if (swings)
+        row(doorStrengthList, L"Breaks down");
+      if (doorOpenSlider) {
+        caption(rx, y + 6, 96, L"Starts open");
+        placeControl(doorOpenSlider, rx + 100, y, 212, 32, TRUE);
+        ShowWindow(doorOpenSlider, SW_SHOW);
+        y += 38;
+      }
     }
     if (!selectedEvent().empty()) {
       row(actionList, L"Add");
@@ -5994,7 +6023,7 @@ struct Editor {
         if (k == "HAZARD")
           choose(hazardList, HazardList, std::clamp(std::stoi(f[2]), 0, 7));
         if (k == "CREATURE")
-          choose(creatureList, CreatureList, std::clamp(std::stoi(f[2]), 0, 7));
+          choose(creatureList, CreatureList, std::clamp(std::stoi(f[2]), 0, 8));
         if (k == "PICKUP")
           choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 2));
         if (k == "SURFACE") {
@@ -6007,6 +6036,8 @@ struct Editor {
           drag(num(3), num(4), num(5), num(6));
         else if (k == "LEAD")
           drag(num(2), num(3), num(5), num(6));
+        else if (k == "DOOR" && nativeFlag(f, 21))
+          drag(num(4), num(2), num(4), num(3));
         else if (k == "DOOR")
           drag(num(2), num(4), num(3), num(4));
         else if (k == "PICKUP" || k == "CREATURE" || k == "PRIM" || k == "FIXTURE" || k == "CLUTTER")
@@ -6222,6 +6253,15 @@ struct Editor {
         setLight({{7, "2.4"}, {8, "12"}, {9, "2600"}, {22, "1"}, {23, "0.62"}, {24, "0.3"}}, true);
       else
         setLight({{7, "1.6"}, {17, "0.5"}, {22, "1"}, {23, "0.16"}, {24, "0.1"}}, true);
+    } else if (scene == 11) {
+      // A Chimera picked: it comes out for the scientist first and returns as one animal.
+      tool = CreatureTool, viewMode = 1;
+      SendMessageW(creatureList, CB_SETCURSEL, 6, 0);
+      gesture(18.5f, 10.5f, 18.5f, 10.5f);
+      tool = 0;
+      selectRecord(int(doc.records("CREATURE", map).back()));
+      setCreatureField(10, "0");
+      setCreatureField(9, "the_chimera");
     }
     group = toolInfo[tool].group;
     message(toolInfo[tool].hint);
@@ -7647,6 +7687,97 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
   if (ghost == ui::Prop)
     ghost = ui::Wall; // ghosts are always bright
   auto faded=[&](COLORREF color,float opacity){auto mix=[&](int a,int b){return int(a*opacity+b*(1-opacity));};return RGB(mix(GetRValue(color),GetRValue(ui::PlanBlack)),mix(GetGValue(color),GetGValue(ui::PlanBlack)),mix(GetBValue(color),GetBValue(ui::PlanBlack)));};
+  // A door the way a plan draws one, whichever way it stands (NativeDoor): a
+  // sliding door is its leaf line; a swinging door is the opening (dotted), the
+  // leaf standing open from its hinge, the arc its latch sweeps, the hinge block.
+  auto drawDoor = [&](HDC dc, const NativeDoor &d, COLORREF color, bool dashed) {
+    auto at = [&](std::pair<float, float> p) { return POINT{int(ox + p.first * cell), int(oy + p.second * cell)}; };
+    auto line = [&](std::pair<float, float> a, std::pair<float, float> b, HPEN p) {
+      auto old = SelectObject(dc, p);
+      POINT pa = at(a), pb = at(b);
+      MoveToEx(dc, pa.x, pa.y, nullptr);
+      LineTo(dc, pb.x, pb.y);
+      SelectObject(dc, old);
+      DeleteObject(p);
+    };
+    auto a = d.world(d.left, d.line), b = d.world(d.right, d.line);
+    // The lock it shows, on the wall beside the latch post: a keycard reader
+    // (a box with its card slot and red lamp), a key (a round cylinder) or a
+    // power release (a box with its amber lamp).
+    if (d.lock >= 1 && d.lock <= 3) {
+      auto latch = d.latch(), hinge = d.hinge();
+      float run = std::hypot(latch.first - hinge.first, latch.second - hinge.second);
+      float ux = run > 0 ? (latch.first - hinge.first) / run : 1.f, uy = run > 0 ? (latch.second - hinge.second) / run : 0.f;
+      POINT c = at({latch.first + ux * .3f, latch.second + uy * .3f});
+      int s = std::max(4, int(cell * .14f));
+      auto body = CreateSolidBrush(color);
+      auto dark = CreateSolidBrush(ui::PlanBlack);
+      RECT plate{c.x - s, c.y - s, c.x + s + 1, c.y + s + 1};
+      if (d.lock == 2) {
+        auto oldBrush = SelectObject(dc, body);
+        auto oldPen = SelectObject(dc, GetStockObject(NULL_PEN));
+        Ellipse(dc, plate.left, plate.top, plate.right + 1, plate.bottom + 1);
+        SelectObject(dc, oldPen);
+        SelectObject(dc, oldBrush);
+        RECT hole{c.x - 1, c.y - s / 2, c.x + 2, c.y + s / 2 + 1};
+        FillRect(dc, &hole, dark);
+      } else {
+        FillRect(dc, &plate, body);
+        RECT slot{c.x - s + 2, c.y - 1, c.x + s - 1, c.y + 1};
+        if (d.lock == 1)
+          FillRect(dc, &slot, dark);
+        auto lamp = CreateSolidBrush(d.lock == 1 ? RGB(0xE0, 0x30, 0x30) : RGB(0xFF, 0x9A, 0x1A));
+        RECT bulb{c.x - 2, c.y - s + 1, c.x + 2, c.y - s + 5};
+        FillRect(dc, &bulb, lamp);
+        DeleteObject(lamp);
+      }
+      DeleteObject(body);
+      DeleteObject(dark);
+    }
+    if (!d.swinging) {
+      line(a, b, dashed ? ui::dashedPen(3, color) : pen(4, color));
+      return;
+    }
+    float width = std::abs(d.right - d.left), open = std::clamp(d.maxOpen, .05f, 1.f);
+    // An authored-ajar leaf stands at its own angle; a shut one is drawn open, as plans do.
+    float leafAt = d.open > 0 ? std::clamp(d.open, .02f, open) : open;
+    auto h = d.hinge();
+    auto tip = [&](float t) {
+      auto v = d.leafAxis(t);
+      return std::pair{h.first + v.first * width, h.second + v.second * width};
+    };
+    line(a, b, pen(1, color, PS_DOT));
+    std::vector<POINT> arc;
+    for (int i = 0; i <= 18; ++i)
+      arc.push_back(at(tip(open * float(i) / 18.f)));
+    auto p = pen(1, color);
+    auto old = SelectObject(dc, p);
+    Polyline(dc, arc.data(), int(arc.size()));
+    SelectObject(dc, old);
+    DeleteObject(p);
+    // A leaf that breaks down is drawn broken: dashed, with a crack across its middle.
+    line(h, tip(leafAt), dashed || d.breakable() ? ui::dashedPen(3, color) : pen(3, color));
+    if (d.breakable() && !dashed) {
+      auto v = d.leafAxis(leafAt);
+      auto mid = std::pair{h.first + v.first * width * .55f, h.second + v.second * width * .55f};
+      float nx = -v.second, ny = v.first, k = .12f;
+      std::array<POINT, 4> crack{at({mid.first + nx * k, mid.second + ny * k}),
+                                 at({mid.first + v.first * .08f, mid.second + v.second * .08f}),
+                                 at({mid.first - v.first * .08f, mid.second - v.second * .08f}),
+                                 at({mid.first - nx * k, mid.second - ny * k})};
+      auto crackPen = pen(2, color);
+      auto before = SelectObject(dc, crackPen);
+      Polyline(dc, crack.data(), int(crack.size()));
+      SelectObject(dc, before);
+      DeleteObject(crackPen);
+    }
+    POINT hp = at(h);
+    int s = std::max(3, int(cell * .1f));
+    RECT block{hp.x - s, hp.y - s, hp.x + s + 1, hp.y + s + 1};
+    auto brush = CreateSolidBrush(color);
+    FillRect(dc, &block, brush);
+    DeleteObject(brush);
+  };
   auto drawBase = [&](HDC dc) {
   FillRect(dc, &r, e->planBrush);
   SetBkMode(dc, TRANSPARENT);
@@ -7870,18 +8001,39 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
   for (auto index : e->doc.records("DOOR", e->map)) {
     if(!e->visibleFloorRecord(index))continue;
     auto f = NativeDocument::fields(e->doc.lines[index]);
-    if (f.size() < 5)
-      continue;
-    try {
-      float left = std::stof(f[2]), right = std::stof(f[3]),
-            y = std::stof(f[4]);
-      auto p = pen(4, faded(ui::Door,activeLayer.opacity));
+    if (auto door = nativeDoor(f))
+      drawDoor(dc, *door, faded(ui::Door, activeLayer.opacity), false);
+  }
+  // A creature that comes out for a person: a dashed line in its colour from
+  // the creature to where that person stands, ringed at their end.
+  {
+    std::map<int, std::pair<float, float>> standing; // actor index -> first pose
+    for (auto index : e->doc.records("ACTOR_KEY", e->map)) {
+      auto f = NativeDocument::fields(e->doc.lines[index]);
+      if (f.size() > 5)
+        standing.emplace(int(Editor::number(f[2], -1)), std::pair{Editor::number(f[4], 0), Editor::number(f[5], 0)});
+    }
+    for (auto index : e->doc.records("CREATURE", e->map)) {
+      if (!e->visibleFloorRecord(index))
+        continue;
+      auto f = NativeDocument::fields(e->doc.lines[index]);
+      if (f.size() < 11 || f[10].empty())
+        continue;
+      auto it = standing.find(int(Editor::number(f[10], -1)));
+      if (it == standing.end())
+        continue;
+      int x0 = int(ox + Editor::number(f[3], 0) * cell), y0 = int(oy + Editor::number(f[4], 0) * cell);
+      int x1 = int(ox + it->second.first * cell), y1 = int(oy + it->second.second * cell);
+      auto p = ui::dashedPen(2, ui::Creature);
       auto old = SelectObject(dc, p);
-      MoveToEx(dc, int(ox + left * cell), int(oy + y * cell), nullptr);
-      LineTo(dc, int(ox + right * cell), int(oy + y * cell));
+      auto oldBrush = SelectObject(dc, GetStockObject(HOLLOW_BRUSH));
+      MoveToEx(dc, x0, y0, nullptr);
+      LineTo(dc, x1, y1);
+      int ringSize = std::max(6, int(cell * .45f));
+      Ellipse(dc, x1 - ringSize, y1 - ringSize, x1 + ringSize + 1, y1 + ringSize + 1);
+      SelectObject(dc, oldBrush);
       SelectObject(dc, old);
       DeleteObject(p);
-    } catch (...) {
     }
   }
   // The player start: a bright white diamond with a green heart.
@@ -8024,14 +8176,16 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       if (shape == 'R' && e->autoDetail)
         outline(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ui::Lamp, 1, PS_DOT);
     };
-    if (stretching && (shape == 't' || shape == 'R' || shape == 'w' || shape == 'c'))
+    if (shape == 'd')
+      // The door this click or drag fits, in the wall's direction, as R has turned it.
+      drawDoor(dc, stretching ? e->plannedDoor(e->dragFX, e->dragFY, hx, hy) : e->plannedDoor(hx, hy, hx, hy), ghost, true);
+    else if (stretching && (shape == 't' || shape == 'R' || shape == 'w' || shape == 'c'))
       tileBox(e->dragFX, e->dragFY, hx, hy);
-    else if (stretching && (shape == 'l' || shape == 'd')) {
+    else if (stretching && shape == 'l') {
       auto p = ui::dashedPen(3, ghost);
       auto old = SelectObject(dc, p);
-      float ly = shape == 'd' ? std::floor(e->dragFY) + .5f : e->dragFY;
-      MoveToEx(dc, int(ox + e->snapped(e->dragFX) * cell), int(oy + ly * cell), nullptr);
-      LineTo(dc, int(ox + e->snapped(hx) * cell), int(oy + (shape == 'd' ? ly : e->snapped(hy)) * cell));
+      MoveToEx(dc, int(ox + e->snapped(e->dragFX) * cell), int(oy + e->dragFY * cell), nullptr);
+      LineTo(dc, int(ox + e->snapped(hx) * cell), int(oy + e->snapped(hy) * cell));
       SelectObject(dc, old);
       DeleteObject(p);
     } else if (stretching)
@@ -8832,6 +8986,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_HSCROLL: {
       HWND slider = reinterpret_cast<HWND>(l);
       if(slider==e->layerOpacity){e->layerOpacityChanged(LOWORD(w)!=TB_THUMBTRACK);return 0;}
+      if(slider==e->doorOpenSlider){e->doorOpenChanged(LOWORD(w));return 0;}
       if (slider == e->historySlider) {
         e->scrubTo(int(SendMessageW(slider, TBM_GETPOS, 0, 0)));
         return 0;
@@ -9012,6 +9167,14 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (id == ActionList && notification == CBN_SELCHANGE) {
         e->addToTrigger(e->listIndex(e->actionList));
         SendMessageW(e->actionList, CB_SETCURSEL, 0, 0);
+        return 0;
+      }
+      if (id == PreyList || id == HunterList) {
+        e->creatureControlChanged(id, notification);
+        return 0;
+      }
+      if (id >= DoorToolList && id <= DoorStrengthList) {
+        e->doorControlChanged(id, notification);
         return 0;
       }
       if (id == LinkList && notification == LBN_SELCHANGE) {
@@ -9767,8 +9930,19 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     for (const auto &row : e.bankSounds)
       SendMessageW(e.soundList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>((row.label + (row.loop ? L"  (loop)" : L"")).c_str()));
     SendMessageW(e.soundList, CB_SETCURSEL, 0, 0);
-    e.pickupList = choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets"});
-    e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed"});
+    // A picked creature: who it comes out for (a person on its map) and its recurring-animal name.
+    e.preyList = choices(PreyList, {});
+    e.hunterList = e.controlWindow(L"COMBOBOX", L"", CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP, HunterList);
+    // The Door tool's kind of door, and a picked door's boxes (NativeDoorMethods.inc).
+    e.doorToolList = choices(DoorToolList, {L"Slides", L"Swings on a hinge"});
+    e.doorKindList = choices(DoorKindList, {});
+    e.doorAxisList = choices(DoorAxisList, {});
+    e.doorSwingList = choices(DoorSwingList, {});
+    e.doorHingeList = choices(DoorHingeList, {});
+    e.doorLockList = choices(DoorLockList, {});
+    e.doorStrengthList = e.controlWindow(L"COMBOBOX", L"", CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP, DoorStrengthList);
+    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets"});
+    e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
     e.tileList = choices(TileList, {L"Crate", L"Barrel (explodes)", L"Tank"});
     e.primList = choices(PrimList, {L"Box", L"Pillar", L"Stairs", L"Ramp", L"Column", L"Arch", L"Vault roof", L"Dome", L"Door frame", L"Window"}, 5);
@@ -9837,6 +10011,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     }
     // Lamp controls: drag and the picture relights.
     e.brightSlider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, BrightSlider);
+    // A picked door's Starts open (NativeDoorMethods.inc).
+    e.doorOpenSlider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, DoorOpenSlider);
+    SendMessageW(e.doorOpenSlider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 100));
     e.reachSlider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, ReachSlider);
     e.warmSlider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, WarmSlider);
     SendMessageW(e.brightSlider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 400));

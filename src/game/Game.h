@@ -131,6 +131,9 @@ struct Enemy {
     // began, so a wound ends it), a hunter's flight (seconds) and the last noise
     // of the player's it went to by ear (Game elapsed).
     float feeding=0,feedHp=0,fleeTime=0,earTime=-1;int feedActor=-1;
+    // Not saved: the cursed equipment's seconds in live current (Machine.cpp), the clock of its
+    // sparks, and whether the plant's current is what killed it (its lamp blown, its death a short).
+    float shock=0,sparkClock=0;bool shorted=false;
     // A hunter that got away: not dead, gone (alive off, its hp kept).
     bool gone()const{return !alive&&hp>0&&hunter!=0;}
     // Not saved: how it died, for the body it leaves (Carcass), and the shots that struck it
@@ -147,8 +150,10 @@ struct Enemy {
     float bodyTop()const{return z+creatureTraits(kind).top*scale;}
     float hull()const{return creatureTraits(kind).hull*scale;}
     float reach()const{return creatureTraits(kind).reach*scale;}
-    float radius()const{return (kind==Kind::Chimera?.45f:kind==Kind::Brute?.3f:.2f)*scale;}
-    float contactRadius()const{return (kind==Kind::Chimera?1.f:kind==Kind::Brute?.55f:kind==Kind::Huntsman?.4f:.38f)*scale;}
+    float radius()const{return creatureTraits(kind).radius*scale;}
+    float contactRadius()const{return creatureTraits(kind).contactRadius*scale;}
+    // A kind that stands dead until woken (CreatureTraits::dormant) keeps its wake state set while it sleeps.
+    bool sleeping()const{return alive&&wakeState!=0&&creatureTraits(kind).dormant;}
     const char* name()const{return creatureTraits(kind).name;}
 };
 
@@ -336,7 +341,18 @@ public:
     // reload shows him headless; the age is large after a load).
     bool npcHeadless(size_t actor)const;
     float npcHeadlessAge(size_t actor)const;
+    // How a man died, for the body the renderer makes of him: seconds since on the death clip's own
+    // clock and whether that clock has run out, the clip phase he died at (a man already down dies
+    // lying), and the way the killing hit threw him.
+    struct NpcDeath {bool dead=false,done=false;float age=0,from=0;Point3 push{};};
+    NpcDeath npcDeath(size_t actor)const;
     static bool testChimeraHunt();
+    static bool testDoorAxis();
+    static bool testDoors();
+    static bool testMachine();
+    // --machine-frames: 0 the electrical death on a lit test floor, 1 the lure across Experimental Power's split feed (chunk 92).
+    static Game machineScene(int which);
+    static StateId machineAsleepState();
     // Chapter 2 as the player arrives in `level`, the god camera at pos/z/yaw, for staging R-117
     // (--chimera-kill-frames and the chimera-hunt content checks).
     static Game chimeraStage(int level,Vec2 pos,float z,float yaw,float pitch=0);
@@ -593,7 +609,7 @@ public:
     static bool testHandgunSaves(std::ostream& report);
     // 20: how far each creature has made the player out (Enemy::recognition).
     // 21: each chunk's torn leads.
-    static constexpr int SaveVersion=22;
+    static constexpr int SaveVersion=24;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1062,6 +1078,14 @@ private:
     void ensureChunk(int level);
     void updateStreaming(float dt);
     void useDoor(int index);
+    // Doors in play (DoorPlay.cpp): the hand kept on a leaf (hold E and it eases
+    // while held, and stays where it is let go: ajar, to look through), a shove
+    // from walking into a shut leaf, each leaf's sounds, and the creatures that
+    // batter a door that gives.
+    void updateDoorPlay(const InputState& input,float dt);
+    bool batterDoor(Enemy& e,Vec2 goal);
+    static bool battersDoors(Enemy::Kind kind){return kind==Enemy::Kind::Brute||kind==Enemy::Kind::Chimera||kind==Enemy::Kind::Machine;}
+    int m_doorHand=-1;float m_doorHandTime=0,m_doorRattle=0;
     // Index of the door in chunk `level` across the boundary from this chunk's door, or -1.
     int boundaryPartner(int level,const Door& door)const;
     void updateClutter(const InputState& input,float dt);
@@ -1138,6 +1162,18 @@ private:
     void vanishHunter(Enemy& e);
     bool hunterFlight(Enemy& e,Vec2& goal,float& goalZ,float dt);
     void hunterArrive(Enemy& e,float dt);
+    // Machine.cpp: the cursed equipment, asleep among the plant until woken; the plant's live current
+    // (machineCurrent: a live Electricity hazard, a torn live lead) seizes and shorts it out. machineUpdate
+    // runs first each frame for a dormant kind and returns true while it is asleep, starting up or seized.
+    bool machineUpdate(Enemy& e,const std::vector<AiStimulus>& stimuli,float dt);
+    void wakeMachine(Enemy& e,Vec2 toward,float towardZ,bool knows);
+    void wakeMachinesNear(Vec2 at,float z,float radius);
+    bool machineCurrent(const Enemy& e,Point3& contact)const;
+    void machineAttraction(const Enemy& e,Vec2& goal,float& goalZ)const;
+    void shortMachine(Enemy& e,Point3 contact);
+    Point3 machineLamp(const Enemy& e)const;
+    // Set while a blast resolves through resolveShot: what it does is not a round, and no hide turns it.
+    bool m_blastShot=false;
     void hearPlayerNoise(const std::vector<AiStimulus>& stimuli);
     struct PlayerNoise {Vec2 pos{};float z=0,time=-1;} m_playerNoise;
     unsigned creatureConditions(const Enemy& enemy,bool visible,bool heard,bool canMelee,bool hurt)const;

@@ -97,13 +97,17 @@
   }
   void rotateMultiple() {
     auto indices=selectedNativeSet();if(indices.empty())return;
-    for(auto i:indices)if(NativeDocument::fields(doc.lines[i])[0]=="DOOR")throw std::runtime_error("Native doors run horizontally. Move or resize this doorway separately before rotating the group.");
     float l=1e9f,r=-1e9f,t=1e9f,b=-1e9f;
     for(auto i:indices){auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;
       for(auto [x,y]:nativeCorners(schemas[size_t(schema)].fields,f)){l=std::min(l,x);r=std::max(r,x);t=std::min(t,y);b=std::max(b,y);}}
     if(l>r||t>b)return;float cx=(l+r)*.5f,cy=(t+b)*.5f;
     editNativeSelection([&]{for(auto i:indices){if(!editableRecord(i))throw std::runtime_error("Unlock selected floors before rotating content");
-      auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;auto h=nativeHandle(schemas[size_t(schema)].fields,f);if(!h)continue;
+      auto f=NativeDocument::fields(doc.lines[i]);int schema=schemaFor(f);if(schema<0)continue;
+      // A door turns with the group as a frame: in a wall that now runs the other way.
+      if(auto door=nativeDoor(f)){auto turned=transformedDoor(*door,[&](float px,float py){return std::pair{cx+py-cy,cy-px+cx};});
+        if(turned.alongY&&turned.seam)throw std::runtime_error("An entry or exit door stays in a wall that runs left to right. Leave it out of the group to turn the rest.");
+        storeNativeDoor(f,turned);doc.replace(i,f);continue;}
+      auto h=nativeHandle(schemas[size_t(schema)].fields,f);if(!h)continue;
       for(auto [x,y]:h->points){float px=number(f[x],0),py=number(f[y],0);f[x]=nativeNumber(cx+py-cy);f[y]=nativeNumber(cy-px+cx);}
       if(!nativeLineKind(f[0])&&h->points.size()==2){auto [ax,ay]=h->points[0];auto [bx,by]=h->points[1];if(number(f[ax],0)>number(f[bx],0))std::swap(f[ax],f[bx]);if(number(f[ay],0)>number(f[by],0))std::swap(f[ay],f[by]);}
       auto yaw=nativeField(schemas[size_t(schema)].fields,f,"yaw");if(yaw!=size_t(-1))f[yaw]=nativeNumber(std::remainder(number(f[yaw],0)+1.57079632679f,6.28318530718f));

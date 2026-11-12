@@ -345,6 +345,7 @@ std::shared_ptr<Map> rgChunk(int index,bool mx,bool my,int seed){
 std::shared_ptr<const Map> makeObservationRingNorthWest(){
  auto p=rgChunk(87,false,false,0);auto& m=*p;const float top=G+3.6f;
  m.definition.playerStart={12.f,2.2f};m.definition.spawnHeight=G;
+ m.definition.musicCue=MusicCue::Silence;   // no score: the room is quiet enough to hear what is plugged in waking up
  openEdge(m,{'N',10.f,14.f,G,false,0});openEdge(m,{'E',1.f,23.f,G,false,0});openEdge(m,{'S',1.f,23.f,G,false,0});openEdge(m,{'W',9.f,14.f,G,false,0});
  deck(m,G,10,0,14,1);deck(m,G,0,9,1,14);
  rgQuadrant(m,false,false,0);
@@ -393,6 +394,12 @@ std::shared_ptr<const Map> makeObservationRingNorthWest(){
   ScriptAction sting;sting.type=ScriptAction::Type::PlaySound;sting.sound=Sound::StingScratch;sting.amount=.7f;
   ScriptAction comes;comes.type=ScriptAction::Type::SpawnEnemy;comes.enemyKind=CreatureKind::Transformed;comes.position={4.6f,21.6f};comes.z=G;comes.amount=6;
   e.actions={seq,shake,sting,comes};m.scriptEvents.push_back(std::move(e));}
+ // THE RIM TEST UNIT: the pit's own equipment, stood dead on the rim at the corner of the keep-back marks
+ // since its feed was pulled, in plain view of the floods desk. Rounds put into it spark off and wake it.
+ // The floods coming on wake it too, and the electrodes' first strike on the rim shorts it out where it stands.
+ m.creatureSpawns.push_back({CreatureKind::Machine,{15.3f,16.9f},G,1,0,floods});
+ taped(m,{1.015f,6.7f},G+1.5f,anE,Readable::Note,"PIT CONTROL / RIM UNIT","THE RIM TEST UNIT WOULD NOT STAY OFF. WE PULLED ITS FEED AT 02:00. AT 02:20 ITS LAMP CAME BACK ON BY ITSELF.",
+  "ROUNDS GO OFF IT LIKE HAIL OFF A ROOF. IT IS THE PLANT'S OWN. ONLY THE PLANT PUTS IT DOWN.");
  zone(m,"OBSERVATION RING / PIT CONTROL",1.f,1.f,7.8f,7.8f);
  zone(m,"OBSERVATION RING / NORTH GALLERY",8.f,1.f,24.f,7.8f);
  zone(m,"OBSERVATION RING / WEST GALLERY",1.f,8.f,7.8f,24.f);
@@ -659,6 +666,50 @@ std::shared_ptr<const Map> makeObservationRingSouthEast(){
  cue(m,"rg_nine_radio",800,Sound::Empty,{19.4f,18.85f},"INVESTIGATOR (RADIO): Detail nine. Hold the ring. Nothing comes up from Containment.",.9f,G+1.f,"rg_nine_radio_1");
  cue(m,"rg_nine_radio",6200,Sound::Empty,{19.4f,18.85f},"RADIO: Copy. Sir, there's nothing left down there to come up.",.9f,G+1.f,"rg_nine_radio_2");
  cue(m,"rg_nine_radio",10900,Sound::Empty,{19.4f,18.85f},"INVESTIGATOR (RADIO): Then hold it anyway.",.9f,G+1.f,"rg_nine_radio_3");
+ // --- THE TRADE: as the player comes to the edge of no man's land, Nine's fourth man (the medic's worry, walking)
+ // carries the night's water out to the fire and sets it down; the survivors' night engineer comes out from behind
+ // the boarding to meet him; three lines across the brazier; each goes back behind their own line. Seen from Nine's
+ // forward line, a few metres off. The engineer can be talked to after (rg_trade_done).
+ {const char* trade="rg_trade";const int a=int(m.actorTracks.size()),b=a+1;
+  TimedSequence s;s.timerState=stateId(trade);s.finishState=stateId("rg_trade_done");s.x1=8.2f;s.y1=8.2f;s.x2=13.5f;s.y2=16.f;
+  s.durationMs=30000;s.finishAtMs=18000;s.soundIntervalMs=0;s.soundUntilMs=0;s.sightActor=a;s.sightDistance=14.f;m.timedSequences.push_back(s);
+  auto heading=[](Vec2 from,Vec2 to){return std::atan2(to.x-from.x,to.y-from.y);};
+  const Vec2 aHome{9.4f,13.4f},aGap{7.6f,12.4f},aFire{5.5f,12.3f},bHome{1.1f,12.3f},bFire{3.9f,12.2f},bBack{1.3f,12.5f};
+  const float west=-kPi*.5f,east=kPi*.5f,toB=heading(aFire,bFire),toA=heading(bFire,aFire);
+  ActorTrack nine;nine.timerState=stateId(trade);nine.visual=ActorVisual::CleanupHeavy;nine.scale=1.6f;
+  nine.keys={{0,aHome,G,west,0,0},{1500,aHome,G,heading(aHome,aGap),0,.6f},{1600,aHome,G,heading(aHome,aGap),1,0},{3400,aGap,G,heading(aGap,aFire),1,1.2f},
+   {5200,aFire,G,west,1,2.3f},{5400,aFire,G,west,5,0},{7200,aFire,G,west,5,1.6f},{7400,aFire,G,toB,0,0,b},{13200,aFire,G,toB,0,4.f,b},
+   {13400,aFire,G,heading(aFire,aGap),1,0},{15300,aGap,G,heading(aGap,aHome),1,1.2f},{17200,aHome,G,west,1,2.4f},{17400,aHome,G,west,0,0},{30000,aHome,G,west,0,9.f}};
+  m.actorTracks.push_back(std::move(nine));
+  ActorTrack eng;eng.timerState=stateId(trade);eng.visual=ActorVisual::SeniorScientist;eng.scale=1.7f;eng.health=60;
+  eng.damageState=stateId("rg_eng_damage");eng.deadState=stateId("rg_eng_dead");
+  eng.keys={{0,bHome,G,east,0,0},{6000,bHome,G,east,0,3.f},{6100,bHome,G,heading(bHome,bFire),1,0},{8300,bFire,G,toA,1,1.6f},{8400,bFire,G,toA,0,0,a},
+   {12900,bFire,G,toA,0,3.f,a},{13000,bFire,G,toA,5,0},{14600,bFire,G,toA,5,1.4f},{14700,bFire,G,heading(bFire,bBack),1,0},{17000,bBack,G,east,1,1.7f},
+   {17200,bBack,G,east,0,0},{30000,bBack,G,east,0,9.f}};
+  eng.ai.mode=ActorAiMode::Civilian;eng.ai.enableState=stateId("rg_trade_done");eng.talk=stateId("rg_eng_hello");
+  m.actorTracks.push_back(std::move(eng));
+  cue(m,trade,6900,Sound::JunkMetal,{5.2f,12.3f},"",.45f,G+.2f);                                                           // the cans, set down on the walk
+  cue(m,trade,8700,Sound::Empty,{5.5f,12.3f},"DETAIL NINE: Two cans. Same as last night.",.8f,G+1.5f,"rg_trade_8700");
+  cue(m,trade,11300,Sound::Empty,{3.9f,12.2f},"NIGHT ENGINEER: Tell your sergeant thank you.",.8f,G+1.5f,"rg_trade_10600");
+  cue(m,trade,13200,Sound::Empty,{5.5f,12.3f},"DETAIL NINE: Tell him yourself. He won't hear it either.",.8f,G+1.5f,"rg_trade_12300");
+  cue(m,trade,13800,Sound::JunkMetal,{4.2f,12.2f},"",.35f,G+.2f);                                                          // taken up
+  // come to the survivors' side without watching, the trade is already done
+  {ScriptEvent e;e.id=stateId("rg_trade_missed");e.x1=0;e.y1=8.2f;e.x2=6.2f;e.y2=16.f;e.bottom=-100;e.top=100;
+   ScriptCondition c;c.id=stateId(trade);c.value=0;e.conditions={c};
+   ScriptAction jump;jump.type=ScriptAction::Type::SetState;jump.id=stateId(trade);jump.value=17600;e.actions={jump};m.scriptEvents.push_back(std::move(e));}
+  // the night engineer: Conversion's night shift, up with the survivors; the feeder handle in her coat since 02:31
+  auto reply=[](const char* text,const char* next,std::initializer_list<const char*> sets={},const char* hide=""){DialogueReply r;r.text=text;r.next=*next?stateId(next):0;
+   for(auto s:sets)r.sets.push_back({stateId(s),1});r.hide=*hide?stateId(hide):0;return r;};
+  m.dialogue.push_back({stateId("rg_eng_hello"),"NIGHT ENGINEER","Conversion, night shift. What's left of it. Nine gives us the fire. Not the door.","rg_eng_hello",{
+   reply("What happened at Conversion?","rg_eng_what"),reply("I'm putting the containment feed back.","rg_eng_handle",{},"rg_eng_gave"),
+   reply("Why won't Nine let you through?","rg_eng_nine"),reply("Keep your heads down.","")}});
+  m.dialogue.push_back({stateId("rg_eng_what"),"NIGHT ENGINEER","I.I. had the output off containment at half two. I pulled the feeder handle off the bank myself. Holt took the spare back down at three to put it right.","rg_eng_what",{
+   reply("Where's Holt now?","rg_eng_holt"),reply("Back.","rg_eng_hello")}});
+  m.dialogue.push_back({stateId("rg_eng_holt"),"NIGHT ENGINEER","On the floor by column four, I'd think. He crossed on the light. You cross on the dark.","rg_eng_holt",{reply("Back.","rg_eng_hello")}});
+  m.dialogue.push_back({stateId("rg_eng_handle"),"NIGHT ENGINEER","Then you'll want this. The bank's feeder handle. I've carried it since half two like it was mine. The bank throws every four seconds: go in on the dark.","rg_eng_handle",{
+   reply("Give it here.","rg_eng_given",{"et_conv_handle","rg_eng_gave"}),reply("Not yet.","rg_eng_hello")}});
+  m.dialogue.push_back({stateId("rg_eng_given"),"NIGHT ENGINEER","Don't thank me. Put it on the bank.","rg_eng_given",{reply("...","")}});
+  m.dialogue.push_back({stateId("rg_eng_nine"),"NIGHT ENGINEER","Anyone up from below is exposed, the sergeant says. We came up from Conversion, not Containment. He doesn't ask which.","rg_eng_nine",{reply("Back.","rg_eng_hello")}});}
  m.pickupSpawns.push_back({{21.8f,17.f},PickupKind::HandgunAmmo,G});
  titleCard(m,"ENERGY TEST COMPLEX",20.f,8.f,24.f,15.f);
  zone(m,"OBSERVATION RING / DETAIL NINE",16.2f,16.2f,23.f,23.f,-1000,1000,{.15f,.13f,.11f,.005f});

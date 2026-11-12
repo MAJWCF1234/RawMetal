@@ -14,7 +14,9 @@ public:
  // Blood for the renderer to throw: a hit, or the stump a severed section leaves.
  struct Event {Point3 point{},direction{};float power=1;bool stump=false;};
  // `posed` is the mesh in world space as it was last drawn alive; `push` is the velocity the kill gave it.
- void build(const std::vector<MeshTriangle>& posed,const World& world,Point3 push,float scale,unsigned seed);
+ // `reach`: how far each of its points keeps off walls and the sides of steps, so the skin between
+ // them does not go into them (a man's limbs; 0 holds only the points themselves out).
+ void build(const std::vector<MeshTriangle>& posed,const World& world,Point3 push,float scale,unsigned seed,float reach=0);
  // Steps to `toAge` seconds after death. Driven by the creature's own death clock, so asking twice is free.
  void advance(const World& world,float toAge);
  // A round through the body: shoves the section it meets, and takes it off once it has had enough.
@@ -53,7 +55,7 @@ private:
  std::vector<Particle> m_particles;std::vector<Section> m_sections;std::vector<Joint> m_joints;std::vector<Bind> m_binds;
  std::vector<Point3> m_rest,m_posed;std::vector<int> m_corner,m_owner,m_piece;std::vector<Edge> m_edges;std::vector<Loop> m_loops;
  std::vector<MeshTriangle> m_triangles,m_caps;
- Point3 m_centre{};float m_radius=1,m_age=0,m_quiet=0,m_woke=0,m_scale=1,m_size=1,m_motion=0;
+ Point3 m_centre{};float m_radius=1,m_age=0,m_quiet=0,m_woke=0,m_scale=1,m_size=1,m_motion=0,m_reach=0;
  int m_root=0,m_pieces=1,m_body=0;unsigned m_seed=1;bool m_asleep=false,m_dirty=true;
 };
 }

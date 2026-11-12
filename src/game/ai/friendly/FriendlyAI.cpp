@@ -22,6 +22,8 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
   npcVoice(actor,NpcVoiceCue::Down);
   setState(friendlyKey(actor,"killed_by_player"),attacker.kind==ShotKind::Player?1:0);
   if(npcIncapacitated(actor)&&!npcHeld(actor)){setState(friendlyKey(actor,"death_ms"),state(friendlyKey(actor,"restraint_ms")));setState(friendlyKey(actor,"death_fraction"),state(friendlyKey(actor,"restraint_fraction")));}
+  // Where on the death clip he went: on his feet, or already down.
+  setState(friendlyKey(actor,"death_from"),state(friendlyKey(actor,"death_ms")));
   int heldWeapon=state(friendlyKey(actor,"restraint_weapon"));if(npcHeld(actor)&&playerFirearm(WeaponId(std::clamp(heldWeapon,0,2)))&&ownsWeapon(WeaponId(heldWeapon)))equipWeapon(WeaponId(heldWeapon));
   for(const char*field:{"restraint","restraint_ms","restraint_fraction","restraint_weapon"})setState(friendlyKey(actor,field),0);
   setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));if(track.ai.mode==ActorAiMode::Guard)clearGuardSchedule(actor);updateMechanisms(0);
@@ -48,6 +50,17 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
   }
  }
 }
+Game::NpcDeath Game::npcDeath(size_t actor)const{
+ NpcDeath death;if(actor>=m_friendlyActors.size())return death;
+ const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();if(!track.deadState||!state(track.deadState))return death;
+ const float sourceDuration=cleanupAnimationDuration(track.visual,4);const int duration=sourceDuration>0?std::max(1,int(std::round(sourceDuration*1000))):1000;
+ const int from=std::clamp(state(friendlyKey(actor,"death_from")),0,duration),at=std::clamp(state(friendlyKey(actor,"death_ms")),from,duration);
+ death.dead=true;death.done=at>=duration;death.from=float(from)/float(duration);death.age=float(at-from)*.001f;
+ // Thrown away from what hit him, the harder the higher up he is (Carcass).
+ if(state(friendlyKey(actor,"hit_source"))){const Vec2 hit{state(friendlyKey(actor,"hit_x"))*.001f,state(friendlyKey(actor,"hit_y"))*.001f},away=npc.pose.position-hit;
+  const float far=std::sqrt(away.x*away.x+away.y*away.y);if(far>.05f&&far<40.f)death.push={away.x/far*1.3f,away.y/far*1.3f,.2f};}
+ return death;
+}
 bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
  perf::count(perf::DoorLockChecks);
  int living=hostilesRemaining(level);
@@ -56,9 +69,11 @@ bool Game::aiDoorLocked(const World&world,int level,const Door&door)const{
 void Game::requestAiDoor(World& world,int level,Vec2 position,float feet,Vec2 goal){
  perf::Scope doorProfile(perf::DoorRequests);
  for(size_t i=0;i<world.doors().size();++i){const auto&door=world.doors()[i];
-  if(aiDoorLocked(world,level,door)||door.opening||std::fabs(position.y-door.y)>1.8f||position.x<door.left+.2f||position.x>door.right-.2f||(position.y-door.y)*(goal.y-door.y)>=0)continue;
-  float z=world.floorHeight((door.left+door.right)*.5f,door.y)+door.z;if(std::fabs(feet-z)>.3f)continue;
-  Vec2 face{position.x,door.y+std::copysign(.2f,position.y-door.y)};
+  // In the door's frame: x along its span, y across its wall.
+  const Vec2 at=door.local(position),to=door.local(goal);
+  if(aiDoorLocked(world,level,door)||door.opening||std::fabs(at.y-door.y)>1.8f||!door.spans(position,.2f)||(at.y-door.y)*(to.y-door.y)>=0)continue;
+  const Vec2 centre=door.centre();float z=world.floorHeight(centre.x,centre.y)+door.z;if(std::fabs(feet-z)>.3f)continue;
+  Vec2 face=door.world(at.x,door.y+std::copysign(.2f,at.y-door.y));
   if(world.rayClear(position,feet+.7f,face,feet+.7f))world.openDoor(int(i));
  }
 }
