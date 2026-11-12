@@ -422,6 +422,66 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
  }
  return {range,scale};
 }
+// A dead man is a body (Carcass), as a dead creature is: his mesh in the pose he died in, let go
+// under its own weight. A man killed in play falls from where the death clip had him when he went
+// (on his feet, or already down), thrown away from what hit him, on the death clip's clock while it
+// runs and the session's after. A body the map lays down (a track that ends lying dead) is let go
+// from its lying pose a little above the floor and has come to rest before it is first seen, so a
+// level opens on bodies lying as they fell, limbs on the floor, off the edge of whatever they were
+// laid over. The same body from the same start comes to rest the same way, so a reload or a second
+// look shows it as it was. Nothing for the living, the restrained or the hung.
+SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot){
+ static const bool enabled=[]{const char* v=std::getenv("RM_RAGDOLL");return !v||v[0]!='0';}();
+ if(!enabled||!humanActorVisual(track.visual)||pose.clip!=4||track.platform||track.suspensionTop>pose.z)return nullptr;
+ const float now=game.elapsed();
+ // The clock ran back (a load, a new game): nothing kept is true any more.
+ if(now+.001f<m_corpseClock)m_corpses.clear();m_corpseClock=now;
+ bool headless=false,live=false;float from=1,age=1e4f;Point3 push{};
+ if(actor>=0){
+  const auto death=game.npcDeath(size_t(actor));if(!death.dead)return nullptr;
+  headless=game.npcHeadless(size_t(actor));from=death.from;push=death.push;if(!death.done){age=death.age;live=true;}
+ }else if(!(track.deadState&&game.state(track.deadState))){
+  // Laid down by the map: the track ends with him lying dead. One that dies on its track has lain
+  // as long as its clock has run since the clip reached its end; one that starts dead, for ever.
+  const auto&keys=track.keys;auto down=[](const ActorKey&k){return k.clip==4&&k.phase>=.999f;};
+  if(pose.phase<.999f||keys.empty()||!down(keys.back()))return nullptr;
+  for(size_t k=keys.size()-1;k>0;--k)if(down(keys[k])&&!down(keys[k-1])){const float since=float(game.state(track.timerState)-keys[k].timeMs)*.001f;if(since>=0&&since<8.f){age=since;live=true;}break;}
+ }
+ const bool cleanup=cleanupActorVisual(track.visual);const int role=cleanup?cleanupActorBody(track.visual):0,body=std::max(0,civilianActorBody(track.visual));
+ Mesh& mesh=cleanup?*cleanupMeshes()[size_t(role)]:civilianMesh(body);
+ auto mix=[](std::uint64_t h,float v){return (h^(std::uint64_t(std::bit_cast<std::uint32_t>(v))+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2)));};
+ std::uint64_t signature=mix(mix(mix(mix(mix(mix(std::uint64_t(level)*1315423911ull+std::uint64_t(track.visual),track.scale),pose.position.x),pose.position.y),pose.z),pose.yaw),from)^(headless?0x5bd1e995ull:0);
+ auto&corpse=m_corpses[slot];corpse.seen=now;
+ if(corpse.signature!=signature||!corpse.carcass.built()){
+  corpse=Corpse{};corpse.signature=signature;corpse.seen=now;
+  mesh.poseCreature(4,from);
+  const float scale=track.scale/std::max(.01f,mesh.maximum.y-mesh.minimum.y),c=std::cos(pose.yaw),s=std::sin(pose.yaw);
+  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  // A head a bite took is not part of him.
+  const float neckY=mesh.minimum.y+(mesh.maximum.y-mesh.minimum.y)*.855f;const auto&rest=mesh.bindTriangles();
+  std::vector<MeshTriangle> posed;posed.reserve(mesh.triangles.size());corpse.faces.reserve(mesh.triangles.size());
+  for(size_t i=0;i<mesh.triangles.size();++i){
+   if(headless&&i<rest.size()&&(rest[i].v[0].p.y+rest[i].v[1].p.y+rest[i].v[2].p.y)/3.f>neckY)continue;
+   MeshTriangle face=mesh.triangles[i];for(auto&v:face.v)v.p=transform(v.p);posed.push_back(face);corpse.faces.push_back(int(i));}
+  if(posed.empty()){m_corpses.erase(slot);return nullptr;}
+  // Clear of the floor under him before he is let go: a clip's last frame can have a hand or a heel
+  // through it, and a body that starts in the floor is pushed out of it, not laid on it.
+  float rise=0;for(size_t i=0;i<posed.size();i+=3)for(const auto&v:posed[i].v){const float floor=w.supportBelow(v.p.x,v.p.y,std::max(v.p.z,pose.z)+.05f);if(floor>-50.f)rise=std::max(rise,floor+.03f-v.p.z);}
+  rise=std::min(rise,.25f);if(!live&&actor<0)rise=std::max(rise,.03f);
+  for(auto&face:posed)for(auto&v:face.v)v.p.z+=rise;
+  corpse.carcass.build(posed,w,push,track.scale/1.7f,unsigned(slot*2654435761ull)^unsigned(slot>>32)*40503u^0x2545f491u,.05f);
+  corpse.live=live;corpse.base=now-(live?age:0.f);
+ }
+ // A fall still being watched runs on its clock; one first seen after it ended has already ended.
+ auto&carcass=corpse.carcass;
+ if(live)corpse.base=now-age;
+ const float target=live||corpse.live?now-corpse.base:1e4f;
+ if(target>=1e3f){for(int guard=0;guard<4&&!carcass.asleep();++guard)carcass.advance(w,carcass.age()+5.f);}
+ else carcass.advance(w,target);
+ // Bodies no longer drawn are let go after a while: the same one is made the same way again.
+ if(m_corpses.size()>64)std::erase_if(m_corpses,[&](const auto&entry){return entry.second.seen<now-30.f;});
+ return &corpse;
+}
 void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  perf::Scope frameProfile(perf::Scene);
  if(clearDepth)std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
@@ -1597,7 +1657,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(door.leaf!=1&&sphereVisible((lo+hi)*.5f,width*.5f+1.2f)){
     const float latchAt=width-.085f;
     // Satin stainless for the lever, rose and kick plate; brass for a key cylinder.
-    static const Texture satin=[]{Texture t{1,1,{0xff98a1a8u}};t.glossStrength=.6f;return t;}(),plate=[]{Texture t{1,1,{0xffa7adb2u}};t.glossStrength=.4f;return t;}(),brass=[]{Texture t{1,1,{0xffb89a5cu}};t.glossStrength=.5f;return t;}();
+    static const Texture satin=[]{Texture t{1,1,{0xff7f8a94u}};t.glossStrength=.4f;return t;}(),plate=[]{Texture t{1,1,{0xffa7adb2u}};t.glossStrength=.4f;return t;}(),brass=[]{Texture t{1,1,{0xffb89a5cu}};t.glossStrength=.5f;return t;}();
     for(float side:{-1.f,1.f}){auto off=[&](float a,float b){return side<0?std::pair{-b,-a}:std::pair{a,b};};
      {auto [s0,s1]=off(.045f,.058f);part(latchAt-.035f,latchAt+.035f,s0,s1,.98f,1.10f,satin,1.f);}
      {auto [s0,s1]=off(.058f,.082f);part(latchAt-.15f,latchAt+.012f,s0,s1,1.025f,1.05f,satin,1.05f);}
@@ -2504,6 +2564,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // A man a creature's bite took the head from: nothing above the neck, a
   // stump that pumps for its first seconds and a pool spreading under it.
   const bool headless=human&&actor>=0&&game.npcHeadless(size_t(actor));
+  // A dead man is drawn from his body (humanCorpse), not from the death clip's last frame.
+  Corpse* corpse=human&&pose.clip==4&&m_cleanupInspectionStage==0?humanCorpse(game,w,level,track,pose,actor,emitSlot):nullptr;
+  if(corpse&&!sphereVisible(corpse->carcass.centre(),corpse->carcass.radius()+.1f))return;
   // Civilians share the Worker path; civilianBody picks the Worker or a staff model.
   const int civilianBody=std::max(0,civilianActorBody(track.visual));const auto&rig=kCivilianRigs[size_t(civilianBody)];
   int cleanupRole=cleanup?cleanupActorBody(track.visual):0;auto& mesh=cleanup?*cleanupMeshes()[size_t(cleanupRole)]:human?civilianMesh(civilianBody):wasp?m_waspMesh:m_enemyMesh;
@@ -2514,7 +2577,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   bool engineering=engineer&&(weapon->engineering>0||weapon->maintenance||directSupport);
   auto terminal=fieldTerminalFrame(pose,track.scale,engineering);
   float terminalTouch=engineering?std::sin((weapon->maintenance?game.elapsed()*5.f:weapon->engineering*3.f)*kPi):0;
-  if(human){
+  if(human&&!corpse){
    if(directSupport)mesh.poseCreature(weapon->supportClip,weapon->supportPhase);
    else if(treating&&track.visual==ActorVisual::CleanupMedic)mesh.poseCreature(6,weapon->treatment);
    else if(cleanup&&pose.clip!=4&&m_cleanupInspectionStage!=1){
@@ -2675,11 +2738,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=true;objectNormalLighting=nullptr;
   ExteriorLight actorLights;
-  {perf::ActorScope profile(0);actorLights=exteriorLight({pose.position.x,pose.position.y,pose.z+track.scale*.5f},track.scale*.5f,track.scale*.5f,track.scale,pose.yaw,true);}
+  // A body is lit as the low heap it is, where it came to rest.
+  const Point3 actorCenter=corpse?corpse->carcass.centre()+Point3{0,0,.12f}:Point3{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
+  {perf::ActorScope profile(0);if(corpse){const float heap=std::clamp(corpse->carcass.radius(),.3f,1.2f);actorLights=exteriorLight(actorCenter,heap,heap,.4f,pose.yaw,true);}
+   else actorLights=exteriorLight(actorCenter,track.scale*.5f,track.scale*.5f,track.scale,pose.yaw,true);}
   // Preserve the existing per-triangle distance rejection near a chunk's
   // far limit; ordinary nearby actors use hardware projection and clipping.
   const bool nearFarLimit=cameraPoint({pose.position.x,pose.position.y,pose.z+radius*.5f},game).z+radius*4.f>=farPlane;
-  const Point3 actorCenter{pose.position.x,pose.position.y,pose.z+track.scale*.5f};
   const int gpuActor=m_gpuFrame&&m_gpuActorPreparation&&!nearFarLimit?m_gpu->beginActor(actorLights.normals,actorLights.brightness,actorLights.gloss,game.chunkOffset(level),player.pos,actorCenter):-1;
   std::array<GpuRenderer::ActorMaterial,4> gpuMaterials{};
   std::array<bool,4> gpuMaterialReady{};
@@ -2707,6 +2772,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   mixBits(emitIdentity,std::uint32_t(track.visual));mixFloat(emitIdentity,track.scale);mixFloat(emitIdentity,pose.position.x);mixFloat(emitIdentity,pose.position.y);
   mixFloat(emitIdentity,pose.z);mixFloat(emitIdentity,pose.yaw);mixBits(emitIdentity,std::uint32_t(pose.clip));mixBits(emitIdentity,std::uint32_t(m_cleanupInspectionStage));
   mixFloat(emitIdentity,pose.phase);if(wasp)mixFloat(emitIdentity,game.elapsed());mixBits(emitIdentity,headless?1u:0u);
+  // A body moves until it comes to rest; at rest it is the same body every frame.
+  if(corpse){mixBits(emitIdentity,std::uint32_t(corpse->signature));mixBits(emitIdentity,std::uint32_t(corpse->signature>>32));mixFloat(emitIdentity,corpse->carcass.asleep()?-1.f:corpse->carcass.age());}
   if(weapon){mixBits(emitIdentity,weapon->armed);mixBits(emitIdentity,weapon->handgun);mixBits(emitIdentity,weapon->crouched);mixBits(emitIdentity,weapon->maintenance);
    mixBits(emitIdentity,weapon->supportAnimation);mixBits(emitIdentity,weapon->padVisible);mixBits(emitIdentity,weapon->pistolVisible);mixBits(emitIdentity,std::uint32_t(weapon->supportClip));
    mixBits(emitIdentity,std::uint32_t(weapon->action));mixFloat(emitIdentity,weapon->supportPhase);mixFloat(emitIdentity,weapon->treatment);mixFloat(emitIdentity,weapon->engineering);
@@ -2736,13 +2803,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float bindHeight=mesh.maximum.y-mesh.minimum.y,neckY=mesh.minimum.y+bindHeight*.855f;
   Point3 ring{},chest{};int ringCount=0,chestCount=0;
   const bool streamBody=gpuActor>=0&&m_actorStreamWriting;
-  GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(mesh.triangles.size());
+  // A body's faces are already where it lies, in the posed mesh's order less any it lost.
+  const auto&faces=corpse?corpse->carcass.triangles():mesh.triangles;
+  GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(faces.size());
   uint32_t emitted=0,runStart=0;int runMaterial=-1;
   auto flushRun=[&]{if(runMaterial>=0)m_gpu->actorStreamRun(stream.start+runStart,emitted-runStart,gpuMaterials[runMaterial]);runStart=emitted;};
   {perf::ActorScope profile(1);
-  for(auto face:mesh.triangles){
+  for(size_t faceIndex=0;faceIndex<faces.size();++faceIndex){auto face=faces[faceIndex];
+   if(corpse)actorFace=size_t(corpse->faces[faceIndex]);
    float bindCentre=0;if(headless){const auto&rest=mesh.bindTriangles()[actorFace];bindCentre=(rest.v[0].p.y+rest.v[1].p.y+rest.v[2].p.y)/3.f;if(bindCentre>neckY){++actorFace;continue;}}
-   int vertex=0;for(auto& v:face.v){
+   if(!corpse){int vertex=0;for(auto& v:face.v){
     uint32_t group=reuseAttachment?(*armedVertices)[actorFace][vertex].group:0;
     if(reuseAttachment&&attachmentReady[group]){v.p=attachmentPositions[group];++vertex;continue;}
     auto p=v.p;if(!human){p=p-(mesh.minimum+mesh.maximum)*.5f;p.y+=(mesh.maximum.y-mesh.minimum.y)*.5f;if(pose.clip==4)p.y*=.14f;else if(wasp)p.y+=std::sin(game.elapsed()*19+p.x*7)*.025f;}
@@ -2767,9 +2837,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      auto sleeve=upper+(lower-upper)*bind.lower;auto attached=rigidHand?hand:sleeve+(hand-sleeve)*bind.palm;v.p=v.p+(attached-v.p)*(rigidHand?1.f:bind.influence);
     }}
     if(reuseAttachment){attachmentPositions[group]=v.p;attachmentReady[group]=1;}
-    ++vertex;}
-   if(m_environmentInspection&&posedArms&&armedVertices)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
-   if(m_environmentInspection&&cleanup){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
+    ++vertex;}}
+   if(m_environmentInspection&&posedArms&&armedVertices&&!corpse)for(int edgeVertex=0;edgeVertex<3;++edgeVertex){int next=(edgeVertex+1)%3;const auto&a=(*armedVertices)[actorFace][edgeVertex];const auto&b=(*armedVertices)[actorFace][next];if(a.side==b.side&&a.influence*a.palm>.15f&&b.influence*b.palm>.15f){auto before=(mesh.triangles[actorFace].v[edgeVertex].p-mesh.triangles[actorFace].v[next].p)*scale,after=face.v[edgeVertex].p-face.v[next].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupFingerError=std::max(m_cleanupFingerError,std::fabs(length(before)-length(after)));}}
+   if(m_environmentInspection&&cleanup&&!corpse){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
    if(headless){const Point3 centre=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
     if(bindCentre>neckY-.045f*bindHeight){ring=ring+centre;++ringCount;}else if(bindCentre>neckY-.24f*bindHeight&&bindCentre<neckY-.14f*bindHeight){chest=chest+centre;++chestCount;}}
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
@@ -2810,11 +2880,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const Point3 side=std::fabs(axis.z)<.9f?cross3(axis,Point3{0,0,1}):cross3(axis,Point3{1,0,0});const float sl=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);const Point3 u=side*(.07f*body/std::max(sl,.001f)),v=cross3(axis,u);
    const Point3 cap=neck+axis*(.012f*body);quad(cap-u-v,cap+u-v,cap+u+v,cap-u+v,m_stump[0],.95f);quad(cap-u+v,cap+u+v,cap+u-v,cap-u-v,m_stump[0],.95f);
    // What ran out of him: a pool spreading from the neck along the way it points, on the floor under it.
-   {Point3 flat{neck.x-pose.position.x,neck.y-pose.position.y,0};if(flat.x*flat.x+flat.y*flat.y<.01f)flat={axis.x,axis.y,0};   // from where he lies out through the neck
+   {const Point3 lies=corpse?corpse->carcass.centre():Point3{pose.position.x,pose.position.y,pose.z};
+    Point3 flat{neck.x-lies.x,neck.y-lies.y,0};if(flat.x*flat.x+flat.y*flat.y<.01f)flat={axis.x,axis.y,0};   // from where he lies out through the neck
     {const float fl=std::sqrt(flat.x*flat.x+flat.y*flat.y);flat=fl>.05f?flat*(1.f/fl):Point3{1,0,0};}
     const float grow=std::sqrt(std::clamp(age/6.f,0.f,1.f)),half=std::max(.14f,.8f*body*grow);
     // centred on the cut: it runs under his shoulders and out past where his head was
-    const Point3 c{neck.x+flat.x*half*.15f,neck.y+flat.y*half*.15f,w.supportBelow(neck.x,neck.y,neck.z+.05f)+.03f};   // 3 cm: clear of a relief floor's drawn surface
+    const Point3 c{neck.x+flat.x*half*.5f,neck.y+flat.y*half*.5f,w.supportBelow(neck.x,neck.y,neck.z+.05f)+.03f};   // 3 cm: clear of a relief floor's drawn surface
     const float turn=float((unsigned(actor)*2654435761u>>9)%628u)*.01f,cs=std::cos(turn)*half,sn=std::sin(turn)*half;
     const Point3 a{c.x-cs+sn,c.y-sn-cs,c.z},bb{c.x+cs+sn,c.y+sn-cs,c.z},cc{c.x+cs-sn,c.y+sn+cs,c.z},d{c.x-cs-sn,c.y-sn+cs,c.z};
     static constexpr unsigned heavy[]={0,2,3,4};const Texture&pool=bloodDecal(Fluid::Blood,BloodJob::Pool,heavy[unsigned(actor)%4u]);

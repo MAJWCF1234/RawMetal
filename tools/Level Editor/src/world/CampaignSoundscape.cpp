@@ -63,7 +63,8 @@ void dress(Map& m,int chunk){
  d.byFixtures({model::med_fluoro_light},Sound::AmbFluorescent,.34f,7,3,8);
  d.byFixtures({model::vent,model::pwr_vent_grille,model::extraction_fan,model::pwr_air_handler},Sound::AmbVent,.5f,9,2,9);
  d.byFixtures({model::pwr_duct_fan_unit},Sound::AmbFan,.5f,10,1,10);
- d.byFixtures({model::lab_mainframe,model::lab_analyzer_cabinet},Sound::AmbStatic,.3f,7,2,7);
+ // A mainframe hums with its fans, low; it used to crackle static, and a lab full of it grated.
+ d.byFixtures({model::lab_mainframe,model::lab_analyzer_cabinet},Sound::AmbFan,.2f,6,1,9);
  d.byFixtures({model::lab_status_display,model::lab_scope_monitor},Sound::AmbLightBuzz,.26f,5,2,6);
  d.byFixtures({model::lab_test_chamber},Sound::AmbMechanical,.45f,11,1,10);
  // The district's own air.
@@ -85,8 +86,8 @@ void dress(Map& m,int chunk){
  }else if(chunk<=103){ // Containment
   d.bed(1,Sound::AmbHaunting,.38f,16);d.now(2,Sound::OneGlassBang,.48f,14,32,45);d.now(3,Sound::OneMonsterGroan,.42f,18,58,70);
   if(chunk>=100)d.now(4,Sound::OneGlassBang,.44f,14,41,50);
-  if(chunk==102){d.now(5,Sound::OneMonsterGrowl,.45f,18,50,60);d.bed(6,Sound::AmbGasLeak,.45f,8);}                                 // the Breach Sector
-  if(chunk==103)d.bed(6,Sound::AmbGasLeak,.4f,8);
+  if(chunk==102){d.now(5,Sound::OneMonsterGrowl,.45f,18,50,60);d.bed(6,Sound::AmbGasLeak,.3f,6);}                                  // the Breach Sector
+  if(chunk==103)d.bed(6,Sound::AmbGasLeak,.26f,6);
   d.announce({Sound::PaContainmentBreach,Sound::PaEvacuate,Sound::PaSystemLockdown});
  }else{ // Deep Research: under everything
   d.bed(1,Sound::AmbDrone,.42f,18);d.now(2,Sound::OneDebris,.4f,12,42,50);d.now(3,Sound::OneDistantYell,.34f,24,85,90);

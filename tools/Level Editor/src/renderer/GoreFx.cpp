@@ -1,10 +1,12 @@
 #include "GoreFx.h"
 #include "GpuRenderer.h"
+#include "../game/EngineRegressionScene.h"
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -276,5 +278,85 @@ bool SoftwareRenderer::testGore(std::ostream& report){
    check(follows&&!g.chunkEnemies(g.level())[0].alive,backend+": the "+name+"'s body keeps the game's clock");}
  }
  return passed;
+}
+// Dead men are bodies: every man Chapter 2 lays dead has come to rest on the floor under him by the
+// time he is first seen (his lowest point on it, nothing of him through it), the same way each time;
+// a guard killed in play falls where he stood and settles, and a reload shows him lying as he fell;
+// a man laid over the edge of a table goes off it.
+bool SoftwareRenderer::testHumanRagdoll(){
+ std::ofstream report("human-ragdoll-test.txt");bool passed=true;
+ auto check=[&](bool ok,const std::string&text){report<<(ok?"PASS":"FAIL")<<": "<<text<<'\n';report.flush();passed&=ok;};
+ auto number=[](float v){char text[32];std::snprintf(text,sizeof text,"%.3f",double(v));return std::string(text);};
+ auto storage=std::make_unique<SoftwareRenderer>(320,180);auto&d=*storage;
+ // How a body lies: its lowest point over the floor under it, the deepest any of it goes into that
+ // floor, and how much of it there is.
+ // The floor under a point is the lowest within 5 cm of it: a hand that hangs down the face of a step
+ // is over the floor below the step, not in the step, and one under a bench seat is over the floor under
+ // the bench (the floor is looked for from 6 cm above it). One that is in the side of a step or a slab by
+ // more than a centimetre is counted apart (grazing): the body holds its points, not every vertex,
+ // off walls.
+ struct Lie {float lowest=1e9f,deepest=1e9f,top=-1e9f;int under=0,grazing=0,count=0;bool finite=true;};
+ auto lie=[](Carcass&c,const World&w){Lie l;for(const auto&t:c.triangles())for(const auto&v:t.v){
+   if(!std::isfinite(v.p.x+v.p.y+v.p.z)){l.finite=false;continue;}
+   const float own=w.supportBelow(v.p.x,v.p.y,v.p.z+.06f);float floor=own;
+   for(auto [dx,dy]:{std::pair{.05f,0.f},{-.05f,0.f},{0.f,.05f},{0.f,-.05f}})floor=std::min(floor,w.supportBelow(v.p.x+dx,v.p.y+dy,v.p.z+.06f));
+   const float gap=v.p.z-floor;l.lowest=std::min(l.lowest,gap);l.deepest=std::min(l.deepest,v.p.z-own);l.under+=gap<-.01f;l.grazing+=gap>=-.01f&&v.p.z-own<-.01f;++l.count;l.top=std::max(l.top,v.p.z);}
+  return l;};
+ auto same=[](Carcass&a,const std::vector<MeshTriangle>&b){const auto&t=a.triangles();if(t.size()!=b.size())return false;
+  for(size_t i=0;i<t.size();++i)for(int k=0;k<3;++k)if(t[i].v[k].p.x!=b[i].v[k].p.x||t[i].v[k].p.y!=b[i].v[k].p.y||t[i].v[k].p.z!=b[i].v[k].p.z)return false;return true;};
+ // 1. Every body Chapter 2 lays down.
+ int bodies=0,resting=0,onFloor=0,clean=0,repeat=0,grazed=0;float worstLow=0,worstDeep=0;
+ for(int level=68;level<=109;++level){
+  Game g=Game::mapInspection({12,12},0,0,level,false,-999,true);const World&w=g.chunkWorld(level);
+  for(size_t i=0;i<w.actorTracks().size();++i){const auto&track=w.actorTracks()[i];if(g.autonomousActor(track))continue;
+   const ActorPose pose=w.actorPose(i);const std::uint64_t slot=0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|i;
+   auto started=std::chrono::steady_clock::now();
+   Corpse*corpse=d.humanCorpse(g,w,level,track,pose,-1,slot);if(!corpse)continue;
+   const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+   ++bodies;auto&c=corpse->carcass;const Lie l=lie(c,w);const std::vector<MeshTriangle> first=c.triangles();const Point3 centre=c.centre();const float age=c.age();
+   const bool asleep=c.asleep(),down=l.finite&&l.lowest<=.06f&&l.lowest>=-.01f,whole=l.finite&&l.under==0;
+   d.m_corpses.erase(slot);Corpse*again=d.humanCorpse(g,w,level,track,pose,-1,slot);const bool repeats=again&&same(again->carcass,first);
+   resting+=asleep;onFloor+=down;clean+=whole;repeat+=repeats;grazed+=l.grazing>0;worstLow=std::max(worstLow,std::fabs(l.lowest));worstDeep=std::min(worstDeep,l.deepest);
+   report<<(asleep&&down&&whole&&repeats?"  ok ":"  BAD ")<<"map "<<level<<" actor "<<i<<" visual "<<int(track.visual)<<" at "<<number(pose.position.x)<<','<<number(pose.position.y)<<','<<number(pose.z)
+         <<": lowest "<<number(l.lowest)<<" deepest "<<number(l.deepest)<<" under "<<l.under<<" grazing "<<l.grazing<<'/'<<l.count<<" top "<<number(l.top-pose.z)<<" centre "<<number(centre.x)<<','<<number(centre.y)<<','<<number(centre.z)
+         <<" asleep "<<asleep<<" age "<<number(age)<<" repeats "<<repeats<<" built in "<<number(float(ms))<<" ms\n";}
+ }
+ check(bodies>=10,"Chapter 2 lays down bodies ("+std::to_string(bodies)+")");
+ check(resting==bodies,"every one has come to rest before he is first seen ("+std::to_string(resting)+" of "+std::to_string(bodies)+")");
+ check(onFloor==bodies,"every one lies with his lowest point on the floor under him, within 6 cm ("+std::to_string(onFloor)+" of "+std::to_string(bodies)+", worst "+number(worstLow)+" m)");
+ check(clean==bodies,"nothing of any of them goes through the floor ("+std::to_string(clean)+" of "+std::to_string(bodies)+"; "+std::to_string(grazed)+" touch the side of a step or slab, at most "+number(-worstDeep)+" m in)");
+ check(repeat==bodies,"the same body comes to rest the same way when it is made again ("+std::to_string(repeat)+" of "+std::to_string(bodies)+")");
+ // 2. A guard killed in play, and the same guard after a reload.
+ {auto m=regression::room();m->structures.push_back({14.f,9.f,15.f,13.f,0.f,.78f});
+  auto guard=regression::guard({13.4f,11.f},{13.4f,11.f});guard.visual=ActorVisual::Cleanup;guard.ai.armed=true;guard.ai.weapon=2;guard.ai.dropsSidearm=true;guard.keys[0].yaw=guard.keys[1].yaw=kPi*.5f;m->actorTracks.push_back(guard);
+  const auto campaign=regression::campaign(m);Game g(campaign);const_cast<Player&>(g.player()).pos={6.f,11.f};g.update({},1.f/60);
+  const auto&npc=g.npcActors()[0];const Point3 stood{npc.pose.position.x,npc.pose.position.y,npc.pose.z};
+  g.downSidearmCarriers();const auto death=g.npcDeath(0);
+  check(death.dead&&!death.done&&death.age<.05f,"the guard is killed and his death clip starts ("+number(death.age)+" s)");
+  const World&w=g.chunkWorld(g.level());const std::uint64_t slot=0xA000000000000000ull;d.m_corpses.clear();
+  Corpse*corpse=nullptr;float fellAt=-1,startTop=0;
+  for(int frame=0;frame<60*10;++frame){g.update({},1.f/60);const auto&n=g.npcActors()[0];corpse=d.humanCorpse(g,w,g.level(),n.track(),n.pose,0,slot);if(!corpse)break;
+   if(frame==0)startTop=lie(corpse->carcass,w).top-stood.z;if(fellAt<0&&lie(corpse->carcass,w).top-stood.z<.6f)fellAt=float(frame)/60;}
+  check(corpse!=nullptr,"his body is made from him");
+  if(corpse){auto&c=corpse->carcass;const Lie l=lie(c,w);const std::vector<MeshTriangle> live=c.triangles();
+   const float moved=std::hypot(c.centre().x-stood.x,c.centre().y-stood.y);
+   report<<"  killed: stood "<<number(startTop)<<" m tall at first, down below 0.6 m at "<<number(fellAt)<<" s, lowest "<<number(l.lowest)<<" deepest "<<number(l.deepest)<<" top "<<number(l.top)<<" asleep "<<c.asleep()<<" at "<<number(c.age())<<" s, "<<number(moved)<<" m from where he stood\n";
+   check(startTop>1.2f&&fellAt>0&&fellAt<2.5f,"he falls from his feet ("+number(startTop)+" m tall, below 0.6 m at "+number(fellAt)+" s)");
+   check(c.asleep()&&l.finite&&l.lowest<=.06f&&l.lowest>=-.01f&&l.under==0&&l.top<1.f&&moved<1.6f,"he comes to rest down, against the table he fell at, where he fell (lowest "+number(l.lowest)+", top "+number(l.top)+", "+number(moved)+" m away)");
+   // A reload: the game's state is his (the death clock run out), the renderer has nothing kept.
+   d.m_corpses.clear();Corpse*after=d.humanCorpse(g,w,g.level(),g.npcActors()[0].track(),g.npcActors()[0].pose,0,slot);
+   check(after&&after->carcass.asleep()&&same(after->carcass,live),"seen first after his fall (a reload) he lies exactly as he fell");}}
+ // 3. A man laid over the edge of a table goes off it.
+ {auto m=regression::room();m->structures.push_back({10.f,9.f,11.f,13.f,0.f,.8f});
+  ActorTrack body;body.timerState=stateId("reg_guard_clock");body.visual=ActorVisual::Cleanup;body.scale=1.7f;body.keys={{0,{11.05f,11.f},.8f,kPi*.5f,4,1},{60000,{11.05f,11.f},.8f,kPi*.5f,4,1}};m->actorTracks.push_back(body);
+  Game g(regression::campaign(m));g.update({},1.f/60);const World&w=g.chunkWorld(g.level());d.m_corpses.clear();
+  Corpse*corpse=d.humanCorpse(g,w,g.level(),w.actorTracks()[0],w.actorPose(0),-1,0xB0000000000000ffull);
+  if(!corpse)check(false,"the man on the table is a body");
+  else{auto&c=corpse->carcass;const Lie l=lie(c,w);float low=1e9f;int inside=0;
+   for(const auto&t:c.triangles())for(const auto&v:t.v){low=std::min(low,v.p.z);inside+=v.p.x>10.02f&&v.p.x<10.98f&&v.p.y>9.02f&&v.p.y<12.98f&&v.p.z<.79f;}
+   report<<"  table: lowest point "<<number(low)<<" m, lowest over what is under it "<<number(l.lowest)<<", "<<inside<<" points inside the table, asleep "<<c.asleep()<<" centre "<<number(c.centre().x)<<','<<number(c.centre().y)<<','<<number(c.centre().z)<<'\n';
+   check(c.asleep()&&low<.25f&&l.under==0,"laid over a table's edge he goes off it to the floor ("+number(low)+" m, "+std::to_string(l.under)+" points through what he lies on)");
+   check(inside<=l.count/100,"he does not lie inside the table ("+std::to_string(inside)+" points)");}}
+ report<<(passed?"PASS":"FAIL")<<'\n';return passed;
 }
 }

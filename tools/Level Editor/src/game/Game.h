@@ -368,6 +368,11 @@ public:
     // reload shows him headless; the age is large after a load).
     bool npcHeadless(size_t actor)const;
     float npcHeadlessAge(size_t actor)const;
+    // How a man died, for the body the renderer makes of him: seconds since on the death clip's own
+    // clock and whether that clock has run out, the clip phase he died at (a man already down dies
+    // lying), and the way the killing hit threw him.
+    struct NpcDeath {bool dead=false,done=false;float age=0,from=0;Point3 push{};};
+    NpcDeath npcDeath(size_t actor)const;
     static bool testChimeraHunt();
     static bool testDoorAxis();
     static bool testDoors();

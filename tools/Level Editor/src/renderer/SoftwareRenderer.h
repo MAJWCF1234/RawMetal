@@ -76,6 +76,7 @@ public:
     static bool testElectricRendering(std::ostream& report);
     // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
     static bool testGore(std::ostream& report);
+    static bool testHumanRagdoll(); // --each-test=human-ragdoll
     static bool testSigns(std::ostream& report); // --sign-render-test
     static bool testPresentationResize();
     static bool testCreatureAnimation();
@@ -212,6 +213,12 @@ private:
      // A wound: the face it is on and where on it, which side shows, and the faces round it that carry its mark.
      struct Wound {int face=0;float side=1,size=.06f,b1=.33f,b2=.33f;std::vector<int> patch;};std::vector<Wound> wounds;Carcass carcass;};
     std::unordered_map<std::uint64_t,Remains> m_remains;float m_remainsClock=0;
+    // A dead man: his mesh as a body (Carcass) that falls from where he died, rolls off what it lies
+    // over and comes to rest, and the face of the posed mesh each of its faces is. Kept by actor emit
+    // slot; `base` is the session time he died at, for a fall that is still being watched.
+    struct Corpse {std::uint64_t signature=0;float seen=0,base=0;bool live=false;std::vector<int> faces;Carcass carcass;};
+    std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
+    Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
     std::vector<HitBurst> m_goreBursts;
     // A headless man's neck (where the stump is, and the way the neck runs), by actor emit slot, kept for frames
     // whose body replays a cached emit; and how many of its stump's pumps have been thrown.
