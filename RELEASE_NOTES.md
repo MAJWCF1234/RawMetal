@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.2 - Air and glass (2026-11-12)
+
+A patch. The great door at the bottom of Chapter 1 is still shut.
+
+- **Light that goes somewhere.** A lamp used to light what it could see and nothing else; the floor beyond its pool was a black slab. Every room now keeps the light that comes off its own walls: the near side of a pillar is warm from the red lamp behind it, a corridor carries a little of the room it leads from, and a dark corner is dark because nothing reaches it, not because the arithmetic gave up. Rooms meant to be black still are.
+- **What shines.** Tile, wet floors, steel, chrome, glass and standing water now hold the room in them: the lamps, the doorway, a table's legs. Dusty concrete and rust stay dull. The crystals in the deep levels glow from their cores and throw a cold light onto the rock they grew out of.
+- **Air.** Smoke, steam, sparks, grit, dust in the lamp light, drips and spray now share one set of rules and take the room's light. Steam leaks in threads and jets; smoke rolls and frays; a grenade leaves a trail where it flew, goes up as a burning billow and lies down as soot, with a wave of dust along the floor and grit shaken out of the ceiling. The plant breathes where its vents are, and sparks where its panels are broken.
+- **Doors.** A Brute on the wrong side of a door that gives no longer stops after two blows to listen to the door rattle. It keeps on.
+- **Claire, seen from outside.** The console command THIRDPERSON puts the camera over her shoulder: she walks, runs, crouches, crawls, turns on her feet and holds the shotgun and the pistol the way someone who has used them would.
+- **Campaign Builder.** An Emitter tool places any of the air above, on a switch or a timer. A Light menu shows the bounce alone, or what is polished, and bakes the light again after an edit. Play can walk the map over Claire's shoulder. Film cameras can be set down, moved along a path or turned on Claire, and rendered by the engine into a folder of frames.
+- **The Starter Map** has a new wing: a room of doors and locks with a Brute to let loose on one, a room of every kind of air, a room built to show the light, the dead laid over edges and the blood of every kind of thing that bleeds, a Machine to wake and short out, an animal behind glass that you can release, and two rooms to hear the difference between a hall and a closet. The guide walks through it.
+
+Verified with the full test suite on the release build (all 66 checks, run in parallel lanes, plus the gore, carcass, campaign-map and repeated-frame rendering tests), the feature lab's door tubes (a Brute through a solid door and a grille), and the Campaign Builder's self-tests, editing test and map round-trips.
+
+---
+
 ## v1.4.1 - What it leaves behind (2026-11-12)
 
 An update, not a chapter. The great door at the bottom of Chapter 1 stays shut. Work behind it goes on: people to talk to, things to work out, and in the machine rooms something that was never alive has started to move. The research levels have stopped humming a nursery tune to themselves and the static has been taken off the walls; some rooms down there now have no music at all, and are worse for it. It is not ready to be looked at yet.

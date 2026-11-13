@@ -270,6 +270,7 @@ struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,R
 class Game {
     friend struct GuardCtx;
     friend struct CivilianMindView;
+    friend struct LabAccess; // the feature lab (src/lab) stages scenes and snapshots them
 public:
     explicit Game(WorldId id=WorldId::Campaign);
     explicit Game(std::shared_ptr<const CustomCampaign> campaign);

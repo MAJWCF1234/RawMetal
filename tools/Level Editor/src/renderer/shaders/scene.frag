@@ -132,8 +132,13 @@ float lampBeam(vec4 params,vec3 away){
 // Light probes (LightProbes.h, GpuRenderer probeInfo). The irradiance atlas holds each resident
 // map's grid of ambient cubes: a 24-row band per map, six 24-wide face blocks (+x, -x, +y, -y,
 // +z, -z) across, one layer per cell of height. rgb is irradiance over pi, a sky openness.
-const float ProbeGain=3.6; // LightProbes.h ProbeGain
-const float ProbeCeiling=0.8; // LightProbes.h probeShoulder
+const float ProbeGain=10.35; // LightProbes.h ProbeGain
+const float ProbeCeiling=1.1; // LightProbes.h probeShoulder
+#define FillScale (lampGrid.probeInfo.w>0.0?lampGrid.probeInfo.w:1.0)
+// The look's values (LookTuning.h; post.frag names them): LookB.z the fill's saturation, LookC.z a
+// crystal's glow.
+#define LookB lampGrid.reflections[142]
+#define LookC lampGrid.reflections[143]
 // The fill arriving at a surface at p facing n (unit), read half a cell out along n so a face never
 // reads the probes behind it; a<0 where no map's grid covers p.
 vec4 probeIrradiance(vec3 p,vec3 n){
@@ -400,7 +405,7 @@ void main(){
   vec3 lit=card.rgb*lighting.x*lighting.y*0.96/(1.0+surface.x*0.018);
   if(lighting.x<1.5){
    vec4 fill=probeIrradiance(worldPos,normalize(-toCard));
-   if(fill.w>=0.0){vec3 light=ProbeCeiling*(1.0-exp(-fill.rgb*ProbeGain/ProbeCeiling));float luma=dot(light,vec3(0.2126,0.7152,0.0722));
+   if(fill.w>=0.0){vec3 light=ProbeCeiling*(1.0-exp(-fill.rgb*ProbeGain*FillScale/ProbeCeiling));float luma=dot(light,vec3(0.2126,0.7152,0.0722));
     if(luma>1e-4)lit*=mix(vec3(1.0),light/luma,clamp(luma/max(lighting.y,0.02),0.0,1.0));}
   }
   outMaterial=vec4(1.0,0.0,0.5,1.0);
@@ -524,10 +529,10 @@ void main(){
     float t=1.0-d2/r2,falloff=params.x*3.2*t*t/(1.0+d2*0.12);
     float bounce=params.x*0.2*t*t;
     // The probes hold the fixed lamps' return as it really falls (colour, corners, the far side of
-    // a pillar); each lamp's flat share stays under it at half weight, so a big hall the bake sees
-    // little of still fills. A switchable lamp (code 16 and up) keeps its whole share at this
-    // frame's power, so a breaker or a failing tube is never baked in.
-    if(probed&&unpackHalf2x16(floatBitsToUint(params.w)).y<15.5)bounce*=0.5;
+    // a pillar), so they carry most of it; each lamp's flat share stays under them at a fifth, so a
+    // big hall the bake sees little of still fills. A switchable lamp (code 16 and up) keeps its whole
+    // share at this frame's power, so a breaker or a failing tube is never baked in.
+    if(probed&&unpackHalf2x16(floatBitsToUint(params.w)).y<15.5)bounce*=0.2;
     if(bounce>0.002){
      vec3 q=bouncePoint-lamp.xyz;float texelQ=length(q)*2.0/float(textureSize(lampShadows,0).x);
      bounceLight+=lampTone(params)*bounce*(params.y>=0.0?lampVisible(int(params.y),q,lamp.w,texelQ*2.0/lamp.w):1.0);
@@ -607,7 +612,7 @@ void main(){
   // Its own soft shoulder: a room of many lamps fills, it never floods.
   // A crystal stands in its own glow: the probes round it carry that glow, which must not light
   // the crystal itself flat; it takes only a little of it.
-  if(probed)bounceLight+=probe.rgb*ProbeGain*(crystal?0.12:1.0);
+  if(probed){vec3 fill=probe.rgb*ProbeGain*FillScale*(crystal?0.12:1.0);float fl=dot(fill,vec3(0.2126,0.7152,0.0722));bounceLight+=max(vec3(fl)+(fill-vec3(fl))*LookB.z,vec3(0.0));}
   bounceOut=ProbeCeiling*(1.0-exp(-bounceLight/ProbeCeiling))*relief;
   // Outdoors the sky's fill follows how much sky the probes saw (under a roof, in a ruin).
   vertexLight=lighting.y*relief*(probed&&lampGrid.sun.w>0.0?0.45+0.55*probe.a:1.0);
@@ -640,7 +645,7 @@ void main(){
  if(directLight<0.0&&surface.z<0.5&&lighting.x<1.5){
   vec3 facing=normalize(cross(dx,dy));if(dot(facing,view.eyeYaw.xyz-worldPos)<0.0)facing=-facing;
   vec4 fill=probeIrradiance(worldPos,facing);
-  if(fill.w>=0.0){vec3 light=ProbeCeiling*(1.0-exp(-fill.rgb*ProbeGain/ProbeCeiling));float luma=dot(light,vec3(0.2126,0.7152,0.0722));
+  if(fill.w>=0.0){vec3 light=ProbeCeiling*(1.0-exp(-fill.rgb*ProbeGain*FillScale/ProbeCeiling));float luma=dot(light,vec3(0.2126,0.7152,0.0722));
    if(luma>1e-4)result*=mix(vec3(1.0),light/luma,clamp(luma/max(lighting.x*vertexLight,0.02),0.0,1.0));}
  }
 
@@ -667,7 +672,7 @@ void main(){
    // white. A few facets catch the eye and glint as it moves.
    vec3 Ng=normalize(cross(dx,dy)),V=normalize(view.eyeYaw.xyz-worldPos);if(dot(Ng,V)<0.0)Ng=-Ng;
    float NoV=max(dot(Ng,V),0.0),l=dot(glow,vec3(0.2126,0.7152,0.0722));
-   float core=NoV*NoV;glow=(mix(vec3(l),glow,0.85)*mix(0.1,1.0,core)+vec3(l*l*0.3)*core*core)*0.72;
+   float core=NoV*NoV;glow=(mix(vec3(l),glow,0.85)*mix(0.1,1.0,core)+vec3(l*l*0.3)*core*core)*0.72*LookC.z;
    float rim=pow(1.0-NoV,3.0);result+=vec3(0.16,0.42,0.56)*rim*(0.12+0.5*l);
    vec2 cell=floor(sampleUV*vec2(textureSize(colorMap,0))/6.0);float glint=fract(sin(dot(cell,vec2(12.9898,78.233))+floor(dot(V,vec3(7.1,5.3,3.7))*3.0))*43758.5453);
    result+=vec3(0.75,0.95,1.0)*smoothstep(0.985,1.0,glint)*(0.4+l)*NoV;

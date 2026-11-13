@@ -2,6 +2,7 @@
 #include <unordered_set>
 #include "GpuRenderer.h"
 #include "../core/FrameProfile.h"
+#include "LookTuning.h"
 
 #include <sstream>
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -648,13 +649,22 @@ struct GpuRenderer::Impl {
   submitUploadCommands();
  }
  // This frame's probes for the shaders: the volumes in use and the captured reflection probes.
+ static void writeLook(float* tail){
+  static const float look[12]={lookTune("reflect",1.5f),lookTune("polish",.58f),lookTune("envAdd",1.1f),lookTune("envTake",.5f),
+   lookTune("ssrRough",.8f),lookTune("probeLod",1.6f),lookTune("fillSat",1.15f),lookTune("metalTint",.35f),
+   0.f,0.f,lookTune("crystalGlow",2.f),lookTune("wetBase",.5f)};
+  std::memcpy(tail,look,sizeof(look));}
  void writeProbeHeader(void* mapped){
   LampHeader h{};int volumes=0,reflections=0;
   for(int slot:activeProbes){if(volumes>=ProbeSlots)break;const auto&s=probeSlots[size_t(slot)];float* v=h.probeVolumes+volumes*8;
    v[0]=s.origin[0];v[1]=s.origin[1];v[2]=s.origin[2];v[3]=s.cellZ;v[4]=float(slot);v[5]=float(s.layers);++volumes;}
-  for(int index:activeReflections){const auto&r=reflectionSlots[size_t(index)];if(!r.captured||reflections>=MaxReflections)continue;float* v=h.reflections+reflections*12;
+  for(int index:activeReflections){const auto&r=reflectionSlots[size_t(index)];if(!r.captured||reflections>=MaxReflections-1)continue;float* v=h.reflections+reflections*12;
    v[0]=r.probe[0];v[1]=r.probe[1];v[2]=r.probe[2];v[3]=float(index);for(int k=0;k<3;++k){v[4+k]=r.probe[3+k];v[8+k]=r.probe[6+k];}++reflections;}
   h.probeInfo[0]=float(volumes);h.probeInfo[1]=float(reflections);h.probeInfo[2]=float(ReflectionLevels);
+  // The look's values for the shaders (LookTuning.h; RM_LOOK overrides them for a capture), in the
+  // last reflection probe's record: scene.frag and post.frag read them as LookA, LookB and LookC.
+  h.probeInfo[3]=lookTune("fill",1.f);
+  writeLook(h.reflections+(MaxReflections-1)*12);
   std::memcpy(static_cast<uint8_t*>(mapped)+offsetof(LampHeader,probeInfo),h.probeInfo,sizeof(h.probeInfo)+sizeof(h.probeVolumes)+sizeof(h.reflections));
  }
  // Capture the reflection probes not yet captured: each face is the scene pass at 90 degrees from
@@ -1084,6 +1094,8 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=m->projectionSets[i];write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
   vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
   m->makeBuffer(m->lampBuffers[i],Impl::LampBufferBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampBufferBytes);
+  // (The look's values are there from the first frame: a probe captured before any header is written reads them.)
+  Impl::writeLook(reinterpret_cast<float*>(static_cast<uint8_t*>(m->lampBuffers[i].mapped)+offsetof(Impl::LampHeader,reflections))+(Impl::MaxReflections-1)*12);
   VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampBufferBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
  }
  {
