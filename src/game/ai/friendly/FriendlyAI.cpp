@@ -29,7 +29,8 @@ void Game::damageFriendly(size_t actor,float amount,Vec2 source,AiTargetRef atta
   setState(track.deadState,1);setState(actorPositionState(track.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(track.deadState,2),int(std::round(pose.z*1000)));if(track.ai.mode==ActorAiMode::Guard)clearGuardSchedule(actor);updateMechanisms(0);
  }
  bool voiced=damage>=track.health?std::any_of(m_sounds.begin(),m_sounds.end(),[&](const auto&e){return e.speech>=0&&e.speaker==actor+1;}):npcVoice(actor,NpcVoiceCue::Hurt);
- if(!voiced&&!npcHasVoice(actor))m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
+ // The staff cry out in their own takes (npcVoice): never Claire's hurt or the worker's scream for them.
+ if(!voiced&&!npcHasVoice(actor)&&!civilianActorVisual(track.visual))m_sounds.push_back({damage>=track.health?Sound::WorkerDying:Sound::Hurt,pose.position+chunkOffset(npc.level)-chunkOffset(m_level),.7f,1,true,17,pose.z+track.scale*.7f});
  if(damage>=track.health&&track.ai.squad){
   // The nearest squadmate who saw him go down (a voiced one, for the spoken line).
   auto witness=[&](bool voiced){size_t reporter=SIZE_MAX;float best=15.f*15.f;

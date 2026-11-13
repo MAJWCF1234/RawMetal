@@ -1,0 +1,10 @@
+# The plain room with people to kill (authored by the death-voices feature): a Cleanup
+# squad of three, a worker and a woman of the staff walking about, a scripted worker on
+# a looping timer whose cues scream and cry at him, and a dormant transformed worker with
+# a looping moan at its bed (the Medical Ward's curtain). Tube: death-voices.
+world room
+camera 4 11.5 -999 0 -6
+light 9 11.5 3.2 1.4 10
+light 15 11.5 3.2 1.0 9
+size 320 180
+frames 1260

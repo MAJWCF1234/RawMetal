@@ -1,0 +1,10 @@
+# Ten people die in the plain room two seconds apart, a few metres in front of the player
+# (authored by the death-variety feature): six Cleanup men in one squad, a Heavy and a Rusher
+# with them, a worker and a woman of the staff; then four transformed workers. The headless
+# mix is written to the wav path. Tube: death-variety.
+world room
+camera 4 11.5 -999 0 -6
+light 9 11.5 3.2 1.4 10
+size 320 180
+frames 1980
+wav .build/lab-out/death-mix.wav

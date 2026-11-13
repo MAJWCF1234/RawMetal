@@ -22,7 +22,8 @@
   "Betrayed",
   "Greet",
   "Plead",
-  "Talk"
+  "Talk",
+  "LastGasp"
  ],
  "clips": [
   {
@@ -2856,6 +2857,330 @@
    "voice_id": "IKne3meq5aSn9XLyUdCD",
    "text": "[clipped, over a handset, urgent] Bank's tripped. Throwing it back. Go.",
    "line": "dr_core_relay_say_900",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "assault-down-1",
+   "role": 1,
+   "cue": "Down",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[screams in agony] AAAGH--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "assault-down-2",
+   "role": 1,
+   "cue": "Down",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[choking, gurgling, dying] Hhk... ghh... hhh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "engineer-down-1",
+   "role": 2,
+   "cue": "Down",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[cries out in sudden pain] Aah-- AAH!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "engineer-down-2",
+   "role": 2,
+   "cue": "Down",
+   "voice_id": "iP95p4xoKVk53GoZ742B",
+   "text": "[wheezing, fading out] Hhh... no... hhh...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "sharpshooter-down-1",
+   "role": 3,
+   "cue": "Down",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[sharp, agonized cry] Nngh-- AAGH!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "sharpshooter-down-2",
+   "role": 3,
+   "cue": "Down",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[gurgling, last breath] Ghh... hhh.",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "heavy-down-1",
+   "role": 4,
+   "cue": "Down",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[deep roar of pain] RRAAGH!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "heavy-down-2",
+   "role": 4,
+   "cue": "Down",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[heavy, dying groan] Uunnghh... hhh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "medic-down-1",
+   "role": 5,
+   "cue": "Down",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[screams, then chokes] AAAH-- hhk...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "medic-down-2",
+   "role": 5,
+   "cue": "Down",
+   "voice_id": "cjVigY5qzO86Huf0OWal",
+   "text": "[weak, fading groan] Ohh... hhh...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "rusher-down-1",
+   "role": 6,
+   "cue": "Down",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[yells in agony] AARGH! NO--",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "rusher-down-2",
+   "role": 6,
+   "cue": "Down",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[gasping, choking] Hhk-- hhk... hh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "witness-down-0",
+   "role": 7,
+   "cue": "Down",
+   "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+   "text": "[terrified scream] NO-- AAAH!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "witness-down-1",
+   "role": 7,
+   "cue": "Down",
+   "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+   "text": "[weak, crying, fading] Please... hhh...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "zone-military-down-1",
+   "role": 8,
+   "cue": "Down",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[agonized scream] AAAGH!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "zone-military-down-2",
+   "role": 8,
+   "cue": "Down",
+   "voice_id": "pNInz6obpgDQGcFmaJgB",
+   "text": "[dying gasp] Hhh... uhh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "zone-bandit-down-1",
+   "role": 9,
+   "cue": "Down",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[guttural scream] GRAAAH--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "zone-bandit-down-2",
+   "role": 9,
+   "cue": "Down",
+   "voice_id": "2OcnG4mH3jIMtWz3vKus",
+   "text": "[rattling last breath] Hhhhh... ghh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-down-0",
+   "role": 14,
+   "cue": "Down",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[screams in terror and pain] AAAAH--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-down-1",
+   "role": 14,
+   "cue": "Down",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[agonized, choking] Ghh-- ahh... hhh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-down-2",
+   "role": 14,
+   "cue": "Down",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[cries out, then gurgles] AH-- oh God-- hhk...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-down-3",
+   "role": 14,
+   "cue": "Down",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[short pained cry as he falls] Unh--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-hurt-0",
+   "role": 14,
+   "cue": "Hurt",
+   "voice_id": "bIHbv24MWmeRgasZH58o",
+   "text": "[grunts in pain] Ngh!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-hurt-1",
+   "role": 14,
+   "cue": "Hurt",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
+   "text": "[pained gasp] Agh--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-man-hurt-2",
+   "role": 14,
+   "cue": "Hurt",
+   "voice_id": "CwhRBWXzGAHq8TQ4Fs17",
+   "text": "[yelps in pain] Ow-- ahh!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-woman-down-0",
+   "role": 15,
+   "cue": "Down",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[screams] AAAAH--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-woman-down-1",
+   "role": 15,
+   "cue": "Down",
+   "voice_id": "XrExE9yKIg1WjnnlVkGX",
+   "text": "[agonized, choking] Hhk... no... hhh.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-woman-down-2",
+   "role": 15,
+   "cue": "Down",
+   "voice_id": "EXAVITQu4vr4xnSDxMaL",
+   "text": "[terrified scream, cut short] NO-- AAH--",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-woman-hurt-0",
+   "role": 15,
+   "cue": "Hurt",
+   "voice_id": "EXAVITQu4vr4xnSDxMaL",
+   "text": "[sharp pained gasp] Ah--!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "staff-woman-hurt-1",
+   "role": 15,
+   "cue": "Hurt",
+   "voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+   "text": "[cries out in pain] Ow-- ahh!",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "assault-lastgasp-0",
+   "role": 1,
+   "cue": "LastGasp",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[gasping, weak] Command... I'm hit... can't feel my...",
+   "model": "eleven_v4",
+   "seed": 2202
+  },
+  {
+   "id": "assault-lastgasp-1",
+   "role": 1,
+   "cue": "LastGasp",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[choking, faint] Tell them... it came out of the walls...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "assault-lastgasp-2",
+   "role": 1,
+   "cue": "LastGasp",
+   "voice_id": "SOYHLrjzK2X1ezoPC6cr",
+   "text": "[struggling to breathe] Man down... he's right... [gasps]",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "sharpshooter-lastgasp-0",
+   "role": 3,
+   "cue": "LastGasp",
+   "voice_id": "N2lVS1w4EtoT3dr4eOWO",
+   "text": "[faint, fading] Don't... send anyone... else.",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "heavy-lastgasp-0",
+   "role": 4,
+   "cue": "LastGasp",
+   "voice_id": "nPczCjzI2devNBz1zQrb",
+   "text": "[heavy, labored] I'm done... the door's yours...",
+   "model": "eleven_v4",
+   "seed": 1101
+  },
+  {
+   "id": "rusher-lastgasp-0",
+   "role": 6,
+   "cue": "LastGasp",
+   "voice_id": "IKne3meq5aSn9XLyUdCD",
+   "text": "[gasping] Keep... moving... don't stop for...",
    "model": "eleven_v4",
    "seed": 1101
   }

@@ -101,7 +101,9 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  if(hit.kind==ShotKind::Actor){const auto&actor=world.actorTracks().at(size_t(hit.index));if(!actor.health)return;const auto&pose=world.actorPose(size_t(hit.index));int previous=std::clamp(state(actor.damageState),0,actor.health);int damage=previous+std::min(actor.health-previous,int(std::ceil(std::min(damageOverride>0?damageOverride:definition.actorDamage,float(actor.health)))));setState(actor.damageState,damage);if(playerFired)m_hitFlash=1;
   hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,humanActorVisual(actor.visual)?-1:int(actor.visual==ActorVisual::Wasp?CreatureKind::Wasp:CreatureKind::Huntsman),damage>=actor.health?1.5f:.9f,damage>=actor.health);
   bool killed=damage>=actor.health;if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(pose.z*1000)));if(!humanActorVisual(actor.visual)){if(hit.level==m_level)++m_kills;else ++m_chunks[hit.level].kills;}}
-  m_sounds.push_back({humanActorVisual(actor.visual)?Sound::Hurt:killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,pose.position-shift,.8f,1,true,17,pose.z+actor.scale*.7f});updateMechanisms(0);return;
+  if(humanActorVisual(actor.visual))scriptedPersonCry(actor,size_t(hit.index),pose.position-shift,pose.z,killed);
+  else m_sounds.push_back({killed?(actor.visual==ActorVisual::Wasp?Sound::WaspDeath:Sound::SpiderDeath):Sound::PunchHit,pose.position-shift,.8f,1,true,17,pose.z+actor.scale*.7f});
+  updateMechanisms(0);return;
  }
  if(hit.kind==ShotKind::Enemy){auto&enemy=(hit.level==m_level?m_enemies:m_chunks[hit.level].enemies).at(size_t(hit.index));
   // A gunshot wound is a stimulus: the creature turns on the shooter even if it never saw them.

@@ -1,9 +1,9 @@
 #pragma once
 #include <array>
 namespace retro {
-enum class NpcVoiceCue {Patrol,Investigate,Alert,Hurt,Down,Retreat,AllyDown,Support,Deploy,Repair,Treat,Follow,Wait,Danger,Witness,CheckLockers,Found,GiveUp,Warn,Betrayed,Greet,Plead,Talk};
+enum class NpcVoiceCue {Patrol,Investigate,Alert,Hurt,Down,Retreat,AllyDown,Support,Deploy,Repair,Treat,Follow,Wait,Danger,Witness,CheckLockers,Found,GiveUp,Warn,Betrayed,Greet,Plead,Talk,LastGasp};
 struct NpcVoiceClip {int role; NpcVoiceCue cue; float seconds; int stance=0; int mood=0; const char* line="";};
-inline constexpr std::array<NpcVoiceClip,344> NpcVoiceClips={{
+inline constexpr std::array<NpcVoiceClip,380> NpcVoiceClips={{
  {1,NpcVoiceCue::Patrol,2.8530f,0,0,""},
  {1,NpcVoiceCue::Patrol,3.2122f,0,0,""},
  {1,NpcVoiceCue::Investigate,1.6479f,0,0,""},
@@ -348,5 +348,41 @@ inline constexpr std::array<NpcVoiceClip,344> NpcVoiceClips={{
  {10,NpcVoiceCue::Talk,9.5200f,0,0,"dr_geo_bank"},
  {10,NpcVoiceCue::Talk,6.0149f,0,0,"dr_geo_room_say"},
  {1,NpcVoiceCue::Talk,2.3102f,0,0,"dr_core_relay_say_900"},
+ {1,NpcVoiceCue::Down,2.1154f,0,0,""},
+ {1,NpcVoiceCue::Down,4.0255f,0,0,""},
+ {2,NpcVoiceCue::Down,2.3642f,0,0,""},
+ {2,NpcVoiceCue::Down,2.2933f,0,0,""},
+ {3,NpcVoiceCue::Down,2.8960f,0,0,""},
+ {3,NpcVoiceCue::Down,3.9661f,0,0,""},
+ {4,NpcVoiceCue::Down,1.4450f,0,0,""},
+ {4,NpcVoiceCue::Down,2.5321f,0,0,""},
+ {5,NpcVoiceCue::Down,3.1774f,0,0,""},
+ {5,NpcVoiceCue::Down,1.7755f,0,0,""},
+ {6,NpcVoiceCue::Down,1.9686f,0,0,""},
+ {6,NpcVoiceCue::Down,3.2068f,0,0,""},
+ {7,NpcVoiceCue::Down,1.7379f,0,0,""},
+ {7,NpcVoiceCue::Down,1.6497f,0,0,""},
+ {8,NpcVoiceCue::Down,1.3090f,0,0,""},
+ {8,NpcVoiceCue::Down,2.9483f,0,0,""},
+ {9,NpcVoiceCue::Down,1.4343f,0,0,""},
+ {9,NpcVoiceCue::Down,3.0099f,0,0,""},
+ {14,NpcVoiceCue::Down,2.4529f,0,0,""},
+ {14,NpcVoiceCue::Down,2.3856f,0,0,""},
+ {14,NpcVoiceCue::Down,3.4397f,0,0,""},
+ {14,NpcVoiceCue::Down,1.3850f,0,0,""},
+ {14,NpcVoiceCue::Hurt,1.6969f,0,0,""},
+ {14,NpcVoiceCue::Hurt,1.4350f,0,0,""},
+ {14,NpcVoiceCue::Hurt,2.2944f,0,0,""},
+ {15,NpcVoiceCue::Down,1.1146f,0,0,""},
+ {15,NpcVoiceCue::Down,2.8594f,0,0,""},
+ {15,NpcVoiceCue::Down,1.5693f,0,0,""},
+ {15,NpcVoiceCue::Hurt,1.3508f,0,0,""},
+ {15,NpcVoiceCue::Hurt,1.7610f,0,0,""},
+ {1,NpcVoiceCue::LastGasp,4.1756f,0,0,""},
+ {1,NpcVoiceCue::LastGasp,2.8448f,0,0,""},
+ {1,NpcVoiceCue::LastGasp,3.8247f,0,0,""},
+ {3,NpcVoiceCue::LastGasp,2.6833f,0,0,""},
+ {4,NpcVoiceCue::LastGasp,2.6922f,0,0,""},
+ {6,NpcVoiceCue::LastGasp,4.2661f,0,0,""},
 }};
 }

@@ -35,14 +35,19 @@ enum class Sound {
  // Chapter 2's area scores (MusicCue Research and Clinic): resources 2412 and
  // 2413, straight after the bank.
  MusicResearch, MusicClinic,
+ // Deaths and pain (tools/audio/import_horror_sfx.py VOX, resources 2600 on, in this order):
+ // the transformed workers' four death groans, then two gasps for a scripted person hit.
+ // The people's own cries are takes in the NPC voice bank (NpcVoiceCatalog.h, Down/Hurt/LastGasp).
+ VoxTransformedDeath1, VoxTransformedDeath2, VoxTransformedDeath3, VoxTransformedDeath4, VoxGasp1, VoxGasp2,
  Count
 };
 // AudioEngine maps every sound from ZoneWind on to consecutive library resources
 // and AreaTitle, the locker sounds, the detection sounds and the alert loop to their own: a sound appended after them
 // needs its resource mapped there explicitly, or it would load an unrelated file.
 // GlassShatter to PistolRack take consecutive resources from 2255 (the pistol from 2260); LeadArc is mapped on its own;
-// the bank block (AmbVent on) and Chapter 2's two scores after it take consecutive resources from 2370.
-static_assert(int(Sound::Count)==int(Sound::MusicClinic)+1&&int(Sound::MusicResearch)==int(Sound::PaHostileDetected)+1&&int(Sound::AmbVent)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
+// the bank block (AmbVent on) and Chapter 2's two scores after it take consecutive resources from 2370;
+// the Vox block takes consecutive resources from 2600.
+static_assert(int(Sound::Count)==int(Sound::VoxGasp2)+1&&int(Sound::VoxTransformedDeath1)==int(Sound::MusicClinic)+1&&int(Sound::MusicResearch)==int(Sound::PaHostileDetected)+1&&int(Sound::AmbVent)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
 inline bool gunshotSound(Sound s){return s==Sound::Shot||s==Sound::PistolShot;}
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}

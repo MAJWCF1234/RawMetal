@@ -12,7 +12,9 @@
 #include <iosfwd>
 namespace retro {
 class Game;
+struct LabAccess;
 class AudioEngine {
+ friend struct LabAccess; // the feature lab (src/lab) mixes it headless and reads what plays
 public:
  explicit AudioEngine(bool device=true);
  ~AudioEngine();

@@ -78,6 +78,8 @@ constexpr int DetectionSoundResource=2180;
 constexpr int LeadArcResource=2347;
 // The sound bank (SoundBank.h): Horror SFX by YourPalRob, purchased; tools/audio/import_horror_sfx.py.
 constexpr int BankSoundResource=2370;
+// Deaths and pain (the Vox block): Horror SFX by YourPalRob, purchased; import_horror_sfx.py --vox.
+constexpr int VoxSoundResource=2600;
 std::int64_t ambientEmitter(AmbientKind kind,int level,std::size_t index){
  return std::int64_t((std::uint64_t(kind)<<48)|(std::uint64_t(level)<<32)|std::uint64_t(index));
 }
@@ -128,7 +130,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  auto resource=loadResource(i>=size_t(Sound::AmbVent)?BankSoundResource+int(i-size_t(Sound::AmbVent)):i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i>=size_t(Sound::VoxTransformedDeath1)?VoxSoundResource+int(i-size_t(Sound::VoxTransformedDeath1)):i>=size_t(Sound::AmbVent)?BankSoundResource+int(i-size_t(Sound::AmbVent)):i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   auto&sample=m_samples[i];
@@ -261,8 +263,10 @@ void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
  // Authored cues reach here unvalidated: a non-finite or non-positive pitch
  // would never finish (or read backwards), a wild gain would clip everything.
  if(!std::isfinite(event.gain)||!std::isfinite(event.pitch)||event.pitch<=0||event.gain<=0)return;
- if(event.speech>=0){if(size_t(event.speech)>=m_speech.size()||!event.speaker)return;
-  std::erase_if(m_voices,[&](const auto&voice){return voice.speech>=0&&voice.speaker==event.speaker;});
+ // Speech from an actor (speaker = actor+1) replaces his last take; speaker 0 is a one-off
+ // from a place (a scripted cue, a scripted person's cry) that nobody's later take cuts.
+ if(event.speech>=0){if(size_t(event.speech)>=m_speech.size())return;
+  if(event.speaker)std::erase_if(m_voices,[&](const auto&voice){return voice.speech>=0&&voice.speaker==event.speaker;});
   if(std::count_if(m_voices.begin(),m_voices.end(),[](const auto&v){return v.speech>=0;})>=2){
    auto victim=m_voices.end();for(auto it=m_voices.begin();it!=m_voices.end();++it)if(it->speech>=0&&(victim==m_voices.end()||it->speechPriority<victim->speechPriority))victim=it;
    if(victim!=m_voices.end()){if(victim->speechPriority>event.speechPriority)return;m_voices.erase(victim);}}
@@ -348,13 +352,16 @@ void AudioEngine::update(const Game& game,bool focused){
  for(auto&voice:m_voices)if(voice.emitter==-2)voice.pitch=m_motorTarget<.3f?.65f:game.world().liftPhaseTime()>24?.82f:1.f;
  for(int c=1;c<AreaScores;++c)if(m_areaTarget[size_t(c)]>0)sceneLoop(areaSound(c),AreaEmitter-c);
  if(m_reactorTarget>0)sceneLoop(Sound::ReactorMusic,-3);
- std::erase_if(m_voices,[&](const auto&voice){if(voice.speech<0)return false;if(!voice.speaker||voice.speaker>game.npcActors().size())return true;
-  size_t actor=voice.speaker-1;const auto&npc=game.npcActors()[actor];return !game.chunkResident(npc.level)||(voice.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(npc.track().deadState)));});
+ // The dead (and the downed) say nothing but their death take: a line, a call or a
+ // conversation still in his mouth is cut the moment he falls, and nothing new starts.
+ auto silenced=[&](size_t speaker,int speech){if(!speaker)return false;if(speaker>game.npcActors().size())return true;
+  size_t actor=speaker-1;const auto&npc=game.npcActors()[actor];const auto cue=NpcVoiceClips[size_t(speech)].cue;
+  return !game.chunkResident(npc.level)||(cue!=NpcVoiceCue::Down&&cue!=NpcVoiceCue::LastGasp&&(game.npcIncapacitated(actor)||game.state(npc.track().deadState)));};
+ std::erase_if(m_voices,[&](const auto&voice){return voice.speech>=0&&silenced(voice.speaker,voice.speech);});
  for(const auto&event:game.sounds()){
   // The sting on a guard's '!' (or on the doors of your locker coming open) cuts the score.
   if(event.sound==Sound::DetectSting||event.sound==Sound::LockerSting)duckForSting();
-  if(event.speech>=0){if(!event.speaker||event.speaker>game.npcActors().size())continue;size_t actor=event.speaker-1;
-   if(event.speechPriority<3&&(game.npcIncapacitated(actor)||game.state(game.npcActors()[actor].track().deadState)))continue;}
+  if(event.speech>=0&&(size_t(event.speech)>=NpcVoiceClips.size()||silenced(event.speaker,event.speech)))continue;
   play(event);
  }
  for(auto&voice:m_voices)if(voice.speech>=0&&voice.speaker&&voice.speaker<=game.npcActors().size()){

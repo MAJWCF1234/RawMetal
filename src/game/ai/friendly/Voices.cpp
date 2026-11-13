@@ -24,10 +24,39 @@ int voiceRole(const ActorTrack& track){
   default:return 0;
  }
 }
+// The plant's staff say nothing on their rounds, but they cry out when hit and when
+// they die: 14 a man (worker, scientist, tech), 15 a woman; 0 for anything not a person.
+int staffVoiceRole(ActorVisual visual){
+ if(visual==ActorVisual::FemaleScientist||visual==ActorVisual::FemaleDoctor)return 15;
+ return civilianActorVisual(visual)||visual==ActorVisual::Investigator?14:0;
+}
+bool deathCue(NpcVoiceCue cue){return cue==NpcVoiceCue::Down||cue==NpcVoiceCue::LastGasp;}
+// The voice a hit or a death takes: the speaker's own, or for the silent staff their cries.
+int painVoiceRole(const ActorTrack& track,NpcVoiceCue cue){
+ const int role=voiceRole(track);
+ return role||!(cue==NpcVoiceCue::Hurt||deathCue(cue))?role:staffVoiceRole(track.visual);
+}
+// A man's cries a shade higher or lower than the next man's: within 5% either way, fixed per actor.
+float actorVoicePitch(size_t actor){return 1+.025f*(float((unsigned(actor)*2654435761u>>13)%5u)-2);}
+// A death cry or last words from the takes: never the take the last one to die gave, and of
+// the rest the one used longest ago (never used first; ties by who and when), so a squad
+// going down goes through all its cries. States, so a reload picks the same.
+int pickDeathTake(Game& game,const int* choices,int count,unsigned seed){
+ if(count<=0)return -1;
+ const StateId deaths=stateId("npc_voice_deaths"),last=stateId("npc_voice_last_death");const int n=game.state(deaths);
+ auto used=[](int clip){return stateId("npc_voice_used/"+std::to_string(clip));};
+ int at=-1;long long best=0;
+ for(int i=0;i<count;++i){if(count>1&&choices[i]+1==game.state(last))continue;
+  const unsigned mix=(unsigned(n)*2654435761u)^(seed*40503u)^(unsigned(choices[i])*2246822519u);
+  const long long key=(long long)game.state(used(choices[i]))*4096+(long long)((mix>>13)%4096u);
+  if(at<0||key<best){at=i;best=key;}}
+ if(at<0)at=0;
+ game.setState(deaths,n+1);game.setState(last,choices[at]+1);game.setState(used(choices[at]),n+1);return choices[at];
+}
 int voicePriority(NpcVoiceCue cue){
  // The door ripped open is the one line nothing may swallow, not even his own
- // "let's see what's in here" still in his mouth as the leaves swing.
- if(cue==NpcVoiceCue::Down||cue==NpcVoiceCue::Found)return 3;
+ // "let's see what's in here" still in his mouth as the leaves swing. Nor his last words.
+ if(deathCue(cue)||cue==NpcVoiceCue::Found)return 3;
  // Locker events are called once, as they happen: another guard's chatter on
  // the channel must not drop them, or the player hides on a lie of silence.
  // A truce warned or broken is the turn of the scene: nothing may talk over it.
@@ -71,12 +100,21 @@ int cueCooldownMs(NpcVoiceCue cue){
 bool Game::npcHasVoice(size_t actor)const{return actor<m_friendlyActors.size()&&voiceRole(m_friendlyActors[actor].track())!=0;}
 bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  if(actor>=m_friendlyActors.size())return false;const auto&npc=m_friendlyActors[actor];const auto&track=npc.track();
- int role=voiceRole(track);if(!role||!autonomousActor(track)||!chunkResident(npc.level)||state(track.deadState)||npcIncapacitated(actor))return false;
+ int role=painVoiceRole(track,cue);if(!role||!autonomousActor(track)||!chunkResident(npc.level)||state(track.deadState)||npcIncapacitated(actor))return false;
  Vec2 position=npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level);
  if(lengthSq(position-m_player.pos)+std::pow(npc.pose.z-m_player.z,2)>22*22)return false;
+ // A man going down with his squad still near keys his radio for his last words about three
+ // deaths in seven; the rest die with a cry (and a man with no last words, too).
+ if(cue==NpcVoiceCue::Down&&track.ai.squad&&(unsigned(state(stateId("npc_voice_deaths")))*5u+unsigned(actor)*3u)%7u<3u){
+  bool squadNear=false;for(size_t other=0;other<m_friendlyActors.size()&&!squadNear;++other){const auto&buddy=m_friendlyActors[other];
+   squadNear=other!=actor&&buddy.track().ai.squad==track.ai.squad&&!state(buddy.track().deadState)&&!npcIncapacitated(other)&&
+    lengthSq(buddy.pose.position+chunkOffset(buddy.level)-npc.pose.position-chunkOffset(npc.level))<20.f*20.f;}
+  // (No squelch: that is the tell of a guard calling something in.)
+  if(squadNear&&npcVoice(actor,NpcVoiceCue::LastGasp))return true;
+ }
  auto get=[&](const char*field){return state(friendlyKey(actor,field));};auto put=[&](const char*field,int value){setState(friendlyKey(actor,field),value);};
  int priority=voicePriority(cue);
- if(cue!=NpcVoiceCue::Down&&((get("voice_lock")&&get("voice_priority")>=priority)||(priority<2&&state("npc_voice_busy"))||(cue==NpcVoiceCue::Hurt&&get("voice_hurt_wait"))))return false;
+ if(!deathCue(cue)&&((get("voice_lock")&&get("voice_priority")>=priority)||(priority<2&&state("npc_voice_busy"))||(cue==NpcVoiceCue::Hurt&&get("voice_hurt_wait"))))return false;
  // AllyDown reserves its cooldown at claim time so multi-kills cannot queue
  // several reports; the elected speaker must still be allowed to flush.
  if(StateId cooldown=cueCooldownId(cue);cooldown&&state(cooldown)>0&&cue!=NpcVoiceCue::Hurt&&cue!=NpcVoiceCue::Down&&cue!=NpcVoiceCue::AllyDown)return false;
@@ -84,11 +122,20 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  // Takes recorded for a stance (1 hostile, 2 truce, 3 ally) or a mood (1 steady, 2 shaken,
  // 3 broken) are only said in it; the closest match wins over the untagged ones.
  const auto stance=npcStance(track);const int voiceStance=stance==SquadStance::Truce?2:stance==SquadStance::Ally?3:factionsHostile(npcFaction(track),AiFaction::Player)?1:0,mood=squadMood(actor);
- int choices[4],count=0,best=-1;for(size_t i=0;i<NpcVoiceClips.size();++i){const auto&clip=NpcVoiceClips[i];
+ int choices[4],count=0,best=-1;
+ auto gather=[&]{count=0;best=-1;for(size_t i=0;i<NpcVoiceClips.size();++i){const auto&clip=NpcVoiceClips[i];
   if(clip.role!=role||clip.cue!=cue||*clip.line||(clip.stance&&clip.stance!=voiceStance)||(clip.mood&&clip.mood!=mood))continue;
-  int score=(clip.stance?2:0)+(clip.mood?1:0);if(score<best)continue;if(score>best){best=score;count=0;}if(count<4)choices[count++]=int(i);}
+  int score=(clip.stance?2:0)+(clip.mood?1:0);if(score<best)continue;if(score>best){best=score;count=0;}if(count<4)choices[count++]=int(i);}};
+ gather();
+ // A voice with no takes for a hit or a death (the zone's guide, the Investigator) cries out in the staff's.
+ if(!count&&(cue==NpcVoiceCue::Hurt||cue==NpcVoiceCue::Down)&&role<14){role=staffVoiceRole(track.visual)?staffVoiceRole(track.visual):14;gather();}
  if(!count)return false;
  int variant=std::max(0,get("voice_variant"));int clip=choices[variant%count];put("voice_variant",(variant+1)%10000);
+ // A death cry or last words: never the take the last man to die gave, and spread over
+ // the takes as the deaths add up (states, so a reload picks the same).
+ if(deathCue(cue))clip=pickDeathTake(*this,choices,count,unsigned(actor));
+ // The staff's pain takes are several men (and women): one person keeps one voice.
+ else if(cue==NpcVoiceCue::Hurt&&role>=14)clip=choices[actor%size_t(count)];
  // At a locker only the takes that match what he does: a plain "saw that";
  // for the check, the one door he heard ("what's in here") or a bank he means
  // to go through ("check the lockers", "which one are you in?"); and on the
@@ -108,7 +155,35 @@ bool Game::npcVoice(size_t actor,NpcVoiceCue cue){
  if(cue==NpcVoiceCue::Alert)for(size_t other=0;other<m_friendlyActors.size();++other)if(other==actor||(track.ai.squad&&m_friendlyActors[other].track().ai.squad==track.ai.squad))setState(friendlyKey(other,"voice_cd_alert"),cueCooldownMs(cue));
  // A single speaker cannot overlap its previous take, even within one frame.
  std::erase_if(m_sounds,[&](const auto&event){return event.speech>=0&&event.speaker==actor+1;});
- m_sounds.push_back({Sound::WorkerDying,position,.95f,1,true,22,npc.pose.z+track.scale*.85f,clip,actor+1,priority});return true;
+ // Hurt, he cries out a shade higher or lower than the next man.
+ const float pitch=cue==NpcVoiceCue::Hurt||deathCue(cue)?actorVoicePitch(actor):1.f;
+ m_sounds.push_back({Sound::WorkerDying,position,.95f,pitch,true,22,npc.pose.z+track.scale*.85f,clip,actor+1,priority});return true;
+}
+void Game::scriptedPersonCry(const ActorTrack& track,size_t index,Vec2 at,float feet,bool killed){
+ const float z=feet+track.scale*.8f,pitch=actorVoicePitch(index+101);
+ if(!killed){m_sounds.push_back({index%2?Sound::VoxGasp2:Sound::VoxGasp1,at,.8f,pitch,true,15,z});return;}
+ // His own voice's death takes (a Cleanup man's), else the staff's: a one-off from where he fell.
+ for(int role:{voiceRole(track),staffVoiceRole(track.visual)}){if(!role)continue;
+  int choices[8],count=0;for(size_t i=0;i<NpcVoiceClips.size()&&count<8;++i){const auto&clip=NpcVoiceClips[i];if(clip.role==role&&clip.cue==NpcVoiceCue::Down&&!*clip.line)choices[count++]=int(i);}
+  if(const int clip=pickDeathTake(*this,choices,count,unsigned(index)+31u);clip>=0){m_sounds.push_back({Sound::WorkerDying,at,.95f,pitch,true,22,z,clip,0,3});return;}}
+ m_sounds.push_back({Sound::WorkerDying,at,.8f,pitch,true,17,z});
+}
+bool Game::vocalCueSilenced(int level,Vec2 at)const{
+ if(level<0||level>=chunkCount()||!chunkResident(level))return false;
+ // The nearest body with a man's voice within reach of the cue decides: alive and there, the
+ // voice is his; dead (or a transformed man gone from the place it was put), nobody is left to
+ // make it. A wasp or a spider beside a screaming worker is not the one screaming.
+ float best=1.2f*1.2f;int verdict=0;auto consider=[&](Vec2 p,int v){const float d=lengthSq(p-at);if(d<best){best=d;verdict=v;}};
+ for(const auto&e:level==m_level?m_enemies:m_chunks[size_t(level)].enemies){
+  if(e.kind!=CreatureKind::Mutant&&e.kind!=CreatureKind::Snatcher&&e.kind!=CreatureKind::Transformed)continue;
+  if(!e.alive){consider(e.pos,2);consider(e.home,2);continue;}
+  consider(e.pos,1);if(lengthSq(e.pos-e.home)>2.5f*2.5f)consider(e.home,2);}
+ for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.level!=level||!humanActorVisual(npc.track().visual)||!autonomousActor(npc.track()))continue;
+  const bool dead=npc.track().deadState&&state(npc.track().deadState);consider(npc.pose.position,dead?2:1);}
+ const World& world=chunkWorld(level);
+ for(size_t i=0;i<world.actorTracks().size();++i){const auto&track=world.actorTracks()[i];if(track.platform||!humanActorVisual(track.visual)||autonomousActor(track))continue;
+  consider(world.actorPose(i).position,track.deadState&&state(track.deadState)?2:1);}
+ return verdict==2;
 }
 void Game::updateNpcVoices(float dt){
  int ms=std::max(0,int(std::round(dt*1000)));setState(stateId("npc_voice_busy"),std::max(0,state("npc_voice_busy")-ms));
