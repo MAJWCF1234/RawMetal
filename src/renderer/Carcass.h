@@ -5,10 +5,11 @@
 #include "../world/World.h"
 namespace retro {
 // What a creature leaves behind: its own mesh, in the pose it died in, made into a body that falls,
-// folds at its joints and comes apart at them. Each section of it is rigid: a cloud of points on its
-// skin finds where it is, and every vertex is carried by its section's rigid frame, blended with the
-// next section's only on the seam between them. Joints turn within limits and sections do not pass
-// through one another. Nothing need be authored per creature: the sections, the joints between them
+// folds at its joints and comes apart at them. Each section of it is a rigid body (the mass and spread
+// of a cloud of points on its skin), stepped by position-based dynamics; every vertex is carried by its
+// section's frame, blended with the next section's only on the seam between them. Joints hold, turn
+// within limits and against friction; sections do not pass through one another; the floor grips what
+// lies on it (RM_CARCASS=1 frees the limits, 4 the keeping apart, for comparison). Nothing need be authored per creature: the sections, the joints between them
 // and the caps that close a cut are found from the triangles, so every kind the engine can draw can be
 // dropped, shot to pieces or blown apart. A body can also be told its parts (a man's, Humanoid.h), and
 // then its joints turn as that body's do.
@@ -64,7 +65,10 @@ private:
   // Its body for the others to keep out of: a capsule with an oval section, in rest coordinates.
   Point3 capA{},capB{},capU{1,0,0},capV{0,1,0};float ru=0,rv=0;
   // Where it was at the end of the last step: how much it moves is what says it has come to rest.
-  Point3 was{};float wasQ[4]{1,0,0,0};};
+  Point3 was{};float wasQ[4]{1,0,0,0};
+  // As a rigid body: its centre of mass (in the rest pose and now), velocity, spin, inverse inertia (rest
+  // frame) and where it was when the substep began.
+  Point3 com{},comRest{},vel{},spin{},prevCom{},prevAxes[3]{};float prevQ[4]{1,0,0,0},invInertia[9]{},mass=0,reach=0,capReach=0;};
  struct Joint {int a=0,b=0,particle=-1;bool seam=false,cut=false;Point3 rest{};};
  // A vertex rides its own section and, on a seam, the section across it.
  struct Bind {int home=0,other=-1,joint=-1;float blend=0;};
@@ -72,10 +76,9 @@ private:
  struct Loop {int owner=0;std::vector<int> edges;Point3 centre{},out{},across{},up{};float reach=1;};
  void fit();
  void step(const World& world);
- void bend(float tone,float friction,bool limits);
- void collide();
- void pin();
+ void bodies();
  void settle(const World& world);
+ float depthIn(const Particle& p,int section)const;
  void regroup();
  void measure();
  void skin();
@@ -89,6 +92,6 @@ private:
  std::vector<Point3> m_rest,m_posed;std::vector<int> m_corner,m_owner,m_piece;std::vector<Edge> m_edges;std::vector<Loop> m_loops;
  std::vector<MeshTriangle> m_triangles,m_caps;
  Point3 m_centre{};float m_radius=1,m_age=0,m_quiet=0,m_woke=0,m_scale=1,m_size=1,m_motion=0,m_reach=0;
- int m_root=0,m_pieces=1,m_body=0;unsigned m_seed=1;bool m_asleep=false,m_dirty=true,m_rigged=false;
+ int m_root=0,m_pieces=1,m_body=0;unsigned m_seed=1;bool m_asleep=false,m_dirty=true,m_rigged=false,m_bodies=false;
 };
 }
