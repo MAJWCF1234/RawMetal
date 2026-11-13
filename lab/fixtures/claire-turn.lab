@@ -1,0 +1,10 @@
+# Claire in the regression room, over her shoulder, turning through her holds.
+# Tubes: claire.
+world room
+camera 12 12 -999 0 0
+light 13.5 12 3.2 1.4 9
+light 9 8.5 3.2 0.9 8
+# the third-person body is not drawn in a scene-only (environment inspection) frame
+hud on
+size 480 270
+frames 160

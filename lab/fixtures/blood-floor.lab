@@ -1,0 +1,9 @@
+# Bare floor in the regression room, lit from above: one mark per fluid in a
+# row 2.2 m ahead of the camera (blood). Tubes: blood.
+world room
+camera 12 8 -999 90 -60
+light 12 10.5 3.0 3.0 9
+light 10 9 3.0 1.5 7
+light 14 9 3.0 1.5 7
+size 480 270
+frames 30

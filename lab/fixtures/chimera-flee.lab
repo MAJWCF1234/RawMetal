@@ -1,0 +1,11 @@
+# Starter-map bug 2: a Chimera hunter in the open room, hurt past its threshold
+# 6 m in front of the player; it runs, and may be gone only out of his sight.
+# Tubes: chimera-shot.
+world room
+camera 3 12 -999 0 -4
+light 8 12 3.2 1.4 10
+light 16 12 3.2 1.4 10
+chimera-at 9 12
+size 480 270
+frames 600
+step 0.0333

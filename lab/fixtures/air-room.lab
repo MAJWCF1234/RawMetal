@@ -1,0 +1,11 @@
+# The plain room the particles test films, seen from its west end: a steam leak,
+# a jet, a smoke column and a fire (authored by the particles feature at air-at).
+# Tubes: particles (+ probes, doors).
+world room
+camera 3.2 12 -999 0 4
+light 9 12 3.2 1.4 9
+light 16 9 3.2 1.1 8
+air room
+air-at 8 12
+size 480 270
+frames 120

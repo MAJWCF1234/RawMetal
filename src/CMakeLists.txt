@@ -305,4 +305,6 @@ if(MSVC)
 else()
   target_compile_options(RawMetal PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+# The feature lab (src/lab/Lab.cmake): RawMetalLab, never part of ALL; see lab/README.md.
+include("${CMAKE_CURRENT_SOURCE_DIR}/lab/Lab.cmake" OPTIONAL)
 

@@ -1,0 +1,11 @@
+# Chapter 2, map 86: a grenade thrown 5 m ahead lies a second and goes off.
+# Tubes: particles.
+world campaign
+map 86
+camera 12 7 -999 90 -8
+open-doors
+scenery-only
+air none
+grenade 5
+size 480 270
+frames 120

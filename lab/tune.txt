@@ -1,0 +1,8 @@
+# Live knobs for the feature lab (retro::tune, src/core/Tune.h). One "name value" a line;
+# a running lab re-reads this file within a quarter second of an edit. Examples the seeded
+# tubes read (uncomment to change them):
+# ragdoll.edge 0.45        # height of the step beside the man in feed-room (0: no step)
+# blood.spread 0.75        # metres between the fluid marks in blood-floor
+# doors.strength 120       # the door's strength in door-hunt
+# claire.orbit 2.6         # turnaround camera distance (after the ClaireOutside merge)
+# particles.steam 0.7      # steam leak strength in air-room (after the Particles merge)

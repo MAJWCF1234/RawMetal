@@ -64,5 +64,8 @@ inline std::vector<unsigned char> loadResourceFromModule(HMODULE module,int id,i
 
  return decoded;
 }
-inline std::vector<unsigned char> loadResource(int id){return loadResourceFromModule(GetModuleHandleW(nullptr),id);}
+// The feature lab (src/lab/LabAssets.cpp) sets this to read the loose source files assets.rc names
+// instead of packed resources. Null in the game: every load goes to the embedded pack as before.
+inline std::vector<unsigned char>(*g_looseResourceLoader)(int id)=nullptr;
+inline std::vector<unsigned char> loadResource(int id){if(g_looseResourceLoader)return g_looseResourceLoader(id);return loadResourceFromModule(GetModuleHandleW(nullptr),id);}
 }
