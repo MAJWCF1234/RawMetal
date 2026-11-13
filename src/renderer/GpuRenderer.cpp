@@ -695,11 +695,12 @@ struct GpuRenderer::Impl {
  static void writeLook(float* tail){
   // LookA: the screen reflections' strength (0 for an A/B), surface maps on (1) or off (0, an A/B), the mean albedo that turns the room's
   // ambient into what a lobe sees where no probe covers it, a shift of the probes' mip by roughness;
-  // LookB: the screen march's roughest finish (only mirrors: water, chrome, glass), the lamps' highlight gain, the fill's saturation, spare; LookC: the bounce's
+  // LookB: the screen march's roughest finish (only mirrors: water, chrome, glass), the lamps' highlight gain,
+  // (LookB.w: emissive gain in probe captures) the fill's saturation, spare; LookC: the bounce's
   // ceiling, a debug switch (1: probe parallax off, 2: no screen march), a crystal's glow, the
   // image-based specular's strength (1; 0 for an A/B).
   static const float look[12]={lookTune("reflect",1.f),lookTune("surfaceMaps",1.f),lookTune("roomAlbedo",.3f),lookTune("probeLodShift",0.f),
-   lookTune("ssrRough",.16f),lookTune("lampSpec",1.6f),lookTune("fillSat",.85f),0.f,
+   lookTune("ssrRough",.16f),lookTune("lampSpec",1.6f),lookTune("fillSat",.85f),lookTune("probeEmissive",6.f),
    lookFillCeiling(),lookTune("probeDebug",0.f),lookTune("crystalGlow",2.f),lookTune("ibl",1.f)};
   std::memcpy(tail,look,sizeof(look));if(!lookReflections())tail[0]=0.f;}
  void writeProbeHeader(void* mapped){

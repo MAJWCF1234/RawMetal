@@ -36,6 +36,8 @@ layout(location=6) in vec3 inWorldPos;
 vec3 worldPos;
 layout(location=7) in float parallaxScale;
 layout(location=8) in vec4 impostor;
+// The triangle's reflection probe (scene.vert), -1 none.
+layout(location=9) flat in int vertexProbe;
 layout(location=0) out vec4 outColor;
 // Material target for the post pass: roughness, wetness, direct-light share.
 layout(location=1) out vec4 outMaterial;
@@ -247,6 +249,17 @@ vec3 specularGGX(vec3 N,vec3 V,vec3 L,float a2,vec3 F0){
  float gv=NoL*sqrt(NoV*NoV*(1.0-a2)+a2),gl=NoV*sqrt(NoL*NoL*(1.0-a2)+a2);
  vec3 F=F0+(1.0-F0)*pow(1.0-VoH,5.0);
  return F*(D*0.5/max(gv+gl,1e-5)*NoL);
+}
+// A lamp is a glowing panel, not a point (Karis 2013, sphere lights): the lobe takes the representative
+// point of a sphere of `radius` round the lamp nearest the mirror ray, widened by the sphere's size
+// and normalized so its energy holds. A satin floor shows a soft glowing streak under each lamp
+// instead of a pinprick. (The reflection probes cannot: the lamp fittings are drawn each frame, not in
+// the static scene a probe captures.)
+vec3 specularSphere(vec3 N,vec3 V,vec3 toLamp,float radius,float a2,vec3 F0){
+ vec3 R=reflect(-V,N);vec3 toRay=dot(toLamp,R)*R-toLamp;
+ vec3 L=normalize(toLamp+toRay*clamp(radius/max(length(toRay),1e-4),0.0,1.0));
+ float a=sqrt(a2),wide=clamp(a+radius/(2.0*max(length(toLamp),0.05)),0.0,1.0);
+ return specularGGX(N,V,L,a2,F0)*(a*a)/(wide*wide);
 }
 // The split-sum table at (NoV, roughness): F0 * x + y is the lobe's directional albedo.
 vec2 envBRDF(float NoV,float r){const float n=float(textureSize(envBrdfMap,0).x);return texture(envBrdfMap,(vec2(clamp(NoV,0.0,1.0),clamp(r,0.0,1.0))*(n-1.0)+0.5)/n).rg;}
@@ -621,7 +634,7 @@ void main(){
     // Soft terminator: normal maps never cut a lit face to black.
     vec3 tone=lampTone(params);
     lampLight+=tone*falloff*shadow*(0.04+0.96*max(dot(N,L),0.0))*smoothstep(0.0,0.12,geometric);
-    lampSpecularRGB+=tone*falloff*shadow*specularGGX(N,V,L,specAlpha2,F0)*smoothstep(0.0,0.12,geometric);
+    lampSpecularRGB+=tone*falloff*shadow*specularSphere(N,V,toLamp,0.3,specAlpha2,F0)*smoothstep(0.0,0.12,geometric);
    }
   }
   if(view.effects.x>0.5){
@@ -726,7 +739,7 @@ void main(){
   // covers a point the lobe sees the room's ambient times a room's mean albedo (LookA.z): the ambient
   // is light arriving, what a lobe sees is light leaving the room's surfaces.
   // (A probe's first capture reads none; its second, CaptureBounce, reads the first round.)
-  {float sky=0.0;vec4 refl=(view.effects.z>-1.0e5||view.effects.z<-1.5e6)&&LookC.w>0.0?probeReflection(worldPos,R,iblRoughness,sky):vec4(0.0);
+  {float sky=0.0;vec4 refl=(view.effects.z>-1.0e5||view.effects.z<-1.5e6)&&LookC.w>0.0&&vertexProbe>=0?probeSample(vertexProbe,worldPos,R,probeLod(iblRoughness),sky):vec4(0.0);
    vec3 fill=ambientEnv*LookA.z;
    env=mix(fill,mix(refl.rgb,fill,sky),refl.a);}
   specIBL=env*weight*LookC.w;
@@ -792,6 +805,10 @@ void main(){
    vec2 cell=floor(sampleUV*vec2(textureSize(colorMap,0))/6.0);float glint=fract(sin(dot(cell,vec2(12.9898,78.233))+floor(dot(V,vec3(7.1,5.3,3.7))*3.0))*43758.5453);
    result+=vec3(0.75,0.95,1.0)*smoothstep(0.985,1.0,glint)*(0.4+l)*NoV;
   }
+  // A probe sees a lamp's panel at its real intensity, many times the ceiling round it (the frame's
+  // tone curve clips it to white anyway): its reflection in a satin floor stays a glowing streak after
+  // the roughness mip (LookB.w; captures only).
+  if(view.effects.z<=-1.0e5&&!crystal)glow*=LookB.w;
   result+=glow;
  }
 

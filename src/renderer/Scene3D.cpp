@@ -1299,7 +1299,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      // Maps 0-2 lay their area floor as 2 m tiles; grating and raised plate stay functional.
      if(floorFinish)finishQuad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},*floorFinish->floor,.95f,{floorFinish->floorRepeat,floorFinish->floorRepeat});
      else if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
-     else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.metalFloor(x,y)?.8f:.95f);
+     else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concreteFloor),w.metalFloor(x,y)?.8f:.95f);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
      // Risers between floor heights: steel plate, or the floor's own finish.
      auto riser=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(floorFinish)finishQuad(a,b,c,d,*floorFinish->floor,.9f,{floorFinish->floorRepeat,floorFinish->floorRepeat});else quad(a,b,c,d,m_metal,.9f);};

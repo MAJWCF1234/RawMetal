@@ -156,7 +156,7 @@ bool SoftwareRenderer::enableHardware(void* window){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
-  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_murkWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_nineTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})m_gpu->prepare(*texture);
+  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_murkWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_nineTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_concreteFloor,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})m_gpu->prepare(*texture);
   for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_cursedTexture,&m_cursedGlow,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel,&m_panelSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
   for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
   // Worker/Witness materials are large too. Deferring their mip construction
@@ -549,6 +549,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // glass...) with its physical range of roughness and its metalness, and a surface map derived from its
  // own albedo (grime and pits rougher, worn edges smoother, rust and paint chips their own material),
  // so a highlight breaks up across a surface the way it does on a real one instead of one even smear.
+ m_concreteFloor=m_concrete;
  {std::vector<MaterialJob> jobs;auto apply=[&](Texture& t,Material m,const char* name){jobs.push_back({&t,int(m),name});};
   for(auto& [name,t]:m_facilityTextures){if(t.additive)continue;
    apply(t,t.liquid?Material::Water:t.crystal?Material::Crystal:t.transparent&&name.find("glass")!=std::string::npos?Material::Glass:classifyMaterial(name),name.c_str());}
@@ -565,7 +566,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
    {&m_wall,M::Plaster},{&m_floor,M::SealedConcrete},{&m_metal,M::BareSteel},{&m_serviceFloor,M::SealedConcrete},{&m_serviceCeiling,M::Plaster},
    {&m_pressureWall,M::Concrete},{&m_pressureFloor,M::BareSteel},{&m_pressureMetal,M::BareSteel},{&m_bulkhead,M::PaintedMetal},
    {&m_pumpTexture,M::PaintedMetal},{&m_compressorTexture,M::PaintedMetal},{&m_pipeTexture,M::PaintedMetal},{&m_gateTexture,M::PaintedMetal},
-   {&m_barrelTexture,M::PaintedMetal},{&m_crateTexture,M::BareWood},{&m_concrete,M::Concrete},{&m_framePaint,M::PaintedMetal},
+   {&m_barrelTexture,M::PaintedMetal},{&m_crateTexture,M::BareWood},{&m_concrete,M::Concrete},{&m_concreteFloor,M::SealedConcrete},{&m_framePaint,M::PaintedMetal},
    {&m_yellowSteel,M::PaintedMetal},{&m_redSteel,M::PaintedMetal},{&m_paleSteel,M::PaintedMetal},{&m_panelSteel,M::PaintedMetal},
    {&m_ironTexture,M::BareSteel},{&m_darkMetalTexture,M::BareSteel},{&m_rubberTexture,M::Rubber},{&m_leatherTexture,M::Leather},
    {&m_officeTile,M::Vinyl},{&m_officeWall,M::Plaster},{&m_dropCeiling,M::Plaster},{&m_securityCarpet,M::Fabric},{&m_officeCarpet,M::Fabric},
