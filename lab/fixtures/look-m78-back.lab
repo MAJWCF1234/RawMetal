@@ -1,0 +1,11 @@
+# Look: campaign map 78, looking back at its spawn. Tubes: look (reflections, brightness and finish against v1.4.1).
+# look-v141 / look-v142: mean luma, band, p90 of that release's engine on this view, drawn in the lab (v1.4.1: the lab commit on the v1.4.1 engine).
+world campaign
+map 78
+camera 12.00 11.20 -12.00 270.0 -10
+open-doors
+scenery-only
+size 960 540
+frames 1
+look-v141 43.44 0.661 54.52
+look-v142 45.02 1.438 59.73

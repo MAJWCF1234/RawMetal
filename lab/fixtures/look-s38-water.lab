@@ -1,0 +1,11 @@
+# Look: the light room's two pools close up at a low angle (the user's water case). Tubes: look (reflections, brightness and finish against v1.4.1).
+# look-v141 / look-v142: mean luma, band, p90 of that release's engine on this view, drawn in the lab (v1.4.1: the lab commit on the v1.4.1 engine).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 4.4 14.6 -0.88 90 -16
+open-doors
+scenery-only
+size 960 540
+frames 1
+look-v141 58.07 1.410 89.48
+look-v142 81.10 2.143 125.22

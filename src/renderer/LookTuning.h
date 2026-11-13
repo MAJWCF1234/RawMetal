@@ -14,4 +14,10 @@ inline float lookTune(const char* name,float fallback){
     if(eq!=std::string::npos)out[pair.substr(0,eq)]=float(std::atof(pair.c_str()+eq+1));at=end+1;}}
   return out;}();
  const auto found=values.find(name);return found==values.end()?fallback:found->second;}
+// The lab's A/B switch for reflections (screen march and probes): off, post.frag draws none, so a
+// tube can measure what they add. Play never turns it off.
+inline bool& lookReflections(){static bool on=true;return on;}
+// The probes' fill: the gain from a probe's stored value to the light scene.frag adds, and the soft
+// ceiling both renderers put on the bounce (LightProbes.h probeShoulder; scene.frag LookC.x, LookC.y).
+inline float lookFillCeiling(){static const float v=lookTune("fillCeiling",.62f);return v;}
 }
