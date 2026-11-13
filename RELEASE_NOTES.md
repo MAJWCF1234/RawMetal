@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.5 - What things are made of (2026-11-13)
+
+A patch. Glass, then chalk; now the things down here look like what they are.
+
+- **Materials.** Every surface now answers light the way its stuff does. Painted steel has a soft sheen and shows bare metal where it has been knocked; bare steel and machinery are plainly metal, bright where a lamp catches them and holding a blurred picture of the room; rust, concrete, cloth and raw wood stay dull; sealed floors and vinyl have a satin finish that carries the ceiling lamps down a corridor in soft smears; chrome, glass and water are sharp. Nothing is one even gloss any more: wear, grime, stains and grout break every highlight up, worked out from each texture itself.
+- **Wet only where it is wet.** A whole floor used to shine as if it had just been mopped. Now it is wet around standing water, under drips, leaks and sprays, at drains and in the low spots, and outdoors only where the rain reaches; everywhere else is dry. Custom maps can paint wet patches with a WET record.
+- **The lamps in the floor.** The ceiling lamps are now part of what the room reflects, so a polished corridor shows where its lights hang.
+- **How the dead fall.** A man who is shot now goes over: his joints stop where joints stop, his limbs no longer pass through him, he does not skate across the floor once he is down, and he settles in two or three seconds where he fell, over a table edge, down a stair, against a wall.
+- **Raw Metal Filmmaker.** The Campaign Builder's film cameras grow into a small film studio: a list of shots, a timeline for each, keys for the camera (where it is, where it looks, how wide), for people and creatures (where they stand, which way they face, what they are doing) and for the map (doors, lights, states), a preview in the 3D view, and a render of every shot to frames and, with ffmpeg installed, to video.
+
+Verified with the full test suite (all 66 checks, gore, carcass, campaign-map and repeated-frame rendering) and the audio test on the release build, the feature lab's material, wetness and ragdoll tubes (energy-conserving shading, every texture in its material's range, a dry map dry, ten falls at rest without sliding and within their joints), and the Campaign Builder's self-tests, editing test (a shot made, keyed, saved, reloaded and filmed) and map round-trips.
+
+For anyone building it: `python tools/release/ship.py VERSION` now builds, tests, packages and publishes a release in one command (`--offline` stops before publishing), and `python tools/release/install_map.py MAP.rmc` installs a custom map for the game and the Campaign Builder and checks it loads (docs/Systems/shipping.md).
+
+---
+
 ## v1.4.4 - Quiet now (2026-11-12)
 
 A patch. The dead had too much to say, and came apart the wrong way.

@@ -393,12 +393,17 @@ echo   SHIP RAWMETAL
 echo ============================================================
 echo.
 
-if not exist "%ROOT%\ShipRawMetal.cmd" (
-    echo [ERROR] ShipRawMetal.cmd is missing.
+rem One command for the whole release (tools/release/ship.py; see docs/Systems/shipping.md).
+rem Write the new "## vX.Y.Z - Title (date)" section at the top of RELEASE_NOTES.md first.
+set "SHIPVER=%~2"
+if "%SHIPVER%"=="" set /p "SHIPVER=Version to ship (e.g. 1.4.6): "
+if "%SHIPVER%"=="" (
+    echo [ERROR] No version given.
     exit /b 1
 )
-
-call "%ROOT%\ShipRawMetal.cmd"
+set "SHIPMODE="
+if /I "%~3"=="offline" set "SHIPMODE=--offline"
+python "%ROOT%\tools\release\ship.py" %SHIPVER% %SHIPMODE%
 exit /b %ERRORLEVEL%
 
 :clean_core

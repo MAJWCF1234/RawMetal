@@ -182,6 +182,8 @@ private:
     // scene.frag). NoBounceAir: the shader takes the point in front of the face.
     static constexpr float NoBounceAir=-1.e9f;
     std::array<float,3> m_triangleAir{NoBounceAir,NoBounceAir,NoBounceAir};
+    // The CPU rasteriser's wetness for the next triangle (Wetness.h, the map's mask at its corners; 0 dry).
+    float m_triangleWet=0;
     std::uint64_t m_staticGeometryBuilds=0,m_propGeometryBuilds=0,m_breakableGeometryBuilds=0;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
@@ -206,6 +208,10 @@ private:
         // its own colour (post.frag). crystal: a resonance crystal's glowing body, shaded as lit
         // mineral with the glow in its cores (scene.frag).
         float polish=0,metalness=0; bool crystal=false;
+        // The physically based material (Materials.h): its class and the surface map derived from the
+        // albedo, one 0xAABBGGRR texel per albedo texel (R roughness, G metalness, B cavity). Both
+        // renderers shade from it; empty: the finish above (glossStrength, metalness) stands in.
+        std::uint8_t material=0; std::vector<std::uint32_t> surfaceMap;
         // soft: a particle atlas (Particles.cpp). Its cards take their opacity, the depth over which they
         // fade into what lies behind them and their flipbook blend from m_card, not from the texels alone.
         bool soft=false; };
@@ -220,6 +226,12 @@ private:
     std::unordered_map<std::uint64_t,Texture> m_lampFaces;
     const Texture& lampFace(const Texture& base,Point3 tone);
     static void deriveSurfaceNormal(Texture& texture,float strength);
+    // Give a texture its material class: a micro-normal from its luminance if it has no normal map,
+    // its surface map, and its albedo brought to the class's physical range (Materials.h).
+    static void applyMaterial(Texture& texture,int material,const char* name);
+    // The same for many textures at once, on every core (each texture is independent).
+    struct MaterialJob {Texture* texture;int material;std::string name;};
+    static void applyMaterials(std::vector<MaterialJob>& jobs);
     static Point3 sampleNormal(const Texture& texture,float u,float v,float lod);
     bool testNormalMapping();
     Texture m_vrWristTexture;
@@ -282,6 +294,8 @@ private:
     // Door header plates of authored maps, one per HUD zone name (lazy).
     std::array<Texture,3> m_serviceAreaSigns;
     Texture m_wall, m_floor, m_metal, m_serviceFloor, m_serviceCeiling, m_arms,m_officeCarpet,m_framePaint;
+    // The default concrete as a floor (sealed: satin), apart from m_concrete on walls and blocks (raw).
+    Texture m_concreteFloor;
     Texture m_yellowSteel,m_redSteel,m_paleSteel,m_panelSteel;
     std::array<Mesh,6> m_clutterMeshes{Mesh{151},Mesh{153},Mesh{155},Mesh{157},Mesh{159},Mesh{161}};
     std::array<Texture,6> m_clutterTextures;
