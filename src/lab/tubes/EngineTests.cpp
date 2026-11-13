@@ -15,6 +15,12 @@ const bool registered=[]{
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);
  engine("chimera-hunt","--each-test=chimera-hunt: the bite, the meal, the return",&Game::testChimeraHunt);
+ // The voices: what the game raises, what the mixer plays, the bank and saves (tubes/DeathVoices.cpp leans on them).
+ engine("audio","--audio-test: the bank decodes, masks, speech caps, the mix",&AudioEngine::test);
+ engine("audio-events","--each-test=audio-events",&Game::testAudioEvents);
+ engine("npc-voices","--each-test=npc-voices: who speaks, when, once",&Game::testNpcVoices);
+ engine("dialogue","--each-test=dialogue",&Game::testDialogue);
+ engine("saves","--each-test=saves",&Game::testSaves);
  #ifdef RAWMETAL_LAB_HAS_PARTICLES
  engine("particles","--each-test=particles: determinism, budgets, walls, records, dressed maps",&testParticles);
  #endif

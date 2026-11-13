@@ -1283,6 +1283,10 @@ private:
     void updateNpcVoices(float dt);
     bool npcVoice(size_t actor,NpcVoiceCue cue);
     bool npcHasVoice(size_t actor)const;
+    // A scripted person shot: a gasp, or the death cry of his (her) voice once he is killed.
+    void scriptedPersonCry(const ActorTrack& track,size_t index,Vec2 at,float feet,bool killed);
+    // A cue in a person's own voice (a scream, a moan, a breath) whose body at the cue is dead or gone: it stays silent.
+    bool vocalCueSilenced(int level,Vec2 at)const;
     StateId friendlyKey(size_t actor,std::string_view field)const;
     World& friendlyWorld(int level){return level==m_level?m_world:m_chunks[level].world;}
     int friendlyChunkAt(Vec2 global,int preferred)const;

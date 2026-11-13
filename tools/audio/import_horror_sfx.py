@@ -11,7 +11,8 @@ then points assets.rc at them, in BANK's order, from FIRST_RESOURCE. The order
 is the order of the Amb*/One*/Sting*/Pa* block in src/audio/Sound.h and of
 src/audio/SoundBank.h: keep the three in step.
 
-Usage: python tools/audio/import_horror_sfx.py ["O:/retro official/Audio/Horror SFX Complete (ogg files).zip"]
+Usage: python tools/audio/import_horror_sfx.py ["O:/retro official/Audio/Horror SFX Complete (ogg files).zip"] [--vox]
+(--vox makes only the deaths-and-pain block, VOX, from FIRST_VOX_RESOURCE.)
 """
 import array
 import re
@@ -78,6 +79,51 @@ BANK = [
     ('pa_backup_generators',  False, ROBOT+'Backup Generators Online.ogg', 0, 6, .75),
     ('pa_hostile_detected',   False, ROBOT+'Warning Hostile Creature Detected.ogg', 0, 7, .75),
 ]
+
+# Deaths and pain the game picks from (Sound.h's Vox block, resources FIRST_VOX_RESOURCE on, in
+# this order): the transformed workers' death groans (the Mutant, Snatcher and Transformed die as
+# men, not with the Brute's roar) and two sharp gasps for a scripted person hit. Voices are small:
+# plain MP3, mono 22050 Hz, LAME VBR q6 (the NPC voice bank's codec), written vox_<name>.mp3.
+# (name, archive path under the pack folder, start s, length s, level)
+FIRST_VOX_RESOURCE = 2600
+VOX = [
+    ('transformed_death_1', 'Monsters & Ghosts/Zombie_7.ogg', 0, 2.2, .85),
+    ('transformed_death_2', 'Monsters & Ghosts/Zombie_9.ogg', 0, 3.2, .85),
+    ('transformed_death_3', 'Monsters & Ghosts/Zombie_10.ogg', 0, 2.4, .85),
+    ('transformed_death_4', 'Monsters & Ghosts/Zombie_5.ogg', 0, 1.6, .85),
+    ('gasp_1',              'Character/Gasp.ogg', 0, .9, .7),
+    ('gasp_2',              'Character/Gasp_2.ogg', 0, .8, .7),
+]
+
+
+def import_vox(archive, members):
+    lines = []
+    for index, (name, member, start, length, peak) in enumerate(VOX):
+        found = members.get((PACK+member).lower())
+        if not found:
+            raise SystemExit(f'not in the pack: {member}')
+        source = WORK/f'{name}.ogg'
+        source.write_bytes(archive.read(found))
+        samples = fade(level(trim_silence(decode(source, start, length)), peak), 64, 2205)
+        master = WORK/f'vox_{name}.wav'
+        with wave.open(str(master), 'wb') as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(44100)
+            w.writeframes(samples.tobytes())
+        out = OUT/f'vox_{name}.mp3'
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(master), '-ac', '1', '-ar', '22050', '-c:a', 'libmp3lame', '-q:a', '6', str(out)], check=True)
+        print(f'{FIRST_VOX_RESOURCE+index} {out.name}: {len(samples)/44100:.2f} s, {out.stat().st_size} bytes')
+        lines.append(f'{FIRST_VOX_RESOURCE+index} RCDATA "assets/library/audio/{out.name}"')
+        source.unlink()
+        master.unlink()
+    text = RC.read_text()
+    text = re.sub(r'^\d+ RCDATA "assets/library/audio/vox_[^"]+"\n', '', text, flags=re.M)
+    if not text.endswith('\n'):
+        text += '\n'
+    with open(RC, 'w', newline='') as file:
+        file.write(text+'\n'.join(lines)+'\n')
+    print(f'{len(lines)} vox sounds, resources {FIRST_VOX_RESOURCE}-{FIRST_VOX_RESOURCE+len(lines)-1}')
 
 
 # Beds that grated in play (the user on Chapter 2, 2026-11-12): white hiss at full width is a
@@ -149,12 +195,18 @@ def main():
     only = set(args[args.index('--only')+1:]) if '--only' in args else None
     if only is not None:
         args = args[:args.index('--only')]
+    # --vox: make only the deaths-and-pain block (VOX), leaving the bank as it is.
+    vox = '--vox' in args
+    args = [a for a in args if a != '--vox']
     pack = Path(args[0]) if args else Path('O:/retro official/Audio/Horror SFX Complete (ogg files).zip')
     WORK.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     lines = []
     with zipfile.ZipFile(pack) as archive:
         members = {name.lower(): name for name in archive.namelist()}
+        if vox:
+            import_vox(archive, members)
+            return
         for index, (name, loop, member, start, length, peak) in enumerate(BANK):
             if only is not None and name not in only:
                 continue

@@ -227,7 +227,15 @@ void Game::sound(Sound sound,float gain,float pitch){
  if(gunshotSound(sound)&&m_vrAimValid)origin=m_vrAimPosition;
  m_sounds.push_back({sound,{origin.x,origin.y},gain,pitch,false,17,origin.z});
 }
-void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){const auto& traits=creatureTraits(enemy.kind);m_sounds.push_back({Sound(int(Sound::SpiderCall)+traits.voice*3+action),enemy.pos,gain,pitch*traits.voicePitch,true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
+void Game::enemySound(const Enemy& enemy,int action,float gain,float pitch){const auto& traits=creatureTraits(enemy.kind);
+ // The mutated men, the Snatcher and the transformed workers die as men, not with the Brute's
+ // roar: one of four death groans, never the last one heard, a shade apart per body.
+ if(action==2&&(enemy.kind==CreatureKind::Mutant||enemy.kind==CreatureKind::Snatcher||enemy.kind==CreatureKind::Transformed)){
+  const StateId last=stateId("creature_death_last"),deaths=stateId("creature_deaths");const unsigned seed=unsigned(std::lround(std::fabs(enemy.home.x*7+enemy.home.y*13)));
+  int pick=int((seed+unsigned(state(deaths)))%4u);if(pick+1==state(last))pick=(pick+1)%4;
+  setState(last,pick+1);setState(deaths,state(deaths)+1);
+  m_sounds.push_back({Sound(int(Sound::VoxTransformedDeath1)+pick),enemy.pos,gain,pitch*(.94f+.04f*float(seed%4u)),true,19,(enemy.bodyBottom()+enemy.bodyTop())*.5f});return;}
+ m_sounds.push_back({Sound(int(Sound::SpiderCall)+traits.voice*3+action),enemy.pos,gain,pitch*traits.voicePitch,true,17,(enemy.bodyBottom()+enemy.bodyTop())*.5f});}
 
 int Game::hostilesRemaining(int level)const{
  perf::count(perf::HostileCensus);
@@ -810,7 +818,10 @@ bool Game::testAudioEvents(){
    game.shoot();
   }
   if(game.m_enemies[0].alive)return false;
-  if(!contains(Sound(int(Sound::SpiderDeath)+voiceKind*3)))return false;
+  // The mutated men, the Snatcher and the transformed die as men: one of the Vox groans, never the Brute's roar.
+  const bool man=kind==Enemy::Kind::Mutant||kind==Enemy::Kind::Snatcher||kind==Enemy::Kind::Transformed;
+  const bool groan=std::any_of(game.m_sounds.begin(),game.m_sounds.end(),[](auto&e){return e.sound>=Sound::VoxTransformedDeath1&&e.sound<=Sound::VoxTransformedDeath4;});
+  if(man?(!groan||contains(Sound::BruteDeath)):!contains(Sound(int(Sound::SpiderDeath)+voiceKind*3)))return false;
  }
  game=validationScene(Enemy::Kind::Huntsman,3);game.m_player.pos={1.21f,4.5f};game.m_player.angle=kPi;
  for(int i=0;i<90;++i){InputState input{};input.forward=true;game.update(input,1.f/60.f);for(auto&e:game.m_sounds)if(footstepSound(e.sound))return false;}

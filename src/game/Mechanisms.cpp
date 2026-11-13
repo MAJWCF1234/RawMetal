@@ -191,9 +191,14 @@ void Game::updateMechanisms(float dt){
   for(const auto& cue:world.sequenceCues()){if(cue.timerState!=sequence.timerState)continue;int at=std::max(cue.timeMs,1);
    if(!((age<=at&&(advanced>at||(ended&&at==sequence.durationMs)))||(wrapped&&next>at)))continue;
    auto position=chunkOffset(level)+cue.position-chunkOffset(m_level);
+   int voice=-1;if(!cue.voice.empty())for(size_t clip=0;clip<NpcVoiceClips.size();++clip)if(cue.voice==NpcVoiceClips[clip].line){voice=int(clip);break;}
+   // A scream, a moan or a line in the room from a body that is dead (or a creature gone from
+   // its bed) is not made again: the loop that breathed behind the curtain stops with him.
+   // Radio, PA and the Investigator's handset keep talking.
+   const int role=voice>=0?NpcVoiceClips[size_t(voice)].role:0;
+   if((cue.sound==Sound::WorkerDying||cue.sound==Sound::Hurt||role==7||role==10||role==12||role==14||role==15)&&vocalCueSilenced(level,cue.position))continue;
    m_sounds.push_back({cue.sound,position,cue.gain,cue.pitch,true,35,cue.z});m_sounds.back().aiRadius=cue.aiRadius;
-   if(!cue.voice.empty())for(size_t clip=0;clip<NpcVoiceClips.size();++clip)if(cue.voice==NpcVoiceClips[clip].line){
-    m_sounds.push_back({Sound::WorkerDying,position,cue.gain,1,true,35,cue.z,int(clip),0,2});break;}
+   if(voice>=0)m_sounds.push_back({Sound::WorkerDying,position,cue.gain,1,true,35,cue.z,voice,0,2});
   }
  }
  for(size_t i=0;i<world.actorTracks().size();++i){const auto& track=world.actorTracks()[i];auto old=world.actorPose(i),pose=sampleActor(track,state(track.timerState));world.setActorPose(i,pose);
