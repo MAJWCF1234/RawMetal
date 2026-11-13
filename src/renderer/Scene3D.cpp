@@ -342,7 +342,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
   const int tx=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ty=std::min(texture.height-1,int((V-std::floor(V))*texture.height));
   const std::uint32_t m=texture.surfaceMap[size_t(ty*texture.width+tx)];
   const float rough=float(m&255u)/255.f,metal=float((m>>8)&255u)/255.f,cavity=float((m>>16)&255u)/255.f;
-  const auto ab=envBrdf(faceNoV,rough);const float dielectric=.04f*ab[0]+ab[1],e1=std::max(ab[0]+ab[1],.05f);
+  const auto ab=envBrdf(faceNoV,rough);const float dielectric=.04f*ab[0]+ab[1],e1=std::max(ab[0]+ab[1],.01f);
   const float lightLinear=std::pow(std::max(level,0.f),2.2f),diffuse=(1-metal)*(1-dielectric),seen=lightLinear*.3f*cavity;
   std::uint32_t out=0xff000000u;
   for(int shift=0;shift<24;shift+=8){const float albedo=linearByte[(texel>>shift)&255u];

@@ -1,0 +1,8 @@
+# Materials: campaign map 49, the tank and pipes (tubes: materials).
+world campaign
+map 49
+camera 10.00 11.20 -25.00 270.0 -10
+open-doors
+scenery-only
+size 960 540
+frames 1

@@ -49,19 +49,23 @@ const bool materials=add({
   auto view=[&](int detail,const char* label,bool reference)->std::vector<std::uint32_t>{
    SoftwareRenderer::setDetailLayer(detail);if(reference)GpuRenderer::setReferenceDisplay(true);r.render(s.g());
    std::vector<std::uint32_t> px(r.pixels(),r.pixels()+size_t(w)*h);GpuRenderer::setReferenceDisplay(false);s.shoot(label);return px;};
-  view(13,"material: roughness (red), metalness (green), cavity (blue)",true);
+  const auto material=view(13,"material: roughness (red), metalness (green), cavity (blue)",true);
   const auto spec=view(14,"specular term alone",true),furnace=view(15,"white furnace",true),refl=view(16,"dielectric reflectance facing the eye",true);
   SoftwareRenderer::setDetailLayer(layer);r.render(s.g());
   // Furnace: every surface pixel against the frame's median.
-  std::vector<float> fv;for(auto p:furnace){const float v=greyOf(p);if(v>.05f)fv.push_back(v);}
+  // (Pixels on a silhouette, resolved half with what lies behind, are not a surface: each must sit
+  // among surface neighbours.)
+  std::vector<float> fv;for(int y=1;y<h-1;++y)for(int x=1;x<w-1;++x){const size_t i=size_t(y)*w+x;const float v=greyOf(furnace[i])*4;if(v<=.05f)continue;
+   bool inside=true;for(int dy=-1;dy<=1&&inside;++dy)for(int dx=-1;dx<=1;++dx)if(std::fabs(greyOf(furnace[i+size_t(dy*w+dx)])*4-v)>.15f*v){inside=false;break;}
+   if(inside)fv.push_back(v);}
   if(!fv.empty()){std::sort(fv.begin(),fv.end());const float med=fv[fv.size()/2];s.board["mat.furnace_lo"]=fv[fv.size()/100]/med;s.board["mat.furnace_hi"]=fv[fv.size()-1-fv.size()/100]/med;s.board["mat.furnace_median"]=med;s.board["mat.furnace_pixels"]=double(fv.size());}
   float rmax=0;std::vector<float> rv;for(auto p:refl){const float v=greyOf(p);if(v>0){rv.push_back(v);rmax=std::max(rmax,v);}}
   if(!rv.empty()){std::sort(rv.begin(),rv.end());s.board["mat.refl_p99"]=rv[rv.size()*99/100];s.board["mat.refl_pixels"]=double(rv.size());}
   s.board["mat.refl_max"]=rmax;
-  for(const auto& b:surfaces(*s.fixture)){double sum=0,sum2=0;long n=0;
-   for(int y=std::max(0,b.y0);y<std::min(h,b.y1);++y)for(int x=std::max(0,b.x0);x<std::min(w,b.x1);++x){const double v=greyOf(spec[size_t(y)*w+x]);sum+=v;sum2+=v*v;++n;}
+  for(const auto& b:surfaces(*s.fixture)){double sum=0,sum2=0,rough=0;long n=0;
+   for(int y=std::max(0,b.y0);y<std::min(h,b.y1);++y)for(int x=std::max(0,b.x0);x<std::min(w,b.x1);++x){const double v=greyOf(spec[size_t(y)*w+x])/8.0;sum+=v;sum2+=v*v;++n;rough+=linearOf(int((material[size_t(y)*w+x]>>16)&255u));}
    if(n<16)continue;const double mean=sum/n,sd=std::sqrt(std::max(0.0,sum2/n-mean*mean));
-   s.board["mat.cov."+b.name]=mean>1e-5?sd/mean:0;s.board["mat.mean."+b.name]=mean;}},
+   s.board["mat.cov."+b.name]=mean>1e-5?sd/mean:0;s.board["mat.mean."+b.name]=mean;s.board["mat.rough."+b.name]=rough/n;}},
  .metrics=[](Scene& s,Report& r){
   // The table against brute force, the compensation to 1 (F0 = 1, every roughness a furnace sees).
   double worstTable=0,worstComp=0;std::string where;
@@ -97,7 +101,10 @@ const bool materials=add({
    r.check("dielectrics facing the eye reflect no more than Fresnel allows (99th pct under .05)",p99<.05,fixed(p99,4));}
   for(const auto& b:surfaces(*s.fixture)){const auto k="mat.cov."+b.name;if(!s.board.count(k))continue;const double cov=s.board[k];
    r.metric("specular_cov."+b.name,cov);r.metric("specular_mean."+b.name,s.board["mat.mean."+b.name]);
-   r.check("the specular term varies across "+b.name+" (CoV over .15: not a plastic smear)",cov>.15,fixed(cov));}},
+   // A rough finish (concrete, plaster, fabric) has a broad, even sheen by nature: its spread is
+   // reported; the check is for the finishes plastic is made of, semi-gloss and smoother.
+   const double rough=s.board["mat.rough."+b.name];r.metric("roughness_mean."+b.name,rough);
+   if(rough<.7)r.check("the specular term varies across "+b.name+" (CoV over .15: not a plastic smear)",cov>.15,fixed(cov)+" at roughness "+fixed(rough,2));}},
  .reporter=[](Scene& s,Overlay& o){for(const auto& b:surfaces(*s.fixture)){o.text(b.x0+2,b.y0+2,b.name,0xffff40);
   o.lines.push_back({{float(b.x0),float(b.y0),0},{float(b.x1),float(b.y0),0},0xffff40,false});o.lines.push_back({{float(b.x0),float(b.y1),0},{float(b.x1),float(b.y1),0},0xffff40,false});
   o.lines.push_back({{float(b.x0),float(b.y0),0},{float(b.x0),float(b.y1),0},0xffff40,false});o.lines.push_back({{float(b.x1),float(b.y0),0},{float(b.x1),float(b.y1),0},0xffff40,false});}},

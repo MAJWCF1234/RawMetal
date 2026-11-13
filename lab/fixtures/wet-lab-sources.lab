@@ -7,6 +7,9 @@ wet-at2 16 16
 wet-dry-at1 8.5 4.5
 wet-dry-at2 18.5 16
 wet-dry-at3 12 10
+wet-at3 19 5
+wet-at4 10 19
+wet-patches 2
 begin-campaign
 --- CUSTOM_CAMPAIGN_DATA_START ---
 CAMPAIGN|Wet lab|0
@@ -40,5 +43,7 @@ LIGHT|0|6|12|3.2|0|0|2.4|10|4200
 LIGHT|0|17|12|3.2|0|0|2.4|10|4200
 WATER|0|3|3|6|6|-0.2|0.02
 EMITTER|0|16|16|3.4|0|0|2|0.5|0.008|0|2|6|1
+WET|0|19|5|1|0.8|1
+WET|0|9|18|11|20|0.7|0
 --- CUSTOM_CAMPAIGN_DATA_END ---
 end-campaign

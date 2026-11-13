@@ -454,7 +454,14 @@ void main(){
  // The material: per texel from the surface map (Materials.h), else the finish's single value.
  vec4 surfaceTexel=surfaceMapped?textureGrad(reliefMap,sampleUV,uvDx,uvDy):vec4(0.5,0.0,0.0,1.0);
  float materialRoughness=surfaceMapped?max(surfaceTexel.g,0.02):clamp(1.0-fract(surface.z),0.18,1.0),wetness=0.0;
- float metalness=surfaceMapped?surfaceTexel.b:metal,cavity=surfaceMapped?surfaceTexel.a:1.0;
+ float metalness=surfaceMapped?surfaceTexel.b:metal,cavity=surfaceMapped?surfaceTexel.a:1.0,smudge=1.0;
+ // Grunge: two octaves of noise in world space (on the face's dominant plane) move every finish's
+ // roughness by up to a fifth either way, smudges and wear at room and hand scale, so even a flat
+ // paint or a pack's tiny palette texture never draws one even highlight.
+ if(surface.z<0.5&&surface.w<1.5&&!impostorQuad){vec3 an=abs(cross(dx,dy));vec2 gp=an.z>=max(an.x,an.y)?worldPos.xy:an.x>=an.y?worldPos.yz:worldPos.xz;
+  float g=detailNoise(gp*1.7)*0.65+detailNoise(gp*6.1+vec2(3.7,1.3))*0.35;materialRoughness=clamp(materialRoughness*(1.0+0.4*(g-0.5)),0.02,1.0);
+  // Smudges and dust dull the sheen in patches: the whole specular, lamps' and room's alike.
+  smudge=mix(0.55,1.0,smoothstep(0.25,0.75,detailNoise(gp*3.3+vec2(9.1,4.7))));}
  // Resonance crystal reads as mineral: the body's flat cyan pulled toward a deep cold grey-teal and
  // lit like polished stone; the glow is added below, concentrated in the cores.
  if(crystal){float l=dot(color.rgb,vec3(0.2126,0.7152,0.0722));color.rgb=mix(vec3(l),color.rgb,0.45)*vec3(0.5,0.7,0.8);}
@@ -708,9 +715,9 @@ void main(){
   // antialiasing width added.
   float a2=clamp(specAlpha2-pow(materialRoughness,4.0)+pow(dryRoughness,4.0),1e-6,1.0);iblRoughness=sqrt(sqrt(a2));
   float NoV=max(dot(N,V),1e-3);vec2 AB=envBRDF(NoV,iblRoughness);
-  float E1=max(AB.x+AB.y,0.05);vec3 comp=1.0+F0*(1.0/E1-1.0);
+  float E1=max(AB.x+AB.y,0.01);vec3 comp=1.0+F0*(1.0/E1-1.0);
   vec3 R=reflect(-V,N);float horizon=clamp(1.0+dot(R,Ng),0.0,1.0);horizon*=horizon;
-  vec3 weight=(F0*AB.x+AB.y)*comp*specularOcclusion(NoV,cavity,iblRoughness)*horizon;
+  vec3 weight=(F0*AB.x+AB.y)*comp*specularOcclusion(NoV,cavity,iblRoughness)*horizon*smudge;
   // What the lobe sees. A probe's capture never reads the atlas it is filling (no feedback, no order).
   vec3 env;
   // The room's reflection probe, parallax-corrected to its box, at the lobe's mip. Where no probe
@@ -722,7 +729,7 @@ void main(){
   specIBL=env*weight*LookC.w;
   diffuseShare=(1.0-metalness)*(1.0-(0.04*AB.x+AB.y));
   // The lamps' lobes lose the same multiple scattering.
-  specDirect*=comp;
+  specDirect*=comp*smudge;
   debugSpecular=dot(specDirect+specIBL,vec3(0.2126,0.7152,0.0722));
   // White furnace: a white material in a uniform white room, no lamps (metal F0 = 1).
   {vec3 Fw=mix(vec3(0.04),vec3(1.0),metalness);debugFurnace=dot((1.0-metalness)*(1.0-(0.04*AB.x+AB.y))+(Fw*AB.x+AB.y)*(1.0+Fw*(1.0/E1-1.0)),vec3(0.2126,0.7152,0.0722));}
@@ -822,8 +829,8 @@ void main(){
  // Material views (post.frag shows them as they are): 13 roughness, metalness, cavity; 14 the specular
  // term alone; 15 the white furnace; 16 a dielectric's reflectance where it faces the eye.
  if(lampGrid.flags.y==13)result=shadedOpaque?vec3(iblRoughness,metalness,cavity):vec3(0.0);
- if(lampGrid.flags.y==14)result=vec3(debugSpecular);
- if(lampGrid.flags.y==15)result=vec3(debugFurnace);
+ if(lampGrid.flags.y==14)result=vec3(debugSpecular*8.0); // (x8: the lab reads it in 8 bits)
+ if(lampGrid.flags.y==15)result=vec3(debugFurnace*0.25); // (x.25: off the display curve's shoulder)
  if(lampGrid.flags.y==16)result=vec3(debugReflectance);
  // 17: the wetness as the floor and walls take it (red wet, blue puddle or streak).
  if(lampGrid.flags.y==17)result=vec3(wetDebug,0.0,wetness>wetDebug*0.4+0.01?wetness:0.0)+color.rgb*0.15;

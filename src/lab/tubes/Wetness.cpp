@@ -43,6 +43,7 @@ const bool wetness=add({
     r.check("wet at ("+fixed(x,1)+", "+fixed(y,1)+")",v>.5f,fixed(v));}
    if(point(f,"wet-dry-at"+std::to_string(i),x,y)){const float v=mask.floorWet(x,y,w.floorHeight(x,y));r.metric("dry_at"+std::to_string(i),v);
     r.check("dry at ("+fixed(x,1)+", "+fixed(y,1)+")",v<.05f,fixed(v));}}
+  if(const double want=f.number("wet-patches",-1);want>=0)r.check("the map's WET records load ("+fixed(want,0)+")",double(w.wetPatches().size())==want,std::to_string(w.wetPatches().size()));
   r.metric("rain",outdoorRain(w));const double drawn=s.board["wet.view_share"];r.metric("wet_in_view",drawn,"share");
   if(!f.value("wet-rain").empty()){const double rain=f.number("wet-rain",0);
    if(rain>0)r.check("in rain the open ground is drawn wet (over 15% of the frame)",drawn>.15,fixed(drawn*100,1)+"%");
