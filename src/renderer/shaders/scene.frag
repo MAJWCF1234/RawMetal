@@ -461,7 +461,7 @@ void main(){
  if(surface.z<0.5&&surface.w<1.5&&!impostorQuad){vec3 an=abs(cross(dx,dy));vec2 gp=an.z>=max(an.x,an.y)?worldPos.xy:an.x>=an.y?worldPos.yz:worldPos.xz;
   float g=detailNoise(gp*1.7)*0.65+detailNoise(gp*6.1+vec2(3.7,1.3))*0.35;materialRoughness=clamp(materialRoughness*(1.0+0.4*(g-0.5)),0.02,1.0);
   // Smudges and dust dull the sheen in patches: the whole specular, lamps' and room's alike.
-  smudge=mix(0.55,1.0,smoothstep(0.25,0.75,detailNoise(gp*3.3+vec2(9.1,4.7))));}
+  smudge=mix(0.8,1.0,smoothstep(0.25,0.75,detailNoise(gp*3.3+vec2(9.1,4.7))));}
  // Resonance crystal reads as mineral: the body's flat cyan pulled toward a deep cold grey-teal and
  // lit like polished stone; the glow is added below, concentrated in the cores.
  if(crystal){float l=dot(color.rgb,vec3(0.2126,0.7152,0.0722));color.rgb=mix(vec3(l),color.rgb,0.45)*vec3(0.5,0.7,0.8);}

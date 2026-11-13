@@ -328,8 +328,9 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
  m_triangleAir.fill(NoBounceAir);
  // The CPU's physically based material, a cheaper match of scene.frag's: per texel roughness, metalness
  // and cavity from the surface map; the split-sum table at the face's NoV; the diffuse takes what the
- // lobe does not reflect (1 - E), a metal none; the lobe sees the light falling here times a room's mean
- // albedo (scene.frag's fallback where no reflection probe covers a point). The rasteriser lights sRGB
+ // lobe does not reflect (1 - E), a metal none; the lobe sees the light falling here times half a room's
+ // mean albedo (scene.frag's fallback where no probe covers a point uses the ambient alone; the CPU's
+ // light here holds the lamps' direct light too, which a reflection does not see). The rasteriser lights sRGB
  // bytes by a factor; that is linear light times the factor's 2.2 power, so the lobe is added in linear
  // light and the sum encoded back: with no surface map the result is the old one exactly.
  static const std::array<float,256> linearByte=[]{std::array<float,256> t{};for(int i=0;i<256;++i)t[size_t(i)]=std::pow(i/255.f,2.2f);return t;}();
@@ -343,7 +344,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
   const std::uint32_t m=texture.surfaceMap[size_t(ty*texture.width+tx)];
   const float rough=float(m&255u)/255.f,metal=float((m>>8)&255u)/255.f,cavity=float((m>>16)&255u)/255.f;
   const auto ab=envBrdf(faceNoV,rough);const float dielectric=.04f*ab[0]+ab[1],e1=std::max(ab[0]+ab[1],.01f);
-  const float lightLinear=std::pow(std::max(level,0.f),2.2f),diffuse=(1-metal)*(1-dielectric),seen=lightLinear*.3f*cavity;
+  const float lightLinear=std::pow(std::max(level,0.f),2.2f),diffuse=(1-metal)*(1-dielectric),seen=lightLinear*.15f*cavity;
   std::uint32_t out=0xff000000u;
   for(int shift=0;shift<24;shift+=8){const float albedo=linearByte[(texel>>shift)&255u];
    const float f0=.04f+(albedo-.04f)*metal,lobe=(f0*ab[0]+ab[1])*(1+f0*(1/e1-1));

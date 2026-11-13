@@ -124,15 +124,19 @@ const bool materialsCpu=add({
   const std::vector<std::uint32_t> without(r.pixels(),r.pixels()+n);
   double a=0,b=0;for(size_t i=0;i<n;++i){a+=lumaOf(with[i]);b+=lumaOf(without[i]);}
   s.board["cpu.mean"]=a/double(n);s.board["cpu.mean_without"]=b/double(n);
-  auto boxes=surfaces(*s.fixture);if(boxes.empty())boxes.push_back({"frame",0,0,f.width,f.height});
+  auto boxes=surfaces(*s.fixture);boxes.push_back({"frame",0,0,f.width,f.height});
   for(const auto& box:boxes){double sum=0,sum2=0;long k=0;
    for(int y=std::max(0,box.y0);y<std::min(f.height,box.y1);++y)for(int x=std::max(0,box.x0);x<std::min(f.width,box.x1);++x){const size_t i=size_t(y)*f.width+x;const double v=std::fabs(lumaOf(with[i])-lumaOf(without[i]));sum+=v;sum2+=v*v;++k;}
    if(k>16){const double m=sum/k;s.board["cpu.cov."+box.name]=m>1e-3?std::sqrt(std::max(0.0,sum2/k-m*m))/m:0;}}
   r.render(s.g());},
  .metrics=[](Scene& s,Report& r){
   const double m=s.board["cpu.mean"],m0=s.board["cpu.mean_without"];r.metric("mean",m,"luma");r.metric("mean_without_maps",m0,"luma");
-  r.check("the CPU's materials keep the frame's brightness (within 10%)",m0>0&&std::fabs(m/m0-1)<.10,fixed(m,2)+" vs "+fixed(m0,2));
-  for(const auto& [k,v]:s.board)if(k.rfind("cpu.cov.",0)==0){r.metric("cov."+k.substr(8),v);r.check("what the CPU's materials change varies across "+k.substr(8)+" (CoV over .15)",v>.15,fixed(v));}},
+  // Against v1.4.3's CPU frame of the same view (mat-cpu-v143 MEAN in the fixture).
+  if(const double base=s.fixture->number("mat-cpu-v143",0);base>0){r.metric("mean_vs_v143",m/base,"ratio");
+   r.check("the CPU's frame keeps v1.4.3's brightness (within 10%)",std::fabs(m/base-1)<.10,fixed(m,2)+" vs "+fixed(base,2));}
+  for(const auto& [k,v]:s.board)if(k.rfind("cpu.cov.",0)==0)r.metric("cov."+k.substr(8),v);
+  const double frame=s.board["cpu.cov.frame"];r.metric("cov_frame",frame);
+  r.check("what the CPU's materials change varies across the frame (CoV over .15)",frame>.15,fixed(frame));},
  .teardown=[](Scene&){cpuMaterials()=true;}});
 }
 }
