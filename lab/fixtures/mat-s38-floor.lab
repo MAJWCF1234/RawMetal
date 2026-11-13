@@ -1,0 +1,8 @@
+# Materials: the look-s38-floor view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 12 14 -0.98 -90 -5
+open-doors
+scenery-only
+size 960 540
+frames 1

@@ -287,6 +287,9 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   for(const auto& p:m.cratePlates)line(Rec("CRATE_PLATE").i(mi).n(p.position.x).n(p.position.y).st(p.state));
   if(m.crateReset)line(Rec("CRATE_RESET").i(mi).st(m.crateReset));
   for(const auto& w:m.waterVolumes){Rec r("WATER");r.i(mi).n(w.x1).n(w.y1).n(w.x2).n(w.y2).n(w.bed).n(w.surface);if(w.murk>0)r.n(w.murk);line(r);}
+  for(const auto& p:m.wetPatches){Rec r("WET");r.i(mi);
+   if(p.round&&std::fabs((p.x2-p.x1)-(p.y2-p.y1))<1e-4f)r.n((p.x1+p.x2)*.5f).n((p.y1+p.y2)*.5f).n((p.x2-p.x1)*.5f).n(p.amount).i(p.puddle?1:0);
+   else r.n(p.x1).n(p.y1).n(p.x2).n(p.y2).n(p.amount).i(p.puddle?1:0);line(r);}
   for(const auto& c:m.compactors)line(Rec("COMPACTOR").i(mi).n(c.x1).n(c.y1).n(c.x2).n(c.y2).n(c.bed).n(c.raised).n(c.period).st(c.stopState),9);
   for(const auto& h:m.navHints)line(Rec("NAV_HINT").i(mi).n(h.position.x).n(h.position.y).n(h.z).i(h.hint));
   for(const auto& s:m.shelters)line(Rec("SHELTER").i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top));
@@ -459,6 +462,8 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  for(size_t i=0;i<std::min(a.breakables.size(),b.breakables.size());++i){const auto&p=a.breakables[i];const auto&q=b.breakables[i];auto w=at("breakable",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);
   d.eq(w+".material",p.material,q.material);d.eq(w+".health",p.health,q.health);d.eq(w+".holds",p.holds,q.holds);d.eq(w+".state",p.state,q.state);d.eq(w+".trigger",p.trigger,q.trigger);d.eq(w+".fixture",p.fixture,q.fixture);d.eq(w+".part",p.part,q.part);}
  d.count("water",a.waterVolumes.size(),b.waterVolumes.size());
+ d.count("wet patches",a.wetPatches.size(),b.wetPatches.size());
+ for(size_t i=0;i<std::min(a.wetPatches.size(),b.wetPatches.size());++i){const auto&p=a.wetPatches[i];const auto&q=b.wetPatches[i];auto w=at("wet",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".amount",p.amount,q.amount);}
  for(size_t i=0;i<std::min(a.waterVolumes.size(),b.waterVolumes.size());++i){const auto&p=a.waterVolumes[i];const auto&q=b.waterVolumes[i];auto w=at("water",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bed",p.bed,q.bed);d.eq(w+".surface",p.surface,q.surface);}
  d.count("emitters",a.emitters.size(),b.emitters.size());
  for(size_t i=0;i<std::min(a.emitters.size(),b.emitters.size());++i){const auto&p=a.emitters[i];const auto&q=b.emitters[i];auto w=at("emitter",i);d.eq(w+".position",p.position,q.position);d.eq(w+".z",p.z,q.z);d.eq(w+".drift",p.drift,q.drift);d.eq(w+".rise",p.rise,q.rise);d.eq(w+".rate",p.rate,q.rate);d.eq(w+".radius",p.radius,q.radius);d.eq(w+".growth",p.growth,q.growth);d.eq(w+".count",p.count,q.count);

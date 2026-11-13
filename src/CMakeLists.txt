@@ -220,6 +220,8 @@ add_executable(RawMetal WIN32
     renderer/SoftwareRenderer.cpp
     renderer/SurfaceSetTest.cpp
     renderer/NormalMapping.cpp
+    renderer/Materials.cpp
+    renderer/Wetness.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
     renderer/ClaireOutside.cpp

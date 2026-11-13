@@ -310,6 +310,10 @@ inline ParticleEmitter& sparkShower(Map& m,Vec2 at,float z,Point3 along,float ev
 // Dust turning in a lamp's light: a box halfWidth by halfDepth from z up `height` metres, `motes` in it.
 inline ParticleEmitter& dustMotes(Map& m,Vec2 at,float z,float halfWidth,float halfDepth,float height,int motes=40,float strength=.8f){return airEmitter(m,ParticleKind::Dust,at,z,{halfWidth,halfDepth,height},12.f,motes,.013f,.004f,strength);}
 // Water falling from `at` (a pipe, a crack in the ceiling): `perSecond` drops, each splashing where it lands.
+// A wet patch on the floor (WET record): round, `radius` metres, `amount` 0-1, puddles in it if `puddle`.
+inline WetPatch& wet(Map& m,Vec2 at,float radius,float amount=1,bool puddle=false){m.wetPatches.push_back({at.x-radius,at.y-radius,at.x+radius,at.y+radius,amount,puddle,true});return m.wetPatches.back();}
+// The same over a box.
+inline WetPatch& wetBox(Map& m,float x1,float y1,float x2,float y2,float amount=1,bool puddle=false){m.wetPatches.push_back({x1,y1,x2,y2,amount,puddle,false});return m.wetPatches.back();}
 inline ParticleEmitter& dripping(Map& m,Vec2 at,float z,float perSecond=.8f){return airEmitter(m,ParticleKind::Drips,at,z,{0,0,0},2.f,std::max(1,int(std::round(perSecond*2.f))),.008f,0,1);}
 // Water thrown out of a break as spray and fine mist.
 inline ParticleEmitter& waterSpray(Map& m,Vec2 at,float z,Point3 out,float strength=.8f){return airEmitter(m,ParticleKind::Spray,at,z,out,1.2f,24,.04f,.45f,strength);}

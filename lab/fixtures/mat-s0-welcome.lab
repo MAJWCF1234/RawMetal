@@ -1,0 +1,17 @@
+# Materials: the look-s0-welcome view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 0
+camera 12 2.2 -999 90 -6
+open-doors
+scenery-only
+size 960 540
+frames 1
+mat-surface1 mat12 128 250 198 318
+mat-surface2 mat11 235 250 298 318
+mat-surface3 mat10 345 250 398 318
+mat-surface4 mat9 452 250 502 318
+mat-surface5 mat8 557 250 608 318
+mat-surface6 mat7 658 250 718 318
+mat-surface7 mat5 858 250 940 318
+mat-surface8 floor 200 430 800 530
+mat-cpu-v143 25.79

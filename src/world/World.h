@@ -270,6 +270,10 @@ struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;floa
 // murk: 0 the plant's clear coolant, up to 1 for standing water in the dark (a
 // pool in a cold store reads as still and black, not as a lit swimming bath).
 struct WaterVolume {float x1,y1,x2,y2,bed,surface;float murk=0;};
+// An authored wet patch (WET record, kit::wet): the floor in it is wet by `amount` (0-1), with
+// puddles in its low spots when `puddle`; `round` takes the circle inside the box. The renderers'
+// wetness mask (renderer/Wetness.h) adds it to the wet the map's water and leaks leave.
+struct WetPatch {float x1,y1,x2,y2,amount=1;bool puddle=false,round=false;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.
 // What an emitter gives off (EMITTER record; renderer/Particles.cpp). Plume is the old record's puff:
 // steam indoors, smoke under the open sky. Sparks are thrown as showers by the electric system
@@ -479,6 +483,7 @@ struct AuthoredMapData {
     std::vector<ClutterSpawn> clutterSpawns;
     std::vector<Breakable> breakables;
     std::vector<WaterVolume> waterVolumes;
+    std::vector<WetPatch> wetPatches;
     std::vector<Hazard> hazards;
     std::vector<Compactor> compactors;
     std::vector<Structure> structures;
@@ -613,6 +618,7 @@ public:
     const std::vector<PickupSpawn>& pickupSpawns()const{return m_pickupSpawns;}
     const std::vector<ClutterSpawn>& clutterSpawns()const{return m_clutterSpawns;}
     const std::vector<WaterVolume>& waterVolumes()const{return m_waterVolumes;}
+    const std::vector<WetPatch>& wetPatches()const{static const std::vector<WetPatch> none;return m_mapData?m_mapData->wetPatches:none;}
     const std::vector<ParticleEmitter>& particleEmitters()const{return m_particleEmitters;}
     const std::vector<Shelter>& shelters()const{static const std::vector<Shelter> none;return m_mapData?m_mapData->shelters:none;}
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
@@ -649,8 +655,9 @@ public:
     const std::vector<Structure>& structures()const{return m_structures;}
     const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
     bool hasTerrain()const{return !m_terrain.empty();}
-    // How wet floors are (0 dry .. 1 flooded): damp sheen everywhere, puddles
-    // on level ground. Carpet never puddles; the Foundry runs hot and dry.
+    // How wet the map runs (0 dry .. 1 flooded): the scale on its wetness mask (renderer/Wetness.h:
+    // bigger, wetter patches round its water, leaks and drains, more seeps), and outdoors how much
+    // rain has fallen on what sees the sky. Carpet never puddles; the Foundry runs hot and dry.
     float wetness()const{
      if(definition().wetness>=0)return definition().wetness;
      if(definition().floorMaterial==FloorMaterial::OfficeCarpet)return 0.f;

@@ -1,0 +1,14 @@
+# Materials: the look-s5-crates view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 5
+camera 16.2 5.2 -999 90 -12
+open-doors
+scenery-only
+size 960 540
+frames 1
+mat-surface1 crate-wood 318 300 420 330
+mat-surface2 packing-crate 545 262 640 318
+mat-surface3 pc-tower 770 340 785 395
+mat-surface4 plinth-concrete 55 380 200 450
+mat-surface5 floor 300 470 700 530
+mat-cpu-v143 25.01

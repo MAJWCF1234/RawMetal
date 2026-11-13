@@ -1,4 +1,7 @@
 #include "SoftwareRenderer.h"
+#include "Materials.h"
+#include <atomic>
+#include <thread>
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -43,6 +46,28 @@ void SoftwareRenderer::deriveSurfaceNormal(Texture& texture,float strength){
  for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float dx=(sampleHeight(x+1,y)-sampleHeight(x-1,y))*.5f,dy=(sampleHeight(x,y+1)-sampleHeight(x,y-1))*.5f;Point3 n{-dx*strength,dy*strength,1.f};float length=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);normals.push_back(n*(1.f/length));}
  texture.normalLevels.push_back(std::move(normals));int width=texture.width,heightPixels=texture.height;
  while(width>1||heightPixels>1){int nw=std::max(1,width/2),nh=std::max(1,heightPixels/2);std::vector<Point3> next(size_t(nw*nh));auto&previous=texture.normalLevels.back();for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){Point3 sum{};for(int j=0;j<2;++j)for(int i=0;i<2;++i)sum=sum+previous[std::min(heightPixels-1,y*2+j)*width+std::min(width-1,x*2+i)];float length=std::sqrt(sum.x*sum.x+sum.y*sum.y+sum.z*sum.z);next[size_t(y*nw+x)]=length>.00001f?sum*(1.f/length):Point3{0,0,1};}texture.normalLevels.push_back(std::move(next));width=nw;heightPixels=nh;}
+}
+void SoftwareRenderer::applyMaterial(Texture& texture,int material,const char* name){
+ if(texture.width<2||texture.height<2||texture.pixels.size()!=size_t(texture.width)*size_t(texture.height))return;
+ const auto m=Material(std::clamp(material,0,int(Material::Count)-1));const auto& range=materialRange(m);const bool clamp=texture.clampEdges;
+ // The micro-normal comes from the albedo as shipped, before a metal's texels are brought to their F0.
+ if(texture.normalLevels.empty()&&range.normal>0)deriveSurfaceNormal(texture,range.normal);
+ texture.material=std::uint8_t(m);
+ texture.surfaceMap=deriveSurfaceMap(texture.pixels,texture.width,texture.height,m,name?name:"");
+ prepareDecal(texture,clamp);
+ // The finish values the paths without a surface map read: the class's mean.
+ texture.metalness=range.metal?.99f:0.f;texture.polish=0;
+ // (Under .5: surface.z carries the blend code in its whole part, so an opaque gloss over .5 would draw additive.)
+ texture.glossStrength=std::clamp(1.f-(range.lo+range.hi)*.5f,.02f,texture.liquid||texture.transparent?.95f:.48f);
+}
+void SoftwareRenderer::applyMaterials(std::vector<MaterialJob>& jobs){
+ // Largest first, so no core is left with one big atlas at the end.
+ std::sort(jobs.begin(),jobs.end(),[](const MaterialJob& a,const MaterialJob& b){return a.texture->pixels.size()>b.texture->pixels.size();});
+ std::atomic<size_t> next{0};const unsigned count=std::clamp(std::thread::hardware_concurrency(),1u,16u);std::vector<std::thread> workers;
+ for(unsigned i=0;i<count;++i)workers.emplace_back([&]{for(size_t k;(k=next++)<jobs.size();)applyMaterial(*jobs[k].texture,jobs[k].material,jobs[k].name.c_str());});
+ for(auto& worker:workers)worker.join();
+ // The lab reads the records in a fixed order whatever finished first.
+ std::sort(materialRecords().begin(),materialRecords().end(),[](const MaterialRecord& a,const MaterialRecord& b){return a.name!=b.name?a.name<b.name:a.texels<b.texels;});
 }
 Point3 SoftwareRenderer::sampleNormal(const Texture& texture,float u,float v,float lod){
  if(texture.normalLevels.empty())return {0,0,1};u-=std::floor(u);v-=std::floor(v);

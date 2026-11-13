@@ -1,0 +1,8 @@
+# Materials: the look-s38-dark view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 10 17.0 -999 90 -10
+open-doors
+scenery-only
+size 960 540
+frames 1

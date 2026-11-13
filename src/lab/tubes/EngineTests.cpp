@@ -4,6 +4,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "renderer/Carcass.h"
+#include "world/CampaignExport.h"
 namespace retro {bool testDoorLeaves();} // game/Movement.cpp
 namespace retro::lab {
 namespace {
@@ -28,6 +29,9 @@ const bool registered=[]{
  engine("physics-stages","--each-test=physics-stages: props through the physics stages",&Game::testPhysicsStages);
  engine("prop-saves","--each-test=prop-saves: props and their state through a save",&Game::testPropSaves);
  engine("combat","--each-test=combat: shots, barrels, melee",&Game::testCombat);
+ // The map records (WET joined them): every chunk through the RMC exporter and back, and the worlds kept apart.
+ engine("rmc-export","--each-test=rmc-export: every map exported to RMC, loaded back, compared record by record",+[]{return testRmcExportRoundTrip("rmc-export-test.txt");});
+ engine("world-isolation","--world-isolation-test: maps keep their own light, wetness and records",&Game::testWorldIsolation);
  #ifdef RAWMETAL_LAB_HAS_PARTICLES
  engine("particles","--each-test=particles: determinism, budgets, walls, records, dressed maps",&testParticles);
  #endif

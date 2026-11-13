@@ -1,0 +1,8 @@
+# Materials: the look-s38-light view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 4 10.5 -999 -90 -8
+open-doors
+scenery-only
+size 960 540
+frames 1

@@ -47,6 +47,7 @@ layout(location=7) out float outParallax;
 // grid size (columns*16+rows) and the far fade; zero for everything else.
 layout(location=8) out vec4 outImpostor;
 
+
 vec3 cameraVector(vec3 v){
  precise float forward=v.x*view.eyeYaw.w+v.y*view.basis.x;
  return vec3(-v.x*view.basis.x+v.y*view.eyeYaw.w,v.z*view.basis.y-forward*view.basis.z,forward*view.basis.y+v.z*view.basis.z);

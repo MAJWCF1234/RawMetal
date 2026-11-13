@@ -1,0 +1,9 @@
+# Wetness: the Ashfall zone outdoors, in rain (tubes: wetness).
+world ashfall
+map 5
+camera 12 12 -999 0 -6
+wet-rain 1
+open-doors
+scenery-only
+size 960 540
+frames 1

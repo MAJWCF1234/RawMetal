@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "BoxSurfaces.h"
+#include "Materials.h"
+#include "Wetness.h"
 #include "../game/CreatureAnimation.h"
 #include "../world/ModelIds.h"
 #include "../world/GlassFracture.h"
@@ -276,6 +278,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
  // With no fixture power an opaque surface has exactly unit diffuse response
  // and zero specular light. Water still needs its tangent frame for Fresnel.
  // Per-pixel lamps keep the tangent frame (and normal map) even with no baked light.
+ const float wet=m_triangleWet;m_triangleWet=0;
  bool tangentActive=normalLighting!=nullptr&&(texture.transparent||normalLighting->weights[0]!=0.f||normalLighting->weights[1]!=0.f||(m_pixelLighting&&m_staticGeometryBuild));bool normalActive=tangentActive&&!texture.normalLevels.empty();std::array<Point3,2> tangentLights{};float flatResponse=.22f;
  auto dot=[](Point3 p,Point3 q){return p.x*q.x+p.y*q.y+p.z*q.z;};
  auto unitWithSquared=[&](Point3 v,float squared){
@@ -323,6 +326,38 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
  }
  if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale,m_dissolve,&m_triangleAir,texture.soft?&m_card:nullptr);m_triangleAir.fill(NoBounceAir);return;}
  m_triangleAir.fill(NoBounceAir);
+ // The CPU's physically based material, a cheaper match of scene.frag's: per texel roughness, metalness
+ // and cavity from the surface map; the split-sum table at the face's NoV; the diffuse takes what the
+ // lobe does not reflect (1 - E), a metal none; the lobe sees the light falling here times half a room's
+ // mean albedo (scene.frag's fallback where no probe covers a point uses the ambient alone; the CPU's
+ // light here holds the lamps' direct light too, which a reflection does not see). The rasteriser lights sRGB
+ // bytes by a factor; that is linear light times the factor's 2.2 power, so the lobe is added in linear
+ // light and the sum encoded back: with no surface map the result is the old one exactly.
+ static const std::array<float,256> linearByte=[]{std::array<float,256> t{};for(int i=0;i<256;++i)t[size_t(i)]=std::pow(i/255.f,2.2f);return t;}();
+ static const std::array<std::uint8_t,4096> encodeLinear=[]{std::array<std::uint8_t,4096> t{};for(int i=0;i<4096;++i)t[size_t(i)]=std::uint8_t(std::lround(std::pow(i/4095.f,1/2.2f)*255.f));return t;}();
+ const bool material=cpuMaterials()&&!texture.surfaceMap.empty()&&!texture.transparent&&!texture.additive&&texture.surfaceMap.size()==texture.pixels.size();
+ float faceNoV=1.f;
+ if(material||wet>0){const Point3 n=cross3(b.p-a.p,c.p-a.p),centre=(a.p+b.p+c.p)*(1.f/3.f);const float nl=std::sqrt(dot(n,n)),cl=std::sqrt(dot(centre,centre));
+  faceNoV=nl>1e-9f&&cl>1e-6f?std::clamp(std::fabs(dot(n,centre))/(nl*cl),.02f,1.f):1.f;}
+ auto materialShade=[&](std::uint32_t texel,float U,float V,float level)->std::uint32_t{
+  const int tx=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ty=std::min(texture.height-1,int((V-std::floor(V))*texture.height));
+  const std::uint32_t m=texture.surfaceMap[size_t(ty*texture.width+tx)];
+  const float rough=float(m&255u)/255.f,metal=float((m>>8)&255u)/255.f,cavity=float((m>>16)&255u)/255.f;
+  const auto ab=envBrdf(faceNoV,rough);const float dielectric=.04f*ab[0]+ab[1],e1=std::max(ab[0]+ab[1],.01f);
+  const float lightLinear=std::pow(std::max(level,0.f),2.2f),diffuse=(1-metal)*(1-dielectric),seen=lightLinear*.15f*cavity;
+  std::uint32_t out=0xff000000u;
+  for(int shift=0;shift<24;shift+=8){const float albedo=linearByte[(texel>>shift)&255u];
+   const float f0=.04f+(albedo-.04f)*metal,lobe=(f0*ab[0]+ab[1])*(1+f0*(1/e1-1));
+   const float v=albedo*lightLinear*diffuse+seen*lobe;
+   out|=std::uint32_t(v>=1.f?255u:encodeLinear[size_t(std::max(v,0.f)*4095.f)])<<shift;}
+  return out;};
+ // A wet floor (m_triangleWet): darker where water soaks in, and the water's own film mirrors the
+ // room's light by its Fresnel (F0 .02), as scene.frag and post.frag do per pixel.
+ const float wetCoat=wet>0?(.02f+.98f*std::pow(1.f-faceNoV,5.f))*wet:0.f;
+ auto wetShade=[&](std::uint32_t c,float level)->std::uint32_t{
+  const float lightLinear=std::pow(std::max(level,0.f),2.2f)*.3f*wetCoat,soak=1.f-.34f*wet;std::uint32_t out=c&0xff000000u;
+  for(int shift=0;shift<24;shift+=8){const float v=linearByte[(c>>shift)&255u]*soak+lightLinear;out|=std::uint32_t(v>=1.f?255u:encodeLinear[size_t(std::max(v,0.f)*4095.f)])<<shift;}
+  return out;};
  // Clip in camera space before perspective division; preserve UVs at intersections.
  const Projection projection{float(m_width)/m_height};
  MeshVertex input[8]={a,b,c},output[8];int count=3;
@@ -387,7 +422,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }
    if(texture.additive){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;
     for(int channel=0;channel<3;++channel){float tint=channel==0?.35f:channel==1?.72f:1.f;unsigned value=std::min(255u,unsigned((old>>(channel*8))&255)+unsigned(((texel>>(channel*8))&255)*alpha*light*tint));result|=value<<(channel*8);}put(x,y,result);
-   }else{if(!texture.transparent)m_zbuffer[index]=z;auto color=shade(texel,light*vertexLight/(1.f+z*.018f));
+   }else{if(!texture.transparent)m_zbuffer[index]=z;const float level=light*vertexLight/(1.f+z*.018f);auto color=material?materialShade(texel,U,V,level):shade(texel,level);if(wet>0)color=wetShade(color,level);
     if(!texture.emission.empty()){
      int ex=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ey=std::min(texture.height-1,int((V-std::floor(V))*texture.height));auto glow=texture.emission[size_t(ey*texture.width+ex)];unsigned result=0xff000000u;
      for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f*m_emissionScale));result|=value<<(channel*8);}color=result;
@@ -824,7 +859,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // The CPU rasteriser's stand-in for reflections: a polished or metal face takes the probes' light
  // from the way it mirrors the eye, by Fresnel (metal strongly face-on).
  auto probeSheen=[&](Point3 p,Point3 n,const Texture&t){
-  if(m_gpuFrame||!probes||(t.metalness<=0&&t.polish<.3f))return 0.f;
+  // A surface map is shaded per texel by the rasteriser (triangle3D), its reflection included.
+  if(m_gpuFrame||!probes||!t.surfaceMap.empty()||(t.metalness<=0&&t.polish<.3f))return 0.f;
   float nl=std::sqrt(goreDot(n,n));Point3 v=p-eye;float vl=std::sqrt(goreDot(v,v));if(nl<1e-5f||vl<1e-4f)return 0.f;n=n*(1.f/nl);v=v*(1.f/vl);if(goreDot(n,v)>0)n=n*-1.f;
   const float facing=std::max(0.f,-goreDot(n,v)),f0=.04f+.68f*t.metalness,fresnel=f0+(1.f-f0)*std::pow(1.f-facing,5.f);
   const auto mirrored=probes->sample(p,v-n*(2.f*goreDot(v,n)));
@@ -843,6 +879,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(objectLighting){if(m_pixelLighting&&m_staticGeometryBuild&&light<1.5f){a.light*=objectLight;b.light*=objectLight;c.light*=objectLight;m_triangleAir.fill(objectAir);}else light*=objectLight;}
   else if(light<1.5f){std::array<float,3> air;a.light=illumination(a.p,worldNormal);air[0]=illuminationAir;b.light=illumination(b.p,worldNormal);air[1]=illuminationAir;c.light=illumination(c.p,worldNormal);air[2]=illuminationAir;m_triangleAir=air;
    if(const float sheen=probeSheen((a.p+b.p+c.p)*(1.f/3.f),worldNormal,t);sheen>0){a.light+=sheen;b.light+=sheen;c.light+=sheen;}}
+  // The CPU's wet floors (scene.frag reads the same mask per pixel): a floor-facing face takes the
+  // mask's wet at its corners where it lies on the mask's floor, and outdoors the rain where it sees sky.
+  if(!m_gpuFrame&&probeBake&&!t.transparent&&!t.additive){const Point3 n=cross3(b.p-a.p,c.p-a.p);const float nl=std::sqrt(goreDot(n,n));
+   if(nl>1e-9f&&std::fabs(n.z)/nl>.8f){float wet=0;for(const auto* v:{&a.p,&b.p,&c.p})wet+=probeBake->wet.floorWet(v->x,v->y,v->z)/3.f;
+    if(const float rain=outdoorRain(w);rain>0&&probes){const Point3 centre=(a.p+b.p+c.p)*(1.f/3.f);wet=std::max(wet,rain*std::clamp((probes->sample(centre,{0,0,1})[3]-.55f)/.3f,0.f,1.f)*.7f);}
+    m_triangleWet=wet;}}
   a.p=A;b.p=B;c.p=C;
   if(objectNormalLighting&&(!t.normalLevels.empty()||t.glossStrength>0))triangle3D(a,b,c,t,light,objectNormalLighting);
   else if(needsNormalLighting){auto lights=normalLightingAt(worldCenter);lights.surfaceNormal=surfaceNormal(worldCenter,worldNormal);triangle3D(a,b,c,t,light,&lights);}
@@ -1257,7 +1299,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      // Maps 0-2 lay their area floor as 2 m tiles; grating and raised plate stay functional.
      if(floorFinish)finishQuad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},*floorFinish->floor,.95f,{floorFinish->floorRepeat,floorFinish->floorRepeat});
      else if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
-     else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concrete),w.metalFloor(x,y)?.8f:.95f);
+     else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concreteFloor),w.metalFloor(x,y)?.8f:.95f);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
      // Risers between floor heights: steel plate, or the floor's own finish.
      auto riser=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(floorFinish)finishQuad(a,b,c,d,*floorFinish->floor,.9f,{floorFinish->floorRepeat,floorFinish->floorRepeat});else quad(a,b,c,d,m_metal,.9f);};

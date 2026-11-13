@@ -1,0 +1,8 @@
+# Materials: the welcome hall's material plinths close up (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 0
+camera 12 3.4 -999 90 -8
+open-doors
+scenery-only
+size 960 540
+frames 1

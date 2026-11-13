@@ -1,0 +1,14 @@
+# Materials: the look-s38-steel view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 11.5 6.2 -999 -90 -10
+open-doors
+scenery-only
+size 960 540
+frames 1
+mat-surface1 pressure-steel 10 60 125 370
+mat-surface2 tread-steel 275 60 390 370
+mat-surface3 red-paint 570 60 685 370
+mat-surface4 pale-paint 835 60 955 370
+mat-surface5 steel-table 250 460 900 530
+mat-cpu-v143 43.73

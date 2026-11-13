@@ -623,6 +623,16 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<8||f.size()>9)throw std::runtime_error("malformed WATER record");auto map=mapAt(maps,f);map->waterVolumes.push_back({
     number(f,2,"water x1"),number(f,3,"water y1"),number(f,4,"water x2"),number(f,5,"water y2"),number(f,6,"water bed"),number(f,7,"water surface")});
    if(given(8)){const float murk=number(f,8,"water murk");if(!(murk>=0&&murk<=1))throw std::runtime_error("water murk is 0 to 1");map->waterVolumes.back().murk=murk;}
+  }else if(tag=="WET"){
+   // WET|map|x|y|radius|amount[|puddle]: a round wet patch; WET|map|x1|y1|x2|y2|amount|puddle: a box.
+   // amount 0-1 how wet; puddle 1 lets puddles gather in it.
+   if(f.size()<6||f.size()>8)throw std::runtime_error("malformed WET record");auto map=mapAt(maps,f);WetPatch p;
+   if(f.size()==8){p.x1=number(f,2,"wet x1");p.y1=number(f,3,"wet y1");p.x2=number(f,4,"wet x2");p.y2=number(f,5,"wet y2");p.amount=number(f,6,"wet amount");p.puddle=boolean(f,7,"wet puddle");
+    if(!(p.x2>p.x1&&p.y2>p.y1))throw std::runtime_error("WET box must have x2 > x1 and y2 > y1");}
+   else{const float x=number(f,2,"wet x"),y=number(f,3,"wet y"),r=number(f,4,"wet radius");if(!(r>0&&r<=24))throw std::runtime_error("WET radius is over 0 and at most 24");
+    p={x-r,y-r,x+r,y+r,number(f,5,"wet amount"),given(6)&&boolean(f,6,"wet puddle"),true};}
+   if(!(p.amount>=0&&p.amount<=1))throw std::runtime_error("WET amount is 0 to 1");
+   if(map->wetPatches.size()>=64)throw std::runtime_error("too many WET records in one map");map->wetPatches.push_back(p);
   }else if(tag=="COMPACTOR"){
    if(f.size()<9)throw std::runtime_error("malformed COMPACTOR record");auto map=mapAt(maps,f);map->compactors.push_back({
     number(f,2,"compactor x1"),number(f,3,"compactor y1"),number(f,4,"compactor x2"),number(f,5,"compactor y2"),number(f,6,"compactor bed"),number(f,7,"compactor raised"),number(f,8,"compactor period"),0});

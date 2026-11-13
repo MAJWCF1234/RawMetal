@@ -1,0 +1,8 @@
+# Materials: campaign map 72, the ward corridor (tubes: materials).
+world campaign
+map 72
+camera 3.20 11.50 -12.00 0.0 -10
+open-doors
+scenery-only
+size 960 540
+frames 1

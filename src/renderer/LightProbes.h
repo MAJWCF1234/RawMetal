@@ -1,6 +1,7 @@
 #pragma once
 #include "world/World.h"
 #include "renderer/LookTuning.h"
+#include "renderer/Wetness.h"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -54,7 +55,8 @@ struct ProbeBakeInput {
  // Worker threads (0: the machine's cores less one, at most eight).
  int threads=0;
 };
-struct ProbeBake {IrradianceVolume volume;std::vector<ReflectionProbe> reflections;};
+// wet: where the map is wet (Wetness.h), baked with the probes over the same 24 x 24 m.
+struct ProbeBake {IrradianceVolume volume;std::vector<ReflectionProbe> reflections;WetnessMask wet;};
 
 // Scale from a probe's stored value to the fill light scene.frag adds (in the lamps' units), and the
 // soft shoulder both renderers put on it so a room of many lamps fills and never floods.
