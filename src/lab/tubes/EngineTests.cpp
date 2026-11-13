@@ -21,6 +21,13 @@ const bool registered=[]{
  engine("npc-voices","--each-test=npc-voices: who speaks, when, once",&Game::testNpcVoices);
  engine("dialogue","--each-test=dialogue",&Game::testDialogue);
  engine("saves","--each-test=saves",&Game::testSaves);
+ // What breaks and what it leaves (tubes/Debris.cpp works the pieces; these keep the old behaviour).
+ engine("clutter","--each-test=clutter: junk and shards lift, fall, land and sound",&Game::testClutter);
+ engine("props","--each-test=props: model props, breaking, held and thrown",&Game::testProps);
+ engine("glass","--each-test=glass: panes, breakables, blasts",&Game::testGlass);
+ engine("physics-stages","--each-test=physics-stages: props through the physics stages",&Game::testPhysicsStages);
+ engine("prop-saves","--each-test=prop-saves: props and their state through a save",&Game::testPropSaves);
+ engine("combat","--each-test=combat: shots, barrels, melee",&Game::testCombat);
  #ifdef RAWMETAL_LAB_HAS_PARTICLES
  engine("particles","--each-test=particles: determinism, budgets, walls, records, dressed maps",&testParticles);
  #endif

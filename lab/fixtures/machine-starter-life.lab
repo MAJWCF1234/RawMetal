@@ -1,0 +1,6 @@
+# The Starter Map's LIFE row (map 3): the Machine's pen, asleep. Tubes: machine.
+world custom "custom maps/Starter Map.rmc"
+map 3
+camera 16.35 17.2 -999 -90 -6
+size 480 270
+frames 30

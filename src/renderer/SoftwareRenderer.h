@@ -399,6 +399,10 @@ private:
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
+    // What a shard (clutter kind 6, ShardOf) is drawn from: the mesh it is an eighth of (null: a
+    // splinter or slab outline) and the sheet (a model's part 0; each face takes its own part's).
+    struct ShardLook {const Mesh* mesh=nullptr;const Texture* sheet=nullptr;bool barrel=false;};
+    ShardLook shardLook(const Clutter& c)const;
     // Painterly Horizon LOD (Impostors.cpp): a shared multi-view atlas per
     // repeated cutout model, captured on first use; null for other models.
     struct Impostor {Texture atlas;Point3 center{};float radius=0;};

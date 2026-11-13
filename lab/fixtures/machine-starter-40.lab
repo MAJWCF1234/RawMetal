@@ -1,0 +1,7 @@
+# The Starter Map's showcase Machine room (map 40), its power off: the Machine
+# dormant in its bay, seen from the aisle. Tubes: machine.
+world custom "custom maps/Starter Map.rmc"
+map 40
+camera 12 10.5 -999 -90 -4
+size 480 270
+frames 30

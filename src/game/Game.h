@@ -200,7 +200,14 @@ struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impuls
 struct HitBurst {Point3 point{},direction{};float time=0;int level=0;ImpactMaterial material=ImpactMaterial::Concrete;int species=-1;float power=1;bool kill=false;float floor=0,reach=9;bool stump=false;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
-struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int level=0;PropMaterial material=PropMaterial::Glass;float width=.1f,height=.1f;bool pane=false;Vec2 along{};int index=-1;};
+// model: the facility model that broke (its chips take its own sheet), or -1.
+struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int level=0;PropMaterial material=PropMaterial::Glass;float width=.1f,height=.1f;bool pane=false;Vec2 along{};int index=-1;int model=-1;};
+// What a shard (clutter kind 6) was broken from, so it is drawn as a piece of that thing: a crate's
+// splinter (the old look), an eighth of an exploded barrel's hull, a chunk of a drop-ceiling tile, or
+// an eighth of a broken prop or fixture part cut from its own mesh with its own sheet.
+enum class ShardOf:int {Crate,Barrel,Ceiling,Model,Count};
+// The drawn size of a 'B' barrel (Scene3D draws it 1.1 m tall in a .94 m footprint): its shards are eighths of it.
+inline constexpr std::array<float,3> kBarrelSize{.74f,.74f,1.1f};
 // Where a pane gave way and which way the blow came from, so its shards fall
 // from the hole and lie where they landed. Not saved: a reloaded pane breaks
 // about its centre.
@@ -209,9 +216,13 @@ struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
  int model=-1;std::array<float,3> dims{};float damage=0;bool authored=false,broken=false;Vec2 home{};float homeZ=0;StateId breakState=0;int soundOwner=-1;float blockedTime=0;
+ // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
+ // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
+ // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
+ ShardOf shardOf=ShardOf::Crate;int piece=0,shardModel=-1;std::array<float,3> from{};
  PropMaterial material()const;float mass()const;float supportHeight()const;
  bool footprintContains(Vec2 point)const{auto d=point-pos;if(std::fabs(pitch)+std::fabs(roll)<.1f){float c=std::cos(yaw),s=std::sin(yaw);return std::fabs(d.x*c+d.y*s)<=dims[0]*.5f+.001f&&std::fabs(-d.x*s+d.y*c)<=dims[1]*.5f+.001f;}auto e=extent();return std::fabs(d.x)<=e[0]+.001f&&std::fabs(d.y)<=e[1]+.001f;}
- std::array<float,3> size()const{if(model>=0)return dims;constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
+ std::array<float,3> size()const{if(model>=0||(kind==6&&dims[0]>0))return dims;constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
  std::array<float,3> rotate(float x,float y,float localZ)const{
   float cp=std::cos(pitch),sp=std::sin(pitch),cr=std::cos(roll),sr=std::sin(roll),cy=std::cos(yaw),sy=std::sin(yaw);
   float a=cp*x+sp*localZ,b=-sp*x+cp*localZ,c=cr*y-sr*b,d=sr*y+cr*b;
@@ -222,7 +233,11 @@ struct Clutter {
  std::array<Vec2,9> footprintOffsets()const{auto local=*this;local.yaw=0;auto e=local.extent();std::array<Vec2,9> points;int i=0;float co=std::cos(yaw),si=std::sin(yaw);for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]})points[size_t(i++)]={x*co-y*si,x*si+y*co};return points;}
  float height()const{return extent()[2]*2;}
  float footprint()const{auto s=size();return std::max(s[0],s[1]);}
- Sound impactSound()const{if(model>=0)return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
+ // The pieces a thing breaks into (kind 6 shards of `of`): `count` of its eighths, each where
+ // that eighth sat in it (centre: its middle; size: x, y, up; yaw: its heading), thrown out from
+ // the middle at `speed` and up at `lift`. ShardOf::Ceiling gives small slabs of a tile instead.
+ static std::vector<Clutter> shards(ShardOf of,Point3 centre,std::array<float,3> size,float yaw,int count,float speed,float lift,int model=-1);
+ Sound impactSound()const{if(model>=0||(kind==6&&shardOf!=ShardOf::Crate))return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
 };
 
 // One firearm's rounds: total counts the loaded ones too, so the reserve is
@@ -610,7 +625,7 @@ public:
     static bool testHandgunSaves(std::ostream& report);
     // 20: how far each creature has made the player out (Enemy::recognition).
     // 21: each chunk's torn leads.
-    static constexpr int SaveVersion=24;
+    static constexpr int SaveVersion=25;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1121,6 +1136,8 @@ private:
     void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);
     void breakClutter(int level,size_t index,Point3 direction);
+    // Pieces of props broken this frame (level, shard), added to their lists once nothing holds a reference into them.
+    std::vector<std::pair<int,Clutter>> m_pendingShards;void landShards();
     bool tryMove(Vec2 delta);
     bool hullFits(Vec2 position,float feet,float height,float radius=.20f,bool creatures=true)const;
     bool unstickPlayer();

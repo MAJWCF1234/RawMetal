@@ -1,0 +1,9 @@
+# The cursed equipment (CreatureKind::Machine) standing dormant in the plain
+# room, seen from 5 m. Tubes: machine.
+world room
+camera 12 13.5 -999 -90 -4
+light 12 9 3.2 1.4 10
+light 12 13 3.2 1 8
+spawn creature Machine 12 8.5
+size 480 270
+frames 30

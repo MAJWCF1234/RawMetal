@@ -1861,7 +1861,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const auto f=paneFrame(w.breakables()[size_t(e.index)]);const auto shards=glass::fracture(f.width,f.height,paneHit(e.index,f),paneSeed(e.index));const Vec2 drive=paneDrive(e.index,f);
    for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,t);}
   int count=e.pane?std::clamp(int(e.width*e.height*12),6,16):propMaterialTraits(e.material).shards;
-  for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},e.material==PropMaterial::Ceramic?m_paleSteel:m_glassTexture,1.5f);}
+  // A prop's chips are bits of its own sheet; glass stays glass.
+  const Texture&chipSheet=e.model>=0&&e.model<FacilityModelCount&&e.material!=PropMaterial::Glass?facilityTexture(e.model,0):e.material==PropMaterial::Ceramic?m_paleSteel:m_glassTexture;
+  for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},chipSheet,1.5f);}
  }
  auto drawClutter=[&](const Clutter&c){
   if(c.broken){if(c.material()==PropMaterial::Glass||c.material()==PropMaterial::Ceramic)chips(c.pos,c.z,.18f,10,c.model);return;}bool woodShard=c.kind==6;auto size=c.size();
@@ -1880,18 +1882,45 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
   if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
    for(auto face:mesh.triangles){for(auto&v:face.v){auto p=v.p-center;auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
+  }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
+   // An eighth of the thing that broke, cut from its own mesh: its faces clipped to that eighth of
+   // its box (clean cut edges, its own UVs), drawn with its own sheet about the eighth's centre (Clutter::shards).
+   const bool barrel=look.barrel;const Mesh&mesh=*look.mesh;
+   const Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+   // The barrel is drawn as the tile draws it (uniform, 1.1 m in a .94 m footprint); a prop or fixture at its own size.
+   const float uniform=std::min(1.1f/std::max(.001f,range.y),.94f/std::max({.001f,range.x,range.z}));
+   const float sx=barrel?uniform:c.from[0]/std::max(.001f,range.x),sy=barrel?uniform:c.from[1]/std::max(.001f,range.z),sz=barrel?uniform:c.from[2]/std::max(.001f,range.y);
+   const float ox=(c.piece&1?.25f:-.25f)*range.x*sx,oy=(c.piece&2?.25f:-.25f)*range.z*sy,oz=(c.piece&4?.25f:-.25f)*range.y*sz;
+   const float side[3]={c.piece&1?1.f:-1.f,c.piece&4?1.f:-1.f,c.piece&2?1.f:-1.f}; // mesh x, y (up), z
+   auto along=[&](const Point3&p,int axis){return (axis==0?p.x-center.x:axis==1?p.y-center.y:p.z-center.z)*side[axis];};
+   for(const auto&face:mesh.triangles){
+    bool out=false;for(int axis=0;axis<3&&!out;++axis)out=along(face.v[0].p,axis)<0&&along(face.v[1].p,axis)<0&&along(face.v[2].p,axis)<0;if(out)continue;
+    std::array<MeshVertex,9> poly{face.v[0],face.v[1],face.v[2]},next{};int n=3;
+    for(int axis=0;axis<3&&n>=3;++axis){int m=0;
+     for(int k=0;k<n;++k){const auto&a=poly[size_t(k)];const auto&b=poly[size_t((k+1)%n)];const float da=along(a.p,axis),db=along(b.p,axis);
+      if(da>=0&&m<9)next[size_t(m++)]=a;
+      if((da>=0)!=(db>=0)&&m<9){const float t=da/(da-db);next[size_t(m++)]=MeshVertex{a.p+(b.p-a.p)*t,a.u+(b.u-a.u)*t,a.v+(b.v-a.v)*t,a.light+(b.light-a.light)*t};}}
+     poly=next;n=m;}
+    if(n<3)continue;
+    for(int k=0;k<n;++k){auto&v=poly[size_t(k)];const Point3 p=v.p-center;auto r=c.rotate(p.x*sx-ox,p.z*sy-oy,p.y*sz-oz);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}
+    const auto normal=cross3(poly[1].p-poly[0].p,poly[2].p-poly[0].p);const float light=.8f+.25f*std::fabs(normal.z)/std::max(.001f,std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z));
+    const Texture&sheet=barrel?*look.sheet:facilityTexture(c.shardModel,face.part);
+    for(int k=1;k+1<n;++k)tri(poly[0],poly[size_t(k)],poly[size_t(k+1)],sheet,light);}
   }else if(woodShard){
    // Thin splinter with a broken point and irregular edges; use a strip from
    // the crate's own vertical-grain atlas instead of mapping a whole crate face.
-   constexpr int points=6;MeshVertex bottom[points],top[points];
+   // A drop-ceiling slab is the same broken outline cut from the tile's own sheet.
+   const bool ceilingSlab=c.shardOf==ShardOf::Ceiling;constexpr int points=6;MeshVertex bottom[points],top[points];
    const float x[points]={-.50f,-.29f,.28f,.50f,.31f,-.34f};
    const float y[points]={-.30f,-.50f,-.42f,.02f,.50f,.34f};
    for(int i=0;i<points;++i){float px=x[i]*size[0],py=y[i]*size[1];auto rb=c.rotate(px,py,-size[2]*.5f),rt=c.rotate(px,py,size[2]*.5f);
     float across=.115f+std::clamp(y[i],-.5f,.5f)*.07f,along=.055f+std::clamp(x[i]+.5f,0.f,1.f)*.275f;
+    if(ceilingSlab){across=.1f+.12f*float(c.piece%4)+(y[i]+.5f)*.22f;along=.1f+.2f*float(c.piece/4)+(x[i]+.5f)*.3f;}
     bottom[i]={{c.pos.x+rb[0],c.pos.y+rb[1],mid+rb[2]},across,along};top[i]={{c.pos.x+rt[0],c.pos.y+rt[1],mid+rt[2]},across,along};}
    auto uvAt=[&](MeshVertex v,float u,float vv){v.u=u;v.v=vv;return v;};
-   for(int i=1;i<points-1;++i){tri(top[0],top[i],top[i+1],m_crateTexture,1.f);tri(bottom[0],bottom[i+1],bottom[i],m_crateTexture,1.f);}
-   for(int i=0;i<points;++i){int j=(i+1)%points;auto a=bottom[i],b=bottom[j],d=top[j],e=top[i];a=uvAt(a,.115f,.055f);b=uvAt(b,.185f,.055f);d=uvAt(d,.185f,.33f);e=uvAt(e,.115f,.33f);tri(a,b,d,m_crateTexture,1.f);tri(a,d,e,m_crateTexture,1.f);}
+   const Texture&sheet=*shardLook(c).sheet;
+   for(int i=1;i<points-1;++i){tri(top[0],top[i],top[i+1],sheet,1.f);tri(bottom[0],bottom[i+1],bottom[i],sheet,1.f);}
+   for(int i=0;i<points;++i){int j=(i+1)%points;auto a=bottom[i],b=bottom[j],d=top[j],e=top[i];a=uvAt(a,.115f,.055f);b=uvAt(b,.185f,.055f);d=uvAt(d,.185f,.33f);e=uvAt(e,.115f,.33f);tri(a,b,d,sheet,1.f);tri(a,d,e,sheet,1.f);}
   }else{
    auto&mesh=m_clutterMeshes[c.kind];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;float scale=std::max({size[0],size[1],size[2]})/std::max({range.x,range.y,range.z});
    for(auto face:mesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;auto r=c.rotate(p.x,p.z,p.y);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}tri(face.v[0],face.v[1],face.v[2],m_clutterTextures[c.kind],1.f);}
@@ -4002,5 +4031,14 @@ void SoftwareRenderer::inspectRig(const Game&game,float yaw,float pitch,Point3 c
  text(10,10,"RAWMETAL / RIG INSPECTION",0xffeadcbb);
  text(10,m_height-12,game.weaponKick()>.1f?"RECOIL POSE":"IDLE POSE",0xffbdad8d);
  m_inspectRig=false;
+}
+SoftwareRenderer::ShardLook SoftwareRenderer::shardLook(const Clutter& c)const{
+ if(c.kind!=6)return {};
+ switch(c.shardOf){
+  case ShardOf::Barrel:return {&m_barrelMesh,&m_barrelTexture,true};
+  case ShardOf::Ceiling:return {nullptr,&m_dropCeiling,false};
+  case ShardOf::Model:if(c.shardModel>=0&&c.shardModel<FacilityModelCount)return {&m_facilityMeshes[size_t(c.shardModel)],&facilityTexture(c.shardModel,0),false};break;
+  default:break;}
+ return {nullptr,&m_crateTexture,false};
 }
 }

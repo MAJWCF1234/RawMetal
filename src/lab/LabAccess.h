@@ -48,6 +48,7 @@ struct LabAccess {
  // A man killed where he stands (the damage a hit from `from` does), as play kills him.
  static void killNpc(Game& g,size_t actor,Vec2 from){g.damageFriendly(actor,1e4f,from);}
  static bool decodeSave(Game& g,const std::string& data){return g.decodeSave(data);}
+ static std::string encodeSave(const Game& g){return g.encodeSave();}
  static bool damageEnemy(Game& g,Enemy& e,float amount){return g.applyEnemyDamage(e,amount,false,false);}
  static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);g.equipWeapon(id);}
  static void setGod(Game& g,bool on){g.m_god=on;if(on)g.m_player.health=std::max(g.m_player.health,100.f);}
@@ -65,6 +66,12 @@ struct LabAccess {
  // What plays: each voice's sound, speech clip (-1 none) and speaker (actor+1, 0 none).
  struct Playing {Sound sound;int speech;size_t speaker;};
  static std::vector<Playing> playing(const AudioEngine& a){std::vector<Playing> out;for(const auto& v:a.m_voices)if(!v.loop)out.push_back({v.sound,v.speech,v.speaker});return out;}
+ // Things that break, and what they leave (tubes/Debris.cpp).
+ static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
+ static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}
+ static void damagePane(Game& g,int index,float amount,Point3 at,Point3 direction){g.damagePane(g.m_level,index,amount,at,direction);}
+ static void breakClutter(Game& g,size_t index,Point3 direction){g.breakClutter(g.m_level,index,direction);g.landShards();}
+ static void blastProps(Game& g,Point3 at,bool tiles){g.blastProps(at,tiles);}
  // ---- SoftwareRenderer ----
  using Corpse=SoftwareRenderer::Corpse;
  static std::unordered_map<std::uint64_t,Corpse>& corpses(SoftwareRenderer& r){return r.m_corpses;}
@@ -77,6 +84,12 @@ struct LabAccess {
  static void resetRenderer(SoftwareRenderer& r){r.m_corpses.clear();r.m_corpseClock=0;r.m_goreBursts.clear();r.forgetScene();}
  static Point3 cameraPoint(const SoftwareRenderer& r,Point3 p){return r.cameraPoint(p,r.m_view);}
  static const Player& view(const SoftwareRenderer& r){return r.m_view;}
+ // The sheet a shard is drawn with, and the sheets its sources are drawn with (Scene3D: a 'B' tile, a
+ // 'C' tile, an intact breakable of `material`, a facility model).
+ static SoftwareRenderer::ShardLook shardLook(const SoftwareRenderer& r,const Clutter& c){return r.shardLook(c);}
+ static const SoftwareRenderer::Texture* tileSheet(const SoftwareRenderer& r,char tile){return tile=='B'?&r.m_barrelTexture:&r.m_crateTexture;}
+ static const SoftwareRenderer::Texture* breakableSheet(const SoftwareRenderer& r,int material){return material==22?&r.m_dropCeiling:material==17?&r.m_glassTexture:&r.m_crateTexture;}
+ static const SoftwareRenderer::Texture* modelSheet(const SoftwareRenderer& r,int model){return &r.facilityTexture(model,0);}
  static int bloodDecalCount(const SoftwareRenderer& r,SoftwareRenderer::Fluid f,SoftwareRenderer::BloodJob j){return int(r.m_bloodDecals[size_t(f)][size_t(j)].size());}
  static SoftwareRenderer::Fluid fluidOf(int species){const auto& v=SoftwareRenderer::creatureVisuals;return v[size_t(std::clamp(species,0,int(v.size())-1))].fluid;}
  #ifdef RAWMETAL_LAB_HAS_PARTICLES
