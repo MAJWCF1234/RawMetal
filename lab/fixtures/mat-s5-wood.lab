@@ -1,0 +1,8 @@
+# Materials: the look-s5-wood view (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 5
+camera 5.2 8.6 -999 90 -14
+open-doors
+scenery-only
+size 960 540
+frames 1

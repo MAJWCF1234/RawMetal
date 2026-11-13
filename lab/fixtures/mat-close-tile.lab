@@ -1,0 +1,8 @@
+# Materials: the clinic tile walls at a grazing angle (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 4 6.5 -999 -60 -4
+open-doors
+scenery-only
+size 960 540
+frames 1

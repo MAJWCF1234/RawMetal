@@ -3,6 +3,7 @@
 #include "GpuRenderer.h"
 #include "../core/FrameProfile.h"
 #include "LookTuning.h"
+#include "Materials.h"
 
 #include <sstream>
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -122,6 +123,22 @@ std::vector<uint32_t> upsamplePixels(const std::vector<uint32_t>& source,int wid
  };
  for(int y=0;y<outH;++y)for(int x=0;x<outW;++x)out[size_t(y*outW+x)]=sample((x+.5f)/scale-.5f,(y+.5f)/scale-.5f);
  return out;
+}
+// A material's surface map for the GPU (SoftwareRenderer::Texture::surfaceMap with its relief): RGBA8,
+// r relief, g roughness, b metalness, a cavity, with its mip chain. Roughness filters as its square
+// (the lobe's width adds in alpha, not in r), the rest by their mean.
+std::vector<std::vector<uint8_t>> surfaceBytes(int width,int height,const std::vector<uint32_t>& level0){
+ std::vector<std::vector<uint8_t>> levels;std::vector<uint32_t> current=level0;int w=width,h=height;
+ auto bytesOf=[](const std::vector<uint32_t>& v){std::vector<uint8_t> out(v.size()*4);std::memcpy(out.data(),v.data(),out.size());return out;};
+ levels.push_back(bytesOf(current));
+ while(w>1||h>1){const int nw=std::max(1,w/2),nh=std::max(1,h/2);std::vector<uint32_t> next(size_t(nw)*nh);
+  for(int y=0;y<nh;++y)for(int x=0;x<nw;++x){float sum[4]{};
+   for(int j=0;j<2;++j)for(int i=0;i<2;++i){const uint32_t p=current[size_t(std::min(h-1,y*2+j))*w+std::min(w-1,x*2+i)];
+    for(int c=0;c<4;++c){const float v=float((p>>(c*8))&255u)/255.f;sum[c]+=c==1?v*v:v;}}
+   uint32_t out=0;for(int c=0;c<4;++c){const float v=c==1?std::sqrt(sum[c]*.25f):sum[c]*.25f;out|=uint32_t(std::clamp(int(std::lround(v*255.f)),0,255))<<(c*8);}
+   next[size_t(y)*nw+x]=out;}
+  levels.push_back(bytesOf(next));current=std::move(next);w=nw;h=nh;}
+ return levels;
 }
 std::vector<uint8_t> upsampleRelief(const std::vector<uint8_t>& source,int width,int height,int scale){
  if(scale<=1||width<1||height<1||source.size()!=size_t(width)*height)return source;
@@ -519,7 +536,7 @@ struct GpuRenderer::Impl {
  // world position and atlas probe index, then its room box (lo, hi).
  struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];
   float probeInfo[4];float probeVolumes[ProbeSlots*8];float reflections[MaxReflections*12];};
- Image irradianceAtlas,reflectionAtlas;VkSampler probeSampler=VK_NULL_HANDLE,reflectionSampler=VK_NULL_HANDLE;bool reflectionsReady=false;
+ Image irradianceAtlas,reflectionAtlas,envBrdfImage,wetAtlas;VkSampler probeSampler=VK_NULL_HANDLE,reflectionSampler=VK_NULL_HANDLE;bool reflectionsReady=false;
  struct ProbeSlot {int level=-1;uint64_t key=0,used=0;float origin[3]{};float cellZ=1;int layers=0;};
  std::array<ProbeSlot,ProbeSlots> probeSlots{};std::vector<int> activeProbes;
  struct ReflectionSlot {uint64_t key=0,used=0;int level=-1;float probe[9]{};bool captured=false;};
@@ -586,13 +603,15 @@ struct GpuRenderer::Impl {
    VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};view.image=out.handle;view.viewType=viewType;view.format=format;view.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,layers};check(vkCreateImageView(device,&view,nullptr,&out.view),"Create light probe view");
   };
   image(irradianceAtlas,VK_IMAGE_TYPE_3D,VK_IMAGE_VIEW_TYPE_3D,{uint32_t(ProbeAtlasWidth),uint32_t(ProbeAtlasHeight),uint32_t(ProbeAtlasDepth)},1,1,VK_FORMAT_R16G16B16A16_SFLOAT,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT);
+  // Each probe slot's wetness mask (Wetness.h), a layer per slot: dry until its map's bake lands.
+  image(wetAtlas,VK_IMAGE_TYPE_2D,VK_IMAGE_VIEW_TYPE_2D_ARRAY,{uint32_t(WetnessMask::Size),uint32_t(WetnessMask::Size),1},1,uint32_t(ProbeSlots),VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT);
   // Reflections are blitted out of the HDR scene target and filtered down their mips.
   VkFormatProperties properties{};vkGetPhysicalDeviceFormatProperties(physical,sceneFormat,&properties);
   constexpr VkFormatFeatureFlags blit=VK_FORMAT_FEATURE_BLIT_SRC_BIT|VK_FORMAT_FEATURE_BLIT_DST_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
   reflectionsReady=hdrScene&&!vrMode&&(properties.optimalTilingFeatures&blit)==blit;
   image(reflectionAtlas,VK_IMAGE_TYPE_2D,VK_IMAGE_VIEW_TYPE_2D_ARRAY,{ReflectionSize,ReflectionSize,1},ReflectionLevels,uint32_t(MaxReflections*6),hdrScene?sceneFormat:VK_FORMAT_R16G16B16A16_SFLOAT,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT);
   startUploadCommands();
-  for(auto* target:{&irradianceAtlas,&reflectionAtlas}){const uint32_t levels=target==&reflectionAtlas?ReflectionLevels:1,layers=target==&reflectionAtlas?uint32_t(MaxReflections*6):1;
+  for(auto* target:{&irradianceAtlas,&reflectionAtlas,&wetAtlas}){const uint32_t levels=target==&reflectionAtlas?ReflectionLevels:1,layers=target==&reflectionAtlas?uint32_t(MaxReflections*6):target==&wetAtlas?uint32_t(ProbeSlots):1;
    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=target->handle;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,layers};b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
    vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
    VkClearColorValue zero{{0.f,0.f,0.f,0.f}};vkCmdClearColorImage(uploadCommand,target->handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&zero,1,&b.subresourceRange);
@@ -623,10 +642,18 @@ struct GpuRenderer::Impl {
   }
   for(int which=0;which<2;++which)for(auto set:which?captureSets:projectionSets)for(uint32_t binding=5;binding<=6;++binding){
    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&images[binding-5];vkUpdateDescriptorSets(device,1,&write,0,nullptr);}
+  // The split-sum environment BRDF (Materials.h), computed once: scale and bias of F0 by NoV and roughness.
+  {const auto& table=envBrdfTable();std::vector<uint8_t> bytes(table.size()*2);auto* half=reinterpret_cast<uint16_t*>(bytes.data());
+   for(size_t i=0;i<table.size();++i)half[i]=emissionHalf(table[i]);
+   upload(envBrdfImage,EnvBrdfSize,EnvBrdfSize,VK_FORMAT_R16G16_SFLOAT,{std::move(bytes)},4);flushUploads();
+   VkDescriptorImageInfo lut{clamp,envBrdfImage.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+   VkDescriptorImageInfo wetInfo{probeSampler,wetAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+   for(int which=0;which<2;++which)for(auto set:which?captureSets:projectionSets)for(uint32_t binding=8;binding<=9;++binding){
+    VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=binding==8?&lut:&wetInfo;vkUpdateDescriptorSets(device,1,&write,0,nullptr);}}
  }
  void destroyProbeResources(){
   if(captureFrame)vkDestroyFramebuffer(device,captureFrame,nullptr);captureFrame=VK_NULL_HANDLE;
-  for(auto* i:{&irradianceAtlas,&reflectionAtlas,&captureColor,&captureTarget,&captureDepth,&captureMaterialColor,&captureMaterial})destroy(*i);
+  for(auto* i:{&irradianceAtlas,&reflectionAtlas,&envBrdfImage,&wetAtlas,&captureColor,&captureTarget,&captureDepth,&captureMaterialColor,&captureMaterial})destroy(*i);
   for(auto&b:captureBuffers)destroy(b);destroy(probeStaging);
   if(probeSampler)vkDestroySampler(device,probeSampler,nullptr);if(reflectionSampler)vkDestroySampler(device,reflectionSampler,nullptr);probeSampler=reflectionSampler=VK_NULL_HANDLE;
  }
@@ -648,15 +675,30 @@ struct GpuRenderer::Impl {
   vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&b);
   submitUploadCommands();
  }
+ // One map's wetness mask into its slot's layer of the wetness atlas.
+ void uploadWetness(int slot,const WetnessMask& wet){
+  constexpr int N=WetnessMask::Size;const size_t bytes=size_t(N)*N*4;std::vector<std::uint32_t> texels=wet.texels;texels.resize(size_t(N)*N,0u);
+  if(probeStaging.size<bytes){destroy(probeStaging);makeBuffer(probeStaging,bytes,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);}
+  std::memcpy(probeStaging.mapped,texels.data(),bytes);
+  startUploadCommands();
+  VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=wetAtlas.handle;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,uint32_t(slot),1};b.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+  vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+  VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,uint32_t(slot),1};copy.imageExtent={uint32_t(N),uint32_t(N),1};
+  vkCmdCopyBufferToImage(uploadCommand,probeStaging.handle,wetAtlas.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+  std::swap(b.oldLayout,b.newLayout);std::swap(b.srcAccessMask,b.dstAccessMask);
+  vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&b);
+  submitUploadCommands();
+ }
  // This frame's probes for the shaders: the volumes in use and the captured reflection probes.
  static void writeLook(float* tail){
-  // LookA: reflection strength, a dielectric's F0, a metal's F0, the roughness past which a dielectric
-  // shows no reflection; LookB: the march's roughest finish, the probe's blur by roughness, the fill's
-  // saturation, a metal's tint; LookC: the bounce's ceiling, a debug switch (1: probe parallax off,
-  // 2: no screen march), a crystal's glow, spare.
-  static const float look[12]={lookTune("reflect",1.f),lookTune("f0",.04f),lookTune("metalF0",.5f),lookTune("matte",.3f),
-   lookTune("ssrRough",.34f),lookTune("probeLod",1.5f),lookTune("fillSat",.85f),lookTune("metalTint",.35f),
-   lookFillCeiling(),lookTune("probeDebug",0.f),lookTune("crystalGlow",2.f),0.f};
+  // LookA: the screen reflections' strength (0 for an A/B), spare, the mean albedo that turns the room's
+  // ambient into what a lobe sees where no probe covers it, spare;
+  // LookB: the screen march's roughest finish, spare, the fill's saturation, spare; LookC: the bounce's
+  // ceiling, a debug switch (1: probe parallax off, 2: no screen march), a crystal's glow, the
+  // image-based specular's strength (1; 0 for an A/B).
+  static const float look[12]={lookTune("reflect",1.f),0.f,lookTune("roomAlbedo",.3f),0.f,
+   lookTune("ssrRough",.34f),0.f,lookTune("fillSat",.85f),0.f,
+   lookFillCeiling(),lookTune("probeDebug",0.f),lookTune("crystalGlow",2.f),lookTune("ibl",1.f)};
   std::memcpy(tail,look,sizeof(look));if(!lookReflections())tail[0]=0.f;}
  void writeProbeHeader(void* mapped){
   LampHeader h{};int volumes=0,reflections=0;
@@ -974,7 +1016,12 @@ struct GpuRenderer::Impl {
   if(!t.normalLevels.empty()){auto normals=upsampleNormals(t.normalLevels.front(),t.width,t.height,scale);upload(mat.normal,presentW,presentH,VK_FORMAT_R16G16B16A16_SNORM,normalBytes(presentW,presentH,normals),8);}
   if(!t.emission.empty())upload(mat.emission,presentW,presentH,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(presentW,presentH,emission)),8);
   else if(!blackEmission.view)upload(blackEmission,1,1,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(1,1,{0xff000000u})),8);
-  if(!t.relief.empty()){auto relief=upsampleRelief(t.relief,t.width,t.height,scale);upload(mat.relief,presentW,presentH,VK_FORMAT_R8_UNORM,{bytes(relief)},1);}
+  if(!t.surfaceMap.empty()&&t.surfaceMap.size()==t.pixels.size()){
+   // The surface map rides in the relief slot (r keeps the relief the parallax step reads).
+   std::vector<uint32_t> packed(t.surfaceMap.size());const bool relief=t.relief.size()==packed.size();
+   for(size_t i=0;i<packed.size();++i){const uint32_t s=t.surfaceMap[i];packed[i]=(relief?uint32_t(t.relief[i]):128u)|((s&255u)<<8)|(((s>>8)&255u)<<16)|(((s>>16)&255u)<<24);}
+   upload(mat.relief,presentW,presentH,VK_FORMAT_R8G8B8A8_UNORM,surfaceBytes(presentW,presentH,upsamplePixels(packed,t.width,t.height,scale)),4);}
+  else if(!t.relief.empty()){auto relief=upsampleRelief(t.relief,t.width,t.height,scale);upload(mat.relief,presentW,presentH,VK_FORMAT_R8_UNORM,{bytes(relief)},1);}
   VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};alloc.descriptorPool=descriptors;alloc.descriptorSetCount=1;alloc.pSetLayouts=&setLayout;check(vkAllocateDescriptorSets(device,&alloc,&mat.set),"Allocate material descriptors");
   VkDescriptorImageInfo images[]={{t.clampEdges?clamp:wrap,mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.normal.view?mat.normal.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{t.clampEdges?clamp:wrap,mat.emission.view?mat.emission.view:blackEmission.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.relief.view?mat.relief.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[n].dstSet=mat.set;writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[n].pImageInfo=&images[n];}vkUpdateDescriptorSets(device,4,writes,0,nullptr);return key;
@@ -1085,11 +1132,15 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   {5,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
   {6,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
   // Soft particles: the room's planar depth (Impl::softDepth).
-  {7,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr}};
- VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=8;projectionInfo.pBindings=projectionBindings;
+  {7,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  // The split-sum environment BRDF table (Materials.h envBrdfTable).
+  {8,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  // Where each resident map is wet (Wetness.h), a layer per probe slot.
+  {9,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr}};
+ VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=10;projectionInfo.pBindings=projectionBindings;
  check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create view and actor layout");
  // Two frame sets and two reflection capture sets (createProbeResources).
- VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,4},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,8},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,24}};
+ VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,4},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,8},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,40}};
  VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=4;projectionPool.poolSizeCount=3;projectionPool.pPoolSizes=projectionSizes;
  check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create view and actor pool");
  VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;
@@ -1519,7 +1570,7 @@ void GpuRenderer::useProbes(int level,const ProbeBake* bake,std::uint64_t key,Ve
  if(slot<0){std::uint64_t oldest=~0ull;for(int i=0;i<Impl::ProbeSlots;++i){const auto&s=m->probeSlots[size_t(i)];if(s.used!=m->probeFrame&&s.used<oldest){oldest=s.used;slot=i;}}}
  if(slot<0)return;
  auto&s=m->probeSlots[size_t(slot)];
- if(s.level!=level||s.key!=key){m->uploadIrradiance(slot,v);s.level=level;s.key=key;}
+ if(s.level!=level||s.key!=key){m->uploadIrradiance(slot,v);m->uploadWetness(slot,bake->wet);s.level=level;s.key=key;}
  s.origin[0]=v.origin.x+offset.x;s.origin[1]=v.origin.y+offset.y;s.origin[2]=v.origin.z;s.cellZ=v.cellZ;s.layers=std::clamp(v.nz,1,Impl::ProbeAtlasDepth);
  if(s.used!=m->probeFrame){s.used=m->probeFrame;m->activeProbes.push_back(slot);}
  for(size_t i=0;i<bake->reflections.size();++i){
@@ -1617,7 +1668,7 @@ GpuRenderer::ActorMaterial GpuRenderer::prepareActorMaterial(const SoftwareRende
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
- return {key,sortKey,texture.emission.empty()?0.f:emissionScale,!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f,texture.parallaxScale,(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength};
+ return {key,sortKey,texture.emission.empty()?0.f:emissionScale,(!texture.normalLevels.empty()?1.f:texture.glossStrength>0?0.f:-1.f)+(texture.surfaceMap.empty()||(texture.normalLevels.empty()&&texture.glossStrength<=0)?0.f:2.f),texture.parallaxScale,(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength};
 }
 void GpuRenderer::submitActor(const MeshVertex&a,const MeshVertex&b,const MeshVertex&c,int actor,const ActorMaterial&material){
  uint32_t start=uint32_t(m->actorVertices.size());
@@ -1652,7 +1703,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  if(m->capturing&&m->lodTag&&m->lodTag->impostor){const MeshVertex* v[3]={&a,&b,&c};
   for(int i=0;i<3;++i)for(int j=i+1;j<3;++j)if(std::fabs(v[i]->u+v[j]->u)<.01f&&std::fabs(v[i]->v+v[j]->v)<.01f)impostorCentre=(worldPoint(v[i]->p)+worldPoint(v[j]->p))*.5f;}
  int corner=0;for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{const Projection projection{float(m->width)/m->height};out.position[0]=v.p.x*Projection::horizontal;out.position[1]=-v.p.y*projection.vertical();out.position[2]=v.p.z-Projection::nearPlane;out.position[3]=v.p.z;}
-  out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=(normals?1.f:0.f)+dissolve*.45f;
+  out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=(normals?1.f:0.f)+(texture.surfaceMap.empty()?0.f:2.f)+dissolve*.45f;
   for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=m->capturing?(bounceAir?(*bounceAir)[size_t(corner)]:SoftwareRenderer::NoBounceAir):v.p.z;++corner;out.surface[1]=texture.emission.empty()?-(std::floor(std::clamp(texture.polish,0.f,.99f)*10.f)+std::clamp(texture.metalness,0.f,.99f)):texture.crystal?100.f+emissionScale:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
   // A particle card (surface code 5; 0-4 are opaque, additive, blended, liquid and their gloss): its opacity, the depth over which it fades into what lies
   // behind it (when this frame has the room's depth to read), its flipbook blend and the step to

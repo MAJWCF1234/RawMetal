@@ -1,0 +1,8 @@
+# Materials: the light room's floor at a grazing angle, low (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 12 12 -1.2 -90 -3
+open-doors
+scenery-only
+size 960 540
+frames 1

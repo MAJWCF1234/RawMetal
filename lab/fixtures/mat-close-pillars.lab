@@ -1,0 +1,8 @@
+# Materials: the steel, painted and copper pillars close up (tubes: materials).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 11.2 4.3 -999 -90 -12
+open-doors
+scenery-only
+size 960 540
+frames 1

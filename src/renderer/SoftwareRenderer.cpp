@@ -1,5 +1,7 @@
 #include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
+#include "Materials.h"
+#include "Wetness.h"
 #include "Projection.h"
 #include "GpuRenderer.h"
 #include "../vr/VrRuntime.h"
@@ -542,34 +544,41 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // Pressure and office plaster are the finishes maps already use, at their repeats.
  m_surfaceSets[SurfacePressure]={&m_pressureWall,&m_pressureFloor,&m_facilityTextures.at("ceiling_1"),{2,3},.5f,.5f};
  m_surfaceSets[SurfaceOfficePlaster]={&m_officeWall,&m_securityCarpet,&m_dropCeiling,{1,1},1,1};
- // Finishes that mirror the room (light probes, post.frag), as polish (roughness at most 1 - polish)
- // and metalness. This is a worn facility: almost nothing in it is polished. Glazed floor tile and lab
- // vinyl show a faint, blurred sheen at a low angle (wet, they mirror: scene.frag's wetness); clean
- // steel and machinery are brushed, a broad dim sheen; painted and worn metal is paint, matte; chrome,
- // stainless fittings, mirrors and glass are the only sharp reflectors. Concrete, rust, timber, rock,
- // fabric and rubber keep none.
- {auto finish=[](Texture& t,float polish,float metal){t.polish=polish;t.metalness=metal;};
-  // Clinic tile wall and floor, lab panel wall and vinyl floor.
-  finish(m_surfaceTextures[6],.2f,0);finish(m_surfaceTextures[7],.42f,0);finish(m_surfaceTextures[9],.2f,0);finish(m_surfaceTextures[10],.4f,0);
-  // Structure materials 46-48 and 50 (tread plate, rusted steel, metal roofing, floor tile).
-  const auto architecture=[&](int material)->Texture&{return m_surfaceTextures[size_t(ArchitectureFinish+material-FirstArchitectureMaterial)];};
-  finish(architecture(46),.3f,.35f);finish(architecture(47),0,0);finish(architecture(48),.2f,.25f);finish(architecture(50),.42f,0);
-  finish(m_officeTile,.42f,0);finish(m_pressureMetal,.32f,.35f);finish(m_pipeTexture,.32f,.35f);finish(m_darkMetalTexture,.25f,.3f);finish(m_ironTexture,.15f,.2f);
-  for(auto& [name,t]:m_facilityTextures){
-   auto has=[&](const char* part){return name.find(part)!=std::string::npos;};
-   if(t.transparent||t.additive||!t.emission.empty())continue;
-   const bool worn=has("rust")||has("grime")||has("dirt")||has("old")||has("dead");
-   if(has("wood")||has("crate")||has("pallet")||has("fabric")||has("cloth")||has("rubber")||has("tire")||has("paper")||has("cardboard"))continue;
-   if(has("mirror"))finish(t,worn?.55f:.9f,.8f);
-   else if(has("chrome")||has("stainless"))finish(t,worn?.45f:.75f,.85f);
-   else if(has("autopsy_table")||has("sink_textures")||has("tray"))finish(t,.5f,.7f);
-   else if(has("glass")||has("_screen")||has("monitor"))finish(t,.8f,0);
-   else if(has("roof")||has("ceiling"))continue;
-   else if(has("tile")||has("marble")||has("polished"))finish(t,.42f,0);
-   else if(has("metal")||has("steel")||has("pipe")||has("valve")||has("locker")||has("catwalk")||has("cage")||has("gate")||has("cabinet")){
-    if(has("fire_extenguisher"))continue;
-    if(worn||has("painted"))finish(t,0,0);else finish(t,.3f,.35f);}
-  }}
+ // Physically based materials (Materials.h): every surface takes a class (painted metal, bare steel,
+ // rust, chrome, concrete, glazed tile, lab vinyl, bare and varnished wood, fabric, rubber, plastic,
+ // glass...) with its physical range of roughness and its metalness, and a surface map derived from its
+ // own albedo (grime and pits rougher, worn edges smoother, rust and paint chips their own material),
+ // so a highlight breaks up across a surface the way it does on a real one instead of one even smear.
+ {std::vector<MaterialJob> jobs;auto apply=[&](Texture& t,Material m,const char* name){jobs.push_back({&t,int(m),name});};
+  for(auto& [name,t]:m_facilityTextures){if(t.additive)continue;
+   apply(t,t.liquid?Material::Water:t.crystal?Material::Crystal:t.transparent&&name.find("glass")!=std::string::npos?Material::Glass:classifyMaterial(name),name.c_str());}
+  // Surface sets and structure finishes, in surfaceFinishes order. Floor tile is worn vinyl-composition
+  // or quarry tile (no floor here is a glazed mirror); glazed tile is a wall finish.
+  using M=Material;
+  constexpr Material finishes[]={M::Concrete,M::Concrete,M::Concrete, M::Plaster,M::Plaster,M::Plaster, M::GlazedTile,M::GlazedTile,M::Plaster,
+   M::Plastic,M::Vinyl,M::Plastic, M::Stone,M::Stone,M::Stone, M::PaintedMetal,M::PaintedMetal,M::PaintedMetal, M::BareWood,M::Ground,
+   M::Stone,M::Stone,M::Stone, M::Stone,M::Crystal, M::Plaster, M::Plastic,M::Plastic,M::Plastic, M::Fabric,
+   M::Concrete,M::Concrete,M::Concrete, M::Concrete,M::Concrete,M::Concrete, M::BareSteel,M::Rust,M::Aluminium, M::Ground,M::Vinyl,M::VarnishedWood};
+  static_assert(std::size(finishes)==std::tuple_size_v<decltype(m_surfaceTextures)>);
+  for(size_t i=0;i<m_surfaceTextures.size();++i)apply(m_surfaceTextures[i],finishes[i],("finish "+std::to_string(i)).c_str());
+  const std::pair<Texture*,Material> named[]={
+   {&m_wall,M::Plaster},{&m_floor,M::Concrete},{&m_metal,M::BareSteel},{&m_serviceFloor,M::Concrete},{&m_serviceCeiling,M::Plaster},
+   {&m_pressureWall,M::Concrete},{&m_pressureFloor,M::BareSteel},{&m_pressureMetal,M::BareSteel},{&m_bulkhead,M::PaintedMetal},
+   {&m_pumpTexture,M::PaintedMetal},{&m_compressorTexture,M::PaintedMetal},{&m_pipeTexture,M::PaintedMetal},{&m_gateTexture,M::PaintedMetal},
+   {&m_barrelTexture,M::PaintedMetal},{&m_crateTexture,M::BareWood},{&m_concrete,M::Concrete},{&m_framePaint,M::PaintedMetal},
+   {&m_yellowSteel,M::PaintedMetal},{&m_redSteel,M::PaintedMetal},{&m_paleSteel,M::PaintedMetal},{&m_panelSteel,M::PaintedMetal},
+   {&m_ironTexture,M::BareSteel},{&m_darkMetalTexture,M::BareSteel},{&m_rubberTexture,M::Rubber},{&m_leatherTexture,M::Leather},
+   {&m_officeTile,M::Vinyl},{&m_officeWall,M::Plaster},{&m_dropCeiling,M::Plaster},{&m_securityCarpet,M::Fabric},{&m_officeCarpet,M::Fabric},
+   {&m_areaWalls[0],M::Plaster},{&m_areaWalls[1],M::Plaster},{&m_areaWalls[2],M::Plaster},{&m_areaFloors[0],M::Concrete},{&m_areaFloors[1],M::Concrete},{&m_areaFloors[2],M::Concrete},
+   {&m_handgunTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
+   {&m_cursedTexture,M::Rust},{&m_droneTexture,M::PaintedMetal},{&m_arms,M::Clothing}};
+  for(auto [t,m]:named)apply(*t,m,"engine");
+  for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");
+  for(auto* t:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})apply(*t,M::Clothing,"transformed");
+  for(auto& role:m_cleanupTextures)for(auto& t:role)apply(t,M::Clothing,"cleanup");
+  for(auto* water:{&m_water,&m_murkWater,&m_coastWater})apply(*water,M::Water,"water");
+  apply(m_glassTexture,M::Glass,"glass");
+  applyMaterials(jobs);}
  m_logo=loadEmbeddedPng(2);m_logo.clampEdges=true;
 }
 SoftwareRenderer::Texture SoftwareRenderer::loadSurfaceFinish(int index){
@@ -1481,7 +1490,7 @@ void SoftwareRenderer::render(const Game& game){
   }
   // Sun cascades: three view-frustum slices, each a texel-snapped square in
   // the light's frame so the shadow edge does not crawl as the camera moves.
-  {std::array<float,56> sunData{};const auto sun=world.sun();sunData[7]=world.wetness();
+  {std::array<float,56> sunData{};const auto sun=world.sun();sunData[7]=outdoorRain(world);
    if(sun.intensity>0){
     sunData[0]=sun.direction.x;sunData[1]=sun.direction.y;sunData[2]=sun.direction.z;sunData[3]=sun.intensity*(1.f-.9f*game.stormIntensity());sunData[4]=sun.r;sunData[5]=sun.g;sunData[6]=sun.b;
     auto cross=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};Point3 forward=sun.direction*-1.f,right=cross(forward,Point3{0,0,1});float rl=std::sqrt(right.x*right.x+right.y*right.y+right.z*right.z);right=right*(1.f/std::max(rl,1e-4f));Point3 up=cross(right,forward);

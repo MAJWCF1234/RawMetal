@@ -204,6 +204,7 @@ ProbeBake bakeLightProbes(const World& w,const ProbeBakeInput& input){
   bool duplicate=false;for(const auto&other:bake.reflections)if(p.x>other.lo.x&&p.x<other.hi.x&&p.y>other.lo.y&&p.y<other.hi.y&&std::fabs(p.z-other.position.z)<1.f&&std::hypot(p.x-other.position.x,p.y-other.position.y)<4.5f)duplicate=true;
   if(!duplicate)bake.reflections.push_back(probe);
  }
+ bake.wet=bakeWetness(w,v.origin.z);
  v.milliseconds=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
  return bake;
 }

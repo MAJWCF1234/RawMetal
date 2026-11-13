@@ -14,10 +14,8 @@ layout(set=0,binding=5) uniform sampler2D bloomImage;
 // The room reflection probes (GpuRenderer captureReflections), the off-screen fallback for SSR.
 layout(set=0,binding=6) uniform sampler2DArray reflectionAtlas;
 layout(std430,set=0,binding=7) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];} lampGrid;
-// The look's values (LookTuning.h, GpuRenderer writeLook): reflection strength, a dielectric's F0, a
-// metal's F0, the roughness past which a dielectric shows none; the march's roughest finish, the
-// probe's blur by roughness, the fill's saturation, a metal's tint; the bounce's ceiling, spare, a
-// crystal's glow, spare.
+// The look's values (LookTuning.h, GpuRenderer writeLook): the screen reflections' strength (LookA.x),
+// the screen march's roughest finish (LookB.x), a debug switch (LookC.y: 2 no screen march).
 #define LookA lampGrid.reflections[141]
 #define LookB lampGrid.reflections[142]
 #define LookC lampGrid.reflections[143]
@@ -91,6 +89,10 @@ float lampScatter(vec3 rayDirection,float rayLength,vec4 lamp){
 
 // Reflection probes: six 90-degree faces per room probe, captured by the scene pass (face order and
 // orientation as GpuRenderer captureReflections draws them), a mip chain for rough surfaces.
+// The mip a GGX lobe of roughness r reads (as scene.frag's probeLod).
+float probeLod(float r){float a=r*r;return clamp(log2(max(159.0*a,1e-4)),0.0,lampGrid.probeInfo.z-1.0);}
+// The split-sum table's analytic fit (Karis, mobile), for the weight of the screen march's swap.
+vec2 envBrdfApprox(float NoV,float r){const vec4 c0=vec4(-1.0,-0.0275,-0.572,0.022);const vec4 c1=vec4(1.0,0.0425,1.04,-0.04);vec4 q=r*c0+c1;float a004=min(q.x*q.x,exp2(-9.28*NoV))*q.x+q.y;return vec2(-1.04,1.04)*a004+q.zw;}
 const vec3 CaptureForward[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
 const vec3 CaptureRight[6]=vec3[6](vec3(0,1,0),vec3(0,-1,0),vec3(-1,0,0),vec3(1,0,0),vec3(0,1,0),vec3(0,1,0));
 const vec3 CaptureUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(-1,0,0),vec3(1,0,0));
@@ -116,8 +118,7 @@ vec4 probeReflection(vec3 p,vec3 R,float roughness,out float sky){
  vec2 st=clamp(vec2(0.5+0.5*dot(dir,CaptureRight[face])/z,0.5-0.5*dot(dir,CaptureUp[face])/z),vec2(0.0),vec2(1.0));
  // Blurred down the mips with roughness: a mirror reads the face itself, a brushed or worn finish
  // only the room's broad light and dark.
- float lod=clamp(roughness*LookB.y,0.0,1.0)*(lampGrid.probeInfo.z-1.0);
- vec4 s=textureLod(reflectionAtlas,vec3(st,c.w*6.0+float(face)),lod);
+ vec4 s=textureLod(reflectionAtlas,vec3(st,c.w*6.0+float(face)),probeLod(roughness));
  sky=smoothstep(300.0,900.0,s.a);
  return vec4(s.rgb,clamp(1.0-away/6.0,0.0,1.0));
 }
@@ -275,6 +276,8 @@ vec4 screenReflection(vec3 center,vec3 normal,float roughness){
 void main(){
  vec4 source=texture(sceneImage,uv);
  vec3 color=source.rgb;float depth=source.a;
+ // The material views (scene.frag --detail 13-16) are measurements: shown as they are.
+ if(lampGrid.flags.y>=13&&lampGrid.flags.y<=17){outColor=vec4(color,depth);return;}
  // The viewmodel writes negative depth and keeps its own lighting.
  bool viewModel=depth<0.0;
  bool surface=depth>0.02&&depth<p.grade.w;
@@ -300,9 +303,6 @@ void main(){
   float packed=floor(material.r*255.0+0.5),roughness=floor(packed/8.0)/31.0;int axis=int(packed-8.0*floor(packed/8.0));
   // g carries a metal's metalness above .5, else half the surface's wetness (scene.frag).
   float metal=material.g>0.5?(material.g-0.5)*2.0:0.0,wet=material.g>0.5?0.0:material.g*2.0;
-  // A finish shows the room only while it is smooth: a dielectric (paint, wood, concrete, rubber) none
-  // past LookA.w, a metal a little further (a brushed or worn metal keeps a broad, dim, blurred sheen).
-  float matte=mix(LookA.w,min(LookA.w+0.13,0.95),metal);
   // Water on a surface is a film over it: smooth whatever lies under it, a mirror at a grazing angle
   // and nothing head-on (F0 .02). A damp floor carries a little of it, a puddle all of it.
   float film=smoothstep(0.0,0.6,wet);
@@ -310,7 +310,11 @@ void main(){
   // smoothness, blue the water film.
   if(lampGrid.flags.y==12){vec3 hue=axis==1||axis==2?vec3(1.0,0.3,0.3):axis==3||axis==4?vec3(0.3,1.0,0.3):axis==5||axis==6?vec3(0.4,0.5,1.0):axis==0?vec3(0.6):vec3(0.0);
    outColor=vec4(hue*(0.25+0.75*(1.0-roughness))*(axis==2||axis==4||axis==6?0.6:1.0)+vec3(0.0,0.0,film),depth);return;}
-  if(roughness<matte||film>0.0){
+  // scene.frag lit every finish with the room's reflection probe (the split sum). On smooth finishes
+  // (under LookB.x) the screen march refines it: where it finds the room on screen it takes the place of
+  // what the probe gave, by the same specular weight; the probe stays wherever the march is unsure.
+  float marchShare=1.0-smoothstep(LookB.x*0.6,LookB.x,roughness);
+  if(marchShare>0.0||film>0.0){
    vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
    // The face's own axis when the scene pass gave one: the depth-built normal steps with half-float
    // depth, worst on a wall or floor seen at a grazing angle, and cut their reflections into bands and
@@ -321,32 +325,21 @@ void main(){
    vec3 toEye=normalize(-center);float NoV=max(dot(normal,toEye),0.0),grazing=pow(1.0-NoV,5.0);
    // Standing water lies on what faces up; a damp wall is not a mirror.
    film*=smoothstep(0.75,0.95,worldVector(normal).z);
-   // Schlick's Fresnel with the grazing rise held down by roughness: a rough finish never turns to a
-   // mirror. The share of the reflection a finish shows fades to none over the rougher part of its range.
-   float f0=mix(LookA.y,LookA.z,metal);
-   float fresnel=f0+(max(1.0-roughness,f0)-f0)*grazing;
-   float visible=1.0-smoothstep(matte-0.38,matte,roughness);
-   float strength=roughness<matte?min(fresnel*visible*LookA.x,0.9):0.0;
    float filmStrength=min((0.02+0.98*grazing)*film*LookA.x,0.9);
-   // One sharp reflection serves the smooth layer (the film, or the finish itself when smooth): the
-   // screen march where it finds the room, the probe's sharp mips past it. A rougher finish takes the
-   // probe alone, blurred down its mips.
-   float marchShare=1.0-smoothstep(LookB.x*0.6,LookB.x,roughness);
-   bool sharpNeeded=filmStrength>0.004||(strength>0.004&&marchShare>0.0);
    vec3 R=normalize(worldVector(reflect(-toEye,normal)));vec3 at=lampGrid.eye.xyz+worldVector(center);
    vec4 sharp=vec4(0.0);
-   if(sharpNeeded){sharp=LookC.y>1.5?vec4(0.0):screenReflection(center,normal,0.0);
-    if(sharp.a<0.999){float sky;vec4 probe=probeReflection(at,R,min(roughness,0.05),sky);
+   if(filmStrength>0.004){sharp=LookC.y>1.5?vec4(0.0):screenReflection(center,normal,0.0);
+    if(sharp.a<0.999){float sky;vec4 probe=probeReflection(at,R,0.03,sky);
      if(probe.a>0.0){vec3 seen=lampGrid.sun.w>0.0&&R.z>0.0?mix(probe.rgb,proceduralSky(R),sky):probe.rgb;sharp=vec4(mix(seen,sharp.rgb,sharp.a),max(sharp.a,probe.a));}}}
-   if(strength>0.004){vec4 reflection=sharp;
-    if(marchShare<1.0){float sky;vec4 probe=probeReflection(at,R,roughness,sky);vec4 blurred=vec4(0.0);
-     if(probe.a>0.0)blurred=vec4(lampGrid.sun.w>0.0&&R.z>0.0?mix(probe.rgb,proceduralSky(R),sky):probe.rgb,probe.a);
-     reflection=vec4(mix(blurred.rgb,sharp.rgb,marchShare*sharp.a),mix(blurred.a,sharp.a,marchShare));}
-    // A metal tints what it reflects with its own colour.
-    if(metal>0.0){float l=dot(color,vec3(0.2126,0.7152,0.0722));reflection.rgb*=mix(vec3(1.0),clamp(color/max(l,1e-4),vec3(0.0),vec3(2.0)),metal*LookB.w);}
-    // What the surface reflects takes the place of that share of its own light: a reflection never
-    // adds light the room does not have.
-    color=mix(color,reflection.rgb,strength*reflection.a);}
+   if(marchShare>0.0&&LookA.x>0.0&&LookC.y<1.5){
+    vec4 hit=filmStrength>0.004?sharp:screenReflection(center,normal,0.0);
+    float sky;vec4 probe=probeReflection(at,R,roughness,sky);
+    if(hit.a>0.0&&probe.a>0.0){
+     // F0: .04 a dielectric; a metal's from its own colour (its albedo is its F0).
+     float l=dot(color,vec3(0.2126,0.7152,0.0722));vec3 tint=clamp(color/max(l,1e-4),vec3(0.0),vec3(2.0));
+     vec2 AB=envBrdfApprox(NoV,roughness);vec3 F0=mix(vec3(0.04),tint*0.6,metal);
+     vec3 weight=(F0*AB.x+AB.y)*marchShare*hit.a*probe.a*LookA.x;
+     color=max(color+weight*(hit.rgb-probe.rgb),vec3(0.0));}}
    if(filmStrength>0.004)color=mix(color,sharp.rgb,filmStrength*sharp.a);
   }
  }
