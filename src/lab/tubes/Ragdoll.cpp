@@ -3,7 +3,8 @@
 // from the side; one shot onto a table, down a stair, back against a wall; a headless man; a Brute and
 // a Chimera. Every frame: no joint past its limit, no section in another, every section the shape it
 // was (its rigid core within 1.5 cm after the best rigid fit), the volume kept, and at rest nothing in
-// the floor or a wall. Strips from the front and the side at 30 fps for judging by eye.
+// the floor or a wall. Once down (nothing of it 0.6 m above where his feet were) its middle moves less
+// than 0.3 m: it does not slide. Strips from the front and the side at 30 fps for judging by eye.
 //
 // Fixture keys: scenario (a label), body N (0-5 civilians, 6.. the cleanup crew, 12 the Investigator),
 // creature KIND, kill-frame, from DEG (where the shot comes from, off the way he faces: 0 in front,
@@ -62,7 +63,9 @@ void bestFit(const std::vector<Point3>& a,const std::vector<Point3>& b,Point3& c
 // triangle, how far each corner is from the seam to another group.
 struct Watch {bool ready=false,human=false;int body=0;std::vector<Point3> rest;std::vector<int> group;std::vector<float> seam;int groups=0;double volume=0;Point3 feet{};float facing=0;
  // Per frame, the worst seen.
- float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0;float settled=-1,fell=-1;};
+ float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0;float settled=-1,fell=-1;
+ // Where its middle was once it had fallen (down within 0.6 m of the floor), and the farthest it went from there: the slide.
+ Point3 down{};float slide=0;};
 // Each group's own enclosed volume about its own middle, summed: a rigid turn of a part leaves it as it is, a squash does not.
 double volumeOf(const std::vector<MeshTriangle>& t,const std::vector<int>& group){std::map<int,std::pair<Point3,int>> mid;for(size_t i=0;i<t.size();++i){auto& m=mid[group[i]];m.first=m.first+t[i].v[0].p;++m.second;}
  std::map<int,double> vol;for(size_t i=0;i<t.size();++i){const auto& m=mid[group[i]];const Point3 c=m.first*(1.f/float(m.second));vol[group[i]]+=dot3(t[i].v[0].p-c,cross3(t[i].v[1].p-c,t[i].v[2].p-c))/6.0;}double v=0;for(auto& [g,x]:vol)v+=std::fabs(x);return v;}
@@ -161,7 +164,7 @@ const bool fall=add({
     std::vector<float> each;float a,b;shapeError(v,tri,a,b,&each);log<<"  by section:";for(size_t g=0;g<each.size();++g)log<<' '<<humanoid::name(c->partOf(int(g)))<<'='<<fixed(each[g]*100,1);log<<'\n';}
    #endif
    #ifdef RAWMETAL_CARCASS_RIG
-   for(const auto& j:c->jointStates())log<<"  "<<humanoid::name(j.part)<<" from "<<humanoid::name(c->partOf(j.parent))<<" bend "<<j.bend*57.3f<<" ["<<j.bendLo*57.3f<<","<<j.bendHi*57.3f<<"] side "<<j.side*57.3f<<" twist "<<j.twist*57.3f<<'\n';
+   for(const auto& j:c->jointStates())log<<"  "<<humanoid::name(j.part)<<" from "<<humanoid::name(c->partOf(j.parent))<<" bend "<<j.bend*57.3f<<" ["<<j.bendLo*57.3f<<","<<j.bendHi*57.3f<<"] side "<<j.side*57.3f<<" /"<<j.sideMax*57.3f<<" twist "<<j.twist*57.3f<<" /"<<j.twistMax*57.3f<<'\n';
    #endif
    log.flush();}
   w.volumeDev=std::max(w.volumeDev,float(std::fabs(volumeOf(tri,w.group)/w.volume-1)));
@@ -171,7 +174,8 @@ const bool fall=add({
   #endif
   if(!c->asleep()&&(s.frame-killFrame(s))%2==0){float low=0;w.insideMoving=std::max(w.insideMoving,insideCount(tri,world,low));w.lowestMoving=std::min(w.lowestMoving,low);}
   if(w.settled<0&&c->asleep())w.settled=c->age();
-  if(w.fell<0){float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);if(top-w.feet.z<.6f)w.fell=c->age();}
+  if(w.fell<0){float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);if(top-w.feet.z<.6f){w.fell=c->age();w.down=c->centre();}}
+  else w.slide=std::max(w.slide,std::hypot(c->centre().x-w.down.x,c->centre().y-w.down.y));
   // The strips: the fall from the front and the side, every other frame (30 fps) for 2.5 s.
   const int since=s.frame-killFrame(s);
   if(since>=0&&since<150&&since%2==0){Player& cam=LabAccess::player(g);const Player was=cam;const Vec2 f=facingOf(w.facing),side{f.y,-f.x};const Point3 aim{w.feet.x,w.feet.y,w.feet.z+.45f};
@@ -188,7 +192,8 @@ const bool fall=add({
   float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);
   const Point3 ctr=c->centre();const float drift=std::hypot(ctr.x-w.feet.x,ctr.y-w.feet.y);
   r.metric("settle_s",w.settled,"s");r.metric("fell_s",w.fell,"s");r.metric("shape_core_cm",w.shapeCore*100,"cm");r.metric("shape_all_cm",w.shapeAll*100,"cm");r.metric("volume_dev_pct",w.volumeDev*100,"%");
-  r.metric("inside_moving",w.insideMoving);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");
+  r.metric("inside_moving",w.insideMoving);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("slide_after_fall_m",w.slide,"m");
+  r.check("once down it does not slide (centre within 0.3 m of where it fell)",w.fell<0||w.slide<.3f,fixed(w.slide,2)+" m");
   #ifdef RAWMETAL_CARCASS_RIG
   r.metric("limit_excess_deg",w.limitDeg,"deg");r.metric("overlap_cm",w.overlap*100,"cm");r.metric("sections",c->sections());
   r.check("every joint within its limits every frame (2 deg)",w.limitDeg<=2.f,fixed(w.limitDeg,1)+" deg past at worst");

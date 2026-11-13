@@ -1,4 +1,5 @@
 #include "Carcass.h"
+#include "../core/Tune.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -11,11 +12,24 @@
 namespace retro {
 namespace {
 constexpr float Tick=1.f/60,Skin=.012f;
-// How the dead hold themselves: the pose a body died in is held, fading, for its first moments (so a
-// man shot standing goes over stiff from the hips, not down at the knees), and every joint turns
-// against friction so a limb lands rather than flops.
-constexpr float ToneStart=.6f,ToneTime=.9f,JointFriction=.12f;
-constexpr int Passes=4;
+// How the dead go down and lie (Carcass::step). Each knob is read live in the lab (lab/tune.txt,
+// carcass.NAME) and is the default given here everywhere else.
+// Death tone (the pose a body died in held, fading, for its first moments) is built but off: held stiff,
+// a man fell down a stair as a plank and went on tumbling at the bottom. A standing man still goes over
+// from the hips, because his feet grip the floor. Joints turn against friction so a limb lands, not flops.
+float ToneStart=0,ToneTime=.9f,JointFriction=.12f,TurnCap=.25f;
+// Each step is cut into SubSteps, each solved in Passes; the floor grips (Coulomb, by position: a point the
+// floor pushed back by `depth` does not move along it while that move is under StaticGrip*depth+Hold; past
+// it, it slides, slowed by KineticGrip). Lying on the floor a section loses its motion at GroundDamp a
+// second, and one barely moving (RestSpeed) stops. MaxLift: the most the floor lifts a point a pass (a
+// step's edge is climbed, not leapt). CollideStep: the most two sections are pushed apart a pass. A body
+// still moving FadeFrom seconds after it fell runs down at up to FadeDamp a second.
+int Passes=4,SubSteps=7,VelocityRounds=3;
+float StaticGrip=.9f,KineticGrip=.8f,Hold=.0015f,GroundDamp=8,ProbeStep=.01f,RestSpeed=.08f,CollideStep=.05f,MaxLift=.02f,FadeDamp=4,FadeFrom=2.5f;
+void knobs(){ToneStart=tune("carcass.tone",0);ToneTime=tune("carcass.toneTime",.9f);JointFriction=tune("carcass.jointFriction",.12f);TurnCap=tune("carcass.turnCap",.25f);
+ Passes=std::max(1,int(tune("carcass.passes",4)));SubSteps=std::max(1,int(tune("carcass.substeps",7)));VelocityRounds=std::max(1,int(tune("carcass.vrounds",3)));
+ StaticGrip=tune("carcass.static",.9f);KineticGrip=tune("carcass.kinetic",.8f);Hold=tune("carcass.hold",.0015f);GroundDamp=tune("carcass.groundDamp",8);ProbeStep=tune("carcass.probe",.01f);
+ RestSpeed=tune("carcass.rest",.08f);CollideStep=tune("carcass.collideStep",.05f);MaxLift=tune("carcass.maxLift",.02f);FadeDamp=tune("carcass.fade",4);FadeFrom=tune("carcass.fadeFrom",2.5f);}
 float dot3(Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
 Point3 cross3(Point3 a,Point3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
 float span(Point3 a){return std::sqrt(dot3(a,a));}
@@ -259,58 +273,12 @@ void Carcass::fit(){
   axesOf(s.q,s.axes);s.centre=c;s.restCentre=rc;}
 }
 
-// Joints turn within their limits, held toward the pose they died in while the body still has tone,
-// and against friction. Each correction turns parent and child about the joint, the lighter more.
-void Carcass::bend(float tone,float friction,bool limits){
- bool any=false;
- for(auto&s:m_sections){if(!s.limited||s.parent<0||s.joint<0||m_joints[size_t(s.joint)].cut||s.members.empty())continue;auto&p=m_sections[size_t(s.parent)];if(p.members.empty())continue;
-  float rel[4];relative(s,rel);float want[4]{rel[0],rel[1],rel[2],rel[3]};
-  if(tone>0)qslerp(want,s.rel0,tone,want);
-  if(friction>0)qslerp(want,s.last,friction,want);
-  Turn t=decompose(want,s.twistAxis,s.bendAxis,s.sideAxis);const Turn was=t;
-  if(limits){t.bend=std::clamp(t.bend,s.limit.bendLo,s.limit.bendHi);t.side=std::clamp(t.side,-s.limit.side,s.limit.side);t.twist=std::clamp(t.twist,-s.limit.twist,s.limit.twist);}
-  if(was.bend!=t.bend||was.side!=t.side||was.twist!=t.twist){float sw[4],tw[4];qexp(s.bendAxis*t.bend+s.sideAxis*t.side,sw);qexp(s.twistAxis*t.twist,tw);qmul(sw,tw,want);}
-  // The world turn that brings the child to where it should be against its parent.
-  float wp[4],wc[4],target[4],iwc[4],e[4];qmul(p.q,p.bind,wp);qmul(s.q,s.bind,wc);qmul(wp,want,target);qconj(wc,iwc);qmul(target,iwc,e);qnorm(e);
-  // At most a tenth of a radian a pass: a joint is eased back, not kicked.
-  Point3 turn=qlog(e);const float angle=span(turn);if(angle<1e-5f)continue;if(angle>.1f)turn=turn*(.1f/angle);any=true;
-  const float mc=float(s.count),mp=float(p.count),share=mp/(mp+mc);
-  const Point3 pivot=m_particles[size_t(m_joints[size_t(s.joint)].particle)].x;
-  auto rotate=[&](Section&x,Point3 r){float d[4];qexp(r,d);qmul(d,x.q,x.q);qnorm(x.q);x.centre=pivot+qrot(d,x.centre-pivot);axesOf(x.q,x.axes);
-   // Its points turn with it, where they were as well as where they are: a joint held in its range is not flung.
-   for(int i:x.members){auto&pt=m_particles[size_t(i)];if(pt.region<0)continue;pt.x=pivot+qrot(d,pt.x-pivot);pt.previous=pivot+qrot(d,pt.previous-pivot);}};
-  rotate(s,turn*share);rotate(p,turn*-(1-share));}
- (void)any;
-}
-
-// The joints hold: where two sections meet, both have the joint in the same place. Each is slid
-// toward the other, the lighter the farther, until they meet.
-void Carcass::pin(){
- for(int round=0;round<4;++round)for(const auto&j:m_joints){if(j.cut)continue;auto&a=m_sections[size_t(j.a)];auto&b=m_sections[size_t(j.b)];if(a.members.empty()||b.members.empty())continue;
-  const Point3 gap=carry(b,j.rest)-carry(a,j.rest);const float ma=float(std::max(1,a.count)),mb=float(std::max(1,b.count)),wa=mb/(ma+mb);
-  a.centre=a.centre+gap*wa;b.centre=b.centre-gap*(1-wa);}
-}
-
-// Sections keep out of one another: a point of one inside another's capsule is put back on its skin.
-void Carcass::collide(){
- const int R=int(m_sections.size());if(R<2)return;
- std::vector<char> next(size_t(R)*size_t(R),0);for(auto&j:m_joints)if(!j.cut){next[size_t(j.a)*size_t(R)+size_t(j.b)]=1;next[size_t(j.b)*size_t(R)+size_t(j.a)]=1;}
- for(auto&p:m_particles){if(p.region<0)continue;
-  for(int s=0;s<R;++s){if(s==p.region||next[size_t(p.region)*size_t(R)+size_t(s)]||(s<32&&(p.ignore>>s&1u)))continue;const auto&o=m_sections[size_t(s)];if(o.ru<=0||o.members.empty())continue;
-   // Into the section's rest frame.
-   const Point3 d=p.x-o.centre,l=Point3{dot3(d,o.axes[0]),dot3(d,o.axes[1]),dot3(d,o.axes[2])}+o.restCentre;
-   const Point3 axis=o.capB-o.capA;const float len=span(axis);const Point3 U=len>1e-6f?axis*(1/len):Point3{0,0,1};const float t=std::clamp(dot3(l-o.capA,U),0.f,len);const Point3 foot=o.capA+U*t,off=l-foot;
-   const float rw=std::min(o.ru,o.rv),u=dot3(off,o.capU)/o.ru,v=dot3(off,o.capV)/o.rv,w=dot3(off,U)/rw,rho2=u*u+v*v+w*w;if(rho2>=1)continue;
-   const float rho=std::sqrt(rho2);const Point3 out=rho>1e-4f?foot+off*(1/rho):foot+o.capU*o.ru;
-   const Point3 move=carry(o,out)-p.x;p.x=p.x+move;p.previous=p.previous+move;}}
-}
-
-// Come to rest: no section lies in the floor or a wall. Each is lifted or slid out by the most its
-// own skin is in, so it stays the shape it is.
+// Come to rest: no section lies in the floor or a wall. Each section is lifted by the most its own skin is
+// in the floor; each piece is slid by the most it is in a wall, whole, so no section is pushed into the next.
 void Carcass::settle(const World& world){
  const int V=int(m_binds.size());if(V==0)return;
  for(int round=0;round<6;++round){bool moved=false;
-  std::vector<Point3> fix(m_sections.size());std::vector<float> need(m_sections.size(),0.f);
+  std::vector<float> up(m_sections.size(),0.f),side(m_sections.size(),0.f);std::vector<Point3> slide(m_sections.size());
   skin();for(int c=0;c<int(m_corner.size());++c){const int v=m_corner[size_t(c)],t=c/3;const auto&b=m_binds[size_t(v)];const int owner=m_owner[size_t(t)];
    const int home=m_piece[size_t(b.home)]==m_piece[size_t(owner)]?b.home:owner;const Point3 at=m_triangles[size_t(t)].v[c%3].p;
    // Under what it lies on (to within a few millimetres): lifted onto it. In a wall or the side of a step: the
@@ -319,51 +287,158 @@ void Carcass::settle(const World& world){
    else if(world.fits(at.x,at.y,at.z+.03f,.001f,false))continue;
    if(least>1e29f)for(float r:{.01f,.02f,.035f,.05f,.075f,.1f}){if(r>=least)break;for(int k=0;k<8;++k){const float a=float(k)*kPi*.25f;const Point3 step{std::cos(a)*r,std::sin(a)*r,0};
      if(world.fits(at.x+step.x,at.y+step.y,at.z+.03f,.001f,false)){best=step*1.15f;least=r;break;}}}
-   if(least<1e29f&&least>need[size_t(home)]){need[size_t(home)]=least;fix[size_t(home)]=best;}}
-  for(size_t s=0;s<m_sections.size();++s){if(need[s]<=0)continue;moved=true;auto&sec=m_sections[s];sec.centre=sec.centre+fix[s];for(int i:sec.members){auto&p=m_particles[size_t(i)];if(p.region>=0){p.x=p.x+fix[s];p.previous=p.x;}}}
+   const size_t piece=size_t(m_piece[size_t(home)]);if(least>=1e29f)continue;
+   if(best.z>0)up[size_t(home)]=std::max(up[size_t(home)],best.z);else if(least>side[piece]){side[piece]=least;slide[piece]=best;}}
+  for(size_t s=0;s<m_sections.size();++s){const size_t piece=size_t(m_piece[s]);const Point3 fix=slide[piece]+Point3{0,0,up[s]};if(up[s]<=0&&side[piece]<=0)continue;moved=true;auto&sec=m_sections[s];sec.centre=sec.centre+fix;for(int i:sec.members){auto&p=m_particles[size_t(i)];if(p.region>=0){p.x=p.x+fix;p.previous=p.x;}}}
+  // A section lifted into one that lies over it lifts that one too.
+  for(int k=0;k<4;++k){std::vector<float> rise(m_sections.size(),0.f);bool any=false;
+   for(const auto&p:m_particles){if(p.region<0)continue;for(int o=0;o<int(m_sections.size());++o){const float d=depthIn(p,o);if(d<=0)continue;
+    const int upper=m_sections[size_t(o)].centre.z>=m_sections[size_t(p.region)].centre.z?o:p.region;rise[size_t(upper)]=std::max(rise[size_t(upper)],d+.003f);any=true;}}
+   if(!any)break;moved=true;
+   for(size_t s=0;s<m_sections.size();++s){if(rise[s]<=0)continue;auto&sec=m_sections[s];sec.centre.z+=rise[s];for(int i:sec.members){auto&p=m_particles[size_t(i)];if(p.region>=0){p.x.z+=rise[s];p.previous=p.x;}}}}
   if(!moved)break;}
  m_dirty=true;
 }
 
+// Each section is a rigid body (its points' mass and spread), stepped in SubSteps by position-based
+// dynamics: everything moves only where a body is, and its velocity is what it did over the substep.
+// Joints hold their two sides together and turn within their limits; sections keep out of one another;
+// the floor holds them up and grips them (static friction where they are, dynamic as they slide).
+void Carcass::bodies(){
+ for(auto&s:m_sections){s.mass=0;s.comRest={};for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region<0)continue;s.comRest=s.comRest+p.rest;s.mass+=1;}
+  if(s.mass<=0)continue;s.comRest=s.comRest*(1/s.mass);
+  double I[3][3]{};for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region<0)continue;const Point3 r=p.rest-s.comRest;const double a[3]{r.x,r.y,r.z},rr=double(dot3(r,r));
+   for(int u=0;u<3;++u)for(int v=0;v<3;++v)I[u][v]+=(u==v?rr:0.)-a[u]*a[v];}
+  // Nothing outside this reach of its centre can be inside its capsule.
+  s.capReach=std::max(span(s.capA-s.comRest),span(s.capB-s.comRest))+std::max(s.ru,s.rv)+.001f;
+  s.reach=std::sqrt(float((I[0][0]+I[1][1]+I[2][2])*.5/double(s.mass)));
+  // Points sit on the skin: a section is at least as hard to turn as a ball 3 cm across.
+  for(int u=0;u<3;++u)I[u][u]+=double(s.mass)*.0004;
+  const double det=I[0][0]*(I[1][1]*I[2][2]-I[1][2]*I[2][1])-I[0][1]*(I[1][0]*I[2][2]-I[1][2]*I[2][0])+I[0][2]*(I[1][0]*I[2][1]-I[1][1]*I[2][0]);
+  for(int u=0;u<3;++u)for(int v=0;v<3;++v){const int u1=(v+1)%3,u2=(v+2)%3,v1=(u+1)%3,v2=(u+2)%3;s.invInertia[u*3+v]=float((I[u1][v1]*I[u2][v2]-I[u1][v2]*I[u2][v1])/det);}}
+ m_bodies=true;}
+
+namespace {
+// A section's inverse inertia (world) times u.
+Point3 turnBy(const Point3 axes[3],const float inv[9],Point3 u){const Point3 l{dot3(axes[0],u),dot3(axes[1],u),dot3(axes[2],u)};
+ const Point3 m{inv[0]*l.x+inv[1]*l.y+inv[2]*l.z,inv[3]*l.x+inv[4]*l.y+inv[5]*l.z,inv[6]*l.x+inv[7]*l.y+inv[8]*l.z};return axes[0]*m.x+axes[1]*m.y+axes[2]*m.z;}
+}
+
 void Carcass::step(const World& world){
- const size_t count=m_particles.size();
+ if(!m_bodies)bodies();
+ const int R=int(m_sections.size());
  // A point is clear where it is free, and, with a reach, free that far round it.
  auto clear=[&](Point3 at){if(!world.fits(at.x,at.y,at.z+.01f,.04f,false))return false;if(m_reach<=0)return true;
   for(auto [dx,dy]:{std::pair{m_reach,0.f},{-m_reach,0.f},{0.f,m_reach},{0.f,-m_reach}})if(!world.fits(at.x+dx,at.y+dy,at.z+.01f,.04f,false))return false;return true;};
- for(auto&p:m_particles){if(p.region==-2)continue;Point3 v=(p.x-p.previous)*.992f;float speed=span(v);if(speed>.3f)v=v*(.3f/speed);p.previous=p.x;p.x=p.x+v;p.x.z-=14.f*Tick*Tick;p.grounded=false;}
- static thread_local std::vector<Point3> goal;static thread_local std::vector<float> share;
- const float tone=ToneStart*std::clamp(1.f-m_age/ToneTime,0.f,1.f);
- for(int pass=0;pass<Passes;++pass){
-  // Every section is put back to its own shape, turned within its joints; the joints they share hold
-  // them to one another.
-  // Joint limits, death tone and self-collision are built but held back (RM_CARCASS=1 limits, 2 tone, 4 sections
-  // keep out of one another): in the lab they still fight the floor and walk the body. Friction is on.
-  static const int trying=[]{const char*v=std::getenv("RM_CARCASS");return v?std::atoi(v):0;}();
-  fit();bend(trying&2?tone:0.f,JointFriction,trying&1);goal.assign(count,Point3{});share.assign(count,0.f);
-  for(auto&s:m_sections)for(size_t k=0;k<s.members.size();++k){size_t i=size_t(s.members[k]);goal[i]=goal[i]+carry(s,m_particles[i].rest)*s.weights[k];share[i]+=s.weights[k];}
-  for(size_t i=0;i<count;++i)if(share[i]>0)m_particles[i].x=goal[i]*(1/share[i]);
-  if(trying&4)collide();
-  for(auto&p:m_particles){if(p.region==-2)continue;
-   if(p.x.z>p.roof-Skin&&p.roof>p.floor+.1f){p.x.z=p.roof-Skin;p.previous.z=std::max(p.previous.z,p.x.z);}
-   if(p.x.z<p.floor+Skin){p.x.z=p.floor+Skin;p.grounded=true;}
-   float dx=p.x.x-p.safe.x,dy=p.x.y-p.safe.y;
-   if(dx*dx+dy*dy>.03f*.03f){
-    // A point that began inside a wall is let out before walls start holding it.
-    if(clear(p.x)){p.safe=p.x;p.loose=true;}
-    else if(p.loose){p.x.x=p.safe.x;p.x.y=p.safe.y;p.previous.x=p.x.x;p.previous.y=p.x.y;}
-   }
-   dx=p.x.x-p.probe.x;dy=p.x.y-p.probe.y;
-   if(dx*dx+dy*dy>.04f*.04f||p.x.z>p.probe.z+.25f){p.floor=world.supportBelow(p.x.x,p.x.y,std::max(p.x.z,p.previous.z)+.08f);p.roof=world.clearanceAbove(p.x.x,p.x.y,std::max(p.floor,std::min(p.x.z,p.previous.z)-.05f));p.probe=p.x;if(p.x.z<p.floor+Skin){p.x.z=p.floor+Skin;p.grounded=true;}}
+ knobs();
+ // RM_CARCASS clears features for comparison: bit 1 no joint limits, 2 no death tone, 4 no self-collision.
+ static const int off=[]{const char*v=std::getenv("RM_CARCASS");return v?std::atoi(v):0;}();
+ const int subs=std::max(1,SubSteps);const float h=Tick/float(subs),hold=Hold/float(subs);
+ auto live=[&](const Section&s){return s.mass>0&&!s.members.empty();};
+ auto at=[&](const Section&s,Point3 rest){const Point3 d=rest-s.comRest;return s.com+s.axes[0]*d.x+s.axes[1]*d.y+s.axes[2]*d.z;};
+ auto wasAt=[&](const Section&s,Point3 rest){const Point3 d=rest-s.comRest;return s.prevCom+s.prevAxes[0]*d.x+s.prevAxes[1]*d.y+s.prevAxes[2]*d.z;};
+ auto spinOf=[&](Section&s,Point3 dw){const float d[4]{0,dw.x,dw.y,dw.z};float t[4];qmul(d,s.q,t);for(int k=0;k<4;++k)s.q[k]+=.5f*t[k];qnorm(s.q);axesOf(s.q,s.axes);};
+ auto weightAt=[&](const Section&s,Point3 r,Point3 n){const Point3 rn=cross3(r,n);return 1/s.mass+dot3(rn,turnBy(s.axes,s.invInertia,rn));};
+ auto push=[&](Section&s,Point3 r,Point3 p){s.com=s.com+p*(1/s.mass);spinOf(s,turnBy(s.axes,s.invInertia,cross3(r,p)));};
+ // Pull the point `pa` of a toward `pb` of b (b may be the world: null).
+ auto meet=[&](Section&a,Point3 pa,Section*b,Point3 pb,float most){Point3 dx=pb-pa;float c=span(dx);if(c<1e-7f)return 0.f;if(c>most){dx=dx*(most/c);c=most;}const Point3 n=dx*(1/c),ra=pa-a.com;
+  const float wa=weightAt(a,ra,n),wb=b?weightAt(*b,pb-b->com,n):0.f,l=c/(wa+wb);push(a,ra,n*l);if(b)push(*b,pb-b->com,n*-l);return l;};
+ // The velocities each section has, from its points (a strike or a blast pushes the points).
+ for(auto&s:m_sections){if(!live(s))continue;axesOf(s.q,s.axes);s.com=carry(s,s.comRest);Point3 v{};for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region>=0)v=v+(p.x-p.previous);}v=v*(1/(s.mass*Tick));
+  Point3 L{};for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region<0)continue;L=L+cross3(p.x-s.com,(p.x-p.previous)*(1/Tick)-v);}
+  s.vel=v*.992f;s.spin=turnBy(s.axes,s.invInertia,L)*.97f;const float sp=span(s.vel);if(sp>18.f)s.vel=s.vel*(18.f/sp);const float w=span(s.spin);if(w>30.f)s.spin=s.spin*(30.f/w);}
+ const float tone=off&2?0.f:ToneStart*std::clamp(1.f-m_age/ToneTime,0.f,1.f);
+ // Death tone and joint friction pull so far a step (as four passes of the whole pull would): the same however finely the step is cut.
+ const float toneSub=1-std::pow(1-tone,4.f/float(subs*Passes)),frictionSub=1-std::pow(1-JointFriction,4.f/float(subs*Passes));
+ struct Contact {int section,particle;float press;bool held;};static thread_local std::vector<Contact> contacts;static thread_local std::vector<int> touching;
+ std::vector<char> next(size_t(R)*size_t(R),0);for(auto&j:m_joints)if(!j.cut){next[size_t(j.a)*size_t(R)+size_t(j.b)]=1;next[size_t(j.b)*size_t(R)+size_t(j.a)]=1;}
+ // Sections keep out of one another: a point of one inside another's capsule is put back on its skin.
+ auto keepApart=[&]{if(off&4)return;
+  for(auto&pt:m_particles){if(pt.region<0)continue;auto&a=m_sections[size_t(pt.region)];if(!live(a))continue;Point3 p=at(a,pt.rest);
+    for(int o=0;o<R;++o){if(o==pt.region||next[size_t(pt.region)*size_t(R)+size_t(o)]||(o<32&&(pt.ignore>>o&1u)))continue;auto&b=m_sections[size_t(o)];if(b.ru<=0||!live(b))continue;
+     const Point3 d=p-b.com;if(dot3(d,d)>b.capReach*b.capReach)continue;const Point3 l=Point3{dot3(d,b.axes[0]),dot3(d,b.axes[1]),dot3(d,b.axes[2])}+b.comRest;
+     const Point3 axis=b.capB-b.capA;const float len=span(axis);const Point3 U=len>1e-6f?axis*(1/len):Point3{0,0,1};const float tt=std::clamp(dot3(l-b.capA,U),0.f,len);const Point3 foot=b.capA+U*tt,offs=l-foot;
+     const float rw=std::min(b.ru,b.rv),u=dot3(offs,b.capU)/b.ru,v=dot3(offs,b.capV)/b.rv,w=dot3(offs,U)/rw,rho2=u*u+v*v+w*w;if(rho2>=1)continue;
+     const float rho=std::sqrt(rho2);const Point3 out=rho>1e-4f?foot+offs*(1/rho):foot+b.capU*b.ru;
+     // The point goes out of b and b off the point, the lighter the more.
+     const Point3 o2=at(b,out);meet(a,p,&b,o2,CollideStep);p=at(a,pt.rest);}}
+ };
+ for(int sub=0;sub<subs;++sub){
+  for(auto&s:m_sections){if(!live(s))continue;s.prevCom=s.com;for(int k=0;k<4;++k)s.prevQ[k]=s.q[k];for(int k=0;k<3;++k)s.prevAxes[k]=s.axes[k];
+   s.vel.z-=14.f*h;s.com=s.com+s.vel*h;spinOf(s,s.spin*h);}
+  contacts.clear();touching.assign(m_particles.size(),-1);
+  for(int pass=0;pass<Passes;++pass){const bool last=pass+1==Passes;
+   // The floor, the roof and the walls; the floor grips what lies on it.
+   for(int i=0;i<int(m_particles.size());++i){auto&pt=m_particles[size_t(i)];if(pt.region<0)continue;auto&s=m_sections[size_t(pt.region)];if(!live(s))continue;
+    Point3 p=at(s,pt.rest);
+    float dx=p.x-pt.probe.x,dy=p.y-pt.probe.y;
+    if(dx*dx+dy*dy>ProbeStep*ProbeStep||std::fabs(p.z-pt.probe.z)>.1f){const float was=wasAt(s,pt.rest).z;pt.floor=world.supportBelow(p.x,p.y,std::max(p.z,was)+.08f);pt.roof=world.clearanceAbove(p.x,p.y,std::max(pt.floor,std::min(p.z,was)-.05f));pt.probe=p;}
+    if(p.z>pt.roof-Skin&&pt.roof>pt.floor+.1f){meet(s,p,nullptr,Point3{p.x,p.y,pt.roof-Skin},1e9f);p=at(s,pt.rest);}
+    // Deep under a floor it was not under a substep ago, it came in from the side (a step's riser): it goes back out
+    // the way it came, not up onto the step.
+    if(const Point3 came=wasAt(s,pt.rest);p.z<pt.floor-.03f&&world.supportBelow(came.x,came.y,came.z+.02f)<pt.floor-.02f){meet(s,p,nullptr,Point3{came.x,came.y,p.z},1e9f);p=at(s,pt.rest);pt.floor=world.supportBelow(p.x,p.y,p.z+.08f);pt.probe=p;}
+    if(p.z<pt.floor+Skin){const float depth=pt.floor+Skin-p.z;meet(s,p,nullptr,Point3{p.x,p.y,pt.floor+Skin},MaxLift);p=at(s,pt.rest);
+     // Static friction: what it moved along the floor this substep is taken back while the floor holds it hard enough.
+     const Point3 from=wasAt(s,pt.rest);const Point3 slid{p.x-from.x,p.y-from.y,0};const float moved=span(slid);
+     const bool held=moved<=StaticGrip*depth+hold;if(held&&moved>1e-7f){meet(s,p,nullptr,p-slid,1e9f);p=at(s,pt.rest);}
+     // Every point the floor pushed this substep, in any pass, gives up what it is moving into or off the floor.
+     if(int&k=touching[size_t(i)];k<0){k=int(contacts.size());contacts.push_back({pt.region,i,depth,held});}else{auto&c=contacts[size_t(k)];c.press=std::max(c.press,depth);c.held=held;}}
+    dx=p.x-pt.safe.x;dy=p.y-pt.safe.y;
+    if(dx*dx+dy*dy>.03f*.03f){
+     // A point that began inside a wall is let out before walls start holding it.
+     if(clear(p)){pt.safe=p;pt.loose=true;}
+     // Into a wall: back to where the substep found it, so the wall stops it rather than throws it (what is
+     // left in a wall at rest, settle frees).
+     else if(pt.loose){const Point3 came=wasAt(s,pt.rest);const Point3 to=came;
+      meet(s,p,nullptr,Point3{to.x,to.y,p.z},1e9f);}}}
+   keepApart();
+   // The joints hold.
+   for(auto&j:m_joints){if(j.cut)continue;auto&a=m_sections[size_t(j.a)];auto&b=m_sections[size_t(j.b)];if(!live(a)||!live(b))continue;meet(a,at(a,j.rest),&b,at(b,j.rest),1e9f);}
+   // Joints turn toward the pose they died in while the body has tone, and against friction, and within their
+   // limits (three sweeps: setting one joint moves the next).
+   // The limits and keeping apart alternate (thrice on the last pass), so neither undoes the other.
+   for(int cycle=0;cycle<(last?3:1);++cycle){
+   for(int round=0;round<3;++round)for(int c=0;c<R;++c){auto&s=m_sections[size_t(c)];if(!s.limited||s.parent<0||s.joint<0||m_joints[size_t(s.joint)].cut||!live(s))continue;auto&p=m_sections[size_t(s.parent)];if(!live(p))continue;
+    float rel[4];relative(s,rel);float want[4]{rel[0],rel[1],rel[2],rel[3]};
+    if(cycle==0&&round==0&&toneSub>0)qslerp(want,s.rel0,toneSub,want);
+    if(cycle==0&&round==0&&frictionSub>0)qslerp(want,s.last,frictionSub,want);
+    Turn t=decompose(want,s.twistAxis,s.bendAxis,s.sideAxis);const Turn was=t;
+    if(!(off&1)){t.bend=std::clamp(t.bend,s.limit.bendLo,s.limit.bendHi);t.side=std::clamp(t.side,-s.limit.side,s.limit.side);t.twist=std::clamp(t.twist,-s.limit.twist,s.limit.twist);}
+    if(was.bend!=t.bend||was.side!=t.side||was.twist!=t.twist){float sw[4],tw[4];qexp(s.bendAxis*t.bend+s.sideAxis*t.side,sw);qexp(s.twistAxis*t.twist,tw);qmul(sw,tw,want);}
+    float wp[4],wc[4],target[4],iwc[4],e[4];qmul(p.q,p.bind,wp);qmul(s.q,s.bind,wc);qmul(wp,want,target);qconj(wc,iwc);qmul(target,iwc,e);qnorm(e);
+    Point3 turn=qlog(e);const float angle=span(turn);if(angle<1e-6f)continue;if(angle>TurnCap)turn=turn*(TurnCap/angle);const Point3 n=unit(turn);
+    const Point3 ic=turnBy(s.axes,s.invInertia,n),ip=turnBy(p.axes,p.invInertia,n);const float l=span(turn)/(dot3(n,ic)+dot3(n,ip));
+    spinOf(s,ic*l);spinOf(p,ip*-l);}
+   keepApart();}
   }
+  // The velocities are what the substep did.
+  for(auto&s:m_sections){if(!live(s))continue;s.vel=(s.com-s.prevCom)*(1/h);float iq[4],d[4];qconj(s.prevQ,iq);qmul(s.q,iq,d);if(d[0]<0)for(float&k:d)k=-k;s.spin=Point3{d[1],d[2],d[3]}*(2/h);}
+  // On the floor nothing goes into it or comes off it, and what slides is slowed (dynamic friction).
+  for(int round=0;round<VelocityRounds;++round)for(const auto&c:contacts){auto&s=m_sections[size_t(c.section)];const auto&pt=m_particles[size_t(c.particle)];const Point3 r=at(s,pt.rest)-s.com;
+   auto pointV=[&]{return s.vel+cross3(s.spin,r);};auto kick=[&](Point3 p){s.vel=s.vel+p*(1/s.mass);s.spin=s.spin+turnBy(s.axes,s.invInertia,cross3(r,p));};
+   Point3 v=pointV();{const Point3 n{0,0,1};kick(n*(-v.z/weightAt(s,r,n)));}
+   v=pointV();const Point3 vt{v.x,v.y,0};const float sp=span(vt);if(sp<1e-6f)continue;const Point3 tdir=vt*(1/sp);
+   const float cut=c.held?sp:std::min(sp,KineticGrip*c.press/h/float(VelocityRounds));kick(tdir*(-cut/weightAt(s,r,tdir)));}
+  // Flesh on the floor does not roll on: a section lying on it loses its motion as it rolls and slides, and
+  // one barely moving stops.
+  {const float keep=std::exp(-GroundDamp*h);std::vector<char> seen(m_sections.size(),0);for(const auto&c:contacts){if(seen[size_t(c.section)])continue;seen[size_t(c.section)]=1;auto&s=m_sections[size_t(c.section)];s.vel=Point3{s.vel.x*keep,s.vel.y*keep,s.vel.z};s.spin=s.spin*keep;
+   if(m_age>ToneTime&&span(s.vel)<RestSpeed&&span(s.spin)*s.reach<RestSpeed){s.vel={};s.spin={};}}}
+  // A body still moving long after it fell runs down: what is left of its motion drains away faster the
+  // longer it goes on (it still falls, only as through water).
+  if(const float drain=FadeDamp*std::clamp((m_age-m_woke-FadeFrom)/1.5f,0.f,1.f);drain>0){const float keep=std::exp(-drain*h);for(auto&s:m_sections){s.vel=s.vel*keep;s.spin=s.spin*keep;}}
+  for(auto&s:m_sections)if(s.limited&&s.parent>=0&&live(s)&&live(m_sections[size_t(s.parent)]))relative(s,s.last);
  }
- // What lies on the floor grips it: slow, it stops; fast, it drags.
+ // The points ride their sections; their velocity is their section's there.
  float motion=0;
- for(auto&p:m_particles){if(p.region==-2)continue;if(p.grounded){const float vx=p.x.x-p.previous.x,vy=p.x.y-p.previous.y,keep=vx*vx+vy*vy<.004f*.004f?0.f:.6f;p.previous.x=p.x.x-vx*keep;p.previous.y=p.x.y-vy*keep;p.previous.z=p.x.z;}motion=std::max(motion,span(p.x-p.previous));}
- fit();pin();for(auto&s:m_sections)if(s.limited&&s.parent>=0)relative(s,s.last);
+ for(auto&s:m_sections){if(!live(s))continue;s.centre=s.com-(s.axes[0]*(s.comRest-s.restCentre).x+s.axes[1]*(s.comRest-s.restCentre).y+s.axes[2]*(s.comRest-s.restCentre).z);
+  for(int i:s.members){auto&p=m_particles[size_t(i)];if(p.region<0)continue;p.x=at(s,p.rest);p.previous=p.x-(s.vel+cross3(s.spin,p.x-s.com))*Tick;p.grounded=p.x.z<p.floor+Skin+.004f;motion=std::max(motion,span(p.x-p.previous));}}
+ for(auto&j:m_joints){if(j.cut)continue;auto&p=m_particles[size_t(j.particle)];p.x=(carry(m_sections[size_t(j.a)],j.rest)+carry(m_sections[size_t(j.b)],j.rest))*.5f;p.previous=p.x;}
  // Every half second, how far any section has got since the last look: points that fidget get nowhere.
- bool still=false;if(int(m_age/Tick+.5f)%30==29){float most=0;for(auto&s:m_sections){if(s.members.empty())continue;float iq[4],d[4];qconj(s.wasQ,iq);qmul(s.q,iq,d);most=std::max(most,span(s.centre-s.was)+span(qlog(d))*.25f);s.was=s.centre;for(int k=0;k<4;++k)s.wasQ[k]=s.q[k];}still=most<.012f&&m_age>.6f;}
+ // A big body (a Chimera) is still at the same turn of its parts that leaves a man still: its far points move more.
+ const float big=std::max(1.f,m_size/1.9f);
+ bool still=false;if(int(m_age/Tick+.5f)%30==29){float most=0;for(auto&s:m_sections){if(s.members.empty())continue;float iq[4],d[4];qconj(s.wasQ,iq);qmul(s.q,iq,d);most=std::max(most,span(s.centre-s.was)+span(qlog(d))*.25f);s.was=s.centre;for(int k=0;k<4;++k)s.wasQ[k]=s.q[k];}still=most<.012f*big&&m_age>.6f;}
  measure();m_age+=Tick;m_dirty=true;m_motion=motion;
- m_quiet=motion<.0024f?m_quiet+Tick:0;if(m_quiet>.5f||still||m_age-m_woke>7.f){m_asleep=true;settle(world);measure();}
+ m_quiet=motion<.0024f*big?m_quiet+Tick:0;if(m_quiet>.5f||still||m_age-m_woke>7.f){m_asleep=true;settle(world);measure();}
 }
 
 void Carcass::advance(const World& world,float toAge){
@@ -380,13 +455,15 @@ std::vector<Carcass::JointState> Carcass::jointStates()const{
   float rel[4];relative(s,rel);const Turn t=decompose(rel,s.twistAxis,s.bendAxis,s.sideAxis);j.bend=t.bend;j.side=t.side;j.twist=t.twist;j.bendLo=s.limit.bendLo;j.bendHi=s.limit.bendHi;j.sideMax=s.limit.side;j.twistMax=s.limit.twist;out.push_back(j);}
  return out;}
 
+// How deep a point is inside section s's body (0 when it is not, or may be: its own, a neighbour, one it touched at rest).
+float Carcass::depthIn(const Particle& p,int s)const{
+ if(p.region<0||s==p.region||neighbours(p.region,s)||(s<32&&(p.ignore>>s&1u)))return 0;const auto&o=m_sections[size_t(s)];if(o.ru<=0||o.members.empty())return 0;
+ const Point3 d=p.x-o.centre,l=Point3{dot3(d,o.axes[0]),dot3(d,o.axes[1]),dot3(d,o.axes[2])}+o.restCentre;
+ const Point3 axis=o.capB-o.capA;const float len=span(axis);const Point3 U=len>1e-6f?axis*(1/len):Point3{0,0,1};const float t=std::clamp(dot3(l-o.capA,U),0.f,len);const Point3 off=l-(o.capA+U*t);
+ const float rw=std::min(o.ru,o.rv),u=dot3(off,o.capU)/o.ru,v=dot3(off,o.capV)/o.rv,w=dot3(off,U)/rw,rho=std::sqrt(u*u+v*v+w*w);return rho<1?(1-rho)*rw:0.f;}
 float Carcass::overlap()const{
  float worst=0;const int R=int(m_sections.size());
- for(const auto&p:m_particles){if(p.region<0)continue;
-  for(int s=0;s<R;++s){if(s==p.region||neighbours(p.region,s)||(s<32&&(p.ignore>>s&1u)))continue;const auto&o=m_sections[size_t(s)];if(o.ru<=0||o.members.empty())continue;
-   const Point3 d=p.x-o.centre,l=Point3{dot3(d,o.axes[0]),dot3(d,o.axes[1]),dot3(d,o.axes[2])}+o.restCentre;
-   const Point3 axis=o.capB-o.capA;const float len=span(axis);const Point3 U=len>1e-6f?axis*(1/len):Point3{0,0,1};const float t=std::clamp(dot3(l-o.capA,U),0.f,len);const Point3 off=l-(o.capA+U*t);
-   const float rw=std::min(o.ru,o.rv),u=dot3(off,o.capU)/o.ru,v=dot3(off,o.capV)/o.rv,w=dot3(off,U)/rw,rho=std::sqrt(u*u+v*v+w*w);if(rho<1)worst=std::max(worst,(1-rho)*rw);}}
+ for(const auto&p:m_particles)for(int s=0;s<R;++s)worst=std::max(worst,depthIn(p,s));
  return worst;}
 
 void Carcass::regroup(){
