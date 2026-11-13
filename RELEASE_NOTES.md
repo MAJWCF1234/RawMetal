@@ -4,6 +4,18 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.3 - Matte (2026-11-12)
+
+A patch, and an apology to the eyes. The last one polished too much.
+
+- **Reflections.** Floors and water carried hard lines smeared across what they reflected, and a doubled ghost of the room. That came from the reflection reading the floor's angle in coarse steps and then catching itself. It reads the surface exactly now, will not reflect itself, and fades where it is unsure. Only things that are really smooth hold a picture of the room: still water, puddles, wet floor at a low angle, chrome, glass, mirrors.
+- **Finishes.** Painted and worn steel, rust, wood, crates, cloth and rubber had been made to shine like glass and plastic. They are matte again; brushed steel gives a dull sheen, and chrome and glass stay bright.
+- **Light.** The bounced light was turned up too far and washed the rooms out. Lit rooms are back to how they looked before, give or take a little; shadows keep a faint warmth of the colour around them.
+
+Verified with the full test suite on the release build (all 66 checks, plus the gore, carcass, campaign-map and repeated-frame rendering tests), and in the feature lab against the v1.4.1 look on the same views: brightness per room, a measure for streaks across reflections, and how much finishes that should be matte still reflect.
+
+---
+
 ## v1.4.2 - Air and glass (2026-11-12)
 
 A patch. The great door at the bottom of Chapter 1 is still shut.

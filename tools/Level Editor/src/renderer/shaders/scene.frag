@@ -132,8 +132,9 @@ float lampBeam(vec4 params,vec3 away){
 // Light probes (LightProbes.h, GpuRenderer probeInfo). The irradiance atlas holds each resident
 // map's grid of ambient cubes: a 24-row band per map, six 24-wide face blocks (+x, -x, +y, -y,
 // +z, -z) across, one layer per cell of height. rgb is irradiance over pi, a sky openness.
-const float ProbeGain=10.35; // LightProbes.h ProbeGain
-const float ProbeCeiling=1.1; // LightProbes.h probeShoulder
+const float ProbeGain=3.1; // LightProbes.h ProbeGain
+// The bounce's soft ceiling (LightProbes.h probeShoulder, LookTuning.h lookFillCeiling), in the look's values.
+#define ProbeCeiling (LookC.x>0.0?LookC.x:0.62)
 #define FillScale (lampGrid.probeInfo.w>0.0?lampGrid.probeInfo.w:1.0)
 // The look's values (LookTuning.h; post.frag names them): LookB.z the fill's saturation, LookC.z a
 // crystal's glow.
@@ -175,8 +176,9 @@ vec4 probeReflection(vec3 p,vec3 R,float roughness,out float sky){
  if(best<0)return vec4(0.0);
  vec4 c=lampGrid.reflections[3*best],lo=lampGrid.reflections[3*best+1],hi=lampGrid.reflections[3*best+2];
  float away=length(max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)));
+ // As post.frag: a point on (or a hair outside) the box's face is carried just inside it.
  vec3 dir=R;
- if(away<0.01){vec3 r=R+vec3(1e-5);vec3 t=max((hi.xyz-p)/r,(lo.xyz-p)/r);dir=p+R*max(min(min(t.x,t.y),t.z),0.0)-c.xyz;}
+ if(away<0.5){vec3 q=clamp(p,lo.xyz+0.02,hi.xyz-0.02);vec3 r=R+vec3(1e-5);vec3 t=max((hi.xyz-q)/r,(lo.xyz-q)/r);dir=q+R*max(min(min(t.x,t.y),t.z),0.0)-c.xyz;}
  vec3 a=abs(dir);int face=a.x>=a.y&&a.x>=a.z?(dir.x>0.0?0:1):a.y>=a.z?(dir.y>0.0?2:3):(dir.z>0.0?4:5);
  float z=max(dot(dir,CaptureForward[face]),1e-5);
  vec2 st=clamp(vec2(0.5+0.5*dot(dir,CaptureRight[face])/z,0.5-0.5*dot(dir,CaptureUp[face])/z),vec2(0.0),vec2(1.0));
@@ -740,6 +742,13 @@ void main(){
  // (fractional after resolve) skip world-only post effects.
  bool viewModelPixel=surface.w>1.5&&surface.w<2.5;
  // g: a metal's metalness above .5 (0.5 + metal/2), else half the wetness (post.frag).
- outMaterial=vec4((surface.z<0.5||liquid)&&surface.w<1.5?min(materialRoughness,1.0-polish):1.0,metal>0.0?0.5+0.5*metal:wetness*0.5,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
+ // r: roughness in 32 steps (the high five bits) and, in the low three, the axis the face looks along
+ // (1-6: +x -x +y -y +z -z; 0 sloped; 7 none): post.frag reflects off that exact normal instead of
+ // one rebuilt from half-float depth, which steps at a distance and cut floors' reflections into bands.
+ float roughOut=(surface.z<0.5||liquid)&&surface.w<1.5?min(materialRoughness,1.0-polish):1.0;
+ float axisCode=7.0;
+ if(roughOut<0.99){vec3 Nf=normalize(cross(dx,dy));if(dot(Nf,view.eyeYaw.xyz-worldPos)<0.0)Nf=-Nf;vec3 a=abs(Nf);
+  axisCode=a.z>0.985?(Nf.z>0.0?5.0:6.0):a.x>0.985?(Nf.x>0.0?1.0:2.0):a.y>0.985?(Nf.y>0.0?3.0:4.0):0.0;}
+ outMaterial=vec4((floor(clamp(roughOut,0.0,1.0)*31.0+0.5)*8.0+axisCode)/255.0,metal>0.0?0.5+0.5*metal:wetness*0.5,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
  outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5&&!liquid?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
 }

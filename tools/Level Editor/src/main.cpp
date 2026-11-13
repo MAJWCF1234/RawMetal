@@ -1989,6 +1989,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          try{ok=run();}catch(const std::exception& e){report<<name<<" threw "<<e.what()<<'\n';}
          failed+=!ok;report<<(ok?"PASS ":"FAIL ")<<name<<" "<<std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count()<<"s\n";report.flush();
         }
+        // A name asked for that is no test fails loudly (a stray character once skipped six tests silently).
+        if(only){std::wstring list(only+12);list+=L",";for(size_t a=0,b;(b=list.find(L',',a))!=std::wstring::npos;a=b+1){const std::wstring wanted=list.substr(a,b-a);if(wanted.empty())continue;
+          bool known=false;for(const auto& t:tests)known|=std::wstring(t.first,t.first+std::strlen(t.first))==wanted;
+          if(!known){++failed;report<<"FAIL unknown test '"<<std::string(wanted.begin(),wanted.end())<<"'\n";}}}
         report<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';std::cout<<(failed?"FAILED ":"ALL PASSED ")<<failed<<'\n';return failed?1:0;
     }
     if(commandArguments().find(L"--smoke-test")){

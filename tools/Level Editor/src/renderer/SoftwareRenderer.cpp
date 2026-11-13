@@ -542,28 +542,33 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // Pressure and office plaster are the finishes maps already use, at their repeats.
  m_surfaceSets[SurfacePressure]={&m_pressureWall,&m_pressureFloor,&m_facilityTextures.at("ceiling_1"),{2,3},.5f,.5f};
  m_surfaceSets[SurfaceOfficePlaster]={&m_officeWall,&m_securityCarpet,&m_dropCeiling,{1,1},1,1};
- // Finishes that should mirror the room (light probes, post.frag): glazed tile and lab vinyl polished
- // enough to show the room at a low angle, clean steel and chrome as metal (strong, tinted reflection
- // face-on), glass and mirrors near-mirror. Dusty concrete, rust, timber and rock stay matte.
+ // Finishes that mirror the room (light probes, post.frag), as polish (roughness at most 1 - polish)
+ // and metalness. This is a worn facility: almost nothing in it is polished. Glazed floor tile and lab
+ // vinyl show a faint, blurred sheen at a low angle (wet, they mirror: scene.frag's wetness); clean
+ // steel and machinery are brushed, a broad dim sheen; painted and worn metal is paint, matte; chrome,
+ // stainless fittings, mirrors and glass are the only sharp reflectors. Concrete, rust, timber, rock,
+ // fabric and rubber keep none.
  {auto finish=[](Texture& t,float polish,float metal){t.polish=polish;t.metalness=metal;};
-  finish(m_surfaceTextures[6],.5f,0);finish(m_surfaceTextures[7],.56f,0);finish(m_surfaceTextures[9],.42f,0);finish(m_surfaceTextures[10],.5f,0);
+  // Clinic tile wall and floor, lab panel wall and vinyl floor.
+  finish(m_surfaceTextures[6],.2f,0);finish(m_surfaceTextures[7],.42f,0);finish(m_surfaceTextures[9],.2f,0);finish(m_surfaceTextures[10],.4f,0);
   // Structure materials 46-48 and 50 (tread plate, rusted steel, metal roofing, floor tile).
   const auto architecture=[&](int material)->Texture&{return m_surfaceTextures[size_t(ArchitectureFinish+material-FirstArchitectureMaterial)];};
-  finish(architecture(46),.42f,.55f);finish(architecture(47),.12f,.2f);finish(architecture(48),.22f,.35f);finish(architecture(50),.5f,0);
-  finish(m_officeTile,.5f,0);finish(m_pressureMetal,.44f,.5f);finish(m_pipeTexture,.42f,.45f);finish(m_darkMetalTexture,.34f,.45f);finish(m_ironTexture,.22f,.3f);
+  finish(architecture(46),.3f,.35f);finish(architecture(47),0,0);finish(architecture(48),.2f,.25f);finish(architecture(50),.42f,0);
+  finish(m_officeTile,.42f,0);finish(m_pressureMetal,.32f,.35f);finish(m_pipeTexture,.32f,.35f);finish(m_darkMetalTexture,.25f,.3f);finish(m_ironTexture,.15f,.2f);
   for(auto& [name,t]:m_facilityTextures){
    auto has=[&](const char* part){return name.find(part)!=std::string::npos;};
    if(t.transparent||t.additive||!t.emission.empty())continue;
    const bool worn=has("rust")||has("grime")||has("dirt")||has("old")||has("dead");
-   if(has("mirror"))finish(t,worn?.6f:.85f,.35f);
-   else if(has("chrome")||has("stainless"))finish(t,.6f,.8f);
-   else if(has("autopsy_table")||has("sink_textures")||has("tray"))finish(t,.45f,.45f);
-   else if(has("glass")||has("_screen")||has("monitor"))finish(t,.62f,0);
+   if(has("wood")||has("crate")||has("pallet")||has("fabric")||has("cloth")||has("rubber")||has("tire")||has("paper")||has("cardboard"))continue;
+   if(has("mirror"))finish(t,worn?.55f:.9f,.8f);
+   else if(has("chrome")||has("stainless"))finish(t,worn?.45f:.75f,.85f);
+   else if(has("autopsy_table")||has("sink_textures")||has("tray"))finish(t,.5f,.7f);
+   else if(has("glass")||has("_screen")||has("monitor"))finish(t,.8f,0);
    else if(has("roof")||has("ceiling"))continue;
-   else if(has("tile")||has("marble")||has("polished"))finish(t,.5f,0);
+   else if(has("tile")||has("marble")||has("polished"))finish(t,.42f,0);
    else if(has("metal")||has("steel")||has("pipe")||has("valve")||has("locker")||has("catwalk")||has("cage")||has("gate")||has("cabinet")){
-    if(has("wood")||has("fire_extenguisher"))continue;
-    if(worn)finish(t,.18f,.25f);else if(has("painted"))finish(t,.3f,.15f);else finish(t,.38f,.55f);}
+    if(has("fire_extenguisher"))continue;
+    if(worn||has("painted"))finish(t,0,0);else finish(t,.3f,.35f);}
   }}
  m_logo=loadEmbeddedPng(2);m_logo.clampEdges=true;
 }

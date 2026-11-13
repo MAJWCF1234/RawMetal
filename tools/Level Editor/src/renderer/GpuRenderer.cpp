@@ -650,10 +650,14 @@ struct GpuRenderer::Impl {
  }
  // This frame's probes for the shaders: the volumes in use and the captured reflection probes.
  static void writeLook(float* tail){
-  static const float look[12]={lookTune("reflect",1.5f),lookTune("polish",.58f),lookTune("envAdd",1.1f),lookTune("envTake",.5f),
-   lookTune("ssrRough",.8f),lookTune("probeLod",1.6f),lookTune("fillSat",1.15f),lookTune("metalTint",.35f),
-   0.f,0.f,lookTune("crystalGlow",2.f),lookTune("wetBase",.5f)};
-  std::memcpy(tail,look,sizeof(look));}
+  // LookA: reflection strength, a dielectric's F0, a metal's F0, the roughness past which a dielectric
+  // shows no reflection; LookB: the march's roughest finish, the probe's blur by roughness, the fill's
+  // saturation, a metal's tint; LookC: the bounce's ceiling, a debug switch (1: probe parallax off,
+  // 2: no screen march), a crystal's glow, spare.
+  static const float look[12]={lookTune("reflect",1.f),lookTune("f0",.04f),lookTune("metalF0",.5f),lookTune("matte",.3f),
+   lookTune("ssrRough",.34f),lookTune("probeLod",1.5f),lookTune("fillSat",.85f),lookTune("metalTint",.35f),
+   lookFillCeiling(),lookTune("probeDebug",0.f),lookTune("crystalGlow",2.f),0.f};
+  std::memcpy(tail,look,sizeof(look));if(!lookReflections())tail[0]=0.f;}
  void writeProbeHeader(void* mapped){
   LampHeader h{};int volumes=0,reflections=0;
   for(int slot:activeProbes){if(volumes>=ProbeSlots)break;const auto&s=probeSlots[size_t(slot)];float* v=h.probeVolumes+volumes*8;
@@ -1036,7 +1040,10 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  uint32_t count=0;check(vkEnumeratePhysicalDevices(m->instance,&count,nullptr),"Enumerate Vulkan adapters");std::vector<VkPhysicalDevice> adapters(count);check(vkEnumeratePhysicalDevices(m->instance,&count,adapters.data()),"Enumerate Vulkan adapters");int score=-1;
  auto vrDevice=m->vrMode?VrRuntime::active()->outputDevice(m->instance):VK_NULL_HANDLE;
  if(m->vrMode&&!vrDevice)throw std::runtime_error("SteamVR did not select a Vulkan adapter");
+ // RM_GPU=N keeps only the Nth hardware adapter (test lanes spread across the machine's cards); unset, the best one.
+ const char* pick=std::getenv("RM_GPU");int wanted=pick&&*pick?std::atoi(pick):-1,seen=-1;
  for(auto adapter:adapters){if(m->vrMode&&adapter!=vrDevice)continue;VkPhysicalDeviceProperties props;vkGetPhysicalDeviceProperties(adapter,&props);if(props.deviceType==VK_PHYSICAL_DEVICE_TYPE_CPU)continue;
+  if(wanted>=0&&!m->vrMode&&++seen!=wanted)continue;
   uint32_t families=0;vkGetPhysicalDeviceQueueFamilyProperties(adapter,&families,nullptr);std::vector<VkQueueFamilyProperties> queues(families);vkGetPhysicalDeviceQueueFamilyProperties(adapter,&families,queues.data());
   for(uint32_t i=0;i<families;++i)if(queues[i].queueFlags&VK_QUEUE_GRAPHICS_BIT){VkBool32 present=true;if(m->surface)check(vkGetPhysicalDeviceSurfaceSupportKHR(adapter,i,m->surface,&present),"Check Vulkan presentation support");if(!present)continue;int candidate=props.deviceType==VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU?2:1;if(candidate>score){score=candidate;m->physical=adapter;m->family=i;m->name=props.deviceName;}break;}
  }

@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 7d189f7754fd6ebbcf29fbb5799e6f2c7c7e136c
-# 2026-11-12 18:49, fix: a Brute beats a solid breakable door down; port the Builder's probe rebake and custom-map --film
+commit 4cb00336d5e64809b79f13bffa14ac40702f7099
+# 2026-11-12 21:27, release prep: v1.4.3 version
