@@ -1,0 +1,11 @@
+# A man killed where he stands with no push at all: dead weight from standing. Tube: ragdoll-fall.
+world room
+camera 14.8 15.2 -999 -131 -26
+light 12 12 3.2 1.4 9
+light 9.5 14.5 3 0.9 8
+size 480 270
+frames 300
+kill-frame 12
+scenario dropped dead
+push 0
+topple 1

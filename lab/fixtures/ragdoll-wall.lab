@@ -1,0 +1,12 @@
+# His back to a wall, shot from the front: he goes back against it and slides down. Tube: ragdoll-fall.
+world room
+camera 14.8 15.2 -999 -131 -26
+light 12 12 3.2 1.4 9
+light 9.5 14.5 3 0.9 8
+size 480 270
+frames 300
+kill-frame 12
+scenario back to a wall
+from 0
+box 10 11.4 14 11.65 0 2.6
+body 0

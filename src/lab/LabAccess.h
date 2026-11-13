@@ -47,6 +47,8 @@ struct LabAccess {
  static void loadLevel(Game& g,int level){g.loadLevel(level,false);g.updateStreaming(0);}
  // A man killed where he stands (the damage a hit from `from` does), as play kills him.
  static void killNpc(Game& g,size_t actor,Vec2 from){g.damageFriendly(actor,1e4f,from);}
+ // His head taken, as a biting creature's kill takes it.
+ static void behead(Game& g,size_t actor){g.setState(g.friendlyKey(actor,"headless"),1);g.setState(g.friendlyKey(actor,"headless_at"),int(g.m_elapsed*1000.f));}
  static bool decodeSave(Game& g,const std::string& data){return g.decodeSave(data);}
  static std::string encodeSave(const Game& g){return g.encodeSave();}
  static bool damageEnemy(Game& g,Enemy& e,float amount){return g.applyEnemyDamage(e,amount,false,false);}
@@ -82,6 +84,13 @@ struct LabAccess {
   return r.humanCorpse(g,w,level,w.actorTracks()[track],w.actorPose(track),-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|track);}
  // Between tubes (and before a determinism repeat): nothing a scene left in the renderer carries over.
  static void resetRenderer(SoftwareRenderer& r){r.m_corpses.clear();r.m_corpseClock=0;r.m_goreBursts.clear();r.forgetScene();}
+ // The men's bodies: 0-5 the civilians (civilianActorBody), 6.. the cleanup crew (cleanupActorBody).
+ static Mesh& humanMesh(SoftwareRenderer& r,int i){return i<6?r.civilianMesh(i):*r.cleanupMeshes()[size_t(i-6)];}
+ static int humanMeshes(){return 6+int(kCleanupBodies);}
+ // A dead creature's body, as the renderer keeps it (level, slot in the chunk's creatures); and the mesh it was cut from.
+ static Carcass* remains(SoftwareRenderer& r,int level,size_t slot){auto it=r.m_remains.find((std::uint64_t(std::uint32_t(level))<<32)|std::uint64_t(slot));return it==r.m_remains.end()||!it->second.carcass.built()?nullptr:&it->second.carcass;}
+ static std::vector<MeshTriangle> creatureCorpseMesh(SoftwareRenderer& r,const Enemy& e){std::vector<MeshTriangle> out;r.poseCreatureMesh(e,0,true,out);return out;}
+ static const humanoid::Labels& humanParts(SoftwareRenderer& r,int i){return SoftwareRenderer::humanParts(humanMesh(r,i),i<6?i:-1-(i-6));}
  static Point3 cameraPoint(const SoftwareRenderer& r,Point3 p){return r.cameraPoint(p,r.m_view);}
  static const Player& view(const SoftwareRenderer& r){return r.m_view;}
  // The sheet a shard is drawn with, and the sheets its sources are drawn with (Scene3D: a 'B' tile, a
