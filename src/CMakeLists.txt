@@ -226,6 +226,7 @@ add_executable(RawMetal WIN32
     renderer/ThirdPersonTest.cpp
     renderer/ElectricFx.cpp
     renderer/Carcass.cpp
+    renderer/Humanoid.cpp
     renderer/GoreFx.cpp
     renderer/Particles.cpp
     renderer/ParticlesTest.cpp

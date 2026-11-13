@@ -12,6 +12,7 @@
 #include "GpuRenderer.h"
 #include "ElectricFx.h"
 #include "GoreFx.h"
+#include "Humanoid.h"
 #include "Particles.h"
 #include "../vr/VrRuntime.h"
 #include <algorithm>
@@ -440,6 +441,17 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
 // level opens on bodies lying as they fell, limbs on the floor, off the edge of whatever they were
 // laid over. The same body from the same start comes to rest the same way, so a reload or a second
 // look shows it as it was. Nothing for the living, the restrained or the hung.
+// Kept by body model (a civilian's index, a cleanup role as -1-role): every renderer's copy of a model is the same shape.
+const humanoid::Labels& SoftwareRenderer::humanParts(const Mesh& mesh,int civilianBody){
+ static std::mutex guard;static std::map<int,humanoid::Labels> made;std::lock_guard lock(guard);
+ auto found=made.find(civilianBody);if(found!=made.end())return found->second;
+ humanoid::Labels labels;
+ if(civilianBody>=0&&size_t(civilianBody)<kCivilianRigs.size()){const auto&r=kCivilianRigs[size_t(civilianBody)];
+  // The rig's sides are the hands' (0 the right): ordered left to right across the body here by x.
+  humanoid::Arms arms{{{r.shoulders[0],r.elbows[0],r.hands[0]},{r.shoulders[1],r.elbows[1],r.hands[1]}}};
+  if(arms[0][0].x>arms[1][0].x)std::swap(arms[0],arms[1]);labels=humanoid::label(mesh.bindTriangles(),&arms);}
+ else labels=humanoid::label(mesh.bindTriangles());
+ return made.emplace(civilianBody,std::move(labels)).first->second;}
 SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot){
  static const bool enabled=[]{const char* v=std::getenv("RM_RAGDOLL");return !v||v[0]!='0';}();
  if(!enabled||!humanActorVisual(track.visual)||pose.clip!=4||track.platform||track.suspensionTop>pose.z)return nullptr;
@@ -479,7 +491,15 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
   float rise=0;for(size_t i=0;i<posed.size();i+=3)for(const auto&v:posed[i].v){const float floor=w.supportBelow(v.p.x,v.p.y,std::max(v.p.z,pose.z)+.05f);if(floor>-50.f)rise=std::max(rise,floor+.03f-v.p.z);}
   rise=std::min(rise,.25f);if(!live&&actor<0)rise=std::max(rise,.03f);
   for(auto&face:posed)for(auto&v:face.v)v.p.z+=rise;
-  corpse.carcass.build(posed,w,push,track.scale/1.7f,unsigned(slot*2654435761ull)^unsigned(slot>>32)*40503u^0x2545f491u,.05f);
+  // His parts, found once per body model from its rest pose: the joints turn as a man's do.
+  static const bool rigged=[]{const char* v=std::getenv("RM_RAGDOLL_RIG");return !v||v[0]!='0';}();
+  const humanoid::Labels&parts=humanParts(mesh,cleanup?-1-role:body);const bool told=rigged&&parts.ok;
+  Carcass::Rig rig=told?humanoid::rig(parts,mesh.bindTriangles(),corpse.faces):Carcass::Rig{};
+  // The rest pose turned (and mirrored) as he is laid into the world, so it differs from his posed
+  // body only by how each part has turned.
+  auto turn=[&](Point3 p){return Point3{(p.x*c+p.z*s)*scale,(-p.x*s+p.z*c)*scale,p.y*scale};};
+  for(auto&face:rig.bind)for(auto&v:face.v)v.p=turn(v.p);rig.forward=turn(rig.forward);
+  corpse.carcass.build(posed,w,push,track.scale/1.7f,unsigned(slot*2654435761ull)^unsigned(slot>>32)*40503u^0x2545f491u,.05f,told?&rig:nullptr);
   corpse.live=live;corpse.base=now-(live?age:0.f);
  }
  // A fall still being watched runs on its clock; one first seen after it ended has already ended.
