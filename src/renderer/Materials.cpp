@@ -126,7 +126,9 @@ std::vector<std::uint32_t> deriveSurfaceMap(std::vector<std::uint32_t>& pixels,i
   // brighter (worn raised edges, polish) smoother; a colour off the texture's own (stains) rougher.
   t[i]=.5f+.22f*dark+.25f*pit+.25f*std::min(chroma*3.f,1.f);
   cavity[i]=1.f-.45f*std::clamp((L9[i]-L3[i])/(L9[i]+.03f)*3.f,0.f,1.f);
-  const float rust=std::max(0.f,rustiness(r[i],g[i],b[i])-meanRust);
+  // Rust on bare metal is rust whatever the rest of the sheet is (a rust-red tank plate is rust, not a
+  // brown metal); on paint it is what stands out from the paint's own colour (an orange paint is paint).
+  const float rust=m==Material::PaintedMetal?std::max(0.f,rustiness(r[i],g[i],b[i])-meanRust):rustiness(r[i],g[i],b[i]);
   if(m==Material::BareSteel||m==Material::Aluminium||m==Material::PaintedMetal)second[i]=std::clamp(rust*2.f,0.f,1.f);
   if(m==Material::PaintedMetal&&meanSat>.18f){const float sat=saturationOf(r[i],g[i],b[i]);
    const float chip=std::clamp((meanSat*.55f-sat)/(meanSat*.35f),0.f,1.f)*std::clamp((std::fabs(L3[i]-mL)/(mL+.02f)-.15f)*4.f,0.f,1.f);
@@ -134,12 +136,23 @@ std::vector<std::uint32_t> deriveSurfaceMap(std::vector<std::uint32_t>& pixels,i
   if(m==Material::GlazedTile||m==Material::Ceramic)second[i]=std::clamp((pit-.35f)*2.5f,0.f,1.f);
   // A metal atlas's labels, stencils and painted parts (far brighter or more saturated than its metal)
   // are paint: a dielectric at the paint's roughness, never a metal brought up to F0.
+  // Bare steel, aluminium and chrome are grey: a beige, tan or brown texel on their sheet is a coating,
+  // grime or a painted plate, a dielectric (brass keeps its own yellow).
+  if(range.metal&&m!=Material::Brass){const float sat=saturationOf(r[i],g[i],b[i]);metal[i]*=1.f-std::clamp((sat-.2f)/.15f,0.f,1.f);}
   if(range.metal){const float sat=saturationOf(r[i],g[i],b[i]);
    const float paint=std::max(std::clamp((L3[i]/(mL+.01f)-2.2f)*1.5f,0.f,1.f),std::clamp((sat-meanSat-.3f)*4.f,0.f,1.f));
    metal[i]=std::min(metal[i],1.f-paint);if(paint>0)t[i]=std::min(t[i],.5f);}
  }
  auto share=[&](const std::vector<float>& v){double s=0;for(size_t i=0;i<n;++i)s+=v[i];return float(s/double(n));};
- if(const float c=share(second);c>.33f){const float k=std::clamp((.5f-c)/.17f,0.f,1.f);for(auto& v:second)v*=k;}
+ // Rust and chips come in patches, not single texels: a speckled atlas would print them as dirt.
+ {const auto soft=boxBlur(second,w,h,std::max(1,std::min({2,w/8,h/8})));for(size_t i=0;i<n;++i)second[i]=std::clamp((soft[i]-.25f)*2.5f,0.f,1.f);
+  if(!range.metal){const auto chips=boxBlur(metal,w,h,1);for(size_t i=0;i<n;++i)metal[i]=std::clamp((chips[i]-.2f)*2.f,0.f,1.f);}}
+ // (Rust over most of a bare metal sheet is a rusted sheet: kept. Grout or rust on paint that covers
+ // most of the texture is its colour, not a feature: faded.)
+ // A bare metal sheet's metal comes in regions too: a speckled sheet is a coated or dirty metal, not
+ // single bright and black texels.
+ if(range.metal){const auto soft=boxBlur(metal,w,h,std::max(1,std::min({3,w/8,h/8})));metal=soft;}
+ if(const float c=share(second);c>.33f&&!(range.metal&&m!=Material::GlazedTile)){const float k=std::clamp((.5f-c)/.17f,0.f,1.f);for(auto& v:second)v*=k;}
  if(!range.metal){const float c=share(metal);if(c>.33f){const float k=std::clamp((.5f-c)/.17f,0.f,1.f);for(auto& v:metal)v*=k;}}
  // Stretch the detail over the class's range (its 2nd to 98th percentile to 10%-90% of it): every
  // texture uses the spread its class allows instead of one value.

@@ -539,7 +539,9 @@ struct GpuRenderer::Impl {
  Image irradianceAtlas,reflectionAtlas,envBrdfImage,wetAtlas;VkSampler probeSampler=VK_NULL_HANDLE,reflectionSampler=VK_NULL_HANDLE;bool reflectionsReady=false;
  struct ProbeSlot {int level=-1;uint64_t key=0,used=0;float origin[3]{};float cellZ=1;int layers=0;};
  std::array<ProbeSlot,ProbeSlots> probeSlots{};std::vector<int> activeProbes;
- struct ReflectionSlot {uint64_t key=0,used=0;int level=-1;float probe[9]{};bool captured=false;};
+ // bounces: 0 not captured, 1 captured with no reflections of its own (its metals black), 2 captured
+ // again reading the first round (the room's metals and glazes reflect it).
+ struct ReflectionSlot {uint64_t key=0,used=0;int level=-1;float probe[9]{};bool captured=false;int bounces=0;};
  std::array<ReflectionSlot,MaxReflections> reflectionSlots{};std::vector<int> activeReflections;uint64_t probeFrame=1;
  Buffer probeStaging;
  // Capture targets: the scene pass at 96 x 96 (same formats and samples), its own view block.
@@ -692,11 +694,11 @@ struct GpuRenderer::Impl {
  // This frame's probes for the shaders: the volumes in use and the captured reflection probes.
  static void writeLook(float* tail){
   // LookA: the screen reflections' strength (0 for an A/B), spare, the mean albedo that turns the room's
-  // ambient into what a lobe sees where no probe covers it, spare;
+  // ambient into what a lobe sees where no probe covers it, a shift of the probes' mip by roughness;
   // LookB: the screen march's roughest finish, spare, the fill's saturation, spare; LookC: the bounce's
   // ceiling, a debug switch (1: probe parallax off, 2: no screen march), a crystal's glow, the
   // image-based specular's strength (1; 0 for an A/B).
-  static const float look[12]={lookTune("reflect",1.f),0.f,lookTune("roomAlbedo",.3f),0.f,
+  static const float look[12]={lookTune("reflect",1.f),0.f,lookTune("roomAlbedo",.3f),lookTune("probeLodShift",0.f),
    lookTune("ssrRough",.34f),0.f,lookTune("fillSat",.85f),0.f,
    lookFillCeiling(),lookTune("probeDebug",0.f),lookTune("crystalGlow",2.f),lookTune("ibl",1.f)};
   std::memcpy(tail,look,sizeof(look));if(!lookReflections())tail[0]=0.f;}
@@ -719,11 +721,16 @@ struct GpuRenderer::Impl {
  // A capture holds the room, never the moment: its clock slot (effects.z in the shaders) carries
  // CaptureClock, and the torch, the muzzle and the transient flashes stay out of it, so what a
  // probe shows does not depend on the frame it happened to be taken in.
- static constexpr float CaptureClock=-1.e6f;
+ // Each probe is captured twice: first with no reflections (it cannot read probes not yet there, so
+ // its metals come out black), then once every active probe has its first round, again reading them
+ // (CaptureBounce: scene.frag may read the atlas), so a metal in a probe reflects the room as a metal
+ // in the frame does. The order is fixed (the active list), so the result is the same every time.
+ static constexpr float CaptureClock=-1.e6f,CaptureBounce=-2.e6f;
  void captureReflections(VkCommandBuffer cmd){
   if(!reflectionsReady||!captureFrame)return;
   int budget=surface?2:MaxReflections;bool prepared=false;
-  for(int index:activeReflections){auto&slot=reflectionSlots[size_t(index)];if(slot.captured)continue;if(budget<=0)break;
+  int round=1;for(int index:activeReflections)if(reflectionSlots[size_t(index)].bounces==0){round=0;break;}
+  for(int index:activeReflections){auto&slot=reflectionSlots[size_t(index)];if(slot.bounces!=round)continue;if(budget<=0)break;
    auto cache=staticCaches.find(slot.level);if(cache==staticCaches.end()||!cache->second.buffer.handle)continue;
    if(!prepared){
     auto view=vrProjection;view[16]=0.f;view[18]=view[19]=0.f;view[26]=1.f;view[27]=Projection::nearPlane;std::memcpy(captureBuffers[size_t(frameIndex)].mapped,view.data(),sizeof(view));
@@ -735,7 +742,7 @@ struct GpuRenderer::Impl {
     vkUpdateDescriptorSets(device,3,writes,0,nullptr);prepared=true;}
    const float yaws[6]={0.f,3.14159265f,1.5707963f,-1.5707963f,0.f,0.f},pitches[6]={0.f,0.f,0.f,0.f,1.5707963f,-1.5707963f};
    for(int face=0;face<6;++face){
-    auto view=viewState;view[0]=slot.probe[0];view[1]=slot.probe[1];view[2]=slot.probe[2];view[3]=std::cos(yaws[face]);view[4]=std::sin(yaws[face]);view[5]=std::cos(pitches[face]);view[6]=std::sin(pitches[face]);view[7]=1.f;view[8]=0.f;view[9]=0.f;view[10]=CaptureClock;
+    auto view=viewState;view[0]=slot.probe[0];view[1]=slot.probe[1];view[2]=slot.probe[2];view[3]=std::cos(yaws[face]);view[4]=std::sin(yaws[face]);view[5]=std::cos(pitches[face]);view[6]=std::sin(pitches[face]);view[7]=1.f;view[8]=0.f;view[9]=0.f;view[10]=round==0?CaptureClock:CaptureBounce;
     const uint32_t depthIndex=sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;VkClearValue clear[5]{};clear[0].color=VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}};clear[depthIndex].depthStencil={1,0};clear[depthIndex+1].color=VkClearColorValue{{1.f,0.f,.5f,1.f}};
     VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=renderPass;pass.framebuffer=captureFrame;pass.renderArea.extent={ReflectionSize,ReflectionSize};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
     vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
@@ -767,7 +774,7 @@ struct GpuRenderer::Impl {
     for(auto&x:back){x.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;x.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;}
     vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,2,back);
    }
-   slot.captured=true;--budget;++reflectionCaptures;
+   slot.captured=true;++slot.bounces;--budget;++reflectionCaptures;
   }
  }
  void destroyShadowAtlas(){
@@ -1584,7 +1591,7 @@ void GpuRenderer::useProbes(int level,const ProbeBake* bake,std::uint64_t key,Ve
   if(q.used!=m->probeFrame){q.used=m->probeFrame;m->activeReflections.push_back(r);}
  }
 }
-bool GpuRenderer::reflectionsPending()const{if(!m->reflectionsReady)return false;for(int r:m->activeReflections)if(!m->reflectionSlots[size_t(r)].captured)return true;return false;}
+bool GpuRenderer::reflectionsPending()const{if(!m->reflectionsReady)return false;for(int r:m->activeReflections)if(m->reflectionSlots[size_t(r)].bounces<2)return true;return false;}
 std::uint64_t GpuRenderer::reflectionCaptures()const{return m->reflectionCaptures;}
 
 // Diagnostics: the three cascade depth maps as 8-bit PGMs plus their fit.

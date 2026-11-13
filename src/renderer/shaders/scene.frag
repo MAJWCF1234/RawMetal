@@ -177,10 +177,11 @@ vec4 wetMask(vec3 p){
 }
 // Reflection probes: six 90-degree faces per room probe, captured by the scene pass (face order and
 // orientation as GpuRenderer captureReflections draws them), a mip chain for rough surfaces.
-// The mip a GGX lobe of roughness r reads: the reflected lobe's half-width (about 1.3 alpha radians,
-// alpha = r^2) against a mip's texel (a 96-texel face spans 90 degrees, each mip doubles the texel).
+// The mip a GGX lobe of roughness r reads: the box mip whose width matches the reflected lobe's
+// half-width (about 1.3 alpha radians, alpha = r^2) on a 96-texel, 90-degree face, so the lobe's bright
+// core shows (a lamp in a floor) and its tail blurs; LookA.w shifts it for a capture's A/B.
 // The same in post.frag, so the screen march replaces exactly what this pass took from the probe.
-float probeLod(float r){float a=r*r;return clamp(log2(max(159.0*a,1e-4)),0.0,lampGrid.probeInfo.z-1.0);}
+float probeLod(float r){float a=r*r;return clamp(log2(max(80.0*a,1e-4))+LookA.w,0.0,lampGrid.probeInfo.z-1.0);}
 const vec3 CaptureForward[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
 const vec3 CaptureRight[6]=vec3[6](vec3(0,1,0),vec3(0,-1,0),vec3(-1,0,0),vec3(1,0,0),vec3(0,1,0),vec3(0,1,0));
 const vec3 CaptureUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(-1,0,0),vec3(1,0,0));
@@ -462,7 +463,7 @@ void main(){
   float g=detailNoise(gp*1.7)*0.65+detailNoise(gp*6.1+vec2(3.7,1.3))*0.35;materialRoughness=clamp(materialRoughness*(1.0+0.4*(g-0.5)),0.02,1.0);
   // Smudges and dust dull the sheen in patches: the whole specular, lamps' and room's alike.
   // A texture with no surface map of its own (a flat paint, a palette) takes it the harder.
-  smudge=mix(surfaceMapped?0.75:0.5,1.0,smoothstep(0.25,0.75,detailNoise(gp*3.3+vec2(9.1,4.7))));}
+  smudge=mix(surfaceMapped?0.85:0.5,1.0,smoothstep(0.25,0.75,detailNoise(gp*3.3+vec2(9.1,4.7))));}
  // Resonance crystal reads as mineral: the body's flat cyan pulled toward a deep cold grey-teal and
  // lit like polished stone; the glow is added below, concentrated in the cores.
  if(crystal){float l=dot(color.rgb,vec3(0.2126,0.7152,0.0722));color.rgb=mix(vec3(l),color.rgb,0.45)*vec3(0.5,0.7,0.8);}
@@ -724,7 +725,8 @@ void main(){
   // The room's reflection probe, parallax-corrected to its box, at the lobe's mip. Where no probe
   // covers a point the lobe sees the room's ambient times a room's mean albedo (LookA.z): the ambient
   // is light arriving, what a lobe sees is light leaving the room's surfaces.
-  {float sky=0.0;vec4 refl=view.effects.z>-1.0e5&&LookC.w>0.0?probeReflection(worldPos,R,iblRoughness,sky):vec4(0.0);
+  // (A probe's first capture reads none; its second, CaptureBounce, reads the first round.)
+  {float sky=0.0;vec4 refl=(view.effects.z>-1.0e5||view.effects.z<-1.5e6)&&LookC.w>0.0?probeReflection(worldPos,R,iblRoughness,sky):vec4(0.0);
    vec3 fill=ambientEnv*LookA.z;
    env=mix(fill,mix(refl.rgb,fill,sky),refl.a);}
   specIBL=env*weight*LookC.w;
@@ -834,6 +836,9 @@ void main(){
  if(lampGrid.flags.y==15)result=vec3(debugFurnace*0.25); // (x.25: off the display curve's shoulder)
  if(lampGrid.flags.y==16)result=vec3(debugReflectance);
  // 17: the wetness as the floor and walls take it (red wet, blue puddle or streak).
+ // 18: what the room's probe saw at this point (looking at it from the probe, sharp); 19 this pass's own
+ // light here: their ratio says whether the captures hold the room as it is drawn.
+ if(lampGrid.flags.y==18){int b=probeBest(worldPos);float sky;result=b>=0?probeSample(b,lampGrid.reflections[3*b].xyz,normalize(worldPos-lampGrid.reflections[3*b].xyz),0.0,sky).rgb:vec3(0.0);}
  if(lampGrid.flags.y==17)result=vec3(wetDebug,0.0,wetness>wetDebug*0.4+0.01?wetness:0.0)+color.rgb*0.15;
  if(lampGrid.flags.y==2&&detailAmount>0.001)result=vec3(detailValue*0.5);
  if(lampGrid.flags.y==3&&detailAmount>0.001)result=detailNormal*0.5+0.5;

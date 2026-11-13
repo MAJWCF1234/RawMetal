@@ -90,7 +90,7 @@ float lampScatter(vec3 rayDirection,float rayLength,vec4 lamp){
 // Reflection probes: six 90-degree faces per room probe, captured by the scene pass (face order and
 // orientation as GpuRenderer captureReflections draws them), a mip chain for rough surfaces.
 // The mip a GGX lobe of roughness r reads (as scene.frag's probeLod).
-float probeLod(float r){float a=r*r;return clamp(log2(max(159.0*a,1e-4)),0.0,lampGrid.probeInfo.z-1.0);}
+float probeLod(float r){float a=r*r;return clamp(log2(max(80.0*a,1e-4))+LookA.w,0.0,lampGrid.probeInfo.z-1.0);}
 // The split-sum table's analytic fit (Karis, mobile), for the weight of the screen march's swap.
 vec2 envBrdfApprox(float NoV,float r){const vec4 c0=vec4(-1.0,-0.0275,-0.572,0.022);const vec4 c1=vec4(1.0,0.0425,1.04,-0.04);vec4 q=r*c0+c1;float a004=min(q.x*q.x,exp2(-9.28*NoV))*q.x+q.y;return vec2(-1.04,1.04)*a004+q.zw;}
 const vec3 CaptureForward[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
@@ -277,7 +277,7 @@ void main(){
  vec4 source=texture(sceneImage,uv);
  vec3 color=source.rgb;float depth=source.a;
  // The material views (scene.frag --detail 13-16) are measurements: shown as they are.
- if(lampGrid.flags.y>=13&&lampGrid.flags.y<=17){outColor=vec4(color,depth);return;}
+ if(lampGrid.flags.y>=13&&lampGrid.flags.y<=19){outColor=vec4(color,depth);return;}
  // The viewmodel writes negative depth and keeps its own lighting.
  bool viewModel=depth<0.0;
  bool surface=depth>0.02&&depth<p.grade.w;

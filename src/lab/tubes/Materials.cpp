@@ -51,6 +51,11 @@ const bool materials=add({
    std::vector<std::uint32_t> px(r.pixels(),r.pixels()+size_t(w)*h);GpuRenderer::setReferenceDisplay(false);s.shoot(label);return px;};
   const auto material=view(13,"material: roughness (red), metalness (green), cavity (blue)",true);
   const auto spec=view(14,"specular term alone",true),furnace=view(15,"white furnace",true),refl=view(16,"dielectric reflectance facing the eye",true);
+  // The probes against the frame: what the room's probe saw at each point over this pass's own light
+  // there (the captures must hold the room as it is drawn, not a darker one).
+  {const auto seen=view(18,"what the room's probe saw here",true),drawn=view(19,"this pass's own light (to compare)",true);std::vector<float> ratio;
+   for(size_t i=0;i<seen.size();++i){const float a=greyOf(seen[i]),b=linearOf(int(((drawn[i]>>8)&255u)));if(a>.01f&&b>.01f)ratio.push_back(a/b);}
+   if(!ratio.empty()){std::sort(ratio.begin(),ratio.end());s.board["mat.probe_ratio"]=ratio[ratio.size()/2];}}
   SoftwareRenderer::setDetailLayer(layer);r.render(s.g());
   // Furnace: every surface pixel against the frame's median.
   // (Pixels on a silhouette, resolved half with what lies behind, are not a surface: each must sit
@@ -97,6 +102,7 @@ const bool materials=add({
   if(s.board.count("mat.furnace_median")){const double lo=s.board["mat.furnace_lo"],hi=s.board["mat.furnace_hi"];
    r.metric("furnace_spread_lo",lo,"ratio");r.metric("furnace_spread_hi",hi,"ratio");r.metric("furnace_median",s.board["mat.furnace_median"]);
    r.check("rendered white furnace: rough and smooth, metal and dielectric reflect the same energy (1st-99th pct within 6%)",lo>.94&&hi<1.06,fixed(lo)+" .. "+fixed(hi));}
+  if(s.board.count("mat.probe_ratio"))r.metric("probe_vs_frame",s.board["mat.probe_ratio"],"ratio");
   {const double p99=s.board.count("mat.refl_p99")?s.board["mat.refl_p99"]:0;r.metric("dielectric_reflectance_p99",p99);r.metric("dielectric_reflectance_max",s.board["mat.refl_max"]);
    r.check("dielectrics facing the eye reflect no more than Fresnel allows (99th pct under .05)",p99<.05,fixed(p99,4));}
   for(const auto& b:surfaces(*s.fixture)){const auto k="mat.cov."+b.name;if(!s.board.count(k))continue;const double cov=s.board[k];
