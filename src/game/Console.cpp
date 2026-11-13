@@ -1,6 +1,7 @@
 #include "Game.h"
 #include "../renderer/SoftwareRenderer.h"
 #include "../world/CustomCampaign.h"
+#include "../lab/LabAccess.h"
 #include <sstream>
 #include <cctype>
 #include <fstream>
@@ -81,6 +82,9 @@ void Game::executeConsole(std::string command){
  else if(verb=="r_texels"){
   if(arg=="crisp"||arg=="smooth"){SoftwareRenderer::setCrispTexels(arg=="crisp");m_consoleLog.push_back(arg=="crisp"?"TEXELS CRISP: SQUARE PSX TEXELS, ANTIALIASED EDGES.":"TEXELS SMOOTH: PLAIN BILINEAR MAGNIFICATION.");}
   else m_consoleLog.push_back("USE R_TEXELS CRISP OR SMOOTH. CRISP IS THE DEFAULT.");
+ }
+ else if(verb=="labsnap"){ // the scene as a feature-lab fixture (src/lab/LabAccess.h, lab/README.md)
+  const std::string path=LabAccess::snapshot(*this,arg);m_consoleLog.push_back(path.empty()?"LABSNAP FAILED.":"LAB FIXTURE "+path);
  }
  else if(verb=="where"){
   std::ostringstream out;out<<"MAP "<<m_level<<" X "<<m_player.pos.x<<" Y "<<m_player.pos.y<<" Z "<<m_player.z;m_consoleLog.push_back(out.str());

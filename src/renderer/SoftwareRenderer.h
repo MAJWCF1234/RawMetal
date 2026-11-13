@@ -136,6 +136,7 @@ public:
     void inspectRig(const Game& game,float yaw,float pitch,Point3 center={.12f,-.20f,.83f},float distance=1.3f);
 private:
     friend class GpuRenderer;
+    friend struct LabAccess; // the feature lab (src/lab) stages and measures scenes from inside
     std::unique_ptr<GpuRenderer> m_gpu;
     std::unique_ptr<FrameWorker> m_animationWorker;
     std::string m_gpuName;
