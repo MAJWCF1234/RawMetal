@@ -69,8 +69,11 @@ bool Game::batterDoor(Enemy& e,Vec2 goal){
   const Vec2 at=d.nearestOnLine(e.pos,.2f),to=at-e.pos;e.heading=std::atan2(to.y,to.x);
   const auto& traits=creatureTraits(e.kind);e.attackCooldown=std::max(1.1f,traits.cooldown);
   const bool push=off*d.swing<0,broke=m_world.batterDoor(i,traits.damage,push);
-  SoundEvent bang{Sound::LockerBang,c,1.f,broke?.62f:.74f,true,18,base+1.2f};bang.aiRadius=18;m_sounds.push_back(bang);
-  if(broke){SoundEvent tear{Sound::OneMetalBang,c,1.f,.8f,true,20,base+1.f};tear.aiRadius=20;m_sounds.push_back(tear);}
+  // Its own blows are marked as its own (-2-index): every other creature and guard hears the door go,
+  // but it does not take the din at the leaf for where its quarry went and stop beating.
+  const int self=-2-int(&e-m_enemies.data());
+  SoundEvent bang{Sound::LockerBang,c,1.f,broke?.62f:.74f,true,18,base+1.2f};bang.aiRadius=18;bang.owner=self;m_sounds.push_back(bang);
+  if(broke){SoundEvent tear{Sound::OneMetalBang,c,1.f,.8f,true,20,base+1.f};tear.aiRadius=20;tear.owner=self;m_sounds.push_back(tear);}
   return true;
  }
  return false;

@@ -253,21 +253,26 @@ bool testLightProbes(){
 #include "renderer/SoftwareRenderer.h"
 #include "renderer/GpuRenderer.h"
 namespace retro {
-namespace {bool g_lightProbes=true;}
+namespace {bool g_lightProbes=true;
+// Rebake: a salt in every map's key, so each bakes again; and what the bakes that landed took.
+unsigned g_probeSalt=0,g_probeBakes=0;double g_probeBakeMs=0;}
 void SoftwareRenderer::setLightProbes(bool enabled){g_lightProbes=enabled;}
 bool SoftwareRenderer::lightProbes(){return g_lightProbes;}
+void SoftwareRenderer::rebakeLightProbes(){++g_probeSalt;}
+unsigned SoftwareRenderer::lightProbeBakes(){return g_probeBakes;}
+double SoftwareRenderer::lastLightProbeBakeMs(){return g_probeBakeMs;}
 const ProbeBake* SoftwareRenderer::chunkProbes(const Game& game,int level,const World& w,std::uint64_t lightKey,bool wait){
  if(!g_lightProbes||level<0||level>=Game::MaxChunks)return nullptr;
  auto& entry=m_chunkProbes[size_t(level)];
  ProbeBakeInput input;input.lampPower.assign(w.lights().size(),1.f);
  std::uint64_t key=1469598103934665603ull;auto mix=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
  mix(lightKey);mix(game.staticRevision(level));mix(std::uint64_t(game.worldId()));mix(std::uint64_t(level));
- mix(std::uint64_t(reinterpret_cast<std::uintptr_t>(w.definitionIdentity().map)));mix(w.fixtures().size());
+ mix(std::uint64_t(reinterpret_cast<std::uintptr_t>(w.definitionIdentity().map)));mix(w.fixtures().size());mix(g_probeSalt);
  // Switchable lamps (a breaker, a timer, a failing tube) stay out of the bake: their power changes
  // in play, so each keeps its own flat room bounce at this frame's power (scene.frag, Scene3D).
  for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].switchable())input.lampPower[i]=0.f;
  auto collect=[&]{
-  try{entry.bake=entry.pending.get();}catch(const std::exception& e){std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Light probe bake failed on map "<<level<<": "<<e.what()<<'\n';}
+  try{entry.bake=entry.pending.get();if(entry.bake){++g_probeBakes;g_probeBakeMs=entry.bake->volume.milliseconds;}}catch(const std::exception& e){std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Light probe bake failed on map "<<level<<": "<<e.what()<<'\n';}
   entry.pending={};entry.key=entry.pendingKey;++m_probeBakesTaken;
   // The CPU rasteriser's vertex light carries the fill: its cache for this map goes.
   m_chunkLighting[size_t(level)].clear();

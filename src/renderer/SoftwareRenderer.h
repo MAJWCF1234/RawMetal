@@ -98,6 +98,12 @@ public:
     // Off (--no-probes) both renderers fall back to the lamps' flat room bounce.
     static void setLightProbes(bool enabled);
     static bool lightProbes();
+    // Every map's probes bake again from the map as it stands (the builder's Rebake);
+    // the probes in use stay until the new bake lands.
+    static void rebakeLightProbes();
+    // Probe bakes landed since the program started, and how long the last one took (ms).
+    static unsigned lightProbeBakes();
+    static double lastLightProbeBakeMs();
     // Close-up procedural detail layer on per-pixel-lit surfaces.
     // 0 off, 1 on, 2 debug: raw field, 3 debug: detail normal.
     static void setDetailLayer(int mode);

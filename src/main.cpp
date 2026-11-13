@@ -1231,14 +1231,24 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // where every creature of the chunk is. Lines: "stage LEVEL X Y FEET YAW PITCH [a,b,c]" (Game::chimeraStage,
     // the anchor) or "machine N" (Game::machineScene) first; then "anchor X Y FEET YAW PITCH", "set a,b,c",
     // "torch", "shut", "door I OPEN [swing]", "tick N", and "f NAME TICKS X Y FEET YAW PITCH" (step, then draw).
+    // "custom MAP X Y FEET YAW PITCH FILE" first films a custom campaign (FILE, the rest of the line; MAP its
+    // map, the anchor map-local): the Campaign Builder's Film cameras write such a list. --film-out=DIR puts
+    // the frames there instead of .build/film.
     if(auto arg=commandArguments().find(L"--film=")){
      std::ifstream list{std::filesystem::path(arg+7)};if(!list)return 21;std::vector<std::string> lines;for(std::string l;std::getline(list,l);)lines.push_back(l);
      if(lines.empty())return 21;
      std::istringstream head(lines[0]);std::string kind;int level=0;float hx=0,hy=0,hz=0,hyaw=0,hpitch=0;std::string sets;head>>kind;
-     if(kind=="machine")head>>level;else if(!(head>>level>>hx>>hy>>hz>>hyaw>>hpitch))return 21;head>>sets;
+     if(kind=="machine")head>>level;else if(!(head>>level>>hx>>hy>>hz>>hyaw>>hpitch))return 21;
+     std::shared_ptr<retro::CustomCampaign> custom;
+     if(kind=="custom"){std::string file;std::getline(head,file);while(!file.empty()&&(file.front()==' '||file.front()=='\t'))file.erase(0,1);while(!file.empty()&&(file.back()=='\r'||file.back()==' '))file.pop_back();
+      try{custom=std::make_shared<retro::CustomCampaign>(*retro::loadCustomCampaignFile(std::filesystem::u8path(file)));if(level<0||level>=int(custom->maps.size()))throw std::runtime_error("no map "+std::to_string(level));custom->startMap=level;}
+      catch(const std::exception& e){std::ofstream("film-log.txt")<<"ERROR: "<<file<<": "<<e.what()<<'\n';return 21;}}
+     else head>>sets;
      // "game LEVEL X Y FEET YAW PITCH [a,b,c]": the staged scene saved and loaded into a fresh game, so it plays
      // as the game does (not an inspection camera): Claire's body under the camera, the replay camera can see her.
-     auto make=[&]{if(kind=="machine")return retro::Game::machineScene(level);auto staged=retro::Game::chimeraStage(level,{hx,hy},hz,hyaw*retro::kPi/180.f,hpitch);
+     auto make=[&]{if(kind=="machine")return retro::Game::machineScene(level);
+      if(custom){retro::Game fresh(custom);fresh.update({},1.f/60);fresh.inspectLockerWatch({hx,hy},hz,hyaw*retro::kPi/180.f,hpitch);return fresh;}
+      auto staged=retro::Game::chimeraStage(level,{hx,hy},hz,hyaw*retro::kPi/180.f,hpitch);
       if(kind!="game")return staged;std::filesystem::create_directories(".build/filmsave");staged.setSaveDirectory(L".build/filmsave");
       {std::istringstream each(sets);std::string st;while(std::getline(each,st,',')){auto eq=st.find('=');if(!st.empty())staged.setState(retro::stateId(st.substr(0,eq)),eq==std::string::npos?1:std::stoi(st.substr(eq+1)));}}
       staged.saveSlot(0);retro::Game fresh;fresh.setAsyncLoads(false);fresh.setSaveDirectory(L".build/filmsave");fresh.loadSlot(0);return fresh;};
@@ -1247,7 +1257,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      apply(sets);
      float ax=scene.player().pos.x,ay=scene.player().pos.y,az=scene.player().z,ayaw=scene.player().angle,apitch=scene.player().pitch;
      auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!commandArguments().find(L"--software")&&!renderer->enableHardware())return 36;
-     renderer->setEnvironmentInspection(true);std::filesystem::create_directories(".build/film");std::ofstream log("film-log.txt");
+     std::filesystem::path filmDir=".build/film";if(auto out=commandArguments().find(L"--film-out="))filmDir=out+11;
+     renderer->setEnvironmentInspection(true);std::filesystem::create_directories(filmDir);std::ofstream log("film-log.txt");
      // Gameplay takes (capture only): "play" lets go of the anchor and the player is driven by input; "hud 1"
      // draws the hands and HUD; "rec NAME" draws every second tick from the player's eyes into
      // .build/film/NAME_NNNN.ppm until "stop", and logs each tick's game sounds to film-sounds.txt (tick, sound,
@@ -1262,7 +1273,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      auto drawTo=[&](const std::string& name){
       // The replay camera: a fixed point in the room, turned on the player (the renderer's body orbit, aimed there).
       if(camSet){const auto&pl=scene.player();const float dx=camX-pl.pos.x,dy=camY-pl.pos.y;renderer->setBodyOrbit(std::max(.5f,std::hypot(dx,dy)),retro::wrapAngle(std::atan2(dy,dx)-pl.angle));}
-      renderer->render(scene);if(camSet)renderer->setBodyOrbit(0,0);std::ofstream out(".build/film/"+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
+      renderer->render(scene);if(camSet)renderer->setBodyOrbit(0,0);std::ofstream out(filmDir/(name+".ppm"),std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
      auto hold=[&]{if(!play)scene.inspectLockerWatch({ax,ay},az,ayaw,apitch);};
      auto step=[&](const retro::InputState& in){hold();scene.update(in,1.f/60.f);++ticks;
       for(const auto&s:scene.sounds())soundLog<<ticks<<' '<<(recording?recName:std::string("-"))<<' '<<recFrame<<' '<<int(s.sound)<<' '<<s.gain<<' '<<s.pitch<<' '<<(s.spatial?std::hypot(s.position.x-scene.player().pos.x,s.position.y-scene.player().pos.y):0.f)<<'\n';
@@ -1341,7 +1352,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       else if(op=="tick"){int n=0;f>>n;tick(n);}
       else if(op=="f"){std::string name;int n=0;float x=0,y=0,z=0,yaw=0,pitch=0;if(!(f>>name>>n>>x>>y>>z>>yaw>>pitch))continue;tick(n);
        scene.inspectLockerWatch({x,y},z,yaw*retro::kPi/180.f,pitch);renderer->render(scene);hold();
-       std::ofstream out(".build/film/"+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
+       std::ofstream out(filmDir/(name+".ppm"),std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
        log<<name<<" t="<<scene.elapsed();const auto&foes=scene.chunkEnemies(scene.level());
        for(size_t e=0;e<foes.size();++e){const auto&q=foes[e];log<<" | e"<<e<<' '<<q.name()<<' '<<q.pos.x<<' '<<q.pos.y<<' '<<q.z<<" alive="<<q.alive<<" sleep="<<q.sleeping()<<" feed="<<q.feeding<<" clip="<<q.visualClip<<" head="<<q.heading;}
        log<<'\n';}}

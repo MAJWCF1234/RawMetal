@@ -245,6 +245,10 @@ void Game::updateEnemies(float dt){
   // historical Brute thumps into Investigate magnets.
   // Its kind's hearing scales how far each sound carries to it.
   if(!visible)for(const auto&stimulus:stimuli){
+   if(stimulus.npc==-2-int(&e-m_enemies.data()))continue;   // its own blows on a door (DoorPlay.cpp)
+   // Nor the door it stands beating: the leaf's rattle and slam come from where the quarry is not.
+   if(battersDoors(e.kind)){bool atDoor=false;for(const auto&d:m_world.doors()){if(!d.breakable()||d.broken||!d.spans(e.pos,-.1f)||std::fabs(d.across(e.pos)-d.y)>1.6f)continue;
+     const Vec2 c=d.centre();if(lengthSq(stimulus.source-c)<2.25f){atDoor=true;break;}}if(atDoor)continue;}
    bool combat=stimulus.categories&(ai::SoundWeapon|ai::SoundDanger|ai::SoundImpact);
    if(!combat&&!stimulus.loud&&!stimulus.step&&stimulus.radius>5.f)continue;
    if((stimulus.categories&ai::SoundImpact)&&!stimulus.loud&&stimulus.gain<=.75f)continue;

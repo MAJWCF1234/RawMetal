@@ -38,7 +38,8 @@ const bool brute=add({
   if(d.damage>s.board["brute.damage"]){s.board["brute.damage"]=d.damage;s.board["brute.blows"]+=1;if(!s.board.count("brute.first_blow_s"))s.board["brute.first_blow_s"]=s.time;}
   if(d.broken&&!s.board.count("brute.broke_s"))s.board["brute.broke_s"]=s.time;
   if(e->pos.y>d.y+.4f&&!s.board.count("brute.through_s"))s.board["brute.through_s"]=s.time;
-  s.board["brute.awareness_end"]=e->awareness;},
+  s.board["brute.awareness_end"]=e->awareness;
+  if(std::getenv("LAB_TRACE")){static FILE* t=std::fopen("brute-trace.txt","w");if(t){std::fprintf(t,"%.2f pos %.2f,%.2f z %.2f state %d aware %.1f known %.2f,%.2f cd %.2f wind %.2f strike %.2f dmg %.0f off %.2f\n",s.time,e->pos.x,e->pos.y,e->z,int(e->state),e->awareness,e->lastKnown.x,e->lastKnown.y,e->attackCooldown,e->windup,e->strike,d.damage,d.across(e->pos)-d.y);std::fflush(t);}}},
  .metrics=[](Scene& s,Report& r){
   const World& w=s.g().world();if(w.doors().empty()){r.check("the tube has a door",false);return;}const auto& d=w.doors()[0];
   r.metric("leaf",d.leaf);r.metric("closest_m",s.board["brute.closest"],"m");r.metric("blows",s.board["brute.blows"]);r.metric("damage",d.damage);r.metric("broken",d.broken);r.metric("awareness_end",s.board["brute.awareness_end"]);
