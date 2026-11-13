@@ -151,6 +151,17 @@
     SendMessageW(window,WM_COMMAND,Undo,0);require(doc.text()==quarryKept,"Undo did not bring the quarry back");
     passed.push_back("creature quarry picker (people by name and place), hunter name box, plan line, renumbered and cleared on delete, engine-valid, one-step Undo");
 
+    // Every creature the engine has is placeable, the Machine (kind 8, the cursed equipment) the last:
+    // the Creature list names it, a click writes CREATURE kind 8 there, it can be picked, the engine takes it.
+    reset();require(SendMessageW(creatureList,CB_GETCOUNT,0,0)==9,"The Creature list does not name all nine creatures (0-8, the Machine last)");
+    {wchar_t name[64]{};SendMessageW(creatureList,CB_GETLBTEXT,8,reinterpret_cast<LPARAM>(name));require(std::wstring(name)==L"Cursed equipment","The Creature list's ninth entry is not the Machine (Cursed equipment)");}
+    tool=CreatureTool;SendMessageW(creatureList,CB_SETCURSEL,8,0);place(12.5f,12.5f);tool=0;
+    {auto machines=doc.records("CREATURE",0);require(machines.size()==1,"Placing the Machine left no CREATURE record");auto f=NativeDocument::fields(doc.lines[machines.front()]);
+     require(f.size()>4&&f[2]=="8"&&std::fabs(std::stof(f[3])-12.5f)<.6f&&std::fabs(std::stof(f[4])-12.5f)<.6f,"Placing the Machine did not write CREATURE kind 8 where it was clicked");
+     selectRecord(int(machines.front()));require(record==int(machines.front()),"A placed Machine cannot be picked");}
+    require(validateDocument(),"The engine rejected a placed Machine (CREATURE kind 8)");
+    passed.push_back("the Machine (CREATURE kind 8) is in the Creature list, placeable where clicked, pickable and engine-valid");
+
     reset();createFloorLayer();refresh();tool=2;SendMessageW(upperFloorTiles,CB_SETCURSEL,1,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(UpperFloorTiles,CBN_SELCHANGE),reinterpret_cast<LPARAM>(upperFloorTiles));gestureNow(6,6,7,7);
     require(doc.tile(0,1,6,6)=='.',"The upper-floor open-space brush cannot reproduce native empty cells");SendMessageW(upperFloorTiles,CB_SETCURSEL,0,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(UpperFloorTiles,CBN_SELCHANGE),reinterpret_cast<LPARAM>(upperFloorTiles));
     tool=5;gestureNow(5,5,18,14);doc.addOnLayer({"STRUCT","0","5","5","18","14","4.5","4.75","0","3"},1);tool=0;selectRecord(int(doc.records("STRUCT",0).back()));

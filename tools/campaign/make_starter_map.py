@@ -65,7 +65,7 @@ SECTIONS = [  # (title, test on the model name); the first that matches wins
     ('OUTDOORS', lambda n, s: True)]
 
 CLUTTER_KINDS = ['paper', 'cardboard', 'bottle', 'electronics A', 'electronics B', 'plastic', 'wood']
-CREATURES = ['Huntsman', 'Wasp', 'Brute', 'Warden', 'Mutant', 'Snatcher', 'Chimera', 'Transformed']
+CREATURES = ['Huntsman', 'Wasp', 'Brute', 'Warden', 'Mutant', 'Snatcher', 'Chimera', 'Transformed', 'Machine']
 ACTORS = ['Worker', 'Wasp', 'Huntsman', 'Cargo', 'Cleanup', 'Cleanup Engineer', 'Cleanup Sharpshooter', 'Cleanup Heavy',
           'Cleanup Medic', 'Cleanup Rusher', 'Scientist', 'Senior Scientist', 'Female Scientist', 'Female Doctor',
           'Lab Tech', 'Investigator']
@@ -444,12 +444,14 @@ def build():
     m = s.new_map('Life', 3, 0, ceiling=5.0)
     s.zone(m, 0, 0, 2.5, 24, '', 'LIFE')
     green = ACCENT['LIFE']
+    # Nine pens, five over four; the Machine (kind 8, the cursed equipment) is dormant anyway and,
+    # like the rest, kept asleep by a state nothing sets.
     for k, name in enumerate(CREATURES):
-        cx = 3.3 + (k % 4) * 5.3; cy = 5.2 if k < 4 else 12.0
-        s.fence(m, cx - 2.1, cy - 2.1, cx + 2.1, cy + 2.1)
+        cx = 3.3 + (k % 5) * 4.35; cy = 5.2 if k < 5 else 12.0
+        s.fence(m, cx - 1.95, cy - 2.1, cx + 1.95, cy + 2.1)
         s.rec(m, 'CREATURE', 3, k, cx, cy, 0, '', '', NEVER)
         s.sign(m, cx, cy - 2.16, .7, 1.8, .36, 'CREATURE %d' % k, name + ' / asleep', green)
-        s.zone(m, cx - 2.3, cy - 3.6, cx + 2.3, cy + 2.1, 'CREATURE kind %d / %s (asleep)' % (k, name))
+        s.zone(m, cx - 2.15, cy - 3.6, cx + 2.15, cy + 2.1, 'CREATURE kind %d / %s (asleep)' % (k, name))
         s.index.append({'map': 3, 'section': 'LIFE', 'x': cx, 'y': cy, 'title': 'CREATURE %d' % k, 'name': name})
     s.rec(m, 'TIMED_SEQUENCE', 3, 'starter_clock', 'starter_clock_done', 0, 0, 24, 24, -100, 100, 60000, 60000, 0, 0, 0, 0, 1, 1)
     for k, name in enumerate(ACTORS):

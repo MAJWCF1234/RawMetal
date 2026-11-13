@@ -1,0 +1,10 @@
+# What breaks leaves pieces of itself: a crate at the middle of the plain room
+# (tile 8,8), broken at frame 4 and filmed as its pieces fly and land.
+# Tubes: debris.
+world room
+camera 4.6 8.5 -999 0 -12
+light 8.5 8.5 3.2 1.4 9
+light 5 6 3.2 1 8
+debris crate
+size 480 270
+frames 90

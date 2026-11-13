@@ -311,10 +311,11 @@ void Game::detonateBarrel(int level,int tx,int ty){
  float near=std::clamp(1.f-length(here-m_player.pos)/9.f,0.f,1.f);
  m_verticalSpringVelocity-=.6f+1.2f*near;m_damageFlash=std::max(m_damageFlash,.25f+.55f*near);
  m_sounds.push_back({Sound::LiftCrash,here,1.f,.8f,true,17,floor+.6f});
- // A scorch on the floor, burning scrap in the air.
+ // A scorch on the floor, and the barrel's own hull torn into pieces and thrown (the
+ // renderer cuts each from the barrel's mesh and sheet; Scene3D draws the tile with yaw x).
  m_bulletImpacts.push_back({at,floor+.012f,{0,0},m_elapsed,level,false,-2,1.f});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
  auto&clutter=level==m_level?m_clutter:m_chunks[level].clutter;
- for(int i=0;i<5;++i){Clutter c;c.kind=3;c.pos=at;c.z=floor+.5f;c.yaw=float(i)*1.2566f+.3f;c.pitch=(i%2?-.3f:.3f);c.velocity={std::cos(c.yaw)*(3.5f+float(i)*.4f),std::sin(c.yaw)*(3.5f+float(i)*.4f)};c.vz=3.5f+float(i%3);c.spin=(i%2?1.f:-1.f)*5;c.pitchSpeed=(i%2?1.f:-1.f)*4;c.rollSpeed=3;clutter.push_back(c);}
+ for(auto&c:Clutter::shards(ShardOf::Barrel,{at.x,at.y,floor+kBarrelSize[2]*.5f},kBarrelSize,-float(tx),6,3.6f,3.8f))clutter.push_back(c);
  auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
  // What the blast kills it takes apart.
  for(auto&e:enemies)if(e.alive&&length(e.pos-at)<kUnarmedMelee.barrelRadius&&applyEnemyDamage(e,kUnarmedMelee.barrelDamage,false,false,level)){e.deathBlast=true;e.blastOrigin={at.x,at.y,floor+.3f};

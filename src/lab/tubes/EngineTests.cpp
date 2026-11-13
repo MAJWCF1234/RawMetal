@@ -15,6 +15,14 @@ const bool registered=[]{
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);
  engine("chimera-hunt","--each-test=chimera-hunt: the bite, the meal, the return",&Game::testChimeraHunt);
+ // What breaks and what it leaves (tubes/Debris.cpp works the pieces; these keep the old behaviour).
+ engine("clutter","--each-test=clutter: junk and shards lift, fall, land and sound",&Game::testClutter);
+ engine("props","--each-test=props: model props, breaking, held and thrown",&Game::testProps);
+ engine("glass","--each-test=glass: panes, breakables, blasts",&Game::testGlass);
+ engine("physics-stages","--each-test=physics-stages: props through the physics stages",&Game::testPhysicsStages);
+ engine("saves","--each-test=saves: every save version loads",&Game::testSaves);
+ engine("prop-saves","--each-test=prop-saves: props and their state through a save",&Game::testPropSaves);
+ engine("combat","--each-test=combat: shots, barrels, melee",&Game::testCombat);
  #ifdef RAWMETAL_LAB_HAS_PARTICLES
  engine("particles","--each-test=particles: determinism, budgets, walls, records, dressed maps",&testParticles);
  #endif
