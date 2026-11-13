@@ -58,7 +58,6 @@ struct LabAccess {
  static ShotKind fireAt(Game& g,Point3 at){const Player& p=g.m_player;const Point3 o{p.pos.x,p.pos.y,p.z+p.stanceEye()};Point3 d{at.x-o.x,at.y-o.y,at.z-o.z};
   const float n=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(n<1e-4f)return ShotKind::None;d=d*(1/n);const auto& gun=weaponDef(WeaponId::Shotgun).hitscan;
   const auto hit=g.traceShot(o,d,40,-1,false,&gun);g.resolveShot(hit,o,d,gun,true);return hit.kind;}
- static std::string encodeSave(const Game& g){return g.encodeSave();}
  // A sound raised as if the game had raised it this frame (heard by the audio engine's next update).
  static void raise(Game& g,const SoundEvent& e){g.m_sounds.push_back(e);}
  static void mute(Game& g,bool music){g.m_musicEnabled=!music;}
