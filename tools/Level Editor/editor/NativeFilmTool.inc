@@ -9,7 +9,8 @@
 // are degrees, not a `yaw` field, so the plan's group and copy turns (which turn yaw in
 // radians) leave them be.
 // Write film list puts an --film list beside the project ("custom MAP ..." then the
-// frames); Render runs RawMetal.exe on it and opens the folder of pictures.
+// frames); Render runs RawMetal.exe on it and opens the folder of pictures. Filmmaker
+// opens the Raw Metal Filmmaker (NativeFilmmaker.inc): shots with keyed timelines.
 // Included inside struct Editor.
 static constexpr const char *FilmKind = "# EDITOR_FILM";
 static constexpr int FilmFps = 10;        // a moving shot's frames a second (Claire's: 30, the engine's rec)
@@ -82,6 +83,22 @@ fs::path filmFolder() const { return (path.empty() ? root / L"custom maps" : pat
 std::wstring filmStem() const { return path.empty() ? std::wstring(L"Untitled") : path.stem().wstring(); }
 // The --film list for one map's cameras, the campaign read from pack. Frames are named after
 // the camera (NAME, or NAME_0000 on for a moving shot or one of Claire).
+// The stage comes first (the engine reads line one before any other); its anchor is where
+// Claire stands while the cameras film: the map's player start. The Filmmaker's shots
+// (NativeFilmmaker.inc) start from the same line.
+std::string filmStageLine(int on, const fs::path &pack) const {
+  std::ostringstream out;
+  out.setf(std::ios::fixed);
+  out.precision(3);
+  float sx = 12, sy = 12, sz = 0, syaw = 0;
+  for (auto i : doc.records("MAP", on)) {
+    auto f = NativeDocument::fields(doc.lines[i]);
+    sx = f.size() > 5 ? number(f[5], sx) : sx, sy = f.size() > 6 ? number(f[6], sy) : sy, sz = f.size() > 7 ? number(f[7], 0) : 0;
+    syaw = f.size() > 20 ? number(f[20], 0) * 180.f / 3.14159265f : 0;
+  }
+  out << "custom " << on << ' ' << sx << ' ' << sy << ' ' << sz << ' ' << syaw << " 0 " << utf8(pack.wstring()) << '\n';
+  return out.str();
+}
 std::string filmListText(int on, const fs::path &pack) const {
   std::ostringstream out;
   out.setf(std::ios::fixed);
@@ -92,15 +109,7 @@ std::string filmListText(int on, const fs::path &pack) const {
         c = '_';
     return s.empty() ? std::string("shot") : s;
   };
-  float sx = 12, sy = 12, sz = 0, syaw = 0;
-  for (auto i : doc.records("MAP", on)) {
-    auto f = NativeDocument::fields(doc.lines[i]);
-    sx = f.size() > 5 ? number(f[5], sx) : sx, sy = f.size() > 6 ? number(f[6], sy) : sy, sz = f.size() > 7 ? number(f[7], 0) : 0;
-    syaw = f.size() > 20 ? number(f[20], 0) * 180.f / 3.14159265f : 0;
-  }
-  // The stage comes first (the engine reads line one before any other); its anchor is where
-  // Claire stands while the cameras film: the map's player start.
-  out << "custom " << on << ' ' << sx << ' ' << sy << ' ' << sz << ' ' << syaw << " 0 " << utf8(pack.wstring()) << '\n';
+  out << filmStageLine(on, pack);
   out << "# Film cameras of map " << on << " (Campaign Builder). RawMetal.exe --film=\"this list\" [--film-out=FOLDER]\n";
   auto pitchUnits = [](float degrees) { return degrees * 3.14159265f / 180.f * 140.f; };
   auto turnBetween = [](float a, float b, float t) {

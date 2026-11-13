@@ -212,6 +212,7 @@
     passed.push_back("new-floor headroom, actual 3D edge drag, unchanged deck, player start and native export/reopen");
     verifyDoorRotation(passed,mouse,reset);
     verifyAirLightFilm(passed,mouse,reset);
+    verifyFilmmaker(passed,reset); // NativeFilmmaker.inc
 
     std::ofstream report(root/L"native-editor-interaction-test.txt");
     for(const auto& message:passed)report<<"PASS: "<<message<<'\n';

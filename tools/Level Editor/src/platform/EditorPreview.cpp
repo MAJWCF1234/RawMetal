@@ -8,6 +8,7 @@
 #include "../renderer/SoftwareRenderer.h"
 #include "../renderer/Projection.h"
 #include "../renderer/Particles.h"
+#include "../game/FilmPuppet.h"
 #include "../audio/AudioEngine.h"
 #include <fstream>
 #include <memory>
@@ -253,6 +254,35 @@ int runEditorPreview(const EditorPreviewOptions& options){
      <<' '<<air.sources<<' '<<air.particles<<' '<<(scene?scene->elapsed():0.f)<<' '<<int(thirdShown&&renderer->claireOutsideReport().drawn)<<' '<<lookRebake<<'\n';
   put(lookStatus,out.str());
  };
+ // The Filmmaker's preview (film.txt beside the control file, editor/NativeFilmmaker.inc):
+ // "FILM 1 X Y EYE YAW PITCH FOV" (metres, degrees; FOV across, 0 the game's) and then
+ // "pose aK|eK X Y FEET YAW CLIP PHASE" lines (game/FilmPuppet.h) put the picture at the
+ // shot's camera at the playhead with its people and creatures posed; "FILM 0" gives the
+ // free camera and the authored poses back. film-status.txt answers "VIEW X Y EYE YAW PITCH"
+ // (the free camera, degrees) and whether the preview is on, so the Filmmaker can key the view.
+ const auto filmControl=options.control.parent_path()/L"film.txt",filmStatus=options.control.parent_path()/L"film-status.txt";
+ bool filmOn=false;long long filmRevision=-1;Player filmFree{};float filmX=0,filmY=0,filmEye=0,filmYaw=0,filmPitch=0,filmFov=0;
+ std::vector<FilmPuppet> filmHeld;std::vector<ActorPose> filmWorldPoses,filmNpcPoses;std::vector<Enemy> filmEnemies;int filmLevel=-1;
+ auto filmSnapshot=[&]{
+  filmWorldPoses.clear();filmNpcPoses.clear();filmLevel=scene->level();filmRevision=revision;
+  for(size_t i=0;i<scene->world().actorTracks().size();++i)filmWorldPoses.push_back(scene->world().actorPose(i));
+  for(const auto& npc:scene->npcActors())filmNpcPoses.push_back(npc.pose);
+  filmEnemies=scene->chunkEnemies(filmLevel);
+ };
+ auto filmRestore=[&]{
+  if(!scene||filmRevision!=revision||filmLevel!=scene->level())return;
+  auto& world=const_cast<World&>(scene->world());
+  for(size_t i=0;i<filmWorldPoses.size()&&i<world.actorTracks().size();++i)world.setActorPose(i,filmWorldPoses[i]);
+  auto& people=const_cast<std::vector<FriendlyActor>&>(scene->npcActors());
+  for(size_t i=0;i<filmNpcPoses.size()&&i<people.size();++i)people[i].pose=filmNpcPoses[i];
+  auto& foes=const_cast<std::vector<Enemy>&>(scene->chunkEnemies(filmLevel));if(foes.size()==filmEnemies.size())foes=filmEnemies;
+ };
+ auto reportFilm=[&]{
+  if(!scene)return;const auto& v=filmOn?filmFree:scene->player();
+  std::ostringstream out;out.setf(std::ios::fixed);out.precision(3);
+  out<<"VIEW "<<v.pos.x<<' '<<v.pos.y<<' '<<v.z+v.eye<<' '<<v.angle*180.f/kPi<<' '<<v.pitch/140.f*180.f/kPi<<' '<<int(filmOn)<<'\n';
+  put(filmStatus,out.str());
+ };
  int lastWidth=-1,lastHeight=-1;LiveCampaign live;
  // Every map stored in the scene matches the document (false after a
  // campaign-wide change was applied to the map on show only).
@@ -290,6 +320,10 @@ int runEditorPreview(const EditorPreviewOptions& options){
     if(mode!=lookMode){lookMode=std::clamp(mode,0,3);SoftwareRenderer::setLightProbes(lookMode!=3);SoftwareRenderer::setDetailLayer(lookMode==1?10:lookMode==2?11:1);}
     if(rebake!=lookRebake){lookRebake=rebake;SoftwareRenderer::rebakeLightProbes();}
     lookThird=third!=0;lookAnimate=animate!=0;}}
+  bool filmWanted=false;std::vector<FilmPuppet> filmAsked;
+  {std::istringstream ask(get(filmControl));std::string tag;int on=0;
+   if(ask>>tag>>on&&tag=="FILM"&&on&&ask>>filmX>>filmY>>filmEye>>filmYaw>>filmPitch>>filmFov){filmWanted=true;
+    for(std::string line;std::getline(ask,line);){std::istringstream l(line);std::string op;FilmPuppet p;if(l>>op&&op=="pose"&&readFilmPuppet(l,p))holdFilmPuppet(filmAsked,p);}}}
   const auto controlRead=Clock::now();
   // An edit, another map or play ends Simulate first: the change lands on the authored scene.
   if(simulating&&(requested!=revision||map!=attemptedMap||play!=0||!simWanted))stopSim();
@@ -348,6 +382,12 @@ int runEditorPreview(const EditorPreviewOptions& options){
   playing=play!=0&&valid;
   // Over the shoulder in play when asked: the renderer draws her from outside only out of inspection.
   {const bool third=playing&&lookThird;if(third!=thirdShown){thirdShown=third;renderer->setEnvironmentInspection(!third);SoftwareRenderer::setThirdPerson(third);}}
+  // The Filmmaker's preview: never in play or Simulate, which own the picture.
+  if(scene&&filmWanted&&!playing&&!simulating){
+   if(!filmOn){filmOn=true;filmFree=scene->player();filmSnapshot();}
+   else if(filmRevision!=revision||filmLevel!=scene->level())filmSnapshot();
+   filmHeld=std::move(filmAsked);
+  }else if(filmOn){filmRestore();filmOn=false;filmHeld.clear();if(scene&&!playing)scene->restoreEditorCamera(filmFree);}
   if(simWanted&&!simulating&&!playing&&valid&&scene){
    authored=std::make_unique<Game>(*scene);scene->setEditorObserver(true);
    simulating=true;simTime=0;fireSerial=simFire;pulses.clear();reportSim();lastSimReport=now;
@@ -382,7 +422,7 @@ int runEditorPreview(const EditorPreviewOptions& options){
      const float ground=scene->world().floorHeight(camera.pos.x,camera.pos.y);
      camera.z=std::clamp(camera.z,ground-1.5f,ground+48.f);
     }
-    if(moved)scene->restoreEditorCamera(camera);
+    if(moved&&!filmOn)scene->restoreEditorCamera(camera);
     // F6 in the picture starts or stops Simulate; Escape stops it.
     const bool simKey=window.focused()&&(GetAsyncKeyState(VK_F6)&0x8000)!=0;
     if(simKey&&!simKeyHeld&&valid){if(simulating){stopSim();askSim(false);}else askSim(true);}
@@ -420,8 +460,11 @@ int runEditorPreview(const EditorPreviewOptions& options){
    const bool profileFrame=!options.perf.empty()&&!pendingPicture.empty();
    if(profileFrame){perf::enabled=true;perf::costs={};}
    const auto staticBuilds=renderer->staticGeometryBuilds();
-   renderer->setEditorView(playing||simulating?std::vector<EditorFloorView>{}:editorFloors,playing||simulating?std::vector<EditorGuide>{}:editorGuides);
+   renderer->setEditorView(playing||simulating?std::vector<EditorFloorView>{}:editorFloors,playing||simulating||filmOn?std::vector<EditorGuide>{}:editorGuides);
+   if(filmOn){auto cam=scene->player();cam.pos={filmX,filmY};cam.eye=Player::StandingEye;cam.z=filmEye-cam.eye;cam.crouched=cam.prone=false;
+    cam.angle=filmYaw*kPi/180.f;cam.pitch=std::clamp(filmPitch*kPi/180.f*140.f,-210.f,210.f);scene->restoreEditorCamera(cam);applyFilmPuppets(*scene,filmHeld);Projection::setFieldOfView(filmFov);}
    renderer->render(*scene);
+   if(filmOn)Projection::setFieldOfView(0);
    if(profileFrame){
     perf::enabled=false;std::vector<std::pair<double,int>> top;for(int c=0;c<perf::Count;++c)if(perf::costs[size_t(c)]>.5)top.push_back({perf::costs[size_t(c)],c});
     std::sort(top.rbegin(),top.rend());std::ostringstream line;line.setf(std::ios::fixed);line.precision(1);
@@ -443,7 +486,7 @@ int runEditorPreview(const EditorPreviewOptions& options){
     }
    }
    if(now-lastReport>std::chrono::milliseconds(50)){report(valid?"READY":"ERROR",valid&&!pickDetail.empty()?pickDetail:loadError);lastReport=now;}
-   if(now-lastLook>std::chrono::milliseconds(100)){reportLook();lastLook=now;}
+   if(now-lastLook>std::chrono::milliseconds(100)){reportLook();reportFilm();lastLook=now;}
    if(options.frames>0&&frame>=unsigned(options.frames))break;
   }
   Sleep(scene?1:16);

@@ -25,6 +25,8 @@
 #include <sstream>
 #include <map>
 #include <set>
+#include <optional>
+#include <array>
 #include <memory>
 #include <regex>
 #include <shellapi.h>
@@ -730,7 +732,7 @@ enum {
   SoundList=640,PreyList,HunterList,
   DoorToolList=660,DoorKindList,DoorAxisList,DoorSwingList,DoorHingeList,DoorLockList,DoorStrengthList,DoorOpenSlider,
   EmitterPresetList=690,EmitterKindList,EmitterRestyleList,EmitterHeadingSlider,EmitterStrengthSlider,
-  LightViewButton=700,ThirdPersonToggle,FilmWrite,FilmRender,
+  LightViewButton=700,ThirdPersonToggle,FilmWrite,FilmRender,FilmMaker,
   LightMenuBase=710
 };
 // Every tool keeps its historical number (tests and saved habits use them).
@@ -1046,6 +1048,7 @@ struct Editor {
 #include "NativeEmitterTool.inc"
 #include "NativeLightView.inc"
 #include "NativeFilmTool.inc"
+#include "NativeFilmmaker.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -4747,7 +4750,8 @@ struct Editor {
                       surfaceList, hazardList, soundList, preyList, hunterList, doorToolList, doorKindList, doorAxisList,
                       doorSwingList, doorHingeList, doorLockList, doorStrengthList, doorOpenSlider, pickupList, creatureList, tileList, primList, brushList,
                       clutterList, actionList, linkList, kindList, recordList, emitterPresetList, emitterKindList, emitterRestyleList,
-                      emitterHeadingSlider, emitterStrengthSlider, GetDlgItem(window, FilmWrite), GetDlgItem(window, FilmRender)})
+                      emitterHeadingSlider, emitterStrengthSlider, GetDlgItem(window, FilmWrite), GetDlgItem(window, FilmRender),
+                      GetDlgItem(window, FilmMaker)})
       if (list)
         ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
@@ -4865,6 +4869,10 @@ struct Editor {
         placeControl(GetDlgItem(window, id), rx + i++ * 159, y, 153, 34, TRUE);
         ShowWindow(GetDlgItem(window, id), SW_SHOW);
       }
+      y += 42;
+      // Shots with keyed timelines on top of the cameras (NativeFilmmaker.inc).
+      placeControl(GetDlgItem(window, FilmMaker), rx, y, 312, 34, TRUE);
+      ShowWindow(GetDlgItem(window, FilmMaker), SW_SHOW);
       y += 42;
     }
     if (tool == 23)
@@ -9070,6 +9078,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       // A film render finished (NativeFilmTool.inc): frames made, the folder to open.
       e->filmRendered(int(w), reinterpret_cast<std::wstring *>(l));
       return 0;
+    case WM_APP + 53:
+      // The Filmmaker's shots are filmed (NativeFilmmaker.inc): frames made, what was made.
+      e->shotsRendered(int(w), reinterpret_cast<std::wstring *>(l));
+      return 0;
     case WM_APP + 31:
       // The engine left play on Escape; restore the view she was building in.
       if (e->playing || e->playView >= 0)
@@ -9412,6 +9424,9 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       case FilmRender:
         e->renderFilmButton();
         break;
+      case FilmMaker:
+        e->openFilmmaker();
+        break;
       case SoundToggle: {
         sfx::muted = !sfx::muted;
         std::error_code ec;
@@ -9706,6 +9721,12 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
           << "PASS: old editor people get their missing clock and guard post on open; complete files stay untouched\n";
       LocalFree(argv);
       return 0;
+    }
+    // RawMetalEditor.exe --filmmaker-render "PROJECT.rmc" [MAP]: film every Filmmaker shot (NativeFilmmaker.inc).
+    if (argc > 2 && std::wstring(argv[1]) == L"--filmmaker-render") {
+      int code = e.renderProjectShots(fs::path(argv[2]), argc > 3 ? _wtoi(argv[3]) : -1);
+      LocalFree(argv);
+      return code;
     }
     if (argc > 1 && std::wstring(argv[1]) == L"--background-test") {
       e.backgroundTest = true;
@@ -10154,6 +10175,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.button(L"Play: first person", ThirdPersonToggle);
     e.button(L"Write film list", FilmWrite);
     e.button(L"\u25B6 Render films", FilmRender);
+    e.button(L"\u2707 Raw Metal Filmmaker...", FilmMaker);
     e.button(L"↺ Start fresh", StartFresh);
     for (int i = 0; i < 3; ++i)
       e.ideaButtons.push_back(e.button(L"", IdeaBase + i));
