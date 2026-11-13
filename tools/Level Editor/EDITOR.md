@@ -122,6 +122,79 @@ are in `.build/interaction`: `air-plan.bmp`, `air-a.ppm` and `air-b.ppm` (the
 air moving), `light-0.ppm` to `light-3.ppm`, `third-person.ppm`,
 `first-person.ppm`, `films-plan.bmp` and the frames in `Film test film`.
 
+### Raw Metal Filmmaker
+
+**✇ Raw Metal Filmmaker...** (under the Film camera tool's buttons) opens a
+window for directing shots: Source Filmmaker's idea, kept small. A **shot** is a
+length of time on the map you are on; its **timeline** has a lane for the
+camera, one for each person or creature you direct, and one for map states.
+
+- **Shots** (left): **+ New shot** makes `shot_1`, 3 s at 30 frames a second.
+  With a Film camera picked it starts from that camera (its still, or both ends
+  of its move as two keys); otherwise from where the 3D view's free camera is.
+  Name, length and frames a second (60, 30, 20, 15, 12, 10...: a whole number of
+  engine ticks a frame) change under **Apply to shot**; a rename takes its keys.
+- **Track** picks what the boxes key: **Camera** (East, South, Eye height, Turn
+  and Tilt in degrees, **Lens** the field of view across in degrees, 0 the
+  game's own, about 75), **Person N** / **Creature N** (where they stand, Feet,
+  Turn, and a **clip**: 0 idle, 1 walk, 2 punch, 3 hit, 4 death, 5 crouch; the
+  Investigator also 6-9; a creature plays idle, walk, attack and flinch), or
+  **Map state**: an `--film` op at that moment (`set NAME=V`, `door I OPEN`,
+  `lights S`, `ambient A`, `torch`, `shut`, `dark`, `lamp ...`).
+- **◆ Set key here** keys the boxes at the playhead (a key already there is
+  changed). **Key the 3D view** keys the camera where the 3D view's free camera
+  stands and looks: turn off **Show in 3D view**, fly there, key. **Ease out of
+  this key** slows out of it and into the next (a dot on the lane; a straight
+  line is a diamond). **Delete key** removes the key under the playhead.
+- **The timeline**: click or drag the ruler to scrub (frames snap); click a key
+  to pick it and drag it to retime; a person's lane shows its clips as a strip
+  (walking green, dying red). Space plays (it loops), the arrows step a frame,
+  K keys, Delete deletes.
+- Between keys a track moves in a straight line, or eased; turns go the short
+  way round. A walk's phase follows the ground covered (a stride a cycle, so feet
+  do not slide); a punch, hit or fall plays once from its key; idles loop.
+
+**Show in 3D view** (on by default) plays the shot in the live 3D view: the
+engine picture sits at the shot's camera and lens with the people and creatures
+posed as keyed (it hands the free camera and the authored poses back when it is
+turned off or the window closes). Map-state keys show only in a render.
+
+**Render shot** / **▶ Render all shots** write one `--film` list a shot
+(`NAME film/SHOT.film.txt`), film each with the builder's `RawMetal.exe` into
+`NAME film/SHOT/` (`SHOT_0000.bmp` on) and, with `ffmpeg` on PATH, encode
+`NAME film/SHOT.mp4` (H.264) and, for several shots, the whole cut in shot-list
+order as `NAME film/NAME.mp4`. Without ffmpeg the frames stay as pictures.
+Unsaved changes are filmed from a snapshot, as the Film cameras are.
+`RawMetalEditor.exe --filmmaker-render "PROJECT.rmc" [MAP]` does the same from
+the command line and writes `native-editor-filmmaker-render.txt`.
+
+Shots and keys are builder lines the game skips; Undo, save and load treat them
+like any record (each key or shot change is one Ctrl+Z):
+
+```text
+# EDITOR_SHOT|map|name|seconds|fps
+# EDITOR_SHOT_KEY|map|shot|track|time|ease|a|b|c|d|e|f
+```
+
+`track` is `cam` (a b c: east, south, eye height; d turn, e tilt, f lens), `aK`
+person K by ACTOR index or `eK` creature K in CREATURE order (a b c: east,
+south, feet; d facing; e clip), or `set` (a: the op, percent-encoded).
+
+The engine side is small (`src/`, synced into the builder's copy by
+`tools/editor/sync_engine.py`): `--film` lists take `pose aK|eK X Y FEET YAW CLIP
+PHASE` (held through every tick until `pose aK off`; `src/game/FilmPuppet.h`)
+and an optional last field on `f` lines, the lens in degrees across
+(`Projection::setFieldOfView`; play always draws at the game's 1.3). The live
+preview reads `film.txt` beside the picture's control file and answers the free
+camera in `film-status.txt` (`tools/Level Editor/src/platform/EditorPreview.cpp`).
+
+`--editing-test` drives it through the window's own buttons: a new shot, two
+camera keys (eased, the lens 60 to 40) and a walking person's key, a ruler scrub,
+a key dragged to retime and Undo, save and reopen byte for byte, engine
+validation, the 90-frame list's poses and lens, a rename, and a 2-frame engine
+take (and its MP4 when ffmpeg is on PATH). It leaves `filmmaker-window.bmp` and
+`Filmmaker test film` in `.build/interaction`.
+
 ### Doors stand either way
 
 A door stands in whichever wall it is put in. With **Door**, click in a gap

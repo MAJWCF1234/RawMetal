@@ -3,6 +3,8 @@
 #include "core/NeuralTexture.h"
 #ifdef _WIN32
 #include "game/Game.h"
+#include "game/FilmPuppet.h"
+#include "renderer/Projection.h"
 #include "game/ai/DecisionClock.h"
 #include "game/ai/WalkQueryCache.h"
 #include "game/ai/StateLookupHints.h"
@@ -1267,7 +1269,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     // "torch", "shut", "door I OPEN [swing]", "tick N", and "f NAME TICKS X Y FEET YAW PITCH" (step, then draw).
     // "custom MAP X Y FEET YAW PITCH FILE" first films a custom campaign (FILE, the rest of the line; MAP its
     // map, the anchor map-local): the Campaign Builder's Film cameras write such a list. --film-out=DIR puts
-    // the frames there instead of .build/film.
+    // the frames there instead of .build/film. The Filmmaker's keyed takes add "pose aK|eK X Y FEET YAW CLIP PHASE"
+    // (a person or creature held for the take, game/FilmPuppet.h; "pose aK off" lets go) and an optional last
+    // field on "f": the lens's field of view in degrees across (0 or none: the game's own).
     if(auto arg=commandArguments().find(L"--film=")){
      std::ifstream list{std::filesystem::path(arg+7)};if(!list)return 21;std::vector<std::string> lines;for(std::string l;std::getline(list,l);)lines.push_back(l);
      if(lines.empty())return 21;
@@ -1303,13 +1307,13 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // there; "weapon shotgun|handgun|fists"; "reach" / "yank" stage the nearest guard coming for the locker;
      // "census" logs every creature and person in the chunk.
      bool play=false,recording=false;int recFrame=0,ticks=0;std::string recName;std::ofstream soundLog("film-sounds.txt");
-     bool camSet=false;float camX=0,camY=0;
+     bool camSet=false;float camX=0,camY=0;std::vector<retro::FilmPuppet> puppets;
      auto drawTo=[&](const std::string& name){
       // The replay camera: a fixed point in the room, turned on the player (the renderer's body orbit, aimed there).
       if(camSet){const auto&pl=scene.player();const float dx=camX-pl.pos.x,dy=camY-pl.pos.y;renderer->setBodyOrbit(std::max(.5f,std::hypot(dx,dy)),retro::wrapAngle(std::atan2(dy,dx)-pl.angle));}
       renderer->render(scene);if(camSet)renderer->setBodyOrbit(0,0);std::ofstream out(filmDir/(name+".ppm"),std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
      auto hold=[&]{if(!play)scene.inspectLockerWatch({ax,ay},az,ayaw,apitch);};
-     auto step=[&](const retro::InputState& in){hold();scene.update(in,1.f/60.f);++ticks;
+     auto step=[&](const retro::InputState& in){hold();scene.update(in,1.f/60.f);retro::applyFilmPuppets(scene,puppets);++ticks;
       for(const auto&s:scene.sounds())soundLog<<ticks<<' '<<(recording?recName:std::string("-"))<<' '<<recFrame<<' '<<int(s.sound)<<' '<<s.gain<<' '<<s.pitch<<' '<<(s.spatial?std::hypot(s.position.x-scene.player().pos.x,s.position.y-scene.player().pos.y):0.f)<<'\n';
       if(recording&&ticks%2==0){char n[32];std::snprintf(n,sizeof n,"_%04d",recFrame++);drawTo(recName+n);}};
      auto tick=[&](int n){for(int i=0;i<n;++i)step({});};
@@ -1328,6 +1332,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       in.mouseDx=dyaw/(.0022f*sens);in.mouseDy=-dpitch/(.308f*sens)*(scene.settings().invertMouse?-1.f:1.f);};
      for(size_t li=1;li<lines.size();++li){std::istringstream f(lines[li]);std::string op;if(!(f>>op)||op[0]=='#')continue;
       if(op=="play"){play=true;continue;}
+      if(op=="pose"){retro::FilmPuppet p;if(retro::readFilmPuppet(f,p)){retro::holdFilmPuppet(puppets,p);retro::applyFilmPuppet(scene,p);}else log<<"pose: unreadable: "<<lines[li]<<'\n';continue;}
       if(op=="hud"){int on=1;f>>on;renderer->setEnvironmentInspection(!on);continue;}
       if(op=="rec"){f>>recName;recFrame=0;recording=true;continue;}
       if(op=="stop"){recording=false;continue;}
@@ -1384,8 +1389,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        const_cast<std::vector<retro::WorldLight>&>(scene.world().lights()).push_back(l);}
       else if(op=="door"){int i=0;float open=0;std::string swing;f>>i>>open>>swing;auto&world=const_cast<retro::World&>(scene.world());if(i>=0&&i<int(world.doors().size()))world.setDoor(i,open,swing=="swing");}
       else if(op=="tick"){int n=0;f>>n;tick(n);}
-      else if(op=="f"){std::string name;int n=0;float x=0,y=0,z=0,yaw=0,pitch=0;if(!(f>>name>>n>>x>>y>>z>>yaw>>pitch))continue;tick(n);
-       scene.inspectLockerWatch({x,y},z,yaw*retro::kPi/180.f,pitch);renderer->render(scene);hold();
+      else if(op=="f"){std::string name;int n=0;float x=0,y=0,z=0,yaw=0,pitch=0,fov=0;if(!(f>>name>>n>>x>>y>>z>>yaw>>pitch))continue;f>>fov;tick(n);
+       scene.inspectLockerWatch({x,y},z,yaw*retro::kPi/180.f,pitch);retro::applyFilmPuppets(scene,puppets);retro::Projection::setFieldOfView(fov);renderer->render(scene);retro::Projection::setFieldOfView(0);hold();
        std::ofstream out(filmDir/(name+".ppm"),std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}
        log<<name<<" t="<<scene.elapsed();const auto&foes=scene.chunkEnemies(scene.level());
        for(size_t e=0;e<foes.size();++e){const auto&q=foes[e];log<<" | e"<<e<<' '<<q.name()<<' '<<q.pos.x<<' '<<q.pos.y<<' '<<q.z<<" alive="<<q.alive<<" sleep="<<q.sleeping()<<" feed="<<q.feeding<<" clip="<<q.visualClip<<" head="<<q.heading;}
