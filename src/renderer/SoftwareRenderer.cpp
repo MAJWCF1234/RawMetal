@@ -555,21 +555,21 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
   // Surface sets and structure finishes, in surfaceFinishes order. Floor tile is worn vinyl-composition
   // or quarry tile (no floor here is a glazed mirror); glazed tile is a wall finish.
   using M=Material;
-  constexpr Material finishes[]={M::Concrete,M::Concrete,M::Concrete, M::Plaster,M::Plaster,M::Plaster, M::GlazedTile,M::GlazedTile,M::Plaster,
+  constexpr Material finishes[]={M::Concrete,M::SealedConcrete,M::Concrete, M::Plaster,M::Plaster,M::Plaster, M::GlazedTile,M::GlazedTile,M::Plaster,
    M::Plastic,M::Vinyl,M::Plastic, M::Stone,M::Stone,M::Stone, M::PaintedMetal,M::PaintedMetal,M::PaintedMetal, M::BareWood,M::Ground,
    M::Stone,M::Stone,M::Stone, M::Stone,M::Crystal, M::Plaster, M::Plastic,M::Plastic,M::Plastic, M::Fabric,
    M::Concrete,M::Concrete,M::Concrete, M::Concrete,M::Concrete,M::Concrete, M::BareSteel,M::Rust,M::Aluminium, M::Ground,M::Vinyl,M::VarnishedWood};
   static_assert(std::size(finishes)==std::tuple_size_v<decltype(m_surfaceTextures)>);
   for(size_t i=0;i<m_surfaceTextures.size();++i)apply(m_surfaceTextures[i],finishes[i],("finish "+std::to_string(i)).c_str());
   const std::pair<Texture*,Material> named[]={
-   {&m_wall,M::Plaster},{&m_floor,M::Concrete},{&m_metal,M::BareSteel},{&m_serviceFloor,M::Concrete},{&m_serviceCeiling,M::Plaster},
+   {&m_wall,M::Plaster},{&m_floor,M::SealedConcrete},{&m_metal,M::BareSteel},{&m_serviceFloor,M::SealedConcrete},{&m_serviceCeiling,M::Plaster},
    {&m_pressureWall,M::Concrete},{&m_pressureFloor,M::BareSteel},{&m_pressureMetal,M::BareSteel},{&m_bulkhead,M::PaintedMetal},
    {&m_pumpTexture,M::PaintedMetal},{&m_compressorTexture,M::PaintedMetal},{&m_pipeTexture,M::PaintedMetal},{&m_gateTexture,M::PaintedMetal},
    {&m_barrelTexture,M::PaintedMetal},{&m_crateTexture,M::BareWood},{&m_concrete,M::Concrete},{&m_framePaint,M::PaintedMetal},
    {&m_yellowSteel,M::PaintedMetal},{&m_redSteel,M::PaintedMetal},{&m_paleSteel,M::PaintedMetal},{&m_panelSteel,M::PaintedMetal},
    {&m_ironTexture,M::BareSteel},{&m_darkMetalTexture,M::BareSteel},{&m_rubberTexture,M::Rubber},{&m_leatherTexture,M::Leather},
    {&m_officeTile,M::Vinyl},{&m_officeWall,M::Plaster},{&m_dropCeiling,M::Plaster},{&m_securityCarpet,M::Fabric},{&m_officeCarpet,M::Fabric},
-   {&m_areaWalls[0],M::Plaster},{&m_areaWalls[1],M::Plaster},{&m_areaWalls[2],M::Plaster},{&m_areaFloors[0],M::Concrete},{&m_areaFloors[1],M::Concrete},{&m_areaFloors[2],M::Concrete},
+   {&m_areaWalls[0],M::Plaster},{&m_areaWalls[1],M::Plaster},{&m_areaWalls[2],M::Plaster},{&m_areaFloors[0],M::SealedConcrete},{&m_areaFloors[1],M::SealedConcrete},{&m_areaFloors[2],M::SealedConcrete},
    {&m_handgunTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
    {&m_cursedTexture,M::Rust},{&m_droneTexture,M::PaintedMetal},{&m_arms,M::Clothing}};
   for(auto [t,m]:named)apply(*t,m,"engine");

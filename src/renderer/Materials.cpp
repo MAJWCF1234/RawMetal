@@ -5,27 +5,29 @@
 
 namespace retro {
 namespace {
-// Roughness ranges after Lagarde & de Rousiers (2014) and the UE4/Frostbite material charts; metal
+// Roughness ranges after Lagarde & de Rousiers (2014) and the UE4/Frostbite material charts, tuned to the
+// satin look (Half-Life: Alyx): sealed floors, paint, plastic, varnish and machined steel on the glossy
+// side of their real range, worn and dirty patches rougher through the surface map; metal
 // F0 lumas from measured reflectance (iron .56, aluminium .91, chrome .55, copper/brass ~.7).
 constexpr MaterialRange Ranges[size_t(Material::Count)]={
  {"none",.5f,.8f,false,.04f,.5f},
- {"painted metal",.35f,.6f,false,.04f,.5f},
- {"bare steel",.3f,.5f,true,.56f,.45f},
+ {"painted metal",.25f,.4f,false,.04f,.5f},
+ {"bare steel",.2f,.4f,true,.56f,.45f},
  {"rust",.8f,.95f,false,.04f,.8f},
- {"chrome",.05f,.15f,true,.6f,.2f},
- {"aluminium",.3f,.5f,true,.8f,.4f},
+ {"chrome",.05f,.12f,true,.6f,.2f},
+ {"aluminium",.2f,.4f,true,.8f,.4f},
  {"brass",.25f,.45f,true,.68f,.4f},
  {"concrete",.75f,.95f,false,.04f,.9f},
  {"plaster",.6f,.85f,false,.04f,.6f},
  {"stone",.7f,.95f,false,.04f,1.f},
  {"brick",.75f,.95f,false,.04f,.9f},
  {"glazed tile",.1f,.25f,false,.04f,.5f},
- {"vinyl",.35f,.5f,false,.04f,.4f},
+ {"vinyl",.2f,.45f,false,.04f,.4f},
  {"bare wood",.6f,.85f,false,.04f,.65f},
- {"varnished wood",.25f,.4f,false,.04f,.5f},
+ {"varnished wood",.2f,.35f,false,.04f,.5f},
  {"fabric",.85f,1.f,false,.04f,.6f},
  {"rubber",.7f,.9f,false,.04f,.3f},
- {"plastic",.3f,.6f,false,.04f,.35f},
+ {"plastic",.25f,.45f,false,.04f,.35f},
  {"glass",.02f,.05f,false,.04f,0.f},
  {"water",.02f,.1f,false,.02f,0.f},
  {"skin",.45f,.6f,false,.028f,.3f},
@@ -36,7 +38,8 @@ constexpr MaterialRange Ranges[size_t(Material::Count)]={
  {"ground",.85f,1.f,false,.04f,1.f},
  {"ceramic",.1f,.25f,false,.04f,.3f},
  {"foliage",.5f,.85f,false,.04f,.6f},
- {"screen",.05f,.15f,false,.04f,.1f}};
+ {"screen",.05f,.15f,false,.04f,.1f},
+ {"sealed concrete",.25f,.5f,false,.04f,.7f}};
 float toLinear(std::uint32_t c){static const auto table=[]{std::array<float,256> t{};for(int i=0;i<256;++i)t[size_t(i)]=std::pow(i/255.f,2.2f);return t;}();return table[c&255u];}
 std::uint32_t toByte(float v){static const auto table=[]{std::array<std::uint8_t,4096> t{};for(int i=0;i<4096;++i)t[size_t(i)]=std::uint8_t(std::lround(std::pow(i/4095.f,1.f/2.2f)*255.f));return t;}();
  return table[size_t(std::clamp(v,0.f,1.f)*4095.f+.5f)];}

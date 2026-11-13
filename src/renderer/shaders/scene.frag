@@ -386,7 +386,7 @@ void main(){
  bool parallaxMaterial=parallaxScale>0.0&&surface.z<0.5&&parallaxFade>0.001;
  // lighting.w: 1 a normal map, +2 a surface map (roughness, metalness, cavity in the relief slot),
  // the fraction a corpse's dissolve.
- float mapFlags=floor(lighting.w+0.25);bool normalMapped=mapFlags>0.5&&mod(mapFlags,2.0)>0.5,surfaceMapped=mapFlags>1.5&&!impostorQuad;
+ float mapFlags=floor(lighting.w+0.25);bool normalMapped=mapFlags>0.5&&mod(mapFlags,2.0)>0.5,surfaceMapped=mapFlags>1.5&&!impostorQuad&&LookA.y>0.0;
  bool litMaterial=normalMapped||light0.w+light1.w>0.0||detailAmount>0.001;
  vec3 tangent=vec3(0.0),bitangent=vec3(0.0),geometricNormal=vec3(0.0);
  bool tangentFrameValid=false;
@@ -686,7 +686,7 @@ void main(){
   vertexLight=lighting.y*relief*(probed&&lampGrid.sun.w>0.0?0.45+0.55*probe.a:1.0);
   // The lamps' highlights go through the same soft shoulder as their diffuse light (its slope here).
   float lampIn=dot(lampLight,vec3(0.2126,0.7152,0.0722)),shoulder=lampIn>1e-4?dot(lampOut,vec3(0.2126,0.7152,0.0722))/lampIn:0.62;
-  specDirect=lampSpecularRGB*shoulder+sunSpecular*0.96;specularLight=0.0;
+  specDirect=(lampSpecularRGB*shoulder+sunSpecular*0.96)*LookB.y;specularLight=0.0;
   shadeN=N;shadeReady=true;ambientEnv=vertexLight*vec3(0.78,0.88,1.12)+bounceOut;
   float lampLuma=dot(lampOut,vec3(0.2126,0.7152,0.0722));
   directLight=lampLuma+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief+dot(bounceOut,vec3(0.2126,0.7152,0.0722));

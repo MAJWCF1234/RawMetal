@@ -20,7 +20,7 @@ namespace retro {
 enum class Material : std::uint8_t {
  None,PaintedMetal,BareSteel,Rust,Chrome,Aluminium,Brass,Concrete,Plaster,Stone,Brick,GlazedTile,Vinyl,
  BareWood,VarnishedWood,Fabric,Rubber,Plastic,Glass,Water,Skin,Clothing,Crystal,Paper,Leather,Ground,
- Ceramic,Foliage,Screen,Count};
+ Ceramic,Foliage,Screen,SealedConcrete,Count};
 // lo..hi: the class's roughness range (perceptual roughness, alpha = r^2). metal: the class is a metal
 // (its albedo is its F0, it has no diffuse). f0: a metal's F0 luma (linear) its albedo is brought to;
 // a dielectric's specular reflectance at normal incidence. normal: strength of the micro-normal

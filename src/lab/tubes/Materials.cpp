@@ -87,7 +87,7 @@ const bool materials=add({
   int outside=0,flat=0,total=0;std::string firstOut,firstFlat;std::map<int,std::pair<double,int>> covByClass;
   for(const auto& m:materialRecords()){const auto& range=materialRange(m.material);++total;
    const bool secondary=m.material==Material::PaintedMetal||m.material==Material::BareSteel||m.material==Material::Aluminium||m.material==Material::GlazedTile||m.material==Material::Ceramic;
-   const float lo=secondary?std::min(range.lo,.3f):range.lo,hi=secondary?std::max(range.hi,.95f):range.hi;
+   const float lo=secondary?std::min(range.lo,.18f):range.lo,hi=secondary?std::max(range.hi,.95f):range.hi;
    if(m.minRough<lo-.01f||m.maxRough>hi+.01f){if(!outside++)firstOut=m.name+" ("+materialName(m.material)+" "+fixed(m.minRough,2)+"-"+fixed(m.maxRough,2)+")";}
    if(m.cov<.03f&&m.texels>64){if(!flat++)firstFlat=m.name;}
    auto& c=covByClass[int(m.material)];c.first+=m.cov;++c.second;}
