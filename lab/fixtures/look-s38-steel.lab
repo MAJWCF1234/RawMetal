@@ -1,0 +1,12 @@
+# Look: steel, pale steel and copper pillars under a lamp. Tubes: look (reflections, brightness and finish against v1.4.1).
+# look-v141 / look-v142: mean luma, band, p90 of that release's engine on this view, drawn in the lab (v1.4.1: the lab commit on the v1.4.1 engine).
+world custom "custom maps/Starter Map.rmc"
+map 38
+camera 11.5 6.2 -999 -90 -10
+open-doors
+scenery-only
+size 960 540
+frames 1
+look-matte 0 0 960 380
+look-v141 50.42 0.586 91.24
+look-v142 74.23 0.649 104.67

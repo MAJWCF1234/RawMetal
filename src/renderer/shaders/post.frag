@@ -14,10 +14,10 @@ layout(set=0,binding=5) uniform sampler2D bloomImage;
 // The room reflection probes (GpuRenderer captureReflections), the off-screen fallback for SSR.
 layout(set=0,binding=6) uniform sampler2DArray reflectionAtlas;
 layout(std430,set=0,binding=7) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];} lampGrid;
-// The look's values (LookTuning.h, GpuRenderer writeProbeHeader): reflection strength, a polished
-// dielectric's sheen, how much an envmap adds and takes away; the march's roughest finish, the probe's
-// blur by roughness, the fill's saturation, a metal's tint; two spare, a crystal's glow, how much of
-// its sheen a wet surface keeps head-on.
+// The look's values (LookTuning.h, GpuRenderer writeLook): reflection strength, a dielectric's F0, a
+// metal's F0, the roughness past which a dielectric shows none; the march's roughest finish, the
+// probe's blur by roughness, the fill's saturation, a metal's tint; the bounce's ceiling, spare, a
+// crystal's glow, spare.
 #define LookA lampGrid.reflections[141]
 #define LookB lampGrid.reflections[142]
 #define LookC lampGrid.reflections[143]
@@ -106,13 +106,17 @@ vec4 probeReflection(vec3 p,vec3 R,float roughness,out float sky){
  if(best<0)return vec4(0.0);
  vec4 c=lampGrid.reflections[3*best],lo=lampGrid.reflections[3*best+1],hi=lampGrid.reflections[3*best+2];
  float away=length(max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)));
+ // A room's walls are its box's faces, so a point on a wall sits on the box's edge, and depth's steps
+ // put it a hair inside or outside from one pixel to the next: an on/off parallax there drew streaks.
+ // Points within half a metre of the box are carried just inside it and always take the parallax.
  vec3 dir=R;
- if(away<0.01){vec3 r=R+vec3(1e-5);vec3 t=max((hi.xyz-p)/r,(lo.xyz-p)/r);dir=p+R*max(min(min(t.x,t.y),t.z),0.0)-c.xyz;}
+ if(away<0.5&&LookC.y<0.5){vec3 q=clamp(p,lo.xyz+0.02,hi.xyz-0.02);vec3 r=R+vec3(1e-5);vec3 t=max((hi.xyz-q)/r,(lo.xyz-q)/r);dir=q+R*max(min(min(t.x,t.y),t.z),0.0)-c.xyz;}
  vec3 a=abs(dir);int face=a.x>=a.y&&a.x>=a.z?(dir.x>0.0?0:1):a.y>=a.z?(dir.y>0.0?2:3):(dir.z>0.0?4:5);
  float z=max(dot(dir,CaptureForward[face]),1e-5);
  vec2 st=clamp(vec2(0.5+0.5*dot(dir,CaptureRight[face])/z,0.5-0.5*dot(dir,CaptureUp[face])/z),vec2(0.0),vec2(1.0));
- // Blurred down the mips with roughness, but a polished floor's stays sharp enough to show the lamps.
- float lod=clamp(roughness*roughness*LookB.y,0.0,1.0)*(lampGrid.probeInfo.z-1.0);
+ // Blurred down the mips with roughness: a mirror reads the face itself, a brushed or worn finish
+ // only the room's broad light and dark.
+ float lod=clamp(roughness*LookB.y,0.0,1.0)*(lampGrid.probeInfo.z-1.0);
  vec4 s=textureLod(reflectionAtlas,vec3(st,c.w*6.0+float(face)),lod);
  sky=smoothstep(300.0,900.0,s.a);
  return vec4(s.rgb,clamp(1.0-away/6.0,0.0,1.0));
@@ -218,32 +222,45 @@ float steamAmount(vec3 dir,float rayLength){
 }
 float postHash(vec2 v){uvec2 q=uvec2(ivec2(v)+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u+uint(lampGrid.eye.w*60.0)*2654435761u;h^=h>>16;h*=0x7feb352du;h^=h>>15;return float(h&0xffffffu)/16777216.0;}
 
-// Screen-space reflections. Roughness and wetness come from the material
-// target. The march is the same for every pixel and frame (a jittered one left
-// a stipple wherever no TAA resolves it: a still shot, a test frame); a rougher
-// finish blurs what it finds instead, wider the further the ray went. Misses
-// outdoors fall back to the sky.
+// Interleaved gradient noise: a per-pixel dither with no frame term, so a still shot and a test
+// frame are the same every time. It staggers where each pixel's march samples, so neighbouring rows
+// of a floor do not all find a wall on the same step (the hard horizontal bands an even march draws);
+// the refinement below then takes every pixel's hit to the same surface whichever step found it.
+float stepDither(vec2 p){return fract(52.9829189*fract(dot(p,vec2(0.06711056,0.00583715))));}
+// Screen-space reflections, for finishes smooth enough to mirror (roughness under LookB.x: water, wet
+// tile, chrome, glass). Rougher ones take the room's probe, filtered down its mips, instead: a blurred
+// march copies what it finds side by side (a doubled image), the probe is blurred by construction.
+// The hit must lie on the surface it found (a thickness test, then a check after refining), and the
+// result fades where the march is unsure: near the frame's edge, far along the ray, on rays turned
+// back toward the eye. Misses outdoors fall back to the sky.
 vec4 screenReflection(vec3 center,vec3 normal,float roughness){
  vec3 V=normalize(-center);
  vec3 R=reflect(-V,normal);
  if(dot(R,normal)<0.0)R=reflect(R,normal);
- const int Steps=32;const float MaxDistance=16.0;
- float jitter=0.5,previous=0.0;
- for(int i=0;i<Steps;++i){
-  float t=MaxDistance*pow((float(i)+jitter)/float(Steps),1.7);
-  vec3 q=center+normal*0.02+R*t;if(q.z<0.05)break;
+ // A ray coming back toward the eye can only meet the backs of what is on screen.
+ float facing=smoothstep(-0.15,0.2,R.z);
+ const int Steps=40;const float MaxDistance=16.0;
+ vec3 origin=center+normal*(0.015+0.003*center.z);
+ float jitter=stepDither(gl_FragCoord.xy),previous=0.0;
+ if(facing>0.0)for(int i=0;i<Steps;++i){
+  float t=MaxDistance*pow((float(i)+jitter)/float(Steps),1.8);
+  vec3 q=origin+R*t;if(q.z<0.05)break;
   vec2 at=projectView(q);if(any(lessThan(at,vec2(0.0)))||any(greaterThan(at,vec2(1.0))))break;
-  float scene=depthAt(at);
-  if(scene>0.02&&q.z>scene&&q.z-scene<0.25+0.04*q.z){
-   // Refine between the last miss and this hit.
+  float scene=depthAt(at),thickness=0.12+0.03*q.z;
+  if(scene>0.02&&q.z>scene&&q.z-scene<thickness){
+   // Refine between the last miss and this hit, staying on the surface found (behind it, within its thickness).
    float lo=previous,hi=t;
-   for(int k=0;k<6;++k){float mid=(lo+hi)*0.5;vec3 m=center+normal*0.02+R*mid;vec2 mu=projectView(m);float sd=depthAt(mu);if(sd>0.02&&m.z>sd)hi=mid;else lo=mid;}
-   at=projectView(center+normal*0.02+R*hi);
-   vec2 edge=min(at,1.0-at);float fade=smoothstep(0.0,0.08,min(edge.x,edge.y))*(1.0-smoothstep(0.6,1.0,hi/MaxDistance));
-   vec3 seen=texture(sceneImage,at).rgb;float blur=roughness*roughness*hi*0.012;
-   if(blur>0.0008){vec2 size=vec2(textureSize(sceneImage,0)),d=vec2(blur,blur*size.x/size.y);
-    seen=(seen*2.0+texture(sceneImage,at+vec2(d.x,0.0)).rgb+texture(sceneImage,at-vec2(d.x,0.0)).rgb+texture(sceneImage,at+vec2(0.0,d.y)).rgb+texture(sceneImage,at-vec2(0.0,d.y)).rgb)/6.0;}
-   return vec4(seen,fade);
+   for(int k=0;k<8;++k){float mid=(lo+hi)*0.5;vec3 m=origin+R*mid;float sd=depthAt(projectView(m));if(sd>0.02&&m.z>sd&&m.z-sd<thickness)hi=mid;else lo=mid;}
+   vec3 hit=origin+R*hi;at=projectView(hit);float sd=depthAt(at);
+   // Still off the surface after refining: the ray passed behind a thin edge, not into a surface.
+   float onSurface=1.0-smoothstep(0.02+0.008*hit.z,0.06+0.02*hit.z,abs(hit.z-sd));
+   // A plane cannot mirror itself: a hit still on the reflecting surface's own plane is the ray
+   // grazing along it and meeting it again through depth's steps (the smeared copies of a wall or a
+   // floor drawn along it). It must stand off the plane.
+   onSurface*=smoothstep(0.03+0.006*hit.z,0.08+0.015*hit.z,dot(hit-center,normal));
+   if(onSurface<=0.0){previous=t;continue;}
+   vec2 edge=min(at,1.0-at);float fade=smoothstep(0.0,0.1,min(edge.x,edge.y))*(1.0-smoothstep(0.55,1.0,hi/MaxDistance))*facing*onSurface;
+   return vec4(texture(sceneImage,at).rgb,fade);
   }
   previous=t;
  }
@@ -279,31 +296,58 @@ void main(){
   color+=occlusion.rgb*0.22*occlusion.a*smoothstep(0.35,1.1,depth);
   color*=mix(1.0,shadow.x,directShare);
   // Reflections: dielectric Fresnel, faded out for rough materials.
-  float roughness=material.r;
+  // r: roughness in its high five bits, the face's axis in the low three (scene.frag outMaterial).
+  float packed=floor(material.r*255.0+0.5),roughness=floor(packed/8.0)/31.0;int axis=int(packed-8.0*floor(packed/8.0));
   // g carries a metal's metalness above .5, else half the surface's wetness (scene.frag).
   float metal=material.g>0.5?(material.g-0.5)*2.0:0.0,wet=material.g>0.5?0.0:material.g*2.0;
-  if(roughness<0.85){
+  // A finish shows the room only while it is smooth: a dielectric (paint, wood, concrete, rubber) none
+  // past LookA.w, a metal a little further (a brushed or worn metal keeps a broad, dim, blurred sheen).
+  float matte=mix(LookA.w,min(LookA.w+0.13,0.95),metal);
+  // Water on a surface is a film over it: smooth whatever lies under it, a mirror at a grazing angle
+  // and nothing head-on (F0 .02). A damp floor carries a little of it, a puddle all of it.
+  float film=smoothstep(0.0,0.6,wet);
+  // --detail 12: the finish as post reads it: hue the face's axis (grey sloped, black none), brightness
+  // smoothness, blue the water film.
+  if(lampGrid.flags.y==12){vec3 hue=axis==1||axis==2?vec3(1.0,0.3,0.3):axis==3||axis==4?vec3(0.3,1.0,0.3):axis==5||axis==6?vec3(0.4,0.5,1.0):axis==0?vec3(0.6):vec3(0.0);
+   outColor=vec4(hue*(0.25+0.75*(1.0-roughness))*(axis==2||axis==4||axis==6?0.6:1.0)+vec3(0.0,0.0,film),depth);return;}
+  if(roughness<matte||film>0.0){
    vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
-   float NoV=max(dot(normal,normalize(-center)),0.0);
-   // Metals reflect strongly face-on (a coloured F0); polished tile and vinyl carry a sheen of the
-   // room at every angle (the HL2 envmap look), growing toward a mirror at grazing angles; water and
-   // a wet floor are dark head-on and mirror the room as the eye drops to them.
-   float polished=1.0-smoothstep(0.1,0.9,roughness);
-   float f0=mix(mix(0.04,LookA.y,polished)*(1.0-(1.0-LookC.w)*wet),0.2+0.35*polished,metal);
-   float fresnel=f0+(1.0-f0)*pow(1.0-NoV,wet>0.5?3.0:5.0)*polished;
-   float strength=min(fresnel*(0.85+0.45*max(wet,metal))*LookA.x,0.92);
-   // The screen march gives the sharp reflection (lamps, the room in view); off screen, or blurred
-   // by a rougher finish, the room's probe filtered down its mips carries it.
-   if(strength>0.004){vec4 reflection=roughness<LookB.x?screenReflection(center,normal,roughness):vec4(0.0);reflection.a*=1.0-smoothstep(LookB.x-0.3,LookB.x,roughness);
-    // Off screen (or past the march) the room's reflection probe stands in.
-    if(reflection.a<0.999){vec3 R=normalize(worldVector(reflect(normalize(center),normal)));float sky;
-     vec4 probe=probeReflection(lampGrid.eye.xyz+worldVector(center),R,roughness,sky);
-     if(probe.a>0.0){vec3 seen=lampGrid.sun.w>0.0&&R.z>0.0?mix(probe.rgb,proceduralSky(R),sky):probe.rgb;reflection=vec4(mix(seen,reflection.rgb,reflection.a),max(reflection.a,probe.a));}}
+   // The face's own axis when the scene pass gave one: the depth-built normal steps with half-float
+   // depth, worst on a wall or floor seen at a grazing angle, and cut their reflections into bands and
+   // stipple. A pixel on an edge blends two faces' codes, so the axis must face the eye and not oppose
+   // the depth-built normal. Sloped faces keep the depth-built one.
+   if(axis>=1&&axis<=6){vec3 w=vec3(axis==1?1.0:axis==2?-1.0:0.0,axis==3?1.0:axis==4?-1.0:0.0,axis==5?1.0:axis==6?-1.0:0.0);
+    vec3 exact=normalize(viewDirection(w));if(dot(exact,normal)>0.0&&dot(exact,-center)>0.0)normal=exact;}
+   vec3 toEye=normalize(-center);float NoV=max(dot(normal,toEye),0.0),grazing=pow(1.0-NoV,5.0);
+   // Standing water lies on what faces up; a damp wall is not a mirror.
+   film*=smoothstep(0.75,0.95,worldVector(normal).z);
+   // Schlick's Fresnel with the grazing rise held down by roughness: a rough finish never turns to a
+   // mirror. The share of the reflection a finish shows fades to none over the rougher part of its range.
+   float f0=mix(LookA.y,LookA.z,metal);
+   float fresnel=f0+(max(1.0-roughness,f0)-f0)*grazing;
+   float visible=1.0-smoothstep(matte-0.38,matte,roughness);
+   float strength=roughness<matte?min(fresnel*visible*LookA.x,0.9):0.0;
+   float filmStrength=min((0.02+0.98*grazing)*film*LookA.x,0.9);
+   // One sharp reflection serves the smooth layer (the film, or the finish itself when smooth): the
+   // screen march where it finds the room, the probe's sharp mips past it. A rougher finish takes the
+   // probe alone, blurred down its mips.
+   float marchShare=1.0-smoothstep(LookB.x*0.6,LookB.x,roughness);
+   bool sharpNeeded=filmStrength>0.004||(strength>0.004&&marchShare>0.0);
+   vec3 R=normalize(worldVector(reflect(-toEye,normal)));vec3 at=lampGrid.eye.xyz+worldVector(center);
+   vec4 sharp=vec4(0.0);
+   if(sharpNeeded){sharp=LookC.y>1.5?vec4(0.0):screenReflection(center,normal,0.0);
+    if(sharp.a<0.999){float sky;vec4 probe=probeReflection(at,R,min(roughness,0.05),sky);
+     if(probe.a>0.0){vec3 seen=lampGrid.sun.w>0.0&&R.z>0.0?mix(probe.rgb,proceduralSky(R),sky):probe.rgb;sharp=vec4(mix(seen,sharp.rgb,sharp.a),max(sharp.a,probe.a));}}}
+   if(strength>0.004){vec4 reflection=sharp;
+    if(marchShare<1.0){float sky;vec4 probe=probeReflection(at,R,roughness,sky);vec4 blurred=vec4(0.0);
+     if(probe.a>0.0)blurred=vec4(lampGrid.sun.w>0.0&&R.z>0.0?mix(probe.rgb,proceduralSky(R),sky):probe.rgb,probe.a);
+     reflection=vec4(mix(blurred.rgb,sharp.rgb,marchShare*sharp.a),mix(blurred.a,sharp.a,marchShare));}
     // A metal tints what it reflects with its own colour.
     if(metal>0.0){float l=dot(color,vec3(0.2126,0.7152,0.0722));reflection.rgb*=mix(vec3(1.0),clamp(color/max(l,1e-4),vec3(0.0),vec3(2.0)),metal*LookB.w);}
-    // Laid over the surface as an envmap is, a little more than it takes away: a lamp shows in a
-    // polished floor, the dark of the room does not black it out.
-    color=color*(1.0-LookA.w*strength*reflection.a)+reflection.rgb*(LookA.z*strength*reflection.a);}
+    // What the surface reflects takes the place of that share of its own light: a reflection never
+    // adds light the room does not have.
+    color=mix(color,reflection.rgb,strength*reflection.a);}
+   if(filmStrength>0.004)color=mix(color,sharp.rgb,filmStrength*sharp.a);
   }
  }
  // Auto exposure scales scene light; haze and shafts below are added in

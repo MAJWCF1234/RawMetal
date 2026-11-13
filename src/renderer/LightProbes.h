@@ -1,5 +1,6 @@
 #pragma once
 #include "world/World.h"
+#include "renderer/LookTuning.h"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -57,8 +58,8 @@ struct ProbeBake {IrradianceVolume volume;std::vector<ReflectionProbe> reflectio
 
 // Scale from a probe's stored value to the fill light scene.frag adds (in the lamps' units), and the
 // soft shoulder both renderers put on it so a room of many lamps fills and never floods.
-inline constexpr float ProbeGain=10.35f;
-inline float probeShoulder(float fill){return 1.1f*(1.f-std::exp(-fill/1.1f));}
+inline constexpr float ProbeGain=3.1f;
+inline float probeShoulder(float fill){const float ceiling=lookFillCeiling();return ceiling*(1.f-std::exp(-fill/ceiling));}
 
 ProbeBake bakeLightProbes(const World& world,const ProbeBakeInput& input);
 // Resonance crystal fixtures (res_crystal_l/m/s/wall) as cold emitters.
