@@ -11,7 +11,16 @@ layout(set=0,binding=3) uniform sampler2D exposureImage;
 layout(set=0,binding=4) uniform sampler2D materialImage;
 // The bloom chain's top level (half size): the sum of six glare widths.
 layout(set=0,binding=5) uniform sampler2D bloomImage;
-layout(std430,set=0,binding=6) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];} lampGrid;
+// The room reflection probes (GpuRenderer captureReflections), the off-screen fallback for SSR.
+layout(set=0,binding=6) uniform sampler2DArray reflectionAtlas;
+layout(std430,set=0,binding=7) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];} lampGrid;
+// The look's values (LookTuning.h, GpuRenderer writeProbeHeader): reflection strength, a polished
+// dielectric's sheen, how much an envmap adds and takes away; the march's roughest finish, the probe's
+// blur by roughness, the fill's saturation, a metal's tint; two spare, a crystal's glow, how much of
+// its sheen a wet surface keeps head-on.
+#define LookA lampGrid.reflections[141]
+#define LookB lampGrid.reflections[142]
+#define LookC lampGrid.reflections[143]
 layout(push_constant) uniform PostParams {
  vec4 camera;   // x AO strength (negative: debug view), y aspect, z focal, w radius (m)
  vec4 haze;     // rgb linear haze colour, w density per metre
@@ -79,6 +88,38 @@ float lampScatter(vec3 rayDirection,float rayLength,vec4 lamp){
  return glow*lamp.w;
 }
 
+
+// Reflection probes: six 90-degree faces per room probe, captured by the scene pass (face order and
+// orientation as GpuRenderer captureReflections draws them), a mip chain for rough surfaces.
+const vec3 CaptureForward[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
+const vec3 CaptureRight[6]=vec3[6](vec3(0,1,0),vec3(0,-1,0),vec3(-1,0,0),vec3(1,0,0),vec3(0,1,0),vec3(0,1,0));
+const vec3 CaptureUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(-1,0,0),vec3(1,0,0));
+// What the room's probe sees along R from p: inside the room's box the ray is carried to the box
+// wall it meets first and that point looked up from the probe (parallax), so a floor reflects the
+// wall across from it, not the one behind the probe. a is the probe's weight (1 inside its box,
+// fading over 6 m outside it); sky is the share of the texel that saw no surface (outdoors).
+vec4 probeReflection(vec3 p,vec3 R,float roughness,out float sky){
+ sky=0.0;int count=int(lampGrid.probeInfo.y);int best=-1;float bestScore=1e30;
+ for(int i=0;i<count;++i){vec4 c=lampGrid.reflections[3*i],lo=lampGrid.reflections[3*i+1],hi=lampGrid.reflections[3*i+2];
+  vec3 outside=max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)),d=p-c.xyz;float score=dot(d,d)*0.05+dot(outside,outside)*4.0;
+  if(score<bestScore){bestScore=score;best=i;}}
+ if(best<0)return vec4(0.0);
+ vec4 c=lampGrid.reflections[3*best],lo=lampGrid.reflections[3*best+1],hi=lampGrid.reflections[3*best+2];
+ float away=length(max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)));
+ vec3 dir=R;
+ if(away<0.01){vec3 r=R+vec3(1e-5);vec3 t=max((hi.xyz-p)/r,(lo.xyz-p)/r);dir=p+R*max(min(min(t.x,t.y),t.z),0.0)-c.xyz;}
+ vec3 a=abs(dir);int face=a.x>=a.y&&a.x>=a.z?(dir.x>0.0?0:1):a.y>=a.z?(dir.y>0.0?2:3):(dir.z>0.0?4:5);
+ float z=max(dot(dir,CaptureForward[face]),1e-5);
+ vec2 st=clamp(vec2(0.5+0.5*dot(dir,CaptureRight[face])/z,0.5-0.5*dot(dir,CaptureUp[face])/z),vec2(0.0),vec2(1.0));
+ // Blurred down the mips with roughness, but a polished floor's stays sharp enough to show the lamps.
+ float lod=clamp(roughness*roughness*LookB.y,0.0,1.0)*(lampGrid.probeInfo.z-1.0);
+ vec4 s=textureLod(reflectionAtlas,vec3(st,c.w*6.0+float(face)),lod);
+ sky=smoothstep(300.0,900.0,s.a);
+ return vec4(s.rgb,clamp(1.0-away/6.0,0.0,1.0));
+}
+
+// A view-space vector in world space (worldDirection without the normalising).
+vec3 worldVector(vec3 v){vec4 b=lampGrid.basis;float forward=v.z*b.z-v.y*b.w;return vec3(-v.x*b.y+forward*b.x,v.x*b.x+forward*b.y,v.y*b.z+v.z*b.w);}
 vec3 worldDirection(vec3 v){
  vec4 b=lampGrid.basis;float forward=v.z*b.z-v.y*b.w;
  return normalize(vec3(-v.x*b.y+forward*b.x,v.x*b.x+forward*b.y,v.y*b.z+v.z*b.w));
@@ -178,18 +219,16 @@ float steamAmount(vec3 dir,float rayLength){
 float postHash(vec2 v){uvec2 q=uvec2(ivec2(v)+ivec2(65536));uint h=q.x*1664525u+q.y*1013904223u+uint(lampGrid.eye.w*60.0)*2654435761u;h^=h>>16;h*=0x7feb352du;h^=h>>15;return float(h&0xffffffu)/16777216.0;}
 
 // Screen-space reflections. Roughness and wetness come from the material
-// target; rough surfaces jitter the ray per pixel and per frame and TAA
-// resolves the blur. Misses outdoors fall back to the sky.
+// target. The march is the same for every pixel and frame (a jittered one left
+// a stipple wherever no TAA resolves it: a still shot, a test frame); a rougher
+// finish blurs what it finds instead, wider the further the ray went. Misses
+// outdoors fall back to the sky.
 vec4 screenReflection(vec3 center,vec3 normal,float roughness){
  vec3 V=normalize(-center);
- vec2 xi=vec2(postHash(gl_FragCoord.xy),postHash(gl_FragCoord.yx+vec2(17.0,3.0)));
  vec3 R=reflect(-V,normal);
- vec3 a=normalize(cross(abs(R.y)<0.9?vec3(0,1,0):vec3(1,0,0),R)),b=cross(R,a);
- float spread=roughness*roughness*0.9;float ang=xi.x*6.2831853,rad=sqrt(xi.y)*spread;
- R=normalize(R+(a*cos(ang)+b*sin(ang))*rad);
  if(dot(R,normal)<0.0)R=reflect(R,normal);
- const int Steps=24;const float MaxDistance=16.0;
- float jitter=postHash(gl_FragCoord.xy+vec2(91.0,57.0)),previous=0.0;
+ const int Steps=32;const float MaxDistance=16.0;
+ float jitter=0.5,previous=0.0;
  for(int i=0;i<Steps;++i){
   float t=MaxDistance*pow((float(i)+jitter)/float(Steps),1.7);
   vec3 q=center+normal*0.02+R*t;if(q.z<0.05)break;
@@ -198,10 +237,13 @@ vec4 screenReflection(vec3 center,vec3 normal,float roughness){
   if(scene>0.02&&q.z>scene&&q.z-scene<0.25+0.04*q.z){
    // Refine between the last miss and this hit.
    float lo=previous,hi=t;
-   for(int k=0;k<5;++k){float mid=(lo+hi)*0.5;vec3 m=center+normal*0.02+R*mid;vec2 mu=projectView(m);float sd=depthAt(mu);if(sd>0.02&&m.z>sd)hi=mid;else lo=mid;}
+   for(int k=0;k<6;++k){float mid=(lo+hi)*0.5;vec3 m=center+normal*0.02+R*mid;vec2 mu=projectView(m);float sd=depthAt(mu);if(sd>0.02&&m.z>sd)hi=mid;else lo=mid;}
    at=projectView(center+normal*0.02+R*hi);
    vec2 edge=min(at,1.0-at);float fade=smoothstep(0.0,0.08,min(edge.x,edge.y))*(1.0-smoothstep(0.6,1.0,hi/MaxDistance));
-   return vec4(texture(sceneImage,at).rgb,fade);
+   vec3 seen=texture(sceneImage,at).rgb;float blur=roughness*roughness*hi*0.012;
+   if(blur>0.0008){vec2 size=vec2(textureSize(sceneImage,0)),d=vec2(blur,blur*size.x/size.y);
+    seen=(seen*2.0+texture(sceneImage,at+vec2(d.x,0.0)).rgb+texture(sceneImage,at-vec2(d.x,0.0)).rgb+texture(sceneImage,at+vec2(0.0,d.y)).rgb+texture(sceneImage,at-vec2(0.0,d.y)).rgb)/6.0;}
+   return vec4(seen,fade);
   }
   previous=t;
  }
@@ -238,12 +280,30 @@ void main(){
   color*=mix(1.0,shadow.x,directShare);
   // Reflections: dielectric Fresnel, faded out for rough materials.
   float roughness=material.r;
-  if(roughness<0.8){
+  // g carries a metal's metalness above .5, else half the surface's wetness (scene.frag).
+  float metal=material.g>0.5?(material.g-0.5)*2.0:0.0,wet=material.g>0.5?0.0:material.g*2.0;
+  if(roughness<0.85){
    vec3 center=viewPosition(uv,depth),normal=viewNormal(uv,center);
    float NoV=max(dot(normal,normalize(-center)),0.0);
-   float fresnel=0.04+0.96*pow(1.0-NoV,5.0);
-   float strength=fresnel*(1.0-smoothstep(0.15,0.8,roughness))*(0.55+0.45*material.g);
-   if(strength>0.004){vec4 reflection=screenReflection(center,normal,roughness);color=mix(color,reflection.rgb,strength*reflection.a);}
+   // Metals reflect strongly face-on (a coloured F0); polished tile and vinyl carry a sheen of the
+   // room at every angle (the HL2 envmap look), growing toward a mirror at grazing angles; water and
+   // a wet floor are dark head-on and mirror the room as the eye drops to them.
+   float polished=1.0-smoothstep(0.1,0.9,roughness);
+   float f0=mix(mix(0.04,LookA.y,polished)*(1.0-(1.0-LookC.w)*wet),0.2+0.35*polished,metal);
+   float fresnel=f0+(1.0-f0)*pow(1.0-NoV,wet>0.5?3.0:5.0)*polished;
+   float strength=min(fresnel*(0.85+0.45*max(wet,metal))*LookA.x,0.92);
+   // The screen march gives the sharp reflection (lamps, the room in view); off screen, or blurred
+   // by a rougher finish, the room's probe filtered down its mips carries it.
+   if(strength>0.004){vec4 reflection=roughness<LookB.x?screenReflection(center,normal,roughness):vec4(0.0);reflection.a*=1.0-smoothstep(LookB.x-0.3,LookB.x,roughness);
+    // Off screen (or past the march) the room's reflection probe stands in.
+    if(reflection.a<0.999){vec3 R=normalize(worldVector(reflect(normalize(center),normal)));float sky;
+     vec4 probe=probeReflection(lampGrid.eye.xyz+worldVector(center),R,roughness,sky);
+     if(probe.a>0.0){vec3 seen=lampGrid.sun.w>0.0&&R.z>0.0?mix(probe.rgb,proceduralSky(R),sky):probe.rgb;reflection=vec4(mix(seen,reflection.rgb,reflection.a),max(reflection.a,probe.a));}}
+    // A metal tints what it reflects with its own colour.
+    if(metal>0.0){float l=dot(color,vec3(0.2126,0.7152,0.0722));reflection.rgb*=mix(vec3(1.0),clamp(color/max(l,1e-4),vec3(0.0),vec3(2.0)),metal*LookB.w);}
+    // Laid over the surface as an envmap is, a little more than it takes away: a lamp shows in a
+    // polished floor, the dark of the room does not black it out.
+    color=color*(1.0-LookA.w*strength*reflection.a)+reflection.rgb*(LookA.z*strength*reflection.a);}
   }
  }
  // Auto exposure scales scene light; haze and shafts below are added in

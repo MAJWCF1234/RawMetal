@@ -1,0 +1,57 @@
+DEPTHWORKS - YOUTUBE UPLOAD SHEET (Chapter 2 "coming soon" trailer, v3.1)
+
+FILE
+  trailer-1080p.mp4  (1920x1080, 30 fps, 2:04.9; the master, give YouTube this one)
+  Not trailer-720p-web.mp4, which is the compressed copy for sharing.
+  Thumbnail: v2/youtube-thumbnail-1280x720.png
+
+TITLE  (under 100 characters)
+  DEPTHWORKS - Chapter 2: Energy Research | Coming Soon Trailer | Stealth Horror
+
+  Shorter alternatives:
+  DEPTHWORKS | Chapter 2: Energy Research - Teaser Trailer
+  DEPTHWORKS - Something Hunts These Halls (Chapter 2 Trailer)
+
+DESCRIPTION  (paste as is; the first two lines show above "...more")
+------------------------------------------------------------------------
+The research levels never closed. Something hunts these halls.
+DEPTHWORKS Chapter 2: Energy Research is coming. Chapter 1 is free now: https://majwcf1234.itch.io/depthworks
+
+Under the plant, the research levels kept their own hours after the staff
+stopped keeping them. The welcome film is still running. The mortuary is still
+full. Containment kept its specimens, mostly. One of them is not in its cell.
+It moves low, takes a man's head, stays down to feed, and comes back for the
+rest. Some of the equipment is awake too, and only the current kills it.
+
+DEPTHWORKS is a first-person stealth and survival horror game set in a power
+plant on its worst night. Creep, hide, listen, and decide how much of the dark
+you can afford. Chapter 1 is complete and free. Chapter 2 is coming.
+
+Built on RawMetal, a custom engine and renderer written from scratch. Every
+shot is in-engine: gameplay captured from the running game, cinematics from
+the same simulation. Music and sound design from licensed libraries.
+
+Windows 10/11 (x64), Vulkan 1.0 GPU. Experimental VR (SteamVR).
+
+Play Chapter 1 free:  https://majwcf1234.itch.io/depthworks
+Release notes:        https://github.com/MAJWCF1234/RawMetal/releases
+
+#DepthWorks #IndieHorror #StealthHorror
+------------------------------------------------------------------------
+
+TAGS  (comma-separated; paste into the Tags box)
+  DepthWorks, Depth Works, DepthWorks Chapter 2, DepthWorks trailer, Energy Research,
+  coming soon, teaser trailer, indie horror, horror game, stealth game, stealth horror,
+  first person horror, survival horror, retro horror, PSX horror, creature horror,
+  monster horror, custom engine, RawMetal, Vulkan, itch.io, free horror game
+
+CATEGORY  Gaming        LANGUAGE  English       AGE  Not made for kids
+  Contains a decapitation (in-engine, brief), gunfire and blood: answer "yes" to
+  violence if asked. Age restriction is the uploader's call.
+
+PINNED COMMENT
+  Chapter 1 is free on itch.io. Chapter 2 has no date yet. When it does, it
+  will be here first.
+
+END SCREEN  (YouTube needs the last 5-20 s: use the end card and the Machine tease)
+  Video: the Chapter 1 trailer. Link: the itch.io page.

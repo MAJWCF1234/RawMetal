@@ -291,6 +291,36 @@ inline void zone(Map& m,const char* name,float x1,float y1,float x2,float y2,flo
 // Opens a major area: its title card shows the first time the player walks in.
 inline void titleCard(Map& m,const char* title,float x1=0,float y1=0,float x2=24,float y2=24){AuthoredZone z;z.x1=x1;z.y1=y1;z.x2=x2;z.y2=y2;z.title=title;m.zones.push_back(std::move(z));}
 inline void hazard(Map& m,Hazard::Kind kind,float x1,float y1,float x2,float y2,float bottom,float top,float damage){Hazard h;h.kind=kind;h.x1=x1;h.y1=y1;h.x2=x2;h.y2=y2;h.bottom=bottom;h.top=top;h.damagePerSecond=damage;m.hazards.push_back(h);}
+// --- The air's stuff (EMITTER records; renderer/Particles.cpp) ------------------------------------------
+// Each fills the record a custom map writes: travel is where a puff goes over its life (metres), life its
+// seconds, count how many are in the air at once, size its radius as it leaves, swell how much that grows
+// by the end. gated and pulsed switch one like a HAZARD.
+inline ParticleEmitter& airEmitter(Map& m,ParticleKind kind,Vec2 at,float z,Point3 travel,float life,int count,float size,float swell,float strength=1){
+ ParticleEmitter e{at,z,{travel.x,travel.y},travel.z,1.f/std::max(.2f,life),size,swell,std::clamp(count,1,64)};e.kind=kind;e.strength=strength;m.emitters.push_back(e);return m.emitters.back();}
+inline ParticleEmitter& gated(ParticleEmitter& e,StateId state,int value=1,bool invert=false){e.enabledFlag=state;e.enabledValue=value;e.invertFlag=invert;return e;}
+inline ParticleEmitter& pulsed(ParticleEmitter& e,float period,float onTime,float phase=0){e.period=period;e.onTime=onTime;e.phase=phase;return e;}
+// A joint weeping steam: `out` the way the leak points and how far it carries, a hiss of white.
+inline ParticleEmitter& steamLeak(Map& m,Vec2 at,float z,Point3 out,float strength=.7f){return airEmitter(m,ParticleKind::Steam,at,z,out,1.8f,32,.04f,.5f,strength);}
+// A burst main: a hard jet that stands a metre or two out before it billows.
+inline ParticleEmitter& steamJet(Map& m,Vec2 at,float z,Point3 out,float strength=1){return airEmitter(m,ParticleKind::Steam,at,z,out,1.1f,34,.05f,.7f,strength);}
+// Smoke rising `height` metres from something burning or running hot, `width` across where it leaves.
+inline ParticleEmitter& smokeColumn(Map& m,Vec2 at,float z,float height=2.5f,float strength=.7f,float width=.25f){return airEmitter(m,ParticleKind::Smoke,at,z,{.15f,.08f,height},6.f,22,width,width*4+.3f,strength);}
+// A damaged panel or a cable that spits a shower of `sparks` every `every` seconds or so, along `along`.
+inline ParticleEmitter& sparkShower(Map& m,Vec2 at,float z,Point3 along,float every=5,int sparks=24,float heat=1){return airEmitter(m,ParticleKind::Sparks,at,z,along,every,sparks,.01f,0,heat);}
+// Dust turning in a lamp's light: a box halfWidth by halfDepth from z up `height` metres, `motes` in it.
+inline ParticleEmitter& dustMotes(Map& m,Vec2 at,float z,float halfWidth,float halfDepth,float height,int motes=40,float strength=.8f){return airEmitter(m,ParticleKind::Dust,at,z,{halfWidth,halfDepth,height},12.f,motes,.013f,.004f,strength);}
+// Water falling from `at` (a pipe, a crack in the ceiling): `perSecond` drops, each splashing where it lands.
+inline ParticleEmitter& dripping(Map& m,Vec2 at,float z,float perSecond=.8f){return airEmitter(m,ParticleKind::Drips,at,z,{0,0,0},2.f,std::max(1,int(std::round(perSecond*2.f))),.008f,0,1);}
+// Water thrown out of a break as spray and fine mist.
+inline ParticleEmitter& waterSpray(Map& m,Vec2 at,float z,Point3 out,float strength=.8f){return airEmitter(m,ParticleKind::Spray,at,z,out,1.2f,24,.04f,.45f,strength);}
+// A fire halfWidth across with flames `tall` high, its embers and its smoke.
+inline ParticleEmitter& fire(Map& m,Vec2 at,float z,float halfWidth=.3f,float tall=.6f,float strength=1){return airEmitter(m,ParticleKind::Fire,at,z,{0,0,tall},1.f,20,halfWidth,tall,strength);}
+// Gas lying in a pool halfWidth by halfDepth on the floor at z, `deep` metres of it.
+inline ParticleEmitter& toxicPool(Map& m,Vec2 at,float z,float halfWidth,float halfDepth,float deep=.5f,float strength=.8f){return airEmitter(m,ParticleKind::Toxic,at,z,{halfWidth,halfDepth,deep},7.f,int(std::clamp(halfWidth*halfDepth*6.f,6.f,28.f)),.3f,.8f,strength);}
+// A crack in the ceiling at z that lets grit go, `perSecond` of it, now and then a chip.
+inline ParticleEmitter& ceilingGrit(Map& m,Vec2 at,float z,float perSecond=10,float strength=.8f){return airEmitter(m,ParticleKind::Debris,at,z,{0,0,0},2.f,int(perSecond*2),.02f,0,strength);}
+// The glow and ozone round live current at `at`, within `reach`.
+inline ParticleEmitter& arcGlow(Map& m,Vec2 at,float z,float reach=.3f,float strength=.8f){return airEmitter(m,ParticleKind::ArcGlow,at,z,{0,0,.3f},1.2f,8,reach,.1f,strength);}
 inline void shelf(Map& m,Vec2 p,float yaw,float floor=0){m.fixtures.push_back({7,p,floor,1.8f,.5f,1.8f,yaw,true});}
 // Exit to the next map: the stitched gap in the south wall at columns 20-22
 // and the transfer door that opens once the map's hostiles are cleared.

@@ -186,7 +186,7 @@ void main(){
   // The player's muzzle flash, then the transient lights (NPC guns, sparks, arcs); in darkness the falloff
   // eases so a shot lights the whole room for an instant. Opaque surfaces
   // with per-pixel lamps are lit in the fragment shader (a vertex misses big quads).
-  if(lampGrid.flags.x==0||surface.z>=0.5||lighting.x>=1.5)for(int flash=0;flash<5;++flash){
+  if(lampGrid.flags.x==0||surface.z>=0.5||lighting.x>=1.5)for(int flash=0;flash<5&&view.effects.z>-1.0e5;++flash){
    float strength=flash==0?view.effects.y:lampGrid.flashes[flash-1].w;
    if(strength<=0.0)continue;
    vec3 muzzle=flash==0?eye+forwardWorld*0.42-vec3(0,0,0.10):lampGrid.flashes[flash-1].xyz;

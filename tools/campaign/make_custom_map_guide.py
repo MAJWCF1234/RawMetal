@@ -40,6 +40,37 @@ SHOTS = [
     ('scripts-south', 'Scripts', 12, 10.2, 92, -.38, .6, 'Match any (two switches), a repeat doormat, a Huntsman pen (@kills, @remaining) and a gas strip (@health).'),
 ]
 
+# The Showcase, south of the rooms: the same kind of view, in its own part of the tour.
+SHOWCASE_SHOTS = [
+    ('show-doors', 'Showcase Doors', 6, 13.6, -90, -6, 0, 'Doors: sliding, grille, hinged left and right, ajar; along Y in the closet walls behind.'),
+    ('show-locks', 'Showcase Doors', 17, 9.6, 90, -6, 0, 'The locks (keycard, key, power) and the barred pen a Brute beats down.'),
+    ('show-fx', 'Showcase Particles', 7, 11, -90, -4, 0, 'Particles: one plinth per EMITTER preset, each with its own switch.'),
+    ('show-light', 'Showcase Light', 4, 10.5, -90, -8, 0, 'Light: a red gel lamp bleeding onto white walls; metals and glass beyond.'),
+    ('show-crystals', 'Showcase Light', 19.4, 14.2, 90, -8, 0, 'Resonance crystals glowing cyan on their rock.'),
+    ('show-dead', 'Showcase Dead and Blood', 6.5, 11, -90, -8, 0, 'The dead: bodies over a table edge and down a stair settle where they fall.'),
+    ('show-blood', 'Showcase Dead and Blood', 6.5, 12.5, 90, -8, 0, 'A creature of each fluid asleep in a pen: blood, goo, ichor.'),
+    ('show-predator', 'Showcase Predator', 12.5, 12.5, -90, -6, 0, 'Predator: a Chimera hunter and the man it comes for, behind glass.'),
+]
+SHOWCASE = [  # room, what stands in it, what to do
+    ('Doors', 'Sliding, grille (leaf 1), hinged left and right, painted panel (leaf 2), one ajar (open 0.4); three along Y (axis 1) in the closet walls; '
+     'locks 1-3; a barred door with strength 90.',
+     'Take the keycard at the desk and the key off the board; flip DOOR POWER. WAKE THE BRUTE and stand back: it beats the pen door down.'),
+    ('Particles', 'Every EMITTER preset (CampaignKit.h): steam leak and jet, smoke, sparks, dust in a lamp shaft, drips, spray, fire, toxic pool, '
+     'ceiling grit, arc glow, the old plume, and a steam jet on a timed window.',
+     "Each plinth's terminal switches its emitter off and on (state sc_fx_NAME, inverted). Shoot the ROW \"B\" barrel for blast smoke."),
+    ('Light', 'Lamps only where placed: a red gel in a white booth (colour bleed), steel and copper, two glass panes, clear and murky WATER, '
+     'a white corner no lamp reaches (bounce only), resonance crystals on rock.', 'Walk round it; the floor is wet (MAP wetness 0.35).'),
+    ('The Dead and Blood', 'Bodies (ACTOR clip 4, phase 1) over a table edge, on a stair, across a step and on the floor: they settle as ragdolls. '
+     'Pens with a creature of each fluid: blood, goo, ichor.', 'Shoot them (health 60): tinted squibs, mist and pools. Ammo in the aisle.'),
+    ('Machine', 'The cursed equipment (CREATURE kind 8), dormant; a live electrode band (HAZARD 0) between it and the aisle.',
+     'MACHINE POWER wakes it; it comes for you and shorts out on the band. ELECTRODES cuts the band. Rounds spark off it; it bleeds oil.'),
+    ('Predator', 'A Chimera with a hunter name (sc_beast) and a prey (ACTOR 0) in a glass pen, a run behind it.',
+     'RELEASE: it takes the man and feeds. Shoot it (the glass breaks first): badly hurt, it runs for the run and is gone; sc_beast counts it.'),
+    ('Sound and the Dead Room', 'AMBIENT beds (mode 0), now-and-then sounds (mode 1) and a PA line on a state (mode 2) in a hall with REVERB 0.6 / 4.5 s and '
+     'music cue 6; south of it a curtained room with REVERB 0.04 / 0.2 s and music cue 11 (silence).',
+     'PA TEST plays the line; walk between the two rooms to hear the reverb and the score change.'),
+]
+
 SECTION_ROWS = [('WELCOME, LIGHTS, HAZARDS, LIFE', 0)]
 
 CSS = """
@@ -236,13 +267,15 @@ def grid_diagram(index):
     for i, m in enumerate(maps):
         x, y = ox + m['col'] * s, oy + m['row'] * 46
         base = m['name'].rstrip('0123456789 ')
-        color = colors.get(base, '#56606c')
-        b += rect(x, y, s - 4, 42, color + '60', color) + text(x + 6, y + 16, m['name'][:19], 11, '#fff', weight='bold')
+        show = base.startswith('Showcase ')
+        color = '#e07838' if show else colors.get(base, '#56606c')
+        b += rect(x, y, s - 4, 42, color + '60', color) + text(x + 6, y + 16, (m['name'][9:] if show else m['name'])[:19], 11, '#fff', weight='bold')
         b += text(x + 6, y + 33, 'map %d  %d,%d' % (i, 24 * m['col'], 24 * m['row']), 10, '#c8ccd2')
     tx = ox + cols * s + 10
     b += '<circle cx="%g" cy="%g" r="5" fill="#50b060"/>' % (ox + 12 / 24 * (s - 4), oy + 6) + text(tx, oy + 26, '< you spawn in Welcome. Rooms run east.', 12, '#9aa0a8')
     b += text(tx, oy + 46 + 26, '< each set of models is one row; walk south', 12, '#9aa0a8')
-    b += text(tx, oy + 92 + 26, '  through the corridor along their west side', 12, '#9aa0a8')
+    b += text(tx, oy + 92 + 26, '< Props, and the SHOWCASE (orange) east of it', 12, '#e07838')
+    b += text(tx, oy + 138 + 26, '  models: the corridor along their west side', 12, '#9aa0a8')
     last = max(m['row'] for m in maps if m['name'] in ('Ground paint', 'Seams')) if any(m['name'] == 'Seams' for m in maps) else None
     if last is not None:
         b += text(tx, oy + (last - 1) * 46 + 26, '< outdoors: ground paint, terrain, a grove', 12, '#9aa0a8')
@@ -398,7 +431,17 @@ RECORDS = [
          'space a row about its height apart. A wall lamp lights the room in front of it; a floor lamp shines every way. The fitting glows in the lamp\'s own colour.'),
         ('DARK|map|x1|y1|x2|y2[|bottom|top|state|value|invert|jam]', 'True darkness inside the box; jam 1 (default) also kills the flashlight.'),
         ('ZONE|map|x1|y1|x2|y2|name[|bottom|top|title|hazeR|hazeG|hazeB|density]', 'A named place: the HUD shows name while you are inside. A title shows a big title card on entry. A haze gives the box its own fog colour.'),
-        ('EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count', 'Smoke or steam rising from a point.')]),
+        ('EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count[|kind|strength|state|value|invert|period|onTime|phase]',
+         'The air\'s own stuff at a point: count puffs in the air at once, each living 1/rate seconds, leaving at radius metres and swelling by growth, '
+         'carried driftX, driftY and rise metres over its life (rate 0-5, count 1-64). kind: 0 the old plume (steam indoors, smoke under an open sky; the default), '
+         '1 smoke (thick and rolling, slow), 2 steam (white: a long reach is a jet, a short one a slow leak), 3 sparks (a shower of count sparks about every 1/rate seconds, '
+         'thrown along the drift; they bounce off the room and light it), 4 dust (motes turning in a box: driftX and driftY its half width and depth, rise its height), '
+         '5 debris (grit pouring from a crack in the ceiling, now and then a chip, dust where it lands), 6 drips (count drops every 1/rate seconds, each splashing where it lands), '
+         '7 spray (water thrown out as mist and drops), 8 fire (radius its half width, growth how tall its flames stand; it brings its own embers and smoke), '
+         '9 toxic gas (a green pool lying on the floor: driftX and driftY its half sizes, rise how deep it lies), 10 the glow and ozone round live current. '
+         'strength 0-4 is how thick or bright (1 default). state/value/invert/period/onTime/phase switch it exactly like a HAZARD, so a vent can breathe in time with its scald. '
+         'Smoke, steam and dust take the room\'s light and glow in a lamp\'s shaft; nothing is drawn through a wall or floor. Keep it atmosphere: a few to a room, '
+         'and leave the sight lines open. The Campaign Builder\'s Smoke tool places them.')]),
     ('Danger', [
         ('HAZARD|map|kind|x1|y1|x2|y2|bottom|top|damage', 'Hurts whoever stands in the box, damage per second. Kinds in the hazard table.'),
         ('COMPACTOR|map|x1|y1|x2|y2|bed|raised|period', 'A crushing ceiling that cycles every period seconds.'),
@@ -430,11 +473,11 @@ def shots():
     os.makedirs(os.path.dirname(listing), exist_ok=True)
     number = {m['name']: m['index'] for m in starter.build().maps}
     with open(listing, 'w') as fh:
-        for name, m, x, y, yaw, pitch, lift, _ in SHOTS:
+        for name, m, x, y, yaw, pitch, lift, _ in SHOTS + SHOWCASE_SHOTS:
             fh.write('%s %d %g %g %g %g %g\n' % (name, number[m], x, y, yaw, pitch, lift))
     subprocess.run([os.path.join(ROOT, 'RawMetal.exe'), '--zone-pack=' + PACK, '--zone-shots=' + listing], cwd=ROOT, check=True)
     from PIL import Image
-    for name, *_ in SHOTS:
+    for name, *_ in SHOTS + SHOWCASE_SHOTS:
         ppm = os.path.join(ROOT, '.build', 'shot', name + '.ppm')
         Image.open(ppm).convert('RGB').save(os.path.join(IMAGES, name + '.jpg'), quality=86, optimize=True)
         os.remove(ppm)
@@ -586,12 +629,23 @@ def main():
 
     o.append('<h2 id="starter">9. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
              'the big text is its ID (the number you type in the record), the small text its name. Stand next to anything and the HUD, top left, '
-             'names it in full. Nothing in it can hurt you unless you climb into a hazard pen, walk the gas strip in Scripts, or wake a creature (by hitting it, or with the Scripts terminal that wakes its Huntsman).</p><div class="shots">')
+             'names it in full. Nothing in it can hurt you unless you climb into a hazard pen, walk the gas strip in Scripts, wake a creature (by hitting it, or with a switch that wakes one) '
+             "or step onto the Machine room's electrodes.</p><div class=\"shots\">")
     for name, *_, caption in SHOTS:
         if os.path.exists(os.path.join(IMAGES, name + '.jpg')):
             o.append('<figure><img src="guide/%s.jpg" alt="%s"><figcaption>%s</figcaption></figure>' % (name, esc(name), esc(caption)))
     o.append('</div><p>To copy anything you see, search <code>Starter Map.rmc</code> for its sign text (for example <code>|#27|</code> or <code>HAZARD 4</code>): '
              'the records just above it build that exhibit.</p>')
+    o.append('<h3>The Showcase</h3><p>Through the gap in Welcome to Props, then east: a row of rooms for the newer systems, one aisle through them all. '
+             'Everything that needs triggering has a switch (a terminal: E) beside it, and the creatures sleep until a switch or a wound wakes them. '
+             'Its states all start <code>sc_</code>. At the way in, a sign gives the console command <code>THIRDPERSON</code> '
+             "(open the console with <b>~</b>): the camera over Claire's shoulder, and the same again for first person.</p>")
+    o.append(table(['Room', 'What is in it', 'What to do'], SHOWCASE))
+    o.append('<div class="shots">')
+    for name, *_, caption in SHOWCASE_SHOTS:
+        if os.path.exists(os.path.join(IMAGES, name + '.jpg')):
+            o.append('<figure><img src="guide/%s.jpg" alt="%s"><figcaption>%s</figcaption></figure>' % (name, esc(name), esc(caption)))
+    o.append('</div>')
 
     PRIM_KINDS = [
         ('box', '1 x 1 x 1', 'a plain box'), ('pillar', '0.5 x 0.5 x 3', 'a square pier'),

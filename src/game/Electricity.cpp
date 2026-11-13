@@ -242,6 +242,17 @@ void Game::electricScene(int level,electric::Scene& out)const{
   if(!found)found=electric::conductor(w,a.from,reach,a.seed^unsigned(std::int64_t(now*electric::StrikeRate)),a.to);
   if(!found)a.to=a.from;a.open=!found;out.arcs.push_back(a);}
  for(const auto&a:m_timedArcs)if(a.level==level&&now<=a.until)out.arcs.push_back(a);
+ // A Sparks EMITTER (a damaged panel, a cable that spits) throws a shower about every 1/rate seconds
+ // while its gate is open, each a little early or late on its own seed and one in eight held back, so it
+ // spits rather than ticks: `count` sparks along its drift, strength their heat.
+ for(size_t i=0;i<w.particleEmitters().size();++i){const auto&e=w.particleEmitters()[i];if(e.kind!=ParticleKind::Sparks)continue;
+  bool open=!e.enabledFlag||state(e.enabledFlag)==e.enabledValue;if(e.invertFlag)open=!open;if(!open)continue;
+  const float every=1.f/std::max(.02f,e.rate);const auto last=std::int64_t(std::floor(now/every));
+  for(auto k=last-3;k<=last+1;++k){const unsigned seed=mix(unsigned(level+1)*0x9e3779b9u^unsigned(i)*0x85ebca6bu^unsigned(k)*0xc2b2ae35u);if((seed>>29)==0)continue;
+   const float t=(float(k)+.7f*(float(seed&1023u)/1023.f-.5f))*every;if(t>now||!e.window(t))continue;
+   Burst b;b.at={e.position.x,e.position.y,e.z};const Point3 along{e.drift.x,e.drift.y,e.rise};b.along=unit(span(along)>1e-3f?along:Point3{0,0,-1});b.time=t;b.seed=seed;
+   b.speed=std::clamp(1.6f+span(along)*2.2f,1.6f,5.f);b.spread=.85f;b.heat=std::clamp(e.strength,.3f,1.f);b.count=std::clamp(e.count,1,64);b.embers=std::max(1,b.count/7);b.smoke=b.count>=16;b.level=level;
+   if(now<t+burstLife(b))out.bursts.push_back(b);}}
  // Hazards' arcs; the sparks they spit are showers of their own (updateElectricity), already above.
  for(int i=0;i<int(w.hazards().size());++i){const auto&h=w.hazards()[size_t(i)];if(h.kind==Hazard::Kind::Electricity&&hazardActive(h))electric::hazardArcs(w,h,i,now,out.arcs);}
  for(const auto&b:out.bursts){auto f=electric::flash(b,now);if(f.strength>0)out.flashes.push_back(f);}

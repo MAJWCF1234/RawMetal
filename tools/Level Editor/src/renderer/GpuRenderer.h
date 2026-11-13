@@ -62,6 +62,13 @@ public:
  // The impostor's centre is the midpoint of its quad's opposite (uv -1/+1) corners.
  struct LodTag {float lod=0;bool impostor=false;float z=0,half=0,yaw=0,farFade=0;int columns=0,rows=0;};
  void setLodTag(const LodTag* tag);
+ // Light probes (LightProbes.h) of a map drawn this frame, at its world offset. Its irradiance
+ // grid is uploaded when its key is new; its reflection probes are each captured once (six faces
+ // through the scene pipeline, once the lamps' shadows are drawn), a few a frame in the window
+ // and all at once headless, and again when the key changes.
+ void useProbes(int level,const ProbeBake* bake,std::uint64_t key,Vec2 offset);
+ bool reflectionsPending()const;
+ std::uint64_t reflectionCaptures()const;
  void saveSunCascades(const char* prefix);
  std::uint64_t shadowFacesDrawn()const;
  std::uint64_t staticCacheHits()const;
@@ -101,7 +108,7 @@ public:
  void clearActorEmitCache();
  void setActorEmitCaching(bool enabled);
  std::array<std::uint64_t,3> actorStatistics()const;
- void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f,float dissolve=0.f,const std::array<float,3>* bounceAir=nullptr);
+ void submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture& texture,float light,const std::array<Point3,2>& directions,const std::array<float,2>& weights,float flatResponse,bool normals,float emissionScale=1.f,float dissolve=0.f,const std::array<float,3>* bounceAir=nullptr,const SoftwareRenderer::CardLook* card=nullptr);
  void finish(std::vector<std::uint32_t>& pixels);
  bool hasSurface()const;
  bool vrActive()const;

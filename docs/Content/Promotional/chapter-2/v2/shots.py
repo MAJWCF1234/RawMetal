@@ -39,6 +39,20 @@ SHOTS = {
     'booth': (101, [], 105, (1.5, 22.6, -18.3, -36, 0), (2.4, 21.8, -18.3, -41, -1), {}),
     # The breach (102): growth across the floor, a body in the crystals.
     'breach': (102, [], 105, (11.4, 16.9, -17.6, -128, -8), (10.6, 16.1, -17.6, -121, -6), {}),
+    # v3: the suit room (69), low along the hangers
+    'suits': (69, [], 120, (9.6, 18.9, -12.6, 205, 2), (9.0, 18.5, -12.6, 200, 1), {}),
+    # v3: the calibration pan (84): standing water under the gantry, a slow crane down
+    'pan': (84, [], 120, (4.5, 10.5, -11.0, 42, -14), (5.0, 11.0, -11.3, 46, -10), {}),
+    # v3: the Observation Ring (90), a slow drift along the glass
+    'ring': (90, [], 120, (0.9, 7.9, -12.3, 35, -1), (1.6, 8.6, -12.3, 40, -2), {}),
+    # v3: Deep Research (105), the far corner pushing in
+    'deep': (105, [], 120, (22.0, 22.0, -15.3, -135, -2), (21.2, 21.2, -15.3, -132, -3), {}),
+    # v3: Medical Front (72), a ward corridor
+    'ward': (72, [], 110, (7.6, 22.0, -12.45, -54, 0), (8.3, 21.1, -12.45, -50, -1), {}),
+    # v3: Observation (94), the gallery
+    'gallery': (94, [], 110, (1.7, 21.8, -13.7, -35, -2), (2.5, 21.2, -13.7, -32, -3), {}),
+    # v3: Containment approach (100), the far end
+    'approach': (100, [], 110, (13.2, 12.9, -14.6, -136, -1), (12.5, 12.2, -14.6, -132, -2), {}),
     # Containment cages (99): R-117 walking behind the bars (its return), warm light.
     'cages': (99, ['cont_power', 'conb_sh_r117_out'], 150, (9, 16.8, -18.55, 63.6, 4), (9.1, 17.3, -18.55, 66, 4),
               {'anchor': (9, 16.8, -18, 63.6, -4), 'track': 'CHIMERA', 'pre': 20, 'lines': DARK}),

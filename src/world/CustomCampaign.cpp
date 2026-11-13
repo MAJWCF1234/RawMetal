@@ -536,10 +536,20 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    {auto& h=map->hazards.back();if(given(10))h.enabledFlag=stateField(f[10]);if(given(11))h.enabledValue=integer(f,11,"hazard state value");if(given(12))h.invertFlag=boolean(f,12,"hazard invert");
     if(given(13))h.period=number(f,13,"hazard period");if(given(14))h.onTime=number(f,14,"hazard on time");if(given(15))h.phase=number(f,15,"hazard phase");}
   }else if(tag=="EMITTER"){
-   // EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count: a smoke/vapour plume.
-   if(f.size()!=12)throw std::runtime_error("malformed EMITTER record");auto map=mapAt(maps,f);
+   // EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count[|kind|strength|state|value|invert|period|onTime|phase]:
+   // `count` puffs in the air at once, each living 1/rate s, leaving at `radius`, swelling by `growth`,
+   // carried driftX, driftY, rise metres over its life. kind (World.h ParticleKind): 0 the old plume
+   // (steam indoors, smoke under the sky), 1 smoke, 2 steam, 3 sparks (a shower of `count` every 1/rate s
+   // along the drift, strength its heat), 4 dust (motes filling a box: drift its half sizes, rise its
+   // height), 5 debris (grit from a crack), 6 drips, 7 spray, 8 fire (radius its half width, growth its
+   // flames' height), 9 toxic gas (a pool: drift its half sizes, rise its depth), 10 the glow round live
+   // current; strength 0-4 how thick or bright; the rest switch it like a HAZARD.
+   if(f.size()<12||f.size()>20)throw std::runtime_error("malformed EMITTER record");auto map=mapAt(maps,f);
    ParticleEmitter e{{number(f,2,"emitter x"),number(f,3,"emitter y")},number(f,4,"emitter z"),{number(f,5,"emitter drift x"),number(f,6,"emitter drift y")},number(f,7,"emitter rise"),number(f,8,"emitter rate"),number(f,9,"emitter radius"),number(f,10,"emitter growth"),integer(f,11,"emitter count")};
-   if(e.rate<=0||e.rate>5||e.radius<=0||e.radius>3||e.growth<0||e.growth>5||e.count<1||e.count>32||e.rise<0||e.rise>20)throw std::runtime_error("emitter parameters out of range");
+   if(given(12)){const int kind=integer(f,12,"emitter kind");if(kind<0||kind>=int(ParticleKind::Count))throw std::runtime_error("invalid emitter kind");e.kind=ParticleKind(kind);}
+   if(given(13))e.strength=number(f,13,"emitter strength");if(given(14))e.enabledFlag=stateField(f[14]);if(given(15))e.enabledValue=integer(f,15,"emitter state value");
+   if(given(16))e.invertFlag=boolean(f,16,"emitter invert");if(given(17))e.period=number(f,17,"emitter period");if(given(18))e.onTime=number(f,18,"emitter on time");if(given(19))e.phase=number(f,19,"emitter phase");
+   if(!validParticleEmitter(e))throw std::runtime_error("emitter parameters out of range");
    if(map->emitters.size()>=64)throw std::runtime_error("too many EMITTER records in one map");map->emitters.push_back(e);
   }else if(tag=="STAIR"){
    if(f.size()<11||f.size()>14)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({

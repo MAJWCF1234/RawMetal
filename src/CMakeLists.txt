@@ -182,6 +182,7 @@ add_executable(RawMetal WIN32
     world/World.cpp
     world/CampaignMaps.cpp
     world/CampaignSoundscape.cpp
+    world/CampaignParticles.cpp
     world/CampaignChapters.cpp
     world/CampaignChapterPower.cpp
     world/CampaignChapterMachineHall.cpp
@@ -221,12 +222,17 @@ add_executable(RawMetal WIN32
     renderer/NormalMapping.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
+    renderer/ClaireOutside.cpp
+    renderer/ThirdPersonTest.cpp
     renderer/ElectricFx.cpp
     renderer/Carcass.cpp
     renderer/GoreFx.cpp
+    renderer/Particles.cpp
+    renderer/ParticlesTest.cpp
     renderer/Impostors.cpp
     renderer/Performance.cpp
     renderer/GpuRenderer.cpp
+    renderer/LightProbes.cpp
     ThirdParty/ufbx/ufbx.c
     platform/Win32Window.cpp
     platform/EditorPreview.cpp)

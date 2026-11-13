@@ -12,6 +12,7 @@
 #include "GpuRenderer.h"
 #include "ElectricFx.h"
 #include "GoreFx.h"
+#include "Particles.h"
 #include "../vr/VrRuntime.h"
 #include <algorithm>
 #include <bit>
@@ -319,7 +320,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
    }
   }
  }
- if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale,m_dissolve,&m_triangleAir);m_triangleAir.fill(NoBounceAir);return;}
+ if(m_gpuFrame){m_gpu->submit(a,b,c,texture,light,tangentLights,tangentActive?normalLighting->weights:std::array<float,2>{},flatResponse,normalActive,m_emissionScale,m_dissolve,&m_triangleAir,texture.soft?&m_card:nullptr);m_triangleAir.fill(NoBounceAir);return;}
  m_triangleAir.fill(NoBounceAir);
  // Clip in camera space before perspective division; preserve UVs at intersections.
  const Projection projection{float(m_width)/m_height};
@@ -368,7 +369,16 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
     float vx=(vDerivative.x-V*depthDerivative.x)*z*texture.height,vy=(vDerivative.y-V*depthDerivative.y)*z*texture.height;
     lod=std::max(0.f,.5f*std::log2(std::max({1.f,ux*ux+vx*vx,uy*uy+vy*vy})));
    }
-   auto texel=sample(texture,U,V,lod);if((texel>>24)==0||(!texture.transparent&&(texel>>24)<128))continue;
+   auto texel=sample(texture,U,V,lod);
+   // A particle card: on toward its flipbook's next frame, its opacity, and faded where it nears the
+   // surface behind it (the depth already drawn there), as scene.frag fades it on the GPU.
+   float cardAlpha=1.f;
+   if(texture.soft){
+    if(m_card.blend>0){const auto next=sample(texture,U+m_card.step,V,lod);const float t=m_card.blend;unsigned mixed=0;
+     for(int shift=0;shift<32;shift+=8)mixed|=unsigned(std::lround(float((texel>>shift)&255u)*(1-t)+float((next>>shift)&255u)*t))<<shift;texel=mixed;}
+    cardAlpha=m_card.opacity;if(m_card.soft>0&&m_zbuffer[index]<1e20f)cardAlpha*=std::clamp((m_zbuffer[index]-z)/m_card.soft,0.f,1.f);
+    if(float(texel>>24)*cardAlpha<1.f)continue;}
+   if((texel>>24)==0||(!texture.transparent&&(texel>>24)<128))continue;
    float vertexLight=(A.light*u+B.light*v+C.light*w)*z;
    if(normalActive){auto n=sampleNormal(texture,U,V,lod);float response=.22f;
     for(int i=0;i<2;++i)response+=normalLighting->weights[i]*std::max(0.f,dot(n,tangentLights[i]));
@@ -380,7 +390,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
     if(!texture.emission.empty()){
      int ex=std::min(texture.width-1,int((U-std::floor(U))*texture.width)),ey=std::min(texture.height-1,int((V-std::floor(V))*texture.height));auto glow=texture.emission[size_t(ey*texture.width+ex)];unsigned result=0xff000000u;
      for(int channel=0;channel<3;++channel){unsigned value=std::min(255u,unsigned((color>>(channel*8))&255)+unsigned(((glow>>(channel*8))&255)*1.6f*m_emissionScale));result|=value<<(channel*8);}color=result;
-    }if(texture.transparent){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;for(int channel=0;channel<3;++channel){int shift=channel*8;result|=unsigned(((color>>shift)&255)*alpha+((old>>shift)&255)*(1-alpha))<<shift;}color=result;}put(x,y,color);}
+    }if(texture.transparent){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f*cardAlpha;unsigned result=0xff000000u;for(int channel=0;channel<3;++channel){int shift=channel*8;result|=unsigned(((color>>shift)&255)*alpha+((old>>shift)&255)*(1-alpha))<<shift;}color=result;}put(x,y,color);}
    }
   }
  }
@@ -517,6 +527,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(m_chunkLightSourceKeys[w.level()]!=fixedLightSourceKey){
   m_chunkLightSourceKeys[w.level()]=fixedLightSourceKey;m_lightingCache.clear();m_chunkNormalLighting[w.level()].clear();m_chunkLightCells[w.level()].clear();m_chunkLightCounts[w.level()]=0;
  }
+ // Light probes (LightProbes.h): this map's baked fill and crystal glow once its bake has landed
+ // (the map in play waits for its first; one streaming in uses the flat room bounce until then).
+ const ProbeBake* probeBake=chunkProbes(game,level,w,fixedLightSourceKey,level==game.level()||m_environmentInspection);
+ const IrradianceVolume* probes=probeBake&&!probeBake->volume.empty()?&probeBake->volume:nullptr;
+ if(m_gpuFrame&&m_gpu)m_gpu->useProbes(level,probeBake,m_chunkProbes[size_t(level)].key,game.chunkOffset(level));
+ auto probeFill=[&](Point3 p,Point3 n){const auto s=probes->sample(p,n);return probeShoulder((s[0]*.2126f+s[1]*.7152f+s[2]*.0722f)*ProbeGain);};
+ // Outdoors the sky's share of the flat ambient follows how much sky the point sees.
+ auto skyOpen=[&](Point3 p,Point3 n){return probes&&w.outdoors()?.45f+.55f*probes->sample(p,n)[3]:1.f;};
  // A light's pose is immutable during a draw. Reuse its exact emitter and
  // shadow samples instead of evaluating wall-lamp trigonometry per receiver.
  const auto sun=w.sun();
@@ -661,10 +679,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   illuminationAir=SoftwareRenderer::NoBounceAir;
   if(movingGeometry){
    const float dark=ambientDarkness();
-   float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
+   float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f)*skyOpen(point,normal):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
    Point3 room{};bool roomReady=false;
+   // With probes the room's return comes from them, each lamp's flat share under it at half weight.
+   if(probes)brightness+=probeFill(point,normal);
    for(auto source:lightCells[lightCell(point)]){const auto& fixture=w.lights()[source];auto delta=lightFrames[source].emitter-point;float d2=delta.x*delta.x+delta.y*delta.y+delta.z*delta.z;float weight=fixture.reach(delta,d2)*lampPower(source);if(d2<.001f||weight<=0)continue;
-    if(float bounce=fixture.bounce(d2)*lampPower(source);bounce>.002f){if(!roomReady){room=bounceProbe(point,normal);roomReady=true;}
+    if(float bounce=fixture.bounce(d2)*lampPower(source)*(probes&&!fixture.switchable()?.5f:1.f);bounce>.002f){if(!roomReady){room=bounceProbe(point,normal);roomReady=true;}
      auto target=lightFrames[source].target;if(!fixture.shadows||w.lightRayClear({room.x,room.y},room.z,{target.x,target.y},target.z))brightness+=bounce;}
     float distance=std::sqrt(d2),facing=std::max(0.f,normal.x*delta.x+normal.y*delta.y+normal.z*delta.z)/distance;if(facing<=0)continue;
     auto start=point+delta*(.04f/distance),target=lightFrames[source].target;float visibility=!fixture.shadows||w.lightRayClear({start.x,start.y},start.z,{target.x,target.y},target.z)?1.f:.04f;
@@ -713,7 +733,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
     accessibility=1.f-.68f*occlusion*.25f;
    }
-   ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
+   ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f)*(pixelLamps?1.f:skyOpen(point,normal)):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
    Point3 room{};bool roomReady=false;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
@@ -723,12 +743,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     float visibility=0;
     for(auto target:lightFrames[source].shadowSamples){if(shadowBudget<=0)continue;--shadowBudget;visibility+=!fixture.shadows||w.lightRayClear({origin.x,origin.y},origin.z,{target.x,target.y},target.z)?1.f:.04f;}
     float contribution=(visibility/3.f)*(.04f+.96f*facing)*weight;
-    if(float bounce=fixture.bounce(d2);bounce>.002f&&shadowBudget>0){if(!roomReady){room=bounceProbe(point,normal);roomReady=true;}auto target=lightFrames[source].target;
+    if(float bounce=fixture.bounce(d2)*(probes&&!fixture.switchable()?.5f:1.f);bounce>.002f&&shadowBudget>0){if(!roomReady){room=bounceProbe(point,normal);roomReady=true;}auto target=lightFrames[source].target;
      --shadowBudget;if(!fixture.shadows||w.lightRayClear({room.x,room.y},room.z,{target.x,target.y},target.z))contribution+=bounce;}
     if(!lampSwitchable[source])brightness+=contribution;
     else{switched+=lampPower(source)*contribution;if(shadowBudget>0)m_lightingCache.emplace(key|lampTag(source),contribution);}
    }
    if(!pixelLamps)brightness+=sunTerm(normal);
+   if(!pixelLamps&&probes)brightness+=probeFill(point,normal);
    // A per-pixel static bake never darkens on the CPU (the shader scales it).
    if(shadowBudget>0){m_lightingCache.emplace(key,brightness);if(!pixelLamps)m_lightingCache.emplace(key|AmbientTag,ambient);}
   }
@@ -780,6 +801,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  bool objectLighting=false;float objectLight=1,objectAir=SoftwareRenderer::NoBounceAir;const NormalLighting*objectNormalLighting=nullptr;
  // While a ceiling lamp's fitting draws: its tone, which its glowing parts take.
  const Point3*fittingTone=nullptr;
+ // The CPU rasteriser's stand-in for reflections: a polished or metal face takes the probes' light
+ // from the way it mirrors the eye, by Fresnel (metal strongly face-on).
+ auto probeSheen=[&](Point3 p,Point3 n,const Texture&t){
+  if(m_gpuFrame||!probes||(t.metalness<=0&&t.polish<.3f))return 0.f;
+  float nl=std::sqrt(goreDot(n,n));Point3 v=p-eye;float vl=std::sqrt(goreDot(v,v));if(nl<1e-5f||vl<1e-4f)return 0.f;n=n*(1.f/nl);v=v*(1.f/vl);if(goreDot(n,v)>0)n=n*-1.f;
+  const float facing=std::max(0.f,-goreDot(n,v)),f0=.04f+.68f*t.metalness,fresnel=f0+(1.f-f0)*std::pow(1.f-facing,5.f);
+  const auto mirrored=probes->sample(p,v-n*(2.f*goreDot(v,n)));
+  return probeShoulder((mirrored[0]*.2126f+mirrored[1]*.7152f+mirrored[2]*.0722f)*ProbeGain)*fresnel*std::min(1.f,t.polish+t.metalness);};
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
   perf::ActorTriangleScope profile;
   if(!m_staticGeometryBuild&&std::max({a.p.z,b.p.z,c.p.z})<dormantFloor)return;
@@ -792,7 +821,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // multiplies its lamps by the face light, so the bake rides in the vertex
   // light as it does for walls (scaling the face light cut models' lamps ~12x).
   if(objectLighting){if(m_pixelLighting&&m_staticGeometryBuild&&light<1.5f){a.light*=objectLight;b.light*=objectLight;c.light*=objectLight;m_triangleAir.fill(objectAir);}else light*=objectLight;}
-  else if(light<1.5f){std::array<float,3> air;a.light=illumination(a.p,worldNormal);air[0]=illuminationAir;b.light=illumination(b.p,worldNormal);air[1]=illuminationAir;c.light=illumination(c.p,worldNormal);air[2]=illuminationAir;m_triangleAir=air;}
+  else if(light<1.5f){std::array<float,3> air;a.light=illumination(a.p,worldNormal);air[0]=illuminationAir;b.light=illumination(b.p,worldNormal);air[1]=illuminationAir;c.light=illumination(c.p,worldNormal);air[2]=illuminationAir;m_triangleAir=air;
+   if(const float sheen=probeSheen((a.p+b.p+c.p)*(1.f/3.f),worldNormal,t);sheen>0){a.light+=sheen;b.light+=sheen;c.light+=sheen;}}
   a.p=A;b.p=B;c.p=C;
   if(objectNormalLighting&&(!t.normalLevels.empty()||t.glossStrength>0))triangle3D(a,b,c,t,light,objectNormalLighting);
   else if(needsNormalLighting){auto lights=normalLightingAt(worldCenter);lights.surfaceNormal=surfaceNormal(worldCenter,worldNormal);triangle3D(a,b,c,t,light,&lights);}
@@ -841,7 +871,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto &A=vertices[i],&B=vertices[i+1],&C=vertices[i+columns+2],&D=vertices[i+columns+1];
    if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
-   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal):1.f;if(light<1.5f)airs[size_t(&v-vertices.data())]=illuminationAir;
+   auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal)+probeSheen(p,normal,t):1.f;if(light<1.5f)airs[size_t(&v-vertices.data())]=illuminationAir;
     if(floorFace&&light<1.5f){bool nearWall=false;
      for(auto offset:{Vec2{-.24f,0},Vec2{.24f,0},Vec2{0,-.24f},Vec2{0,.24f}})
       nearWall|=w.tile(int(std::floor(p.x+offset.x)),int(std::floor(p.y+offset.y)))=='#';
@@ -1077,6 +1107,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Authored lamp power may change independently of the map/session. Use exact
   // float bits so even a small power change refreshes emission and baked light.
   hash(fixedLightSourceKey);
+  // A vertex-lit bake (no per-pixel lamps) carries the probes' fill in its vertices.
+  if(!m_pixelLighting&&probes)hash(m_chunkProbes[size_t(level)].key);
   buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
   geometryKey=key;
  }
@@ -1085,6 +1117,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Static lighting is baked once per chunk. A frame-sized ray budget leaves
  // later surfaces at ambient only, producing flat walls and missing shadows.
  if(m_staticGeometryBuild)shadowBudget=400000;
+ // An inspection frame (clean shots) is drawn once: the CPU rasteriser lights all of it.
+ if(!m_gpuFrame&&m_environmentInspection)shadowBudget=400000;
  // Surface sets (World.h): the map's own wall, floor and ceiling finish, or
  // null for the legacy choice. Finishes are laid in world metres, u along the
  // face and v down world z (or along y on flats), so they run on unbroken
@@ -2081,24 +2115,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({p.x-.025f,p.y-.025f,lampZ},{p.x+.025f,p.y+.025f,lampZ+.023f},game.state(terminal.activateState)?lamp:amber,1.8f);
   }
  }
- // Anomalies show as a slow vortex of pale motes; fires as flame tongues and
- // lifting embers. Both sit in their hazard box so players can read and avoid them.
- for(const auto& hazard:w.hazards())if((hazard.kind==Hazard::Kind::Anomaly||hazard.kind==Hazard::Kind::Fire)&&game.hazardActive(hazard)){
+ // Anomalies show as a slow vortex of pale motes in their hazard box, so players can read and avoid
+ // them. Fire, steam, gas and the rest are the air's own (Particles.cpp, at the end of the scene).
+ for(const auto& hazard:w.hazards())if(hazard.kind==Hazard::Kind::Anomaly&&game.hazardActive(hazard)){
   static Texture mote=[](){Texture t{16,16,std::vector<uint32_t>(256)};t.clampEdges=true;
    for(int y=0;y<16;++y)for(int x=0;x<16;++x){float dx=(x-7.5f)/8,dy=(y-7.5f)/8,d=dx*dx+dy*dy;t.pixels[y*16+x]=d<.55f?0xffd8f4ffu:d<1?0xff7fc8e8u:0;}return t;}();
-  // A soft additive tongue (base on the last row: quads map their bottom edge
-  // to v=1): white-yellow core, orange body, dark red edge,
-  // fading out at the tip; black is transparent under additive blending.
-  static Texture flame=[](){Texture t{32,64,std::vector<uint32_t>(2048)};t.clampEdges=true;t.additive=true;
-   for(int y=0;y<64;++y)for(int x=0;x<32;++x){float v=1-y/63.f,u=std::fabs(x-15.5f)/16,width=std::pow(1-v,.65f)*.92f+.04f;
-    float body=std::clamp(1-u/width,0.f,1.f);body=body*body*(3-2*body)*std::pow(1-v,.45f);
-    float heat=std::clamp(body*1.35f-.1f,0.f,1.f);
-    float r=body*(.55f+.45f*heat),g=body*(.12f+.75f*heat*heat),b=body*.55f*heat*heat*heat;
-    auto c=[](float value){return std::uint32_t(std::clamp(value,0.f,1.f)*255.f+.5f);};
-    t.pixels[y*32+x]=0xff000000u|(c(r)<<16)|(c(g)<<8)|c(b);}return t;}();
   Point3 side{-std::sin(player.angle),std::cos(player.angle),0},c{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f,hazard.bottom};
   float r=std::min(hazard.x2-hazard.x1,hazard.y2-hazard.y1)*.5f,t=game.elapsed();
-  if(hazard.kind==Hazard::Kind::Anomaly){
+  {
    // Pinpoint glints that crawl over the surface and now and then lift off it,
    // shrinking as they rise and twinkling out of step: the tingle before the bite.
    for(int i=0;i<18;++i){float k=std::fmod(i*.618f,1.f),a=t*(.5f+k*.6f)+i*2.4f,d=r*(.2f+.75f*k),rise=std::fmod(t*.22f+k*1.7f,1.f),h=.1f+rise*rise*1.1f,sz=(.022f+.028f*k)*(1.f-.6f*rise);
@@ -2107,30 +2131,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // Wading through it, the glints at the player's own face would fill the view: they shrink away.
     const float fade=std::clamp((length(Vec2{p.x,p.y}-player.pos)-.3f)/.9f,0.f,1.f);if(fade<=0)continue;sz*=fade;
     Point3 up{0,0,sz};quad(p-side*sz-up,p+side*sz-up,p+side*sz+up,p-side*sz+up,mote,glint);}
-  }else{
-   // One tall body flame, then tongues that lick up from the embers and shrink.
-   float scale=std::min(1.f,r*2.f),body=(.34f+.04f*std::sin(t*9.f)+.03f*std::sin(t*23.f))*scale;
-   {Point3 p{c.x,c.y,c.z+.16f},up{0,0,body*2.7f};quad(p-side*body,p+side*body,p+side*body+up,p-side*body+up,flame,2.f);}
-   for(int i=0;i<12;++i){float age=std::fmod(t*1.6f+i/12.f,1.f),a=i*2.1f+t*.7f,d=r*.5f*(1-age),h=age*.45f;
-    float flicker=.85f+.15f*std::sin(t*13.f+i*1.7f),sz=(.24f*(1-age)+.07f)*scale*flicker;
-    Point3 p{c.x+std::cos(a)*d,c.y+std::sin(a)*d,c.z+.16f+h},up{0,0,sz*2.6f};quad(p-side*sz,p+side*sz,p+side*sz+up,p-side*sz+up,flame,2.2f);}
-   for(int i=0;i<6;++i){float age=std::fmod(t*.6f+i/6.f,1.f),a=i*1.7f;Point3 p{c.x+std::cos(a)*r*.3f+age*.2f,c.y+std::sin(a)*r*.3f,c.z+.4f+age*2.2f},up{0,0,.025f};
-    quad(p-side*.025f-up,p+side*.025f-up,p+side*.025f+up,p-side*.025f+up,flame,2.8f);}
   }
- }
- for(const auto& emitter:w.particleEmitters()){
-  static Texture steam=[](){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;
-   for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=dx*dx+dy*dy;unsigned noise=unsigned(x+y*32+1)*747796405u+2891336453u;noise=((noise>>((noise>>28)+4))^noise)*277803737u;noise=((noise>>22)^noise)&255u;
-    t.pixels[y*32+x]=d<1&&noise<190*(1-d)?0xff7f8e91u:0;}return t;}();
-  // The open zone's smoke is soft and blended, fading as each puff rises.
-  static const std::array<Texture,4> smoke=[](){std::array<Texture,4> result;
-   for(int k=0;k<4;++k){Texture t{32,32,std::vector<uint32_t>(1024)};t.clampEdges=true;t.transparent=true;
-    for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/16,dy=(y-15.5f)/16,d=std::sqrt(dx*dx+dy*dy),a=std::clamp(1-d,0.f,1.f);
-     t.pixels[y*32+x]=(std::uint32_t(a*a*150.f*(1-k*.24f))<<24)|0x8a8d8eu;}result[size_t(k)]=std::move(t);}return result;}();
-  const bool softSmoke=w.zoneSky();
-  Point3 side{-std::sin(player.angle),std::cos(player.angle),0};
-  for(int i=0;i<emitter.count;++i){float age=std::fmod(game.elapsed()*emitter.rate+float(i)/emitter.count,1.f),radius=emitter.radius+age*emitter.growth;Point3 p{emitter.position.x+age*emitter.drift.x,emitter.position.y+age*emitter.drift.y,emitter.z+age*emitter.rise},up{0,0,radius};
-   quad(p-side*radius-up,p+side*radius-up,p+side*radius+up,p-side*radius+up,softSmoke?smoke[size_t(std::min(3,int(age*4)))]:steam,.9f);}
  }
  // Falling ash (Game::ashFall): flakes in a box that moves with the camera,
  // each on its own slow tumble down the wind; a storm fills the air with them.
@@ -2482,66 +2483,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   else{const size_t m=size_t(mark.material);hole(p+impactNormal*.003f,ringSize[m],scars[m],.9f);if(pitSize[m]>0)hole(p+impactNormal*.005f,pitSize[m],crater,.9f);}
   // Its sparks are drawn with all the electricity (ElectricFx).
  }
- // Barrel fire stays in world space, so walls and props occlude it. Every
- // mask is generated here; no runtime image dependency is needed.
- static const Texture fire=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
-  for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
-   unsigned hash=(unsigned(x)*73856093u^unsigned(y)*19349663u^0x6d2b79f5u);hash=(hash^(hash>>13))*1274126177u;
-   float noise=float((hash>>24)&255u)/255.f,angle=std::atan2(dy,dx);
-   float boundary=.86f+.10f*std::sin(angle*5.f+1.4f)+.07f*std::sin(angle*11.f-2.1f)+.045f*std::sin(angle*17.f+.7f);
-   float edge=std::clamp((boundary-r)*9.f+(noise-.5f)*.28f,0.f,1.f);
-   float turbulence=std::sin(dx*13.f+std::sin(dy*9.f)*2.f)*std::sin(dy*11.f-dx*4.f);
-   float heat=std::clamp(.62f-r*.32f+turbulence*.20f+(noise-.5f)*.14f,0.f,1.f);
-   unsigned red=unsigned(210.f+45.f*heat),green=unsigned(78.f+147.f*heat),blue=unsigned(8.f+48.f*heat),alpha=unsigned(edge*220.f);
-   t.pixels[size_t(y*48+x)]=(alpha<<24)|(red<<16)|(green<<8)|blue;
-  }return t;}();
  // The flash: an additive core that the bloom pass spreads across the hall.
  static const Texture flash=[](){Texture t{32,32,std::vector<std::uint32_t>(32*32)};t.additive=true;t.clampEdges=true;
   for(int y=0;y<32;++y)for(int x=0;x<32;++x){float dx=(x-15.5f)/15.5f,dy=(y-15.5f)/15.5f,r=std::sqrt(dx*dx+dy*dy);
    float core=std::clamp(1.f-r,0.f,1.f);core=core*core;unsigned v=unsigned(core*255.f);
    t.pixels[size_t(y*32+x)]=(v<<24)|(255u<<16)|(unsigned(205.f+50.f*core)<<8)|unsigned(90.f+140.f*core);
   }return t;}();
- static const Texture smoke=[](){Texture t{48,48,std::vector<std::uint32_t>(48*48)};t.transparent=true;t.clampEdges=true;
-  for(int y=0;y<48;++y)for(int x=0;x<48;++x){float dx=(x-23.5f)/23.5f,dy=(y-23.5f)/23.5f,r=std::sqrt(dx*dx+dy*dy);
-   unsigned hash=(unsigned(x)*2654435761u^unsigned(y)*2246822519u^0xa8c3b75eu);hash=(hash^(hash>>15))*3266489917u;
-   float noise=float((hash>>24)&255u)/255.f,alpha=std::clamp((.95f-r)*1.55f+(noise-.5f)*.18f,0.f,1.f)*.48f;
-   t.pixels[size_t(y*48+x)]=(unsigned(alpha*255.f)<<24)|0x00645b53u;
-  }return t;}();
  Point3 effectSide{-std::sin(player.angle),std::cos(player.angle),0};
  // Cards face the camera and keep upright; a spin turns each one so the
  // same mask never reads as a stamp.
  auto effectCard=[&](Point3 center,float radius,const Texture&texture,float light,float turn=0.f){Point3 across=effectSide*radius,up{0,0,radius};float cs=std::cos(turn),sn=std::sin(turn);Point3 u=across*cs+up*sn,v=across*-sn+up*cs;quad(center-u-v,center+u-v,center+u+v,center-u+v,texture,light);};
- for(const auto&blast:game.barrelExplosions())if(blast.level==level){
-  float age=game.elapsed()-blast.time;if(age<0.f||age>2.6f)continue;
+ // The flash; the fireball, the smoke, the dust sheet along the floor, the debris and embers it throws
+ // are the air's (Particles.cpp). A test's or an inspection's own blasts flash too.
+ std::vector<BarrelExplosion> blasts=game.barrelExplosions();if(m_particleMemory){const auto&extra=particleExtraBlasts(*m_particleMemory);blasts.insert(blasts.end(),extra.begin(),extra.end());}
+ for(const auto&blast:blasts)if(blast.level==level){
+  float age=game.elapsed()-blast.time;if(age<0.f||age>.14f)continue;
   Point3 center{blast.pos.x,blast.pos.y,blast.z};
-  unsigned seed=unsigned(std::fabs(blast.pos.x)*131.f)^unsigned(std::fabs(blast.pos.y)*719.f);
-  auto rnd=[&](int i){unsigned h=(seed+unsigned(i)*2654435761u);h=(h^(h>>13))*1274126177u;return float((h>>24)&255u)/255.f;};
   if(age<.14f){float flare=1.f-age/.14f;effectCard(center+Point3{0,0,.25f},1.4f*(.6f+.4f*flare)+age*4.f,flash,2.2f*flare);}
-  if(age<.7f){float life=std::clamp(1.f-age/.7f,0.f,1.f),growth=.70f+std::min(age/.09f,1.f)*.5f;
-   effectCard(center+Point3{0,0,.12f+age*.6f},.8f*growth*std::sqrt(life),fire,1.65f,rnd(0)*6.28f+age*1.2f);
-   for(int i=0;i<7;++i){float phase=rnd(i+1)*6.283f,spread=(.15f+age*(.8f+rnd(i+9)*.8f))*(i%2?.85f:1.f),size=(.22f+rnd(i+20)*.16f)*growth*life;
-    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.1f+age*(.6f+rnd(i+30)*1.1f)};
-    effectCard(p,size,fire,1.45f,rnd(i+40)*6.28f-age*(1.f+rnd(i)));
-   }
-  }
-  // Embers: burning fragments thrown out on ballistic arcs.
-  if(age<1.1f)for(int i=0;i<14;++i){float phase=rnd(i+50)*6.283f,speed=2.5f+rnd(i+70)*4.f,lift=3.f+rnd(i+90)*3.5f,t=age;
-   Point3 e{center.x+std::cos(phase)*speed*t,center.y+std::sin(phase)*speed*t,center.z+.2f+lift*t-4.9f*t*t};
-   if(e.z<w.floorHeight(e.x,e.y)+.02f)continue;
-   float glow=std::clamp(1.f-age/1.1f,0.f,1.f);
-   quad(e,{e.x+.03f,e.y,e.z},{e.x+.03f,e.y,e.z+.05f},{e.x,e.y,e.z+.05f},amber,1.2f+glow*.9f);
-  }
-  // A shock ring races over the floor, then smoke climbs and thins.
-  if(age<.32f){float ring=age/.32f,radius=.4f+ring*3.2f,z=w.floorHeight(center.x,center.y)+.03f;
-   for(int i=0;i<16;++i){float a0=i*kPi/8,a1=(i+1)*kPi/8,inner=radius-.25f;
-    quad({center.x+std::cos(a0)*inner,center.y+std::sin(a0)*inner,z},{center.x+std::cos(a1)*inner,center.y+std::sin(a1)*inner,z},{center.x+std::cos(a1)*radius,center.y+std::sin(a1)*radius,z},{center.x+std::cos(a0)*radius,center.y+std::sin(a0)*radius,z},flash,1.3f*(1.f-ring));}
-  }
-  if(age>.1f){float puff=std::clamp((age-.1f)/.25f,0.f,1.f)*std::clamp((2.6f-age)/.9f,0.f,1.f);
-   for(int i=0;i<6;++i){float phase=rnd(i+100)*6.283f,spread=.15f+age*(.35f+rnd(i+110)*.3f),radius=(.4f+age*.5f)*puff;
-    Point3 p{center.x+std::cos(phase)*spread,center.y+std::sin(phase)*spread,center.z+.3f+age*(.7f+rnd(i+120)*.4f)};
-    effectCard(p,radius,smoke,1.5f,rnd(i+130)*6.28f+age*.4f*(i%2?1.f:-1.f));
-   }
-  }
  }
  movingGeometry=true;
  auto drawTacticalGrenade=[&](Point3 p,float fuse){
@@ -3213,8 +3171,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // her head, hair and arms are left out (the viewmodel's arms stand in for
  // hers) and she stands a hand's width behind the eye, so looking down shows
  // her chest, belt, legs and boots in step with the footsteps. Her whole
- // silhouette throws the floor shadow under the nearest lamp.
- if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&!m_vrRendering&&!m_environmentInspection&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
+ // silhouette throws the floor shadow under the nearest lamp. A replay or film
+ // camera outside her draws her in clean captures too.
+ if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&!m_vrRendering&&(!m_environmentInspection||m_bodyOutside)&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
   auto&mesh=m_claireMesh;const auto&state=game.player();
   if(m_claireFaceTexture.size()!=mesh.triangles.size()){
    // Classify once, on the bind pose: material by name, and the head (above
@@ -3252,6 +3211,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    m_bodyStance=stance;
    if(m_bodyTransitionClip>=0){const float t=(now-m_bodyTransitionStart)/m_bodyTransitionLength;
     if(t>=1||t<0||speed>=.25f||!state.grounded||game.dead())m_bodyTransitionClip=-1;else{clip=m_bodyTransitionClip;phase=t*m_bodyTransitionRange;}}}
+  // From outside, the legs keep this locomotion clip under any hold.
+  const int legsClip=clip;const float legsPhase=phase;
   // Aiming, firing and reloading where she stands (24-27: aim idle, crouched
   // aim idle, the rifle shot, the reload stretched over the shell reload).
   if(!game.dead()&&state.grounded&&!state.prone&&speed<.25f&&m_bodyTransitionClip<0){
@@ -3259,10 +3220,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    else if(game.shotAge()<.3f&&!game.unarmed()){clip=26;phase=game.shotAge()/.3f;}
    else if(game.aimBlend()>.5f){clip=state.crouched?25:24;phase=std::fmod(game.elapsed()/(state.crouched?1.9f:2.03f),1.f);}}
   // (The map's angle grows clockwise, so a growing look is a right turn.)
-  // Third person: the body trails the look while she stands still (28-31: turn
-  // left/right, crouched turn left/right). In first person it is the look.
+  // From outside (third person, replays): the body trails the look while she
+  // stands still (28-31: turn left/right, crouched turn left/right), stepping
+  // round when it falls too far behind. In first person it is the look.
   float bodyAngle=state.angle;
-  if(m_bodyOutside&&SoftwareRenderer::thirdPerson()&&!game.dead()&&!m_turnYawReady){
+  if(m_bodyOutside&&!game.dead()&&!m_turnYawReady){
    // Measure each turn clip's turn as drawn (the mirror included): her facing is
    // her eyes against her head, at the clip's first and last frame.
    auto facing=[&](int c,float ph){mesh.poseCreature(c,ph);Point3 eyes{},head{};int ne=0,nh=0;
@@ -3271,26 +3233,120 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     if(!ne||!nh)return 0.f;const Point3 d=eyes*(1.f/ne)-head*(1.f/nh);return std::atan2(-d.x,d.z);};
    for(int i=0;i<4;++i){float a=facing(28+i,0),b=facing(28+i,1),d=b-a;while(d>kPi)d-=2*kPi;while(d<-kPi)d+=2*kPi;m_turnYaw[size_t(i)]=d;}
    m_turnYawReady=true;}
-  if(m_bodyOutside&&SoftwareRenderer::thirdPerson()&&!game.dead()){const float t=game.elapsed();
+  if(m_bodyOutside&&!game.dead()){const float t=game.elapsed();
    auto wrap=[](float a){while(a>kPi)a-=2*kPi;while(a<-kPi)a+=2*kPi;return a;};
    const float dt=m_tpYawTime<0||t<m_tpYawTime?0.f:std::min(.1f,t-m_tpYawTime);m_tpYawTime=t;
    if(m_tpBodyYaw<-1e8f||dt==0)m_tpBodyYaw=state.angle;
+   // A gun brought up (the shotgun aimed, the pistol just fired) cuts a turn
+   // short where it has got to; the body then swings onto the look.
+   const bool raised=game.aimBlend()>.5f||(game.equippedWeapon()==WeaponId::Handgun&&!game.unarmed()&&game.shotAge()<1.5f);
    if(m_tpTurnClip>=0){const float u=(t-m_tpTurnStart)/m_tpTurnLength;
-    if(u>=1||speed>=.25f||!state.grounded){if(u>=1)m_tpBodyYaw=wrap(m_tpBodyYaw+m_turnYaw[size_t(m_tpTurnClip-28)]);m_tpTurnClip=-1;}else{clip=m_tpTurnClip;phase=u;}}
+    if(u>=1||speed>=.25f||!state.grounded||raised){m_tpBodyYaw=wrap(m_tpBodyYaw+m_turnYaw[size_t(m_tpTurnClip-28)]*std::min(1.f,u));m_tpTurnClip=-1;}else{clip=m_tpTurnClip;phase=u;}}
    if(m_tpTurnClip<0){const float d=wrap(state.angle-m_tpBodyYaw);
-    if(speed>=.25f||!state.grounded||state.prone||game.aimBlend()>.5f)m_tpBodyYaw=wrap(m_tpBodyYaw+d*std::min(1.f,dt*12.f));
+    if(speed>=.25f||!state.grounded||state.prone||raised)m_tpBodyYaw=wrap(m_tpBodyYaw+d*std::min(1.f,dt*12.f));
     else if(std::fabs(d)>1.1f){m_tpTurnSign=d>0?1:-1;{const int base=state.crouched?30:28;m_tpTurnClip=(m_turnYaw[size_t(base-28)]>0)==(d>0)?base:base+1;}m_tpTurnStart=t;m_tpTurnLength=state.crouched?1.27f:1.f;clip=m_tpTurnClip;phase=0;}}
    bodyAngle=m_tpBodyYaw;}
   else m_tpBodyYaw=-1e9f;
   // A change of clip blends over .2 s from the pose it left.
   const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
-  if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;}
+  if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;m_outsideKey=-1;m_outsideAir=0;}
+  const float frameDt=m_bodyLastElapsed<0?0.f:std::clamp(now-m_bodyLastElapsed,0.f,.1f);
   m_bodyLastElapsed=now;
+  // From outside (ClaireOutside.h) she is posed in layers: the legs' clip, the
+  // hold of the gun in her hands over it from the waist up, and her upper body
+  // turned about the chest so that gun points where the player aims. Standing
+  // still with the shotgun the aim, shot and reload clips are whole-body (her
+  // feet set for them); walking, they ride on the walk. The pistol always rides.
+  using ClaireClip=ClaireOutside::Clip;
+  const bool outside=m_bodyOutside&&m_claireOutside.prepare(mesh)&&m_claireOutside.hasClip(ClaireClip::Land);
+  const int held=!outside||game.dead()||game.unarmed()?0:game.equippedWeapon()==WeaponId::Handgun?2:game.equippedWeapon()==WeaponId::Shotgun?1:0;
+  Point3 outsideAim{0,0,1};float outsideAimed=0;int layerClip=-1;ClaireOutside::Gun heldGun{};Point3 heldSocket{};
+  if(outside){
+   int lower=clip;float lowerPhase=phase;
+   if(held==2&&lower>=ClaireClip::AimIdle&&lower<=ClaireClip::RifleReload){lower=legsClip;lowerPhase=legsPhase;}
+   if(held!=1&&lower>=ClaireClip::AimIdle&&lower<=ClaireClip::RifleReload){lower=legsClip;lowerPhase=legsPhase;}
+   // The rifle clips' reload swaps a magazine with the muzzle up past her face:
+   // the shotgun is loaded shell by shell from the hip instead (below).
+   if(lower==ClaireClip::RifleReload){lower=legsClip;lowerPhase=legsPhase;}
+   // A hit staggers her for under half a second; a fall of more than a third
+   // of a second lands with bent knees.
+   if(game.damageFlash()>m_outsideDamage+.15f)m_outsideHitStart=now;m_outsideDamage=game.damageFlash();
+   if(!state.grounded)m_outsideAir+=frameDt;else{if(m_outsideAir>.35f)m_outsideLandStart=now;m_outsideAir=0;}
+   const bool transition=lower>=20&&lower<=23;
+   if(!game.dead()&&state.grounded&&!state.prone&&!transition&&speed<.25f&&now-m_outsideLandStart<.5f){lower=ClaireClip::Land;lowerPhase=.25f+.75f*(now-m_outsideLandStart)/.5f;}
+   const bool upright=!game.dead()&&state.grounded&&!state.prone&&!transition&&lower!=ClaireClip::Land;
+   const bool stillWhole=lower>=ClaireClip::AimIdle&&lower<=ClaireClip::RifleReload;
+   ClaireOutside::Layer layer;const float shot=game.shotAge(),look=state.pitch/140.f;
+   if(!game.dead()&&!state.prone&&now-m_outsideHitStart<.45f){layer={ClaireClip::HitReaction,(now-m_outsideHitStart)/.45f,1};}
+   else if(held==1&&upright){
+    if(stillWhole)outsideAimed=lower==ClaireClip::RifleReload?0.f:lower==ClaireClip::AimIdle||lower==ClaireClip::CrouchAim||lower==ClaireClip::RifleShot?1.f:0.f;
+    else if(game.reloading()){}
+    else if(shot<.3f){layer={ClaireClip::RifleShot,shot/.3f,1};outsideAimed=1;}
+    else if(game.aimBlend()>.5f){layer={ClaireClip::AimIdle,std::fmod(now/2.03f,1.f),1};outsideAimed=1;}}
+   else if(held==2&&upright){
+    if(game.reloading())layer={ClaireClip::PistolReload,game.reloadProgress(),1};
+    else if(shot<.45f){layer={ClaireClip::PistolShoot,shot/.45f,1};outsideAimed=1;}
+    // The pistol has no sights to raise: she holds it up a moment after each shot.
+    else if(shot<1.5f||game.aimBlend()>.5f){layer={ClaireClip::PistolAim,0,1,look>0?ClaireClip::PistolAimUp:ClaireClip::PistolAimDown,0,std::clamp(std::fabs(look)/.9f,0.f,1.f)};outsideAimed=1;}
+    else layer={ClaireClip::PistolIdle,std::fmod(now/1.67f,1.f),1};}
+   // Where the player aims, in her mesh's frame (+X her left, +Z ahead).
+   {const Point3 aimWorld{std::cos(state.angle)*std::cos(look),std::sin(state.angle)*std::cos(look),std::sin(look)};
+    outsideAim={aimWorld.x*std::sin(bodyAngle)-aimWorld.y*std::cos(bodyAngle),aimWorld.z,aimWorld.x*std::cos(bodyAngle)+aimWorld.y*std::sin(bodyAngle)};}
+   float pitch=0,yaw=0;
+   if(held&&upright){pitch=outsideAimed>0?look:look*(game.reloading()?.2f:.35f);if(outsideAimed>0)yaw=std::atan2(outsideAim.x,outsideAim.z);}
+   else if(!game.dead()&&!state.prone&&state.grounded)pitch=look*.25f;
+   pitch=std::clamp(pitch,-1.f,1.f);yaw=std::clamp(yaw,-.9f,.9f);
+   m_claireOutside.compose(mesh,lower,lowerPhase,layer,pitch,yaw);
+   // Aimed, the gun itself is brought onto the line: measure where the fitted
+   // gun points and turn the upper body by what is left (twice converges).
+   if(outsideAimed>0&&held){const float gunScale=m_claireOutside.perMetre()*(held==1?1.f/std::max(.01f,m_weaponMesh.maximum.z-m_weaponMesh.minimum.z):1.f);
+    for(int pass=0;pass<2;++pass){const auto r=m_claireOutside.hand(0,false),l=m_claireOutside.hand(1,false);
+     const auto gun=held==1?ClaireOutside::fitLongGun(r,l,shotgunSocket(false),shotgunSocket(true),{0,0,-1},gunScale):ClaireOutside::fitPistol(r,{},1);
+     float dp=std::asin(std::clamp(outsideAim.y,-1.f,1.f))-std::asin(std::clamp(gun.bore.y,-1.f,1.f)),dy=std::atan2(outsideAim.x,outsideAim.z)-std::atan2(gun.bore.x,gun.bore.z);
+     while(dy>kPi)dy-=2*kPi;while(dy<-kPi)dy+=2*kPi;
+     pitch=std::clamp(pitch+dp,-1.2f,1.2f);yaw=std::clamp(yaw+dy,-1.f,1.f);m_claireOutside.compose(mesh,lower,lowerPhase,layer,pitch,yaw);}}
+   const int key=lower*4096+(layer.clip+1)*64+(layer.mixClip+1)*2+(outsideAimed>0);
+   // A pose being blended from stays where it stood while her facing turns.
+   if(key!=m_outsideKey){if(m_outsideKey>=0){m_claireOutside.blendFromLast();m_outsideBlendStart=now;}else m_outsideYaw=bodyAngle;m_outsideKey=key;}
+   {float turned=bodyAngle-m_outsideYaw;while(turned>kPi)turned-=2*kPi;while(turned<-kPi)turned+=2*kPi;m_claireOutside.turnBlendStart(turned,(mesh.minimum+mesh.maximum)*.5f);m_outsideYaw=bodyAngle;}
+   m_claireOutside.publish(mesh,m_outsideBlendStart<0?1.f:std::clamp((now-m_outsideBlendStart)/.2f,0.f,1.f));
+   m_outsideReport=ClaireOutside::Report{};m_outsideReport.drawn=true;m_outsideReport.blending=m_claireOutside.blending();m_outsideReport.weapon=held;m_outsideReport.lower=lower;m_outsideReport.layer=layer.clip;layerClip=layer.clip;
+   if(held){
+    const bool pistol=held==2;const Point3 socket=pistol?Point3{0,-.022f,-.012f}:shotgunSocket(false);
+    const auto r=m_claireOutside.hand(0);auto l=m_claireOutside.hand(1);
+    const float metre=m_claireOutside.perMetre();
+    // Prone, the long gun lies nearly flat along the line between her hands
+    // (the crawl's hands rise and fall, the gun does not dig into the floor).
+    auto lay=l;if(state.prone){Point3 d=l.grip-r.grip;d.y*=.15f;lay.grip=r.grip+d;}
+    auto gun=pistol?ClaireOutside::fitPistol(r,socket,metre):ClaireOutside::fitLongGun(r,lay,socket,shotgunSocket(true),{0,0,-1},metre/std::max(.01f,m_weaponMesh.maximum.z-m_weaponMesh.minimum.z));
+    // A reload or a stagger takes the left hand away: the shotgun then stays as
+    // it last sat in the right.
+    const bool bothHands=!game.reloading()&&layerClip!=ClaireClip::HitReaction&&!state.prone;
+    if(!pistol&&!state.prone){if(bothHands)m_claireOutside.rememberInRightHand(r,gun);else m_claireOutside.gunFromRightHand(r,gun);}
+    // The rifle clips space her hands for a longer gun: her left hand is drawn
+    // back along the gun onto the pump's wood (z -2.85 to -1.65 of the model),
+    // the arm bending to reach it. Both hands on the pistol, the left closes
+    // round the grip's left side. Reloading, the left hand is the clip's own.
+    {const Point3 d=l.grip-gun.origin;const float z=(d.x*gun.z.x+d.y*gun.z.y+d.z*gun.z.z)/gun.scale+socket.z;
+     const bool support=bothHands&&(pistol?layerClip==ClaireClip::PistolAim||layerClip==ClaireClip::PistolShoot:true);
+     if(support){const Point3 aim=pistol?socket+Point3{.034f,-.004f,.004f}:Point3{shotgunSocket(true).x,shotgunSocket(true).y,std::clamp(z,-2.85f,-1.65f)};
+      m_claireOutside.reachLeft(mesh,ClaireOutside::place(gun,socket,aim));}
+     // The shotgun's reload: her left hand goes down to the shells at her left
+     // hip and up into the loading port under the receiver, once a shell.
+     else if(!pistol&&game.reloading()&&layerClip!=ClaireClip::HitReaction){
+      const float cycle=std::fmod(game.reloadProgress()*3.f,1.f),up=cycle<.35f?0.f:cycle<.75f?(cycle-.35f)/.4f:1.f,ease=up*up*(3-2*up);
+      const Point3 hip=m_claireOutside.centroid(ClaireOutside::Pelvis,true)+Point3{.17f,-.02f,.08f}*metre,port=ClaireOutside::place(gun,socket,{0,.55f,.35f});
+      m_claireOutside.reachLeft(mesh,hip+(port-hip)*ease);}}
+    heldGun=gun;heldSocket=socket;
+   }
+   m_bodyClip=-1;m_bodyBlendStart=-1;
+  }else{m_outsideKey=-1;
   if(clip!=m_bodyClip){if(m_bodyClip>=0){m_bodyFrom=mesh.triangles;m_bodyBlendStart=now;}m_bodyClip=clip;}
   mesh.poseCreature(clip,phase);
   const float blend=m_bodyBlendStart<0?1.f:std::clamp((now-m_bodyBlendStart)/.2f,0.f,1.f);
   if(blend<1&&m_bodyFrom.size()==mesh.triangles.size())for(size_t f=0;f<mesh.triangles.size();++f)for(int v=0;v<3;++v){auto&p=mesh.triangles[f].v[v].p;const auto&q=m_bodyFrom[f].v[v].p;p=q+(p-q)*blend;}
   else m_bodyBlendStart=-1;
+  }
   // Stand her on the player's feet as tall as the game's other people (1.7 m,
   // an actor's authored size), a hand's width behind the eye.
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
@@ -3301,8 +3357,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // In first person her animated head sits just behind the eye, wherever the
   // clip carries it (the rifle stance leans, a kneel sits back on the heel),
   // so her legs fall under and behind the view instead of out in front of it.
-  // From outside she stands a hand's width behind the player's position.
-  Vec2 at=state.pos-forward*.14f;const float feet=state.z;
+  // From outside she stands on the player's position itself.
+  Vec2 at=outside?state.pos:state.pos-forward*.14f;const float feet=state.z;
   if(!m_bodyOutside){Point3 head{};int count=0;for(size_t f=0;f<mesh.triangles.size()&&f<m_claireHeadFace.size();++f)if(m_claireHeadFace[f])for(const auto&v:mesh.triangles[f].v){head=head+v.p;++count;}
    if(count){head=(head*(1.f/count)-center)*scale;const Vec2 side{std::sin(angle),-std::cos(angle)};at=state.pos-forward*.10f-forward*head.z-side*head.x;}}
   Point3 receiver{at.x,at.y,feet+.85f};
@@ -3341,13 +3397,53 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
    if(hiddenHere)continue;
+   if(outside&&f<m_claireHeadFace.size()&&m_claireHeadFace[f])++m_outsideReport.headFaces;
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
    tri(face.v[0],face.v[1],face.v[2],m_claireTextures[m_claireFaceTexture[f]],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));
   }
-  // From outside, the gun she carries sits in her right hand and points at
-  // her left (the rifle hold every clip shares).
-  if(m_bodyOutside&&!game.dead()&&game.equippedWeapon()!=WeaponId::Fists){
+  // From outside, the world gun is fitted to her hands as the skin has them
+  // (ClaireOutside::fitLongGun, fitPistol): the shotgun's trigger socket in her
+  // right fist and its pump in her left, the pistol in her right fist along
+  // the forearm. The shotgun is a real 870's length (0.95 m), the pistol the
+  // carriers' own. A torch, when she has one, rides the gun's right side.
+  if(outside){
+   auto world=[&](Point3 p){p=(p-center)*scale;return Point3{at.x+p.z*std::cos(angle)+p.x*std::sin(angle),at.y+p.z*std::sin(angle)-p.x*std::cos(angle),feet+p.y+range.y*scale*.5f+.01f};};
+   auto&report=m_outsideReport;report.scale=scale;report.floorGap=(m_claireOutside.lowestPublished()-mesh.minimum.y)*scale+.01f;
+   report.feet[0]=world(m_claireOutside.centroid(ClaireOutside::FootLeft));report.feet[1]=world(m_claireOutside.centroid(ClaireOutside::FootRight));
+   const auto r=m_claireOutside.hand(0),l=m_claireOutside.hand(1);
+   if(held){
+    const bool pistol=held==2;const Point3 socket=heldSocket;const auto&gun=heldGun;
+    report.gripRight=world(r.grip);report.gripLeft=world(l.grip);
+    // The support hand against the gun: the shotgun's pump (its wood spans
+    // z -3.0 to -1.5 of the model, on the support socket's line) or, both hands
+    // on the pistol, its grip.
+    {const Point3 d=l.grip-gun.origin;const Point3 local{(d.x*gun.x.x+d.y*gun.x.y+d.z*gun.x.z)/gun.scale,(d.x*gun.y.x+d.y*gun.y.y+d.z*gun.y.z)/gun.scale,(d.x*gun.z.x+d.y*gun.z.y+d.z*gun.z.z)/gun.scale};
+     const Point3 model=local+socket;
+     if(pistol){const Point3 g=model-socket;report.handGap=std::sqrt(g.x*g.x+g.y*g.y+g.z*g.z)*gun.scale*scale;}
+     else{const Point3 support=shotgunSocket(true);report.supportGap=std::hypot(model.x-support.x,model.y-support.y)*gun.scale*scale;report.supportAlong=model.z;}}
+    if(outsideAimed>0){const float c=gun.bore.x*outsideAim.x+gun.bore.y*outsideAim.y+gun.bore.z*outsideAim.z;report.aimError=std::acos(std::clamp(c,-1.f,1.f))*180.f/kPi;}
+    const auto&gunMesh=pistol?m_handgunMesh:m_weaponMesh;const auto&gunTexture=pistol?m_handgunTexture:m_weaponTexture;
+    for(auto face:gunMesh.bindTriangles()){if(!pistol&&face.part==3)continue;
+     for(auto&v:face.v)v.p=world(ClaireOutside::place(gun,socket,v.p));
+     std::swap(face.v[1],face.v[2]);
+     {bool near=false;for(const auto&v:face.v){Point3 d=v.p-eye;near=near||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}if(near)continue;}   // as her body, past the lens
+     Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
+     selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
+     tri(face.v[0],face.v[1],face.v[2],gunTexture,.75f+.3f*std::fabs(n.z)/std::max(.001f,len));}
+    if(game.hasFlashlight()){
+     // The torch: a short dark tube on the gun's right, its lens toward the muzzle.
+     const Point3 bore=gun.bore,side=gun.x*(pistol?-1.f:1.f),top=gun.y;const float radius=pistol?.014f:.018f,length=pistol?.09f:.13f;
+     const Point3 base=pistol?ClaireOutside::place(gun,socket,{0,.006f,.06f})+top*(-.012f/std::max(.001f,scale)):ClaireOutside::place(gun,socket,shotgunSocket(true))+side*(.035f/std::max(.001f,scale))+top*(.01f/std::max(.001f,scale));
+     const float r=radius/std::max(.001f,scale),len=length/std::max(.001f,scale);
+     for(int k=0;k<8;++k){const float a0=k*kPi/4,a1=(k+1)*kPi/4;
+      const Point3 o0=side*std::cos(a0)*r+top*std::sin(a0)*r,o1=side*std::cos(a1)*r+top*std::sin(a1)*r;
+      MeshVertex q[4]={{world(base+o0),0,0},{world(base+o1),1,0},{world(base+o1+bore*len),1,1},{world(base+o0+bore*len),0,1}};
+      tri(q[0],q[2],q[1],m_panelMetal,.6f);tri(q[0],q[3],q[2],m_panelMetal,.6f);
+      MeshVertex lens[3]={{world(base+bore*len),.5f,.5f},{world(base+o0+bore*len),0,0},{world(base+o1+bore*len),1,0}};tri(lens[0],lens[1],lens[2],m_panelMetal,game.flashlightOn()?2.2f:.5f);}}
+   }
+  }
+  else if(m_bodyOutside&&!game.dead()&&game.equippedWeapon()!=WeaponId::Fists){
    auto world=[&](Point3 p){p=(p-center)*scale;return Point3{at.x+p.z*std::cos(angle)+p.x*std::sin(angle),at.y+p.z*std::sin(angle)-p.x*std::cos(angle),feet+p.y+range.y*scale*.5f+.01f};};
    const Point3 grip=world(mesh.poseAnchor(0)),support=world(mesh.poseAnchor(1));
    auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-5f?v*(1/l):Point3{1,0,0};};
@@ -3398,6 +3494,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
         {(right-left)*.45f,(far-near)*.45f},{left+game.elapsed()*.014f,near-game.elapsed()*.008f});
   }
  }
+ // The air's own stuff: smoke, steam, dust, debris, drips, fire and gas (Particles.cpp). Last, so on the
+ // CPU path every blended card lies over the room it hangs in. Lit at its corners as moving geometry
+ // (from in front and from behind, so it glows in a lamp's shaft); out of view or behind an occluder
+ // is asked once a source.
+ if(!m_staticGeometryBuild){
+  Particles::View airView;airView.eye=eye;airView.forward=flashForward;airView.pixel=1.f/projection.focal(float(m_width));airView.level=level;airView.now=game.elapsed();
+  const bool moving=movingGeometry;movingGeometry=true;
+  Particles::draw(particleMemory(),game,airView,
+   [&](const MeshVertex*q,const Texture&t,float light,const CardLook&look){objectLighting=true;objectLight=1;objectNormalLighting=nullptr;m_card=look;tri(q[0],q[1],q[2],t,light);tri(q[0],q[2],q[3],t,light);m_card={};objectLighting=false;},
+   // Asked as a fixed surface would be (the chunk's lighting cache keeps it, lamps' switching and flicker
+   // and the flashlight and muzzle flash still added fresh), facing the nearest axis toward the eye, so a
+   // patch of air is worked out once rather than every frame.
+   [&](Point3 p,Point3 n){const float ax=std::fabs(n.x),ay=std::fabs(n.y),az=std::fabs(n.z);const Point3 axis=ax>=ay&&ax>=az?Point3{n.x<0?-1.f:1.f,0,0}:ay>=az?Point3{0,n.y<0?-1.f:1.f,0}:Point3{0,0,n.z<0?-1.f:1.f};
+    const bool was=movingGeometry;movingGeometry=false;const float l=illumination(p,axis);movingGeometry=was;return l;},
+   [&](Point3 lo,Point3 hi){const Point3 half=(hi-lo)*.5f;return sphereVisible(lo+half,std::sqrt(half.x*half.x+half.y*half.y+half.z*half.z))&&!hidden(lo,hi);});
+  movingGeometry=moving;}
  // A single camera-facing tapered sheet gives each lamp a readable shaft.
  // Multiple crossed sheets overlap into distracting round bright patches.
  if(!m_gpuFrame&&!w.outdoors()){

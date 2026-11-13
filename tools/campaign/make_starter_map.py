@@ -19,6 +19,11 @@ with a clear corridor down the west side joining the rows:
   MODELS      every fixture model by set; buildings over 7.5 m shown scaled down
   OUTDOORS    under the model rows: ground paints, terrain, a grove, then the SEAMS
               between maps, north-south and east-west, signed with their open flags
+  SHOWCASE    under the rooms, east of Props: DOORS (axes, hinges, leaves, locks, a door
+              a Brute beats down), PARTICLES (every EMITTER preset on a switch), LIGHT
+              (colour bleed, metals, glass, water, a corner lit by bounce, crystals), THE
+              DEAD AND BLOOD (bodies that settle, a creature of each fluid), MACHINE,
+              PREDATOR (a hunter and its prey), SOUND (AMBIENT, REVERB, music cues)
 
 Writes "custom maps/Starter Map.rmc" by default. The file is also the worked
 example for custom maps/GUIDE.html (tools/campaign/make_custom_map_guide.py).
@@ -254,7 +259,7 @@ class Starter:
             out.append('|'.join(f(v) for v in ['MAP', i, 'Starter Map / ' + m['name'], 24 * c, 24 * r, spawn[0], spawn[1], 0,
                                                 int(m['outdoor']), m['ceiling'], m['ambient'],
                                                 'brutal_wasteland' if m['outdoor'] else 'industrial_night',
-                                                int(north), int(south), int(west), int(east), 0, -1, 0, 0, spawn[2], 0, 0,
+                                                int(north), int(south), int(west), int(east), 0, -1, 0, m.get('music', 0), spawn[2], 0, 0,
                                                 *m.get('haze', ('', '', '', '') if 'wetness' in m else ()),
                                                 *((m['wetness'],) if 'wetness' in m else ())]))
             if m['surface'] is not None:
@@ -526,6 +531,7 @@ def build():
     scripts(s)                  # built after the rest so every earlier map keeps its number
     architecture(s)
     architecture_2(s)
+    showcase(s, slot, catalogue)
     building(s, slot, catalogue)
     return s
 
@@ -612,6 +618,450 @@ def architecture_2(s):
     prim('dome', 13.2, 17.0, 0, 0, 0, 0, 0, 42, 'half ellipsoid')
     prim('core', 19.6, 17.0, 0, 0, 0, 5.0, 2, 41, 'tower shaft, 2.2 m door', sx=16.6, sy=14.4)
     prim('bridge', 6.0, 21.5, 0, 2.4, 0, 2.6, 1, 41, 'walk-through span', sx=11.2, sy=20.6)
+
+
+SHOW = 0xe07838                  # the showcase's signs: orange, against the museum rows' own colours
+FLUIDS = {'blood': 0xc02626, 'goo': 0x94a833, 'ichor': 0x2c98a8, 'oil': 0x8a7a64}
+AISLE = range(10, 14)            # the showcase's through aisle: tiles y 10-13 open in every map's east and west wall
+
+
+def showcase(s, slot, catalogue):
+    """SHOWCASE, the row under the rooms (in the courtyard the forest used to fill): the engine's
+    newer systems, each one working, on a switch where it needs one. West to east, entered from
+    Props: DOORS, PARTICLES, LIGHT, THE DEAD AND BLOOD, MACHINE, PREDATOR, SOUND, and the DEAD
+    ROOM south of Sound. One aisle (y 10-14) runs through them all; their north edges stay shut
+    on the rooms above, so every room keeps its own walls. Creatures sleep until a switch or a
+    wound wakes them."""
+    rooms = {}
+
+    def room(name, col, title, row=1, title_box=(0, 9, 3, 15), **kw):
+        m = s.new_map(name, col, row, **kw)
+        rooms[name] = m
+        above = (m['col'], m['row'] - 1)
+        for other in s.maps:                                  # shut on the rooms row and the model rows,
+            if (other['col'], other['row']) in (above, (m['col'], m['row'] + 1)) and other['name'] in KEEP_SHUT:
+                s.closed.add(frozenset(((m['col'], m['row']), (other['col'], other['row']))))
+        if row == 1:                                          # open only along the aisle, east and west
+            m['walls'] |= {(x, y) for x in (0, 23) for y in range(24) if y not in AISLE}
+        s.zone(m, *title_box, '', title)
+        return m
+
+    def tiles(x1, y1, x2, y2):
+        return {(x, y) for x in range(x1, x2 + 1) for y in range(y1, y2 + 1)}
+
+    def label(m, cx, y, title, sub, facing, width=1.4, accent=SHOW):
+        """A post sign: facing 'S' reads from the south (+y), 'N' from the north."""
+        if facing == 'S':
+            s.struct(m, cx - width / 2, y, cx + width / 2, y + .06, 0, .55, 20)
+            s.sign(m, cx, y + .07, .34, width - .06, .3, title, sub, accent, 0)
+        else:
+            s.post_sign(m, cx, y, title, sub, accent, width)
+
+    def plate(m, x, y, z, w, h, title, sub, facing, accent=SHOW):
+        """A sign on a wall face, reading toward `facing` (N, S, E or W)."""
+        s.sign(m, x, y, z, w, h, title, sub, accent, {'S': 0, 'N': PI, 'W': -HALF, 'E': HALF}[facing])
+
+    def switch(m, x, y, facing, title, line1, line2, state, toggle=1):
+        """A control TERMINAL; its screen faces `facing`. A terminal's yaw points the other way from a sign's."""
+        s.rec(m, 'TERMINAL', m['index'], x, y, 0, 1, title, line1, line2, state, toggle, '', {'S': PI, 'N': 0, 'E': -HALF, 'W': HALF}[facing])
+
+    def exhibit(m, box, zone, title, name, x=None, y=None):
+        x1, y1, x2, y2 = box
+        s.zone(m, x1, y1, x2, y2, zone)
+        s.index.append({'map': m['index'], 'section': 'SHOWCASE', 'x': round((x1 + x2) / 2 if x is None else x, 2),
+                        'y': round((y1 + y2) / 2 if y is None else y, 2), 'title': title, 'name': name})
+
+    def model(m, name, x, y, base, scale=1.0, yaw=None, solid=1, facing='N'):
+        """A catalogue model at its own size; yaw None turns its front to `facing` (the museum's
+        fronts face north, so south is a half turn more)."""
+        w, d, h = catalogue[name]
+        h = max(h, .005)                                      # the id card is a few millimetres thick
+        if yaw is None:
+            yaw = next(y0 for sl, n, *_, y0 in models() if n == name) + (PI if facing == 'S' else 0)
+        s.rec(m, 'FIXTURE', m['index'], slot[name], x, y, base, w * scale, d * scale, h * scale, yaw, solid)
+
+    def clock(m, name):
+        """A looping minute for a map's ACTOR tracks, as in Life."""
+        s.rec(m, 'TIMED_SEQUENCE', m['index'], name, name + '_done', 0, 0, 24, 24, -100, 100, 60000, 60000, 0, 0, 0, 0, 1, 1)
+
+    def actor(m, timer, k, visual, x, y, z, yaw, dead):
+        """ACTOR k: two keys at one spot. dead: clip 4 at its end (phase 1), a body the renderer lays
+        down as a ragdoll and lets settle the first time it is seen; otherwise standing idle."""
+        s.rec(m, 'ACTOR', m['index'], timer, visual, 1.75, 0, 0, k)
+        s.rec(m, 'ACTOR_KEY', m['index'], k, 0, x, y, z, yaw, 4 if dead else 0, 1 if dead else 0)
+        s.rec(m, 'ACTOR_KEY', m['index'], k, 60000, x, y, z, yaw, 4 if dead else 0, 1)
+
+    def event(m, name, box, actions, gates=(), where='box', repeat=0):
+        x1, y1, x2, y2 = box
+        s.rec(m, 'SCRIPT_EVENT', m['index'], name, x1, y1, x2, y2, -1, 5, '', 1, 0)
+        for g in gates:
+            s.rec(m, 'SCRIPT_REQUIRE', m['index'], name, *g)
+        if (where, repeat) != ('box', 0):
+            s.rec(m, 'SCRIPT_TRIGGER', m['index'], name, where, 'all', repeat)
+        for a in actions:
+            s.rec(m, 'SCRIPT_ACTION', m['index'], name, *a)
+
+    # ---- DOORS: every leaf, hinge, axis and lock, and one a Brute beats down ----------------------
+    m = room('Showcase Doors', 1, 'SHOWCASE: DOORS')
+    i = m['index']
+    # North: five closets (x 1-4, 6-9, 11-14, 16-19, 21-22), a door along X into each from the aisle,
+    # and doors along Y in the walls between the first four.
+    m['walls'] |= {(x, 8) for x in range(1, 23) if x not in (2, 3, 7, 8, 12, 13, 17, 18, 21, 22)}
+    m['walls'] |= {(x, y) for x in (5, 10, 15, 20) for y in range(1, 8) if not (x < 20 and y in (3, 4))}
+    # South: four stores behind locked doors (x 1-5, 7-11, 13-17) and the Brute's pen (x 19-22).
+    m['walls'] |= {(x, 15) for x in range(1, 23) if x not in (2, 3, 8, 9, 14, 15, 20, 21)}
+    m['walls'] |= {(x, y) for x in (6, 12, 18) for y in range(16, 23)}
+
+    def door(left, right, y, swinging=0, state='', value='', swing='', open_='', leaf='', label_='', locked='',
+             axis='', hinge='', strength='', lock=''):
+        # DOOR|map|left|right|y|z|entry|transfer|swinging|clear|sign|state|value|control|swing|maxOpen|open|opening|
+        #      leaf|label|locked|axis|hinge|strength|lock
+        s.rec(m, 'DOOR', i, left, right, y, 0, 0, 0, swinging, 0, 0, state, value, '', swing, '', open_, '',
+              leaf, label_, locked, axis, hinge, strength, lock)
+
+    along_x = [(2, 'SLIDING', 'swinging 0, leaf 0', dict(label_='SLIDING DOOR')),
+               (7, 'GRILLE', 'leaf 1: see and hear through', dict(leaf=1, label_='GRILLE GATE')),
+               (12, 'HINGE LEFT', 'swing 1: opens into the aisle', dict(swinging=1, swing=1, label_='HINGED LEFT')),
+               (17, 'HINGE RIGHT', 'hinge 1, swing -1, leaf 2 panel', dict(swinging=1, swing=-1, hinge=1, leaf=2, label_='PANEL, HINGED RIGHT')),
+               (21, 'AJAR', 'open 0.4: starts ajar', dict(swinging=1, swing=1, open_=.4, label_='AJAR'))]
+    for x, title, sub, kw in along_x:
+        door(x, x + 2, 8.5, **kw)
+        plate(m, x + 1, 9.02, 2.7, 1.9, .36, 'DOOR ' + title, sub, 'S')
+        exhibit(m, (x - .5, 6.5, x + 2.5, 10.5), 'DOOR along X / %s / %s' % (title.lower(), sub), 'DOOR ' + title, sub, x + 1, 8.5)
+    along_y = [(5, 'SLIDING ALONG Y', 'axis 1: a wall running N-S', dict(label_='SLIDING, ALONG Y')),
+               (10, 'Y, HINGE LEFT', 'axis 1, swing 1: opens east', dict(swinging=1, swing=1, label_='ALONG Y, HINGED LEFT')),
+               (15, 'Y, HINGE RIGHT', 'axis 1, hinge 1, swing -1: west', dict(swinging=1, swing=-1, hinge=1, label_='ALONG Y, HINGED RIGHT'))]
+    for x, title, sub, kw in along_y:
+        door(3, 5, x + .5, axis=1, **kw)
+        plate(m, x - .02, 4, 2.7, 1.9, .36, 'DOOR ' + title, sub, 'W')
+        exhibit(m, (x - 1.5, 2, x + 2.5, 6), 'DOOR along Y / %s' % sub, 'DOOR ' + title, sub, x + .5, 4)
+    # The locks, each with what opens it in front of its door.
+    door(2, 4, 15.5, 1, 'sc_keycard', 1, 1, label_='STORE A', locked='KEYCARD READER / FIND THE CARD', lock=1)
+    door(8, 10, 15.5, 1, 'sc_key', 1, 1, label_='STORE B', locked='KEY CYLINDER / THE KEY IS ON THE BOARD', lock=2)
+    door(14, 16, 15.5, 1, 'sc_door_power', 1, 1, label_='STORE C', locked='POWER RELEASE / NO POWER', lock=3)
+    plate(m, 3, 14.98, 2.7, 1.9, .36, 'LOCK 1: KEYCARD', 'the card is on the desk', 'N')
+    plate(m, 9, 14.98, 2.7, 1.9, .36, 'LOCK 2: KEY', 'the key is on the board', 'N')
+    plate(m, 15, 14.98, 2.7, 1.9, .36, 'LOCK 3: POWER', 'the switch powers the release', 'N')
+    model(m, 'desk', 5.3, 14.6, 0)
+    model(m, 'item_id_card', 5.1, 14.55, .75, 1.6, solid=0)
+    event(m, 'sc_take_card', (4.6, 13.75, 6.0, 14.25), [('ITEM', 'keycard', 1), ('STATE', 'sc_keycard', 1),
+                                                       ('MESSAGE', 'KEYCARD TAKEN: STORE A READS IT (LOCK 1)', 4)])
+    s.struct(m, 10.4, 14.86, 11.6, 15, 1.1, 1.8, 12)                           # the key board, a key on its hook
+    s.struct(m, 10.95, 14.8, 11.05, 14.86, 1.32, 1.5, 19)
+    event(m, 'sc_take_key', (10.1, 13.4, 11.9, 14.8), [('STATE', 'sc_key', 1), ('MESSAGE', 'KEY TAKEN: IT TURNS STORE B (LOCK 2)', 4)])
+    plate(m, 11, 14.84, 2.05, 1.1, .28, 'KEY BOARD', 'walk up: take the key', 'N')
+    model(m, 'pwr_breaker_lever', 17.4, 14.88, 1.2, facing='N', solid=0)
+    switch(m, 17.4, 13.9, 'N', 'DOOR POWER', 'POWERS STORE C\'S RELEASE (LOCK 3).', 'E: ON / OFF. THE LAMP OVER IT GOES GREEN.', 'sc_door_power')
+    s.rec(m, 'LIGHT', i, 15, 14.3, 3.85, 0, 0, .8, 4, 6500, 0, 'sc_door_power', 1, 0, '', '', '', '', '', '', '', '', .1, 1, .2)
+    for x, kind, what in ((3.5, 0, 'keycard'), (9.5, 1, 'key'), (15.5, 2, 'power')):
+        s.rec(m, 'PICKUP', i, kind, x, 19)
+        plate(m, x, 22.98, 1.6, 1.6, .32, 'OPENED', 'by the ' + what, 'N')
+    exhibit(m, (1, 12.5, 6.3, 15), 'LOCK 1 KEYCARD / the card on the desk', 'LOCK 1 KEYCARD', 'desk, store A', 3, 15.5)
+    exhibit(m, (7, 12.5, 12, 15), 'LOCK 2 KEY / the key on the board', 'LOCK 2 KEY', 'key board, store B', 9, 15.5)
+    exhibit(m, (13, 12.5, 18.3, 15), 'LOCK 3 POWER / DOOR POWER switch', 'LOCK 3 POWER', 'switch, store C', 15, 15.5)
+    # The Brute's pen: a door that gives (strength 90, five blows), barred so only it opens it.
+    # A grille leaf (1): it sees you through the bars, which is what sets it on the door.
+    door(20, 22, 15.5, 1, NEVER, 1, -1, leaf=1, label_='PEN', locked='BARRED / SOMETHING IS IN THERE', strength=90)
+    s.rec(m, 'CREATURE', i, 2, 21, 17.4, 0, '', 140, 'sc_brute_wake')
+    switch(m, 19.9, 9.5, 'S', 'WAKE THE BRUTE', 'IT WAKES AND COMES FOR YOU: THE PEN DOOR IS', 'STRENGTH 90. STAND BACK AND WATCH IT GIVE.', 'sc_brute_wake', 0)
+    plate(m, 21, 14.98, 2.7, 2.0, .36, 'BREAKABLE: STRENGTH 90', 'a Brute beats it down', 'N')
+    exhibit(m, (18.5, 12.5, 23, 15), 'DOOR strength 90 / a Brute behind it', 'DOOR STRENGTH', 'Brute batters through', 21, 15.5)
+    # The way in: the console's over-the-shoulder camera.
+    plate(m, 5.5, 9.02, 2.0, 2.6, .55, 'CONSOLE: THIRDPERSON', 'over the shoulder; ~ opens console', 'S')
+    plate(m, 1.0, 9.02, 1.8, 1.5, .4, 'SHOWCASE', 'new systems, east from here', 'S')
+    exhibit(m, (0, 9, 7, 15), 'SHOWCASE / console THIRDPERSON: 3rd person', 'THIRDPERSON', 'console command', 5.5, 9)
+
+    # ---- PARTICLES: one plinth per EMITTER preset (CampaignKit.h), each on its own switch ----------
+    m = room('Showcase Particles', 2, 'SHOWCASE: PARTICLES', ceiling=5.0)
+    i = m['index']
+
+    def emitter(name, x, y, z, drift, rise, life, radius, growth, count, kind, strength, period='', on=''):
+        # EMITTER|map|x|y|z|driftX|driftY|rise|rate|radius|growth|count|kind|strength|state|value|invert|period|onTime|phase:
+        # on unless its switch sets the state (invert 1).
+        s.rec(m, 'EMITTER', i, x, y, z, drift[0], drift[1], rise, round(1 / life, 4), radius, growth, count, kind, strength,
+              'sc_fx_' + name, 1, 1, period, on, '')
+
+    north = [('steam_leak', 'STEAM LEAK', 'kind 2: a weeping joint'), ('steam_jet', 'STEAM JET', 'kind 2: a burst main'),
+             ('smoke', 'SMOKE COLUMN', 'kind 1: from a burn barrel'), ('sparks', 'SPARK SHOWER', 'kind 3: every 3 s'),
+             ('dust', 'DUST MOTES', 'kind 4: in a lamp shaft'), ('drips', 'DRIPS', 'kind 6: from the ceiling'),
+             ('timed', 'TIMED WINDOW', 'period 4 s, on 1.5 s')]
+    south = [('spray', 'SPRAY', 'kind 7: a split pipe'), ('fire', 'FIRE', 'kind 8: flames, embers, smoke'),
+             ('toxic', 'TOXIC POOL', 'kind 9: gas lying low'), ('grit', 'CEILING GRIT', 'kind 5: debris from a crack'),
+             ('arc', 'ARC GLOW', 'kind 10: round a live lead'), ('plume', 'PLUME', 'kind 0: the old plume')]
+    for band, items, cy in (('N', north, 4.4), ('S', south, 19.6)):
+        for k, (name, title, sub) in enumerate(items):
+            cx = 3.67 + k * 2.94
+            s.struct(m, cx - 1.1, cy - 1.1, cx + 1.1, cy + 1.1, 0, .04, 13)
+            if band == 'N':
+                label(m, cx - .2, cy + 1.25, title, sub, 'S', 1.5)
+                switch(m, cx + .95, 7.0, 'S', title, 'EMITTER kind, strength, state gate.', 'E: OFF / ON (sc_fx_%s)' % name, 'sc_fx_' + name)
+                exhibit(m, (cx - 1.47, 1, cx + 1.47, 7.2), 'EMITTER / %s / %s' % (title.lower(), sub), title, sub, cx, cy)
+            else:
+                label(m, cx - .2, cy - 1.25, title, sub, 'N', 1.5)
+                switch(m, cx + .95, 17.0, 'N', title, 'EMITTER kind, strength, state gate.', 'E: OFF / ON (sc_fx_%s)' % name, 'sc_fx_' + name)
+                exhibit(m, (cx - 1.47, 16.8, cx + 1.47, 23), 'EMITTER / %s / %s' % (title.lower(), sub), title, sub, cx, cy)
+            # The presets, with CampaignKit.h's numbers: life is 1/rate.
+            if name == 'steam_leak':
+                s.rec(m, 'PIPE', i, cx - .45, cy, cx - .45, cy, 0, .09, 3.2, 2)
+                emitter(name, cx - .35, cy, 1.3, (.9, -.2), .25, 1.8, .04, .5, 32, 2, .7)
+            elif name == 'steam_jet':
+                s.rec(m, 'PIPE', i, cx - .9, cy - .3, cx - .9, cy - .3, 0, .11, 3.2, 3)
+                emitter(name, cx - .78, cy - .3, 1.0, (1.6, 0), .35, 1.1, .05, .7, 34, 2, 1)
+            elif name == 'smoke':
+                model(m, 'scrap_burn_barrel', cx, cy, .04)
+                emitter(name, cx, cy, .92, (.15, .08), 2.5, 6, .25, 1.3, 22, 1, .7)
+            elif name == 'sparks':
+                s.struct(m, cx - .05, cy - .5, cx + .05, cy - .4, .04, 1.9, 2)
+                model(m, 'pwr_breaker_panel_open', cx, cy - .24, 1.3, 1.4, facing='S', solid=0)
+                emitter(name, cx, cy - .05, 1.5, (0, .7), .4, 3, .01, 0, 24, 3, 1)
+            elif name == 'dust':
+                emitter(name, cx, cy, .1, (.9, .9), 3.0, 12, .013, .004, 40, 4, .8)
+                s.rec(m, 'LIGHT', i, cx, cy, 4.85, 0, 0, 1.7, 6, 4500)
+            elif name == 'drips':
+                emitter(name, cx, cy, 4.95, (0, 0), 0, 2, .008, 0, 2, 6, 1)
+                s.rec(m, 'WATER', i, cx - .6, cy - .6, cx + .6, cy + .6, .04, .07, .3)
+            elif name == 'timed':
+                s.struct(m, cx - .3, cy - .3, cx + .3, cy + .3, .04, .07, 7)
+                emitter(name, cx, cy, .1, (0, 0), 2.4, 1.1, .05, .7, 34, 2, 1, 4, 1.5)
+            elif name == 'spray':
+                s.rec(m, 'PIPE', i, cx - .5, cy, cx - .5, cy, 0, .09, 3.2, 0)
+                emitter(name, cx - .4, cy, 1.1, (.4, 1.0), .3, 1.2, .04, .45, 24, 7, .8)
+            elif name == 'fire':
+                s.struct(m, cx - .45, cy - .45, cx + .45, cy + .45, .04, .12, 8)
+                emitter(name, cx, cy, .12, (0, 0), .6, 1, .3, .6, 20, 8, 1)
+                s.rec(m, 'LIGHT', i, cx, cy, .9, 2, 0, 1.0, 5, 1900, 0, 'sc_fx_fire', 1, 1, '', '', '', .45)
+            elif name == 'toxic':
+                emitter(name, cx, cy, .04, (1.0, 1.0), .5, 7, .3, .8, 6, 9, .8)
+            elif name == 'grit':
+                emitter(name, cx, cy, 4.95, (0, 0), 0, 2, .02, 0, 20, 5, .8)
+            elif name == 'arc':
+                for x in (cx - .8, cx + .7):
+                    s.struct(m, x, cy - .05, x + .1, cy + .05, .04, 1.0, 2)
+                s.rec(m, 'LEAD', i, cx - .7, cy, .95, cx + .7, cy, .95, 1.6, .008, 8, 1)
+                emitter(name, cx, cy, .7, (0, 0), .3, 1.2, .3, .1, 8, 10, .8)
+            elif name == 'plume':
+                emitter(name, cx, cy, .3, (.2, .1), 2.4, 1 / .3, .1, .5, 7, 0, 1)
+    # A barrel tile (ROW "B") to shoot: the blast throws its smoke and debris.
+    m.setdefault('tiles', {})[(21, 19)] = 'B'
+    s.struct(m, 20, 18, 23, 21.8, 0, .02, 13)
+    label(m, 20.6, 17.85, 'ROW "B": SHOOT IT', 'blast smoke and debris; stand back', 'N', 2.0)
+    exhibit(m, (19.8, 16.8, 23, 23), 'ROW "B" barrel / shoot it: blast smoke', 'BARREL', 'blast smoke and debris', 21.5, 19.5)
+
+    # ---- LIGHT: probes and reflections, a dark corner lit only by bounce ------------------------------
+    m = room('Showcase Light', 3, 'SHOWCASE: LIGHT', ambient=.1)
+    i = m['index']
+    m['lights'] = False
+    m['haze'] = (.05, .055, .065, .012)
+    m['wetness'] = .35                      # a damp sheen on the tiles: every lamp in the floor
+    s.struct(m, 1, 1, 23, 23, 0, .02, 50)  # polished floor tile throughout
+    for x in (6, 12, 18):
+        s.rec(m, 'LIGHT', i, x, 11.6, 3.85, 0, 0, .9, 7, 3400)
+    # Colour bleed: a red gel lamp in a white booth; the white walls and the block take the red.
+    s.struct(m, 1, 1, 7, 1.25, 0, 4, 27)
+    s.struct(m, 1, 1.25, 1.25, 7.5, 0, 4, 27)
+    s.struct(m, 6.75, 1.25, 7, 7.5, 0, 4, 27)
+    s.struct(m, 1.25, 1.25, 6.75, 7.5, 0, .03, 27)
+    s.struct(m, 4.2, 3.2, 5.2, 4.2, 0, 1.1, 27)
+    s.rec(m, 'LIGHT', i, 1.27, 3.4, 2.3, 1, 0, 1.8, 6, 3400, 0, '', '', '', '', '', '', '', '', '', '', '', 1, .08, .05)
+    label(m, 4, 7.65, 'COLOUR BLEED', 'red gel lamp on white walls', 'S', 1.8)
+    exhibit(m, (1, 1, 7, 8.5), 'LIGHT / colour bleed: a red gel on white', 'COLOUR BLEED', 'red gel, white walls', 4, 4)
+    # Steel and chrome: a steel wall, metal pillars and a steel table under one lamp.
+    s.struct(m, 8, 1, 15, 1.2, 0, 3.2, 2)
+    for k, mat in enumerate((20, 8, 19, 11)):
+        x = 9.1 + k * 1.6
+        s.struct(m, x - .3, 2.4, x + .3, 3.0, 0, 2.6, mat)
+    model(m, 'med_autopsy_table', 11.5, 5.2, .02, facing='S')
+    s.rec(m, 'LIGHT', i, 11.5, 4.4, 3.85, 0, 0, 1.4, 8, 5600)
+    label(m, 11.5, 7.65, 'STEEL AND CHROME', 'materials 2, 20, 8, 19, 11', 'S', 1.8)
+    exhibit(m, (8, 1, 15, 8.5), 'LIGHT / steel, pale steel, copper: specular', 'STEEL AND CHROME', 'metals under a lamp', 11.5, 4)
+    # Glass: two panes, one along each axis, with colour behind them.
+    s.struct(m, 16.5, 5.0, 21.5, 5.06, 0, 2.6, 17)
+    s.struct(m, 19, 1.5, 19.06, 4.6, 0, 2.6, 17)
+    for a in ((16.42, 4.97, 16.5, 5.09, 0, 2.68), (21.5, 4.97, 21.58, 5.09, 0, 2.68), (16.42, 4.97, 21.58, 5.09, 2.6, 2.68),
+              (16.5, 4.97, 21.5, 5.09, 0, .06), (18.97, 4.6, 19.09, 4.68, 0, 2.68), (18.97, 1.5, 19.09, 4.68, 2.6, 2.68),
+              (18.97, 1.5, 19.09, 4.6, 0, .06)):
+        s.struct(m, *a, 2)
+    s.struct(m, 17.2, 2.2, 18.2, 3.2, 0, 1.2, 14)
+    s.struct(m, 20, 2.2, 21, 3.2, 0, 1.6, 13)
+    s.rec(m, 'LIGHT', i, 19, 6.6, 3.85, 0, 0, 1.3, 8, 4000)
+    label(m, 19, 7.65, 'GLASS', 'material 17: see through it', 'S', 1.6)
+    exhibit(m, (16, 1, 22.5, 8.5), 'LIGHT / glass panes, material 17', 'GLASS', 'two panes', 19, 4)
+    # Standing water: clear (murk 0) beside dark (murk 0.85), a lamp over them and a blue one beyond.
+    for x1, x2, murk in ((1.5, 4.3, 0), (4.7, 7.5, .85)):
+        for a in ((x1, 17, x2, 17.15), (x1, 21.35, x2, 21.5), (x1, 17, x1 + .15, 21.5), (x2 - .15, 17, x2, 21.5)):
+            s.struct(m, *a, 0, .3, 5)
+        s.rec(m, 'WATER', i, x1 + .15, 17.15, x2 - .15, 21.35, .02, .24, murk)
+        label(m, (x1 + x2) / 2, 16.85, 'WATER murk %g' % murk, 'clear coolant' if not murk else 'still, dark standing water', 'N', 1.6)
+    s.rec(m, 'LIGHT', i, 4.5, 19.2, 3.85, 0, 0, 1.3, 7, 4200)
+    s.rec(m, 'LIGHT', i, 4.5, 22.9, 2.0, 1, -HALF, .9, 6, 6500, 0, '', '', '', '', '', '', '', '', '', '', '', .2, .45, 1)
+    exhibit(m, (1, 15.5, 8, 23), 'LIGHT / WATER murk 0 and 0.85: reflections', 'STANDING WATER', 'murk 0 and 0.85', 4.5, 19)
+    # The dark corner: a white pocket behind a baffle, no lamp in it; the lamp outside lights the
+    # white wall and floor in front of it, and only their bounce gets in.
+    s.struct(m, 8.7, 16, 9, 23, 0, 4, 27)
+    s.struct(m, 11, 18.5, 11.3, 23, 0, 4, 27)
+    s.struct(m, 9, 16, 16, 16.3, 0, 4, 27)
+    s.struct(m, 9, 16.3, 16, 23, 0, .03, 27)
+    s.struct(m, 9.4, 21.4, 10.6, 22.6, 0, 1.0, 27)
+    s.rec(m, 'LIGHT', i, 14.5, 18, 3.85, 0, 0, 1.6, 4.5, 5000)
+    s.sign(m, 10, 16.32, 2.2, 1.9, .36, 'DARK CORNER', 'no lamp in it: bounce light only', SHOW, 0)
+    exhibit(m, (8.7, 16, 16, 23), 'LIGHT / a corner lit only by bounce', 'DARK CORNER', 'bounce light only', 10, 20)
+    # Resonance crystals (374-377) burning cyan on the rock they came up through (378-380).
+    model(m, 'res_rock_low', 19.4, 20.2, 0, 1.2)
+    model(m, 'res_rock_crag', 21.6, 18.4, 0)
+    model(m, 'res_rock_spire', 17.6, 21.6, 0)
+    model(m, 'res_crystal_l', 19.4, 20.3, .92 - .52 * .75, .75)
+    model(m, 'res_crystal_m', 21.6, 18.5, 1.2 - .34 * .7, .7)
+    model(m, 'res_crystal_s', 18.2, 19.4, 0, .9)
+    model(m, 'res_crystal_s', 20.9, 21.4, 0, .8)
+    model(m, 'res_crystal_wall', 17.4, 22.35, .3)
+    s.rec(m, 'LIGHT', i, 19.4, 19.2, 1.4, 2, 0, 1.5, 5, 9000, 0, '', '', '', '', '', '', '', '', '', '', '', .25, .85, 1)
+    s.rec(m, 'LIGHT', i, 21.2, 19.6, .9, 2, 0, .8, 3.5, 9000, 0, '', '', '', '', '', '', '', '', '', '', '', .3, .9, 1)
+    label(m, 19.4, 16.85, 'RESONANCE CRYSTALS', '#374-377 on rock #378-380', 'N', 1.9)
+    exhibit(m, (16.3, 15.5, 23, 23), 'LIGHT / resonance crystals 374-377, rock 378-380', 'RESONANCE CRYSTALS', 'cyan glow on rock', 19.4, 20)
+
+    # ---- THE DEAD AND BLOOD: bodies that settle, and a creature of each fluid to shoot ---------------
+    m = room('Showcase Dead and Blood', 4, 'SHOWCASE: THE DEAD AND BLOOD', ceiling=4.5)
+    i = m['index']
+    clock(m, 'sc_dead_clock')
+    # A steel table (top 0.8 on four legs), a body laid along its edge: he goes off it.
+    s.struct(m, 3, 2.6, 4, 6.4, .74, .8, 2)
+    for x, y in ((3.05, 2.65), (3.89, 2.65), (3.05, 6.29), (3.89, 6.29)):
+        s.struct(m, x, y, x + .06, y + .06, 0, .74, 2)
+    actor(m, 'sc_dead_clock', 0, 4, 4.05, 4.5, .8, HALF, True)
+    # A stair down toward the aisle, a body lying on it.
+    s.struct(m, 8, 2, 10, 4, 0, 1.2, 11)
+    s.rec(m, 'STAIR', i, 8, 4, 10, 7.5, 0, 1.2, 7, 1, 0)
+    actor(m, 'sc_dead_clock', 1, 0, 9, 5.4, .9, HALF, True)
+    # A step: a body lying across its edge, half on it.
+    s.struct(m, 13, 2.5, 16, 6.5, 0, .35, 5)
+    actor(m, 'sc_dead_clock', 2, 10, 16.0, 4.5, .35, 0, True)
+    # And one on the floor, for comparison.
+    actor(m, 'sc_dead_clock', 3, 14, 19.5, 4.5, 0, HALF, True)
+    for k, (cx, title, sub) in enumerate(((3.5, 'OVER A TABLE EDGE', 'ACTOR clip 4, phase 1'), (9, 'DOWN A STAIR', 'a body settles where it lies'),
+                                          (14.5, 'ACROSS A STEP', 'half on it, half off'), (19.5, 'ON THE FLOOR', 'the same body, flat'))):
+        label(m, cx, 7.75, title, sub, 'S', 2.0)
+        exhibit(m, (cx - 2.5, 1, cx + 2.5, 8.5), 'DEAD / %s / ragdoll settles' % title.lower(), title, sub, cx, 4.5)
+    # Pens: one creature of each fluid, asleep, light enough (60) to drop in a few rounds.
+    pens = [(4, 'MUTANT', 'blood'), (5, 'SNATCHER', 'blood'), (7, 'TRANSFORMED', 'blood'), (0, 'HUNTSMAN', 'goo'),
+            (1, 'WASP', 'goo'), (2, 'BRUTE', 'ichor'), (3, 'WARDEN', 'ichor'), (6, 'CHIMERA', 'ichor')]
+    for k, (kind, name, fluid) in enumerate(pens):
+        cx = 2.55 + k * 2.7
+        s.fence(m, cx - 1.3, 16.4, cx + 1.3, 22.6)
+        s.rec(m, 'CREATURE', i, kind, cx, 19.8, 0, '', 60, NEVER)
+        s.sign(m, cx, 16.34, .7, 2.3, .36, '%s: %s' % (fluid.upper(), name), 'kind %d asleep: shoot it' % kind, FLUIDS[fluid], PI)
+        exhibit(m, (cx - 1.35, 14.8, cx + 1.35, 22.6), 'BLOOD / %s / %s (asleep, shoot it)' % (fluid, name.lower()), '%s: %s' % (fluid.upper(), name), 'creature kind %d' % kind, cx, 19.8)
+    plate(m, 22.98, 8.5, 1.9, 2.2, .45, 'OIL: THE MACHINE', 'next room east: shoot it there', 'W', FLUIDS['oil'])
+    for x, kind in ((4, 1), (8, 2), (12, 1), (16, 2), (20, 0)):
+        s.rec(m, 'PICKUP', i, kind, x, 12)
+
+    # ---- MACHINE: the cursed equipment, dormant until its power comes on; current kills it -----------
+    m = room('Showcase Machine', 5, 'SHOWCASE: MACHINE', ceiling=4.5, ambient=.2)
+    i = m['index']
+    m['lights'] = False
+    s.rec(m, 'CREATURE', i, 8, 12, 3.0, 0, '', '', 'sc_machine_power')
+    # The electrodes: a live band across the bay between it and the aisle, on unless cut.
+    s.rec(m, 'HAZARD', i, 0, 1, 5.8, 23, 7.2, -.6, 2.2, 30, 'sc_electrodes_cut', 1, 1)
+    s.struct(m, 1, 5.8, 23, 7.2, 0, .02, 13)
+    for x in (4, 12, 20):
+        s.rec(m, 'EMITTER', i, x, 6.5, .15, 0, 0, .3, .8333, .3, .1, 8, 10, .8, 'sc_electrodes_cut', 1, 1, '', '', '')
+    for x in (8, 16):
+        s.rec(m, 'EMITTER', i, x, 6.5, .1, .5, .3, .4, .4, .01, 0, 16, 3, 1, 'sc_electrodes_cut', 1, 1, '', '', '')
+    s.rec(m, 'LEAD', i, 6.5, 6.5, 4.4, 6.5, 6.5, .2, 4.3, .01, 8, 1, '', '', '', '', '', 1)
+    # Its room's lamps come on with the power; one dim work lamp shows it standing dark till then.
+    for x in (6, 18):
+        s.rec(m, 'LIGHT', i, x, 3, 4.35, 0, 0, 1.2, 9, 4000, 0, 'sc_machine_power', 1)
+    s.rec(m, 'LIGHT', i, 12, 9.4, 4.35, 0, 0, .8, 9, 3200)
+    for x in (4, 20):
+        s.rec(m, 'LIGHT', i, x, 12.4, 4.35, 0, 0, .8, 7, 3400)
+    # Both switches stand over 8 m from it: a terminal worked any closer wakes it too.
+    switch(m, 4, 11.2, 'S', 'MACHINE POWER', 'THE BAY\'S POWER. THE MACHINE WAKES WHEN IT', 'COMES ON (ITS WAKE STATE) AND COMES FOR YOU.', 'sc_machine_power', 0)
+    switch(m, 20, 11.2, 'S', 'ELECTRODES', 'THE LIVE BAND (HAZARD 0) IS ON UNTIL CUT HERE.', 'CURRENT IS WHAT KILLS IT: ROUNDS SPARK OFF.', 'sc_electrodes_cut')
+    plate(m, 12, 1.02, 3.0, 4.2, .6, 'THE MACHINE', 'kind 8: dormant until power or a wound', 'S')
+    label(m, 6, 7.4, 'ELECTRODES', 'HAZARD 0, live: it shorts out', 'S', 2.0)
+    label(m, 18, 7.4, 'OIL', 'shoot it: sparks, and it bleeds oil', 'S', 2.0)
+    exhibit(m, (1, 1, 23, 5.8), 'MACHINE / kind 8, dormant: power wakes it', 'THE MACHINE', 'creature kind 8', 12, 3)
+    exhibit(m, (1, 5.8, 23, 8.5), 'MACHINE / electrodes: live current kills it', 'ELECTRODES', 'live band, a live lead', 12, 6.5)
+    exhibit(m, (1, 9.5, 7, 13.5), 'MACHINE POWER / wakes it (sc_machine_power)', 'MACHINE POWER', 'switch', 4, 11.2)
+    exhibit(m, (17, 9.5, 23, 13.5), 'ELECTRODES switch / sc_electrodes_cut', 'ELECTRODES SWITCH', 'switch', 20, 11.2)
+    s.rec(m, 'PICKUP', i, 1, 12, 13.5)
+
+    # ---- PREDATOR: a Chimera hunter and its prey behind glass, released by a switch -----------------
+    m = room('Showcase Predator', 6, 'SHOWCASE: PREDATOR', ceiling=4.5)
+    i = m['index']
+    # The pen (x 7-17, y 1-8) behind two panes of glass you can shoot out; a service run behind
+    # its west wall (x 4-6) is where it goes to ground when it runs.
+    m['walls'] |= tiles(1, 1, 3, 8) | tiles(18, 1, 22, 8) | {(6, y) for y in range(3, 8)} | {(4, 8), (5, 8), (6, 8)} | {(17, y) for y in range(1, 9)}
+    for k in range(2):
+        x1 = 7 + k * 5
+        s.rec(m, 'BREAKABLE', i, x1, 7.95, x1 + 5, 8.05, 0, 4.5, 17, 20, 0, 'sc_pane_%d' % k, NEVER)
+    s.struct(m, 11.95, 7.9, 12.05, 8.1, 0, 4.5, 2)
+    clock(m, 'sc_pen_clock')
+    actor(m, 'sc_pen_clock', 0, 0, 15.5, 4, 0, PI, False)
+    s.rec(m, 'ACTOR_HEALTH', i, 0, 100, 'sc_prey_hurt', 'sc_prey_dead')
+    s.rec(m, 'CREATURE', i, 6, 8.5, 3.5, 0, '', 120, 'sc_release', 'sc_beast', 0)   # light (120): a few rounds and it runs
+    switch(m, 6.5, 10.2, 'S', 'RELEASE', 'WAKES THE CHIMERA (HUNTER sc_beast, PREY ACTOR 0).', 'IT GOES FOR HIM, TAKES HIS HEAD AND FEEDS.', 'sc_release', 0)
+    event(m, 'sc_beast_gone', (0, 0, 24, 24), [('MESSAGE', 'IT RAN AND IS GONE: sc_beast = {sc_beast} ESCAPES', 5)],
+          gates=[('sc_beast', '>=', 1)], where='map')
+    plate(m, 3.5, 9.02, 2.3, 2.8, .5, 'PREDATOR', 'CREATURE hunter + prey fields', 'S')
+    plate(m, 20, 9.02, 2.3, 2.8, .5, 'SHOOT IT: IT RUNS', 'the glass breaks; hurt, it flees', 'S')
+    exhibit(m, (7, 1, 17, 8.1), 'PREDATOR / Chimera hunter sc_beast, prey actor 0', 'PREDATOR', 'hunter and prey', 12, 4)
+    exhibit(m, (4, 1, 6, 8), 'PREDATOR / the run it goes to ground in', 'THE RUN', 'out of sight: gone', 5, 4)
+    exhibit(m, (4, 9, 9, 12), 'RELEASE / sets sc_release: its wake state', 'RELEASE', 'switch', 6.5, 10.2)
+    for x in (6, 19):
+        s.rec(m, 'PICKUP', i, 1, x, 13)
+
+    # ---- SOUND: a ringing hall with a score, and a dead room in silence south of it -----------------
+    m = room('Showcase Sound', 7, 'SHOWCASE: SOUND', ceiling=12.0, surface='concrete')
+    i = m['index']
+    m['music'] = 6                                     # MusicCue Darkness
+    s.rec(m, 'REVERB', i, .6, 4.5)
+    m['walls'] |= {(x, 23) for x in range(24) if x not in (11, 12)}
+    for x, y in ((6, 6), (18, 6), (6, 18), (18, 18)):
+        s.struct(m, x - .5, y - .5, x + .5, y + .5, 0, 12, 42)
+    plate(m, 12, 1.02, 4.5, 6.0, 1.0, 'SOUND: REVERB 0.6 / 4.5 S', 'MAP music cue 6 (Darkness); beds and one-shots', 'S')
+    # AMBIENT|map|sound|x|y|z|gain|radius|mode|every|spread|state|value
+    sounds = [('drone', 4, 3.5, 1.2, .4, 18, 0, '', '', 'BED: drone', 'mode 0: loops in earshot'),
+              ('vent_airflow', 9, 3.5, 1.2, .5, 9, 0, '', '', 'BED: vent airflow', 'mode 0, radius 9'),
+              ('mechanical', 15, 3.5, 1.2, .4, 12, 0, '', '', 'BED: machinery', 'mode 0, radius 12'),
+              ('metal_creak', 4, 20.5, 1.2, .6, 16, 1, 6, 6, 'NOW AND THEN: creak', 'mode 1: every 6-12 s'),
+              ('debris', 9, 20.5, 1.2, .6, 12, 1, 9, 6, 'NOW AND THEN: debris', 'mode 1: every 9-15 s'),
+              ('distant_yell', 15, 20.5, 1.2, .5, 22, 1, 15, 10, 'NOW AND THEN: a yell', 'mode 1: every 15-25 s')]
+    for name, x, y, z, gain, radius, mode, every, spread, title, sub in sounds:
+        s.struct(m, x - .5, y - .5, x + .5, y + .5, 0, .75, 20)
+        s.rec(m, 'AMBIENT', i, name, x, y, z, gain, radius, mode, every, spread, '', '')
+        if y < 12:
+            label(m, x, y + .7, title, sub, 'S', 2.0)
+        else:
+            label(m, x, y - .7, title, sub, 'N', 2.0)
+        exhibit(m, (x - 2, y - 2.5, x + 2, y + 2.5), 'AMBIENT %s / %s' % (name, sub), title, sub, x, y)
+    s.struct(m, 20.5, 15.5, 21.5, 16.5, 0, .75, 20)
+    s.rec(m, 'AMBIENT', i, 'pa_access_granted', 21, 16, 3, .7, 18, 2, '', '', 'sc_pa', 1)
+    switch(m, 19.2, 16, 'W', 'PA TEST', 'AMBIENT MODE 2 PLAYS ONCE EACH TIME sc_pa = 1.', 'E: SET IT (AGAIN: CLEAR IT, THEN SET IT).', 'sc_pa')
+    label(m, 21, 15.3, 'ON A STATE: PA', 'mode 2: once when sc_pa = 1', 'N', 2.0)
+    exhibit(m, (18.5, 14.5, 23, 18.5), 'AMBIENT pa_access_granted / mode 2 on sc_pa', 'ON A STATE: PA', 'mode 2', 21, 16)
+    plate(m, 9.4, 22.98, 2.8, 2.8, .5, 'DEAD ROOM THIS WAY >', 'REVERB 0.04 / 0.2 s, music 11: silence', 'N')
+
+    m = room('Showcase Dead Room', 7, 'SHOWCASE: DEAD ROOM', row=2, title_box=(9, 1, 15, 7), ceiling=2.7)
+    i = m['index']
+    m['music'] = 11                                    # MusicCue Silence: no score at all
+    m['lights'] = False
+    s.rec(m, 'REVERB', i, .04, .2)
+    m['walls'] |= tiles(0, 0, 23, 23) - tiles(9, 1, 14, 6) - {(11, 0), (12, 0)}
+    s.struct(m, 9, 1, 15, 7, 0, .03, 23)                                       # carpet, curtains all round
+    for a in ((9, 1, 9.12, 7), (14.88, 1, 15, 7), (9, 6.88, 15, 7), (9, 1, 11, 1.12), (13, 1, 15, 1.12)):
+        s.struct(m, *a, 0, 2.7, 39)
+    s.rec(m, 'LIGHT', i, 12, 4, 2.55, 0, 0, .8, 6, 3000)
+    s.rec(m, 'AMBIENT', i, 'light_buzz', 12, 4, 2.4, .3, 6)
+    plate(m, 12, 6.86, 1.7, 3.2, .5, 'DEAD ROOM: REVERB 0.04 / 0.2 S', 'music cue 11: silence. hear the buzz', 'N')
+    exhibit(m, (9, 1, 15, 7), 'SOUND / dead room: REVERB 0.04, music 11', 'DEAD ROOM', 'reverb and silence', 12, 4)
+    # Signs at the way in: the Welcome gap and Props' east side.
+    s.sign(s.maps[0], 10.5, 22.95, 2.85, 2.4, .4, 'SHOWCASE THIS WAY', 'through the gap, then east', SHOW)
+    props = next(x for x in s.maps if x['name'] == 'Props')
+    s.sign(props, 23.97, 9.4, 2.3, 1.8, .45, 'SHOWCASE >', 'doors, particles, light, sound', SHOW, -HALF)
+
+
+KEEP_SHUT = {'Lights', 'Hazards', 'Life', 'Levels', 'Scripts', 'Architecture', 'Architecture 2',
+             'Engine And Office 2', 'Engine And Office 3'}
 
 
 def scripts(s):

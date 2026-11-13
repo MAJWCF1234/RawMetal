@@ -7,6 +7,7 @@
 #include "../core/FrameProfile.h"
 #include "../renderer/SoftwareRenderer.h"
 #include "../renderer/Projection.h"
+#include "../renderer/Particles.h"
 #include "../audio/AudioEngine.h"
 #include <fstream>
 #include <memory>
@@ -37,6 +38,14 @@ int validateEditorCampaign(const std::filesystem::path& path){
  auto campaign=loadCustomCampaignFile(path);
  for(size_t i=0;i<campaign->maps.size();++i){World validated(int(i),campaign->maps[i]);}
  std::cout<<"OK "<<campaign->maps.size()<<'\n';return 0;
+}
+int exportEditorCampaign(const std::filesystem::path& path){
+ auto campaign=loadCustomCampaignFile(path);std::vector<RmcMapSource> maps;
+ for(const auto& m:campaign->maps)maps.push_back({m,-1});
+ auto exported=exportRmc(campaign->name,maps,campaign->startMap);
+ std::ofstream out(path.wstring()+L".exported.rmc",std::ios::binary);out<<exported.text;
+ if(!out)throw std::runtime_error("Cannot write the exported campaign");
+ std::cout<<"OK "<<campaign->maps.size()<<' '<<exported.notes.size()<<'\n';return 0;
 }
 int validateEditorCampaignText(const std::string& text){
  // The parse builds every map's World to check it (the file check above builds them twice).
@@ -229,6 +238,21 @@ int runEditorPreview(const EditorPreviewOptions& options){
   auto camera=scene->player();scene=std::move(authored);scene->restoreEditorCamera(camera);
   simulating=false;simTime=0;pulses.clear();reportSim();
  };
+ // The builder's lighting view and play options: look.txt beside the control file,
+ // "LOOK mode third rebake animate". mode 0 lit, 1 the probes' fill alone (--detail-probes),
+ // 2 the finish (--detail-finish: crystal red, metal blue, polish grey), 3 no probes (--no-probes);
+ // third 1 plays over Claire's shoulder; a new rebake number bakes every map's probes again;
+ // animate 1 runs the clock between edits, so the air moves in the picture. look-status.txt
+ // answers with what the picture is doing.
+ const auto lookControl=options.control.parent_path()/L"look.txt",lookStatus=options.control.parent_path()/L"look-status.txt";
+ int lookMode=-1,lookThird=0,lookRebake=0,lookAnimate=1;bool thirdShown=false;auto lastLook=last;
+ auto reportLook=[&]{
+  std::ostringstream out;out.setf(std::ios::fixed);out.precision(3);
+  const auto& air=renderer->particleMemory().last;
+  out<<"LOOK "<<std::max(0,lookMode)<<' '<<lookThird<<' '<<int(playing)<<' '<<SoftwareRenderer::lightProbeBakes()<<' '<<SoftwareRenderer::lastLightProbeBakeMs()
+     <<' '<<air.sources<<' '<<air.particles<<' '<<(scene?scene->elapsed():0.f)<<' '<<int(thirdShown&&renderer->claireOutsideReport().drawn)<<' '<<lookRebake<<'\n';
+  put(lookStatus,out.str());
+ };
  int lastWidth=-1,lastHeight=-1;LiveCampaign live;
  // Every map stored in the scene matches the document (false after a
  // campaign-wide change was applied to the map on show only).
@@ -261,6 +285,11 @@ int runEditorPreview(const EditorPreviewOptions& options){
   if(stop)break;
   int simWanted=0,simFire=fireSerial;float fireX1=0,fireY1=0,fireX2=0,fireY2=0;
   {std::istringstream ask(get(simControl));ask>>simWanted>>simFire>>fireX1>>fireY1>>fireX2>>fireY2;}
+  {int mode=0,third=0,rebake=lookRebake,animate=1;std::string tag;std::istringstream ask(get(lookControl));
+   if(ask>>tag>>mode>>third>>rebake>>animate&&tag=="LOOK"){
+    if(mode!=lookMode){lookMode=std::clamp(mode,0,3);SoftwareRenderer::setLightProbes(lookMode!=3);SoftwareRenderer::setDetailLayer(lookMode==1?10:lookMode==2?11:1);}
+    if(rebake!=lookRebake){lookRebake=rebake;SoftwareRenderer::rebakeLightProbes();}
+    lookThird=third!=0;lookAnimate=animate!=0;}}
   const auto controlRead=Clock::now();
   // An edit, another map or play ends Simulate first: the change lands on the authored scene.
   if(simulating&&(requested!=revision||map!=attemptedMap||play!=0||!simWanted))stopSim();
@@ -317,6 +346,8 @@ int runEditorPreview(const EditorPreviewOptions& options){
   }
   if(playing&&!(play!=0&&valid)&&scene&&haveEditCamera){scene->restoreEditorCamera(editCamera);haveEditCamera=false;}
   playing=play!=0&&valid;
+  // Over the shoulder in play when asked: the renderer draws her from outside only out of inspection.
+  {const bool third=playing&&lookThird;if(third!=thirdShown){thirdShown=third;renderer->setEnvironmentInspection(!third);SoftwareRenderer::setThirdPerson(third);}}
   if(simWanted&&!simulating&&!playing&&valid&&scene){
    authored=std::make_unique<Game>(*scene);scene->setEditorObserver(true);
    simulating=true;simTime=0;fireSerial=simFire;pulses.clear();reportSim();lastSimReport=now;
@@ -357,6 +388,8 @@ int runEditorPreview(const EditorPreviewOptions& options){
     if(simKey&&!simKeyHeld&&valid){if(simulating){stopSim();askSim(false);}else askSim(true);}
     if(input.escape&&!simEscapeHeld&&simulating){stopSim();askSim(false);}
     simKeyHeld=simKey;simEscapeHeld=input.escape;
+    // Between edits the clock alone runs: smoke, steam, sparks and water move; nothing else does.
+    if(!simulating&&lookAnimate)scene->advanceEditorClock(dt);
     if(simulating){
      // The world runs with no hands on it; the camera stays wherever it is flown.
      auto eye=scene->player();scene->update({},dt);scene->restoreEditorCamera(eye);simTime+=dt;
@@ -410,11 +443,14 @@ int runEditorPreview(const EditorPreviewOptions& options){
     }
    }
    if(now-lastReport>std::chrono::milliseconds(50)){report(valid?"READY":"ERROR",valid&&!pickDetail.empty()?pickDetail:loadError);lastReport=now;}
+   if(now-lastLook>std::chrono::milliseconds(100)){reportLook();lastLook=now;}
    if(options.frames>0&&frame>=unsigned(options.frames))break;
   }
   Sleep(scene?1:16);
  }
  window.setMenu(true);
+ if(scene)reportLook();
+ if(thirdShown){renderer->setEnvironmentInspection(true);SoftwareRenderer::setThirdPerson(false);}
  if(!options.capture.empty()&&scene){std::ofstream out(options.capture,std::ios::binary);out<<"P6\n"<<width<<' '<<height<<"\n255\n";for(int i=0;i<width*height;++i){auto p=renderer->pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
  report("STOPPED");return scene?0:8;
 }

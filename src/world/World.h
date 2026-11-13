@@ -271,7 +271,23 @@ struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;floa
 // pool in a cold store reads as still and black, not as a lit swimming bath).
 struct WaterVolume {float x1,y1,x2,y2,bed,surface;float murk=0;};
 // Content specifies emitters; rendering does not decide their positions from chunk IDs.
-struct ParticleEmitter {Vec2 position;float z;Vec2 drift;float rise=1.05f,rate=.55f,radius=.07f,growth=.2f;int count=7;};
+// What an emitter gives off (EMITTER record; renderer/Particles.cpp). Plume is the old record's puff:
+// steam indoors, smoke under the open sky. Sparks are thrown as showers by the electric system
+// (Game::electricScene), so they bounce off the room and light it.
+enum class ParticleKind:std::uint8_t {Plume,Smoke,Steam,Sparks,Dust,Debris,Drips,Spray,Fire,Toxic,ArcGlow,Count};
+// `count` puffs in the air at once, each living 1/rate seconds, leaving at `radius` and swelling by
+// `growth`, carried drift x, drift y and rise metres over its life. Sparks: a shower every 1/rate s of
+// `count` sparks thrown along the drift. Dust and Toxic fill a box (drift its half sizes, rise its
+// height); Fire's radius is its half width and growth its flames' height. strength: how thick or bright.
+// Switched like a HAZARD: a state gate and a timed window.
+struct ParticleEmitter {Vec2 position;float z;Vec2 drift;float rise=1.05f,rate=.55f,radius=.07f,growth=.2f;int count=7;
+ ParticleKind kind=ParticleKind::Plume;float strength=1;StateId enabledFlag=0;int enabledValue=1;bool invertFlag=false;float period=0,onTime=0,phase=0;
+ // Open at game time t by its timed window alone (the state gate is the game's to read).
+ bool window(float t)const{return period<=0||std::fmod(std::fmod(t+phase,period)+period,period)<onTime;}};
+inline bool validParticleEmitter(const ParticleEmitter& e){
+ const bool old=e.kind==ParticleKind::Plume;
+ return e.kind<ParticleKind::Count&&e.rate>0&&e.rate<=5&&e.radius>0&&e.radius<=3&&e.growth>=(old?0.f:-3.f)&&e.growth<=5&&e.count>=1&&e.count<=(old?32:64)&&
+        e.rise>=(old?0.f:-20.f)&&e.rise<=20&&std::fabs(e.drift.x)<=20&&std::fabs(e.drift.y)<=20&&e.strength>0&&e.strength<=4&&e.period>=0&&e.onTime>=0&&(e.period<=0||e.onTime<=e.period);}
 struct Hazard {
  enum class Kind {Electricity,Steam,Crusher,Toxic,Fire,FallingDebris,Pressure,Anomaly};
  Kind kind=Kind::Electricity;float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100,damagePerSecond=0;
@@ -720,6 +736,11 @@ public:
     bool rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors=true,bool dynamic=true,bool shelfCavities=false,bool sight=false)const;
     // Static optical visibility: exact solid intersections, separate from player hull clearance.
     bool lightRayClear(Vec2 a,float az,Vec2 b,float bz)const;
+    // The first optical solid on the segment a..b (the boxes lightRayClear tests, terrain and
+    // water beds aside): the fraction along it (1 when clear) and the face's outward normal.
+    float lightRayHit(Point3 a,Point3 b,Point3& normal)const;
+    // A point inside one of those solids (a light probe in a wall, a deck or a cabinet).
+    bool insideLightSolid(Point3 p)const;
     // Nearest physical shot obstruction on a finite 3D segment. Actor hulls
     // are resolved by Game; this includes static and moving world geometry.
     float shotFraction(Point3 from,Point3 to,Point3&normal,ShotTrace* trace=nullptr)const;

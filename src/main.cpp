@@ -23,6 +23,7 @@
 #pragma comment(lib,"shell32.lib")
 #include "renderer/SoftwareRenderer.h"
 #include "renderer/Carcass.h"
+#include "renderer/Particles.h"
 #include "platform/Win32Window.h"
 #include "platform/EditorPreview.h"
 #include "audio/AudioEngine.h"
@@ -64,6 +65,7 @@ static void applyRenderSwitches(bool withoutPost=false,bool withoutPixel=false){
  const auto& args=commandArguments();
  retro::SoftwareRenderer::setPostProcessing(!args.find(L"--nopost")&&(args.find(L"--post-ao")||!withoutPost),args.find(L"--post-ao")!=nullptr);
  retro::SoftwareRenderer::setPixelLighting(!withoutPixel&&!args.find(L"--nopixel"));
+ retro::SoftwareRenderer::setLightProbes(!args.find(L"--no-probes"));
 }
 __declspec(noinline) static int neuralTextureRuntimeTest(int W,int H,bool vulkan){
  std::ofstream report("neural-texture-runtime-test.txt");
@@ -887,6 +889,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--detail-ppt"))retro::SoftwareRenderer::setDetailLayer(7); // debug: pixels per texel and detail cell coordinate
     if(commandArguments().find(L"--detail-sun"))retro::SoftwareRenderer::setDetailLayer(8); // debug: sun visibility, N.L, cascade
     if(commandArguments().find(L"--detail-light"))retro::SoftwareRenderer::setDetailLayer(9); // debug: ambient (r), lamp (g), not per-pixel lit (b)
+    if(commandArguments().find(L"--detail-probes"))retro::SoftwareRenderer::setDetailLayer(10); // debug: the light probes' fill alone
+    if(commandArguments().find(L"--detail-finish"))retro::SoftwareRenderer::setDetailLayer(11); // debug: crystal (red), metal (blue), polish (grey)
     if(commandArguments().find(L"--minimap-cache-test"))return retro::MinimapCache::test()?0:35;
     if(auto arg=commandArguments().find(L"--perf-profile="))return perfProfile(arg+15);
     if(commandArguments().find(L"--perf-profile-census")){std::ofstream out("perf-census.txt");retro::Game::perfCensus(out);return out?0:21;}
@@ -1232,15 +1236,95 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      if(lines.empty())return 21;
      std::istringstream head(lines[0]);std::string kind;int level=0;float hx=0,hy=0,hz=0,hyaw=0,hpitch=0;std::string sets;head>>kind;
      if(kind=="machine")head>>level;else if(!(head>>level>>hx>>hy>>hz>>hyaw>>hpitch))return 21;head>>sets;
-     retro::Game scene=kind=="machine"?retro::Game::machineScene(level):retro::Game::chimeraStage(level,{hx,hy},hz,hyaw*retro::kPi/180.f,hpitch);
+     // "game LEVEL X Y FEET YAW PITCH [a,b,c]": the staged scene saved and loaded into a fresh game, so it plays
+     // as the game does (not an inspection camera): Claire's body under the camera, the replay camera can see her.
+     auto make=[&]{if(kind=="machine")return retro::Game::machineScene(level);auto staged=retro::Game::chimeraStage(level,{hx,hy},hz,hyaw*retro::kPi/180.f,hpitch);
+      if(kind!="game")return staged;std::filesystem::create_directories(".build/filmsave");staged.setSaveDirectory(L".build/filmsave");
+      {std::istringstream each(sets);std::string st;while(std::getline(each,st,',')){auto eq=st.find('=');if(!st.empty())staged.setState(retro::stateId(st.substr(0,eq)),eq==std::string::npos?1:std::stoi(st.substr(eq+1)));}}
+      staged.saveSlot(0);retro::Game fresh;fresh.setAsyncLoads(false);fresh.setSaveDirectory(L".build/filmsave");fresh.loadSlot(0);return fresh;};
+     retro::Game scene=make();
      auto apply=[&](const std::string& states){std::istringstream each(states);std::string s;while(std::getline(each,s,',')){auto eq=s.find('=');if(!s.empty())scene.setState(retro::stateId(s.substr(0,eq)),eq==std::string::npos?1:std::stoi(s.substr(eq+1)));}};
      apply(sets);
      float ax=scene.player().pos.x,ay=scene.player().pos.y,az=scene.player().z,ayaw=scene.player().angle,apitch=scene.player().pitch;
      auto renderer=std::make_unique<retro::SoftwareRenderer>(960,540);if(!commandArguments().find(L"--software")&&!renderer->enableHardware())return 36;
      renderer->setEnvironmentInspection(true);std::filesystem::create_directories(".build/film");std::ofstream log("film-log.txt");
-     auto hold=[&]{scene.inspectLockerWatch({ax,ay},az,ayaw,apitch);};
-     auto tick=[&](int n){for(int i=0;i<n;++i){hold();scene.update({},1.f/60.f);}};
+     // Gameplay takes (capture only): "play" lets go of the anchor and the player is driven by input; "hud 1"
+     // draws the hands and HUD; "rec NAME" draws every second tick from the player's eyes into
+     // .build/film/NAME_NNNN.ppm until "stop", and logs each tick's game sounds to film-sounds.txt (tick, sound,
+     // gain) for the mix. Input: "in N KEYS [MDX MDY]" (KEYS a comma list of w,a,s,d,sprint,crouch,jump,fire,
+     // use,reload,flash,guard,subdue,1,2,3 or '-'; fire/use/reload/flash/1-3 press on the first tick only);
+     // "look T N [KEYS]" eases the view onto a target over N ticks, "track T N [KEYS]" follows it (T: eK an enemy's
+     // chest, hK its head, nK a person's chest, gK his head, or x,y,z); "pos X Y FEET YAW PITCH" puts the player
+     // there; "weapon shotgun|handgun|fists"; "reach" / "yank" stage the nearest guard coming for the locker;
+     // "census" logs every creature and person in the chunk.
+     bool play=false,recording=false;int recFrame=0,ticks=0;std::string recName;std::ofstream soundLog("film-sounds.txt");
+     bool camSet=false;float camX=0,camY=0;
+     auto drawTo=[&](const std::string& name){
+      // The replay camera: a fixed point in the room, turned on the player (the renderer's body orbit, aimed there).
+      if(camSet){const auto&pl=scene.player();const float dx=camX-pl.pos.x,dy=camY-pl.pos.y;renderer->setBodyOrbit(std::max(.5f,std::hypot(dx,dy)),retro::wrapAngle(std::atan2(dy,dx)-pl.angle));}
+      renderer->render(scene);if(camSet)renderer->setBodyOrbit(0,0);std::ofstream out(".build/film/"+name+".ppm",std::ios::binary);out<<"P6\n960 540\n255\n";for(int k=0;k<960*540;++k){auto px=renderer->pixels()[k];char rgb[]={char(px>>16),char(px>>8),char(px)};out.write(rgb,3);}};
+     auto hold=[&]{if(!play)scene.inspectLockerWatch({ax,ay},az,ayaw,apitch);};
+     auto step=[&](const retro::InputState& in){hold();scene.update(in,1.f/60.f);++ticks;
+      for(const auto&s:scene.sounds())soundLog<<ticks<<' '<<(recording?recName:std::string("-"))<<' '<<recFrame<<' '<<int(s.sound)<<' '<<s.gain<<' '<<s.pitch<<' '<<(s.spatial?std::hypot(s.position.x-scene.player().pos.x,s.position.y-scene.player().pos.y):0.f)<<'\n';
+      if(recording&&ticks%2==0){char n[32];std::snprintf(n,sizeof n,"_%04d",recFrame++);drawTo(recName+n);}};
+     auto tick=[&](int n){for(int i=0;i<n;++i)step({});};
+     auto keysOf=[&](const std::string& keys,bool first){retro::InputState in{};std::istringstream each(keys);std::string k;while(std::getline(each,k,',')){
+       if(k=="w")in.forward=true;else if(k=="s")in.back=true;else if(k=="a")in.left=true;else if(k=="d")in.right=true;else if(k=="sprint")in.sprint=true;else if(k=="crouch")in.crouch=true;else if(k=="guard")in.guard=true;
+       else if(first){if(k=="fire")in.fire=true;else if(k=="use")in.use=true;else if(k=="reload")in.reload=true;else if(k=="flash")in.flashlight=true;else if(k=="jump")in.jump=true;else if(k=="subdue")in.subdue=true;else if(k=="1"||k=="2"||k=="3")in.choice=k[0]-'0';}}
+      return in;};
+     auto target=[&](const std::string& t,retro::Point3& p)->bool{if(t.size()<2)return false;const char c=t[0];
+      if(c=='e'||c=='h'){const auto&foes=scene.chunkEnemies(scene.level());const size_t k=std::stoul(t.substr(1));if(k>=foes.size())return false;const auto&q=foes[k];p={q.pos.x,q.pos.y,q.z+(q.bodyTop()-q.z)*(c=='h'?.85f:.55f)};return true;}
+      if(c=='n'||c=='g'){const size_t k=std::stoul(t.substr(1));if(k>=scene.npcActors().size())return false;const auto&a=scene.npcActors()[k].pose;p={a.position.x,a.position.y,a.z+(c=='g'?1.6f:1.15f)};return true;}
+      float x=0,y=0,z=0;if(std::sscanf(t.c_str(),"%f,%f,%f",&x,&y,&z)==3){p={x,y,z};return true;}return false;};
+     auto aimInput=[&](retro::InputState& in,const retro::Point3& p,float u){const auto&pl=scene.player();const float eye=pl.z+pl.eye;
+      const float yaw=std::atan2(p.y-pl.pos.y,p.x-pl.pos.x),pitch=std::atan2(p.z-eye,std::hypot(p.x-pl.pos.x,p.y-pl.pos.y))*140.f;const float sens=scene.settings().sensitivity;
+      // A steady hand: at most 1.6 degrees and 2.5 pitch units a tick, so the weapon's sway never throws it about.
+      const float dyaw=std::clamp(retro::wrapAngle(yaw-pl.angle)*u,-.028f,.028f),dpitch=std::clamp((pitch-pl.pitch)*u,-2.5f,2.5f);
+      in.mouseDx=dyaw/(.0022f*sens);in.mouseDy=-dpitch/(.308f*sens)*(scene.settings().invertMouse?-1.f:1.f);};
      for(size_t li=1;li<lines.size();++li){std::istringstream f(lines[li]);std::string op;if(!(f>>op)||op[0]=='#')continue;
+      if(op=="play"){play=true;continue;}
+      if(op=="hud"){int on=1;f>>on;renderer->setEnvironmentInspection(!on);continue;}
+      if(op=="rec"){f>>recName;recFrame=0;recording=true;continue;}
+      if(op=="stop"){recording=false;continue;}
+      // "cam rel BEARING DIST": the replay camera that far off the player's facing (0 ahead, 90 left), pulled in
+      // until it can see the player's chest; "cam off".
+      // "cam auto DIST [B1 B2 ...]": the first of those bearings (default a fan from ahead-left round to behind)
+      // with DIST m clear of walls and props; failing that, the bearing with the most room.
+      if(op=="cam"&&f.peek()!=EOF){const auto mark=f.tellg();std::string x;f>>x;if(x=="auto"){float dist=3;f>>dist;std::vector<float> bearings;for(float b;f>>b;)bearings.push_back(b);
+        if(bearings.empty())bearings={50,-50,80,-80,30,-30,110,-110,140,-140,180,0};const auto&pl=scene.player();const auto&w=scene.world();float best=-1,bestA=0;
+        for(float b:bearings){const float a=pl.angle+b*retro::kPi/180.f;float d=0;for(float r=.6f;r<=dist+.01f;r+=.1f){const retro::Vec2 c{pl.pos.x+std::cos(a)*r,pl.pos.y+std::sin(a)*r};if(!w.rayClear(pl.pos,pl.z+1.f,c,pl.z+1.f)||!w.fits(c.x-.2f,c.y-.2f,pl.z+.8f,.4f)||!w.fits(c.x+.2f,c.y+.2f,pl.z+.8f,.4f)||!w.fits(c.x-.2f,c.y+.2f,pl.z+.8f,.4f)||!w.fits(c.x+.2f,c.y-.2f,pl.z+.8f,.4f))break;d=r;}
+         if(d>best+.3f){best=d;bestA=a;}if(d>=dist-.05f)break;}
+        const float d=std::max(.8f,best-.3f);camX=pl.pos.x+std::cos(bestA)*d;camY=pl.pos.y+std::sin(bestA)*d;camSet=true;log<<"cam auto "<<camX<<' '<<camY<<" ("<<d<<" m at "<<(bestA-pl.angle)*180.f/retro::kPi<<")\n";continue;}
+       f.clear();f.seekg(mark);}
+      if(op=="cam"){std::string x;f>>x;if(x=="off")camSet=false;else if(x=="rel"){float bearing=0,dist=3;f>>bearing>>dist;const auto&pl=scene.player();const auto&w=scene.world();
+        const float a=pl.angle+bearing*retro::kPi/180.f;float d=dist;for(;d>.8f;d-=.1f){const retro::Vec2 c{pl.pos.x+std::cos(a)*d,pl.pos.y+std::sin(a)*d};if(w.rayClear(pl.pos,pl.z+1.f,c,pl.z+1.f)&&w.fits(c.x,c.y,pl.z+.3f,.4f))break;}
+        camX=pl.pos.x+std::cos(a)*d;camY=pl.pos.y+std::sin(a)*d;camSet=true;log<<"cam "<<camX<<' '<<camY<<" ("<<d<<" m)\n";}
+       else{camX=std::stof(x);f>>camY;camSet=true;}continue;}
+      // "near T R [DEG]": the player put R m from the target, facing it, at the first bearing (from DEG, in 20 degree
+      // steps) with a clear line to it and room to stand.
+      if(op=="near"){std::string t;float r=5,deg=0;f>>t>>r>>deg;retro::Point3 p{};if(!target(t,p))continue;const auto&w=scene.world();bool found=false;
+       for(int k=0;k<54&&!found;++k){const float rr=r-float(k/18)*1.2f;const int j=k%18;const float a=(deg+(j%2?-1:1)*20.f*float((j+1)/2))*retro::kPi/180.f;const retro::Vec2 at{p.x+std::cos(a)*rr,p.y+std::sin(a)*rr};const float feet=w.floorHeight(at.x,at.y);
+        if(std::fabs(feet-(p.z-1.f))>1.6f||!w.fits(at.x,at.y,feet+.35f,1.3f,false)||!w.rayClear(at,feet+1.4f,{p.x,p.y},p.z,true,false))continue;
+        const float yaw=std::atan2(p.y-at.y,p.x-at.x);scene.inspectLockerWatch(at,feet,yaw,0);ax=at.x;ay=at.y;az=feet;ayaw=yaw;apitch=0;found=true;log<<"near "<<t<<" at "<<at.x<<' '<<at.y<<' '<<feet<<" yaw "<<yaw*180.f/retro::kPi<<'\n';}
+       if(!found)log<<"near "<<t<<": no place\n";continue;}
+      if(op=="console"){std::string text;std::getline(f,text);while(!text.empty()&&text[0]==' ')text.erase(0,1);retro::InputState open{};open.console=true;step(open);step({});
+       retro::InputState type{};type.textInput=text+"\r";step(type);step(open);step({});continue;}
+      if(op=="pos"){float x=0,y=0,z=0,yaw=0,pitch=0;f>>x>>y>>z>>yaw>>pitch;scene.inspectLockerWatch({x,y},z,yaw*retro::kPi/180.f,pitch);ax=x;ay=y;az=scene.player().z;ayaw=yaw*retro::kPi/180.f;apitch=pitch;continue;}
+      if(op=="weapon"){std::string w;f>>w;if(w=="handgun"){scene.grantHandgun(36);scene.equipWeapon(retro::WeaponId::Handgun);}else if(w=="fists")scene.equipWeapon(retro::WeaponId::Fists);else if(w=="none")scene.stowWeapon();else scene.equipWeapon(retro::WeaponId::Shotgun);continue;}
+      if(op=="in"){int n=0;std::string keys;float mdx=0,mdy=0;f>>n>>keys>>mdx>>mdy;for(int i=0;i<n;++i){auto in=keysOf(keys,i==0);in.mouseDx=mdx;in.mouseDy=mdy;step(in);}continue;}
+      if(op=="look"||op=="track"){std::string t,keys;int n=0;f>>t>>n>>keys;retro::Point3 p{};
+       for(int i=0;i<n;++i){auto in=keysOf(keys,i==0);if(target(t,p)){const float u=op=="look"?1.f/float(std::max(1,n-i))*(1.f+1.5f*std::sin(retro::kPi*float(i)/float(n))):.12f;aimInput(in,p,std::min(1.f,u));}step(in);}continue;}
+      if(op=="reach"){retro::InputState use{};use.use=true;step(use);scene.inspectLockerGuard(false,true);continue;}
+      if(op=="yank"){scene.stageLockerCatch();continue;}
+      // "hp eK V": stage a creature's health for the take (a puppet that goes down in two rounds, not five).
+      // "hurt nK V": a person's wounds staged so V health is left (two rounds, not ten).
+      if(op=="hurt"){std::string t;int v=0;f>>t>>v;const size_t k=t.size()>1?std::stoul(t.substr(1)):0;if(k<scene.npcActors().size()){const auto&tr=scene.npcActors()[k].track();if(tr.damageState)scene.setState(tr.damageState,std::max(0,tr.health-v));}continue;}
+      if(op=="hp"){std::string t;float v=0;f>>t>>v;const size_t k=t.size()>1?std::stoul(t.substr(1)):0;auto&foes=const_cast<std::vector<retro::Enemy>&>(scene.chunkEnemies(scene.level()));if(k<foes.size())foes[k].hp=v;continue;}
+      if(op=="census"){log<<"census level "<<scene.level()<<" t="<<scene.elapsed()<<" player "<<scene.player().pos.x<<' '<<scene.player().pos.y<<' '<<scene.player().z<<" yaw "<<scene.player().angle*180.f/retro::kPi<<" hp "<<scene.player().health<<" alarm "<<scene.guardAlarm()<<'\n';const auto&foes=scene.chunkEnemies(scene.level());
+       for(size_t e=0;e<foes.size();++e){const auto&q=foes[e];log<<"  e"<<e<<' '<<q.name()<<' '<<q.pos.x<<' '<<q.pos.y<<' '<<q.z<<" alive="<<q.alive<<" sleep="<<q.sleeping()<<" hp="<<q.hp<<'\n';}
+       for(size_t i=0;i<scene.npcActors().size();++i){const auto&a=scene.npcActors()[i];if(a.level!=scene.level())continue;log<<"  n"<<i<<' '<<a.pose.position.x<<' '<<a.pose.position.y<<' '<<a.pose.z<<" visual="<<int(a.track().visual)<<" hp="<<a.track().health<<" dead="<<(a.track().deadState&&scene.state(a.track().deadState))<<" damage="<<(a.track().damageState?scene.state(a.track().damageState):-1)<<" mode="<<int(scene.guardState(i))<<'\n';}
+       const auto&doors=scene.world().doors();for(size_t i=0;i<doors.size();++i){const auto&d=doors[i];log<<"  d"<<i<<(d.alongY?" alongY x=":" y=")<<d.y<<" from "<<d.left<<" to "<<d.right<<" z="<<d.z<<" swing="<<d.swinging<<" leaf="<<d.leaf<<" open="<<d.open<<" entry="<<d.entry<<" transfer="<<d.transfer<<" lock="<<(d.requireState!=0)<<'\n';}
+       const auto&terms=scene.world().terminals();for(size_t i=0;i<terms.size();++i)log<<"  t"<<i<<' '<<terms[i].position.x<<' '<<terms[i].position.y<<" z="<<terms[i].z<<' '<<(terms[i].title?terms[i].title:"")<<'\n';continue;}
       if(op=="anchor"){float yaw=0;f>>ax>>ay>>az>>yaw>>apitch;ayaw=yaw*retro::kPi/180.f;}
       else if(op=="set"){std::string s;f>>s;apply(s);}
       else if(op=="torch"){scene.giveQuestItem(retro::Game::Flashlight);scene.setState(retro::stateId("flashlight_on"),1);}
@@ -1749,6 +1833,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--lab-performance"))return ashfallPerformance(true,true,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
     if(commandArguments().find(L"--approach-test"))return approachTest();
     if(commandArguments().find(L"--body-inspection"))return bodyInspection();
+    // Claire from outside: frames for the eye (--third-person-inspection); --third-person starts over her shoulder.
+    if(commandArguments().find(L"--third-person-inspection"))return retro::SoftwareRenderer::thirdPersonInspection();
+    if(commandArguments().find(L"--third-person"))retro::SoftwareRenderer::setThirdPerson(true);
     if(commandArguments().find(L"--ashfall-performance")||commandArguments().find(L"--ashfall-performance-yard"))return ashfallPerformance(commandArguments().find(L"--ashfall-performance-yard")!=nullptr,false,commandArguments().find(L"--cpu-actor-preparation")!=nullptr,commandArguments().find(L"--uncached-ai-queries")!=nullptr,commandArguments().find(L"--full-rate-ai-decisions")!=nullptr);
     if(commandArguments().find(L"--performance-window")||commandArguments().find(L"--service-performance-window")||commandArguments().find(L"--door-performance-window")||commandArguments().find(L"--freight-performance-window"))return windowPerformance(commandLine,W,H);
     if(commandArguments().find(L"--glazing-test"))return retro::SoftwareRenderer::testHardware(true)?0:36;
@@ -1843,9 +1930,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"storm",retro::Game::testStorm},
          {"zone-people",retro::Game::testZonePeople},
          {"handgun",retro::Game::testHandgun},
-         {"human-ragdoll",retro::SoftwareRenderer::testHumanRagdoll},
+         {"human-ragdoll",retro::SoftwareRenderer::testHumanRagdoll},{"third-person",retro::SoftwareRenderer::testThirdPerson},
          {"scripting",retro::Game::testScripting},
-         {"primitives",retro::testPrimitives}};
+         {"light-probes",retro::testLightProbes},
+         {"primitives",retro::testPrimitives},
+         {"particles",retro::testParticles}};
         std::ofstream report("each-test.txt");int failed=0;
         const wchar_t* only=commandArguments().find(L"--each-test=");
         for(const auto& [name,run]:tests){

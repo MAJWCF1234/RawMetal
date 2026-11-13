@@ -8,7 +8,11 @@ layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fo
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
 // lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot, tone.
 // scatter.w is 1 when the shadow stage carries the lamp shafts this frame.
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];vec4 lamps[512];uint cells[];} lampGrid;
+layout(set=1,binding=5) uniform sampler3D probeAtlas;
+layout(set=1,binding=6) uniform sampler2DArray reflectionAtlas;
+// Soft particles: the room's planar depth (the scene target's alpha) once the room is drawn.
+layout(set=1,binding=7) uniform sampler2D sceneDepth;
 // Three sun cascades (orthographic radial depth), compared in hardware.
 layout(set=1,binding=4) uniform sampler2DArrayShadow sunShadows;
 // Six radial-depth faces per lamp, compared in hardware with bilinear PCF.
@@ -117,10 +121,64 @@ vec3 lampTone(vec4 params){vec2 rg=unpackHalf2x16(floatBitsToUint(params.z)),b=u
 // WorldLight::beam: the share of a lamp's light leaving toward `away` (unit,
 // lamp to receiver), by the beam code packed beside its blue channel.
 float lampBeam(vec4 params,vec3 away){
- float code=unpackHalf2x16(floatBitsToUint(params.w)).y;
+ // 16 and up: a switchable lamp (its power changes in play; SoftwareRenderer render).
+ float code=unpackHalf2x16(floatBitsToUint(params.w)).y;if(code>=15.5)code-=16.0;
  if(code<1.5)return 1.0;
  if(code<3.0)return 0.2+0.8*smoothstep(0.0,1.0,(-away.z-0.42)/0.45);
  float yaw=code-4.0;return 0.12+0.88*smoothstep(0.0,1.0,(away.x*cos(yaw)+away.y*sin(yaw)+0.25)/0.75);
+}
+
+
+// Light probes (LightProbes.h, GpuRenderer probeInfo). The irradiance atlas holds each resident
+// map's grid of ambient cubes: a 24-row band per map, six 24-wide face blocks (+x, -x, +y, -y,
+// +z, -z) across, one layer per cell of height. rgb is irradiance over pi, a sky openness.
+const float ProbeGain=3.6; // LightProbes.h ProbeGain
+const float ProbeCeiling=0.8; // LightProbes.h probeShoulder
+// The fill arriving at a surface at p facing n (unit), read half a cell out along n so a face never
+// reads the probes behind it; a<0 where no map's grid covers p.
+vec4 probeIrradiance(vec3 p,vec3 n){
+ int count=int(lampGrid.probeInfo.x);
+ for(int i=0;i<count;++i){
+  vec4 a=lampGrid.probeVolumes[2*i],b=lampGrid.probeVolumes[2*i+1];
+  vec3 local=p-a.xyz;
+  if(local.x<0.0||local.y<0.0||local.x>=24.0||local.y>=24.0||local.z<-2.0||local.z>b.y*a.w+2.0)continue;
+  vec3 q=local+n*vec3(0.5,0.5,0.5*a.w);
+  vec3 f=clamp(vec3(q.x-0.5,q.y-0.5,q.z/a.w-0.5),vec3(0.0),vec3(23.0,23.0,b.y-1.0))+0.5;
+  vec3 base=vec3(f.x/144.0,(f.y+24.0*b.x)/192.0,f.z/48.0);
+  vec3 w=n*n;
+  vec4 sx=texture(probeAtlas,base+vec3(n.x>=0.0?0.0:24.0/144.0,0.0,0.0));
+  vec4 sy=texture(probeAtlas,base+vec3(n.y>=0.0?48.0/144.0:72.0/144.0,0.0,0.0));
+  vec4 sz=texture(probeAtlas,base+vec3(n.z>=0.0?96.0/144.0:120.0/144.0,0.0,0.0));
+  return sx*w.x+sy*w.y+sz*w.z;
+ }
+ return vec4(-1.0);
+}
+// Reflection probes: six 90-degree faces per room probe, captured by the scene pass (face order and
+// orientation as GpuRenderer captureReflections draws them), a mip chain for rough surfaces.
+const vec3 CaptureForward[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
+const vec3 CaptureRight[6]=vec3[6](vec3(0,1,0),vec3(0,-1,0),vec3(-1,0,0),vec3(1,0,0),vec3(0,1,0),vec3(0,1,0));
+const vec3 CaptureUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(-1,0,0),vec3(1,0,0));
+// What the room's probe sees along R from p: inside the room's box the ray is carried to the box
+// wall it meets first and that point looked up from the probe (parallax), so a floor reflects the
+// wall across from it, not the one behind the probe. a is the probe's weight (1 inside its box,
+// fading over 6 m outside it); sky is the share of the texel that saw no surface (outdoors).
+vec4 probeReflection(vec3 p,vec3 R,float roughness,out float sky){
+ sky=0.0;int count=int(lampGrid.probeInfo.y);int best=-1;float bestScore=1e30;
+ for(int i=0;i<count;++i){vec4 c=lampGrid.reflections[3*i],lo=lampGrid.reflections[3*i+1],hi=lampGrid.reflections[3*i+2];
+  vec3 outside=max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)),d=p-c.xyz;float score=dot(d,d)*0.05+dot(outside,outside)*4.0;
+  if(score<bestScore){bestScore=score;best=i;}}
+ if(best<0)return vec4(0.0);
+ vec4 c=lampGrid.reflections[3*best],lo=lampGrid.reflections[3*best+1],hi=lampGrid.reflections[3*best+2];
+ float away=length(max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)));
+ vec3 dir=R;
+ if(away<0.01){vec3 r=R+vec3(1e-5);vec3 t=max((hi.xyz-p)/r,(lo.xyz-p)/r);dir=p+R*max(min(min(t.x,t.y),t.z),0.0)-c.xyz;}
+ vec3 a=abs(dir);int face=a.x>=a.y&&a.x>=a.z?(dir.x>0.0?0:1):a.y>=a.z?(dir.y>0.0?2:3):(dir.z>0.0?4:5);
+ float z=max(dot(dir,CaptureForward[face]),1e-5);
+ vec2 st=clamp(vec2(0.5+0.5*dot(dir,CaptureRight[face])/z,0.5-0.5*dot(dir,CaptureUp[face])/z),vec2(0.0),vec2(1.0));
+ float lod=clamp(roughness*1.2,0.0,1.0)*(lampGrid.probeInfo.z-1.0);
+ vec4 s=textureLod(reflectionAtlas,vec3(st,c.w*6.0+float(face)),lod);
+ sky=smoothstep(300.0,900.0,s.a);
+ return vec4(s.rgb,clamp(1.0-away/6.0,0.0,1.0));
 }
 
 vec3 toLinear(vec3 c){return pow(max(c,vec3(0.0)),vec3(2.2));}
@@ -257,6 +315,11 @@ void main(){
    }
   }
  }
+ // surface.y: emission scale; 100 and up a resonance crystal (its emission scale above 100);
+ // below 0 a finish with no emission: tenths of polish (how sharply it mirrors the room) in the
+ // whole part of -y, metalness in the fraction.
+ bool crystal=surface.y>=99.5;float emissionScale=crystal?surface.y-100.0:max(surface.y,0.0);
+ float metal=surface.y<0.0?fract(-surface.y):0.0,polish=surface.y<0.0?floor(-surface.y)*0.1:0.0;
  outMaterial=vec4(1.0,0.0,0.5,1.0);
  // Painterly Horizon LOD crossfade: the real mesh and its impostor take
  // complementary halves of one screen dither across the band, so the swap
@@ -321,6 +384,29 @@ void main(){
  vec4 color=impostorQuad?impostorColor(uv,uvDx,uvDy,materialDistance>lodDistance*2.0):textureGrad(colorMap,sampleUV,uvDx,uvDy);
  // The impostor's visible surface lies in front of or behind its card.
  if(impostorQuad)worldPos+=normalize(view.eyeYaw.xyz-worldPos)*impostorDepth*light1.x;
+ // A particle card (Particles.cpp, surface code 5): its atlas read smooth (never snapped to texels),
+ // on toward its flipbook's next frame (light1: blend, step), its own opacity (light0.x), faded where
+ // it nears what was drawn behind it (over light0.y metres of the room's planar depth, when the frame
+ // has it: light0.z), lit by its corners as the CPU found the room's light there, the probes' colour
+ // in the share of it they carry.
+ if(surface.z>=4.5&&surface.z<5.5){
+  vec4 card=textureGrad(colorMap,uv,uvDx,uvDy);
+  if(light1.x>0.0)card=mix(card,textureGrad(colorMap,uv+vec2(light1.y,0.0),uvDx,uvDy),light1.x);
+  vec3 toCard=worldPos-view.eyeYaw.xyz;float ahead=toCard.x*view.eyeYaw.w+toCard.y*view.basis.x;
+  float cardDepth=max(ahead*view.basis.y+toCard.z*view.basis.z,0.0);
+  float a=card.a*light0.x;
+  if(light0.z>0.5&&light0.y>0.0){float behind=texelFetch(sceneDepth,ivec2(gl_FragCoord.xy),0).a;if(behind>0.0)a*=clamp((behind-cardDepth)/light0.y,0.0,1.0);}
+  if(a<0.003)discard;
+  vec3 lit=card.rgb*lighting.x*lighting.y*0.96/(1.0+surface.x*0.018);
+  if(lighting.x<1.5){
+   vec4 fill=probeIrradiance(worldPos,normalize(-toCard));
+   if(fill.w>=0.0){vec3 light=ProbeCeiling*(1.0-exp(-fill.rgb*ProbeGain/ProbeCeiling));float luma=dot(light,vec3(0.2126,0.7152,0.0722));
+    if(luma>1e-4)lit*=mix(vec3(1.0),light/luma,clamp(luma/max(lighting.y,0.02),0.0,1.0));}
+  }
+  outMaterial=vec4(1.0,0.0,0.5,1.0);
+  outColor=view.effects.w>0.5?vec4(max(lit,vec3(0.0)),a):vec4(toDisplay(filmic(lit*0.95)),a);
+  return;
+ }
  if(color.a<(surface.z>0.5?0.01:0.5))discard;
  // A corpse dissolving: the fraction rides above the normal-map flag in lighting.w.
  float dissolveFade=clamp((fract(lighting.w+0.25)-0.25)/0.45,0.0,1.0);
@@ -328,6 +414,9 @@ void main(){
  // Wetness: a damp sheen everywhere plus puddles on level static ground.
  // Wet porous surfaces darken and their roughness collapses toward a mirror.
  float materialRoughness=clamp(1.0-fract(surface.z),0.18,1.0),wetness=0.0;
+ // Resonance crystal reads as mineral: the body's flat cyan pulled toward a deep cold grey-teal and
+ // lit like polished stone; the glow is added below, concentrated in the cores.
+ if(crystal){float l=dot(color.rgb,vec3(0.2126,0.7152,0.0722));color.rgb=mix(vec3(l),color.rgb,0.45)*vec3(0.5,0.7,0.8);}
  // A liquid: a blended surface with near-mirror gloss reflects like a puddle.
  bool liquid=surface.z>=3.0&&surface.z<4.0;
  if(liquid){materialRoughness=0.04;wetness=1.0;}
@@ -415,6 +504,9 @@ void main(){
   float roughness=clamp(materialRoughness,0.03,0.96);
   roughness=sqrt(clamp(roughness*roughness+(1.0-concentration)/max(concentration,0.05),0.0324,1.0));
   vec3 lampLight=vec3(0.0),lampSpecularRGB=vec3(0.0),bounceLight=vec3(0.0);float lampSpecular=0.0;
+  // The map's light probes carry the room's return when they cover this point (each lamp's flat
+  // bounce below is the fallback while a streamed map's probes are still baking).
+  vec4 probe=probeIrradiance(worldPos,N);bool probed=probe.w>=0.0;
   // Bounce (WorldLight::bounce): each lamp's room returns a share of its light
   // to every face in it, whichever way the face turns. The room is reached
   // through the open air in front of the face, lifted toward its ceiling on the
@@ -431,6 +523,11 @@ void main(){
     // Same falloff as WorldLight::falloff and the CPU bake.
     float t=1.0-d2/r2,falloff=params.x*3.2*t*t/(1.0+d2*0.12);
     float bounce=params.x*0.2*t*t;
+    // The probes hold the fixed lamps' return as it really falls (colour, corners, the far side of
+    // a pillar); each lamp's flat share stays under it at half weight, so a big hall the bake sees
+    // little of still fills. A switchable lamp (code 16 and up) keeps its whole share at this
+    // frame's power, so a breaker or a failing tube is never baked in.
+    if(probed&&unpackHalf2x16(floatBitsToUint(params.w)).y<15.5)bounce*=0.5;
     if(bounce>0.002){
      vec3 q=bouncePoint-lamp.xyz;float texelQ=length(q)*2.0/float(textureSize(lampShadows,0).x);
      bounceLight+=lampTone(params)*bounce*(params.y>=0.0?lampVisible(int(params.y),q,lamp.w,texelQ*2.0/lamp.w):1.0);
@@ -473,7 +570,9 @@ void main(){
   // and arcs, each in its own tone and reach), the vertex formula per pixel: a wall
   // or ceiling quad spanning the room still lights. Unshadowed, lifted 1.6x to
   // match the shoulder's low-end slope.
-  for(int flash=0;flash<5;++flash){
+  // A reflection probe's capture (effects.z the capture's clock, GpuRenderer::CaptureClock) holds the
+  // room, not this moment's flashes.
+  for(int flash=0;flash<5&&view.effects.z>-1.0e5;++flash){
    float strength=flash==0?view.effects.y:lampGrid.flashes[flash-1].w;if(strength<=0.0)continue;
    vec3 forwardWorld=normalize(vec3(view.eyeYaw.w*view.basis.y,view.basis.x*view.basis.y,view.basis.z));
    vec3 muzzle=flash==0?view.eyeYaw.xyz+forwardWorld*0.42-vec3(0,0,0.10):lampGrid.flashes[flash-1].xyz;
@@ -506,8 +605,12 @@ void main(){
   // and drowned each lamp's shadows in its neighbours' light. Cores stay hot.
   lampOut=2.4*(1.0-exp(-lampLight*0.62/2.4));
   // Its own soft shoulder: a room of many lamps fills, it never floods.
-  bounceOut=0.6*(1.0-exp(-bounceLight/0.6))*relief;
-  vertexLight=lighting.y*relief;
+  // A crystal stands in its own glow: the probes round it carry that glow, which must not light
+  // the crystal itself flat; it takes only a little of it.
+  if(probed)bounceLight+=probe.rgb*ProbeGain*(crystal?0.12:1.0);
+  bounceOut=ProbeCeiling*(1.0-exp(-bounceLight/ProbeCeiling))*relief;
+  // Outdoors the sky's fill follows how much sky the probes saw (under a roof, in a ruin).
+  vertexLight=lighting.y*relief*(probed&&lampGrid.sun.w>0.0?0.45+0.55*probe.a:1.0);
   specularLight=lampSpecular*0.7;lampSpecularOut=lampSpecularRGB*0.7;
   float lampLuma=dot(lampOut,vec3(0.2126,0.7152,0.0722));
   directLight=lampLuma+dot(sunLight,vec3(0.333));ambientLight=lighting.y*relief+dot(bounceOut,vec3(0.2126,0.7152,0.0722));
@@ -532,6 +635,14 @@ void main(){
   float key=clamp((vertexLight-0.24)/0.75,0.0,1.0);
   result*=mix(vec3(0.82,0.88,0.97),vec3(1.04,0.98,0.90),key);
  }
+ // Lit on the CPU (actors, the hands, a vertex-lit bake): its brightness already holds the probes'
+ // fill; the share of it that came from them takes their colour (crystal cyan, an emergency red).
+ if(directLight<0.0&&surface.z<0.5&&lighting.x<1.5){
+  vec3 facing=normalize(cross(dx,dy));if(dot(facing,view.eyeYaw.xyz-worldPos)<0.0)facing=-facing;
+  vec4 fill=probeIrradiance(worldPos,facing);
+  if(fill.w>=0.0){vec3 light=ProbeCeiling*(1.0-exp(-fill.rgb*ProbeGain/ProbeCeiling));float luma=dot(light,vec3(0.2126,0.7152,0.0722));
+   if(luma>1e-4)result*=mix(vec3(1.0),light/luma,clamp(luma/max(lighting.x*vertexLight,0.02),0.0,1.0));}
+ }
 
  result+=vec3(specularLight*lighting.x)+lampSpecularOut*lighting.x;
 
@@ -539,10 +650,29 @@ void main(){
   vec3 skySheen=toLinear(vec3(0.55,0.72,0.92));
   result+=skySheen*waterFresnel*0.22;
  }
+ // Glass mirrors the room: its reflection probe, by Fresnel, makes a pane read even where nothing
+ // lies behind it to see.
+ float reflectAlpha=0.0;
+ if(surface.z>1.5&&!liquid){vec3 Ng=normalize(cross(dx,dy)),V=normalize(view.eyeYaw.xyz-worldPos);if(dot(Ng,V)<0.0)Ng=-Ng;
+  float sky;vec4 mirror=probeReflection(worldPos,reflect(-V,Ng),0.06,sky);
+  if(mirror.a>0.0){float F=0.04+0.96*pow(1.0-max(dot(Ng,V),0.0),5.0);reflectAlpha=clamp(F*1.1+0.08,0.0,0.85)*mirror.a;result=mix(result,mirror.rgb,reflectAlpha);}
+ }
 
- if(surface.y>0.0){
+ if(emissionScale>0.0){
   // Emission atlases and their mip chains already contain linear radiance.
-  result+=textureGrad(emissionMap,sampleUV,uvDx,uvDy).rgb*1.6*surface.y;
+  vec3 glow=textureGrad(emissionMap,sampleUV,uvDx,uvDy).rgb*1.6*emissionScale;
+  if(crystal){
+   // The light is inside the stone: strongest looking into a prism's core, falling off toward its
+   // edges, where the cold rim and the room's reflection take over; the hottest cores go toward
+   // white. A few facets catch the eye and glint as it moves.
+   vec3 Ng=normalize(cross(dx,dy)),V=normalize(view.eyeYaw.xyz-worldPos);if(dot(Ng,V)<0.0)Ng=-Ng;
+   float NoV=max(dot(Ng,V),0.0),l=dot(glow,vec3(0.2126,0.7152,0.0722));
+   float core=NoV*NoV;glow=(mix(vec3(l),glow,0.85)*mix(0.1,1.0,core)+vec3(l*l*0.3)*core*core)*0.72;
+   float rim=pow(1.0-NoV,3.0);result+=vec3(0.16,0.42,0.56)*rim*(0.12+0.5*l);
+   vec2 cell=floor(sampleUV*vec2(textureSize(colorMap,0))/6.0);float glint=fract(sin(dot(cell,vec2(12.9898,78.233))+floor(dot(V,vec3(7.1,5.3,3.7))*3.0))*43758.5453);
+   result+=vec3(0.75,0.95,1.0)*smoothstep(0.985,1.0,glint)*(0.4+l)*NoV;
+  }
+  result+=glow;
  }
 
  // Fixture lighting is already visibility-tested in vertexLight and the two
@@ -582,13 +712,15 @@ void main(){
  if(lampGrid.flags.y==2&&detailAmount>0.001)result=vec3(detailValue*0.5);
  if(lampGrid.flags.y==3&&detailAmount>0.001)result=detailNormal*0.5+0.5;
  if(lampGrid.flags.y==8)result=sunDebug;
+ if(lampGrid.flags.y==10)result=bounceOut*color.rgb*2.0;
+ if(lampGrid.flags.y==11)result=crystal?vec3(1.0,0.0,0.0):metal>0.0?vec3(0.0,0.0,metal):vec3(polish*0.5);
  if(lampGrid.flags.y==9)result=vec3(ambientLight,max(directLight,0.0),directLight<0.0?0.5:0.0)*0.25;
  if(lampGrid.flags.y==7)result=vec3(clamp(pixelsPerTexel/64.0,0.0,1.0),fract(uv.y*atlasSize.y*2.5),fract(uv.x*atlasSize.x*2.5));
  if(lampGrid.flags.y==6)result=baseNormalDebug*0.5+0.5;
  if(lampGrid.flags.y==5)result=vec3(clamp(abs(uv.x)/64.0,0.0,1.0),clamp(abs(uv.y)/64.0,0.0,1.0),surface.w*0.25);
  if(lampGrid.flags.y==4)result=vec3(fract(uv.x*atlasSize.x),fract(uv.y*atlasSize.y*4.0),fract(worldPos.z*256.0));
  if(editorGhost>0.0)result=mix(result,vec3(0.16,0.42,0.50),editorGhost*0.45);
- float alpha=surface.z>1.5?color.a:1;
+ float alpha=surface.z>1.5?mix(color.a,1.0,reflectAlpha):1;
  // HDR opaque surfaces store planar camera depth in alpha for the post pass;
  // blended pipelines keep the destination alpha, so water stays a blend factor.
  vec3 toPoint=worldPos-view.eyeYaw.xyz;float forward=toPoint.x*view.eyeYaw.w+toPoint.y*view.basis.x;
@@ -602,6 +734,7 @@ void main(){
  // Alpha 1 marks world pixels; the viewmodel writes 0 so MSAA edge pixels
  // (fractional after resolve) skip world-only post effects.
  bool viewModelPixel=surface.w>1.5&&surface.w<2.5;
- outMaterial=vec4((surface.z<0.5||liquid)&&surface.w<1.5?materialRoughness:1.0,wetness,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
+ // g: a metal's metalness above .5 (0.5 + metal/2), else half the wetness (post.frag).
+ outMaterial=vec4((surface.z<0.5||liquid)&&surface.w<1.5?min(materialRoughness,1.0-polish):1.0,metal>0.0?0.5+0.5*metal:wetness*0.5,viewModelPixel?1.0:directShare,viewModelPixel?0.0:1.0);
  outColor=view.effects.w>0.5?vec4(max(result,vec3(0)),surface.z>1.5&&!liquid?alpha:planarDepth):vec4(toDisplay(filmic(result*0.95)),alpha);
 }

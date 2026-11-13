@@ -72,6 +72,104 @@ in `.build/promo-ch2`); grading: `chapter-2/make_ch2.py`, run from
 `.build/promo-ch2` (it imports `.build/promo-1.0/look.py`). No Chapter 2
 trailer or loop GIF yet.
 
+## Chapter 2 reveal trailer v3.1 (`chapter-2/v2/trailer-*`, copies in `chapter-2/`, 2:04.9)
+
+Made 2026-11-12 from the v1.4.1 build (ragdoll dead, fluid blood). v3 answered the
+user's notes on v2 (repetitive, no gameplay with the HUD, too much text); v3.1 then
+cut what the user called broken in v3: every third-person replay (Claire's body is a
+first-person rig with no third-person animation) and every voice in the game layer
+(each NPC line, radio call and death cry is raised as `Sound::WorkerDying` with a
+speech clip, and the take logs placed `worker-dying.wav` for every one of them).
+Gameplay is first person only. The game layer keeps only non-vocal sounds:
+gunshots, pump, dry click, footsteps, impacts, glass and wood, locker metal, the
+detection sting and tick, the Machine. Dropped: WorkerDying (all speech and death
+cries), Hurt (Claire's voice), RadioSquelch, and the Brute calls/attacks/death the
+Transformed and the mutated men borrow in the game; from the packs, the PA line
+`containment_breach_risk_smx_1` (now a distant alarm), `monster_talking_1/3` (a
+distant growl and a wet body impact) and `unknown_entity_distant_mx_2` (a distant
+impact). Radio subtitle bars in the gameplay frames are painted out
+(`compose_v3.unsub`). The stills, cover, banner and thumbnail below are still v2's;
+v2's trailer is kept untracked as `trailer-v2-*.mp4`.
+
+| File | Size | What it is |
+|---|---|---|
+| trailer-1080p.mp4 | 1920x1080, 30 fps, 2:04.9, H.264 High CRF 19 (tune grain) + AAC 320k 48 kHz, 650 MB, -14.2 LUFS, -0.7 dBTP | the master; give YouTube this one |
+| trailer-720p-web.mp4 | 1280x720, 30 fps, 2:04.9, CRF 23 + AAC 192k, 110 MB, -15.0 LUFS, -1.5 dBTP | the share copy |
+| trailer-contact-sheet.png | 1920x1818 (50 frames) | one frame every 2.5 s |
+| cue-sheet.txt | text | every sound cue: time, frame, level, and the cut it lands on |
+
+**Act 1, 0:00-0:40, the levels as they were left** (cold hold grade, 2.20 band):
+MAJWCF1234 PRESENTS; the intake theatre (68), the mortuary (78), a ward (72);
+"THE RESEARCH LEVELS NEVER CLOSED."; test labs (93), the suit room (69), the
+calibration pan's standing water (84), the red hall (100), Containment B's rock
+(98), the breach crystals (102), the gallery under its red emergency light (94);
+"WHAT THEY KEPT DOWN HERE IS AWAKE."
+
+**Act 2, 0:40-1:21, playing it** (first person only, with the hands and full HUD,
+graded light so the HUD reads; each beat runs up to the fight and holds through
+the kill and the fall, cut on the pulse of the act's track):
+crouched in Ward C's corridor while a sharpshooter walks his round (71) and the
+same from outside; the shotgun on a transformed worker in the Conversion Lab
+(93); the Lab 4 door reader; the flashlight in the Observation Ring's pit (88);
+a Cleanup squad in Containment Intake makes her out (the '?' fills, the sting,
+ALERT) and the handgun answers (95); the Observation Ring (cinematic breather);
+the shotgun on the mutated man in Materials Intake (79); the staff room lockers:
+in, through the holes, torn open by a guard and hauled out, from the room (71);
+the handgun among Containment B's crystals (98); the plenum (97); R-117 behind
+the cage bars in the dark (99); a Cleanup man shot down in a lit doorway (71);
+the dark Core Sample Archive lit by muzzle flashes (105); the shielding corridor's Cleanup man (91),
+Geophysics (106), the core pit (107), the prep room (104) and the test bay (86),
+each a different creature and weapon (v3.1 dropped Specimen Handling and the
+Resonance Laboratory with the replays); then the cursed equipment wakes on live
+current (92: its lamp-eye, the arcs over its casing).
+
+**Act 3, 1:21-2:05, Containment A**: black, "SOMETHING HUNTS THESE HALLS."; the build
+(the office in 101, R-117 against the red door, rising behind the post man, in
+slow motion); the drop on the kill (the stride out, the pounce, the bite on a
+flash frame with blood on the lens, the feed, it gets up), a blood wipe into the
+return in 103, the floor camera in 101, the last pounce; hard stop to silence;
+the title, CHAPTER 2 · ENERGY RESEARCH, COMING SOON, CHAPTER 1 — FREE ON
+ITCH.IO; burn out; the Machine's lamp-eye alone in the dark, the floor going
+live; black.
+
+**Music and sound.** Act 1: "No Light Returns" (`Tracks/Split/ost_no_light_returns_mx_1_beginning.ogg`,
+0:00-0:40, faded in over 4 s) over Pure Horror `drone_long_ph_1`, with room tone
+per shot (projector hum, a radio, lab computers, sub tones, the PA's
+"containment breach risk", crystal hum, something distant in the gallery) and a
+low distant impact under each story line. Act 2: "Storm - dark - heavy -
+lurking" (`Tracks/`, from 0:00, its first bar on the first gameplay cut, every
+cut on its 1.02 s pulse), with the game's own sounds under it: each gameplay
+take logs every sound event the game raised, frame by frame (`film-sounds.txt`),
+and those are placed from the game's audio files at the frame they happened
+(shotgun, pump, handgun, footsteps, the detection sting and ticks, the locker
+bang; no voices, see above); the
+Machine is the game's `machine.wav` with `electric_shock_mx_1` and
+`sfx_impact_mx_4`. Act 3: silence, then "What Eyes Can't See" placed so its
+drop (0:44.65) lands on the kill's first cut at 1:32.2, cut dead at 1:49.6;
+the v2 creature and impact cues on the kill. Title `sfx_stinger_mx_2` +
+`sfx_gong_mx_1`, the tease `machine.wav`, `stinger_ph_1`, `electric_shock_mx_1`,
+`sfx_impact_mx_16`, end drone `drone_ph_2`. Mixed with numpy at 48 kHz stereo,
+look-ahead limited: -14.2 LUFS integrated, -1.0 dBTP (1080p; -0.7 on the 720p copy), LRA 12 LU; digital silence from the
+stop to the title.
+
+**How the gameplay was shot.** The capture-only `--film` hook (src/main.cpp)
+gained player ops: `game LEVEL ...` (the staged scene saved and loaded into a
+fresh game, so it plays as the game does, with Claire's body), `play` (the
+player driven by input), `hud 1`, `rec NAME` / `stop` (every second 60 Hz tick
+drawn, and every game sound logged), `in N KEYS [MDX MDY]`, `look` / `track`
+(the view eased onto, or following, an enemy's chest or head or a person, at
+most 1.6 degrees a tick), `near T R` (placed R m from a target with a clear line),
+`weapon`, `torch`, `reach` / `yank` (a guard coming for the locker), `hp eK V` /
+`hurt nK V` (a creature's or a man's health staged so he goes down in two or
+three rounds), `console CMD`, `census`, and `cam auto DIST` / `cam rel B D` / `cam X Y`
+(a replay camera; tried in v3 and cut in v3.1: the body has no third-person
+animation). Each beat is one deterministic script; the trailer uses its first-person pass.
+
+Scripts (`.build/promo-1.4/`, copies here): `gameplay.py` (the gameplay beats),
+`shots.py` (environments and returns), `film96.py`, `film-machine.txt`,
+`compose_v3.py` (the edit and the frames; `--list` prints the shot list),
+`score_v3.py` (the mix), `cues_v3.py`, `contact_v3.py`, `look14.py`.
+
 ## Chapter 2 promo v2 (`chapter-2/v2/`, the reveal; Chapter 2 still sealed)
 
 Made 2026-11-12 from the v1.4 build (Chapter 2 sealed, chunks loaded directly).

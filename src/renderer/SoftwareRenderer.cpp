@@ -310,7 +310,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    if(material.ends_with("_glow")){texture.emission.resize(texture.pixels.size());
     for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
      float k=std::clamp((y-.28f)/.4f,0.f,1.f);unsigned r=unsigned(((p>>16)&255)*k),g=unsigned(((p>>8)&255)*k),b=unsigned((p&255)*k);
-     texture.emission[i]=0xff000000u|(r<<16)|(g<<8)|b;}}
+     texture.emission[i]=0xff000000u|(r<<16)|(g<<8)|b;}
+    // Resonance crystal: polished mineral that glints and mirrors the room, its glow in its cores.
+    if(material.starts_with("res_crystal_")){texture.crystal=true;texture.glossStrength=.78f;}}
    // "..._glass": a protective pane drawn in the blended pass; the texture's alpha is
    // its opacity (a light tint, denser at streaks and frosted rims), with a gloss sheen.
    if(material.ends_with("_glass")){texture.transparent=true;texture.glossStrength=.45f;}
@@ -540,6 +542,29 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // Pressure and office plaster are the finishes maps already use, at their repeats.
  m_surfaceSets[SurfacePressure]={&m_pressureWall,&m_pressureFloor,&m_facilityTextures.at("ceiling_1"),{2,3},.5f,.5f};
  m_surfaceSets[SurfaceOfficePlaster]={&m_officeWall,&m_securityCarpet,&m_dropCeiling,{1,1},1,1};
+ // Finishes that should mirror the room (light probes, post.frag): glazed tile and lab vinyl polished
+ // enough to show the room at a low angle, clean steel and chrome as metal (strong, tinted reflection
+ // face-on), glass and mirrors near-mirror. Dusty concrete, rust, timber and rock stay matte.
+ {auto finish=[](Texture& t,float polish,float metal){t.polish=polish;t.metalness=metal;};
+  finish(m_surfaceTextures[6],.5f,0);finish(m_surfaceTextures[7],.56f,0);finish(m_surfaceTextures[9],.42f,0);finish(m_surfaceTextures[10],.5f,0);
+  // Structure materials 46-48 and 50 (tread plate, rusted steel, metal roofing, floor tile).
+  const auto architecture=[&](int material)->Texture&{return m_surfaceTextures[size_t(ArchitectureFinish+material-FirstArchitectureMaterial)];};
+  finish(architecture(46),.42f,.55f);finish(architecture(47),.12f,.2f);finish(architecture(48),.22f,.35f);finish(architecture(50),.5f,0);
+  finish(m_officeTile,.5f,0);finish(m_pressureMetal,.44f,.5f);finish(m_pipeTexture,.42f,.45f);finish(m_darkMetalTexture,.34f,.45f);finish(m_ironTexture,.22f,.3f);
+  for(auto& [name,t]:m_facilityTextures){
+   auto has=[&](const char* part){return name.find(part)!=std::string::npos;};
+   if(t.transparent||t.additive||!t.emission.empty())continue;
+   const bool worn=has("rust")||has("grime")||has("dirt")||has("old")||has("dead");
+   if(has("mirror"))finish(t,worn?.6f:.85f,.35f);
+   else if(has("chrome")||has("stainless"))finish(t,.6f,.8f);
+   else if(has("autopsy_table")||has("sink_textures")||has("tray"))finish(t,.45f,.45f);
+   else if(has("glass")||has("_screen")||has("monitor"))finish(t,.62f,0);
+   else if(has("roof")||has("ceiling"))continue;
+   else if(has("tile")||has("marble")||has("polished"))finish(t,.5f,0);
+   else if(has("metal")||has("steel")||has("pipe")||has("valve")||has("locker")||has("catwalk")||has("cage")||has("gate")||has("cabinet")){
+    if(has("wood")||has("fire_extenguisher"))continue;
+    if(worn)finish(t,.18f,.25f);else if(has("painted"))finish(t,.3f,.15f);else finish(t,.38f,.55f);}
+  }}
  m_logo=loadEmbeddedPng(2);m_logo.clampEdges=true;
 }
 SoftwareRenderer::Texture SoftwareRenderer::loadSurfaceFinish(int index){
@@ -1331,7 +1356,17 @@ void SoftwareRenderer::drawConsole(const Game& game){
  int y=28;for(size_t i=first;i<log.size();++i,y+=11)text(12,y,log[i].substr(0,150).c_str(),rgb(188,204,196));
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
-void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();
+void SoftwareRenderer::render(const Game& game){
+ // An inspection frame on Vulkan (a test, a shot) is drawn once the light it is drawn with has
+ // settled: lamp shadows that were still being drawn, reflection probes not yet captured and probe
+ // bakes taken in during a frame change the next one, so it is drawn again until a frame changes
+ // none of them (a few at most). Play is never held up: each catches up over its own frames.
+ if(m_environmentInspection&&m_gpu&&!m_settlingFrame&&!m_vrRendering){m_settlingFrame=true;
+  try{for(int pass=0;pass<6;++pass){const auto faces=m_gpu->shadowFacesDrawn(),captures=m_gpu->reflectionCaptures(),bakes=m_probeBakesTaken;render(game);
+    if(!m_gpu||(faces==m_gpu->shadowFacesDrawn()&&captures==m_gpu->reflectionCaptures()&&bakes==m_probeBakesTaken&&!m_gpu->shadowsPending()&&!m_gpu->reflectionsPending()))break;}}
+  catch(...){m_settlingFrame=false;throw;}
+  m_settlingFrame=false;return;}
+ auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();
  m_bodyOutside=false;
  // A lens position the camera may take: in sight of her head and with room
  // round it (a .4 m box clear of walls, pillars, props and doors).
@@ -1431,7 +1466,7 @@ void SoftwareRenderer::render(const Game& game){auto start=std::chrono::steady_c
   {std::vector<std::array<float,16>> lamps;std::vector<float> powers;
    for(int level=0;level<game.chunkCount();++level){if(!nearby(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
-    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,lamp.shadows?lamp.beamCode():-lamp.beamCode(),lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw,lamp.gel.x,lamp.gel.y,lamp.gel.z});powers.push_back(game.lampPower(lamp));}
+    for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,(lamp.shadows?1.f:-1.f)*(lamp.beamCode()+(lamp.switchable()?16.f:0.f)),lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw,lamp.gel.x,lamp.gel.y,lamp.gel.z});powers.push_back(game.lampPower(lamp));}
    }
    if(lamps.size()>256){Point3 eye{m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye};
     std::vector<std::pair<float,size_t>> order;for(size_t i=0;i<lamps.size();++i){float dx=lamps[i][0]-eye.x,dy=lamps[i][1]-eye.y,dz=lamps[i][2]-eye.z;order.push_back({dx*dx+dy*dy+dz*dz,i});}

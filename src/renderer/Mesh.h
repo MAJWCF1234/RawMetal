@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <array>
+#include <initializer_list>
 #include "../core/Math.h"
 #include "../ThirdParty/ufbx/ufbx.h"
 namespace retro {
@@ -59,6 +60,14 @@ public:
  // Imported, normalized topology remains available after animation poses.
  const std::vector<MeshTriangle>& bindTriangles()const;
  const std::vector<uint16_t>& creatureVertexIndices()const{return m_creatureIndices;}
+ // Posing a creature from outside its clips: a clip's skinned vertices (one per
+ // vertex of the bank, as creatureVertexIndices numbers them), a set of them
+ // published as the mesh's triangles, and per vertex the summed skin weight of
+ // the named bones (Claire's body is layered and aimed this way from outside).
+ void sampleCreatureVertices(int clip,float phase,std::vector<Point3>& out)const{sampleCreatureClip(clip,phase,out);}
+ void publishCreatureVertices(const std::vector<Point3>& vertices);
+ std::vector<float> creatureBoneWeights(std::initializer_list<const char*> bones)const;
+ size_t creatureVertexCount()const{return m_creatureVertices;}
  std::vector<MeshTriangle> triangles;
  std::vector<std::vector<MeshVertex>> openRings;
  Point3 minimum,maximum;

@@ -200,6 +200,7 @@
     std::ofstream(exportFolder/L"latest-export.txt")<<utf8(path.wstring())<<'\n';
     passed.push_back("new-floor headroom, actual 3D edge drag, unchanged deck, player start and native export/reopen");
     verifyDoorRotation(passed,mouse,reset);
+    verifyAirLightFilm(passed,mouse,reset);
 
     std::ofstream report(root/L"native-editor-interaction-test.txt");
     for(const auto& message:passed)report<<"PASS: "<<message<<'\n';
@@ -351,4 +352,226 @@
       out.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof info.bmiHeader);out.write(static_cast<const char*>(bits),std::streamsize(size_t(r.right)*size_t(r.bottom)*4));}
     SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);
     passed.push_back("plan draws all eight swinging doors (leaf from the hinge toward the swing side, never the other side or end, an ajar leaf at its angle, a breakable leaf cracked), lock glyphs beside the latch only where shown, and sliding doors along their axis; picture in .build/interaction/doors-plan.bmp");
+  }
+  // The Emitter tool, the picture's light and the Film camera tool (NativeEmitterTool.inc,
+  // NativeLightView.inc, NativeFilmTool.inc), through the plan's mouse, the inspector's
+  // boxes and sliders, R and Undo; the engine reads, exports, draws and films the result.
+  // Pictures land in .build/interaction: air-plan.bmp, air-a/b.ppm (the air moving),
+  // light-0..3.ppm (lit, probe fill, finish, no probes), third-person.ppm, first-person.ppm,
+  // films-plan.bmp and the film's frames under "Film test film".
+  template <class Mouse, class Reset> void verifyAirLightFilm(std::vector<std::string> &passed, Mouse &mouse, Reset &reset) {
+    auto require=[](bool okay,const std::string& message){if(!okay)throw std::runtime_error(message);};
+    auto exportPath=path;
+    auto folder=root/L".build"/L"interaction";fs::create_directories(folder);
+    auto fieldsOf=[&](size_t i){return NativeDocument::fields(doc.lines[i]);};
+    auto shown=[](HWND h){return (GetWindowLongW(h,GWL_STYLE)&WS_VISIBLE)!=0;};
+    auto box=[&](HWND list,int id,int choice){SendMessageW(list,CB_SETCURSEL,choice,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(id,CBN_SELCHANGE),reinterpret_cast<LPARAM>(list));};
+    auto slide=[&](HWND s,int at){SendMessageW(s,TBM_SETPOS,TRUE,at);SendMessageW(window,WM_HSCROLL,MAKEWPARAM(TB_ENDTRACK,0),reinterpret_cast<LPARAM>(s));};
+    auto about=[](const std::string& v,float want,float tolerance=.002f){return std::abs(number(v,-1e9f)-want)<=tolerance;};
+    // The plan as it is drawn, read pixel by pixel, then kept as a picture.
+    auto planShot=[&](const wchar_t* name,auto&& inspect){
+      InvalidateRect(plan,nullptr,TRUE);RECT r{};GetClientRect(plan,&r);HDC dc=CreateCompatibleDC(nullptr);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+      void* bits=nullptr;auto bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(dc,bitmap);SendMessageW(plan,WM_PRINTCLIENT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT);GdiFlush();
+      {std::ofstream out(folder/name,std::ios::binary);BITMAPFILEHEADER head{};head.bfType=0x4D42;head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
+       head.bfSize=DWORD(head.bfOffBits+size_t(r.right)*size_t(r.bottom)*4);out.write(reinterpret_cast<const char*>(&head),sizeof head);
+       out.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof info.bmiHeader);out.write(static_cast<const char*>(bits),std::streamsize(size_t(r.right)*size_t(r.bottom)*4));}
+      try{inspect(dc,planView());}catch(...){SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);throw;}
+      SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);};
+    // The whole builder window (its right pane shows the tool's boxes), kept as a picture.
+    auto windowShot=[&](const wchar_t* name){
+      RECT was{};GetWindowRect(window,&was);SetWindowPos(window,nullptr,-6000,0,1600,960,SWP_NOZORDER|SWP_NOACTIVATE);ShowWindow(window,SW_SHOWNOACTIVATE);layout();RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN);
+      RECT r{};GetClientRect(window,&r);if(r.right<=0||r.bottom<=0)return;HDC screen=GetDC(window);HDC dc=CreateCompatibleDC(screen);auto bitmap=CreateCompatibleBitmap(screen,r.right,r.bottom);auto old=SelectObject(dc,bitmap);
+      PrintWindow(window,dc,PW_CLIENTONLY|PW_RENDERFULLCONTENT);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+      std::vector<char> bits(size_t(r.right)*size_t(r.bottom)*4);SelectObject(dc,old);GetDIBits(dc,bitmap,0,UINT(r.bottom),bits.data(),&info,DIB_RGB_COLORS);
+      std::ofstream out(folder/name,std::ios::binary);BITMAPFILEHEADER head{};head.bfType=0x4D42;head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);head.bfSize=DWORD(head.bfOffBits+bits.size());
+      out.write(reinterpret_cast<const char*>(&head),sizeof head);out.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof info.bmiHeader);out.write(bits.data(),std::streamsize(bits.size()));
+      DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(window,screen);ShowWindow(window,SW_HIDE);SetWindowPos(window,nullptr,was.left,was.top,was.right-was.left,was.bottom-was.top,SWP_NOZORDER|SWP_NOACTIVATE);};
+    auto colourNear=[](HDC dc,int x,int y,int reach,COLORREF colour){int n=0;for(int dx=-reach;dx<=reach;++dx)for(int dy=-reach;dy<=reach;++dy)n+=GetPixel(dc,x+dx,y+dy)==colour;return n;};
+    // The engine run as the builder runs its picture, hidden: the document, the control and
+    // look files in a session folder of their own, N frames, the last one captured.
+    auto engineRun=[&](const std::wstring& args,const fs::path& cwd,bool wait=true)->PROCESS_INFORMATION{
+      std::wstring line=L"\""+engineExecutable().wstring()+L"\" "+args;STARTUPINFOW si{sizeof(si)};PROCESS_INFORMATION p{};
+      require(CreateProcessW(nullptr,line.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,cwd.c_str(),&si,&p)!=0,"The engine could not be started for the picture checks");
+      if(wait){if(WaitForSingleObject(p.hProcess,240000)==WAIT_TIMEOUT)TerminateProcess(p.hProcess,9);WaitForSingleObject(p.hProcess,5000);}
+      return p;};
+    auto finish=[&](PROCESS_INFORMATION p){DWORD code=1;GetExitCodeProcess(p.hProcess,&code);CloseHandle(p.hThread);CloseHandle(p.hProcess);return int(code);};
+    struct Look{int mode=-1,third=0,playing=0;unsigned bakes=0;double ms=0;int sources=0,particles=0;float clock=0;int outside=0,rebake=0;};
+    auto readLookFile=[&](const fs::path& file){Look s;std::ifstream in(file);std::string tag;in>>tag>>s.mode>>s.third>>s.playing>>s.bakes>>s.ms>>s.sources>>s.particles>>s.clock>>s.outside>>s.rebake;if(tag!="LOOK")s.mode=-1;return s;};
+    auto picture=[&](const std::wstring& name,const std::string& look,int frames,int play=0)->Look{
+      auto session=folder/(name+L"-session");fs::create_directories(session);
+      doc.save(session/L"working.rmc");
+      std::ofstream(session/L"control.txt")<<"1 "<<map<<' '<<play<<" 0 0 "<<(play?1:0)<<" 0 0 0\n0\n0\n";
+      std::ofstream(session/L"look.txt")<<look;std::error_code ec;fs::remove(session/L"look-status.txt",ec);fs::remove(folder/(name+L".ppm"),ec);
+      auto p=engineRun(L"\"--editor-pack="+(session/L"working.rmc").wstring()+L"\" \"--editor-control="+(session/L"control.txt").wstring()+L"\" \"--editor-status="+(session/L"status.txt").wstring()+
+                       L"\" --editor-frames="+std::to_wstring(frames)+L" \"--editor-capture="+(folder/(name+L".ppm")).wstring()+L"\" --editor-hidden",session);
+      require(finish(p)==0,"The engine picture failed for "+utf8(name));
+      require(fs::exists(folder/(name+L".ppm")),"The engine picture wrote no capture for "+utf8(name));
+      return readLookFile(session/L"look-status.txt");};
+    auto pixels=[&](const std::wstring& name){std::ifstream in(folder/(name+L".ppm"),std::ios::binary);std::string magic;int w=0,h=0,d=0;in>>magic>>w>>h>>d;in.get();std::vector<unsigned char> rgb(size_t(std::max(0,w*h*3)));in.read(reinterpret_cast<char*>(rgb.data()),std::streamsize(rgb.size()));return rgb;};
+    auto differ=[&](const std::wstring& a,const std::wstring& b){auto p=pixels(a),q=pixels(b);if(p.size()!=q.size()||p.empty())return -1;int n=0;
+      for(size_t i=0;i+2<p.size();i+=3)n+=std::abs(int(p[i])-int(q[i]))+std::abs(int(p[i+1])-int(q[i+1]))+std::abs(int(p[i+2])-int(q[i+2]))>24;return n;};
+
+    // ---- The Emitter tool: every preset placed by a click, each one Undo, all engine-valid.
+    reset();
+    {auto start=doc.records("MAP",0).front();auto m=fieldsOf(start);m[5]="12";m[6]="1.6";m[20]="1.570796";m[21]="0";doc.replace(start,m);}
+    tool=EmitterTool;layout();
+    require(shown(emitterPresetList)&&SendMessageW(emitterPresetList,CB_GETCOUNT,0,0)==EmitterPresetCount,"The Emitter tool shows no preset list");
+    std::vector<size_t> placed;std::vector<std::pair<float,float>> spots;
+    for(int i=0;i<EmitterPresetCount;++i){
+      float x=4.f+float(i%4)*5.25f,y=6.f+float(i/4)*5.f;spots.push_back({x,y});
+      box(emitterPresetList,EmitterPresetList,i);auto before=doc.records("EMITTER",0).size();auto historyCount=history.size();
+      mouse(WM_LBUTTONDOWN,x,y);mouse(WM_LBUTTONUP,x,y);
+      require(doc.records("EMITTER",0).size()==before+1&&history.size()==historyCount+1,"A click with the Emitter tool did not place one emitter as one Undo ("+utf8(emitterPresets[i].name)+")");
+      auto f=fieldsOf(doc.records("EMITTER",0).back());const auto& p=emitterPresets[i];
+      require(f.size()==14&&about(f[2],x)&&about(f[3],y)&&f[12]==std::to_string(p.kind)&&about(f[8],1.f/p.life,.01f)&&f[11]==std::to_string(p.count)&&about(f[9],p.size)&&about(f[13],p.strength),
+              "The "+utf8(p.name)+" preset did not write its kit helper's numbers: "+doc.lines[doc.records("EMITTER",0).back()]);
+      require(p.fromCeiling?about(f[4],creationCeiling()-p.lift,.01f):about(f[4],p.lift,.01f),"The "+utf8(p.name)+" preset did not leave at its height");
+      placed.push_back(doc.records("EMITTER",0).back());}
+    require(validateDocument(),"The engine refused the presets: "+utf8(notice));
+    passed.push_back("Emitter tool: all "+std::to_string(EmitterPresetCount)+" presets (steam leak and jet, smoke column, spark shower, dust motes, drips, spray, fire, toxic pool, ceiling grit, arc glow, old plume) placed by plan clicks with their kit helpers' numbers, one Undo each, engine-valid");
+
+    // ---- A picked emitter: What, Restyle, Points, Strength, R, its switch and timed window, one Undo each.
+    tool=0;auto jet=[&]{return doc.records("EMITTER",0)[1];};selectRecord(int(jet()));layout();
+    require(emitterPicked()&&shown(emitterKindList)&&shown(emitterRestyleList)&&shown(emitterHeadingSlider)&&shown(emitterStrengthSlider),"A picked emitter shows no What, Restyle, Points or Strength");
+    viewMode=0;layout();windowShot(L"air-window.bmp");viewMode=1;layout();
+    auto editFrom=doc.text();auto historyCount=history.size();
+    slide(emitterHeadingSlider,90);auto f=fieldsOf(jet());
+    require(about(f[5],0,.01f)&&about(f[6],2,.01f),"Points 90 did not carry the jet south at its reach: "+doc.lines[jet()]);
+    {MSG key{plan,WM_KEYDOWN,'R',0};shortcut(key);}f=fieldsOf(jet());
+    require(about(f[5],-1.414f,.01f)&&about(f[6],1.414f,.01f),"R did not turn the picked jet an eighth round: "+doc.lines[jet()]);
+    slide(emitterStrengthSlider,250);f=fieldsOf(jet());require(f[13]=="2.5","Strength 250 did not write 2.5: "+doc.lines[jet()]);
+    box(emitterKindList,EmitterKindList,7);f=fieldsOf(jet());
+    require(f[12]=="7"&&about(f[8],1.f/1.2f,.01f)&&about(f[5],-.707f,.01f)&&about(f[6],.707f,.01f)&&about(f[2],spots[1].first),"What: Spray did not take the spray's numbers and keep the heading: "+doc.lines[jet()]);
+    selectRecord(int(jet()));box(emitterRestyleList,EmitterRestyleList,1+2);f=fieldsOf(jet());
+    require(f[12]=="1"&&f[11]=="22"&&SendMessageW(emitterRestyleList,CB_GETCURSEL,0,0)==0,"Restyle: Smoke column did not restyle the emitter: "+doc.lines[jet()]);
+    selectRecord(int(jet()));
+    {auto set=[&](size_t field,const wchar_t* v){SetWindowTextW(fieldInputs[field-2],v);};set(14,L"vent_on");set(15,L"1");set(17,L"4");set(18,L"1.5");apply(true);}
+    f=fieldsOf(jet());require(f.size()==19&&f[14]=="vent_on"&&f[17]=="4"&&f[18]=="1.5","The inspector did not gate the emitter on a switch and a timed window: "+doc.lines[jet()]);
+    require(history.size()==historyCount+6,"What, Restyle, Points, Strength, R and the fields are not one Undo each ("+std::to_string(history.size()-historyCount)+")");
+    require(validateDocument(),"The engine refused the edited emitter: "+utf8(notice));
+    auto edited=doc.text();
+    auto dust=doc.records("EMITTER",0)[4];selectRecord(int(dust));auto dustLine=doc.lines[dust];slide(emitterHeadingSlider,45);
+    require(doc.lines[dust]==dustLine&&!IsWindowEnabled(emitterHeadingSlider),"Dust motes took a heading");
+    for(int i=0;i<6;++i)SendMessageW(window,WM_COMMAND,Undo,0);
+    require(doc.text()==editFrom,"Undo did not take the emitter's edits back exactly");
+    for(int i=0;i<6;++i)SendMessageW(window,WM_COMMAND,Redo,0);
+    require(doc.text()==edited,"Redo did not bring the emitter's edits back exactly");
+    passed.push_back("picked emitter: Points slider, R (an eighth), Strength slider, What (takes that kind's numbers, keeps the heading), Restyle from a preset, switch and timed window through the fields; one Undo each, exact Undo/Redo; dust refuses a heading");
+
+    // ---- The plan: every glyph in its kind's colour, the carry arrow, the dust box.
+    selectRecord(-1);
+    planShot(L"air-plan.bmp",[&](HDC dc,const auto& v){
+      for(size_t i=0;i<placed.size();++i){auto g=fieldsOf(doc.records("EMITTER",0)[i]);int kind=emitterKindOf(g);
+        int x=int(v.ox+number(g[2],0)*v.cell),y=int(v.oy+number(g[3],0)*v.cell);
+        require(colourNear(dc,x,y,int(v.cell*.6f),emitterColor(kind))>=6,"The plan does not draw the "+utf8(emitterKindNames[kind])+" emitter's glyph in its colour");}
+      auto leak=fieldsOf(doc.records("EMITTER",0)[0]);int x=int(v.ox+number(leak[2],0)*v.cell),y=int(v.oy+number(leak[3],0)*v.cell),along=0;
+      for(float t=.35f;t<=.65f;t+=.05f)along+=colourNear(dc,x+int(t*v.cell),y,1,emitterColor(2));
+      require(along>=4,"The plan does not draw the steam leak's arrow east");
+      auto motes=fieldsOf(dust);int bx=int(v.ox+(number(motes[2],0)-1.5f)*v.cell),by=int(v.oy+number(motes[3],0)*v.cell);
+      require(colourNear(dc,bx,by,2,emitterColor(4))>=1,"The plan does not draw the box dust motes fill");});
+    passed.push_back("plan draws every emitter kind's glyph in its colour, the carry arrow and the box dust fills; picture in .build/interaction/air-plan.bmp");
+
+    // ---- Save/reopen, and the engine's own exporter writes them back the same.
+    {auto saved=folder/L"air-export.rmc";saveTo(saved);NativeDocument back;back.open(saved);require(back.text()==doc.text(),"Save/reopen changed an emitter");path=exportPath;
+     std::error_code ec;fs::remove(saved.wstring()+L".exported.rmc",ec);
+     require(finish(engineRun(L"\"--editor-export="+saved.wstring()+L"\"",folder))==0,"The engine could not export the emitters");
+     NativeDocument exported;exported.open(saved.wstring()+L".exported.rmc");auto mine=doc.records("EMITTER",0),theirs=exported.records("EMITTER",0);
+     require(mine.size()==theirs.size(),"The engine's export lost emitters ("+std::to_string(theirs.size())+" of "+std::to_string(mine.size())+")");
+     for(size_t i=0;i<mine.size();++i){auto a=fieldsOf(mine[i]),b=NativeDocument::fields(exported.lines[theirs[i]]);a.resize(20);b.resize(20);
+       for(size_t k=2;k<20;++k){if(k==14){require(a[k].empty()==b[k].empty(),"The export lost an emitter's switch");continue;}
+         require(std::abs(number(a[k],k==13?1.f:k==15?1.f:0.f)-number(b[k],k==13?1.f:k==15?1.f:0.f))<.002f,"The export changed field "+std::to_string(k)+": "+doc.lines[mine[i]]+" / "+exported.lines[theirs[i]]);}}}
+    passed.push_back("save/reopen byte-identical; the engine's exporter (--editor-export) writes every emitter back with the same numbers, switch and window");
+
+    // ---- The picture: the emitters show and move in the builder's 3D view (the clock runs between edits).
+    {auto start=doc.records("EMITTER",0);auto g=fieldsOf(start[1]);g.resize(14);doc.replace(start[1],g);} // the smoke column ungated for the picture
+    auto a=picture(L"air-a","LOOK 0 0 0 1\n",30),b=picture(L"air-b","LOOK 0 0 0 1\n",120);
+    require(a.mode==0&&a.sources>=8&&a.particles>100,"The builder's picture draws no air ("+std::to_string(a.sources)+" sources, "+std::to_string(a.particles)+" particles)");
+    require(b.clock>a.clock+.3f,"The picture's clock does not run between edits");
+    int moved=differ(L"air-a",L"air-b");require(moved>800,"The air does not move in the picture ("+std::to_string(moved)+" pixels changed)");
+    auto still=picture(L"air-still","LOOK 0 0 0 0\n",60);require(still.clock<.05f,"Air moves: off still ran the clock");
+    passed.push_back("3D view: "+std::to_string(b.sources)+" emitters, "+std::to_string(b.particles)+" particles drawn by the engine in the builder's picture; the clock runs between edits ("+std::to_string(moved)+" pixels moved) and holds when asked; air-a.ppm, air-b.ppm");
+
+    // ---- Light: lit, probe fill, finish, no probes; Rebake while the picture runs; a crystal's glow said.
+    addAuthored({"FIXTURE","0",std::to_string(retro::model::res_crystal_l),"20","20","0","1.83","1.66","2.91","0","1"});
+    selectRecord(int(doc.records("FIXTURE",0).back()));layout();
+    require(crystalGlow()==L"Cyan glow 4.0, reaches 6.0 m","A picked crystal does not say its glow: "+utf8(crystalGlow()));
+    {auto c=fieldsOf(size_t(record));c[8]="1.455";doc.replace(size_t(record),c);require(crystalGlow()==L"Cyan glow 2.0, reaches 4.2 m","A half-size crystal's glow is not halved: "+utf8(crystalGlow()));c[8]="2.91";doc.replace(size_t(record),c);}
+    selectRecord(-1);lightMenuChosen(LightMenuBase+1);require(lightView==1&&lookText()=="LOOK 1 0 0 1\n","The Light menu's Probe fill did not reach the look file: "+lookText());
+    lightMenuChosen(LightMenuBase+5);require(!airMoves&&lookText()=="LOOK 1 0 0 0\n","Air moves did not switch off");lightMenuChosen(LightMenuBase+5);
+    lightMenuChosen(LightMenuBase+4);require(rebakeSerial==1&&lookText()=="LOOK 1 0 1 1\n","Rebake did not ask the picture");
+    SendMessageW(window,WM_COMMAND,ThirdPersonToggle,0);require(thirdPersonPlay&&lookText()=="LOOK 1 1 1 1\n","The play toggle did not ask for the shoulder camera");
+    SendMessageW(window,WM_COMMAND,ThirdPersonToggle,0);lightMenuChosen(LightMenuBase);rebakeSerial=0;
+    std::array<Look,4> modes;for(int m=0;m<4;++m)modes[size_t(m)]=picture(L"light-"+std::to_wstring(m),"LOOK "+std::to_string(m)+" 0 0 0\n",24);
+    for(int m=1;m<4;++m){require(modes[size_t(m)].mode==m,"The picture did not take light mode "+std::to_string(m));int d=differ(L"light-0",L"light-"+std::to_wstring(m));
+      require(d>2000,"Light mode "+std::to_string(m)+" looks the same as lit ("+std::to_string(d)+" pixels)");}
+    {auto session=folder/L"rebake-session";fs::create_directories(session);doc.save(session/L"working.rmc");std::error_code ec;fs::remove(session/L"look-status.txt",ec);
+     std::ofstream(session/L"control.txt")<<"1 0 0 0 0 0 0 0 0\n0\n0\n";std::ofstream(session/L"look.txt")<<"LOOK 0 0 0 0\n";
+     auto p=engineRun(L"\"--editor-pack="+(session/L"working.rmc").wstring()+L"\" \"--editor-control="+(session/L"control.txt").wstring()+L"\" \"--editor-status="+(session/L"status.txt").wstring()+L"\" --editor-frames=600 --editor-hidden",session,false);
+     Look first;for(int i=0;i<2400&&(first=readLookFile(session/L"look-status.txt")).bakes<1;++i)Sleep(25);
+     require(first.bakes>=1,"The picture never baked its probes");
+     {std::ofstream(session/L"look.txt.tmp")<<"LOOK 0 0 1 0\n";}MoveFileExW((session/L"look.txt.tmp").c_str(),(session/L"look.txt").c_str(),MOVEFILE_REPLACE_EXISTING);
+     Look again;for(int i=0;i<2400&&(again=readLookFile(session/L"look-status.txt")).bakes<=first.bakes;++i)Sleep(25);
+     if(WaitForSingleObject(p.hProcess,240000)==WAIT_TIMEOUT)TerminateProcess(p.hProcess,9);finish(p);
+     require(again.bakes>first.bakes&&again.rebake==1,"Rebake did not bake the probes again in the running picture ("+std::to_string(first.bakes)+" then "+std::to_string(again.bakes)+")");
+     passed.push_back("light view: lit, probe fill (--detail-probes), finish (--detail-finish) and no probes (--no-probes) as runtime switches, each a different picture (light-0..3.ppm); Rebake bakes again in the running picture ("+std::to_string(int(again.ms))+" ms); a crystal's glow said from its model and size; the Light menu and play toggle reach the look file");}
+
+    // ---- Play as Claire over her shoulder: she is drawn from outside; first person she is not.
+    // Her start 3 m off the north wall, so the shoulder camera has room behind her.
+    {auto start=doc.records("MAP",0).front();auto m=fieldsOf(start);m[6]="4.5";doc.replace(start,m);}
+    {auto third=picture(L"third-person","LOOK 0 1 0 1\n",150,1),first=picture(L"first-person","LOOK 0 0 0 1\n",150,1);
+     require(third.playing==1&&third.third==1&&third.outside==1,"Play over the shoulder did not draw Claire from outside");
+     require(first.playing==1&&first.outside==0,"First-person play drew Claire from outside");
+     require(differ(L"third-person",L"first-person")>5000,"The shoulder camera's picture is the first-person one");
+     passed.push_back("play as Claire: the shoulder camera draws her from outside (third-person.ppm), first person does not (first-person.ppm)");}
+
+    // ---- Film cameras: a click, R and a drag place named cameras; the inspector moves one and turns one on Claire.
+    reset();
+    {auto start=doc.records("MAP",0).front();auto m=fieldsOf(start);m[5]="12";m[6]="12";m[20]="-1.570796";doc.replace(start,m);}
+    for(int i=0;i<3;++i){tool=EmitterTool;emitterPreset=i==0?2:i==1?0:10;place(8.f+4.f*float(i),9.f);}
+    tool=FilmTool;filmTurn=0;layout();
+    require(shown(GetDlgItem(window,FilmWrite))&&shown(GetDlgItem(window,FilmRender)),"The Film camera tool shows no Write or Render");
+    historyCount=history.size();
+    mouse(WM_LBUTTONDOWN,3.f,12.f);mouse(WM_LBUTTONUP,3.f,12.f);
+    selectRecord(-1);{MSG key{plan,WM_KEYDOWN,'R',0};shortcut(key);}require(filmTurn==1,"R did not turn the next camera");
+    selectRecord(-1);mouse(WM_LBUTTONDOWN,3.f,3.f);mouse(WM_LBUTTONUP,3.f,3.f);
+    gestureNow(12.f,20.f,12.f,10.f);
+    auto cams=doc.records(FilmKind,0);require(cams.size()==3&&history.size()==historyCount+3,"Click, click and drag did not place three cameras as three Undo");
+    auto c0=filmCamera(fieldsOf(cams[0])),c1=filmCamera(fieldsOf(cams[1])),c2=filmCamera(fieldsOf(cams[2]));
+    require(c0.name=="shot_1"&&c1.name=="shot_2"&&c2.name=="shot_3"&&c0.yaw==0&&c1.yaw==45&&c2.yaw==270&&about(fieldsOf(cams[0])[5],1.6f),"Cameras were not named, turned and aimed as placed: "+doc.lines[cams[2]]);
+    selectRecord(int(cams[2]));layout();require(filmPicked()&&!fieldShown.empty(),"A picked camera shows no fields");
+    {auto set=[&](size_t field,const wchar_t* v){SetWindowTextW(fieldInputs[field-2],v);};set(8,L"2");set(9,L"16");set(10,L"16");set(12,L"300");set(7,L"-10");apply(true);}
+    c2=filmCamera(fieldsOf(cams[2]));require(c2.seconds==2&&c2.bx==16&&c2.by==16&&c2.byaw==300&&c2.pitch==-10,"The inspector did not make a moving shot: "+doc.lines[cams[2]]);
+    selectRecord(int(cams[0]));{MSG key{plan,WM_KEYDOWN,'R',0};shortcut(key);}require(filmCamera(fieldsOf(cams[0])).yaw==45,"R did not turn the picked camera");
+    selectRecord(int(cams[1]));{auto set=[&](size_t field,const wchar_t* v){SetWindowTextW(fieldInputs[field-2],v);};set(14,L"1");set(2,L"claire look");apply(true);}
+    require(filmCamera(fieldsOf(cams[1])).claire&&filmCamera(fieldsOf(cams[1])).name=="claire look","A camera was not turned on Claire");
+    require(history.size()==historyCount+6,"Camera edits are not one Undo each");
+    require(validateDocument(),"The engine refused a map with film cameras: "+utf8(notice));
+    auto filmed=doc.text();for(int i=0;i<6;++i)SendMessageW(window,WM_COMMAND,Undo,0);
+    require(doc.records(FilmKind,0).empty(),"Undo did not take the cameras away");for(int i=0;i<6;++i)SendMessageW(window,WM_COMMAND,Redo,0);
+    require(doc.text()==filmed,"Redo did not bring the cameras back exactly");
+    selectRecord(-1);
+    planShot(L"films-plan.bmp",[&](HDC dc,const auto& v){
+      for(auto i:doc.records(FilmKind,0)){auto c=filmCamera(fieldsOf(i));require(colourNear(dc,int(v.ox+c.ax*v.cell),int(v.oy+c.ay*v.cell),4,ui::Film)>=8,"The plan does not draw camera "+c.name);}
+      auto c=filmCamera(fieldsOf(doc.records(FilmKind,0)[2]));int dashes=0;for(float t=.3f;t<=.7f;t+=.05f)dashes+=colourNear(dc,int(v.ox+(c.ax+(c.bx-c.ax)*t)*v.cell),int(v.oy+(c.ay+(c.by-c.ay)*t)*v.cell),1,ui::Film)>0;
+      require(dashes>=4,"The plan does not draw the moving shot's path");
+      require(colourNear(dc,int(v.ox+c.bx*v.cell),int(v.oy+c.by*v.cell),3,ui::Film)>=3,"The plan does not draw the moving shot's end");});
+    selectRecord(int(doc.records(FilmKind,0)[2]));
+    tool=FilmTool;viewMode=0;layout();windowShot(L"films-window.bmp");viewMode=1;layout();
+    {std::vector<retro::EditorGuide> guides;filmGuides(guides);require(guides.size()==17,"The picked camera's view is not outlined in 3D ("+std::to_string(guides.size())+")");}
+    passed.push_back("Film camera tool: click (R turns the next), drag aims, names shot_1..3; inspector makes a 2 s move and a camera on Claire; R turns a picked one; one Undo each, exact Undo/Redo; engine-valid; plan wedges, path and end (films-plan.bmp); 3D frustum guides");
+
+    // ---- The --film list beside the project, and the engine films it into pictures.
+    {auto project=folder/L"Film test.rmc";saveTo(project);
+     auto pictures=folder/L"Film test film";std::error_code ec;fs::remove_all(pictures,ec);
+     auto jobs=writeFilmLists();require(jobs.size()==1&&jobs[0].list==folder/L"Film test.film.txt"&&jobs[0].folder==pictures,"The film list is not beside the project");
+     std::ifstream list(jobs[0].list);std::vector<std::string> lines;for(std::string l;std::getline(list,l);)lines.push_back(l);
+     require(lines.size()>2&&lines[0].starts_with("custom 0 12.000 12.000 0.000 -90.000 0 ")&&lines[0].ends_with(utf8(project.wstring())),"The film list does not start from the project at the map's start: "+(lines.empty()?std::string():lines[0]));
+     int stills=0,moving=0,claire=0;for(auto& l:lines){if(l.starts_with("f shot_1 ")||l.starts_with("f shot_3 "))++stills;if(l.starts_with("f shot_3_"))++moving;if(l.starts_with("cam "))++claire;}
+     require(stills==1&&moving==21&&claire==2,"The film list's frames are wrong (still "+std::to_string(stills)+", moving "+std::to_string(moving)+", Claire "+std::to_string(claire)+")");
+     int frames=0,code=filmRender(filmEngine(),jobs[0],frames);
+     require(code==0&&frames==1+21+1,"The engine did not film the list ("+std::to_string(frames)+" pictures, exit "+std::to_string(code)+")");
+     for(auto name:{L"shot_1.bmp",L"shot_3_0000.bmp",L"shot_3_0020.bmp",L"claire_look_0000.bmp"})require(fs::exists(pictures/name),"No film picture "+utf8(name));
+     require(fs::file_size(pictures/L"shot_3_0000.bmp")>1000000,"A film picture is not a whole frame");
+     path=exportPath;
+     passed.push_back("film list beside the project (custom stage at the map's start, a still, a 21-frame move, Claire's replay camera); RawMetal.exe --film filmed "+std::to_string(frames)+" pictures into \"Film test film\"");}
   }

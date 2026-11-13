@@ -7,6 +7,9 @@
 #include <memory>
 #include <atomic>
 #include "Mesh.h"
+#include "ClaireOutside.h"
+#include "LightProbes.h"
+#include <future>
 namespace retro::signart{struct Design;}
 #include "Carcass.h"
 #include "../core/CleanupBodies.h"
@@ -16,11 +19,14 @@ class GpuRenderer;
 class FrameWorker;
 struct ElectricFx;
 struct GoreFx;
+struct ParticleMemory;
+struct Particles;
 class SoftwareRenderer {
     // Sparks and arcs draw with the scene's own textures (ElectricFx.cpp).
     friend struct ElectricFx;
     // Blood and debris draw with the scene's own textures too (GoreFx.cpp).
     friend struct GoreFx;
+    friend struct Particles;
 public:
     // What runs out of a creature, by kind (CreatureVisual::fluid): blood, a bug's goo, the resonance
     // creatures' ichor, a machine's oil. Each fluid tints the stumps, the mist, the drops and the decals.
@@ -70,6 +76,9 @@ public:
     static bool testElectricRendering(std::ostream& report);
     // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
     static bool testGore(std::ostream& report);
+    // The air's own stuff (Particles.cpp): what it remembers between frames, the last frame's count, and
+    // the events a test or an inspection adds to the game's.
+    ParticleMemory& particleMemory();
     static bool testHumanRagdoll(); // --each-test=human-ragdoll
     static bool testSigns(std::ostream& report); // --sign-render-test
     static bool testPresentationResize();
@@ -85,6 +94,10 @@ public:
     // Per-pixel lamps with cube shadow maps on the static world (Vulkan only).
     static void setPixelLighting(bool enabled);
     static bool pixelLighting();
+    // Light probes (LightProbes.h): baked indirect fill, crystal glow and reflection probes.
+    // Off (--no-probes) both renderers fall back to the lamps' flat room bounce.
+    static void setLightProbes(bool enabled);
+    static bool lightProbes();
     // Close-up procedural detail layer on per-pixel-lit surfaces.
     // 0 off, 1 on, 2 debug: raw field, 3 debug: detail normal.
     static void setDetailLayer(int mode);
@@ -173,7 +186,19 @@ private:
     // generation, while moves transfer it with the uploaded pixel allocation.
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; TextureGeneration generation;
         // A dado band: drawn once over its first `band` metres above the floor, `above` over the rest of the face.
-        float band=0; const Texture* above=nullptr; bool liquid=false; };
+        float band=0; const Texture* above=nullptr; bool liquid=false;
+        // polish (0..1): how sharply the surface mirrors the room (reflection probes and SSR), apart
+        // from its lamp highlight (glossStrength). Metal (0..1): reflects strongly face-on, tinted by
+        // its own colour (post.frag). crystal: a resonance crystal's glowing body, shaded as lit
+        // mineral with the glow in its cores (scene.frag).
+        float polish=0,metalness=0; bool crystal=false;
+        // soft: a particle atlas (Particles.cpp). Its cards take their opacity, the depth over which they
+        // fade into what lies behind them and their flipbook blend from m_card, not from the texels alone.
+        bool soft=false; };
+    // How the next particle card is drawn (with a soft texture): opacity times its texels' alpha, faded
+    // over `soft` metres where it nears what lies behind it, and blended `blend` of the way toward the
+    // flipbook's next frame, `step` across the atlas.
+    struct CardLook {float opacity=1,soft=0,blend=0,step=0;};
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
     // A lamp fitting's glowing texture with its emission in the lamp's tone
@@ -214,11 +239,13 @@ private:
     std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
     Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
     std::vector<HitBurst> m_goreBursts;
+    std::shared_ptr<ParticleMemory> m_particleMemory;
     // A headless man's neck (where the stump is, and the way the neck runs), by actor emit slot, kept for frames
     // whose body replays a cached emit; and how many of its stump's pumps have been thrown.
     std::unordered_map<std::uint64_t,std::array<Point3,2>> m_neckStumps;std::unordered_map<std::uint64_t,int> m_neckPulses;
     // 0..1: how far the geometry being drawn has dissolved (a corpse on its way out).
     float m_dissolve=0;
+    CardLook m_card;
     // The inside of a cut: red, and the green of the things that bleed it.
     static constexpr std::array<std::array<int,3>,size_t(Fluid::Count)> fluidTint{{{118,14,18},{190,204,78},{52,126,138},{66,56,44}}};
     std::array<Texture,size_t(Fluid::Count)> m_stump;
@@ -275,6 +302,15 @@ private:
     // The clip it last showed and the one it is blending from (.2 s).
     int m_bodyClip=-1,m_bodyFromClip=-1;float m_bodyFromPhase=0,m_bodyBlendStart=-1,m_bodyLastElapsed=-1;
     std::vector<MeshTriangle> m_bodyFrom;
+    // Claire from outside (ClaireOutside.h): her layered, aimed pose, the hold it
+    // blends from, the last hit and landing it reacts to, and what it measured.
+    ClaireOutside m_claireOutside;int m_outsideKey=-1;float m_outsideBlendStart=-1,m_outsideHitStart=-1e9f,m_outsideDamage=0,m_outsideAir=0,m_outsideLandStart=-1e9f,m_outsideAimPitch=0,m_outsideAimYaw=0,m_outsideYaw=0;
+    ClaireOutside::Report m_outsideReport;
+public:
+    const ClaireOutside::Report& claireOutsideReport()const{return m_outsideReport;}
+    static bool testThirdPerson();
+    static int thirdPersonInspection();   // --third-person-inspection: frames of her from outside into tp-frames/
+private:
     // Inspection: film the player's body from outside, the camera this far
     // away at this bearing from her facing (0 off). Her head and arms show.
     float m_bodyOrbit=0,m_bodyOrbitYaw=0;
@@ -455,6 +491,18 @@ private:
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
     const Game* m_lightingGame=nullptr;
+    // Each resident map's light probes, baked on a worker from a copy of the map and swapped in
+    // when done (LightProbes.h). key: the lamps, the powers they were baked at, the crystals and
+    // the geometry; a map is never left without probes while its next bake runs.
+    struct ChunkProbes {std::shared_ptr<const ProbeBake> bake;std::uint64_t key=0,pendingKey=0;std::shared_future<std::shared_ptr<const ProbeBake>> pending;};
+    std::array<ChunkProbes,Game::MaxChunks> m_chunkProbes;
+    // Bakes taken in (each one changes the light), and whether render is already settling an
+    // inspection frame (render, SoftwareRenderer.cpp).
+    std::uint64_t m_probeBakesTaken=0;bool m_settlingFrame=false;
+    // The map's probes for this frame (null until its first bake lands): starts its bake when the
+    // key changes and collects a finished one. The map in play waits for its first bake (it loads
+    // behind the loading card); maps streaming in bake in the background.
+    const ProbeBake* chunkProbes(const Game& game,int level,const World& w,std::uint64_t lightKey,bool wait);
     float m_gripError=0,m_pistolContact=0;ShotgunContact m_shotgunContact{};std::array<Point3,2> m_shotgunTarget{};
     int m_cleanupInspectionStage=0;
     float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0,m_cleanupEdgeStretch=1;

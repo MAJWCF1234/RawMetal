@@ -63,6 +63,36 @@ Clip order:
 | 19 | crawl backward |
 | 20-23 | transitions: stand to crouch, crouch to stand (first 55 %), crouch to prone, prone to crouch |
 
+| 24, 25 | rifle aim idle, crouched aim idle (`P/idle aiming`, `P/idle crouching aiming`) |
+| 26, 27 | rifle shot, rifle reload |
+| 28-31 | turn on the spot left, right, crouched left, right (`P/turn 90 ...`, `P/crouching turn 90 ...`, baked with `:drift`) |
+| 32 | pistol held low (UAL `Pistol_Idle_Loop`) |
+| 33-35 | pistol aimed level, up, down (UAL `Pistol_Aim_Neutral`, `_Up`, `_Down`) |
+| 36, 37 | pistol shot, pistol reload (UAL `Pistol_Shoot`, `Pistol_Reload`) |
+| 38 | hit reaction (`basic-shooter-pack/hit reaction`) |
+| 39 | landing (`P/jump down`) |
+
+Clips 0-27 are the bake above plus v1.1.14's four (24-27). The turns and the
+third-person holds are baked on their own and joined to it with
+`tools/player/append_claire_clips.py` (its docstring has the join). `U` is
+`source-assets/medic-motion/UAL1_Standard.fbx`, the Quaternius library from
+`O:/retro official/Animations`; `FILE@ACTION` takes one of its actions (Unreal
+mannequin bones, its `A_TPose` as the rest) and `:sN` samples a window N times:
+
+```
+RawMetalCreatureBake --takes Claire.fbx turns.bin "P/idle.fbx:1:8" "P/idle.fbx:1:8" \
+ "P/turn 90 left.fbx:1:31:drift" "P/turn 90 right.fbx:1:31:drift" \
+ "P/crouching turn 90 left.fbx:1:39:drift" "P/crouching turn 90 right.fbx:1:38:drift"
+RawMetalCreatureBake --takes Claire.fbx holds.bin "U@Pistol_Idle_Loop:1:50:s25:loop" "U@Pistol_Aim_Neutral:1:5" \
+ "U@Pistol_Aim_Up:1:5" "U@Pistol_Aim_Down:1:5" "U@Pistol_Shoot:1:19" "U@Pistol_Reload:1:50" \
+ "B/hit reaction.fbx:1:13" "P/jump down.fbx:1:20"
+python tools/player/append_claire_clips.py claire-animation.bin base.bin:0:28 turns.bin:2:6 holds.bin
+```
+
+(`B` is `investigator-direct/basic-shooter-pack`; the two idles lead the turn
+bake only because a bake's first two takes are closed into loops.) The bank
+holds up to 64 clips; these eight cost about 0.8 MB of the packed exe.
+
 A change of stance while standing still plays its transition once (0.45 s
 down to a kneel, 0.9 s up, 0.95 s to and from prone). One gait cycle is two
 footsteps (`Game::bodyGait`), so her feet land on the step sounds. A change of
@@ -98,15 +128,49 @@ Three, as Metal Gear has them (`Player`, `Game::updateMovement`):
   the eye and 18 cm below it, and anything up at the eye when crouched or
   prone. Her shadow is cast by her whole body, head included, from the faces
   turned to the lamp, so it darkens the floor once.
-- **Third person.** A console command only, off at every start: `THIRDPERSON`
-  (`ON`, `OFF`, or no argument to toggle). The camera sits 2.5 m back
-  and 0.5 m over her right shoulder, following the look up and down. It pulls
-  in short of anything between her head and the lens, and keeps a 0.4 m box
-  clear round itself.
-  - The gun sits in her right hand, pointing at her left.
+- **Third person.** For inspection and captures, off at every start: the
+  console's `THIRDPERSON` (`ON`, `OFF`, or no argument to toggle), or
+  `--third-person` on the command line. The camera goes out 0.55 m to her
+  right shoulder and 1.75 m back along the look (1.1 m aimed), following the
+  look up and down. It pulls in short of anything between her head and the
+  lens, keeps a 0.4 m box clear round itself and eases back out after a wall.
   - Shots still leave her eye, so the crosshair moves to where her aim meets
     something solid.
   - Her death plays out.
+- **From outside** (that camera, `setBodyOrbit` replays and the `--film`
+  cameras, clean captures included) she is whole, head and hair and arms, at
+  1.7 m, on the player's spot, and is posed in layers by
+  `ClaireOutside` (src/renderer/ClaireOutside.h):
+  - The legs keep the locomotion clip (walk, run, strafe, back-pedal,
+    crouch-walk, crawl, stance changes, landing). Standing still she trails
+    the look and steps round with a turn clip once it is 63 degrees behind;
+    aiming cuts a turn short and swings her onto the look.
+  - The torso and arms take the hold from the waist up, each vertex as far
+    as her skin weights put it in the torso (the chest fully, the belly
+    partly): the shotgun's rifle aim (24), shot (26) over the legs when
+    moving; the pistol held (32), aimed level, up or down by the look (33-35),
+    its shot (36) and reload (37); a hit (38). Standing still with the
+    shotgun the aim, crouched aim and shot clips are whole-body.
+  - The upper body turns about her chest with the look (a third of it at
+    the carry). Aimed or firing, the fitted gun is measured and the body
+    turned by what is left, twice, so the bore lies on the aim (the
+    third-person test holds it within 5 degrees).
+  - The gun is the world model fitted to her hands as the skin has them
+    (each hand's palm, knuckles and fingertips give its frame): the shotgun,
+    a real 870's 1.0 m long, with its trigger socket in the
+    right fist and turned so its pump's line runs through the left; the
+    pistol in the right fist along the forearm, its top toward the index.
+  - Her left arm is bent (a two-bone reach on the skin, upper arm, forearm
+    and hand by their weights) to put the hand on the pump's wood, which the
+    rifle clips' longer reach would otherwise put past the muzzle, or round
+    the pistol's grip when both hands are on it.
+  - The shotgun reload is shell by shell: the right hand keeps the gun where
+    it last held it, the left goes from the shells at her hip to the loading
+    port three times. Prone, the gun lies nearly flat between her hands.
+  - A torch rides the gun's right side, its lens lit while it is on (the
+    beam itself still leaves her eye).
+  - A change of hold blends over 0.2 s from the pose last drawn, which stays
+    put while her facing turns.
 - **Never drawn:** in VR (the tracked hands have nothing joining them to a
   body), inside lockers, and in inspection or test cameras
   (`Game::inspectionCamera`, set by `mapInspection`).
@@ -182,6 +246,25 @@ walking, firing, reloading, fists and a jab, then crouched (ahead, low,
 looking down, walking), standing and walking looking down, and prone (ahead,
 looking down, crawling). Frames go to
 `.build/body/`, with a line per frame in `body-inspection.txt`.
+
+`RawMetal.exe --third-person-inspection` films her from outside in the same
+room, each take with the shotgun and then the pistol (idle, walk, run, strafe,
+back-pedal, crouch-walk, turn on the spot, aimed level, up and down, a shot,
+walking aimed, a reload, the torch on; then a prone crawl and a jump): a
+turnaround of eight bearings for the idle and aimed holds, every take at
+30 fps from the front, side and back with the camera fixed in the room, and
+one over-the-shoulder frame of each, into `tp-frames/` (PPM, with
+`index.txt`).
+
+`--each-test=third-person` runs the same takes over the shoulder and writes
+`third-person-test.txt` (and every frame's numbers to
+`third-person-frames.txt`). It fails a take if any frame does not draw her or
+loses her head, any vertex is more than 1 cm into the floor, her left hand is
+more than 5 cm off the pump's line or off its wood, both hands on the pistol
+are more than 8 cm apart, an aimed gun is more than 5 degrees off the aim,
+a foot moves more than 1 cm a frame standing (blends between holds aside), a
+turn on the spot ever has neither foot planted (the steadier moving more than
+1.2 cm a frame), or an aim or shot is never aimed.
 
 `RawMetal.exe --arms-inspection` renders the arms close up: the shotgun idle and
 just fired, fists and the pistol, each as played and then the rig from eight

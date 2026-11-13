@@ -5,6 +5,7 @@
 #include "../core/CleanupBodies.h"
 #include <windows.h>
 #include <stdexcept>
+#include <cstring>
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -70,7 +71,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
   std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&headerSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
   const uint32_t requiredClips=(id==242||id==272||id==2126||id==2129||id==2441)?5u:animationResource==2185?6u:id==2300?16u:1u;
-  if(vertices!=triangles.size()*3||clips<requiredClips||clips>32||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
+  if(vertices!=triangles.size()*3||clips<requiredClips||clips>64||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureFrameOffset=20+size_t(vertices)*2+(compact?size_t(clips)*4:0);
   if(m_creatureFrames.size()<m_creatureFrameOffset)throw std::runtime_error("Missing creature sample table");
   m_creatureSampleCounts.resize(clips);m_creatureSampleOffsets.resize(clips);
@@ -224,6 +225,23 @@ void Mesh::sampleCreatureAnchors(int clip,float phase){
 }
 void Mesh::publishCreatureVertices(){
  for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v)triangles[t].v[v].p=m_creaturePoseScratch[m_creatureIndices[t*3+v]];
+}
+void Mesh::publishCreatureVertices(const std::vector<Point3>& vertices){
+ if(vertices.size()<m_creatureVertices)throw std::runtime_error("Missing creature vertices");
+ for(size_t t=0;t<triangles.size();++t)for(int v=0;v<3;++v)triangles[t].v[v].p=vertices[m_creatureIndices[t*3+v]];
+}
+std::vector<float> Mesh::creatureBoneWeights(std::initializer_list<const char*> bones)const{
+ // Each bank vertex is a triangle corner of the imported mesh: its skin weights
+ // are that corner's vertex's, summed over the clusters bound to the named bones.
+ std::vector<float> weights(m_creatureVertices,0.f);std::vector<char> seen(m_creatureVertices,0);
+ for(size_t t=0;t<m_cachedTriangles.size()&&t*3+2<m_creatureIndices.size();++t){const auto&face=m_cachedTriangles[t];auto*mesh=m_scene->nodes[face.node]->mesh;
+  if(!mesh||!mesh->skin_deformers.count)continue;const auto*skin=mesh->skin_deformers.data[0];
+  for(int c=0;c<3;++c){const auto index=m_creatureIndices[t*3+c];if(seen[index])continue;seen[index]=1;
+   const uint32_t vertex=mesh->vertex_indices.data[face.corners[size_t(c)]];if(vertex>=skin->vertices.count)continue;const auto&sv=skin->vertices.data[vertex];
+   float sum=0;for(uint32_t w=0;w<sv.num_weights;++w){const auto&weight=skin->weights.data[sv.weight_begin+w];const auto*cluster=skin->clusters.data[weight.cluster_index];
+    if(cluster->bone_node)for(const char*bone:bones)if(std::strcmp(cluster->bone_node->name.data,bone)==0){sum+=float(weight.weight);break;}}
+   weights[index]=sum;}}
+ return weights;
 }
 void Mesh::poseCreature(int clip,float phase){
  sampleCreatureClip(clip,phase,m_creaturePoseScratch);

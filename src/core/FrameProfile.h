@@ -26,6 +26,8 @@ enum Cost {Friendly,Intent,Route,GraphBuild,GraphPath,Walk,Combat,Drones,Enemies
  DoorRequests,
  // friendlyChunkNeeded: updateStreaming asks it of every other chunk each frame (inside streaming).
  ChunkNeeded,
+ // Particles::draw: the air's cards worked out, lit and handed to the renderer (inside draw_scene).
+ Air,
  // GPU time per pass, from timestamp queries, read back two frames late when
  // the frame slot's fence is waited on: lamp/sun shadow maps, the scene pass,
  // each post stage (occlusion, screen shadows and shafts, exposure, compose,
@@ -37,7 +39,7 @@ inline constexpr const char* names[]={"friendly","intent","route","graph_build",
  "enemy_sense","enemy_stalk","enemy_door_plan","enemy_stacked","enemy_repath","enemy_move",
  "stacked_waypoint",
  "guard_mind","guard_threat","locker_witness","guard_schedule","awareness",
- "civilians","door_requests","chunk_needed",
+ "civilians","door_requests","chunk_needed","particles",
  "gpu_shadows","gpu_scene","gpu_occlusion","gpu_shafts","gpu_exposure","gpu_compose","gpu_taa","gpu_composite"};
 static_assert(std::size(names)==Count,"every cost has a name");
 inline thread_local uint64_t cpuGrowthFrames=0,gpuBufferGrowths=0;

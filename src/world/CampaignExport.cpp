@@ -257,8 +257,11 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
     line(Rec("DIALOGUE_REPLY").i(mi).sth(node.id).t(reply.text).st(reply.next).st(reply.require).i(reply.requireValue).st(reply.hide).t(sets).f(reply.stance>=0?std::to_string(reply.stance):""));}}
   for(const auto& h:m.hazards){Rec r("HAZARD");r.i(mi).i(int(h.kind)).n(h.x1).n(h.y1).n(h.x2).n(h.y2).n(h.bottom).n(h.top).n(h.damagePerSecond).st(h.enabledFlag).f(h.enabledValue!=1?std::to_string(h.enabledValue):"").f(h.invertFlag?"1":"")
     .f(h.period?num(h.period):"").f(h.onTime?num(h.onTime):"").f(h.phase?num(h.phase):"");line(r,10);}
-  for(const auto& e:m.emitters){line(Rec("EMITTER").i(mi).n(e.position.x).n(e.position.y).n(e.z).n(e.drift.x).n(e.drift.y).n(e.rise).n(e.rate).n(e.radius).n(e.growth).i(e.count));
-   if(e.rate<=0||e.rate>5||e.radius<=0||e.radius>3||e.growth<0||e.growth>5||e.count<1||e.count>32||e.rise<0||e.rise>20)note("an emitter is outside the EMITTER ranges and will not load");}
+  for(const auto& e:m.emitters){Rec r("EMITTER");r.i(mi).n(e.position.x).n(e.position.y).n(e.z).n(e.drift.x).n(e.drift.y).n(e.rise).n(e.rate).n(e.radius).n(e.growth).i(e.count);
+   // The kind, its strength and its gate only when there are any: an old plume writes the old record.
+   if(e.kind!=ParticleKind::Plume||e.strength!=1||e.enabledFlag||e.invertFlag||e.period>0)r.i(int(e.kind)).f(e.strength!=1?num(e.strength):"").st(e.enabledFlag).f(e.enabledValue!=1?std::to_string(e.enabledValue):"").f(e.invertFlag?"1":"")
+    .f(e.period?num(e.period):"").f(e.onTime?num(e.onTime):"").f(e.phase?num(e.phase):"");
+   line(r,12);if(!validParticleEmitter(e))note("an emitter is outside the EMITTER ranges and will not load");}
   for(const auto& s:m.stairs)line(Rec("STAIR").i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).i(s.steps).b(s.alongY).b(s.ascending).f(s.openUnderside?"1":"").f(s.treadThickness!=.12f?num(s.treadThickness):"").f(s.sideRails?"1":""),11);
   for(const auto& c:m.creatureSpawns)line(Rec("CREATURE").i(mi).i(int(c.kind)).n(c.position.x).n(c.position.y).n(c.z).f(c.scale!=1?num(c.scale):"").f(c.health?num(c.health):"").st(c.wakeState).st(c.hunter).f(c.prey>=0?std::to_string(c.prey):""),6);
   for(const auto& p:m.pickupSpawns)line(Rec("PICKUP").i(mi).i(int(p.kind)).n(p.position.x).n(p.position.y).f(p.z!=-999?num(p.z):""),5);
@@ -458,7 +461,8 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  d.count("water",a.waterVolumes.size(),b.waterVolumes.size());
  for(size_t i=0;i<std::min(a.waterVolumes.size(),b.waterVolumes.size());++i){const auto&p=a.waterVolumes[i];const auto&q=b.waterVolumes[i];auto w=at("water",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bed",p.bed,q.bed);d.eq(w+".surface",p.surface,q.surface);}
  d.count("emitters",a.emitters.size(),b.emitters.size());
- for(size_t i=0;i<std::min(a.emitters.size(),b.emitters.size());++i){const auto&p=a.emitters[i];const auto&q=b.emitters[i];auto w=at("emitter",i);d.eq(w+".position",p.position,q.position);d.eq(w+".z",p.z,q.z);d.eq(w+".drift",p.drift,q.drift);d.eq(w+".rise",p.rise,q.rise);d.eq(w+".rate",p.rate,q.rate);d.eq(w+".radius",p.radius,q.radius);d.eq(w+".growth",p.growth,q.growth);d.eq(w+".count",p.count,q.count);}
+ for(size_t i=0;i<std::min(a.emitters.size(),b.emitters.size());++i){const auto&p=a.emitters[i];const auto&q=b.emitters[i];auto w=at("emitter",i);d.eq(w+".position",p.position,q.position);d.eq(w+".z",p.z,q.z);d.eq(w+".drift",p.drift,q.drift);d.eq(w+".rise",p.rise,q.rise);d.eq(w+".rate",p.rate,q.rate);d.eq(w+".radius",p.radius,q.radius);d.eq(w+".growth",p.growth,q.growth);d.eq(w+".count",p.count,q.count);
+  d.eq(w+".kind",int(p.kind),int(q.kind));d.eq(w+".strength",p.strength,q.strength);d.eq(w+".state",p.enabledFlag,q.enabledFlag);d.eq(w+".value",p.enabledValue,q.enabledValue);d.eq(w+".invert",p.invertFlag,q.invertFlag);d.eq(w+".period",p.period,q.period);d.eq(w+".onTime",p.onTime,q.onTime);d.eq(w+".phase",p.phase,q.phase);}
  d.count("hazards",a.hazards.size(),b.hazards.size());
  for(size_t i=0;i<std::min(a.hazards.size(),b.hazards.size());++i){const auto&p=a.hazards[i];const auto&q=b.hazards[i];auto w=at("hazard",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);
   d.eq(w+".damage",p.damagePerSecond,q.damagePerSecond);d.eq(w+".state",p.enabledFlag,q.enabledFlag);d.eq(w+".value",p.enabledValue,q.enabledValue);d.eq(w+".invert",p.invertFlag,q.invertFlag);d.eq(w+".period",p.period,q.period);d.eq(w+".onTime",p.onTime,q.onTime);d.eq(w+".phase",p.phase,q.phase);}

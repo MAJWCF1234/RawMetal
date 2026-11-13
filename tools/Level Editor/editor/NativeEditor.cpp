@@ -183,6 +183,8 @@ constexpr COLORREF PlanBlack = RGB(0, 0, 0), GridMinor = RGB(0x2A, 0x2C, 0x30),
                    Flatten = RGB(0x6F, 0x92, 0xB4), Prop = RGB(0xA9, 0xB6, 0xC4),
                    Start = RGB(0xFF, 0xFF, 0xFF), Selected = RGB(0xC8, 0xFF, 0x00),
                    Hover = RGB(0xFF, 0xFF, 0xFF);
+// Film cameras on the plan (NativeFilmTool.inc).
+inline constexpr COLORREF Film = RGB(0x40, 0xE0, 0xC8);
 // Colour by record kind on the plan.
 inline COLORREF kindColor(const std::string &k) {
   if (k == "LIGHT")
@@ -550,7 +552,8 @@ static std::wstring plainKind(const std::string &kind) {
                              {"SCRIPT_REQUIRE", L"Trigger condition"},
                              {"SCRIPT_TRIGGER", L"How the trigger fires"},
                              {"DARK", L"Darkness"},
-                             {"EMITTER", L"Smoke"},
+                             {"EMITTER", L"Emitter"},
+                             {"# EDITOR_FILM", L"Film camera"},
                              {"COMPACTOR", L"Crusher"},
                              {"BREAKABLE", L"Glass"},
                              {"PICKUP", L"Health or ammo"},
@@ -725,7 +728,10 @@ enum {
   LayerNew,LayerFromVisible,LayerNewGroup,LayerDuplicate,LayerMerge,LayerDelete,LayerRaise,LayerLower,
   LayerMaskArea,LayerMaskInvert,LayerMaskClear,LayerOpaque,LayerHalf,LayerGhost,LayerRotate,LayerFlipX,LayerFlipY,LayerHeight,LayerFootprint,
   SoundList=640,PreyList,HunterList,
-  DoorToolList=660,DoorKindList,DoorAxisList,DoorSwingList,DoorHingeList,DoorLockList,DoorStrengthList,DoorOpenSlider
+  DoorToolList=660,DoorKindList,DoorAxisList,DoorSwingList,DoorHingeList,DoorLockList,DoorStrengthList,DoorOpenSlider,
+  EmitterPresetList=690,EmitterKindList,EmitterRestyleList,EmitterHeadingSlider,EmitterStrengthSlider,
+  LightViewButton=700,ThirdPersonToggle,FilmWrite,FilmRender,
+  LightMenuBase=710
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -769,7 +775,7 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Trigger", L"✚", L"Drag an area. Something happens when you step in.", 3, "SCRIPT_EVENT", 'r'},
     {L"Health & ammo", L"✚", L"Click to leave health or ammo. Pick which on the right.", 2, "PICKUP", 'p'},
     {L"Cable", L"∿", L"Drag from one end of the cable to the other.", 1, "LEAD", 'l'},
-    {L"Smoke", L"♨", L"Click to make smoke rise.", 1, "EMITTER", 'p'},
+    {L"Emitter", L"♨", L"Pick a preset on the right, then click where it comes from: steam, smoke, sparks, dust, drips, spray, fire, gas or the glow round live current. R points a picked one.", 1, "EMITTER", 'p'},
     {L"Darkness", L"●", L"Drag an area of true darkness.", 1, "DARK", 'r'},
     {L"Crusher", L"⊡", L"Drag an area under a crushing ceiling.", 3, "COMPACTOR", 'r'},
     {L"Glass", L"◇", L"Drag a glass pane that shatters when shot.", 1, "BREAKABLE", 'r'},
@@ -780,10 +786,11 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Corridor", L"⇄", L"Drag from one room to another. A lit corridor joins them.", 0, "", 'K'},
     {L"Raise & lower", L"⇕", L"Paint to raise the floor into platforms, lower it again, or climb in steps. Pick how on the right.", 4, "", 'H'},
     {L"Sound", L"♪", L"Pick a sound on the right, then click where it comes from. Loops hum on; the rest play now and then.", 1, "AMBIENT", 'p'},
+    {L"Film camera", L"✇", L"Click to place a named camera, or drag from where it stands toward what it sees. R turns it. Render films them all with the engine.", 4, "# EDITOR_FILM", 'l'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
-                     HeightTool = 41, SoundTool = 42, DoorTool = 21;
+                     HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -851,7 +858,33 @@ static constexpr Friendly friendlyFields[] = {
     {"PIPE", "endZ", L"Far end height (m)"},
     {"LEAD", "live", L"Shocks (1 yes)"},
     {"BREAKABLE", "health", L"Toughness"},
-    {"EMITTER", "count", L"Puffs"},
+    {"EMITTER", "z", L"Height it leaves at (m)"},
+    {"EMITTER", "driftX", L"Carried east (m; dust, gas: half width)"},
+    {"EMITTER", "driftY", L"Carried south (m; dust, gas: half depth)"},
+    {"EMITTER", "rise", L"Rises (m; dust: height, gas: depth)"},
+    {"EMITTER", "rate", L"Rate: 1 / seconds each lives (0 - 5)"},
+    {"EMITTER", "radius", L"Size as it leaves (m; fire: half width)"},
+    {"EMITTER", "growth", L"Swells by (fire: flame height)"},
+    {"EMITTER", "count", L"How many at once (1 - 64)"},
+    {"EMITTER", "kind", L"What: 1 smoke, 2 steam, 3 sparks, 4 dust, 5 grit, 6 drips, 7 spray, 8 fire, 9 gas, 10 current"},
+    {"EMITTER", "strength", L"Thickness or brightness (0 - 4)"},
+    {"EMITTER", "state", L"Only while switch..."},
+    {"EMITTER", "value", L"...is set to"},
+    {"EMITTER", "invert", L"Turned round: off while it is (1 yes)"},
+    {"EMITTER", "period", L"Repeats every (s; 0 always on)"},
+    {"EMITTER", "onTime", L"On for (s of each repeat)"},
+    {"EMITTER", "phase", L"Starts this far in (s)"},
+    {"# EDITOR_FILM", "name", L"Camera name (its pictures' name)"},
+    {"# EDITOR_FILM", "az", L"Lens height (m)"},
+    {"# EDITOR_FILM", "turn", L"Turn (degrees; 0 east, 90 south)"},
+    {"# EDITOR_FILM", "tilt", L"Tilt (degrees; up is more)"},
+    {"# EDITOR_FILM", "seconds", L"Moves for (s; 0 a still)"},
+    {"# EDITOR_FILM", "bx", L"...to east (m)"},
+    {"# EDITOR_FILM", "by", L"...to south (m)"},
+    {"# EDITOR_FILM", "bz", L"...to lens height (m)"},
+    {"# EDITOR_FILM", "bturn", L"...turned to (degrees)"},
+    {"# EDITOR_FILM", "btilt", L"...tilted to (degrees)"},
+    {"# EDITOR_FILM", "claire", L"Turned on Claire at the start (1 yes)"},
     {"COMPACTOR", "period", L"Seconds per crush"},
     {"PRIM", "h", L"Height (0 = usual)"},
     {"SURFACE", "wall", L"Walls (-1 to 12)"},
@@ -1010,6 +1043,9 @@ struct Editor {
 #include "NativeCreatureMethods.inc"
 #include "NativeDoorMethods.inc"
 #include "NativeSoundTool.inc"
+#include "NativeEmitterTool.inc"
+#include "NativeLightView.inc"
+#include "NativeFilmTool.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -2325,6 +2361,10 @@ struct Editor {
              "LEAD|map|ax|ay|az|bx|by|bz|length|radius|material|live|state|"
              "prop|ox|oy|oz|loose|panel|socket|terminal"),
          10, true});
+    // Film cameras are the builder's own lines (NativeFilmTool.inc); the game skips them.
+    schemas.push_back({FilmKind, "A film camera: where it stands and looks, and where it moves to.",
+                       NativeDocument::fields(std::string(FilmKind) + "|map|name|ax|ay|az|turn|tilt|seconds|bx|by|bz|bturn|btilt|claire"),
+                       15, true});
     if (std::none_of(schemas.begin(), schemas.end(), [](auto &s) { return s.kind == "CAMPAIGN"; }))
       schemas.push_back({"CAMPAIGN", "Campaign name and the map you start on.",
                          {"CAMPAIGN", "name", "startMap"}, 3, false});
@@ -2975,6 +3015,14 @@ struct Editor {
       return;
     if (rotateDoor())
       return;
+    if (emitterPicked()) {
+      turnEmitter(45.f, false); // an eighth round: the way it is carried
+      return;
+    }
+    if (filmPicked()) {
+      turnFilm();
+      return;
+    }
     auto f = NativeDocument::fields(doc.lines[size_t(record)]);
     auto &names = schemas[size_t(kind)].fields;
     auto yaw = std::find(names.begin(), names.end(), "yaw");
@@ -3670,8 +3718,10 @@ struct Editor {
     } else if (k == "PICKUP") {
       set("kind", std::to_string(listIndex(pickupList)));
     } else if (k == "EMITTER") {
-      set("z", n(floorZ + .3f)), set("driftX", "0.2"), set("driftY", "0.1"), set("rise", "2.4");
-      set("rate", "0.3"), set("radius", "0.1"), set("growth", "0.5"), set("count", "7");
+      // The preset picked in the Emitter tool's list, as its kit helper writes it (NativeEmitterTool.inc).
+      f = emitterFields(emitterPresets[std::clamp(emitterPreset, 0, EmitterPresetCount - 1)], bx, by);
+    } else if (k == FilmKind) {
+      authorFilm(f, ax, ay, bx, by);
     } else if (k == "PIPE") {
       set("x1", n(ax)), set("y1", n(ay)), set("x2", n(bx)), set("y2", n(by));
       // A click makes a riser from the floor up; a drag runs along the ceiling.
@@ -3892,7 +3942,7 @@ struct Editor {
         authorBox(l, t, r, b);
         return;
       }
-      if (info.shape == 'l' && tool != 10 && std::hypot(bx - ax, by - ay) < .1f) {
+      if (info.shape == 'l' && tool != 10 && tool != FilmTool && std::hypot(bx - ax, by - ay) < .1f) {
         message(L"Drag from one end to the other.");
         return;
       }
@@ -4340,6 +4390,8 @@ struct Editor {
     if (msg.wParam == 'R') {
       if (tool == DoorTool)
         turnDoorGhost(); // the Door tool turns the door it is about to fit
+      else if (tool == FilmTool && !filmPicked())
+        turnFilm(); // the Film camera tool turns the camera it is about to place
       else
         rotateSelected();
       return true;
@@ -4641,6 +4693,9 @@ struct Editor {
         SetWindowTextW(sound, sfx::muted ? L"♪ Sound: off" : L"♪ Sound: on");
         placeControl(sound, bx + 14, 52, 124, 40, TRUE);
       }
+      // The picture's light and play over Claire's shoulder (NativeLightView.inc).
+      placeControl(GetDlgItem(window, LightViewButton), bx + 144, 52, 164, 40, TRUE);
+      placeControl(GetDlgItem(window, ThirdPersonToggle), bx + 314, 52, 164, 40, TRUE);
       placeControl(GetDlgItem(window, Walk), w - 14 - 176, 49, 176, 44, TRUE);
       // The whole history on one slider, between the name and the file buttons.
       if (historySlider) {
@@ -4691,7 +4746,8 @@ struct Editor {
     for (HWND list : {upperFloorTiles, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
                       surfaceList, hazardList, soundList, preyList, hunterList, doorToolList, doorKindList, doorAxisList,
                       doorSwingList, doorHingeList, doorLockList, doorStrengthList, doorOpenSlider, pickupList, creatureList, tileList, primList, brushList,
-                      clutterList, actionList, linkList, kindList, recordList})
+                      clutterList, actionList, linkList, kindList, recordList, emitterPresetList, emitterKindList, emitterRestyleList,
+                      emitterHeadingSlider, emitterStrengthSlider, GetDlgItem(window, FilmWrite), GetDlgItem(window, FilmRender)})
       if (list)
         ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
@@ -4801,6 +4857,16 @@ struct Editor {
       row(soundList, L"Sound");
     if (tool == DoorTool)
       row(doorToolList, L"Door");
+    if (tool == EmitterTool)
+      row(emitterPresetList, L"Preset");
+    if (tool == FilmTool) {
+      int i = 0;
+      for (int id : {FilmWrite, FilmRender}) {
+        placeControl(GetDlgItem(window, id), rx + i++ * 159, y, 153, 34, TRUE);
+        ShowWindow(GetDlgItem(window, id), SW_SHOW);
+      }
+      y += 42;
+    }
     if (tool == 23)
       row(groundList, L"Ground");
     if (tool == 26)
@@ -4848,6 +4914,22 @@ struct Editor {
       SetWindowTextW(flicker, number(lightField(17), 0) > 0 ? L"\u2734 Flicker: on" : L"\u2734 Flicker: off");
       placeControl(flicker, rx, y, 312, 34, TRUE);
       y += 44;
+    }
+    if (emitterPicked() && emitterKindList) {
+      syncEmitterControls();
+      row(emitterKindList, L"What");
+      row(emitterRestyleList, L"Restyle");
+      for (auto [slider, text] : {std::pair{emitterHeadingSlider, L"Points"}, std::pair{emitterStrengthSlider, L"Strength"}}) {
+        caption(rx, y + 6, 96, text);
+        placeControl(slider, rx + 100, y, 212, 32, TRUE);
+        ShowWindow(slider, SW_SHOW);
+        y += 36;
+      }
+    }
+    if (auto glow = crystalGlow(); !glow.empty()) {
+      caption(rx, y, 312, L"Crystal glow: by its model and Height");
+      caption(rx, y + 20, 312, glow);
+      y += 46;
     }
     if (creaturePicked() && preyList && hunterList) {
       syncCreatureControls();
@@ -7586,6 +7668,7 @@ struct Editor {
     inProcess = retro::editorchannel::active = !edperf::baseline;
 #endif
     publish(false);
+    writeLook(); // the picture's light, air and play options (NativeLightView.inc)
     engineLive = true;
 #ifdef RAWMETAL_UNIFIED
     // On this thread, before the picture thread starts. A child window created
@@ -7963,6 +8046,9 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     int x = int(ox + object.x * cell), y = int(oy + object.y * cell);
     int hw = int(std::max(4.f, object.width * cell * .5f)),
         hd = int(std::max(4.f, object.depth * cell * .5f));
+    // Emitters and film cameras draw their own glyphs (drawEmitterGlyphs, drawFilmCameras).
+    if (f[0] == "EMITTER" || f[0] == "# EDITOR_FILM")
+      continue;
     COLORREF color = faded(ui::kindColor(f[0]),e->effectiveFloorView(e->floorLayer(e->recordFloor(index))).opacity);
     if (object.width >= 23.5f && object.depth >= 23.5f)
       color = RGB(GetRValue(color) * 3 / 10, GetGValue(color) * 3 / 10, GetBValue(color) * 3 / 10);
@@ -7998,6 +8084,9 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       DeleteObject(tick);
     }
   }
+  // The air's emitters and the film cameras (NativeEmitterTool.inc, NativeFilmTool.inc).
+  e->drawEmitterGlyphs(dc, ox, oy, cell);
+  e->drawFilmCameras(dc, ox, oy, cell);
   for (auto index : e->doc.records("DOOR", e->map)) {
     if(!e->visibleFloorRecord(index))continue;
     auto f = NativeDocument::fields(e->doc.lines[index]);
@@ -8732,6 +8821,8 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         active = true;
       if (id == SoundToggle && !sfx::muted)
         active = true;
+      if ((id == ThirdPersonToggle && e->thirdPersonPlay) || (id == LightViewButton && e->lightView != 0))
+        active = true;
       if (id >= SwatchBase && id < SwatchBase + int(std::size(Editor::gels))) {
         const auto &gel = Editor::gels[id - SwatchBase];
         bool chosen = e->lightPicked() && std::abs(Editor::number(e->lightField(22), 1) - gel.r) < .02f &&
@@ -8860,6 +8951,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
       }
       e->pollThumbnails();
+      e->readLook();
       if (!e->restoredFrom.empty() && e->restoredAt >= 0 && e->changeCount > e->restoredAt) {
         e->restoredFrom.clear(); // she carried on: the restored work is simply her map now
         e->relayout();
@@ -8974,6 +9066,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (e->livePending && e->renderedRevision == e->revision && (e->drag || e->brushing || e->objectDrag || e->viewDrag))
         e->publish(), e->lastDragPublish = GetTickCount64();
       return 0;
+    case WM_APP + 52:
+      // A film render finished (NativeFilmTool.inc): frames made, the folder to open.
+      e->filmRendered(int(w), reinterpret_cast<std::wstring *>(l));
+      return 0;
     case WM_APP + 31:
       // The engine left play on Escape; restore the view she was building in.
       if (e->playing || e->playView >= 0)
@@ -8987,6 +9083,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       HWND slider = reinterpret_cast<HWND>(l);
       if(slider==e->layerOpacity){e->layerOpacityChanged(LOWORD(w)!=TB_THUMBTRACK);return 0;}
       if(slider==e->doorOpenSlider){e->doorOpenChanged(LOWORD(w));return 0;}
+      if(slider==e->emitterHeadingSlider||slider==e->emitterStrengthSlider){e->emitterSliderChanged(slider,LOWORD(w));return 0;}
       if (slider == e->historySlider) {
         e->scrubTo(int(SendMessageW(slider, TBM_GETPOS, 0, 0)));
         return 0;
@@ -9177,6 +9274,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->doorControlChanged(id, notification);
         return 0;
       }
+      if (id >= EmitterPresetList && id <= EmitterRestyleList) {
+        e->emitterControlChanged(id, notification);
+        return 0;
+      }
       if (id == LinkList && notification == LBN_SELCHANGE) {
         auto n = SendMessageW(e->linkList, LB_GETCURSEL, 0, 0);
         if (n >= 0)
@@ -9297,6 +9398,19 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       case OutlineTerraces:
         e->makeFromOutline(id - OutlineWalls);
         e->celebrate();
+        break;
+      case LightViewButton:
+        e->chooseLightView();
+        break;
+      case ThirdPersonToggle:
+        e->setThirdPersonPlay(!e->thirdPersonPlay);
+        InvalidateRect(GetDlgItem(h, ThirdPersonToggle), nullptr, FALSE);
+        break;
+      case FilmWrite:
+        e->writeFilmButton();
+        break;
+      case FilmRender:
+        e->renderFilmButton();
         break;
       case SoundToggle: {
         sfx::muted = !sfx::muted;
@@ -9941,6 +10055,19 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.doorHingeList = choices(DoorHingeList, {});
     e.doorLockList = choices(DoorLockList, {});
     e.doorStrengthList = e.controlWindow(L"COMBOBOX", L"", CBS_DROPDOWN | CBS_AUTOHSCROLL | WS_VSCROLL | WS_TABSTOP, DoorStrengthList);
+    // The Emitter tool's presets, and a picked emitter's boxes and sliders (NativeEmitterTool.inc).
+    e.emitterPresetList = choices(EmitterPresetList, {});
+    e.emitterRestyleList = choices(EmitterRestyleList, {L"Pick a preset..."});
+    for (const auto &preset : Editor::emitterPresets)
+      SendMessageW(e.emitterPresetList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(preset.name)),
+          SendMessageW(e.emitterRestyleList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(preset.name));
+    SendMessageW(e.emitterPresetList, CB_SETCURSEL, 0, 0);
+    SendMessageW(e.emitterRestyleList, CB_SETCURSEL, 0, 0);
+    e.emitterKindList = choices(EmitterKindList, {});
+    for (auto name : Editor::emitterKindNames)
+      SendMessageW(e.emitterKindList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
+    for (auto [slider, id] : {std::pair{&e.emitterHeadingSlider, int(EmitterHeadingSlider)}, std::pair{&e.emitterStrengthSlider, int(EmitterStrengthSlider)}})
+      *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
     e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets"});
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
@@ -10023,6 +10150,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.swatches.push_back(e.button(Editor::gels[i].name, SwatchBase + int(i)));
     e.button(L"Flicker: off", FlickerToggle);
     e.button(L"Sound: on", SoundToggle);
+    e.button(L"\u2600 Light: lit \u25BE", LightViewButton);
+    e.button(L"Play: first person", ThirdPersonToggle);
+    e.button(L"Write film list", FilmWrite);
+    e.button(L"\u25B6 Render films", FilmRender);
     e.button(L"↺ Start fresh", StartFresh);
     for (int i = 0; i < 3; ++i)
       e.ideaButtons.push_back(e.button(L"", IdeaBase + i));

@@ -18,6 +18,110 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Emitter tool: the air's own stuff
+
+**Emitter** (Decor page, where Smoke was) places `EMITTER` records, the steam,
+smoke, sparks, dust, drips, spray, fire, gas and glow the engine draws
+(`src/renderer/Particles.cpp`). Pick a **Preset** on the right and click where
+it comes from. The presets are the kit's own helpers in
+`src/world/CampaignKit.h`, written as the record each makes: steam leak, steam
+jet, smoke column, spark shower, dust motes, drips, spray, fire, toxic pool,
+ceiling grit, arc glow, and the old plume. Each leaves at its own height
+(drips and grit hang under the ceiling).
+
+Pick an emitter and the inspector shows, under Turn, Copy and Delete:
+
+- **What**: the kind (smoke, steam, sparks, dust, grit, drips, spray, fire,
+  gas, the glow round live current, the old plume). A new kind takes that
+  kind's preset numbers and keeps where it stands, its heading and its switch.
+- **Restyle**: any preset's numbers on this emitter, the same way.
+- **Points**: the way smoke, steam, sparks, spray and the plume are carried
+  (0 east, 90 south), its reach kept. **R** (or Turn) turns it an eighth.
+  Dust and gas fill a box (the drift is its half sizes); fire, grit, drips and
+  the glow point nowhere, and the slider stays off for them.
+- **Strength**: 0.05 to 4 (1 usual): how thick, or how bright.
+- The fields below: height, carry, rise, rate, size, swell, how many at once,
+  and the switch (**Only while switch... is set to**, **Turned round**) and the
+  timed window (**Repeats every**, **On for**, **Starts this far in**), the same
+  as a `HAZARD`, so a vent can breathe in time with its scald.
+
+Each change is one Ctrl+Z. The plan draws each kind's glyph in its own colour,
+a ring its size as it leaves (a fire its width), the box dust and gas fill, an
+arrow the way it is carried, and a dotted ring round one a switch or a timed
+window gates. A picked emitter shows its carry (or its box) in the 3D view.
+
+The picture is the engine's: emitters show in the 3D view and move there, since
+the builder runs the game's clock between edits (smoke rises, steam drifts,
+sparks spit, water ripples; nothing else moves). **Light ▾ > Air moves between
+edits** holds it still. A gated emitter shows once its switch is set
+(Simulate, F6, or play).
+
+### Light view and Rebake
+
+**☀ Light ▾** (top band) sets how the 3D view is lit:
+
+- **Lit**: as the game draws it.
+- **Probe fill only**: just the light the probes carry (the engine's
+  `--detail-probes`): the lamps' bounce off walls, floors and ceilings and the
+  crystals' cyan.
+- **Finish**: crystal red, metal blue, polish grey, black for no shine
+  (`--detail-finish`).
+- **No probes**: the lamps' flat room bounce, as before the probes
+  (`--no-probes`), to compare.
+- **Rebake light probes now** bakes every map's probes again from the map as it
+  stands. The engine already bakes a map again when its lamps or its rooms
+  change; Rebake is for when something else moved, or to see it happen. The
+  status line says when the new bake landed and how long it took.
+
+Probes need no record: the engine places and bakes them itself. A resonance
+crystal (`res_crystal_l/m/s/wall`) is a light because of its model and its size,
+so picking one shows **Crystal glow** read-only (how bright, how far it
+reaches); its **Height** scales it. These are runtime switches in the picture,
+sent in `look.txt` beside its control file and answered in `look-status.txt`
+(`src/platform/EditorPreview.cpp`).
+
+### Play as Claire
+
+**Play: first person** (top band) switches to **Play: over shoulder**: Play
+(F5) and From start then walk the map as Claire with the camera over her right
+shoulder, as the game's `THIRDPERSON` console command and `--third-person` do.
+Escape comes back to building as before.
+
+### Film camera tool
+
+**Film camera** (World page) places named cameras for the engine to film.
+Click to place a still (it faces the way **R** turned it: an eighth a press),
+or drag from where it stands toward what it sees. Cameras are named shot_1,
+shot_2 and on; pick one to change it:
+
+- **Camera name** (its pictures' name), where it stands, **Lens height**,
+  **Turn** (degrees; 0 east, 90 south) and **Tilt** (degrees, up is more).
+- **Moves for**: 0 is a still. More seconds moves it to the **...to** point,
+  turn and tilt over that time (the plan draws its path dashed and its end).
+- **Turned on Claire**: 1 makes it a replay camera turned on Claire, who
+  stands at the map's player start; the engine films her from outside.
+
+The plan draws each camera as a wedge the way it looks, with its name; the 3D
+view outlines what a picked camera takes in. R turns a picked camera; Copy,
+Delete and Ctrl+Z work as on anything else. A camera is a builder line the game
+skips: `# EDITOR_FILM|map|name|ax|ay|az|turn|tilt|seconds|bx|by|bz|bturn|btilt|claire`.
+
+**Write film list** writes an `--film` list beside the project
+(`NAME.film.txt`; with cameras on several maps, `NAME map N.film.txt` each). It
+starts `custom MAP X Y FEET YAW PITCH FILE`, the project's file and its player
+start, then a frame line per picture: a still is one picture, a moving shot ten
+a second (`NAME_0000` on), a camera on Claire thirty a second. Unsaved changes
+are filmed from a snapshot in the picture folder. **▶ Render films** writes the
+lists, runs `RawMetal.exe --film=LIST --film-out=FOLDER` (the one in this
+folder) and opens `NAME film`, the pictures as `.bmp`.
+
+`--editing-test` drives all four (the Emitter tool's presets, inspector, R,
+Undo, plan, export and 3D picture; the light modes and a Rebake in a running
+picture; play over the shoulder; cameras, the list and a render). Its pictures
+are in `.build/interaction`: `air-plan.bmp`, `air-a.ppm` and `air-b.ppm` (the
+air moving), `light-0.ppm` to `light-3.ppm`, `third-person.ppm`,
+`first-person.ppm`, `films-plan.bmp` and the frames in `Film test film`.
+
 ### Doors stand either way
 
 A door stands in whichever wall it is put in. With **Door**, click in a gap

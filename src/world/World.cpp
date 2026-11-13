@@ -1144,6 +1144,42 @@ bool World::lightRayClear(Vec2 a,float az,Vec2 b,float bz)const{
   }
  }return true;
 }
+float World::lightRayHit(Point3 a,Point3 b,Point3& normal)const{
+ if(m_lightNodes.empty())buildLightOcclusion();
+ normal={0,0,0};if(m_lightNodes.empty())return 1.f;
+ const Point3 delta=b-a;float best=1.f;
+ // Entry fraction of a ray into a box (local frame), or 2 when it misses or starts inside.
+ auto enter=[](Point3 o,Point3 d,Point3 lo,Point3 hi,float limit,int& axis,float& side){float nearT=-1e30f,farT=limit;axis=-1;side=0;
+  const float p[3]={o.x,o.y,o.z},v[3]={d.x,d.y,d.z},l[3]={lo.x,lo.y,lo.z},h[3]={hi.x,hi.y,hi.z};
+  for(int k=0;k<3;++k){if(std::fabs(v[k])<1e-9f){if(p[k]<l[k]||p[k]>h[k])return 2.f;continue;}
+   float t1=(l[k]-p[k])/v[k],t2=(h[k]-p[k])/v[k];float s=-1.f;if(t1>t2){std::swap(t1,t2);s=1.f;}
+   if(t1>nearT){nearT=t1;axis=k;side=s;}farT=std::min(farT,t2);if(farT<nearT)return 2.f;}
+  return nearT>=0.f&&axis>=0?nearT:2.f;};
+ std::array<int,64> pending{};int count=1;pending[0]=0;
+ while(count){const auto&node=m_lightNodes[pending[--count]];int axis;float side;
+  // A node is entered before `best` or the ray starts inside it.
+  {bool inside=a.x>=node.minimum.x&&a.y>=node.minimum.y&&a.z>=node.minimum.z&&a.x<=node.maximum.x&&a.y<=node.maximum.y&&a.z<=node.maximum.z;
+   if(!inside&&enter(a,delta,node.minimum,node.maximum,best,axis,side)>=best)continue;}
+  if(node.left>=0){pending[size_t(count++)]=node.left;pending[size_t(count++)]=node.right;continue;}
+  for(int i=node.begin;i<node.end;++i){const auto&s=m_lightSolids[size_t(i)];auto p=a-s.center;
+   Point3 local{p.x*s.cosine-p.y*s.sine,p.x*s.sine+p.y*s.cosine,p.z},direction{delta.x*s.cosine-delta.y*s.sine,delta.x*s.sine+delta.y*s.cosine,delta.z};
+   float t=enter(local,direction,s.half*-1.f,s.half,best,axis,side);if(t>=best)continue;best=t;
+   // The entered face's normal, turned back from the solid's own frame.
+   Point3 n{axis==0?side:0.f,axis==1?side:0.f,axis==2?side:0.f};normal={n.x*s.cosine+n.y*s.sine,-n.x*s.sine+n.y*s.cosine,n.z};
+  }
+ }
+ return best;
+}
+bool World::insideLightSolid(Point3 q)const{
+ if(m_lightNodes.empty())buildLightOcclusion();
+ if(m_lightNodes.empty())return false;std::array<int,64> pending{};int count=1;pending[0]=0;
+ while(count){const auto&node=m_lightNodes[pending[--count]];
+  if(q.x<node.minimum.x||q.y<node.minimum.y||q.z<node.minimum.z||q.x>node.maximum.x||q.y>node.maximum.y||q.z>node.maximum.z)continue;
+  if(node.left>=0){pending[size_t(count++)]=node.left;pending[size_t(count++)]=node.right;continue;}
+  for(int i=node.begin;i<node.end;++i){const auto&s=m_lightSolids[size_t(i)];auto p=q-s.center;Point3 local{p.x*s.cosine-p.y*s.sine,p.x*s.sine+p.y*s.cosine,p.z};
+   if(std::fabs(local.x)<s.half.x&&std::fabs(local.y)<s.half.y&&std::fabs(local.z)<s.half.z)return true;}
+ }return false;
+}
 bool World::rayClear(Vec2 a,float az,Vec2 b,float bz,bool doors,bool dynamic,bool shelfCavities,bool sight)const{
  auto delta=b-a;float dz=bz-az;int steps=std::max(1,int(std::ceil(std::sqrt(lengthSq(delta)+dz*dz)/.12f)));
  perf::count(perf::RayClear);perf::count(perf::RayClearSteps,uint64_t(steps-1));

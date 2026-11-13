@@ -15,7 +15,7 @@ layout(location=0) in vec2 uv;
 layout(location=0) out vec4 outColor;
 // Per-pixel lamp grid and cube shadow maps (see scene.frag), for shafts.
 // scatter.rgb is the torch's tone while it is on.
-layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=0,binding=1) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];vec4 lamps[512];uint cells[];} lampGrid;
 layout(set=0,binding=2) uniform sampler2DArrayShadow lampShadows;
 const vec3 ShadowFace[6]=vec3[6](vec3(1,0,0),vec3(-1,0,0),vec3(0,1,0),vec3(0,-1,0),vec3(0,0,1),vec3(0,0,-1));
 const vec3 ShadowUp[6]=vec3[6](vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,0,1),vec3(0,1,0),vec3(0,1,0));
@@ -91,7 +91,8 @@ float shadowTap(int slot,vec3 d,float range){
 vec3 lampTone(vec4 params){vec2 rg=unpackHalf2x16(floatBitsToUint(params.z)),b=unpackHalf2x16(floatBitsToUint(params.w));return vec3(rg,b.x);}
 // WorldLight::beam (see scene.frag): a ceiling fitting's shaft is a cone.
 float lampBeam(vec4 params,vec3 away){
- float code=unpackHalf2x16(floatBitsToUint(params.w)).y;
+ // 16 and up: a switchable lamp (its power changes in play; SoftwareRenderer render).
+ float code=unpackHalf2x16(floatBitsToUint(params.w)).y;if(code>=15.5)code-=16.0;
  if(code<1.5)return 1.0;
  if(code<3.0)return 0.2+0.8*smoothstep(0.0,1.0,(-away.z-0.42)/0.45);
  float yaw=code-4.0;return 0.12+0.88*smoothstep(0.0,1.0,(away.x*cos(yaw)+away.y*sin(yaw)+0.25)/0.75);

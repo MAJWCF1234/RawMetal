@@ -2,12 +2,14 @@
 #include <unordered_set>
 #include "GpuRenderer.h"
 #include "../core/FrameProfile.h"
+#include "LookTuning.h"
 
 #include <sstream>
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <windows.h>
 #include <vulkan/vulkan.h>
 #include "../vr/VrRuntime.h"
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <sstream>
@@ -433,6 +435,12 @@ struct GpuRenderer::Impl {
  VkPipeline actorOpaque=VK_NULL_HANDLE,actorAdditive=VK_NULL_HANDLE,actorTransparent=VK_NULL_HANDLE;
  VkSampler wrap=VK_NULL_HANDLE,clamp=VK_NULL_HANDLE,sceneSampler=VK_NULL_HANDLE,pointSampler=VK_NULL_HANDLE;VkFramebuffer framebuffer=VK_NULL_HANDLE;
  Image target,sceneColor,depth,blackEmission;Buffer readback,dynamicUpload;
+ // Soft particles: a frame that draws particle cards ends the scene pass once the room is drawn
+ // (passOpaque, which keeps its attachments), copies the resolved target, whose alpha is the room's
+ // planar depth, into softDepth, and draws the rest in passBlended (which loads them). The cards
+ // fade where they meet what lies behind them (scene.frag).
+ Image softDepth;VkRenderPass passOpaque=VK_NULL_HANDLE,passBlended=VK_NULL_HANDLE;
+ bool softDepthLive()const{return hdrScene&&!vrMode;}
  // Material target (roughness, wetness, direct-light share) for the post pass.
  Image materialTarget,materialColor;
  // Auto exposure: 1x1 ping-pong targets written by the exposure stage.
@@ -461,7 +469,7 @@ struct GpuRenderer::Impl {
  Image& finalImage(){return taaRan?taaImages[size_t(taaWrite)]:postRan?composeStage.image:target;}
  void destroyStageTarget(FullscreenStage& stage){if(stage.framebuffer)vkDestroyFramebuffer(device,stage.framebuffer,nullptr);stage.framebuffer=VK_NULL_HANDLE;destroy(stage.image);}
  void destroyStage(FullscreenStage& stage){destroyStageTarget(stage);if(stage.pipeline)vkDestroyPipeline(device,stage.pipeline,nullptr);if(stage.layout)vkDestroyPipelineLayout(device,stage.layout,nullptr);if(stage.setLayout)vkDestroyDescriptorSetLayout(device,stage.setLayout,nullptr);if(stage.pool)vkDestroyDescriptorPool(device,stage.pool,nullptr);if(stage.pass)vkDestroyRenderPass(device,stage.pass,nullptr);}
- struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false,liquid=false;uint32_t sortKey=0,colorLevels=1;};
+ struct Material {Image color,normal,emission,relief;VkDescriptorSet set=VK_NULL_HANDLE;bool additive=false,transparent=false,liquid=false,soft=false;uint32_t sortKey=0,colorLevels=1;};
  std::unordered_map<uint64_t,Material> materials;
  std::unordered_set<uint64_t> missingMaterials;
  Material* findMaterial(uint64_t key){auto found=materials.find(key);if(found!=materials.end())return &found->second;
@@ -500,7 +508,26 @@ struct GpuRenderer::Impl {
  // eye/basis: the scene camera, rewritten every frame for the post stages.
  // scatter: the torch's tone when lit (rgb, it scatters in the shadow stage's
  // march) and w=1 when that stage carries the lamp shafts this frame.
- struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];};
+ // ── Light probes (LightProbes.h) ─────────────────────────────────────────
+ // Irradiance: up to eight maps' probe grids in one 3D atlas, each a 24-row band of six 24-wide
+ // face blocks (+x, -x, +y, -y, +z, -z) by up to 48 layers. Reflection: up to 48 room probes, six
+ // 96 px faces each with a mip chain for rough surfaces, captured by the scene pipeline itself.
+ static constexpr int ProbeSlots=8,ProbeAtlasWidth=IrradianceVolume::Width*6,ProbeAtlasHeight=IrradianceVolume::Width*ProbeSlots,ProbeAtlasDepth=IrradianceVolume::Depth;
+ static constexpr int MaxReflections=48;static constexpr uint32_t ReflectionSize=96,ReflectionLevels=7;
+ // probeInfo: x volumes in use this frame, y reflection probes, z reflection mip levels. Each volume:
+ // its world origin and height cell, then its atlas band and layer count. Each reflection probe: its
+ // world position and atlas probe index, then its room box (lo, hi).
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];
+  float probeInfo[4];float probeVolumes[ProbeSlots*8];float reflections[MaxReflections*12];};
+ Image irradianceAtlas,reflectionAtlas;VkSampler probeSampler=VK_NULL_HANDLE,reflectionSampler=VK_NULL_HANDLE;bool reflectionsReady=false;
+ struct ProbeSlot {int level=-1;uint64_t key=0,used=0;float origin[3]{};float cellZ=1;int layers=0;};
+ std::array<ProbeSlot,ProbeSlots> probeSlots{};std::vector<int> activeProbes;
+ struct ReflectionSlot {uint64_t key=0,used=0;int level=-1;float probe[9]{};bool captured=false;};
+ std::array<ReflectionSlot,MaxReflections> reflectionSlots{};std::vector<int> activeReflections;uint64_t probeFrame=1;
+ Buffer probeStaging;
+ // Capture targets: the scene pass at 96 x 96 (same formats and samples), its own view block.
+ Image captureColor,captureTarget,captureDepth,captureMaterialColor,captureMaterial;VkFramebuffer captureFrame=VK_NULL_HANDLE;
+ std::array<Buffer,FrameCount> captureBuffers{};std::array<VkDescriptorSet,FrameCount> captureSets{};uint64_t reflectionCaptures=0;
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
@@ -548,6 +575,155 @@ struct GpuRenderer::Impl {
  Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false,shadowAtlasFresh=true;
  VkRenderPass shadowPass=VK_NULL_HANDLE;VkPipeline shadowPipeline=VK_NULL_HANDLE;VkPipelineLayout shadowLayout=VK_NULL_HANDLE;VkSampler shadowSampler=VK_NULL_HANDLE;
  std::uint64_t shadowFacesDrawn=0;
+ // Light probe images: the irradiance atlas and the reflection atlas, cleared and left
+ // shader-readable, their samplers, the capture targets and the capture view blocks.
+ void createProbeResources(){
+  auto image=[&](Image& out,VkImageType type,VkImageViewType viewType,VkExtent3D extent,uint32_t levels,uint32_t layers,VkFormat format,VkImageUsageFlags usage){
+   VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};info.imageType=type;info.format=format;info.extent=extent;info.mipLevels=levels;info.arrayLayers=layers;info.samples=VK_SAMPLE_COUNT_1_BIT;info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=usage;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
+   check(vkCreateImage(device,&info,nullptr,&out.handle),"Create light probe atlas");
+   VkMemoryRequirements req;vkGetImageMemoryRequirements(device,out.handle,&req);VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;alloc.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+   check(vkAllocateMemory(device,&alloc,nullptr,&out.memory),"Allocate light probe atlas");check(vkBindImageMemory(device,out.handle,out.memory,0),"Bind light probe atlas");
+   VkImageViewCreateInfo view{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};view.image=out.handle;view.viewType=viewType;view.format=format;view.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,layers};check(vkCreateImageView(device,&view,nullptr,&out.view),"Create light probe view");
+  };
+  image(irradianceAtlas,VK_IMAGE_TYPE_3D,VK_IMAGE_VIEW_TYPE_3D,{uint32_t(ProbeAtlasWidth),uint32_t(ProbeAtlasHeight),uint32_t(ProbeAtlasDepth)},1,1,VK_FORMAT_R16G16B16A16_SFLOAT,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT);
+  // Reflections are blitted out of the HDR scene target and filtered down their mips.
+  VkFormatProperties properties{};vkGetPhysicalDeviceFormatProperties(physical,sceneFormat,&properties);
+  constexpr VkFormatFeatureFlags blit=VK_FORMAT_FEATURE_BLIT_SRC_BIT|VK_FORMAT_FEATURE_BLIT_DST_BIT|VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+  reflectionsReady=hdrScene&&!vrMode&&(properties.optimalTilingFeatures&blit)==blit;
+  image(reflectionAtlas,VK_IMAGE_TYPE_2D,VK_IMAGE_VIEW_TYPE_2D_ARRAY,{ReflectionSize,ReflectionSize,1},ReflectionLevels,uint32_t(MaxReflections*6),hdrScene?sceneFormat:VK_FORMAT_R16G16B16A16_SFLOAT,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT);
+  startUploadCommands();
+  for(auto* target:{&irradianceAtlas,&reflectionAtlas}){const uint32_t levels=target==&reflectionAtlas?ReflectionLevels:1,layers=target==&reflectionAtlas?uint32_t(MaxReflections*6):1;
+   VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_UNDEFINED;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=target->handle;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,levels,0,layers};b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+   vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+   VkClearColorValue zero{{0.f,0.f,0.f,0.f}};vkCmdClearColorImage(uploadCommand,target->handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&zero,1,&b.subresourceRange);
+   b.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+   vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&b);}
+  submitUploadCommands();
+  VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};sampler.magFilter=sampler.minFilter=VK_FILTER_LINEAR;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;sampler.maxLod=0.f;
+  check(vkCreateSampler(device,&sampler,nullptr,&probeSampler),"Create irradiance probe sampler");
+  sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;sampler.maxLod=float(ReflectionLevels);check(vkCreateSampler(device,&sampler,nullptr,&reflectionSampler),"Create reflection probe sampler");
+  if(reflectionsReady){
+   const bool msaa=sceneSamples!=VK_SAMPLE_COUNT_1_BIT;const int size=int(ReflectionSize);
+   makeImage(captureMaterial,size,size,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+   if(msaa)makeImage(captureMaterialColor,size,size,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,sceneSamples);
+   makeImage(captureTarget,size,size,1,sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+   if(msaa)makeImage(captureColor,size,size,1,sceneFormat,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,sceneSamples);
+   makeImage(captureDepth,size,size,1,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,VK_IMAGE_ASPECT_DEPTH_BIT,sceneSamples);
+   VkImageView views[5]={msaa?captureColor.view:captureTarget.view,msaa?captureTarget.view:captureDepth.view,msaa?captureDepth.view:captureMaterial.view,msaa?captureMaterialColor.view:VK_NULL_HANDLE,msaa?captureMaterial.view:VK_NULL_HANDLE};
+   VkFramebufferCreateInfo frame{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};frame.renderPass=renderPass;frame.attachmentCount=msaa?5u:3u;frame.pAttachments=views;frame.width=frame.height=ReflectionSize;frame.layers=1;check(vkCreateFramebuffer(device,&frame,nullptr,&captureFrame),"Create reflection capture target");
+  }
+  std::array<VkDescriptorSetLayout,FrameCount> layouts;layouts.fill(projectionLayout);VkDescriptorSetAllocateInfo allocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};allocate.descriptorPool=projectionPool;allocate.descriptorSetCount=uint32_t(FrameCount);allocate.pSetLayouts=layouts.data();
+  check(vkAllocateDescriptorSets(device,&allocate,captureSets.data()),"Allocate reflection capture descriptors");
+  VkDescriptorImageInfo images[2]={{probeSampler,irradianceAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{reflectionSampler,reflectionAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+  for(int i=0;i<FrameCount;++i){
+   makeBuffer(captureBuffers[size_t(i)],sizeof(vrProjection),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+   VkDescriptorBufferInfo buffers[2]={{captureBuffers[size_t(i)].handle,0,sizeof(vrProjection)},{actorBuffers[size_t(i)].handle,0,VK_WHOLE_SIZE}};
+   VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=captureSets[size_t(i)];write.dstBinding=uint32_t(binding);write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
+   vkUpdateDescriptorSets(device,2,writes,0,nullptr);
+  }
+  for(int which=0;which<2;++which)for(auto set:which?captureSets:projectionSets)for(uint32_t binding=5;binding<=6;++binding){
+   VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&images[binding-5];vkUpdateDescriptorSets(device,1,&write,0,nullptr);}
+ }
+ void destroyProbeResources(){
+  if(captureFrame)vkDestroyFramebuffer(device,captureFrame,nullptr);captureFrame=VK_NULL_HANDLE;
+  for(auto* i:{&irradianceAtlas,&reflectionAtlas,&captureColor,&captureTarget,&captureDepth,&captureMaterialColor,&captureMaterial})destroy(*i);
+  for(auto&b:captureBuffers)destroy(b);destroy(probeStaging);
+  if(probeSampler)vkDestroySampler(device,probeSampler,nullptr);if(reflectionSampler)vkDestroySampler(device,reflectionSampler,nullptr);probeSampler=reflectionSampler=VK_NULL_HANDLE;
+ }
+ // One map's probe grid into its band of the irradiance atlas (half floats, six face blocks).
+ void uploadIrradiance(int slot,const IrradianceVolume& v){
+  constexpr int W=IrradianceVolume::Width;const size_t bytes=size_t(ProbeAtlasWidth)*W*ProbeAtlasDepth*8;
+  if(probeStaging.size<bytes){destroy(probeStaging);makeBuffer(probeStaging,bytes,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);}
+  auto* out=static_cast<uint16_t*>(probeStaging.mapped);const int layers=std::clamp(v.nz,1,ProbeAtlasDepth);
+  for(int z=0;z<layers;++z)for(int y=0;y<W;++y)for(int face=0;face<6;++face)for(int x=0;x<W;++x){
+   const float* source=v.data.data()+v.index(std::min(x,v.nx-1),std::min(y,v.ny-1),std::min(z,v.nz-1))*IrradianceVolume::Stride+face*4;
+   uint16_t* target=out+((size_t(z)*W+size_t(y))*ProbeAtlasWidth+size_t(face*W+x))*4;
+   for(int c=0;c<4;++c)target[c]=emissionHalf(std::clamp(source[c],0.f,60000.f));}
+  startUploadCommands();
+  VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=irradianceAtlas.handle;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};b.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+  vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+  VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageOffset={0,slot*W,0};copy.imageExtent={uint32_t(ProbeAtlasWidth),uint32_t(W),uint32_t(layers)};
+  vkCmdCopyBufferToImage(uploadCommand,probeStaging.handle,irradianceAtlas.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&copy);
+  std::swap(b.oldLayout,b.newLayout);std::swap(b.srcAccessMask,b.dstAccessMask);
+  vkCmdPipelineBarrier(uploadCommand,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&b);
+  submitUploadCommands();
+ }
+ // This frame's probes for the shaders: the volumes in use and the captured reflection probes.
+ static void writeLook(float* tail){
+  static const float look[12]={lookTune("reflect",1.5f),lookTune("polish",.58f),lookTune("envAdd",1.1f),lookTune("envTake",.5f),
+   lookTune("ssrRough",.8f),lookTune("probeLod",1.6f),lookTune("fillSat",1.15f),lookTune("metalTint",.35f),
+   0.f,0.f,lookTune("crystalGlow",2.f),lookTune("wetBase",.5f)};
+  std::memcpy(tail,look,sizeof(look));}
+ void writeProbeHeader(void* mapped){
+  LampHeader h{};int volumes=0,reflections=0;
+  for(int slot:activeProbes){if(volumes>=ProbeSlots)break;const auto&s=probeSlots[size_t(slot)];float* v=h.probeVolumes+volumes*8;
+   v[0]=s.origin[0];v[1]=s.origin[1];v[2]=s.origin[2];v[3]=s.cellZ;v[4]=float(slot);v[5]=float(s.layers);++volumes;}
+  for(int index:activeReflections){const auto&r=reflectionSlots[size_t(index)];if(!r.captured||reflections>=MaxReflections-1)continue;float* v=h.reflections+reflections*12;
+   v[0]=r.probe[0];v[1]=r.probe[1];v[2]=r.probe[2];v[3]=float(index);for(int k=0;k<3;++k){v[4+k]=r.probe[3+k];v[8+k]=r.probe[6+k];}++reflections;}
+  h.probeInfo[0]=float(volumes);h.probeInfo[1]=float(reflections);h.probeInfo[2]=float(ReflectionLevels);
+  // The look's values for the shaders (LookTuning.h; RM_LOOK overrides them for a capture), in the
+  // last reflection probe's record: scene.frag and post.frag read them as LookA, LookB and LookC.
+  h.probeInfo[3]=lookTune("fill",1.f);
+  writeLook(h.reflections+(MaxReflections-1)*12);
+  std::memcpy(static_cast<uint8_t*>(mapped)+offsetof(LampHeader,probeInfo),h.probeInfo,sizeof(h.probeInfo)+sizeof(h.probeVolumes)+sizeof(h.reflections));
+ }
+ // Capture the reflection probes not yet captured: each face is the scene pass at 90 degrees from
+ // the probe, drawing its map's static cache with its lamps, shadows and probes, blitted into the
+ // atlas and filtered down its mips. In the window a few go each frame; headless all at once.
+ // A capture holds the room, never the moment: its clock slot (effects.z in the shaders) carries
+ // CaptureClock, and the torch, the muzzle and the transient flashes stay out of it, so what a
+ // probe shows does not depend on the frame it happened to be taken in.
+ static constexpr float CaptureClock=-1.e6f;
+ void captureReflections(VkCommandBuffer cmd){
+  if(!reflectionsReady||!captureFrame)return;
+  int budget=surface?2:MaxReflections;bool prepared=false;
+  for(int index:activeReflections){auto&slot=reflectionSlots[size_t(index)];if(slot.captured)continue;if(budget<=0)break;
+   auto cache=staticCaches.find(slot.level);if(cache==staticCaches.end()||!cache->second.buffer.handle)continue;
+   if(!prepared){
+    auto view=vrProjection;view[16]=0.f;view[18]=view[19]=0.f;view[26]=1.f;view[27]=Projection::nearPlane;std::memcpy(captureBuffers[size_t(frameIndex)].mapped,view.data(),sizeof(view));
+    VkDescriptorBufferInfo lampInfo{lampBuffers[size_t(frameIndex)].handle,0,LampBufferBytes};VkDescriptorImageInfo images[2]={{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{shadowSampler,sunAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkWriteDescriptorSet writes[3]{};for(auto&w:writes){w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=captureSets[size_t(frameIndex)];w.descriptorCount=1;}
+    writes[0].dstBinding=2;writes[0].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[0].pBufferInfo=&lampInfo;
+    writes[1].dstBinding=3;writes[1].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[1].pImageInfo=&images[0];
+    writes[2].dstBinding=4;writes[2].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[2].pImageInfo=&images[1];
+    vkUpdateDescriptorSets(device,3,writes,0,nullptr);prepared=true;}
+   const float yaws[6]={0.f,3.14159265f,1.5707963f,-1.5707963f,0.f,0.f},pitches[6]={0.f,0.f,0.f,0.f,1.5707963f,-1.5707963f};
+   for(int face=0;face<6;++face){
+    auto view=viewState;view[0]=slot.probe[0];view[1]=slot.probe[1];view[2]=slot.probe[2];view[3]=std::cos(yaws[face]);view[4]=std::sin(yaws[face]);view[5]=std::cos(pitches[face]);view[6]=std::sin(pitches[face]);view[7]=1.f;view[8]=0.f;view[9]=0.f;view[10]=CaptureClock;
+    const uint32_t depthIndex=sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;VkClearValue clear[5]{};clear[0].color=VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}};clear[depthIndex].depthStencil={1,0};clear[depthIndex+1].color=VkClearColorValue{{1.f,0.f,.5f,1.f}};
+    VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=renderPass;pass.framebuffer=captureFrame;pass.renderArea.extent={ReflectionSize,ReflectionSize};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
+    vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
+    VkViewport viewport{0,0,float(ReflectionSize),float(ReflectionSize),0,1};VkRect2D scissor{{0,0},{ReflectionSize,ReflectionSize}};vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
+    vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,1,1,&captureSets[size_t(frameIndex)],0,nullptr);
+    vkCmdPushConstants(cmd,pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(view),view.data());
+    VkDeviceSize offset=0;vkCmdBindVertexBuffers(cmd,0,1,&cache->second.buffer.handle,&offset);VkPipeline bound=VK_NULL_HANDLE;
+    for(int round=0;round<2;++round)for(auto&cached:cache->second.batches){auto*material=findMaterial(cached.material);if(!material||material->transparent!=(round==1))continue;
+     auto pipeline=material->transparent?(material->liquid?liquid:transparent):material->additive?additive:opaque;if(pipeline!=bound){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);bound=pipeline;}
+     vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&material->set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}
+    vkCmdEndRenderPass(cmd);
+    // Into the atlas: the face, then each mip from the one above it.
+    const uint32_t layer=uint32_t(index*6+face);
+    VkImageMemoryBarrier b{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};b.srcQueueFamilyIndex=b.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;b.image=reflectionAtlas.handle;
+    b.oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.srcAccessMask=VK_ACCESS_SHADER_READ_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,ReflectionLevels,layer,1};
+    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+    VkImageBlit region{};region.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};region.srcOffsets[1]={int32_t(ReflectionSize),int32_t(ReflectionSize),1};region.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,layer,1};region.dstOffsets[1]=region.srcOffsets[1];
+    vkCmdBlitImage(cmd,captureTarget.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,reflectionAtlas.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region,VK_FILTER_NEAREST);
+    for(uint32_t level=1;level<ReflectionLevels;++level){
+     b.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,level-1,1,layer,1};b.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b.newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;b.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b.dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+     vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,1,&b);
+     const int32_t from=int32_t(std::max(1u,ReflectionSize>>(level-1))),to=int32_t(std::max(1u,ReflectionSize>>level));
+     VkImageBlit down{};down.srcSubresource={VK_IMAGE_ASPECT_COLOR_BIT,level-1,layer,1};down.srcOffsets[1]={from,from,1};down.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,level,layer,1};down.dstOffsets[1]={to,to,1};
+     vkCmdBlitImage(cmd,reflectionAtlas.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,reflectionAtlas.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&down,VK_FILTER_LINEAR);
+    }
+    VkImageMemoryBarrier back[2]{b,b};
+    back[0].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,ReflectionLevels-1,layer,1};back[0].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;back[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    back[1].subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,ReflectionLevels-1,1,layer,1};back[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;back[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+    for(auto&x:back){x.newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;x.dstAccessMask=VK_ACCESS_SHADER_READ_BIT;}
+    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,2,back);
+   }
+   slot.captured=true;--budget;++reflectionCaptures;
+  }
+ }
  void destroyShadowAtlas(){
   for(auto frame:shadowFrames)vkDestroyFramebuffer(device,frame,nullptr);shadowFrames.clear();
   for(auto view:shadowLayerViews)vkDestroyImageView(device,view,nullptr);shadowLayerViews.clear();
@@ -652,10 +828,10 @@ struct GpuRenderer::Impl {
    destroyStage(occlusionStage);destroyStage(shadowStage);destroyStage(composeStage);destroyTaaTargets();destroyStage(taaStage);
    for(auto&stage:bloomDown)destroyStage(stage);for(auto&stage:bloomUp)destroyStage(stage);
    for(int i=0;i<2;++i){if(exposureFrames[size_t(i)])vkDestroyFramebuffer(device,exposureFrames[size_t(i)],nullptr);destroy(exposureImages[size_t(i)]);}destroyStage(exposureStage);destroy(materialTarget);destroy(materialColor);
-   destroy(target);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
+   destroy(target);destroy(softDepth);destroy(sceneColor);destroy(depth);destroy(blackEmission);destroy(overlay);destroy(readback);destroy(dynamicUpload);destroy(atlasStaging);
    for(int i=0;i<FrameCount;++i){destroy(vertexBuffers[i]);destroy(actorVertexBuffers[i]);destroy(overlayBuffers[i]);}
    for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}
-   destroyShadowAtlas();for(auto&b:lampBuffers)destroy(b);
+   destroyShadowAtlas();destroyProbeResources();for(auto&b:lampBuffers)destroy(b);
    for(auto frame:sunFrames)if(frame)vkDestroyFramebuffer(device,frame,nullptr);for(auto view:sunViews)if(view)vkDestroyImageView(device,view,nullptr);destroy(sunAtlas);
    if(sunPipeline)vkDestroyPipeline(device,sunPipeline,nullptr);if(sunLayout)vkDestroyPipelineLayout(device,sunLayout,nullptr);
    if(shadowPipeline)vkDestroyPipeline(device,shadowPipeline,nullptr);if(shadowLayout)vkDestroyPipelineLayout(device,shadowLayout,nullptr);if(shadowPass)vkDestroyRenderPass(device,shadowPass,nullptr);if(shadowSampler)vkDestroySampler(device,shadowSampler,nullptr);
@@ -663,7 +839,7 @@ struct GpuRenderer::Impl {
    for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
    if(transparent)vkDestroyPipeline(device,transparent,nullptr);if(liquid)vkDestroyPipeline(device,liquid,nullptr);if(opaque)vkDestroyPipeline(device,opaque,nullptr);if(additive)vkDestroyPipeline(device,additive,nullptr);
    if(actorTransparent)vkDestroyPipeline(device,actorTransparent,nullptr);if(actorOpaque)vkDestroyPipeline(device,actorOpaque,nullptr);if(actorAdditive)vkDestroyPipeline(device,actorAdditive,nullptr);
-   if(compositePipeline)vkDestroyPipeline(device,compositePipeline,nullptr);if(compositePass)vkDestroyRenderPass(device,compositePass,nullptr);if(compositeLayout)vkDestroyPipelineLayout(device,compositeLayout,nullptr);if(compositeSetLayout)vkDestroyDescriptorSetLayout(device,compositeSetLayout,nullptr);if(compositeDescriptors)vkDestroyDescriptorPool(device,compositeDescriptors,nullptr);if(renderPass)vkDestroyRenderPass(device,renderPass,nullptr);if(pipelineLayout)vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
+   if(compositePipeline)vkDestroyPipeline(device,compositePipeline,nullptr);if(compositePass)vkDestroyRenderPass(device,compositePass,nullptr);if(compositeLayout)vkDestroyPipelineLayout(device,compositeLayout,nullptr);if(compositeSetLayout)vkDestroyDescriptorSetLayout(device,compositeSetLayout,nullptr);if(compositeDescriptors)vkDestroyDescriptorPool(device,compositeDescriptors,nullptr);if(renderPass)vkDestroyRenderPass(device,renderPass,nullptr);if(passOpaque)vkDestroyRenderPass(device,passOpaque,nullptr);if(passBlended)vkDestroyRenderPass(device,passBlended,nullptr);if(pipelineLayout)vkDestroyPipelineLayout(device,pipelineLayout,nullptr);
    if(descriptors)vkDestroyDescriptorPool(device,descriptors,nullptr);if(setLayout)vkDestroyDescriptorSetLayout(device,setLayout,nullptr);
    if(wrap)vkDestroySampler(device,wrap,nullptr);if(clamp)vkDestroySampler(device,clamp,nullptr);if(sceneSampler)vkDestroySampler(device,sceneSampler,nullptr);if(pointSampler)vkDestroySampler(device,pointSampler,nullptr);
    for(auto sem:readySemaphores)vkDestroySemaphore(device,sem,nullptr);
@@ -775,7 +951,7 @@ struct GpuRenderer::Impl {
   // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
   uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
   uint64_t key=base^(uint64_t(unsigned(scale))<<56);auto found=materials.find(key);if(found!=materials.end())return key;
-  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;
+  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;mat.soft=t.transparent&&t.soft;
   mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
   int presentW=std::max(1,t.width*scale),presentH=std::max(1,t.height*scale);
@@ -897,11 +1073,17 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   {1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT,nullptr},
   {2,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
   {3,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
-  {4,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr}};
- VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=5;projectionInfo.pBindings=projectionBindings;
+  {4,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  // Light probes: the irradiance atlas (3D) and the reflection atlas (array).
+  {5,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  {6,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr},
+  // Soft particles: the room's planar depth (Impl::softDepth).
+  {7,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr}};
+ VkDescriptorSetLayoutCreateInfo projectionInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};projectionInfo.bindingCount=8;projectionInfo.pBindings=projectionBindings;
  check(vkCreateDescriptorSetLayout(m->device,&projectionInfo,nullptr,&m->projectionLayout),"Create view and actor layout");
- VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,2},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,4},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,4}};
- VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=2;projectionPool.poolSizeCount=3;projectionPool.pPoolSizes=projectionSizes;
+ // Two frame sets and two reflection capture sets (createProbeResources).
+ VkDescriptorPoolSize projectionSizes[]={{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,4},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,8},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,24}};
+ VkDescriptorPoolCreateInfo projectionPool{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};projectionPool.maxSets=4;projectionPool.poolSizeCount=3;projectionPool.pPoolSizes=projectionSizes;
  check(vkCreateDescriptorPool(m->device,&projectionPool,nullptr,&m->projectionPool),"Create view and actor pool");
  VkDescriptorSetLayout projectionLayouts[]={m->projectionLayout,m->projectionLayout};VkDescriptorSetAllocateInfo projectionAllocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};projectionAllocate.descriptorPool=m->projectionPool;projectionAllocate.descriptorSetCount=2;projectionAllocate.pSetLayouts=projectionLayouts;
  check(vkAllocateDescriptorSets(m->device,&projectionAllocate,m->projectionSets.data()),"Allocate view and actor descriptors");
@@ -912,6 +1094,8 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=m->projectionSets[i];write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
   vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
   m->makeBuffer(m->lampBuffers[i],Impl::LampBufferBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampBufferBytes);
+  // (The look's values are there from the first frame: a probe captured before any header is written reads them.)
+  Impl::writeLook(reinterpret_cast<float*>(static_cast<uint8_t*>(m->lampBuffers[i].mapped)+offsetof(Impl::LampHeader,reflections))+(Impl::MaxReflections-1)*12);
   VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampBufferBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
  }
  {
@@ -992,6 +1176,14 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
  VkAttachmentReference colors[2]={{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},{materialIndex,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},resolves[2]={{1,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},{materialIndex+1,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}},depth{depthIndex,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};VkSubpassDescription subpass{};subpass.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;subpass.colorAttachmentCount=2;subpass.pColorAttachments=colors;subpass.pResolveAttachments=multisampled?resolves:nullptr;subpass.pDepthStencilAttachment=&depth;
  VkSubpassDependency deps[2]{};deps[0].srcSubpass=VK_SUBPASS_EXTERNAL;deps[0].dstSubpass=0;deps[0].srcStageMask=VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].srcAccessMask=VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;deps[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;deps[1].srcSubpass=0;deps[1].dstSubpass=VK_SUBPASS_EXTERNAL;deps[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;deps[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;deps[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;deps[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
  VkRenderPassCreateInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};pass.attachmentCount=multisampled?5u:3u;pass.pAttachments=attachments;pass.subpassCount=1;pass.pSubpasses=&subpass;pass.dependencyCount=2;pass.pDependencies=deps;check(vkCreateRenderPass(m->device,&pass,nullptr,&m->renderPass),"Create render pass");
+ // The soft-particle pair (Impl::softDepth): the same attachments (so the same framebuffer and
+ // pipelines), the first storing what the second loads; resolve targets are written again at its end.
+ {VkAttachmentDescription kept[5],loaded[5];
+  for(uint32_t i=0;i<pass.attachmentCount;++i){const bool resolve=multisampled&&(i==1||i==materialIndex+1);kept[i]=attachments[i];
+   if(!resolve)kept[i].storeOp=VK_ATTACHMENT_STORE_OP_STORE;
+   loaded[i]=kept[i];if(resolve){loaded[i].loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;loaded[i].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;}else{loaded[i].loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;loaded[i].initialLayout=kept[i].finalLayout;}}
+  pass.pAttachments=kept;check(vkCreateRenderPass(m->device,&pass,nullptr,&m->passOpaque),"Create opaque scene pass");
+  pass.pAttachments=loaded;check(vkCreateRenderPass(m->device,&pass,nullptr,&m->passBlended),"Create blended scene pass");pass.pAttachments=attachments;}
  VkSamplerCreateInfo sampler{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};sampler.magFilter=sampler.minFilter=VK_FILTER_LINEAR;sampler.anisotropyEnable=enabled.samplerAnisotropy;sampler.maxAnisotropy=enabled.samplerAnisotropy?std::min(8.f,deviceProperties.limits.maxSamplerAnisotropy):1.f;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_LINEAR;sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_REPEAT;sampler.maxLod=VK_LOD_CLAMP_NONE;check(vkCreateSampler(m->device,&sampler,nullptr,&m->wrap),"Create texture sampler");sampler.addressModeU=sampler.addressModeV=sampler.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;check(vkCreateSampler(m->device,&sampler,nullptr,&m->clamp),"Create decal sampler");
  sampler.anisotropyEnable=VK_FALSE;sampler.maxAnisotropy=1.f;sampler.maxLod=0.f;check(vkCreateSampler(m->device,&sampler,nullptr,&m->sceneSampler),"Create scene presentation sampler");
  sampler.magFilter=sampler.minFilter=VK_FILTER_NEAREST;sampler.mipmapMode=VK_SAMPLER_MIPMAP_MODE_NEAREST;check(vkCreateSampler(m->device,&sampler,nullptr,&m->pointSampler),"Create HUD and depth sampler");
@@ -1036,7 +1228,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
    VkSubpassDependency pd[2]{};pd[0].srcSubpass=VK_SUBPASS_EXTERNAL;pd[0].dstSubpass=0;pd[0].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;pd[0].dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_SHADER_READ_BIT;
    pd[1].srcSubpass=0;pd[1].dstSubpass=VK_SUBPASS_EXTERNAL;pd[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;pd[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;pd[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;pd[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT|VK_ACCESS_SHADER_READ_BIT;
    VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};rp.attachmentCount=1;rp.pAttachments=&a;rp.subpassCount=1;rp.pSubpasses=&sp;rp.dependencyCount=2;rp.pDependencies=pd;check(vkCreateRenderPass(m->device,&rp,nullptr,&stage.pass),name);
-   VkDescriptorSetLayoutBinding pb[8]{};for(uint32_t i=0;i<samplers;++i){pb[i].binding=i;pb[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb[i].descriptorCount=1;pb[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
+   VkDescriptorSetLayoutBinding pb[12]{};for(uint32_t i=0;i<samplers;++i){pb[i].binding=i;pb[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;pb[i].descriptorCount=1;pb[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}
    // Lamp access: the lamp grid and the cube shadow atlas follow the images.
    if(lampAccess){pb[samplers]={samplers,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};pb[samplers+1]={samplers+1,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};}
    VkDescriptorSetLayoutCreateInfo psl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};psl.bindingCount=samplers+(lampAccess?2u:0u);psl.pBindings=pb;check(vkCreateDescriptorSetLayout(m->device,&psl,nullptr,&stage.setLayout),name);
@@ -1059,7 +1251,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   };
   buildStage(m->occlusionStage,occlusionFragmentShader,sizeof(occlusionFragmentShader),1,"Create occlusion post stage");
   buildStage(m->shadowStage,shadowFragmentShader,sizeof(shadowFragmentShader),1,"Create shadow post stage",true);
-  buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),6,"Create compose post stage",true);
+  buildStage(m->composeStage,postFragmentShader,sizeof(postFragmentShader),7,"Create compose post stage",true);
   for(auto&stage:m->bloomDown)buildStage(stage,bloomFragmentShader,sizeof(bloomFragmentShader),2,"Create bloom halving stage");
   for(auto&stage:m->bloomUp)buildStage(stage,bloomFragmentShader,sizeof(bloomFragmentShader),2,"Create bloom climb stage");
   buildStage(m->exposureStage,exposureFragmentShader,sizeof(exposureFragmentShader),2,"Create auto exposure stage");
@@ -1070,6 +1262,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   buildStage(m->taaStage,taaFragmentShader,sizeof(taaFragmentShader),3,"Create temporal AA stage");
   m->postAvailable=true;
  }
+ m->createProbeResources();
  if(m->surface||m->vrMode)m->initPresentation();
  m->vertices.reserve(150000);m->actorVertices.reserve(40000);m->batches.reserve(4096);
 }
@@ -1159,18 +1352,25 @@ void GpuRenderer::begin(int width,int height){
  }
  for(auto&buffer:m->retiredBuffers[m->frameIndex])m->destroy(buffer);m->retiredBuffers[m->frameIndex].clear();
  m->vertices.clear();m->actorVertices.clear();m->batches.clear();m->actorLights.clear();m->actorTriangles=0;m->capturing=false;m->captureSlot=-1;m->renderingViewmodel=false;
+ m->activeProbes.clear();m->activeReflections.clear();++m->probeFrame;
  m->frameVertexCapacity=m->vertices.capacity();m->frameActorCapacity=m->actorVertices.capacity();
  if(width==m->width&&height==m->height)return;
  // Render target size changed — must drain GPU fully before resize.
  vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
  m->destroyStageTarget(m->occlusionStage);m->destroyStageTarget(m->shadowStage);m->destroyStageTarget(m->composeStage);m->destroyTaaTargets();
  for(auto&stage:m->bloomDown)m->destroyStageTarget(stage);for(auto&stage:m->bloomUp)m->destroyStageTarget(stage);
- if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->sceneColor);m->destroy(m->depth);m->destroy(m->readback);m->destroy(m->materialTarget);m->destroy(m->materialColor);
+ if(m->framebuffer){vkDestroyFramebuffer(m->device,m->framebuffer,nullptr);m->framebuffer=VK_NULL_HANDLE;}m->destroy(m->target);m->destroy(m->softDepth);m->destroy(m->sceneColor);m->destroy(m->depth);m->destroy(m->readback);m->destroy(m->materialTarget);m->destroy(m->materialColor);
  m->makeImage(m->materialTarget,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
- if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->materialColor,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);
- m->makeImage(m->target,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->sceneColor,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT|VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);m->makeImage(m->depth,width,height,1,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,VK_IMAGE_ASPECT_DEPTH_BIT,m->sceneSamples);m->makeBuffer(m->readback,VkDeviceSize(width)*height*(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT?8:m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT?16:4),VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+ if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->materialColor,width,height,1,VK_FORMAT_R8G8B8A8_UNORM,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);
+ m->makeImage(m->target,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);if(m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT)m->makeImage(m->sceneColor,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,VK_IMAGE_ASPECT_COLOR_BIT,m->sceneSamples);m->makeImage(m->depth,width,height,1,VK_FORMAT_D32_SFLOAT,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,VK_IMAGE_ASPECT_DEPTH_BIT,m->sceneSamples);m->makeBuffer(m->readback,VkDeviceSize(width)*height*(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT?8:m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT?16:4),VK_BUFFER_USAGE_TRANSFER_DST_BIT);
  const bool msaa=m->sceneSamples!=VK_SAMPLE_COUNT_1_BIT;
  VkImageView views[5]={msaa?m->sceneColor.view:m->target.view,msaa?m->target.view:m->depth.view,msaa?m->depth.view:m->materialTarget.view,msaa?m->materialColor.view:VK_NULL_HANDLE,msaa?m->materialTarget.view:VK_NULL_HANDLE};VkFramebufferCreateInfo frame{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};frame.renderPass=m->renderPass;frame.attachmentCount=msaa?5u:3u;frame.pAttachments=views;frame.width=width;frame.height=height;frame.layers=1;check(vkCreateFramebuffer(m->device,&frame,nullptr,&m->framebuffer),"Create frame target");m->width=width;m->height=height;
+ // Soft particles read the room's depth from the HDR target's alpha (not in VR, nor without HDR,
+ // where the alpha is not depth): its copy, left shader-readable (a texel of it otherwise, never read).
+ {const bool live=m->softDepthLive();m->makeImage(m->softDepth,live?width:1,live?height:1,1,m->sceneFormat,VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
+  m->startUploadCommands();m->barrier(m->softDepth,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,0,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,m->uploadCommand);m->submitUploadCommands();}
+ {VkDescriptorImageInfo image{m->pointSampler,m->softDepth.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  for(int which=0;which<2;++which)for(auto set:which?m->captureSets:m->projectionSets){if(!set)continue;VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=7;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&image;vkUpdateDescriptorSets(m->device,1,&write,0,nullptr);}}
  if(m->postAvailable)for(auto* stage:{&m->occlusionStage,&m->shadowStage,&m->composeStage}){
   m->makeImage(stage->image,width,height,1,m->sceneFormat,VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_SAMPLED_BIT,VK_IMAGE_ASPECT_COLOR_BIT);
   VkFramebufferCreateInfo pfb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};pfb.renderPass=stage->pass;pfb.attachmentCount=1;pfb.pAttachments=&stage->image.view;pfb.width=width;pfb.height=height;pfb.layers=1;check(vkCreateFramebuffer(m->device,&pfb,nullptr,&stage->framebuffer),"Create post stage target");
@@ -1306,6 +1506,29 @@ void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
 void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}
 void GpuRenderer::setLodTag(const LodTag* tag){m->lodTag=tag;}
+void GpuRenderer::useProbes(int level,const ProbeBake* bake,std::uint64_t key,Vec2 offset){
+ if(!bake||bake->volume.empty()||!m->irradianceAtlas.handle)return;const auto&v=bake->volume;
+ int slot=-1;for(int i=0;i<Impl::ProbeSlots;++i)if(m->probeSlots[size_t(i)].level==level){slot=i;break;}
+ if(slot<0){std::uint64_t oldest=~0ull;for(int i=0;i<Impl::ProbeSlots;++i){const auto&s=m->probeSlots[size_t(i)];if(s.used!=m->probeFrame&&s.used<oldest){oldest=s.used;slot=i;}}}
+ if(slot<0)return;
+ auto&s=m->probeSlots[size_t(slot)];
+ if(s.level!=level||s.key!=key){m->uploadIrradiance(slot,v);s.level=level;s.key=key;}
+ s.origin[0]=v.origin.x+offset.x;s.origin[1]=v.origin.y+offset.y;s.origin[2]=v.origin.z;s.cellZ=v.cellZ;s.layers=std::clamp(v.nz,1,Impl::ProbeAtlasDepth);
+ if(s.used!=m->probeFrame){s.used=m->probeFrame;m->activeProbes.push_back(slot);}
+ for(size_t i=0;i<bake->reflections.size();++i){
+  const std::uint64_t probeKey=key^(0x9e3779b97f4a7c15ull*(i+1));int r=-1;
+  for(int j=0;j<Impl::MaxReflections;++j)if(m->reflectionSlots[size_t(j)].key==probeKey&&m->reflectionSlots[size_t(j)].level==level){r=j;break;}
+  if(r<0){std::uint64_t oldest=~0ull;for(int j=0;j<Impl::MaxReflections;++j){const auto&q=m->reflectionSlots[size_t(j)];if(q.used!=m->probeFrame&&q.used<oldest){oldest=q.used;r=j;}}}
+  if(r<0)break;
+  auto&q=m->reflectionSlots[size_t(r)];if(q.key!=probeKey||q.level!=level){q=Impl::ReflectionSlot{};q.key=probeKey;q.level=level;}
+  const auto&p=bake->reflections[i];const float values[9]={p.position.x+offset.x,p.position.y+offset.y,p.position.z,p.lo.x+offset.x,p.lo.y+offset.y,p.lo.z,p.hi.x+offset.x,p.hi.y+offset.y,p.hi.z};
+  std::copy(values,values+9,q.probe);
+  if(q.used!=m->probeFrame){q.used=m->probeFrame;m->activeReflections.push_back(r);}
+ }
+}
+bool GpuRenderer::reflectionsPending()const{if(!m->reflectionsReady)return false;for(int r:m->activeReflections)if(!m->reflectionSlots[size_t(r)].captured)return true;return false;}
+std::uint64_t GpuRenderer::reflectionCaptures()const{return m->reflectionCaptures;}
+
 // Diagnostics: the three cascade depth maps as 8-bit PGMs plus their fit.
 void GpuRenderer::saveSunCascades(const char* prefix){
  if(!m->sunAtlas.handle)return;vkDeviceWaitIdle(m->device);for(int i=0;i<Impl::FrameCount;++i)m->frameInFlight[i]=false;
@@ -1411,7 +1634,7 @@ void GpuRenderer::actorStreamRun(uint32_t start,uint32_t count,const ActorMateri
 void GpuRenderer::endActorStream(const ActorStream&stream,uint32_t count){
  m->actorVertices.resize(size_t(stream.start)+count);m->actorTriangles+=count;
 }
-void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale,float dissolve,const std::array<float,3>* bounceAir){
+void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRenderer::Texture&texture,float light,const std::array<Point3,2>&directions,const std::array<float,2>&weights,float flatResponse,bool normals,float emissionScale,float dissolve,const std::array<float,3>* bounceAir,const SoftwareRenderer::CardLook* card){
  uint64_t key;uint32_t sortKey;
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
@@ -1423,7 +1646,12 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
   for(int i=0;i<3;++i)for(int j=i+1;j<3;++j)if(std::fabs(v[i]->u+v[j]->u)<.01f&&std::fabs(v[i]->v+v[j]->v)<.01f)impostorCentre=(worldPoint(v[i]->p)+worldPoint(v[j]->p))*.5f;}
  int corner=0;for(auto v:{a,b,c}){Vertex out{};if(m->capturing){auto p=worldPoint(v.p);out.position[0]=p.x;out.position[1]=p.y;out.position[2]=p.z;out.position[3]=1.f;}else{const Projection projection{float(m->width)/m->height};out.position[0]=v.p.x*Projection::horizontal;out.position[1]=-v.p.y*projection.vertical();out.position[2]=v.p.z-Projection::nearPlane;out.position[3]=v.p.z;}
   out.uv[0]=v.u;out.uv[1]=v.v;out.lighting[0]=light;out.lighting[1]=v.light;out.lighting[2]=flatResponse;out.lighting[3]=(normals?1.f:0.f)+dissolve*.45f;
-  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=m->capturing?(bounceAir?(*bounceAir)[size_t(corner)]:SoftwareRenderer::NoBounceAir):v.p.z;++corner;out.surface[1]=texture.emission.empty()?0.f:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
+  for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=m->capturing?(bounceAir?(*bounceAir)[size_t(corner)]:SoftwareRenderer::NoBounceAir):v.p.z;++corner;out.surface[1]=texture.emission.empty()?-(std::floor(std::clamp(texture.polish,0.f,.99f)*10.f)+std::clamp(texture.metalness,0.f,.99f)):texture.crystal?100.f+emissionScale:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
+  // A particle card (surface code 5; 0-4 are opaque, additive, blended, liquid and their gloss): its opacity, the depth over which it fades into what lies
+  // behind it (when this frame has the room's depth to read), its flipbook blend and the step to
+  // the next frame in the atlas, in the lamp slots it has no use for.
+  if(card&&texture.soft&&!m->capturing){out.light0[0]=card->opacity;out.light0[1]=card->soft;out.light0[2]=m->softDepthLive()?1.f:0.f;out.light0[3]=0.f;
+   out.light1[0]=card->blend;out.light1[1]=card->step;out.light1[2]=0.f;out.light1[3]=0.f;out.surface[2]=5.f;}
   // Painterly Horizon LOD markers ride in the parallax slot (negative values).
   if(const auto*tag=m->capturing?m->lodTag:nullptr){
    if(tag->impostor){out.position[0]=impostorCentre.x;out.position[1]=impostorCentre.y;out.position[2]=impostorCentre.z;out.position[3]=1.f;
@@ -1483,10 +1711,16 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  }
  m->batches.swap(m->sortedBatches);
  m->startCommands();m->stamp(m->commands[m->frameIndex],0);
- if(!(m->vrMode&&m->vrEye==1)){m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);}
+ if(!(m->vrMode&&m->vrEye==1)){m->renderLampShadows(m->commands[m->frameIndex]);m->renderSunShadows(m->commands[m->frameIndex]);
+  // Reflection probes are captured once their lamps' shadows are drawn.
+  if(!shadowsPending())m->captureReflections(m->commands[m->frameIndex]);}
+ m->writeProbeHeader(m->lampBuffers[m->frameIndex].mapped);
  m->stamp(m->commands[m->frameIndex],1); // the second eye reuses the first eye's shadow maps
   VkClearValue clear[5]{};clear[0].color=m->hdrScene?VkClearColorValue{{std::pow(12/255.f,2.2f),std::pow(16/255.f,2.2f),std::pow(18/255.f,2.2f),1000}}:VkClearColorValue{{12/255.f,16/255.f,18/255.f,1}};uint32_t depthIndex=m->sceneSamples==VK_SAMPLE_COUNT_1_BIT?1u:2u;clear[depthIndex].depthStencil={1,0};clear[depthIndex+1].color=VkClearColorValue{{1.f,0.f,.5f,1.f}};
- VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
+ // Particle cards in the frame: the room is drawn first in a pass of its own (see Impl::softDepth).
+ static const bool splitAllowed=!std::getenv("RM_NO_SOFT_DEPTH");
+ bool split=false;if(splitAllowed&&m->softDepthLive()&&m->softDepth.handle&&m->passOpaque)for(const auto&batch:m->batches)if(!batch.clear&&!batch.cache&&!batch.actor){auto*material=m->findMaterial(batch.material);if(material&&material->soft){split=true;break;}}
+ VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=split?m->passOpaque:m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];
  vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
  VkViewport viewport{0,0,float(m->width),float(m->height),0,1};VkRect2D scissor{{0,0},{uint32_t(m->width),uint32_t(m->height)}};
@@ -1498,7 +1732,21 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
  struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false,liquid=false;};std::vector<TransparentDraw> transparentDraws;
- auto flushTransparent=[&]{for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
+ // Before the first blended draws of a split frame: the room's depth (the resolved target's alpha)
+ // into softDepth, then the same attachments loaded again for the rest of the frame.
+ auto splitScene=[&]{split=false;vkCmdEndRenderPass(cmd);
+  VkImageMemoryBarrier b[2]{};for(auto&x:b){x.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;x.srcQueueFamilyIndex=x.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;x.subresourceRange={VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};}
+  b[0].image=m->target.handle;b[0].oldLayout=b[0].newLayout=VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;b[0].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;b[0].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+  b[1].image=m->softDepth.handle;b[1].oldLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b[1].newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b[1].srcAccessMask=VK_ACCESS_SHADER_READ_BIT;b[1].dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;
+  vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,nullptr,0,nullptr,2,b);
+  VkImageCopy region{};region.srcSubresource=region.dstSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};region.extent={uint32_t(m->width),uint32_t(m->height),1};
+  vkCmdCopyImage(cmd,m->target.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,m->softDepth.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,1,&region);
+  b[0].srcAccessMask=VK_ACCESS_TRANSFER_READ_BIT;b[0].dstAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  b[1].oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;b[1].newLayout=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;b[1].srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;b[1].dstAccessMask=VK_ACCESS_SHADER_READ_BIT;
+  vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,2,b);
+  pass.renderPass=m->passBlended;vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);previous=VK_NULL_HANDLE;};
+ auto flushTransparent=[&]{if(split&&!transparentDraws.empty())splitScene();for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
   if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
@@ -1520,8 +1768,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    float right=-dx*v[4]+dy*v[3],forward=dx*v[3]+dy*v[4];
    params[16+i*4]=right;params[17+i*4]=dz*v[5]-forward*v[6];params[18+i*4]=forward*v[5]+dz*v[6];params[19+i*4]=m->vrProjection[20+size_t(i)];}
   auto runStage=[&](Impl::FullscreenStage& stage,std::initializer_list<VkImageView> sources,const float* push=nullptr,VkFramebuffer framebuffer=VK_NULL_HANDLE,VkExtent2D extent={0,0}){
-   VkDescriptorImageInfo images[8]{};VkWriteDescriptorSet writes[8]{};uint32_t count=0;
-   for(auto view:sources){images[count]={m->sceneSampler,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&w=writes[count];w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=stage.sets[m->frameIndex];w.dstBinding=count;w.descriptorCount=1;w.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w.pImageInfo=&images[count];++count;}
+   VkDescriptorImageInfo images[12]{};VkWriteDescriptorSet writes[12]{};uint32_t count=0;
+   for(auto view:sources){images[count]={view==m->reflectionAtlas.view?m->reflectionSampler:m->sceneSampler,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&w=writes[count];w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=stage.sets[m->frameIndex];w.dstBinding=count;w.descriptorCount=1;w.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w.pImageInfo=&images[count];++count;}
    VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampBufferBytes};
    if(stage.lampAccess){
     auto&grid=writes[count];grid.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;grid.dstSet=stage.sets[m->frameIndex];grid.dstBinding=count;grid.descriptorCount=1;grid.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;grid.pBufferInfo=&lampInfo;
@@ -1564,7 +1812,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    m->exposureLayouts[size_t(write)]=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;m->exposureWrite=write;
   }
   m->stamp(cmd,5);
-  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view,m->bloomUp[0].image.view});m->stamp(cmd,6);
+  runStage(m->composeStage,{m->target.view,m->occlusionStage.image.view,m->shadowStage.image.view,m->exposureImages[size_t(m->exposureWrite)].view,m->materialTarget.view,m->bloomUp[0].image.view,m->reflectionAtlas.view});m->stamp(cmd,6);
   m->postRan=true;
   m->taaRan=false;
   if(taaThisFrame){

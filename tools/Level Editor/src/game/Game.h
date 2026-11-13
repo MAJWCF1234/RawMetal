@@ -354,6 +354,9 @@ public:
     // Boxes (x1 y1 x2 y2, current map) of the events that ran since the last
     // call. Recorded only while observing.
     std::vector<std::array<float,4>> takeEditorFires(){return std::exchange(m_editorFires,{});}
+    // The builder's picture between edits: the clock runs (smoke rises, steam
+    // drifts, sparks spit, water ripples) while nothing in the world moves.
+    void advanceEditorClock(float dt){if(dt>0&&dt<1)m_elapsed+=dt;}
     Vec2 playerVelocity()const{return m_velocity;}
     float bodyGait()const{return m_bodyGait;}
     bool bodySprinting()const{return m_bodySprint;}
