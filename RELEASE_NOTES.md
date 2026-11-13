@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.4 - Quiet now (2026-11-12)
+
+A patch. The dead had too much to say, and came apart the wrong way.
+
+- **The dead are quiet.** A man you had killed could go on screaming: a ward's breathing behind a curtain kept playing at a bed whose sleeper was dead, a dead guard finished his radio lines, and shot workers cried out in Claire's voice. A dead man now makes one sound, his last, and nothing after it; a body you shoot again makes the sound of meat, not of a man.
+- **How they die.** More cries, and fewer repeats: guards, workers, scientists and women each have several, no man dies with the same cry as the one before him, and a guard dying near his squad sometimes gets a last word out on the radio. The things that were men die groaning, not roaring like a Brute. Lines tied to timed moments in the maps had been silently dropped; they are heard now.
+- **Bodies hold together.** A body no longer melts into liquid lumps as it lies: arms, legs, head and trunk keep their shape from the fall to the floor. (They still fold down more than they topple; that is next.)
+- **What breaks leaves itself.** A barrel that goes up throws pieces of its own hull, not spare electronics. Ceiling tiles fall as slabs of ceiling; wooden, plastic and metal props break into pieces of themselves.
+- **The Machine** has its own pen in the Starter Map's row of every creature. In the Campaign Builder it is the last of the creatures, "Cursed equipment".
+
+Verified with the full test suite (all 66 checks, gore, carcass, campaign-map and repeated-frame rendering) and the audio test on the release build, the feature lab's tubes for each fix (nothing vocal from the dead over shots and a reload; ten deaths with no take twice running; every breakable's pieces drawn from its own material; the Machine drawn where it stands; body sections holding their shape), and the Campaign Builder's self-tests and map round-trips.
+
+---
+
 ## v1.4.3 - Matte (2026-11-12)
 
 A patch, and an apology to the eyes. The last one polished too much.

@@ -11,6 +11,7 @@
 #include "LightProbes.h"
 #include <future>
 namespace retro::signart{struct Design;}
+namespace retro::humanoid{struct Labels;}
 #include "Carcass.h"
 #include "../core/EditorView.h"
 #include "../core/CleanupBodies.h"
@@ -251,6 +252,8 @@ private:
     struct Corpse {std::uint64_t signature=0;float seen=0,base=0;bool live=false;std::vector<int> faces;Carcass carcass;};
     std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
     Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
+    // A man's body model cut into the parts he bends at (Humanoid.h), once per model; civilians by their arm joints.
+    static const humanoid::Labels& humanParts(const Mesh& mesh,int civilianBody);
     std::vector<HitBurst> m_goreBursts;
     std::shared_ptr<ParticleMemory> m_particleMemory;
     // A headless man's neck (where the stump is, and the way the neck runs), by actor emit slot, kept for frames
@@ -405,6 +408,10 @@ private:
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
+    // What a shard (clutter kind 6, ShardOf) is drawn from: the mesh it is an eighth of (null: a
+    // splinter or slab outline) and the sheet (a model's part 0; each face takes its own part's).
+    struct ShardLook {const Mesh* mesh=nullptr;const Texture* sheet=nullptr;bool barrel=false;};
+    ShardLook shardLook(const Clutter& c)const;
     // Painterly Horizon LOD (Impostors.cpp): a shared multi-view atlas per
     // repeated cutout model, captured on first use; null for other models.
     struct Impostor {Texture atlas;Point3 center{};float radius=0;};
