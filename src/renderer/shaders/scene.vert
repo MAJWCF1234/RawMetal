@@ -23,7 +23,7 @@ layout(location=6) in vec4 worldNormal;
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;vec4 fogTone[4];} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];} lampGrid;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
@@ -46,16 +46,7 @@ layout(location=7) out float outParallax;
 // Painterly Horizon LOD impostors: fractional atlas column and row, packed
 // grid size (columns*16+rows) and the far fade; zero for everything else.
 layout(location=8) out vec4 outImpostor;
-// The room's reflection probe for this triangle (its first corner's nearest, scene.frag's score), so a
-// pixel reads one probe instead of searching every probe of every resident map; -1 none.
-layout(location=9) flat out int outProbe;
-int probeBest(vec3 p){
- int count=int(lampGrid.probeInfo.y);int best=-1;float bestScore=1e30;
- for(int i=0;i<count;++i){vec4 c=lampGrid.reflections[3*i],lo=lampGrid.reflections[3*i+1],hi=lampGrid.reflections[3*i+2];
-  vec3 outside=max(max(lo.xyz-p,p-hi.xyz),vec3(0.0)),d=p-c.xyz;float score=dot(d,d)*0.05+dot(outside,outside)*4.0;
-  if(score<bestScore){bestScore=score;best=i;}}
- return best;
-}
+
 
 vec3 cameraVector(vec3 v){
  precise float forward=v.x*view.eyeYaw.w+v.y*view.basis.x;
@@ -239,5 +230,4 @@ void main(){
  outAir=air;
  outWorldPos=worldPos;
  outParallax=worldNormal.w;
- outProbe=probeBest(worldPos);
 }

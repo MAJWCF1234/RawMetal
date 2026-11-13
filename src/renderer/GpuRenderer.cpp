@@ -534,8 +534,12 @@ struct GpuRenderer::Impl {
  // probeInfo: x volumes in use this frame, y reflection probes, z reflection mip levels. Each volume:
  // its world origin and height cell, then its atlas band and layer count. Each reflection probe: its
  // world position and atlas probe index, then its room box (lo, hi).
+ static constexpr int ProbeCellsPerVolume=IrradianceVolume::Width*IrradianceVolume::Width;
  struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];
-  float probeInfo[4];float probeVolumes[ProbeSlots*8];float reflections[MaxReflections*12];};
+  float probeInfo[4];float probeVolumes[ProbeSlots*8];float reflections[MaxReflections*12];
+  // Each probe volume's 24 x 24 one-metre cells: the reflection probe (record + 1, 0 none) a point in the
+  // cell reads, resolved here once per probe set so a pixel does one lookup (scene.frag probeAt).
+  uint32_t probeCells[ProbeSlots*ProbeCellsPerVolume/4];};
  Image irradianceAtlas,reflectionAtlas,envBrdfImage,wetAtlas;VkSampler probeSampler=VK_NULL_HANDLE,reflectionSampler=VK_NULL_HANDLE;bool reflectionsReady=false;
  struct ProbeSlot {int level=-1;uint64_t key=0,used=0;float origin[3]{};float cellZ=1;int layers=0;};
  std::array<ProbeSlot,ProbeSlots> probeSlots{};std::vector<int> activeProbes;
@@ -703,6 +707,7 @@ struct GpuRenderer::Impl {
    lookTune("ssrRough",.16f),lookTune("lampSpec",1.6f),lookTune("fillSat",.85f),lookTune("probeEmissive",6.f),
    lookFillCeiling(),lookTune("probeDebug",0.f),lookTune("crystalGlow",2.f),lookTune("ibl",1.f)};
   std::memcpy(tail,look,sizeof(look));if(!lookReflections())tail[0]=0.f;}
+ std::uint64_t probeCellKey=0;std::uint32_t probeCellCache[ProbeSlots*ProbeCellsPerVolume/4]{};
  void writeProbeHeader(void* mapped){
   LampHeader h{};int volumes=0,reflections=0;
   for(int slot:activeProbes){if(volumes>=ProbeSlots)break;const auto&s=probeSlots[size_t(slot)];float* v=h.probeVolumes+volumes*8;
@@ -714,7 +719,19 @@ struct GpuRenderer::Impl {
   // last reflection probe's record: scene.frag and post.frag read them as LookA, LookB and LookC.
   h.probeInfo[3]=lookTune("fill",1.f);
   writeLook(h.reflections+(MaxReflections-1)*12);
-  std::memcpy(static_cast<uint8_t*>(mapped)+offsetof(LampHeader,probeInfo),h.probeInfo,sizeof(h.probeInfo)+sizeof(h.probeVolumes)+sizeof(h.reflections));
+  // The nearest probe per cell, by scene.frag's old per-pixel score at eye height over the cell; only
+  // when the volumes or probes change.
+  {std::uint64_t key=1469598103934665603ull;auto mix=[&](const float* v,size_t n){for(size_t i=0;i<n;++i){key^=std::bit_cast<std::uint32_t>(v[i]);key*=1099511628211ull;}};
+   mix(h.probeVolumes,size_t(volumes)*8);mix(h.reflections,size_t(reflections)*12);key^=std::uint64_t(volumes)<<32|std::uint64_t(reflections);
+   if(key!=probeCellKey){probeCellKey=key;std::fill(std::begin(probeCellCache),std::end(probeCellCache),0u);
+    for(int v=0;v<volumes;++v){const float* o=h.probeVolumes+v*8;
+     for(int y=0;y<IrradianceVolume::Width;++y)for(int x=0;x<IrradianceVolume::Width;++x){const float p[3]={o[0]+x+.5f,o[1]+y+.5f,o[2]+1.6f};int best=-1;float bestScore=1e30f;
+      for(int r=0;r<reflections;++r){const float* c=h.reflections+r*12;float d2=0,out2=0;
+       for(int k=0;k<3;++k){const float d=p[k]-c[k];d2+=d*d;const float o2=std::max({c[4+k]-p[k],p[k]-c[8+k],0.f});out2+=o2*o2;}
+       const float score=d2*.05f+out2*4.f;if(score<bestScore){bestScore=score;best=r;}}
+      const size_t u=size_t(v*ProbeCellsPerVolume+y*IrradianceVolume::Width+x);probeCellCache[u>>2]|=std::uint32_t(best+1)<<((u&3u)*8u);}}}
+   std::memcpy(h.probeCells,probeCellCache,sizeof(h.probeCells));}
+  std::memcpy(static_cast<uint8_t*>(mapped)+offsetof(LampHeader,probeInfo),h.probeInfo,sizeof(h.probeInfo)+sizeof(h.probeVolumes)+sizeof(h.reflections)+sizeof(h.probeCells));
  }
  // Capture the reflection probes not yet captured: each face is the scene pass at 90 degrees from
  // the probe, drawing its map's static cache with its lamps, shadows and probes, blitted into the
@@ -750,10 +767,14 @@ struct GpuRenderer::Impl {
     VkViewport viewport{0,0,float(ReflectionSize),float(ReflectionSize),0,1};VkRect2D scissor{{0,0},{ReflectionSize,ReflectionSize}};vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
     vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,1,1,&captureSets[size_t(frameIndex)],0,nullptr);
     vkCmdPushConstants(cmd,pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(view),view.data());
-    VkDeviceSize offset=0;vkCmdBindVertexBuffers(cmd,0,1,&cache->second.buffer.handle,&offset);VkPipeline bound=VK_NULL_HANDLE;
-    for(int round=0;round<2;++round)for(auto&cached:cache->second.batches){auto*material=findMaterial(cached.material);if(!material||material->transparent!=(round==1))continue;
-     auto pipeline=material->transparent?(material->liquid?liquid:transparent):material->additive?additive:opaque;if(pipeline!=bound){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);bound=pipeline;}
-     vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&material->set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}
+    // The map's architecture and its companion caches (Scene3D): pipes, the fixed ceiling lamps' fittings
+    // with their glowing faces (a probe must see the lamps a floor reflects), the props and fixture parts.
+    VkPipeline bound=VK_NULL_HANDLE;
+    for(int round=0;round<2;++round)for(int companion:{0,1,2,3,40}){auto part=staticCaches.find(companion*WorldChunkCapacity+slot.level);if(part==staticCaches.end()||!part->second.buffer.handle)continue;
+     VkDeviceSize offset=0;vkCmdBindVertexBuffers(cmd,0,1,&part->second.buffer.handle,&offset);
+     for(auto&cached:part->second.batches){auto*material=findMaterial(cached.material);if(!material||material->transparent!=(round==1))continue;
+      auto pipeline=material->transparent?(material->liquid?liquid:transparent):material->additive?additive:opaque;if(pipeline!=bound){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);bound=pipeline;}
+      vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipelineLayout,0,1,&material->set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}}
     vkCmdEndRenderPass(cmd);
     // Into the atlas: the face, then each mip from the one above it.
     const uint32_t layer=uint32_t(index*6+face);
