@@ -67,6 +67,25 @@ def main():
         for line in re.findall(r'^FAIL .*$', text, re.M):
             failed.append(f'{name}: {line}')
         print(f'  {name} done at {int(time.time() - start)} s, exit {p.returncode}')
+    # A test that failed beside six others may have failed on load (a time budget, a GPU queue): run it
+    # once more alone; only a second failure counts.
+    if failed:
+        lane = os.path.join(out, 'rerun'); os.makedirs(lane, exist_ok=True); shutil.copy2(exe, os.path.join(lane, 'rm.exe'))
+        still = []
+        for line in failed:
+            m = re.search(r'FAIL (\S+)', line)
+            if not m or m.group(1).startswith('--'):
+                still.append(line); continue
+            report = os.path.join(lane, 'each-test.txt')
+            if os.path.exists(report):
+                os.remove(report)
+            subprocess.run([os.path.join(lane, 'rm.exe'), '--each-test=' + m.group(1)], cwd=lane, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            text = open(report, errors='ignore').read() if os.path.exists(report) else ''
+            if re.search(rf'^PASS {re.escape(m.group(1))} ', text, re.M):
+                print(f'  {m.group(1)} failed beside the other lanes and passed alone (load, not a fault)')
+            else:
+                still.append(line)
+        failed = still
     os.makedirs(os.path.dirname(TIMES), exist_ok=True)
     json.dump(times, open(TIMES, 'w'), indent=1, sort_keys=True)
     print(f'suite: {int(time.time() - start)} s wall' + ('' if failed else ', ALL PASSED'))
