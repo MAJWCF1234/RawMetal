@@ -61,13 +61,15 @@ def set_version(version):
         text = text.replace('"' + old + '\\0"', '"' + version + '\\0"')   # the string values end in a literal \0
         if text.count(f'{major},{minor},{patch},0') != 2 or text.count(f'"{version}\\0"') != 2:
             sys.exit(f'ship: could not set the version in {rc}')
-        open(rc, 'wb').write(text.encode('utf-8'))
+        if text.encode('utf-8') != open(rc, 'rb').read():   # untouched when already set, so a rerun does not relink
+            open(rc, 'wb').write(text.encode('utf-8'))
     menu = os.path.join(ROOT, 'src', 'renderer', 'SoftwareRenderer.cpp')
     text = open(menu, 'rb').read().decode('utf-8')
     text, n = re.subn(r'V\d+\.\d+\.\d+  CHAPTER', f'V{version}  CHAPTER', text)
     if n != 1:
         sys.exit('ship: could not find the menu version tag in SoftwareRenderer.cpp')
-    open(menu, 'wb').write(text.encode('utf-8'))
+    if text.encode('utf-8') != open(menu, 'rb').read():
+        open(menu, 'wb').write(text.encode('utf-8'))
 
 
 def notes_title(version):
