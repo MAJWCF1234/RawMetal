@@ -697,7 +697,8 @@ std::shared_ptr<const Map> makeObservationRingSouthEast(){
   {ScriptEvent e;e.id=stateId("rg_trade_missed");e.x1=0;e.y1=8.2f;e.x2=6.2f;e.y2=16.f;e.bottom=-100;e.top=100;
    ScriptCondition c;c.id=stateId(trade);c.value=0;e.conditions={c};
    ScriptAction jump;jump.type=ScriptAction::Type::SetState;jump.id=stateId(trade);jump.value=17600;e.actions={jump};m.scriptEvents.push_back(std::move(e));}
-  // the night engineer: Conversion's night shift, up with the survivors; the feeder handle in her coat since 02:31
+  // the night engineer: Conversion's night shift, up with the survivors; the feeder handle in his coat since 02:31
+  // (a SeniorScientist, a man: his lines are Bill's voice; they were a woman's until v1.4.5)
   auto reply=[](const char* text,const char* next,std::initializer_list<const char*> sets={},const char* hide=""){DialogueReply r;r.text=text;r.next=*next?stateId(next):0;
    for(auto s:sets)r.sets.push_back({stateId(s),1});r.hide=*hide?stateId(hide):0;return r;};
   m.dialogue.push_back({stateId("rg_eng_hello"),"NIGHT ENGINEER","Conversion, night shift. What's left of it. Nine gives us the fire. Not the door.","rg_eng_hello",{

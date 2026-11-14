@@ -222,6 +222,13 @@ void Game::updateMechanisms(float dt){
    if(dt>0)setState(flinch,std::max(0,left-int(std::round(dt*1000))));world.setActorPose(i,pose);}
   if(track.deadState&&state(track.deadState)){pose.position={state(actorPositionState(track.deadState,0))*.001f,state(actorPositionState(track.deadState,1))*.001f};pose.z=state(actorPositionState(track.deadState,2))*.001f;pose.clip=4;pose.phase=1;pose.lookAtActor=-1;world.setActorPose(i,pose);}
   pose=friendlyAwareness(world,level,track,level,i,old,pose,dt);world.setActorPose(i,pose);
+  // A scripted person walking his keys is heard walking (for the player's ears; no creature
+  // hunts by them): a step a metre on the floor under him, the floor's four takes in turn.
+  if(dt>0&&!track.platform&&humanActorVisual(track.visual)&&pose.clip==1&&!(track.deadState&&state(track.deadState))){
+   const float moved=length(pose.position-old.position);if(moved>0&&moved<.5f){const StateId walked=actorTrackState(track.timerState,i,"step_mm");int steps=state(walked)+int(std::round(moved*1000));
+    if(steps>=1000){const StateId takeId=actorTrackState(track.timerState,i,"step_take");const int take=state(takeId);setState(takeId,(take+1)%4);
+     SoundEvent step{Sound(int(stepSoundAt(world,pose.position))+take),pose.position+chunkOffset(level)-chunkOffset(m_level),.34f,.96f+.03f*float(take%2),true,17,pose.z+.04f};step.aiRadius=-1;m_sounds.push_back(step);steps%=1000;}
+    setState(walked,steps);}}
   if(dt>0&&level==m_level&&track.platform&&std::fabs(m_player.z-old.z)<.04f&&std::fabs(m_player.pos.x-old.position.x)<track.footprint.x*.5f&&std::fabs(m_player.pos.y-old.position.y)<track.footprint.y*.5f){
    auto target=m_player.pos+pose.position-old.position;float z=m_player.z+pose.z-old.z;
    if(hullFits(target,z,m_player.hullHeight())){m_player.pos=target;m_player.z=z;m_player.verticalVelocity=0;m_player.grounded=true;}

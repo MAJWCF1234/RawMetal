@@ -1,0 +1,6 @@
+# Actor shadows: Sample Storage -80 room, the Warden (reactor stalker) under its lamp, as filmed from v1.4.4 (w80a). Tube: actor-shadows.
+world campaign
+map 80
+camera 21.3 16.8 -15 90 -12
+size 960 540
+frames 30

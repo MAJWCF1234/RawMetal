@@ -40,6 +40,8 @@ private:
  static Biquad biquad(int type,float freq,float q,float gainDb=0);
  struct Voice {Sound sound; double cursor=0; float gain=1,pitch=1,left=1,right=1; Vec2 position{}; bool spatial=false,loop=false; std::int64_t emitter=0;float smoothLeft=0,smoothRight=0,occlusion=1,radius=17,z=std::numeric_limits<float>::quiet_NaN();int speech=-1;size_t speaker=0;int speechPriority=0;float filter=1,filterTarget=1,filtered=0;MaskFilter mask{};};
  static constexpr int Rate=44100, Block=512;
+ // Voices mixed at once. Loops (beds, machines, water) only fill what one-shots leave free.
+ static constexpr size_t VoiceLimit=48;
  std::array<Sample,size_t(Sound::Count)> m_samples;
  std::vector<Sample> m_speech;
  const Sample& sampleFor(const Voice& voice)const{return voice.speech>=0?m_speech.at(size_t(voice.speech)):m_samples[size_t(voice.sound)];}
@@ -51,7 +53,7 @@ private:
  std::thread m_thread;
  std::mutex m_mutex;
  std::atomic<bool> m_stop=false;
- float m_master=1,m_targetMaster=1,m_musicGain=.28f,m_lastTime=-1;
+ float m_master=1,m_targetMaster=1,m_musicGain=.18f,m_lastTime=-1;
  float m_effectsGain=1;
  float m_mainBlend=1,m_reactorBlend=0,m_motorBlend=0;
  float m_mainTarget=1,m_reactorTarget=0,m_motorTarget=0;

@@ -2857,6 +2857,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   GpuRenderer::ActorStream stream;if(streamBody)stream=m_gpu->beginActorStream(faces.size());
   uint32_t emitted=0,runStart=0;int runMaterial=-1;
   auto flushRun=[&]{if(runMaterial>=0)m_gpu->actorStreamRun(stream.start+runStart,emitted-runStart,gpuMaterials[runMaterial]);runStart=emitted;};
+  // A person standing under a lamp throws one shadow on the floor, as Claire and the creatures do:
+  // each face turned to the nearest lamp above him, projected from it onto the floor as the 24% black
+  // film (only the lit faces, so a closed body darkens each floor pixel about once). People had none.
+  const WorldLight* shadowLamp=nullptr;
+  if(human&&!corpse&&pose.clip!=4&&!w.outdoors()&&length(pose.position-player.pos)<15.f){float nearest=36.f;const float top=pose.z+track.scale;
+   for(const auto&source:w.lights()){auto emitter=source.emitter();float dx=emitter.x-pose.position.x,dy=emitter.y-pose.position.y,d2=dx*dx+dy*dy;
+    if(source.intensity>0&&lampPower(size_t(&source-w.lights().data()))>.05f&&emitter.z>top+.2f&&d2<source.range*source.range&&d2<nearest){nearest=d2;shadowLamp=&source;}}}
+  static const Texture actorShadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
+  auto castShadow=[&](const MeshTriangle& f){if(!shadowLamp)return;const auto emitter=shadowLamp->emitter();
+   const Point3 c=(f.v[0].p+f.v[1].p+f.v[2].p)*(1.f/3.f),n=cross3(f.v[1].p-f.v[0].p,f.v[2].p-f.v[0].p);
+   if(n.x*(emitter.x-c.x)+n.y*(emitter.y-c.y)+n.z*(emitter.z-c.z)<=0)return;
+   MeshVertex cast[3];for(int i=0;i<3;++i){const auto p=f.v[i].p;const float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;if(denominator<.25f)return;
+    const float factor=(emitter.z-floor)/denominator,x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
+    if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-pose.position.x,y-pose.position.y)>4.f)return;
+    cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
+   for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],actorShadow,1.f);};
   {perf::ActorScope profile(1);
   for(size_t faceIndex=0;faceIndex<faces.size();++faceIndex){auto face=faces[faceIndex];
    if(corpse)actorFace=size_t(corpse->faces[faceIndex]);
@@ -2891,6 +2907,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(m_environmentInspection&&cleanup&&!corpse){const auto&rest=mesh.bindTriangles()[actorFace];for(int a=0;a<3;++a){int b=(a+1)%3;auto before=(rest.v[a].p-rest.v[b].p)*scale,after=face.v[a].p-face.v[b].p;auto length=[](Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);};m_cleanupEdgeStretch=std::max(m_cleanupEdgeStretch,length(after)/std::max(.01f*scale,length(before)));}}
    if(headless){const Point3 centre=(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f);
     if(bindCentre>neckY-.045f*bindHeight){ring=ring+centre;++ringCount;}else if(bindCentre>neckY-.24f*bindHeight&&bindCentre<neckY-.14f*bindHeight){chest=chest+centre;++chestCount;}}
+   castShadow(face);
    int material=face.part>=0&&size_t(face.part)<actorMaterials.size()?actorMaterials[size_t(face.part)]:0;
    if(streamBody){
     if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
@@ -3217,8 +3234,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[part],light*partLight[part]);
    if(keyLight){
     static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
-    MeshVertex cast[3];bool valid=true;auto emitter=keyLight->emitter();
-    for(int i=0;i<3;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
+    MeshVertex cast[3];auto emitter=keyLight->emitter();
+    // Only the faces turned to the lamp cast (as Claire's do): every face casting stacked the
+    // translucent film two and three deep under a body, a faceted black mass, not a shadow.
+    bool valid=goreDot(n,emitter-centroid(face))>0;
+    for(int i=0;i<3&&valid;++i){auto p=face.v[i].p;float floor=w.floorHeight(p.x,p.y),denominator=emitter.z-p.z;
      if(denominator<.25f){valid=false;break;}float factor=(emitter.z-floor)/denominator;
      float x=emitter.x+(p.x-emitter.x)*factor,y=emitter.y+(p.y-emitter.y)*factor;
      if(x<.05f||y<.05f||x>23.95f||y>23.95f||std::hypot(x-receiver.x,y-receiver.y)>4.f){valid=false;break;}

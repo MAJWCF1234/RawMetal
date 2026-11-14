@@ -1,0 +1,7 @@
+# Audio: Materials Intake / Dock Hall (campaign map 79) from its spawn, a Huntsman to fight. Tube: audio-mix.
+world campaign
+map 79
+camera 12 1.6 -999 90 0
+spawn creature Huntsman 12 5.5
+size 160 90
+frames 600

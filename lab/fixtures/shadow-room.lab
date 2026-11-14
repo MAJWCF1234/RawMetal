@@ -1,0 +1,8 @@
+# Actor shadows: a Brute and a Huntsman beside one lamp in the plain room, seen from above. Tube: actor-shadows.
+world room
+camera 12 8.2 -999 90 -70
+light 12 12 3.2 1.6 10
+spawn creature Brute 13.3 12.4 -999 90
+spawn creature Huntsman 10.6 11.6 -999 90
+size 480 270
+frames 30

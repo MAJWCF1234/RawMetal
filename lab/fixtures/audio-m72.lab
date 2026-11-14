@@ -1,0 +1,7 @@
+# Audio: campaign map 72 from the look camera, a Huntsman to fight. Tube: audio-mix.
+world campaign
+map 72
+camera 3.2 11.5 -999 0 0
+spawn creature Huntsman 7 11.5
+size 160 90
+frames 600

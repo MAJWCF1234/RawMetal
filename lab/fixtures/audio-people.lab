@@ -1,0 +1,8 @@
+# Audio: the plain room with people (authored by audio-mix: two civilians and a scripted walker) and a Huntsman. Tube: audio-mix.
+world room
+people on
+camera 4 11.5 -999 0 0
+light 9 11.5 3.2 1.4 10
+spawn creature Huntsman 14 11.5
+size 160 90
+frames 600
