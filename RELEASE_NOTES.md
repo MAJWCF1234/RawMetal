@@ -4,6 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.6 - Heard everywhere (2026-11-14)
+
+A patch, for the ears first.
+
+- **Sound.** The plant's own noise was losing to its music and to itself: the score sat too close to footsteps and gunfire, and machines humming in rooms you could not hear had taken most of the voices the mixer could play, so a footstep or a shot could be dropped for a fan two rooms away. The score is lower now, sounds out of earshot let go, and nothing heard near you is ever pushed out by something you cannot hear. Everyone who walks makes footsteps now, not only the guards.
+- **Shadows.** Since v1.4.2 a shadow on a smooth floor could be mistaken for something shiny and vanish into a reflection. Shadows only darken again, and people cast them as well as creatures.
+- **What you push.** A heavy crate shoved hard into a thin wall could end up on the other side of it. Props now feel for walls along their whole outline, in short steps, and stop.
+- **The night engineer** speaks in a man's voice, as his face says he should.
+
+Verified with tools/release/ship.py (the full test suite, the audio test and the Campaign Builder's checks on the release build) and the feature lab's tubes for each fix: the mix in three maps with sounds over the score and no loop holding a voice out of earshot, shadow pixels for people and creatures, fifty props shoved into walls with none inside one, and the engineer's lines.
+
+---
+
 ## v1.4.5 - What things are made of (2026-11-13)
 
 A patch. Glass, then chalk; now the things down here look like what they are.
