@@ -92,9 +92,13 @@ def sync_builder():
             if '<<<<<<< editor' not in text:
                 continue
             blocks = pattern.findall(text)
-            if blocks and all('CAMPAIGN BUILDER' in mine for mine, _ in blocks):
-                open(path, 'wb').write(pattern.sub(lambda m: m.group(1), text).encode('utf-8'))
-                say(f'kept the Builder menu tag in {os.path.relpath(path, ROOT)}')
+            builder_only = lambda mine: 'CAMPAIGN BUILDER' in mine or 'editorGhost' in mine or 'editorView' in mine
+            if blocks and all(builder_only(mine) for mine, _ in blocks):
+                # The Builder's menu tag replaces the game's; its editor-view lines (ghosted upper floors)
+                # go after the game's new lines, so both survive.
+                text = pattern.sub(lambda m: m.group(1) if 'CAMPAIGN BUILDER' in m.group(1) else m.group(2) + m.group(1), text)
+                open(path, 'wb').write(text.encode('utf-8'))
+                say(f'kept the Builder lines (and the game\'s) in {os.path.relpath(path, ROOT)}')
             else:
                 sys.exit(f'ship: the Builder sync has a real conflict in {path}; merge it by hand, then run again.')
     run([sys.executable, 'tools/editor/sync_engine.py'], 'sync2.txt')
