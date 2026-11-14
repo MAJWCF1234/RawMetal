@@ -1,0 +1,7 @@
+# Audio: Sample Storage (campaign map 80) from its spawn, a Huntsman to fight. Tube: audio-mix.
+world campaign
+map 80
+camera 22 11.5 -12 180 0
+spawn creature Huntsman 18.5 11.5 -12
+size 160 90
+frames 600

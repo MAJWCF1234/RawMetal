@@ -273,7 +273,16 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
    put("guard_patrol_progress",progress);put("guard_patrol_movement_fraction",movement);put("guard_patrol_wait",wait);
   }
  }
- if(config.mode==ActorAiMode::Guard&&moved>0){int steps=get("guard_step")+int(std::round(moved*1000));if(steps>=1000){auto material=stepSoundAt(world,pose.position);m_sounds.push_back({material,pose.position+chunkOffset(level)-chunkOffset(m_level),.3f,.96f,true,17,pose.z+.04f});steps%=1000;}put("guard_step",steps);}
+ // Footsteps: every person who walks is heard walking, on the floor under him, a step a metre (a
+ // stride and a half running), the four takes of that floor in turn. A guard's steps reach the
+ // creatures' ears as they always have; a worker's, a scientist's, an escort's or an ally's are for
+ // the player alone (aiRadius -1), so no hunt changes. Before v1.4.6 only guards had any.
+ if(moved>0&&humanActorVisual(track.visual)&&pose.clip!=4){const bool guard=config.mode==ActorAiMode::Guard;const float stride=moved/std::max(dt,1e-4f)>2.6f?1.45f:1.f;
+  int steps=get("guard_step")+int(std::round(moved*1000/stride));
+  if(steps>=1000){const int take=get("step_take");put("step_take",(take+1)%4);const auto material=stepSoundAt(world,pose.position);
+   SoundEvent step{guard?material:Sound(int(material)+take),pose.position+chunkOffset(level)-chunkOffset(m_level),guard?.3f:.34f,.96f+.03f*float(take%2),true,17,pose.z+.04f};if(!guard)step.aiRadius=-1;
+   m_sounds.push_back(step);steps%=1000;}
+  put("guard_step",steps);}
  if(pose.clip==0&&!get("guard_danger_ms")&&moved<.0001f&&(config.mode==ActorAiMode::Civilian||config.mode==ActorAiMode::Escort||(config.mode==ActorAiMode::Guard&&guardState(actor)==GuardState::Patrol)))
   pose=friendlyAwareness(world,level,track,m_friendlyActors[actor].homeLevel,m_friendlyActors[actor].homeActor,old,pose,dt);
  int stuck=wantsMove&&moved<.0001f?std::clamp(get("stuck"),0,500)+ms:0;if(stuck>500){timer=0;stuck=0;}put("stuck",stuck);

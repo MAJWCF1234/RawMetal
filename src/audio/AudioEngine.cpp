@@ -271,10 +271,20 @@ void AudioEngine::play(const SoundEvent& event,std::int64_t emitter,bool loop){
    auto victim=m_voices.end();for(auto it=m_voices.begin();it!=m_voices.end();++it)if(it->speech>=0&&(victim==m_voices.end()||it->speechPriority<victim->speechPriority))victim=it;
    if(victim!=m_voices.end()){if(victim->speechPriority>event.speechPriority)return;m_voices.erase(victim);}}
  }
- if(m_voices.size()>=48){
-  // Full: the oldest ordinary one-shot makes room; speech only yields to more important speech.
-  auto voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop&&v.speech<0;});
-  if(voice==m_voices.end()&&event.speech>=0)voice=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return !v.loop&&v.speechPriority<event.speechPriority;});
+ if(m_voices.size()>=VoiceLimit){
+  // Full. A bed or a machine (a loop, re-offered every update) never takes the place of
+  // something that happened: it waits for a free voice, or for a fainter loop to give way.
+  // A one-shot (a step, a shot, a cry) takes the oldest ordinary one-shot's place, else the
+  // faintest loop's; speech only yields to more important speech. Before v1.4.6 the beds of
+  // a busy map (Sample Storage's plant and freezers, the next chunks' machines and water)
+  // could hold every voice, and every footstep, shot and creature after them was dropped.
+  auto heard=[](const Voice& v){return (v.left+v.right)*v.gain;};
+  auto faintestLoop=[&]{auto it=m_voices.end();for(auto at=m_voices.begin();at!=m_voices.end();++at)if(at->loop&&at->emitter>0&&(it==m_voices.end()||heard(*at)<heard(*it)))it=at;return it;};
+  auto voice=m_voices.end();
+  if(loop){voice=faintestLoop();if(voice==m_voices.end()||heard(*voice)>0)return;}
+  else{voice=std::find_if(m_voices.begin(),m_voices.end(),[](auto&v){return !v.loop&&v.speech<0;});
+   if(voice==m_voices.end()&&event.speech>=0)voice=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return !v.loop&&v.speechPriority<event.speechPriority;});
+   if(voice==m_voices.end())voice=faintestLoop();}
   if(voice==m_voices.end())return;m_voices.erase(voice);}
  m_voices.push_back({event.sound,0,std::min(event.gain,4.f),std::clamp(event.pitch,.05f,4.f),1,1,event.position,event.spatial,loop,emitter});
  m_voices.back().radius=std::max(.1f,event.radius);
@@ -331,7 +341,9 @@ void AudioEngine::update(const Game& game,bool focused){
  if(m_lastChunk>=0&&m_lastChunk!=game.level()){auto shift=game.chunkOffset(m_lastChunk)-game.chunkOffset(game.level());for(auto&voice:m_voices)if(voice.spatial)voice.position+=shift;}m_lastChunk=game.level();
  m_lastTime=game.elapsed();m_targetMaster=focused&&!game.audioMuted()?game.settings().master:0.f;
  m_submergedTarget=game.world().waterSurface(game.player().pos.x,game.player().pos.y)>game.player().z+game.player().eye+.03f?1.f:0.f;
- m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.16f:.28f)*game.settings().music/.75f:0;
+ // The score sits under the world: steps, shots, cries and the room's own sounds are what the
+ // player listens by (v1.4.6: .28 to .18, the one-shots' median now over twice the score's level).
+ m_musicGain=game.musicEnabled()?(game.dead()||game.won()?.11f:.18f)*game.settings().music/.75f:0;
  m_effectsGain=game.settings().effects;m_paused=game.paused()||game.consoleOpen();
  auto phase=game.world().liftPhase();bool shaft=game.world().hasLift();
  // One score plays at a time: the map's area cue, or the original track. A
@@ -367,6 +379,9 @@ void AudioEngine::update(const Game& game,bool focused){
  for(auto&voice:m_voices)if(voice.speech>=0&&voice.speaker&&voice.speaker<=game.npcActors().size()){
   const auto&npc=game.npcActors()[voice.speaker-1];if(voice.mask.kind<0)configureMask(voice.mask,maskForVisual(npc.track().visual));voice.position=npc.pose.position+game.chunkOffset(npc.level)-game.chunkOffset(game.level());voice.z=npc.pose.z+npc.track().scale*.85f;}
  auto loop=[&](std::int64_t emitter,Sound sound,Vec2 pos,float gain,float z=std::numeric_limits<float>::quiet_NaN(),float radius=17.f){auto it=std::find_if(m_voices.begin(),m_voices.end(),[&](auto&v){return v.emitter==emitter;});
+  // Out of earshot a bed holds no voice (it would only crowd out what can be heard); it starts
+  // again, at its own place in the loop, as the player comes within reach.
+  if(lengthSq(pos-game.player().pos)>(radius+1.f)*(radius+1.f)){if(it!=m_voices.end())m_voices.erase(it);return;}
   if(it==m_voices.end()){play({sound,pos,gain,1,true,radius,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;it->radius=radius;}
  };
  // The room answers: the reverb eases toward what the game measures or the map sets.

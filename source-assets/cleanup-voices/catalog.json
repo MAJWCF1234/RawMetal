@@ -2624,11 +2624,11 @@
    "id": "dlg-rg_trade_10600",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[dry, careful] Tell your sergeant thank you.",
    "line": "rg_trade_10600",
    "model": "eleven_v4",
-   "seed": 2202
+   "seed": 1101
   },
   {
    "id": "dlg-rg_trade_12300",
@@ -2644,7 +2644,7 @@
    "id": "dlg-rg_eng_hello",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[weary, matter-of-fact] Conversion, night shift. What's left of it. Nine gives us the fire. Not the door.",
    "line": "rg_eng_hello",
    "model": "eleven_v4",
@@ -2654,17 +2654,17 @@
    "id": "dlg-rg_eng_what",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[confession, steady] I.I. had the output off containment at half two. I pulled the feeder handle off the bank myself. Holt took the spare back down at three to put it right.",
    "line": "rg_eng_what",
    "model": "eleven_v4",
-   "seed": 1101
+   "seed": 2202
   },
   {
    "id": "dlg-rg_eng_holt",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[quiet, an instruction] On the floor by column four, I'd think. He crossed on the light. You cross on the dark.",
    "line": "rg_eng_holt",
    "model": "eleven_v4",
@@ -2674,7 +2674,7 @@
    "id": "dlg-rg_eng_handle",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[handing it over, relieved] Then you'll want this. The bank's feeder handle. I've carried it since half two like it was mine. The bank throws every four seconds: go in on the dark.",
    "line": "rg_eng_handle",
    "model": "eleven_v4",
@@ -2684,21 +2684,21 @@
    "id": "dlg-rg_eng_given",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[curt, looking away] Don't thank me. Put it on the bank.",
    "line": "rg_eng_given",
    "model": "eleven_v4",
-   "seed": 3303
+   "seed": 2202
   },
   {
    "id": "dlg-rg_eng_nine",
    "role": 10,
    "cue": "Talk",
-   "voice_id": "SAz9YHcvj6GT2YYXdXww",
+   "voice_id": "pqHfZKP75CvOlQylNhV4",
    "text": "[bitter, low] Anyone up from below is exposed, the sergeant says. We came up from Conversion, not Containment. He doesn't ask which.",
    "line": "rg_eng_nine",
    "model": "eleven_v4",
-   "seed": 1101
+   "seed": 3303
   },
   {
    "id": "dlg-cona_qw_q2_5300",

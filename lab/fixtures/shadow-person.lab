@@ -1,0 +1,7 @@
+# Actor shadows: a guard alone beside a lamp in the plain room. Tube: actor-shadows (people throw shadows too).
+world room
+camera 12 8.2 -999 90 -70
+light 12 12 3.2 1.6 10
+spawn guard 13.2 12.6 0
+size 480 270
+frames 30

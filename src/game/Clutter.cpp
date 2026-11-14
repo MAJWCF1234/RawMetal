@@ -105,7 +105,7 @@ void Game::updateClutter(const InputState&input,float dt){
   bool clear=!m_vrInputActive||m_vrHandValid[m_vrCarryHand];
   Point3 eye{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},end{target.x,target.y,height+c.height()*.5f},n;
   float fraction=clutterPathFraction(eye,end,n);if(fraction<1){end=eye+(end-eye)*std::max(0.f,fraction-.02f);target={end.x,end.y};height=end.z-c.height()*.5f;}
-  auto extent=c.extent();auto fit=[&](float t){auto p=m_player.pos+(target-m_player.pos)*t;float z=eye.z+(height-eye.z)*t;for(auto offset:c.footprintOffsets()){auto q=p+offset;const auto&w=worldAt(q);if(!w.fits(q.x,q.y,z,c.height(),true,true)||w.doorBlocks(q.x,q.y,z,c.height()))return false;}return true;};
+  auto extent=c.extent();auto fit=[&](float t){auto p=m_player.pos+(target-m_player.pos)*t;float z=eye.z+(height-eye.z)*t;return c.everyOutlinePoint([&](Vec2 offset){auto q=p+offset;const auto&w=worldAt(q);return w.fits(q.x,q.y,z,c.height(),true,true)&&!w.doorBlocks(q.x,q.y,z,c.height());});};
   if(c.model>=0&&!fit(1)){float lo=0,hi=1;for(int i=0;i<8;++i){float mid=(lo+hi)*.5f;if(fit(mid))lo=mid;else hi=mid;}target=m_player.pos+(target-m_player.pos)*lo;height=eye.z+(height-eye.z)*lo;clear&=lo>.1f;}
   if(clear&&targetWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_vrInputActive?std::atan2(forward.y,forward.x):m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
   else{m_heldClutter=-1;c.projectile=false;}
@@ -195,6 +195,14 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
  const int initialCount=int(list.size());size_t debris=0;for(const auto&b:friendlyWorld(level).breakables())if(b.material!=17)debris+=6;list.reserve(list.size()+debris);
  auto shift=chunkOffset(level)-chunkOffset(m_level);
  auto physicalWorld=[&](Vec2& p)->const World&{auto local=p-shift;if(local.x>=0&&local.x<24&&local.y>=0&&local.y<24){p=local;return level==m_level?m_world:m_chunks[level].world;}return worldAt(p);};
+ // A prop fits where its whole outline (every 10 cm, not only its nine footprint points) is clear
+ // of solids and doors; it may go from one place to another only if every 8 cm of the way fits.
+ // A big crate's nine points sit half its width apart: a partition thinner than that passed
+ // between them, and a shove's one-step depenetration jumped it clean through (v1.4.5, the dock hall).
+ // A swinging leaf sweeping a prop aside starts out overlapping it: on that way out only the walls
+ // count until the place it lands (doors=false between).
+ auto propFits=[&](const Clutter& v,Vec2 p,float z,float h,bool doors=true){return v.everyOutlinePoint([&](Vec2 offset){auto q=p+offset+shift;const auto&w=physicalWorld(q);return w.fits(q.x,q.y,z,h,true,true)&&!(doors&&w.doorBlocks(q.x,q.y,z,h));});};
+ auto sweepFits=[&](const Clutter& v,Vec2 from,Vec2 to,float z,float h,bool doorsOnTheWay=true){const float d=length(to-from);const int n=std::max(1,int(std::ceil(d/.08f)));for(int k=1;k<=n;++k)if(!propFits(v,from+(to-from)*(float(k)/float(n)),z,h,doorsOnTheWay||k==n))return false;return true;};
  std::vector<std::array<float,3>> shapes;std::vector<Vec2> bases;shapes.reserve(list.size());bases.reserve(list.size());for(const auto&v:list){shapes.push_back(v.extent());bases.push_back({std::cos(v.yaw),std::sin(v.yaw)});}
  // One broad phase per resident list. Query neighbouring cells as movers cross a bucket.
  std::array<std::vector<int>,24*24> buckets;
@@ -208,7 +216,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    bool pushing=c.mass()>=8&&std::fabs(delta.x)<e[0]+.27f&&std::fabs(delta.y)<e[1]+.27f&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z&&(m_velocity.x*m_velocity.x+m_velocity.y*m_velocity.y>.001f||m_propPushAttempt);
    if(pushing){c.blockedTime+=dt;Vec2 n=length(delta)>.001f?delta*(1/length(delta)):Vec2{1,0};c.velocity+=n*(dt*4/std::sqrt(c.mass()));c.sleeping=false;c.soundOwner=-1;}else if(std::fabs(delta.x)>e[0]+.4f||std::fabs(delta.y)>e[1]+.4f)c.blockedTime=0;
    float nx=e[0]+.2f-std::fabs(delta.x),ny=e[1]+.2f-std::fabs(delta.y);
-   if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){for(auto offset:c.footprintOffsets()){auto q=p+offset+shift;const auto&w=physicalWorld(q);if(!w.fits(q.x,q.y,c.z,c.height(),true,true)||w.doorBlocks(q.x,q.y,c.z,c.height()))return false;}return true;};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}
+   if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){return sweepFits(c,c.pos,p,c.z,c.height());};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}
   }else if(length(m_velocity)>.5f&&length(c.pos-(m_player.pos-shift))<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.model>=0){auto probe=c.pos+shift;const auto&under=physicalWorld(probe);if(probe.x<0||probe.x>=24||probe.y<0||probe.y>=24||!chunkResident(under.level())){c.sleeping=true;c.restTime=-1;continue;}if(c.restTime<0){c.sleeping=false;c.restTime=0;}}
   if(c.model>=0){auto e=c.extent();
@@ -221,7 +229,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    for(const auto&door:w.doors()){if(!door.opening&&door.open<=0)continue;const Vec2 centre=door.centre();float base=w.floorHeight(centre.x,centre.y)+door.z;if(c.z>=base+2.5f||c.z+c.height()<=base)continue;
     Vec2 axis=door.swinging?door.leafAxis(door.open):door.tangent(),hinge=door.swinging?door.hinge():door.world(door.left,door.y),nearest=hinge+axis*std::clamp(dot(c.pos-hinge,axis),0.f,door.width());auto d=c.pos-nearest;float radius=std::max(e[0],e[1])+.16f;
     if(lengthSq(d)>=radius*radius||!w.doorBlocks(nearest.x,nearest.y,c.z,c.height()))continue;Vec2 normal=lengthSq(d)>.00001f?d*(1/length(d)):Vec2{-axis.y,axis.x};auto next=nearest+normal*(radius+.02f);
-    bool clear=true;for(auto offset:c.footprintOffsets())clear&=w.fits(next.x+offset.x,next.y+offset.y,c.z,c.height(),true,true)&&!w.doorBlocks(next.x+offset.x,next.y+offset.y,c.z,c.height());
+    const bool clear=sweepFits(c,c.pos,next,c.z,c.height(),false);
     if(clear)c.pos=next;c.velocity+=normal*.8f;c.sleeping=false;c.restTime=0;
    }
   }
@@ -236,7 +244,8 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    auto oldExtent=c.extent();float center=c.z+oldExtent[2],oldPitch=c.pitch,oldRoll=c.roll,oldYaw=c.yaw;
    c.pitch=wrapAngle(c.pitch+c.pitchSpeed*step);c.roll=wrapAngle(c.roll+c.rollSpeed*step);c.yaw=wrapAngle(c.yaw+c.spin*step);
    auto extent=c.extent();c.z=center-extent[2];
-   auto fits=[&](Vec2 p,float z){for(auto offset:c.footprintOffsets()){auto local=p+offset+shift;const auto&w=physicalWorld(local);if(!w.fits(local.x,local.y,z,extent[2]*2,true,true)||w.doorBlocks(local.x,local.y,z,extent[2]*2))return false;}return true;};
+   auto fits=[&](Vec2 p,float z){if(c.model>=0)return sweepFits(c,c.pos,p,z,extent[2]*2);
+    for(auto offset:c.footprintOffsets()){auto local=p+offset+shift;const auto&w=physicalWorld(local);if(!w.fits(local.x,local.y,z,extent[2]*2,true,true)||w.doorBlocks(local.x,local.y,z,extent[2]*2))return false;}return true;};
    auto local=c.pos+shift;const auto&supportWorld=physicalWorld(local);
    float floor=supportWorld.supportBelow(local.x,local.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0);
    if((c.model<0||c.pitch!=oldPitch||c.roll!=oldRoll||c.yaw!=oldYaw)&&!fits(c.pos,std::max(c.z,floor))){c.pitch=oldPitch;c.roll=oldRoll;c.yaw=oldYaw;c.pitchSpeed*=-.2f;c.rollSpeed*=-.2f;c.spin*=-.2f;extent=oldExtent;c.z=center-extent[2];}
@@ -263,7 +272,10 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-(c.model>=0?propMaterialTraits(c.material()).restitution:.25f);c.projectile=false;}
    }
    floor=-100;float ceiling=100;
-   for(auto offset:c.footprintOffsets()){auto sample=c.pos+offset;auto p=sample+shift;const auto&w=physicalWorld(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0));if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z,c.model>=0));}
+   // What it rests on and what is over it, under its whole outline (a desk's edge between two of
+   // the nine footprint points let a falling prop settle half inside it).
+   auto under=[&](Vec2 offset){auto sample=c.pos+offset;auto p=sample+shift;const auto&w=physicalWorld(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0));if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z,c.model>=0));return true;};
+   if(c.model>=0)c.everyOutlinePoint(under);else for(auto offset:c.footprintOffsets())under(offset);
    float z=c.z+c.vz*step;
    if(c.vz>0&&z+(extent[2]*2)>ceiling){c.z=std::max(floor,ceiling-(extent[2]*2));impact(c.vz);c.vz=-c.vz*.2f;}
    else if(z<=floor+.001f){
@@ -302,7 +314,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    Vec2 ax{std::cos(a.yaw),std::sin(a.yaw)},ay{-ax.y,ax.x},bx{std::cos(b.yaw),std::sin(b.yaw)},by{-bx.y,bx.x};
    for(Vec2 n:flat?std::array<Vec2,4>{ax,ay,bx,by}:std::array<Vec2,4>{Vec2{1,0},Vec2{0,1},Vec2{1,0},Vec2{0,1}}){float ra=flat?(std::fabs(dot(ax,n))*a.dims[0]+std::fabs(dot(ay,n))*a.dims[1])*.5f:std::fabs(n.x)*ae[0]+std::fabs(n.y)*ae[1];float rb=flat?(std::fabs(dot(bx,n))*b.dims[0]+std::fabs(dot(by,n))*b.dims[1])*.5f:std::fabs(n.x)*be[0]+std::fabs(n.y)*be[1];float p=ra+rb-std::fabs(dot(d,n));if(p<=0){overlap=false;break;}if(p<penetration){penetration=p;normal=n*(dot(d,n)<0?-1.f:1.f);}}
    if(!overlap)continue;float ia=a.sleeping&&a.mass()>4*b.mass()?0:1/a.mass(),ib=b.sleeping&&b.mass()>4*a.mass()?0:1/b.mass(),total=ia+ib;if(total==0)continue;
-   auto move=[&](Clutter&v,Vec2 delta){auto e=v.extent();for(auto offset:v.footprintOffsets()){auto p=v.pos+delta+offset+shift;const auto&w=physicalWorld(p);if(!w.fits(p.x,p.y,v.z,e[2]*2,true,true)||w.doorBlocks(p.x,p.y,v.z,e[2]*2))return;}auto p=v.pos+delta+shift;const auto&w=physicalWorld(p);if(w.railBlocksHull(p.x,p.y,std::max(e[0],e[1]),v.z,e[2]*2))return;v.pos+=delta;if(lengthSq(delta)>.000001f){v.sleeping=false;v.restTime=0;}};
+   auto move=[&](Clutter&v,Vec2 delta){auto e=v.extent();if(!sweepFits(v,v.pos,v.pos+delta,v.z,e[2]*2))return;auto p=v.pos+delta+shift;const auto&w=physicalWorld(p);if(w.railBlocksHull(p.x,p.y,std::max(e[0],e[1]),v.z,e[2]*2))return;v.pos+=delta;if(lengthSq(delta)>.000001f){v.sleeping=false;v.restTime=0;}};
    move(a,normal*(-penetration*ia/total));move(b,normal*(penetration*ib/total));int owner=std::fabs(dot(a.velocity,normal))>=std::fabs(dot(b.velocity,normal))?a.soundOwner:b.soundOwner;float closing=dot(a.velocity-b.velocity,normal);if(closing>.65f&&a.impactCooldown<=0){const auto&t=propMaterialTraits(a.material());SoundEvent event{t.impact,a.pos+shift,std::clamp(closing*.12f,.12f,.85f)*t.impactGain,t.impactPitch,true,17,a.z+shapes[i][2]};event.owner=owner;event.aiRadius=std::clamp(2+std::sqrt(a.mass())*closing,2.f,12.f);m_sounds.push_back(event);a.impactCooldown=.075f;}
    if(closing>0){a.soundOwner=b.soundOwner=owner;float impulse=closing*(1+std::min(propMaterialTraits(a.material()).restitution,propMaterialTraits(b.material()).restitution))/total;a.velocity=a.velocity-normal*(impulse*ia);b.velocity+=normal*(impulse*ib);if(impulse*ia>.05f){a.sleeping=false;a.restTime=0;}if(impulse*ib>.05f){b.sleeping=false;b.restTime=0;}
     float sa=propMaterialTraits(a.material()).breakSpeed,sb=propMaterialTraits(b.material()).breakSpeed;if(sa>0&&closing>sa)breakClutter(level,i,{normal.x,normal.y,0});if(sb>0&&closing>sb)breakClutter(level,j,{-normal.x,-normal.y,0});if(a.broken)break;

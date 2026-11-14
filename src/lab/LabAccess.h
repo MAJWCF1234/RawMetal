@@ -38,6 +38,7 @@ struct LabAccess {
  static void playerCamera(Game& g){g.m_inspectionCamera=false;}
  static World& world(Game& g){return g.m_world;}
  static std::vector<Enemy>& enemies(Game& g){return g.m_enemies;}
+ static auto& friendlies(Game& g){return g.m_friendlyActors;}
  static std::vector<BulletImpact>& impacts(Game& g){return g.m_bulletImpacts;}
  static std::vector<HitBurst>& bursts(Game& g){return g.m_hitBursts;}
  static void hitBurst(Game& g,Point3 p,Point3 dir,ImpactMaterial m,int species,float power,bool kill){g.hitBurst(g.m_level,p,dir,m,species,power,kill);}
@@ -67,6 +68,18 @@ struct LabAccess {
  // What plays: each voice's sound, speech clip (-1 none) and speaker (actor+1, 0 none).
  struct Playing {Sound sound;int speech;size_t speaker;};
  static std::vector<Playing> playing(const AudioEngine& a){std::vector<Playing> out;for(const auto& v:a.m_voices)if(!v.loop)out.push_back({v.sound,v.speech,v.speaker});return out;}
+ // Every voice the mixer holds, loops included: what it is, whether it just started (cursor 0),
+ // and the level it reaches the ears at (its gain, spatial pan and the bus: score or effects).
+ struct Held {Sound sound;int speech;bool loop,fresh,music,spatial;float level,occlusion,filter;Vec2 at;float z;};
+ static std::vector<Held> held(const AudioEngine& a){std::vector<Held> out;
+  for(const auto& v:a.m_voices){const bool music=v.emitter==-1||v.emitter==-3||v.emitter==AudioEngine::AlertEmitter||(v.emitter<AudioEngine::AreaEmitter&&v.emitter>AudioEngine::AreaEmitter-AudioEngine::AreaScores);
+   out.push_back({v.sound,v.speech,v.loop,v.cursor==0,music,v.spatial,v.gain*(v.left+v.right)*.5f*(music?a.m_musicGain:a.m_effectsGain),v.occlusion,v.filterTarget,v.position,v.z});}
+  return out;}
+ // After an update, before a mix: keep one bus of what the engine holds. 0 the one-shots (steps,
+ // shots, cries, impacts, speech), 1 the score, 2 the beds and machines (loops that are not score).
+ static void onlyBus(AudioEngine& a,int bus){
+  for(auto& v:a.m_voices){const bool music=v.emitter==-1||v.emitter==-2||v.emitter==-3||v.emitter==AudioEngine::AlertEmitter||(v.emitter<AudioEngine::AreaEmitter&&v.emitter>AudioEngine::AreaEmitter-AudioEngine::AreaScores);
+   const int of=music?1:v.loop?2:0;if(of!=bus){v.left=v.right=v.smoothLeft=v.smoothRight=0;}}}
  // Things that break, and what they leave (tubes/Debris.cpp).
  static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
  static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}

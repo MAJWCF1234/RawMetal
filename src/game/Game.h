@@ -231,6 +231,15 @@ struct Clutter {
  std::array<float,3> extent()const{auto s=size(),a=rotate(s[0]*.5f,0,0),b=rotate(0,s[1]*.5f,0),c=rotate(0,0,s[2]*.5f);return {std::fabs(a[0])+std::fabs(b[0])+std::fabs(c[0]),std::fabs(a[1])+std::fabs(b[1])+std::fabs(c[1]),std::fabs(a[2])+std::fabs(b[2])+std::fabs(c[2])};}
  // Horizontal projection in model orientation; avoids empty world-AABB corners.
  std::array<Vec2,9> footprintOffsets()const{auto local=*this;local.yaw=0;auto e=local.extent();std::array<Vec2,9> points;int i=0;float co=std::cos(yaw),si=std::sin(yaw);for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]})points[size_t(i++)]={x*co-y*si,x*si+y*co};return points;}
+ // The footprint's outline every `spacing` metres (corners and edges, in model orientation) and
+ // its middle: f(offset) for each until one returns false. A wall thinner than the nine
+ // footprintOffsets' gaps (half a big prop's width) still meets the outline.
+ template<class F> bool everyOutlinePoint(F&& f,float spacing=.1f)const{auto local=*this;local.yaw=0;const auto e=local.extent();const float co=std::cos(yaw),si=std::sin(yaw);
+  auto at=[&](float x,float y){return f(Vec2{x*co-y*si,x*si+y*co});};if(!at(0,0))return false;
+  const int nx=std::max(1,int(std::ceil(2*e[0]/spacing))),ny=std::max(1,int(std::ceil(2*e[1]/spacing)));
+  for(int i=0;i<=nx;++i){const float x=-e[0]+2*e[0]*float(i)/float(nx);if(!at(x,-e[1])||!at(x,e[1]))return false;}
+  for(int j=1;j<ny;++j){const float y=-e[1]+2*e[1]*float(j)/float(ny);if(!at(-e[0],y)||!at(e[0],y))return false;}
+  return true;}
  float height()const{return extent()[2]*2;}
  float footprint()const{auto s=size();return std::max(s[0],s[1]);}
  // The pieces a thing breaks into (kind 6 shards of `of`): `count` of its eighths, each where
