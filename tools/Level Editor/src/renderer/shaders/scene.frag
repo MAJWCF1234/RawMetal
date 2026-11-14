@@ -810,14 +810,19 @@ void main(){
  result+=vec3(specularLight*lighting.x)*mix(vec3(1.0),F0*25.0,metalness)+lampSpecularOut*lighting.x;
  result+=specDirect*lighting.x+specIBL*0.96/(1.0+surface.x*0.018)+capturedLamps;
 
- if(surface.z>1.5){
+ // A black translucent film is a shadow (a creature's or Claire's, cast on the floor from the faces
+ // turned to the lamp) or soot: it only darkens what is under it. It is no pane, so it takes neither
+ // the sky sheen nor the room's mirror. Since v1.4.2 it took both, and at the grazing angles a floor
+ // is seen at the mirror's Fresnel made the film up to 85% an opaque reflection: the shadows went.
+ bool film=surface.z>1.5&&!liquid&&max(color.r,max(color.g,color.b))<0.02;
+ if(surface.z>1.5&&!film){
   vec3 skySheen=toLinear(vec3(0.55,0.72,0.92));
   result+=skySheen*waterFresnel*0.22;
  }
  // Glass mirrors the room: its reflection probe, by Fresnel, makes a pane read even where nothing
  // lies behind it to see.
  float reflectAlpha=0.0;
- if(surface.z>1.5&&!liquid){vec3 Ng=normalize(cross(dx,dy)),V=normalize(view.eyeYaw.xyz-worldPos);if(dot(Ng,V)<0.0)Ng=-Ng;
+ if(surface.z>1.5&&!liquid&&!film){vec3 Ng=normalize(cross(dx,dy)),V=normalize(view.eyeYaw.xyz-worldPos);if(dot(Ng,V)<0.0)Ng=-Ng;
   float sky;vec4 mirror=probeReflection(worldPos,reflect(-V,Ng),0.06,sky);
   if(mirror.a>0.0){float F=0.04+0.96*pow(1.0-max(dot(Ng,V),0.0),5.0);reflectAlpha=clamp(F*1.1+0.08,0.0,0.85)*mirror.a;result=mix(result,mirror.rgb,reflectAlpha);}
  }
@@ -898,6 +903,8 @@ void main(){
  if(lampGrid.flags.y==6)result=baseNormalDebug*0.5+0.5;
  if(lampGrid.flags.y==5)result=vec3(clamp(abs(uv.x)/64.0,0.0,1.0),clamp(abs(uv.y)/64.0,0.0,1.0),surface.w*0.25);
  if(lampGrid.flags.y==4)result=vec3(fract(uv.x*atlasSize.x),fract(uv.y*atlasSize.y*4.0),fract(worldPos.z*256.0));
+ // The film is black: no lamp's highlight or probe light rides on a shadow either.
+ if(film)result=vec3(0.0);
  if(editorGhost>0.0)result=mix(result,vec3(0.16,0.42,0.50),editorGhost*0.45);
  float alpha=surface.z>1.5?mix(color.a,1.0,reflectAlpha):1;
  // HDR opaque surfaces store planar camera depth in alpha for the post pass;

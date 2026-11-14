@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit efabc677624052b0ffd035648a74a08b71fb91da
-# 2026-11-13 12:50, release prep: v1.4.5 version
+commit ae2b4174daea8201edf33a9c036295fcdf1e86dd
+# 2026-11-14 04:37, suite.py: a test that fails beside the other lanes runs once more alone before it counts
