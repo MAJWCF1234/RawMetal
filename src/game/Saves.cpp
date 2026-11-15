@@ -1,5 +1,6 @@
 #include <optional>
 #include <thread>
+#include <chrono>
 #include "Game.h"
 #include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
@@ -15,13 +16,21 @@
 
 namespace retro {
 namespace {
-constexpr size_t MaxSaveBytes=2*1024*1024;
+// A sanity cap, not a budget. It was 2 MB: a playthrough into Chapter 2 writes more than that
+// (every chunk's props are saved, and broken ones leave their pieces), so a save written late
+// in the game was refused by the very build that wrote it.
+constexpr size_t MaxSaveBytes=64*1024*1024;
 uint32_t checksum(const std::string& data){uint32_t hash=2166136261u;for(unsigned char c:data){hash^=c;hash*=16777619u;}return hash;}
 struct Writer {
  static constexpr bool reading=false;
  std::ostringstream stream;
  Writer(){stream.imbue(std::locale::classic());stream<<std::setprecision(std::numeric_limits<float>::max_digits10);}
- template<class T> void one(T& v){if constexpr(std::is_enum_v<T>)stream<<int(v);else stream<<v;stream<<' ';}
+ // A number the reader would refuse (NaN, infinity, past ten million) is written as the
+ // nearest it accepts, and counted: one glitched value must not make the whole save unloadable.
+ int repaired=0;
+ template<class T> void one(T& v){if constexpr(std::is_enum_v<T>)stream<<int(v);
+  else if constexpr(std::is_floating_point_v<T>){T out=v;if(!std::isfinite(double(out))){out=0;++repaired;}else if(std::fabs(double(out))>9999999.){out=out<0?T(-9999999):T(9999999);++repaired;}stream<<out;}
+  else stream<<v;stream<<' ';}
  template<class... T> void operator()(T&... v){(one(v),...);stream<<'\n';}
 };
 struct Reader {
@@ -29,7 +38,7 @@ struct Reader {
  std::istringstream stream;
  explicit Reader(const std::string& s):stream(s){stream.imbue(std::locale::classic());}
  template<class T> void one(T& v){
-  if constexpr(std::is_enum_v<T>||std::is_same_v<T,bool>){int n=0;if(!(stream>>n)||n<0||n>(std::is_same_v<T,bool>?1:16))throw std::runtime_error("invalid enum");v=static_cast<T>(n);}
+  if constexpr(std::is_enum_v<T>||std::is_same_v<T,bool>){int n=0;if(!(stream>>n)||n<0||n>(std::is_same_v<T,bool>?1:16))throw std::runtime_error(std::is_same_v<T,bool>?"invalid flag "+std::to_string(n):"invalid enum value "+std::to_string(n));v=static_cast<T>(n);}
   else if constexpr(std::is_floating_point_v<T>){if(!(stream>>v)||!std::isfinite(double(v))||std::fabs(double(v))>10000000)throw std::runtime_error("invalid number");}
   else if(!(stream>>v))throw std::runtime_error("invalid integer");
  }
@@ -38,6 +47,17 @@ struct Reader {
 std::filesystem::path slotPath(const std::wstring& directory,int slot){return std::filesystem::path(directory)/("slot-"+std::to_string(slot+1)+".rms");}
 std::filesystem::path checkpointPath(const std::wstring& directory){return std::filesystem::path(directory)/"checkpoint.rms";}
 void writeAtomic(const std::filesystem::path& path,const std::string& data){auto temp=path;temp+=L".tmp";std::filesystem::create_directories(path.parent_path());{std::ofstream file(temp,std::ios::binary|std::ios::trunc);file.write(data.data(),std::streamsize(data.size()));file.flush();if(!file)throw std::runtime_error("write failed");file.close();if(file.fail())throw std::runtime_error("close failed");}if(!MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))throw std::runtime_error("replace failed");}
+// Why the last load on this thread was refused. Every refusal names its reason:
+// the menu shows it short and RawMetal-load.txt keeps it whole.
+thread_local std::string t_loadFailure;
+bool refuse(const std::string& why){t_loadFailure=why.empty()?"unknown error":why;return false;}
+// Appends one refused load to RawMetal-load.txt beside the other RawMetal-*.txt reports.
+void logLoadFailure(const std::filesystem::path& path,const std::string& why){
+ try{std::ofstream log("RawMetal-load.txt",std::ios::app);SYSTEMTIME t;GetLocalTime(&t);char stamp[32];std::snprintf(stamp,sizeof stamp,"%04d-%02d-%02d %02d:%02d:%02d",t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond);
+  log<<stamp<<" load refused: "<<path.string()<<" (this build reads save versions 1-"<<Game::SaveVersion<<"): "<<why<<'\n';}catch(...){}
+}
+// The menu line: the reason, upper case, short enough for the pause menu.
+std::string loadFailureLine(const std::string& lead,const std::string& why){std::string line=lead+" / "+why;for(auto&c:line)c=char(std::toupper(static_cast<unsigned char>(c)));if(line.size()>58)line=line.substr(0,55)+"...";return line;}
 std::string readFile(const std::filesystem::path& path){
  std::error_code error;auto size=std::filesystem::file_size(path,error);if(error||size>MaxSaveBytes)throw std::runtime_error("missing or oversized save");
  std::ifstream in(path,std::ios::binary);std::string data(size,'\0');if(!in.read(data.data(),std::streamsize(size)))throw std::runtime_error("unreadable save");return data;
@@ -89,7 +109,7 @@ template<class A> int Game::archiveSave(A& a,int version){
  }
  int archivedChunks=version>=12?chunkCount():version>=11?worldChunkCount(m_worldId):version>=10?(m_worldId==WorldId::Campaign?6:12):version>=7?6:4;
  if(version>=11){a(archivedChunks);int available=version>=12?chunkCount():worldChunkCount(m_worldId);if(archivedChunks<1||archivedChunks>available||archivedChunks>MaxChunks)throw std::runtime_error("Invalid chunk count");}
- for(int index=0;index<archivedChunks;++index){auto&c=m_chunks[index];if constexpr(A::reading){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
+ for(int index=0;index<archivedChunks;++index)try{auto&c=m_chunks[index];if constexpr(A::reading){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   if(version>=16)list(w.m_destroyedTiles,[&](std::pair<int,int>&t){a(t.first,t.second);if(t.first<0||t.second<0||t.first>=World::Width||t.second>=World::Height)throw std::runtime_error("invalid destroyed tile");});
   if(version>=17){list(w.m_brokenBreakables,[&](std::uint16_t&i){a(i);if(i>=w.breakables().size())throw std::runtime_error("invalid broken pane");});
@@ -109,29 +129,30 @@ template<class A> int Game::archiveSave(A& a,int version){
     if(door<int(w.m_doors.size())){auto&d=w.m_doors[door];d.open=open;d.opening=opening;d.rest=rest<0?-1.f:std::min(rest,d.maxOpen);d.damage=damage;d.broken=broken&&d.breakable();}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");if(version>=24)a(d.rest,d.damage,d.broken);}
   list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.idleTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);
-   if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid enemy");}
+   if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid creature fields");}
    // Before version 20 the recognition meter was not kept: a creature on a Chase has the player made out.
    if(version>=20)a(e.recognition);else if constexpr(A::reading)e.recognition=e.state==Enemy::State::Chase&&e.awareness>0?1.f:0.f;
    // Version 22: a recurring hunter's name and prey, and its walk in through a seam.
-   if(version>=22){a(e.hunter,e.prey,e.arrive);if(e.prey<-1||e.prey>4096||!(e.arrive>=0&&e.arrive<=30))throw std::runtime_error("invalid enemy");}
-   if(int(e.kind)>(version>=23?int(Enemy::Kind::Machine):version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0||!(e.recognition>=0&&e.recognition<=1))throw std::runtime_error("invalid enemy");});
+   if(version>=22){a(e.hunter,e.prey,e.arrive);if(e.prey<-1||e.prey>4096||!(e.arrive>=0&&e.arrive<=30))throw std::runtime_error("invalid creature fields");}
+   if(int(e.kind)>(version>=23?int(Enemy::Kind::Machine):version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0||!(e.recognition>=0&&e.recognition<=1))throw std::runtime_error("invalid creature (kind "+std::to_string(int(e.kind))+", state "+std::to_string(int(e.state))+", stalk "+std::to_string(int(e.stalkMode))+" for "+std::to_string(e.stalkTimer)+" s, max hp "+std::to_string(e.maxHp)+", recognition "+std::to_string(e.recognition)+")");},4096);
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
   list(c.clutter,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>3.f;})))throw std::runtime_error("invalid prop");}
    // Version 25: what a shard was broken from, so it is drawn as a piece of it (Clutter::shards).
    if(version>=25){a(v.shardOf,v.piece,v.shardModel);for(auto&d:v.from)a(d);
-    if(int(v.shardOf)<0||int(v.shardOf)>=int(ShardOf::Count)||v.piece<0||v.piece>7||v.shardModel<-1||v.shardModel>=FacilityModelCount||std::any_of(v.from.begin(),v.from.end(),[](float d){return !(d>=0&&d<=30.f);})||(v.kind==6&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return !(d>=0&&d<=3.f);})))throw std::runtime_error("invalid shard");}});
+    if(int(v.shardOf)<0||int(v.shardOf)>=int(ShardOf::Count)||v.piece<0||v.piece>7||v.shardModel<-1||v.shardModel>=FacilityModelCount||std::any_of(v.from.begin(),v.from.end(),[](float d){return !(d>=0&&d<=30.f);})||(v.kind==6&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return !(d>=0&&d<=3.f);})))throw std::runtime_error("invalid shard");}},16384); // a map whose props were all broken holds thousands of pieces
   // Version 21: which leads have torn. The cables themselves are hung again on load.
   if(version>=21){std::vector<std::uint16_t> torn;if constexpr(!A::reading)for(size_t i=0;i<w.m_leadRopes.size();++i)if(w.m_leadRopes[i].torn)torn.push_back(std::uint16_t(i));
    list(torn,[&](std::uint16_t&i){a(i);if(i>=w.leads().size())throw std::runtime_error("invalid lead");});if constexpr(A::reading)for(auto i:torn)w.m_leadRopes[i].torn=true;}
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
- }
+ }catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}
  return archivedChunks;
 }
 std::string Game::encodeSave()const{
  // Each pool is clamped to its own magazine or tube.
  Game snapshot=*this;for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=snapshot.m_player.pool(id);rounds.loaded=std::clamp(rounds.loaded,0,std::clamp(rounds.total,0,playerWeaponDef(id).cycle.tubeCapacity));}
  snapshot.m_player.pool(WeaponId::Fists)={};snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,SaveVersion);auto payload=writer.stream.str();
+ if(writer.repaired)try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"save on map "<<m_level<<": "<<writer.repaired<<" non-finite or out-of-range numbers written as the nearest a load accepts\n";}catch(...){}
  return "RAWMETAL_SAVE "+std::to_string(SaveVersion)+" "+std::to_string(checksum(payload))+"\n"+payload;
 }
 bool Game::decodeSave(const std::string& data){
@@ -139,17 +160,18 @@ bool Game::decodeSave(const std::string& data){
  *this=std::move(next);return true;
 }
 bool Game::prepareLoad(const std::string& data,Game& next)const{
+ t_loadFailure.clear();
  try {
-  if(data.size()>MaxSaveBytes)return false;auto split=data.find('\n');if(split==std::string::npos)return false;
+  if(data.size()>MaxSaveBytes)return refuse("save is larger than 64 MB");auto split=data.find('\n');if(split==std::string::npos)return refuse("no header line (empty or truncated file)");
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
-  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE"||(version<1||version>SaveVersion))return false;header>>std::ws;if(!header.eof())return false;
-  auto payload=data.substr(split+1);if(checksum(payload)!=hash)return false;
+  if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE")return refuse("not a RawMetal save (bad header)");if(version<1)return refuse("invalid save version "+std::to_string(version));if(version>SaveVersion)return refuse("save version "+std::to_string(version)+" is from a newer build (this build reads up to "+std::to_string(SaveVersion)+")");header>>std::ws;if(!header.eof())return refuse("extra text on the header line");
+  auto payload=data.substr(split+1);if(checksum(payload)!=hash)return refuse("checksum mismatch (file damaged or truncated)");
   next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);
   // A save made inside the prologue when it was its own custom world: its map
   // has since moved onto the campaign grid, so the night shift starts over.
   auto oldPrologue=[&]{return next.m_worldId==WorldId::Custom&&next.m_customCampaignKey==loadEmbeddedPrologueCampaign()->key;};
   int archived=0;try{archived=next.archiveSave(reader,version);}catch(const std::exception&){if(!oldPrologue())throw;}
-  if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}if(version==1){auto&shells=next.m_player.pool(WeaponId::Shotgun);shells.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,shells.total);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return false;
+  if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}if(version==1){auto&shells=next.m_player.pool(WeaponId::Shotgun);shells.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,shells.total);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return refuse("unread data after the version "+std::to_string(version)+" archive");
   // Earlier builds represented a broken crate as four unrelated prop models
   // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
   // the current textured splinter kind so existing saves receive the repair.
@@ -238,25 +260,32 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   }
   auto&p=next.m_player;
   // Each firearm's pool against its own magazine; the handgun's only when it is owned or its 9 mm waits for it.
-  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return false;}
-  if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return false;
-  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||next.m_reloadTimer<0||next.m_reloadTimer>8||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return false;
+  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return refuse("invalid ammunition pool");}
+  if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return refuse("invalid weapon or reload state");
+  // A body saved somewhere no body can be (past the map's edge, far above or below it, as a
+  // noclip flight or a glitch leaves it) is set back on the map's own start rather than refusing
+  // the whole save; the camera's eye and pitch come back into range the same way.
+  if(next.m_level>=0&&next.m_level<next.chunkCount()&&(p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100)){
+   const auto& d=next.m_chunks[next.m_level].world.definition();p.pos=d.playerStart;p.z=d.spawnHeight;p.verticalVelocity=0;p.grounded=true;next.m_velocity={};
+   try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"load: the player was saved off map "<<next.m_level<<"; set at its start\n";}catch(...){}}
+  p.eye=std::clamp(p.eye,.1f,2.6f);p.pitch=std::clamp(p.pitch,-220.f,220.f);p.health=std::min(p.health,100.f);
+  if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||next.m_reloadTimer<0||next.m_reloadTimer>8||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return refuse("player or map out of range (map "+std::to_string(next.m_level)+", health "+std::to_string(p.health)+", at "+std::to_string(p.pos.x)+","+std::to_string(p.pos.y)+","+std::to_string(p.z)+")");
   // A save from before the 9 mm stack gives it the first 1x2 cell clear of the others.
   if(version<19){auto taken=[&](int c){for(int i=0;i<3;++i){int at=next.m_itemCells[size_t(i)],w=i==0?4:i==2?2:1;for(int r=c/6;r<c/6+2;++r)if(r>=at/6&&r<at/6+2&&c%6>=at%6&&c%6<at%6+w)return true;}return false;};
    for(int c=0;c<24;++c)if(!taken(c)){next.m_itemCells[3]=c;break;}}
-  for(int i=0;i<int(next.m_itemCells.size());++i){int cell=next.m_itemCells[size_t(i)],width=i==0?4:i==2?2:1;if(cell<0||cell/6+2>5||cell%6+width>6)return false;}
+  for(int i=0;i<int(next.m_itemCells.size());++i){int cell=next.m_itemCells[size_t(i)],width=i==0?4:i==2?2:1;if(cell<0||cell/6+2>5||cell%6+width>6)return refuse("invalid inventory cell");}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
   next.updateHungSuits(0);
-  if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return false;
+  if(next.m_heldClutter<-1||next.m_heldClutter>=int(next.m_clutter.size())||(next.m_heldClutter>=0&&next.m_clutter[next.m_heldClutter].broken))return refuse("held prop index invalid or broken");
   adoptSession(next);
   next.updateStreaming(0);
   for(int level=0;level<next.chunkCount();++level)if(next.chunkResident(level))next.settleLeads(level);
   next.rebuildFriendlyActors();
   int heldCount=0;
   for(size_t actor=0;actor<next.m_friendlyActors.size();++actor){const auto&npc=next.m_friendlyActors[actor];
-   if(next.npcIncapacitated(actor)&&npc.track().deadState&&next.state(npc.track().deadState))return false;
-   if(next.npcHeld(actor)&&(++heldCount>1||npc.level!=next.m_level))return false;
+   if(next.npcIncapacitated(actor)&&npc.track().deadState&&next.state(npc.track().deadState))return refuse("NPC "+std::to_string(actor)+" is both restrained and dead");
+   if(next.npcHeld(actor)&&(++heldCount>1||npc.level!=next.m_level))return refuse("NPC "+std::to_string(actor)+" held off the current map or more than one held");
   }
   next.validateTacticalGrenades();
   next.validateEngineerDrones();
@@ -272,17 +301,24 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   // unless an update has since blocked every way out: then they go free and
   // are set somewhere clear like anyone else.
   if(const int locker=next.hiddenLocker();locker>=0){Vec2 exit;float feet;if(!next.lockerExit(next.m_world.fixtures()[size_t(locker)],exit,feet,true))next.forgetLocker();}
-  if(next.m_world.campaign()&&next.m_level>=4&&next.hiddenLocker()<0&&!next.hullFits(p.pos,p.z,p.hullHeight())){
+  // A creature or a man pressed against the player is not geometry: only walls and props move him.
+  // The clear place is looked for on the floor and on the decks and slabs near his own height (maps
+  // 107-109 stand their floors on slabs over a deep layer, where the layer's floor is solid
+  // everywhere: looking only there refused every such save). Nothing clear: the map's own start.
+  if(next.m_world.campaign()&&next.m_level>=4&&next.hiddenLocker()<0&&!next.hullFits(p.pos,p.z,p.hullHeight(),.2f,false)){
    Vec2 safe{};float safeZ=0,best=std::numeric_limits<float>::max();
    for(float y=1.25f;y<23.75f;y+=.25f)for(float x=1.25f;x<23;x+=.25f){
-    Vec2 candidate{x,y};float z=next.m_world.floorHeight(x,y),distance=lengthSq(candidate-p.pos);
-    if(distance<best&&next.hullFits(candidate,z,p.hullHeight())){safe=candidate;safeZ=z;best=distance;}
+    Vec2 candidate{x,y};const float planar=lengthSq(candidate-p.pos);if(planar>=best)continue;
+    for(float z:{next.m_world.supportBelow(x,y,p.z+1.f),next.m_world.supportBelow(x,y,p.z+.3f),next.m_world.floorHeight(x,y)}){
+     const float distance=planar+(z-p.z)*(z-p.z);
+     if(std::isfinite(z)&&distance<best&&next.hullFits(candidate,z,p.hullHeight(),.2f,false)){safe=candidate;safeZ=z;best=distance;}}
    }
-   if(best==std::numeric_limits<float>::max())return false;
+   if(best==std::numeric_limits<float>::max()){const auto& d=next.m_world.definition();safe=d.playerStart;safeZ=d.spawnHeight;
+    try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"load: no clear place near the saved player on map "<<next.m_level<<"; set at its start\n";}catch(...){}}
    p.pos=safe;p.z=safeZ;p.verticalVelocity=0;p.grounded=true;next.m_velocity={};
   }
   return true;
- }catch(const std::exception&){return false;}
+ }catch(const std::exception& error){return refuse(error.what());}
 }
 // What a loaded game keeps of the session that loads it: settings, the save
 // folder and engine switches, and a fresh render revision.
@@ -295,27 +331,29 @@ void Game::adoptSession(Game& next)const{
 // A save being built on a worker. The worker only writes `result`, `ok` and the
 // counters; the main thread reads them after `done`, then joins.
 struct LoadJob {
- std::thread worker;std::atomic<bool> done{false};std::atomic<int> progress{0};int expected=1,slot=-1;bool ok=false;std::optional<Game> result;
+ std::thread worker;std::atomic<bool> done{false};std::atomic<int> progress{0};int expected=1,slot=-1;bool ok=false;std::optional<Game> result;std::string failure;std::filesystem::path path;
  ~LoadJob(){if(worker.joinable())worker.join();}
 };
 bool Game::loadReady()const{return m_loadJob&&m_loadJob->done.load();}
 float Game::loadProgress()const{if(!m_loadJob)return 1.f;return std::clamp(float(m_loadJob->progress.load())/float(m_loadJob->expected),0.f,.99f);}
 bool Game::beginLoad(std::string data,int slot){
  if(m_loadJob)return false;
- auto job=std::make_shared<LoadJob>();job->slot=slot;job->expected=std::max(1,chunkCount()*3);
+ auto job=std::make_shared<LoadJob>();job->slot=slot;job->path=slot>=0?slotPath(m_saveDirectory,slot):checkpointPath(m_saveDirectory);job->expected=std::max(1,chunkCount()*3);
  // The source session stays still while the worker reads its settings: update()
  // does nothing else until the job is done.
  job->worker=std::thread([job,this,data=std::move(data)]{loadProgressCounter=&job->progress;
-  try{job->result.emplace();job->ok=prepareLoad(data,*job->result);}catch(...){job->ok=false;}
+  try{job->result.emplace();job->ok=prepareLoad(data,*job->result);if(!job->ok)job->failure=t_loadFailure;}catch(const std::exception& error){job->ok=false;job->failure=error.what();}catch(...){job->ok=false;job->failure="unknown error";}
   loadProgressCounter=nullptr;job->done.store(true);});
  m_loadJob=std::move(job);m_menuMessage.clear();return true;
 }
 void Game::finishLoad(){
  auto job=std::move(m_loadJob);m_loadJob.reset();if(job->worker.joinable())job->worker.join();
  if(job->ok){*this=std::move(*job->result);return;}
- if(job->slot>=0){m_menuMessage="LOAD FAILED / EMPTY OR INVALID SAVE";m_menuPage=MenuPage::Load;m_menuSelection=job->slot;}
- else m_menuMessage="AUTOSAVE EMPTY OR INVALID";
+ logLoadFailure(job->path,job->failure);
+ if(job->slot>=0){m_menuMessage=loadFailureLine("LOAD FAILED",job->failure);m_menuPage=MenuPage::Load;m_menuSelection=job->slot;}
+ else m_menuMessage=loadFailureLine("AUTOSAVE FAILED",job->failure);
 }
+const std::string& Game::lastLoadFailure(){return t_loadFailure;}
 static std::string saveLabel(int level,float elapsed,float health){return "MAP "+std::to_string(level)+" / "+std::to_string(int(elapsed/60))+" MIN / HP "+std::to_string(int(health));}
 static std::filesystem::path labelPath(const std::filesystem::path& save){auto path=save;path+=".label";return path;}
 bool Game::saveSlot(int slot){
@@ -323,11 +361,16 @@ bool Game::saveSlot(int slot){
  try {writeAtomic(slotPath(m_saveDirectory,slot),encodeSave());try{writeAtomic(labelPath(slotPath(m_saveDirectory,slot)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();m_menuMessage="GAME SAVED";return true;}catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
 }
 bool Game::saveCheckpoint(){if(m_saveDirectory.empty())return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());try{writeAtomic(labelPath(checkpointPath(m_saveDirectory)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
-bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}try{auto data=readFile(checkpointPath(m_saveDirectory));if(m_asyncLoads)return beginLoad(std::move(data),-1);if(decodeSave(data))return true;}catch(const std::exception&){}m_menuMessage="AUTOSAVE EMPTY OR INVALID";return false;}
+bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}
+ const auto path=checkpointPath(m_saveDirectory);std::string why;
+ try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),-1);if(decodeSave(data))return true;why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
+ logLoadFailure(path,why);m_menuMessage=loadFailureLine("AUTOSAVE FAILED",why);return false;}
 bool Game::loadSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
- try{auto data=readFile(slotPath(m_saveDirectory,slot));if(m_asyncLoads)return beginLoad(std::move(data),slot);if(decodeSave(data))return true;}catch(const std::exception&){}
- m_menuMessage="LOAD FAILED / EMPTY OR INVALID SAVE";return false;
+ const auto path=slotPath(m_saveDirectory,slot);std::string why;std::error_code missing;
+ if(!std::filesystem::exists(path,missing)){m_menuMessage="LOAD FAILED / EMPTY SLOT";return false;}
+ try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),slot);if(decodeSave(data))return true;why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
+ logLoadFailure(path,why);m_menuMessage=loadFailureLine("LOAD FAILED",why);return false;
 }
 // What a save's menu row says: its sidecar label when it is newer than the
 // save; otherwise (a save from before sidecars) one full decode, after which the
@@ -546,6 +589,9 @@ bool Game::testSaves(){
 
 namespace retro {
 bool Game::testPropSaves(){
+ // A late save is big: past the old 2 MB cap and past 1024 pieces in one map, it still loads.
+ {Game big(regression::campaign(regression::room()));for(int i=0;i<16000;++i){Clutter c{};c.pos={2.0123457f+float(i%180)*.1f,2.0123457f+float(i/180)*.25f};c.z=.0123457f;c.yaw=c.pitch=c.roll=.1234567f*float(i%7);c.restTime=1.2345678f;c.sleeping=true;big.m_clutter.push_back(c);}
+  const auto bytes=big.encodeSave();Game loaded(big.m_customCampaign);if(bytes.size()<=2u*1024*1024||!loaded.decodeSave(bytes)||loaded.m_clutter.size()<16000){std::ofstream("prop-saves-big.txt")<<"bytes "<<bytes.size()<<" loaded "<<loaded.m_clutter.size()<<" "<<lastLoadFailure()<<std::endl;return false;}}
  auto map=regression::room();map->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});auto campaign=regression::campaign(map);Game g(campaign);g.storeChunk();g.m_chunks[0].clutter.clear();g.m_heldClutter=-1;Writer writer;g.archiveSave(writer,16);auto payload=writer.stream.str();Game loaded(campaign);if(!loaded.decodeSave("RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload)||loaded.m_clutter.size()!=1||loaded.m_clutter[0].model!=27)return false;
  loaded.m_heldClutter=0;auto bytes=loaded.encodeSave();Game held(campaign);if(!held.decodeSave(bytes)||held.m_heldClutter!=0||held.encodeSave()!=bytes)return false;
  // Version 21 keeps which leads have torn; a version 20 or 19 save opens on the map's own leads, clipped.
@@ -579,6 +625,84 @@ bool Game::testHandgunSaves(std::ostream& report){
   Game h(campaign);h.m_player.pool(WeaponId::Handgun)={12,4};Game unowned(campaign);check(!unowned.decodeSave(raw(h,19)),"A loaded handgun pool without the handgun is refused");
   Game k(campaign);k.m_player.pool(WeaponId::Handgun)={12,0};Game waiting(campaign);check(waiting.decodeSave(raw(k,19))&&waiting.player().pool(WeaponId::Handgun).total==12,"9 mm waiting for the pistol loads");
   Game s(campaign);s.grantHandgun(12);s.m_player.pool(WeaponId::Shotgun)={12,6};s.m_player.pool(WeaponId::Handgun)={12,12};Game clamp(campaign);check(clamp.decodeSave(s.encodeSave())&&clamp.player().pool(WeaponId::Handgun).loaded==12&&clamp.player().pool(WeaponId::Shotgun).loaded==6,"Each pool keeps its own capacity: twelve 9 mm and six shells");}
+ return passed;
+}
+}
+namespace retro {
+// Saves written the way play writes them, on every Chapter 1 and Chapter 2 map:
+// on entry, after a while, the moment men and creatures die and while their
+// bodies settle, with props broken into pieces and barrels blown, mid-fight
+// with guards shooting, the script checkpoints a walk sets off, and the seam
+// autosave into the next map. Every one must load, load again after it was
+// itself saved, and play on. RM_SAVE_MAPS="a-b" narrows the maps.
+bool Game::testSavesInPlay(std::ostream& report){
+ int first=0,last=109,stride=1;if(const char* range=std::getenv("RM_SAVE_MAPS")){std::sscanf(range,"%d-%d/%d",&first,&last,&stride);stride=std::max(1,stride);}
+ const auto directory=std::filesystem::temp_directory_path()/("rm-saves-in-play-"+std::to_string(GetCurrentProcessId()));std::error_code ignored;std::filesystem::create_directories(directory,ignored);
+ int saves=0,refused=0;bool passed=true;std::string lastCheckpoint;
+ const bool verbose=std::getenv("RM_SAVE_VERBOSE")!=nullptr;
+ auto load=[&](const std::string& data,int level,const std::string& what,bool deep=false){
+  using clock=std::chrono::steady_clock;auto ms=[](clock::time_point a,clock::time_point b){return std::chrono::duration_cast<std::chrono::milliseconds>(b-a).count();};
+  const auto t0=clock::now();++saves;Game loaded;const auto t1=clock::now();const bool ok=loaded.decodeSave(data);const auto t2=clock::now();
+  if(!ok){++refused;passed=false;report<<"FAIL map "<<level<<" "<<what<<": "<<t_loadFailure<<'\n';report.flush();return;}
+  if(!deep){if(verbose){report<<"  map "<<level<<" "<<what<<": decode "<<ms(t1,t2)<<" ms\n";report.flush();}return;}
+  // The loaded game plays on and is saved again: that save must load too.
+  for(int i=0;i<10;++i)loaded.update({},1.f/60);const auto t3=clock::now();
+  const auto again=loaded.encodeSave();Game second;if(!second.decodeSave(again)){++refused;passed=false;report<<"FAIL map "<<level<<" "<<what<<" (saved again after loading): "<<t_loadFailure<<'\n';report.flush();}
+  if(verbose){report<<"  map "<<level<<" "<<what<<": construct "<<ms(t0,t1)<<" ms, decode "<<ms(t1,t2)<<" ms, play "<<ms(t2,t3)<<" ms, again "<<ms(t3,clock::now())<<" ms\n";report.flush();}
+ };
+ auto probe=[&](const Game& g,const std::string& what,bool deep=false){load(g.encodeSave(),g.m_level,what,deep);};
+ // A checkpoint the game wrote itself since the last look.
+ auto checkpoints=[&](const Game& g,const std::string& what){std::error_code e;const auto path=checkpointPath(directory.wstring());if(!std::filesystem::exists(path,e))return;
+  std::string data;try{data=readFile(path);}catch(const std::exception&){return;}if(data==lastCheckpoint)return;lastCheckpoint=data;load(data,g.m_level,"checkpoint during "+what);};
+ auto run=[&](Game& g,int frames,const InputState& input,const std::string& what){for(int i=0;i<frames;++i){g.update(input,1.f/60);checkpoints(g,what);}};
+ auto fresh=[&](int level){Game g;g.setSaveDirectory(directory.wstring());g.setAsyncLoads(false);g.startMainCampaign(level);g.m_god=true;return g;};
+ // One game carried through every map in turn, as a playthrough carries it: what it gathers
+ // (states, fired events, bodies, debris) must still fit a save at the end of Chapter 2.
+ if(std::getenv("RM_SAVE_LONG")){Game g=fresh(first);
+  for(int level=first;level<=last&&level<CampaignChunkCount;level+=stride){
+   if(level!=g.m_level){g.storeChunk();g.loadLevel(level,true);g.updateStreaming(0);}
+   InputState walk{};walk.forward=true;walk.fire=true;walk.mouseDx=20;run(g,45,walk,"a walk");
+   for(size_t a=0;a<g.m_friendlyActors.size();++a){const auto&npc=g.m_friendlyActors[a];if(npc.level!=level||!npc.track().health||(npc.track().deadState&&g.state(npc.track().deadState)))continue;g.damageFriendly(a,1e4f,g.m_player.pos,{ShotKind::Player,0,0});}
+   for(auto&e:g.m_enemies)if(e.alive)g.applyEnemyDamage(e,e.maxHp*3+100);
+   for(size_t i=0;i<g.m_clutter.size();++i)if(g.m_clutter[i].kind==7&&!g.m_clutter[i].broken)g.breakClutter(g.m_level,i,{1,0,0});
+   g.landShards();run(g,30,{},"after");
+   size_t clutter=0,enemies=0;for(int l=0;l<g.chunkCount();++l){clutter=std::max(clutter,l==g.m_level?g.m_clutter.size():g.m_chunks[l].clutter.size());enemies=std::max(enemies,l==g.m_level?g.m_enemies.size():g.m_chunks[l].enemies.size());}
+   report<<"  through map "<<level<<": "<<g.m_states.size()<<" states (limit 8192), "<<g.m_firedEvents.size()<<" fired events (limit 1024), most clutter in a map "<<clutter<<", most creatures "<<enemies<<", save "<<g.encodeSave().size()<<" bytes\n";report.flush();
+   if((level-first)/stride%10==9||level+stride>last)probe(g,"after the walk through map "+std::to_string(level),true);
+  }
+  std::filesystem::remove_all(directory,ignored);report<<(passed?"PASS":"FAIL")<<" long walk: "<<saves<<" saves, "<<refused<<" refused\n";return passed;}
+ // A physics glitch leaves a NaN spin on a shard and an infinite timer on a creature: the save still loads.
+ {Game g=fresh(first);bool staged=false;for(auto&c:g.m_clutter){c.spin=std::numeric_limits<float>::quiet_NaN();c.vz=std::numeric_limits<float>::infinity();staged=true;break;}
+  for(auto&e:g.m_enemies){e.voiceTimer=std::numeric_limits<float>::infinity();e.heading=std::numeric_limits<float>::quiet_NaN();staged=true;break;}
+  g.m_shotAge=3e7f;probe(g,staged?"with a NaN spin, an infinite timer and a huge clock":"with a huge clock");}
+ for(int level=first;level<=last&&level<CampaignChunkCount;level+=stride){
+  const int before=refused;
+  {Game g=fresh(level);run(g,90,{},"idle");
+   // The men on this map die where they stand, and the creatures.
+   int men=0,beasts=0;
+   for(size_t a=0;a<g.m_friendlyActors.size();++a){const auto&npc=g.m_friendlyActors[a];if(npc.level!=level||!npc.track().health||(npc.track().deadState&&g.state(npc.track().deadState)))continue;g.damageFriendly(a,1e4f,g.m_player.pos,{ShotKind::Player,0,0});++men;}
+   for(auto&e:g.m_enemies)if(e.alive){g.applyEnemyDamage(e,e.maxHp*3+100);++beasts;}
+   if(men+beasts){run(g,6,{},"dying");probe(g,"0.1 s after the deaths");run(g,90,{},"bodies settling");probe(g,"1.6 s after the deaths",true);}
+   // Props broken into pieces, a barrel blown.
+   int broken=0;for(size_t i=0;i<g.m_clutter.size()&&broken<4;++i)if(g.m_clutter[i].kind==7&&!g.m_clutter[i].broken){g.breakClutter(g.m_level,i,{1,0,0});++broken;}
+   g.landShards();
+   bool blown=false;for(int y=0;y<World::Height&&!blown;++y)for(int x=0;x<World::Width&&!blown;++x)if(g.m_world.tile(x,y)=='B'){g.detonateBarrel(g.m_level,x,y);blown=true;}
+   if(broken||blown){run(g,12,{},"debris flying");run(g,120,{},"debris settling");probe(g,"debris at rest");}
+  }
+  // Mid-fight: fire into the room while walking and turning, guards answering.
+  {Game g=fresh(level);InputState fight{};fight.fire=true;fight.forward=true;
+   for(int second=0;second<4;++second){fight.mouseDx=second%2?40.f:-25.f;run(g,60,fight,"a fight");if(second%2)probe(g,"mid-fight, "+std::to_string(second+1)+" s",second==3);fight.mouseDx=0;}
+  }
+  // The seam autosave: across each edge with a map beyond it.
+  {const Vec2 edges[]={{12,24.3f},{12,-.3f},{24.3f,12},{-.3f,12}};
+   for(const auto at:edges){Game g=fresh(level);const Vec2 global=at+g.chunkOffset(level);int beyond=-1;
+    for(int other=0;other<g.chunkCount();++other){const Vec2 o=g.chunkOffset(other);if(other!=level&&global.x>=o.x&&global.x<o.x+World::Width&&global.y>=o.y&&global.y<o.y+World::Height){beyond=other;break;}}
+    if(beyond<0)continue;g.m_player.pos=at;run(g,2,{},"crossing into "+std::to_string(beyond));if(g.m_level!=level)probe(g,"just across into map "+std::to_string(beyond));}
+  }
+  report<<(refused==before?"PASS":"FAIL")<<" map "<<level<<' '<<CampaignMapNames[level]<<'\n';report.flush();
+ }
+ std::filesystem::remove_all(directory,ignored);
+ report<<(passed?"PASS":"FAIL")<<" saves in play: "<<saves<<" saves, "<<refused<<" refused\n";
  return passed;
 }
 }

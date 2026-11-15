@@ -2955,6 +2955,9 @@ std::shared_ptr<const AuthoredMapData> campaignMap(int level){
   result[ReactorCoreChunk]=makeReactorCore();result[CoolantLoopChunk]=makeCoolantLoop();
   // Chunks 34 on: the descent chapters, one file per district.
   buildCampaignChapters(result);
+  // Any Cleanup man on a keyed track can be shot dead (CustomCampaign.h): 95's hit engineer sitting it out was not.
+  for(auto& map:result)if(map&&std::any_of(map->actorTracks.begin(),map->actorTracks.end(),[](const ActorTrack& t){return t.ai.mode==ActorAiMode::Scripted&&!t.platform&&t.health<=0&&cleanupActorVisual(t.visual);})){
+   auto armed=std::make_shared<Map>(*map);if(armScriptedCleanup(*armed))map=std::move(armed);}
   // Chapter 2 gets its sound from the bank once its maps are built (CampaignSoundscape.cpp).
   dressChapterTwoSound(result);
   // Chapters 1 and 2 get their air: steam, sparks, smoke, drips and dust from what stands in them (CampaignParticles.cpp).

@@ -18,6 +18,12 @@ std::shared_ptr<const CustomCampaign> loadEmbeddedExclusionZoneCampaign();
 // The main campaign's opening (assets.rc id 398). New Game starts here and its
 // ENTER_CAMPAIGN hands off to campaign Map 0. It is not listed in Custom Maps.
 std::shared_ptr<const CustomCampaign> loadEmbeddedPrologueCampaign();
+// A Cleanup-force man on a keyed (scripted) track with no health could be shot,
+// flinch and never die. Each one gets a man's health and its own damage and
+// dead states, so a round kills him like any other (the body falls through the
+// track's dead pose). Story people (civilian visuals) and bodies are left alone.
+// Returns how many were given life. Run on campaign and custom maps alike.
+int armScriptedCleanup(AuthoredMapData& map);
 // Built-in payloads that saves may reference without a custom-maps folder.
 std::shared_ptr<const CustomCampaign> builtInCampaignForKey(std::uint64_t key);
 }

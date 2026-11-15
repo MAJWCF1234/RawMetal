@@ -97,6 +97,7 @@ bool Game::unstickPlayer(){
  return false;
 }
 void Game::updateMovement(const InputState& input,float dt){
+ if(m_noclip){updateNoclip(input,dt);return;}
  unstickPlayer();
  const Vec2 startPosition=m_player.pos;
  if(input.jump&&!m_previousJump)m_jumpBuffer=.12f;m_previousJump=input.jump;
@@ -180,6 +181,29 @@ void Game::updateMovement(const InputState& input,float dt){
  const bool trying=input.forward||input.back||input.left||input.right||(input.vrTracked&&(input.vrMoveForward!=0||input.vrMoveRight!=0));
  if(trying&&lengthSq(m_player.pos-startPosition)<1e-6f&&!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_stuckTime+=dt;else m_stuckTime=0;
 }
+// The console's noclip: fly where the camera looks, through walls, floors and
+// props, with no gravity. Jump rises, crouch sinks, sprint triples the speed.
+// The flight stays inside the stitched maps; the flag is never saved.
+void Game::updateNoclip(const InputState& input,float dt){
+ const float pitch=m_player.pitch/140.f,speed=input.sprint?18.f:6.f;
+ const Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x};
+ Vec2 flat{};float up=0;
+ if(input.forward){flat+=forward*std::cos(pitch);up+=std::sin(pitch);}
+ if(input.back){flat+=forward*-std::cos(pitch);up-=std::sin(pitch);}
+ if(input.right)flat+=right;if(input.left)flat+=right*-1;
+ if(input.vrTracked){flat=forward*input.vrMoveForward+right*input.vrMoveRight;}
+ if(input.jump)up+=1;if(input.crouch||input.prone)up-=1;
+ const float n=std::sqrt(lengthSq(flat)+up*up);
+ if(n>1e-4f){const float k=speed*dt/std::max(1.f,n);const Vec2 next=m_player.pos+flat*k;
+  // Only into a map that exists: off every chunk, the X/Y step is dropped.
+  const Vec2 global=next+chunkOffset(m_level);bool inside=false;
+  for(int level=0;level<chunkCount()&&!inside;++level){const Vec2 o=chunkOffset(level);inside=global.x>=o.x&&global.x<o.x+World::Width&&global.y>=o.y&&global.y<o.y+World::Height;}
+  if(inside)m_player.pos=next;m_player.z=std::clamp(m_player.z+up*k,-95.f,95.f);}
+ m_player.crouched=m_player.prone=false;m_player.grounded=false;m_player.verticalVelocity=0;m_velocity={};m_jumpBuffer=0;m_coyote=0;m_stuckTime=0;m_previousJump=input.jump;
+ if(input.vrTracked)m_player.eye=input.vrEye;else m_player.eye+=(m_player.stanceEye()-m_player.eye)*std::min(1.f,dt*16.f);
+}
+// Turns noclip on or off. Off, the body lands wherever it is (gravity takes over).
+void Game::setNoclip(bool on){m_noclip=on;if(!on){m_player.grounded=false;m_player.verticalVelocity=0;}}
 float Game::vrInteractionDistance(Point3 target,float housingRadius)const{
  int hand=m_vrInteractionHand;if(!m_vrHandValid[hand])return 999.f;
  auto origin=m_vrHandPosition[hand],delta=target-origin;

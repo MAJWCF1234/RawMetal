@@ -19,7 +19,7 @@ void Game::executeConsole(std::string command){
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
-  m_consoleLog.push_back("RELOAD / WHERE / GOD / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
+  m_consoleLog.push_back("RELOAD / WHERE / GOD / NOCLIP / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("NOCLIP: FLY THROUGH WALLS WHERE YOU LOOK. JUMP RISES, CROUCH SINKS, SPRINT IS FASTER. NOT SAVED.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="unlock"){
   // Unlock what the player is looking at for good, by setting the state it
@@ -48,6 +48,9 @@ void Game::executeConsole(std::string command){
  else if(verb=="give"&&arg=="9mm"&&extra.empty()){m_player.pool(WeaponId::Handgun).total+=24;m_consoleLog.push_back("24 ROUNDS 9MM ADDED.");}
  else if(verb=="dev"){setDeveloperMode(!developerMode());m_consoleLog.push_back(developerMode()?"DEVELOPER MODE ON: NO DAMAGE, NO CREATURES, EVERY DOOR OPEN.":"DEVELOPER MODE OFF.");}
  else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE. DEV ALSO OPENS THE GATES THAT WANT A ROOM CLEARED.":"GOD MODE OFF.");}
+ else if(verb=="noclip"){const bool on=arg=="on"||(arg.empty()&&!m_noclip);
+  if(arg.empty()||arg=="on"||arg=="off"){setNoclip(on);m_consoleLog.push_back(on?"NOCLIP ON: FLY WHERE YOU LOOK. JUMP UP, CROUCH DOWN, SPRINT FAST.":"NOCLIP OFF.");}
+  else m_consoleLog.push_back("USE NOCLIP, NOCLIP ON OR NOCLIP OFF.");}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
  else if(verb=="r_scale"){
   if(arg=="50"||arg=="75"||arg=="100"){m_renderScale=arg=="50"?.5f:arg=="75"?.75f:1.f;m_consoleLog.push_back("3D RENDER SCALE "+arg+" PERCENT. HUD STAYS FULL RESOLUTION.");}
@@ -132,6 +135,36 @@ void Game::updateConsole(const InputState& input){
  if(input.menuUp&&!m_consoleUp&&!m_consoleHistory.empty()){m_consoleHistoryIndex=std::max(0,m_consoleHistoryIndex-1);m_consoleLine=m_consoleHistory[m_consoleHistoryIndex];}
  if(input.menuDown&&!m_consoleDown){m_consoleHistoryIndex=std::min(int(m_consoleHistory.size()),m_consoleHistoryIndex+1);m_consoleLine=m_consoleHistoryIndex<int(m_consoleHistory.size())?m_consoleHistory[m_consoleHistoryIndex]:"";}
  m_consoleUp=input.menuUp;m_consoleDown=input.menuDown;
+}
+// noclip: typed in the console, the body flies through a wall where the camera
+// looks, rises and sinks, ignores gravity, stays out of the save, and lands when off.
+bool Game::testNoclip(std::ostream& report){
+ bool passed=true;auto check=[&](bool ok,const std::string& label){report<<(ok?"PASS ":"FAIL ")<<label<<'\n';report.flush();passed&=ok;};
+ Game g;g.startMainCampaign(95);g.m_god=true;g.update({},1.f/60);
+ auto type=[&](const std::string& line){InputState open{};open.console=true;g.update(open,1.f/60);InputState text{};text.textInput=line+"\r";g.update(text,1.f/60);InputState close{};close.escape=true;g.update(close,1.f/60);g.update({},1.f/60);};
+ type("help");bool listed=false;for(const auto& l:g.m_consoleLog)listed|=l.find("NOCLIP")!=std::string::npos;check(listed,"help lists NOCLIP");
+ // Stand in the middle of the map facing a wall a metre or two away, with floor past it.
+ Vec2 start=g.m_player.pos;float bestD=1e9f;float bestYaw=0;
+ for(float y=6;y<=18&&bestD>9e8f;y+=.5f)for(float x=6;x<=18&&bestD>9e8f;x+=.5f){const float z=g.m_world.floorHeight(x,y);if(!g.hullFits({x,y},z,Player::StandingHeight))continue;
+  for(int a=0;a<8&&bestD>9e8f;++a){const float yaw=a*kPi/4;const Vec2 f{std::cos(yaw),std::sin(yaw)};
+   for(float d=1.f;d<2.5f;d+=.1f){const Vec2 p=start=Vec2{x,y};const Vec2 q=p+f*d;if(g.m_world.fits(q.x,q.y,z+.3f,1.4f,false))continue;
+    const Vec2 past=p+f*(d+1.2f);if(g.hullFits(past,g.m_world.floorHeight(past.x,past.y),Player::StandingHeight)){bestD=d;bestYaw=yaw;g.m_player.pos=p;g.m_player.z=z;}break;}}}
+ start=g.m_player.pos;
+ g.m_player.angle=bestYaw;g.m_player.pitch=0;const Vec2 ahead{std::cos(bestYaw),std::sin(bestYaw)};
+ {Game walk=g;InputState fwd{};fwd.forward=true;for(int i=0;i<120;++i)walk.update(fwd,1.f/60);check(walk.level()==g.level()&&dot(walk.m_player.pos-start,ahead)<bestD+.05f,"without noclip the wall "+std::to_string(bestD)+" m ahead stops the body");}
+ type("noclip");check(g.noclip(),"noclip turns on");
+ report<<"  start "<<start.x<<","<<start.y<<" yaw "<<bestYaw<<" now "<<g.m_player.pos.x<<","<<g.m_player.pos.y<<" angle "<<g.m_player.angle<<" level "<<g.level()<<"\n";g.m_player.angle=bestYaw;g.m_player.pitch=0;
+ InputState fwd{};fwd.forward=true;for(int i=0;i<int(60*(bestD+1.5f)/6.f)+30;++i)g.update(fwd,1.f/60);
+ const float through=dot(g.m_player.pos-start,ahead);report<<"  after the flight "<<g.m_player.pos.x<<","<<g.m_player.pos.y<<" angle "<<g.m_player.angle<<" level "<<g.level()<<"\n";
+ check(through>bestD+.6f||g.level()!=95,"noclip flies through the wall ("+std::to_string(through)+" m along, wall at "+std::to_string(bestD)+")");
+ const float z0=g.m_player.z;for(int i=0;i<60;++i)g.update({},1.f/60);check(std::fabs(g.m_player.z-z0)<1e-3f,"noclip holds height without gravity");
+ InputState up{};up.jump=true;for(int i=0;i<30;++i)g.update(up,1.f/60);const float risen=g.m_player.z-z0;check(risen>2.5f&&risen<3.5f,"jump rises 6 m/s ("+std::to_string(risen)+" m in 0.5 s)");
+ InputState down{};down.crouch=true;for(int i=0;i<30;++i)g.update(down,1.f/60);check(std::fabs(g.m_player.z-z0)<.2f,"crouch sinks back");
+ InputState fast{};fast.forward=true;fast.sprint=true;g.m_player.pitch=0;const Vec2 before=g.m_player.pos;const int level=g.level();g.update(fast,.05f);if(g.level()==level)check(length(g.m_player.pos-before)>.8f,"sprint flies 18 m/s");
+ g.m_player.pitch=140.f*.5f;const float zLook=g.m_player.z;for(int i=0;i<6;++i)g.update(fwd,1.f/60);check(g.m_player.z>zLook+.2f,"forward follows the look pitch upward");
+ Game loaded;check(loaded.decodeSave(g.encodeSave())&&!loaded.noclip(),"a save taken in noclip loads without noclip");
+ type("noclip");check(!g.noclip(),"noclip turns off");for(int i=0;i<240;++i)g.update({},1.f/60);check(g.m_player.grounded||g.m_player.verticalVelocity<0,"off, gravity takes the body again");
+ return passed;
 }
 bool Game::testConsole(){
  std::ofstream report("console-test.txt");
