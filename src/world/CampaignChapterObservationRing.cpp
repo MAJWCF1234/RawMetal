@@ -454,8 +454,8 @@ std::shared_ptr<const Map> makeObservationRingNorthEast(){
   wallSign(m,x,y,G+.74f,title,sub,1.5f,yaw);
   m.lights.push_back(lamp({alongX?x:x+1.2f,alongX?y-1.2f:y},G+2.6f,.45f,4.f,2700,0,WorldLightMount::Bare,0,true));}
  // the display cases they wheeled out for the opening, against the glass; one shoved aside, its case empty
- anModel(m,model::lab_specimen_cabinet,2.9f,8.6f,G,anS,true);anModel(m,model::lab_specimen_cabinet,5.5f,8.85f,G,anS+.4f,true);
- wall(m,2.2f,8.2f,6.3f,9.5f,G+2.19f,G+3.1f,30);
+ anModel(m,model::lab_specimen_cabinet,2.9f,8.6f,G,anS,true);anModel(m,model::lab_specimen_cabinet,5.95f,8.85f,G,anS+.4f,true);   // the shoved one clear of the torn bay (x 4.1-5.5)
+ wall(m,2.2f,8.2f,6.75f,9.5f,G+2.19f,G+3.1f,30);
  // the gallery's emergency shutters, dropped at 01:58 on the walk side of the glass; one bay torn up
  for(float x:{1.f,7.f,9.f,15.f})wall(m,x-.05f,8.f,x+.05f,8.1f,G,G+3.1f,12);
  for(float z=G+.75f;z<G+3.05f;z+=.13f){
