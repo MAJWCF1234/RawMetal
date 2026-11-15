@@ -170,7 +170,12 @@ void Game::updateScripts(float){
   if(event.rearm&&latched&&!ready){m_firedEvents.erase(std::find(m_firedEvents.begin(),m_firedEvents.end(),event.id));continue;}
   if(!ready||latched)continue;
   if(event.once||event.rearm)m_firedEvents.push_back(event.id);
-  for(const auto&action:event.actions)executeScriptAction(action);
+  // A checkpoint is written after the event's other actions, wherever it is
+  // listed: a save taken first would latch a once-event with its states unset,
+  // and loading it would lose what the event does (76's blackout did that).
+  bool checkpoint=false;
+  for(const auto&action:event.actions){if(action.type==ScriptAction::Type::Checkpoint){checkpoint=true;continue;}executeScriptAction(action);}
+  if(checkpoint)saveCheckpoint();
  }
 }
 bool Game::hazardActive(const Hazard& h)const{

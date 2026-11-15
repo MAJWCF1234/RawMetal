@@ -1408,16 +1408,15 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  m.lights.push_back(drTube(16.f,3.4f,slab,.45f,5.f,5600,.03f,.7f));
  m.lights.push_back(drTube(12.f,5.2f,slab,.6f,6.f,5600,.03f));
  drDeadTube(m,12.f,3.4f,slab);drDeadTube(m,8.f,6.f,slab);
- // the ring the head was driven through: the way on, two cage lamps clamped to it by whoever came
- // through last, the cable torn out of it still live
- drModel(m,model::mine_shield_ring,12.f,9.6f,f,drS,false);
- for(float x:{9.33f,14.f})wall(m,x,8.03f,x+.67f,11.17f,f,f+3.79f,30);
- wall(m,10.f,8.03f,14.f,11.17f,f+3.f,f+3.79f,30);
- for(float x:{10.2f,13.8f}){drFix(m,model::mine_cage_lamp,x,7.86f,f+2.3f,.206f,.201f,.362f,0,false);m.pipes.push_back({{x,7.86f},{x,8.05f},f+2.62f,.012f,f+2.9f,6});
+ // the ring the head was driven through, shoved east into the rock that came up round it: solid
+ // (its plinth and stair are steel), the way on the 2.4 m beside it. Two cage lamps clamped to it by
+ // whoever came through last, the cable torn out of it still live.
+ drModel(m,model::mine_shield_ring,14.4f,9.6f,f,drS,true);
+ for(float x:{12.6f,15.f}){drFix(m,model::mine_cage_lamp,x,7.86f,f+2.3f,.206f,.201f,.362f,0,false);m.pipes.push_back({{x,7.86f},{x,8.05f},f+2.62f,.012f,f+2.9f,6});
   m.lights.push_back(lamp({x,7.6f},f+2.25f,3.f,4.2f,3400,0,WorldLightMount::Bare,0,false));}
- m.lights.push_back(lamp({12.f,9.6f},f+2.8f,1.2f,4.2f,4200,0,WorldLightMount::Bare,0,false));           // inside the bore
- looseLead(m,{11.f,8.1f,f+2.99f},{11.6f,7.6f,f},2.6f,7,true,.018f);
- {Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=10.6f;h.x2=12.2f;h.y1=7.f;h.y2=8.2f;h.bottom=f;h.top=f+2.2f;h.damagePerSecond=25;h.period=2.4f;h.onTime=.6f;m.hazards.push_back(h);}
+ m.lights.push_back(lamp({14.4f,7.75f},f+2.8f,1.2f,4.2f,4200,0,WorldLightMount::Bare,0,false));          // on the bore's mouth
+ looseLead(m,{13.4f,7.99f,f+2.99f},{14.f,7.4f,f},2.6f,7,true,.018f);
+ {Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=13.f;h.x2=14.6f;h.y1=7.f;h.y2=8.2f;h.bottom=f;h.top=f+2.2f;h.damagePerSecond=25;h.period=2.4f;h.onTime=.6f;m.hazards.push_back(h);}
  // --- The threshold: a steel deck out of the ring to a painted rim, rails, two floods on stands ----
  // aimed across the void at the far bank. The last clean thing in the chapter.
  wall(m,6.f,11.17f,17.4f,rimN,f,f+.02f,20);floorLine(m,5.6f,rimN-.16f,18.4f,rimN,f+.02f,13);

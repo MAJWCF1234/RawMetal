@@ -95,6 +95,21 @@ AuthoredLayerData& layerAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,c
 }
 }
 
+int armScriptedCleanup(AuthoredMapData& map){
+ int armed=0;
+ for(size_t i=0;i<map.actorTracks.size();++i){auto& t=map.actorTracks[i];
+  if(t.platform||t.ai.mode!=ActorAiMode::Scripted||t.health>0||!cleanupActorVisual(t.visual)||t.keys.empty())continue;
+  // A body laid out on its track (every key the dead clip) is already dead.
+  if(std::all_of(t.keys.begin(),t.keys.end(),[](const ActorKey& k){return k.clip==4;}))continue;
+  t.health=60;
+  // One of the Cleanup force, as its armed men are (CampaignChapterContainmentA caGuard): they do not turn on him.
+  if(t.ai.faction==AiFaction::Unspecified)t.ai.faction=AiFaction::Raider;
+  if(!t.damageState)t.damageState=actorTrackState(t.timerState,i,"damage");
+  if(!t.deadState)t.deadState=actorTrackState(t.timerState,i,"dead");
+  ++armed;
+ }
+ return armed;
+}
 std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,std::string sourceFile){
  auto start=text.find(DataStart),end=text.find(DataEnd);
  if(start==std::string::npos||end==std::string::npos||end<=start)throw std::runtime_error("missing CUSTOM_CAMPAIGN_DATA markers");
@@ -682,7 +697,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   for(size_t j=0;j<i;++j){auto a=maps[i]->definition.origin,b=maps[j]->definition.origin;
    if(a.x<b.x+World::Width&&a.x+World::Width>b.x&&a.y<b.y+World::Height&&a.y+World::Height>b.y)throw std::runtime_error("custom map chunk footprints overlap");
   }
-  maps[i]->terrain=terrain;
+  maps[i]->terrain=terrain;armScriptedCleanup(*maps[i]);
   // Reject malformed geometry during discovery, while the caller can report
   // a per-file error, rather than crashing when a player selects the pack.
   World validated(int(i),maps[i]);

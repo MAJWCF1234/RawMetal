@@ -324,6 +324,10 @@ public:
     void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandValid[side]=valid;}
     bool vrSupportGrip()const{return m_vrSupportGrip;}
     // Developer mode (--dev, console DEV): no damage, no creatures, every door open.
+    // Console noclip: fly through walls (Movement.cpp). Never saved.
+    bool noclip()const{return m_noclip;}
+    void setNoclip(bool on);
+    static bool testNoclip(std::ostream& report);
     void setDeveloperMode(bool on){m_god=m_peaceful=m_unlockAll=on;if(on){m_player.health=std::max(m_player.health,100.f);m_enemies.clear();}}
     bool developerMode()const{return m_unlockAll;}
     bool reloading()const{return m_reloadTimer>0;}
@@ -482,6 +486,10 @@ public:
     static bool testAudioEvents();
     static bool testSettings();
     static bool testSaves();
+    // Saves written while playing many campaign maps (deaths, debris, bodies, seams), each loaded back.
+    static bool testSavesInPlay(std::ostream& report);
+    // Why the last load on this thread was refused ("" when it loaded): also written to RawMetal-load.txt.
+    static const std::string& lastLoadFailure();
     static bool testNpcVoices();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
@@ -1052,7 +1060,7 @@ private:
     void syncReactorComplex();
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
-    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false,m_peaceful=false,m_unlockAll=false;
+    bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false,m_peaceful=false,m_unlockAll=false,m_noclip=false;
     std::string m_consoleLine;
     std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
     std::vector<std::string> m_consoleHistory;
@@ -1077,6 +1085,7 @@ private:
     bool scriptEventReady(const ScriptEvent& event)const;
     void updateReceivingBreach();
     void executeScriptAction(const ScriptAction& action);
+    void updateNoclip(const InputState& input,float dt);
     void spawnScriptEnemy(const ScriptAction& action);
     void spawnCreature(const CreatureSpawn& spawn,float awareness=0,bool announce=false);
     void updateHazards(float dt);

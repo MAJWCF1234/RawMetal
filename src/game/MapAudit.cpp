@@ -522,6 +522,169 @@ bool Game::auditMapScene(Game& game,int level){
    if(inside)fail("OVERLAP "+name+" with model "+std::to_string(g.model)+" at "+at(g.position));
   }
  }
+ // ---- Placement as an inspector walking the map sees it (Chapter 2 inspection, 2026-11-14) ----
+ // Every fixture, solid or not: what holds it up, what it stands on or in, what stands in a door,
+ // what is doubled, what a screen faces, what a wall device is, what a railing crosses.
+ {
+  using namespace model;
+  auto natural=[&](int m){static const int list[]={fern_a,fern_big,grass_a,grass_b,grass_c,rock_big,rock_mid,rock_small,grass_l,bush_a,bush_b,bush_c,bush_d,grass_patch,grass_bush,rock_mossy,
+   cave_boulder_a,cave_boulder_round,cave_calcified_tree,cave_ceiling_rock,cave_crystal_bed_blue,cave_fish_skeleton,cave_fungus_bulbs,cave_fungus_funnel,cave_fungus_giant,cave_fungus_shelf,cave_fungus_spire,cave_nest_pod,
+   cave_oldcity_arch,cave_oldcity_dais,cave_oldcity_gateway,cave_oldcity_pillar,cave_oldcity_pillar_broken,cave_oldcity_pillar_fallen,cave_oldcity_relic,cave_oldcity_rubble,cave_oldcity_wall_ruin,cave_ossuary_wall,
+   cave_rock_block,cave_rock_column,cave_rock_slab,cave_stalactite,cave_stalactite_cluster,cave_stalagmite,cave_stalagmite_cluster,cave_web_corner,res_rock_crag,res_rock_spire,res_rock_low,
+   res_crystal_l,res_crystal_m,res_crystal_s,res_crystal_wall};
+   return std::find(std::begin(list),std::end(list),m)!=std::end(list);};
+  // Things that are stacked on one another where they are stored.
+  auto stackable=[&](int m){static const int list[]={pallet,wooden_crate,packing_crate,container_open,container_closed,drum,gas_cylinder,ind_barrel,ind_crate,ind_pallets,ind_stack,ind_sandbags,tire,lab_specimen_crate,
+   scrap_drum,scrap_plank_pile,pwr_sheet_steel_stack,prop_cardboard_box,prop_cardboard_box_open,brick_pile,med_first_aid_box,mine_first_aid_box,office_paper_stack,binder,office_file_binder,keyboard,scrap_burn_barrel,
+   lab_sample_fridge};
+   return std::find(std::begin(list),std::end(list),m)!=std::end(list);};
+  // Frames a player walks through, or that frame a door: arches, gates, door sets, a headframe.
+  auto frame=[&](int m){return m==doorway_wide||m==door_wide_bottom||m==door_wide_top||m==ticket_gate||m==ind_pipe_arch||m==mine_headframe||m==lab_cell_gate||m==med_cell_bars_doorway||
+   m==mine_cage_gate||m==mine_mesh_doorway||m==mine_timber_set;};
+  // Visible solid geometry at a point: a wall tile, a structure that is not an invisible collision
+  // proxy, or a solid fixture's box. (A proxy over a bench is not a wall a screen faces.)
+  auto wallAt=[&](Vec2 p,float z){if(p.x<0||p.y<0||p.x>=24||p.y>=24)return true;
+   if(w.tile(int(std::floor(p.x)),int(std::floor(p.y)))=='#'&&z<w.floorHeight(p.x,p.y)+3.f)return true;
+   for(const auto& s:w.structures())if(s.solid&&!s.rail&&s.material!=CollisionProxyMaterial&&p.x>=s.x1&&p.x<=s.x2&&p.y>=s.y1&&p.y<=s.y2&&z>=s.bottom&&z<=s.top)return true;
+   for(const auto& g:fixtures)if(g.solid&&g.visible){const float gb=w.floorHeight(g.position.x,g.position.y)+g.base;if(z<gb||z>gb+g.height)continue;const float dx=p.x-g.position.x,dy=p.y-g.position.y,c=std::cos(g.yaw),sn=std::sin(g.yaw);
+    if(std::fabs(dx*c-dy*sn)<g.width*.5f&&std::fabs(dx*sn+dy*c)<g.depth*.5f)return true;}
+   return false;};
+  // Storage that holds things inside its own box on its shelves or tiers.
+  auto storage=[&](int m){return m==metal_shelf||m==bookcase||m==office_bookcase||m==office_file_cabinet_open||m==med_crash_cart||m==desk||m==desk_corner||m==wooden_table;};
+  // Screens: their face is the fixture's front (+depth: sin yaw, cos yaw).
+  auto screen=[&](int m){return m==computer||m==crt_monitor||m==lab_data_terminal||m==lab_instrument_terminal||m==lab_scope_monitor||m==med_vitals_monitor||m==med_vitals_monitor_dead||m==scrap_shrine_terminal||m==lab_control_board;};
+  // Readers and keypads a hand uses: palm-sized, on a wall.
+  auto wallDevice=[&](int m){return m==lab_id_scanner||m==lab_door_reader;};
+  auto fbase=[&](const Fixture& f){return w.floorHeight(f.position.x,f.position.y)+f.base;};
+  auto localOf=[](const Fixture& f,Vec2 p){const float dx=p.x-f.position.x,dy=p.y-f.position.y,c=std::cos(f.yaw),s=std::sin(f.yaw);return Vec2{dx*c-dy*s,dx*s+dy*c};};
+  auto inRect=[&](const Fixture& f,Vec2 p,float margin){const auto l=localOf(f,p);return std::fabs(l.x)<f.width*.5f-margin&&std::fabs(l.y)<f.depth*.5f-margin;};
+  auto toWorld=[](const Fixture& f,float x,float y){const float c=std::cos(f.yaw),s=std::sin(f.yaw);return Vec2{f.position.x+x*c+y*s,f.position.y-x*s+y*c};};
+  auto frontOf=[](const Fixture& f){return Vec2{std::sin(f.yaw),std::cos(f.yaw)};};
+  auto fname=[&](size_t i){const auto& f=fixtures[i];char text[96];std::snprintf(text,sizeof text,"fixture[%zu] model %d at %.2f,%.2f z %.2f (%.2fx%.2fx%.2f)",i,f.model,f.position.x,f.position.y,fbase(f),f.width,f.depth,f.height);return std::string(text);};
+  auto counted=[&](const Fixture& f){return f.visible&&f.model>=0&&!natural(f.model)&&f.width>0&&f.depth>0&&f.height>0;};
+  const auto& pipes=w.pipes();
+  auto pipeNear=[&](Point3 q,float reach){for(const auto& p:pipes){const float z1=p.endZ>-999.f?p.endZ:p.z;Vec2 d=p.end-p.start;const float l2=lengthSq(d);
+    if(l2<1e-6f){const float lo=std::min(p.z,z1),hi=std::max(p.z,z1),dz=q.z<lo?lo-q.z:q.z>hi?q.z-hi:0.f;if(std::sqrt(lengthSq(Vec2{q.x,q.y}-p.start)+dz*dz)<=p.radius+reach)return true;continue;}
+    const float t=std::clamp(dot(Vec2{q.x,q.y}-p.start,d)/l2,0.f,1.f);const Vec2 c=p.start+d*t;const float cz=p.z+(z1-p.z)*t;if(std::sqrt(lengthSq(Vec2{q.x,q.y}-c)+(q.z-cz)*(q.z-cz))<=p.radius+reach)return true;}
+   return false;};
+  // A: FLOATING FIXTURE: nothing under it (floor, slab, a fixture's top or shelf, a prop), not on a
+  // wall, not under a roof, not on a pipe, rod or rail.
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f))continue;
+   const float base=fbase(f),top=base+f.height;if(base<w.floorHeight(f.position.x,f.position.y)-.05f)continue;
+   bool held=false;float under=-1e9f;
+   const float ix=f.width*.3f,iy=f.depth*.3f;
+   for(Vec2 p:{f.position,toWorld(f,-ix,-iy),toWorld(f,ix,-iy),toWorld(f,-ix,iy),toWorld(f,ix,iy)}){
+    const float s=w.supportBelow(p.x,p.y,base+.05f);under=std::max(under,s);if(std::fabs(s-base)<.06f){held=true;break;}
+    for(size_t j=0;j<fixtures.size()&&!held;++j){if(j==i)continue;const auto& g=fixtures[j];if(!inRect(g,p,-.02f))continue;const float gs=w.fixtureSurface(g,p.x,p.y,base+.011f,false);if(gs>-99.f)under=std::max(under,gs);held=std::fabs(gs-base)<.06f;}
+    for(const auto& c:game.m_clutter)if(!held&&c.model>=0&&!c.broken&&c.footprintContains(p)&&std::fabs(c.z+c.supportHeight()-base)<.06f)held=true;
+    if(held)break;}
+   if(!held){const Vec2 n=frontOf(f),t{n.y,-n.x};
+    for(float side:{-1.f,1.f})for(int axis=0;axis<2&&!held;++axis){const Vec2 out=axis?n*side:t*side;const float half=axis?f.depth*.5f:f.width*.5f,span=axis?f.width*.5f:f.depth*.5f;const Vec2 along=axis?t:n;
+     for(float u:{-.6f,0.f,.6f})for(float h:{.2f,.5f,.8f}){const Vec2 p=f.position+out*(half+.04f)+along*(u*span);if(!w.fits(p.x,p.y,base+f.height*h,.015f,false)){held=true;break;}}}}
+   if(!held&&w.clearanceAbove(f.position.x,f.position.y,top-.02f)<=top+.08f)held=true;
+   if(!held)for(const auto& s:w.structures())if(s.bottom>=top-.06f&&s.bottom<=top+.1f&&f.position.x>=s.x1&&f.position.x<=s.x2&&f.position.y>=s.y1&&f.position.y<=s.y2){held=true;break;}
+   if(!held)for(float h:{0.f,.5f,1.f})for(Vec2 p:{f.position,toWorld(f,-ix,0),toWorld(f,ix,0),toWorld(f,0,-iy),toWorld(f,0,iy)})if(!held&&pipeNear({p.x,p.y,base+f.height*h},.06f))held=true;
+   if(!held){char gap[64];std::snprintf(gap,sizeof gap," %.2f m over what is under it",under>-1e8f?base-under:999.f);fail("FLOATING FIXTURE "+fname(i)+gap);}
+  }
+  // B: STACKED: a piece of furniture standing on another (a desk on a desk, a console on a console).
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||stackable(f.model)||f.width*f.depth<.3f||f.height<.45f)continue;const float base=fbase(f);
+   for(size_t j=0;j<fixtures.size();++j){if(j==i)continue;const auto& g=fixtures[j];if(!counted(g)||stackable(g.model)||g.width*g.depth<.3f||g.height<.45f)continue;
+    if(inRect(g,f.position,0)&&std::fabs(fbase(g)+g.height-base)<.08f){fail("STACKED "+fname(i)+" on "+fname(j));break;}}}
+  // Props too: a desk or a cabinet prop standing on a piece of furniture or on another.
+  for(const auto& c:game.m_clutter){if(c.model<0||c.broken||stackable(c.model)||c.dims[0]*c.dims[1]<.3f||c.height()<.45f)continue;
+   bool on=false;for(size_t j=0;j<fixtures.size()&&!on;++j){const auto& g=fixtures[j];if(!counted(g)||stackable(g.model)||g.width*g.depth<.3f||g.height<.45f)continue;
+    if(inRect(g,c.pos,0)&&std::fabs(fbase(g)+g.height-c.z)<.08f){on=true;char text[96];std::snprintf(text,sizeof text,"STACKED prop model %d at %.2f,%.2f z %.2f on ",c.model,c.pos.x,c.pos.y,c.z);fail(text+fname(j));}}
+   for(const auto& o:game.m_clutter){if(on||&o==&c||o.model<0||o.broken||stackable(o.model)||o.dims[0]*o.dims[1]<.3f||o.height()<.45f)continue;
+    if(o.footprintContains(c.pos)&&std::fabs(o.z+o.supportHeight()-c.z)<.08f){on=true;char text[128];std::snprintf(text,sizeof text,"STACKED prop model %d at %.2f,%.2f z %.2f on prop model %d at %.2f,%.2f",c.model,c.pos.x,c.pos.y,c.z,o.model,o.pos.x,o.pos.y);fail(text);}}}
+  // FLOATING STRUCTURE: a visible bar, shelf or strip in mid-air touching nothing: no wall, floor,
+  // roof, other structure, fixture or pipe within 3 cm.
+  {const auto& st=w.structures();
+   for(size_t si=0;si<st.size();++si){const auto& v=st[si];if(v.material==CollisionProxyMaterial||v.rail)continue;const Vec2 c{(v.x1+v.x2)*.5f,(v.y1+v.y2)*.5f};
+    const float under=w.supportBelow(c.x,c.y,v.bottom+.02f);if(!(v.bottom>under+.1f))continue;
+    if(w.clearanceAbove(c.x,c.y,v.top-.02f)<=v.top+.05f)continue;
+    bool touching=false;const float e=.03f;
+    for(size_t sj=0;sj<st.size()&&!touching;++sj){if(sj==si)continue;const auto& u=st[sj];touching=u.x1<=v.x2+e&&u.x2>=v.x1-e&&u.y1<=v.y2+e&&u.y2>=v.y1-e&&u.bottom<=v.top+e&&u.top>=v.bottom-e;}
+    for(float fx:{0.f,.5f,1.f})for(float fy:{0.f,.5f,1.f})for(float h:{0.f,.5f,1.f}){if(touching)break;const Vec2 p{v.x1-e+(v.x2-v.x1+2*e)*fx,v.y1-e+(v.y2-v.y1+2*e)*fy};const float z=v.bottom+(v.top-v.bottom)*h;
+     if(p.x<=0||p.y<=0||p.x>=24||p.y>=24||w.tile(int(std::floor(p.x)),int(std::floor(p.y)))=='#')touching=true;
+     else for(const auto& g:fixtures){if(!g.visible)continue;const float gb=fbase(g);if(z<gb-e||z>gb+g.height+e)continue;if(inRect(g,p,-e)){touching=true;break;}}
+     if(!touching&&pipeNear({p.x,p.y,z},e))touching=true;}
+    if(!touching){char text[128];std::snprintf(text,sizeof text,"FLOATING STRUCTURE structure[%zu] %.2f,%.2f..%.2f,%.2f z %.2f..%.2f mat %d, %.2f m over what is under it",si,v.x1,v.y1,v.x2,v.y2,v.bottom,v.top,v.material,v.bottom-under);fail(text);}}}
+  // C: INSIDE: one fixture's body inside another's (a PC through a shelf, a cabinet into a bench).
+  // Stored on a shelf or a table top is not inside; neither are two parts that share one footprint
+  // by design (a locker's leaves).
+  for(size_t i=0;i<fixtures.size();++i)for(size_t j=i+1;j<fixtures.size();++j){const auto& fi=fixtures[i];const auto& fj=fixtures[j];if(!counted(fi)||!counted(fj))continue;
+   if(lengthSq(fi.position-fj.position)>std::pow((std::max(fi.width,fi.depth)+std::max(fj.width,fj.depth))*.5f,2.f))continue;
+   const bool iSmall=fi.width*fi.depth*fi.height<=fj.width*fj.depth*fj.height;const size_t ai=iSmall?i:j,bi=iSmall?j:i;const auto& a=fixtures[ai];const auto& b=fixtures[bi];
+   if(a.width*a.depth*a.height<.008f)continue;
+   if(((a.model==psx_locker_door_l||a.model==psx_locker_door_r)&&b.model==psx_locker)||frame(a.model)||frame(b.model))continue;
+   const float ab=fbase(a),bb=fbase(b);int inside=0;
+   for(float u:{-.35f,0.f,.35f})for(float v:{-.35f,0.f,.35f})for(float h:{.2f,.5f,.8f}){const Vec2 p=toWorld(a,u*a.width,v*a.depth);const float z=ab+h*a.height;if(inRect(b,p,.02f)&&z>bb+.02f&&z<bb+b.height-.02f)++inside;}
+   if(inside<6)continue;
+   if(storage(b.model)){const float s=w.fixtureSurface(b,a.position.x,a.position.y,ab+.011f,false);if(std::fabs(s-ab)<.04f)continue;}
+   char share[32];std::snprintf(share,sizeof share," (%d/27 of it)",inside);fail("INSIDE "+fname(ai)+" is inside "+fname(bi)+share);
+  }
+  // D: DOORS: nothing stands in the opening, in a leaf's swing, or across its approach on either
+  // side; no trim or strip crosses the opening.
+  for(size_t di=0;di<w.doors().size();++di){const auto& d=w.doors()[di];const Vec2 centre=d.centre();const float base=w.floorHeight(centre.x,centre.y)+d.z,span=d.right-d.left;
+   if(span<.3f)continue;
+   const float hinge=d.hingeRight?d.right:d.left,away=d.hingeRight?-1.f:1.f;
+   // Where a point is: 1 the opening, 2 the swing, 3 an approach; 0 clear.
+   auto where=[&](Vec2 p,float face=.12f)->int{const Vec2 l=d.local(p);const float a=l.x,c=l.y-d.y;
+    if(a>d.left+.05f&&a<d.right-.05f&&std::fabs(c)<face)return 1;
+    if(d.swinging&&c*d.swing>0&&(a-hinge)*away>=-.02f&&std::hypot(a-hinge,c)<span-.05f)return 2;
+    if(a>d.left+.15f&&a<d.right-.15f&&std::fabs(c)>=face&&std::fabs(c)<1.2f)return 3;
+    return 0;};
+   const char* what[]={"","IN DOORWAY","IN DOOR SWING","BLOCKS DOOR APPROACH"};
+   auto doorName=[&]{char text[96];std::snprintf(text,sizeof text," of door[%zu] %s %.2f-%.2f at %s %.2f",di,d.alongY?"y":"x",d.left,d.right,d.alongY?"x":"y",d.y);return std::string(text);};
+   for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||frame(f.model))continue;const float fb=fbase(f);if(fb>base+1.95f||fb+f.height<base+.1f||f.height<.12f)continue;
+    int worst=0;for(float u:{-.45f,0.f,.45f})for(float v:{-.45f,0.f,.45f}){const int k=where(toWorld(f,u*f.width,v*f.depth));if(k&&(!worst||k<worst))worst=k;}
+    if(worst==3&&(f.height<.3f||f.width*f.depth<.04f))worst=0;
+    if(worst)fail(std::string(what[worst])+" "+fname(i)+doorName());}
+   for(const auto& c:game.m_clutter){if(c.model<0||c.broken||c.z>base+1.95f||c.z+c.height()<base+.1f||c.height()<.25f)continue;
+    int worst=0;for(auto p:footprint(c)){const int k=where(p);if(k&&(!worst||k<worst))worst=k;}
+    if(worst){char text[96];std::snprintf(text,sizeof text," prop model %d at %.2f,%.2f z %.2f",c.model,c.pos.x,c.pos.y,c.z);fail(std::string(what[worst])+text+doorName());}}
+   for(size_t si=0;si<w.structures().size();++si){const auto& s=w.structures()[si];if(s.top<=base+.12f||s.bottom>=base+1.95f)continue;
+    int worst=0;for(float fx:{.05f,.3f,.5f,.7f,.95f})for(float fy:{.05f,.5f,.95f}){const int k=where({s.x1+(s.x2-s.x1)*fx,s.y1+(s.y2-s.y1)*fy},.2f);if(k&&(!worst||k<worst))worst=k;}
+    if(!worst)continue;
+    // Beside the opening only what stands in the way counts: solid, visible, a body high.
+    if(worst>1&&(!s.solid||s.material==CollisionProxyMaterial||s.rail||s.top<base+.35f))continue;
+    char text[128];std::snprintf(text,sizeof text," structure[%zu] %.2f,%.2f..%.2f,%.2f z %.2f..%.2f mat %d%s",si,s.x1,s.y1,s.x2,s.y2,s.bottom,s.top,s.material,s.solid?"":" (trim)");
+    fail(std::string(worst>1?what[worst]:s.top-s.bottom<.45f||!s.solid?"TRIM ACROSS DOOR":"STRUCTURE IN DOORWAY")+text+doorName());}
+  }
+  // E: DOUBLED: two lamps in one place, or the same model twice in one place.
+  for(size_t i=0;i<w.lights().size();++i)for(size_t j=i+1;j<w.lights().size();++j){const auto& a=w.lights()[i];const auto& b=w.lights()[j];
+   if(lengthSq(a.position-b.position)+(a.z-b.z)*(a.z-b.z)<.25f*.25f){char text[96];std::snprintf(text,sizeof text,"LAMPS STACKED lights %zu and %zu at %.2f,%.2f z %.2f",i,j,a.position.x,a.position.y,a.z);fail(text);}}
+  for(size_t i=0;i<fixtures.size();++i)for(size_t j=i+1;j<fixtures.size();++j){const auto& a=fixtures[i];const auto& b=fixtures[j];
+   if(a.model==b.model&&a.model>=0&&lengthSq(a.position-b.position)<.1f*.1f&&std::fabs(fbase(a)-fbase(b))<.1f)fail("DUPLICATE "+fname(i)+" and fixture["+std::to_string(j)+"]");}
+  // F: SCREEN FACES WALL: a screen turned to a wall less than 0.4 m off its face.
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||!screen(f.model))continue;const Vec2 n=frontOf(f);const float z=fbase(f)+f.height*.6f;
+   for(float dd:{.05f,.15f,.25f,.38f}){const Vec2 p=f.position+n*(f.depth*.5f+dd);if(wallAt(p,z)){char text[48];std::snprintf(text,sizeof text," (wall %.2f m off its face)",dd);fail("SCREEN FACES WALL "+fname(i)+text);break;}}}
+  // The same for screen props and for the computers the terminals are drawn as (their face is the record's yaw).
+  for(const auto& c:game.m_clutter){if(c.model<0||c.broken||!screen(c.model))continue;const Vec2 n{-std::sin(c.yaw),std::cos(c.yaw)};const float z=c.z+c.height()*.6f;
+   for(float dd:{.05f,.15f,.25f,.38f}){const Vec2 p=c.pos+n*(c.dims[1]*.5f+dd);if(wallAt(p,z)){char text[128];std::snprintf(text,sizeof text,"SCREEN FACES WALL prop model %d at %.2f,%.2f z %.2f (wall %.2f m off its face)",c.model,c.pos.x,c.pos.y,c.z,dd);fail(text);break;}}}
+  for(const auto& t:w.terminals()){if(t.paper()||t.control||t.reactorAction)continue;const Vec2 n{std::sin(t.yaw),std::cos(t.yaw)};const float z=w.floorHeight(t.position.x,t.position.y)+t.z+1.f;
+   for(float dd:{.3f,.45f,.6f}){const Vec2 p=t.position+n*dd;if(wallAt(p,z)){char text[160];std::snprintf(text,sizeof text,"SCREEN FACES WALL terminal '%s' at %.2f,%.2f (wall %.2f m in front of it)",t.title,t.position.x,t.position.y,dd);fail(text);break;}}}
+  // G: WALL DEVICE: a reader or keypad is hand-sized (0.35 m at most) and on a wall.
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!f.visible||!wallDevice(f.model))continue;
+   if(std::max({f.width,f.depth,f.height})>.35f)fail("WALL DEVICE OVERSIZE "+fname(i));
+   const Vec2 back=f.position-frontOf(f)*(f.depth*.5f+.04f);if(!wallAt(back,fbase(f)+f.height*.5f))fail("WALL DEVICE OFF WALL "+fname(i));}
+  // H: RAILING ACROSS WALKWAY: a rail with the same walked floor on both sides along most of it.
+  for(size_t si=0;si<w.structures().size();++si){const auto& s=w.structures()[si];if(!s.rail)continue;const bool alongX=s.x2-s.x1>=s.y2-s.y1;const float len=alongX?s.x2-s.x1:s.y2-s.y1;if(len<.9f)continue;
+   int samples=0,crossing=0;
+   for(float t=.15f;t<len-.1f;t+=.3f){++samples;const Vec2 p=alongX?Vec2{s.x1+t,(s.y1+s.y2)*.5f}:Vec2{(s.x1+s.x2)*.5f,s.y1+t};const Vec2 n=alongX?Vec2{0,1}:Vec2{1,0};
+    if(reachableIn(standing,p+n*.45f,s.bottom,.15f)&&reachableIn(standing,p-n*.45f,s.bottom,.15f)){
+     bool level=false;for(float side:{1.f,-1.f}){const Vec2 q=p+n*(.45f*side);const float fl=w.supportBelow(q.x,q.y,s.bottom+.3f);level=side>0?std::fabs(fl-s.bottom)<.3f:level&&std::fabs(fl-s.bottom)<.3f;}
+     crossing+=level;}}
+   if(samples>=3&&crossing*10>=samples*6){char text[128];std::snprintf(text,sizeof text,"RAILING ACROSS WALKWAY structure[%zu] %.2f,%.2f..%.2f,%.2f z %.2f (%d/%d of it walked on both sides)",si,s.x1,s.y1,s.x2,s.y2,s.bottom,crossing,samples);fail(text);}}
+  // I: SCALE: a pack model drawn at under half or over twice its own size.
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||f.model>=int(std::size(model::size))||model::size[f.model][0]<=0)continue;
+   const float* own=model::size[f.model];const float given[]={f.width,f.depth,f.height};float sum=0;int n=0;for(int a=0;a<3;++a)if(own[a]>=.1f){sum+=given[a]/own[a];++n;}
+   if(!n)continue;const float r=sum/n;if(r>2.2f||r<.45f){char text[32];std::snprintf(text,sizeof text," at x%.2f its own size",r);fail("SCALE "+fname(i)+text);}}
+  // J: WALK-THROUGH: a big piece standing on the floor with no collision where a player walks.
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||f.solid||frame(f.model)||f.height<1.2f||f.width*f.depth<.6f)continue;const float base=fbase(f);
+   int walked=0;for(float u:{-.25f,0.f,.25f})for(float v:{-.25f,0.f,.25f}){const Vec2 p=toWorld(f,u*f.width,v*f.depth);if(reachableIn(standing,p,base,.1f)&&game.hullFits(p,base+.02f,Player::StandingHeight,.2f,false))++walked;}
+   if(walked>=3){char text[40];std::snprintf(text,sizeof text," (%d/9 of its footprint walked)",walked);fail("WALK-THROUGH "+fname(i)+text);}}
+ }
  // ASCII: '#' wall, '.' reachable, 'c' only crouched, 'o' floor nobody can
  // reach, '^' reachable above floor level.
  report<<"\n";

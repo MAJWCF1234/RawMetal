@@ -1,0 +1,6 @@
+# Map 109: the shield ring from the threshold, looking back into the lab (E4)
+world campaign
+map 109
+camera 10.6 12.0 -15 -80 -4
+size 960 540
+frames 60
