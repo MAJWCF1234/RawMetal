@@ -3955,8 +3955,63 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   if(slot==0){roomLights.weights[1]=roomLights.weights[0];roomLights.directions[1]=roomLights.directions[0];}
   roomLights.weights[slot]=weight;roomLights.directions[slot]=cameraPoint(receiver+delta*(1.f/std::sqrt(d2)),game);
  }
+ // The torch's frame, fixed before anything draws so the faces that carry it
+ // (the gun; empty-handed, the left forearm) can measure its bracket. It rides
+ // whatever places the gun this frame: the pack's baked clips (fpShotgunPoint),
+ // the pistol's hold, or the procedural shotgun, along that gun's own axes.
+ const bool torch=game.hasFlashlight();
+ auto unit=[](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,p.x*p.x+p.y*p.y+p.z*p.z)));};
+ Point3 torchAxis{0,0,1},torchSide{1,0,0},torchUp{0,1,0},torchMount{},torchForearm{},torchAnchor{};
+ float torchScale=fists?.60f:pistol?.45f:.68f,torchSize=1.f,torchReach=.016f,torchSeat=.010f,torchWidth=.007f;
+ if(torch){
+  if(pistol){
+   // The pistol carries it under the barrel ahead of the guard, its clamp up
+   // into the dust cover: side points away from the gun, down.
+   torchAxis=unit(hold.axis[2]);torchSide=unit(hold.axis[1])*-1.f;torchUp=unit(cross3(torchAxis,torchSide));torchMount=hold.point({0.f,0.f,.125f});}
+  else if(fists){
+   auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
+   torchAxis=unit(wrist-elbow);torchSide=unit(cross3(std::fabs(torchAxis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},torchAxis));torchUp=unit(cross3(torchAxis,torchSide));
+   // Anchor beside the visible wrist, not the elbow that leaves the desktop
+   // frustum in the guard pose. The inboard saddle keeps the fist clear.
+   torchForearm=wrist-torchAxis*.025f;torchMount=wrist+torchAxis*.035f+torchSide*.105f+torchUp*.025f;}
+  else{
+   // The shotgun: on the receiver's right face at bore height, its lens just
+   // short of the pump (the model's muzzle is -z; the pump's wood runs -3.0 to
+   // -1.5), in the imported gun's coordinates carried by the map that draws the
+   // gun this frame. The face is read from the gun's own receiver and stock
+   // vertices there. The baked clips hold the Remington at their own size: the
+   // torch scales with it.
+   float face=-1e9f;for(const auto&t:m_weaponMesh.triangles){if(t.part==2||t.part==3)continue;for(const auto&v:t.v)if(v.p.z>-1.4f&&v.p.z<-.6f&&v.p.y>.95f&&v.p.y<1.5f)face=std::max(face,v.p.x);}
+   const Point3 rail{face>-1e8f?face:.25f,1.22f,-1.f};
+   auto carry=[&](Point3 source){return fpShotgun?fpShotgunPoint(source,false):gunLocal(source);};
+   const Point3 seat=carry(rail),bore=carry(rail+Point3{0,0,-1})-seat,right=carry(rail+Point3{1,0,0})-seat;
+   torchSize=std::sqrt(bore.x*bore.x+bore.y*bore.y+bore.z*bore.z)/gunScale;
+   torchAxis=unit(bore);torchSide=unit(right-torchAxis*(right.x*torchAxis.x+right.y*torchAxis.y+right.z*torchAxis.z));torchUp=unit(cross3(torchAxis,torchSide));
+   // The housing stands a centimetre off the face; its brackets run from inside
+   // the housing to just into the receiver.
+   const float housing=.033f*torchScale*torchSize,standoff=.010f*torchSize;
+   torchMount=seat+torchSide*(housing+standoff);torchReach=housing+standoff+.004f*torchSize;torchSeat=housing*.7f;torchWidth=.015f*torchSize;}
+  torchScale*=torchSize;}
+ // Into the view as the carrier's own faces go: the clips, the hold and the
+ // fists are placed already; the procedural shotgun still turns with its motion.
+ auto torchView=[&](Point3 p){return assembly(fists||pistol||fpShotgun?p:animated(p));};
+ // What must touch the carrier: the rear bracket's inner end, or the saddle's back.
+ if(torch)torchAnchor=torchView(fists?torchForearm+torchUp*.025f:torchMount+torchAxis*(-.055f*torchScale)-torchSide*torchReach);
+ float torchGap=torch?1e9f:-1.f;bool carrier=false;   // carrier: the faces drawing now hold the torch
+ auto noteCarrier=[&](const MeshTriangle&face){
+  // The anchor's distance from this face (closest point on a triangle).
+  auto dot=[](Point3 u,Point3 v){return u.x*v.x+u.y*v.y+u.z*v.z;};
+  const Point3 a=face.v[0].p,b=face.v[1].p,c=face.v[2].p,p=torchAnchor,ab=b-a,ac=c-a,ap=p-a;Point3 q;
+  const float d1=dot(ab,ap),d2=dot(ac,ap),d3=dot(ab,p-b),d4=dot(ac,p-b),d5=dot(ab,p-c),d6=dot(ac,p-c),vc=d1*d4-d3*d2,vb=d5*d2-d1*d6,va=d3*d6-d5*d4;
+  if(d1<=0&&d2<=0)q=a;else if(d3>=0&&d4<=d3)q=b;else if(d6>=0&&d5<=d6)q=c;
+  else if(vc<=0&&d1>=0&&d3<=0)q=a+ab*(d1/(d1-d3));else if(vb<=0&&d2>=0&&d6<=0)q=a+ac*(d2/(d2-d6));
+  else if(va<=0&&d4-d3>=0&&d5-d6>=0)q=b+(c-b)*((d4-d3)/((d4-d3)+(d5-d6)));
+  else{const float s=1.f/std::max(1e-12f,va+vb+vc);q=a+ab*(vb*s)+ac*(vc*s);}
+  const Point3 d=p-q;torchGap=std::min(torchGap,std::sqrt(dot(d,d)));};
  auto shade=[&](MeshTriangle face,const Texture&texture){
-   for(auto&v:face.v){v.p=assembly(v.p);if(m_inspectRig)v.p=inspectionPoint(v.p);}
+   for(auto&v:face.v)v.p=assembly(v.p);
+   if(carrier&&torch)noteCarrier(face);
+   if(m_inspectRig)for(auto&v:face.v)v.p=inspectionPoint(v.p);
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    if(len>.00001f)n=n*(1.f/len);if(n.x*face.v[0].p.x+n.y*face.v[0].p.y+n.z*face.v[0].p.z>0)n=n*-1.f;
    float light=roomAmbient;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::max(0.f,n.x*l.x+n.y*l.y+n.z*l.z);}
@@ -3991,6 +4046,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
     }
    }
    const int claire=arms?claireMaterial(m_armsMesh,face.part):-1;
+   carrier=arms?fists:&mesh==&m_handgunMesh||(face.part!=2&&face.part!=3);   // the shotgun's receiver and stock, not its pump
    shade(face,claire>=0?m_claireTextures[size_t(claire)]:texture);
   }
  };
@@ -3998,33 +4054,20 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   for(auto face:m_fpShotgun.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
    const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?m_claireTextures[size_t(claire)]:m_arms);}
   for(auto face:m_weaponMesh.triangles){if(face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
-   for(auto&v:face.v)v.p=fpShotgunPoint(v.p,face.part==2);shade(face,m_weaponTexture);}
+   for(auto&v:face.v)v.p=fpShotgunPoint(v.p,face.part==2);carrier=face.part!=2;shade(face,m_weaponTexture);}
  }else{draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);}
+ carrier=false;
  // The pack's slide is an open shell notched for the hammer: run back, its
  // rear shows the hollow inside. A breech face, slide steel, closes it.
  if(pistol&&hold.slide>.001f){const MeshTriangle*steel=nullptr;for(const auto&t:m_handgunMesh.triangles)if(t.part==4){steel=&t;break;}
   if(steel){const float u=steel->v[0].u,v=steel->v[0].v,z=.006f-hold.slide,x=.0125f,y0=.024f,y1=.061f;
    auto corner=[&](float cx,float cy){return MeshVertex{hold.point({cx,cy,z}),u,v};};
    shade({{corner(-x,y0),corner(x,y0),corner(x,y1)},4},m_handgunTexture);shade({{corner(-x,y0),corner(x,y1),corner(-x,y1)},4},m_handgunTexture);}}
- if(game.hasFlashlight()){
-  // A small rail torch follows the gun assembly; empty hands keep it strapped
-  // to the animated left forearm so neither fist loses its existing action.
-  auto unit=[](Point3 p){return p*(1.f/std::sqrt(std::max(.000001f,p.x*p.x+p.y*p.y+p.z*p.z)));};
-  // The imported gun is over eight source units long. Its narrow side rail
-  // needs a full source-unit offset to put the housing outside the receiver.
-  Point3 axis{0,0,1},side{1,0,0},up{0,1,0},mount=gunLocal({1.02f,1.25f,-1.45f}),forearm{};
-  // The pistol carries it under the barrel ahead of the guard, its clamp up
-  // into the dust cover: side points away from the gun, down.
-  if(pistol){const float a=0.f;axis=unit(hold.axis[2]);side=unit(unit(hold.axis[1])*-std::cos(a)+unit(hold.axis[0])*std::sin(a));up=unit(cross3(axis,side));mount=hold.point({0.f,0.f,.125f});}
-  if(fists){
-   auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
-   axis=unit(wrist-elbow);side=unit(cross3(std::fabs(axis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},axis));up=unit(cross3(axis,side));
-   // Anchor beside the visible wrist, not the elbow that leaves the desktop
-   // frustum in the guard pose. The inboard saddle keeps the fist clear.
-   forearm=wrist-axis*.025f;mount=wrist+axis*.035f+side*.105f+up*.025f;
-  }
-  float torchScale=fists?.60f:pistol?.45f:.68f;
-  auto point=[&](Point3 p){p=assembly(fists||pistol?p:animated(p));return m_inspectRig?inspectionPoint(p):p;};
+ if(torch){
+  // A small rail torch on the gun's rail, along the gun's own axes; empty hands
+  // keep it strapped to the animated left forearm so neither fist loses its action.
+  const Point3 axis=torchAxis,side=torchSide,up=torchUp,mount=torchMount,forearm=torchForearm;
+  auto point=[&](Point3 p){p=torchView(p);return m_inspectRig?inspectionPoint(p):p;};
   auto tri=[&](Point3 a,Point3 b,Point3 c,const Texture&texture,float emission=0.f){
    a=point(a);b=point(b);c=point(c);auto normal=unit(cross3(b-a,c-a));
    float light=roomAmbient+.18f*handFloor;for(int i=0;i<2;++i){auto l=roomLights.directions[i];light+=roomLights.weights[i]*std::fabs(normal.x*l.x+normal.y*l.y+normal.z*l.z);}
@@ -4049,13 +4092,13 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   }
   else{
    // Closed side brackets join the receiver to the outboard housing.
-   const float reach=pistol?.016f:.094f,seat=pistol?.010f:.025f,width=pistol?.007f:.015f;
+   const float reach=torchReach,seat=torchSeat,width=torchWidth,thick=.009f*torchSize;
    for(float z:{-.055f,.045f}){auto p=mount+axis*(z*torchScale);
     auto a=p-side*reach-up*width,b=p-side*seat-up*width,c=p-side*seat+up*width,d=p-side*reach+up*width;
-    quad(a-axis*.009f,b-axis*.009f,c-axis*.009f,d-axis*.009f,m_panelMetal);
-    quad(d+axis*.009f,c+axis*.009f,b+axis*.009f,a+axis*.009f,m_panelMetal);
-    quad(a-axis*.009f,a+axis*.009f,b+axis*.009f,b-axis*.009f,m_metal);
-    quad(d-axis*.009f,c-axis*.009f,c+axis*.009f,d+axis*.009f,m_metal);
+    quad(a-axis*thick,b-axis*thick,c-axis*thick,d-axis*thick,m_panelMetal);
+    quad(d+axis*thick,c+axis*thick,b+axis*thick,a+axis*thick,m_panelMetal);
+    quad(a-axis*thick,a+axis*thick,b+axis*thick,b-axis*thick,m_metal);
+    quad(d-axis*thick,c-axis*thick,c+axis*thick,d+axis*thick,m_metal);
     tube(mount,z-.009f,z+.009f,.038f,.038f,reflector,torchScale);
    }
   }
@@ -4077,6 +4120,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto toggle=mount+(axis*-.045f+up*.035f)*torchScale;
   quad(toggle+(side*-.009f-axis*.012f)*torchScale,toggle+(side*.009f-axis*.012f)*torchScale,toggle+(side*.009f+axis*.012f)*torchScale,toggle+(side*-.009f+axis*.012f)*torchScale,game.flashlightOn()?lensOn:strap,game.flashlightOn()?1.4f:0.f);
  }
+ m_torchGap=torch?torchGap/kViewModelScale:-1.f;
  // The source arms end in open shoulder rings. Continue those rings into dark
  // sleeves behind the camera, closing the model rather than exposing its interior.
  const Texture& sleeve=m_leatherTexture;

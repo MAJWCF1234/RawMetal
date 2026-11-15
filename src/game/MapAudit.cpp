@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <cctype>
 #include "Game.h"
 #include <cstdlib>
@@ -688,6 +689,29 @@ bool Game::auditMapScene(Game& game,int level){
   for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||f.solid||frame(f.model)||f.height<1.2f||f.width*f.depth<.6f)continue;const float base=fbase(f);
    int walked=0;for(float u:{-.25f,0.f,.25f})for(float v:{-.25f,0.f,.25f}){const Vec2 p=toWorld(f,u*f.width,v*f.depth);if(reachableIn(standing,p,base,.1f)&&game.hullFits(p,base+.02f,Player::StandingHeight,.2f,false))++walked;}
    if(walked>=3){char text[40];std::snprintf(text,sizeof text," (%d/9 of its footprint walked)",walked);fail("WALK-THROUGH "+fname(i)+text);}}
+  // K: STRAP OFF MATTRESS: a strap, rail or bar (a structure no wider than 15 cm) over a bed, fixture
+  // or prop, that does not rest on its mattress: the ward beds' crown is .404 of their .842 (the
+  // tossed one's mattress too), a floor mattress or bedroll is all mattress. Laid across, it lies
+  // within 3 cm of the crown; hanging off a side, it runs down from the crown, not up past it. The
+  // bed's own box hides such a bar from FLOATING STRUCTURE (Medical Screening's hold, 2026-11-15).
+  {auto crown=[&](int m){return m==med_ward_bed||m==med_ward_bed_tossed?.404f/.842f:m==med_mattress_stained||m==scrap_bedroll?1.f:-1.f;};
+   struct Bed{std::string name;float base,height,crown;std::function<bool(Vec2)> under;};std::vector<Bed> beds;
+   for(size_t i=0;i<fixtures.size();++i){const auto& b=fixtures[i];if(b.visible&&b.width>0&&b.depth>0&&crown(b.model)>0)beds.push_back({fname(i),fbase(b),b.height,crown(b.model),[&,i](Vec2 p){return inRect(fixtures[i],p,-.02f);}});}
+   for(const auto& c:game.m_clutter)if(c.model>=0&&!c.broken&&crown(c.model)>0){char text[96];std::snprintf(text,sizeof text,"prop model %d at %.2f,%.2f z %.2f",c.model,c.pos.x,c.pos.y,c.z);
+    beds.push_back({text,c.z,c.height(),crown(c.model),[&c](Vec2 p){const Vec2 in=c.pos+(p-c.pos)*(1.f/1.04f);return c.footprintContains(in);}});}
+   const auto& st=w.structures();
+   for(const auto& b:beds){const float mattress=b.base+b.height*b.crown;
+    for(size_t si=0;si<st.size();++si){const auto& v=st[si];if(v.material==CollisionProxyMaterial)continue;
+     const float sx=v.x2-v.x1,sy=v.y2-v.y1;if(std::min(sx,sy)>.15f||v.top-v.bottom>1.f)continue;      // a slab or a box set on the bed, a curtain or post standing past it
+     if(v.top<mattress-.02f||v.bottom>b.base+b.height+.3f)continue;                                      // under the mattress, or a lamp or track overhead
+     int over=0;for(float fx:{.1f,.5f,.9f})for(float fy:{.1f,.5f,.9f})if(b.under({v.x1+sx*fx,v.y1+sy*fy}))++over;if(!over)continue;
+     if(v.bottom<=mattress+.03f&&v.top<=mattress+.06f)continue;                                         // on it, or hanging from it
+     bool load=false;   // or on or tied round what lies on the mattress (a strap's buckle, a bag's tape)
+     for(const auto& u:st){if(&u==&v||u.material==CollisionProxyMaterial||std::fabs(u.bottom-mattress)>.03f)continue;
+      if(u.x1<=v.x2&&u.x2>=v.x1&&u.y1<=v.y2&&u.y2>=v.y1&&v.bottom>=u.bottom-.02f&&v.bottom<=u.top+.01f&&v.top<=u.top+.04f){load=true;break;}}
+     if(load)continue;
+     char text[200];std::snprintf(text,sizeof text,"STRAP OFF MATTRESS structure[%zu] %.2f,%.2f..%.2f,%.2f z %.2f..%.2f mat %d, mattress crown at %.2f over ",si,v.x1,v.y1,v.x2,v.y2,v.bottom,v.top,v.material,mattress);
+     fail(text+b.name);}}}
  }
  // ASCII: '#' wall, '.' reachable, 'c' only crouched, 'o' floor nobody can
  // reach, '^' reachable above floor level.
