@@ -593,8 +593,7 @@ void dgStake(Map& m,Vec2 p,float f,float head,const char* state,float period,flo
 // A workstation whose screen is a terminal: the desk set at its east half, the terminal's
 // console volume at the west end, clear of the props.
 void dgDeskTerminal(Map& m,float x,float y,float f,int facing,int variant,const char* title,const char* a,const char* b,StateId state=0,StateId prerequisite=0){
- workstation(m,x,y,f,facing,variant,false);const float s=float(facing),screen=facing>0?kPi:0.f;
- kit::prop(m,model::crt_monitor,x+.15f,y+s*.12f,f+.75f,.42f,.4f,.38f,screen);kit::prop(m,model::keyboard,x+.15f,y-s*.2f,f+.75f,.45f,.16f,.03f,screen);
+ workstation(m,x,y,f,facing,variant,false);       // its own screen and keyboard: no second set on top
  terminal(m,{x-.52f,y},title,a,b,0,state,prerequisite);
 }
 // A paper readable lying on furniture `surface` above the floor (0: on the floor itself).
