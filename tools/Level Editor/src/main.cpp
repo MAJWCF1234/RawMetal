@@ -2233,7 +2233,23 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
        for(int side=0;side<2;++side){auto r=renderer->armsGripReport(side);worst[side]=std::max({worst[side],r.wristTwist,r.elbowTwist*55.f/45.f});if(last[side]>=0)jump[side]=std::max(jump[side],std::fabs(r.wristTwist-last[side]));last[side]=r.wristTwist;}
        if(frame==20||frame==40)save("shotgun-sway-"+std::to_string(frame));}
       for(int side=0;side<2;++side){report<<"shotgun sway "<<(side?"left":"right")<<" worst wrist-twist "<<worst[side]<<" deg, biggest frame jump "<<jump[side]<<" deg\n";if(!renderer->fpShotgunPosed()&&(worst[side]>55||jump[side]>8))bad=true;}}
-     report<<(bad?"FAIL":"PASS")<<": palms curl to their palm side, wrists under 55 degrees of twist and elbows under 45, none jumping 8 in a frame while swaying, no arm past 97% of its reach\n";return bad?11:0;}
+     // The torch on what carries it: the shotgun's rail at the hip, aimed, walking,
+     // crouched, fired and reloading, the pistol's dust cover held and through a
+     // shot and a reload, the left wrist with empty hands and in the guard. Its
+     // bracket (the saddle, on the wrist) must touch what holds it: 3 cm at most.
+     {auto lit=[](retro::Game g){g.giveQuestItem(retro::Game::Flashlight);g.setState(retro::stateId("flashlight_on"),1);return g;};
+      struct Torch{const char* name;int mode;float age;int frames;std::function<void(retro::InputState&,int)> act;};
+      const std::vector<Torch> torches={{"shotgun-hip",2,10,0,{}},{"shotgun-aim",2,10,30,[](retro::InputState&in,int){in.guard=true;}},
+       {"shotgun-walk",2,10,24,[](retro::InputState&in,int){in.forward=true;}},{"shotgun-crouch",2,10,40,[](retro::InputState&in,int){in.crouch=true;}},
+       {"shotgun-fired",2,.03f,0,{}},{"shotgun-reload",2,10,100,[](retro::InputState&in,int i){in.fire=i==0;in.reload=i==70;}},
+       {"pistol",4,10,0,{}},{"pistol-shot",4,.05f,0,{}},{"pistol-reload",5,.55f,0,{}},{"fists",1,10,0,{}},{"fists-guard",3,10,0,{}}};
+      float worstTorch=0;
+      for(const auto&t:torches){auto scene=lit(retro::Game::weaponInspection(t.mode,t.age));for(int i=0;i<t.frames;++i){retro::InputState in{};t.act(in,i);scene.update(in,1.f/60.f);}
+       renderer->render(scene);save("torch-"+std::string(t.name)+"-view");
+       const float gap=renderer->torchGap();report<<"torch "<<t.name<<" bracket gap "<<gap<<" m"<<(t.mode==2&&renderer->fpShotgunPosed()?" (baked clips)":"")<<(scene.reloading()?" (reloading)":"")<<"\n";worstTorch=gap<0?1e9f:std::max(worstTorch,gap);
+       renderer->inspectRig(scene,1.570796f,.2f,{.12f,-.24f,.70f},.80f);save("torch-"+std::string(t.name)+"-side");}
+      report<<"torch worst bracket gap "<<worstTorch<<" m (0.03 allowed)\n";if(!(worstTorch<=.03f))bad=true;}
+     report<<(bad?"FAIL":"PASS")<<": palms curl to their palm side, wrists under 55 degrees of twist and elbows under 45, none jumping 8 in a frame while swaying, no arm past 97% of its reach, the torch on its mount\n";return bad?11:0;}
     if(commandArguments().find(L"--pistol-inspection")){
      // The player's pistol held (Game::weaponInspection modes 4-9) on the GPU:
      // idle, a shot through its rise, both reloads through every phase, low

@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 825deef52e40de77491ff967b5e427aa7c08c185
-# 2026-11-14 23:36, release: v1.4.7, inspected
+commit 897ce8ec5f8fe841aebc0be17c7e6cb0d440f415
+# 2026-11-15 11:40, Creatures walk through loose props and shove them aside from their whole body; heavy props no longer stall a creature on a route its path planner thought clear

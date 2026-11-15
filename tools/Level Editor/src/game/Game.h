@@ -217,6 +217,11 @@ struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
  int model=-1;std::array<float,3> dims{};float damage=0;bool authored=false,broken=false;Vec2 home{};float homeZ=0;StateId breakState=0;int soundOwner=-1;float blockedTime=0;
+ // Seconds until a blow on a pane counts again: a prop held against glass (shoved into it, resting on
+ // it) strikes it once, not every step (not saved: a loaded prop strikes afresh).
+ float paneRearm=0;
+ // Seconds a blow from another prop leaves it free to pivot on its base edge (not saved).
+ float tipTime=0;
  // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
@@ -672,7 +677,11 @@ public:
     static bool testHandgunSaves(std::ostream& report);
     // 20: how far each creature has made the player out (Enemy::recognition).
     // 21: each chunk's torn leads.
-    static constexpr int SaveVersion=25;
+    // 26: no new fields. Chairs on a floor are loose props from v1.4.8, carried in each chunk's
+    // clutter; an older build would draw them twice (its fixed chair and the saved loose one), so
+    // it refuses a 26. Older saves load here: the props they lack come back where they were put.
+    // docs/Systems/save-format.md keeps the whole history.
+    static constexpr int SaveVersion=26;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1192,7 +1201,7 @@ private:
     // Pieces of props broken this frame (level, shard), added to their lists once nothing holds a reference into them.
     std::vector<std::pair<int,Clutter>> m_pendingShards;void landShards();
     bool tryMove(Vec2 delta);
-    bool hullFits(Vec2 position,float feet,float height,float radius=.20f,bool creatures=true)const;
+    bool hullFits(Vec2 position,float feet,float height,float radius=.20f,bool creatures=true,bool props=true)const;   // props=false: a creature's step, which shoves loose props aside (Clutter kick) instead of stopping at them
     bool unstickPlayer();
     float groundHeight(Vec2 position)const;
     float groundHeight(Vec2 position,float feet,float radius=.20f)const;

@@ -81,7 +81,9 @@ struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSiz
 // at its trunk, not across its canopy); 1 for ordinary furniture and plant.
 // visible=false: a collision-only copy, standing in a neighbouring map for the
 // part of a large fixture that crosses the map border.
-struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;bool visible=true;};
+struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;bool visible=true;
+ // A chair authored fixed in place (FIXTURE field 14): not turned loose with the others.
+ bool anchored=false;};
 // Bare: a light with no housing (a fire, a lamp head that already has its model).
 enum class WorldLightMount { Ceiling, Wall, Bare };
 struct WorldLight {

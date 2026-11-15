@@ -133,6 +133,9 @@ public:
     struct ShotgunContact {float leftWrap=0,rightWrap=0,trigger=0;};
     ShotgunContact shotgunContact()const{return m_shotgunContact;}
     bool fpShotgunPosed()const{return m_fpShotgunPosed;}   // the last frame drew the pack's authored shotgun rig
+    // The first-person torch's bracket (or, empty-handed, its wrist saddle) from
+    // the nearest drawn face of what carries it, metres; -1 with no torch.
+    float torchGap()const{return m_torchGap;}
     std::array<float,4> cleanupAttachmentErrors()const{return {m_cleanupReachError,m_cleanupFingerError,m_cleanupBarrelError,m_cleanupEdgeStretch};}
     // Inspection only: 1 = donor bake, 2 = composed layers, 3 = bind mesh,
     // 0 = final attachment (ordinary gameplay).
@@ -537,7 +540,7 @@ private:
     // key changes and collects a finished one. The map in play waits for its first bake (it loads
     // behind the loading card); maps streaming in bake in the background.
     const ProbeBake* chunkProbes(const Game& game,int level,const World& w,std::uint64_t lightKey,bool wait);
-    float m_gripError=0,m_pistolContact=0;ShotgunContact m_shotgunContact{};std::array<Point3,2> m_shotgunTarget{};
+    float m_gripError=0,m_pistolContact=0,m_torchGap=-1;ShotgunContact m_shotgunContact{};std::array<Point3,2> m_shotgunTarget{};
     int m_cleanupInspectionStage=0;
     float m_cleanupReachError=0,m_cleanupFingerError=0,m_cleanupBarrelError=0,m_cleanupEdgeStretch=1;
     bool m_inspectRig=false;
