@@ -366,9 +366,15 @@ std::shared_ptr<const Map> makeResearchIntake(){
  }
  bench(m,10.5f,15.9f,f);bench(m,13.5f,15.9f,f);
  // The exhibit: the product, the first cell, lit in its case. No plaque.
- rfFix(m,model::office_display_cabinet,16.93f,8.6f,f,.968f,.54f,2.1f,rfW,true);
- kit::fixturePart(m,int(m.fixtures.size())-1,4,16.63f,8.17f,16.69f,9.03f,f+.23f,f+1.95f,stateId("rf_intake_alert"));
- rfFix(m,model::lab_test_chamber,16.93f,8.6f,f+1.05f,.627f,.374f,.352f,rfW,false);
+ // A vitrine on a plinth against the wall: painted plinth and steel cap, the cell on the cap, steel corner
+ // posts and lid, glass front and sides (the front pane breaking raises the alert, as the case always did).
+ // (office_display_cabinet's door is baked half out of its side and its shelves cut through the cell.)
+ wall(m,16.62f,8.08f,17.2f,9.12f,f,f+.9f,plaster);wall(m,16.6f,8.06f,17.2f,9.14f,f+.9f,f+.94f,12);
+ rfFix(m,model::lab_test_chamber,16.9f,8.6f,f+.94f,.627f,.374f,.352f,rfW,false);
+ for(float y:{8.08f,9.09f})wall(m,16.6f,y,16.63f,y+.03f,f+.94f,f+1.52f,12);
+ wall(m,16.6f,8.06f,17.2f,9.14f,f+1.52f,f+1.56f,12);
+ kit::breakable(m,16.605f,8.11f,16.625f,9.09f,f+.94f,f+1.52f,17,false,stateId("rf_intake_alert"));
+ for(float y:{8.08f,9.1f})kit::breakable(m,16.63f,y,17.2f,y+.02f,f+.94f,f+1.52f,17,false,stateId("rf_intake_alert"));
  // A soft edge to the exit lobby: planters, and a few things on the walls.
  for(auto [x1,x2]:{std::pair{7.2f,9.6f},{14.4f,16.8f}}){
   wall(m,x1,17.3f,x2,17.8f,f,f+.5f,plaster);wall(m,x1-.02f,17.28f,x2+.02f,17.82f,f+.5f,f+.54f,12);

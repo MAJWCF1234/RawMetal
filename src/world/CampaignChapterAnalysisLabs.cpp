@@ -218,7 +218,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  m.pipes.push_back({{20.35f,5.08f},{20.35f,5.08f},f+1.13f,.03f,roof,3});
  anModel(m,model::lab_wall_clock,12.f,5.016f,f+2.45f,anS,false);
  // The west wall: the glass-fronted reagent cabinet, the stalled extract grille, the PA, the specimen cabinet.
- anModel(m,model::office_display_cabinet,1.27f,7.4f,f,anE,true);wall(m,1.f,6.92f,1.54f,7.88f,f+2.1f,roof,30);
+ anModel(m,model::lab_specimen_cabinet,1.37f,7.4f,f,anE,true);wall(m,1.f,6.73f,1.74f,8.07f,f+2.19f,roof,30);   // the pack's glass-fronted cabinet: office_display_cabinet's door is baked half out of its side
  m.lights.push_back(lamp({1.85f,7.4f},f+1.95f,.18f,1.4f,4000,0,WorldLightMount::Bare,0,false));   // a light on the cabinet's glass, so the jars read
  anFix(m,model::pwr_vent_grille,1.03f,6.f,f+2.3f,.819f,.04f,.8f,anE,false);
  anFix(m,model::lab_pa_horn,1.29f,8.6f,f+2.5f,.495f,.564f,.433f,anE,false);

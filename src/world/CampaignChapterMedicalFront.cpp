@@ -1135,7 +1135,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  for(auto [a,b]:{std::pair{1.05f,2.15f},{3.45f,8.95f},{14.05f,22.95f}})crash(13.96f,14.f,a,b);
  mdFix(m,model::bench,13.7f,5.6f,f,1.86f,.44f,.63f,kPi*.5f,true);
  for(float y:{15.6f,18.f})mdFix(m,model::med_ward_bed,13.45f,y,f,1.98f,.94f,.84f,kPi*.5f,true);
- for(float y:{15.05f,15.95f,17.45f})wall(m,12.98f,y,13.92f,y+.06f,f+.84f,f+.848f,8);                   // straps left buckled
+ for(float y:{15.05f,15.95f,17.45f})wall(m,12.98f,y,13.92f,y+.06f,f+.43f,f+.442f,8);                   // straps left buckled, on the mattress (its crown at .41)
  mdFix(m,model::med_wheelchair,10.6f,10.8f,f,.48f,.9f,.79f,.4f,true);
  extinguisher(m,10.f,15.5f,f,mdE);
  mdFix(m,model::med_wall_clock,13.99f,7.9f,f+2.05f,.24f,.02f,.23f,mdW,false);
@@ -1235,7 +1235,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  kit::breakable(m,3.585f,12.f,3.615f,12.8f,f+1.25f,f+1.75f,17,true);
  mdFix(m,model::med_supply_cabinet,4.3f,9.62f,f,1.1f,.44f,1.7f,mdS,true);
  mdFix(m,model::med_ward_bed,8.2f,14.45f,f,1.98f,.94f,.84f,0,true);
- for(float x:{7.7f,8.7f})wall(m,x,13.98f,x+.06f,14.92f,f+.84f,f+.848f,8);
+ for(float x:{7.7f,8.7f})wall(m,x,13.98f,x+.06f,14.92f,f+.43f,f+.442f,8);                                // straps across the mattress (crown .41)
  kit::prop(m,model::prop_cardboard_box_open,7.3f,10.1f,f,.73f,.725f,.73f,.3f);
  for(auto [x,y]:{std::pair{7.6f,10.9f},{6.9f,11.2f},{8.4f,11.6f}})wall(m,x,y,x+.35f,y+.43f,f,f+.02f,20);   // cassettes, emptied
  mdFix(m,model::trash_can,9.4f,9.85f,f,.45f,.45f,.56f,0,true);
