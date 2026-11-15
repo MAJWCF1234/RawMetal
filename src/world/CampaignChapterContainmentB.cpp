@@ -362,7 +362,9 @@ std::shared_ptr<const Map> makeSpecimenHandling(){
  openEdge(m,{'E',9.f,14.f,up,false,0});
  machineryClock(m,"conb_sh_clock",60000);const char* clock="conb_sh_clock";
  // --- The landing and the gallery (-15) -----------------------------------------------------------
- wall(m,8.f,0,17.f,6.f,fl,up,15);
+ // The landing is built as a block and its top course, so the deck reads it as a landing and puts no
+ // edge rail across the walk from the landing onto the gallery deck (x 17, y 2-6).
+ wall(m,8.f,0,17.f,6.f,fl,up-.4f,15);wall(m,8.f,0,17.f,6.f,up-.4f,up,15);
  deck(m,up,17,2,23,15);deck(m,up,23,9,24,14);
  deckSupports(m,m.layers.back(),fl,6.f);
  wall(m,23.f,8.9f,24.f,14.1f,fl,up-.22f,15);                                                  // under the seam: no pit
@@ -509,15 +511,17 @@ std::shared_ptr<const Map> makeIsolationWing(){
     onFace(d1-.16f,d1+.04f,1.05f,1.3f,.24f,19,false);                                                   // the hasp and its padlock
     for(int s2=0;s2<4;++s2)for(int i=0;i<7;++i){const float x=d1+.45f+s2*.13f+i*.07f,z=1.75f-i*.16f-s2*.05f;onFace(x,x+.05f,z,z+.13f,.012f,20,false);}   // scored by hands
     for(int i=0;i<5;++i){const float x=v0+.1f+i*.18f;onFace(x,x+.04f,.45f,.95f-i*.07f,.012f,16,false);}                               // and under the glass
-    m.lights.push_back(lamp({cx,face+dir*.03f},f+3.25f,1.7f,5.5f,2000,0,WorldLightMount::Wall,blN,true,{1.f,.07f,.04f}));
-    m.fixtures.push_back({model::mine_cage_lamp,{cx,face+dir*.12f},f+3.05f-m.layers.front().elevation,.21f,.2f,.36f,0,false});}
+    m.lights.push_back(lamp({cx,face+dir*.03f},f+3.25f,1.7f,5.5f,2000,0,WorldLightMount::Wall,blN,true,{1.f,.07f,.04f}));}
    cbStencil(m,numbers[row][k],cx,face,int(dir),2.98f,.62f);
    for(float x:{d0-.16f,d1+.04f})onFace(x,x+.12f,1.02f,1.26f,.14f,8);                                 // drop-bar brackets
    if(n==2||n>=5)onFace(d0-.24f,d1+.24f,1.08f,1.2f,.12f,8,false);                                     // barred
    if(n==1)onFace(d1+.3f,d1+.38f,0,1.7f,.08f,8);                                                      // its bar lifted off and stood by
-   if(n==4){for(float z:{.85f,1.55f})onFace(d0-.1f,d1+.1f,z,z+.08f,.13f,13,false);onFace(d1-.1f,d1+.02f,1.9f,2.5f,.13f,13,false);}   // the seal tape, cut
+   // the seal tape, cut: its ends left on the frame either side, nothing across the opening the leaf swings out of
+   if(n==4){for(float z:{.85f,1.55f}){onFace(d0-.18f,d0-.02f,z,z+.08f,.13f,13,false);onFace(d1+.02f,d1+.18f,z-.04f,z+.04f,.13f,13,false);}onFace(d1+.04f,d1+.16f,1.9f,2.5f,.13f,13,false);}
    if(n==3)for(int i=0;i<5;++i)onFace(d1+.4f,d1+.9f+i*.35f,1.15f+i*.13f,1.17f+i*.13f,.01f,8);        // her pen, on the corridor wall
-   m.fixtures.push_back({model::mine_cage_lamp,{d1+.42f,face+dir*.12f},f+2.6f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+   // a door lamp is its own wall fitting (6 and 8 come on with the maintenance breaker, below); only 2,
+   // under its red lamp, keeps a bare cage lamp here
+   if(n==2)m.fixtures.push_back({model::mine_cage_lamp,{d1+.42f,face+dir*.12f},f+2.6f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
    const float amber=n==3?2600.f:n==4?1900.f:4200.f;
    auto l=lamp({d1+.42f,face+dir*.02f},f+2.75f,n==3?.75f:n==4?.45f:.38f,5.5f,amber,0,WorldLightMount::Wall,row?blN:blS,true);
    if(n==7)l.flicker=.45f;if(n!=6&&n!=8&&n!=2)m.lights.push_back(l);}                       // 6 and 8: lamps dead
@@ -677,8 +681,7 @@ std::shared_ptr<const Map> makeObservationTheater(){
   for(auto [x1,x2]:{std::pair{4.1f,11.2f},{12.8f,23.f}})floorLine(m,x1,y0+.72f,x2,y0+.8f,top,14);
   wall(m,12.8f,y0+.1f,12.95f,y0+.7f,top,top+.85f,10);}
  for(float x:{11.3f,12.7f})m.pipes.push_back({{x,4.1f},{x,7.9f},up+.9f,.025f,fl+.9f+.5f,2});
- for(auto [y,z]:{std::pair{4.6f,up+.2f},{6.6f,up-.8f}}){m.lights.push_back(lamp({23.f,y},z+1.6f,.6f,7.f,2800,0,WorldLightMount::Wall,blW));
-  m.fixtures.push_back({model::mine_cage_lamp,{22.9f,y},z+1.45f-m.layers.front().elevation,.21f,.2f,.36f,0,false});}
+ for(auto [y,z]:{std::pair{4.6f,up+.2f},{6.6f,up-.8f}}){m.lights.push_back(lamp({23.f,y},z+1.6f,.6f,7.f,2800,0,WorldLightMount::Wall,blW));}
  // the two who did not leave
  cbBody(m,clock,ActorVisual::SeniorScientist,{7.f,6.05f},up-1.5f,.3f);
  cbBody(m,clock,ActorVisual::Scientist,{18.9f,4.45f},up-.5f,2.8f);   // between the bench legs, not in the end one
@@ -952,15 +955,14 @@ std::shared_ptr<const Map> makeBreachSector(){
  cbMound(m,2.3f,21.6f,up,1.f,.9f);crust(3.2f,21.2f,3.8f,3.f,up);
  cbFix(m,model::pwr_generator_unit,16.2f,21.6f,up,.2f,true);cbFix(m,model::pwr_step_transformer,15.f,22.3f,up,0,true);
  cbFix(m,model::lab_status_display,18.f-.04f,20.1f,up+2.f,cbW,false);
- m.lights.push_back(lamp({18.f,21.3f},up+2.4f,.55f,6.f,4200,0,WorldLightMount::Wall,blW));             // the ledge's own lamp on the lift core
- m.fixtures.push_back({model::mine_cage_lamp,{17.9f,21.3f},up+2.2f-m.layers.front().elevation,.21f,.2f,.36f,cbW,false});
+ m.lights.push_back(lamp({18.f,21.3f},up+2.4f,.55f,6.f,4200,0,WorldLightMount::Wall,blW));             // the ledge's own lamp on the lift core (its own fitting)
  m.pickupSpawns.push_back({{2.8f,20.2f},PickupKind::Health,up});
  {ScriptAction save;save.type=ScriptAction::Type::Checkpoint;cbEvent(m,"conb_br_out",9.5f,20.6f,14.5f,23.6f,"conb_br_dark",{save});}
  // --- Light: the Force's work lamps mark the line; red on the walls; the way on is the one warm door
  for(auto [x,y,z]:{std::tuple{18.5f,12.2f,up},{12.f,12.f,fl},{9.3f,12.9f,fl},{6.95f,13.9f,fl},{7.1f,20.6f,up}}){
   m.fixtures.push_back({model::mine_cage_lamp,{x,y},z-m.layers.front().elevation,.21f,.2f,.36f,0,false});
   m.lights.push_back(cbGlow({x,y},z+.3f,.65f,6.f,3000));}
- for(auto [x,y,yaw,ph]:{std::tuple{23.f,4.6f,blW,0.f},{23.f,15.6f,blW,.9f},{16.6f,23.f,blN,.4f},{18.f,21.5f,blW,1.3f}})m.lights.push_back(cbAlarm({x,y},up+2.4f,yaw,ph));
+ for(auto [x,y,yaw,ph]:{std::tuple{23.f,4.6f,blW,0.f},{23.f,15.6f,blW,.9f},{16.6f,23.f,blN,.4f},{18.f,18.f,blW,1.3f}})m.lights.push_back(cbAlarm({x,y},up+2.4f,yaw,ph));   // one fitting per mount: the core's alarm north of its lamp and screen
  m.lights.push_back(lamp({12.f,22.4f},up+3.5f,.8f,7.f,3200,0,WorldLightMount::Wall,blN));
  zone(m,"BREACH SECTOR / CRATER",1.f,1.f,18.f,19.f,-1000,up-.5f,{.11f,.10f,.12f,.006f});
  zone(m,"BREACH SECTOR",0,0,24,24,-1000,1000,{.11f,.10f,.11f,.006f});
@@ -1005,11 +1007,11 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  wall(m,13.85f,5.25f,15.35f,5.9f,f,f+.92f,2);wall(m,13.8f,5.2f,15.4f,5.95f,f+.92f,f+.96f,8);
  cbFix(m,model::lab_control_board,14.6f,5.88f,f+.96f,cbN,false);
  cbFix(m,model::lab_status_display,13.25f,5.97f,f+2.25f,cbN,false);
- terminal(m,{14.6f,5.5f},"CHECKPOINT A / LOCKDOWN","03:18 SECTOR DOOR LOWERED ON LOSS. 03:19 DOOR SEALED. OPEN REQUESTED. REFUSED. REFUSED. REFUSED.",
-  "03:22 SHUTTER BREACH EAST, PANEL 6. 03:24 POST ABANDONED. LOCKDOWN STILL IN FORCE.",.96f);
+ // the console's own CRT on its bench on the floor at the console's east end, not stood on the console
+ terminal(m,{16.f,5.5f},"CHECKPOINT A / LOCKDOWN","03:18 SECTOR DOOR LOWERED ON LOSS. 03:19 DOOR SEALED. OPEN REQUESTED. REFUSED. REFUSED. REFUSED.",
+  "03:22 SHUTTER BREACH EAST, PANEL 6. 03:24 POST ABANDONED. LOCKDOWN STILL IN FORCE.");
  m.terminals.back().yaw=kPi;
- m.lights.push_back(cbGlow({14.6f,4.85f},f+1.4f,.5f,3.5f,9000,{.5f,.9f,1.f},.12f));
- m.fixtures.push_back({model::mine_cage_lamp,{12.f,5.9f},f+3.f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
+ m.lights.push_back(cbGlow({16.f,4.95f},f+1.15f,.5f,3.5f,9000,{.5f,.9f,1.f},.12f));
  {auto l=cbAlarm({12.f,5.97f},f+3.1f,blN,0);l.period=1.f;l.onTime=.45f;l.intensity=1.5f;l.range=6.f;m.lights.push_back(l);}
  {auto l=cbAlarm({12.f,6.73f},f+3.15f,blS,.55f);l.period=1.f;l.onTime=.45f;l.intensity=.3f;l.range=4.f;m.lights.push_back(l);}
  // the tear through panel 6: slats bent up out of the way, scorched, the drag of something through
@@ -1037,7 +1039,6 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  extinguisher(m,2.6f,7.8f,f+.3f,cbN);cbFix(m,model::pwr_fire_cabinet,5.3f,7.78f,f+1.1f,cbN,false);
  cbFix(m,model::lab_notice_board,3.9f,7.77f,f+1.3f,cbN,false);
  m.lights.push_back(lamp({1.8f,7.8f},f+2.35f,.55f,5.5f,4600,.04f,WorldLightMount::Wall,blN));
- m.fixtures.push_back({model::mine_cage_lamp,{1.8f,7.7f},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,kPi,false});
  cbFix(m,model::lab_specimen_crate,4.7f,7.18f,f,.1f,true,.55f);kit::prop(m,model::prop_cardboard_box,4.7f,7.18f,f+.62f,.3f,.7f);
  {const int d=wallDoor(m,1.f,6.2f,13.f,13.2f,3.f,4.2f,f,roof,1);m.doors[size_t(d)].requireState=stateId("conb_ec_welded");}   // never: welded
  for(float x:{3.f,4.15f})wall(m,x,13.2f,x+.05f,13.26f,f,f+2.4f,13);
@@ -1057,7 +1058,6 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  for(float x:{18.2f,18.6f,19.f})cbFix(m,model::pwr_breaker_panel,x,7.75f,f+1.4f,cbN,false);
  cbFix(m,model::pwr_disconnect_switch,21.4f,7.62f,f+1.f,cbN,false);cbFix(m,model::pwr_ammeter_box,22.1f,7.74f,f+1.5f,cbN,false);
  m.lights.push_back(lamp({20.f,7.8f},f+2.35f,.55f,5.5f,4600,.04f,WorldLightMount::Wall,blN));
- m.fixtures.push_back({model::mine_cage_lamp,{20.f,7.7f},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,kPi,false});
  wallDoor(m,17.f,23.f,13.f,13.2f,19.6f,20.8f,f,roof,-1);
  cbFix(m,model::lab_control_board,22.9f,10.6f,f+.95f,cbW,false);
  terminal(m,{22.2f,10.6f},"EMERGENCY BARRICADE / SOUTH","LOWERED 03:20 ON SECTOR LOSS. ACCUMULATOR BLED DOWN 03:41 BY ORDER. RAISE NEEDS 180 BAR.",
@@ -1153,7 +1153,6 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
   when("conb_ec_obj_done",0,0,24,24,{{"cont_barricade",1}},{goal("conb_ec_obj_bar",ObjectiveStatus::Complete),goal("conb_ec_obj_pump",ObjectiveStatus::Complete),goal("conb_ec_obj_supply",ObjectiveStatus::Complete),goal("conb_ec_obj_raise",ObjectiveStatus::Complete)});
   for(auto& e:m.scriptEvents)if(e.x1==0&&e.y1==0&&e.x2==24&&e.y2==24&&(e.id==stateId("conb_ec_obj_live")||e.id==stateId("conb_ec_obj_full")||e.id==stateId("conb_ec_obj_done")))e.scope=ScriptEvent::Scope::Map;}
  m.lights.push_back(lamp({1.f,19.15f},f+2.45f,.6f,6.f,3400,0,WorldLightMount::Wall,blE));
- m.fixtures.push_back({model::mine_cage_lamp,{1.1f,19.15f},f+2.25f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  {auto l=cbGlow({1.9f,18.55f},f+1.3f,.3f,2.6f,9000,{.5f,1.f,.6f});l.enabledState=stateId("conb_ec_pressure");m.lights.push_back(l);}   // CHARGED
  {ScriptAction a;a.type=ScriptAction::Type::PlaySound;a.sound=Sound::OneMetalCreak;a.amount=.6f;cbEvent(m,"conb_ec_pumped",0,0,24,24,"conb_ec_pressure",{a});}
  servicePipe(m,{1.2f,22.6f},{9.6f,22.6f},f+3.05f,.06f,4);

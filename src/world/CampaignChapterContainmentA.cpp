@@ -504,7 +504,9 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  m.lights.push_back(caTube(19.f,7.7f,roof,.45f,5.f,3800,0));
  // --- The holding room: the detail's dead laid out under sheets --------------------------------
  wallDoor(m,14.2f,23.f,13.8f,14.f,19.4f,20.6f,f,roof,1);                                    // door 3: the passage's south wall
- for(auto y:{16.2f,18.4f,20.6f})m.fixtures.push_back({model::med_corpse_supine,{21.7f,y},0,.744f,1.753f,.411f,caN,false});
+ // laid side by side on the floor along the east wall, heads to it, a body's width between them
+ for(auto [x,y,yaw]:{std::tuple{21.95f,17.55f,caW+.04f},{21.85f,18.75f,caW-.07f},{22.f,19.95f,caW+.02f}})
+  m.fixtures.push_back({model::med_corpse_supine,{x,y},0,.744f,1.753f,.411f,yaw,false});
  caBody(m,clock,ActorVisual::Cleanup,{17.8f,20.2f},f,1.2f);
  for(int i=0;i<3;++i)caFix(m,model::psx_locker,15.2f+i*.92f,22.66f,f,kPi*.5f,true);
  wall(m,14.7f,22.2f,17.6f,23.f,f+2.3f,roof,CollisionProxyMaterial);
@@ -515,10 +517,11 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  m.lights.push_back(caTube(18.6f,17.4f,roof,.45f,5.5f,5000,.03f));
  // It was the ward's overflow before it was a morgue: a bed they could not lift him off, the crash
  // cart that did nothing, the screens wheeled back; one lamp pulled down low over the sheets to write by.
- caFix(m,model::med_ward_bed,20.6f,14.95f,f,0,true);caFix(m,model::med_crash_cart,15.3f,16.6f,f,caE,true);
+ // The bed stands head to the east wall, clear of door 3's swing; he lies on its mattress (0.40 m).
+ caFix(m,model::med_ward_bed,21.95f,15.3f,f,kPi,true);caFix(m,model::med_crash_cart,15.3f,16.6f,f,caE,true);
  kit::prop(m,model::med_vitals_monitor_dead,15.3f,16.6f,f+1.f,caE);
- m.fixtures.push_back({model::med_corpse_supine,{20.6f,14.95f},.66f,.744f,1.753f,.411f,caE,false});
- caPendant(m,{20.9f,18.4f},roof,f+2.2f,.85f,5.5f,2900);
+ m.fixtures.push_back({model::med_corpse_supine,{21.95f,15.3f},.4f,.744f,1.753f,.411f,caW,false});
+ caPendant(m,{21.3f,18.75f},roof,f+2.2f,.85f,5.5f,2900);
  paperDrift(m,19.6f,17.f,20.6f,19.8f,f,5,941);
  m.pickupSpawns.push_back({{16.2f,22.f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{17.6f,15.9f},PickupKind::HandgunAmmo,f});
  // --- The east passage: her lamps ----------------------------------------------------------------
@@ -566,8 +569,7 @@ std::shared_ptr<const Map> makeContainmentIntake(){
  wall(m,1.f,3.f,6.f,20.f,f,g,37);wall(m,0,8.9f,1.f,14.1f,f,g,15);                           // the gallery's mass (painted plant green to the band), and its lip to the ring
  wall(m,5.98f,3.f,6.f,20.f,f+1.08f,f+1.16f,13);                                                     // the hazard edge along its foot
  // its east face is the hall's west wall: lamps on it, the intake's supply and records cabinets and the board at its foot
- for(float y:{9.f,15.f}){m.lights.push_back(lamp({6.f,y},f+2.35f,.6f,6.5f,4600,.05f,WorldLightMount::Wall,clE));
-  m.fixtures.push_back({model::mine_cage_lamp,{6.1f,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,caE,false});}
+ for(float y:{9.f,15.f}){m.lights.push_back(lamp({6.f,y},f+2.35f,.6f,6.5f,4600,.05f,WorldLightMount::Wall,clE));}
  caFix(m,model::med_supply_cabinet,6.24f,12.6f,f,caE,true);caFix(m,model::med_records_cabinet,6.27f,13.8f,f,caE,true);
  caFix(m,model::lab_notice_board,6.03f,17.6f,f+1.25f,caE,false);caFix(m,model::pwr_fire_cabinet,6.1f,6.2f,f+1.1f,caE,false);
  m.stairs.push_back({6.f,3.3f,10.48f,4.8f,f,g,16,false,false});
@@ -688,11 +690,8 @@ std::shared_ptr<const Map> makeContainmentIntake(){
  m.lights.push_back(caBeacon({23.f,18.f},f+2.8f,clW,.4f,"cont_power"));
  m.lights.push_back(lamp({3.5f,20.f},f+2.3f,.55f,6.f,3200,0,WorldLightMount::Wall,clS));               // the gallery's foot, and the pocket under it
  m.lights.push_back(lamp({3.5f,23.f},f+2.6f,.6f,6.f,5200,.04f,WorldLightMount::Wall,clN));               // and its face, from the south wall
- m.fixtures.push_back({model::mine_cage_lamp,{3.5f,22.9f},f+2.4f-m.layers.front().elevation,.21f,.2f,.36f,kPi,false});
  caFix(m,model::med_notice_board,4.7f,20.04f,f+1.3f,caS,false);caFix(m,model::ind_crate,5.3f,22.4f,f,.3f,true);
  m.lights.push_back(lamp({9.8f,1.f},f+2.3f,.6f,6.5f,4600,.05f,WorldLightMount::Wall,clS));                // the stair's flank, from the north wall
- m.fixtures.push_back({model::mine_cage_lamp,{9.8f,1.1f},f+2.1f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
- m.fixtures.push_back({model::mine_cage_lamp,{3.5f,20.1f},f+2.1f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  m.pickupSpawns.push_back({{19.6f,13.f},PickupKind::Health,f});
  zone(m,"",6.f,18.f,18.f,24.f,-1000,1000,{.15f,.12f,.11f,.008f});
  zone(m,"CONTAINMENT INTAKE / GALLERY",0,3.f,6.f,20.f,g-.5f,1000,{.13f,.13f,.14f,.010f});
@@ -794,7 +793,6 @@ std::shared_ptr<const Map> makeContainmentA(){
  wall(m,9.4f,17.3f,9.6f,23.f,f,roof,37);wall(m,14.4f,17.3f,14.6f,23.f,f,roof,37);
  wall(m,9.6f,22.9f,14.4f,24.f,f+3.4f,roof,15);                                                  // the service ceiling starts here
  m.lights.push_back(lamp({14.4f,20.2f},f+2.4f,.5f,5.5f,4200,0,WorldLightMount::Wall,clW));
- m.fixtures.push_back({model::mine_cage_lamp,{14.3f,20.2f},f+2.2f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  for(float y:{19.5f,21.6f})caFix(m,model::med_ward_bed,2.05f,y,f,0,true);
  m.lights.push_back(lamp({5.f,23.f},f+2.9f,.6f,6.f,6500,.02f,WorldLightMount::Wall,clN));
  // S2: they sealed one of their own in. He asked them to.
@@ -938,7 +936,6 @@ std::shared_ptr<const Map> makeContainmentService(){
  wall(m,22.2f,6.4f,23.f,6.6f,f,roof,15);wall(m,13.6f,8.4f,23.f,8.6f,f,roof,15);
  m.lights.push_back(lamp({23.f,7.5f},f+2.2f,.32f,4.5f,2700,0,WorldLightMount::Wall,clW));
  m.lights.push_back(lamp({14.3f,8.4f},f+2.3f,.3f,4.f,2700,0,WorldLightMount::Wall,clN));
- for(auto [x,y]:{std::pair{22.9f,7.5f},{14.3f,8.3f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.05f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  for(auto [y,r,paint]:{std::tuple{8.1f,.09f,3},{7.85f,.06f,1}})servicePipe(m,{13.6f,y},{23.f,y},roof-.3f,r,paint);
  // The cell: crust over everything, trunks of it up to the roof, knots of crystal lit from inside,
  // what is left of the bed, and a suit hung from the lamp hook with the light behind it.
@@ -970,7 +967,6 @@ std::shared_ptr<const Map> makeContainmentService(){
  for(auto [x,y]:{std::pair{22.5f,12.6f},{22.4f,19.4f}})caFix(m,model::ind_barrel,x,y,f,x,true);
  m.lights.push_back(lamp({19.f,12.f},f+2.4f,.5f,6.f,3000,0,WorldLightMount::Wall,clS));
  m.lights.push_back(lamp({15.2f,20.f},f+2.4f,.42f,5.5f,3000,0,WorldLightMount::Wall,clN));m.lights.back().flicker=.3f;
- for(auto [x,y]:{std::pair{19.f,12.1f},{15.2f,19.9f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  // --- The south run to the theater: the junction's mains carried on down it ----------------------
  for(auto [x,r,paint]:{std::tuple{10.95f,.11f,3},{11.22f,.07f,1},{13.05f,.09f,4}})servicePipe(m,{x,11.05f},{x,24.f},roof-.3f,r,paint);
  m.pipes.push_back({{10.82f,22.2f},{10.82f,22.2f},f,.07f,roof-.3f,3});flange(m,{10.82f,22.2f,f+.06f},{},.07f);
@@ -983,7 +979,6 @@ std::shared_ptr<const Map> makeContainmentService(){
  for(float y:{13.6f,17.6f,21.6f})m.lights.push_back(caTube(12.f,y,roof,.42f,5.5f,5600,.04f,y>20?.25f:0.f));
  for(auto [x,y]:{std::pair{5.f,17.f},{18.f,16.f}})m.lights.push_back(caTube(x,y,roof,.4f,5.5f,5600,.04f,.1f));
  m.lights.push_back(lamp({13.4f,22.f},f+2.4f,.45f,5.f,3000,0,WorldLightMount::Wall,clW));
- for(auto [x,y]:{std::pair{10.72f,13.f},{10.72f,20.f},{13.28f,22.f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  for(auto [x,y]:{std::pair{11.f,19.5f},{11.05f,20.6f}})caFix(m,model::ind_barrel,x,y,f,x+y,true);
  caFix(m,model::pwr_fire_cabinet,13.3f,12.6f,f+1.1f,caW,false);
  // --- The west spur to B: the growth comes the other way to meet you ---------------------------
@@ -1003,7 +998,6 @@ std::shared_ptr<const Map> makeContainmentService(){
  wall(m,7.f,15.2f,7.4f,15.65f,f,roof,CollisionProxyMaterial);
  caFix(m,model::pwr_gate_valve,7.2f,15.45f,f+1.05f,caS,false);
  m.lights.push_back(lamp({4.6f,15.2f},f+2.4f,.42f,5.f,3000,0,WorldLightMount::Wall,clS));
- for(auto [x,y]:{std::pair{4.6f,15.3f},{8.f,18.7f}})m.fixtures.push_back({model::mine_cage_lamp,{x,y},f+2.15f-m.layers.front().elevation,.21f,.2f,.36f,0,false});
  caMound(m,2.1f,17.7f,f,.8f,.7f);caTrunk(m,1.25f,15.45f,f,roof,.4f);caLens(m,2.6f,16.8f,f,3.4f,2.8f,.08f);
  recessedFittings(m);
  zone(m,"CONTAINMENT SERVICE / VALVE JUNCTION",1.f,1.f,13.4f,10.9f,-1000,1000,{.16f,.15f,.13f,.01f});
@@ -1185,7 +1179,6 @@ std::shared_ptr<const Map> makeContainmentB(){
  caFix(m,model::med_ward_toilet,8.5f,8.43f,f,caN,true);caFix(m,model::med_scrub_sink,7.2f,8.5f,f,caN,true);
  caFix(m,model::med_floor_drain,5.6f,5.f,f,0,false);
  caCrust(m,1.f,8.6f,5.2f,8.8f,f,f+3.6f);
- m.fixtures.push_back({model::mine_cage_lamp,{6.1f,8.68f},f+2.45f-m.layers.front().elevation,.21f,.2f,.36f,kPi,false});
  m.lights.push_back(lamp({6.1f,8.8f},f+2.6f,.6f,6.5f,6800,.02f,WorldLightMount::Wall,clN));m.lights.back().flicker=.25f;
  for(auto [x1,x2,z]:{std::tuple{6.6f,7.9f,1.1f},{7.f,8.4f,1.45f}})wall(m,x1,8.788f,x2,8.8f,f+z,f+z+.05f,16);
  caModel(m,model::cave_oldcity_rubble,6.3f,6.f,f,1.03f,1.03f,.18f,.7f);caModel(m,model::cave_oldcity_rubble,8.1f,3.4f,f,.8f,.8f,.14f,2.1f);
