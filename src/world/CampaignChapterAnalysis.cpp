@@ -1083,8 +1083,8 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  kit::prop(m,model::trash_can,1.3f,3.3f,f,.3f,.3f,.45f,.3f);
  anFix(m,model::med_first_aid_box,5.74f,1.85f,f+1.3f,.367f,.12f,.349f,anW,false);
  // the techs' office: the survey mirrored up to I.I. as it was taken
- workstation(m,13.f,2.35f,f,1,3);workstation(m,16.f,2.35f,f,1,1);
- dgDeskTerminal(m,20.6f,2.35f,f,1,0,"SURVEY / MIRROR TO I.I.","EVERY READING COPIED TO INTERNAL INVESTIGATIONS AS TAKEN. 214 STAFF ON FILE.","03:02 FILE CALLED UP IN FULL BY I.I. 03:02 LOCAL COPY DELETED.");
+ workstation(m,13.f,2.35f,f,-1,3);workstation(m,16.f,2.35f,f,-1,1);   // screens to the room, seats on the room side
+ dgDeskTerminal(m,20.6f,2.35f,f,-1,0,"SURVEY / MIRROR TO I.I.","EVERY READING COPIED TO INTERNAL INVESTIGATIONS AS TAKEN. 214 STAFF ON FILE.","03:02 FILE CALLED UP IN FULL BY I.I. 03:02 LOCAL COPY DELETED.");
  taped(m,{19.3f,1.01f},f+1.45f,anS,Readable::Note,"PAN MAP / 01:50","R-46 TURNS TO A LIGHT BEFORE THE METERS DO. ONLY A LIGHT THAT MOVES. THE PLANT'S OWN LAMPS IT IGNORES.",
   "WE STOPPED CALIBRATING THE METERS. WE CALIBRATE THE DOG.");
  paperDrift(m,10.6f,3.f,21.2f,4.2f,f,6,8401);
