@@ -374,8 +374,9 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  paperDrift(m,2.f,18.4f,8.f,21.8f,f,5,1041);
  workstation(m,19.f,21.4f,f,-1,1,false);
  drModel(m,model::med_records_cabinet,22.5f,19.f,f,drW,true);
- terminal(m,{21.4f,18.2f},"MATERIALS / NIGHT LOG","02:40 THE DETAIL WELDED THE CONTAINMENT DOOR BEHIND US. WE ARE ON THE WRONG SIDE OF IT.",
+ terminal(m,{21.4f,17.45f},"MATERIALS / NIGHT LOG","02:40 THE DETAIL WELDED THE CONTAINMENT DOOR BEHIND US. WE ARE ON THE WRONG SIDE OF IT.",
   "03:15 THE INVESTIGATOR WANTS THE D-SERIES BOXED FOR THE LIFT. HE DID NOT SAY WHERE THE LIFT GOES.");
+ m.terminals.back().yaw=0;                                                    // back to the wall, facing the room
  m.lights.push_back(lamp({18.6f,21.2f},f+1.2f,.3f,3.f,3000,0,WorldLightMount::Bare,0,false));
  m.pickupSpawns.push_back({{17.4f,21.2f},PickupKind::Health,f});
  // somebody has been sleeping here since the door was welded: a ward bed dragged in, the shelf of
@@ -942,7 +943,7 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
  for(auto [x,y,yaw]:{std::tuple{13.6f,9.6f,1.f},{9.5f,13.7f,2.f},{14.6f,10.4f,4.f}})drModel(m,model::cave_crystal_bed_blue,x,y,pit,yaw,false,.9f);
  // and where the slurry comes in, out of the blasted faces over the pumps and along the ledge
  drCrystalWall(m,7.8f,17.98f,pit+4.2f,1.3f,drN);drCrystalWall(m,16.1f,17.98f,pit+3.4f,1.f,drN);
- drCrystalWall(m,18.98f,8.6f,pit+5.2f,1.2f,drW);drCrystalWall(m,12.2f,6.02f,pit+6.4f,1.1f,drS);
+ drCrystalWall(m,18.98f,8.6f,pit+5.2f,1.2f,drW);drCrystalWall(m,12.2f,6.02f,pit+4.4f,1.1f,drS);   // under the north flood, not over it
  drCrystalTo(m,6.1f,11.3f,pit,1.2f,.8f);drCrystalTo(m,6.4f,12.6f,pit,.5f,2.9f);wall(m,5.8f,11.f,6.4f,11.6f,pit,pit+1.f,CollisionProxyMaterial);
  // the station's own work light, on a bracket off the south face: the one steady lamp on the pit
  // floor, so from the landing the goal is a lit corner past the arcs
@@ -968,8 +969,9 @@ std::shared_ptr<const Map> makeEnergyCoreResearch(){
  // bank beside it, and the bank holds for fifty seconds before it trips and the load comes back.
  // So: clear the pit, come back up, shed, and run the stairs to the isolation station at the east
  // wall, round the arcs or through them.
- terminal(m,{19.f,2.4f},"CORE / LOAD CONTROL","LOAD 104%. FEED OPEN. E / SHED LOAD TO THE DUMP BANK. THE BANK HOLDS FIFTY SECONDS, THEN TRIPS.",
+ terminal(m,{18.85f,1.75f},"CORE / LOAD CONTROL","LOAD 104%. FEED OPEN. E / SHED LOAD TO THE DUMP BANK. THE BANK HOLDS FIFTY SECONDS, THEN TRIPS.",
   "ISOLATE THE FEED AT THE PIT FLOOR WHILE IT HOLDS. NOBODY HAS TIMED THE STAIRS.",g-pit,shed);
+ m.terminals.back().yaw=0;                                                    // its back to the wall, the screen to the gallery and the pit
  taped(m,{17.4f,1.f},g+1.5f,drS,Readable::Note,"CORE / STATUS PRINT","LOAD 104%. FEED OPEN. ACCESS CONTROL HELD UNTIL THE FEED IS ISOLATED AT THE PIT FLOOR.",
   "THE CORE DOES NOT ANALYSE THE ORE. THE ORE ANALYSES THE CORE. DO NOT WRITE THAT IN THE LOG. (PEN, UNDER THE PRINT)");
  for(float x:{20.75f,21.6f,22.45f})drModel(m,model::pwr_step_transformer,x,1.62f,g,0,true);
@@ -1137,8 +1139,11 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  wall(m,15.f,13.1f,15.2f,19.f,f,R,3);doorwayY(m,19.f,20.2f,15.f,15.2f,f,R);wall(m,15.f,20.2f,15.2f,23.f,f,R,3);
  wallDoor(m,1.f,9.f,15.f,15.2f,3.f,4.2f,f,R,1);                                // door 3: the armoury
  wall(m,8.8f,15.2f,9.f,23.f,f,R,3);
- // the reader line: three pylons, two lanes, the wall above
- for(float x:{9.43f,12.f,14.57f}){drModel(m,model::lab_door_reader,x,15.1f,f,drN,true);}
+ // the reader line: three piers, two lanes, the wall above. Each lane has its badge reader (the door
+ // control unit: card reader over keypad, 0.15 m wide) on the pier to its right at hand height,
+ // facing the queue.
+ for(auto [x1,x2]:{std::pair{9.f,9.5f},{11.75f,12.25f},{14.5f,15.f}})wall(m,x1,14.95f,x2,15.25f,f,f+2.45f,3);
+ for(float x:{9.3f,12.05f})drFix(m,model::lab_door_reader,x,14.903f,f+.85f,.15f,.092f,.42f,drN,false);
  wall(m,9.f,14.95f,15.f,15.25f,f+2.45f,R,3);drProxy(m,9.f,14.84f,15.f,15.36f,f+2.39f,f+2.45f);
  floorLine(m,9.85f,14.4f,14.15f,14.52f,f,13);
  // the blast door, open: jambs, the lintel, the leaf drawn up into it with its foot showing, the
@@ -1177,21 +1182,22 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  for(float y:{2.2f,3.2f,4.2f})drSuit(m,1.29f,y,f+2.2f,drE+.06f*(y-3.2f));
  wall(m,1.03f,1.9f,1.09f,4.5f,f+2.38f,f+2.42f,20);
  for(float x:{7.5f,8.7f})for(float y:{4.f,7.f,10.f})drModel(m,model::pwr_safety_bollard,x,y,f,0,true);
- bench(m,4.5f,13.8f,f);bench(m,3.6f,5.6f,f);
+ bench(m,6.6f,14.62f,f);bench(m,3.6f,5.6f,f);                                    // the first back to the armoury wall, clear of its door
  for(float x:{10.72f,13.28f}){drFix(m,model::pwr_handrail,x,12.6f,f,.08f,3.6f,1.1f,0,true);floorLine(m,x-.5f,10.8f,x-.38f,14.4f,f,14);}
  for(auto [x,y,yaw,sc]:{std::tuple{14.3f,2.5f,.1f,.85f},{14.4f,7.4f,-.15f,.8f}}){drFix(m,model::pallet,x,y,f,1.2f,1.15f,.16f,yaw,true);drModel(m,model::lab_specimen_crate,x,y,f+.16f,yaw,true,sc);}
- kit::prop(m,model::prop_cardboard_box,13.2f,1.7f,f,.4f);
+ kit::prop(m,model::prop_cardboard_box,8.6f,1.6f,f,.4f);   // against the north wall west of the way in, out of it
  drFix(m,model::lab_notice_board,5.f,1.035f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::lab_wall_clock,7.2f,1.02f,f+2.2f,.402f,.032f,.4f,drS,false);
  extinguisher(m,1.f,5.4f,f+.6f,drE);
- kit::prop(m,model::mine_hard_hat,3.9f,6.4f,f,.279f,.351f,.153f,.4f);kit::prop(m,model::item_dosimeter,5.1f,13.8f,f+.51f,1.1f);
+ kit::prop(m,model::mine_hard_hat,3.9f,6.4f,f,.279f,.351f,.153f,.4f);kit::prop(m,model::item_dosimeter,6.2f,14.55f,f+.51f,1.1f);
  wallSign(m,12.f,14.89f,f+2.6f,"BADGE AT THE READER","ONE AT A TIME / DOSIMETER ON THE OUTSIDE OF THE SUIT",2.6f,drN);
  // --- The booth: his window on the hall --------------------------------------------------------
  drCounter(m,21.8f,7.f,22.9f,12.2f,f);
  for(float y:{7.8f,9.5f,11.2f})kit::prop(m,model::cctv_tv,22.4f,y,f+.9f,drW);
  drFix(m,model::lab_control_board,22.96f,9.5f,f+1.7f,1.32f,.19f,.6f,drW,false);
  kit::prop(m,model::office_chair,20.8f,9.4f,f,.55f,.55f,.95f,drE);
- terminal(m,{18.4f,7.f},"ACCESS / ORDERS","03:52 EXTRACTION LEVEL CLOSED TO ALL STAFF. DRILL TEAM HOLDS. NO RELIEF.",
+ terminal(m,{18.4f,6.55f},"ACCESS / ORDERS","03:52 EXTRACTION LEVEL CLOSED TO ALL STAFF. DRILL TEAM HOLDS. NO RELIEF.",
   "04:10 THE PLANT GUARD IS BELOW CONTAINMENT. SHE HAS SEEN THE CORE. SHE DOES NOT COME UP.",f-sb);
+ m.terminals.back().yaw=0;                                                    // back to the lift wall, facing into the booth
  m.lights.push_back(drGlow({22.2f,9.5f},f+1.3f,.3f,3.5f,{.3f,.55f,1.f}));
  m.lights.push_back(drTube(19.f,9.5f,R,.34f,5.f,4000,0));
  // his place at the glass: a ledge inside the pane with the desk mic and a lamp turned up at him,
@@ -1264,7 +1270,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  kit::prop(m,model::office_paper_stack,5.05f,16.f,f+.81f,.33f,.44f,.03f,0);
  drFix(m,model::wooden_chair,5.f,16.9f,f,.417f,.525f,.95f,.3f,true);
  drModel(m,model::lab_specimen_crate,7.4f,17.6f,f,.3f,true,.7f);
- drFix(m,model::lab_notice_board,3.6f,15.235f,f+1.3f,1.2f,.07f,.9f,drS,false);
+ drFix(m,model::lab_notice_board,5.3f,15.235f,f+1.3f,1.2f,.07f,.9f,drS,false);       // over the bench, clear of door 3
  extinguisher(m,8.8f,16.4f,f+.6f,drW);
  m.pickupSpawns.push_back({{3.2f,21.4f},PickupKind::Ammo,f});m.pickupSpawns.push_back({{6.4f,21.4f},PickupKind::HandgunAmmo,f});
  drPendant(m,{5.f,17.6f},R,f+2.9f,.9f,6.f,4200,.2f);drPendant(m,{4.4f,21.4f},R,f+2.9f,.55f,4.5f,3600);
@@ -1281,7 +1287,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  drProxy(m,22.34f,18.75f,23.f,21.4f,f+2.42f,R);
  for(auto [x,y,yaw]:{std::tuple{16.f,20.6f,.05f},{17.3f,20.9f,.12f}})kit::prop(m,model::scrap_bedroll,x,y,f,yaw);
  kit::prop(m,model::prop_cardboard_box,15.9f,22.4f,f,.3f);kit::prop(m,model::mine_hard_hat,16.5f,19.4f,f,.279f,.351f,.153f,2.f);
- drFix(m,model::lab_notice_board,19.f,13.135f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::med_first_aid_box,22.94f,13.6f,f+1.2f,.367f,.12f,.349f,drW,false);
+ drFix(m,model::lab_notice_board,20.6f,13.135f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::med_first_aid_box,22.94f,13.6f,f+1.2f,.367f,.12f,.349f,drW,false);   // the board east of the booth door
  m.pickupSpawns.push_back({{17.f,15.f},PickupKind::Health,f});
  drPendant(m,{19.2f,17.4f},R,f+2.7f,.9f,6.f,2900);
  // --- The detail he leaves behind: both turned to the glass while he speaks, their backs and the ---
@@ -1397,8 +1403,9 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  drModel(m,model::lab_analyzer_cabinet,5.4f,4.3f,f,drN,true);drProxy(m,4.45f,3.15f,6.35f,5.45f,f+3.11f,slab);   // its panel turned to the way in
  m.lights.push_back(drWall({4.f,2.5f},f+2.3f,lE,.55f,5.f,5000));                                  // a bracket lamp over the bench end
  drModel(m,model::lab_mainframe,18.8f,3.4f,f,drW,true);drProxy(m,17.65f,2.25f,20.f,4.55f,f+3.18f,slab);
- terminal(m,{8.6f,2.6f},"EXTRACTION INTERFACE / HEAD","THE HEAD WAS SET INTO THE SEAM AT 900 M AND THE LAB WAS BUILT ROUND IT. FEED TO THE CORE, SAMPLES TO THE ARCHIVE.",
+ terminal(m,{8.6f,2.15f},"EXTRACTION INTERFACE / HEAD","THE HEAD WAS SET INTO THE SEAM AT 900 M AND THE LAB WAS BUILT ROUND IT. FEED TO THE CORE, SAMPLES TO THE ARCHIVE.",
   "02:40 THE SEAM MOVED. NOT THE HEAD: THE SEAM. IT CAME UP TO MEET US.",f-sb);
+ m.terminals.back().yaw=0;                                                    // back to the control bench, facing the way in
  for(float x:{6.f,18.f})servicePipe(m,{x,1.2f},{x,x<12?9.f:7.3f},slab-.4f,.08f,3);
  kit::prop(m,model::office_chair,7.f,3.f,f+.012f,.55f,.55f,.95f,2.6f);
  propPose(m,model::office_chair,13.6f,5.4f,f+.012f,1.2f,kPi*.5f,0);
