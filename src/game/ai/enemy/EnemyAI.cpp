@@ -177,13 +177,13 @@ void Game::updateEnemies(float dt){
   float settle=e.alive&&e.surfaceMode==0&&e.verticalVelocity<=0?(m_world.hasTerrain()?roughStep(e.kind):.215f):.01f;
   float support=groundHeight(e.pos,e.z+settle,e.radius());
   if(e.surfaceMode==0){if(e.z>support+.005f){e.verticalVelocity-=14.f*dt;e.z=std::max(support,e.z+e.verticalVelocity*dt);}else{e.z=support;e.verticalVelocity=0;}}
-  if(e.alive&&e.surfaceMode==0&&e.searchTime>.25f&&!hullFits(e.pos,e.z,e.hull(),e.radius(),false)){
+  if(e.alive&&e.surfaceMode==0&&e.searchTime>.25f&&!hullFits(e.pos,e.z,e.hull(),e.radius(),false,false)){
    // Recover an old/authored pose whose centre is clear but whose body overlaps
    // a jamb or terrain obstacle. The centre ray prevents crossing a real wall.
    bool recovered=false;float step=m_world.hasTerrain()?roughStep(e.kind):.215f;
    for(float radius=.05f;radius<=.6f&&!recovered;radius+=.05f)for(int side=0;side<16;++side){
     float angle=side*kTwoPi/16;Vec2 p=e.pos+Vec2{std::cos(angle),std::sin(angle)}*radius;float z=groundHeight(p,e.z+step,e.radius());
-    if(std::fabs(z-e.z)>step+.025f||!hullFits(p,z,e.hull(),e.radius(),false)||!m_world.rayClear(e.pos,e.z+.6f,p,z+.6f))continue;
+    if(std::fabs(z-e.z)>step+.025f||!hullFits(p,z,e.hull(),e.radius(),false,false)||!m_world.rayClear(e.pos,e.z+.6f,p,z+.6f))continue;
     e.pos=p;e.z=z;e.verticalVelocity=0;e.repathTimer=0;recovered=true;break;
    }
    e.searchTime=0;
@@ -654,7 +654,7 @@ void Game::updateEnemies(float dt){
    auto old=e.pos;
    auto move=[&](Vec2 next){float ground=groundHeight(next,e.z+stepHeight,radius),height=hull;
     bool followStep=e.z-ground<=std::max(.24f,stepHeight)&&e.verticalVelocity<=0;float feet=followStep?ground:std::max(e.z,ground);
-    if(ground-e.z>stepHeight+.01f||!aiStructureSegment(m_world,e.pos,e.z,next,height,true,radius)||!hullFits(next,feet,height,radius,false))return false;
+    if(ground-e.z>stepHeight+.01f||!aiStructureSegment(m_world,e.pos,e.z,next,height,true,radius)||!hullFits(next,feet,height,radius,false,false))return false;
     auto approaches=[&](Vec2 body,float bodyFeet,float bodyTop,float clearance){return feet<bodyTop&&feet+height>bodyFeet&&lengthSq(next-body)<clearance*clearance&&lengthSq(next-body)+.000001f<lengthSq(e.pos-body);};
     if(approaches(m_player.pos,m_player.z,m_player.z+m_player.hullHeight(),e.contactRadius()+.2f))return false;
     if(friendly>=0&&approaches(target,targetFeet,targetFeet+targetHull,e.contactRadius()+.2f))return false;

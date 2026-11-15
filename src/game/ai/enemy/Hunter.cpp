@@ -121,7 +121,7 @@ bool Game::hunterFlight(Enemy& e,Vec2& goal,float& goalZ,float dt){
   const float step=m_world.hasTerrain()?creatureTraits(e.kind).step:.215f;
   Vec2 best=e.home;float bestZ=e.homeZ>-999?e.homeZ:e.z,bestScore=-1e9f;
   auto consider=[&](Vec2 p,float bonus){if(p.x<1||p.y<1||p.x>World::Width-1||p.y>World::Height-1)return;
-   const float z=groundHeight(p,e.z+step+1.2f,e.radius());if(std::fabs(z-e.z)>1.3f||!hullFits(p,z,e.hull(),e.radius(),false))return;
+   const float z=groundHeight(p,e.z+step+1.2f,e.radius());if(std::fabs(z-e.z)>1.3f||!hullFits(p,z,e.hull(),e.radius(),false,false))return;
    const Vec2 from=e.pos-m_player.pos,run=p-e.pos;const float spread=length(p-m_player.pos);
    float score=spread+bonus;
    if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,p,z+.6f))score+=6.f;
@@ -143,7 +143,7 @@ void Game::hunterArrive(Enemy& e,float dt){
  // In: at the crossing, or the nearest place beside it its body fits.
  Vec2 at=e.waypoint;float z=e.homeZ;bool placed=false;
  for(float r:{0.f,.35f,.7f,1.05f,1.4f}){for(int i=0;i<8&&!placed;++i){const float a=float(i)*kPi/4;const Vec2 p=e.waypoint+Vec2{std::cos(a),std::sin(a)}*r;const float g=groundHeight(p,e.homeZ+.3f,e.radius());
-   if(std::fabs(g-e.homeZ)<.5f&&hullFits(p,g,e.hull(),e.radius(),false)){at=p;z=g;placed=true;}}if(placed)break;}
+   if(std::fabs(g-e.homeZ)<.5f&&hullFits(p,g,e.hull(),e.radius(),false,false)){at=p;z=g;placed=true;}}if(placed)break;}
  e.pos=at;e.z=z;e.verticalVelocity=0;e.home=at;e.homeZ=z;e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=std::max(e.awareness,8.f);e.state=Enemy::State::Investigate;e.repathTimer=0;e.searchTime=0;e.moving=false;
  enemySound(e,0,.9f,.92f);
 }

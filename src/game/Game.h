@@ -1166,7 +1166,7 @@ private:
     // Pieces of props broken this frame (level, shard), added to their lists once nothing holds a reference into them.
     std::vector<std::pair<int,Clutter>> m_pendingShards;void landShards();
     bool tryMove(Vec2 delta);
-    bool hullFits(Vec2 position,float feet,float height,float radius=.20f,bool creatures=true)const;
+    bool hullFits(Vec2 position,float feet,float height,float radius=.20f,bool creatures=true,bool props=true)const;   // props=false: a creature's step, which shoves loose props aside (Clutter kick) instead of stopping at them
     bool unstickPlayer();
     float groundHeight(Vec2 position)const;
     float groundHeight(Vec2 position,float feet,float radius=.20f)const;
