@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.8 - Weight (2026-11-15)
+
+A patch about things that are heavy, and things that should have been where they were.
+
+- **Glass.** A crate thrown at a window cracked nothing unless it was flying fast and struck dead centre. Glass now takes a blow by how hard it is hit: a thrown crate cracks it, a hard throw or a heavy drop breaks it and goes through, a tossed mug does not, and the reinforced panes still only craze. A breaking window is heard as far as a gunshot.
+- **Chairs.** A crate or a barrel struck a chair and the chair did not care. Chairs now slide, tip and go over when something heavy meets them, and every chair standing on a floor in the game is loose, not only some of them.
+- **The torch.** On the shotgun the flashlight hung in the air beside the gun. It rides on the receiver now, at the hip, aimed, walking, crouched and reloading.
+- **Beds.** Straps floated above the beds in Medical Screening, over the recovery bed in Surgery, and a body hung above its gurney in the Quarantine Ward. They lie where they are laid. The audit now looks for it.
+- **Field Measurement.** The techs' office worked with their backs to the room and their screens to the wall, and the terminals there had grown a second screen. One screen each, facing the chair.
+
+Verified with tools/release/ship.py (the full test suite, the audio test and the Campaign Builder's checks on the release build), the feature lab's heavy-impacts tube (crates at nine speeds against glass and reinforced glass, chairs struck head-on, side-on and by a shove, a resting stack left ten seconds), the arms inspection measuring the torch on its mount in eleven poses, the map audit over every touched map, and before-and-after shots of each fix.
+
+---
+
 ## v1.4.7 - Inspected (2026-11-14)
 
 A patch from the inspectors' notes. Every item they marked is mended, and the audit now looks for each kind of fault they found.

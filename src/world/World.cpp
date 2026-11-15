@@ -389,6 +389,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(auto&d:m_doors)if(d.swinging&&!d.opening&&d.open>0&&d.rest<0)d.rest=std::min(d.open,d.maxOpen);
  m_props=m_mapData->props;m_fixtures=m_mapData->fixtures;m_pipes=m_mapData->pipes;m_lights=m_mapData->lights;for(auto&l:m_lights)if(l.prop>=0)l.propLevel=level();
  m_creatureSpawns=m_mapData->creatureSpawns;m_pickupSpawns=m_mapData->pickupSpawns;m_clutterSpawns=m_mapData->clutterSpawns;
+ // Chairs on the floor are loose: a thrown crate or a body knocks them over wherever they were
+ // authored (desk sets placed them as fixed fixtures). The fixture stays, hidden and not solid, so
+ // fixture indices other records hold do not move.
+ for(auto&f:m_fixtures)if((f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair)&&f.visible&&f.base<.05f){
+  m_clutterSpawns.push_back({ClutterModelKind,f.position,-999,-f.yaw,f.model,f.width,f.depth,f.height});f.visible=false;f.solid=false;}
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;
  m_pushCrates=m_mapData->pushCrates;m_cratePlates=m_mapData->cratePlates;
