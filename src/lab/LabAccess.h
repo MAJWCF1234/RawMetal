@@ -86,6 +86,9 @@ struct LabAccess {
  static void damagePane(Game& g,int index,float amount,Point3 at,Point3 direction){g.damagePane(g.m_level,index,amount,at,direction);}
  static void breakClutter(Game& g,size_t index,Point3 direction){g.breakClutter(g.m_level,index,direction);g.landShards();}
  static void blastProps(Game& g,Point3 at,bool tiles){g.blastProps(at,tiles);}
+ // The player's hand on the prop in front of him (or off the one he holds), as the use key does.
+ static bool grab(Game& g){return g.interactClutter();}
+ static int held(const Game& g){return g.m_heldClutter;}
  // ---- SoftwareRenderer ----
  using Corpse=SoftwareRenderer::Corpse;
  static std::unordered_map<std::uint64_t,Corpse>& corpses(SoftwareRenderer& r){return r.m_corpses;}

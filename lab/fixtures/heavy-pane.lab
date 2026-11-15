@@ -1,0 +1,10 @@
+# A 9 kg crate thrown (as the player throws it) at a floor-standing glass screen across
+# the plain room (x = 10): it cracks the pane. Shots "before" and "after".
+# Tubes: heavy-impacts (its numbers run here too).
+world room
+camera 6.3 8.9 -999 -8 -4
+light 8.5 8.5 3.2 1.4 9
+light 11.5 8 3.2 1 8
+heavy pane
+size 480 270
+frames 90

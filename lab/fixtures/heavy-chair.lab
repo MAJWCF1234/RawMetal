@@ -1,0 +1,9 @@
+# A 9 kg crate thrown (as the player throws it) into a wooden chair: it knocks it over.
+# Shots "before" and "after". Tubes: heavy-impacts (its prop-against-prop numbers run here).
+world room
+camera 9.6 5.4 -999 80 -14
+light 9.5 8 3.2 1.4 9
+light 7 6 3.2 1 8
+heavy chair
+size 480 270
+frames 120

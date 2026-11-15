@@ -191,6 +191,25 @@ void Game::tearLead(int level,int index,bool quiet){
  SoundEvent zap{Sound::LeadArc,at,1,1,true,20,tip.z};zap.aiRadius=14;m_sounds.push_back(zap);
  if(held&&std::fabs(m_elapsed-m_leadShockAt)>.6f){m_leadShockAt=m_elapsed;if(!m_god)m_player.health=std::max(std::min(m_player.health,1.f),m_player.health-LeadShock);m_damageFlash=std::max(m_damageFlash,.8f);m_verticalSpringVelocity-=.5f;sound(Sound::Hurt,.6f,1.15f);}
 }
+// A prop's blow on a pane: the energy of its speed into the pane (half m v squared), past a 2 J tap, as a
+// share of the energy that breaks the pane outright. Ordinary glass goes at 150 J: a crate thrown hard, or
+// dropped from head height, breaks it; the player's throw of a 9 kg crate (about 100 J) cracks it two
+// thirds of the way; a crate shoved at a sprint stars it; a mug tossed does nothing. Holds glass takes
+// three times that to reach its last crack and never goes (World::damageBreakable). A ceiling tile goes
+// at 40 J, boarding and partitions at 300 J. Bullets and blows keep their own damage.
+namespace {
+constexpr float PaneTap=2,PaneRearm=.3f;
+float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:150.f):b.material==22?40.f:300.f;}
+float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
+// The struck prop tips about its base edge away from the blow: an impulse `dv` (m/s) along `dir` landing
+// `h` above its base turns a box about that edge at 3 dv h / (H^2 + D^2), D its depth along the blow. The
+// floor's gravity torque (below) turns props about their middle, with a quarter of the edge's inertia, so
+// the turn is given at twice that rate to climb the same angle: what physically goes over, goes over.
+// High on a tall light chair it goes over; low on a squat heavy crate it only slides.
+void tipFromBlow(Clutter& v,Vec2 dir,float dv,float contactZ){if(dv<.3f||v.model<0)return;const float H=std::max(.05f,v.dims[2]),h=std::clamp(contactZ-v.z,0.f,H);
+ const Vec2 ax{std::cos(v.yaw),std::sin(v.yaw)},ay{-ax.y,ax.x};const float along=dot(dir,ax),across=dot(dir,ay);
+ v.tipTime=1.5f;v.pitchSpeed+=std::clamp(6*dv*along*h/(H*H+v.dims[0]*v.dims[0]),-8.f,8.f);v.rollSpeed-=std::clamp(6*dv*across*h/(H*H+v.dims[1]*v.dims[1]),-8.f,8.f);}
+}
 void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held){
  const int initialCount=int(list.size());size_t debris=0;for(const auto&b:friendlyWorld(level).breakables())if(b.material!=17)debris+=6;list.reserve(list.size()+debris);
  auto shift=chunkOffset(level)-chunkOffset(m_level);
@@ -238,9 +257,15 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
   auto impact=[&](float speed){if(speed<.65f||c.impactCooldown>0)return;float gain=std::clamp(speed*.12f,.12f,.85f);if(c.model<0&&c.impactSound()==Sound::JunkSoft)gain*=.65f;
    const auto&t=propMaterialTraits(c.material());SoundEvent event{c.impactSound(),c.pos+shift,gain,c.model>=0?t.impactPitch:.94f+.1f*std::fabs(std::sin(c.yaw+index)),true,17,c.z+c.height()*.5f};if(c.model>=0){event.gain*=t.impactGain;event.owner=c.soundOwner;event.aiRadius=std::clamp(2.f+std::sqrt(c.mass())*speed,2.f,12.f);if(t.breakSpeed>0&&speed>t.breakSpeed)breakClutter(level,index,{c.velocity.x,c.velocity.y,c.vz});}m_sounds.push_back(event);c.impactCooldown=.075f;
   };
+  // A pane the prop meets at `speed` into it: cracked by the blow's energy (PaneTap..paneBreakEnergy), or
+  // broken, when the prop goes on with what the glass did not take (the share of its speed returned).
+  auto strike=[&](int paneLevel,int pane,float speed,Point3 at,Point3 dir)->float{auto&pw=paneLevel==m_level?m_world:m_chunks[paneLevel].world;if(!pw.breakableIntact(pane))return 1;
+   const bool fresh=c.paneRearm<=0;c.paneRearm=PaneRearm;if(!fresh)return 0;const auto b=pw.breakables()[size_t(pane)];
+   const float energy=.5f*c.mass()*speed*speed,limit=paneLimit(b),left=std::max(0.f,limit-pw.breakableDamage(pane)),damage=limit*std::max(0.f,energy-PaneTap)/paneBreakEnergy(b);
+   if(damage<=0||!damagePane(paneLevel,pane,damage,at,dir))return 0;c.paneRearm=0;return std::sqrt(std::clamp(1-(PaneTap+paneBreakEnergy(b)*left/limit)/energy,.1f,.9f));};
   for(int i=0;i<steps;++i){
    if(c.model>=0&&(lengthSq(c.velocity)>.0001f||std::fabs(c.vz)>.05f))for(auto&v:list)if(&v!=&c&&v.model>=0&&!v.broken&&v.sleeping&&std::fabs(v.z-c.z-c.supportHeight())<.03f&&length(v.pos-c.pos)<(v.footprint()+c.footprint())*.7f){v.sleeping=false;v.restTime=0;}
-   c.impactCooldown=std::max(0.f,c.impactCooldown-step);
+   c.impactCooldown=std::max(0.f,c.impactCooldown-step);c.paneRearm=std::max(0.f,c.paneRearm-step);c.tipTime=std::max(0.f,c.tipTime-step);
    auto oldExtent=c.extent();float center=c.z+oldExtent[2],oldPitch=c.pitch,oldRoll=c.roll,oldYaw=c.yaw;
    c.pitch=wrapAngle(c.pitch+c.pitchSpeed*step);c.roll=wrapAngle(c.roll+c.rollSpeed*step);c.yaw=wrapAngle(c.yaw+c.spin*step);
    auto extent=c.extent();c.z=center-extent[2];
@@ -261,14 +286,31 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     float drag=std::exp(-5.f*immersed*step);c.velocity=c.velocity*drag;c.vz*=drag;c.spin*=drag;c.pitchSpeed*=drag;c.rollSpeed*=drag;
    }
    if(c.model>=0){auto delta=Point3{c.velocity.x*step,c.velocity.y*step,c.vz*step};float distance=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);if(distance>.02f){auto q=c.pos+shift;const auto&readWorld=physicalWorld(q);int targetLevel=readWorld.level();auto&w=targetLevel==m_level?m_world:m_chunks[targetLevel].world;Point3 from{q.x,q.y,c.z+extent[2]},n;ShotTrace trace;auto travel=delta*(1+std::max({extent[0],extent[1],extent[2]})/distance);float t=w.shotFraction(from,from+travel,n,&trace);
-    for(int j=0;j<2;++j)if(trace.passed[j]>=0&&trace.passedAt[j]<t){float energy=.75f*c.mass()*distance*distance/(step*step);if(damagePane(targetLevel,trace.passed[j],energy,from+travel*trace.passedAt[j],delta*(1/distance))){c.velocity=c.velocity*.7f;c.vz*=.7f;}else{t=trace.passedAt[j];n=trace.passedNormal[j];break;}}
-    if(t<1){if(trace.blocking>=0)damagePane(targetLevel,trace.blocking,.75f*c.mass()*distance*distance/(step*step),from+travel*t,delta*(1/distance));float closing=c.velocity.x*n.x+c.velocity.y*n.y+c.vz*n.z;impact(std::fabs(closing));if(closing<0){c.velocity=c.velocity-Vec2{n.x,n.y}*(closing*1.2f);c.vz-=n.z*closing*1.2f;}}
+    for(int j=0;j<2;++j)if(trace.passed[j]>=0&&trace.passedAt[j]<t){const auto pn=trace.passedNormal[j];const float keep=strike(targetLevel,trace.passed[j],std::fabs(c.velocity.x*pn.x+c.velocity.y*pn.y+c.vz*pn.z),from+travel*trace.passedAt[j],delta*(1/distance));if(keep>0){c.velocity=c.velocity*keep;c.vz*=keep;}else{t=trace.passedAt[j];n=pn;break;}}
+    if(t<1){float closing=c.velocity.x*n.x+c.velocity.y*n.y+c.vz*n.z;const float keep=trace.blocking>=0?strike(targetLevel,trace.blocking,std::fabs(closing),from+travel*t,delta*(1/distance)):0.f;
+     if(keep>0){c.velocity=c.velocity*keep;c.vz*=keep;}else{impact(std::fabs(closing));if(closing<0){c.velocity=c.velocity-Vec2{n.x,n.y}*(closing*1.2f);c.vz-=n.z*closing*1.2f;}}}
    }}
    if(c.broken)break;
    // Wall impulses affect the normal component, not tangential momentum.
    for(int axis=0;axis<2;++axis){auto next=c.pos;float& speed=axis==0?c.velocity.x:c.velocity.y;
     if(c.model>=0&&std::fabs(speed)<.00001f)continue;if(axis==0)next.x+=speed*step;else next.y+=speed*step;
     if(fits(next,std::max(c.z,floor)))c.pos=next;
+    else if([&]{
+     // Stopped short: by an upright pane square across this axis (the trace above only runs for a fast
+     // prop's middle; a shoved or slow-thrown one, or one meeting the glass off its middle, lands here).
+     if(c.model<0)return false;auto q=next+shift;const auto&pw=physicalWorld(q);const auto&panes=pw.breakables();
+     // fits() tests the prop's outline (its yaw-free box turned by its yaw), which reaches past its world box.
+     auto upright=c;upright.yaw=0;const auto box=upright.extent();const float co=std::fabs(std::cos(c.yaw)),si=std::fabs(std::sin(c.yaw));
+     const float reachX=std::max(extent[0],co*box[0]+si*box[1]),reachY=std::max(extent[1],si*box[0]+co*box[1]);
+     for(int b=0;b<int(panes.size());++b){const auto&p=panes[size_t(b)];const float across=axis==0?p.x2-p.x1:p.y2-p.y1,along=axis==0?p.y2-p.y1:p.x2-p.x1;
+      if(across>=along||across>=p.top-p.bottom||!pw.breakableIntact(b))continue;
+      if(axis==0?(q.x+reachX<p.x1-.02f||q.x-reachX>p.x2+.02f||q.y+reachY<=p.y1||q.y-reachY>=p.y2):(q.y+reachY<p.y1-.02f||q.y-reachY>p.y2+.02f||q.x+reachX<=p.x1||q.x-reachX>=p.x2))continue;
+      if(c.z+extent[2]*2<=p.bottom||c.z>=p.top)continue;
+      const float sign=speed>0?1.f:-1.f;const Point3 dir=axis==0?Point3{sign,0,0}:Point3{0,sign,0};
+      const Point3 at{axis==0?(sign>0?p.x1:p.x2):std::clamp(q.x,p.x1,p.x2),axis==1?(sign>0?p.y1:p.y2):std::clamp(q.y,p.y1,p.y2),std::clamp(c.z+extent[2],p.bottom,p.top)};
+      const float keep=strike(pw.level(),b,std::fabs(speed),at,dir);if(keep<=0)return false;c.velocity=c.velocity*keep;c.vz*=keep;
+      auto on=c.pos;if(axis==0)on.x+=speed*step;else on.y+=speed*step;if(fits(on,std::max(c.z,floor)))c.pos=on;return true;}
+     return false;}()){}
     else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-(c.model>=0?propMaterialTraits(c.material()).restitution:.25f);c.projectile=false;}
    }
    floor=-100;float ceiling=100;
@@ -277,7 +319,16 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    auto under=[&](Vec2 offset){auto sample=c.pos+offset;auto p=sample+shift;const auto&w=physicalWorld(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0));if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z,c.model>=0));return true;};
    if(c.model>=0)c.everyOutlinePoint(under);else for(auto offset:c.footprintOffsets())under(offset);
    float z=c.z+c.vz*step;
-   if(c.vz>0&&z+(extent[2]*2)>ceiling){c.z=std::max(floor,ceiling-(extent[2]*2));impact(c.vz);c.vz=-c.vz*.2f;}
+   // Coming down on a flat pane (a glass floor, a skylight, a ceiling tile from above): it takes the
+   // fall's blow, and broken it lets the prop on down.
+   auto through=[&]{if(c.model<0||c.vz>-.5f||z>floor+.001f)return false;auto q=c.pos+shift;const auto&pw=physicalWorld(q);const auto&panes=pw.breakables();
+    for(int b=0;b<int(panes.size());++b){const auto&p=panes[size_t(b)];if(p.top-p.bottom>=std::min(p.x2-p.x1,p.y2-p.y1)||std::fabs(p.top-floor)>.03f||!pw.breakableIntact(b))continue;
+     if(q.x+extent[0]<=p.x1||q.x-extent[0]>=p.x2||q.y+extent[1]<=p.y1||q.y-extent[1]>=p.y2)continue;
+     const float keep=strike(pw.level(),b,-c.vz,{std::clamp(q.x,p.x1,p.x2),std::clamp(q.y,p.y1,p.y2),p.top},{0,0,-1});if(keep<=0)return false;
+     c.vz*=keep;c.velocity=c.velocity*keep;c.z=z;c.restTime=0;return true;}
+    return false;};
+   if(through()){}
+   else if(c.vz>0&&z+(extent[2]*2)>ceiling){c.z=std::max(floor,ceiling-(extent[2]*2));impact(c.vz);c.vz=-c.vz*.2f;}
    else if(z<=floor+.001f){
     float speed=-c.vz;c.z=floor;impact(speed);float bounce=c.model>=0?propMaterialTraits(c.material()).restitution:c.impactSound()==Sound::JunkSoft?.04f:.2f;c.vz=speed>1.f?speed*bounce:0;
     if(speed>1.5f&&length(c.velocity)>.1f){c.pitchSpeed+=c.velocity.x*.4f;c.rollSpeed-=c.velocity.y*.4f;}
@@ -288,7 +339,11 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     c.pitchSpeed+=std::clamp(-14*(plus-minus)/(.01f*iy),-35.f,35.f)*step;
     probe=c;probe.roll+=.005f;plus=probe.extent()[2];probe.roll-=.01f;minus=probe.extent()[2];
     c.rollSpeed+=std::clamp(-14*(plus-minus)/(.01f*ix),-35.f,35.f)*step;
-    c.velocity=c.velocity*std::exp(-(c.model>=0?propMaterialTraits(c.material()).friction:7.f)*step);float damping=std::exp(-8.f*step);c.pitchSpeed*=damping;c.rollSpeed*=damping;c.spin*=damping;
+    c.velocity=c.velocity*std::exp(-(c.model>=0?propMaterialTraits(c.material()).friction:7.f)*step);float damping=std::exp(-8.f*step);
+    // Struck by another prop and up on an edge (tipped well off any face), it pivots almost freely for a
+    // moment, so a blow that tips a chair past its balance carries it over; otherwise the old damping.
+    auto offFace=[](float a){const float r=std::fmod(std::fabs(a),kPi*.5f);return std::min(r,kPi*.5f-r);};const float turnDamping=c.model>=0&&c.tipTime>0&&std::max(offFace(c.pitch),offFace(c.roll))>.12f?std::exp(-1.5f*step):damping;
+    c.pitchSpeed*=turnDamping;c.rollSpeed*=turnDamping;c.spin*=damping;
     if(length(c.velocity)<.5f)c.projectile=false;
     if(!(immersed>0&&buoyant)&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
@@ -316,7 +371,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    if(!overlap)continue;float ia=a.sleeping&&a.mass()>4*b.mass()?0:1/a.mass(),ib=b.sleeping&&b.mass()>4*a.mass()?0:1/b.mass(),total=ia+ib;if(total==0)continue;
    auto move=[&](Clutter&v,Vec2 delta){auto e=v.extent();if(!sweepFits(v,v.pos,v.pos+delta,v.z,e[2]*2))return;auto p=v.pos+delta+shift;const auto&w=physicalWorld(p);if(w.railBlocksHull(p.x,p.y,std::max(e[0],e[1]),v.z,e[2]*2))return;v.pos+=delta;if(lengthSq(delta)>.000001f){v.sleeping=false;v.restTime=0;}};
    move(a,normal*(-penetration*ia/total));move(b,normal*(penetration*ib/total));int owner=std::fabs(dot(a.velocity,normal))>=std::fabs(dot(b.velocity,normal))?a.soundOwner:b.soundOwner;float closing=dot(a.velocity-b.velocity,normal);if(closing>.65f&&a.impactCooldown<=0){const auto&t=propMaterialTraits(a.material());SoundEvent event{t.impact,a.pos+shift,std::clamp(closing*.12f,.12f,.85f)*t.impactGain,t.impactPitch,true,17,a.z+shapes[i][2]};event.owner=owner;event.aiRadius=std::clamp(2+std::sqrt(a.mass())*closing,2.f,12.f);m_sounds.push_back(event);a.impactCooldown=.075f;}
-   if(closing>0){a.soundOwner=b.soundOwner=owner;float impulse=closing*(1+std::min(propMaterialTraits(a.material()).restitution,propMaterialTraits(b.material()).restitution))/total;a.velocity=a.velocity-normal*(impulse*ia);b.velocity+=normal*(impulse*ib);if(impulse*ia>.05f){a.sleeping=false;a.restTime=0;}if(impulse*ib>.05f){b.sleeping=false;b.restTime=0;}
+   if(closing>0){a.soundOwner=b.soundOwner=owner;float impulse=closing*(1+std::min(propMaterialTraits(a.material()).restitution,propMaterialTraits(b.material()).restitution))/total;a.velocity=a.velocity-normal*(impulse*ia);b.velocity+=normal*(impulse*ib);{const float contact=(std::max(a.z,b.z)+std::min(a.z+a.supportHeight(),b.z+b.supportHeight()))*.5f;tipFromBlow(b,normal,impulse*ib,contact);tipFromBlow(a,normal*-1.f,impulse*ia,contact);}if(impulse*ia>.05f){a.sleeping=false;a.restTime=0;}if(impulse*ib>.05f){b.sleeping=false;b.restTime=0;}
     float sa=propMaterialTraits(a.material()).breakSpeed,sb=propMaterialTraits(b.material()).breakSpeed;if(sa>0&&closing>sa)breakClutter(level,i,{normal.x,normal.y,0});if(sb>0&&closing>sb)breakClutter(level,j,{-normal.x,-normal.y,0});if(a.broken)break;
    }
   }
