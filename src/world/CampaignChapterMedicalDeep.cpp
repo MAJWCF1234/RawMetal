@@ -300,7 +300,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  ddFix(m,model::med_ward_bed,2.04f,15.6f,f,1.984f,.944f,.842f,0,true);ddCorpse(m,2.f,15.6f,f+.57f,ddE,.95f);   // subject 31
  ddFix(m,model::med_ward_bed_tossed,2.1f,18.4f,f,2.097f,1.525f,.842f,0,true);
  ddFix(m,model::med_ward_bed,2.04f,21.4f,f,1.984f,.944f,.842f,0,true);
- for(float x:{1.6f,2.5f})wall(m,x,20.93f,x+.06f,21.87f,f+.6f,f+.608f,8);
+ for(float x:{1.6f,2.5f})wall(m,x,20.93f,x+.06f,21.87f,f+.43f,f+.442f,8);                                 // straps on the mattress (crown .41)
  ddDrip(m,3.45f,16.25f,f);ddDrip(m,3.5f,19.25f,f,false);
  ddTrack(m,{1.f,17.f},{4.2f,17.f},f,roof);ddCurtain(m,1.f,3.3f,17.f,true,f);ddBunch(m,3.4f,17.f,f,true);
  ddTrack(m,{1.f,19.9f},{4.2f,19.9f},f,roof);ddBunch(m,4.1f,19.9f,f,true);

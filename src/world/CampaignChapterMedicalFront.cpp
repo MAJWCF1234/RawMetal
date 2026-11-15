@@ -388,8 +388,8 @@ std::shared_ptr<const Map> makeMedicalScreening(){
  for(auto [y,tossed]:{std::pair{15.f,false},{17.8f,true},{20.6f,false}}){
   if(tossed)mdFix(m,model::med_ward_bed_tossed,6.85f,y,f,2.097f,1.525f,.842f,0,true);
   else mdFix(m,model::med_ward_bed,6.79f,y,f,1.984f,.944f,.842f,0,true); // fixed with its authored restraint straps
-  if(!tossed)for(float x:{6.6f,7.4f})wall(m,x,y-.48f,x+.06f,y+.48f,f+.842f,f+.852f,12);
-  else{wall(m,7.f,y+.6f,7.06f,y+.64f,f+.25f,f+.84f,12);wall(m,7.6f,y-.62f,7.66f,y-.58f,f+.35f,f+.84f,12);}
+  if(!tossed)for(float x:{6.6f,7.4f})wall(m,x,y-.48f,x+.06f,y+.48f,f+.43f,f+.442f,12);                 // buckled across the mattress (its crown at .41)
+  else{wall(m,7.f,y+.6f,7.06f,y+.64f,f+.25f,f+.42f,12);wall(m,7.6f,y-.62f,7.66f,y-.58f,f+.35f,f+.42f,12);}   // torn loose, hanging off the mattress
   wall(m,5.8f,y-.25f,6.05f,y+.25f,f+1.27f,f+1.3f,20);
   kit::prop(m,model::med_vitals_monitor,5.92f,y,f+1.3f,.38f,.181f,.28f,mdE);
   const float ix=6.15f,iy=y-(tossed?1.f:.72f);                                                     // the IV stand

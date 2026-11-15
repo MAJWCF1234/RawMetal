@@ -426,8 +426,8 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  paperDrift(m,10.2f,6.6f,13.8f,22.8f,f,8,9401);
  // The one they did bag: a gurney left against the holding glass, the bag taped shut twice over.
  caFix(m,model::med_ward_bed,13.3f,17.9f,f,caE,true);
- wall(m,13.02f,17.f,13.58f,18.8f,f+.6f,f+.84f,8);m.structures.back().solid=false;
- for(float y:{17.45f,18.3f}){wall(m,12.99f,y,13.61f,y+.07f,f+.6f,f+.86f,13);m.structures.back().solid=false;}
+ wall(m,13.02f,17.f,13.58f,18.8f,f+.41f,f+.65f,8);m.structures.back().solid=false;                          // the bag, on the mattress (crown .41)
+ for(float y:{17.45f,18.3f}){wall(m,12.99f,y,13.61f,y+.07f,f+.41f,f+.67f,13);m.structures.back().solid=false;}
  // The ward alarm: the panel by Q1 still calling a breach nobody answered, under its own amber lamp.
  caFix(m,model::lab_status_display,10.03f,13.45f,f+1.85f,caE,false);
  caFix(m,model::lab_control_board,10.1f,13.45f,f+1.05f,caE,false);
