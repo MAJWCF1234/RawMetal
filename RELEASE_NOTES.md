@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.7 - Inspected (2026-11-14)
+
+A patch from the inspectors' notes. Every item they marked is mended, and the audit now looks for each kind of fault they found.
+
+- **Saves.** A game carried deep enough grew a save bigger than the game was willing to read back, and the autosave crossing into Deep Access Control was refused because the floor there stands above the map's base. Both load now, and a save that will not load says why.
+- **The research levels, put right.** The concourse exhibit is a glass case, not a shelf with a door growing out of its side. Straps lie on the beds instead of above them. Kits, extinguishers and lamps hang on walls and rails instead of in the air. Trim stops at door frames. No bench, notice board or box stands in a door. Terminals face the room. Lamps no longer sit inside one another. Desks no longer stand on desks. A railing no longer crosses the walk onto the specimen gallery. The dead in the quarantine holding room are laid out, not lined up like luggage. The card readers at Deep Access Control are the size of card readers.
+- **The Head.** The great ring in the Extraction Interface is solid now, and stands clear of the path through.
+- **A man who would not die.** The hurt engineer in Containment Intake could be shot all day; he, and others like him, can die now.
+- **noclip.** Typed at the console, it lets you fly through walls, for checking a map.
+
+Verified with tools/release/ship.py (the full test suite, the audio test and the Campaign Builder's checks on the release build), before-and-after shots of every inspector item, the map audit over every touched map, the chapter route over all 170 passages, and saves written by v1.4.4 and v1.4.5 and through a whole game from map 0 to 109.
+
+---
+
 ## v1.4.6 - Heard everywhere (2026-11-14)
 
 A patch, for the ears first.
