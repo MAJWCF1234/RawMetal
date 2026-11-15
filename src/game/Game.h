@@ -647,7 +647,11 @@ public:
     static bool testHandgunSaves(std::ostream& report);
     // 20: how far each creature has made the player out (Enemy::recognition).
     // 21: each chunk's torn leads.
-    static constexpr int SaveVersion=25;
+    // 26: no new fields. Chairs on a floor are loose props from v1.4.8, carried in each chunk's
+    // clutter; an older build would draw them twice (its fixed chair and the saved loose one), so
+    // it refuses a 26. Older saves load here: the props they lack come back where they were put.
+    // docs/Systems/save-format.md keeps the whole history.
+    static constexpr int SaveVersion=26;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}

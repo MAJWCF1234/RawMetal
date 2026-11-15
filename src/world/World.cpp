@@ -392,7 +392,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // Chairs on the floor are loose: a thrown crate or a body knocks them over wherever they were
  // authored (desk sets placed them as fixed fixtures). The fixture stays, hidden and not solid, so
  // fixture indices other records hold do not move.
- for(auto&f:m_fixtures)if((f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair)&&f.visible&&f.base<.05f){
+ for(auto&f:m_fixtures)if((f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair)&&f.visible&&!f.anchored&&f.base<.05f){
   m_clutterSpawns.push_back({ClutterModelKind,f.position,-999,-f.yaw,f.model,f.width,f.depth,f.height});f.visible=false;f.solid=false;}
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;

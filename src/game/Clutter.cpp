@@ -4,6 +4,7 @@
 #include "../core/Ray.h"
 #include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
+#include "../world/CampaignExport.h"
 #include "../world/CampaignKit.h"
 #include "../world/GlassFracture.h"
 #include "ai/WalkQueryCache.h"
@@ -67,7 +68,7 @@ void Game::seedClutter(){
   Clutter c;c.kind=spawn.kind;c.pos=spawn.position;c.yaw=spawn.yaw;
   c.model=spawn.model;c.dims={spawn.width,spawn.depth,spawn.height};c.pitch=spawn.pitch;c.roll=spawn.roll;c.breakState=spawn.breakState;
   c.z=spawn.z==-999?m_world.supportBelow(c.pos.x,c.pos.y,m_world.floorHeight(c.pos.x,c.pos.y)+.5f):spawn.z;
-  if(c.model>=0){c.authored=true;c.home=c.pos+chunkOffset(m_level);c.homeZ=spawn.z;auto e=c.extent();float support=-100;
+  if(c.model>=0){c.authored=true;c.home=c.pos+chunkOffset(m_level);c.homeZ=spawn.z==-999?c.z:spawn.z;auto e=c.extent();float support=-100;
    for(auto offset:c.footprintOffsets()){float x=offset.x,y=offset.y;float z=m_world.supportBelow(c.pos.x+x,c.pos.y+y,c.z+.05f,true);for(const auto&other:m_clutter){auto oe=other.extent();if(!other.broken&&(other.model>=0?other.footprintContains(c.pos+Vec2{x,y}):(std::fabs(c.pos.x+x-other.pos.x)<=oe[0]&&std::fabs(c.pos.y+y-other.pos.y)<=oe[1]))&&other.z+other.supportHeight()<=c.z+.03f)z=std::max(z,other.z+other.supportHeight());}support=std::max(support,z);}
    if(c.z-support>=-.025f&&c.z-support<=.03f){c.z=support;c.sleeping=true;}
   }
@@ -380,6 +381,16 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
 }
 bool Game::testProps(){
  std::ofstream report("props-test.txt");bool ok=true;auto check=[&](bool pass,const char*label){report<<(pass?"PASS ":"FAIL ")<<label<<'\n';ok&=pass;};
+ // FIXTURE field 14 (v1.4.8): a chair on the floor plays loose unless anchored, and the export keeps the field.
+ {std::string text="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Chair parser|0\nMAP|0|Room|0|0|4.5|6.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+  for(int y=0;y<24;++y)text+="ROW|0|0|"+std::to_string(y)+"|........................\n";
+  text+="FIXTURE|0|"+std::to_string(model::office_chair)+"|8|8|0|0.55|0.55|0.95|0|1\nFIXTURE|0|"+std::to_string(model::wooden_chair)+"|12|8|0|0.42|0.52|0.95|0|1|1|1|1\n--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+  try{auto campaign=loadCustomCampaignText(text,"chair-parser.txt");Game chairs(campaign);const auto&fx=chairs.world().fixtures();
+   const bool loose=std::any_of(chairs.m_clutter.begin(),chairs.m_clutter.end(),[](const Clutter&c){return c.model==model::office_chair&&c.sleeping&&length(c.pos-Vec2{8,8})<.01f;});
+   const bool anchored=fx.size()==2&&fx[1].anchored&&fx[1].solid&&fx[1].visible&&!fx[0].visible&&!fx[0].solid&&std::none_of(chairs.m_clutter.begin(),chairs.m_clutter.end(),[](const Clutter&c){return c.model==model::wooden_chair;});
+   const auto written=exportRmc("Chair parser",{{campaign->maps[0],-1}}).text;
+   check(loose&&anchored&&(written.find("|1|1|1\n")!=std::string::npos||written.find("|1|1|1\r\n")!=std::string::npos),"a floor chair loads loose and asleep, an anchored one stays a solid fixture, and the export keeps the anchored field");
+  }catch(const std::exception&){check(false,"a floor chair loads loose and asleep, an anchored one stays a solid fixture, and the export keeps the anchored field");}}
  auto map=regression::room();map->fixtures.push_back({24,{8,8},0,1.4f,.7f,.75f,0,true});kit::deskSet(*map,{8,8},.75f,0,1);auto campaign=regression::campaign(map);Game g(campaign);
  check(g.m_clutter.size()==4&&std::all_of(g.m_clutter.begin(),g.m_clutter.end(),[](const Clutter&c){return c.sleeping&&std::fabs(c.z-.75f)<.01f;}),"desk set seeds asleep on desk");
  g.m_clutter[3].breakState=stateId("mug_broken");Point3 origin{8.42f,6, .8f},direction{0,1,0};auto hit=g.traceShot(origin,direction,24);g.resolveShot(hit,origin,direction,weaponDef(WeaponId::Shotgun).hitscan,true);

@@ -204,7 +204,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    r.f(door.alongY?"1":"").f(door.hingeRight?"1":"").f(door.strength>0?num(door.strength):"").f(door.lock?std::to_string(door.lock):"");line(r,13);}
   for(const auto& s:m.structures){Rec r("STRUCT");r.i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).b(s.rail).i(s.material).f(s.solid?"":"0").f(s.shape?std::to_string(s.shape):"").f(s.facing?std::to_string(s.facing):"");line(r,10);}
   for(const auto& x:m.fixtures){Rec r("FIXTURE");r.i(mi).i(x.model).n(x.position.x).n(x.position.y).n(x.base).n(x.width).n(x.depth).n(x.height).n(x.yaw).b(x.solid);
-   if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
+   if(x.anchored)r.n(x.core).b(x.visible).b(true);else if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
   for(const auto& p:m.props)line(Rec("PROP").i(mi).i(p.kind).n(p.position.x).n(p.position.y).n(p.height).n(p.footprint).n(p.yaw).n(p.halfSize.x).n(p.halfSize.y).n(p.base));
   // A test lead's pilot lamp is made again when its LEAD is seated on load.
   std::set<int> pilots;for(const auto& lead:m.leads)if(lead.panel>=0&&lead.lamp>=0)pilots.insert(lead.lamp);

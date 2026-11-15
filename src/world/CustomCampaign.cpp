@@ -351,7 +351,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=12){float core=number(f,11,"fixture collision core");if(core<0||core>1)throw std::runtime_error("map "+f[1]+" fixture["+std::to_string(map->fixtures.size()-1)+"] core="+std::to_string(core)+" must be in [0,1]");map->fixtures.back().core=core;}
    // 13th field 0: collision only (a neighbouring map draws the model).
    if(f.size()>=13)map->fixtures.back().visible=boolean(f,12,"fixture visible");
-   if(f.size()>13)throw std::runtime_error("malformed FIXTURE record");
+   // 14th field 1: a chair that stays where it was put (chairs on a floor are otherwise loose).
+   if(f.size()>=14)map->fixtures.back().anchored=boolean(f,13,"fixture anchored");
+   if(f.size()>14)throw std::runtime_error("malformed FIXTURE record");
    const auto& fixture=map->fixtures.back();if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("invalid fixture model or dimensions");
   }else if(tag=="PROP"){
    if(f.size()<11)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({
