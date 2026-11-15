@@ -433,7 +433,7 @@ std::shared_ptr<const Map> makeSampleStorage(){
  extinguisher(m,1.f,13.4f,f,anE);
  for(float x:{2.25f,2.8f,3.35f})ssDewar(m,x,14.5f,f);
  wall(m,2.f,14.76f,3.6f,14.8f,f+.82f,f+.86f,8);
- crash(1.9f,10.9f,14.76f,14.8f,f);crash(6.4f,10.9f,1.f,1.04f,f);crash(1.f,1.04f,8.6f,13.f,f);
+ crash(1.9f,5.54f,14.76f,14.8f,f);crash(6.86f,10.9f,14.76f,14.8f,f);crash(6.4f,10.9f,1.f,1.04f,f);   // the south rail stops at the plant doorway's jambscrash(1.f,1.04f,8.6f,13.f,f);
  m.pickupSpawns.push_back({{2.5f,10.4f},PickupKind::Ammo,f});
  // the refrigerant pair from the plant, under the slab to the freezer runs, and its drops
  for(float x:{2.3f,2.45f}){m.pipes.push_back({{x,14.8f},{x,1.6f},ceil-.1f,.035f,ceil-.1f,5});m.pipes.push_back({{x,1.6f},{x,1.6f},f+2.12f,.035f,ceil-.1f,5});}
@@ -1206,9 +1206,12 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
   guardRail(m,x1,y1,x2,y2,cw);
  // caged lamps on the rail posts at hand height, plant lamps that do not move: the walk is lit, the water
  // takes their light and gives none of it back
- for(auto [x,y]:{std::pair{4.1f,10.1f},{9.f,10.1f},{15.9f,10.1f},{4.1f,15.f},{15.9f,13.f},{4.1f,21.9f},{11.f,21.9f}}){
-  anFix(m,model::mine_cage_lamp,x,y,cw+1.1f,.21f,.2f,.36f,0,false);
-  m.lights.push_back(lamp({x,y},cw+1.3f,.58f,5.2f,4300,0,WorldLightMount::Bare,0,false));}
+ // each sits on the outer rail's top (cw+1.1) on its clamp plate, centred on the rail line
+ for(auto [x,y]:{std::pair{4.04f,10.04f},{9.f,10.04f},{15.9f,10.04f},{4.04f,15.f},{15.96f,13.f},{4.04f,21.96f},{11.f,21.96f}}){
+  wall(m,x-.08f,y-.08f,x+.08f,y+.08f,cw+1.1f,cw+1.13f,8);m.structures.back().solid=false;
+  wall(m,x-.05f,y-.05f,x+.05f,y+.05f,cw+.98f,cw+1.1f,8);m.structures.back().solid=false;     // the clamp round the rail
+  anFix(m,model::mine_cage_lamp,x,y,cw+1.13f,.21f,.2f,.36f,0,false);
+  m.lights.push_back(lamp({x,y},cw+1.33f,.58f,5.2f,4300,0,WorldLightMount::Bare,0,false));}
  // the water's skin: rings standing on it round the stand that never spread and never fade, and the
  // pan's black taking the rail lamps' light a hand's width from its edge
  for(auto [rx,ry]:{std::pair{1.6f,1.45f},{2.5f,2.05f},{3.35f,2.4f},{4.1f,2.48f}}){const int n=40;
@@ -1225,7 +1228,7 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  for(int i=0;i<4;++i)kit::prop(m,model::anl_cell_charged,9.6f+i*.27f,17.6f,f+1.23f,.22f,.2f,.41f,i*.7f);
  steelColumn(m,10.f,18.42f,f+.42f,f+3.9f);
  wall(m,8.2f,18.3f,11.8f,18.54f,f+3.62f,f+3.84f,18);                                           // the crossarm
- for(float x:{8.4f,11.6f}){anFix(m,model::mine_cage_lamp,x,18.42f,f+3.24f,.21f,.2f,.36f,0,false);}
+ for(float x:{8.4f,11.6f}){anFix(m,model::mine_cage_lamp,x,18.42f,f+3.26f,.21f,.2f,.36f,0,false);}   // hung tight under the crossarm
  m.lights.push_back(lamp({10.f,17.9f},f+3.f,1.15f,6.5f,7200,0,WorldLightMount::Bare,0,true,{.82f,.86f,1.f}));   // the reference lamp: still light, the safe kind, cold white; the violet is the cells' and the bus's
  // the mast's two outer lamps are on the field lamp bus: dark until Chamber 3's switch is closed, then seen from its window
  for(float x:{8.4f,11.6f}){auto l=lamp({x,18.3f},f+3.1f,.5f,6.f,9500,-.4f,WorldLightMount::Bare,0,false,{.62f,.35f,1.f});l.enabledState=stateId("anl_fm_bus");m.lights.push_back(l);}

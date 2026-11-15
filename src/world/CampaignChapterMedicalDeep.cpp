@@ -246,8 +246,8 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  // --- The transfer bay: the red line where the ward handed them over -------------------------------
  floorLine(m,3.3f,8.8f,3.42f,14.2f,f,19);
  ddFix(m,model::med_ward_bed,2.3f,9.32f,f,1.984f,.944f,.842f,0,true);                     // the bed 40 came in on
- for(float x:{1.9f,2.75f}){wall(m,x,8.87f,x+.06f,9.77f,f+.6f,f+.608f,8);wall(m,x,9.77f,x+.06f,9.79f,f+.36f,f+.608f,8);}  // straps, cut
- wall(m,2.55f,8.95f,2.95f,9.27f,f+.6f,f+.7f,39);
+ for(float x:{1.9f,2.75f}){wall(m,x,8.87f,x+.06f,9.77f,f+.43f,f+.442f,8);wall(m,x,9.77f,x+.06f,9.79f,f+.21f,f+.442f,8);}  // straps, cut: on the mattress (crown .41), the ends hanging
+ wall(m,2.55f,8.95f,2.95f,9.27f,f+.43f,f+.53f,39);
  ddTrolley(m,4.75f,13.45f,f,true);                                                  // the theatre trolley, back from the table
  wall(m,3.9f,13.2f,4.4f,13.7f,f+.82f,f+.824f,16);
  ddFix(m,model::med_notice_board,1.9f,14.165f,f+1.15f,1.2f,.07f,.9f,ddN,false);
@@ -271,7 +271,8 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
  ddFix(m,model::med_notice_board,8.565f,3.3f,f+1.2f,1.2f,.07f,.9f,ddW,false);                             // the theatre list board, by the scrub door
  wall(m,6.f,5.f,6.12f,5.35f,f+1.3f,f+1.6f,8);wall(m,6.12f,5.08f,6.16f,5.27f,f+1.42f,f+1.56f,20);          // wall phone
  kit::prop(m,model::med_crash_cart,8.3f,14.35f,f,ddE);
- ddFix(m,model::med_first_aid_box,6.06f,13.2f,f+1.3f,.367f,.12f,.349f,ddE,false);
+ // the first-aid box on the corridor's east wall over the crash rail (x 6 is the transfer bay's open side: no wall there)
+ ddFix(m,model::med_first_aid_box,8.54f,13.4f,f+1.3f,.367f,.12f,.349f,ddW,false);
  // --- Staff changing --------------------------------------------------------------------------------
  for(int i=0;i<4;++i)ddFix(m,model::psx_locker,1.5f+i*.86f,1.33f,f,.64f,.85f,2.42f,-kPi*.5f,true);
  bench(m,3.3f,3.3f,f);
@@ -372,7 +373,7 @@ std::shared_ptr<const Map> makeMedicalSurgery(){
   "LAB 4 IS THE CLEAN ONE YOU ASKED FOR. SEND HER DOWN AND YOU WILL HAVE YOUR CONTROL BY SIX.");
  m.terminals.back().readable=Readable::Letter;m.terminals.back().surface=.891f;m.terminals.back().yaw=ddW;
  ddFix(m,model::office_bookcase,22.75f,9.25f,f,2.025f,.5f,2.5f,ddW,true);
- ddFix(m,model::office_display_cabinet,22.73f,12.7f,f,.968f,.54f,2.1f,ddW,true);
+ ddFix(m,model::lab_specimen_cabinet,22.63f,12.7f,f,1.34f,.74f,2.19f,ddW,true);   // glass-fronted: office_display_cabinet's door is baked half out of its side
  ddFix(m,model::office_couch_green,21.4f,14.97f,f,2.242f*.92f,1.364f*.92f,1.192f*.92f,ddN,true);
  ddFix(m,model::med_wall_clock,19.6f,15.59f,f+2.2f,.236f,.02f,.233f,ddN,false);
  // his coat, on its stand by the door

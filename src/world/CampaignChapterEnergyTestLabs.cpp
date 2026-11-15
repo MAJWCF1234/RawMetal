@@ -290,10 +290,10 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  for(auto [x,y,yaw]:{std::tuple{3.f,10.6f,.2f+kPi},{3.9f,12.05f,-.3f}})kit::prop(m,model::wooden_chair,x,y,f,.417f,.525f,.95f,yaw);
  kit::prop(m,model::office_paper_stack,3.f,11.35f,f+.78f,.33f,.44f,.03f,.4f);kit::prop(m,model::office_file_binder,3.75f,11.2f,f+.78f,.093f,.301f,.424f,1.3f);
  kit::prop(m,model::lab_microscope,3.55f,11.45f,f+.78f,.18f,.22f,.29f,.6f);
- anModel(m,model::office_file_cabinet_open,1.42f,12.6f,f,anE,true);
+ anModel(m,model::office_file_cabinet_open,1.42f,15.f,f,anE,true);                              // on the wall south of the seam's mouth (9-14), clear of the way in
  handCart(m,5.2f,9.4f,f);kit::prop(m,model::lab_field_meter,5.15f,9.2f,f+.29f,.25f,.328f,.148f,.4f);anModel(m,model::lab_scope_monitor,5.25f,9.75f,f+.29f,anE,false);
  paperDrift(m,2.f,9.6f,5.6f,13.4f,f,4,8531);
- extinguisher(m,1.f,15.f,f,anE);
+ extinguisher(m,1.f,16.2f,f,anE);
  // the west seam: a framed mouth onto the passage to the test bay
  wall(m,0.f,9.f,1.f,14.f,f+2.7f,roof,28);
  paperDrift(m,1.5f,8.2f,20.4f,16.5f,f,12,8501);
@@ -412,7 +412,7 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
  anFix(m,model::pallet,21.6f,19.6f,g,1.2f,1.15f,.16f,0,true);anModel(m,model::lab_specimen_crate,21.6f,19.6f,g+.16f,.2f,true,.8f);
  anModel(m,model::mine_portable_generator,19.6f,21.9f,g,.3f,true);
  anFix(m,model::pwr_cable_bundle,20.f,15.f,g,4.f,.14f,.22f,kPi*.5f,false);
- extinguisher(m,23.f,10.f,g,anW);
+ extinguisher(m,23.f,14.5f,g,anW);                                                             // on the wall south of the seam (9-14 is open)
  wallSign(m,22.94f,15.6f,g+2.2f,"HIGH VOLTAGE","STAY OFF THE BAY FLOOR WHILE THE TOWERS ARE UP",2.4f,anW);
  for(float y:{16.6f,19.f})m.lights.push_back(etWall({22.98f,y},g+2.8f,kPi,.6f,7.f,3400));
  // --- The south gallery: the shot crew's lockers and suits --------------------------------------

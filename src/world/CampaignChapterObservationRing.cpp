@@ -208,8 +208,9 @@ void rgQuadrant(Map& m,bool mx,bool my,int seed){
   // of what the company wanted seen, the desk their passes were written at, the spare chairs
   shelf(m,{X(15.6f),Y(1.3f)},Yaw(0),G-F);box(14.7f,1.05f,16.5f,1.55f,G+1.95f,top,30);
   pr(model::mine_hard_hat,15.1f,1.3f,G+.972f,.3f);pr(model::mine_hard_hat,15.7f,1.32f,G+.972f,1.4f);pr(model::mine_hard_hat,16.1f,1.3f,G+1.656f,2.2f);pr(model::prop_cardboard_box,15.3f,1.3f,G+.306f,0,.6f);
-  for(float x:{17.6f,18.7f,19.8f})fx(model::office_display_cabinet,x,1.3f,G,anS,true);
-  box(17.1f,1.03f,20.3f,1.6f,G+2.1f,top,30);
+  // the pack's glass-fronted cabinet (office_display_cabinet's door is baked half out of its side)
+  for(float x:{17.95f,19.45f})fx(model::lab_specimen_cabinet,x,1.4f,G,anS,true);
+  box(17.1f,1.03f,20.3f,1.8f,G+2.19f,top,30);
   fx(model::art_painting_6,21.3f,1.03f,G+1.5f,anS,false);fx(model::lab_notice_board,9.1f,1.04f,G+1.1f,anS,false);
   fx(model::lab_exec_desk,21.2f,4.3f,G,anE,true);fx(model::lab_boardroom_chair,22.6f,4.3f,G,anW,true);
   pr(model::office_paper_stack,21.1f,4.f,G+.891f,.3f);fx(model::lab_desk_lamp,21.3f,3.55f,G+.891f,anW,false);
@@ -224,8 +225,8 @@ void rgQuadrant(Map& m,bool mx,bool my,int seed){
   box(3.95f,11.95f,4.85f,12.45f,G+.78f,G+.83f,15);box(4.28f,12.08f,4.52f,12.32f,G+.83f,G+.84f,8);box(4.385f,12.185f,4.415f,12.215f,G+.83f,G+1.22f,18);
   for(float z:{G+.98f,G+1.1f}){box(4.25f,12.05f,4.55f,12.065f,z,z+.012f,20);box(4.25f,12.335f,4.55f,12.35f,z,z+.012f,20);box(4.25f,12.05f,4.265f,12.35f,z,z+.012f,20);box(4.535f,12.05f,4.55f,12.35f,z,z+.012f,20);}
   box(3.95f,11.95f,4.85f,12.45f,G+.83f,G+1.36f,17);
-  for(float y:{11.2f,12.3f})fx(model::office_display_cabinet,1.3f,y,G,anE,true);
-  box(1.03f,10.7f,1.6f,12.8f,G+2.1f,top,30);
+  for(float y:{11.05f,12.45f})fx(model::lab_specimen_cabinet,1.4f,y,G,anE,true);
+  box(1.03f,10.35f,1.8f,13.15f,G+2.19f,top,30);
   fxSide(model::lab_photocopier,1.45f,15.9f,G,anE,-1,true);
   fx(model::lab_specimen_crate,2.f,19.f,G,.05f,true);fx(model::lab_specimen_crate,2.05f,20.3f,G,-.1f,true);fx(model::lab_specimen_crate,3.3f,19.7f,G,.3f,true,.85f);fx(model::lab_specimen_crate,2.05f,19.05f,G+1.12f,.2f,true,.8f);
   box(1.4f,18.4f,2.7f,20.9f,G+1.13f,top,30);box(2.8f,19.2f,3.8f,20.2f,G+.96f,top,30);
@@ -271,7 +272,7 @@ void rgQuadrant(Map& m,bool mx,bool my,int seed){
  if(seed!=3){fx(model::lab_potted_plant,8.45f,8.45f,G,seed*.7f,true);}
  // and on the galleries' back walls, what was hung there for the visitors to look at on the way round
  if(seed==0){
-  fx(model::office_display_cabinet,8.95f,1.3f,G,anS,true);box(8.46f,1.03f,9.44f,1.58f,G+2.1f,top,30);
+  fx(model::lab_specimen_cabinet,8.95f,1.4f,G,anS,true);box(8.25f,1.03f,9.65f,1.8f,G+2.19f,top,30);
   fx(model::radiator_panel,14.65f,1.14f,G+.1f,anS,false);fit(model::med_first_aid_box,1.07f,8.5f,G+1.3f,.367f,.12f,.349f,anE,false);}
  if(seed==1){
   fx(model::art_painting_6,1.03f,14.f,G+1.45f,anE,false);fx(model::lab_notice_board,1.05f,17.6f,G+1.1f,anE,false);fx(model::lab_potted_plant,1.4f,9.f,G,.3f,true);}
@@ -453,8 +454,8 @@ std::shared_ptr<const Map> makeObservationRingNorthEast(){
   wallSign(m,x,y,G+.74f,title,sub,1.5f,yaw);
   m.lights.push_back(lamp({alongX?x:x+1.2f,alongX?y-1.2f:y},G+2.6f,.45f,4.f,2700,0,WorldLightMount::Bare,0,true));}
  // the display cases they wheeled out for the opening, against the glass; one shoved aside, its case empty
- anModel(m,model::office_display_cabinet,2.9f,8.6f,G,anS,true);anModel(m,model::office_display_cabinet,5.5f,8.85f,G,anS+.4f,true);
- wall(m,2.35f,8.3f,6.1f,9.25f,G+2.1f,G+3.1f,30);
+ anModel(m,model::lab_specimen_cabinet,2.9f,8.6f,G,anS,true);anModel(m,model::lab_specimen_cabinet,5.5f,8.85f,G,anS+.4f,true);
+ wall(m,2.2f,8.2f,6.3f,9.5f,G+2.19f,G+3.1f,30);
  // the gallery's emergency shutters, dropped at 01:58 on the walk side of the glass; one bay torn up
  for(float x:{1.f,7.f,9.f,15.f})wall(m,x-.05f,8.f,x+.05f,8.1f,G,G+3.1f,12);
  for(float z=G+.75f;z<G+3.05f;z+=.13f){
