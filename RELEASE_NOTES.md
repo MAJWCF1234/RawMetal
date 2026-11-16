@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.11 - Only what changed (2026-11-16)
+
+A patch so a release does not re-prove the whole game when you only touched one system.
+
+- **Affected ship tests.** `ship.py` maps files changed since the last release to the suite tests, extras and audio they cover (`tools/dev/affected.py`). Preview with `python tools/dev/affected.py`. Unknown files under `src/` still run the full suite. `--full-suite` forces everything; `--full-audio` still forces the long audio proof.
+
+Verified by dry-running the map on the v1.4.10 audio diff (eleven tests and smoke audio, no campaign-map extras) and by shipping this release through the new gate.
+
+---
+
 ## v1.4.10 - Quicker out (2026-11-16)
 
 A patch for the time between a change and a release.
