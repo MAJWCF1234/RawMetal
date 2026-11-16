@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.10 - Quicker out (2026-11-16)
+
+A patch for the time between a change and a release.
+
+- **Ship audio.** The release gate runs a smoke audio proof by default: every score still has to decode, masks and speech still have to hold, and a few area seams still have to carry — without mixing a full second of every campaign map. After soundtrack or mixer work, `python tools/release/ship.py … --full-audio` still runs the long proof.
+- **Orbit.** The machine-orbit check reuses one map instead of rebuilding it hundreds of times, so even the full audio test spends less time waiting on the same room.
+
+Verified with tools/release/ship.py (the full test suite, `--audio-test=smoke`, and the Campaign Builder's checks on the release build); smoke audio passed in about half a minute on the ship machine.
+
+---
+
 ## v1.4.9 - In the hands (2026-11-16)
 
 A patch for what you carry, what hits a body, and what a round does when it meets water.
