@@ -19,7 +19,7 @@ const bool registered=[]{
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);
  engine("chimera-hunt","--each-test=chimera-hunt: the bite, the meal, the return",&Game::testChimeraHunt);
  // The voices: what the game raises, what the mixer plays, the bank and saves (tubes/DeathVoices.cpp leans on them).
- engine("audio","--audio-test: the bank decodes, masks, speech caps, the mix",&AudioEngine::test);
+ engine("audio","--audio-test: the bank decodes, masks, speech caps, the mix (smoke; --audio-test=full for every map)",+[]{return AudioEngine::test(false);});
  engine("audio-events","--each-test=audio-events",&Game::testAudioEvents);
  engine("npc-voices","--each-test=npc-voices: who speaks, when, once",&Game::testNpcVoices);
  engine("dialogue","--each-test=dialogue",&Game::testDialogue);

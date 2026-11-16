@@ -18,7 +18,7 @@ That one command:
 - commits;
 - syncs the Campaign Builder's engine copy;
 - builds the game and the Builder in parallel;
-- runs every test: the suite in parallel lanes on both GPUs, gore, carcass, campaign-map, repeated-frame rendering, the audio test, the Builder's self-test, editing test and map round-trips;
+- runs every test: the suite in parallel lanes on both GPUs, gore, carcass, campaign-map, repeated-frame rendering, the audio smoke test (`--audio-test=smoke`), the Builder's self-test, editing test and map round-trips;
 - packages the release and checks that the zipped exe is the tested one;
 - pushes, publishes the GitHub release as Latest with its four files, and downloads it back to verify the checksums.
 
@@ -27,6 +27,7 @@ It stops at the first failure and prints the log to read.
 Options:
 - `--offline` does everything except push and publish. The finished release sits in `.build/release/v1.4.6/`; run the command again without `--offline` later to publish.
 - `--check` builds and tests the current tree without changing the version or packaging. Use it before deciding to ship.
+- `--full-audio` runs `--audio-test=full` (every campaign map, long mix) instead of the ship smoke path. Use after soundtrack or mixer changes.
 
 From the launcher: `RawMetalMaster.cmd ship 1.4.6` or `RawMetalMaster.cmd ship 1.4.6 offline`.
 

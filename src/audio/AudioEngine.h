@@ -22,7 +22,9 @@ public:
  AudioEngine& operator=(const AudioEngine&)=delete;
  void update(const Game& game, bool focused=true);
  bool available()const{return m_device!=nullptr;}
- static bool test();
+ // full=false is the ship smoke path (stratified area scores, short mix, reused orbit).
+ // full=true walks every campaign map and the long gameplay mix (--audio-test=full).
+ static bool test(bool full=false);
  static bool testDevice();
  static bool testLiftMix();
  static bool testAlertMusic();

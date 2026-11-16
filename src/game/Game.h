@@ -1009,6 +1009,8 @@ public:
     void posePreviewCreature(int clip,float phase);
     static Game terminalInspection(int level,int terminal=0);
     static Game mapInspection(Vec2 position,float angle,float pitch=0,int level=0,bool openDoors=false,float height=-999,bool sceneryOnly=false,WorldId id=WorldId::Campaign);
+    // Move the inspection camera without rebuilding the map (audio orbit, map-shot walks).
+    void inspectAt(Vec2 position,float angle,float pitch=0,float height=-999){m_inspectionCamera=true;m_player.pos=position;m_player.angle=angle;m_player.pitch=pitch;m_player.z=height==-999?(m_world.hasTerrain()?groundHeight(position,float(World::TerrainMaxZ+1)):m_world.floorHeight(position.x,position.y)):height;}
     // --map-shots "shut N": the chunk's doors shut again (the inspection opens them all).
     void shutDoors(){for(int i=0;i<int(m_world.doors().size());++i)m_world.setDoor(i,0,false);}
     static Game barrelInspection(float age);

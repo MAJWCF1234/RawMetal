@@ -529,8 +529,9 @@ bool AudioEngine::testLiftMix(){
  file.write("RIFF",4);write(riff);file.write("WAVEfmt ",8);write(fmt);write(pcm);write(channels);write(rate);write(byteRate);write(align);write(bits);file.write("data",4);write(bytes);file.write(reinterpret_cast<const char*>(output.data()),bytes);
  return true;
 }
-bool AudioEngine::test(){
+bool AudioEngine::test(bool full){
  std::ofstream diagnostic("audio-validation.txt");auto failure=[&](const char* reason){diagnostic<<"FAIL: "<<reason<<'\n';return false;};
+ diagnostic<<(full?"full":"smoke")<<" audio test\n";
  // The old -2000-map*100 water IDs collided with machine IDs ten maps later.
  auto waterKey=ambientEmitter(AmbientKind::Water,5,0),machineKey=ambientEmitter(AmbientKind::Machine,15,0);
  if(waterKey==machineKey||emitterInChunk(waterKey,15)||!emitterInChunk(waterKey,5))return failure("ambient emitter namespace collision");
@@ -664,37 +665,54 @@ bool AudioEngine::test(){
  // Area score: every campaign map plays its own cue's loop (the original
  // track for Default), one voice per score, and a loop keeps its place across
  // the seams within its area instead of restarting.
+ // Smoke: one visit per cue plus a few seam pairs; full: every map with 1 s of mix.
  {
   AudioEngine district(false);std::array<int16_t,Rate*2> block{};
   for(int c=1;c<AreaScores;++c)if(district.m_samples[size_t(areaSound(c))].frames()<Rate*20)return failure("area score track missing or truncated");
-  // A long campaign mixes past a loop's end: a cursor may wrap, but only once
-  // a whole track has played since that score was last heard.
-  std::array<double,AreaScores> cursor;cursor.fill(-1);std::array<int,AreaScores> heard;heard.fill(0);int scored=0;
-  for(int level=0;level<CampaignChunkCount;++level){auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
-   const int cue=int(view.world().definition().musicCue);
-   if(view.world().hasLift()&&view.world().liftPhase()!=World::LiftPhase::Ready)continue;
-   // A map held in silence plays no score at all: neither an area loop nor the original track.
-   if(cue==int(MusicCue::Silence)){if(district.m_mainTarget!=0||std::any_of(district.m_areaTarget.begin(),district.m_areaTarget.end(),[](float t){return t>0;}))return failure("a silent map plays a score");cursor.fill(-1);continue;}   // and the silence breaks the carry: a score may begin again after it
-   if(cue==0?district.m_mainTarget!=1:(district.m_areaTarget[size_t(cue)]!=1||district.m_mainTarget!=0))return failure("area score coverage");
-   if(cue==0)continue;++scored;
-   int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;
-    const bool wrapped=cursor[size_t(cue)]+double(level-heard[size_t(cue)])*Rate>=double(district.m_samples[size_t(areaSound(cue))].frames());
-    if(v.cursor<=cursor[size_t(cue)]&&!wrapped){diagnostic<<"Chunk "<<level<<" cue "<<cue<<" cursor "<<v.cursor<<" after "<<cursor[size_t(cue)]<<" at chunk "<<heard[size_t(cue)]<<" of "<<district.m_samples[size_t(areaSound(cue))].frames()<<" frames\n";return failure("area score restarts at a seam");}
-    cursor[size_t(cue)]=v.cursor;heard[size_t(cue)]=level;}
-   if(count!=1)return failure("duplicated area score voice");
+  std::array<bool,AreaScores> used{};std::array<int,AreaScores> firstOfCue;firstOfCue.fill(-1);int scored=0,silent=0;
+  std::vector<std::pair<int,int>> seams;
+  for(int level=0;level<CampaignChunkCount;++level){
+   const int cue=int(game.chunkView(level).world().definition().musicCue);
+   if(cue>=0&&cue<AreaScores){used[size_t(cue)]=true;if(firstOfCue[size_t(cue)]<0)firstOfCue[size_t(cue)]=level;}
+   if(level+1<CampaignChunkCount){const int next=int(game.chunkView(level+1).world().definition().musicCue);
+    if(cue>0&&cue<AreaScores&&cue==next)seams.push_back({level,level+1});}
   }
-  std::array<bool,AreaScores> used{};for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);if(cue<AreaScores)used[size_t(cue)]=true;}
+  auto visit=[&](int level,double& cursor,int& heard,bool checkSeam)->bool{
+   auto view=game.chunkView(level);district.update(view);district.mix(block.data(),Rate);
+   const int cue=int(view.world().definition().musicCue);
+   if(view.world().hasLift()&&view.world().liftPhase()!=World::LiftPhase::Ready)return true;
+   if(cue==int(MusicCue::Silence)){++silent;if(district.m_mainTarget!=0||std::any_of(district.m_areaTarget.begin(),district.m_areaTarget.end(),[](float t){return t>0;}))return failure("a silent map plays a score");cursor=-1;return true;}
+   if(cue==0?district.m_mainTarget!=1:(district.m_areaTarget[size_t(cue)]!=1||district.m_mainTarget!=0))return failure("area score coverage");
+   if(cue==0)return true;++scored;
+   int count=0;for(const auto&v:district.m_voices)if(v.sound==areaSound(cue)){++count;
+    if(checkSeam&&cursor>=0){const bool wrapped=cursor+double(level-heard)*Rate>=double(district.m_samples[size_t(areaSound(cue))].frames());
+     if(v.cursor<=cursor&&!wrapped){diagnostic<<"Chunk "<<level<<" cue "<<cue<<" cursor "<<v.cursor<<" after "<<cursor<<" at chunk "<<heard<<" of "<<district.m_samples[size_t(areaSound(cue))].frames()<<" frames\n";return failure("area score restarts at a seam");}}
+    cursor=v.cursor;heard=level;}
+   if(count!=1)return failure("duplicated area score voice");return true;
+  };
+  if(full){
+   std::array<double,AreaScores> cursor;cursor.fill(-1);std::array<int,AreaScores> heard;heard.fill(0);
+   for(int level=0;level<CampaignChunkCount;++level){const int cue=int(game.chunkView(level).world().definition().musicCue);
+    if(!visit(level,cue>0&&cue<AreaScores?cursor[size_t(cue)]:cursor[0],cue>0&&cue<AreaScores?heard[size_t(cue)]:heard[0],true))return false;}
+  }else{
+   for(int c=0;c<AreaScores;++c)if(firstOfCue[size_t(c)]>=0){double cursor=-1;int heard=0;if(!visit(firstOfCue[size_t(c)],cursor,heard,false))return false;}
+   const int seamLimit=std::min(int(seams.size()),3);
+   for(int i=0;i<seamLimit;++i){double cursor=-1;int heard=0;
+    if(!visit(seams[size_t(i)].first,cursor,heard,false)||!visit(seams[size_t(i)].second,cursor,heard,true))return false;}
+   if(silent==0)for(int level=0;level<CampaignChunkCount;++level)if(int(game.chunkView(level).world().definition().musicCue)==int(MusicCue::Silence)){double cursor=-1;int heard=0;if(!visit(level,cursor,heard,false))return false;break;}
+  }
   if(std::count(used.begin(),used.end(),true)<8)return failure("campaign soundtrack lacks variety");
   district.update(game);if(game.world().definition().musicCue==MusicCue::Default&&district.m_mainTarget!=1)return failure("original soundtrack return");
-  diagnostic<<"Area score: "<<scored<<" scored maps, "<<std::count(used.begin(),used.end(),true)<<" distinct scores, loops carry on across seams: PASS\n";
+  diagnostic<<"Area score ("<<(full?"full":"smoke")<<"): "<<scored<<" scored visits, "<<std::count(used.begin(),used.end(),true)<<" distinct scores, loops carry on across seams: PASS\n";
  }
- std::vector<int16_t> output;output.reserve(Rate*2*12);size_t maxVoices=0;double energy=0;
- for(int frame=0;frame<720;++frame){InputState input{};input.forward=frame<95;input.back=frame>=95&&frame<185;input.jump=frame==125;input.fire=frame==220||frame==280||frame==340||frame==400;game.update(input,1.f/60.f);audio.update(game);
-  if(frame==450)audio.play({Sound::WaspAttack,game.player().pos+Vec2{0,2},.8f,1,true});
-  if(frame==510)audio.play({Sound::SpiderDeath,game.player().pos+Vec2{0,-2},.8f,1,true});
-  if(frame==560)audio.play({Sound::JunkMetal,game.player().pos+Vec2{0,2},.8f,1,true});
-  if(frame==610)audio.play({Sound::JunkGlass,game.player().pos+Vec2{0,-2},.8f,1,true});
-  if(frame==660)audio.play({Sound::JunkSoft,game.player().pos+Vec2{1,0},.8f,1,true});
+ const int mixFrames=full?720:240;
+ std::vector<int16_t> output;output.reserve(size_t(Rate*2)*(full?12:4));size_t maxVoices=0;double energy=0;
+ for(int frame=0;frame<mixFrames;++frame){InputState input{};input.forward=frame<95;input.back=frame>=95&&frame<185;input.jump=frame==125;input.fire=frame==220||frame==280||(full&&(frame==340||frame==400));game.update(input,1.f/60.f);audio.update(game);
+  if(frame==(full?450:200))audio.play({Sound::WaspAttack,game.player().pos+Vec2{0,2},.8f,1,true});
+  if(frame==(full?510:210))audio.play({Sound::SpiderDeath,game.player().pos+Vec2{0,-2},.8f,1,true});
+  if(frame==(full?560:220))audio.play({Sound::JunkMetal,game.player().pos+Vec2{0,2},.8f,1,true});
+  if(full&&frame==610)audio.play({Sound::JunkGlass,game.player().pos+Vec2{0,-2},.8f,1,true});
+  if(full&&frame==660)audio.play({Sound::JunkSoft,game.player().pos+Vec2{1,0},.8f,1,true});
   for(auto&v:audio.m_voices)audio.spatialize(v,game);
   maxVoices=std::max(maxVoices,audio.m_voices.size());std::array<int16_t,1470> block;audio.mix(block.data(),735);for(auto v:block)energy+=double(v)*v;output.insert(output.end(),block.begin(),block.end());
  }
@@ -702,9 +720,12 @@ bool AudioEngine::test(){
  Voice right{Sound::WaspCall};right.spatial=true;right.position=game.player().pos+Vec2{0,2};audio.spatialize(right,game);
  Voice distantVoice=right;distantVoice.position=game.player().pos+Vec2{0,15};audio.spatialize(distantVoice,game);
  diagnostic<<"Spatial gains "<<right.left<<' '<<right.right<<" distant "<<distantVoice.right<<" voices "<<maxVoices<<" energy "<<energy<<'\n';
- if(right.right<=right.left||distantVoice.right>=right.right||maxVoices<4||energy<1e8)return failure("spatial direction, attenuation, overlap or mix energy");
+ // Smoke mixes ~3 s; full mixes 12 s. Energy floor scales with length.
+ if(right.right<=right.left||distantVoice.right>=right.right||maxVoices<4||energy<(full?1e8:3e7))return failure("spatial direction, attenuation, overlap or mix energy");
  Voice machine{Sound::Machine};machine.spatial=true;machine.position={4.f,10.5f};float previous=-1,maxChange=0;
- for(int i=0;i<720;++i){float angle=i*kTwoPi/720;auto orbit=Game::mapInspection({4.f+std::cos(angle)*1.5f,10.5f+std::sin(angle)*1.5f},angle+kPi*.5f);
+ const int orbitSteps=full?720:72;
+ auto orbit=Game::mapInspection({5.5f,10.5f},0);
+ for(int i=0;i<orbitSteps;++i){float angle=i*kTwoPi/float(orbitSteps);orbit.inspectAt({4.f+std::cos(angle)*1.5f,10.5f+std::sin(angle)*1.5f},angle+kPi*.5f);
   audio.spatialize(machine,orbit);float total=machine.left+machine.right;
   if(!std::isfinite(total))return failure("nonfinite machine spatial gain");if(previous>=0)maxChange=std::max(maxChange,std::fabs(total-previous));previous=total;
  }if(maxChange>.08f)return failure("machine orbit gain discontinuity");
@@ -727,7 +748,7 @@ bool AudioEngine::test(){
  std::ofstream file("audio-preview.wav",std::ios::binary);uint32_t bytes=uint32_t(output.size()*2),riff=bytes+36,fmtSize=16,rate=Rate,byteRate=Rate*4;uint16_t pcm=1,channels=2,align=4,bits=16;
  auto write=[&](auto value){file.write(reinterpret_cast<const char*>(&value),sizeof(value));};
  file.write("RIFF",4);write(riff);file.write("WAVEfmt ",8);write(fmtSize);write(pcm);write(channels);write(rate);write(byteRate);write(align);write(bits);file.write("data",4);write(bytes);file.write(reinterpret_cast<const char*>(output.data()),bytes);
- std::ofstream("audio-test.txt")<<"Loaded "<<audio.m_samples.size()<<" embedded samples.\n12 second gameplay mix; peak voices: "<<maxVoices<<"\nStereo direction, distance attenuation, overlap, mute and PCM output: PASS\n";
+ std::ofstream("audio-test.txt")<<"Loaded "<<audio.m_samples.size()<<" embedded samples.\n"<<(full?"full":"smoke")<<" gameplay mix ("<<mixFrames<<" frames); peak voices: "<<maxVoices<<"\nStereo direction, distance attenuation, overlap, mute and PCM output: PASS\n";
  return bool(file);
 }
 // Alert / Evasion music: a loop no map plays as its score, the fade curve

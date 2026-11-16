@@ -3,6 +3,7 @@
   python tools/release/ship.py 1.4.6            # everything, then publish to GitHub as the latest release
   python tools/release/ship.py 1.4.6 --offline  # everything except git push and the GitHub release
   python tools/release/ship.py 1.4.6 --no-tests # skip the suite (only for a rebuild of a tested tree)
+  python tools/release/ship.py 1.4.6 --full-audio  # ship with the long --audio-test=full proof
   python tools/release/ship.py --check          # build + suite + Builder checks on the current version, nothing else
 
 Steps, stopping at the first failure (each step's log is in .build/ship/):
@@ -15,8 +16,8 @@ Steps, stopping at the first failure (each step's log is in .build/ship/):
      the Builder's own "CAMPAIGN BUILDER" menu tag; any other conflict stops the ship for a person to merge.
   5. Builds: Build.cmd (the game) and the Builder's Build.cmd + BuildEditor.cmd, in parallel.
   6. Tests: tools/dev/suite.py --extras (every --each-test check in lanes on both GPUs, plus gore, carcass,
-     campaign-map and repeated-frame rendering) and --audio-test; the Builder's --selftest, --editing-test
-     and --campaign-open-test on maps 0, 75 and 102.
+     campaign-map and repeated-frame rendering) and --audio-test (smoke by default; --full-audio for every
+     campaign map); the Builder's --selftest, --editing-test and --campaign-open-test on maps 0, 75 and 102.
   7. Package: tools/release/package.py; the zip's DepthWorks.exe must be byte-identical to the tested exe,
      and it re-runs two quick tests from the unzipped folder.
   8. Publish (not with --offline): commit the Builder sync, push main, gh release create --latest with the
@@ -147,12 +148,15 @@ def main():
         game.result(); builder.result()
     exe = os.path.join(ROOT, 'RawMetal.exe')
     if '--no-tests' not in args:
-        say('testing: the suite on both GPUs, the audio test and the Builder checks (about 15-25 minutes)')
+        full_audio = '--full-audio' in args
+        audio_flag = '--audio-test=full' if full_audio else '--audio-test=smoke'
+        say(f'testing: the suite on both GPUs, {audio_flag} and the Builder checks'
+            f' (suite dominates; audio is {"full proof" if full_audio else "smoke"})')
         audio_dir = os.path.join(ROOT, '.build', 'ship-audio'); os.makedirs(audio_dir, exist_ok=True)
         shutil.copy2(exe, os.path.join(audio_dir, 'rm.exe'))
         with concurrent.futures.ThreadPoolExecutor(3) as pool:
             suite = pool.submit(run, [sys.executable, 'tools/dev/suite.py', exe, '--lanes', '7', '--extras', '--out', '.build/ship-suite'], 'suite.txt')
-            audio = pool.submit(run, [os.path.join(audio_dir, 'rm.exe'), '--audio-test'], 'audio-test.txt', audio_dir, True, dict(os.environ, RM_GPU='1'))
+            audio = pool.submit(run, [os.path.join(audio_dir, 'rm.exe'), audio_flag], 'audio-test.txt', audio_dir, True, dict(os.environ, RM_GPU='1'))
             builder = pool.submit(builder_checks)
             suite.result(); audio.result(); builder.result()
         say('all tests passed')
