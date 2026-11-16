@@ -243,7 +243,13 @@ void Game::updateClutter(const InputState&input,float dt){
    // Heavy carried props sweep living bodies along the hand path; a wall-pinned
    // body stops the prop at the last clear pose instead of tunneling through.
    if(c.model>=0&&c.mass()>=8){pushBodiesFromCarried(c,previous);if(!m_vrInputActive)m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
-   if(dt>1e-4f&&!m_vrInputActive){m_carryHandVelocity=(c.pos-previous.pos)*(1.f/dt);m_carryHandVz=(c.z-previous.z)/dt;}
+   // Skip teleport-sized jumps (grab snap, wall retract). Interaction releases
+   // before this step, so a one-frame snap must not become throw velocity.
+   if(dt>1e-4f&&!m_vrInputActive){
+    const Vec2 delta=(c.pos-previous.pos)*(1.f/dt);const float dz=(c.z-previous.z)/dt;
+    if(length(delta)+std::fabs(dz)<28.f){m_carryHandVelocity=delta;m_carryHandVz=dz;}
+    else{m_carryHandVelocity={};m_carryHandVz=0;}
+   }
    c.velocity={};c.vz=c.pitchSpeed=c.rollSpeed=c.spin=0;
   }
   else{c.yaw=previous.yaw;c.pitch=previous.pitch;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;c.projectile=false;}
@@ -615,6 +621,10 @@ bool Game::testProps(){
   InputState turn;turn.mouseDx=180;for(int i=0;i<4;++i)spin.update(turn,1.f/60);
   turn.use=true;spin.update(turn,1.f/60);
   check(!spin.holdingClutter()&&length(spin.m_clutter[0].velocity)>1.5f&&spin.m_clutter[0].projectile,"spinning and releasing flings the prop sideways");
+  Game soft(regression::campaign(regression::room()));soft.m_player.pos={6,6};soft.m_player.angle=0;soft.m_player.pitch=0;
+  c.pos={7,6};c.z=.75f;soft.m_clutter={c};check(soft.interactClutter(),"soft release grabs monitor");soft.update({},1.f/60);
+  InputState drop;drop.use=true;soft.update(drop,1.f/60);
+  check(!soft.holdingClutter()&&length(soft.m_clutter[0].velocity)<.8f&&std::fabs(soft.m_clutter[0].vz)<.8f&&!soft.m_clutter[0].projectile,"releasing still does not fling from the grab snap");
  }
  {auto room=regression::room();room->structures.push_back({7.5f,3,7.6f,10,0,3.4f});Game carry(regression::campaign(room));carry.m_player.pos={6,6};carry.m_player.angle=0;
   Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={6.8f,6};c.z=.75f;carry.m_clutter={c};carry.interactClutter();carry.update({},1.f/120);
