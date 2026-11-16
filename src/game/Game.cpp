@@ -635,6 +635,8 @@ void Game::update(const InputState& input, float dt) {
         {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
         {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
         updateEnemies(dt);
+        // AI may walk back into a held prop after the hand sweep; clear that overlap.
+        resolveHeldPropBodies();
         {perf::Scope profile(perf::Voices);updateStances(dt);updateNpcVoices(dt);updateAmbience(dt);}
         {perf::Scope profile(perf::Pickups);updatePickups();updateSidearms();}
 

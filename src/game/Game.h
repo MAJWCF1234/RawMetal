@@ -1139,6 +1139,9 @@ private:
     // Index of the door in chunk `level` across the boundary from this chunk's door, or -1.
     int boundaryPartner(int level,const Door& door)const;
     void updateClutter(const InputState& input,float dt);
+    // Held heavy props: sweep bodies along a hand move, or re-clear overlaps after AI.
+    void pushBodiesFromCarried(Clutter& prop,const Clutter& previous);
+    void resolveHeldPropBodies();
     bool interactClutter(int hand=-1);
     float vrInteractionDistance(Point3 target,float housingRadius)const;
     int nearbyInteractionDoor()const;

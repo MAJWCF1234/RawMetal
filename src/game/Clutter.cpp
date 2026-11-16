@@ -1,5 +1,6 @@
 #include "Game.h"
 #include <fstream>
+#include <limits>
 #include "../world/ModelIds.h"
 #include "../core/Ray.h"
 #include "EngineRegressionScene.h"
@@ -91,6 +92,106 @@ bool Game::interactClutter(int grabHand){
  if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.1f;c.vz=0;if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}if(c.model>=0){float factor=std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f);c.velocity=c.velocity*factor;c.vz*=factor;}c.pitchSpeed=0;c.rollSpeed=0;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
  m_heldClutter=nearbyClutter(grabHand);if(holdingClutter()&&m_clutter[m_heldClutter].mass()>25){m_heldClutter=-1;return false;}if(holdingClutter()){auto&c=m_clutter[m_heldClutter];if(m_vrInputActive){float nearest=999;for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(distance<nearest){nearest=distance;m_vrCarryHand=hand;}}}c.projectile=false;if(c.model>=0)knockClutter(m_level,m_heldClutter,{c.pos.x,c.pos.y,c.z},{});c.sleeping=false;c.restTime=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
 }
+namespace {
+// Oriented horizontal prop footprint against the actor's axis-aligned hull.
+struct PropBodyFootprint {
+ Vec2 ax,ay;float halfX,halfY;
+ explicit PropBodyFootprint(const Clutter& prop):ax{std::cos(prop.yaw),std::sin(prop.yaw)},ay{-ax.y,ax.x}{
+  auto local=prop;local.yaw=0;const auto half=local.extent();halfX=half[0];halfY=half[1];
+ }
+ bool overlap(Vec2 delta,float radius,Vec2& normal,float& penetration)const{
+  penetration=std::numeric_limits<float>::max();
+  for(Vec2 axis:std::array<Vec2,4>{Vec2{1,0},Vec2{0,1},ax,ay}){
+   const float along=dot(delta,axis);
+   const float reach=std::fabs(dot(ax,axis))*halfX+std::fabs(dot(ay,axis))*halfY+radius*(std::fabs(axis.x)+std::fabs(axis.y));
+   const float depth=reach-std::fabs(along);
+   if(depth<=0)return false;
+   if(depth<penetration){penetration=depth;normal=axis*(along<0?-1.f:1.f);}
+  }
+  return true;
+ }
+};
+template<class Fits> Vec2 sweepBody(Vec2 start,Vec2 delta,Fits&& fits){
+ const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));
+ Vec2 reached=start;
+ for(int i=1;i<=steps;++i){const auto next=start+delta*(float(i)/steps);if(!fits(next))break;reached=next;}
+ return reached;
+}
+
+struct CarryBody {
+ Vec2* position;Vec2 offset;int level;bool friendly;
+ float bottom,top,feet,height,radius;
+ Vec2 next{};
+};
+
+template<class FitsProp,class FitsBody>
+void sweepCarriedProp(Clutter& prop,const Clutter& start,std::vector<CarryBody>& bodies,FitsProp&& fitsProp,FitsBody&& fitsBody){
+ const Clutter goal=prop;
+ const float yaw=wrapAngle(goal.yaw-start.yaw),pitch=wrapAngle(goal.pitch-start.pitch);
+ const float oldCenter=start.z+start.height()*.5f,newCenter=goal.z+goal.height()*.5f;
+ const auto size=goal.size();
+ const float corner=.5f*std::sqrt(size[0]*size[0]+size[1]*size[1]+size[2]*size[2]);
+ const float travel=length(goal.pos-start.pos)+std::fabs(newCenter-oldCenter)+corner*(std::fabs(yaw)+std::fabs(pitch));
+ const int steps=std::max(1,int(std::ceil(travel/.04f)));
+ // A large tracked-hand jump advances in bounded work without skipping the intervening path.
+ prop=start;
+ for(int i=1;i<=std::min(steps,128);++i){
+  const float t=float(i)/steps;auto candidate=goal;
+  candidate.pos=start.pos+(goal.pos-start.pos)*t;
+  candidate.yaw=wrapAngle(start.yaw+yaw*t);candidate.pitch=std::remainder(start.pitch+pitch*t,2*kPi);
+  const float height=candidate.height();candidate.z=oldCenter+(newCenter-oldCenter)*t-height*.5f;
+  if(!fitsProp(candidate,height))break;
+  const PropBodyFootprint footprint(candidate);
+  bool clear=true;
+  for(auto& body:bodies){
+   body.next=*body.position;
+   if(candidate.z>=body.top||candidate.z+height<=body.bottom)continue;
+   Vec2 normal;float depth;
+   if(!footprint.overlap(*body.position+body.offset-candidate.pos,body.radius,normal,depth))continue;
+   const Vec2 delta=normal*(depth+.001f);
+   body.next=sweepBody(*body.position,delta,[&](Vec2 next){return fitsBody(body,next);});
+   if(lengthSq(body.next-(*body.position+delta))>1e-8f){clear=false;break;}
+  }
+  // A pinned body stops the hand at the last valid transform. Commit a step only
+  // when every body it touches can move, including the corners during rotation.
+  if(!clear)break;
+  for(const auto& body:bodies)*body.position=body.next;
+  prop=candidate;
+ }
+}
+}
+
+void Game::pushBodiesFromCarried(Clutter& prop,const Clutter& previous){
+ if(prop.model<0||prop.mass()<8)return;
+ std::vector<CarryBody> bodies;const Vec2 origin=chunkOffset(m_level);const auto size=prop.size();
+ const float bound=.5f*std::sqrt(size[0]*size[0]+size[1]*size[1]+size[2]*size[2]);
+ auto withinReach=[&](Vec2 p,float radius){float r=bound+radius;
+  return p.x>=std::min(prop.pos.x,previous.pos.x)-r&&p.x<=std::max(prop.pos.x,previous.pos.x)+r&&
+   p.y>=std::min(prop.pos.y,previous.pos.y)-r&&p.y<=std::max(prop.pos.y,previous.pos.y)+r;};
+ for(size_t a=0;a<m_friendlyActors.size();++a){auto& npc=m_friendlyActors[a];const Vec2 offset=chunkOffset(npc.level)-origin;
+  if(!withinReach(npc.pose.position+offset,.2f)||npc.pose.clip==4||npcHeld(a))continue;
+  const auto& track=npc.track();if(!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;
+  const float hull=friendlyHullHeight(a,track);bodies.push_back({&npc.pose.position,offset,npc.level,true,npc.pose.z,npc.pose.z+hull,npc.pose.z,hull,.2f});
+ }
+ for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto offset=chunkOffset(level)-origin;
+  auto& enemies=level==m_level?m_enemies:m_chunks[level].enemies;
+  for(auto& e:enemies)if(e.alive&&withinReach(e.pos+offset,e.radius()))
+   bodies.push_back({&e.pos,offset,level,false,e.bodyBottom(),e.bodyTop(),e.z,e.hull(),e.radius()});
+ }
+ if(bodies.empty())return;
+ sweepCarriedProp(prop,previous,bodies,[&](const Clutter& pose,float h){
+  return pose.everyOutlinePoint([&](Vec2 offset){auto p=pose.pos+offset;const auto& w=worldAt(p);return w.fits(p.x,p.y,pose.z,h,true,true)&&!w.doorBlocks(p.x,p.y,pose.z,h);});
+ },[&](const CarryBody& body,Vec2 next){return body.friendly?friendlyBodyFits(body.level,next,body.feet,body.height):
+   hullFits(next+body.offset,body.feet,body.height,body.radius,false,false);});
+}
+
+void Game::resolveHeldPropBodies(){
+ if(!holdingClutter())return;
+ auto& prop=m_clutter[size_t(m_heldClutter)];
+ // After AI and enemy steps, bodies may walk back into the hand's volume. Push them
+ // out again without moving the held prop.
+ const Clutter at=prop;pushBodiesFromCarried(prop,at);
+}
 void Game::updateClutter(const InputState&input,float dt){
  landShards();
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
@@ -98,7 +199,7 @@ void Game::updateClutter(const InputState&input,float dt){
  if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;
   if(m_carryClutter!=m_heldClutter){m_carryClutter=m_heldClutter;m_carryDistance=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f;m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
-  const float oldYaw=c.yaw,oldPitch=c.pitch,oldOffset=m_carryYawOffset;
+  const Clutter previous=c;const float oldOffset=m_carryYawOffset;
   if(!m_vrInputActive){
    m_carryDistance=std::clamp(m_carryDistance+input.weaponScroll*.2f,std::max(.6f,.35f+c.footprint()*.5f),2.5f);
    if(input.rotateProp){m_carryYawOffset=wrapAngle(m_carryYawOffset+input.mouseDx*.008f*m_settings.sensitivity);c.pitch=std::remainder(c.pitch+input.mouseDy*.008f*m_settings.sensitivity,2*kPi);}
@@ -118,8 +219,14 @@ void Game::updateClutter(const InputState&input,float dt){
   auto extent=c.extent();auto fit=[&](float t){auto p=m_player.pos+(target-m_player.pos)*t;float z=eye.z+(height-eye.z)*t;return c.everyOutlinePoint([&](Vec2 offset){auto q=p+offset;const auto&w=worldAt(q);return w.fits(q.x,q.y,z,c.height(),true,true)&&!w.doorBlocks(q.x,q.y,z,c.height());});};
   if(c.model>=0&&!fit(1)){float lo=0,hi=1;for(int i=0;i<8;++i){float mid=(lo+hi)*.5f;if(fit(mid))lo=mid;else hi=mid;}target=m_player.pos+(target-m_player.pos)*lo;height=eye.z+(height-eye.z)*lo;clear&=lo>.1f;}
   local=target;const auto&finalWorld=worldAt(local);
-  if(clear&&finalWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;if(m_vrInputActive)c.yaw=std::atan2(forward.y,forward.x);c.pitchSpeed=c.rollSpeed=c.spin=0;}
-  else{c.yaw=oldYaw;c.pitch=oldPitch;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;c.projectile=false;}
+  if(clear&&finalWorld.fits(local.x,local.y,height,c.height(),true,true)){
+   c.pos=target;c.z=height;if(m_vrInputActive)c.yaw=std::atan2(forward.y,forward.x);
+   // Heavy carried props sweep living bodies along the hand path; a wall-pinned
+   // body stops the prop at the last clear pose instead of tunneling through.
+   if(c.model>=0&&c.mass()>=8){pushBodiesFromCarried(c,previous);if(!m_vrInputActive)m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
+   c.velocity={};c.vz=c.pitchSpeed=c.rollSpeed=c.spin=0;
+  }
+  else{c.yaw=previous.yaw;c.pitch=previous.pitch;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;c.projectile=false;}
   if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){float speed=9.f*(c.model>=0?std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f):1.f);c.velocity=forward*(speed*std::cos(pitch));c.vz=2.f+speed*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;c.soundOwner=-1;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
@@ -250,7 +357,10 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
   }else if(length(m_velocity)>.5f&&length(c.pos-(m_player.pos-shift))<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.model>=0){auto probe=c.pos+shift;const auto&under=physicalWorld(probe);if(probe.x<0||probe.x>=24||probe.y<0||probe.y>=24||!chunkResident(under.level())){c.sleeping=true;c.restTime=-1;continue;}if(c.restTime<0){c.sleeping=false;c.restTime=0;}}
   if(c.model>=0){auto e=c.extent();
-   auto kick=[&](Vec2 actor,float z,float height,Vec2 velocity,int owner,float reach=.22f){auto delta=c.pos-actor;float nx=e[0]+reach-std::fabs(delta.x),ny=e[1]+reach-std::fabs(delta.y);if(nx<=0||ny<=0||c.z>=z+height||c.z+c.height()<=z||lengthSq(velocity)<.001f)return;Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};float speed=std::max(.25f,dot(velocity,n)*std::min(1.f,4/c.mass()));c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.soundOwner=owner;c.sleeping=false;c.restTime=0;};
+   auto kick=[&](Vec2 actor,float z,float height,Vec2 velocity,int owner,float reach=.22f){auto delta=c.pos-actor;float nx=e[0]+reach-std::fabs(delta.x),ny=e[1]+reach-std::fabs(delta.y);if(nx<=0||ny<=0||c.z>=z+height||c.z+c.height()<=z||lengthSq(velocity)<.001f)return;Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};
+    // An approaching heavy prop reaches the body solver before a walking pose can kick it away.
+    if(c.mass()>=8&&dot(c.velocity,n)<-.05f)return;
+    float speed=std::max(.25f,dot(velocity,n)*std::min(1.f,4/c.mass()));c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.soundOwner=owner;c.sleeping=false;c.restTime=0;};
    for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];if(npc.pose.clip!=1||!autonomousActor(npc.track())||npcHeld(a))continue;auto offset=chunkOffset(npc.level)-chunkOffset(level);Vec2 velocity{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};if(npc.pose.clip!=1)velocity={};kick(npc.pose.position+offset,npc.pose.z,friendlyHullHeight(a,npc.track()),velocity,int(a));}
    const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;for(const auto&e:enemies)if(e.alive&&e.moving)kick(e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),{std::cos(e.heading),std::sin(e.heading)},-1,std::max(.22f,e.radius()+.05f));   // walks through props (hullFits props=false), shoving them from its whole body
    if(m_vrInputActive&&level==m_level)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]){auto p=m_vrHandPosition[hand],v=m_vrHandVelocity[hand];if(p.z>=c.z-.08f&&p.z<=c.z+c.height()+.08f&&std::fabs(p.x-c.pos.x)<e[0]+.08f&&std::fabs(p.y-c.pos.y)<e[1]+.08f){knockClutter(level,index,p,v*(std::min(2.f,c.mass())*.35f));c.soundOwner=-1;}}
@@ -271,14 +381,17 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
   // Loose dressing meets bodies through its oriented footprint. Heavy props carry a body along; its
   // ordinary hull sweep still stops at a wall. The remaining penetration comes out of the prop,
   // so a pinned person is never pushed through geometry or left inside a moving crate.
-  auto bodyContacts=[&]{if(c.model<0)return;const auto e=c.extent();const float propHeight=e[2]*2,mass=c.mass();auto unturned=c;unturned.yaw=0;const auto box=unturned.extent();const Vec2 ax{std::cos(c.yaw),std::sin(c.yaw)},ay{-ax.y,ax.x};
+  auto bodyContacts=[&](float fallStep){if(c.model<0)return;const auto e=c.extent();const float propHeight=e[2]*2,mass=c.mass();const PropBodyFootprint footprint(c);
    AiTargetRef attacker;if(c.soundOwner>=0&&size_t(c.soundOwner)<m_friendlyActors.size())attacker={ShotKind::Npc,m_friendlyActors[size_t(c.soundOwner)].level,c.soundOwner};else if(c.projectile)attacker={ShotKind::Player,m_level,0};
-   auto nearby=[&](Vec2 actor,float feet,float height,float radius){return std::fabs(actor.x-c.pos.x)<e[0]+radius&&std::fabs(actor.y-c.pos.y)<e[1]+radius&&c.z<feet+height&&c.z+propHeight>feet;};
-   auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt){if(!nearby(actor,feet,height,radius))return;Vec2 d=actor-c.pos,n{};float penetration=100;
-    // The world AABB is broad phase only: four separating axes distinguish a thin board's
-    // footprint from the empty corners of the square surrounding it, as for prop pairs below.
-    for(Vec2 axis:std::array<Vec2,4>{Vec2{1,0},Vec2{0,1},ax,ay}){float reach=std::fabs(dot(ax,axis))*box[0]+std::fabs(dot(ay,axis))*box[1]+radius*(std::fabs(axis.x)+std::fabs(axis.y));float depth=reach-std::fabs(dot(d,axis));if(depth<=0)return;if(depth<penetration){penetration=depth;n=axis*(dot(d,axis)<0?-1.f:1.f);}}
+   // Sweep the descending base through the head plane before vertical integration. Sampling only
+   // the current overlap lets a fast fall skip a body, or be pushed aside on the next frame.
+   auto nearby=[&](Vec2 actor,float feet,float height,float radius){return std::fabs(actor.x-c.pos.x)<e[0]+radius&&std::fabs(actor.y-c.pos.y)<e[1]+radius&&c.z+std::min(0.f,c.vz*fallStep)<feet+height&&c.z+propHeight>feet;};
+   auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt){if(!nearby(actor,feet,height,radius))return;Vec2 n{};float penetration;
+    if(!footprint.overlap(actor-c.pos,radius,n,penetration))return;
     float closing=std::max(0.f,dot(c.velocity-actorVelocity,n));const bool falling=c.vz<0&&c.z>=feet+height-.12f;float speed=std::max(closing,falling?-c.vz:0.f);
+    // The full outline can land on a shelf that a center trace misses. That support stops the
+    // fall before a lower head, just as it does in the ordinary vertical collision pass.
+    if(falling&&!c.everyOutlinePoint([&](Vec2 offset){auto sample=c.pos+offset;auto p=sample+shift;const auto&w=physicalWorld(p);return std::max(w.supportBelow(p.x,p.y,c.z+.025f,true),support(index,sample,c.z))<feet+height;}))return;
     if(speed>=1.5f&&c.bodyImpactCooldown<=0){float damage=std::clamp((.5f*c.mass()*speed*speed-2.f)*.2f,0.f,80.f);if(damage>0){hurt(damage,n);c.bodyImpactCooldown=.25f;c.projectile=false;impact(speed);}}
     if(c.broken)return;if(falling){c.z=feet+height;c.vz=std::max(0.f,-c.vz*.12f);return;}
     // Bodies have no retained horizontal physics velocity. Carry the transmitted impulse
@@ -291,10 +404,10 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    };
    contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false);});
    for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
-    contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;int count=std::max(1,int(std::ceil(length(delta)/.04f)));auto part=delta*(1.f/count);for(int i=0;i<count;++i){auto next=npc.pose.position+part;if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;npc.pose.position=next;}return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);});
+    contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;npc.pose.position=sweepBody(before,delta,[&](Vec2 next){return friendlyBodyFits(npc.level,next,npc.pose.z,height);});return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);});
    }
    for(int target=0;target<chunkCount();++target)if(chunkResident(target)){auto offset=chunkOffset(target)-chunkOffset(level);auto&enemies=target==m_level?m_enemies:m_chunks[target].enemies;for(auto&enemy:enemies)if(enemy.alive){
-    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;int count=std::max(1,int(std::ceil(length(delta)/.04f)));auto part=delta*(1.f/count);for(int i=0;i<count;++i){auto next=enemy.pos+part;auto global=next+chunkOffset(target)-chunkOffset(m_level);if(!hullFits(global,enemy.z,enemy.hull(),enemy.radius(),false,false))break;enemy.pos=next;}return enemy.pos-before;},[&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}});
+    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;enemy.pos=sweepBody(before,delta,[&](Vec2 next){return hullFits(next+chunkOffset(target)-chunkOffset(m_level),enemy.z,enemy.hull(),enemy.radius(),false,false);});return enemy.pos-before;},[&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}});
    }}
   };
   // A pane the prop meets at `speed` into it: cracked by the blow's energy (PaneTap..paneBreakEnergy), or
@@ -353,7 +466,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
      return false;}()){}
     else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-(c.model>=0?propMaterialTraits(c.material()).restitution:.25f);c.projectile=false;}
    }
-   bodyContacts();if(c.broken)break;
+   bodyContacts(step);if(c.broken)break;
    floor=-100;float ceiling=100;
    // What it rests on and what is over it, under its whole outline (a desk's edge between two of
    // the nine footprint points let a falling prop settle half inside it).

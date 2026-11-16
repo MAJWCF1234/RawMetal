@@ -38,6 +38,7 @@ struct LabAccess {
  static void playerCamera(Game& g){g.m_inspectionCamera=false;}
  static World& world(Game& g){return g.m_world;}
  static std::vector<Enemy>& enemies(Game& g){return g.m_enemies;}
+ static void stepProps(Game& g,float dt,const InputState& input={}){g.updateClutter(input,dt);}
  static auto& friendlies(Game& g){return g.m_friendlyActors;}
  static std::vector<BulletImpact>& impacts(Game& g){return g.m_bulletImpacts;}
  static std::vector<HitBurst>& bursts(Game& g){return g.m_hitBursts;}
