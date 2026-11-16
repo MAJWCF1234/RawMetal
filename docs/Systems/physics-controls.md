@@ -13,7 +13,7 @@ Impact damage follows the object's kinetic energy using body-relative closing sp
 
 Firearm rounds entering standing water throw droplets above the surface. A bridge, wall or target in front of the water blocks the splash. After crossing the surface, a round can still hit an underwater target.
 
-The Starter Map pools use a wider spray of larger drops that stays visible around shotgun recoil. The mist lasts about 0.7 seconds. The positional splash has a 24 m sound radius and a 0.58-second sample with a wet tail that follows the gunshot. Native 640×360 Vulkan captures on 2026-11-16 show the effect in the Welcome basin and in both Light pools, including the murky one. The gameplay mixer also registered a shotgun water strike from 10 m.
+The Starter Map pools use a wider spray of larger drops that stays visible around shotgun recoil. The mist lasts about 0.7 seconds. The positional splash is a real 0.58-second wet sample (Horror SFX liquids: a short plash plus a thrown-splash body), 24 m radius, with a wet tail that follows the gunshot — not a synthetic tone. Native 640×360 Vulkan captures on 2026-11-16 show the effect in the Welcome basin and in both Light pools, including the murky one. The gameplay mixer also registered a shotgun water strike from 10 m.
 
 Console: `give 12 GA`, `give 12 gauge`, `give 12ga`, or `give shells` adds 16 shells to the shotgun's reserve without loading the tube or changing the equipped weapon.
 

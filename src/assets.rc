@@ -5,6 +5,7 @@
 237 RCDATA "assets/audio/reactor.mp3"
 238 RCDATA "assets/audio/lift-snap.sfx"
 239 RCDATA "assets/audio/water-return.sfx"
+248 RCDATA "assets/audio/water-splash.sfx"
 102 RCDATA "assets/ai/grating-x2.ntx"
 103 RCDATA "assets/ai/metal-x2.ntx"
 106 RCDATA "assets/ai/arms_gloves_01-x2.ntx"

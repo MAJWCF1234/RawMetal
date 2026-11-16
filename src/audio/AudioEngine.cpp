@@ -76,6 +76,7 @@ constexpr int LockerSoundResource=2140;
 constexpr int DetectionSoundResource=2180;
 // A torn lead's arc: ROT Horror Audio Bundle, electric_shock_mx_1, +5 dB, trimmed to 2.7 s.
 constexpr int LeadArcResource=2347;
+constexpr int WaterSplashResource=248;
 // The sound bank (SoundBank.h): Horror SFX by YourPalRob, purchased; tools/audio/import_horror_sfx.py.
 constexpr int BankSoundResource=2370;
 // Deaths and pain (the Vox block): Horror SFX by YourPalRob, purchased; import_horror_sfx.py --vox.
@@ -130,23 +131,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 AudioEngine::AudioEngine(bool device){
  for(size_t i=0;i<m_samples.size();++i){
-  if(i==size_t(Sound::WaterSplash)){
-   // The wet tail follows the gun's attack, so the surface remains audible under a shot.
-   // Generate this one-shot explicitly; it has no resource ID in the authored sound bank.
-   auto&sample=m_samples[i];sample.channels=1;sample.pcm.resize(size_t(Rate*.58f));
-   std::uint32_t dice=0x6d2b79f5u;float wet=0,phase[6]{};
-   for(size_t f=0;f<sample.pcm.size();++f){const float t=float(f)/Rate;dice^=dice<<13;dice^=dice>>17;dice^=dice<<5;
-    const float noise=float(dice>>8)*(2.f/16777216.f)-1.f;wet+=.24f*(noise-wet);
-    float value=(noise*.22f+wet)*std::exp(-t*18.f);
-    const float tail=t-.045f;if(tail>0)value+=(noise*.12f+wet*.75f)*(1-std::exp(-tail*60.f))*std::exp(-tail*7.5f);
-    for(int bubble=0;bubble<6;++bubble){const float age=t-(.035f+.055f*bubble);if(age<0)continue;
-     phase[bubble]+=kTwoPi*(550.f+float(bubble)*190.f+age*1100.f)/Rate;value+=.14f*std::sin(phase[bubble])*(1-std::exp(-age*500.f))*std::exp(-age*20.f);}
-    const float envelope=std::min(1.f,t*2500.f)*std::clamp((.58f-t)*35.f,0.f,1.f);
-    sample.pcm[f]=int16_t(std::clamp(value*envelope,-1.f,1.f)*26000.f);
-   }
-   continue;
-  }
-  auto resource=loadResource(i>=size_t(Sound::VoxTransformedDeath1)?VoxSoundResource+int(i-size_t(Sound::VoxTransformedDeath1)):i>=size_t(Sound::AmbVent)?BankSoundResource+int(i-size_t(Sound::AmbVent)):i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
+  auto resource=loadResource(i==size_t(Sound::WaterSplash)?WaterSplashResource:i>=size_t(Sound::VoxTransformedDeath1)?VoxSoundResource+int(i-size_t(Sound::VoxTransformedDeath1)):i>=size_t(Sound::AmbVent)?BankSoundResource+int(i-size_t(Sound::AmbVent)):i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i));auto data=resource.data();size_t size=resource.size();
   auto u16=[](const unsigned char*p){return unsigned(p[0])|(unsigned(p[1])<<8);};
   auto u32=[](const unsigned char*p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);};
   auto&sample=m_samples[i];

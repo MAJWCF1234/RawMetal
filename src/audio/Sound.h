@@ -39,7 +39,7 @@ enum class Sound {
  // the transformed workers' four death groans, then two gasps for a scripted person hit.
  // The people's own cries are takes in the NPC voice bank (NpcVoiceCatalog.h, Down/Hurt/LastGasp).
  VoxTransformedDeath1, VoxTransformedDeath2, VoxTransformedDeath3, VoxTransformedDeath4, VoxGasp1, VoxGasp2,
- // Synthesized explicitly by AudioEngine, outside the consecutive resource banks.
+ // Bullet hitting standing water: resource 248 (assets/audio/water-splash.sfx).
  WaterSplash,
  Count
 };

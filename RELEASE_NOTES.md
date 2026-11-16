@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.14 - Wet hit (2026-11-16)
+
+A patch for the sound when a round meets water.
+
+- **Water splash.** Shooting a pool no longer plays a thin synthetic tone. The strike is a real wet sample from the liquids kit — a short plash and a thrown-splash body — so it reads under the gunshot instead of as a beep.
+
+Verified with the water-audio mixer checks and the handgun water-surface cases.
+
+---
+
 ## v1.4.13 - Let it fly (2026-11-16)
 
 A patch for the moment you let go.
