@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.13 - Let it fly (2026-11-16)
+
+A patch for the moment you let go.
+
+- **Flick release.** On desktop, releasing a held prop with E keeps the look you were making: spin hard and it flies sideways; flick the mouse up and it goes up. Soft put-downs still land nearly dead. Left-click throw is unchanged. VR still uses the tracked hand.
+
+Verified with the props checks for look-up and spin release, and the physics-stages checks.
+
+---
+
 ## v1.4.12 - In your hands (2026-11-16)
 
 A patch for the heavy thing you are holding.

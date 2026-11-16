@@ -89,8 +89,27 @@ int Game::nearbyClutter(int grabHand)const{
 }
 bool Game::interactClutter(int grabHand){
  m_carryClutter=-1;
- if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.1f;c.vz=0;if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}if(c.model>=0){float factor=std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f);c.velocity=c.velocity*factor;c.vz*=factor;}c.pitchSpeed=0;c.rollSpeed=0;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
- m_heldClutter=nearbyClutter(grabHand);if(holdingClutter()&&m_clutter[m_heldClutter].mass()>25){m_heldClutter=-1;return false;}if(holdingClutter()){auto&c=m_clutter[m_heldClutter];if(m_vrInputActive){float nearest=999;for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(distance<nearest){nearest=distance;m_vrCarryHand=hand;}}}c.projectile=false;if(c.model>=0)knockClutter(m_level,m_heldClutter,{c.pos.x,c.pos.y,c.z},{});c.sleeping=false;c.restTime=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
+ if(holdingClutter()){
+  auto&c=m_clutter[m_heldClutter];
+  if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}
+  else{
+   // Desktop: the held prop follows look. Releasing mid-spin or mid-flick keeps that path
+   // (and this frame's mouse rate, so a same-frame whip still flings it).
+   const float hold=m_carryDistance,pitch=m_player.pitch/140.f,pitchRate=m_lookPitchRate/140.f;
+   const Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x};
+   const Vec2 lookVel=right*(m_lookYawRate*hold*std::cos(pitch))+forward*(-hold*std::sin(pitch)*pitchRate);
+   const float lookVz=hold*std::cos(pitch)*pitchRate;
+   const Vec2 hand=lengthSq(lookVel)>lengthSq(m_carryHandVelocity)?lookVel:m_carryHandVelocity;
+   const float handVz=std::fabs(lookVz)>std::fabs(m_carryHandVz)?lookVz:m_carryHandVz;
+   c.velocity=m_velocity*.35f+hand;c.vz=handVz;
+   c.velocity={std::clamp(c.velocity.x,-12.f,12.f),std::clamp(c.velocity.y,-12.f,12.f)};c.vz=std::clamp(c.vz,-12.f,12.f);
+  }
+  if(c.model>=0){float factor=std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f);c.velocity=c.velocity*factor;c.vz*=factor;}
+  const float releaseSpeed=length(c.velocity)+std::fabs(c.vz);
+  c.projectile=releaseSpeed>1.2f;c.soundOwner=c.projectile?-1:c.soundOwner;c.pitchSpeed=0;c.rollSpeed=0;c.spin=c.projectile?(c.velocity.x+c.velocity.y)*.4f:0;
+  c.sleeping=false;c.restTime=0;m_heldClutter=-1;m_carryHandVelocity={};m_carryHandVz=0;return true;
+ }
+ m_heldClutter=nearbyClutter(grabHand);if(holdingClutter()&&m_clutter[m_heldClutter].mass()>25){m_heldClutter=-1;return false;}if(holdingClutter()){auto&c=m_clutter[m_heldClutter];if(m_vrInputActive){float nearest=999;for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(distance<nearest){nearest=distance;m_vrCarryHand=hand;}}}c.projectile=false;if(c.model>=0)knockClutter(m_level,m_heldClutter,{c.pos.x,c.pos.y,c.z},{});c.sleeping=false;c.restTime=0;m_carryHandVelocity={};m_carryHandVz=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
 }
 namespace {
 // Oriented horizontal prop footprint against the actor's axis-aligned hull.
@@ -224,6 +243,7 @@ void Game::updateClutter(const InputState&input,float dt){
    // Heavy carried props sweep living bodies along the hand path; a wall-pinned
    // body stops the prop at the last clear pose instead of tunneling through.
    if(c.model>=0&&c.mass()>=8){pushBodiesFromCarried(c,previous);if(!m_vrInputActive)m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
+   if(dt>1e-4f&&!m_vrInputActive){m_carryHandVelocity=(c.pos-previous.pos)*(1.f/dt);m_carryHandVz=(c.z-previous.z)/dt;}
    c.velocity={};c.vz=c.pitchSpeed=c.rollSpeed=c.spin=0;
   }
   else{c.yaw=previous.yaw;c.pitch=previous.pitch;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;c.projectile=false;}
@@ -584,6 +604,17 @@ bool Game::testProps(){
   check(length(carry.m_clutter[0].pos-carry.m_player.pos)<=2.51f,"held prop reach has a maximum");
   scroll.weaponScroll=-1;for(int i=0;i<40;++i)carry.update(scroll,1.f/120);
   check(carry.holdingClutter()&&length(carry.m_clutter[0].pos-carry.m_player.pos)>=.59f,"held prop cannot be scrolled inside the player");
+ }
+ {Game flick(regression::campaign(regression::room()));flick.m_player.pos={6,6};flick.m_player.angle=0;flick.m_player.pitch=0;
+  Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={7,6};c.z=.75f;flick.m_clutter={c};
+  check(flick.interactClutter(),"look-flick release grabs monitor");flick.update({},1.f/60);
+  InputState up;up.use=true;up.mouseDy=-140;flick.update(up,1.f/60);
+  check(!flick.holdingClutter()&&flick.m_clutter[0].vz>1.5f&&flick.m_clutter[0].projectile,"looking up and releasing flings the prop upward");
+  Game spin(regression::campaign(regression::room()));spin.m_player.pos={6,6};spin.m_player.angle=0;spin.m_player.pitch=0;
+  c.pos={7,6};c.z=.75f;spin.m_clutter={c};check(spin.interactClutter(),"spin release grabs monitor");
+  InputState turn;turn.mouseDx=180;for(int i=0;i<4;++i)spin.update(turn,1.f/60);
+  turn.use=true;spin.update(turn,1.f/60);
+  check(!spin.holdingClutter()&&length(spin.m_clutter[0].velocity)>1.5f&&spin.m_clutter[0].projectile,"spinning and releasing flings the prop sideways");
  }
  {auto room=regression::room();room->structures.push_back({7.5f,3,7.6f,10,0,3.4f});Game carry(regression::campaign(room));carry.m_player.pos={6,6};carry.m_player.angle=0;
   Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={6.8f,6};c.z=.75f;carry.m_clutter={c};carry.interactClutter();carry.update({},1.f/120);
