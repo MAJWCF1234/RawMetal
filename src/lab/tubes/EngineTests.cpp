@@ -72,6 +72,7 @@ const bool registered=[]{
  engine("physics-stages","--each-test=physics-stages: props through the physics stages",&Game::testPhysicsStages);
  engine("prop-saves","--each-test=prop-saves: props and their state through a save",&Game::testPropSaves);
  engine("combat","--each-test=combat: shots, barrels, melee",&Game::testCombat);
+  engine("handgun","--each-test=handgun: firearms, ammo and water surface hits",&Game::testHandgun);
  // The map records (WET joined them): every chunk through the RMC exporter and back, and the worlds kept apart.
  engine("rmc-export","--each-test=rmc-export: every map exported to RMC, loaded back, compared record by record",+[]{return testRmcExportRoundTrip("rmc-export-test.txt");});
  engine("world-isolation","--world-isolation-test: maps keep their own light, wetness and records",&Game::testWorldIsolation);

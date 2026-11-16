@@ -43,6 +43,17 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    }
   }
   std::sort(passages.begin(),passages.end(),[](const auto&a,const auto&b){return a.distance<b.distance;});int count=0;for(const auto&p:passages)if(p.distance<hit.distance&&count<2)hit.passed[count++]=p;
+  // Water is a passage, never a blocker: the actual first solid or body keeps its hit. Work this
+  // out on the selected ray so cone assistance cannot splash beyond a victim or through cover.
+  if(ray.z<-.00001f){float nearest=hit.distance;
+   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&world=level==m_level?m_world:m_chunks[level].world;const auto shift=activeOrigin-chunkOffset(level);
+    for(const auto&water:world.waterVolumes()){if(origin.z<=water.surface+.002f)continue;const float distance=(water.surface-origin.z)/ray.z;if(distance<=.002f||distance>=nearest-.001f)continue;
+     const auto point=origin+ray*distance;const float x=point.x+shift.x,y=point.y+shift.y;
+     if(x<water.x1||x>=water.x2||y<water.y1||y>=water.y2||world.floorHeight(x,y)>=water.surface-.02f)continue;
+     nearest=distance;hit.waterLevel=level;hit.waterPoint={point.x,point.y,water.surface};hit.waterDistance=distance;
+    }
+   }
+  }
   return hit;
  };
  result=exact(direction);
@@ -87,6 +98,12 @@ void Game::startleScriptedActors(const ShotHit& hit,Point3 origin,Point3 directi
 }
 void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& inputDefinition,bool playerFired,float damageOverride,AiTargetRef attacker){
  if(playerFired)startleScriptedActors(hit,origin,direction);
+ if(!m_blastShot&&hit.waterLevel>=0&&hit.waterLevel<chunkCount()&&chunkResident(hit.waterLevel)&&hit.waterDistance>.002f){
+  const auto shift=chunkOffset(m_level)-chunkOffset(hit.waterLevel);const auto travel=(hit.waterPoint-origin)*(1.f/hit.waterDistance);
+  const float power=std::clamp(hitscanDamageAt(inputDefinition,hit.waterDistance)/24.f,.65f,1.5f);
+  m_waterSplashes.push_back({hit.waterPoint+Point3{shift.x,shift.y,0},travel,m_elapsed,hit.waterLevel,power});if(m_waterSplashes.size()>64)m_waterSplashes.erase(m_waterSplashes.begin());
+  m_sounds.push_back({Sound::WaterSplash,{hit.waterPoint.x,hit.waterPoint.y},.75f*power,1.05f-.08f*power,true,24,hit.waterPoint.z,-1,0,0,-1});
+ }
  // The bodies it passes through answer to the ray itself (Carcass): they block nothing.
  m_shotRays.push_back({origin,direction,hit.kind==ShotKind::None?60.f:hit.distance,m_elapsed,damageOverride>0?damageOverride:hitscanDamageAt(inputDefinition,hit.distance),inputDefinition.ragdollImpulse,m_level});if(m_shotRays.size()>24)m_shotRays.erase(m_shotRays.begin());
  HitscanDef definition=inputDefinition;float attenuation=1;

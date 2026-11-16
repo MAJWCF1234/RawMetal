@@ -56,11 +56,12 @@ struct LabAccess {
  static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);g.equipWeapon(id);}
  static void setGod(Game& g,bool on){g.m_god=on;if(on)g.m_player.health=std::max(g.m_player.health,100.f);}
  // A shotgun round from the player's eye at a point, as the player's own shot lands (trace, then resolve).
- static ShotKind fireAt(Game& g,Point3 at){const Player& p=g.m_player;const Point3 o{p.pos.x,p.pos.y,p.z+p.stanceEye()};Point3 d{at.x-o.x,at.y-o.y,at.z-o.z};
+ static ShotKind fireAt(Game& g,Point3 at,ShotHit* traced=nullptr){const Player& p=g.m_player;const Point3 o{p.pos.x,p.pos.y,p.z+p.stanceEye()};Point3 d{at.x-o.x,at.y-o.y,at.z-o.z};
   const float n=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(n<1e-4f)return ShotKind::None;d=d*(1/n);const auto& gun=weaponDef(WeaponId::Shotgun).hitscan;
-  const auto hit=g.traceShot(o,d,40,-1,false,&gun);g.resolveShot(hit,o,d,gun,true);return hit.kind;}
+  const auto hit=g.traceShot(o,d,40,-1,false,&gun);if(traced)*traced=hit;g.resolveShot(hit,o,d,gun,true);return hit.kind;}
  // A sound raised as if the game had raised it this frame (heard by the audio engine's next update).
  static void raise(Game& g,const SoundEvent& e){g.m_sounds.push_back(e);}
+ static void omitSound(Game& g,Sound sound){std::erase_if(g.m_sounds,[&](const auto& event){return event.sound==sound;});}
  static void mute(Game& g,bool music){g.m_musicEnabled=!music;}
  // ---- AudioEngine, mixed headless (AudioEngine(false)) ----
  static void mix(AudioEngine& a,std::vector<int16_t>& out,size_t frames){const size_t at=out.size();out.resize(at+frames*2);a.mix(out.data()+at,frames);}
@@ -80,6 +81,8 @@ struct LabAccess {
  static void onlyBus(AudioEngine& a,int bus){
   for(auto& v:a.m_voices){const bool music=v.emitter==-1||v.emitter==-2||v.emitter==-3||v.emitter==AudioEngine::AlertEmitter||(v.emitter<AudioEngine::AreaEmitter&&v.emitter>AudioEngine::AreaEmitter-AudioEngine::AreaScores);
    const int of=music?1:v.loop?2:0;if(of!=bus){v.left=v.right=v.smoothLeft=v.smoothRight=0;}}}
+ // Keep the actual mixed voice of one sound, for measuring an impact separately from its gunshot.
+ static void onlySound(AudioEngine& a,Sound sound){std::erase_if(a.m_voices,[&](const auto& v){return v.sound!=sound;});}
  // Things that break, and what they leave (tubes/Debris.cpp).
  static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
  static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}

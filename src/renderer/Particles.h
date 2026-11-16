@@ -59,7 +59,7 @@ struct Particles {
  // A throw: a grenade leaving `from` at `velocity` at `time`, coming to rest on the floor (and smoking
  // there) until `fuse` seconds on.
  struct Throw {Point3 from{},velocity{};float time=0,fuse=2.4f;int level=0;};
- struct Extra {std::vector<BarrelExplosion> blasts;std::vector<HitBurst> hits;std::vector<ShotRay> shots;std::vector<Throw> throws;};
+ struct Extra {std::vector<BarrelExplosion> blasts;std::vector<HitBurst> hits;std::vector<ShotRay> shots;std::vector<Throw> throws;std::vector<WaterSplash> splashes;};
  static ParticleStats draw(ParticleMemory& memory,const Game& game,const View& view,const Card& card,const Light& light,const Visible& visible,const Extra* extra=nullptr);
  // Whether a point is clear of every solid (no card is drawn round a centre that is not).
  static bool open(const World& w,Point3 p);

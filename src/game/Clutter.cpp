@@ -63,7 +63,7 @@ void Game::landShards(){
 }
 bool Game::damageClutter(int level,size_t index,float amount,Point3,Point3 direction){auto&c=(level==m_level?m_clutter:m_chunks[level].clutter).at(index);if(c.model<0||c.broken)return false;c.damage+=std::max(0.f,amount);float health=propTraits(c.model).health;if(health>0&&c.damage>=health){breakClutter(level,index,direction);return true;}return false;}
 void Game::seedClutter(){
- m_heldClutter=-1;m_clutter.clear();
+ m_heldClutter=-1;m_carryClutter=-1;m_clutter.clear();
  for(const auto& spawn:m_world.clutterSpawns()){
   Clutter c;c.kind=spawn.kind;c.pos=spawn.position;c.yaw=spawn.yaw;
   c.model=spawn.model;c.dims={spawn.width,spawn.depth,spawn.height};c.pitch=spawn.pitch;c.roll=spawn.roll;c.breakState=spawn.breakState;
@@ -87,17 +87,26 @@ int Game::nearbyClutter(int grabHand)const{
  return best;
 }
 bool Game::interactClutter(int grabHand){
+ m_carryClutter=-1;
  if(holdingClutter()){auto&c=m_clutter[m_heldClutter];c.velocity=m_velocity*.1f;c.vz=0;if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}if(c.model>=0){float factor=std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f);c.velocity=c.velocity*factor;c.vz*=factor;}c.pitchSpeed=0;c.rollSpeed=0;c.sleeping=false;c.restTime=0;m_heldClutter=-1;return true;}
  m_heldClutter=nearbyClutter(grabHand);if(holdingClutter()&&m_clutter[m_heldClutter].mass()>25){m_heldClutter=-1;return false;}if(holdingClutter()){auto&c=m_clutter[m_heldClutter];if(m_vrInputActive){float nearest=999;for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(distance<nearest){nearest=distance;m_vrCarryHand=hand;}}}c.projectile=false;if(c.model>=0)knockClutter(m_level,m_heldClutter,{c.pos.x,c.pos.y,c.z},{});c.sleeping=false;c.restTime=0;sound(Sound::Pickup,.25f,.8f);return true;}return false;
 }
 void Game::updateClutter(const InputState&input,float dt){
  landShards();
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
+ if(!holdingClutter())m_carryClutter=-1;
  if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;
+  if(m_carryClutter!=m_heldClutter){m_carryClutter=m_heldClutter;m_carryDistance=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f;m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
+  const float oldYaw=c.yaw,oldPitch=c.pitch,oldOffset=m_carryYawOffset;
+  if(!m_vrInputActive){
+   m_carryDistance=std::clamp(m_carryDistance+input.weaponScroll*.2f,std::max(.6f,.35f+c.footprint()*.5f),2.5f);
+   if(input.rotateProp){m_carryYawOffset=wrapAngle(m_carryYawOffset+input.mouseDx*.008f*m_settings.sensitivity);c.pitch=std::remainder(c.pitch+input.mouseDy*.008f*m_settings.sensitivity,2*kPi);}
+   c.yaw=wrapAngle(m_player.angle+m_carryYawOffset);
+  }
   // Aim at the object's centre from the current camera, including crouching.
   // The former .48 m feet-relative cap kept carried objects at knee height.
-  float holdDistance=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f;
+  float holdDistance=m_carryDistance;
   Vec2 target=m_player.pos+forward*(holdDistance*std::cos(pitch));
   float height=m_player.z+m_player.eye+holdDistance*std::sin(pitch)-c.height()*.5f;
   if(m_vrInputActive){auto hand=m_vrHandPosition[m_vrCarryHand],direction=m_vrHandDirection[m_vrCarryHand];target={hand.x+direction.x*.12f,hand.y+direction.y*.12f};height=hand.z+direction.z*.12f-c.height()*.5f;pitch=std::asin(std::clamp(direction.z,-1.f,1.f));float yaw=std::atan2(direction.y,direction.x);forward={std::cos(yaw),std::sin(yaw)};}
@@ -108,8 +117,9 @@ void Game::updateClutter(const InputState&input,float dt){
   float fraction=clutterPathFraction(eye,end,n);if(fraction<1){end=eye+(end-eye)*std::max(0.f,fraction-.02f);target={end.x,end.y};height=end.z-c.height()*.5f;}
   auto extent=c.extent();auto fit=[&](float t){auto p=m_player.pos+(target-m_player.pos)*t;float z=eye.z+(height-eye.z)*t;return c.everyOutlinePoint([&](Vec2 offset){auto q=p+offset;const auto&w=worldAt(q);return w.fits(q.x,q.y,z,c.height(),true,true)&&!w.doorBlocks(q.x,q.y,z,c.height());});};
   if(c.model>=0&&!fit(1)){float lo=0,hi=1;for(int i=0;i<8;++i){float mid=(lo+hi)*.5f;if(fit(mid))lo=mid;else hi=mid;}target=m_player.pos+(target-m_player.pos)*lo;height=eye.z+(height-eye.z)*lo;clear&=lo>.1f;}
-  if(clear&&targetWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;c.yaw=m_vrInputActive?std::atan2(forward.y,forward.x):m_player.angle;c.pitchSpeed=c.rollSpeed=c.spin=0;}
-  else{m_heldClutter=-1;c.projectile=false;}
+  local=target;const auto&finalWorld=worldAt(local);
+  if(clear&&finalWorld.fits(local.x,local.y,height,c.height(),true,true)){c.pos=target;c.z=height;c.velocity={};c.vz=0;if(m_vrInputActive)c.yaw=std::atan2(forward.y,forward.x);c.pitchSpeed=c.rollSpeed=c.spin=0;}
+  else{c.yaw=oldYaw;c.pitch=oldPitch;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;c.projectile=false;}
   if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){float speed=9.f*(c.model>=0?std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f):1.f);c.velocity=forward*(speed*std::cos(pitch));c.vz=2.f+speed*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;c.soundOwner=-1;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
@@ -236,7 +246,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    bool pushing=c.mass()>=8&&std::fabs(delta.x)<e[0]+.27f&&std::fabs(delta.y)<e[1]+.27f&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z&&(m_velocity.x*m_velocity.x+m_velocity.y*m_velocity.y>.001f||m_propPushAttempt);
    if(pushing){c.blockedTime+=dt;Vec2 n=length(delta)>.001f?delta*(1/length(delta)):Vec2{1,0};c.velocity+=n*(dt*4/std::sqrt(c.mass()));c.sleeping=false;c.soundOwner=-1;}else if(std::fabs(delta.x)>e[0]+.4f||std::fabs(delta.y)>e[1]+.4f)c.blockedTime=0;
    float nx=e[0]+.2f-std::fabs(delta.x),ny=e[1]+.2f-std::fabs(delta.y);
-   if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){return sweepFits(c,c.pos,p,c.z,c.height());};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}
+   if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};if(c.mass()<8||dot(c.velocity,n)>=-.05f){auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){return sweepFits(c,c.pos,p,c.z,c.height());};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}}
   }else if(length(m_velocity)>.5f&&length(c.pos-(m_player.pos-shift))<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.model>=0){auto probe=c.pos+shift;const auto&under=physicalWorld(probe);if(probe.x<0||probe.x>=24||probe.y<0||probe.y>=24||!chunkResident(under.level())){c.sleeping=true;c.restTime=-1;continue;}if(c.restTime<0){c.sleeping=false;c.restTime=0;}}
   if(c.model>=0){auto e=c.extent();
@@ -258,6 +268,35 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
   auto impact=[&](float speed){if(speed<.65f||c.impactCooldown>0)return;float gain=std::clamp(speed*.12f,.12f,.85f);if(c.model<0&&c.impactSound()==Sound::JunkSoft)gain*=.65f;
    const auto&t=propMaterialTraits(c.material());SoundEvent event{c.impactSound(),c.pos+shift,gain,c.model>=0?t.impactPitch:.94f+.1f*std::fabs(std::sin(c.yaw+index)),true,17,c.z+c.height()*.5f};if(c.model>=0){event.gain*=t.impactGain;event.owner=c.soundOwner;event.aiRadius=std::clamp(2.f+std::sqrt(c.mass())*speed,2.f,12.f);if(t.breakSpeed>0&&speed>t.breakSpeed)breakClutter(level,index,{c.velocity.x,c.velocity.y,c.vz});}m_sounds.push_back(event);c.impactCooldown=.075f;
   };
+  // Loose dressing meets bodies through its oriented footprint. Heavy props carry a body along; its
+  // ordinary hull sweep still stops at a wall. The remaining penetration comes out of the prop,
+  // so a pinned person is never pushed through geometry or left inside a moving crate.
+  auto bodyContacts=[&]{if(c.model<0)return;const auto e=c.extent();const float propHeight=e[2]*2,mass=c.mass();auto unturned=c;unturned.yaw=0;const auto box=unturned.extent();const Vec2 ax{std::cos(c.yaw),std::sin(c.yaw)},ay{-ax.y,ax.x};
+   AiTargetRef attacker;if(c.soundOwner>=0&&size_t(c.soundOwner)<m_friendlyActors.size())attacker={ShotKind::Npc,m_friendlyActors[size_t(c.soundOwner)].level,c.soundOwner};else if(c.projectile)attacker={ShotKind::Player,m_level,0};
+   auto nearby=[&](Vec2 actor,float feet,float height,float radius){return std::fabs(actor.x-c.pos.x)<e[0]+radius&&std::fabs(actor.y-c.pos.y)<e[1]+radius&&c.z<feet+height&&c.z+propHeight>feet;};
+   auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt){if(!nearby(actor,feet,height,radius))return;Vec2 d=actor-c.pos,n{};float penetration=100;
+    // The world AABB is broad phase only: four separating axes distinguish a thin board's
+    // footprint from the empty corners of the square surrounding it, as for prop pairs below.
+    for(Vec2 axis:std::array<Vec2,4>{Vec2{1,0},Vec2{0,1},ax,ay}){float reach=std::fabs(dot(ax,axis))*box[0]+std::fabs(dot(ay,axis))*box[1]+radius*(std::fabs(axis.x)+std::fabs(axis.y));float depth=reach-std::fabs(dot(d,axis));if(depth<=0)return;if(depth<penetration){penetration=depth;n=axis*(dot(d,axis)<0?-1.f:1.f);}}
+    float closing=std::max(0.f,dot(c.velocity-actorVelocity,n));const bool falling=c.vz<0&&c.z>=feet+height-.12f;float speed=std::max(closing,falling?-c.vz:0.f);
+    if(speed>=1.5f&&c.bodyImpactCooldown<=0){float damage=std::clamp((.5f*c.mass()*speed*speed-2.f)*.2f,0.f,80.f);if(damage>0){hurt(damage,n);c.bodyImpactCooldown=.25f;c.projectile=false;impact(speed);}}
+    if(c.broken)return;if(falling){c.z=feet+height;c.vz=std::max(0.f,-c.vz*.12f);return;}
+    // Bodies have no retained horizontal physics velocity. Carry the transmitted impulse
+    // through 80 ms of damped follow-through now, swept through the ordinary hull solver,
+    // rather than discarding that momentum after only a substep's penetration correction.
+    float moved=0;if(mass>=8&&closing>.001f){float bodySpeed=1.15f*closing*mass/(mass+actorMass);auto delta=n*(penetration+.001f+bodySpeed*.08f);moved=std::max(0.f,dot(move(delta),n));}
+    float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&sweepFits(c,c.pos,next,c.z,propHeight))c.pos=next;
+    // Inelastic normal impulse against a human-sized body; tangential motion survives.
+    if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}
+   };
+   contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false);});
+   for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
+    contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;int count=std::max(1,int(std::ceil(length(delta)/.04f)));auto part=delta*(1.f/count);for(int i=0;i<count;++i){auto next=npc.pose.position+part;if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;npc.pose.position=next;}return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);});
+   }
+   for(int target=0;target<chunkCount();++target)if(chunkResident(target)){auto offset=chunkOffset(target)-chunkOffset(level);auto&enemies=target==m_level?m_enemies:m_chunks[target].enemies;for(auto&enemy:enemies)if(enemy.alive){
+    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;int count=std::max(1,int(std::ceil(length(delta)/.04f)));auto part=delta*(1.f/count);for(int i=0;i<count;++i){auto next=enemy.pos+part;auto global=next+chunkOffset(target)-chunkOffset(m_level);if(!hullFits(global,enemy.z,enemy.hull(),enemy.radius(),false,false))break;enemy.pos=next;}return enemy.pos-before;},[&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}});
+   }}
+  };
   // A pane the prop meets at `speed` into it: cracked by the blow's energy (PaneTap..paneBreakEnergy), or
   // broken, when the prop goes on with what the glass did not take (the share of its speed returned).
   auto strike=[&](int paneLevel,int pane,float speed,Point3 at,Point3 dir)->float{auto&pw=paneLevel==m_level?m_world:m_chunks[paneLevel].world;if(!pw.breakableIntact(pane))return 1;
@@ -266,7 +305,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    if(damage<=0||!damagePane(paneLevel,pane,damage,at,dir))return 0;c.paneRearm=0;return std::sqrt(std::clamp(1-(PaneTap+paneBreakEnergy(b)*left/limit)/energy,.1f,.9f));};
   for(int i=0;i<steps;++i){
    if(c.model>=0&&(lengthSq(c.velocity)>.0001f||std::fabs(c.vz)>.05f))for(auto&v:list)if(&v!=&c&&v.model>=0&&!v.broken&&v.sleeping&&std::fabs(v.z-c.z-c.supportHeight())<.03f&&length(v.pos-c.pos)<(v.footprint()+c.footprint())*.7f){v.sleeping=false;v.restTime=0;}
-   c.impactCooldown=std::max(0.f,c.impactCooldown-step);c.paneRearm=std::max(0.f,c.paneRearm-step);c.tipTime=std::max(0.f,c.tipTime-step);
+   c.impactCooldown=std::max(0.f,c.impactCooldown-step);c.bodyImpactCooldown=std::max(0.f,c.bodyImpactCooldown-step);c.paneRearm=std::max(0.f,c.paneRearm-step);c.tipTime=std::max(0.f,c.tipTime-step);
    auto oldExtent=c.extent();float center=c.z+oldExtent[2],oldPitch=c.pitch,oldRoll=c.roll,oldYaw=c.yaw;
    c.pitch=wrapAngle(c.pitch+c.pitchSpeed*step);c.roll=wrapAngle(c.roll+c.rollSpeed*step);c.yaw=wrapAngle(c.yaw+c.spin*step);
    auto extent=c.extent();c.z=center-extent[2];
@@ -314,6 +353,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
      return false;}()){}
     else{impact(std::fabs(speed));if(axis==0)c.pitchSpeed+=std::clamp(speed*1.5f,-8.f,8.f);else c.rollSpeed-=std::clamp(speed*1.5f,-8.f,8.f);speed*=-(c.model>=0?propMaterialTraits(c.material()).restitution:.25f);c.projectile=false;}
    }
+   bodyContacts();if(c.broken)break;
    floor=-100;float ceiling=100;
    // What it rests on and what is over it, under its whole outline (a desk's edge between two of
    // the nine footprint points let a falling prop settle half inside it).
@@ -349,8 +389,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     if(!(immersed>0&&buoyant)&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
    }else{c.z=z;c.restTime=0;}
-   if(c.model>=0&&c.projectile)for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];auto p=npc.pose.position+chunkOffset(npc.level)-chunkOffset(level);if(npc.pose.clip==4||lengthSq(p-c.pos)>.3f*.3f||c.z>=npc.pose.z+friendlyHullHeight(a,npc.track())||c.z+c.height()<=npc.pose.z)continue;auto velocity=c.velocity;float speed=length(velocity);Point3 dir{velocity.x/std::max(.001f,speed),velocity.y/std::max(.001f,speed),0},at{c.pos.x+shift.x,c.pos.y+shift.y,c.z+c.height()*.5f};resolveShot({ShotKind::Npc,npc.level,int(a),1,1,at,{}},at-dir,dir,kGuardHandgun.hitscan,true,5,{ShotKind::Player,m_level,0});c.projectile=false;c.velocity=c.velocity*-.18f;break;}
-   if(c.projectile){auto point=c.pos+shift;const auto&contactWorld=physicalWorld(point);int targetLevel=contactWorld.level();auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;
+   if(c.model<0&&c.projectile){auto point=c.pos+shift;const auto&contactWorld=physicalWorld(point);int targetLevel=contactWorld.level();auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;
     for(auto&e:enemies)if(e.alive&&length(e.pos-point)<.5f&&c.z+(extent[2]*2)>e.bodyBottom()&&c.z<e.bodyTop()){
      impact(length(c.velocity));e.awareness=6;e.recognition=1;e.lastKnown=point;e.lastKnownZ=contactWorld.supportBelow(point.x,point.y,c.z+extent[2]);e.state=Enemy::State::Investigate;c.projectile=false;c.velocity=c.velocity*-.18f;m_sounds.push_back({Sound::PunchHit,c.pos+shift,.6f,1,true,17,c.z+extent[2]});
      if(applyEnemyDamage(e,kUnarmedMelee.clutterDamage,false,false,targetLevel)){auto audible=e;audible.pos+=chunkOffset(targetLevel)-chunkOffset(m_level);enemySound(audible,2);}break;
@@ -408,7 +447,7 @@ bool Game::testProps(){
  for(int variant=0;variant<4;++variant){auto m=regression::room();m->fixtures.push_back({24,{8,8},0,1.4f,.7f,.75f,0,true});kit::deskSet(*m,{8,8},.75f,0,variant);Game desk(regression::campaign(m));bool supported=desk.m_clutter.size()==4;for(const auto&c:desk.m_clutter){auto e=c.extent();supported&=c.sleeping;for(float x:{-e[0],0.f,e[0]})for(float y:{-e[1],0.f,e[1]})supported&=std::fabs(desk.world().supportBelow(c.pos.x+x,c.pos.y+y,.8f)-.75f)<.01f;}check(supported,"binder, mug, desk lamp and pill bottle desk variants seed fully supported");}
  {Game budget(regression::campaign(regression::room()));budget.m_player.pos={3,3};for(int i=0;i<100;++i){Clutter c;c.kind=7;c.model=model::keyboard;c.dims=propTraits(c.model).size;c.pos={8+(i%10)*.8f,8+(i/10)*.8f};c.z=2;budget.m_clutter.push_back(c);}budget.updateClutter({},1.f/60);int moving=0;for(const auto&c:budget.m_clutter)moving+=c.vz<0;check(moving==48,"nearest 48 awake props run at full rate");budget.updateClutter({},1.f/60);check(std::all_of(budget.m_clutter.begin(),budget.m_clutter.end(),[](const Clutter&c){return c.vz<-.2f;}),"remaining awake props advance at half rate without freezing");}
  for(int variant=0;variant<4;++variant){auto m=regression::room();kit::workstation(*m,8,8,0,1,variant,true);Game workstation(regression::campaign(m));check(workstation.m_clutter.size()==size_t(4+(variant%2!=0)+(variant%3==0)+(variant%4==1))&&std::all_of(workstation.m_clutter.begin(),workstation.m_clutter.end(),[](const Clutter&c){return c.sleeping;}),"loose workstation preserves its original desktop set and supports the physical floor tower");}
- {auto next=regression::room();next->definition.origin={24,0};auto campaign=regression::campaign(regression::room());campaign->maps.push_back(next);Game resident(campaign);resident.ensureChunk(1);Enemy enemy;enemy.pos=enemy.home=enemy.lastKnown={10,10};resident.m_chunks[1].enemies={enemy};Clutter c;c.kind=7;c.model=model::keyboard;c.dims=propTraits(c.model).size;c.pos={9,10};c.z=.1f;c.velocity={12,0};c.projectile=true;resident.m_chunks[1].clutter={c};for(int i=0;i<120;++i)resident.updateClutter({},1.f/120);check(resident.m_chunks[1].enemies[0].hp==105&&!resident.m_chunks[1].clutter[0].projectile,"resident-neighbour thrown prop hits its creature once for legacy five damage");}
+ {auto next=regression::room();next->definition.origin={24,0};auto campaign=regression::campaign(regression::room());campaign->maps.push_back(next);Game resident(campaign);resident.ensureChunk(1);Enemy enemy;enemy.pos=enemy.home=enemy.lastKnown={10,10};resident.m_chunks[1].enemies={enemy};Clutter c;c.kind=7;c.model=model::keyboard;c.dims=propTraits(c.model).size;c.pos={9,10};c.z=.1f;c.velocity={12,0};c.projectile=true;resident.m_chunks[1].clutter={c};for(int i=0;i<120;++i)resident.updateClutter({},1.f/120);check(resident.m_chunks[1].enemies[0].hp<110&&resident.m_chunks[1].enemies[0].hp>0&&!resident.m_chunks[1].clutter[0].projectile,"resident-neighbour thrown modeled prop damages its creature and loses projectile status");}
  {Game held(regression::campaign(regression::room()));Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims=propTraits(c.model).size;c.pos={8,8};c.z=.75f;held.m_clutter={c};held.m_heldClutter=0;check(held.traceShot({6,8,.9f},{1,0,0},10).kind==ShotKind::Prop,"held monitor retains its physical bullet-blocking box");held.m_clutter[0].model=model::mug;held.m_clutter[0].dims=propTraits(model::mug).size;held.breakClutter(0,0,{1,0,0});Game loaded(held.m_customCampaign);check(!held.holdingClutter()&&loaded.decodeSave(held.encodeSave())&&loaded.m_clutter[0].broken,"breaking a held prop drops it and leaves a loadable tombstone");}
  for(bool held:{false,true})for(bool broken:{false,true}){auto first=regression::room(),second=regression::room();first->openEast=true;first->layers[0].rows[8][23]='.';second->definition.origin={24,0};second->openWest=true;second->layers[0].rows[8][0]='.';kit::prop(*first,model::mug,22.5f,8,0,0);kit::prop(*second,model::mug,22.5f,8,0,0);auto campaign=regression::campaign(first);campaign->maps.push_back(second);Game g(campaign);g.m_clutter[0].pos={24.1f,8};g.m_player.pos={24.1f,8};if(held)g.m_heldClutter=0;g.crossChunkBoundary();int moved=-1;for(int i=0;i<int(g.m_clutter.size());++i)if(std::fabs(g.m_clutter[i].home.x-22.5f)<.01f)moved=i;if(moved>=0&&broken)g.breakClutter(1,moved,{});auto bytes=g.encodeSave();Game loaded(campaign);bool valid=moved>=0&&loaded.decodeSave(bytes);check(valid&&loaded.level()==1&&loaded.m_clutter.size()==2&&loaded.chunkClutter(0).empty()&&loaded.holdingClutter()==(held&&!broken)&&loaded.encodeSave()==bytes,"cross-seam authored live/held/tombstone identity roundtrips without desk respawn");}
  check(testPropSaves(),"v16 migration, held prop save, and torn leads kept by v21 and authored from v19/v20");
@@ -416,6 +455,28 @@ bool Game::testProps(){
  {Game carry(regression::campaign(regression::room()));carry.m_player.pos={6,6};carry.m_player.angle=0;Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={7,6};c.z=.75f;carry.m_clutter={c};check(carry.interactClutter()&&carry.holdingClutter(),"11 kg monitor can be lifted");InputState fire;fire.fire=true;carry.updateClutter(fire,1.f/120);check(!carry.holdingClutter()&&length(carry.m_clutter[0].velocity)<5,"11 kg monitor throw is under 5 m/s");c.model=0;c.dims={1,1,1};carry.m_clutter={c};carry.m_heldClutter=-1;check(!carry.interactClutter()&&!carry.holdingClutter()&&carry.m_clutter[0].mass()==30,"30 kg uncurated box cannot be lifted");}
  {auto neighbour=regression::room();neighbour->definition.origin={24,0};neighbour->layers[0].rows[10][10]='B';auto multi=regression::campaign(regression::room());multi->maps.push_back(neighbour);Game n(multi);n.ensureChunk(1);Clutter c;c.kind=7;c.model=model::keyboard;c.dims={.45f,.16f,.03f};c.pos={10,10};c.z=2;n.m_chunks[1].clutter={c};n.detonateBarrel(1,10,10);for(int i=0;i<600;++i)n.updateClutter({},1.f/120);check(n.m_chunks[1].clutter.size()==7&&std::all_of(n.m_chunks[1].clutter.begin(),n.m_chunks[1].clutter.end(),[](const Clutter&v){return v.sleeping&&v.z<.02f;}),"resident neighbour prop and actual barrel debris land and sleep");
  check(std::all_of(n.m_chunks[1].clutter.begin()+1,n.m_chunks[1].clutter.end(),[](const Clutter&v){return v.kind==6&&v.shardOf==ShardOf::Barrel&&v.model<0;}),"a barrel is torn into pieces of its own hull, not unrelated junk");}
+ {Game carry(regression::campaign(regression::room()));carry.m_player.pos={6,6};carry.m_player.angle=0;
+  Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={7,6};c.z=.75f;carry.m_clutter={c};
+  check(carry.interactClutter(),"carry controls fixture grabs monitor");carry.update({},1.f/120);
+  const float angle=carry.m_player.angle,pitch=carry.m_player.pitch,yaw=carry.m_clutter[0].yaw,tilt=carry.m_clutter[0].pitch;
+  InputState turn;turn.rotateProp=true;turn.mouseDx=80;turn.mouseDy=40;carry.update(turn,1.f/120);
+  check(carry.holdingClutter()&&std::fabs(carry.m_player.angle-angle)<.001f&&std::fabs(carry.m_player.pitch-pitch)<.001f&&
+   std::fabs(carry.m_clutter[0].yaw-yaw)>.05f&&std::fabs(carry.m_clutter[0].pitch-tilt)>.05f,"middle drag turns held prop without moving the camera");
+  const float turned=carry.m_clutter[0].yaw;carry.update({},1.f/120);
+  check(std::fabs(carry.m_clutter[0].yaw-turned)<.001f,"held prop keeps its rotation after middle drag ends");
+  const float nearDistance=length(carry.m_clutter[0].pos-carry.m_player.pos);const auto weapon=carry.equippedWeapon();
+  InputState scroll;scroll.weaponScroll=1;carry.update(scroll,1.f/120);
+  check(carry.holdingClutter()&&length(carry.m_clutter[0].pos-carry.m_player.pos)>nearDistance+.1f&&carry.equippedWeapon()==weapon,"wheel extends held prop reach without switching weapon");
+  for(int i=0;i<40;++i)carry.update(scroll,1.f/120);
+  check(length(carry.m_clutter[0].pos-carry.m_player.pos)<=2.51f,"held prop reach has a maximum");
+  scroll.weaponScroll=-1;for(int i=0;i<40;++i)carry.update(scroll,1.f/120);
+  check(carry.holdingClutter()&&length(carry.m_clutter[0].pos-carry.m_player.pos)>=.59f,"held prop cannot be scrolled inside the player");
+ }
+ {auto room=regression::room();room->structures.push_back({7.5f,3,7.6f,10,0,3.4f});Game carry(regression::campaign(room));carry.m_player.pos={6,6};carry.m_player.angle=0;
+  Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={6.8f,6};c.z=.75f;carry.m_clutter={c};carry.interactClutter();carry.update({},1.f/120);
+  InputState scroll;scroll.weaponScroll=1;for(int i=0;i<12;++i)carry.update(scroll,1.f/120);
+  const auto& held=carry.m_clutter[0];check(carry.holdingClutter()&&held.pos.x+held.extent()[0]<7.51f,"scrolling toward a wall keeps the prop held at a clear endpoint");
+ }
  report<<(ok?"ALL PASSED props":"FAILED props")<<'\n';return ok;
 }
 bool Game::testClutter(){
@@ -660,6 +721,21 @@ namespace retro {
 bool Game::testPhysicsStages(){
  std::ofstream out("physics-stages-test.txt");bool ok=true;auto check=[&](bool pass,const char*label){out<<(pass?"PASS ":"FAIL ")<<label<<'\n';out.flush();ok&=pass;};
  auto prop=[](int model,Vec2 p,float z=0){Clutter c;c.kind=7;c.model=model;c.dims=propTraits(model).size;c.pos=p;c.z=z;c.sleeping=true;return c;};
+ // Removing reciprocal body contact must leave these stationary victims unmoved.
+ for(int rate:{60,120})for(int victim:{0,1,2}){auto m=regression::room();if(victim==1)m->actorTracks.push_back(regression::guard({8,8},{8,8}));Game g(regression::campaign(m));g.m_player.pos=victim==0?Vec2{8,8}:Vec2{3,3};if(victim==2){Enemy e;e.pos=e.home=e.lastKnown={8,8};g.m_enemies={e};}auto c=prop(0,{7,8.45f},.1f);c.dims={1.2f,1.2f,1.2f};c.velocity={5,0};c.sleeping=false;g.m_clutter={c};for(int i=0;i<rate/3;++i)g.simulateClutter(g.m_clutter,0,1.f/rate,-1);Vec2 at=victim==0?g.m_player.pos:victim==1?g.m_friendlyActors[0].pose.position:g.m_enemies[0].pos;const auto&v=g.m_clutter[0];out<<"body shove "<<rate<<" Hz victim "<<victim<<": body "<<at.x<<','<<at.y<<", prop "<<v.pos.x<<','<<v.pos.y<<" z "<<v.z<<" mass "<<v.mass()<<" vx "<<v.velocity.x<<'\n';check(at.x>8.02f,victim==0?"large prop edge physically pushes a stationary player at 60/120 Hz":victim==1?"large prop edge physically pushes a stationary guard at 60/120 Hz":"large prop edge physically pushes a stationary creature at 60/120 Hz");}
+ // A body shove uses the same thin-wall sweep as ordinary locomotion.
+ for(int victim:{0,1,2}){auto m=regression::room();kit::wall(*m,8.35f,5,8.4f,11,0,4);if(victim==1)m->actorTracks.push_back(regression::guard({8,8},{8,8}));Game g(regression::campaign(m));g.m_player.pos=victim==0?Vec2{8,8}:Vec2{3,3};if(victim==2){Enemy e;e.pos=e.home=e.lastKnown={8,8};g.m_enemies={e};}auto c=prop(0,{7,8},.1f);c.dims={1,1,1};c.velocity={8,0};c.sleeping=false;g.m_clutter={c};for(int i=0;i<60;++i)g.simulateClutter(g.m_clutter,0,1.f/120,-1);Vec2 at=victim==0?g.m_player.pos:victim==1?g.m_friendlyActors[0].pose.position:g.m_enemies[0].pos;check(at.x>=8&&at.x<8.16f,victim==0?"prop shove cannot drive the player through a thin wall":victim==1?"prop shove cannot drive a guard through a thin wall":"prop shove cannot drive a creature through a thin wall");}
+ // Constant damage or ignoring impact speed breaks these real creature wounds.
+ auto wound=[&](int model,float speed,int resident=0){auto m=regression::room();auto campaign=regression::campaign(m);if(resident){auto next=regression::room();next->definition.origin={24,0};campaign->maps.push_back(next);}Game g(campaign);g.m_player.pos={3,3};if(resident)g.ensureChunk(1);Enemy e;e.pos=e.home=e.lastKnown={8,8};auto&enemies=resident?g.m_chunks[1].enemies:g.m_enemies;enemies={e};auto c=prop(model,{7.55f,8},.5f);c.dims={.4f,.4f,.4f};c.velocity={speed,0};c.sleeping=false;c.projectile=true;auto&items=resident?g.m_chunks[1].clutter:g.m_clutter;items={c};for(int i=0;i<30;++i)g.simulateClutter(items,resident,1.f/120,-1);return 110-enemies[0].hp;};
+ const float lightWound=wound(model::keyboard,6),heavyWound=wound(model::crt_monitor,6),slowWound=wound(model::crt_monitor,3);check(lightWound>0&&heavyWound>lightWound+2,"heavier modeled props cause greater impact damage at equal speed");check(heavyWound>slowWound+2&&slowWound>0,"faster modeled props cause greater impact damage at equal mass");check(std::fabs(wound(model::crt_monitor,6,1)-heavyWound)<.01f,"resident-neighbour prop impact uses the same mass-scaled damage");
+ {Game g(regression::campaign(regression::room()));g.m_player.pos={3,3};Enemy e;e.pos=e.home=e.lastKnown={8,8};g.m_enemies={e};auto c=prop(model::crt_monitor,{8,8},.1f);c.velocity={.1f,0};c.sleeping=false;g.m_clutter={c};for(int i=0;i<240;++i)g.simulateClutter(g.m_clutter,0,1.f/120,-1);check(g.m_enemies[0].hp==110,"resting and slow prop overlap does not repeatedly damage a body");}
+ // An enclosing world box must not turn a thin rotated board into a solid square.
+ {auto m=regression::room();m->actorTracks.push_back(regression::guard({8.5f,7.5f},{8.5f,7.5f}));Game g(regression::campaign(m));g.m_player.pos={3,3};auto c=prop(0,{8,8},.5f);c.dims={2,.1f,.3f};c.yaw=kPi*.25f;c.velocity={4,-4};c.sleeping=false;g.m_clutter={c};g.simulateClutter(g.m_clutter,0,1.f/120,-1);check(length(g.m_friendlyActors[0].pose.position-Vec2{8.5f,7.5f})<.001f&&g.state(stateId("reg_guard_damage"))==0,"empty world-box corner of a rotated thin prop cannot push or hurt a guard");}
+ // Gravity and other people do not make a prop the player's attack.
+ for(bool npcOwned:{false,true}){auto m=regression::room();auto guard=regression::guard({8,8},{8,8});guard.ai.stance=stateId("environment_prop_truce");m->actorTracks.push_back(guard);if(npcOwned)m->actorTracks.push_back(regression::guard({5,8},{5,8}));Game g(regression::campaign(m));g.setState(stateId("environment_prop_truce"),int(SquadStance::Truce));g.m_player.pos={3,3};auto c=prop(model::crt_monitor,{7.55f,8},.5f);c.dims={.4f,.4f,.4f};c.velocity={6,0};c.sleeping=false;c.soundOwner=npcOwned?1:-1;g.m_clutter={c};for(int i=0;i<20;++i)g.simulateClutter(g.m_clutter,0,1.f/120,-1);check(g.state(stateId("reg_guard_damage"))>0&&g.state(g.friendlyKey(0,"hit_kind"))==int(npcOwned?ShotKind::Npc:ShotKind::None),npcOwned?"NPC-kicked prop damage names its NPC attacker":"environmental prop damage has no invented player attacker");check(g.state(stateId("environment_prop_truce"))==int(SquadStance::Truce),npcOwned?"NPC-kicked prop does not break the player's truce":"environmental prop does not break the player's truce");}
+ // Removing body-relative velocity makes all three impacts equally violent.
+ auto playerImpact=[&](float playerSpeed){Game g(regression::campaign(regression::room()));g.m_player.pos={8,8};g.m_velocity={playerSpeed,0};auto c=prop(model::crt_monitor,{7.55f,8},.5f);c.dims={.4f,.4f,.4f};c.velocity={6,0};c.sleeping=false;g.m_clutter={c};g.simulateClutter(g.m_clutter,0,1.f/60,-1);return 100-g.m_player.health;};
+ check(playerImpact(6)==0,"a co-moving player takes no impact damage from a prop at the same speed");check(playerImpact(-2)>playerImpact(2)+2&&playerImpact(2)>0,"approaching a prop causes a harder impact than moving away from it");
  {auto m=regression::room();kit::breakable(*m,9.97f,6,10.03f,10,0,3);Game g(regression::campaign(m));g.m_player.pos={3,3};g.m_clutter={prop(model::crt_monitor,{8,8})};g.blastProps({7,8,1},false);check(length(g.m_clutter[0].velocity)>0&&!g.world().breakableIntact(0),"blast pushes visible props and shatters a clear pane");}
  {auto m=regression::room();kit::wall(*m,7.5f,5,7.8f,11,0,4);kit::breakable(*m,9.97f,6,10.03f,10,0,3);Game g(regression::campaign(m));g.m_clutter={prop(model::crt_monitor,{8.5f,8})};g.blastProps({7,8,1},false);check(g.m_clutter[0].sleeping&&g.world().breakableIntact(0),"opaque wall shields props and glazing from a blast");}
  {auto m=regression::room();m->layers[0].rows[8][8]='C';m->layers[0].rows[8][10]='B';Game g(regression::campaign(m));g.blastProps({7,8.5f,.5f},true);check(g.world().tile(8,8)!='C',"grenade destroys a crate on its clear line");g.blastProps({9.5f,8.5f,.5f},true);check(g.world().tile(10,8)!='B',"grenade detonates a barrel");}

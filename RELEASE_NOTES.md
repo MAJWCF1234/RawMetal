@@ -4,6 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.9 - In the hands (2026-11-16)
+
+A patch for what you carry, what hits a body, and what a round does when it meets water.
+
+- **Carrying.** Hold a prop and the middle mouse button turns it without moving the camera; the mouse wheel reaches it farther or closer without changing weapons. It will not scroll into you or through a wall.
+- **What a prop does to a body.** A loose crate, monitor or board that strikes you, a guard or a creature now pushes and hurts by how heavy it is and how hard it meets them. A shove stops at a wall. A prop resting against someone does not keep dealing damage. A thin board's empty corners no longer count as a solid square. A kick from the room itself is not counted as your attack.
+- **Water.** A shot into a pool raises a splash and a wet sound on the surface, and still finds whatever stands under or beyond the water. Cover before the pool keeps it dry. A round parallel to the surface, or that begins already under it, makes no entry splash. It works across an open doorway into the next chunk.
+- **The console.** `GIVE 12 GA`, `GIVE 12GA` or `GIVE SHELLS` adds sixteen shotgun shells to the reserve.
+
+Verified with tools/release/ship.py (the full test suite, the audio test and the Campaign Builder's checks on the release build), the props and physics-stages checks for carry and body contact, the handgun water-surface checks, and the feature lab's starter-water and water-audio tubes.
+
+---
+
 ## v1.4.8 - Weight (2026-11-15)
 
 A patch about things that are heavy, and things that should have been where they were.

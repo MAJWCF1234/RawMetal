@@ -56,16 +56,32 @@ void savePpm(const SoftwareRenderer& d,const std::filesystem::path& file,int w,i
 bool writeParticleStrips(const std::string& folder,std::ostream& report){
  namespace fs=std::filesystem;fs::create_directories(folder);
  const bool software=std::getenv("RM_PARTICLE_SOFTWARE")!=nullptr;
- auto storage=std::make_unique<SoftwareRenderer>(960,540);auto&d=*storage;if(!software&&!d.enableHardware())return false;d.setEnvironmentInspection(true);
+ const std::string only=std::getenv("RM_PARTICLE_ONLY")?std::getenv("RM_PARTICLE_ONLY"):"";
+ const int width=only=="starter-water"?DisplayWidth:960,height=only=="starter-water"?DisplayHeight:540;
+ auto storage=std::make_unique<SoftwareRenderer>(width,height);auto&d=*storage;if(!software&&!d.enableHardware())return false;d.setEnvironmentInspection(only!="starter-water");
  const std::string tag=software?"cpu-":"gpu-";
  // The first emitter of a kind (from map `first` on) that can be seen from somewhere to stand.
  auto findKind=[&](ParticleKind kind,int first,int last,int& level,Point3& at){for(int l=first;l<=last;++l){auto m=campaignMap(l);if(!m)continue;for(const auto&e:m->emitters)if(e.kind==kind){const Point3 p{e.position.x,e.position.y,e.z};if(!standFor(l,p,2.6f,2.4f).found)continue;level=l;at=p;return true;}}return false;};
  auto scene=[&](const Stand& s){return Game::mapInspection(s.eye,s.yaw*kPi/180.f,s.pitch,s.level,true,s.feet,true);};
- auto film=[&](Game& g,const std::string& name,int frames,int every=2){for(int i=0;i<frames;++i){for(int k=0;k<every;++k)g.update({},1.f/60);d.render(g);char file[64];std::snprintf(file,sizeof file,"%s%s-%03d.ppm",tag.c_str(),name.c_str(),i);savePpm(d,fs::path(folder)/file,960,540);}};
+ auto film=[&](Game& g,const std::string& name,int frames,int every=2){for(int i=0;i<frames;++i){for(int k=0;k<every;++k)g.update({},1.f/60);d.render(g);char file[64];std::snprintf(file,sizeof file,"%s%s-%03d.ppm",tag.c_str(),name.c_str(),i);savePpm(d,fs::path(folder)/file,width,height);}};
  std::ofstream places(fs::path(folder)/"places.txt");int strips=0;
  // RM_PARTICLE_ONLY=steam,room (a look round): only those strips.
- const std::string only=std::getenv("RM_PARTICLE_ONLY")?std::getenv("RM_PARTICLE_ONLY"):"";
  auto want=[&](const char* name){return only.empty()||only.find(name)!=std::string::npos;};
+ if(only=="starter-water"){
+  const char* root=std::getenv("RM_LAB_ROOT");
+  auto pack=loadCustomCampaignFile(fs::path(root?root:".")/"custom maps/Starter Map.rmc");
+  if(!pack){report<<"FAIL: Starter Map could not be loaded\n";return false;}
+  struct PoolView {int level;Vec2 stand,target;float surface;const char* name;};
+  for(const auto&pool:{PoolView{0,{12.3f,15.5f},{15.5f,15.5f},.42f,"welcome"},PoolView{38,{2.9f,16.35f},{2.9f,19.25f},.24f,"clear"},PoolView{38,{6.1f,16.35f},{6.1f,19.25f},.24f,"murky"}}){
+   auto selected=std::make_shared<CustomCampaign>(*pack);selected->startMap=pool.level;
+   Game g(selected);g.equipWeapon(WeaponId::Shotgun);auto&p=const_cast<Player&>(g.player());p.pos=pool.stand;p.z=0;
+   for(int i=0;i<40;++i)g.update({},1.f/60);const auto delta=pool.target-p.pos;p.angle=std::atan2(delta.y,delta.x);p.pitch=-std::atan2(p.z+p.eye-pool.surface,length(delta))*140.f;
+   InputState fire{};fire.fire=true;g.update(fire,.02f);
+   if(g.waterSplashes().empty()){report<<"FAIL: Starter Map "<<pool.name<<" pool shot produced no splash\n";return false;}
+   film(g,std::string("starter-water-")+pool.name,24);report<<"Starter Map "<<pool.name<<": real player shot, "<<width<<'x'<<height<<", surface "<<pool.surface<<" m\n";
+  }
+  return true;
+ }
  if(want("steam")){int level=0;Point3 at;if(findKind(ParticleKind::Steam,34,67,level,at)){const auto s=standFor(level,at,2.4f,2.4f);if(s.found){Game g=scene(s);film(g,"steam",24);++strips;report<<"steam strip: map "<<level<<"\n";}}}
  if(want("sparks")){int level=0;Point3 at;if(findKind(ParticleKind::Sparks,34,109,level,at)){const auto s=standFor(level,at,2.6f,2.4f);if(s.found){Game g=scene(s);
    for(int i=0;i<60*20;++i){g.update({},1.f/60);bool shower=false;for(const auto&b:g.electricNow(g.level()).bursts)shower|=g.elapsed()-b.time<.03f&&std::fabs(b.at.x-at.x)<.3f&&std::fabs(b.at.y-at.y)<.3f;if(shower)break;}
@@ -74,7 +90,13 @@ bool writeParticleStrips(const std::string& folder,std::ostream& report){
   // Face the nearest wall a few metres off, and fire into it.
   float best=0;for(int k=0;k<16;++k){const float a=float(k)*kTwoPi/16;float reach=0;for(float r=.5f;r<9.f;r+=.25f){if(!w.fits(5.f+std::cos(a)*r,13.f+std::sin(a)*r,w.supportBelow(5.f,13.f,g.player().z+1.f)+1.2f,.1f,false,false))break;reach=r;}if(reach>3.f&&reach<7.f&&(best==0||std::fabs(reach-4.5f)<std::fabs(best-4.5f))){best=reach;auto&p=const_cast<Player&>(g.player());p.angle=a;p.pitch=-6;}}
   (void)s;g.update({},1.f/60);g.equipWeapon(WeaponId::Shotgun);for(int i=0;i<40;++i)g.update({},1.f/60);InputState fire{};fire.fire=true;g.update(fire,.02f);film(g,"gunshot",60);++strips;report<<"gunshot strip: map 55, wall "<<best<<" m\n";}
- if(want("grenade")){Game g=Game::mapInspection({12.f,7.f},kPi*.5f,-8,86,true,-999,true);const World&w=g.chunkWorld(g.level());for(int i=0;i<3;++i)g.update({},1.f/60);
+  if(want("water")){auto pool=regression::room();pool->name="Water strike inspection";pool->definition.ambient=.42f;pool->definition.ceiling=3.4f;
+   pool->waterVolumes.push_back({8,4,20,20,-2,-.45f});pool->lights.push_back(kit::lamp({10,12},3.2f,1.2f,9,4000));Game g(regression::campaign(pool));
+   auto&p=const_cast<Player&>(g.player());p.pos={5,12};p.angle=0;p.pitch=-std::atan2(2.05f,5.f)*140.f;
+   for(int i=0;i<40;++i)g.update({},1.f/60);InputState fire{};fire.fire=true;g.update(fire,.02f);
+   if(g.waterSplashes().empty()){report<<"FAIL: water inspection shot produced no splash\n";return false;}
+   film(g,"water",24);++strips;report<<"water strike strip: authored pool, surface -.45 m\n";}
+  if(want("grenade")){Game g=Game::mapInspection({12.f,7.f},kPi*.5f,-8,86,true,-999,true);const World&w=g.chunkWorld(g.level());for(int i=0;i<3;++i)g.update({},1.f/60);
   const Vec2 at{12.f+std::cos(g.player().angle)*5.f,7.f+std::sin(g.player().angle)*5.f};
   // Thrown from beside the player: its trail as it flies and smokes where it lies, then the blast.
   const float floor=w.supportBelow(at.x,at.y,g.player().z+1.f),thrown=g.elapsed()+.02f,flight=.6f,fuse=1.f;
@@ -85,13 +107,14 @@ bool writeParticleStrips(const std::string& folder,std::ostream& report){
  // One of everything in the plain room (airRoom), seen from its door: steam, a jet, a smoke column,
  // dust in the lamp, drips, spray, fire, gas, grit and the glow round current, a couple of seconds of it.
  if(want("room")){Game g(regression::campaign(airRoom()));{auto&p=const_cast<Player&>(g.player());p.pos={3.2f,12.f};p.angle=0;p.pitch=4;}for(int i=0;i<120;++i)g.update({},1.f/60);film(g,"room",8,15);report<<"room strip: the air room\n";}
+  if(only=="water")return strips==1;
  // Places for the before and after sheet: the hero rooms, then the first of each dressed kind.
  auto place=[&](const std::string& name,int level,Point3 at,float distance){const auto s=standFor(level,at,distance);if(!s.found){report<<"no place for "<<name<<"\n";return;}
   places<<name<<' '<<level<<' '<<s.eye.x<<' '<<s.eye.y<<' '<<s.feet<<' '<<s.yaw<<' '<<s.pitch<<" wait 30\n";};
  for(int level:{0,49,51,86,102}){auto m=campaignMap(level);if(!m||m->emitters.empty())continue;size_t pick=0;float most=0;for(size_t i=0;i<m->emitters.size();++i){const auto&e=m->emitters[i];const float weight=float(e.count)*e.strength*(e.kind==ParticleKind::Sparks?.2f:1.f);if(weight>most){most=weight;pick=i;}}
   const auto&e=m->emitters[pick];place("hero-"+std::to_string(level),level,{e.position.x,e.position.y,e.z},3.4f);}
  for(auto [kind,name,first,last]:{std::tuple{ParticleKind::Steam,"steam",34,67},{ParticleKind::Dust,"dust",34,67},{ParticleKind::Smoke,"smoke",34,67},{ParticleKind::Drips,"drips",68,109},{ParticleKind::Steam,"vent",68,109}}){int level=0;Point3 at;if(findKind(kind,first,last,level,at))place(std::string(name)+"-"+std::to_string(level),level,at,2.8f);}
- return strips==4||!only.empty();}
+  return strips==5||!only.empty();}
 }
 
 bool testParticles(){
@@ -110,6 +133,18 @@ bool testParticles(){
    for(int k=0;k<4;++k){r.values.push_back(q[k].p.x);r.values.push_back(q[k].p.y);r.values.push_back(q[k].p.z);r.values.push_back(q[k].u);r.values.push_back(q[k].v);r.values.push_back(q[k].light);}},light,[](Point3,Point3){return true;},extra);
   if(stats)*stats=s;return r;};
  Particles::Extra events;const float now=40.f;
+ // Removing splash sources must remove both the surface mist and the ballistic water drops.
+ {auto pool=regression::room();pool->waterVolumes.push_back({8,8,16,16,-2,1});Game water(regression::campaign(pool));
+  Particles::Extra splash;splash.splashes.push_back({{10,10,1},{.2f,0,-1},40,0,1});
+  auto sample=[&](ParticleMemory&memory,float time,bool stored=false){Recorded r;Particles::View v;v.eye={5,10,2.5f};v.forward=unitOf(Point3{5,0,-1.5f});v.pixel=1.f/900;v.level=0;v.now=time;
+   Particles::draw(memory,water,v,[&](const MeshVertex*q,const Particles::Texture&,float,const Particles::CardLook&look){++r.cards;r.values.push_back(look.opacity);for(int k=0;k<4;++k){r.values.push_back(q[k].p.x);r.values.push_back(q[k].p.y);r.values.push_back(q[k].p.z);r.values.push_back(q[k].v);}},light,[](Point3,Point3){return true;},stored?nullptr:&splash);return r;};
+  auto a=makeParticleMemory(),b=makeParticleMemory();const auto first=sample(*a,40.08f);sample(*a,41);const auto repeated=sample(*a,40.08f),fresh=sample(*b,40.08f);
+  check(first.cards>=12,"A bullet water strike throws a visible burst of spray and drops");
+  bool mist=false,drops=false,raised=false;for(size_t i=0;i+16<first.values.size();i+=17){mist|=first.values[i+4]>=5.f/9.f&&first.values[i+4]<6.f/9.f;drops|=first.values[i+4]>=8.f/9.f;raised|=first.values[i+3]>1.08f;}
+  check(mist&&drops&&raised,"Water strike cards contain mist and raised ballistic drops");
+  check(first.values==repeated.values&&first.values==fresh.values,"A splash draws identically when revisited and with fresh particle memory");
+  auto stored=makeParticleMemory();stored->extra=splash;check(sample(*stored,40.08f,true).values==first.values,"A splash-only inspection source draws through the default particle memory input");
+  check(sample(*a,43).cards==0,"A bullet splash clears after its brief lifetime");}
  events.blasts.push_back({{14.f,8.f},.55f,now-1.5f,0});
  events.hits.push_back({{22.95f,12.f,1.3f},{-1,0,0},now-.4f,0,ImpactMaterial::Concrete,-1,1.f,false,0.f,9.f});
  events.hits.push_back({{12.f,12.f,3.39f},{0,0,-1},now-.3f,0,ImpactMaterial::Plaster,-1,1.f,false,0.f,9.f});

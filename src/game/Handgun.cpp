@@ -77,6 +77,33 @@ bool Game::testHandgun(){
  check(handgun.id==WeaponId::Handgun&&handgun.cycle.semiAuto&&handgun.cycle.tubeCapacity==12&&handgun.cycle.pickupAmount==12&&handgun.hitscan.maxRange==24&&handgun.hitscan.dmgNear==20&&handgun.hitscan.coneBase<playerWeaponDef(WeaponId::Shotgun).hitscan.coneBase&&handgun.cycle.emptyReloadTime>handgun.cycle.reloadTime,"The player handgun is its own kWeapons row: semi-automatic, 12-round magazine, 24 m, a tighter cone");
  check(weaponDef(WeaponId::Handgun).hitscan.dmgNear==10&&&weaponDef(WeaponId::Handgun)==&kGuardHandgun&&&playerWeaponDef(WeaponId::Handgun)!=&kGuardHandgun,"Guards keep kGuardHandgun; the player reads playerWeaponDef");
  check(std::ceil(90.f/handgun.hitscan.actorDamage)>=4&&std::ceil(110.f/handgun.hitscan.actorDamage)<=6,"A Cleanup soldier (90-110) takes four to six body hits");
+ // A water crossing reacts without becoming a blocking hit. These checks catch missing splashes,
+ // a surface stealing a body hit, and a splash emitted through cover or beyond the actual victim.
+ auto waterRoom=[](){auto map=regression::room();map->waterVolumes.push_back({8,8,16,16,-2,1});return map;};
+ auto waterShot=[&](Game&g,Point3 from,Point3 direction){auto hit=g.traceShot(from,direction,8);g.resolveShot(hit,from,direction,handgun.hitscan,true);return hit;};
+ {Game g(regression::campaign(waterRoom()));auto hit=waterShot(g,{10,10,3},{0,0,-1});
+  check(hit.kind==ShotKind::Solid&&g.waterSplashes().size()==1,"A downward round splashes on water and still reaches the submerged bed");
+  if(!g.waterSplashes().empty()){const auto&s=g.waterSplashes().back();check(s.level==0&&std::fabs(s.point.x-10)<.001f&&std::fabs(s.point.y-10)<.001f&&std::fabs(s.point.z-1)<.001f,"The splash lies on the water surface rather than the bed");}
+  bool heard=false;for(const auto&s:g.sounds())heard|=s.sound==Sound::WaterSplash&&s.spatial&&std::fabs(s.z-1)<.001f;
+  check(heard,"A water strike emits a positional splash sound at its surface");}
+ {auto map=waterRoom();map->structures.push_back({9,9,11,11,1.8f,2});Game g(regression::campaign(map));auto hit=waterShot(g,{10,10,3},{0,0,-1});
+  check(hit.kind==ShotKind::Solid&&hit.point.z>1.7f&&g.waterSplashes().empty(),"Solid cover before the water prevents a splash behind it");}
+ for(bool submerged:{false,true}){Game g(regression::campaign(waterRoom()));Enemy enemy;enemy.pos=enemy.home=enemy.lastKnown={10,10};enemy.z=submerged?-1.8f:1.4f;g.m_enemies={enemy};auto hit=waterShot(g,{10,10,3},{0,0,-1});
+  check(hit.kind==ShotKind::Enemy&&g.m_enemies[0].hp<enemy.hp,"Water preserves the actual "+std::string(submerged?"submerged":"above-water")+" enemy hit");
+  check(g.waterSplashes().size()==size_t(submerged?1:0),submerged?"A submerged victim still has a surface entry splash":"An above-water victim prevents a splash beyond its body");}
+ {Game g(regression::campaign(waterRoom()));waterShot(g,{6,10,3},{0,0,-1});check(g.waterSplashes().empty(),"A shot outside the authored pool stays dry");
+  waterShot(g,{10,10,2},{1,0,0});check(g.waterSplashes().empty(),"A round parallel to the water surface makes no splash");
+  waterShot(g,{10,10,.5f},{0,0,1});check(g.waterSplashes().empty(),"A round starting underwater makes no surface entry splash");}
+ {auto home=regression::room(),neighbor=regression::room();home->definition.playerStart={22,10};home->openEast=true;neighbor->definition.origin={24,0};neighbor->openWest=true;
+  for(auto*map:{home.get(),neighbor.get()})for(auto&row:map->layers[0].rows)row=std::string(24,'.');neighbor->waterVolumes.push_back({1,8,8,16,-2,1});
+  auto campaign=regression::campaign(home);campaign->maps.push_back(neighbor);Game g(campaign);auto hit=waterShot(g,{22,10,3},{2,1,-1});
+  check(g.level()==0&&g.chunkResident(1)&&hit.waterLevel==1&&g.waterSplashes().size()==1,"An angled shot reaches the resident neighboring pool across an open chunk seam");
+  if(!g.waterSplashes().empty()){const auto&s=g.waterSplashes().back();check(s.level==1&&std::fabs(s.point.x-2)<.001f&&std::fabs(s.point.y-12)<.001f&&std::fabs(s.point.z-1)<.001f,"A neighboring splash stores its owning chunk and local surface coordinates");}
+  bool positioned=false;for(const auto&s:g.sounds())positioned|=s.sound==Sound::WaterSplash&&std::fabs(s.position.x-26)<.001f&&std::fabs(s.position.y-12)<.001f&&std::fabs(s.z-1)<.001f;
+  check(positioned,"A neighboring water strike sounds at its surface in active-chunk coordinates");}
+ {Game g(regression::campaign(waterRoom()));ShotHit blast{ShotKind::Solid,0,-1,5,5,{10,10,-2},{0,0,1}};g.resolveShot(blast,{10,10,3},{0,0,-1},handgun.hitscan,true);
+  check(g.waterSplashes().empty(),"Damage resolution without a traced water passage invents no gun splash");
+  g.m_blastShot=true;waterShot(g,{10,10,3},{0,0,-1});g.m_blastShot=false;check(g.waterSplashes().empty(),"Blast damage cannot turn a traced passage into a bullet splash");}
  // --- Chapter 2: a carrier killed drops his pistol at his hand -----------------
  {Game g=mapInspection({12,12},0,0,68,false,-999,false);g.m_god=true;
   const int hall=actorNamed(g,"rf_intake_hall"),sweep=actorNamed(g,"rf_intake_sweep_b"),lead=actorNamed(g,"rf_intake_lead");

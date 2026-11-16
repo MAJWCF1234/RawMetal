@@ -207,6 +207,7 @@ void Game::loadLevel(int level,bool carry) {
     m_weaponKick = 0.0f; m_reloadTimer=0; m_shotCooldown = 0.0f;
     m_damageFlash = 0.0f;
     m_elapsed = 0.0f;
+    m_waterSplashes.clear();
     m_kills = 0;
     m_won = false;
     m_hitFlash=0;
@@ -524,7 +525,7 @@ void Game::update(const InputState& input, float dt) {
     // Hidden in a locker, holding a guard or in a takedown the hands are busy:
     // the locker and the hold give the gun back themselves when they end.
     const bool handsBusy=hiddenLocker()>=0||lockerViewLocked()||heldNpc()>=0||takedownActive()||captured();
-    if(input.weaponScroll&&!handsBusy){selectWeapon(wheelWeapon(input.weaponScroll));m_suppressFire=true;}
+    if(input.weaponScroll&&!handsBusy&&!holdingClutter()){selectWeapon(wheelWeapon(input.weaponScroll));m_suppressFire=true;}
     // 1/2/3 pick a weapon directly, but in a conversation the digits are replies.
     {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=3?input.choice:0;m_previousChoice=input.choice;
      if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=3&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
@@ -533,12 +534,15 @@ void Game::update(const InputState& input, float dt) {
 
     if (!dead() && !m_won) {
         m_elapsed += dt;
+        std::erase_if(m_waterSplashes,[&](const WaterSplash& s){return m_elapsed-s.time>2.5f;});
         // A locker's choreography holds the controls until the camera lands
         // on the committed pose, so the path always ends where the player is.
         {perf::Scope profile(perf::LockerDoors);updateLockerDoors(dt);}const bool choreographed=lockerViewLocked();
         if(!choreographed&&!talking()){
-        m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
-        m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
+        if(input.vrTracked||!input.rotateProp||!holdingClutter()){
+         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
+         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
+        }
         }else{m_velocity={};m_suppressFire=true;}
         // Talking, the view settles on the speaker's face.
         if(talking()){const auto&npc=m_friendlyActors[size_t(m_talk.actor)];auto at=npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level)-m_player.pos;

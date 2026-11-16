@@ -500,6 +500,15 @@ void gather(const Game& game,const World& w,const Particles::View& view,const Pa
   // Struck overhead, the ceiling sheds for a second or two.
   if(n.z<-.6f){Source pour=grit;pour.seed^=0x77u;pour.at=b.point+Point3{0,0,-.03f};pour.box={.08f,.08f,0};pour.travel={0,0,-.2f};pour.count=0;pour.rate=16;pour.until=b.time+1.4f;out.push_back(pour);}}};
  hits(game.hitBursts());if(extra)hits(extra->hits);
+ // A round entering water kicks a short crown of real falling drops out of the surface, with fine
+ // spray over it. Drops use the same water collision and secondary splashes as authored drips.
+ auto splashes=[&](const std::vector<WaterSplash>& list){for(const auto&b:list){const float age=now-b.time;if(b.level!=level||age<0||age>2.5f)continue;
+  const float power=std::clamp(b.power,.5f,1.8f);const auto seed=seedAt(b.point,b.time,0x91u);const Point3 along{b.direction.x,b.direction.y,0};
+  // These beads must survive the 640x360 game target and remain visible around shotgun recoil.
+  Source drops;drops.species=Species::Drop;drops.seed=seed;drops.at=b.point+Up*.035f;drops.box={.045f,.045f,.008f};drops.travel=Up*(3.f+.8f*power)+along*.75f;drops.cone=1.25f;drops.size=.019f;drops.grow=0;drops.life=1.6f;drops.count=int(32*power);drops.t0=b.time;drops.spread=.06f;drops.strength=1;drops.floor=b.point.z;out.push_back(drops);
+  Source mist;mist.species=Species::Mist;mist.seed=seed^0x36a9f1u;mist.at=b.point+Up*.05f;mist.box={.06f,.06f,.012f};mist.travel=Up*.4f+along*.2f;mist.cone=1.15f;mist.size=.07f;mist.grow=.3f;mist.life=.7f;mist.count=10;mist.t0=b.time;mist.spread=.08f;mist.strength=.9f;mist.floor=b.point.z;out.push_back(mist);
+ }};
+ splashes(game.waterSplashes());if(extra)splashes(extra->splashes);
  // Gun smoke: a shot leaves a wisp in front of the muzzle that drifts on and hangs (a shotgun's pellets are one shot).
  auto shots=[&](const std::vector<ShotRay>& list){float lastTime=-1e9f;for(const auto&r:list){if(r.level!=level)continue;const float age=now-r.time;if(age<0||age>3.f||std::fabs(r.time-lastTime)<1e-4f)continue;lastTime=r.time;
   const Point3 d=unit(r.direction,{1,0,0});Source s;s.species=Species::Smoke;s.seed=seedAt(r.origin,r.time,0x61u);s.at=r.origin+d*.85f-Up*.1f;s.travel=d*.45f+Up*.12f;s.cone=.5f;s.size=.03f;s.grow=.34f;s.life=2.4f;s.count=5;s.t0=r.time;s.spread=.05f;s.strength=.5f;out.push_back(s);}};
@@ -538,7 +547,7 @@ ParticleStats Particles::draw(ParticleMemory& memory,const Game& game,const View
  perf::Scope profile(perf::Air);const auto began=std::chrono::steady_clock::now();ParticleStats stats;
  if(!game.chunkResident(view.level)){memory.last=stats;return stats;}
  const World& w=game.chunkWorld(view.level);
- const Extra* extra=extraIn?extraIn:(memory.extra.blasts.empty()&&memory.extra.hits.empty()&&memory.extra.shots.empty()&&memory.extra.throws.empty()?nullptr:&memory.extra);
+ const Extra* extra=extraIn?extraIn:(memory.extra.blasts.empty()&&memory.extra.hits.empty()&&memory.extra.shots.empty()&&memory.extra.throws.empty()&&memory.extra.splashes.empty()?nullptr:&memory.extra);
  // The game's grenades in flight, as this frame sees them: each one's trail is the crumbs it has left
  // (a later frame at the same moment adds none, so the same moment draws the same trail).
  auto&trails=memory.trails[view.level];

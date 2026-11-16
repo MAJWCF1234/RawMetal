@@ -20,6 +20,7 @@ void Game::executeConsole(std::string command){
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / GOD / NOCLIP / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("NOCLIP: FLY THROUGH WALLS WHERE YOU LOOK. JUMP RISES, CROUCH SINKS, SPRINT IS FASTER. NOT SAVED.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
+  m_consoleLog.push_back("GIVE 12 GA / 12GA / SHELLS: ADDS 16 SHOTGUN SHELLS.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="unlock"){
   // Unlock what the player is looking at for good, by setting the state it
@@ -46,6 +47,7 @@ void Game::executeConsole(std::string command){
  // The handgun with one magazine in it (another magazine if already carried), and 24 rounds of 9 mm.
  else if(verb=="give"&&arg=="handgun"&&extra.empty()){grantHandgun(playerWeaponDef(WeaponId::Handgun).cycle.tubeCapacity);m_consoleLog.push_back("HANDGUN ADDED. 3 OR THE WHEEL TO DRAW.");}
  else if(verb=="give"&&arg=="9mm"&&extra.empty()){m_player.pool(WeaponId::Handgun).total+=24;m_consoleLog.push_back("24 ROUNDS 9MM ADDED.");}
+  else if(verb=="give"&&((arg=="12"&&(extra=="ga"||extra=="gauge")&&(stream>>std::ws).eof())||((arg=="12ga"||arg=="shells")&&extra.empty()))){m_player.pool(WeaponId::Shotgun).total+=16;m_consoleLog.push_back("16 SHELLS 12 GA ADDED.");}
  else if(verb=="dev"){setDeveloperMode(!developerMode());m_consoleLog.push_back(developerMode()?"DEVELOPER MODE ON: NO DAMAGE, NO CREATURES, EVERY DOOR OPEN.":"DEVELOPER MODE OFF.");}
  else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE. DEV ALSO OPENS THE GATES THAT WANT A ROOM CLEARED.":"GOD MODE OFF.");}
  else if(verb=="noclip"){const bool on=arg=="on"||(arg.empty()&&!m_noclip);
@@ -172,6 +174,27 @@ bool Game::testConsole(){
  InputState toggle{};toggle.console=true;game.update(toggle,.02f);if(!game.consoleOpen())return fail(__LINE__);
  auto p=game.player();float time=game.elapsed();InputState input{};input.forward=true;input.fire=true;input.mouseDx=30;
  game.update(input,.02f);if(game.elapsed()!=time||game.player().pools!=p.pools||game.player().angle!=p.angle)return fail(__LINE__);
+ // A shell grant must target the shotgun even with the handgun drawn, without
+ // loading the tube, changing weapons, or accepting a partly valid command.
+ game.grantHandgun(3);game.equipWeapon(WeaponId::Handgun);
+ game.m_player.pool(WeaponId::Shotgun)={10,2};game.m_player.pool(WeaponId::Handgun)={11,3};
+ bool givePassed=true;auto checkGive=[&](bool ok,const std::string& label){report<<(ok?"PASS ":"FAIL ")<<label<<'\n';report.flush();givePassed&=ok;};
+ auto typeGive=[&](const std::string& command){input={};input.textInput=command+"\r";game.update(input,.02f);};
+ for(const std::string command:{"give 12 GA","give 12ga","give shells","  GiVe   12   gA  ","give 12 gauge"}){
+  const auto before=game.player().pools;const auto weapon=game.equippedWeapon();
+  typeGive(command);
+  checkGive(game.player().pool(WeaponId::Shotgun)==AmmoPool{before[size_t(WeaponId::Shotgun)].total+16,2},command+" adds sixteen reserve shells without loading");
+  checkGive(game.player().pool(WeaponId::Handgun)==AmmoPool{11,3}&&game.player().pool(WeaponId::Fists)==before[size_t(WeaponId::Fists)]&&game.equippedWeapon()==weapon,command+" preserves the other ammo pools and drawn handgun");
+ }
+ for(const std::string command:{"give 12","give ga","give 12 gax","give 12 ga junk","give 12 gauge junk","give 12ga junk","give shells junk"}){
+  const auto before=game.player().pools;typeGive(command);
+  checkGive(game.player().pools==before&&game.equippedWeapon()==WeaponId::Handgun,command+" rejects malformed shell requests");
+ }
+ typeGive("give 9mm");checkGive(game.player().pool(WeaponId::Handgun)==AmmoPool{35,3},"give 9mm still adds twenty-four rounds");
+ typeGive("give handgun");checkGive(game.hasHandgun()&&game.player().pool(WeaponId::Handgun)==AmmoPool{47,3},"give handgun still adds one magazine when owned");
+ typeGive("help");bool shellHelp=false;for(const auto& line:game.m_consoleLog)shellHelp|=line.find("GIVE 12 GA")!=std::string::npos;
+ checkGive(shellHelp,"help lists the displayed 12 GA caliber command");
+ if(!givePassed)return false;
  for(int level=0;level<ChunkCount;level+=level<34?1:(level+7<ChunkCount?7:std::max(1,ChunkCount-1-level))){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return fail(__LINE__);}
  for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){
   input.textInput=std::string("map ")+alias.first+"\r";game.update(input,.02f);if(game.level()!=alias.second||!game.world().campaign())return fail(__LINE__);
