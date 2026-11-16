@@ -1899,7 +1899,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
             for(int i=0;i<W*H;++i){auto p=renderer.pixels()[i];char rgb[]={char(p>>16),char(p>>8),char(p)};out.write(rgb,3);}}
         return 0;
     }
-    if(commandArguments().find(L"--audio-test"))return retro::AudioEngine::test()?0:13;
+    if(auto audioTest=commandArguments().find(L"--audio-test")){
+        bool full=false;if(std::wcsstr(audioTest,L"=full"))full=true;else if(std::wcsstr(audioTest,L"=smoke"))full=false;
+        return retro::AudioEngine::test(full)?0:13;
+    }
     if(commandArguments().find(L"--audio-device-test"))return retro::AudioEngine::testDevice()?0:15;
     if(commandArguments().find(L"--environment-inspection")){
         auto rendererStorage=std::make_unique<retro::SoftwareRenderer>(W,H);auto& renderer=*rendererStorage;
