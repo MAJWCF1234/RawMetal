@@ -4,6 +4,7 @@
   python tools/release/ship.py 1.4.6 --offline  # everything except git push and the GitHub release
   python tools/release/ship.py 1.4.6 --no-tests # skip the suite (only for a rebuild of a tested tree)
   python tools/release/ship.py 1.4.6 --full-audio  # ship with the long --audio-test=full proof
+  python tools/release/ship.py 1.4.6 --full-suite  # every --each-test + all extras (ignore the affected map)
   python tools/release/ship.py --check          # build + suite + Builder checks on the current version, nothing else
 
 Steps, stopping at the first failure (each step's log is in .build/ship/):
@@ -15,9 +16,10 @@ Steps, stopping at the first failure (each step's log is in .build/ship/):
   4. Campaign Builder engine sync (tools/editor/sync_engine.py). The only conflict it resolves itself is
      the Builder's own "CAMPAIGN BUILDER" menu tag; any other conflict stops the ship for a person to merge.
   5. Builds: Build.cmd (the game) and the Builder's Build.cmd + BuildEditor.cmd, in parallel.
-  6. Tests: tools/dev/suite.py --extras (every --each-test check in lanes on both GPUs, plus gore, carcass,
-     campaign-map and repeated-frame rendering) and --audio-test (smoke by default; --full-audio for every
-     campaign map); the Builder's --selftest, --editing-test and --campaign-open-test on maps 0, 75 and 102.
+  6. Tests: by default only the suite tests / extras / audio / Builder open-maps affected by files
+     changed since the previous release (tools/dev/affected.py). --full-suite restores every
+     --each-test + all extras. Audio is smoke unless --full-audio; skipped when the diff does not
+     touch audio. Builder always runs --selftest/--editing-test; map open checks only when needed.
   7. Package: tools/release/package.py; the zip's DepthWorks.exe must be byte-identical to the tested exe,
      and it re-runs two quick tests from the unzipped folder.
   8. Publish (not with --offline): commit the Builder sync, push main, gh release create --latest with the
@@ -29,6 +31,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 EDITOR = os.path.join(ROOT, 'tools', 'Level Editor')
 LOGS = os.path.join(ROOT, '.build', 'ship')
 REPO = 'MAJWCF1234/RawMetal'
+sys.path.insert(0, os.path.join(ROOT, 'tools', 'dev'))
+import affected as affected_mod  # noqa: E402
 
 
 def say(text):
@@ -107,10 +111,13 @@ def sync_builder():
     run([sys.executable, 'tools/editor/sync_engine.py'], 'sync2.txt')
 
 
-def builder_checks():
+def builder_checks(open_maps=True):
     exe = os.path.join(EDITOR, 'RawMetalEditor.exe')
     run([exe, '--selftest'], 'builder-selftest.txt', cwd=EDITOR)
     run([exe, '--editing-test'], 'builder-editing.txt', cwd=EDITOR)
+    if not open_maps:
+        say('Builder map open checks skipped (diff did not touch campaign/world export)')
+        return
     out = tempfile.mkdtemp(prefix='ship-open-')
     for level in (0, 75, 102):
         run([exe, '--campaign-open-test', str(level), os.path.join(out, f'{level}.rmc')], f'builder-open-{level}.txt', cwd=EDITOR)
@@ -148,17 +155,43 @@ def main():
         game.result(); builder.result()
     exe = os.path.join(ROOT, 'RawMetal.exe')
     if '--no-tests' not in args:
+        full_suite = '--full-suite' in args
         full_audio = '--full-audio' in args
+        if full_suite:
+            sel = dict(mode='full', tests=[], extras=[], audio=True, builder_open=True, files=[], base=None)
+            suite_cmd = [sys.executable, 'tools/dev/suite.py', exe, '--lanes', '7', '--extras', '--out', '.build/ship-suite']
+            say('testing: FULL suite (forced)')
+        else:
+            sel = affected_mod.select()
+            say(f"testing: affected mode={sel['mode']} since {sel['base'] or '(none)'} ({len(sel['files'])} files)")
+            for path in sel['files'][:20]:
+                say(f"  {path} [{sel['reasons'].get(path, '?')}]")
+            if len(sel['files']) > 20:
+                say(f"  … {len(sel['files']) - 20} more")
+            if sel['mode'] == 'none':
+                suite_cmd = None
+            elif sel['mode'] == 'full':
+                suite_cmd = [sys.executable, 'tools/dev/suite.py', exe, '--lanes', '7', '--extras', '--out', '.build/ship-suite']
+            else:
+                suite_cmd = [sys.executable, 'tools/dev/suite.py', exe, '--lanes', '7', '--affected', '--extras', '--out', '.build/ship-suite']
+        run_audio = full_audio or sel.get('audio') or full_suite
         audio_flag = '--audio-test=full' if full_audio else '--audio-test=smoke'
-        say(f'testing: the suite on both GPUs, {audio_flag} and the Builder checks'
-            f' (suite dominates; audio is {"full proof" if full_audio else "smoke"})')
         audio_dir = os.path.join(ROOT, '.build', 'ship-audio'); os.makedirs(audio_dir, exist_ok=True)
-        shutil.copy2(exe, os.path.join(audio_dir, 'rm.exe'))
+        if run_audio:
+            shutil.copy2(exe, os.path.join(audio_dir, 'rm.exe'))
         with concurrent.futures.ThreadPoolExecutor(3) as pool:
-            suite = pool.submit(run, [sys.executable, 'tools/dev/suite.py', exe, '--lanes', '7', '--extras', '--out', '.build/ship-suite'], 'suite.txt')
-            audio = pool.submit(run, [os.path.join(audio_dir, 'rm.exe'), audio_flag], 'audio-test.txt', audio_dir, True, dict(os.environ, RM_GPU='1'))
-            builder = pool.submit(builder_checks)
-            suite.result(); audio.result(); builder.result()
+            suite = pool.submit(run, suite_cmd, 'suite.txt') if suite_cmd else None
+            audio = pool.submit(run, [os.path.join(audio_dir, 'rm.exe'), audio_flag], 'audio-test.txt', audio_dir, True, dict(os.environ, RM_GPU='1')) if run_audio else None
+            builder = pool.submit(builder_checks, full_suite or sel.get('builder_open', True))
+            if suite:
+                suite.result()
+            elif not suite_cmd:
+                say('suite skipped (diff touches no mapped game systems)')
+            if audio:
+                audio.result()
+            elif not run_audio:
+                say(f'audio skipped (diff does not touch audio; pass --full-audio to force)')
+            builder.result()
         say('all tests passed')
     if check_only:
         say('check done (nothing packaged or published)')

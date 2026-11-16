@@ -1,21 +1,25 @@
 """Run the whole --each-test suite fast: lanes in parallel, balanced by how long each test took last time.
 
   python tools/dev/suite.py EXE [--lanes N] [--only a,b,c] [--extras] [--out DIR]
+  python tools/dev/suite.py EXE --affected [--extras]   # only tests for files since last release
 
 Every test in main.cpp's --each-test table is dealt to N lanes (default: cores / 2, at most 8), the
 slowest first, each to the lane with least work so far, using the times recorded in
 .build/suite-times.json (a test never timed counts as 120 s). Each lane runs its own copy of EXE in
 its own folder (tests write their reports into the working directory). --extras also runs the
 stand-alone flags (--gore-test, --carcass-test, --campaign-map-test, --gameplay-rendering-test) as
-one more lane. Lanes alternate between the machine's graphics cards (RM_GPU=0,1,... for each
-lane; --gpus N, default 2). When every lane has finished, the times are written back, every FAIL is printed with
-its lane, and the exit code is 1 if anything failed.
+one more lane; with --affected, only the extras tied to the changed files run. Lanes alternate
+between the machine's graphics cards (RM_GPU=0,1,... for each lane; --gpus N, default 2). When
+every lane has finished, the times are written back, every FAIL is printed with its lane, and the
+exit code is 1 if anything failed.
 """
 import json, os, re, shutil, subprocess, sys, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TIMES = os.path.join(ROOT, '.build', 'suite-times.json')
 EXTRAS = ['--gore-test', '--carcass-test', '--campaign-map-test', '--gameplay-rendering-test']
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import affected as affected_mod  # noqa: E402
 
 
 def suite_names():
@@ -34,12 +38,26 @@ def main():
     gpus = int(opt('--gpus', 2))
     env_for = lambda k: dict(os.environ, RM_GPU=str(k % gpus)) if gpus > 1 else None
     out = os.path.abspath(opt('--out', os.path.join(ROOT, '.build', 'suite')))
-    names = opt('--only').split(',') if opt('--only') else suite_names()
+    extra_flags = list(EXTRAS)
+    if '--affected' in args:
+        sel = affected_mod.select(opt('--base'), suite_names())
+        print(f"suite: affected mode={sel['mode']} since {sel['base'] or '(none)'} ({len(sel['files'])} files)")
+        if sel['mode'] == 'none':
+            print('suite: nothing to run for this diff')
+            sys.exit(0)
+        names = sel['tests'] if sel['mode'] == 'subset' else suite_names()
+        if '--extras' in args:
+            extra_flags = sel['extras'] if sel['mode'] == 'subset' else list(EXTRAS)
+    else:
+        names = opt('--only').split(',') if opt('--only') else suite_names()
+    if not names and '--extras' not in args:
+        print('suite: no tests selected')
+        sys.exit(0)
     times = json.load(open(TIMES)) if os.path.exists(TIMES) else {}
     deal, load = [[] for _ in range(lanes)], [0.0] * lanes
     for n in sorted(names, key=lambda n: -times.get(n, 120)):
         k = load.index(min(load)); deal[k].append(n); load[k] += times.get(n, 120)
-    print(f'suite: {len(names)} tests in {lanes} lanes, longest lane ~{int(max(load))} s by last times')
+    print(f'suite: {len(names)} tests in {lanes} lanes, longest lane ~{int(max(load) if names else 0)} s by last times')
     procs = []
     for k, tests in enumerate(deal):
         if not tests:
@@ -51,12 +69,15 @@ def main():
             os.remove(report)
         procs.append((f'lane{k + 1}', lane, subprocess.Popen([os.path.join(lane, 'rm.exe'), '--each-test=' + ','.join(tests)], cwd=lane, env=env_for(k),
                                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)))
-    if '--extras' in args:
+    if '--extras' in args and extra_flags:
         lane = os.path.join(out, 'extras'); os.makedirs(lane, exist_ok=True); shutil.copy2(exe, os.path.join(lane, 'rm.exe'))
-        script = ' && '.join(f'(rm.exe {f} > NUL 2>&1 && echo PASS {f} || echo FAIL {f}) >> extras.txt' for f in EXTRAS)
+        script = ' && '.join(f'(rm.exe {f} > NUL 2>&1 && echo PASS {f} || echo FAIL {f}) >> extras.txt' for f in extra_flags)
         if os.path.exists(os.path.join(lane, 'extras.txt')):
             os.remove(os.path.join(lane, 'extras.txt'))
         procs.append(('extras', lane, subprocess.Popen(['cmd', '/c', script.replace(' && ', ' & ')], cwd=lane, env=env_for(lanes))))
+    if not procs:
+        print('suite: nothing to run')
+        sys.exit(0)
     start = time.time(); failed = []
     for name, lane, p in procs:
         p.wait()

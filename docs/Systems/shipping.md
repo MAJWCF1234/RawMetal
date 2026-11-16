@@ -28,6 +28,9 @@ Options:
 - `--offline` does everything except push and publish. The finished release sits in `.build/release/v1.4.6/`; run the command again without `--offline` later to publish.
 - `--check` builds and tests the current tree without changing the version or packaging. Use it before deciding to ship.
 - `--full-audio` runs `--audio-test=full` (every campaign map, long mix) instead of the ship smoke path. Use after soundtrack or mixer changes.
+- `--full-suite` runs every `--each-test` and all extras, ignoring the change map. Use before a big release or when the map might miss a cross-cutting risk.
+
+**What gets tested by default:** `tools/dev/affected.py` maps files changed since the previous `release: v*` commit to `--each-test` names, extras, audio, and Builder map-open checks. Preview with `python tools/dev/affected.py`. Unknown files under `src/` force a full suite. Docs-only diffs skip the game suite.
 
 From the launcher: `RawMetalMaster.cmd ship 1.4.6` or `RawMetalMaster.cmd ship 1.4.6 offline`.
 
