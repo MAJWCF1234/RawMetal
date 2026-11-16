@@ -1450,6 +1450,8 @@ private:
     void detonateBarrel(int level,int tx,int ty);
     int m_heldClutter=-1;bool m_propHalfStep=false,m_propPushAttempt=false;
     int m_carryClutter=-1;float m_carryDistance=.9f,m_carryYawOffset=0;
+    // Desktop release inherits the hand path (and this frame's look flick) like VR hand velocity.
+    Vec2 m_carryHandVelocity{};float m_carryHandVz=0,m_lookYawRate=0,m_lookPitchRate=0;
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;
     bool m_aiDecisionScheduling=true;

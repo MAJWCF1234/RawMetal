@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit d4c94e54f3e20115c8ac6f937781d0aeb32fa76b
-# 2026-11-16 13:31, release: v1.4.12, in your hands
+commit 1f562ef47b8720a96a088041b3f3b1fe2f638705
+# 2026-11-16 14:48, fix: ignore grab-snap velocity on desktop prop release

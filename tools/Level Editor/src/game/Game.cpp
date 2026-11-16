@@ -578,10 +578,13 @@ void Game::update(const InputState& input, float dt) {
         {perf::Scope profile(perf::LockerDoors);updateLockerDoors(dt);}const bool choreographed=lockerViewLocked();
         if(!choreographed&&!talking()){
         if(input.vrTracked||!input.rotateProp||!holdingClutter()){
-         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*m_settings.sensitivity);
-         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f), -210.0f, 210.0f);
-        }
-        }else{m_velocity={};m_suppressFire=true;}
+         const float invDt=1.f/std::max(dt,.001f),sens=m_settings.sensitivity,invert=m_settings.invertMouse?-1.f:1.f;
+         m_lookYawRate=input.mouseDx*.0022f*sens*invDt;
+         m_lookPitchRate=-input.mouseDy*.308f*sens*invert*invDt;
+         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*sens);
+         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*sens*invert, -210.0f, 210.0f);
+        }else m_lookYawRate=m_lookPitchRate=0;
+        }else{m_velocity={};m_suppressFire=true;m_lookYawRate=m_lookPitchRate=0;}
         // Talking, the view settles on the speaker's face.
         if(talking()){const auto&npc=m_friendlyActors[size_t(m_talk.actor)];auto at=npc.pose.position+chunkOffset(npc.level)-chunkOffset(m_level)-m_player.pos;
          float want=std::atan2(at.y,at.x),pitch=std::atan2(npc.pose.z+npc.track().scale*.9f-m_player.z-m_player.eye,std::max(.3f,length(at)))*140.f;float k=std::min(1.f,dt*6.f);
