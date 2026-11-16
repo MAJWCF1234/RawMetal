@@ -55,6 +55,7 @@ struct InputState {
     bool prone = false;
     bool fire = false;
     bool guard = false;
+    bool rotateProp = false;
     bool reload = false;
     int weaponScroll=0;
     bool use=false;
@@ -171,7 +172,7 @@ struct AiStimulus {Vec2 source{};float z=0,radius=0,gain=0;bool loud=false;int n
 struct NpcWeaponPose {bool armed=false,handgun=false,maintenance=false,crouched=false,supportAnimation=false,padVisible=false,pistolVisible=false;int supportClip=6;float supportPhase=0,treatment=0,engineering=0;Point3 grip{},muzzle{},direction{};float raise=0,flash=0,recoil=0;GuardAction action=GuardAction::None;float actionProgress=0,reload=0,grenadeThrow=0,haul=0;Point3 handle{};};
 enum class ShotKind {None,Solid,Enemy,Npc,Actor,Player,Ragdoll,Drone,Prop};
 struct ShotPassage {int kind=0,level=0,index=-1;float distance=0;Point3 point{},normal{};};
-struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};int breakable=-1;std::array<ShotPassage,2> passed{};};
+struct ShotHit {ShotKind kind=ShotKind::None;int level=0,index=-1;float distance=0,damageDistance=0;Point3 point{},normal{};int breakable=-1;std::array<ShotPassage,2> passed{};int waterLevel=-1;Point3 waterPoint{};float waterDistance=0;};
 struct AiTargetRef {ShotKind kind=ShotKind::None;int level=0,index=-1;};
 struct TacticalGrenadePose {Point3 position{};float fuse=0;int level=0;};
 struct AiTarget : AiTargetRef {
@@ -199,6 +200,7 @@ struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impuls
 // dust and chips from masonry, splinters from wood, clods from earth. Level-local. floor: where
 // what it throws comes to rest; reach: how far along `direction` before a wall stops it.
 struct HitBurst {Point3 point{},direction{};float time=0;int level=0;ImpactMaterial material=ImpactMaterial::Concrete;int species=-1;float power=1;bool kill=false;float floor=0,reach=9;bool stump=false;};
+struct WaterSplash {Point3 point{},direction{};float time=0;int level=0;float power=1;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
 // model: the facility model that broke (its chips take its own sheet), or -1.
@@ -222,6 +224,8 @@ struct Clutter {
  float paneRearm=0;
  // Seconds a blow from another prop leaves it free to pivot on its base edge (not saved).
  float tipTime=0;
+ // Separate from sound throttling: a resting body contact must not deal repeated damage.
+ float bodyImpactCooldown=0;
  // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
@@ -442,6 +446,7 @@ public:
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
     const std::vector<HitBurst>& hitBursts()const{return m_hitBursts;}
+    const std::vector<WaterSplash>& waterSplashes()const{return m_waterSplashes;}
     const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
     bool holdingClutter()const{return m_heldClutter>=0;}
     int vrCarryHand()const{return m_vrCarryHand;}
@@ -1425,6 +1430,7 @@ private:
     std::vector<Clutter> m_clutter;
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<ShotRay> m_shotRays;std::vector<HitBurst> m_hitBursts;
+    std::vector<WaterSplash> m_waterSplashes;
     // point and direction level-local to `level`.
     void hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial material,int species,float power,bool kill);
     std::vector<BarrelExplosion> m_barrelExplosions;
@@ -1438,6 +1444,7 @@ private:
     std::vector<BarrelExplosion> m_pendingBarrels;
     void detonateBarrel(int level,int tx,int ty);
     int m_heldClutter=-1;bool m_propHalfStep=false,m_propPushAttempt=false;
+    int m_carryClutter=-1;float m_carryDistance=.9f,m_carryYawOffset=0;
     int m_npcNavBudget=4;
     bool m_aiQueryCaching=true;
     bool m_aiDecisionScheduling=true;
