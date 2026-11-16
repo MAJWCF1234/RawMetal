@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.12 - In your hands (2026-11-16)
+
+A patch for the heavy thing you are holding.
+
+- **Carried contact.** A modeled prop of at least 8 kg pushes guards and creatures while you carry it — walking forward, reaching it out, or turning it in place. A body pinned against a wall stops the prop instead of letting it pass through. After AI steps, overlaps against the held prop are cleared again so a shove is not walked back into.
+- **Cover that breaks.** Solid held props still stop rounds. Enough hits shatter them, drop them from your hands, and leave you open.
+
+Verified with the feature lab's held-prop-contacts tube (reach, rotation, walk, and wall-pinned cases at 60 and 120 Hz), and the props and physics-stages checks.
+
+---
+
 ## v1.4.11 - Only what changed (2026-11-16)
 
 A patch so a release does not re-prove the whole game when you only touched one system.
