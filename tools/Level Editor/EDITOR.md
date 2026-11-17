@@ -566,8 +566,9 @@ written above the first map in metres from their middle, and puts one
 from the picked placement, or of the newest prefab at the cursor. A prefab
 that names things gets a fresh name prefix per placement. R turns a placement
 a quarter. The engine places the records when it reads the file; the Builder
-keeps the block as written. `--editing-test` covers all of it
-(`native-editor-format-test.txt`).
+keeps the block as written. `--editing-test` covers all of it, and
+`--format-test` runs that part alone (`native-editor-format-test.txt`, with
+inspector pictures in `.build/interaction/inspector-before.bmp` and `-after.bmp`).
 
 ## Native details
 
