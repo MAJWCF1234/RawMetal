@@ -2271,11 +2271,11 @@ struct Editor {
       // The same process: the engine takes the text from memory, no disk.
       retro::editorchannel::write(pack, doc.text());
     } else {
-      auto temp = pack;
-      temp += L".tmp";
-      doc.save(temp);
-      if (!replaceEditorFile(temp, pack))
-        throw std::runtime_error("Could not update native engine document");
+    auto temp = pack;
+    temp += L".tmp";
+    doc.save(temp);
+    if (!replaceEditorFile(temp, pack))
+      throw std::runtime_error("Could not update native engine document");
     }
     ++revision;
     writeControl();
@@ -2638,7 +2638,7 @@ struct Editor {
           SendMessageW(materialList, CB_SETCURSEL, i, 0);
           structureMaterial = id;
           break;
-        }
+      }
     }
   }
   void useModelSelection() {
@@ -2694,16 +2694,16 @@ struct Editor {
     edperf::Scope perfScope("ui_refreshRecords");
     std::vector<std::pair<LPARAM, std::wstring>> rows;
     if (!schemas.empty()) {
-      auto &s = schemas[size_t(kind)];
-      for (auto index : doc.records(s.kind, s.scoped ? map : -1)) {
-        auto f = NativeDocument::fields(doc.lines[index]);
-        std::string text = s.kind + ": ";
-        for (size_t i = s.scoped ? 2 : 1;
-             i < std::min(f.size(), size_t(s.scoped ? 7 : 6)); i++) {
-          if (i > (s.scoped ? 2 : 1))
-            text += "  ";
-          text += decoded(f[i]);
-        }
+    auto &s = schemas[size_t(kind)];
+    for (auto index : doc.records(s.kind, s.scoped ? map : -1)) {
+      auto f = NativeDocument::fields(doc.lines[index]);
+      std::string text = s.kind + ": ";
+      for (size_t i = s.scoped ? 2 : 1;
+           i < std::min(f.size(), size_t(s.scoped ? 7 : 6)); i++) {
+        if (i > (s.scoped ? 2 : 1))
+          text += "  ";
+        text += decoded(f[i]);
+      }
         rows.emplace_back(LPARAM(index), wide(text));
       }
     }
@@ -2737,7 +2737,7 @@ struct Editor {
     RedrawWindow(recordList, nullptr, nullptr, RDW_INVALIDATE | RDW_FRAME);
     record = -1;
     if (fields)
-      fillFields(true);
+    fillFields(true);
   }
   void refreshMaps() {
     if (!mapList)
@@ -4396,7 +4396,7 @@ struct Editor {
       else if (tool == FilmTool && !filmPicked())
         turnFilm(); // the Film camera tool turns the camera it is about to place
       else
-        rotateSelected();
+      rotateSelected();
       return true;
     }
     if (msg.wParam == 'V' && !ctrl) {
@@ -7194,7 +7194,7 @@ struct Editor {
       fs::create_directories(campaignFolder, ec);
       exportDirectory = campaignFolder;
     }
-    dialog.lpstrInitialDir = exportDirectory.c_str();
+      dialog.lpstrInitialDir = exportDirectory.c_str();
     if (save && (path.empty() || isExample())) {
       auto name = std::wstring(L"My map");
       for (auto index : doc.records("CAMPAIGN")) {
@@ -8494,7 +8494,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         TrackMouseEvent(&track);
       }
       e->hoverInside = inside(l);
-      auto [x, y] = worldPoint(l);
+        auto [x, y] = worldPoint(l);
       e->hoverX = x, e->hoverY = y;
       if(e->drag&&e->selectingArea){e->areaEndX=x;e->areaEndY=y;InvalidateRect(h,nullptr,FALSE);return 0;}
       if (e->drag && e->brushing) {
@@ -8510,17 +8510,17 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             e->applyDragDelta(dx,dy);}
 
           if (e->objectMoved && e->liveTurn()) {
-            e->publish();
-            e->lastDragPublish = GetTickCount64();
-          }
-        } catch (const std::exception &error) {
-          e->message(wide(error.what()));
-          e->finishDrag(true);
+          e->publish();
+          e->lastDragPublish = GetTickCount64();
         }
+      } catch (const std::exception &error) {
+        e->message(wide(error.what()));
+        e->finishDrag(true);
+      }
       } else if (e->tool == 0) {
         int hover = e->hoverInside ? e->hitObject(x, y) : -1;
         if (hover == e->hoverRecord && !e->drag)
-          return 0;
+      return 0;
         e->hoverRecord = hover;
       }
       InvalidateRect(h, nullptr, FALSE);
@@ -8536,8 +8536,8 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     if (m == WM_LBUTTONUP && e->drag) {
       e->drag = false;
-      if (!e->backgroundTest && GetCapture() == h)
-        ReleaseCapture();
+        if (!e->backgroundTest && GetCapture() == h)
+          ReleaseCapture();
       if(e->selectingArea){
         e->selectingArea=false;auto [x,y]=worldPoint(l);
         if(std::hypot(x-e->areaX,y-e->areaY)>.2f)e->selectArea(e->areaX,e->areaY,x,y,e->areaAdd);
@@ -8547,12 +8547,12 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (e->brushing) {
         e->brushing = false;
         e->publish();
-        return 0;
-      }
+          return 0;
+        }
       if (e->objectDrag) {
         e->finishDrag(false);
-        return 0;
-      }
+          return 0;
+        }
       auto [x, y] = worldPoint(l);
       try {
         e->gesture(e->dragFX, e->dragFY, x, y);
@@ -8724,7 +8724,7 @@ static LRESULT CALLBACK formProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       e->apply(true);
     } catch (const std::exception &error) {
       e->message(wide(error.what()));
-    }
+  }
   return DefWindowProcW(h, m, w, l);
 }
 static LRESULT CALLBACK shelfProc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -9301,10 +9301,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->layersDock=false;
         int selected = id - ToolBase;
         if (selected == 18 || selected == 19) {
-          if (selected == 18)
-            e->rotation = (e->rotation + 1) % 4;
+        if (selected == 18)
+          e->rotation = (e->rotation + 1) % 4;
           else
-            e->mirror = (e->mirror + 1) % 4;
+          e->mirror = (e->mirror + 1) % 4;
           if (e->regionStamp.width > 0)
             e->tool = 17;
           e->message(e->regionStamp.width > 0 ? L"Copy turned. Click where it should go." : L"Copy an area first.");
@@ -9395,7 +9395,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         break;
       case FlickerToggle:
         if (e->lightPicked()) {
-          e->remember();
+        e->remember();
           bool on = Editor::number(e->lightField(17), 0) > 0;
           e->setLight({{17, on ? std::string("0") : std::string("0.5")}}, true);
           e->message(on ? L"Steady light." : L"The lamp flickers. Look at the picture.");
@@ -9548,7 +9548,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       // sees it and the program exits instead of coming back.
       e->quitLoop = true;
       if (!e->playOut)
-        PostQuitMessage(0);
+      PostQuitMessage(0);
       return 0;
     case WM_QUERYENDSESSION:
       trace("Windows is signing out");
@@ -9641,9 +9641,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                                    " no longer has the expected maps");
         auto original = campaign.text();
         campaign.save(e.pack);
-        NativeDocument reopened;
-        reopened.open(e.pack);
-        if (reopened.text() != original)
+      NativeDocument reopened;
+      reopened.open(e.pack);
+      if (reopened.text() != original)
           throw std::runtime_error(std::string(label) +
                                    " changed when saved and reopened");
         e.doc = std::move(campaign);
