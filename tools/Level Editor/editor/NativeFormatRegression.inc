@@ -1,3 +1,15 @@
+  // The window as it looks, to a .bmp (the inspector pictures in .build/interaction/).
+  void captureEditorWindow(const fs::path& file){
+    const bool shown=IsWindowVisible(window);if(!shown)ShowWindow(window,SW_SHOWNOACTIVATE);relayout();
+    RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN);
+    RECT r{};GetClientRect(window,&r);HDC screen=GetDC(window),dc=CreateCompatibleDC(screen);auto bitmap=CreateCompatibleBitmap(screen,r.right,r.bottom);auto old=SelectObject(dc,bitmap);
+    PrintWindow(window,dc,PW_CLIENTONLY|PW_RENDERFULLCONTENT);
+    BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
+    std::vector<char> bits(size_t(r.right)*size_t(r.bottom)*4);SelectObject(dc,old);GetDIBits(dc,bitmap,0,UINT(r.bottom),bits.data(),&info,DIB_RGB_COLORS);
+    fs::create_directories(file.parent_path());std::ofstream out(file,std::ios::binary);BITMAPFILEHEADER head{};head.bfType=0x4D42;head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);head.bfSize=DWORD(head.bfOffBits+bits.size());
+    out.write(reinterpret_cast<const char*>(&head),sizeof head);out.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof info.bmiHeader);out.write(bits.data(),std::streamsize(bits.size()));
+    DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(window,screen);if(!shown)ShowWindow(window,SW_HIDE);
+  }
   // Map format 2 in the Builder (--editing-test; docs/Systems/map-format.md): the inspector's
   // named rows (add, edit, remove, labels from the guide), named fields kept through moves,
   // copies, undo/redo and save/reopen, the index leaving FORMAT and PREFAB blocks alone, and
@@ -12,6 +24,7 @@
     auto fixture=[&]{return int(doc.records("FIXTURE",0).back());};
     selectRecord(fixture());fillFields(false);
     require(positionalInputs>0&&namedKeys.size()==1&&namedKeys[0]=="+","a record without named fields shows only the add row");
+    captureEditorWindow(root/L".build"/L"interaction"/L"inspector-before.bmp");
     // Add three fields through the add row, one at a time, as a person would.
     for(const char* text:{"tint=1,0.5,0.5","p.code=1234","name=desk"}){
      SetWindowTextW(fieldInputs.back(),wide(text).c_str());apply(true);fillFields(false);}
@@ -20,6 +33,9 @@
     require(withFields.ends_with("|tint=1,0.5,0.5|p.code=1234|name=desk"),"the add row did not write key=value fields in order: "+withFields);
     require(namedKeys.size()==4&&namedKeys[0]=="tint"&&namedKeys[3]=="+","the inspector does not list the named fields under the record's own");
     require(label(fieldLabels[positionalInputs]).find(L"Tint")!=std::wstring::npos,"the tint row is not labelled from the guide");
+    SetWindowTextW(fieldInputs.back(),L"frozen=1");apply(true);fillFields(false);SetWindowTextW(fieldInputs.back(),L"faction=enemy");apply(true);fillFields(false);
+    captureEditorWindow(root/L".build"/L"interaction"/L"inspector-after.bmp");
+    SetWindowTextW(fieldInputs[positionalInputs+3],L"");SetWindowTextW(fieldInputs[positionalInputs+4],L"");apply(true);fillFields(false);
     report<<"PASS: the add row writes named fields, FORMAT|2 goes in, rows are labelled from the guide\n"<<std::flush;
     // Edit one, empty another (removed), and check the positional fields are untouched.
     SetWindowTextW(fieldInputs[positionalInputs],L"0.2,0.2,1");SetWindowTextW(fieldInputs[positionalInputs+1],L"");apply(true);

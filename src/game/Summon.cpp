@@ -277,7 +277,7 @@ bool Game::consoleSummonCommand(const std::string& command){
  auto say=[&](const std::string& line){m_consoleLog.push_back(upper(line));};
  auto rest=[&]{std::string r;std::getline(in,r);return r;};
  auto enemyAt=[&](const AiTargetRef& r)->Enemy*{if(r.kind!=ShotKind::Enemy||r.level<0||r.level>=chunkCount())return nullptr;auto&l=r.level==m_level?m_enemies:m_chunks[size_t(r.level)].enemies;return r.index>=0&&size_t(r.index)<l.size()?&l[size_t(r.index)]:nullptr;};
- auto label=[&](const AiTargetRef& r)->std::string{if(auto*e=enemyAt(r))return e->name();if(r.kind==ShotKind::Npc){const auto&t=m_friendlyActors[size_t(r.index)].track();return t.ai.mode==ActorAiMode::Guard?guardRoleProfile(t.ai.role).name:"CIVILIAN";}return "NOTHING";};
+ auto label=[&](const AiTargetRef& r)->std::string{if(auto*e=enemyAt(r))return e->name();if(r.kind==ShotKind::Npc){const auto&t=m_friendlyActors[size_t(r.index)].track();if(t.traits&&!t.traits->display.empty())return t.traits->display;return t.ai.mode==ActorAiMode::Guard?guardRoleProfile(t.ai.role).name:"CIVILIAN";}return "NOTHING";};
  auto killEnemy=[&](Enemy& e,int level){if(!e.alive)return false;if(e.hunter&&!e.summon){vanishHunter(e);return true;}e.hunter=0;applyEnemyDamage(e,1e7f,true,false,level);return true;};
  auto killNpc=[&](size_t i){const auto&t=m_friendlyActors[i].track();if(!t.health||(t.deadState&&state(t.deadState))||m_friendlyActors[i].pose.clip==4)return false;damageFriendly(i,1e6f,m_friendlyActors[i].pose.position);return true;};
  if(verb=="help"){in>>arg;if(arg!="summon"&&arg!="summons")return false;
