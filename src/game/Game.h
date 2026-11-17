@@ -536,7 +536,10 @@ public:
     static const std::string& lastLoadFailure();
     // The save container (SaveSections.h, docs/Systems/save-format.md): sections, the refit of
     // older saves, and the stores for entity overrides and map variables.
-    static bool testSaveFormat(std::ostream& report);
+    // Parts: load paths, damage, stores, hooks and the misplaced folder (Core); formats 12-27 on a room; the
+    // campaign formats in two halves; the real saves found on this machine and in lab/fixtures/saves.
+    enum SaveTestPart {SaveTestCore=1,SaveTestCampaignEarly=2,SaveTestCampaignLate=4,SaveTestRealSaves=8,SaveTestRoomFormats=16,SaveTestAll=31};
+    static bool testSaveFormat(std::ostream& report,int parts=SaveTestAll);
     // Adds (or, under a name already taken, replaces) a save section. Call it at start-up,
     // before the first save or load; the built-in sections come first, then these in order.
     static void registerSaveSection(SaveSection section);

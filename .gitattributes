@@ -7,3 +7,5 @@ src/assets/facility/cargo/VEHICLE_Forklift.mtl -text
 src/assets/office/*.obj -text
 src/assets/facility/industrial/*.obj -text
 src/assets/actors/staff/*.obj -text
+# Saves are checksummed bytes (and binary from format 28): never convert their line ends.
+*.rms binary
