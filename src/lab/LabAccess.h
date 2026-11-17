@@ -57,6 +57,10 @@ struct LabAccess {
  static std::string encodeSave(const Game& g){return g.encodeSave();}
  static bool damageEnemy(Game& g,Enemy& e,float amount){return g.applyEnemyDamage(e,amount,false,false);}
  static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);g.equipWeapon(id);}
+ // A console line, as typed (Summon.cpp and the rest), and what it printed.
+ static void console(Game& g,const std::string& line){g.executeConsole(line);}
+ static const std::vector<std::string>& consoleLog(const Game& g){return g.m_consoleLog;}
+ static const auto& summons(const Game& g){return g.m_summons;}
  static void setGod(Game& g,bool on){g.m_god=on;if(on)g.m_player.health=std::max(g.m_player.health,100.f);}
  // A shotgun round from the player's eye at a point, as the player's own shot lands (trace, then resolve).
  static ShotKind fireAt(Game& g,Point3 at,ShotHit* traced=nullptr){const Player& p=g.m_player;const Point3 o{p.pos.x,p.pos.y,p.z+p.stanceEye()};Point3 d{at.x-o.x,at.y-o.y,at.z-o.z};
@@ -123,6 +127,9 @@ struct LabAccess {
  static Corpse* trackCorpse(SoftwareRenderer& r,const Game& g,int level,size_t track){const World& w=g.chunkWorld(level);if(track>=w.actorTracks().size())return nullptr;
   return r.humanCorpse(g,w,level,w.actorTracks()[track],w.actorPose(track),-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|track);}
  // Between tubes (and before a determinism repeat): nothing a scene left in the renderer carries over.
+ // The Vulkan renderer behind it (null on the software path), and where library models begin.
+ static GpuRenderer* gpu(SoftwareRenderer& r){return r.m_gpu.get();}
+ static constexpr int firstLibraryModel(){return SoftwareRenderer::FirstLibraryModel;}
  static void resetRenderer(SoftwareRenderer& r){r.m_corpses.clear();r.m_movers.clear();r.m_corpseClock=0;r.m_goreBursts.clear();r.forgetScene();}
  // The men's bodies: 0-5 the civilians (civilianActorBody), 6.. the cleanup crew (cleanupActorBody).
  static Mesh& humanMesh(SoftwareRenderer& r,int i){return i<6?r.civilianMesh(i):*r.cleanupMeshes()[size_t(i-6)];}

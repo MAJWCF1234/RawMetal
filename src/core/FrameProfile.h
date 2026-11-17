@@ -50,11 +50,15 @@ inline thread_local bool enabled=false;
 // unless asked (--perf-leaf) and counts those calls instead.
 inline thread_local bool leafTimers=true;
 inline thread_local std::array<double,Count> costs{};
+// The innermost open scope (-1 none), and the per-frame triangles the GPU renderer uploaded
+// (not static-cache builds) while each was innermost ([0] none, [1+cost]): who fills the stream.
+inline thread_local int current=-1;
+inline thread_local std::array<uint64_t,Count+1> streamTriangles{};
 struct Scope {
- bool active;Cost cost;std::chrono::steady_clock::time_point start;
- explicit Scope(Cost value,bool leaf=false):active(enabled&&(!leaf||leafTimers)),cost(value){if(active)start=std::chrono::steady_clock::now();}
+ bool active;Cost cost;int previous=-1;std::chrono::steady_clock::time_point start;
+ explicit Scope(Cost value,bool leaf=false):active(enabled&&(!leaf||leafTimers)),cost(value){if(active){previous=current;current=int(value);start=std::chrono::steady_clock::now();}}
  // Close a section early (a block whose locals outlive it).
- void stop(){if(active){costs[cost]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();active=false;}}
+ void stop(){if(active){costs[cost]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();current=previous;active=false;}}
  ~Scope(){stop();}
  Scope(const Scope&)=delete;Scope& operator=(const Scope&)=delete;
 };
@@ -90,5 +94,5 @@ struct CreatureScope {
  ~CreatureScope(){if(active){creatureCosts[size_t(kind)]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();++creatureRuns[size_t(kind)];}}
  CreatureScope(const CreatureScope&)=delete;CreatureScope& operator=(const CreatureScope&)=delete;
 };
-inline void resetFrame(){costs.fill(0);counts.fill(0);creatureCosts.fill(0);creatureRuns.fill(0);}
+inline void resetFrame(){costs.fill(0);counts.fill(0);streamTriangles.fill(0);creatureCosts.fill(0);creatureRuns.fill(0);}
 }

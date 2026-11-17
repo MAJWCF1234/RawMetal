@@ -162,7 +162,7 @@ template<class A> int Game::archiveSave(A& a,int version){
 std::string Game::encodeSave()const{
  // Each pool is clamped to its own magazine or tube.
  Game snapshot=*this;for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=snapshot.m_player.pool(id);rounds.loaded=std::clamp(rounds.loaded,0,std::clamp(rounds.total,0,playerWeaponDef(id).cycle.tubeCapacity));}
- snapshot.m_player.pool(WeaponId::Fists)={};snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,SaveVersion);auto payload=writer.stream.str();
+ snapshot.m_player.pool(WeaponId::Fists)={};snapshot.stripSummons();snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,SaveVersion);auto payload=writer.stream.str();
  if(writer.repaired)try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"save on map "<<m_level<<": "<<writer.repaired<<" non-finite or out-of-range numbers written as the nearest a load accepts\n";}catch(...){}
  return "RAWMETAL_SAVE "+std::to_string(SaveVersion)+" "+std::to_string(checksum(payload))+"\n"+payload;
 }

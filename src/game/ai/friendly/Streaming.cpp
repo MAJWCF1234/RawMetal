@@ -7,7 +7,9 @@
 #include <queue>
 namespace retro {
 StateId Game::friendlyKey(size_t actor,std::string_view field)const{
- const auto&npc=m_friendlyActors.at(actor);return actorAiState(npc.homeLevel,npc.homeActor,npc.track().timerState,field);
+ const auto&npc=m_friendlyActors.at(actor);const StateId id=actorAiState(npc.homeLevel,npc.homeActor,npc.track().timerState,field);
+ if(npc.summon)m_summonKeys.emplace(id,0); // a summon's AI state never reaches a save (Summon.cpp)
+ return id;
 }
 bool Game::scriptedHandoffActive(size_t actor)const{
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return false;const auto&track=m_friendlyActors[actor].track();
@@ -254,12 +256,14 @@ void Game::updateFriendlyActors(float dt,bool guards){
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
+  // The console's freeze and `ai off`: he stands as he is (Summon.cpp).
+  if(dt>0&&(m_aiOff||npc.frozen)&&!npcIncapacitated(i)){npc.pose.clip=npc.pose.clip==1?0:npc.pose.clip;continue;}
   if(npcIncapacitated(i)){
    // Root-controlled held placement and a dropped unconscious body bypass
    // patrol, scripted stage resets and autonomous chunk migration.
    auto old=npc.pose;npc.pose=updateFriendlyAI(friendlyWorld(npc.level),npc.level,i,track,old,old,dt,&stimuli);
    setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"saved"),1);
-   auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);home.setActorPose(npc.homeActor,projected);continue;
+   auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);if(!npc.summon)home.setActorPose(npc.homeActor,projected);continue;
   }
   if(track.ai.mode==ActorAiMode::Guard&&(npc.pose.clip==4||(track.deadState&&state(track.deadState))))clearGuardSchedule(i);
   bool scripted=track.ai.mode==ActorAiMode::Scripted;
@@ -331,7 +335,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
    if(npc.pose.clip==4&&track.deadState&&state(track.deadState)){setState(actorPositionState(track.deadState,0),int(std::round(npc.pose.position.x*1000)));setState(actorPositionState(track.deadState,1),int(std::round(npc.pose.position.y*1000)));}
   }
   setState(friendlyKey(i,"chunk"),npc.level+1);setState(friendlyKey(i,"x"),int(std::round(npc.pose.position.x*1000)));setState(friendlyKey(i,"y"),int(std::round(npc.pose.position.y*1000)));setState(friendlyKey(i,"z"),int(std::round(npc.pose.z*1000)));setState(friendlyKey(i,"yaw"),int(std::round(std::remainder(npc.pose.yaw,2*kPi)*10000)));setState(friendlyKey(i,"phase"),int(std::round(npc.pose.phase*10000)));setState(friendlyKey(i,"walking"),npc.pose.clip==1);setState(friendlyKey(i,"saved"),1);
-  auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);home.setActorPose(npc.homeActor,projected);
+  auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);if(!npc.summon)home.setActorPose(npc.homeActor,projected);
  }
  // Squad Caution counts down here once a frame, for every chunk.
  if(guards&&dt>0)updateGuardCaution(dt);

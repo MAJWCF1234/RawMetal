@@ -86,7 +86,7 @@ void Game::saveRestrainedPose(size_t actor){
  put("saved",1);put("running",0);put("walking",0);put("crouched",0);put("chunk",npc.level+1);
  put("x",int(std::round(npc.pose.position.x*1000)));put("y",int(std::round(npc.pose.position.y*1000)));put("z",int(std::round(npc.pose.z*1000)));
  put("yaw",int(std::round(std::remainder(npc.pose.yaw,2*kPi)*10000)));put("phase",int(std::round(npc.pose.phase*10000)));
- auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);friendlyWorld(npc.homeLevel).setActorPose(npc.homeActor,projected);
+ auto projected=npc.pose;projected.position+=chunkOffset(npc.level)-chunkOffset(npc.homeLevel);if(!npc.summon)friendlyWorld(npc.homeLevel).setActorPose(npc.homeActor,projected);
 }
 void Game::restrainNpc(size_t actor,bool held){
  if(!canTakedown(actor)||heldNpc()>=0||m_takedownActor>=0)return;

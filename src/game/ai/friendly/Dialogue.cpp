@@ -31,6 +31,8 @@ SquadStance Game::npcStance(const ActorTrack& track)const{
  int value=state(track.ai.stance);return value>=0&&value<=3?SquadStance(value):SquadStance::Declared;
 }
 AiFaction Game::npcFaction(const ActorTrack& track)const{
+ // The console's `ally`/`enemy` on one man (Summon.cpp) outranks his squad's stance.
+ for(const auto&[who,faction]:m_factionOverrides)if(who==&track)return faction;
  AiFaction declared=actorFaction(track);
  switch(npcStance(track)){
   case SquadStance::Hostile:return declared==AiFaction::Creature?declared:AiFaction::Raider;

@@ -68,6 +68,11 @@ const bool registered=[]{
  engine("console","--each-test=console: the console, map ids, god, fps",&Game::testConsole);
  engine("friendly-ai","--each-test=friendly-ai: NPC AI, saves of its state",&Game::testFriendlyAI);
  engine("stealth","--each-test=stealth: takedowns, restraint, saves",&Game::testStealth);
+ engine("ai","--each-test=ai: guards, hearing, friendly AI and the creatures (Game::testAI)",&Game::testAI);
+ engine("creature-schedule","--each-test=creature-schedule: creature schedules, wake, bite and fight timings",&Game::testCreatureSchedule);
+ engine("creature-behaviour","--each-test=creature-behaviour",&Game::testCreatureBehaviour);
+ engine("machine","--each-test=machine: the cursed equipment",&Game::testMachine);
+ engine("summon","console summon: kinds, placement, allegiances, fights, aimed commands, transient through a save",+[]{std::ofstream r("summon-test.txt");return Game::testSummon(r);});
  engine("noclip","console noclip: through walls, up and down, sprint, not saved",+[]{std::ofstream r("noclip-test.txt");return Game::testNoclip(r);});
  // What breaks and what it leaves (tubes/Debris.cpp works the pieces; these keep the old behaviour).
  engine("clutter","--each-test=clutter: junk and shards lift, fall, land and sound",&Game::testClutter);

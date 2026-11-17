@@ -157,6 +157,13 @@ struct Enemy {
     // A kind that stands dead until woken (CreatureTraits::dormant) keeps its wake state set while it sleeps.
     bool sleeping()const{return alive&&wakeState!=0&&creatureTraits(kind).dormant;}
     const char* name()const{return creatureTraits(kind).name;}
+    // Who it fights as (factionsHostile): every authored and scripted creature is a
+    // Creature. A console summon (Summon.cpp) may be anything; its serial (0: not a
+    // summon), the standing order it keeps with nothing to fight (SummonOrder),
+    // where that order is anchored, and whether the console holds it still. None
+    // of this is saved: a save leaves summons out (they are transient).
+    AiFaction faction=AiFaction::Creature;std::uint32_t summon=0;std::uint8_t order=0;bool frozen=false;
+    Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,orderClock=0,fleeClock=0;
 };
 
 struct Pickup {
@@ -184,7 +191,12 @@ struct FriendlyActor {
  // Keep the immutable track alive when its home chunk releases geometry.
  int homeLevel=0,level=0;size_t homeActor=0;ActorPose pose{};
  std::shared_ptr<const AuthoredMapData> definition;
- const ActorTrack& track()const{return definition->actorTracks.at(homeActor);}
+ // A console summon (Summon.cpp): its serial, its track the only one in its own
+ // definition, its homeActor SummonActorBase+serial so no authored (level, actor)
+ // identity ever matches it, and no home world pose to write back. Not saved.
+ std::uint32_t summon=0;bool frozen=false;
+ static constexpr size_t SummonActorBase=size_t(1)<<24;
+ const ActorTrack& track()const{return definition->actorTracks.at(summon?0:homeActor);}
 };
 // A Cleanup man on the patched-through yard cameras: where he stands in the
 // current chunk, which way he looks, how far he sees and how wide (cone is the
@@ -350,6 +362,7 @@ public:
     bool noclip()const{return m_noclip;}
     void setNoclip(bool on);
     static bool testNoclip(std::ostream& report);
+    static bool testSummon(std::ostream& report);
     void setDeveloperMode(bool on){m_god=m_peaceful=m_unlockAll=on;if(on){m_player.health=std::max(m_player.health,100.f);m_enemies.clear();}}
     bool developerMode()const{return m_unlockAll;}
     bool reloading()const{return m_reloadTimer>0;}
@@ -1096,6 +1109,25 @@ private:
     void syncReactorComplex();
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
+    // Console summons (Summon.cpp, docs/console.md): creatures, Cleanup men and
+    // civilians placed in front of the player with an allegiance and an order.
+    // Transient: encodeSave leaves them, their states and their keys out.
+    enum class SummonOrder:std::uint8_t {Idle,Patrol,Wander,Guard,Hunt,Follow};
+    struct SummonRecord {std::uint32_t serial=0;std::string name,kind;bool creature=true;SummonOrder order=SummonOrder::Idle;
+     std::shared_ptr<AuthoredMapData> map;Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,clock=0;int level=0,leg=0;};
+    std::vector<SummonRecord> m_summons;std::uint32_t m_summonSerial=0;
+    // Every state a summoned man's AI has touched (friendlyKey), for encodeSave to drop.
+    mutable std::unordered_map<StateId,char> m_summonKeys;
+    // `ai off`: no creature or NPC thinks. Per-actor allegiance from `ally`/`enemy`
+    // on an authored man (summons carry their own). Neither is saved.
+    bool m_aiOff=false;std::vector<std::pair<const ActorTrack*,AiFaction>> m_factionOverrides;
+    bool consoleSummonCommand(const std::string& command);
+    int summon(const std::string& kind,int count,const std::string& options,std::string& error);
+    bool summonSpot(Vec2& at,float& z,float hull,float radius,const std::vector<Vec2>& taken)const;
+    AiTargetRef aimedEntity(float range=40.f)const;
+    void updateSummons(float dt);
+    bool summonFlight(Enemy& e,Vec2& goal,float& goalZ,float dt);
+    void stripSummons();
     bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false,m_peaceful=false,m_unlockAll=false,m_noclip=false;
     std::string m_consoleLine;
     std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};

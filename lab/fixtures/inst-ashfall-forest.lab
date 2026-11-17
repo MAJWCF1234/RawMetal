@@ -1,0 +1,7 @@
+# Instancing: the Ashfall Exclusion Zone's pine forest (zone 0-0), across the trees. Tubes: instancing.
+world custom "src/assets/campaigns/RawMetal-Ashfall-Exclusion-Zone.txt"
+map 0
+camera 3 12 -999 0 -3
+open-doors
+size 960 540
+frames 24

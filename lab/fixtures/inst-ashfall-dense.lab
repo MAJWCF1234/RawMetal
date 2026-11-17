@@ -1,0 +1,7 @@
+# Instancing: the Ashfall Exclusion Zone's densest map by fixtures (zone 2-3). Tubes: instancing.
+world custom "src/assets/campaigns/RawMetal-Ashfall-Exclusion-Zone.txt"
+map 17
+camera 12 12 -999 0 -4
+open-doors
+size 960 540
+frames 24

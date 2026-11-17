@@ -46,7 +46,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -244,7 +244,7 @@ int Game::hostilesRemaining(int level)const{
  // nobody opens the enemy-clear doors and script gates a tester has to pass;
  // the guards themselves still patrol, hunt and go down to a takedown.
  if(m_peaceful)return 0;
- const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
+ const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive&&factionsHostile(e.faction,AiFaction::Player);}));
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&!npcIncapacitated(i)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardHostileToPlayer(i))++n;}return n;
 }
 int Game::enemiesRemaining()const{return hostilesRemaining(m_level);}
@@ -630,6 +630,8 @@ void Game::update(const InputState& input, float dt) {
             else if(cycle.semiAuto&&raised&&press&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=cycle.fireCooldown;}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
+        // Console summons' standing orders (Summon.cpp), before anyone thinks.
+        updateSummons(dt);
         // Steps, wakes and falls into water raise their splashes before anyone listens.
         updateWater(dt,false);
         // Guard perception consumes this frame's movement, throws and shots.

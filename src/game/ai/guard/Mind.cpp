@@ -91,9 +91,9 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   if(i==actor||!t.health||npcIncapacitated(i)||(t.deadState&&state(t.deadState))||!factionsHostile(npcFaction(track),npcFaction(t)))continue;
   if(lengthSq(other.pose.position+chunkOffset(other.level)-globalOrigin-pose.position)<9.f&&std::fabs(other.pose.z-pose.z)<track.scale){nearThreat=true;break;}
  }
- if(!nearThreat&&factionsHostile(npcFaction(track),AiFaction::Creature))for(int other=0;other<chunkCount()&&!nearThreat;++other)if(chunkResident(other)){
+ if(!nearThreat)for(int other=0;other<chunkCount()&&!nearThreat;++other)if(chunkResident(other)){
   const auto&enemies=other==m_level?m_enemies:m_chunks[other].enemies;auto offset=chunkOffset(other)-globalOrigin;
-  for(const auto&enemy:enemies)if(enemy.alive&&lengthSq(enemy.pos+offset-pose.position)<9.f&&std::fabs(enemy.bodyBottom()-pose.z)<track.scale){nearThreat=true;break;}
+  for(const auto&enemy:enemies)if(enemy.alive&&factionsHostile(npcFaction(track),enemy.faction)&&lengthSq(enemy.pos+offset-pose.position)<9.f&&std::fabs(enemy.bodyBottom()-pose.z)<track.scale){nearThreat=true;break;}
  }
  bool noiseWake=false;
  for(const auto&noise:stimuli){

@@ -189,6 +189,8 @@ void Game::updateEnemies(float dt){
    e.searchTime=0;
   }
   if(!e.alive){clearCreatureSchedule(e);continue;}
+  // The console's freeze and `ai off` (Summon.cpp): it stands where it is.
+  if(m_aiOff||e.frozen){e.moving=false;e.windup=0;continue;}
   // A hunter still coming through the seam after the player.
   if(e.arrive>0){hunterArrive(e,dt);continue;}
   perf::count(perf::CreatureUpdates);
@@ -210,10 +212,16 @@ void Game::updateEnemies(float dt){
   if(e.feeding>0&&updateFeeding(e,dt))continue;
   bool hadAwareness=e.awareness>0;e.repathTimer-=dt;e.moving=false;e.strike=std::max(0.f,e.strike-dt*(1.f/traits.strikeSeconds));e.attackCooldown=std::max(0.f,e.attackCooldown-dt);e.painFlash=std::max(0.f,e.painFlash-dt*traits.painDecay);
   perf::Scope senseProfile(perf::EnemySense);
-  Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1;
+  Vec2 target=m_player.pos;float targetFeet=m_player.z,targetEye=m_player.eye,targetHull=m_player.hullHeight();int friendly=-1,rival=-1;
+  // Who it fights is its faction's business (factionsHostile): an authored
+  // creature (a Creature) hunts the player and every squad; a summoned ally
+  // leaves the player be. One on a guard order (Summon.cpp) keeps to its post.
+  const bool huntsPlayer=factionsHostile(e.faction,AiFaction::Player);
+  const bool posted=e.summon&&e.order==3;
+  auto leashed=[&](Vec2 p){return !posted||lengthSq(p-e.anchor)<64.f;};
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   // Shut in a locker the player is out of sight of anything that hunts by eye.
-  const bool seen=hiddenLocker()<0&&aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,traits.sightRange,traits.sightDot,2.5f);
+  const bool seen=huntsPlayer&&leashed(m_player.pos)&&hiddenLocker()<0&&aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,traits.sightRange,traits.sightDot,2.5f);
   // Making the player out, as a guard does (aiRecognitionRate) at its own
   // notice time and need of light. Inside 2.5 m it knows them at once, and a
   // wound the player dealt fills it where it was dealt (Hitscan, the punch, a
@@ -232,11 +240,27 @@ void Game::updateEnemies(float dt){
   // The man it came out for comes first, wherever he is on its floor plan.
   if(const int quarry=hunterPrey(e);quarry>=0){const auto&npc=m_friendlyActors[size_t(quarry)];target=npc.pose.position;targetFeet=npc.pose.z;targetHull=npc.track().scale;targetEye=npc.track().scale*.65f;friendly=quarry;nearest=dist=length(target-e.pos);visible=true;glimpsed=false;to=target-e.pos;}
   else for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.level!=m_level)continue;const auto&track=npc.track();const auto&pose=npc.pose;
-   if(npcIncapacitated(i)||track.ai.mode==ActorAiMode::Scripted||!track.health||state(track.deadState)||pose.clip==4||(track.ai.enableState&&!state(track.ai.enableState))||!factionsHostile(AiFaction::Creature,npcFaction(track)))continue;
+   if(npcIncapacitated(i)||track.ai.mode==ActorAiMode::Scripted||!track.health||state(track.deadState)||pose.clip==4||(track.ai.enableState&&!state(track.ai.enableState))||!factionsHostile(e.faction,npcFaction(track))||!leashed(pose.position))continue;
    float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,pose.position,pose.z+track.scale*.65f,traits.sightRange,traits.sightDot,2.5f)){
     target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;glimpsed=false;to=target-e.pos;
    }
   }
+  // Another creature on the other side (a summoned ally against the zone's own,
+  // or the other way round): nearer than anything else it sees, it is the prey.
+  if(hunterPrey(e)<0)for(size_t i=0;i<m_enemies.size();++i){const auto&o=m_enemies[i];
+   if(&o==&e||!o.alive||o.sleeping()||!factionsHostile(e.faction,o.faction)||!leashed(o.pos))continue;
+   const float distance=length(o.pos-e.pos),mid=(o.bodyBottom()+o.bodyTop())*.5f;
+   if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,o.pos,mid,traits.sightRange,traits.sightDot,2.5f)){
+    target=o.pos;targetFeet=o.bodyBottom();targetHull=o.bodyTop()-o.bodyBottom();targetEye=targetHull*.65f;friendly=-1;rival=int(i);nearest=dist=distance;visible=true;glimpsed=false;to=target-e.pos;}
+  }
+  // Whatever it is striking now: the player, a man (friendly) or a creature (rival).
+  const bool atPlayer=friendly<0&&rival<0;
+  auto strikeRival=[&](float amount){auto&o=m_enemies[size_t(rival)];const float flash=m_hitFlash;
+   const Point3 at{o.pos.x,o.pos.y,(o.bodyBottom()+o.bodyTop())*.5f};const Vec2 push=normalized(o.pos-e.pos);
+   applyEnemyDamage(o,amount,true,false);m_hitFlash=flash; // the player's hit marker is the player's
+   hitBurst(m_level,at,{push.x*.6f,push.y*.6f,.5f},ImpactMaterial::Flesh,int(o.kind),1.f,!o.alive);
+   // It knows who did it, and goes for them.
+   if(o.alive&&factionsHostile(o.faction,e.faction)){o.lastKnown=e.pos;o.lastKnownZ=e.z;o.awareness=std::max(o.awareness,6.f);if(o.state==Enemy::State::Idle||o.state==Enemy::State::Search)o.state=Enemy::State::Investigate;}};
   const AiStimulus* heard=nullptr;float strongest=0;
   // Keep footsteps (a sprint on steel carries 12 m)/impacts/weapons, but ignore
   // long-range world ambience that would steal lastKnown on Ashfall. Near-field sources are ignored so a
@@ -255,7 +279,7 @@ void Game::updateEnemies(float dt){
    const float radius=stimulus.radius*traits.hearingScale;
    float dz=stimulus.z-e.z-.7f;float planar=lengthSq(stimulus.source-e.pos);if(planar+dz*dz>=radius*radius||planar<1.f)continue;
    float strength=aiSoundStrength(e.pos,e.z+.7f,stimulus.source,stimulus.z,radius,stimulus.gain,stimulus.loud,hearingRayClear(e.pos,e.z+.7f,stimulus.source,stimulus.z));
-   if(strength>strongest){strongest=strength;heard=&stimulus;}}
+   if(strength>strongest&&leashed(stimulus.source)){strongest=strength;heard=&stimulus;}}
   if(visible){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,traits.rushSpeed>0?12.f:6.f);e.state=Enemy::State::Chase;}
   // It has seen something there: it goes to look, as it would at a noise.
   else if(glimpsed){e.lastKnown=target;e.lastKnownZ=targetFeet;e.awareness=std::max(e.awareness,5.f);e.state=Enemy::State::Investigate;}
@@ -263,10 +287,10 @@ void Game::updateEnemies(float dt){
   else {e.awareness=std::max(0.f,e.awareness-dt);if(e.awareness==0)e.state=Enemy::State::Idle;else if(length(e.lastKnown-e.pos)<.6f)e.state=Enemy::State::Search;}
   // A recurring hunter goes by ear between sightings: to the player's last
   // loud noise, however far, each time there is a new one.
-  if(e.hunter&&!visible&&!glimpsed&&!heard&&e.stalkMode!=Enemy::StalkMode::Retreat&&m_playerNoise.time>e.earTime){e.earTime=m_playerNoise.time;e.lastKnown=m_playerNoise.pos;e.lastKnownZ=m_playerNoise.z;e.awareness=std::max(e.awareness,6.f);e.state=Enemy::State::Investigate;e.repathTimer=0;}
+  if(e.hunter&&huntsPlayer&&!visible&&!glimpsed&&!heard&&e.stalkMode!=Enemy::StalkMode::Retreat&&m_playerNoise.time>e.earTime){e.earTime=m_playerNoise.time;e.lastKnown=m_playerNoise.pos;e.lastKnownZ=m_playerNoise.z;e.awareness=std::max(e.awareness,6.f);e.state=Enemy::State::Investigate;e.repathTimer=0;}
   // A hunter with hands that knows which locker its prey is shut in goes to the
   // doors, and at them takes hold (LockerCapture.cpp).
-  creatureLockerSense(e);
+  if(huntsPlayer)creatureLockerSense(e);
   senseProfile.stop();if(e.awareness>0)perf::count(perf::CreaturesHunting);
   if(creatureLockerHold(e,dt))continue;
   if(e.kind==Enemy::Kind::Huntsman&&e.surfaceMode){
@@ -296,7 +320,9 @@ void Game::updateEnemies(float dt){
   // Stalkers (the reactor's thing, the Snatcher) hunt by sight: stare, flank, rush, hide.
   const bool stalker=traits.rushSpeed>0;
   // Hurt past its threshold a recurring hunter only runs (Hunter.cpp).
-  const bool fleeing=e.hunter&&e.stalkMode==Enemy::StalkMode::Retreat;
+  const bool huntedFlight=e.hunter&&e.stalkMode==Enemy::StalkMode::Retreat;bool fleeing=huntedFlight;
+  // A summoned neutral runs from what fights all comers and from whoever hurt it (Summon.cpp).
+  Vec2 fleeGoal{};float fleeZ=0;if(e.summon&&!fleeing)fleeing=summonFlight(e,fleeGoal,fleeZ,dt);
   float range=e.reach();
   bool sameLevel=targetFeet<e.bodyTop()&&targetFeet+targetHull>e.bodyBottom();
   // The Snatcher crouches to lunge from further out than its claws reach.
@@ -308,7 +334,8 @@ void Game::updateEnemies(float dt){
   float goalZ=e.awareness>0||e.homeZ<=-999?e.lastKnownZ:e.homeZ;
   // Nothing to go on, the cursed equipment goes to the nearest live lamp or live circuit.
   if(traits.dormant&&e.awareness<=0)machineAttraction(e,goal,goalZ);
-  if(fleeing&&hunterFlight(e,goal,goalZ,dt))continue; // out of sight and away: gone
+  if(huntedFlight&&hunterFlight(e,goal,goalZ,dt))continue; // out of sight and away: gone
+  if(fleeing&&!huntedFlight){goal=fleeGoal;goalZ=fleeZ;}
   bool wantsMove=fleeing||e.state!=Enemy::State::Search&&!(e.windup>0||e.strike>0)&&!canMelee&&length(goal-e.pos)>=.3f&&!(!stalker&&visible&&dist<range*.82f);
   int ms=std::max(1,int(std::round(dt*1000)));
   runCreatureSchedule(e,ms,visible,heardCue,canMelee||e.windup>0||e.strike>0,hurt,wantsMove);
@@ -324,7 +351,7 @@ void Game::updateEnemies(float dt){
    constexpr float Leap=TransformedLeap,LeapSpeed=6.f,Hold=TransformedHold,Stumble=TransformedStumble,Bite=9.f;
    Vec2 aim{std::cos(e.heading),std::sin(e.heading)};
    const bool struck=e.painFlash>.85f;
-   auto release=[&](float seconds){e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(friendly<0)m_grabbed=0;};
+   auto release=[&](float seconds){e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(atPlayer)m_grabbed=0;};
    if(e.stalkMode==Enemy::StalkMode::Recover){
     e.stalkTimer=std::max(0.f,e.stalkTimer-dt);if(e.stalkTimer<=0)e.stalkMode=Enemy::StalkMode::Watch;
     continue;
@@ -351,8 +378,8 @@ void Game::updateEnemies(float dt){
     // still in its hands.
     bool bite=false;for(float at:{Hold-.05f,Hold*.55f,Hold*.15f})bite=bite||(before>at&&e.stalkTimer<=at);
     const bool holding=sameLevel&&dist<range+.35f;
-    if(bite&&holding){if(friendly>=0)damageFriendly(size_t(friendly),Bite,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});else receiveDamage(Bite,e.pos);}
-    if(friendly<0&&holding)m_grabbed=std::max(m_grabbed,std::min(e.stalkTimer,.25f));
+    if(bite&&holding){if(friendly>=0)damageFriendly(size_t(friendly),Bite,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});else if(rival>=0)strikeRival(Bite);else receiveDamage(Bite,e.pos);}
+    if(atPlayer&&holding)m_grabbed=std::max(m_grabbed,std::min(e.stalkTimer,.25f));
     if(lengthSq(to)>.01f)e.heading=std::atan2(to.y,to.x);
     if(e.stalkTimer<=0||!holding){e.stalkMode=Enemy::StalkMode::Watch;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown*.6f);}
     continue;
@@ -370,6 +397,7 @@ void Game::updateEnemies(float dt){
      if(friendly>=0&&friendly==hunterPrey(e))damage=1e4f;
      if(friendly>=0){damageFriendly(size_t(friendly),damage,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});
       const auto&track=m_friendlyActors[size_t(friendly)].track();if(traits.feedSeconds>0&&track.deadState&&state(track.deadState))biteKill(e,size_t(friendly));}
+     else if(rival>=0)strikeRival(damage);
      else receiveDamage(damage,e.pos);
     }
    }continue;
@@ -392,7 +420,7 @@ void Game::updateEnemies(float dt){
   Vec2 playerForward{std::cos(m_player.angle),std::sin(m_player.angle)};
   Vec2 playerToWarden=e.pos-m_player.pos;float playerToWardenDistance=length(playerToWarden);
   bool observed=false;
-  if(stalker&&friendly<0){
+  if(stalker&&atPlayer){
    bool playerLineOfSight=playerToWardenDistance<12.f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.85f);
    float gazePitch=m_player.pitch/140.f,gazeDz=(e.z+.9f)-(m_player.z+m_player.eye),gazeDistance=std::sqrt(playerToWardenDistance*playerToWardenDistance+gazeDz*gazeDz);
    float gazeDot=gazeDistance>.001f?(playerForward.x*std::cos(gazePitch)*playerToWarden.x+playerForward.y*std::cos(gazePitch)*playerToWarden.y+std::sin(gazePitch)*gazeDz)/gazeDistance:1.f;
@@ -427,7 +455,7 @@ void Game::updateEnemies(float dt){
    constexpr float Tell=.65f,Lunge=.45f,Hold=.55f,Sprawl=1.25f,Fade=2.5f,Strike=2.8f;
    Vec2 aim{std::cos(e.heading),std::sin(e.heading)};
    bool struck=e.painFlash>.85f;
-   auto sprawl=[&](float seconds){e.fades=0;e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(friendly<0)m_grabbed=0;};
+   auto sprawl=[&](float seconds){e.fades=0;e.windup=0;e.strike=0;e.stalkMode=Enemy::StalkMode::Recover;e.stalkTimer=seconds;e.attackCooldown=std::max(e.attackCooldown,traits.cooldown);if(atPlayer)m_grabbed=0;};
    if(e.stalkMode==Enemy::StalkMode::Recover){
     e.stalkTimer=std::max(0.f,e.stalkTimer-dt);e.windup=0;e.strike=0;
     e.painFlash=.84f*e.stalkTimer/Sprawl; // plays its stagger through
@@ -461,6 +489,7 @@ void Game::updateEnemies(float dt){
     if(caught){
      e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=Hold;e.attackCooldown=traits.cooldown;enemySound(e,1,.95f,.82f);
      if(friendly>=0)damageFriendly(size_t(friendly),traits.damage,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});
+     else if(rival>=0)strikeRival(traits.damage);
      else if(receiveDamage(traits.damage,e.pos))m_grabbed=Hold;else sprawl(Sprawl);   // a held crate takes the lunge: nothing to hold on to
     }else if(blocked||e.stalkTimer<=0)sprawl(Sprawl);
     continue;
@@ -472,7 +501,7 @@ void Game::updateEnemies(float dt){
     // never drags the player off a ledge or up a step.
     Vec2 back=e.pos-aim*(1.6f*dt);float feet=e.z;
     if(aiWalkSegment(m_world,e.pos,e.z,back,e.hull(),&feet)&&std::fabs(feet-e.z)<=traits.step+.025f){e.pos=back;e.z=feet;}
-    if(friendly<0){m_grabbed=std::max(m_grabbed,e.stalkTimer);
+    if(atPlayer){m_grabbed=std::max(m_grabbed,e.stalkTimer);
      Vec2 haul=e.pos+aim*.95f-m_player.pos;float pull=std::min(length(haul),2.5f*dt);
      if(pull>.001f){Vec2 step=normalized(haul)*pull;if(std::fabs(groundHeight(m_player.pos+step,m_player.z+.215f)-m_player.z)<=.215f)tryMove(step);}}
     if(e.stalkTimer<=0){e.strike=0;e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=Fade;}
@@ -485,7 +514,7 @@ void Game::updateEnemies(float dt){
    if(scheduleStrike&&visible&&sameLevel&&dist<(fading?1.8f:Strike)*e.scale&&e.attackCooldown<=0){
     e.heading=std::atan2(to.y,to.x);e.windup=traits.windup;e.stalkMode=Enemy::StalkMode::Watch;enemySound(e,1,.9f,1.2f);continue;
    }
-   if(friendly<0&&e.awareness>0){
+   if(atPlayer&&e.awareness>0){
     // Seen from a distance, it does not come on: it slips out of sight and
     // comes again from somewhere the player is not looking. Twice; a player
     // who keeps staring it down the third time gets it coming anyway. It picks
@@ -507,7 +536,7 @@ void Game::updateEnemies(float dt){
     stalkSpeed=fading?2.2f:traits.speed;
    }else stalkSpeed=traits.speed;
   }
-  if(stalker&&!snatcher&&friendly<0&&!fleeing){
+  if(stalker&&!snatcher&&atPlayer&&!fleeing){
    e.stalkTimer=std::max(0.f,e.stalkTimer-dt);
    bool flat=std::fabs(e.z-m_player.z)<.23f;
    if(m_world.hasTerrain()&&playerToWardenDistance>.001f){Vec2 probe=e.pos+(m_player.pos-e.pos)*std::min(1.f,1.6f/playerToWardenDistance);flat=roughSegment(m_world,e.pos,e.z,probe,e.hull(),roughStep(e.kind),nullptr,true,e.radius());}
@@ -657,7 +686,7 @@ void Game::updateEnemies(float dt){
     if(ground-e.z>stepHeight+.01f||!aiStructureSegment(m_world,e.pos,e.z,next,height,true,radius)||!hullFits(next,feet,height,radius,false,false))return false;
     auto approaches=[&](Vec2 body,float bodyFeet,float bodyTop,float clearance){return feet<bodyTop&&feet+height>bodyFeet&&lengthSq(next-body)<clearance*clearance&&lengthSq(next-body)+.000001f<lengthSq(e.pos-body);};
     if(approaches(m_player.pos,m_player.z,m_player.z+m_player.hullHeight(),e.contactRadius()+.2f))return false;
-    if(friendly>=0&&approaches(target,targetFeet,targetFeet+targetHull,e.contactRadius()+.2f))return false;
+    if(!atPlayer&&approaches(target,targetFeet,targetFeet+targetHull,e.contactRadius()+.2f))return false;
     for(const auto&other:m_enemies)if(&other!=&e&&other.alive&&approaches(other.pos,other.bodyBottom(),other.bodyTop(),radius+other.radius()))return false;
     e.pos=next;if(followStep||ground>e.z){e.z=ground;e.verticalVelocity=0;}return true;
    };

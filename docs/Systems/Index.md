@@ -14,3 +14,4 @@ aliases: [Systems]
 - [[Systems/windows-compatibility|Windows compatibility]]
 - [[Systems/save-format|Save format]]
 - [[Systems/shipping|Shipping]]
+- [[Systems/console|Developer console]] (summon, allegiances, kill, freeze, ai)
