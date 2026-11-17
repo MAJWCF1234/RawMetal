@@ -1,0 +1,7 @@
+# Plant physbones in the Starter Map's Grove (map 30): a bush near the camera walked through, then shot. Tube: plants.
+world custom "custom maps/Starter Map.rmc"
+map 30
+camera 12 12 -999 90 -8
+size 640 360
+frames 540
+plant-height 0.7 2.2

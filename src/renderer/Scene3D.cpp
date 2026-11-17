@@ -487,6 +487,21 @@ const humanoid::Labels& SoftwareRenderer::humanParts(const Mesh& mesh,int civili
   if(arms[0][0].x>arms[1][0].x)std::swap(arms[0],arms[1]);labels=humanoid::label(mesh.bindTriangles(),&arms);}
  else labels=humanoid::label(mesh.bindTriangles());
  return made.emplace(civilianBody,std::move(labels)).first->second;}
+void SoftwareRenderer::corpseSolids(const Game& game,int level,Point3 centre,float radius,int selfActor,std::vector<Carcass::Solid>& out){
+ const float now=game.elapsed(),reach=radius+1.5f;
+ auto close=[&](Point3 c,float size){return std::fabs(c.x-centre.x)<reach+size&&std::fabs(c.y-centre.y)<reach+size&&std::fabs(c.z-centre.z)<reach+size+1.f;};
+ for(const auto&c:game.chunkClutter(level)){if(c.broken)continue;const auto size=c.size();const float h=c.height();if(std::max(size[0],size[1])<.2f||h<.06f)continue;
+  Carcass::Solid s;s.centre={c.pos.x,c.pos.y,c.z+h*.5f};if(!close(s.centre,std::max(size[0],size[1])))continue;
+  if(std::fabs(c.pitch)+std::fabs(c.roll)<.1f){s.half={size[0]*.5f,size[1]*.5f,h*.5f};s.yaw=c.yaw;}else{const auto e=c.extent();s.half={e[0],e[1],e[2]};}
+  // Its share of a man's 75 kg when it hits him.
+  s.velocity={c.velocity.x,c.velocity.y,c.vz};s.shove=c.mass()/(c.mass()+75.f);out.push_back(s);}
+ // The living move: their velocity is how far they went since last looked at.
+ auto mover=[&](std::uint64_t key,Point3 at){auto&m=m_movers[key];if(m.time>=0&&now>m.time&&now-m.time<.5f)m.velocity=(at-m.at)*(1.f/(now-m.time));else if(now!=m.time)m.velocity={};if(now!=m.time){m.at=at;m.time=now;}return m.velocity;};
+ auto body=[&](std::uint64_t key,Point3 feet,float half,float height,float shove){Carcass::Solid s;s.centre={feet.x,feet.y,feet.z+height*.5f};s.half={half,half,height*.5f};s.velocity=mover(key,s.centre);s.shove=shove;if(close(s.centre,half))out.push_back(s);};
+ {const Vec2 shift=game.chunkOffset(game.level())-game.chunkOffset(level);const Player&p=game.player();body(0,{p.pos.x+shift.x,p.pos.y+shift.y,p.z},.22f,p.hullHeight(),.4f);}
+ {const auto&list=game.chunkEnemies(level);for(size_t i=0;i<list.size();++i){const auto&e=list[i];if(!e.alive)continue;body(1ull<<32|i,{e.pos.x,e.pos.y,e.z},std::max(.15f,e.hull()*.8f),std::max(.3f,e.bodyTop()-e.z),.8f);}}
+ {const auto&men=game.npcActors();for(size_t i=0;i<men.size();++i){const auto&n=men[i];if(int(i)==selfActor||n.level!=level||n.pose.clip==4)continue;body(2ull<<32|i,{n.pose.position.x,n.pose.position.y,n.pose.z},.22f,n.track().scale,.6f);}}
+}
 SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot){
  static const bool enabled=[]{const char* v=std::getenv("RM_RAGDOLL");return !v||v[0]!='0';}();
  if(!enabled||!humanActorVisual(track.visual)||pose.clip!=4||track.platform||track.suspensionTop>pose.z)return nullptr;
@@ -536,12 +551,28 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
   for(auto&face:rig.bind)for(auto&v:face.v)v.p=turn(v.p);rig.forward=turn(rig.forward);
   corpse.carcass.build(posed,w,push,track.scale/1.7f,unsigned(slot*2654435761ull)^unsigned(slot>>32)*40503u^0x2545f491u,.05f,told?&rig:nullptr);
   corpse.live=live;corpse.base=now-(live?age:0.f);
+  // A fall being watched takes the round that killed him (fired the moment he died) on the part it hit,
+  // and every round after; one first seen after it ended takes only rounds from now on.
+  corpse.rayClock=live?corpse.base-.25f:now;corpse.lastSeen=now;
  }
  // A fall still being watched runs on its clock; one first seen after it ended has already ended.
  auto&carcass=corpse.carcass;
  if(live)corpse.base=now-age;
- const float target=live||corpse.live?now-corpse.base:1e4f;
- if(target>=1e3f){for(int guard=0;guard<4&&!carcass.asleep();++guard)carcass.advance(w,carcass.age()+5.f);}
+ const bool clocked=live||corpse.live;
+ {std::vector<Carcass::Solid> solids;corpseSolids(game,level,carcass.centre(),carcass.radius(),actor,solids);carcass.solids(std::move(solids));}
+ // Rounds put into him: each shoves the part it meets, where it meets it (a shotgun's pellets each), at
+ // the moment it was fired. His body is never shot apart.
+ static const bool rounds=[]{const char* v=std::getenv("RM_CORPSE_ROUNDS");return !v||v[0]!='0';}();
+ if(rounds){float newest=corpse.rayClock;const Vec2 here=game.chunkOffset(level);
+  for(const auto&ray:game.shotRays()){if(ray.time<=corpse.rayClock||ray.time>now+.001f)continue;newest=std::max(newest,ray.time);
+   const Vec2 shift=game.chunkOffset(ray.level)-here;const Point3 origin{ray.origin.x+shift.x,ray.origin.y+shift.y,ray.origin.z};
+   if(clocked&&ray.time-corpse.base>carcass.age())carcass.advance(w,ray.time-corpse.base);
+   std::vector<Carcass::Event> events;carcass.strike(Carcass::Ray{origin,ray.direction,ray.range+.5f,ray.damage,ray.impulse,false},events);}
+  corpse.rayClock=newest;}
+ const float frame=std::clamp(now-corpse.lastSeen,0.f,.1f);corpse.lastSeen=now;
+ const float target=clocked?now-corpse.base:1e4f;
+ // First seen after the fall: laid down at once. Once at rest it runs with the frame (a shove wakes it).
+ if(target>=1e3f){if(!carcass.asleep()&&!carcass.shoved()){for(int guard=0;guard<4&&!carcass.asleep();++guard)carcass.advance(w,carcass.age()+5.f);}else carcass.advance(w,carcass.age()+frame);}
  else carcass.advance(w,target);
  // Bodies no longer drawn are let go after a while: the same one is made the same way again.
  if(m_corpses.size()>64)std::erase_if(m_corpses,[&](const auto&entry){return entry.second.seen<now-30.f;});
@@ -1536,6 +1567,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   GpuRenderer::LodTag tag;
   if(impostor){const auto&mesh=m_facilityMeshes[size_t(fixture.model)];float scale=fixture.height/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
    tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
+  // A plant gets its physbones slot: its mesh and its impostor bend in scene.vert.
+  if(m_gpuFrame&&m_gpu&&plantModel(fixture.model))m_gpu->setPlantTag(m_plants.add(w.level(),int(&fixture-w.fixtures().data()),{fixture.position.x,fixture.position.y,base},fixture.height,std::max(fixture.width,fixture.depth)*.5f));
   facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
   if(impostor){
    tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;
@@ -1544,7 +1577,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    MeshVertex a{{x-1,y,z-1},-1,-1},b{{x+1,y,z-1},1,-1},c{{x+1,y,z+1},1,1},d{{x-1,y,z+1},-1,1};
    objectLighting=true;tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;
   }
-  if(m_gpu)m_gpu->setLodTag(nullptr);
+  if(m_gpu){m_gpu->setLodTag(nullptr);m_gpu->setPlantTag(-1);}
  }
  if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
  // A swinging door's posts and head never move, so they bake with the wall they
@@ -3199,6 +3232,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      emitGore(events,ray.time,e,ray.time<=deathMoment+.05f);}
    }
    slot->rayClock=newest;
+   {std::vector<Carcass::Solid> solids;corpseSolids(game,level,carcass.centre(),carcass.radius(),-1,solids);carcass.solids(std::move(solids));}
    carcass.advance(w,e.deathTime);
    if(!slot->pooled&&carcass.age()>=.9f){Point3 c=carcass.centre();slot->pool={c.x,c.y,w.supportBelow(c.x,c.y,c.z+.2f)};slot->pooled=true;}
    if(!sphereVisible(carcass.centre(),carcass.radius()+.25f))continue;

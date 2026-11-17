@@ -16,7 +16,15 @@ namespace retro {
 #define RAWMETAL_CARCASS_RIG 1
 class Carcass {
 public:
- struct Ray {Point3 origin{},direction{};float range=0,damage=0,impulse=0;};
+ // `tear` false: the round shoves and marks the section it meets but never takes it off (a man's body).
+ struct Ray {Point3 origin{},direction{};float range=0,damage=0,impulse=0;bool tear=true;};
+ // Something solid near the body that is not part of the world: a prop, a crate, a bed on wheels, the
+ // player or a creature walking through. A box turned `yaw` about the vertical, `half` its half sizes,
+ // `centre` its middle; `velocity` where it is going, and `shove` how much of its push the body takes
+ // (1 a heavy crate; less for a can or a man wading through). The body lies on its top, is kept out of
+ // its sides, rides along with it, and is woken when it moves into the body.
+ struct Solid {Point3 centre{},half{};float yaw=0;Point3 velocity{};float shove=1;};
+ void solids(std::vector<Solid> list){m_solids=std::move(list);}
  // Blood for the renderer to throw: a hit, or the stump a severed section leaves.
  struct Event {Point3 point{},direction{};float power=1;bool stump=false;};
  // A part's joint to the part it hangs from: how far it bends (radians; + is the way it folds: forward
@@ -44,6 +52,12 @@ public:
  float radius()const{return m_radius;}
  float age()const{return m_age;}
  bool asleep()const{return m_asleep;}
+ // Woken by something moving into it since it first came to rest (its clock then runs with the frame).
+ bool shoved()const{return m_shoved;}
+ // Going to sleep: easing out what settling found (a few frames).
+ bool easing()const{return !m_ease.empty();}
+ // What stepping bodies costs, every body together since the start: steps taken and milliseconds.
+ static long long stepsTaken();static double stepMilliseconds();
  float motion()const{return m_motion;}
  int pieces()const{return m_pieces;}
  int sections()const{return int(m_sections.size());}
@@ -57,7 +71,9 @@ public:
  int partOf(int section)const{return section>=0&&size_t(section)<m_sections.size()?m_sections[size_t(section)].part:-1;}
  static bool test();
 private:
- struct Particle {Point3 x{},previous{},rest{},safe{},probe{};float floor=-100,roof=1e9f;int region=-1;std::uint32_t ignore=0;bool grounded=false,loose=false;};
+ // A hull point (`hull`) is not part of its section's mass: it only keeps the section's outermost skin
+ // (a hand, a heel, the crown) off floors, roofs and props between the cloud's points.
+ struct Particle {Point3 x{},previous{},rest{},safe{},probe{};float floor=-100,roof=1e9f;int region=-1;std::uint32_t ignore=0;bool grounded=false,loose=false,hull=false;};
  struct Section {std::vector<int> members;std::vector<float> weights;Point3 centre{},restCentre{},axes[3]{{1,0,0},{0,1,0},{0,0,1}};float q[4]{1,0,0,0},damage=0;int count=0;
   // Its joint to the section it hangs from, the rotation from the rest pose to the pose it died in,
   // its limits' axes in that rest pose, and the pose its joint died in.
@@ -90,8 +106,10 @@ private:
  bool neighbours(int a,int b)const;
  std::vector<Particle> m_particles;std::vector<Section> m_sections;std::vector<Joint> m_joints;std::vector<Bind> m_binds;
  std::vector<Point3> m_rest,m_posed;std::vector<int> m_corner,m_owner,m_piece;std::vector<Edge> m_edges;std::vector<Loop> m_loops;
- std::vector<MeshTriangle> m_triangles,m_caps;
+ std::vector<MeshTriangle> m_triangles,m_caps;std::vector<Solid> m_solids;
+ // Going to sleep: what settling still has to move each section, eased out over a few frames, not in one.
+ std::vector<Point3> m_ease;void shift(int section,Point3 by);
  Point3 m_centre{};float m_radius=1,m_age=0,m_quiet=0,m_woke=0,m_scale=1,m_size=1,m_motion=0,m_reach=0;
- int m_root=0,m_pieces=1,m_body=0;unsigned m_seed=1;bool m_asleep=false,m_dirty=true,m_rigged=false,m_bodies=false;
+ int m_root=0,m_pieces=1,m_body=0;unsigned m_seed=1;bool m_asleep=false,m_dirty=true,m_rigged=false,m_bodies=false,m_shoved=false;
 };
 }

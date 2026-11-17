@@ -23,7 +23,8 @@ layout(location=6) in vec4 worldNormal;
 layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fogIntensity;vec4 darkness;vec4 fogTone[4];} stereo;
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];} lampGrid;
+// The whole lamp grid as scene.frag reads it, then the plant physbones after it (Foliage.h).
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[262144];vec4 plants[];} lampGrid;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
@@ -58,6 +59,27 @@ vec3 stableUnit(vec3 v){
  float scale=max(max(abs(v.x),abs(v.y)),abs(v.z));
  if(!(scale>0.0)||isinf(scale)||isnan(scale))return vec3(0);
  v/=scale;return v*(1.0/sqrt(dot(v,v)));
+}
+
+// A plant's vertex bent as its two-bone chain is (Foliage.h): weighted by its height over the root (or, on
+// an impostor quad, by how high up the quad it is), the wind's lean and swing for every plant, the
+// chain's own state for those near the eye, a flutter of the leaves, and dropped as it bends so the
+// stem keeps its length.
+vec3 bendPlant(vec3 p,int slot,float fixedWeight){
+ vec4 wind=lampGrid.plants[0];vec4 bone=lampGrid.plants[2+2*slot];vec4 info=lampGrid.plants[3+2*slot];
+ float h=max(info.y,0.05);
+ float w=fixedWeight>=0.0?fixedWeight:clamp((p.z-info.x)/h,0.0,1.0);float w2=w*w;
+ float t=wind.z,ph=float(slot)*2.39996;
+ float f=clamp(1.6/sqrt(h),0.35,2.8)*6.2831853;
+ float strength=length(wind.xy);vec2 along=strength>1.0e-6?wind.xy/strength:vec2(1.0,0.0);
+ // A gust runs across a field as a wave along the wind.
+ float wave=dot(p.xy,along)*0.35;
+ float swing=0.6+0.3*sin(t*f*0.5+ph-wave)+0.25*sin(t*f*1.13+ph*1.7-wave*1.3)*(0.5+wind.w);
+ vec2 sway=wind.xy*(info.z*h)*swing;
+ float flutter=sin(t*11.0+dot(p,vec3(7.1,5.3,3.7)))*0.24*strength*info.z*w;
+ vec2 d=(sway+bone.xy)*w2+bone.zw*w2*w2+vec2(flutter,flutter*0.7);
+ p.xy+=d;p.z-=0.5*dot(d,d)/max(h*w,0.05);
+ return p;
 }
 
 void main(){
@@ -147,6 +169,7 @@ void main(){
    // The real mesh of an impostor model: gone well past its crossfade band.
    collapse=length(position.xyz-view.eyeYaw.xyz)>-worldNormal.w*1.6;
   }
+  if(position.w>1.5)vertexPos=bendPlant(vertexPos,int(position.w-2.0+0.5),worldNormal.w<=-1000.0?uv.y*0.5+0.5:-1.0);
   worldPos=vertexPos;air=surface.x;
   vec3 delta=vertexPos-view.eyeYaw.xyz;
   float right=-delta.x*view.basis.x+delta.y*view.eyeYaw.w;

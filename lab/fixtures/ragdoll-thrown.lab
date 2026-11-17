@@ -1,0 +1,12 @@
+# Dropped dead, then a heavy crate is thrown into him as he lies: he is shoved and settles again. Tube: ragdoll-fall.
+world room
+camera 14.8 15.2 -999 -131 -26
+light 12 12 3.2 1.4 9
+light 9.5 14.5 3 0.9 8
+size 480 270
+frames 420
+kill-frame 12
+scenario a crate thrown into the body
+push 0
+throw 93 3
+throw-from 90

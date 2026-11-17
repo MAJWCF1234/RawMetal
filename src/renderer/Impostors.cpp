@@ -1,5 +1,6 @@
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
+#include "../world/ModelIds.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -25,6 +26,15 @@ std::uint32_t pack(float r,float g,float b,std::uint32_t alpha){
 }
 }
 
+// A plant (physbones, Foliage.h): the purchased grasses, ferns, flowers, bushes and trees, by name, so the
+// answer never waits on a texture being loaded (a static cache is baked once).
+bool SoftwareRenderer::plantModel(int model){
+ if(auto found=m_plantModels.find(model);found!=m_plantModels.end())return found->second;
+ using namespace retro::model;
+ static const int plants[]={dead_tree_a,dead_tree_b,fern_a,fern_big,grass_a,grass_b,grass_c,oak_a,oak_b,oak_c,pine_a,pine_b,sapling,wheat,tall_grass_l,tall_grass_m,grass_l,
+  goldenrod,aster,bracken,sumac,dogbane,clover_patch,creeper,bush_a,bush_b,bush_c,bush_d,grass_patch,grass_bush,leafy_a,leafy_b,aspen_a,aspen_b,lab_potted_plant};
+ const bool plant=std::find(std::begin(plants),std::end(plants),model)!=std::end(plants);
+ m_plantModels[model]=plant;return plant;}
 const SoftwareRenderer::Impostor* SoftwareRenderer::impostorFor(int model){
  auto found=m_impostors.find(model);
  if(found!=m_impostors.end())return found->second.get();

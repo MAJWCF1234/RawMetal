@@ -104,7 +104,7 @@ struct LabAccess {
  static Corpse* trackCorpse(SoftwareRenderer& r,const Game& g,int level,size_t track){const World& w=g.chunkWorld(level);if(track>=w.actorTracks().size())return nullptr;
   return r.humanCorpse(g,w,level,w.actorTracks()[track],w.actorPose(track),-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|track);}
  // Between tubes (and before a determinism repeat): nothing a scene left in the renderer carries over.
- static void resetRenderer(SoftwareRenderer& r){r.m_corpses.clear();r.m_corpseClock=0;r.m_goreBursts.clear();r.forgetScene();}
+ static void resetRenderer(SoftwareRenderer& r){r.m_corpses.clear();r.m_movers.clear();r.m_corpseClock=0;r.m_goreBursts.clear();r.forgetScene();}
  // The men's bodies: 0-5 the civilians (civilianActorBody), 6.. the cleanup crew (cleanupActorBody).
  static Mesh& humanMesh(SoftwareRenderer& r,int i){return i<6?r.civilianMesh(i):*r.cleanupMeshes()[size_t(i-6)];}
  static int humanMeshes(){return 6+int(kCleanupBodies);}
@@ -113,6 +113,9 @@ struct LabAccess {
  static std::vector<MeshTriangle> creatureCorpseMesh(SoftwareRenderer& r,const Enemy& e){std::vector<MeshTriangle> out;r.poseCreatureMesh(e,0,true,out);return out;}
  static const humanoid::Labels& humanParts(SoftwareRenderer& r,int i){return SoftwareRenderer::humanParts(humanMesh(r,i),i<6?i:-1-(i-6));}
  static Point3 cameraPoint(const SoftwareRenderer& r,Point3 p){return r.cameraPoint(p,r.m_view);}
+ // Plant physbones (tubes/Plants.cpp).
+ static PlantBones& plants(SoftwareRenderer& r){return r.m_plants;}
+ static bool plantModel(SoftwareRenderer& r,int model){return r.plantModel(model);}
  static const Player& view(const SoftwareRenderer& r){return r.m_view;}
  // The sheet a shard is drawn with, and the sheets its sources are drawn with (Scene3D: a 'B' tile, a
  // 'C' tile, an intact breakable of `material`, a facility model).
