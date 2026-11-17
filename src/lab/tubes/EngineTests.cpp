@@ -17,6 +17,7 @@ const bool registered=[]{
  engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
+ engine("map-format","--each-test=map-format: named fields, names, overrides, prefabs, properties, FORMAT 2",&Game::testMapFormat);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);

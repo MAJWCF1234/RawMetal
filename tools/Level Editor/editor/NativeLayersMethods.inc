@@ -146,7 +146,7 @@
       if(mapped!=layerMap.end())owner=mapped->second;
       else if(!layerMap.empty()){int original=layerMap.begin()->first;float height=0;if(auto box=creationBox(NativeDocument::fields(doc.lines[i])))height=box->bottom;
         for(const auto& [source,target]:layerMap)if(floorLayer(source).elevation<=height+.04f)original=source;owner=layerMap.at(original);}
-      copyFloors.push_back(owner<0?layer:owner);copyAutomatic.push_back(!layerMap.empty()&&doc.automatic(i));copies.push_back(std::move(f));
+      copyFloors.push_back(owner<0?layer:owner);copyAutomatic.push_back(!layerMap.empty()&&doc.automatic(i));copies.push_back(NativeDocument::withNamed(std::move(f),doc.lines[i]));
     }
     std::vector<size_t> result;
     for(size_t i=0;i<copies.size();++i){auto& f=copies[i];if(copyAutomatic[i])doc.addAutomatic(f,copyFloors[i]);else doc.addOnLayer(f,copyFloors[i]);result.push_back(doc.records(f[0],map).back());}

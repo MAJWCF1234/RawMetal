@@ -32,7 +32,10 @@ struct SoftPad {
  // The pressed surface's world normal at a mesh point (straight up where it lies flat).
  Point3 normalMesh(float mx,float mz)const;
 };
+struct Clutter;
 namespace soft {
 bool isSoft(int model);
+// A prop: its model's softness, unless its CLUTTER record says soft=0 (map format 2).
+bool isSoft(const Clutter& c);
 }
 }

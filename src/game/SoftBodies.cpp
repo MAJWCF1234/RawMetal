@@ -6,6 +6,7 @@
 namespace retro {
 namespace soft {
 bool isSoft(int model){return model>=0&&model<int(std::size(model::soft))&&model::soft[model][1]>0;}
+bool isSoft(const Clutter& c){return !(c.traits&&c.traits->soft==0)&&isSoft(c.model);}
 }
 float SoftPad::depthMesh(float mx,float mz)const{
  if(nx<2||ny<2)return 0;const float w=rect[1]-rect[0],h=rect[3]-rect[2];if(w<=0||h<=0)return 0;
@@ -54,7 +55,7 @@ void allocate(SoftPad& p,const World& w){
 float falloff(float q){if(q>=1)return 0;const float a=1-q*q;return a*a;}
 }
 float Game::softGive(const Clutter& c){
- if(!soft::isSoft(c.model)||c.broken||std::fabs(c.pitch)+std::fabs(c.roll)>.1f)return 0;const auto& own=model::propSize[c.model];if(own[2]<=0)return 0;
+ if(!soft::isSoft(c)||c.broken||std::fabs(c.pitch)+std::fabs(c.roll)>.1f)return 0;const auto& own=model::propSize[c.model];if(own[2]<=0)return 0;
  const auto& k=model::soft[c.model];const float up=c.dims[2]/own[2];return c.height()-k[0]*up+k[1]*up+.01f;
 }
 const SoftPad* Game::softPad(int level,int fixture,int clutter)const{
@@ -68,7 +69,7 @@ float Game::softGround(Vec2 p,float feet,float height,float radius)const{
  // A pad under a fixture's padding presses the floor it gives.
  {auto local=p;const auto& w=worldAt(local);height-=softSinkAt(w.level(),local,height);}
  // A soft prop on the floor is walked on (stepped up onto from its edge, as a hull's corner first finds it): its pressed top.
- for(int i=0;i<int(m_clutter.size());++i){const auto& c=m_clutter[size_t(i)];if(!soft::isSoft(c.model)||c.broken)continue;
+ for(int i=0;i<int(m_clutter.size());++i){const auto& c=m_clutter[size_t(i)];if(!soft::isSoft(c)||c.broken)continue;
   SoftPad frame;if(!frameClutter(c,frame)||frame.top>feet+.025f)continue;const auto* pad=softPad(m_level,-1,i);
   for(Vec2 o:{Vec2{0,0},Vec2{-radius,-radius},Vec2{radius,-radius},Vec2{-radius,radius},Vec2{radius,radius}}){const Vec2 q=p+o;if(!frame.covers(q))continue;
    height=std::max(height,frame.top-(pad?std::max(0.f,pad->depthAt(q)):0.f));}}
@@ -147,7 +148,7 @@ void Game::updateSoftBodies(float dt){
  };
  const auto& fixtures=w.fixtures();
  for(int i=0;i<int(fixtures.size());++i){const auto& f=fixtures[size_t(i)];if(!f.visible||!soft::isSoft(f.model)||lengthSq(f.position-player)>range*range)continue;SoftPad frame;if(frameFixture(w,f,frame))run(frame,i,-1);}
- for(int i=0;i<int(m_clutter.size());++i){const auto& c=m_clutter[size_t(i)];if(!soft::isSoft(c.model)||lengthSq(c.pos-player)>range*range)continue;SoftPad frame;if(frameClutter(c,frame))run(frame,-1,i);}
+ for(int i=0;i<int(m_clutter.size());++i){const auto& c=m_clutter[size_t(i)];if(!soft::isSoft(c)||lengthSq(c.pos-player)>range*range)continue;SoftPad frame;if(frameClutter(c,frame))run(frame,-1,i);}
  std::erase_if(m_softPads,[](const SoftPad& p){return p.quiet<0;});
 }
 }

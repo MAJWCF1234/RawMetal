@@ -53,18 +53,11 @@ const SummonKind* summonKind(const std::string& word){
  std::string w=word;if(w.size()>3&&w.back()=='s'&&w!="heavy")w.pop_back(); // "guards", "huntsmen" stays as typed
  if(w=="huntsmen")w="huntsman";
  for(const auto&k:SummonKinds)if(w==k.word)return &k;return nullptr;}
-const char* factionName(AiFaction f){
- switch(f){case AiFaction::Player:return "PLAYER";case AiFaction::Facility:return "ALLY";case AiFaction::Creature:return "CREATURE";
-  case AiFaction::Raider:return "ENEMY";case AiFaction::Neutral:return "NEUTRAL";case AiFaction::Wary:return "WARY";default:return "UNSET";}}
-bool parseFaction(const std::string& v,bool creature,AiFaction& out){
- if(v=="ally"||v=="facility"||v=="friend"){out=AiFaction::Facility;return true;}
- if(v=="enemy"||v=="hostile"){out=creature?AiFaction::Creature:AiFaction::Raider;return true;}
- if(v=="neutral"){out=AiFaction::Neutral;return true;}if(v=="player"){out=AiFaction::Player;return true;}
- if(v=="creature"){out=AiFaction::Creature;return true;}if(v=="raider"){out=AiFaction::Raider;return true;}
- if(v=="wary"||v=="truce"){out=AiFaction::Wary;return true;}return false;}
+// The words are the map format's too (world/EntityTraits.h): an authored body takes the same traits.
+const char* factionName(AiFaction f){return factionWord(f);}
+bool parseFaction(const std::string& v,bool creature,AiFaction& out){return parseFactionWord(v,creature,out);}
 constexpr const char* OrderNames[]={"IDLE","PATROL","WANDER","GUARD","HUNT","FOLLOW"};
-bool parseOrder(const std::string& v,int& out){
- for(int i=0;i<6;++i){std::string n=OrderNames[i];for(auto&c:n)c=char(std::tolower(static_cast<unsigned char>(c)));if(v==n){out=i;return true;}}return false;}
+bool parseOrder(const std::string& v,int& out){return parseOrderWord(v,out);}
 std::string upper(std::string s){for(auto&c:s)c=char(std::toupper(static_cast<unsigned char>(c)));return s;}
 std::string fixed1(float v){char b[24];std::snprintf(b,sizeof b,"%.1f",double(v));return b;}
 // A repeatable scatter (no rand(): the lab replays every tube twice and wants the same frames).
@@ -102,8 +95,7 @@ int Game::summon(const std::string& word,int count,const std::string& options,st
   else if(key=="ai"||key=="order"){int o=0;if(parseOrder(value,o))order=SummonOrder(o);else{error="AI IS IDLE, PATROL, WANDER, GUARD, HUNT OR FOLLOW.";return 0;}}
   else if(key=="hp"||key=="health"){hp=std::strtof(value.c_str(),nullptr);if(!(hp>0&&hp<=100000)){error="HP IS A NUMBER ABOVE 0.";return 0;}}
   else if(key=="scale"){scale=std::strtof(value.c_str(),nullptr);if(!(scale>=.25f&&scale<=4)){error="SCALE IS 0.25 TO 4.";return 0;}}
-  else if(key=="weapon"){if(value=="rifle"||value=="shotgun"||value=="1")weapon=1;else if(value=="handgun"||value=="pistol"||value=="2")weapon=2;else if(value=="none"||value=="unarmed"||value=="0")weapon=0;
-   else{error="WEAPON IS RIFLE, HANDGUN OR NONE.";return 0;}}
+  else if(key=="weapon"){if(!parseWeaponWord(value,weapon)){error="WEAPON IS RIFLE, HANDGUN OR NONE.";return 0;}}
   else if(key=="name"){name=value;}
   else{error="UNKNOWN OPTION "+upper(key)+".";return 0;}}
  if(kind->creature&&m_peaceful){error="DEVELOPER MODE SPAWNS NO CREATURES. TYPE DEV TO LEAVE IT.";return 0;}
@@ -220,7 +212,7 @@ void Game::updateSummons(float dt){
    if(factionsHostile(side,npcFaction(t)))take(n.pose.position,n.pose.z);}
   for(const auto&o:m_enemies)if(o.alive&&!o.sleeping()&&factionsHostile(side,o.faction))take(o.pos,o.z);
   return found;};
- for(auto&e:m_enemies){if(!e.summon||!e.alive||e.frozen||e.arrive>0)continue;e.orderClock-=dt;
+ for(auto&e:m_enemies){if((!e.summon&&!e.ordered)||!e.alive||e.frozen||e.arrive>0)continue;e.orderClock-=dt;
   const auto order=SummonOrder(e.order);const bool unaware=e.awareness<=0;
   if(order==SummonOrder::Patrol&&unaware&&lengthSq(e.pos-e.home)<.36f){const bool out=lengthSq(e.home-e.anchor)<.01f;e.home=out?e.patrolTo:e.anchor;e.homeZ=out?e.patrolToZ:e.anchorZ;}
   else if(order==SummonOrder::Wander&&unaware&&(lengthSq(e.pos-e.home)<.36f||e.orderClock<=0)){e.orderClock=8.f;
@@ -285,7 +277,7 @@ bool Game::consoleSummonCommand(const std::string& command){
  auto say=[&](const std::string& line){m_consoleLog.push_back(upper(line));};
  auto rest=[&]{std::string r;std::getline(in,r);return r;};
  auto enemyAt=[&](const AiTargetRef& r)->Enemy*{if(r.kind!=ShotKind::Enemy||r.level<0||r.level>=chunkCount())return nullptr;auto&l=r.level==m_level?m_enemies:m_chunks[size_t(r.level)].enemies;return r.index>=0&&size_t(r.index)<l.size()?&l[size_t(r.index)]:nullptr;};
- auto label=[&](const AiTargetRef& r)->std::string{if(auto*e=enemyAt(r))return e->name();if(r.kind==ShotKind::Npc){const auto&t=m_friendlyActors[size_t(r.index)].track();return t.ai.mode==ActorAiMode::Guard?guardRoleProfile(t.ai.role).name:"CIVILIAN";}return "NOTHING";};
+ auto label=[&](const AiTargetRef& r)->std::string{if(auto*e=enemyAt(r))return e->name();if(r.kind==ShotKind::Npc){const auto&t=m_friendlyActors[size_t(r.index)].track();if(t.traits&&!t.traits->display.empty())return t.traits->display;return t.ai.mode==ActorAiMode::Guard?guardRoleProfile(t.ai.role).name:"CIVILIAN";}return "NOTHING";};
  auto killEnemy=[&](Enemy& e,int level){if(!e.alive)return false;if(e.hunter&&!e.summon){vanishHunter(e);return true;}e.hunter=0;applyEnemyDamage(e,1e7f,true,false,level);return true;};
  auto killNpc=[&](size_t i){const auto&t=m_friendlyActors[i].track();if(!t.health||(t.deadState&&state(t.deadState))||m_friendlyActors[i].pose.clip==4)return false;damageFriendly(i,1e6f,m_friendlyActors[i].pose.position);return true;};
  if(verb=="help"){in>>arg;if(arg!="summon"&&arg!="summons")return false;

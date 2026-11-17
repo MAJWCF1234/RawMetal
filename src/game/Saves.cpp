@@ -376,6 +376,9 @@ namespace {
 bool storeName(std::string_view name){return !name.empty()&&name.size()<=SaveStore::MaxName&&std::none_of(name.begin(),name.end(),[](char c){return static_cast<unsigned char>(c)<32;});}
 bool storeValue(const SaveValue& value){if(auto* d=std::get_if<double>(&value))return std::isfinite(*d);if(auto* s=std::get_if<std::string>(&value))return s->size()<=SaveStore::MaxText;return true;}
 }
+// A save in an older positional format (1..LegacySaveVersion), as that build wrote it: for tests
+// that an old save still loads (MapFormatTest.cpp).
+std::string Game::legacySaveText(int version){storeChunk();Writer writer;archiveSave(writer,version);auto payload=writer.stream.str();return "RAWMETAL_SAVE "+std::to_string(version)+" "+std::to_string(checksum(payload))+"\n"+payload;}
 bool Game::setEntityProperty(int chunk,std::string_view entity,std::string_view property,SaveValue value){
  if(chunk<-1||chunk>=MaxChunks||!storeName(entity)||!storeName(property)||!storeValue(value))return false;
  auto& store=m_saveStore.entities;auto at=store.find(SaveStore::Key{chunk,std::string(entity)});
@@ -516,6 +519,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
     int match=-1;for(int i=0;i<int(oldEnemies.size());++i)if(!enemyUsed[i]&&!oldEnemies[i].scriptSpawned&&oldEnemies[i].originLevel<0&&oldEnemies[i].kind==spawn.kind&&samePosition(oldEnemies[i].home,spawn.home)){match=i;break;}
     if(match>=0){enemyUsed[match]=true;auto state=oldEnemies[match];state.maxHp=spawn.maxHp;state.scale=spawn.scale;state.hunter=spawn.hunter;state.prey=spawn.prey;if(state.alive)state.hp=std::min(state.hp,state.maxHp);
      if(state.homeZ<=-999)state.homeZ=spawn.homeZ;
+     state.adoptTraits(spawn); // map format 2 overrides are the map's, not the save's
      // Saves before dormancy kept no wake state: an untouched creature sleeps again.
      if(version<15&&state.alive&&state.hp>=state.maxHp&&state.awareness<=0)state.wakeState=spawn.wakeState;
      saved.enemies.push_back(state);}
@@ -541,7 +545,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
    if(version>=8){
     int held=level==next.m_level?next.m_heldClutter:-1,newHeld=-1;std::vector<Clutter> reconciled;
     for(int i=0;i<int(saved.clutter.size());++i){auto c=saved.clutter[i];bool keep=c.model<0||!c.authored||i==held;
-     if(c.model>=0&&c.authored)if(const auto*spawn=freshProp(c)){c.breakState=spawn->breakState;keep=true;}
+     if(c.model>=0&&c.authored)if(const auto*spawn=freshProp(c)){c.breakState=spawn->breakState;c.traits=spawn->traits;keep=true;}
      if(keep){if(i==held)newHeld=int(reconciled.size());reconciled.push_back(c);}
     }
     for(const auto&spawn:fresh.clutter)if(spawn.model>=0&&!hadSavedProp(spawn))reconciled.push_back(spawn);

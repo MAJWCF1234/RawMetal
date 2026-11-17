@@ -12,11 +12,16 @@ Vec2 halfIn(const Clutter& box,const Clutter& item){const auto s=item.size();con
 Vec2 toLocal(const Clutter& box,Vec2 p){const Vec2 d=p-box.pos;const float co=std::cos(box.yaw),si=std::sin(box.yaw);return {d.x*co+d.y*si,-d.x*si+d.y*co};}
 Vec2 toWorld(const Clutter& box,Vec2 l){const float co=std::cos(box.yaw),si=std::sin(box.yaw);return box.pos+Vec2{l.x*co-l.y*si,l.x*si+l.y*co};}
 }
-bool isContainer(const Clutter& c){return c.model>=0&&c.model<int(std::size(model::container))&&model::container[c.model][1]>0;}
+bool isContainer(const Clutter& c){if(c.traits&&c.traits->volume>=0)return c.model>=0&&c.traits->volume>0;return c.model>=0&&c.model<int(std::size(model::container))&&model::container[c.model][1]>0;}
 Inner inner(const Clutter& c){
- const auto& k=model::container[c.model];const auto s=c.size();const auto& own=model::propSize[c.model];
- auto scale=[&](int a){return own[a]>0?s[size_t(a)]/own[a]:1.f;};
- Inner in;in.floor=k[0]*scale(2);in.rim=k[1]*scale(2);in.halfX=std::max(.01f,s[0]*.5f-k[2]*scale(0));in.halfY=std::max(.01f,s[1]*.5f-k[2]*scale(1));
+ const auto s=c.size();Inner in;
+ const bool modelled=c.model>=0&&c.model<int(std::size(model::container))&&model::container[c.model][1]>0;
+ if(modelled){const auto& k=model::container[c.model];const auto& own=model::propSize[c.model];
+  auto scale=[&](int a){return own[a]>0?s[size_t(a)]/own[a]:1.f;};
+  in.floor=k[0]*scale(2);in.rim=k[1]*scale(2);in.halfX=std::max(.01f,s[0]*.5f-k[2]*scale(0));in.halfY=std::max(.01f,s[1]*.5f-k[2]*scale(1));}
+ else{in.floor=.02f;in.rim=s[2];in.halfX=std::max(.01f,s[0]*.5f-.02f);in.halfY=std::max(.01f,s[1]*.5f-.02f);}
+ // Map format 2 volume= (litres): the rim stands where the opening holds that much.
+ if(c.traits&&c.traits->volume>0)in.rim=std::clamp(in.floor+c.traits->volume*.001f/(4*in.halfX*in.halfY),in.floor+.02f,std::max(in.floor+.02f,s[2]));
  in.spill=std::clamp(std::atan2(in.rim-in.floor,2*std::min(in.halfX,in.halfY)),.21f,.87f);   // 12 to 50 degrees
  return in;
 }

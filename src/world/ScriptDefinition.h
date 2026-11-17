@@ -9,7 +9,9 @@
 #include <charconv>
 #include <cstring>
 #include <limits>
+#include <memory>
 namespace retro {
+struct EntityTraits;
 using StateId=std::uint32_t;
 constexpr StateId stateId(std::string_view value){StateId hash=2166136261u;for(char c:value){hash^=static_cast<unsigned char>(c);hash*=16777619u;}hash&=0x7fffffu;return hash?hash:1u;}
 enum class ObjectiveStatus { Hidden, Active, Complete, Failed };
@@ -99,6 +101,8 @@ struct ActorTrack {
  int voice=0;
  // The dialogue node E opens on this actor (Map::dialogue); 0: nothing to say.
  StateId talk=0;
+ // Map format 2 overrides (EntityTraits.h): the played map has them applied.
+ std::shared_ptr<const EntityTraits> traits;
 };
 // Dialogue: a line from the speaker and the player's replies. A reply shows
 // while `require` holds at least requireValue and `hide` is unset; picking it
