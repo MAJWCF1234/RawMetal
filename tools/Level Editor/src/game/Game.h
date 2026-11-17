@@ -30,6 +30,7 @@
 #include <cstdint>
 #include "Ragdoll.h"
 #include "Electricity.h"
+#include "SoftBodies.h"
 
 namespace retro {
 // Bumped once per chunk built while a save loads on a worker thread, so the
@@ -157,6 +158,13 @@ struct Enemy {
     // A kind that stands dead until woken (CreatureTraits::dormant) keeps its wake state set while it sleeps.
     bool sleeping()const{return alive&&wakeState!=0&&creatureTraits(kind).dormant;}
     const char* name()const{return creatureTraits(kind).name;}
+    // Who it fights as (factionsHostile): every authored and scripted creature is a
+    // Creature. A console summon (Summon.cpp) may be anything; its serial (0: not a
+    // summon), the standing order it keeps with nothing to fight (SummonOrder),
+    // where that order is anchored, and whether the console holds it still. None
+    // of this is saved: a save leaves summons out (they are transient).
+    AiFaction faction=AiFaction::Creature;std::uint32_t summon=0;std::uint8_t order=0;bool frozen=false;
+    Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,orderClock=0,fleeClock=0;
 };
 
 struct Pickup {
@@ -184,7 +192,12 @@ struct FriendlyActor {
  // Keep the immutable track alive when its home chunk releases geometry.
  int homeLevel=0,level=0;size_t homeActor=0;ActorPose pose{};
  std::shared_ptr<const AuthoredMapData> definition;
- const ActorTrack& track()const{return definition->actorTracks.at(homeActor);}
+ // A console summon (Summon.cpp): its serial, its track the only one in its own
+ // definition, its homeActor SummonActorBase+serial so no authored (level, actor)
+ // identity ever matches it, and no home world pose to write back. Not saved.
+ std::uint32_t summon=0;bool frozen=false;
+ static constexpr size_t SummonActorBase=size_t(1)<<24;
+ const ActorTrack& track()const{return definition->actorTracks.at(summon?0:homeActor);}
 };
 // A Cleanup man on the patched-through yard cameras: where he stands in the
 // current chunk, which way he looks, how far he sees and how wide (cone is the
@@ -200,7 +213,12 @@ struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impuls
 // dust and chips from masonry, splinters from wood, clods from earth. Level-local. floor: where
 // what it throws comes to rest; reach: how far along `direction` before a wall stops it.
 struct HitBurst {Point3 point{},direction{};float time=0;int level=0;ImpactMaterial material=ImpactMaterial::Concrete;int species=-1;float power=1;bool kill=false;float floor=0,reach=9;bool stump=false;};
-struct WaterSplash {Point3 point{},direction{};float time=0;int level=0;float power=1;};
+// Something meeting standing water (WaterFx.cpp): a round, a thing or a body falling in, a step, a
+// wake. Its splash (Particles) and its rings on the surface (WaterRipples) scale with power (a round
+// .65-1.5; a fall by the root of its energy, .25-3). A splash due later (a body collapsing) is not
+// yet sounded; Game::updateWater raises its sound when its time comes.
+enum class WaterSplashKind:int {Shot,Entry,Step,Wake,Body};
+struct WaterSplash {Point3 point{},direction{};float time=0;int level=0;float power=1;WaterSplashKind kind=WaterSplashKind::Shot;bool sounded=true;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
 // model: the facility model that broke (its chips take its own sheet), or -1.
@@ -208,13 +226,18 @@ struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int leve
 // What a shard (clutter kind 6) was broken from, so it is drawn as a piece of that thing: a crate's
 // splinter (the old look), an eighth of an exploded barrel's hull, a chunk of a drop-ceiling tile, or
 // an eighth of a broken prop or fixture part cut from its own mesh with its own sheet.
-enum class ShardOf:int {Crate,Barrel,Ceiling,Model,Count};
+// Glass: a piece of a pane (GlassFracture.h), a thin sheet whose outline its piece number picks.
+enum class ShardOf:int {Crate,Barrel,Ceiling,Model,Glass,Count};
 // The drawn size of a 'B' barrel (Scene3D draws it 1.1 m tall in a .94 m footprint): its shards are eighths of it.
 inline constexpr std::array<float,3> kBarrelSize{.74f,.74f,1.1f};
 // Where a pane gave way and which way the blow came from, so its shards fall
 // from the hole and lie where they landed. Not saved: a reloaded pane breaks
 // about its centre.
 struct GlassBreak {int level=0,index=0;Point3 at{},direction{};};
+// What struck a pane (Game::damagePane): a round holes it where it hits; a fist punches a
+// fist-sized hole; a prop (radius: its own) punches a hole its size once the blow beats the
+// glass there; a body coming through, or a blast, takes the whole pane.
+struct PaneBlow {enum Kind {Round,Fist,Prop,Body,Blast};Kind kind=Round;float radius=-1;};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
@@ -226,6 +249,8 @@ struct Clutter {
  float tipTime=0;
  // Separate from sound throttling: a resting body contact must not deal repeated damage.
  float bodyImpactCooldown=0;
+ // Carried along in a moving container this step (Containers.h): the solver leaves it be (not saved).
+ bool riding=false;
  // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
@@ -344,6 +369,7 @@ public:
     bool noclip()const{return m_noclip;}
     void setNoclip(bool on);
     static bool testNoclip(std::ostream& report);
+    static bool testSummon(std::ostream& report);
     void setDeveloperMode(bool on){m_god=m_peaceful=m_unlockAll=on;if(on){m_player.health=std::max(m_player.health,100.f);m_enemies.clear();}}
     bool developerMode()const{return m_unlockAll;}
     bool reloading()const{return m_reloadTimer>0;}
@@ -364,6 +390,13 @@ public:
     const std::vector<Enemy>& chunkEnemies(int level)const{return level==m_level?m_enemies:m_chunks.at(size_t(level)).enemies;}
     const std::vector<Pickup>& chunkPickups(int level)const{return level==m_level?m_pickups:m_chunks.at(size_t(level)).pickups;}
     const std::vector<Clutter>& chunkClutter(int level)const{return level==m_level?m_clutter:m_chunks.at(size_t(level)).clutter;}
+    // Soft padding (SoftBodies.cpp): the awake pad of a fixture or a prop (one of the two, the other -1),
+    // and how far an awake pad covering p with its top within 3 cm of `surface` is pressed down there.
+    const SoftPad* softPad(int level,int fixture,int clutter)const;
+    float softSinkAt(int level,Vec2 p,float surface)const;
+    const std::vector<SoftPad>& softPads()const{return m_softPads;}
+    // How far below its top a soft prop gives (0 if it is hard): a body standing that deep in it is on it.
+    static float softGive(const Clutter& c);
     const World& worldAt(Vec2& local)const;
     bool hearingRayClear(Vec2 from,float fromZ,Vec2 to,float toZ)const;
     bool soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim=0,float farTrim=0)const;
@@ -686,7 +719,7 @@ public:
     // clutter; an older build would draw them twice (its fixed chair and the saved loose one), so
     // it refuses a 26. Older saves load here: the props they lack come back where they were put.
     // docs/Systems/save-format.md keeps the whole history.
-    static constexpr int SaveVersion=26;
+    static constexpr int SaveVersion=27;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1109,6 +1142,25 @@ private:
     void syncReactorComplex();
     void updateConsole(const InputState& input);
     void executeConsole(std::string command);
+    // Console summons (Summon.cpp, docs/console.md): creatures, Cleanup men and
+    // civilians placed in front of the player with an allegiance and an order.
+    // Transient: encodeSave leaves them, their states and their keys out.
+    enum class SummonOrder:std::uint8_t {Idle,Patrol,Wander,Guard,Hunt,Follow};
+    struct SummonRecord {std::uint32_t serial=0;std::string name,kind;bool creature=true;SummonOrder order=SummonOrder::Idle;
+     std::shared_ptr<AuthoredMapData> map;Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,clock=0;int level=0,leg=0;};
+    std::vector<SummonRecord> m_summons;std::uint32_t m_summonSerial=0;
+    // Every state a summoned man's AI has touched (friendlyKey), for encodeSave to drop.
+    mutable std::unordered_map<StateId,char> m_summonKeys;
+    // `ai off`: no creature or NPC thinks. Per-actor allegiance from `ally`/`enemy`
+    // on an authored man (summons carry their own). Neither is saved.
+    bool m_aiOff=false;std::vector<std::pair<const ActorTrack*,AiFaction>> m_factionOverrides;
+    bool consoleSummonCommand(const std::string& command);
+    int summon(const std::string& kind,int count,const std::string& options,std::string& error);
+    bool summonSpot(Vec2& at,float& z,float hull,float radius,const std::vector<Vec2>& taken)const;
+    AiTargetRef aimedEntity(float range=40.f)const;
+    void updateSummons(float dt);
+    bool summonFlight(Enemy& e,Vec2& goal,float& goalZ,float dt);
+    void stripSummons();
     bool m_consoleOpen=false,m_previousConsole=false,m_consoleUp=false,m_consoleDown=false,m_showFps=false,m_god=false,m_peaceful=false,m_unlockAll=false,m_noclip=false;
     std::string m_consoleLine;
     std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
@@ -1203,10 +1255,23 @@ private:
     static constexpr float LeadShock=6.f;
     // What a carried prop that will not break absorbs before a blow tears it out of the hands.
     static constexpr float ShieldKnockAway=60.f;
-    bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
+    bool damagePane(int level,int index,float amount,Point3 at,Point3 direction,PaneBlow blow={});
+    // The glass (GlassPanes.cpp): what a blow does to a pane that stays up (0 a crack, 1 a hole,
+    // 2 it comes down), the resistance left at a point (what a prop's blow must beat there), the
+    // shards a blow or a fall lets go, a shard landing hard, and bodies and feet meeting glass.
+    int glassBlow(int level,int index,float amount,Point3 at,Point3 direction,PaneBlow blow);
+    float paneResistance(int level,int index,Point3 at)const;
+    void dropGlassPieces(int level,int index,const std::vector<glass::Piece>& pieces,Point3 direction,float blowRadius,bool blownProps);
+    void dropCollapsedPane(int level,int index,Point3 at,Point3 direction);
+    void crackGlassShard(int level,size_t index,float speed);
+    void updateGlass(float dt);
+    float m_glassCrunchWalked=0,m_glassBodyRearm=0;Vec2 m_glassCrunchLast{};
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
+    void updateSoftBodies(float dt);
+    // The player on a soft prop (a floor mattress, a bedroll): its pressed top under p, or `height`.
+    float softGround(Vec2 p,float feet,float height,float radius)const;
     void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);
     void breakClutter(int level,size_t index,Point3 direction);
@@ -1438,9 +1503,19 @@ private:
     std::vector<AiStimulus> m_guardShots;
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
+    std::vector<SoftPad> m_softPads;int m_softLevel=-1;bool m_softGrounded=true;float m_softAirSpeed=0;
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<ShotRay> m_shotRays;std::vector<HitBurst> m_hitBursts;
     std::vector<WaterSplash> m_waterSplashes;
+    // Water (WaterFx.cpp), runtime only: the player's feet a frame ago (a fall into water), the way
+    // waded since the last wake, the sounds already looked at for steps in water, and which
+    // creatures and people were already down (a body falls into the water once).
+    float m_waterFeet=-1e9f,m_wakeWay=0;size_t m_waterSoundsSeen=0;std::vector<char> m_waterNpcDown;std::vector<int> m_waterDeaths;
+    // A splash where something meets the water: level-local point on the surface; its sound (and
+    // the AI's hearing of it) now, or when a later `time` comes.
+    void raiseWaterSplash(int level,Point3 point,Point3 direction,float power,WaterSplashKind kind,float delay=0);
+    // Steps, wakes and falls into water; `bodies` the pass after the creatures moved (Game::update).
+    void updateWater(float dt,bool bodies);
     // point and direction level-local to `level`.
     void hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial material,int species,float power,bool kill);
     std::vector<BarrelExplosion> m_barrelExplosions;

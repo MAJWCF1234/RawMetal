@@ -382,7 +382,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
- m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);
+ m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);m_paneGlass.assign(breakables().size(),{});
  m_leadRopes.assign(leads().size(),{});for(size_t i=0;i<m_leadRopes.size();++i)m_leadRopes[i].torn=leads()[i].loose;
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
@@ -1400,11 +1400,17 @@ float World::supportBelow(float x,float y,float feet,bool cavities)const{
  if(batch)batch->store(CollisionQueryBatch::SupportBelow,x,y,feet,0,0,value);
  return value;
 }
+// A padded fixture (a ward bed, a couch: model::soft) is solid to its padding's top over the padding's
+// rect and to its full height round it, for props and bodies alike: one stands on the mattress, not
+// on the bed's bounding box.
+static bool paddedFixture(int model){return model>=0&&model<int(std::size(model::soft))&&model::soft[model][1]>0;}
 float World::supportBelowUncached(float x,float y,float feet,bool cavities)const{
  float fixtureTop=-100;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y,cavities?.001f:0)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
   if(cavities){fixtureTop=std::max(fixtureTop,fixtureSurface(f,x,y,feet,false));continue;}
+  // Padded: its padding's top (or its full height round it) holds what is up at or over it.
+  if(paddedFixture(f.model)){const float top=fixtureSurface(f,x,y,feet,false);if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);continue;}
   if(f.model==7)for(float tier:ShelfTiers){float top=base+f.height*tier;if(top<=feet+.025f)fixtureTop=std::max(fixtureTop,top);}
   else if(base+f.height<=feet+.025f)fixtureTop=std::max(fixtureTop,base+f.height);
  }}
@@ -1419,7 +1425,7 @@ float World::supportBelowUncached(float x,float y,float feet,bool cavities)const
  if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z+c.size<=feet+.025f)result=std::max(result,c.z+c.size);
  for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<=t.footprint.x*.5f&&std::fabs(y-p.position.y)<=t.footprint.y*.5f&&p.z<=feet+.025f)result=std::max(result,p.z);}
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f&&!paneColumnOpen(index,x,y,s.bottom,s.top-s.bottom))result=std::max(result,s.top);}
  return result;
 }
 float World::structureSupportBelow(float x,float y,float radius,float feet)const{
@@ -1447,7 +1453,7 @@ float World::clearanceAboveIndexed(float x,float y,float feet)const{
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f&&!paneColumnOpen(index,x,y,s.bottom,s.top-s.bottom))ceiling=std::min(ceiling,s.bottom);}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
@@ -1492,14 +1498,15 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
  }else if(feet<supportHeight(x,y,dynamic,shelfCavities)-.025f||feet+height>clearanceHeight(x,y,feet)+.005f)return false;
  for(auto index:collisionCandidates(0,x,y)){const auto&f=m_fixtures[index];if(f.solid&&insideFixtureCandidate(index,x,y)){
   float base=floorHeight(f.position.x,f.position.y)+f.base;
-  if(shelfCavities){
+  if(shelfCavities||paddedFixture(f.model)){
    float above=fixtureSurface(f,x,y,feet,true),below=fixtureSurface(f,x,y,feet,false);
-   // A surface intersects this vertical segment, or the point starts inside it.
-   if(above<feet+height-.005f||below>feet+.025f)return false;
+   // A surface intersects this vertical segment, or the point starts inside it (padding: deeper than it gives).
+   const float give=paddedFixture(f.model)&&model::propSize[f.model][2]>0?model::soft[f.model][1]*f.height/model::propSize[f.model][2]*1.4f:0.f;
+   if(above<feet+height-.005f||below>feet+.025f+give)return false;
   }else if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;
  }}
  for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}}
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f&&!paneColumnOpen(index,x,y,std::max(feet,s.bottom+.005f),std::min(feet+height,s.top-.025f)-std::max(feet,s.bottom+.005f)))return false;}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(insideTerminal(*this,t,x,y)&&feet<base+terminalHeight(*this,t,x,y)-.025f&&feet+height>base)return false;}
  return true;
 }
@@ -1589,7 +1596,7 @@ float World::clearanceAboveReference(float x,float y,float feet)const{
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f&&!paneColumnOpen(index,x,y,s.bottom,s.top-s.bottom))ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
@@ -1620,6 +1627,9 @@ float World::fixtureSurface(const Fixture&f,float x,float y,float feet,bool ceil
  else if(chair){float seat=f.model==model::med_wheelchair?.57f:f.model==model::platform_chair?.525f:.5f;slab(f.height*(seat-.07f),f.height*seat);if(u>f.width*.5f-.055f&&v>f.depth*.5f-.055f)slab(0,f.height*.5f);if(dy*c+dx*s>f.depth*.5f-.07f)slab(f.height*.5f,f.height);}
  else if(f.model==model::med_crash_cart){slab(f.height*.18f,f.height*.21f);slab(f.height*.77f,f.height*.809f);if(u>f.width*.5f-.035f&&v>f.depth*.5f-.035f)slab(0,f.height);}
  else if(f.model==model::office_file_cabinet_open){for(float t:{.04f,.5f,1.f})slab(f.height*t-.03f,f.height*t);if(u>f.width*.5f-.04f||dy*c+dx*s>f.depth*.5f-.04f)slab(0,f.height);}
+ else if(paddedFixture(f.model)&&model::propSize[f.model][0]>0&&model::propSize[f.model][1]>0&&model::propSize[f.model][2]>0){
+  const auto&k=model::soft[f.model];const auto&own=model::propSize[f.model];const float mx=(dx*c-dy*s)*own[0]/f.width,mz=(dx*s+dy*c)*own[1]/f.depth;
+  if(mx>=k[2]&&mx<=k[3]&&mz>=k[4]&&mz<=k[5])slab(0,f.height*k[0]/own[2]);else slab(0,f.height);}
  else slab(0,f.height);
  return result;
 }

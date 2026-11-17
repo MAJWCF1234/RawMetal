@@ -1281,7 +1281,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.4.16  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.5.0  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
@@ -1390,6 +1390,12 @@ void SoftwareRenderer::drawConsole(const Game& game){
  int y=28;for(size_t i=first;i<log.size();++i,y+=11)text(12,y,log[i].substr(0,150).c_str(),rgb(188,204,196));
  text(12,132,("> "+game.consoleLine()+"_").c_str(),rgb(245,212,142));
 }
+// The plants' springs for this frame: the bodies lying among them push too.
+void SoftwareRenderer::updatePlants(const Game& game){
+ std::vector<PlantBones::Pusher> bodies;
+ for(auto&[slot,corpse]:m_corpses){if(!corpse.carcass.built()||corpse.seen<game.elapsed()-.5f)continue;const Point3 c=corpse.carcass.centre();bodies.push_back({game.level(),{c.x,c.y,c.z-.25f},std::min(.6f,corpse.carcass.radius()*.45f),.45f,{}});}
+ for(auto&[key,remains]:m_remains){if(!remains.carcass.built())continue;const Point3 c=remains.carcass.centre();bodies.push_back({int(key>>32),{c.x,c.y,c.z-.25f},std::min(.8f,remains.carcass.radius()*.45f),.5f,{}});}
+ m_plants.update(game,bodies,game.elapsed());}
 void SoftwareRenderer::render(const Game& game){
  // An inspection frame on Vulkan (a test, a shot) is drawn once the light it is drawn with has
  // settled: lamp shadows that were still being drawn, reflection probes not yet captured and probe
@@ -1436,6 +1442,7 @@ void SoftwareRenderer::render(const Game& game){
  if(m_lightingGame!=&game||m_lightingWorld!=game.worldId()||m_lightingSession!=game.renderEpoch()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};
   if(m_gpu)m_gpu->clearStaticCaches();
+  m_plants.clear();
   m_lightingGame=&game;m_lightingWorld=game.worldId();m_lightingSession=game.renderEpoch();
   for(int level=0;level<Game::MaxChunks;++level)m_chunkStaticSeen[size_t(level)]=game.staticRevision(level);
  }
@@ -1538,7 +1545,7 @@ void SoftwareRenderer::render(const Game& game){
   const float darkness=game.darkness();for(int c=0;c<3;++c)atmosphere[size_t(c)]*=1.f-darkness;
   const float gloom=std::min(1.f,darkness+game.stormIntensity()*.5f);
   m_gpu->setDarkness(gloom,.045f-.033f*gloom,game.weaponFlashes());
-  m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();if(!m_vrReuseScene)scene();auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+  m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();if(!m_vrReuseScene)scene();if(!m_vrReuseScene)updatePlants(game);m_gpu->setPlants(m_plants.gpu().data(),m_plants.gpu().size());auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';
    // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.
    std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Vulkan frame failed, falling back to software: "<<e.what()<<" (map "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<")\n";m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}

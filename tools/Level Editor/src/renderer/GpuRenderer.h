@@ -62,6 +62,10 @@ public:
  // The impostor's centre is the midpoint of its quad's opposite (uv -1/+1) corners.
  struct LodTag {float lod=0;bool impostor=false;float z=0,half=0,yaw=0,farFade=0;int columns=0,rows=0;};
  void setLodTag(const LodTag* tag);
+ // Plant physbones (Foliage.h): the static triangles submitted next are plant `slot`'s (-1: none);
+ // scene.vert bends them by the plant state set each frame (wind, then per slot), read after the lamp grid.
+ void setPlantTag(int slot);
+ void setPlants(const float* data,size_t floats);
  // Light probes (LightProbes.h) of a map drawn this frame, at its world offset. Its irradiance
  // grid is uploaded when its key is new; its reflection probes are each captured once (six faces
  // through the scene pipeline, once the lamps' shadows are drawn), a few a frame in the window
@@ -72,6 +76,15 @@ public:
  void saveSunCascades(const char* prefix);
  std::uint64_t shadowFacesDrawn()const;
  std::uint64_t staticCacheHits()const;
+ // The last finish()'s scene pass: draws, descriptor-set binds, pipeline binds, vertex-buffer binds,
+ // triangles drawn from static caches, dynamic triangles drawn, actor triangles drawn, static caches
+ // drawn, shadow-map draws (lamp faces + sun cascades), shadow triangles, dynamic vertex bytes and
+ // actor bytes uploaded this frame.
+ enum DrawStat {Draws,DescriptorBinds,PipelineBinds,BufferBinds,CachedTriangles,DynamicTriangles,ActorTriangles,CachesDrawn,ShadowDraws,ShadowTriangles,DynamicBytes,ActorBytes};
+ std::array<std::uint64_t,12> drawStatistics()const;
+ // The last headless finish(), in ms: CPU command recording, the wait for the GPU, the readback's
+ // conversion to display pixels (the windowed path presents instead: zeros).
+ std::array<double,3> finishTimes()const;
  void prepare(const SoftwareRenderer::Texture& texture);
  // prepare/submit collect immutable atlases; finish flushes them before draw.
  void flushUploads();
@@ -89,13 +102,15 @@ public:
  // Immutable for one draw: resolve texture ownership and surface constants
  // outside the per-triangle loop. Positions and UV arithmetic stay unchanged.
  struct ActorMaterial {std::uint64_t key=0;std::uint32_t sortKey=0;float emission=0,normal=-1,parallax=0,surface=0;};
- struct ActorTriangle {float position[3][4],uv[3][2],settings[4],actor;ActorTriangle()noexcept{}};
+ // light: the face's own scalar on the side brightness (lighting.x), as the CPU path's tri(light)
+ // multiplies it: 1 for people; a creature's relief, pain flash, wing glow or dark lamp part.
+ struct ActorTriangle {float position[3][4],uv[3][2],settings[4],actor,light;ActorTriangle()noexcept{}};
  struct ActorStream {std::span<ActorTriangle> triangles;std::uint32_t start=0;};
  ActorStream beginActorStream(size_t maximum);
  void actorStreamRun(std::uint32_t start,std::uint32_t count,const ActorMaterial&material);
  void endActorStream(const ActorStream&stream,std::uint32_t count);
- static void writeActorTriangle(ActorTriangle&out,const MeshTriangle&face,int actor,const ActorMaterial&material){
-  out.settings[0]=material.emission;out.settings[1]=material.normal;out.settings[2]=material.parallax;out.settings[3]=material.surface;out.actor=float(actor);
+ static void writeActorTriangle(ActorTriangle&out,const MeshTriangle&face,int actor,const ActorMaterial&material,float faceLight=1.f){
+  out.settings[0]=material.emission;out.settings[1]=material.normal;out.settings[2]=material.parallax;out.settings[3]=material.surface;out.actor=float(actor);out.light=faceLight;
   for(size_t i=0;i<3;++i){const auto&v=face.v[i];auto&p=out.position[i];p[0]=v.p.x;p[1]=v.p.y;p[2]=v.p.z;p[3]=v.light;out.uv[i][0]=v.u;out.uv[i][1]=v.v;}
  }
  ActorMaterial prepareActorMaterial(const SoftwareRenderer::Texture& texture,float emissionScale=1.f);

@@ -103,7 +103,7 @@ struct Vertex {float position[4],uv[2],lighting[4],light0[4],light1[4],surface[4
 // Keep every position/UV/light at full precision. The vertex shader derives
 // edges, UV differences and outward vectors instead of streaming duplicates.
 using ActorTriangle=GpuRenderer::ActorTriangle;
-static_assert(sizeof(ActorTriangle)==92&&sizeof(Vertex)*3==312);
+static_assert(sizeof(ActorTriangle)==96&&sizeof(Vertex)*3==312);
 struct ActorLighting {std::array<std::array<float,4>,6> normalBrightness,light0,light1,surfaceNormal;std::array<float,4> originEye;};
 static_assert(sizeof(ActorLighting)==400);
 constexpr size_t MaxGpuActors=1024;
@@ -512,9 +512,11 @@ struct GpuRenderer::Impl {
  struct ShadowDraw {uint64_t material;uint32_t first,count;};
  // Issue runs as draws, merging neighbours that are contiguous in the index
  // buffer and share a material.
+ // Shadow-map draws and indices issued (lamp faces and sun cascades), for drawStatistics().
+ inline static std::uint64_t shadowDrawCount=0,shadowIndexCount=0;
  struct DrawMerger {VkCommandBuffer cmd;VkPipelineLayout layout;const std::unordered_map<uint64_t,Material>& materials;uint64_t bound=~0ull;uint64_t material=~0ull;uint32_t first=0,count=0;
   void add(const ShadowRun& run){if(count&&run.material==material&&run.first==first+count){count+=run.count;return;}flush();material=run.material;first=run.first;count=run.count;}
-  void flush(){if(!count)return;if(material!=bound){auto found=materials.find(material);if(found==materials.end()){count=0;return;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&found->second.set,0,nullptr);bound=material;}vkCmdDrawIndexed(cmd,count,1,first,0,0);count=0;}
+  void flush(){if(!count)return;if(material!=bound){auto found=materials.find(material);if(found==materials.end()){count=0;return;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&found->second.set,0,nullptr);bound=material;}vkCmdDrawIndexed(cmd,count,1,first,0,0);++shadowDrawCount;shadowIndexCount+=count;count=0;}
  };
  struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;Buffer shadowIndices;std::vector<ShadowRun> shadowRuns;std::array<float,6> bounds{};};
  // ── Per-pixel lamps ──────────────────────────────────────────────────────
@@ -585,6 +587,9 @@ struct GpuRenderer::Impl {
   }
  }
  static constexpr size_t LampBufferBytes=sizeof(LampHeader)+size_t(MaxLamps)*2*16+size_t(MaxLampCells)*LampsPerCell*4;
+ // Plant physbones after the lamp grid (scene.vert: lampGrid.plants): wind, then two vec4 a plant.
+ static constexpr size_t PlantBytes=size_t(8+8*16384)*4,LampTotalBytes=LampBufferBytes+PlantBytes;
+ int plantSlot=-1;std::vector<float> plantData;
  std::array<Buffer,FrameCount> lampBuffers{};std::array<uint64_t,FrameCount> lampUploaded{};
  std::vector<uint8_t> lampData;uint64_t lampGeneration=1,lampKey=0;bool pixelLighting=false;
  // Per-frame lamp power rewrites only the records' intensity; the key, grid and
@@ -752,7 +757,7 @@ struct GpuRenderer::Impl {
    auto cache=staticCaches.find(slot.level);if(cache==staticCaches.end()||!cache->second.buffer.handle)continue;
    if(!prepared){
     auto view=vrProjection;view[16]=0.f;view[18]=view[19]=0.f;view[26]=1.f;view[27]=Projection::nearPlane;std::memcpy(captureBuffers[size_t(frameIndex)].mapped,view.data(),sizeof(view));
-    VkDescriptorBufferInfo lampInfo{lampBuffers[size_t(frameIndex)].handle,0,LampBufferBytes};VkDescriptorImageInfo images[2]={{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{shadowSampler,sunAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkDescriptorBufferInfo lampInfo{lampBuffers[size_t(frameIndex)].handle,0,LampTotalBytes};VkDescriptorImageInfo images[2]={{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{shadowSampler,sunAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
     VkWriteDescriptorSet writes[3]{};for(auto&w:writes){w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=captureSets[size_t(frameIndex)];w.descriptorCount=1;}
     writes[0].dstBinding=2;writes[0].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[0].pBufferInfo=&lampInfo;
     writes[1].dstBinding=3;writes[1].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[1].pImageInfo=&images[0];
@@ -882,6 +887,10 @@ struct GpuRenderer::Impl {
    }
   }
  }
+ // The last finish()'s scene pass, for drawStatistics() (GpuRenderer.h DrawStat).
+ std::array<std::uint64_t,12> drawStats{};
+ // The last headless finish(): CPU recording, the wait for the GPU, the readback's conversion (ms).
+ std::array<double,3> finishMs{};
  std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
  // VR: the first eye's batches before sorting, replayed for the second eye.
@@ -1180,10 +1189,10 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkDescriptorBufferInfo buffers[]={{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)},{m->actorBuffers[i].handle,0,MaxGpuActors*sizeof(ActorLighting)}};
   VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=m->projectionSets[i];write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
   vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
-  m->makeBuffer(m->lampBuffers[i],Impl::LampBufferBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampBufferBytes);
+  m->makeBuffer(m->lampBuffers[i],Impl::LampTotalBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampTotalBytes);
   // (The look's values are there from the first frame: a probe captured before any header is written reads them.)
   Impl::writeLook(reinterpret_cast<float*>(static_cast<uint8_t*>(m->lampBuffers[i].mapped)+offsetof(Impl::LampHeader,reflections))+(Impl::MaxReflections-1)*12);
-  VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampBufferBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
+  VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampTotalBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
  }
  {
   // Lamp shadow atlas: depth-only faces sampled with hardware comparison.
@@ -1299,8 +1308,8 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkVertexInputAttributeDescription actorAttrs[]={
    {0,0,VK_FORMAT_R32G32B32A32_SFLOAT,0},{1,0,VK_FORMAT_R32G32B32A32_SFLOAT,16},{2,0,VK_FORMAT_R32G32B32A32_SFLOAT,32},
    {3,0,VK_FORMAT_R32G32_SFLOAT,48},{4,0,VK_FORMAT_R32G32_SFLOAT,56},{5,0,VK_FORMAT_R32G32_SFLOAT,64},
-   {6,0,VK_FORMAT_R32G32B32A32_SFLOAT,72},{7,0,VK_FORMAT_R32_SFLOAT,88}};
-  input.vertexAttributeDescriptionCount=8;input.pVertexAttributeDescriptions=actorAttrs;
+   {6,0,VK_FORMAT_R32G32B32A32_SFLOAT,72},{7,0,VK_FORMAT_R32_SFLOAT,88},{8,0,VK_FORMAT_R32_SFLOAT,92}};
+  input.vertexAttributeDescriptionCount=9;input.pVertexAttributeDescriptions=actorAttrs;
   blend.blendEnable=VK_FALSE;blend.srcColorBlendFactor=blend.dstColorBlendFactor=VK_BLEND_FACTOR_ONE;depthState.depthWriteEnable=VK_TRUE;
   syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorOpaque),"Create opaque actor pipeline");
   blend.blendEnable=VK_TRUE;depthState.depthWriteEnable=VK_FALSE;syncBlend();check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->actorAdditive),"Create additive actor pipeline");
@@ -1601,6 +1610,8 @@ void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
 void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}
 void GpuRenderer::setLodTag(const LodTag* tag){m->lodTag=tag;}
+void GpuRenderer::setPlantTag(int slot){m->plantSlot=slot;}
+void GpuRenderer::setPlants(const float* data,size_t floats){m->plantData.assign(data,data+std::min(floats,Impl::PlantBytes/4));}
 void GpuRenderer::useProbes(int level,const ProbeBake* bake,std::uint64_t key,Vec2 offset){
  if(!bake||bake->volume.empty()||!m->irradianceAtlas.handle)return;const auto&v=bake->volume;
  int slot=-1;for(int i=0;i<Impl::ProbeSlots;++i)if(m->probeSlots[size_t(i)].level==level){slot=i;break;}
@@ -1651,6 +1662,8 @@ bool GpuRenderer::shadowsPending()const{
 }
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
+std::array<std::uint64_t,12> GpuRenderer::drawStatistics()const{return m->drawStats;}
+std::array<double,3> GpuRenderer::finishTimes()const{return m->finishMs;}
 void GpuRenderer::clearDepth(){m->batches.push_back({0,0,0,true});m->renderingViewmodel=true;}
 int GpuRenderer::beginActor(const std::array<Point3,6>& normals,const std::array<float,6>& brightness,const std::array<SoftwareRenderer::NormalLighting,6>& lights,Vec2 origin,Vec2 eye,Point3 center){
  if(m->capturing||m->actorLights.size()>=MaxGpuActors)return -1;
@@ -1710,7 +1723,7 @@ GpuRenderer::ActorMaterial GpuRenderer::prepareActorMaterial(const SoftwareRende
 void GpuRenderer::submitActor(const MeshVertex&a,const MeshVertex&b,const MeshVertex&c,int actor,const ActorMaterial&material){
  uint32_t start=uint32_t(m->actorVertices.size());
  auto&common=m->actorVertices.emplace_back();
- common.settings[0]=material.emission;common.settings[1]=material.normal;common.settings[2]=material.parallax;common.settings[3]=material.surface;common.actor=float(actor);
+ common.settings[0]=material.emission;common.settings[1]=material.normal;common.settings[2]=material.parallax;common.settings[3]=material.surface;common.actor=float(actor);common.light=1.f;
  const MeshVertex* points[]={&a,&b,&c};
  for(size_t i=0;i<3;++i){const auto&v=*points[i];auto&out=common.position[i];out[0]=v.p.x;out[1]=v.p.y;out[2]=v.p.z;out[3]=v.light;common.uv[i][0]=v.u;common.uv[i][1]=v.v;}
  if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&m->batches.back().actor&&m->batches.back().material==material.key)++m->batches.back().count;
@@ -1734,6 +1747,7 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
  if(texture.pixels.size()>1&&m->lastPixels==texture.pixels.data()&&m->lastGeneration==texture.generation.value){key=m->lastMaterial;sortKey=m->lastSort;}
  else{key=m->material(texture);sortKey=m->materials.at(key).sortKey;m->lastPixels=texture.pixels.data();m->lastGeneration=texture.generation.value;m->lastMaterial=key;m->lastSort=sortKey;}
  auto&target=m->capturing?m->staticCaches.at(m->captureSlot).vertices:m->vertices;uint32_t start=uint32_t(target.size());
+ if(perf::enabled&&!m->capturing)++perf::streamTriangles[size_t(perf::current+1)];
  auto worldPoint=[&](Point3 p){float cy=m->viewState[3],sy=m->viewState[4],cp=m->viewState[5],sp=m->viewState[6];float forward=p.z*cp-p.y*sp;return Point3{m->viewState[0]-p.x*sy+forward*cy,m->viewState[1]+p.x*cy+forward*sy,m->viewState[2]+p.y*cp+p.z*sp};};
  Point3 worldNormal{};if(m->capturing){auto e1=b.p-a.p,e2=c.p-a.p;Point3 n{e1.y*e2.z-e1.z*e2.y,e1.z*e2.x-e1.x*e2.z,e1.x*e2.y-e1.y*e2.x};float nl=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);if(nl>.00001f)n=n*(1.f/nl);worldNormal={-n.x*m->viewState[4]-n.y*m->viewState[6]*m->viewState[3]+n.z*m->viewState[5]*m->viewState[3],n.x*m->viewState[3]-n.y*m->viewState[6]*m->viewState[4]+n.z*m->viewState[5]*m->viewState[4],n.y*m->viewState[5]+n.z*m->viewState[6]};}
  Point3 impostorCentre{};
@@ -1755,12 +1769,15 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
     out.worldNormal[0]=0.f;out.worldNormal[1]=0.f;out.worldNormal[2]=1.f;out.worldNormal[3]=-(1000.f+tag->lod);}
    else if(out.worldNormal[3]<=0.f)out.worldNormal[3]=-tag->lod;
   }
+  // A plant's (static, world space): w carries its slot past 1, for scene.vert to bend it.
+  if(m->capturing&&m->plantSlot>=0)out.position[3]=2.f+float(m->plantSlot);
   target.push_back(out);
  }
  if(m->capturing){auto&batches=m->staticCaches.at(m->captureSlot).batches;if(!batches.empty()&&!batches.back().clear&&batches.back().material==key)batches.back().count+=3;else batches.push_back({key,start,3,false,false,-1,sortKey});}
  else if(!m->batches.empty()&&!m->batches.back().clear&&!m->batches.back().cache&&!m->batches.back().actor&&m->batches.back().material==key)m->batches.back().count+=3;else m->batches.push_back({key,start,3,false,false,-1,sortKey});
 }
 void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
+ const auto finishStart=std::chrono::steady_clock::now();m->finishMs.fill(0);
  const bool taaThisFrame=m->taaEnabled&&m->postAvailable&&m->postEnabled&&m->surface&&!m->vrMode&&m->taaStage.pass&&m->taaFrames[0];
  if(taaThisFrame){
   // Halton (2,3) over eight frames, in NDC units of a pixel.
@@ -1777,6 +1794,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   {auto torch=v[8]>.5f?WorldLight::tone(5600,0,{1,1,1}):Point3{};float scatter[4]={torch.x,torch.y,torch.z,m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer?1.f:0.f};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,scatter),scatter,sizeof(scatter));}
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+3*sizeof(int32_t),&m->storm,sizeof(int32_t));}
+ static_assert(sizeof(Impl::LampHeader)==16*(7+12+4+4+1+1+16+144+288),"scene.vert reads lampGrid.plants at this offset");
+ if(!m->plantData.empty())std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+Impl::LampBufferBytes,m->plantData.data(),m->plantData.size()*4);
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();
@@ -1785,6 +1804,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  // of hardware draw calls without clipping the visible world.
  auto& vb=m->vertexBuffers[m->frameIndex];
  size_t bytes=m->vertices.size()*sizeof(Vertex);
+ auto&st=m->drawStats;st.fill(0);st[10]=bytes;st[11]=m->actorVertices.size()*sizeof(ActorTriangle);const auto shadowDraws0=Impl::shadowDrawCount,shadowIndices0=Impl::shadowIndexCount;
  if(bytes>vb.size){auto allocationStart=std::chrono::steady_clock::now();m->destroy(vb);m->makeBuffer(vb,std::max(bytes*2,size_t(1048576)),VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);++perf::gpuBufferGrowths;perf::costs[perf::GpuAllocation]+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-allocationStart).count();}
  Vertex* dest=static_cast<Vertex*>(vb.mapped);uint32_t vertexOffset=0;
  auto& ab=m->actorVertexBuffers[m->frameIndex];size_t actorBytes=m->actorVertices.size()*sizeof(ActorTriangle);
@@ -1826,7 +1846,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  std::memcpy(m->projectionBuffers[m->frameIndex].mapped,m->vrProjection.data(),sizeof(m->vrProjection));vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,1,1,&m->projectionSets[m->frameIndex],0,nullptr);
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
- struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false,liquid=false;};std::vector<TransparentDraw> transparentDraws;
+ struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false,liquid=false,cached=false;};std::vector<TransparentDraw> transparentDraws;
  // Before the first blended draws of a split frame: the room's depth (the resolved target's alpha)
  // into softDepth, then the same attachments loaded again for the rest of the frame.
  auto splitScene=[&]{split=false;vkCmdEndRenderPass(cmd);
@@ -1841,17 +1861,17 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,2,b);
   pass.renderPass=m->passBlended;vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
   vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);previous=VK_NULL_HANDLE;};
- auto flushTransparent=[&]{if(split&&!transparentDraws.empty())splitScene();for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);if(draw.actor)vkCmdDraw(cmd,3,draw.count,0,draw.start);else vkCmdDraw(cmd,draw.count,1,draw.start,0);}transparentDraws.clear();};
+ auto flushTransparent=[&]{if(split&&!transparentDraws.empty())splitScene();for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;++st[3];}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);++st[0];++st[1];if(draw.actor){vkCmdDraw(cmd,3,draw.count,0,draw.start);st[6]+=draw.count;}else{vkCmdDraw(cmd,draw.count,1,draw.start,0);st[draw.cached?4:5]+=draw.count/3;}}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
-  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);}continue;}
-  auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;}
+  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}++st[7];for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid,true});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);++st[0];++st[1];st[4]+=cached.count/3;}continue;}
+  auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}
   auto*material=m->findMaterial(batch.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
-  if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;}
-  vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);
-  if(batch.actor)vkCmdDraw(cmd,3,batch.count,0,batch.start);else vkCmdDraw(cmd,batch.count,1,batch.start,0);
+  if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}
+  vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);++st[0];++st[1];
+  if(batch.actor){vkCmdDraw(cmd,3,batch.count,0,batch.start);st[6]+=batch.count;}else{vkCmdDraw(cmd,batch.count,1,batch.start,0);st[5]+=batch.count/3;}
  }
- flushTransparent();vkCmdEndRenderPass(cmd);m->stamp(cmd,2);
+ flushTransparent();vkCmdEndRenderPass(cmd);st[8]=Impl::shadowDrawCount-shadowDraws0;st[9]=(Impl::shadowIndexCount-shadowIndices0)/3;m->stamp(cmd,2);
  m->postRan=false;
  if(m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer){
   // Scene RGB is linear radiance and alpha is planar camera depth.
@@ -1865,7 +1885,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   auto runStage=[&](Impl::FullscreenStage& stage,std::initializer_list<VkImageView> sources,const float* push=nullptr,VkFramebuffer framebuffer=VK_NULL_HANDLE,VkExtent2D extent={0,0}){
    VkDescriptorImageInfo images[12]{};VkWriteDescriptorSet writes[12]{};uint32_t count=0;
    for(auto view:sources){images[count]={view==m->reflectionAtlas.view?m->reflectionSampler:m->sceneSampler,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&w=writes[count];w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=stage.sets[m->frameIndex];w.dstBinding=count;w.descriptorCount=1;w.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w.pImageInfo=&images[count];++count;}
-   VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampBufferBytes};
+   VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampTotalBytes};
    if(stage.lampAccess){
     auto&grid=writes[count];grid.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;grid.dstSet=stage.sets[m->frameIndex];grid.dstBinding=count;grid.descriptorCount=1;grid.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;grid.pBufferInfo=&lampInfo;
     images[count]={m->shadowSampler,m->shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&atlas=writes[count+1];atlas.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;atlas.dstSet=stage.sets[m->frameIndex];atlas.dstBinding=count+1;atlas.descriptorCount=1;atlas.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;atlas.pImageInfo=&images[count];count+=2;
@@ -1936,14 +1956,16 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  VkBufferMemoryBarrier host{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};host.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;host.dstAccessMask=VK_ACCESS_HOST_READ_BIT;host.srcQueueFamilyIndex=host.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED;host.buffer=m->readback.handle;host.size=VK_WHOLE_SIZE;
  vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_HOST_BIT,0,0,nullptr,1,&host,0,nullptr);
  // Blocking submit for headless — we need pixels immediately.
- m->stamp(cmd,8);m->submitCommandsAsync();
+ m->stamp(cmd,8);const auto recorded=std::chrono::steady_clock::now();m->submitCommandsAsync();
  check(vkWaitForFences(m->device,1,&m->fences[m->frameIndex],VK_TRUE,5000000000ull),"Wait for headless frame");
+ const auto waited=std::chrono::steady_clock::now();
  m->frameInFlight[m->frameIndex]=false;m->readStamps(m->frameIndex);
  pixels.resize(size_t(m->width*m->height));
  auto half=[](uint16_t bits){float value;if((bits&0x7c00u)==0x7c00u)value=(bits&0x03ffu)?std::numeric_limits<float>::quiet_NaN():std::numeric_limits<float>::infinity();else if((bits&0x7c00u)==0)value=std::ldexp(float(bits&0x03ffu),-24);else value=std::ldexp(1.f+float(bits&0x03ffu)/1024.f,int((bits>>10)&31)-15);return (bits&0x8000u)?-value:value;};
  if(m->sceneFormat==VK_FORMAT_R16G16B16A16_SFLOAT){auto*source=static_cast<const uint16_t*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(half(source[i*4]),half(source[i*4+1]),half(source[i*4+2]));}
  else if(m->sceneFormat==VK_FORMAT_R32G32B32A32_SFLOAT){auto*source=static_cast<const float*>(m->readback.mapped);for(size_t i=0;i<pixels.size();++i)pixels[i]=displayPixel(source[i*4],source[i*4+1],source[i*4+2]);}
  else std::memcpy(pixels.data(),m->readback.mapped,pixels.size()*4);
+ {auto ms=[](auto a,auto b){return std::chrono::duration<double,std::milli>(b-a).count();};m->finishMs={ms(finishStart,recorded),ms(recorded,waited),ms(waited,std::chrono::steady_clock::now())};}
 }
 void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick,float alarm){
  if(!m->surface&&!m->vrMode)return;

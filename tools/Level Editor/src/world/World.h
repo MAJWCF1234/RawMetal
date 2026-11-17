@@ -9,6 +9,7 @@
 #include <cstdint>
 #include "../core/Math.h"
 #include "WorldDefinition.h"
+#include "GlassFracture.h"
 #include "ScriptDefinition.h"
 #include "TerrainField.h"
 
@@ -639,9 +640,27 @@ public:
     float breakableDamage(int i)const{return m_breakableDamage.at(i);}
     int breakableAt(float x,float y,float z,float margin=.03f)const;
     bool damageBreakable(int i,float amount);
+    float breakableLimit(int i)const;
     void ageBreakables(float dt);
     float breakableOpacity(int i)const{return breakables()[i].holds?std::clamp(21.f-m_breakableAge.at(i),0.f,1.f):1.f;}
     const std::vector<std::uint16_t>& brokenBreakables()const{return m_brokenBreakables;}
+    // A glass pane's own breakage while it stands (GlassFracture.h): its hits, and the lattice
+    // triangles they have taken (gone), which bullets, props and floors honour where they are.
+    struct PaneGlass {std::vector<glass::Hit> hits;std::vector<std::uint8_t> gone;int missing=0;std::uint32_t revision=0;};
+    const PaneGlass* paneGlass(int i)const{return i>=0&&i<int(m_paneGlass.size())&&!m_paneGlass[size_t(i)].hits.empty()?&m_paneGlass[size_t(i)]:nullptr;}
+    glass::Frame paneFrame(int i)const{const auto&b=breakables().at(size_t(i));return glass::frame(b.x1,b.y1,b.x2,b.y2,b.bottom,b.top);}
+    glass::Lattice paneLattice(int i)const{const auto f=paneFrame(i);return glass::lattice(f.width,f.height,glass::paneSeed(level(),i));}
+    // Adds a hit (kept as a save keeps it) and works out what is gone; returns what was gone before.
+    std::vector<std::uint8_t> addPaneHit(int i,glass::Hit hit);
+    // Holds glass healing: its cracks fade, its holes stay.
+    void healPaneCracks(int i);
+    // Whether p, on pane i, is where a piece is gone; whether the column (x, y, feet..+height)
+    // through breakable structure `structure` meets only gone glass.
+    bool paneOpenAt(int i,Point3 p)const;
+    bool paneColumnOpen(int structure,float x,float y,float feet,float height)const;
+    // The hits as a save writes them (pane, hits), and back.
+    std::vector<std::pair<std::uint16_t,std::vector<glass::PackedHit>>> packedPaneHits()const;
+    void restorePaneHits(const std::vector<std::pair<std::uint16_t,std::vector<glass::PackedHit>>>& hits);
     const std::vector<Structure>& structures()const{return m_structures;}
     const std::vector<TerrainTriangle>& terrain()const{return m_terrain;}
     bool hasTerrain()const{return !m_terrain.empty();}
@@ -700,7 +719,7 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
-    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_leadRopes.size()==m_leadRopes.size())m_leadRopes=saved.m_leadRopes;m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
+    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_leadRopes.size()==m_leadRopes.size())m_leadRopes=saved.m_leadRopes;m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;if(saved.m_paneGlass.size()==m_paneGlass.size())m_paneGlass=saved.m_paneGlass;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -785,6 +804,8 @@ private:
     std::vector<MapLayer> m_layers;
     std::vector<std::pair<int,int>> m_destroyedTiles;
     int m_breakableFirst=0;std::vector<std::uint16_t> m_brokenBreakables;std::vector<float> m_breakableDamage,m_breakableAge;
+    std::vector<PaneGlass> m_paneGlass;
+    void solvePane(int i);
     std::vector<LeadRope> m_leadRopes;
     void removeBreakable(int i);
     // Never copied: a plan belongs to the World it was made on.

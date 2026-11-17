@@ -90,7 +90,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -251,7 +251,7 @@ void Game::loadLevel(int level,bool carry) {
     m_weaponKick = 0.0f; m_reloadTimer=0; m_shotCooldown = 0.0f;
     m_damageFlash = 0.0f;
     m_elapsed = 0.0f;
-    m_waterSplashes.clear();
+    m_waterSplashes.clear();m_waterFeet=-1e9f;m_wakeWay=0;m_waterSoundsSeen=0;m_waterNpcDown.clear();m_waterDeaths.clear();
     m_kills = 0;
     m_won = false;
     m_hitFlash=0;
@@ -288,7 +288,7 @@ int Game::hostilesRemaining(int level)const{
  // nobody opens the enemy-clear doors and script gates a tester has to pass;
  // the guards themselves still patrol, hunt and go down to a takedown.
  if(m_peaceful)return 0;
- const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive;}));
+ const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;int n=int(std::count_if(enemies.begin(),enemies.end(),[](const Enemy&e){return e.alive&&factionsHostile(e.faction,AiFaction::Player);}));
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(npc.level==level&&track.ai.mode==ActorAiMode::Guard&&track.ai.armed&&track.health&&autonomousActor(track)&&!npcIncapacitated(i)&&npc.pose.clip!=4&&(!track.deadState||!state(track.deadState))&&guardHostileToPlayer(i))++n;}return n;
 }
 int Game::enemiesRemaining()const{return hostilesRemaining(m_level);}
@@ -676,6 +676,10 @@ void Game::update(const InputState& input, float dt) {
             else if(cycle.semiAuto&&raised&&press&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=cycle.fireCooldown;}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
+        // Console summons' standing orders (Summon.cpp), before anyone thinks.
+        updateSummons(dt);
+        // Steps, wakes and falls into water raise their splashes before anyone listens.
+        updateWater(dt,false);
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
         {perf::Scope profile(perf::Takedown);updateTakedown(dt);}
@@ -683,7 +687,7 @@ void Game::update(const InputState& input, float dt) {
         updateGuardCombat(dt);
         {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
         {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
-        updateEnemies(dt);
+        updateEnemies(dt);updateWater(dt,true);
         // AI may walk back into a held prop after the hand sweep; clear that overlap.
         resolveHeldPropBodies();
         {perf::Scope profile(perf::Voices);updateStances(dt);updateNpcVoices(dt);updateAmbience(dt);}
@@ -741,8 +745,8 @@ void Game::punchImpact(){
  }
  if(hitEnemy)applyPunchHit(*hitEnemy);else if(hitNpc>=0)applyNpcPunchHit(size_t(hitNpc));else{
   Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction{forward.x*std::cos(m_player.pitch/140.f),forward.y*std::cos(m_player.pitch/140.f),std::sin(m_player.pitch/140.f)};auto hit=traceShot(origin,direction,melee.range);
-  for(const auto&p:hit.passed)if(p.kind==1){auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,melee.paneDamage,p.point+Point3{shift.x,shift.y,0},direction);return;}
-  if(hit.breakable>=0){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,melee.paneDamage,hit.point+Point3{shift.x,shift.y,0},direction);return;}
+  for(const auto&p:hit.passed)if(p.kind==1){auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,melee.paneDamage,p.point+Point3{shift.x,shift.y,0},direction,{PaneBlow::Fist});return;}
+  if(hit.breakable>=0){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,melee.paneDamage,hit.point+Point3{shift.x,shift.y,0},direction,{PaneBlow::Fist});return;}
   for(const auto&p:hit.passed)if(p.kind==2){auto shift=chunkOffset(m_level)-chunkOffset(p.level);auto at=p.point+Point3{shift.x,shift.y,0};knockClutter(p.level,p.index,at,direction*melee.propImpulse);damageClutter(p.level,p.index,melee.damage,at,direction);return;}
   if(hit.kind==ShotKind::Prop){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto at=hit.point+Point3{shift.x,shift.y,0};knockClutter(hit.level,hit.index,at,direction*melee.propImpulse);damageClutter(hit.level,hit.index,melee.damage,at,direction);}
  }
@@ -785,7 +789,7 @@ void Game::updateVrMelee(const InputState&input,float dt){
   }
   if(hitEnemy){applyPunchHit(*hitEnemy);m_vrFistCooldown[hand]=melee.vrCooldown;m_punchLeft=hand==0;sound(Sound::PunchSwing,.35f);}
   else if(hitNpc>=0){applyNpcPunchHit(size_t(hitNpc));m_vrFistCooldown[hand]=melee.vrCooldown;m_punchLeft=hand==0;sound(Sound::PunchSwing,.35f);}
-  else{auto direction=sweep*(1/distance);auto hit=traceShot(start,direction,distance+.12f);bool contact=false;for(const auto&p:hit.passed)if(p.kind){auto shift=chunkOffset(m_level)-chunkOffset(p.level);auto at=p.point+Point3{shift.x,shift.y,0};if(p.kind==1)damagePane(p.level,p.index,melee.paneDamage,at,direction);else{knockClutter(p.level,p.index,at,direction*melee.propImpulse);damageClutter(p.level,p.index,melee.damage,at,direction);}contact=true;break;}if(!contact&&hit.kind==ShotKind::Prop){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto at=hit.point+Point3{shift.x,shift.y,0};knockClutter(hit.level,hit.index,at,direction*melee.propImpulse);damageClutter(hit.level,hit.index,melee.damage,at,direction);contact=true;}if(!contact&&hit.breakable>=0){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,melee.paneDamage,hit.point+Point3{shift.x,shift.y,0},direction);contact=true;}if(contact)m_vrFistCooldown[hand]=melee.vrCooldown;
+  else{auto direction=sweep*(1/distance);auto hit=traceShot(start,direction,distance+.12f);bool contact=false;for(const auto&p:hit.passed)if(p.kind){auto shift=chunkOffset(m_level)-chunkOffset(p.level);auto at=p.point+Point3{shift.x,shift.y,0};if(p.kind==1)damagePane(p.level,p.index,melee.paneDamage,at,direction,{PaneBlow::Fist});else{knockClutter(p.level,p.index,at,direction*melee.propImpulse);damageClutter(p.level,p.index,melee.damage,at,direction);}contact=true;break;}if(!contact&&hit.kind==ShotKind::Prop){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto at=hit.point+Point3{shift.x,shift.y,0};knockClutter(hit.level,hit.index,at,direction*melee.propImpulse);damageClutter(hit.level,hit.index,melee.damage,at,direction);contact=true;}if(!contact&&hit.breakable>=0){auto shift=chunkOffset(m_level)-chunkOffset(hit.level);damagePane(hit.level,hit.breakable,melee.paneDamage,hit.point+Point3{shift.x,shift.y,0},direction,{PaneBlow::Fist});contact=true;}if(contact)m_vrFistCooldown[hand]=melee.vrCooldown;
   }
  }
 }

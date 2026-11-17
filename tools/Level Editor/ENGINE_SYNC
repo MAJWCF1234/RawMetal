@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 497592f10fd944c5a7213bb12d9d4bce159361bc
-# 2026-11-17 11:31, feat: the Campaign Builder works outdoors: land, plants and water
+commit 63b2c731234982ff08a04c3a2dab7391d4f13b0d
+# 2026-11-17 13:31, ship: a Builder sync conflict of only #include lines keeps both sides
