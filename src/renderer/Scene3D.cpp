@@ -1068,7 +1068,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto softLight=[&](Point3 at){Point3 best{.3f,.2f,.93f};float nearest=1e9f;
   for(const auto&l:w.lights()){if(l.intensity<=0)continue;const auto e=l.emitter();if(e.z<at.z+.3f)continue;const Point3 d{e.x-at.x,e.y-at.y,e.z-at.z};const float d2=d.x*d.x+d.y*d.y+d.z*d.z;if(d2<nearest){nearest=d2;best=d;}}
   const float l=std::sqrt(best.x*best.x+best.y*best.y+best.z*best.z);return best*(1/l);};
- auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1){
+ auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1,float slopeX=0.f,float slopeY=0.f){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
   float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
@@ -1099,7 +1099,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   };
   const Point3 softL=facilitySoft?softLight({x,y,base+height}):Point3{0,0,1};
   for(auto face:facilitySoft?softmesh::refined(model,mesh):mesh.triangles){
-   auto place=[&](Point3 p){p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};return Point3{x+p.x*c+p.z*s,y-p.x*s+p.z*c,base+p.y+height*.5f};};
+   auto place=[&](Point3 p){p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};const float ex=p.x*c+p.z*s,ey=-p.x*s+p.z*c;return Point3{x+ex,y+ey,base+p.y+height*.5f+ex*slopeX+ey*slopeY};};
    if(facilitySoft){const Point3 a=place(face.v[0].p-center);flatNormal=cross3(place(face.v[1].p-center)-a,place(face.v[2].p-center)-a);}
    softFace=facilitySoft?0.f:1.f;
    for(auto&v:face.v){auto p=v.p-center;if(facilitySoft){const float bent=softmesh::bend(model,*facilitySoft,mesh,v.p),k=softmesh::shade(model,*facilitySoft,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;softFace+=k/3;}v.p=place(p);}
@@ -1550,7 +1550,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   GpuRenderer::LodTag tag;
   if(impostor){const auto&mesh=m_facilityMeshes[size_t(fixture.model)];float scale=fixture.height/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
    tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
-  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);
   if(impostor){
    tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;
    tag.farFade=fixture.height<1.4f?tag.lod*2.6f:0.f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
@@ -1878,7 +1878,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
- if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);
  // Padded fixtures have their own cache, drawn and lit as the static fixtures are: rebuilt only when a pad
  // on them moves (SoftPad::version) or wakes or sleeps, so undeformed they look exactly as they always did.
  {uint64_t key=geometryKey;bool any=false;auto mix=[&](std::uint64_t v){key^=v;key*=1099511628211ull;};

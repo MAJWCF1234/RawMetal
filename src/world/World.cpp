@@ -148,46 +148,8 @@ std::uint8_t authoredAshfallMaterial(int worldX,int worldY,int worldZ){
 // Exclusion Zone outdoor packs sample world XY (origin+local) so stitched custom
 // chunks share one continuous Surface Nets field. Keep gradients soft — steep
 // authored cliffs explode triangle count and tear at chunk seams.
-// Smooth value noise: a hashed lattice, quintic-blended, summed over octaves.
-float latticeValue(std::uint32_t seed,int x,int y){
- std::uint32_t h=seed*0x9E3779B1u^std::uint32_t(x)*0x85EBCA77u^std::uint32_t(y)*0xC2B2AE3Du;
- h^=h>>15;h*=0x2C1B3C6Du;h^=h>>12;h*=0x297A2D39u;h^=h>>15;return float(h&0xffffff)/float(0xffffff)*2.f-1.f;
-}
-float valueNoise(std::uint32_t seed,float x,float y){
- int ix=int(std::floor(x)),iy=int(std::floor(y));float fx=x-ix,fy=y-iy;
- auto fade=[](float t){return t*t*t*(t*(t*6-15)+10);};float u=fade(fx),v=fade(fy);
- float a=latticeValue(seed,ix,iy),b=latticeValue(seed,ix+1,iy),c=latticeValue(seed,ix,iy+1),d=latticeValue(seed,ix+1,iy+1);
- return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
-}
-// The continuous (unquantized) surface height of an authored terrain shape.
-float authoredTerrainHeight(const TerrainShape& shape,float wx,float wy){
- float sum=0,amp=1,freq=1/std::max(4.f,shape.scale),norm=0;
- for(int octave=0;octave<4;++octave){sum+=valueNoise(shape.seed+std::uint32_t(octave)*101u,wx*freq,wy*freq)*amp;norm+=amp;amp*=shape.roughness;freq*=2.03f;}
- float h=shape.base+shape.amplitude*sum/norm;
- for(const auto& flat:shape.flats){
-  float dx=std::max({flat.x1-wx,0.f,wx-flat.x2}),dy=std::max({flat.y1-wy,0.f,wy-flat.y2});
-  float d=std::sqrt(dx*dx+dy*dy),t=flat.blend>0?std::clamp(1-d/flat.blend,0.f,1.f):(d<=0?1.f:0.f);
-  t=t*t*(3-2*t);h=h+(flat.height-h)*t;
- }
- return h;
-}
-int authoredTerrainTop(const TerrainShape& shape,int wx,int wy){
- return std::clamp(int(std::lround(authoredTerrainHeight(shape,wx+.5f,wy+.5f))),World::TerrainMinZ+1,World::TerrainMaxZ-2);
-}
-int authoredGroundKind(const TerrainShape& shape,float wx,float wy){
- // Meadow: two noise fields pick grass, leafy grass, clover, wild and dry
- // patches a few metres across, PSX-style hard edges between triangles.
- float a=valueNoise(shape.seed+7001u,wx*.11f,wy*.11f)+valueNoise(shape.seed+7002u,wx*.31f,wy*.31f)*.35f;
- float b=valueNoise(shape.seed+7003u,wx*.07f,wy*.07f)+valueNoise(shape.seed+7004u,wx*.23f,wy*.23f)*.4f;
- // Green dominates; wild and dry ground are occasional clearings.
- int kind=a>.62f?GroundDry:a>.42f?GroundWild:b>.38f?GroundClover:b<-.2f?GroundLeafyGrass:GroundShortGrass;
- for(const auto& paint:shape.ground){
-  float jitter=valueNoise(shape.seed+7005u,wx*.6f,wy*.6f)*paint.edge;
-  float dx=std::max(paint.x1-wx,wx-paint.x2),dy=std::max(paint.y1-wy,wy-paint.y2);
-  if(std::max(dx,dy)<jitter)kind=paint.kind==GroundMeadow?kind:paint.kind;
- }
- return kind;
-}
+// The authored terrain shape is sampled by TerrainField.h (shared with the Campaign Builder).
+static_assert(World::TerrainMinZ+1==TerrainFieldLowestTop&&World::TerrainMaxZ-2==TerrainFieldHighestTop,"TerrainField.h tops must match the voxel range");
 int exclusionVoxelTop(int worldX,int worldY){
  // Forward facility pad on map 0 stays level so walls and NPCs sit cleanly.
  if(worldX>=5&&worldX<=17&&worldY>=10&&worldY<=19)return 2;

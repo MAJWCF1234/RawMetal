@@ -31,6 +31,7 @@
       // Carry the surface set, with no floor ownership marker on this global record.
       for(auto i:doc.records("SURFACE",source)){auto f=NativeDocument::fields(doc.lines[i]);f[1]=std::to_string(destination);doc.add(f);}
       map=destination;layer=0;selectedLayerGroup=-1;selectedRecords.clear();record=-1;mapHeightSelection=floorTransformSelection=false;
+      if(!remakeTest)joinAllSeams(); // land beside a floor meets it (NativeOutdoorMethods.inc)
       publish(true,false);refresh();writeControl();
       message(L"Map joined on the chosen edge. The 3D view follows the new map; Ctrl+Z restores the whole join.");
     }catch(...){doc=std::move(original);map=source;layer=sourceLayer;history.resize(historyCount);future=std::move(priorFuture);refresh();throw;}

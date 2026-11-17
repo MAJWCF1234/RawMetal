@@ -13,8 +13,9 @@
     }
     if(selectedRecords.size()>1)return out;
     auto corners=nativeCorners(schemas[size_t(schema)].fields,f);if(corners.empty())return out;
-    auto box=creationBox(f);float bottom=box?box->bottom:layerElevation(),top=box?box->top:bottom+.1f;
-    if(f[0]=="STRUCT"&&f.size()>7){bottom=number(f[6],bottom);top=number(f[7],top);}
+    // Outdoors the outline stands where the thing stands: on the ground under it.
+    auto box=worldBox(f);float bottom=box?box->bottom:layerElevation(),top=box?box->top:bottom+.1f;
+    if(!box&&f[0]=="STRUCT"&&f.size()>7){float lift=onTerrain()?groundAt((number(f[2],0)+number(f[4],0))*.5f,(number(f[3],0)+number(f[5],0))*.5f):0.f;bottom=number(f[6],bottom)+lift;top=number(f[7],top)+lift;}
     const auto& names=schemas[size_t(schema)].fields;
     bool upper=nativeField(names,f,"top")!=size_t(-1)||nativeField(names,f,"height")!=size_t(-1)||nativeField(names,f,"h")!=size_t(-1);
     bool lower=nativeField(names,f,"bottom")!=size_t(-1);
@@ -88,6 +89,9 @@
   }
   bool pickMapSurface(float ox,float oy,float oz,float dx,float dy,float dz) {
     float len=std::sqrt(dx*dx+dy*dy+dz*dz);if(len<.0001f)return false;
+    // Outdoors there is no roof to raise: a click on the open land picks the map, as on the plan.
+    if(onTerrain()&&layer==0){float x,y,z;auto maps=doc.records("MAP",map);if(maps.empty()||!terrainRay(ox,oy,oz,dx,dy,dz,x,y,z))return false;
+      selectRecord(int(maps.front()));message(L"The land. Terrain on the World page shapes it; Nature plants it.");return true;}
     dx/=len;dy/=len;dz/=len;
     for(float t=.03f;t<60;t+=.03f){float x=ox+dx*t,y=oy+dy*t,z=oz+dz*t;if(x<0||x>=24||y<0||y>=24)continue;
       if(z>=ceilingHeight()-.02f||(z>=layerElevation()&&doc.tile(map,layer,int(x),int(y))=='#')){
@@ -114,7 +118,7 @@
     std::vector<std::pair<float,float>> corners;float bottom=layerElevation(),top=ceilingHeight();
     if(viewHoverRecord>=0&&viewHoverRecord!=record&&size_t(viewHoverRecord)<doc.lines.size()){
       auto f=NativeDocument::fields(doc.lines[size_t(viewHoverRecord)]);int schema=schemaFor(f);if(schema<0)return out;
-      corners=nativeCorners(schemas[size_t(schema)].fields,f);if(auto box=creationBox(f)){bottom=box->bottom;top=box->top;}
+      corners=nativeCorners(schemas[size_t(schema)].fields,f);if(auto box=worldBox(f)){bottom=box->bottom;top=box->top;}
     }else if(viewHoverCell>=0){float x=float(viewHoverCell%24),y=float(viewHoverCell/24);corners={{x,y},{x+1,y},{x+1,y+1},{x,y+1}};}else return out;
     for(size_t i=0;i<corners.size();++i){auto a=corners[i],b=corners[(i+1)%corners.size()];
       out.push_back({a.first,a.second,top,b.first,b.second,top,4});out.push_back({a.first,a.second,bottom,b.first,b.second,bottom,4});out.push_back({a.first,a.second,bottom,a.first,a.second,top,4});}

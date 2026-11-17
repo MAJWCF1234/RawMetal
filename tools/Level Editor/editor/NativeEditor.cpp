@@ -4,6 +4,7 @@
 #include <windows.h>
 #include "../src/world/ModelIds.h"
 #include "../src/world/SkyboxCatalog.h"
+#include "../src/world/TerrainField.h" // the ground the engine builds, sampled the same here (NativeOutdoorMethods.inc)
 #include "NativeCommands.h"
 #include "NativeDocument.h"
 #include "NativeObjects.h"
@@ -29,6 +30,9 @@
 #include <optional>
 #include <array>
 #include <memory>
+#include <queue>
+#include <random>
+#include <climits>
 #include <regex>
 #include <shellapi.h>
 #include <thread>
@@ -734,7 +738,10 @@ enum {
   DoorToolList=660,DoorKindList,DoorAxisList,DoorSwingList,DoorHingeList,DoorLockList,DoorStrengthList,DoorOpenSlider,
   EmitterPresetList=690,EmitterKindList,EmitterRestyleList,EmitterHeadingSlider,EmitterStrengthSlider,
   LightViewButton=700,ThirdPersonToggle,FilmWrite,FilmRender,FilmMaker,
-  MapSkyList=705,LightMenuBase=710
+  MapSkyList=705,LightMenuBase=710,
+  // The Terrain and Nature tools and water outdoors (NativeOutdoorMethods.inc).
+  TerrainModeList=740,TerrainSizeList,TerrainStrengthList,TerrainHeightBox,NatureSetList,NatureDensityList,NatureScaleList,NatureModeList,
+  NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -790,10 +797,13 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Raise & lower", L"⇕", L"Paint to raise the floor into platforms, lower it again, or climb in steps. Pick how on the right.", 4, "", 'H'},
     {L"Sound", L"♪", L"Pick a sound on the right, then click where it comes from. Loops hum on; the rest play now and then.", 1, "AMBIENT", 'p'},
     {L"Film camera", L"✇", L"Click to place a named camera, or drag from where it stands toward what it sees. R turns it. Render films them all with the engine.", 4, "# EDITOR_FILM", 'l'},
+    {L"Terrain", L"⛰", L"Paint the land: raise, lower, smooth, flatten, lay a ramp or paint the ground. Size and strength on the right; Ctrl+Z takes a stroke back.", 4, "", 'T'},
+    {L"Nature", L"♣", L"Paint trees, bushes, grass, rocks and plants. Pick what on the right; Erase (or Alt) clears them. Walls, buildings and water stay clear.", 4, "", 'N'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
-                     HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43;
+                     HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
+                     TerrainTool = 44, NatureTool = 45, WaterTool = 11;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -983,7 +993,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1050,6 +1060,8 @@ struct Editor {
 #include "NativeLightView.inc"
 #include "NativeFilmTool.inc"
 #include "NativeFilmmaker.inc"
+#include "NativeOutdoorMethods.inc"
+#include "NativeOutdoorRegression.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -3294,6 +3306,10 @@ struct Editor {
         opened = true;
       }
     }
+    // Land that opens onto an indoor map meets its floor (NativeOutdoorMethods.inc). The
+    // remake rebuilds the Starter from its own records, which carry their seams already.
+    if (opened && !remakeTest)
+      joinAllSeams();
     return opened;
   }
   void placePlayer(float x, float y) {
@@ -3418,8 +3434,20 @@ struct Editor {
            nativeNumber(oy + bottom)};
       if (tool == 23)
         f.insert(f.end(), {std::to_string(groundKind), "1"});
-      else
-        f.insert(f.end(), {"0", "2"});
+      else {
+        // A pad levels the ground at the height it has on average there (its voxel
+        // top), not at the map's zero: on a hill that dug a pit.
+        float level = 0;
+        if (onTerrain()) {
+          float sum = 0;
+          int n = 0;
+          for (float y = top + .5f; y < bottom; y += 1)
+            for (float x = left + .5f; x < right; x += 1)
+              sum += groundAt(std::clamp(x, 0.f, 23.99f), std::clamp(y, 0.f, 23.99f)) - .5f, ++n;
+          level = n ? std::round(sum / float(n)) : 0.f;
+        }
+        f.insert(f.end(), {nativeNumber(level), "2"});
+      }
     } else
       return;
     remember();
@@ -3600,12 +3628,14 @@ struct Editor {
     int best=-1;float bestT=1e9f;
     if(dx*dx+dy*dy+dz*dz<.000001f)return -1;
     for(auto i:objects())if(activeFloorRecord(i)){
-      auto f=NativeDocument::fields(doc.lines[i]);auto box=creationBox(f);
-      if(!box){auto h=handleFor(i);if(!h)continue;float bottom=layerElevation(),top=bottom+.3f;
+      auto f=NativeDocument::fields(doc.lines[i]);auto box=worldBox(f);
+      if(!box){auto h=handleFor(i);if(!h)continue;float bottom=layerElevation()+(onTerrain()?groundAt(h->x,h->y):0.f),top=bottom+.3f;
         if(f[0]=="STRUCT"&&f.size()>7){bottom=number(f[6],bottom);top=number(f[7],top);}
         box=creation::Box{h->x,h->y,h->width,h->depth,bottom,top};}
       float t=0;if(rayNativeBox(ox,oy,oz,dx,dy,dz,box->x,box->y,box->w,box->d,box->bottom,box->top,box->yaw,t)&&t<bestT){bestT=t;best=int(i);}
     }
+    // The ground outdoors hides what lies behind a hill.
+    if(best>=0&&terrainOcclusion(ox,oy,oz,dx,dy,dz)+.05f<bestT)best=-1;
     // A wall is opaque to selection too. Props behind it must not light up.
     for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(doc.tile(map,layer,x,y)=='#'){
       float t=0;if(rayNativeBox(ox,oy,oz,dx,dy,dz,x+.5f,y+.5f,1,1,layerElevation(),ceilingHeight(),0,t)&&t+.03f<bestT){bestT=t;best=-1;}}
@@ -3715,6 +3745,10 @@ struct Editor {
       ly = std::floor(by), hy = ly + 1;
     static constexpr float heights[] = {0.f, .9f, 1.5f, 2.1f};
     float floorZ = layerElevation(), lift = floorZ + heights[std::clamp(placeHeight, 0, 3)];
+    // Outdoors these keep absolute heights while the rest follow the ground: they start on
+    // the ground under the click, not buried at the map's zero under a hill.
+    if (onTerrain() && layer == 0 && (s.kind == "SCRIPT_EVENT" || s.kind == "PIPE" || s.kind == "COMPACTOR" || s.kind == "AMBIENT"))
+      floorZ = groundAt(std::clamp((lx + hx) * .5f, 0.f, 23.99f), std::clamp((ly + hy) * .5f, 0.f, 23.99f));
     set("x", n(bx)), set("y", n(by));
     set("x1", n(lx)), set("y1", n(ly)), set("x2", n(hx)), set("y2", n(hy));
     auto sized = [&](int slot) {
@@ -3775,6 +3809,7 @@ struct Editor {
       set("length", n(length)), set("radius", "0.008"), set("material", "8"), set("live", "0");
     } else if (k == "WATER") {
       set("bed", n(floorZ)), set("surface", n(floorZ + .4f));
+      groundWater(f); // outdoors: just under the lowest point of its bank (NativeOutdoorMethods.inc)
     } else if (k == "STAIR") {
       float top = nextLayerElevation();
       set("bottom", n(floorZ)), set("top", n(top));
@@ -3899,6 +3934,13 @@ struct Editor {
     }
     if (info.shape == 'K') {
       corridor(ax, ay, bx, by);
+      return;
+    }
+    // Water that finds its own level (NativeOutdoorMethods.inc): a click fills the hollow
+    // under it, or sets the picked pool's surface to the bank clicked.
+    if (tool == WaterTool && waterMode() != 0) {
+      if (!ghosting)
+        waterMode() == 1 ? (void)fillBasin(bx, by) : (void)waterSurfaceFromBank(bx, by);
       return;
     }
     auto cell = [](float v) { return std::clamp(int(std::floor(v)), 0, 23); };
@@ -4029,6 +4071,15 @@ struct Editor {
     if(effectiveFloorView(floorLayer(layer)).locked)return;
     int cx = std::clamp(int(std::floor(x)), 0, 23), cy = std::clamp(int(std::floor(y)), 0, 23);
     char brushShape = toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape;
+    // The land and its plants (NativeOutdoorMethods.inc): a dab under the pointer.
+    if (brushShape == 'T') {
+      terrainDab(x, y);
+      return;
+    }
+    if (brushShape == 'N') {
+      natureDab(x, y);
+      return;
+    }
     if (brushShape == 'F') {
       // The outline lives beside the map until it becomes walls, a block or terraces.
       if (!history.empty() && history.back() == doc.text())
@@ -4063,7 +4114,7 @@ struct Editor {
   }
   bool brushTool() const {
     char s = toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape;
-    return (s == 't' && brush == 0) || s == 'F' || s == 'H';
+    return (s == 't' && brush == 0) || s == 'F' || s == 'H' || s == 'T' || s == 'N';
   }
   bool fillTool() const { return toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape == 't' && brush == 2; }
   bool dragTool() const {
@@ -4201,7 +4252,7 @@ struct Editor {
       if (objectDrag)
         finishDrag(false);
       if (brushing)
-        brushing = false, publish();
+        brushing = false, endOutdoorStroke(), publish();
       if (viewRect)
         viewRect = false, dropGhost();
       viewDrag = false;
@@ -4214,7 +4265,7 @@ struct Editor {
       }
       if (tool != 0) {
         float fx, fy;
-        if (!floorPoint(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy))
+        if (!pointOnFloor(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy))
           return;
         fx = std::clamp(fx, 0.f, 23.99f), fy = std::clamp(fy, 0.f, 23.99f);
         // The same tools as the plan: brush paints under the pointer, drag
@@ -4250,7 +4301,7 @@ struct Editor {
     if(held&&viewDrag&&objectDrag&&resizeHandle>=0){float fx,fy;if(floorPoint(ox,oy,oz,dx,dy,dz,resizePlane,fx,fy)){applyCornerDrag(fx-viewGrabX,fy-viewGrabY);if(objectMoved&&liveTurn())publish();}return;}
     if (held && viewDrag && objectDrag) {
       float fx, fy;
-      if (!floorPoint(ox, oy, oz, dx, dy, dz, 0, fx, fy))
+      if (!pointOnFloor(ox, oy, oz, dx, dy, dz, 0, fx, fy))
         return;
       float ax = fx - viewGrabX, ay = fy - viewGrabY;
       if (snap > 0) {
@@ -4271,15 +4322,16 @@ struct Editor {
       viewDrag = false;
     } else if (brushing) {
       float fx, fy;
-      if (held && floorPoint(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy))
+      if (held && pointOnFloor(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy))
         brushCell(std::clamp(fx, 0.f, 23.99f), std::clamp(fy, 0.f, 23.99f));
       if (!held) {
         brushing = false;
+        endOutdoorStroke();
         publish();
       }
     } else if (viewRect) {
       float fx = hoverX, fy = hoverY;
-      if (floorPoint(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy)) {
+      if (pointOnFloor(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy)) {
         fx = std::clamp(fx, 0.f, 23.99f), fy = std::clamp(fy, 0.f, 23.99f);
         hoverX = fx, hoverY = fy;
         viewX1 = int(fx), viewY1 = int(fy);
@@ -4414,6 +4466,7 @@ struct Editor {
       bool busy = drag || brushing;
       finishDrag(true);
       drag = brushing = false;
+      endOutdoorStroke();
       if (GetCapture() == plan)
         ReleaseCapture();
       if (!busy && tool != 0) {
@@ -4793,7 +4846,9 @@ struct Editor {
                       doorSwingList, doorHingeList, doorLockList, doorStrengthList, doorOpenSlider, pickupList, creatureList, tileList, primList, brushList,
                       clutterList, actionList, linkList, kindList, recordList, emitterPresetList, emitterKindList, emitterRestyleList,
                       emitterHeadingSlider, emitterStrengthSlider, GetDlgItem(window, FilmWrite), GetDlgItem(window, FilmRender),
-                      GetDlgItem(window, FilmMaker)})
+                      GetDlgItem(window, FilmMaker), terrainModeList, terrainSizeList, terrainStrengthList, terrainHeightBox,
+                      natureSetList, natureDensityList, natureScaleList, natureModeList, GetDlgItem(window, NatureAlignToggle),
+                      waterModeList, waterMurkSlider, waterWetSlider})
       if (list)
         ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
@@ -4905,6 +4960,34 @@ struct Editor {
       row(doorToolList, L"Door");
     if (tool == EmitterTool)
       row(emitterPresetList, L"Preset");
+    // The land, its plants and water (NativeOutdoorMethods.inc).
+    if (tool == TerrainTool) {
+      row(terrainModeList, L"Brush");
+      row(terrainSizeList, L"Size");
+      if (terrainMode() != TerrainPaint && terrainMode() != TerrainRamp)
+        row(terrainStrengthList, L"Strength");
+      if (terrainMode() == TerrainFlatten)
+        row(terrainHeightBox, L"Level (m)", 26);
+      if (terrainMode() == TerrainPaint)
+        row(groundList, L"Paint");
+    }
+    if (tool == NatureTool) {
+      row(natureModeList, L"Brush");
+      if (listIndex(natureModeList) == 0)
+        row(natureSetList, L"Plant");
+      row(terrainSizeList, L"Size");
+      if (listIndex(natureModeList) == 0) {
+        row(natureDensityList, L"Density");
+        row(natureScaleList, L"Sizes");
+        HWND align = GetDlgItem(window, NatureAlignToggle);
+        SetWindowTextW(align, natureAlign ? L"Align to slope: on" : L"Align to slope: off");
+        placeControl(align, rx, y, 312, 32, TRUE);
+        ShowWindow(align, SW_SHOW);
+        y += 38;
+      }
+    }
+    if (tool == WaterTool)
+      row(waterModeList, L"Water");
     if (tool == FilmTool) {
       int i = 0;
       for (int id : {FilmWrite, FilmRender}) {
@@ -4964,6 +5047,15 @@ struct Editor {
       SetWindowTextW(flicker, number(lightField(17), 0) > 0 ? L"\u2734 Flicker: on" : L"\u2734 Flicker: off");
       placeControl(flicker, rx, y, 312, 34, TRUE);
       y += 44;
+    }
+    if (waterPicked() && waterMurkSlider) {
+      syncWaterControls();
+      for (auto [slider, text] : {std::pair{waterMurkSlider, L"Murk"}, std::pair{waterWetSlider, L"Wet banks"}}) {
+        caption(rx, y + 6, 96, text);
+        placeControl(slider, rx + 100, y, 212, 32, TRUE);
+        ShowWindow(slider, SW_SHOW);
+        y += 36;
+      }
     }
     if (emitterPicked() && emitterKindList) {
       syncEmitterControls();
@@ -5685,6 +5777,16 @@ struct Editor {
     groundKind = 6;
     authorRect(1, 16, 6, 18);
     tool = 24;
+    // Outdoors a pad levels the ground at its average height there (NativeOutdoorMethods.inc).
+    float padLevel = 0;
+    {
+      float sum = 0;
+      int n = 0;
+      for (float y = 16.5f; y < 20; y += 1)
+        for (float x = 8.5f; x < 13; x += 1)
+          sum += groundAt(x, y) - .5f, ++n;
+      padLevel = std::round(sum / float(n));
+    }
     authorRect(8, 16, 12, 19);
     placePlayer(4.5f, 4.5f);
     authorSurfaces();
@@ -5708,7 +5810,7 @@ struct Editor {
     auto pad =
         NativeDocument::fields(doc.lines[doc.records("TERRAIN_FLAT").at(0)]);
     require(pad[1] == "8" && pad[2] == "16" && pad[3] == "13" && pad[4] == "20" &&
-                pad[5] == "0" && pad[6] == "2",
+                pad[5] == nativeNumber(padLevel) && pad[6] == "2",
             "Flatten pad was not stored in world metres");
     require(doc.records("TERRAIN").size() == 1, "Outdoor paint did not add terrain");
     auto room = NativeDocument::fields(doc.lines[doc.records("MAP", 0).at(0)]);
@@ -5865,6 +5967,7 @@ struct Editor {
     verifySelectionRegressions();
     verifyLayerRegressions();
     verifyDressingRegressions();
+    verifyOutdoorRegressions(false); // NativeOutdoorRegression.inc, without the engine pictures
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -6537,7 +6640,7 @@ struct Editor {
     if (objectDrag)
       finishDrag(true);
     if (brushing)
-      brushing = false, publish();
+      brushing = false, endOutdoorStroke(), publish();
     if (viewRect)
       viewRect = false, dropGhost();
     drag = false;
@@ -7967,11 +8070,16 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
   };
   auto at = [&](int i) { return int(ox + i * cell); };
   auto atY = [&](int i) { return int(oy + i * cell); };
+  // Outdoors the land itself, shaded by its height and cover, with a contour every metre.
+  const bool land = e->onTerrain() && e->layer == 0 && activeLayer.visible && activeLayer.opacity > 0;
+  if (land)
+    e->drawTerrainPlan(dc, ox, oy, cell);
+  e->drawWaterPlan(dc, ox, oy, cell);
   // Cells: floor a dark slate, walls a grey mass, empty space stays black.
   for (int y = 0; y < 24; y++)
     for (int x = 0; x < 24; x++) {
       char c = tileAt(x, y);
-      if (c == '_')
+      if (c == '_' || (land && c == '.'))
         continue;
       COLORREF color = c == '#'   ? ui::WallFill
                        : c == '=' ? ui::DeckFill
@@ -8125,6 +8233,24 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     // Emitters and film cameras draw their own glyphs (drawEmitterGlyphs, drawFilmCameras).
     if (f[0] == "EMITTER" || f[0] == "# EDITOR_FILM")
       continue;
+    // Plants from the nature pack are drawn as their canopy, green, so a wood reads as a wood
+    // (a neighbour's collision copy of a tree is only its dotted trunk ring).
+    if (f[0] == "FIXTURE" && f.size() > 2 && Editor::natureModel(int(Editor::number(f[2], -1)))) {
+      bool tree = Editor::treeModel(int(Editor::number(f[2], -1))), copy = f.size() > 12 && f[12] == "0";
+      COLORREF leaf = faded(tree ? RGB(0x6C, 0xC8, 0x50) : RGB(0xA6, 0xD8, 0x6A), e->effectiveFloorView(e->floorLayer(e->recordFloor(index))).opacity);
+      int r = copy ? std::max(2, int(cell * .25f)) : std::max(2, std::min(hw, hd));
+      auto p = pen(1, leaf, copy ? PS_DOT : PS_SOLID);
+      auto oldPen = SelectObject(dc, p), oldBrush = SelectObject(dc, GetStockObject(HOLLOW_BRUSH));
+      Ellipse(dc, x - r, y - r, x + r + 1, y + r + 1);
+      SelectObject(dc, oldBrush), SelectObject(dc, oldPen), DeleteObject(p);
+      if (tree && !copy) {
+        auto trunk = CreateSolidBrush(leaf);
+        RECT centre{x - 1, y - 1, x + 2, y + 2};
+        FillRect(dc, &centre, trunk);
+        DeleteObject(trunk);
+      }
+      continue;
+    }
     COLORREF color = faded(ui::kindColor(f[0]),e->effectiveFloorView(e->floorLayer(e->recordFloor(index))).opacity);
     if (object.width >= 23.5f && object.depth >= 23.5f)
       color = RGB(GetRValue(color) * 3 / 10, GetGValue(color) * 3 / 10, GetBValue(color) * 3 / 10);
@@ -8341,7 +8467,9 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       if (shape == 'R' && e->autoDetail)
         outline(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ui::Lamp, 1, PS_DOT);
     };
-    if (shape == 'd')
+    if (shape == 'T' || shape == 'N')
+      e->drawBrushRing(dc, ox, oy, cell, hx, hy);
+    else if (shape == 'd')
       // The door this click or drag fits, in the wall's direction, as R has turned it.
       drawDoor(dc, stretching ? e->plannedDoor(e->dragFX, e->dragFY, hx, hy) : e->plannedDoor(hx, hy, hx, hy), ghost, true);
     else if (stretching && (shape == 't' || shape == 'R' || shape == 'w' || shape == 'c'))
@@ -8485,6 +8613,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (e->objectDrag)
         e->finishDrag(true);
       e->drag = e->brushing = false;
+      e->endOutdoorStroke();
       if (GetCapture() == h)
         ReleaseCapture();
       if (e->tool != 0) {
@@ -8598,7 +8727,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (e->objectDrag)
         e->finishDrag(false);
       if (e->brushing)
-        e->brushing = false, e->publish();
+        e->brushing = false, e->endOutdoorStroke(), e->publish();
       e->drag = false;
       return 0;
     }
@@ -8614,6 +8743,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if (e->brushing) {
         e->brushing = false;
+        e->endOutdoorStroke();
         e->publish();
           return 0;
         }
@@ -9181,6 +9311,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if(slider==e->layerOpacity){e->layerOpacityChanged(LOWORD(w)!=TB_THUMBTRACK);return 0;}
       if(slider==e->doorOpenSlider){e->doorOpenChanged(LOWORD(w));return 0;}
       if(slider==e->emitterHeadingSlider||slider==e->emitterStrengthSlider){e->emitterSliderChanged(slider,LOWORD(w));return 0;}
+      if(slider==e->waterMurkSlider||slider==e->waterWetSlider){e->waterSliderChanged(slider,LOWORD(w));return 0;}
       if (slider == e->historySlider) {
         e->scrubTo(int(SendMessageW(slider, TBM_GETPOS, 0, 0)));
         return 0;
@@ -9377,6 +9508,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if (id >= EmitterPresetList && id <= EmitterRestyleList) {
         e->emitterControlChanged(id, notification);
+        return 0;
+      }
+      if (id >= TerrainModeList && id <= WaterWetSlider) {
+        e->outdoorControlChanged(id, notification);
         return 0;
       }
       if (id == LinkList && notification == LBN_SELCHANGE) {
@@ -9718,7 +9853,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The test modes check every document query against a full scan of the lines.
     if (argc > 1)
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
-                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script"})
+                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -9826,6 +9961,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     }
     if (argc > 1 && std::wstring(argv[1]) == L"--editing-test")
       e.backgroundTest = e.editingTest = true;
+    // Outdoors (NativeOutdoorRegression.inc): terrain maps, mixed maps, the Terrain, Nature and Water tools, pictures.
+    if (argc > 1 && std::wstring(argv[1]) == L"--outdoor-test")
+      e.backgroundTest = e.outdoorTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10185,6 +10323,25 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       SendMessageW(e.emitterKindList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(name));
     for (auto [slider, id] : {std::pair{&e.emitterHeadingSlider, int(EmitterHeadingSlider)}, std::pair{&e.emitterStrengthSlider, int(EmitterStrengthSlider)}})
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
+    // The Terrain and Nature tools and water outdoors (NativeOutdoorMethods.inc).
+    e.terrainModeList = choices(TerrainModeList, {L"Raise", L"Lower", L"Smooth", L"Flatten to a level", L"Ramp (drag from one level to another)", L"Paint the ground"});
+    e.terrainSizeList = choices(TerrainSizeList, {L"1 m across", L"2 m", L"3 m", L"5 m", L"8 m", L"12 m"}, 2);
+    e.terrainStrengthList = choices(TerrainStrengthList, {L"Gentle (0.1 m a dab)", L"Medium (0.25 m)", L"Strong (0.5 m)", L"Full (1 m)"}, 1);
+    e.terrainHeightBox = e.controlWindow(L"EDIT", L"", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, TerrainHeightBox);
+    SendMessageW(e.terrainHeightBox, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"where you press"));
+    e.natureModeList = choices(NatureModeList, {L"Plant", L"Erase"});
+    e.natureSetList = choices(NatureSetList, {});
+    for (const auto &set : Editor::natureSets())
+      SendMessageW(e.natureSetList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(set.name));
+    SendMessageW(e.natureSetList, CB_SETCURSEL, 0, 0);
+    e.natureDensityList = choices(NatureDensityList, {L"Sparse", L"Normal", L"Dense"}, 1);
+    e.natureScaleList = choices(NatureScaleList, {L"All one size", L"Some variety", L"Wide variety"}, 1);
+    e.button(L"Align to slope: on", NatureAlignToggle);
+    e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
+    for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
+      *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
+      SendMessageW(*slider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 100));
+    }
     e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets"});
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
@@ -10369,6 +10526,12 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.verifyEditing();
       DestroyWindow(e.window);
       return 0;
+    }
+    if (e.outdoorTest) {
+      int code = e.runOutdoorTest();
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
     }
     if (e.remakeTest) {
       e.verifyRemake();

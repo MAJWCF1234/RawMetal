@@ -35,7 +35,9 @@ public:
  // Self-check for --editor-live-campaign-test: every map-only result against a full parse.
  static bool test(const std::filesystem::path& file,std::string& report);
 private:
- struct Split{std::uint64_t global=0;std::vector<std::uint64_t> maps;std::vector<int> owner;};
+ // world: the campaign-wide lines but the land's own (TERRAIN_FLAT, TERRAIN_SCULPT, GROUND),
+ // so a terrain brush stroke rebuilds only the maps whose ground it changed.
+ struct Split{std::uint64_t global=0,world=0;std::vector<std::uint64_t> maps;std::vector<int> owner;};
  static Split split(const std::string& text);
  static std::shared_ptr<const CustomCampaign> mapOnly(const std::string& text,const Split& split,int map,const std::string& source,const std::shared_ptr<const CustomCampaign>& good);
  std::shared_ptr<const CustomCampaign> m_good;Split m_split;

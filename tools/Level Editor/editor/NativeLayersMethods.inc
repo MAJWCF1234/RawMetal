@@ -247,11 +247,14 @@
   }  bool showFloorReferences=true,layersDock=false;
   std::string editorViewControl() const {
     std::ostringstream out;auto floors=floorLayers();out<<floors.size()<<'\n';
+    // Outdoors the storeys stand on the ground under them, and the top band reaches the sky:
+    // land higher than the ceiling must not be ghosted or hidden as another floor.
+    const bool land=onTerrain();const float under=land?floorBandGround():0.f;
     for(size_t i=0;i<floors.size();++i){auto a=effectiveFloorView(floors[i]);
-      float top=i+1<floors.size()?floors[i+1].elevation-.001f:std::max(ceilingHeight()+1,a.elevation+4);
+      float top=i+1<floors.size()?floors[i+1].elevation+under-.001f:land?1000.f:std::max(ceilingHeight()+1,a.elevation+4);
       float opacity=a.visible?a.opacity:0.f;
       if(a.id!=layer)opacity*=floorReferenceEnabled()?.22f:0.f;
-      out<<(i==0?-1000.f:a.elevation-.001f)<<' '<<top<<' '<<opacity;
+      out<<(i==0?-1000.f:a.elevation+under-.001f)<<' '<<top<<' '<<opacity;
       for(unsigned mask:a.mask)out<<' '<<mask;out<<'\n';
     }
     auto guides=selectionGuides();auto hover=hoverGuides();guides.insert(guides.end(),hover.begin(),hover.end());

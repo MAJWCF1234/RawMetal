@@ -174,6 +174,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   data<<"\n# ==== Campaign-wide terrain (world metres) ====\n";
   line(Rec("TERRAIN").i(t.seed).n(t.base).n(t.amplitude).n(t.scale).n(t.roughness));
   for(const auto& flat:t.flats)line(Rec("TERRAIN_FLAT").n(flat.x1).n(flat.y1).n(flat.x2).n(flat.y2).n(flat.height).n(flat.blend));
+  for(const auto& sculpt:t.sculpts)line(Rec("TERRAIN_SCULPT").i(sculpt.x).i(sculpt.y).i(sculpt.cols).i(sculpt.rows).f(formatTerrainSculptValues(sculpt.offsets)));
   if(t.horizonDepth>0||!t.horizonModels.empty()){std::string models;for(size_t k=0;k<t.horizonModels.size();++k)models+=(k?",":"")+std::to_string(t.horizonModels[k]);
    line(Rec("HORIZON").n(t.horizonDepth).n(t.horizonSpacing).n(t.horizonRise).f(models));}
   for(const auto& g:t.ground)line(Rec("GROUND").n(g.x1).n(g.y1).n(g.x2).n(g.y2).i(g.kind).n(g.edge));
@@ -204,7 +205,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    r.f(door.alongY?"1":"").f(door.hingeRight?"1":"").f(door.strength>0?num(door.strength):"").f(door.lock?std::to_string(door.lock):"");line(r,13);}
   for(const auto& s:m.structures){Rec r("STRUCT");r.i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).b(s.rail).i(s.material).f(s.solid?"":"0").f(s.shape?std::to_string(s.shape):"").f(s.facing?std::to_string(s.facing):"");line(r,10);}
   for(const auto& x:m.fixtures){Rec r("FIXTURE");r.i(mi).i(x.model).n(x.position.x).n(x.position.y).n(x.base).n(x.width).n(x.depth).n(x.height).n(x.yaw).b(x.solid);
-   if(x.anchored)r.n(x.core).b(x.visible).b(true);else if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
+   if(x.slopeX!=0||x.slopeY!=0)r.n(x.core).b(x.visible).b(x.anchored).n(x.slopeX).n(x.slopeY);
+   else if(x.anchored)r.n(x.core).b(x.visible).b(true);else if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
   for(const auto& p:m.props)line(Rec("PROP").i(mi).i(p.kind).n(p.position.x).n(p.position.y).n(p.height).n(p.footprint).n(p.yaw).n(p.halfSize.x).n(p.halfSize.y).n(p.base));
   // A test lead's pilot lamp is made again when its LEAD is seated on load.
   std::set<int> pilots;for(const auto& lead:m.leads)if(lead.panel>=0&&lead.lamp>=0)pilots.insert(lead.lamp);
@@ -409,6 +411,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  d.eq("terrain present",bool(a.terrain),bool(b.terrain));
  if(a.terrain&&b.terrain){const auto& x=*a.terrain;const auto& y=*b.terrain;d.eq("terrain.seed",x.seed,y.seed);d.eq("terrain.base",x.base,y.base);d.eq("terrain.amplitude",x.amplitude,y.amplitude);d.eq("terrain.scale",x.scale,y.scale);d.eq("terrain.roughness",x.roughness,y.roughness);
   d.count("terrain.flats",x.flats.size(),y.flats.size());for(size_t i=0;i<std::min(x.flats.size(),y.flats.size());++i){const auto&p=x.flats[i];const auto&q=y.flats[i];auto w=at("flat",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".height",p.height,q.height);d.eq(w+".blend",p.blend,q.blend);}
+  d.count("terrain.sculpts",x.sculpts.size(),y.sculpts.size());for(size_t i=0;i<std::min(x.sculpts.size(),y.sculpts.size());++i){const auto&p=x.sculpts[i];const auto&q=y.sculpts[i];auto w=at("sculpt",i);d.eq(w+".grid",Point3{float(p.x),float(p.y),float(p.cols)},Point3{float(q.x),float(q.y),float(q.cols)});d.eq(w+".rows",p.rows,q.rows);d.eq(w+".offsets",p.offsets==q.offsets,true);}
   d.count("terrain.ground",x.ground.size(),y.ground.size());for(size_t i=0;i<std::min(x.ground.size(),y.ground.size());++i){const auto&p=x.ground[i];const auto&q=y.ground[i];auto w=at("ground",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".edge",p.edge,q.edge);}
   d.eq("horizon.depth",x.horizonDepth,y.horizonDepth);d.eq("horizon.spacing",x.horizonSpacing,y.horizonSpacing);d.eq("horizon.rise",x.horizonRise,y.horizonRise);d.eq("horizon.models",x.horizonModels==y.horizonModels,true);}
  {const auto& p=a.definition;const auto& q=b.definition;d.eq("origin",p.origin,q.origin);d.eq("playerStart",p.playerStart,q.playerStart);d.eq("spawnHeight",p.spawnHeight,q.spawnHeight);d.eq("environment",p.environment,q.environment);
@@ -430,7 +433,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  for(size_t i=0;i<std::min(a.props.size(),b.props.size());++i){const auto&p=a.props[i];const auto&q=b.props[i];auto w=at("prop",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".position",p.position,q.position);d.eq(w+".height",p.height,q.height);d.eq(w+".footprint",p.footprint,q.footprint);d.eq(w+".yaw",p.yaw,q.yaw);d.eq(w+".halfSize",p.halfSize,q.halfSize);d.eq(w+".base",p.base,q.base);}
  d.count("fixtures",a.fixtures.size(),b.fixtures.size());
  for(size_t i=0;i<std::min(a.fixtures.size(),b.fixtures.size());++i){const auto&p=a.fixtures[i];const auto&q=b.fixtures[i];auto w=at("fixture",i);d.eq(w+".model",p.model,q.model);d.eq(w+".position",p.position,q.position);d.eq(w+".base",p.base,q.base);
-  d.eq(w+".size",Point3{p.width,p.depth,p.height},Point3{q.width,q.depth,q.height});d.eq(w+".yaw",p.yaw,q.yaw);d.eq(w+".solid",p.solid,q.solid);d.eq(w+".core",p.core,q.core);d.eq(w+".visible",p.visible,q.visible);}
+  d.eq(w+".size",Point3{p.width,p.depth,p.height},Point3{q.width,q.depth,q.height});d.eq(w+".yaw",p.yaw,q.yaw);d.eq(w+".solid",p.solid,q.solid);d.eq(w+".core",p.core,q.core);d.eq(w+".visible",p.visible,q.visible);d.eq(w+".slope",Vec2{p.slopeX,p.slopeY},Vec2{q.slopeX,q.slopeY});}
  d.count("pipes",a.pipes.size(),b.pipes.size());
  for(size_t i=0;i<std::min(a.pipes.size(),b.pipes.size());++i){const auto&p=a.pipes[i];const auto&q=b.pipes[i];auto w=at("pipe",i);d.eq(w+".start",p.start,q.start);d.eq(w+".end",p.end,q.end);d.eq(w+".z",p.z,q.z);d.eq(w+".radius",p.radius,q.radius);d.eq(w+".endZ",p.endZ,q.endZ);d.eq(w+".material",p.material,q.material);}
  // Lights: pilot lamps of test leads are matched by what they are; the rest in order.
