@@ -308,6 +308,16 @@ void Space::solve(float h,bool useBias){
   const Soft s=m.surface.hertz>0?makeSoft(std::min(m.surface.hertz,.25f*inv),1.f,h):B&&B->movable()?soft:hard;
   const V3 dpA=A.dp,dpB=B?B->dp:V3{};const Quat dqA=A.dq,dqB=B?B->dq:Quat{};
   float total=0;
+  // A face meeting a face (two to four points): first the approach at the manifold's middle, shared evenly by
+  // its points. Point by point alone, the first corner solved takes the whole blow and tips the body under the
+  // rest: a basket landing flat on four corners came up spinning at 7 rad/s.
+  if(m.count>1){V3 mid{};for(int k=0;k<m.count;++k)mid=mid+m.points[size_t(k)].p;mid=mid*(1.f/float(m.count));
+   const V3 rA=mid-A.x,rB=B?mid-B->x:mid;const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
+   const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);
+   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
+   if(k>0&&vn<-settings.restitutionThreshold){const float lambda=-vn/k;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
+    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(rA,P);}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(rB,P);}
+    for(int j=0;j<m.count;++j){auto&c=m.points[size_t(j)];c.normalImpulse+=lambda/float(m.count);c.maxNormalImpulse=std::max(c.maxNormalImpulse,lambda/float(m.count));}}}
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
    // The gap now, from how far each body has moved and turned since the step began.
    const V3 prA=dqA.rotate(c.rA),prB=B?dqB.rotate(c.rB):c.rB;

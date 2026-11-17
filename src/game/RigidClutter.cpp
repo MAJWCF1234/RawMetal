@@ -85,7 +85,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   // The usual case, asked once: one flat floor under the whole footprint (no ramp) and every column round
   // and through it open from that floor to over the body. Then each point needs only that floor's height.
   bool flat=downs.size()==1;float flatFloor=0;const World* flatWorld=nullptr;
-  if(flat){const float lo=b.boundsLo.z,hi=b.boundsHi.z;const float x0=b.boundsLo.x,x1=b.boundsHi.x,y0=b.boundsLo.y,y1=b.boundsHi.y;
+  if(flat){const float lo=b.boundsLo.z,hi=b.boundsHi.z;const float reachXY=margin-sp.settings.speculative+.02f,x0=b.boundsLo.x-reachXY,x1=b.boundsHi.x+reachXY,y0=b.boundsLo.y-reachXY,y1=b.boundsHi.y+reachXY;
    const int nx=std::max(1,int(std::ceil((x1-x0)/.1f))),ny=std::max(1,int(std::ceil((y1-y0)/.1f)));
    auto column=[&](float x,float y,bool first)->bool{Vec2 q{x,y};q=q+shift;const World& w=physicalWorld(q);if(first)flatWorld=&w;else if(&w!=flatWorld)return false;
     const float fs=w.supportBelow(q.x,q.y,lo+.06f,true);if(first)flatFloor=fs;else if(std::fabs(fs-flatFloor)>1e-4f)return false;
@@ -121,6 +121,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
       if(w.fits(x,y,base,.01f,true,true)&&!w.doorBlocks(x,y,base,.01f)){hits.push_back({p,{std::cos(ang),std::sin(ang),0},-r,2});found=true;}}if(found)break;}
     continue;}
    if(ceilingNear&&p.z>b.x.z){const float cl=w.clearanceAbove(q.x,q.y,p.z-.05f,true);if(cl-p.z<margin)hits.push_back({p,{0,0,-1},cl-p.z,1});}
+   // Clear now but in a solid by the end of the step at its own speed: a contact now, at the face the way meets
+   // (speculative, for the walls as for the floor), so a fast thing stops at a wall rather than in it.
+   {const V3 vp=b.v+cross(b.w,p-b.x);const V3 move=vp*RigidStep*1.5f;const float horiz=std::sqrt(move.x*move.x+move.y*move.y);
+    if(horiz>.004f){const float tx=q.x+move.x,ty=q.y+move.y;const float fb=std::max(p.z+move.z-.005f,s+.004f);
+     if(!w.fits(tx,ty,fb,.01f,true,true)||w.doorBlocks(tx,ty,fb,.01f)){const V3 from{q.x,q.y,std::max(p.z,s+.006f)},to{tx,ty,std::max(p.z,s+.006f)};V3 n;const float t=w.shotFraction(from,to,n);
+      if(t<1&&dot(n,to-from)<0)hits.push_back({p,n,std::max(0.f,dot(from-(from+(to-from)*t),n)),2});}}}
   }
   if(hits.empty())return;
   // Group: the floor, the ceiling, the walls by the way they face (eight ways round).
@@ -149,10 +155,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  space.sweep=[&](Space&,int,V3 from,V3 to,V3& normal)->float{Vec2 q{from.x,from.y};q=q+shift;const World& w=physicalWorld(q);const Vec2 k=q-(Vec2{from.x,from.y}+shift);
   const V3 a{q.x,q.y,from.z},bb{to.x+shift.x+k.x,to.y+shift.y+k.y,to.z};return w.shotFraction(a,bb,normal);};
  // ---- A prop's own reactions (as the old step had them) ----
- auto impact=[&](int index,float speed){auto&c=list[size_t(index)];if(speed<.65f||c.impactCooldown>0||c.broken)return;
+ // A blow's sound (and hearing) goes by the contact's own approach; breaking goes by the approach of the prop's
+ // middle (`breaking`, the speed the materials' break speeds were set on: a tumbling bottle's tip is faster).
+ auto impact=[&](int index,float speed,float breaking=-1){auto&c=list[size_t(index)];if(speed<.65f||c.impactCooldown>0||c.broken)return;if(breaking<0)breaking=speed;
   const auto&t=propMaterialTraits(c.material());SoundEvent event{c.impactSound(),c.pos+shift,std::clamp(speed*.12f,.12f,.85f)*t.impactGain,t.impactPitch,true,17,c.z+c.height()*.5f};
   event.owner=c.soundOwner;event.aiRadius=std::clamp(2.f+std::sqrt(c.mass())*speed,2.f,12.f);
-  if(t.breakSpeed>0&&speed>t.breakSpeed)breakClutter(level,size_t(index),{c.velocity.x,c.velocity.y,c.vz});m_sounds.push_back(event);c.impactCooldown=.075f;};
+  if(t.breakSpeed>0&&breaking>t.breakSpeed)breakClutter(level,size_t(index),{c.velocity.x,c.velocity.y,c.vz});m_sounds.push_back(event);c.impactCooldown=.075f;};
  // A pane struck with `energy` (J): cracked, or broken (the share of its speed the prop keeps going on).
  auto strike=[&](int index,int paneLevel,int pane,float energy,Point3 at,Point3 dir)->float{auto&c=list[size_t(index)];auto&pw=paneLevel==m_level?m_world:m_chunks[paneLevel].world;if(!pw.breakableIntact(pane))return 1;
   const bool fresh=c.paneRearm<=0;c.paneRearm=PaneRearm;if(!fresh)return 0;const auto b=pw.breakables()[size_t(pane)];
@@ -280,8 +288,9 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // Whoever came in faster (before the blow) gives both its sound's owner (a guard's kick stays his).
    if(bUser>=0){auto&cb=list[size_t(bUser)];const int owner=len(before[size_t(ev.a)])>=len(before[size_t(ev.b)])?ca.soundOwner:cb.soundOwner;ca.soundOwner=cb.soundOwner=owner;}
    const bool aKinematic=space.bodies[size_t(ev.a)].kinematic,bKinematic=ev.b>=0&&space.bodies[size_t(ev.b)].kinematic;
-   if(!aKinematic)impact(a,ev.approach);
-   if(bUser>=0&&!bKinematic){auto&cb=list[size_t(bUser)];const float bs=propMaterialTraits(cb.material()).breakSpeed;if(bs>0&&ev.approach>bs)breakClutter(level,size_t(bUser),{ev.normal.x,ev.normal.y,ev.normal.z});else if(aKinematic)impact(bUser,ev.approach);}
+   const float middles=std::max(0.f,dot(before[size_t(ev.a)]-(ev.b>=0?before[size_t(ev.b)]:V3{}),ev.normal));
+   if(!aKinematic)impact(a,ev.approach,middles);
+   if(bUser>=0&&!bKinematic){auto&cb=list[size_t(bUser)];const float bs=propMaterialTraits(cb.material()).breakSpeed;if(bs>0&&middles>bs)breakClutter(level,size_t(bUser),{ev.normal.x,ev.normal.y,ev.normal.z});else if(aKinematic)impact(bUser,ev.approach);}
    if(aKinematic)continue;
    // Against the world: was it a pane? It takes the energy the contact brought (its effective mass).
    if(ev.b<0&&!ca.broken){Vec2 q{ev.point.x,ev.point.y};q=q+shift;const World& pw=physicalWorld(q);const auto&panes=pw.breakables();

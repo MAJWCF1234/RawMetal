@@ -66,6 +66,10 @@ void author(Map& m,const std::string& scene){
  else if(scene=="glassfloor"){kit::breakable(m,7,7,10,10,1.f,1.03f,17,false);kit::prop(m,model::wooden_crate,8.5f,8.5f,2.35f,0);}
  else if(scene=="letgo"){kit::prop(m,model::market_crate,9.19f,8,0,-kPi*.5f);kit::prop(m,model::glass_bottle,9.f,8,.95f,0);}
  else if(scene=="barrelpane"){kit::breakable(m,9.97f,5,10.03f,11,0,3,17,false);kit::prop(m,model::ind_barrel,9.95f-.265f-.45f,8,0,0);}
+ else if(scene=="shovecrate"){kit::prop(m,model::market_crate,11.1f,8,0,-kPi*.5f);
+  for(int i=0;i<6;++i){const float ox=-.24f+.1f*float(i%3)*2.4f,oy=i<3?-.09f:.09f;kit::prop(m,model::glass_bottle,11.1f+oy,8+ox,.02f,float(i));}}
+ else if(scene=="carry"){kit::prop(m,model::market_basket,10,8,0,-.2f,.55f);
+  const Vec2 fruit[]={{-.07f,-.08f},{.07f,-.07f},{-.06f,.08f},{.07f,.08f}};for(auto o:fruit)kit::prop(m,model::market_pumpkin,10+o.x,8+o.y,.4f*.55f,-o.x*9,.28f);}
  else if(scene=="keys"){kit::prop(m,model::keyboard,8,8,0,0);kit::prop(m,model::keyboard,8.46f,8,0,0);}
  else if(scene=="lob"){kit::prop(m,model::glass_bottle,8.8f,8,.5f,0);kit::prop(m,model::market_pumpkin,8.8f,12,.5f,0);}
  else if(scene=="drop"){
@@ -218,7 +222,7 @@ const bool traced=add({.name="rigid-trace",.summary="a rigid scene traced frame 
  const char* e=std::getenv("RM_RIGID_SCENE");const std::string scene=e?e:"chairs";const bool legacy=std::getenv("RM_RIGID_LEGACY")!=nullptr;
  std::ofstream r("rigid-trace.txt");rigid::forceLegacyProps(legacy?1:0);
  std::unique_ptr<Game> made;if(scene=="ward"){made=std::make_unique<Game>();LabAccess::loadLevel(*made,75);}else made=std::make_unique<Game>(campaign(scene));Game& g=*made;
- if(scene!="barrelpane")LabAccess::player(g).pos={3,3};if(scene=="ward"){LabAccess::player(g).pos={12,12};const auto& fx=g.world().fixtures();
+ if(scene!="barrelpane"&&scene!="shovecrate"&&scene!="carry")LabAccess::player(g).pos={3,3};if(scene=="ward"){LabAccess::player(g).pos={12,12};const auto& fx=g.world().fixtures();
   for(const auto& f:fx)if(f.model==model::med_ward_bed&&f.visible){const float crown=g.world().floorHeight(f.position.x,f.position.y)+f.base+f.height*.404f/.842f;
    Clutter c;c.kind=7;c.model=model::med_corpse_supine;const auto& sz=model::propSize[c.model];c.dims={sz[0],sz[1],sz[2]};const Vec2 along{std::cos(f.yaw),-std::sin(f.yaw)};
    c.pos=f.position;c.z=crown+.05f;c.yaw=std::atan2(-along.x,along.y);LabAccess::clutter(g).push_back(c);
@@ -226,8 +230,11 @@ const bool traced=add({.name="rigid-trace",.summary="a rigid scene traced frame 
     r<<"structure "<<st.x1<<","<<st.y1<<" - "<<st.x2<<","<<st.y2<<" z "<<st.bottom<<".."<<st.top<<" solid "<<st.solid<<" material "<<st.material<<'\n';r<<"bed at "<<f.position.x<<","<<f.position.y<<" yaw "<<f.yaw<<" size "<<f.width<<"x"<<f.depth<<"x"<<f.height<<" crown "<<crown<<'\n';break;}}
  else launch(g,scene);
  if(scene=="barrelpane"){auto& pl=LabAccess::player(g);pl.pos={9.95f-.53f-.45f-.5f,8};pl.angle=0;pl.pitch=0;}
- for(int i=0;i<(std::getenv("RM_RIGID_FRAMES")?std::atoi(std::getenv("RM_RIGID_FRAMES")):180);++i){InputState in;if(scene=="barrelpane"){in.forward=true;in.sprint=true;LabAccess::player(g).angle=0;}g.update(in,1.f/60);
-  if(scene=="barrelpane")r<<"player "<<fixed(LabAccess::player(g).pos.x,3)<<" pane damage "<<fixed(g.world().breakableDamage(0),2)<<" intact "<<g.world().breakableIntact(0)<<'\n';const auto& st=LabAccess::rigidStats(g);r<<"frame "<<i<<" steps "<<st.steps<<" bodies "<<st.bodies<<" awake "<<st.awake<<" manifolds "<<st.manifolds<<" world "<<st.worldManifolds<<" events "<<st.events.size()<<'\n';
+ if(scene=="shovecrate"){auto& pl=LabAccess::player(g);pl.pos={11.1f,6.9f};pl.angle=kPi*.5f;pl.pitch=0;}
+ if(scene=="carry"){auto& pl=LabAccess::player(g);pl.pos={8.95f,8};pl.angle=0;pl.pitch=0;}
+ for(int i=0;i<(std::getenv("RM_RIGID_FRAMES")?std::atoi(std::getenv("RM_RIGID_FRAMES")):180);++i){InputState in;if(scene=="carry"){if(i==12)r<<"grab "<<LabAccess::grab(g)<<" held "<<LabAccess::held(g)<<'\n';if(i>12&&i<102)in.forward=true;if(i>=102&&i<162)in.mouseDx=6;if(i==162)in.use=true;}
+  if(scene=="barrelpane"||(scene=="shovecrate"&&i<90)){in.forward=true;in.sprint=true;LabAccess::player(g).angle=scene=="barrelpane"?0.f:kPi*.5f;}g.update(in,1.f/60);
+  if(scene=="barrelpane"||scene=="shovecrate")r<<"player "<<fixed(LabAccess::player(g).pos.x,3)<<","<<fixed(LabAccess::player(g).pos.y,3)<<" pane damage "<<fixed(g.world().breakables().empty()?0.f:g.world().breakableDamage(0),2)<<'\n';const auto& st=LabAccess::rigidStats(g);r<<"frame "<<i<<" steps "<<st.steps<<" bodies "<<st.bodies<<" awake "<<st.awake<<" manifolds "<<st.manifolds<<" world "<<st.worldManifolds<<" events "<<st.events.size()<<'\n';
   const auto& list=LabAccess::clutter(g);for(size_t k=0;k<list.size();++k){const auto& c=list[k];if(c.model<0)continue;
    r<<"  #"<<k<<" m"<<c.model<<" pos "<<fixed(c.pos.x,3)<<","<<fixed(c.pos.y,3)<<","<<fixed(c.z,3)<<" v "<<fixed(c.velocity.x,2)<<","<<fixed(c.velocity.y,2)<<","<<fixed(c.vz,2)<<" ypr "<<fixed(c.yaw,2)<<","<<fixed(c.pitch,2)<<","<<fixed(c.roll,2)
     <<" w "<<fixed(c.rollSpeed,2)<<","<<fixed(c.pitchSpeed,2)<<","<<fixed(c.spin,2)<<(c.sleeping?" asleep":"")<<(c.riding?" riding":"")<<(c.broken?" broken":"")<<'\n';}

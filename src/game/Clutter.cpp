@@ -227,7 +227,10 @@ void Game::resolveHeldPropBodies(){
 }
 void Game::updateClutter(const InputState&input,float dt){
  landShards();
- std::vector<std::pair<int,containers::Snapshot>> contents;for(int level=0;level<chunkCount();++level)if(level==m_level||chunkResident(level)){auto&list=level==m_level?m_clutter:m_chunks[level].clutter;contents.push_back({level,containers::capture(list,level==m_level?m_heldClutter:-1,!rigid::legacyProps())});}
+ std::vector<std::pair<int,containers::Snapshot>> contents;for(int level=0;level<chunkCount();++level)if(level==m_level||chunkResident(level)){auto&list=level==m_level?m_clutter:m_chunks[level].clutter;contents.push_back({level,containers::capture(list,level==m_level?m_heldClutter:-1,!rigid::legacyProps())});
+   // The rigid core: what a carrying container holds rides from this step (out of the solver, set in place by
+   // carry), not from the next: a crate shoved at a sprint would otherwise hit its own bottles at 5 m/s.
+   if(!rigid::legacyProps())for(const auto&r:contents.back().second.riders)list[size_t(r.item)].riding=true;}
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(!holdingClutter())m_carryClutter=-1;
  if(holdingClutter()){
