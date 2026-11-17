@@ -1,6 +1,6 @@
 # Map format 2: standing in the script box, which reads @vault.code, sets @vault.opened and frees the frozen box.
 world custom "lab/fixtures/map-format.rmc"
-camera 3.5 5 1.6 25 -25
-size 480 270
+camera 5.8 5.8 1.6 38 -18
+size 960 540
 frames 150
 mf-scene open

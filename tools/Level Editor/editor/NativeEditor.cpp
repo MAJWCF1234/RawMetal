@@ -2637,7 +2637,7 @@ struct Editor {
           poolLabels.push_back(controlWindow(L"STATIC", L"", 0, 0, form));
           poolInputs.push_back(controlWindow(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 1000 + int(slot), form));
         }
-        setControlText(poolLabels[slot], key == "+" ? L"Add a field: key=value (tint, scale, mass, frozen, faction, p.name...)" : namedLabel(key).c_str());
+        setControlText(poolLabels[slot], key == "+" ? L"Add a field: key=value" : namedLabel(key).c_str());
         setControlText(poolInputs[slot], wide(key == "+" ? std::string() : decoded(value)).c_str());
         fieldLabels.push_back(poolLabels[slot]);
         fieldInputs.push_back(poolInputs[slot]);

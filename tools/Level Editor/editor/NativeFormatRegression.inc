@@ -6,6 +6,15 @@
     PrintWindow(window,dc,PW_CLIENTONLY|PW_RENDERFULLCONTENT);
     BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;
     std::vector<char> bits(size_t(r.right)*size_t(r.bottom)*4);SelectObject(dc,old);GetDIBits(dc,bitmap,0,UINT(r.bottom),bits.data(),&info,DIB_RGB_COLORS);
+    // Headless, no engine draws the 3D pane: leave its columns out (the plan and the inspector stay).
+    if(viewport&&!engineLive){RECT v{};GetWindowRect(viewport,&v);MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&v),2);
+     const int cut0=std::clamp(int(v.left)-4,0,int(r.right)),cut1=std::clamp(int(v.right)+4,cut0,int(r.right)),width=int(r.right)-(cut1-cut0);
+     // The toolbar rows above the panes go too, so no button is cut in half.
+     const int top=std::clamp(int(v.top)-8,0,int(r.bottom)),height=int(r.bottom)-top;
+     if(cut1>cut0&&width>0&&height>0){std::vector<char> kept(size_t(width)*size_t(height)*4);
+      for(int y=0;y<height;++y){const char* row=bits.data()+size_t(y+top)*size_t(r.right)*4;char* out=kept.data()+size_t(y)*size_t(width)*4;
+       std::memcpy(out,row,size_t(cut0)*4);std::memcpy(out+size_t(cut0)*4,row+size_t(cut1)*4,size_t(int(r.right)-cut1)*4);}
+      bits=std::move(kept);r.right=width;r.bottom=height;info.bmiHeader.biWidth=width;info.bmiHeader.biHeight=-height;}}
     fs::create_directories(file.parent_path());std::ofstream out(file,std::ios::binary);BITMAPFILEHEADER head{};head.bfType=0x4D42;head.bfOffBits=sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);head.bfSize=DWORD(head.bfOffBits+bits.size());
     out.write(reinterpret_cast<const char*>(&head),sizeof head);out.write(reinterpret_cast<const char*>(&info.bmiHeader),sizeof info.bmiHeader);out.write(bits.data(),std::streamsize(bits.size()));
     DeleteObject(bitmap);DeleteDC(dc);ReleaseDC(window,screen);if(!shown)ShowWindow(window,SW_HIDE);

@@ -14,7 +14,7 @@ std::string mapFormatTestText(){
  std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nFORMAT|2\nCAMPAIGN|Format two|0|future.campaign=yes\n"
   "MAP|0|Format room|0|0|4|12|0|0|4|0.6|industrial_night|0|0|0|0|0|-1|0|0|0\nLAYER|0|0|Floor|0|0\n";
  for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+(y==0||y==23?std::string(24,'#'):"#"+std::string(22,'.')+"#")+"\n";
- t+="LIGHT|0|12|12|3.6|0|0|1.4|18|4000\nLIGHT|0|8|8|3.6|0|0|1.2|10|4000\n"
+ t+="LIGHT|0|12|12|3.6|0|0|1.4|18|4000\nLIGHT|0|8|8|3.6|0|0|1.2|10|4000\nLIGHT|0|8.5|10|3.4|0|0|2.6|12|4500\nLIGHT|0|6|6|3.4|0|0|1.8|10|4500\n"
   // A pair of desks, placed twice: turned a quarter, and with their names prefixed.
   "PREFAB|desk_pair\nFIXTURE|@|24|1|0|0|1.4|0.7|0.75|0|1|name=desk\nFIXTURE|@|24|-1|0|0|1.4|0.7|0.75|0|1|name=desk2|tint=0.5,0.5,1\nPREFAB_END\n"
   "PREFAB_PLACE|0|desk_pair|18|6|0|0|a_\nPREFAB_PLACE|0|desk_pair|18|18|0|1.5707964|b_\n"
