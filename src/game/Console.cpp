@@ -14,13 +14,16 @@ void Game::executeConsole(std::string command){
  if(m_consoleHistory.size()>32)m_consoleHistory.erase(m_consoleHistory.begin());m_consoleHistoryIndex=int(m_consoleHistory.size());
  for(auto&c:command)c=char(std::tolower(static_cast<unsigned char>(c)));
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
- if(verb=="help"||verb=="maps"){
+ // summon, ally/enemy/neutral, kill, killall, freeze, ai, list, help summon (Summon.cpp).
+ if(consoleSummonCommand(command)){}
+ else if(verb=="help"||verb=="maps"){
   m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST / MAP EXCLUSION");
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("RELOAD / WHERE / GOD / NOCLIP / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("NOCLIP: FLY THROUGH WALLS WHERE YOU LOOK. JUMP RISES, CROUCH SINKS, SPRINT IS FASTER. NOT SAVED.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
   m_consoleLog.push_back("GIVE 12 GA / 12GA / SHELLS: ADDS 16 SHOTGUN SHELLS.");
+  m_consoleLog.push_back("SUMMON <KIND> [N] [ALLY|ENEMY|NEUTRAL] [AI=..] / ALLY / ENEMY / KILL / KILLALL / FREEZE / AI ON|OFF / LIST. HELP SUMMON.");
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="unlock"){
   // Unlock what the player is looking at for good, by setting the state it

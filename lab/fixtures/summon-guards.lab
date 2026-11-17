@@ -1,0 +1,8 @@
+# Console summons: two allied soldiers against a hostile Chimera. Tubes: summon.
+world room
+camera 4 12 -999 0 -12
+light 8 12 3.2 1.4 10
+light 14 12 3.2 1.2 10
+summon-scene guards
+size 480 270
+frames 1200

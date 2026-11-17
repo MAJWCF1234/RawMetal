@@ -94,6 +94,7 @@ add_executable(RawMetal WIN32
     game/Lift.cpp
     game/Reactor.cpp
     game/Console.cpp
+    game/Summon.cpp
     game/Streaming.cpp
     game/Mechanisms.cpp
     game/Electricity.cpp

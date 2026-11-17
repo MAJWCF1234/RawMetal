@@ -63,6 +63,11 @@ inline bool factionsHostile(AiFaction a,AiFaction b){
  if(a==AiFaction::Player||a==AiFaction::Facility)return b==AiFaction::Creature||b==AiFaction::Raider;
  return a==AiFaction::Creature||a==AiFaction::Raider;
 }
+// What a body flees from: whoever is hostile to it, and for a neutral (a summoned
+// bystander, a neutral animal) anything that fights all comers.
+inline bool factionThreatens(AiFaction self,AiFaction other){
+ return factionsHostile(self,other)||(self==AiFaction::Neutral&&(other==AiFaction::Creature||other==AiFaction::Raider));
+}
 // look: the bearing a guard faces while paused at this post (yaw radians).
 // Unset (NaN), it keeps the bearing it arrived on. Either way a guard on a
 // multi-point route scans slowly either side of it while it waits.
