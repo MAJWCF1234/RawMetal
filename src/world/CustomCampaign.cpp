@@ -836,6 +836,11 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  if(!openPrefab.empty())throw std::runtime_error("PREFAB "+openPrefab+" has no PREFAB_END");
  // Campaign-wide named fields ride on map 0; scripts' @entity.key resolve to property states.
  if(!maps.empty()&&maps[0])for(auto& [key,value]:campaignFields)maps[0]->recordFields[key]=std::move(value);
+ for(auto& n:namedEntities){
+  auto& t=*n.traits;
+  for(const auto& [key,value]:t.properties)n.map->propertySeeds.push_back({entityPropertyState(n.mapIndex,n.map->name,t.name,key),entityPropertyValue(value),t.name,key});
+  if(t.frozen>=0&&t.tag=="CLUTTER"){t.frozenState=entityPropertyState(n.mapIndex,n.map->name,t.name,"frozen");n.map->propertySeeds.push_back({t.frozenState,t.frozen,t.name,"frozen"});}
+ }
  for(const auto& ref:propertyRefs){
   try{
    std::string_view v=ref.text;v.remove_prefix(1);int target=ref.mapIndex;
@@ -846,13 +851,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    const auto& owner=*maps[size_t(target)];if(!owner.entity(entity))throw std::runtime_error("no record named "+std::string(entity)+" on map "+std::to_string(target));
    const StateId id=entityPropertyState(target,owner.name,entity,key);
    auto& event=ref.map->scriptEvents[ref.event];if(ref.action)event.actions[ref.slot].id=id;else event.conditions[ref.slot].id=id;
-   ref.map->stateSpellings.emplace_back(id,ref.text);}
+   ref.map->stateSpellings.emplace_back(id,ref.text);
+   auto& seeds=maps[size_t(target)]->propertySeeds;if(std::none_of(seeds.begin(),seeds.end(),[&](const auto& p){return p.id==id;}))seeds.push_back({id,0,std::string(entity),std::string(key),false});}
   catch(const std::exception& error){throw std::runtime_error("line "+std::to_string(ref.line)+" ("+ref.text+"): "+error.what());}}
- for(auto& n:namedEntities){
-  auto& t=*n.traits;
-  for(const auto& [key,value]:t.properties)n.map->propertySeeds.push_back({entityPropertyState(n.mapIndex,n.map->name,t.name,key),entityPropertyValue(value)});
-  if(t.frozen>=0&&t.tag=="CLUTTER"){t.frozenState=entityPropertyState(n.mapIndex,n.map->name,t.name,"frozen");n.map->propertySeeds.push_back({t.frozenState,t.frozen});}
- }
  for(auto& [map,index]:artUsers){auto& sign=map->signs[index];auto found=art.find(sign.art);
   if(found==art.end())throw std::runtime_error("SIGN record names SIGN_ART "+sign.art+", which is not in the file");sign.picture=found->second;}
  for(auto& seat:seats)if(const auto error=seatTestLead(*seat.map,seat.map->leads[seat.lead],seat.panel,seat.socket,seat.terminal);!error.empty())throw std::runtime_error("LEAD record: "+error);

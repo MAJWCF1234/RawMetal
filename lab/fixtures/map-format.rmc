@@ -1,0 +1,58 @@
+META_LEVEL_NAME: Format two
+# Written by --each-test=map-format (MapFormatTest.cpp); lab/fixtures/map-format.rmc is a copy.
+--- CUSTOM_CAMPAIGN_DATA_START ---
+FORMAT|2
+CAMPAIGN|Format two|0|future.campaign=yes
+MAP|0|Format room|0|0|4|12|0|0|4|0.6|industrial_night|0|0|0|0|0|-1|0|0|0
+LAYER|0|0|Floor|0|0
+ROW|0|0|0|########################
+ROW|0|0|1|#......................#
+ROW|0|0|2|#......................#
+ROW|0|0|3|#......................#
+ROW|0|0|4|#......................#
+ROW|0|0|5|#......................#
+ROW|0|0|6|#......................#
+ROW|0|0|7|#......................#
+ROW|0|0|8|#......................#
+ROW|0|0|9|#......................#
+ROW|0|0|10|#......................#
+ROW|0|0|11|#......................#
+ROW|0|0|12|#......................#
+ROW|0|0|13|#......................#
+ROW|0|0|14|#......................#
+ROW|0|0|15|#......................#
+ROW|0|0|16|#......................#
+ROW|0|0|17|#......................#
+ROW|0|0|18|#......................#
+ROW|0|0|19|#......................#
+ROW|0|0|20|#......................#
+ROW|0|0|21|#......................#
+ROW|0|0|22|#......................#
+ROW|0|0|23|########################
+LIGHT|0|12|12|3.6|0|0|1.4|18|4000
+LIGHT|0|8|8|3.6|0|0|1.2|10|4000
+PREFAB|desk_pair
+FIXTURE|@|24|1|0|0|1.4|0.7|0.75|0|1|name=desk
+FIXTURE|@|24|-1|0|0|1.4|0.7|0.75|0|1|name=desk2|tint=0.5,0.5,1
+PREFAB_END
+PREFAB_PLACE|0|desk_pair|18|6|0|0|a_
+PREFAB_PLACE|0|desk_pair|18|18|0|1.5707964|b_
+CLUTTER|0|7|8|8|0|0|17|0.6|0.6|0.6|0|0|#0|name=red_crate|tint=1,0.25,0.25|mass=3|impact=metal_bang
+CLUTTER|0|7|9.6|9.4|0|0|17|0.6|0.6|0.6|0|0|#0
+CLUTTER|0|7|10|8|1.2|0|17|0.5|0.5|0.5|0|0|#0|name=held_box|frozen=1
+FIXTURE|0|27|6|16|0|0.42|0.4|0.38|0|1|name=vault|p.code=1234|p.owner=Jenkins|future.key=7
+TIMED_SEQUENCE|0|fmt_clock|fmt_clock_done|0|0|1|1|-1|-0.5|60000|60000|0|0|0|0|1
+ACTOR|0|fmt_clock|4|1.6|0|0|0|name=turncoat|faction=enemy|display=Turncoat
+ACTOR_AI|0|0|3||1.5|2|6
+ACTOR_FACTION|0|0|2|
+ACTOR_GUARD|0|0|11|0.65|600|4000|
+ACTOR_PATROL|0|0|16|8|0|60000
+ACTOR_KEY|0|0|0|16|8|0|0|0|0
+ACTOR_KEY|0|0|60000|16|8|0|0|0|1
+CREATURE|0|0|4|20|0|1|0|fmt_sleep|||name=rex|faction=ally|ai=guard|display=Rex|hp=500
+SCRIPT_EVENT|0|fmt_open|2|2|6|6|-10|10||1|0|name=open_box
+SCRIPT_REQUIRE|0|fmt_open|@vault.code|=|1234
+SCRIPT_ACTION|0|fmt_open|STATE|@vault.opened|1
+SCRIPT_ACTION|0|fmt_open|STATE|@held_box.frozen|0
+SCRIPT_ACTION|0|fmt_open|ADD|fmt_count|2
+--- CUSTOM_CAMPAIGN_DATA_END ---

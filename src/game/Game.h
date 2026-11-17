@@ -156,13 +156,20 @@ struct Enemy {
     float contactRadius()const{return creatureTraits(kind).contactRadius*scale;}
     // A kind that stands dead until woken (CreatureTraits::dormant) keeps its wake state set while it sleeps.
     bool sleeping()const{return alive&&wakeState!=0&&creatureTraits(kind).dormant;}
-    const char* name()const{return creatureTraits(kind).name;}
+    // Map format 2 overrides of its CREATURE record (display name, look, side, order). Not saved:
+    // a load takes them from the authored spawn it matches (adoptTraits).
+    EntityTraitsRef traits;
+    const char* name()const{return traits&&!traits->display.empty()?traits->display.c_str():creatureTraits(kind).name;}
     // Who it fights as (factionsHostile): every authored and scripted creature is a
     // Creature. A console summon (Summon.cpp) may be anything; its serial (0: not a
     // summon), the standing order it keeps with nothing to fight (SummonOrder),
     // where that order is anchored, and whether the console holds it still. None
     // of this is saved: a save leaves summons out (they are transient).
     AiFaction faction=AiFaction::Creature;std::uint32_t summon=0;std::uint8_t order=0;bool frozen=false;
+    // An authored creature given an order (CREATURE ai=): it keeps it as a summon does.
+    bool ordered=false;
+    // What a fresh spawn of the same record knows that a save does not keep (traits, side, order).
+    void adoptTraits(const Enemy& spawn){traits=spawn.traits;faction=spawn.faction;ordered=spawn.ordered;order=spawn.order;anchor=spawn.anchor;anchorZ=spawn.anchorZ;patrolTo=spawn.patrolTo;patrolToZ=spawn.patrolToZ;}
     Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,orderClock=0,fleeClock=0;
 };
 
@@ -254,7 +261,16 @@ struct Clutter {
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
  ShardOf shardOf=ShardOf::Crate;int piece=0,shardModel=-1;std::array<float,3> from{};
+ // Map format 2 overrides of the CLUTTER record it came from (EntityTraits.h): mass, health,
+ // material, friction, restitution, density, container volume, impact sound, look. Not saved:
+ // a load takes them again from the authored prop it matches (Saves.cpp reconcile).
+ EntityTraitsRef traits;
+ // Held where it was put: anchored, or frozen (a named prop's `frozen` property, which a script
+ // may clear). Game::refreshPinnedClutter sets it each step; the solver leaves it be.
+ bool pinned=false;
  PropMaterial material()const;float mass()const;float supportHeight()const;
+ float friction()const{return traits&&traits->friction>=0?traits->friction*8.f:model>=0?propMaterialTraits(material()).friction:7.f;}
+ float restitution()const{return traits&&traits->restitution>=0?traits->restitution:propMaterialTraits(material()).restitution;}
  bool footprintContains(Vec2 point)const{auto d=point-pos;if(std::fabs(pitch)+std::fabs(roll)<.1f){float c=std::cos(yaw),s=std::sin(yaw);return std::fabs(d.x*c+d.y*s)<=dims[0]*.5f+.001f&&std::fabs(-d.x*s+d.y*c)<=dims[1]*.5f+.001f;}auto e=extent();return std::fabs(d.x)<=e[0]+.001f&&std::fabs(d.y)<=e[1]+.001f;}
  std::array<float,3> size()const{if(model>=0||(kind==6&&dims[0]>0))return dims;constexpr std::array<float,3> sizes[]={{.22f,.22f,.003231f},{.156383f,.25f,.054035f},{.082788f,.083595f,.28f},{.24f,.222403f,.139543f},{.263634f,.28f,.014386f},{.12f,.11894f,.006745f},{.34f,.045f,.009f}};return sizes[kind];}
  std::array<float,3> rotate(float x,float y,float localZ)const{
@@ -280,7 +296,7 @@ struct Clutter {
  // that eighth sat in it (centre: its middle; size: x, y, up; yaw: its heading), thrown out from
  // the middle at `speed` and up at `lift`. ShardOf::Ceiling gives small slabs of a tile instead.
  static std::vector<Clutter> shards(ShardOf of,Point3 centre,std::array<float,3> size,float yaw,int count,float speed,float lift,int model=-1);
- Sound impactSound()const{if(model>=0||(kind==6&&shardOf!=ShardOf::Crate))return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
+ Sound impactSound()const{if(traits&&traits->impact>=0)return Sound(traits->impact);if(model>=0||(kind==6&&shardOf!=ShardOf::Crate))return propMaterialTraits(material()).impact;return kind==2?Sound::JunkGlass:kind==0||kind==1||kind==5||kind==6?Sound::JunkSoft:Sound::JunkMetal;}
 };
 
 // One firearm's rounds: total counts the loaded ones too, so the reserve is
@@ -419,6 +435,7 @@ public:
     NpcDeath npcDeath(size_t actor)const;
     static bool testChimeraHunt();
     static bool testDoorAxis();
+    static bool testMapFormat();   // MapFormatTest.cpp: map format 2
     static bool testDoors();
     static bool testMachine();
     // --machine-frames: 0 the electrical death on a lit test floor, 1 the lure across Experimental Power's split feed (chunk 92).
@@ -1148,6 +1165,20 @@ private:
     float darknessTarget(bool* jamming)const;
     void updateDarkness(float dt);
     void seedScripts();
+    // ---- Map format 2 entity properties (EntityTraits.h, docs/Systems/map-format.md) ----
+    // Every read and write of a named record's property goes through these four: scripts
+    // (@entity.key conditions and STATE/ADD), a prop's `frozen`, and the seeding of authored
+    // values. Today the values live in script states (saved with them); a store keyed by
+    // map, entity and property can take over here without touching the callers.
+    struct EntityPropertyRef {int level=-1;std::string entity,key;};
+    std::unordered_map<StateId,EntityPropertyRef> m_entityProperties;
+    void seedEntityProperties();
+    bool entityProperty(StateId id)const{return m_entityProperties.count(id)!=0;}
+    int entityPropertyInt(StateId id)const;
+    void setEntityPropertyInt(StateId id,int value);
+    int entityPropertyInt(int level,std::string_view entity,std::string_view key)const;
+    // Props held by anchored= or frozen= (Clutter::pinned), refreshed each physics step.
+    void refreshPinnedClutter();
     void updateScripts(float dt);
     int scriptValue(const ScriptEvent& event,const ScriptCondition& condition)const;
     bool scriptEventReady(const ScriptEvent& event)const;

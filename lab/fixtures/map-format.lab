@@ -1,0 +1,6 @@
+# Map format 2 (src/lab/tubes/MapFormat.cpp): the red crate (tint=), a plain one, the frozen box in the air, the prefab desks.
+world custom "lab/fixtures/map-format.rmc"
+camera 5 12.5 1.6 -49 -40
+size 480 270
+frames 40
+mf-scene closed

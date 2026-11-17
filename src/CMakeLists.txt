@@ -177,6 +177,8 @@ add_executable(RawMetal WIN32
     game/Crates.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
+    game/EntityProperties.cpp
+    game/MapFormatTest.cpp
     game/GlassPanes.cpp
     game/Containers.cpp
     game/SoftBodies.cpp

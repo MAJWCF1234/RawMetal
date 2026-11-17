@@ -1942,7 +1942,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
-         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"doors",retro::Game::testDoors},
+         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"map-format",retro::Game::testMapFormat},{"doors",retro::Game::testDoors},
          {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},

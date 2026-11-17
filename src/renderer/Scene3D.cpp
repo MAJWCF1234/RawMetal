@@ -30,6 +30,31 @@
 #include <stdexcept>
 #include <mutex>
 namespace retro {
+const SoftwareRenderer::Texture& SoftwareRenderer::lookFace(const Texture& base,const EntityTraits& look){
+ if(!look.tinted&&look.emissive<=0)return base;
+ auto bits=[](float v){return std::uint64_t(std::lround(std::clamp(v,0.f,8.f)*255));};
+ std::uint64_t key=std::uint64_t(reinterpret_cast<std::uintptr_t>(&base))*1099511628211ull;
+ for(float f:{look.tint.x,look.tint.y,look.tint.z,look.emissive})key=(key^bits(f))*1099511628211ull;
+ auto found=m_lookFaces.find(key);if(found!=m_lookFaces.end())return found->second;
+ Texture face=base;
+ // Texels are display-encoded: the tint multiplies them as written (a grey crate tinted
+ // 1,0.4,0.4 reads red), each channel held to 255.
+ auto tint=[&](std::uint32_t p){unsigned c[3]={(p>>16)&255u,(p>>8)&255u,p&255u};const float k[3]={look.tint.x,look.tint.y,look.tint.z};
+  for(int i=0;i<3;++i)c[i]=unsigned(std::min(255.f,float(c[i])*k[i]+.5f));return (p&0xff000000u)|(c[0]<<16)|(c[1]<<8)|c[2];};
+ if(look.tinted){for(auto& p:face.pixels)p=tint(p);for(auto& level:face.mips)for(auto& p:level)p=tint(p);}
+ if(look.emissive>0){
+  // It glows in its own (tinted) colour, `emissive` times its texel, over what it already gave off.
+  if(face.emission.size()!=face.pixels.size())face.emission.assign(face.pixels.size(),0xff000000u);
+  for(size_t i=0;i<face.pixels.size();++i){const auto p=face.pixels[i],e=face.emission[i];unsigned c[3];
+   for(int k=0;k<3;++k){const int shift=16-8*k;c[k]=unsigned(std::min(255.f,float((e>>shift)&255u)+float((p>>shift)&255u)*look.emissive));}
+   face.emission[i]=0xff000000u|(c[0]<<16)|(c[1]<<8)|c[2];}}
+ return m_lookFaces.emplace(key,std::move(face)).first->second;
+}
+const SoftwareRenderer::Texture& SoftwareRenderer::lookedTexture(int model,int part,const EntityTraits* look){
+ if(!look)return facilityTexture(model,part);
+ const Texture& base=look->texture>=0&&look->texture<int(m_facilityMeshes.size())?facilityTexture(look->texture,0):facilityTexture(model,part);
+ return look->looks()?lookFace(base,*look):base;
+}
 const SoftwareRenderer::Texture& SoftwareRenderer::lampFace(const Texture& base,Point3 tone){
  const float peak=std::max({tone.x,tone.y,tone.z,1e-4f});
  // Emission bytes are display-encoded: the linear filter goes in as its 1/2.2 power.
@@ -891,6 +916,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  bool objectLighting=false;float objectLight=1,objectAir=SoftwareRenderer::NoBounceAir;const NormalLighting*objectNormalLighting=nullptr;
  // While a ceiling lamp's fitting draws: its tone, which its glowing parts take.
  const Point3*fittingTone=nullptr;
+ // The fixture being drawn's map format 2 look (tint=, emissive=, texture=), or none.
+ const EntityTraits*facilityLook=nullptr;
  // The CPU rasteriser's stand-in for reflections: a polished or metal face takes the probes' light
  // from the way it mirrors the eye, by Fresnel (metal strongly face-on).
  auto probeSheen=[&](Point3 p,Point3 n,const Texture&t){
@@ -1126,6 +1153,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // the shared depth buffer selects the visible exterior without opening holes.
    float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*softFace;
    const Texture*texture=materials.parts[size_t(face.part)];
+   if(facilityLook&&facilityLook->looks())texture=&lookedTexture(model,face.part,facilityLook);
    if(fittingTone&&!texture->emission.empty())texture=&lampFace(*texture,*fittingTone);
    tri(face.v[0],face.v[1],face.v[2],*texture,light);
   };
@@ -1584,7 +1612,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
   // A plant gets its physbones slot: its mesh and its impostor bend in scene.vert.
   if(m_gpuFrame&&m_gpu&&plantModel(fixture.model))m_gpu->setPlantTag(m_plants.add(w.level(),int(&fixture-w.fixtures().data()),{fixture.position.x,fixture.position.y,base},fixture.height,std::max(fixture.width,fixture.depth)*.5f));
-  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);
+  facilityLook=fixture.traits.get();facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);facilityLook=nullptr;
   if(impostor){
    tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;
    tag.farFade=fixture.height<1.4f?tag.lod*2.6f:0.f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
@@ -1912,7 +1940,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
- if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);
+ if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model)){facilityLook=fixture.traits.get();facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);facilityLook=nullptr;}
  // Padded fixtures have their own cache, drawn and lit as the static fixtures are: rebuilt only when a pad
  // on them moves (SoftPad::version) or wakes or sleeps, so undeformed they look exactly as they always did.
  {uint64_t key=geometryKey;bool any=false;auto mix=[&](std::uint64_t v){key^=v;key*=1099511628211ull;};
@@ -1927,7 +1955,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Fixture parts have a separate cache; a screen hit never rebuilds the chunk.
  {uint64_t key=geometryKey;bool any=false;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){any=true;key^=w.fixtureParts(i);key*=1099511628211ull;}
  for(int j=0;j<int(w.breakables().size());++j)if(w.breakables()[j].fixture>=0){key^=(j+1)*(w.breakableIntact(j)?1ull:2ull);key*=1099511628211ull;}
- if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(40*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){const auto&f=w.fixtures()[i];if(f.visible)facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw,w.fixtureParts(i),i);}if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
+ if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(40*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){const auto&f=w.fixtures()[i];if(f.visible){facilityLook=f.traits.get();facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw,w.fixtureParts(i),i);facilityLook=nullptr;}}if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
  // Broken glass is the fracture GlassFracture.h works out for each pane: the
  // pieces fall from the hole outward and stay where they land; teeth stay in the frame.
  // Glass as it is seen. Smooth value noise for its grime and frosting:
@@ -2094,7 +2122,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const Texture&chipSheet=e.model>=0&&e.model<FacilityModelCount&&e.material!=PropMaterial::Glass?facilityTexture(e.model,0):e.material==PropMaterial::Ceramic?m_paleSteel:shardTexture;
   for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},chipSheet,1.5f);}
  }
- auto softPadOf=[&](const Clutter&c)->const SoftPad*{if(!soft::isSoft(c.model))return nullptr;const auto&list=game.chunkClutter(level);const auto i=&c-list.data();return i>=0&&i<std::ptrdiff_t(list.size())?game.softPad(level,-1,int(i)):nullptr;};
+ auto softPadOf=[&](const Clutter&c)->const SoftPad*{if(!soft::isSoft(c))return nullptr;const auto&list=game.chunkClutter(level);const auto i=&c-list.data();return i>=0&&i<std::ptrdiff_t(list.size())?game.softPad(level,-1,int(i)):nullptr;};
  auto drawClutter=[&](const Clutter&c){
   if(c.broken){if(c.material()==PropMaterial::Glass||c.material()==PropMaterial::Ceramic)chips(c.pos,c.z,.18f,10,c.model);return;}bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},c.footprint()+c.height()))return;
@@ -2118,7 +2146,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(int k=1;k+1<n;++k){tri(top[0],top[size_t(k)],top[size_t(k+1)],shardTexture,1.05f);tri(bottom[0],bottom[size_t(k+1)],bottom[size_t(k)],shardTexture,1.05f);}
    objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;return;}
   if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const SoftPad* pad=softPadOf(c);const Point3 softL=pad?softLight({c.pos.x,c.pos.y,c.z+c.height()}):Point3{0,0,1};
-   for(auto face:pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
+   for(auto face:pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],lookedTexture(c.model,face.part,c.traits.get()),light);}
   }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
    // An eighth of the thing that broke, cut from its own mesh: its faces clipped to that eighth of
    // its box (clean cut edges, its own UVs), drawn with its own sheet about the eighth's centre (Clutter::shards).

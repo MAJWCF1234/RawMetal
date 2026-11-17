@@ -511,7 +511,8 @@ struct AuthoredMapData {
     std::vector<EntityName> entityNames;
     const EntityName* entity(std::string_view name)const{for(const auto& e:entityNames)if(e.name==name)return &e;return nullptr;}
     // Custom properties (p.key) and a named prop's `frozen`: script states seeded once a game.
-    struct PropertySeed {StateId id=0;int value=0;};
+    // seeded false: a property only a script names (no p.key on the record); it starts at 0.
+    struct PropertySeed {StateId id=0;int value=0;std::string entity,key;bool seeded=true;};
     std::vector<PropertySeed> propertySeeds;
     // @entity.key spellings the parser resolved, so an export writes the name, not "#id".
     std::vector<std::pair<StateId,std::string>> stateSpellings;

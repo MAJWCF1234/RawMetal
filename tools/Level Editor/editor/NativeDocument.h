@@ -1,5 +1,7 @@
 #pragma once
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -69,10 +71,14 @@ struct NativeDocument {
       return index;
     Index next;
     next.version = version, next.count = lines.size(), next.data = lines.data();
+    bool prefab = false;
     for (size_t i = 0; i < lines.size(); ++i) {
       std::string_view kind, map;
       if (!field(lines[i], 0, kind) || !field(lines[i], 1, map))
         continue; // fewer than two fields: never a record
+      // FORMAT and a PREFAB block's lines are no map's records: the tools leave them be.
+      if (outsideMaps(kind, prefab))
+        continue;
       next.byKind[std::string(kind)].push_back(i);
       next.byKindMap[key(kind, map)].push_back(i);
       next.byMap[std::string(map)].push_back(i);
@@ -100,15 +106,31 @@ struct NativeDocument {
     auto out = found(indexNow().byMap, std::to_string(map));
     if (verify) {
       std::vector<size_t> slow;
+      bool prefab = false;
       for (size_t i = 0; i < lines.size(); ++i)
-        if (auto f = fields(lines[i]); f.size() >= 2 && f[1] == std::to_string(map))
+        if (auto f = fields(lines[i]); f.size() >= 2 && !outsideMaps(f[0], prefab) && f[1] == std::to_string(map))
           slow.push_back(i);
       if (slow != out)
         throw std::logic_error("document index out of date (map " + std::to_string(map) + ")");
     }
     return out;
   }
-  static std::vector<std::string> fields(std::string line) {
+  // ---- Map format 2 (docs/Systems/map-format.md) ----
+  // A record's positional fields may be followed by named `key=value` fields. fields()
+  // gives the positional ones, so every tool that edits a field by its number works as
+  // before; replace() keeps the line's named fields; the inspector reads and writes
+  // them with named()/replaceNamed(). The key rule is the engine's (EntityTraits.cpp).
+  static bool namedKey(std::string_view key) {
+    if (key.empty() || key.size() > 48 || !(std::isalpha((unsigned char)key[0]) || key[0] == '_'))
+      return false;
+    return std::all_of(key.begin(), key.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '.' || c == '-'; });
+  }
+  static bool namedField(std::string_view field) {
+    auto eq = field.find('=');
+    return eq != std::string_view::npos && namedKey(field.substr(0, eq));
+  }
+  // Every field as written, named ones included.
+  static std::vector<std::string> allFields(std::string line) {
     if (!line.empty() && line.back() == '\r')
       line.pop_back();
     std::vector<std::string> out;
@@ -121,6 +143,88 @@ struct NativeDocument {
       start = end + 1;
     }
     return out;
+  }
+  // How many of f's fields are positional (the named run is read from the end).
+  static size_t positionalCount(const std::vector<std::string> &f) {
+    size_t n = f.size();
+    while (n > 1 && namedField(f[n - 1]))
+      --n;
+    return n;
+  }
+  static std::vector<std::string> fields(std::string line) {
+    auto out = allFields(std::move(line));
+    out.resize(positionalCount(out));
+    return out;
+  }
+  using Named = std::vector<std::pair<std::string, std::string>>;
+  // The named fields of a line, in order, values as written (percent-encoded).
+  static Named named(const std::string &line) {
+    auto f = allFields(line);
+    Named out;
+    for (size_t i = positionalCount(f); i < f.size(); ++i) {
+      auto eq = f[i].find('=');
+      out.emplace_back(f[i].substr(0, eq), f[i].substr(eq + 1));
+    }
+    return out;
+  }
+  static std::string namedText(const Named &n) {
+    std::string out;
+    for (auto &[k, v] : n)
+      out += "|" + k + "=" + v;
+    return out;
+  }
+  // FORMAT and the lines of a PREFAB block belong to no map (prefab tracks the block).
+  static bool outsideMaps(std::string_view kind, bool &prefab) {
+    if (kind == "PREFAB") { prefab = true; return true; }
+    if (kind == "PREFAB_END") { prefab = false; return true; }
+    return prefab || kind == "FORMAT";
+  }
+  // A copy of a record keeps its overrides but not its name (names are unique per map).
+  static std::vector<std::string> withNamed(std::vector<std::string> f, const std::string &source) {
+    for (auto &[k, v] : named(source))
+      if (k != "name")
+        f.push_back(k + "=" + v);
+    return f;
+  }
+  // The file's FORMAT version: 1 until a FORMAT record says otherwise.
+  int format() const {
+    for (auto &line : lines)
+      if (line.starts_with("FORMAT|"))
+        return std::atoi(line.c_str() + 7);
+    return 1;
+  }
+  // Named fields need FORMAT|2: put it first after the start marker if it is not there.
+  void ensureFormat2() {
+    if (format() >= 2)
+      return;
+    for (size_t i = 0; i < lines.size(); ++i)
+      if (lines[i].starts_with("FORMAT|")) {
+        lines[i] = std::string("FORMAT|2") + (crlf ? "\r" : "");
+        touch();
+        return;
+      }
+    for (size_t i = 0; i < lines.size(); ++i)
+      if (lines[i].starts_with("--- CUSTOM_CAMPAIGN_DATA_START ---")) {
+        lines.insert(lines.begin() + std::ptrdiff_t(i + 1), std::string("FORMAT|2") + (crlf ? "\r" : ""));
+        touch();
+        return;
+      }
+  }
+  // Positional fields f and named fields n as the record at `at` (the inspector's write).
+  // Returns where the record is now: a FORMAT record put in above it moves it down one.
+  size_t replaceNamed(size_t at, const std::vector<std::string> &f, const Named &n) {
+    if (!n.empty()) {
+      const size_t before = lines.size();
+      ensureFormat2();
+      at += lines.size() - before;
+    }
+    bool cr = !lines.at(at).empty() && lines[at].back() == '\r';
+    auto next = join(f) + namedText(n) + (cr ? "\r" : "");
+    if (next != lines[at])
+      claimAutomatic(at);
+    lines[at] = std::move(next);
+    touch();
+    return at;
   }
   static std::string join(const std::vector<std::string> &f) {
     std::string s;
@@ -158,7 +262,8 @@ struct NativeDocument {
   }
   void replace(size_t at, const std::vector<std::string> &f,bool generatedUpdate=false) {
     bool cr = !lines.at(at).empty() && lines[at].back() == '\r';
-    auto next = join(f) + (cr ? "\r" : "");
+    // The positional fields change; the record's named fields stay (unless f brings its own).
+    auto next = join(f) + (positionalCount(f) == f.size() ? namedText(named(lines[at])) : std::string()) + (cr ? "\r" : "");
     if(next!=lines[at]&&!generatedUpdate)claimAutomatic(at);
     // The index files a line by its first four fields only; a change past
     // them (a moved thing, a painted row) keeps it.
@@ -225,9 +330,10 @@ struct NativeDocument {
   }
   std::vector<size_t> recordsByScan(const std::string &kind, int map = -1) const {
     std::vector<size_t> out;
+    bool prefab = false;
     for (size_t i = 0; i < lines.size(); ++i) {
       auto f = fields(lines[i]);
-      if (f.size() < 2 || f[0] != kind)
+      if (f.size() < 2 || outsideMaps(f[0], prefab) || f[0] != kind)
         continue;
       if (map < 0 || f[1] == std::to_string(map))
         out.push_back(i);
