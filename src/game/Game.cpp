@@ -207,7 +207,7 @@ void Game::loadLevel(int level,bool carry) {
     m_weaponKick = 0.0f; m_reloadTimer=0; m_shotCooldown = 0.0f;
     m_damageFlash = 0.0f;
     m_elapsed = 0.0f;
-    m_waterSplashes.clear();
+    m_waterSplashes.clear();m_waterFeet=-1e9f;m_wakeWay=0;m_waterSoundsSeen=0;m_waterNpcDown.clear();m_waterDeaths.clear();
     m_kills = 0;
     m_won = false;
     m_hitFlash=0;
@@ -630,6 +630,8 @@ void Game::update(const InputState& input, float dt) {
             else if(cycle.semiAuto&&raised&&press&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=cycle.fireCooldown;}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
+        // Steps, wakes and falls into water raise their splashes before anyone listens.
+        updateWater(dt,false);
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
         {perf::Scope profile(perf::Takedown);updateTakedown(dt);}
@@ -637,7 +639,7 @@ void Game::update(const InputState& input, float dt) {
         updateGuardCombat(dt);
         {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
         {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
-        updateEnemies(dt);
+        updateEnemies(dt);updateWater(dt,true);
         // AI may walk back into a held prop after the hand sweep; clear that overlap.
         resolveHeldPropBodies();
         {perf::Scope profile(perf::Voices);updateStances(dt);updateNpcVoices(dt);updateAmbience(dt);}

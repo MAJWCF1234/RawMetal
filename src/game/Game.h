@@ -199,7 +199,12 @@ struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impuls
 // dust and chips from masonry, splinters from wood, clods from earth. Level-local. floor: where
 // what it throws comes to rest; reach: how far along `direction` before a wall stops it.
 struct HitBurst {Point3 point{},direction{};float time=0;int level=0;ImpactMaterial material=ImpactMaterial::Concrete;int species=-1;float power=1;bool kill=false;float floor=0,reach=9;bool stump=false;};
-struct WaterSplash {Point3 point{},direction{};float time=0;int level=0;float power=1;};
+// Something meeting standing water (WaterFx.cpp): a round, a thing or a body falling in, a step, a
+// wake. Its splash (Particles) and its rings on the surface (WaterRipples) scale with power (a round
+// .65-1.5; a fall by the root of its energy, .25-3). A splash due later (a body collapsing) is not
+// yet sounded; Game::updateWater raises its sound when its time comes.
+enum class WaterSplashKind:int {Shot,Entry,Step,Wake,Body};
+struct WaterSplash {Point3 point{},direction{};float time=0;int level=0;float power=1;WaterSplashKind kind=WaterSplashKind::Shot;bool sounded=true;};
 struct BarrelExplosion {Vec2 pos{};float z=0,time=0;int level=0;};
 struct PropTraits {PropMaterial material;float mass,health;std::array<float,3> size;};
 // model: the facility model that broke (its chips take its own sheet), or -1.
@@ -1406,6 +1411,15 @@ private:
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<ShotRay> m_shotRays;std::vector<HitBurst> m_hitBursts;
     std::vector<WaterSplash> m_waterSplashes;
+    // Water (WaterFx.cpp), runtime only: the player's feet a frame ago (a fall into water), the way
+    // waded since the last wake, the sounds already looked at for steps in water, and which
+    // creatures and people were already down (a body falls into the water once).
+    float m_waterFeet=-1e9f,m_wakeWay=0;size_t m_waterSoundsSeen=0;std::vector<char> m_waterNpcDown;std::vector<int> m_waterDeaths;
+    // A splash where something meets the water: level-local point on the surface; its sound (and
+    // the AI's hearing of it) now, or when a later `time` comes.
+    void raiseWaterSplash(int level,Point3 point,Point3 direction,float power,WaterSplashKind kind,float delay=0);
+    // Steps, wakes and falls into water; `bodies` the pass after the creatures moved (Game::update).
+    void updateWater(float dt,bool bodies);
     // point and direction level-local to `level`.
     void hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial material,int species,float power,bool kill);
     std::vector<BarrelExplosion> m_barrelExplosions;

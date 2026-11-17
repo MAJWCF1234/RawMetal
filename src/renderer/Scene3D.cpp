@@ -16,6 +16,8 @@
 #include "GoreFx.h"
 #include "Humanoid.h"
 #include "Particles.h"
+#include "WaterRipples.h"
+#include "../core/Tune.h"
 #include "../vr/VrRuntime.h"
 #include <algorithm>
 #include <bit>
@@ -3596,14 +3598,36 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const auto&water=w.coast()?m_coastWater:m_water;
   // One continuous quad per basin avoids cracks between individually rasterized
   // ripples. Moving normal-mapped UVs still gives the surface visible motion.
+  // Where something met the water (game.waterSplashes()) its rings run out over it (WaterRipples.cpp):
+  // there the surface is cut fine, lifted by the rings' height and tilted by their slope.
+  const auto rings=ripples::gather(game.waterSplashes(),level,game.elapsed());const float ringTilt=tune("water.ripple_tilt",1.f);
   for(const auto& basin:w.waterVolumes()){
    float bank=w.layers().front().elevation;
    float inset=w.coast()?0.f:.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
    float left=basin.x1+inset,right=basin.x2-inset,near=basin.y1+inset,far=basin.y2-inset;
    float z=basin.surface+.004f;
    // Standing water darkens and greys with its murk; the ripples still move on it.
-   quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},basin.murk>0?m_murkWater:water,1.05f*(1-.55f*basin.murk),
-        {(right-left)*.45f,(far-near)*.45f},{left+game.elapsed()*.014f,near-game.elapsed()*.008f});
+   const auto&sheet=basin.murk>0?m_murkWater:water;const float shade=1.05f*(1-.55f*basin.murk),now=game.elapsed();
+   auto U=[&](float x){return (x-left)*.45f+left+now*.014f;};auto V=[&](float y){return (far-y)*.45f+near-now*.008f;};
+   if(rings.empty()||basin.surface<dormantFloor){quad({left,near,z},{right,near,z},{right,far,z},{left,far,z},sheet,shade,{(right-left)*.45f,(far-near)*.45f},{U(left),V(far)});continue;}
+   const auto cells=ripples::cut(rings,left,near,right,far);
+   for(const auto&c:cells.still)quad({c.x1,c.y1,z},{c.x2,c.y1,z},{c.x2,c.y2,z},{c.x1,c.y2,z},sheet,shade,{(c.x2-c.x1)*.45f,(c.y2-c.y1)*.45f},{U(c.x1),V(c.y2)});
+   const int n=std::clamp(cells.fine,1,16);std::array<MeshVertex,17*17> grid;const Point3 up{0,0,1};
+   for(const auto&c:cells.moving){
+    if(outside(cameraPoint({c.x1,c.y1,z},game))&outside(cameraPoint({c.x2,c.y1,z},game))&outside(cameraPoint({c.x2,c.y2,z},game))&outside(cameraPoint({c.x1,c.y2,z},game)))continue;
+    if(hidden({c.x1,c.y1,z-.03f},{c.x2,c.y2,z+.05f}))continue;
+    // Lit as emitQuad lights its grid: at the cell's corners, across it bilinearly; its two lamps once.
+    float lit[4];{int k=0;for(Point3 p:{Point3{c.x1,c.y1,z},Point3{c.x2,c.y1,z},Point3{c.x1,c.y2,z},Point3{c.x2,c.y2,z}})lit[k++]=illumination(p,up)+probeSheen(p,up,sheet);}
+    const NormalLighting lamps=normalLightingAt({(c.x1+c.x2)*.5f,(c.y1+c.y2)*.5f,z});
+    for(int j=0;j<=n;++j)for(int i=0;i<=n;++i){const float u=float(i)/n,v=float(j)/n,x=c.x1+(c.x2-c.x1)*u,y=c.y1+(c.y2-c.y1)*v;
+     grid[size_t(j*(n+1)+i)]={cameraPoint({x,y,z+rings.height(x,y)},game),U(x),V(y),(lit[0]*(1-u)+lit[1]*u)*(1-v)+(lit[2]*(1-u)+lit[3]*u)*v};}
+    for(int j=0;j<n;++j)for(int i=0;i<n;++i){const auto&A=grid[size_t(j*(n+1)+i)],&B=grid[size_t(j*(n+1)+i+1)],&C=grid[size_t((j+1)*(n+1)+i+1)],&D=grid[size_t((j+1)*(n+1)+i)];
+     if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
+     const float x=c.x1+(c.x2-c.x1)*(i+.5f)/n,y=c.y1+(c.y2-c.y1)*(j+.5f)/n;const Vec2 g=rings.slope(x,y)*ringTilt;
+     const float l=std::sqrt(g.x*g.x+g.y*g.y+1);const Point3 at{x,y,z},normal{-g.x/l,-g.y/l,1/l};
+     NormalLighting cell=lamps;cell.surfaceNormal=cameraPoint(at+normal,game)-cameraPoint(at,game);
+     triangle3D(A,B,C,sheet,shade,&cell);triangle3D(A,C,D,sheet,shade,&cell);}
+   }
   }
  }
  // The air's own stuff: smoke, steam, dust, debris, drips, fire and gas (Particles.cpp). Last, so on the

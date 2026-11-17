@@ -210,6 +210,7 @@ struct Source {
  Point3 travel{0,0,1};   // drifting kinds: where one goes over its life on drag alone; ballistic kinds: how fast it leaves
  float cone=-1;          // half angle of the spread round `travel` (radians; -1 the kind's own)
  bool radial=false;      // thrown out level in every direction (a blast's ring along the floor)
+ float rise=.04f;        // radial: how steeply up it leaves (a splash's crown leans out and up)
  float size=.1f,grow=.3f,life=2,strength=1;
  float rate=0;int count=0;float t0=0,spread=0,until=1e30f; // a stream of `rate` a second (from t0 until `until`), or a burst of `count` over `spread` s
  float floor=-1e9f;
@@ -347,7 +348,7 @@ struct Frame {
    if(rnd(id,3)>=keep){++stats.thinned;return;}
    const float u=age/life;
    // Its own way out of the source: round `travel` within the cone, or level round the compass.
-   Point3 base=s.radial?Point3{std::cos(rnd(id,4)*kTwoPi),std::sin(rnd(id,4)*kTwoPi),.04f}:unit(s.travel,Up);
+   Point3 base=s.radial?Point3{std::cos(rnd(id,4)*kTwoPi),std::sin(rnd(id,4)*kTwoPi),s.rise}:unit(s.travel,Up);
    const float cone=s.cone>=0?s.cone:b.cone,theta=cone*std::sqrt(rnd(id,5)),phi=rnd(id,6)*kTwoPi;
    const Point3 t1=unit(std::fabs(base.z)<.9f?cross(base,Up):cross(base,Point3{1,0,0}),{1,0,0}),t2=cross(base,t1);
    const Point3 dir=unit(base*std::cos(theta)+(t1*std::cos(phi)+t2*std::sin(phi))*std::sin(theta),base);
@@ -507,6 +508,24 @@ void gather(const Game& game,const World& w,const Particles::View& view,const Pa
   // These beads must survive the 640x360 game target and remain visible around shotgun recoil.
   Source drops;drops.species=Species::Drop;drops.seed=seed;drops.at=b.point+Up*.035f;drops.box={.045f,.045f,.008f};drops.travel=Up*(3.f+.8f*power)+along*.75f;drops.cone=1.25f;drops.size=.019f;drops.grow=0;drops.life=1.6f;drops.count=int(32*power);drops.t0=b.time;drops.spread=.06f;drops.strength=1;drops.floor=b.point.z;out.push_back(drops);
   Source mist;mist.species=Species::Mist;mist.seed=seed^0x36a9f1u;mist.at=b.point+Up*.05f;mist.box={.06f,.06f,.012f};mist.travel=Up*.4f+along*.2f;mist.cone=1.15f;mist.size=.07f;mist.grow=.3f;mist.life=.7f;mist.count=10;mist.t0=b.time;mist.spread=.08f;mist.strength=.9f;mist.floor=b.point.z;out.push_back(mist);
+  if(b.kind!=WaterSplashKind::Shot){
+   // Not a round: a fall, a step or a wake (WaterFx.cpp), its size by the root of its energy. The
+   // shot's burst above is kept only for a fall in, as its central jet, taller and fuller; a step
+   // throws a few beads, a wake a low wash ahead.
+   const float p=std::clamp(b.power,.1f,3.f);drops.seed^=0x7f4a7c15u;mist.seed^=0x7f4a7c15u;out.pop_back();out.pop_back();
+   if(b.kind==WaterSplashKind::Step||b.kind==WaterSplashKind::Wake){const bool wake=b.kind==WaterSplashKind::Wake;
+    drops.travel=Up*(wake?.8f+.5f*p:1.f+1.6f*p)+along*(wake?.7f:0.f);drops.cone=wake?.75f:.95f;drops.size=.013f;drops.count=int((wake?3:5)+(wake?4:9)*p);drops.life=1.1f;out.push_back(drops);
+    mist.size=.05f;mist.grow=.2f;mist.travel=Up*.25f+along*.3f;mist.count=wake?2:3;mist.strength=.6f;mist.life=.5f;out.push_back(mist);continue;}
+   drops.travel=Up*(2.2f+1.1f*p);drops.cone=.42f;drops.box={.04f+.03f*p,.04f+.03f*p,.01f};drops.size=.02f+.004f*p;drops.count=int(16+14*p);out.push_back(drops);
+   mist.size=.1f+.04f*p;mist.grow=.45f+.2f*p;mist.travel=Up*(.5f+.25f*p);mist.count=int(6+5*p);mist.life=1.f;mist.box={.12f*p,.12f*p,.02f};out.push_back(mist);
+  }
+  // The crown: a ring of drops thrown out and up all round where it went in, wider and taller as it
+  // was harder (a round's is a small one).
+  const float crownPower=b.kind==WaterSplashKind::Shot?power*.45f:std::clamp(b.power,.1f,3.f);
+  if(b.kind!=WaterSplashKind::Step&&b.kind!=WaterSplashKind::Wake&&crownPower>=.25f){
+   Source crown;crown.species=Species::Drop;crown.seed=seed^0x5a17c0u;crown.at=b.point+Up*.03f;crown.box={.05f+.05f*crownPower,.05f+.05f*crownPower,.006f};
+   crown.radial=true;crown.rise=1.5f;crown.cone=.16f;crown.travel={1.1f+.75f*crownPower,0,0};crown.size=.016f;crown.grow=0;crown.life=1.3f;crown.count=int(10+16*crownPower);
+   crown.t0=b.time;crown.spread=.04f;crown.strength=1;crown.floor=b.point.z;out.push_back(crown);}
  }};
  splashes(game.waterSplashes());if(extra)splashes(extra->splashes);
  // Gun smoke: a shot leaves a wisp in front of the muzzle that drifts on and hangs (a shotgun's pellets are one shot).

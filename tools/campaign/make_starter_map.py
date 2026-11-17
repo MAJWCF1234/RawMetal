@@ -350,6 +350,15 @@ def build():
     s.rec(m, 'WATER', 0, 13.1, 13.6, 17.9, 17.4, 0, .42)
     s.post_sign(m, 15.5, 13.3, 'WATER', 'wade in', blue, 1.4)
     s.zone(m, 13, 12.4, 18, 17.5, 'WATER volume')
+    # What is in it floats or sinks by its density (Buoyancy.cpp): a wooden crate, a cardboard box
+    # and a hard hat ride and bob; a monitor lies on the bed. Throw things in, shoot it, wade it.
+    physics = json.load(open(os.path.join(ROOT, 'tools', 'campaign', 'prop_physics.json')))
+    floating = {n: (i, w, d, h) for i, n, w, d, h, _ in models()}
+    for name, x, y, base, yaw in (('wooden_crate', 14.3, 15.9, .13, .3), ('prop_cardboard_box', 16.6, 16.5, .3, 1.1),
+                                  ('mine_hard_hat', 15.7, 14.4, .38, 0), ('crt_monitor', 17.0, 14.4, 0, 2.6)):
+        sl, w, d, h = floating[name]
+        w, d, h = physics.get(name, {}).get('size', (w, d, h))
+        s.rec(m, 'CLUTTER', 0, 7, x, y, base, yaw, sl, w, d, h, 0, 0, '')
     # Pickups.
     for k, name in enumerate(PICKUPS):
         x = 19.5 + k * 1.3

@@ -14,6 +14,7 @@ namespace {
 bool engine(const char* name,const char* summary,bool(*run)()){return add({.name=std::string("engine.")+name,.summary=summary,.standalone=run});}
 const bool registered=[]{
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);
+ engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
