@@ -32,15 +32,15 @@ bool Field::bounds(float& x1,float& y1,float& x2,float& y2)const{bool any=false;
   else{x1=std::min(x1,r.x-reach);y1=std::min(y1,r.y-reach);x2=std::max(x2,r.x+reach);y2=std::max(y2,r.y+reach);}}
  return any;}
 Field gather(const std::vector<WaterSplash>& splashes,int level,float now,size_t most){
- Field f;f.now=now;const float gain=tune("water.ripple",1.4f);
+ Field f;f.now=now;const float gain=tune("water.ripple",2.4f);
  for(auto it=splashes.rbegin();it!=splashes.rend()&&f.rings.size()<most;++it){const auto&s=*it;if(s.level!=level)continue;const float p=std::clamp(s.power,.1f,3.f);
   auto add=[&](float delay,float amplitude,float speed,float wavelength,float life){Ring r;r.x=s.point.x;r.y=s.point.y;r.born=s.time+delay;r.amplitude=amplitude*gain;r.speed=speed;r.wavelength=wavelength;r.life=life;
    if(now-r.born<r.life&&now>=s.time)f.rings.push_back(r);};
   switch(s.kind){
-   case WaterSplashKind::Shot:add(0,.007f*p,.38f,.13f,1.9f);add(.1f,.004f*p,.34f,.11f,1.6f);break;
-   case WaterSplashKind::Step:add(0,.0055f*std::min(1.f,p/.4f),.3f,.12f,1.5f);break;
-   case WaterSplashKind::Wake:add(0,.0045f*std::min(p,1.2f),.28f,.12f,1.4f);break;
-   default:{const float q=std::pow(std::min(p,2.5f),.7f);add(0,.013f*q,.46f+.05f*p,.16f+.03f*p,2.4f);add(.12f,.009f*q,.42f+.04f*p,.13f+.02f*p,2.2f);add(.27f,.006f*q,.38f,.13f,2.f);}}}
+   case WaterSplashKind::Shot:add(0,.007f*p,.38f,.13f,2.3f);add(.1f,.004f*p,.34f,.11f,2.f);break;
+   case WaterSplashKind::Step:add(0,.0055f*std::min(1.f,p/.4f),.3f,.12f,2.f);break;
+   case WaterSplashKind::Wake:add(0,.007f*std::min(p,1.2f),1.f,.15f,2.2f); // fast: a chain of them, laid as the wader goes, opens into a Vbreak;
+   default:{const float q=std::pow(std::min(p,2.5f),.7f);add(0,.013f*q,.46f+.05f*p,.16f+.03f*p,2.5f);add(.12f,.009f*q,.42f+.04f*p,.13f+.02f*p,2.35f);add(.27f,.006f*q,.38f,.13f,2.2f);}}}
  return f;}
 Cut cut(const Field& field,float left,float near,float right,float far,float coarse,int fine,int budget){
  Cut out;out.fine=fine;float x1,y1,x2,y2;

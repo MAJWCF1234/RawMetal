@@ -3600,7 +3600,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // ripples. Moving normal-mapped UVs still gives the surface visible motion.
   // Where something met the water (game.waterSplashes()) its rings run out over it (WaterRipples.cpp):
   // there the surface is cut fine, lifted by the rings' height and tilted by their slope.
-  const auto rings=ripples::gather(game.waterSplashes(),level,game.elapsed());const float ringTilt=tune("water.ripple_tilt",1.f);
+  const auto rings=ripples::gather(game.waterSplashes(),level,game.elapsed());const float ringTilt=tune("water.ripple_tilt",2.5f),ringShade=tune("water.ripple_shade",22.f);
   for(const auto& basin:w.waterVolumes()){
    float bank=w.layers().front().elevation;
    float inset=w.coast()?0.f:.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
@@ -3619,8 +3619,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // Lit as emitQuad lights its grid: at the cell's corners, across it bilinearly; its two lamps once.
     float lit[4];{int k=0;for(Point3 p:{Point3{c.x1,c.y1,z},Point3{c.x2,c.y1,z},Point3{c.x1,c.y2,z},Point3{c.x2,c.y2,z}})lit[k++]=illumination(p,up)+probeSheen(p,up,sheet);}
     const NormalLighting lamps=normalLightingAt({(c.x1+c.x2)*.5f,(c.y1+c.y2)*.5f,z});
-    for(int j=0;j<=n;++j)for(int i=0;i<=n;++i){const float u=float(i)/n,v=float(j)/n,x=c.x1+(c.x2-c.x1)*u,y=c.y1+(c.y2-c.y1)*v;
-     grid[size_t(j*(n+1)+i)]={cameraPoint({x,y,z+rings.height(x,y)},game),U(x),V(y),(lit[0]*(1-u)+lit[1]*u)*(1-v)+(lit[2]*(1-u)+lit[3]*u)*v};}
+    // A crest catches more of the room's light and a trough less (the CPU path has no reflection to
+    // show the tilt; on the GPU it adds to it).
+    for(int j=0;j<=n;++j)for(int i=0;i<=n;++i){const float u=float(i)/n,v=float(j)/n,x=c.x1+(c.x2-c.x1)*u,y=c.y1+(c.y2-c.y1)*v,h=rings.height(x,y);
+     grid[size_t(j*(n+1)+i)]={cameraPoint({x,y,z+h},game),U(x),V(y),((lit[0]*(1-u)+lit[1]*u)*(1-v)+(lit[2]*(1-u)+lit[3]*u)*v)*(1+std::clamp(h*ringShade,-.35f,.45f))};}
     for(int j=0;j<n;++j)for(int i=0;i<n;++i){const auto&A=grid[size_t(j*(n+1)+i)],&B=grid[size_t(j*(n+1)+i+1)],&C=grid[size_t((j+1)*(n+1)+i+1)],&D=grid[size_t((j+1)*(n+1)+i)];
      if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
      const float x=c.x1+(c.x2-c.x1)*(i+.5f)/n,y=c.y1+(c.y2-c.y1)*(j+.5f)/n;const Vec2 g=rings.slope(x,y)*ringTilt;

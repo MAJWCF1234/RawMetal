@@ -151,8 +151,8 @@ const bool splashes=add({.name="water-splashes",.summary="jumps, steps, wakes, b
 const bool rippled=add({.name="water-ripples",.summary="rings and splashes on the Starter Map's welcome pool, filmed before, after and later",.fixtures={"water-pool"},
  .step=[](Scene& s,float){if(s.frame==12){LabAccess::waterSplash(s.g(),{15.2f,15.3f,.42f},2.2f,WaterSplashKind::Entry);LabAccess::waterSplash(s.g(),{16.8f,14.7f,.42f},1.f,WaterSplashKind::Shot);LabAccess::waterSplash(s.g(),{14.1f,16.2f,.42f},.4f,WaterSplashKind::Step);}
   // A wader's wake across the near side: a ring every 32 cm, a tenth of a second apart.
-  if(s.frame==40)for(int k=0;k<8;++k)LabAccess::waterSplash(s.g(),{13.8f+k*.32f,14.3f,.42f},.9f,WaterSplashKind::Wake,k*.09f);},
- .capture=[](Scene& s,const Frame& f){if(f.index==11)s.shoot("before");if(f.index==20)s.shoot("after");if(f.index==50)s.shoot("later");if(f.index==85)s.shoot("rings");},
+  if(s.frame==40)for(int k=0;k<8;++k)LabAccess::waterSplash(s.g(),{13.6f+k*.32f,14.5f,.42f},.9f,WaterSplashKind::Wake,k*.09f);},
+ .capture=[](Scene& s,const Frame& f){if(f.index==11)s.shoot("before");if(f.index==20)s.shoot("after");if(f.index==50)s.shoot("later");if(f.index==85)s.shoot("rings");if(f.index==130)s.shoot("fading");},
  .metrics=[](Scene& s,Report& r){const auto f=ripples::gather(s.g().waterSplashes(),s.g().level(),s.g().elapsed());r.metric("rings",double(f.rings.size()));
   float hmax=0;for(float x=13.2f;x<17.8f;x+=.02f)for(float y=13.7f;y<17.3f;y+=.02f)hmax=std::max(hmax,std::fabs(f.height(x,y)));r.metric("peak_mm",hmax*1000,"mm");
   int floating=0,sunk=0;for(const auto&c:LabAccess::clutter(s.g()))if(c.model>=0&&c.pos.x>13&&c.pos.x<18&&c.pos.y>13.6f&&c.pos.y<17.4f){if(c.z>.05f)++floating;else ++sunk;}
