@@ -221,6 +221,7 @@ add_executable(RawMetal WIN32
     world/CampaignChapterFinaleB.cpp
     world/CampaignChapterFinaleC.cpp
     world/CustomCampaign.cpp
+    world/EntityTraits.cpp
     world/CampaignExport.cpp
     world/Primitives.cpp
     renderer/SoftwareRenderer.cpp

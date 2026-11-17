@@ -69,6 +69,11 @@ std::string encode(std::string_view s){
  for(unsigned char c:s){if(c=='%'||c=='|'||c<32||c==127){out+='%';out+=hex[c>>4];out+=hex[c&15];}else out+=char(c);}
  return out;
 }
+std::string decodeField(std::string_view value){
+ auto hex=[](char c)->int{if(c>='0'&&c<='9')return c-'0';if(c>='a'&&c<='f')return 10+c-'a';if(c>='A'&&c<='F')return 10+c-'A';return -1;};
+ std::string out;for(size_t i=0;i<value.size();++i){if(value[i]=='%'&&i+2<value.size()){int a=hex(value[i+1]),b=hex(value[i+2]);if(a>=0&&b>=0){out.push_back(char(a*16+b));i+=2;continue;}}out.push_back(value[i]);}
+ return out;
+}
 // Fields the loader reads as written (ZONE names, rows, lead port names): no escapes.
 std::string verbatim(std::string_view s,std::vector<std::string>& notes,const std::string& where){
  std::string out(s);bool changed=false;for(auto& c:out)if(c=='|'||c=='\r'||c=='\n'){c='/';changed=true;}
@@ -149,7 +154,10 @@ std::vector<int> campaignChunksInPlayOrder(){
  std::vector<int> order;for(const auto& d:Districts)for(int c=d.first;c<=d.last;++c)order.push_back(c);
  return order;
 }
+// While a map is exported: the @entity.key spellings its scripts used (map format 2).
+thread_local const std::vector<std::pair<StateId,std::string>>* exportSpellings=nullptr;
 std::string stateReference(StateId id){
+ if(exportSpellings)for(const auto& [state,text]:*exportSpellings)if(state==id)return text;
  const auto& names=stateNames();auto it=names.find(id);
  return it!=names.end()?it->second:"#"+std::to_string(id);
 }
@@ -165,9 +173,31 @@ std::string campaignChunkFileName(int chunk){
 RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSource>& sources,int startMap,const StormCycle& storm){
  RmcExport result;std::ostringstream data;auto& notes=result.notes;
  std::map<std::string,std::shared_ptr<const SignPicture>> signArt; // written once each, after the maps
+ // Map format 2: each record's named fields go back after its positional ones, found by the
+ // same key the parser filed them under (recordFieldKey: tag, parent record, ordinal).
+ const std::map<std::string,NamedFields>* fieldsOf=nullptr;std::map<std::string,int> ordinal;std::string parent;std::set<std::string> written;
+ std::vector<std::pair<StateId,std::string>> spellings;bool formatTwo=false;
+ for(const auto& source:sources)if(source.map){formatTwo|=!source.map->recordFields.empty();spellings.insert(spellings.end(),source.map->stateSpellings.begin(),source.map->stateSpellings.end());}
+ struct Spelled {Spelled(const std::vector<std::pair<StateId,std::string>>* s){exportSpellings=s;}~Spelled(){exportSpellings=nullptr;}} spelled(spellings.empty()?nullptr:&spellings);
+ const auto* campaignFields=!sources.empty()&&sources[0].map?&sources[0].map->recordFields:nullptr;
+ auto named=[&](const Rec& r)->std::string{
+  const auto bar=r.s.find('|');const std::string tag=r.s.substr(0,bar);
+  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
+  const auto* table=global?campaignFields:fieldsOf;if(!table||table->empty())return {};
+  std::string key;
+  if(tag=="SIGN_ART"){const auto end=r.s.find('|',bar+1);key=recordFieldKey(tag,"*",0)+"/"+decodeField(r.s.substr(bar+1,end-bar-1));}
+  else if(global)key=recordFieldKey(tag,"*",ordinal["*/"+tag]++);
+  else if(tag=="ROW"){std::vector<std::string> f;size_t at=0;for(int k=0;k<4;++k){const auto next=r.s.find('|',at);f.push_back(r.s.substr(at,next-at));at=next+1;}key=recordFieldKey(tag,f[2],std::stoi(f[3]));}
+  else{const bool child=tag.rfind("ACTOR_",0)==0||tag=="SEQUENCE_SIGHT"||tag=="SCRIPT_REQUIRE"||tag=="SCRIPT_TRIGGER"||tag=="SCRIPT_ACTION"||tag=="DIALOGUE_REPLY";
+   std::string p=child?parent:std::string();
+   if(tag.rfind("ACTOR_",0)==0||tag=="SEQUENCE_SIGHT"){const auto a=r.s.find('|',bar+1),b=r.s.find('|',a+1);p=r.s.substr(a+1,b-a-1);}
+   key=recordFieldKey(tag,p,ordinal[tag+"/"+p]++);}
+  auto it=table->find(key);if(it==table->end())return {};
+  written.insert((global?"*":"")+key);std::string out;for(const auto& f:it->second){out+='|';out+=f.key;out+='=';out+=f.value;}return out;};
  // keep: how many fields (tag included) the record always has; 0 writes every field.
- auto line=[&](const Rec& r,size_t keep=0){data<<(keep?r.trimmed(keep):r.s)<<'\n';};
- data<<Rec("CAMPAIGN").t(campaignName).i(startMap).s<<'\n';
+ auto line=[&](const Rec& r,size_t keep=0){data<<(keep?r.trimmed(keep):r.s)<<named(r)<<'\n';};
+ if(formatTwo)data<<"FORMAT|"<<MapFormatVersion<<'\n';
+ line(Rec("CAMPAIGN").t(campaignName).i(startMap));
  if(storm.active())line(Rec("STORM").i(storm.calmMs).i(storm.warningMs).i(storm.stormMs).n(storm.damage).n(storm.ambientAsh));
  // Terrain is campaign-wide: the first map that has it speaks for the file.
  for(const auto& source:sources)if(source.map&&source.map->terrain){const auto& t=*source.map->terrain;
@@ -183,6 +213,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
  std::set<StateId> objectives,events;
  for(size_t index=0;index<sources.size();++index){
   const auto& m=*sources[index].map;const int chunk=sources[index].chunk;const auto mi=(long long)index;
+  fieldsOf=&m.recordFields;for(auto it=ordinal.begin();it!=ordinal.end();)it=it->first.rfind("*/",0)==0?std::next(it):ordinal.erase(it);parent.clear();
+  written.clear();
   const std::string who="map "+std::to_string(index)+" ("+m.name+(chunk>=0?", campaign chunk "+std::to_string(chunk):std::string())+")";
   auto note=[&](const std::string& text){notes.push_back(who+": "+text);};
   if(chunk>=0)for(const auto& b:Behaviours)if(chunk>=b.first&&chunk<=b.last)note(b.note);
@@ -254,7 +286,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    for(const auto& k:t.idleKeys)line(Rec("ACTOR_IDLE_KEY").i(mi).i(ai_).i(k.timeMs).n(k.position.x).n(k.position.y).n(k.z).n(k.yaw).i(k.clip).n(k.phase).i(k.lookAtActor));}
   for(size_t s=0;s<m.timedSequences.size();++s){const auto& q=m.timedSequences[s];if(q.sightActor!=-1||q.sightDistance!=30)line(Rec("SEQUENCE_SIGHT").i(mi).i((long long)s).i(q.sightActor).n(q.sightDistance));}
   for(const auto& c:m.sequenceCues){Rec r("SEQUENCE_CUE");r.i(mi).sth(c.timerState).i(c.timeMs).i(int(c.sound)).n(c.position.x).n(c.position.y).n(c.gain).n(c.pitch).t(c.caption).f(num(c.z)).t(c.voice).f(c.aiRadius?num(c.aiRadius):"");line(r,10);}
-  for(const auto& node:m.dialogue){line(Rec("DIALOGUE").i(mi).sth(node.id).t(node.speaker).t(node.line).t(node.voice));
+  for(const auto& node:m.dialogue){parent=std::to_string(&node-m.dialogue.data());line(Rec("DIALOGUE").i(mi).sth(node.id).t(node.speaker).t(node.line).t(node.voice));
    for(const auto& reply:node.replies){std::string sets;for(const auto& [state,value]:reply.sets)sets+=(sets.empty()?"":";")+stateReference(state)+"="+std::to_string(value);
     line(Rec("DIALOGUE_REPLY").i(mi).sth(node.id).t(reply.text).st(reply.next).st(reply.require).i(reply.requireValue).st(reply.hide).t(sets).f(reply.stance>=0?std::to_string(reply.stance):""));}}
   for(const auto& h:m.hazards){Rec r("HAZARD");r.i(mi).i(int(h.kind)).n(h.x1).n(h.y1).n(h.x2).n(h.y2).n(h.bottom).n(h.top).n(h.damagePerSecond).st(h.enabledFlag).f(h.enabledValue!=1?std::to_string(h.enabledValue):"").f(h.invertFlag?"1":"")
@@ -301,6 +333,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    if(!printable)note("objective "+stateReference(o.id)+": its text is not 1-80 printable ASCII characters and will not load");
    line(Rec("OBJECTIVE_TEXT").i(mi).sth(o.id).t(o.text));}
   for(const auto& e:m.scriptEvents){
+   parent=std::to_string(&e-m.scriptEvents.data());
    if(!events.insert(e.id).second){note("script event "+stateReference(e.id)+" is declared again by an earlier map; this copy is left out");continue;}
    // e.level is not written: the game gives every event the chunk (or map) whose records hold it (Script.cpp seedScripts).
    if(e.x1<0||e.y1<0||e.x2>24||e.y2>24||e.x1>=e.x2||e.y1>=e.y2||e.bottom>=e.top)note("script event "+stateReference(e.id)+": its box is outside the map or empty and will not load");
@@ -328,6 +361,9 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
     else r.f("RAW").i(int(a.type)).st(a.id).i(a.value).i(a.index).i(int(a.enemyKind)).n(a.position.x).n(a.position.y).n(a.z).n(a.amount).i(int(a.sound)).t(a.text);
     line(r);}
   }
+  // Named fields on records the exporter writes another way (a PRIM is written as its STRUCT boxes,
+  // a prefab as the records it placed) cannot follow them.
+  for(const auto& [key,value]:m.recordFields)if(!written.count(key)&&key.find("/*/")==std::string::npos){std::string text;for(const auto& f:value)text+=(text.empty()?"":"|")+f.key+"="+f.value;note("the named fields of "+key+" ("+text+") have no record to ride on and are left out");}
  }
  // The header: what the file is, and what it cannot carry.
  std::ostringstream text;
@@ -342,7 +378,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   static const char* table="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";std::string b64;
   for(size_t i=0;i<bytes.size();i+=3){unsigned v=unsigned((unsigned char)bytes[i])<<16;if(i+1<bytes.size())v|=unsigned((unsigned char)bytes[i+1])<<8;if(i+2<bytes.size())v|=(unsigned char)bytes[i+2];
    b64+=table[(v>>18)&63];b64+=table[(v>>12)&63];b64+=i+1<bytes.size()?table[(v>>6)&63]:'=';b64+=i+2<bytes.size()?table[v&63]:'=';}
-  data<<Rec("SIGN_ART").t(name).i(picture->width).i(picture->height).f(b64).s<<'\n';}
+  line(Rec("SIGN_ART").t(name).i(picture->width).i(picture->height).f(b64));}
  text<<"\n--- CUSTOM_CAMPAIGN_DATA_START ---\n"<<data.str()<<"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
  result.text=text.str();
  return result;

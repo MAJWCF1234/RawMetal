@@ -12,6 +12,8 @@
 #include "GlassFracture.h"
 #include "ScriptDefinition.h"
 #include "TerrainField.h"
+#include "EntityTraits.h"
+#include <map>
 
 namespace retro {
 struct Door {
@@ -88,7 +90,9 @@ struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool s
  bool anchored=false;
  // FIXTURE fields 15 and 16: the ground's rise per metre east and south under it. The
  // model is sheared to lie along that slope (plants and rocks hug a hillside; trunks stay upright).
- float slopeX=0,slopeY=0;};
+ float slopeX=0,slopeY=0;
+ // Map format 2 overrides (EntityTraits.h): tint, size, texture, glow, anchoring.
+ EntityTraitsRef traits;};
 // Bare: a light with no housing (a fire, a lamp head that already has its model).
 enum class WorldLightMount { Ceiling, Wall, Bare };
 struct WorldLight {
@@ -267,12 +271,12 @@ inline float leadArc(float age,float* since=nullptr){constexpr float bursts[][2]
 // it is gone and the hunter state counts one more escape. Every spawn sharing
 // the name is the same animal: when one wakes, any other still about leaves.
 // prey: an actor on its own map (track index) it comes out for and takes first.
-struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;StateId hunter=0;int prey=-1;};
+struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;StateId hunter=0;int prey=-1;EntityTraitsRef traits;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
 struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;int fixture=-1;unsigned part=0;};
 struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<float,2> passedAt{1,1};std::array<Point3,2> passedNormal{};};
 inline constexpr int ClutterModelKind=7;
-struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;};
+struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;EntityTraitsRef traits;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
 // murk: 0 the plant's clear coolant, up to 1 for standing water in the dark (a
 // pool in a cold store reads as still and black, not as a lit swimming bath).
@@ -498,7 +502,25 @@ struct AuthoredMapData {
     std::vector<DarkZone> darkZones;
     std::vector<Shelter> shelters;
     int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
+    // ---- Map format 2 (EntityTraits.h, docs/Systems/map-format.md) ----
+    // Every record's named fields as written, by recordFieldKey, so the exporter
+    // writes them back (keys this build does not know among them).
+    std::map<std::string,NamedFields> recordFields;
+    // name= on any record: the record kind and its index among that kind's records here.
+    struct EntityName {std::string name,tag;int index=-1;};
+    std::vector<EntityName> entityNames;
+    const EntityName* entity(std::string_view name)const{for(const auto& e:entityNames)if(e.name==name)return &e;return nullptr;}
+    // Custom properties (p.key) and a named prop's `frozen`: script states seeded once a game.
+    struct PropertySeed {StateId id=0;int value=0;};
+    std::vector<PropertySeed> propertySeeds;
+    // @entity.key spellings the parser resolved, so an export writes the name, not "#id".
+    std::vector<std::pair<StateId,std::string>> stateSpellings;
+    // Some record carries overrides the played map applies (playedMap).
+    bool entityTraits=false;
 };
+// The map as it plays: `map` itself, or a copy with its records' overrides
+// applied (sizes, anchoring, a body's side, AI, health, weapon). World loads this.
+std::shared_ptr<const AuthoredMapData> playedMap(std::shared_ptr<const AuthoredMapData> map);
 // Seat test lead `l` by name: its anchor in socket `socket` of fixture `panel` (or left as it
 // is with no panel), its offset on terminal `terminal` of its prop (or left with none). The
 // first lead on a panel adds the panel's pilot lamp, lit until any lead on it tears. Returns
@@ -511,6 +533,8 @@ struct CustomCampaign {
     int startMap=0;
     StormCycle storm;
     std::vector<std::shared_ptr<const AuthoredMapData>> maps;
+    // The FORMAT record's version (1 when the file has none).
+    int format=1;
 };
 
 class World {

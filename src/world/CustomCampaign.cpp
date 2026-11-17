@@ -3,6 +3,8 @@
 #include "../audio/SoundBank.h"
 #include "../core/PackedResource.h"
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cctype>
 #include <cmath>
 #include <cwctype>
@@ -93,6 +95,60 @@ AuthoredLayerData& layerAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,c
  auto map=mapAt(maps,f,1);int layer=integer(f,2,"layer index");if(layer<0||layer>31)throw std::runtime_error("invalid custom layer index");
  if(size_t(layer)>=map->layers.size())map->layers.resize(size_t(layer)+1);return map->layers[size_t(layer)];
 }
+// ---- Prefabs (map format 2) ----
+// Where a record that may stand in a PREFAB keeps its place: points (x,y field
+// pairs), boxes (x1,y1,x2,y2), heights raised with the placement, yaws turned
+// with it (radians: `turn` +yaw for things facing (cos, sin), -yaw for SIGN and
+// TERMINAL, which face (sin, cos)) and quarter-turn facings (PRIM, STRUCT).
+struct PrefabTransform {std::vector<std::pair<int,int>> points;std::vector<std::array<int,4>> boxes;std::vector<int> heights,turn,turnBack,quarters;};
+const PrefabTransform* prefabTransform(std::string_view tag){
+ static const std::map<std::string,PrefabTransform,std::less<>> table{
+  {"FIXTURE",{{{3,4}},{},{5},{9},{},{}}},{"CLUTTER",{{{3,4}},{},{5},{6},{},{}}},{"PROP",{{{3,4}},{},{10},{7},{},{}}},
+  {"LIGHT",{{{2,3}},{},{4},{6},{},{}}},{"CREATURE",{{{3,4}},{},{5},{},{},{}}},{"PICKUP",{{{3,4}},{},{5},{},{},{}}},
+  {"CRATE",{{{2,3}},{},{4},{},{},{}}},{"CRATE_PLATE",{{{2,3}},{},{},{},{},{}}},{"NAV_HINT",{{{2,3}},{},{4},{},{},{}}},
+  {"TERMINAL",{{{2,3}},{},{4},{},{12},{}}},{"SIGN",{{{2,3}},{},{4},{},{7},{}}},{"AMBIENT",{{{3,4}},{},{5},{},{},{}}},
+  {"EMITTER",{{{2,3}},{},{4},{},{},{}}},{"PIPE",{{{2,3},{4,5}},{},{6,8},{},{},{}}},{"PRIM",{{{3,4}},{},{5},{},{},{9}}},
+  {"STRUCT",{{},{{2,3,4,5}},{6,7},{},{},{12}}},{"HAZARD",{{},{{3,4,5,6}},{7,8},{},{},{}}},{"WATER",{{},{{2,3,4,5}},{6,7},{},{},{}}},
+  {"DARK",{{},{{2,3,4,5}},{6,7},{},{},{}}},{"ZONE",{{},{{2,3,4,5}},{7,8},{},{},{}}},{"SHELTER",{{},{{2,3,4,5}},{6,7},{},{},{}}},
+  {"COMPACTOR",{{},{{2,3,4,5}},{6,7},{},{},{}}},{"WET",{{},{},{},{},{},{}}}};
+ auto it=table.find(tag);return it==table.end()?nullptr:&it->second;
+}
+// Records that name others by their number: they cannot be copied about as a group.
+bool prefabReferences(std::string_view tag){
+ return tag.rfind("ACTOR",0)==0||tag.rfind("SCRIPT_",0)==0||tag.rfind("SEQUENCE_",0)==0||tag=="LEAD"||tag=="CHAIN"||tag=="BREAKABLE"||tag=="DIALOGUE"||tag=="DIALOGUE_REPLY"||tag=="TIMED_SEQUENCE";
+}
+struct PrefabPlacement {float x=0,y=0,z=0,yaw=0;};
+std::string prefabNumber(float v){char buffer[48];auto r=std::to_chars(buffer,buffer+sizeof(buffer),v);return std::string(buffer,r.ptr);}
+// One prefab record moved to its placement (its map field already set).
+void placePrefabRecord(std::vector<std::string>& g,const PrefabPlacement& at){
+ const auto* t=prefabTransform(g[0]);if(!t)throw std::runtime_error("a PREFAB cannot hold "+g[0]);
+ if(g[0]=="LIGHT"&&g.size()>26&&!g[26].empty())throw std::runtime_error("a LIGHT in a prefab cannot ride a CLUTTER record (its prop field)");
+ const float c=std::cos(at.yaw),s=std::sin(at.yaw);
+ const int quarters=int(std::lround(at.yaw/1.57079632679f));const bool square=std::fabs(at.yaw-quarters*1.57079632679f)<1e-4f;
+ auto value=[&](int i){return number(g,size_t(i),"prefab field");};
+ auto set=[&](int i,float v){g[size_t(i)]=prefabNumber(v);};
+ auto point=[&](int ix,int iy){const float x=value(ix),y=value(iy);set(ix,at.x+x*c-y*s);set(iy,at.y+x*s+y*c);};
+ if(g[0]=="WET"){
+  // WET|map|x|y|radius|amount[|puddle] (round) or WET|map|x1|y1|x2|y2|amount|puddle (a box).
+  if(g.size()==8){if(!square)throw std::runtime_error("a box record in a prefab turns only by quarter turns (yaw a multiple of 1.5708)");
+   float ax=value(2),ay=value(3),bx=value(4),by=value(5);const float px=at.x+ax*c-ay*s,py=at.y+ax*s+ay*c,qx=at.x+bx*c-by*s,qy=at.y+bx*s+by*c;
+   set(2,std::min(px,qx));set(3,std::min(py,qy));set(4,std::max(px,qx));set(5,std::max(py,qy));}
+  else point(2,3);
+  return;}
+ for(auto [ix,iy]:t->points)if(size_t(std::max(ix,iy))<g.size())point(ix,iy);
+ for(auto b:t->boxes){if(size_t(b[3])>=g.size())continue;
+  if(!square)throw std::runtime_error("a box record ("+g[0]+") in a prefab turns only by quarter turns (yaw a multiple of 1.5708)");
+  const float ax=value(b[0]),ay=value(b[1]),bx=value(b[2]),by=value(b[3]);
+  const float px=at.x+ax*c-ay*s,py=at.y+ax*s+ay*c,qx=at.x+bx*c-by*s,qy=at.y+bx*s+by*c;
+  set(b[0],std::min(px,qx));set(b[1],std::min(py,qy));set(b[2],std::max(px,qx));set(b[3],std::max(py,qy));}
+ for(int i:t->heights)if(size_t(i)<g.size()&&!g[size_t(i)].empty()){const float v=value(i);if(v!=-999)set(i,v+at.z);}
+ for(int i:t->turn)if(size_t(i)<g.size()&&!g[size_t(i)].empty())set(i,std::remainder(value(i)+at.yaw,6.28318530718f));
+ for(int i:t->turnBack)if(size_t(i)<g.size()&&!g[size_t(i)].empty())set(i,std::remainder(value(i)-at.yaw,6.28318530718f));
+ for(int i:t->quarters)if(size_t(i)<g.size()&&!g[size_t(i)].empty()){
+  if(!square)throw std::runtime_error("a "+g[0]+" in a prefab turns only by quarter turns (yaw a multiple of 1.5708)");
+  // Facing 0 +y, 1 +x, 2 -y, 3 -x: a quarter turn from +x toward +y takes +x to +y (1 to 0).
+  g[size_t(i)]=std::to_string(((integer(g,size_t(i),"prefab facing")-quarters)%4+4)%4);}
+}
 }
 
 int armScriptedCleanup(AuthoredMapData& map){
@@ -124,10 +180,48 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  // Errors name the file line, counted from the top, so an author can find the record.
  // The stream opens on the rest of the start marker's line, so that first read brings this to the marker's line.
  int lineNumber=int(std::count(text.begin(),text.begin()+std::ptrdiff_t(start),'\n'));
- while(std::getline(stream,line)){
-  if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#'){++lineNumber;continue;}
-  auto f=fields(line);if(f.empty()){++lineNumber;continue;}const auto& tag=f[0];
-  ++lineNumber;try{
+ // ---- Map format 2 (EntityTraits.h): the FORMAT record, named fields, names, prefabs ----
+ int format=1;bool sawRecord=false;
+ // Named fields of the campaign-wide records (CAMPAIGN, TERRAIN...), kept on map 0 once it exists.
+ std::vector<std::pair<std::string,NamedFields>> campaignFields;std::map<std::string,int> campaignOrdinals;
+ std::map<std::pair<const AuthoredMapData*,std::string>,int> ordinals;
+ // Records with a name and custom properties (or a frozen flag), given their states once every MAP is read.
+ struct Named {std::shared_ptr<AuthoredMapData> map;int mapIndex;std::shared_ptr<EntityTraits> traits;};std::vector<Named> namedEntities;
+ // @entity.key in a script: resolved once every record (and name) is read.
+ struct PropertyRef {std::shared_ptr<AuthoredMapData> map;int mapIndex;size_t event,slot;bool action;std::string text;int line;};std::vector<PropertyRef> propertyRefs;
+ auto propertyRef=[](std::string_view v){return v.size()>3&&v[0]=='@'&&v.find('.')!=std::string_view::npos;};
+ // Prefab blocks: their lines as written, by name, with the line each came from.
+ struct PrefabLine {int line;std::string text;};std::map<std::string,std::vector<PrefabLine>> prefabs;std::string openPrefab;
+ // After a record is read: its named fields kept by key, its name filed, its overrides attached.
+ auto noteRecord=[&](const std::string& tag,const std::vector<std::string>& f,const NamedFields& namedFields){
+  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
+  if(global){if(namedFields.empty())++campaignOrdinals[tag];else{const int ordinal=campaignOrdinals[tag]++;
+    campaignFields.emplace_back(tag=="SIGN_ART"?recordFieldKey(tag,"*",0)+"/"+decode(f[1]):recordFieldKey(tag,"*",ordinal),namedFields);
+    if(findNamedField(namedFields,"name"))throw std::runtime_error("a campaign-wide record takes no name");parseEntityTraits(tag,namedFields);}
+   return;}
+  auto map=mapAt(maps,f);const int mapIndex=integer(f,1,"map index");
+  std::string parent;int ordinal=-1;
+  auto eventIndex=[&]{const auto id=scriptName(f,2,"event name");for(size_t i=0;i<map->scriptEvents.size();++i)if(map->scriptEvents[i].id==id)return std::to_string(i);return std::string("?");};
+  if(tag.rfind("ACTOR_",0)==0||tag=="SEQUENCE_SIGHT")parent=f[2];
+  else if(tag=="SCRIPT_REQUIRE"||tag=="SCRIPT_TRIGGER"||tag=="SCRIPT_ACTION")parent=eventIndex();
+  else if(tag=="DIALOGUE_REPLY"){const auto node=stateField(f[2]);for(size_t i=0;i<map->dialogue.size();++i)if(map->dialogue[i].id==node)parent=std::to_string(i);}
+  else if(tag=="ROW"){parent=f[2];ordinal=integer(f,3,"row index");}
+  if(ordinal<0)ordinal=ordinals[{map.get(),tag+"/"+parent}]++;
+  if(namedFields.empty())return;
+  map->recordFields[recordFieldKey(tag,parent,ordinal)]=namedFields;
+  auto traits=std::make_shared<EntityTraits>(parseEntityTraits(tag,namedFields));traits->map=mapIndex;
+  if(!traits->name.empty()){
+   if(const auto* other=map->entity(traits->name))throw std::runtime_error("the name "+traits->name+" is already taken on map "+std::to_string(mapIndex)+" (by a "+other->tag+"); names are unique per map");
+   map->entityNames.push_back({traits->name,tag,ordinal});
+   if(!traits->properties.empty()||(traits->frozen>=0&&tag=="CLUTTER"))namedEntities.push_back({map,mapIndex,traits});}
+  const bool overrides=traits->looks()||traits->physical()||traits->body()||traits->scale!=1||traits->solid>=0;
+  // Things whose systems read overrides carry them; every record keeps its fields and name.
+  if(tag=="FIXTURE")map->fixtures.back().traits=traits;else if(tag=="CLUTTER")map->clutterSpawns.back().traits=traits;
+  else if(tag=="CREATURE")map->creatureSpawns.back().traits=traits;else if(tag=="ACTOR")map->actorTracks.back().traits=traits;
+  if(overrides&&(tag=="FIXTURE"||tag=="CLUTTER"||tag=="CREATURE"||tag=="ACTOR"))map->entityTraits=true;
+ };
+ auto parseRecord=[&](std::vector<std::string> f,const NamedFields& namedFields){
+  const std::string tag=f[0];
   // A field the exporter appends to an older record (empty or absent keeps the default).
   auto given=[&](size_t i){return f.size()>i&&!f[i].empty();};
   if(tag=="CAMPAIGN"){
@@ -222,6 +316,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("SCRIPT_REQUIRE references an undeclared event");
    ScriptCondition c;using S=ScriptCondition::Source;using O=ScriptCondition::Op;const auto name=decode(f[3]);
    if(name=="@kills")c.source=S::Kills;else if(name=="@remaining")c.source=S::Remaining;else if(name=="@health")c.source=S::Health;else if(name=="@map")c.source=S::Map;
+   // @entity.key (map format 2): a named record's property, resolved once every name is read.
+   else if(propertyRef(name)){c.id=1;propertyRefs.push_back({map,integer(f,1,"map index"),size_t(event-map->scriptEvents.begin()),event->conditions.size(),false,name,lineNumber});}
    else if(!name.empty()&&name[0]=='@')throw std::runtime_error("unknown SCRIPT_REQUIRE value; use a state name, @kills, @remaining, @health or @map");
    else c.id=scriptName(f,3,"require state");
    const auto op=decode(f[4]);
@@ -245,7 +341,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("script action references an undeclared event");
    ScriptAction action;const auto&kind=f[3];
    if(kind=="STATE"||kind=="OBJECTIVE"||kind=="ITEM"||kind=="ADD"||kind=="TAKE"){
-    if(f.size()!=6)throw std::runtime_error("malformed named SCRIPT_ACTION record");action.id=scriptName(f,4,"action name");action.value=integer(f,5,"action value");
+    if(f.size()!=6)throw std::runtime_error("malformed named SCRIPT_ACTION record");action.value=integer(f,5,"action value");
+    // STATE or ADD on @entity.key (map format 2) writes a named record's property.
+    if(const auto target=decode(f[4]);propertyRef(target)&&(kind=="STATE"||kind=="ADD")){action.id=1;propertyRefs.push_back({map,integer(f,1,"map index"),size_t(event-map->scriptEvents.begin()),event->actions.size(),true,target,lineNumber});}
+    else action.id=scriptName(f,4,"action name");
     if(kind=="STATE"){if(action.value< -100000||action.value>100000)throw std::runtime_error("invalid script state value");action.type=ScriptAction::Type::SetState;}
     else if(kind=="ADD"){if(action.value==0||action.value< -100000||action.value>100000)throw std::runtime_error("invalid ADD amount; use a non-zero whole number");action.type=ScriptAction::Type::AddState;}
     else if(kind=="OBJECTIVE"){if(action.value<0||action.value>3)throw std::runtime_error("invalid script objective status");action.type=ScriptAction::Type::SetObjective;}
@@ -686,7 +785,73 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(hint<0||hint>1)throw std::runtime_error("invalid nav hint kind; use Path (0) or Cover (1)");
    map->navHints.push_back({{number(f,2,"nav hint x"),number(f,3,"nav hint y")},number(f,4,"nav hint z"),hint});
   }else throw std::runtime_error("unknown custom campaign record: "+tag);
-  }catch(const std::exception& error){throw std::runtime_error("line "+std::to_string(lineNumber)+" ("+tag+"): "+error.what());}
+  noteRecord(tag,f,namedFields);
+ };
+ while(std::getline(stream,line)){
+  if(!line.empty()&&line.back()=='\r')line.pop_back();if(line.empty()||line[0]=='#'){++lineNumber;continue;}
+  auto f=fields(line);if(f.empty()){++lineNumber;continue;}const std::string tag=f[0];
+  ++lineNumber;try{
+  if(tag=="FORMAT"){
+   // FORMAT|version: the first record. 2 turns on named fields, names and prefabs.
+   if(sawRecord)throw std::runtime_error("FORMAT must be the first record");if(f.size()!=2)throw std::runtime_error("malformed FORMAT record");
+   format=integer(f,1,"format version");if(format<1)throw std::runtime_error("invalid format version");
+   if(format>MapFormatVersion)throw std::runtime_error("this map is format "+std::to_string(format)+"; this build reads formats up to "+std::to_string(MapFormatVersion)+" (update the game)");
+   campaign->format=format;sawRecord=true;continue;}
+  sawRecord=true;
+  if(!openPrefab.empty()){
+   // Inside PREFAB|name ... PREFAB_END: the lines are kept as written, read at each PREFAB_PLACE.
+   if(tag=="PREFAB_END"){if(f.size()!=1)throw std::runtime_error("malformed PREFAB_END record");if(prefabs[openPrefab].empty())throw std::runtime_error("PREFAB "+openPrefab+" holds no records");openPrefab.clear();}
+   else if(tag=="PREFAB"||tag=="PREFAB_PLACE")throw std::runtime_error("a PREFAB cannot hold another PREFAB or a PREFAB_PLACE (close it with PREFAB_END)");
+   else{if(!prefabTransform(tag))throw std::runtime_error("a PREFAB cannot hold "+tag+(prefabReferences(tag)?" (it refers to other records by number)":" (it has no place to move)"));prefabs[openPrefab].push_back({lineNumber,line});}
+   continue;}
+  if(tag=="PREFAB"){
+   // PREFAB|name: the records up to PREFAB_END are a group placed by PREFAB_PLACE, in metres from its origin.
+   if(format<2)throw std::runtime_error("PREFAB needs FORMAT|2 as the file's first record");
+   if(f.size()!=2||!validEntityName(decode(f[1])))throw std::runtime_error("malformed PREFAB record (PREFAB|name; a name is letters, digits, _ or -)");
+   openPrefab=decode(f[1]);if(prefabs.count(openPrefab))throw std::runtime_error("PREFAB "+openPrefab+" is defined twice");prefabs[openPrefab];continue;}
+  if(tag=="PREFAB_END")throw std::runtime_error("PREFAB_END without a PREFAB");
+  NamedFields namedFields;if(format>=2)namedFields=peelNamedFields(f);
+  if(tag=="PREFAB_PLACE"){
+   // PREFAB_PLACE|map|prefab|x|y|z|yaw[|prefix]: the prefab's records, turned by yaw (radians) about
+   // its origin, set down at x,y (map metres) and raised by z; prefix goes before each name= in it.
+   if(f.size()<7||f.size()>8)throw std::runtime_error("malformed PREFAB_PLACE record");
+   const auto name=decode(f[2]);auto found=prefabs.find(name);if(found==prefabs.end())throw std::runtime_error("PREFAB_PLACE names PREFAB "+name+", which is not defined above it");
+   const int mapIndex=integer(f,1,"map index");mapAt(maps,f);
+   const PrefabPlacement at{number(f,3,"place x"),number(f,4,"place y"),number(f,5,"place z"),number(f,6,"place yaw")};
+   const std::string prefix=f.size()>7?decode(f[7]):std::string();if(!prefix.empty()&&!validEntityName(prefix+"a"))throw std::runtime_error("invalid PREFAB_PLACE prefix (letters, digits, _ or -)");
+   for(const auto& source:found->second){
+    try{auto g=fields(source.text);auto gNamed=peelNamedFields(g);if(g.size()<2)throw std::runtime_error("malformed record");
+     g[1]=std::to_string(mapIndex);placePrefabRecord(g,at);
+     for(auto& n:gNamed)if(n.key=="name")n.value=prefix+n.value;
+     parseRecord(std::move(g),gNamed);}
+    catch(const std::exception& error){throw std::runtime_error("PREFAB "+name+" (its line "+std::to_string(source.line)+"): "+error.what());}}
+   noteRecord(tag,f,namedFields);continue;}
+  parseRecord(std::move(f),namedFields);
+  }catch(const std::exception& error){
+   std::string why=error.what();
+   // A version 1 file reads key=value fields as positional: say what is missing.
+   if(format<2){auto g=fields(line);NamedField n;if(g.size()>2&&splitNamedField(g.back(),n))why+=" (named key=value fields need FORMAT|2 as the file's first record)";}
+   throw std::runtime_error("line "+std::to_string(lineNumber)+" ("+tag+"): "+why);}
+ }
+ if(!openPrefab.empty())throw std::runtime_error("PREFAB "+openPrefab+" has no PREFAB_END");
+ // Campaign-wide named fields ride on map 0; scripts' @entity.key resolve to property states.
+ if(!maps.empty()&&maps[0])for(auto& [key,value]:campaignFields)maps[0]->recordFields[key]=std::move(value);
+ for(const auto& ref:propertyRefs){
+  try{
+   std::string_view v=ref.text;v.remove_prefix(1);int target=ref.mapIndex;
+   if(const auto colon=v.find(':');colon!=std::string_view::npos){int n=0;auto r=std::from_chars(v.data(),v.data()+colon,n);if(r.ec!=std::errc{}||r.ptr!=v.data()+colon)throw std::runtime_error("use @entity.key or @map:entity.key");target=n;v.remove_prefix(colon+1);}
+   const auto dot=v.find('.');const auto entity=v.substr(0,dot),key=v.substr(dot+1);
+   if(!validEntityName(entity)||!validPropertyKey(key))throw std::runtime_error("use @entity.key or @map:entity.key (a key is letters, digits and _)");
+   if(target<0||target>=int(maps.size())||!maps[size_t(target)])throw std::runtime_error("no map "+std::to_string(target));
+   const auto& owner=*maps[size_t(target)];if(!owner.entity(entity))throw std::runtime_error("no record named "+std::string(entity)+" on map "+std::to_string(target));
+   const StateId id=entityPropertyState(target,owner.name,entity,key);
+   auto& event=ref.map->scriptEvents[ref.event];if(ref.action)event.actions[ref.slot].id=id;else event.conditions[ref.slot].id=id;
+   ref.map->stateSpellings.emplace_back(id,ref.text);}
+  catch(const std::exception& error){throw std::runtime_error("line "+std::to_string(ref.line)+" ("+ref.text+"): "+error.what());}}
+ for(auto& n:namedEntities){
+  auto& t=*n.traits;
+  for(const auto& [key,value]:t.properties)n.map->propertySeeds.push_back({entityPropertyState(n.mapIndex,n.map->name,t.name,key),entityPropertyValue(value)});
+  if(t.frozen>=0&&t.tag=="CLUTTER"){t.frozenState=entityPropertyState(n.mapIndex,n.map->name,t.name,"frozen");n.map->propertySeeds.push_back({t.frozenState,t.frozen});}
  }
  for(auto& [map,index]:artUsers){auto& sign=map->signs[index];auto found=art.find(sign.art);
   if(found==art.end())throw std::runtime_error("SIGN record names SIGN_ART "+sign.art+", which is not in the file");sign.picture=found->second;}
