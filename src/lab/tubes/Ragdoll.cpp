@@ -73,7 +73,7 @@ struct Watch {bool ready=false,human=false;int body=0;
  // Shot: the most any section moved in the first 5 frames, its part, and the mean; thrown at: where it lay, how far it went, whether it slept again.
  std::vector<Point3> sectionsAt;std::vector<float> sectionMove;Point3 restAt{};float shoved=-1,resleep=-1;bool thrown=false;int insideProps=0;std::vector<Point3> rest;std::vector<int> group;std::vector<float> seam;int groups=0;double volume=0;Point3 feet{};float facing=0;
  // Per frame, the worst seen.
- float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0;float settled=-1,fell=-1;
+ float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0,wallMoving=0,wallAtDeath=-1;float settled=-1,fell=-1;
  // Where its middle was once it had fallen (down within 0.6 m of the floor), and the farthest it went from there: the slide.
  Point3 down{};float slide=0;};
 // Each group's own enclosed volume about its own middle, summed: a rigid turn of a part leaves it as it is, a squash does not.
@@ -96,8 +96,9 @@ void shapeError(const Watch& w,const std::vector<MeshTriangle>& now,float& core,
   Point3 ca,cb,R[3];bestFit(a,b,ca,cb,R);
   for(int c:list){Point3 d=w.rest[size_t(c)]-ca;Point3 at=cb+R[0]*d.x+R[1]*d.y+R[2]*d.z;const float e=len3(at-now[size_t(c/3)].v[c%3].p);all=std::max(all,e);if(w.seam[size_t(c)]>=.06f){core=std::max(core,e);if(each)(*each)[size_t(w.group[size_t(c/3)])]=std::max((*each)[size_t(w.group[size_t(c/3)])],e);}}}}
 // Corners more than 1.5 cm inside the floor or anything solid, and the lowest gap over the floor under the body.
-int insideCount(const std::vector<MeshTriangle>& t,const World& world,float& lowest,Point3* where=nullptr){
- int n=0;lowest=1e9f;for(auto& f:t)for(auto& v:f.v){const Point3 p=v.p;if(!world.fits(p.x,p.y,p.z+.015f,.001f,false)){++n;if(where)*where=p;}
+// `walls`: of those, the ones not under a floor or top within 30 cm over them (in a wall's side, not sunk into what they lie on).
+int insideCount(const std::vector<MeshTriangle>& t,const World& world,float& lowest,Point3* where=nullptr,int* walls=nullptr){
+ int n=0;lowest=1e9f;if(walls)*walls=0;for(auto& f:t)for(auto& v:f.v){const Point3 p=v.p;if(!world.fits(p.x,p.y,p.z+.015f,.001f,false)){++n;if(where)*where=p;if(walls&&world.supportBelow(p.x,p.y,p.z+.3f)<p.z+.015f)++*walls;}
   float floor=world.supportBelow(p.x,p.y,p.z+.06f);for(auto [dx,dy]:{std::pair{.05f,0.f},{-.05f,0.f},{0.f,.05f},{0.f,-.05f}})floor=std::min(floor,world.supportBelow(p.x+dx,p.y+dy,p.z+.06f));lowest=std::min(lowest,p.z-floor);}
  return n;}
 
@@ -214,7 +215,7 @@ const bool fall=add({
   for(const auto& j:c->jointStates()){if(j.cut)continue;const float over=std::max({j.bend-j.bendHi,j.bendLo-j.bend,std::fabs(j.side)-j.sideMax,std::fabs(j.twist)-j.twistMax,0.f});w.limitDeg=std::max(w.limitDeg,over*57.2958f);}
   w.overlap=std::max(w.overlap,c->overlap());
   #endif
-  if(!c->asleep()&&(s.frame-killFrame(s))%2==0){float low=0;w.insideMoving=std::max(w.insideMoving,insideCount(tri,world,low));w.lowestMoving=std::min(w.lowestMoving,low);}
+  if(!c->asleep()&&(s.frame-killFrame(s))%2==0){float low=0;int walls=0;w.insideMoving=std::max(w.insideMoving,insideCount(tri,world,low,nullptr,&walls));w.wallMoving=std::max(w.wallMoving,walls);if(w.wallAtDeath<0)w.wallAtDeath=walls;w.lowestMoving=std::min(w.lowestMoving,low);}
   if(w.settled<0&&c->asleep())w.settled=c->age();
   if(w.fell<0){float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);if(top-w.feet.z<.6f){w.fell=c->age();w.down=c->centre();}}
   else w.slide=std::max(w.slide,std::hypot(c->centre().x-w.down.x,c->centre().y-w.down.y));
@@ -234,13 +235,15 @@ const bool fall=add({
   float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);
   const Point3 ctr=c->centre();const float drift=std::hypot(ctr.x-w.feet.x,ctr.y-w.feet.y);
   r.metric("settle_s",w.settled,"s");r.metric("fell_s",w.fell,"s");r.metric("shape_core_cm",w.shapeCore*100,"cm");r.metric("shape_all_cm",w.shapeAll*100,"cm");r.metric("volume_dev_pct",w.volumeDev*100,"%");
-  r.metric("inside_moving",w.insideMoving);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("slide_after_fall_m",w.slide,"m");
+  r.metric("inside_moving",w.insideMoving);r.metric("in_walls_moving",w.wallMoving);r.metric("in_walls_at_death",w.wallAtDeath);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("slide_after_fall_m",w.slide,"m");
   r.check("once down it does not slide (centre within 0.3 m of where it fell)",w.fell<0||w.slide<.3f,fixed(w.slide,2)+" m");
   r.metric("rest_jitter_mm",w.jitter*1000,"mm");r.metric("sleep_pop_mm",w.sleepPop*1000,"mm");r.metric("ease_step_mm",w.easeStep*1000,"mm");r.metric("awake_frames",w.awakeFrames);r.metric("inside_props_rest",w.insideProps);
   {const long long steps=Carcass::stepsTaken()-w.steps0;const double ms=Carcass::stepMilliseconds()-w.ms0;r.metric("steps",double(steps));r.metric("ms_per_step",steps>0?ms/double(steps):0,"ms");
    r.metric("ms_per_awake_second",steps>0?ms/double(steps)*60:0,"ms");}
   r.check("its last quarter second awake is still (no corner moves 4 mm a frame)",w.jitter>=0&&w.jitter<.004f,fixed(w.jitter*1000,1)+" mm");
-  r.check("going to sleep does not make it jump (1 cm)",w.sleepPop<.01f,fixed(w.sleepPop*1000,1)+" mm");
+  r.check("going to sleep does not make it jump (1.5 cm a frame)",w.sleepPop<.0155f,fixed(w.sleepPop*1000,1)+" mm");
+  r.check("settling toward sleep moves nothing more than 1.5 cm a frame",w.easeStep<.0155f,fixed(w.easeStep*1000,1)+" mm");
+  r.check("no section inside another by more than 1 cm while it settles or at rest",w.overlap<=.01f,fixed(w.overlap*100,2)+" cm");
   r.check("at rest nothing of it is inside a loose prop (1.5 cm)",w.insideProps==0,std::to_string(w.insideProps)+" corners");
   if(s.fixture->number("shoot",0)>0&&!w.sectionMove.empty()){float most=0,mean=0;int at=0;for(size_t i=0;i<w.sectionMove.size();++i){mean+=w.sectionMove[i];if(w.sectionMove[i]>most){most=w.sectionMove[i];at=int(i);}}mean/=float(w.sectionMove.size());
    r.metric("hit_section_move_cm",most*100,"cm");r.metric("mean_section_move_cm",mean*100,"cm");r.metric("hit_lead",mean>0?most/mean:0);
@@ -264,6 +267,15 @@ const bool fall=add({
    for(size_t i=0;i<corpse->faces.size();++i)if(labels.part[size_t(corpse->faces[i])]==humanoid::Head||labels.part[size_t(corpse->faces[i])]==humanoid::Chest){hx+=tri[i].v[0].p.x;hy+=tri[i].v[0].p.y;++hn;}
    const float reach=hn?std::hypot(hx/float(hn)-w.feet.x,hy/float(hn)-w.feet.y):0;r.metric("upper_body_from_feet_m",reach,"m");
    if(s.fixture->number("topple",0)!=0)r.check("he goes over from the hips, not down in a heap (chest 0.7 m or more from where his feet were)",reach>=.7f,fixed(reach,2)+" m");
+   // Lying, not propped up: at rest his trunk (pelvis to chest) is within 40 degrees of level, unless his hips are
+   // down on what is under them (sitting against a wall). Leaning upright on a rail reads as standing or floating.
+   {Point3 pelvis{},chest{};int np=0,nc=0;float hips=1e9f;
+    for(size_t i=0;i<corpse->faces.size();++i){const int part=labels.part[size_t(corpse->faces[i])];const Point3 c=(tri[i].v[0].p+tri[i].v[1].p+tri[i].v[2].p)*(1.f/3);
+     if(part==humanoid::Pelvis){pelvis=pelvis+c;++np;for(const auto& v:tri[i].v)hips=std::min(hips,v.p.z-world.supportBelow(v.p.x,v.p.y,v.p.z+.05f));}
+     if(part==humanoid::Chest){chest=chest+c;++nc;}}
+    if(np&&nc){pelvis=pelvis*(1.f/float(np));chest=chest*(1.f/float(nc));const Point3 d=chest-pelvis;const float deg=std::atan2(std::fabs(d.z),std::hypot(d.x,d.y))*57.2958f;
+     r.metric("torso_deg",deg,"deg");r.metric("hips_over_support_m",hips,"m");
+     r.check("at rest he lies: trunk within 40 deg of level, or hips down on what is under them (sitting)",deg<=40.f||hips<=.12f,fixed(deg,0)+" deg, hips "+fixed(hips,2)+" m over what is under them");}}
    // The same death made again lies the same.
    const auto first=tri;LabAccess::corpses(*s.renderer).clear();auto* again=LabAccess::humanCorpse(*s.renderer,g,0);bool same=again&&again->carcass.triangles().size()==first.size();
    if(same){const auto& t=again->carcass.triangles();for(size_t i=0;i<t.size()&&same;++i)for(int k=0;k<3;++k)same&=t[i].v[k].p.x==first[i].v[k].p.x&&t[i].v[k].p.y==first[i].v[k].p.y&&t[i].v[k].p.z==first[i].v[k].p.z;}

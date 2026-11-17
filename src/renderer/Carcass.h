@@ -108,7 +108,7 @@ private:
  std::vector<Point3> m_rest,m_posed;std::vector<int> m_corner,m_owner,m_piece;std::vector<Edge> m_edges;std::vector<Loop> m_loops;
  std::vector<MeshTriangle> m_triangles,m_caps;std::vector<Solid> m_solids;
  // Going to sleep: what settling still has to move each section, eased out over a few frames, not in one.
- std::vector<Point3> m_ease;void shift(int section,Point3 by);
+ std::vector<Point3> m_ease;float m_settling=0;bool m_glide=false,m_lastFeed=false;void shift(int section,Point3 by);
  Point3 m_centre{};float m_radius=1,m_age=0,m_quiet=0,m_woke=0,m_scale=1,m_size=1,m_motion=0,m_reach=0;
  int m_root=0,m_pieces=1,m_body=0;unsigned m_seed=1;bool m_asleep=false,m_dirty=true,m_rigged=false,m_bodies=false,m_shoved=false;
 };
