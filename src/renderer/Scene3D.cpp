@@ -1866,27 +1866,136 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  movingGeometry=false;m_emissionScale=1.f;
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data())))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
  // Seeded debris is derived from persistent tombstones, never a second simulated population.
- auto chips=[&](Vec2 center,float z,float width,int count,int seed){for(int i=0;i<count;++i){unsigned h=(unsigned(i+seed)*2654435761u);float a=float(h%6283)*.001f,r=float((h>>12)%1000)*.001f*width;float x=center.x+std::cos(a)*r,y=center.y+std::sin(a)*r,s=.008f+float((h>>22)%20)*.001f;float floor=w.supportBelow(x,y,z+.1f)+.008f;tri({{x-s,y-s,floor},0,0},{{x+s,y-s,floor},1,0},{{x,y+s,floor},.5f,1},m_glassTexture,1.3f);}};
+ const Texture* chipSheetGlass=nullptr;auto chipGlass=[&]()->const Texture&{return chipSheetGlass?*chipSheetGlass:m_glassTexture;};
+ auto chips=[&](Vec2 center,float z,float width,int count,int seed){for(int i=0;i<count;++i){unsigned h=(unsigned(i+seed)*2654435761u);float a=float(h%6283)*.001f,r=float((h>>12)%1000)*.001f*width;float x=center.x+std::cos(a)*r,y=center.y+std::sin(a)*r,s=.008f+float((h>>22)%20)*.001f;float floor=w.supportBelow(x,y,z+.1f)+.008f;tri({{x-s,y-s,floor},0,0},{{x+s,y-s,floor},1,0},{{x,y+s,floor},.5f,1},chipGlass(),1.3f);}};
  // Fixture parts have a separate cache; a screen hit never rebuilds the chunk.
  {uint64_t key=geometryKey;bool any=false;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){any=true;key^=w.fixtureParts(i);key*=1099511628211ull;}
  for(int j=0;j<int(w.breakables().size());++j)if(w.breakables()[j].fixture>=0){key^=(j+1)*(w.breakableIntact(j)?1ull:2ull);key*=1099511628211ull;}
  if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(40*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){const auto&f=w.fixtures()[i];if(f.visible)facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw,w.fixtureParts(i),i);}if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
  // Broken glass is the fracture GlassFracture.h works out for each pane: the
  // pieces fall from the hole outward and stay where they land; teeth stay in the frame.
- static const Texture shardTexture=[](){Texture t{8,8,std::vector<std::uint32_t>(64)};t.transparent=true;t.glossStrength=.9f;
-  for(int i=0;i<64;++i){unsigned l=150u+unsigned((i*37)%29);t.pixels[size_t(i)]=(0x78u<<24)|((l*62/100)<<16)|((l*76/100)<<8)|(l*74/100);}return t;}();
+ // Glass as it is seen. Smooth value noise for its grime and frosting:
+ static const auto glassNoise=[](float x,float y,unsigned k,float cell){auto h=[&](int i,int j){unsigned v=unsigned(i)*73856093u^unsigned(j)*19349663u^k;v=(v^(v>>13))*1274126177u;return float((v>>24)&255u)/255.f;};
+  const float gx=x/cell,gy=y/cell;const int i=int(std::floor(gx)),j=int(std::floor(gy));float fx=gx-float(i),fy=gy-float(j);fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+  return h(i,j)*(1-fx)*(1-fy)+h(i+1,j)*fx*(1-fy)+h(i,j+1)*(1-fx)*fy+h(i+1,j+1)*fx*fy;};
+ auto texel=[](float r,float g,float b,float a){auto q=[](float v){return unsigned(std::clamp(v,0.f,1.f)*255.f+.5f);};return (q(a)<<24)|(q(r)<<16)|(q(g)<<8)|q(b);};
+ // Each finished as satin glass (Materials.h): lamps glint in it, and on the GPU the probes mirror the room in it by Fresnel.
+ static const auto asGlass=[](Texture t,const char*name){t.transparent=true;SoftwareRenderer::applyMaterial(t,int(Material::Glass),name);return t;};
+ // A pane's body, laid once over the whole pane: a faint green-grey tint, grime settling toward the sill, wipe smudges and two
+ // soft streaks where it catches the room; and the darker green of its edge where it meets the frame.
+ static const Texture paneSheet=asGlass([&](){const int n=128;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){const float u=(float(x)+.5f)/float(n),v=(float(y)+.5f)/float(n);
+   const float grime=glassNoise(float(x),float(y),0x51u,24)*.6f+glassNoise(float(x),float(y),0x77u,6)*.4f,settle=std::pow(1-v,2.2f);
+   const float wipe=std::fabs(std::sin(u*9.f+std::sin(v*5.f)*1.4f)),smudge=std::pow(1-wipe,8.f)*glassNoise(float(x),float(y),0x91u,20);
+   const float streak=std::exp(-std::pow((u+v*.55f-.62f)/.07f,2.f))*.8f+std::exp(-std::pow((u+v*.55f-.88f)/.035f,2.f))*.55f;
+   const float dirt=settle*grime;
+   t.pixels[size_t(y*n+x)]=texel(.34f+.12f*dirt+.5f*streak,.42f+.07f*dirt+.5f*streak,.41f+.02f*dirt+.5f*streak,.15f+.17f*dirt+.07f*smudge+.13f*streak);}
+  return t;}(),"pane glass");
+ static const Texture paneEdge=asGlass(Texture{4,4,std::vector<std::uint32_t>(16,texel(.12f,.25f,.21f,.62f))},"pane edge");
+ // Cracks: white, at sixteen strengths, glossy enough that a lamp catches them.
+ static const auto crackSheets=[&](){std::array<Texture,17> out;for(int a=0;a<=16;++a){auto&t=out[size_t(a)];t={4,4,std::vector<std::uint32_t>(16,texel(.95f,.97f,.97f,.95f*float(a)/16.f))};t.emission.assign(16,texel(.24f*float(a)/16.f,.25f*float(a)/16.f,.25f*float(a)/16.f,1));t.transparent=true;t.clampEdges=true;t.glossStrength=.45f;}return out;}();
+ // The crushed star a blow leaves: pulverised white at its heart, broken into flakes toward its edge, thirteen uneven
+ // spikes out from it; open in the middle (inner, of its half-width) where a hole goes through.
+ auto crushed=[&](float inner){const int n=96;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;const float heartR=inner>.3f?inner+.07f:std::max(.2f,inner+.12f),dense=inner>.3f?.72f:.95f;
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){const float dx=(float(x)+.5f)/float(n)*2-1,dy=(float(y)+.5f)/float(n)*2-1,r=std::sqrt(dx*dx+dy*dy),a=std::atan2(dy,dx);
+   float spikes=0;for(int k=0;k<13;++k){const float at=kTwoPi*(float(k)+.7f*glass::hashUnit(77,std::uint32_t(k)))/13.f,reach=.55f+.45f*glass::hashUnit(78,std::uint32_t(k)),width=.04f+.07f*glass::hashUnit(79,std::uint32_t(k));
+    float d=std::fabs(std::remainder(a-at,kTwoPi));spikes=std::max(spikes,std::clamp(1-d/(width*(1.2f-r)),0.f,1.f)*std::clamp(1-r/reach,0.f,1.f)*(.5f+.5f*glass::hashUnit(80,std::uint32_t(k))));}
+   const float speck=glassNoise(float(x),float(y),0x5eu,2.f),flakes=glassNoise(float(x),float(y),0x6au,5.f);
+   const float heart=std::clamp((heartR-r)/.05f,0.f,1.f)*(.75f+.25f*speck),broken=std::clamp((heartR+.14f-r)/.14f,0.f,1.f)*(flakes>.55f?.8f:.15f);
+   float alpha=std::max({heart*dense,broken,spikes*.85f})*std::clamp((1-r)*5,0.f,1.f);if(inner>0)alpha*=std::clamp((r-inner)/.04f,0.f,1.f);
+   t.pixels[size_t(y*n+x)]=texel(.97f,.98f,.98f,alpha);}
+  t.emission.assign(t.pixels.size(),texel(.3f,.31f,.31f,1));t.transparent=true;t.glossStrength=.45f;return t;};
+ static const Texture starSheet=crushed(0),piercedSheet=crushed(.2f),ringSheet=crushed(.48f);
+ // The frosted, chipped band round a hole's edge.
+ static const Texture frostSheet=[&](){const int n=16;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x)t.pixels[size_t(y*n+x)]=texel(.92f,.95f,.95f,.25f+.45f*glassNoise(float(x),float(y),0x3cu,3)*(1-float(y)/float(n)));t.transparent=true;t.glossStrength=.45f;return t;}();
+ // Shards and grit: dark, clear glass with a glint along one edge.
+ static const Texture shardTexture=asGlass([&](){const int n=32;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.clampEdges=true;
+  for(int y=0;y<n;++y)for(int x=0;x<n;++x){const float v=(float(y)+.5f)/float(n),u=(float(x)+.5f)/float(n),glint=std::clamp((.09f-v)/.06f,0.f,1.f)*(.55f+.45f*std::sin(u*3.1f));
+   t.pixels[size_t(y*n+x)]=texel(.07f+.85f*glint,.11f+.83f*glint,.11f+.83f*glint,.2f+.6f*glint);}
+  return t;}(),"shard glass");
+ chipSheetGlass=&shardTexture;
  // A crack line at each healing opacity (sixteenths) of bullet-resistant glass.
  static const auto crackLines=[](){std::array<Texture,17> out;for(int a=0;a<=16;++a){auto&t=out[size_t(a)];t={4,4,std::vector<std::uint32_t>(16,(unsigned(0xc4*a/16)<<24)|0xe2e8e8u)};t.transparent=true;t.clampEdges=true;}return out;}();
- struct PaneFrame{Point3 origin,along,normal;float width,height;};
- auto paneFrame=[](const Breakable&b){const bool alongX=b.x2-b.x1>b.y2-b.y1;const Vec2 c{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};
-  return PaneFrame{alongX?Point3{b.x1,c.y,b.bottom}:Point3{c.x,b.y1,b.bottom},alongX?Point3{1,0,0}:Point3{0,1,0},alongX?Point3{0,1,0}:Point3{1,0,0},std::max(b.x2-b.x1,b.y2-b.y1),b.top-b.bottom};};
- auto planePoint=[](const PaneFrame&f,Vec2 q,float off=0){return f.origin+f.along*q.x+Point3{0,0,q.y}+f.normal*off;};
- auto paneSeed=[&](int i){return std::uint32_t(level*7919+i*104729+17);};
- auto paneHit=[&](int i,const PaneFrame&f){if(auto g=game.glassBreak(level,i)){auto d=g->at-f.origin;return Vec2{std::clamp(d.x*f.along.x+d.y*f.along.y,0.f,f.width),std::clamp(d.z,0.f,f.height)};}return Vec2{f.width*.5f,f.height*.55f};};
+ // The pane's own plane (GlassFracture.h), as the game breaks it.
+ using PaneFrame=glass::Frame;
+ auto paneFrame=[](const Breakable&b){return glass::frame(b.x1,b.y1,b.x2,b.y2,b.bottom,b.top);};
+ auto planePoint=[](const PaneFrame&f,Vec2 q,float off=0){return f.at(q,off);};
+ auto paneSeed=[&](int i){return glass::paneSeed(level,i);};
+ auto paneHit=[&](int i,const PaneFrame&f){if(auto g=game.glassBreak(level,i))return f.clamp(f.local(g->at));if(auto p=w.paneGlass(i))return Vec2{p->hits.back().u,p->hits.back().v};return Vec2{f.width*.5f,f.height*.55f};};
  auto paneDrive=[&](int i,const PaneFrame&f){Vec2 d{};if(auto g=game.glassBreak(level,i))d=normalized(Vec2{g->direction.x,g->direction.y});
   if(length(d)<.5f)d=Vec2{f.normal.x,f.normal.y}*(glass::hashUnit(paneSeed(i),99)<.5f?-1.f:1.f);return d;};
  auto crackEdge=[&](const PaneFrame&f,Vec2 a,Vec2 e,float width,const Texture&t){const Vec2 run=e-a;const float len=length(run);if(len<.002f)return;const Vec2 n=Vec2{-run.y,run.x}*(width*.5f/len);
   for(float side:{-.014f,.014f})quad(planePoint(f,a-n,side),planePoint(f,e-n,side),planePoint(f,e+n,side),planePoint(f,a+n,side),t,1.3f);};
+ // A glass pane: its body (holds glass bowed by its strain), its edge where it meets the frame, and,
+ // as it breaks a piece at a time, what is left of its lattice, each hit's crushed star and its cracks
+ // (radials bright and thick at the heart, tapering and fading out; rings shorter and fainter), and a
+ // bright chipped rim round every hole, which lacks all of it.
+ auto paneBody=[&](int i,const Breakable&b,const World::PaneGlass*p){const auto f=paneFrame(b);const auto l=glass::lattice(f.width,f.height,paneSeed(i));const bool whole=p&&p->gone.size()==size_t(l.cells());
+  const float strain=p?std::clamp(w.breakableDamage(i)/(b.holds?180.f:w.breakableLimit(i)),0.f,1.f):0.f;const Vec2 drive=paneDrive(i,f);
+  const float sag=b.holds?.16f*strain*(dot(drive,Vec2{f.normal.x,f.normal.y})<0?-1.f:1.f):0.f;
+  auto bow=[&](Vec2 q){return sag*std::sin(kPi*std::clamp(q.x/f.width,0.f,1.f))*std::sin(kPi*std::clamp(q.y/f.height,0.f,1.f));};
+  auto gone=[&](Vec2 q){if(!whole||!p->missing)return false;const int c=l.at(f.clamp(q));return c>=0&&p->gone[size_t(c)]!=0;};
+  auto vertex=[&](Vec2 q,float side,Vec2 uv){return MeshVertex{f.at(q,side+bow(q)),uv.x,uv.y};};
+  auto sheet=[&](Vec2 q){return Vec2{q.x/f.width,q.y/f.height};};
+  // A triangle on both faces, `off` out from the middle of the glass.
+  auto face=[&](Vec2 a,Vec2 c,Vec2 e,Vec2 ua,Vec2 uc,Vec2 ue,const Texture&t,float off,float light){
+   tri(vertex(a,off,ua),vertex(c,off,uc),vertex(e,off,ue),t,light);tri(vertex(a,-off,ua),vertex(e,-off,ue),vertex(c,-off,uc),t,light);};
+  if(!p){const Vec2 a{0,0},c{f.width,0},e{f.width,f.height},d{0,f.height};face(a,c,e,sheet(a),sheet(c),sheet(e),paneSheet,.012f,1.05f);face(a,e,d,sheet(a),sheet(e),sheet(d),paneSheet,.012f,1.05f);}
+  else for(int c=0;c<l.cells();++c){if(whole&&p->gone[size_t(c)])continue;const auto t=l.triangle(c);face(t[0],t[1],t[2],sheet(t[0]),sheet(t[1]),sheet(t[2]),paneSheet,.012f,1.05f);}
+  // Where it meets the frame: a band of its darker edge, only where glass is left.
+  const float band=std::min(.03f,std::min(f.width,f.height)*.1f);
+  static const std::vector<std::uint8_t> noneGone;const auto&goneCells=whole?p->gone:noneGone;
+  // A mark on the glass, cut to the triangles still standing (glass::onGlass); uv maps a point in the plane to the texture.
+  auto mark=[&](const std::vector<Vec2>&poly,auto&&uv,const Texture&t,float off,float light){glass::onGlass(l,goneCells,poly,[&](int,const std::vector<Vec2>&piece){
+    if(m_recordGlassDecals)m_glassDecals.push_back({level,i,piece});
+    for(size_t m=1;m+1<piece.size();++m)face(piece[0],piece[m],piece[m+1],uv(piece[0]),uv(piece[m]),uv(piece[m+1]),t,off,light);});};
+  auto anywhere=[](Vec2 q){return q*8.f;};
+  auto strip=[&](Vec2 a,Vec2 c,Vec2 inA,Vec2 inC){const Vec2 a2=a+inA*band,c2=c+inC*band;if(!p){face(a,c,c2,{0,0},{1,0},{1,1},paneEdge,.0125f,1.05f);face(a,c2,a2,{0,0},{1,1},{0,1},paneEdge,.0125f,1.05f);}
+   else mark({a,c,c2,a2},anywhere,paneEdge,.0125f,1.05f);};
+  const auto nb=whole?l.neighbours():std::vector<std::array<int,3>>{};
+  if(!whole){const float W=f.width,H=f.height;strip({0,0},{W,0},{0,1},{0,1});strip({W,0},{W,H},{-1,0},{-1,0});strip({W,H},{0,H},{0,-1},{0,-1});strip({0,H},{0,0},{1,0},{1,0});}
+  else for(int c=0;c<l.cells();++c)if(!p->gone[size_t(c)]){const auto k=l.corners(c);const Vec2 centre=l.centre(c);
+   for(int e=0;e<3;++e)if(nb[size_t(c)][size_t(e)]<0){const Vec2 a=l.point(k[size_t(e)]),d=l.point(k[size_t((e+1)%3)]);if(!(l.onFrame(k[size_t(e)])&&l.onFrame(k[size_t((e+1)%3)])))continue;
+    strip(a,d,normalized(centre-a),normalized(centre-d));}}
+  if(!p)return;
+  // A crack or a rim line, cut where the glass is gone: it stops at a hole's jagged edge.
+  auto line=[&](Vec2 a,Vec2 e,float width,const Texture&t){const Vec2 run=e-a;const float len=length(run);if(len<.002f)return;const Vec2 n=Vec2{-run.y,run.x}*(width*.5f/len);
+   mark({a-n,e-n,e+n,a+n},anywhere,t,.014f,1.25f);};
+  const float opacity=w.breakableOpacity(i);
+  for(int k=0;k<int(p->hits.size());++k){const auto&h=p->hits[size_t(k)];const Vec2 c{h.u,h.v};const float reach=std::clamp(h.strain*.6f+strain*.5f+(h.radius>0?.25f:0.f),0.f,1.f);const std::uint32_t seed=paneSeed(i)*31u+std::uint32_t(k);
+   const auto segs=glass::cracks(c,reach,seed);float far=.05f;for(const auto&g:segs)far=std::max(far,length(g.b-c));
+   for(size_t j=0;j<segs.size();++j){const auto&g=segs[j];const Vec2 a=f.clamp(g.a),e=f.clamp(g.b),mid=(a+e)*.5f;if(gone(a)&&gone(e)&&gone(mid))continue;const Vec2 run=e-a,out=mid-c;const float len=length(run),ol=length(out);if(len<.002f)continue;
+    const bool ring=ol>1e-4f&&std::fabs(dot(run,out))/(len*ol)<.55f;const float fade=std::clamp(1.f-ol/far,0.f,1.f),jitter=.6f+.4f*glass::hashUnit(seed,900,std::uint32_t(j));
+    const float strength=(ring?.45f*(.35f+.65f*fade):.35f+.65f*fade)*jitter*opacity;
+    line(a,e,(ring?.0028f:.0032f+.011f*fade*fade)*(b.holds?1.2f:1.f)*(.8f+.4f*jitter),crackSheets[size_t(std::clamp(int(strength*16+.5f),1,16))]);}
+   // The crushed star at every blow: whole where it only starred the glass, a ring of it round a hole; in laminated glass
+   // (whose interlayer keeps the crushed glass) wider and denser the harder that spot has been hammered.
+   // A thing's own hole (a crate's) has its rim and no star.
+   if(h.radius<=.15f){const float local=std::min(3.f,glass::strainAt(p->hits,c));float size=.03f+.03f*h.strain+(b.holds?.065f*local:0.f);
+    const float open=h.radius*1.3f;if(open>0&&open>.2f*size)size=std::max(size,open/.48f);const Texture&star=open<=0?starSheet:open<=.2f*size?piercedSheet:ringSheet;
+    const float turn=glass::hashUnit(seed,901)*kTwoPi,cs=std::cos(turn)*size,sn=std::sin(turn)*size;const Vec2 ax{cs,sn},ay{-sn,cs};
+    const float s2=size*size;auto starUv=[&](Vec2 q){const Vec2 d=q-c;return Vec2{.5f+.5f*dot(d,ax)/s2,.5f+.5f*dot(d,ay)/s2};};
+    const std::vector<Vec2> square{c-ax-ay,c+ax-ay,c+ax+ay,c-ax+ay};
+    for(int layer=0;layer<(b.holds?1+int(local):1);++layer)mark(square,starUv,star,.0145f+.0005f*float(layer),1.25f);}}
+  // A hole's rim, cut into the glass left round it and facing into the hole: a bright chipped edge along it and a
+  // frosted band behind that.
+  if(whole&&p->missing)for(int c=0;c<l.cells();++c)if(p->gone[size_t(c)]){const auto k=l.corners(c);
+   for(int e=0;e<3;++e){const int n=nb[size_t(c)][size_t(e)];if(n<0||p->gone[size_t(n)])continue;const Vec2 a=l.point(k[size_t(e)]),d=l.point(k[size_t((e+1)%3)]),in=l.centre(n);
+    const std::uint32_t key=std::uint32_t(c*3+e);const float r1=glass::hashUnit(paneSeed(i),key,1),r2=glass::hashUnit(paneSeed(i),key,2),r3=glass::hashUnit(paneSeed(i),key,3);
+    const Vec2 ia=normalized(in-a),id=normalized(in-d),a1=a+ia*(.003f+.005f*r1),d1=d+id*(.003f+.005f*r2),a2=a+ia*(.01f+.03f*r2),d2=d+id*(.01f+.03f*r3);
+    mark({a,d,d1,a1},anywhere,crackSheets[16],.014f,1.25f);mark({a1,d1,d2,a2},anywhere,frostSheet,.0135f,1.25f);}}};
+ // Grit and splinters a pane leaves on the floor: mostly small, a few bigger pieces near it, most on the side the
+ // blow drove them; dark clear glass, each with its glint.
+ auto glassGrit=[&](const PaneFrame&f,Vec2 drive,int count,std::uint32_t seed,float floorZ){if(f.flat)return;const Vec2 n{f.normal.x,f.normal.y};const float side=dot(drive,n)<0?-1.f:1.f;
+  for(int i=0;i<count;++i){auto h=[&](int k){return glass::hashUnit(seed,std::uint32_t(i),std::uint32_t(k));};
+   const float u=-.25f+(f.width+.5f)*h(1),near=h(2)*h(2),d=.04f+1.6f*near*(.4f+.6f*h(3)),across=(h(4)<.8f?side:-side)*d;
+   const float size=(.006f+.055f*std::pow(h(5),3.f))*(1.3f-.7f*near);
+   const Point3 c=f.origin+f.along*u+Point3{n.x*across,n.y*across,0};const float z=w.supportBelow(c.x,c.y,floorZ+.3f)+.002f+.0003f*float(i%7);if(z<floorZ-1.f)continue;
+   const float a=h(6)*kTwoPi;Point3 v[3];for(int k=0;k<3;++k){const float t=a+float(k)*2.f+.7f*h(7+k),r=size*(.55f+.6f*h(10+k));v[k]={c.x+std::cos(t)*r,c.y+std::sin(t)*r,z};}
+   tri({v[0],0,0},{v[1],1,0},{v[2],.5f,1},shardTexture,1.05f);}};
+ // The pieces of a fallen pane that are shard props (the game drops them) or were gone before it fell.
+ auto loosePieces=[&](int i,const PaneFrame&f,const std::vector<glass::Shard>&shards){const auto*p=w.paneGlass(i);const auto l=glass::lattice(f.width,f.height,paneSeed(i));return glass::loosePieces(shards,p?&l:nullptr,p?&p->gone:nullptr);};
  auto falling=[&](int i){for(const auto&e:game.breakEvents())if(e.level==level&&e.pane&&e.index==i){float t=game.elapsed()-e.time;if(t>=0&&t<2.5f)return true;}return false;};
  // One shard t seconds after the break (t<0: settled). The centre goes first
  // along the blow; the rest hangs in the frame until its delay, then drops.
@@ -1900,31 +2009,33 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(te<=0){for(int k=0;k<s.shape.n;++k)pts[size_t(k)]=planePoint(f,c+(s.shape.p[size_t(k)]-c)*.96f);
    for(int k=0;k<s.shape.n;++k)crackEdge(f,c+(s.shape.p[size_t(k)]-c)*.96f,c+(s.shape.p[size_t((k+1)%s.shape.n)]-c)*.96f,.0025f,crackLines[16]);}
   else if(te<land){auto p=at(te);float a=s.spin*te,b=s.tumble*te,ca=std::cos(a),sa=std::sin(a),cb=std::cos(b),sb=std::sin(b);
-   for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;float x=o.x*ca-o.y*sa,y=o.x*sa+o.y*ca;pts[size_t(k)]=p+f.along*x+Point3{0,0,y*cb}+f.normal*(y*sb);}}
+   for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;float x=o.x*ca-o.y*sa,y=o.x*sa+o.y*ca;pts[size_t(k)]=p+f.along*x+f.up*(y*cb)+f.normal*(y*sb);}}
   else{auto p=at(land);float ca=std::cos(s.yaw),sa=std::sin(s.yaw),z=floor+.004f+.0004f*float(id%9);
    for(int k=0;k<s.shape.n;++k){Vec2 o=s.shape.p[size_t(k)]-c;pts[size_t(k)]={p.x+o.x*ca-o.y*sa,p.y+o.x*sa+o.y*ca,z};}}
-  for(int k=1;k+1<s.shape.n;++k)tri({pts[0],0,0},{pts[size_t(k)],1,0},{pts[size_t(k+1)],.5f,1},te<=0?m_glassTexture:shardTexture,te<=0?1.05f:1.5f);};
+  for(int k=1;k+1<s.shape.n;++k)tri({pts[0],0,0},{pts[size_t(k)],1,0},{pts[size_t(k+1)],.5f,1},te<=0?paneSheet:shardTexture,1.05f);};
  if(!w.breakables().empty()){
   auto key=geometryKey;for(int i=0;i<int(w.breakables().size());++i){key^=std::uint64_t(!w.breakableIntact(i)+1)+(falling(i)?4u:0u);key*=1099511628211ull;
+   if(auto p=w.paneGlass(i)){key^=std::uint64_t(p->revision)*977+std::uint64_t(w.breakableOpacity(i)*16)*13+std::uint64_t(p->missing)*7919;key*=1099511628211ull;}
    if(auto g=game.glassBreak(level,i)){key^=std::uint64_t(std::int64_t(g->at.x*256)*31+std::int64_t(g->at.y*256)*977+std::int64_t(g->at.z*256)*7919);key*=1099511628211ull;}}
   bool build=!m_gpuFrame||m_gpu->beginStaticCache(3*Game::MaxChunks+level,key);
-  if(build){if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
-   if(w.breakableIntact(i)){if(b.material!=17){box({b.x1,b.y1,b.bottom},{b.x2,b.y2,b.top},b.material==22?m_dropCeiling:m_crateTexture,1.f);continue;}float x1=alongX?b.x1:center.x-.012f,x2=alongX?b.x2:center.x+.012f,y1=alongX?center.y-.012f:b.y1,y2=alongX?center.y+.012f:b.y2;box({x1,y1,b.bottom},{x2,y2,b.top},m_glassTexture,1.05f);
+  if(build){if(m_recordGlassDecals)std::erase_if(m_glassDecals,[&](const GlassDecal&d){return d.level==level;});if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
+   if(w.breakableIntact(i)){if(b.material!=17){box({b.x1,b.y1,b.bottom},{b.x2,b.y2,b.top},b.material==22?m_dropCeiling:m_crateTexture,1.f);continue;}const auto*p=w.paneGlass(i);paneBody(i,b,p);if(p&&p->missing){const auto f=paneFrame(b);glassGrit(f,paneDrive(i,f),std::clamp(int(float(p->missing)*.7f),6,180),paneSeed(i)^0x9e37u,b.bottom);}
    }else if(b.material==17){const auto f=paneFrame(b);const auto seed=paneSeed(i);
-    for(const auto&t:glass::teeth(f.width,f.height,seed)){for(int k=1;k+1<t.n;++k)tri({planePoint(f,t.p[0]),0,0},{planePoint(f,t.p[size_t(k)]),1,0},{planePoint(f,t.p[size_t(k+1)]),.5f,1},m_glassTexture,1.05f);
-     for(int k=1;k<t.n;++k)crackEdge(f,t.p[size_t(k)],t.p[size_t((k+1)%t.n)],.002f,crackLines[11]);}
-    if(!falling(i)){const auto shards=glass::fracture(f.width,f.height,paneHit(i,f),seed);const Vec2 drive=paneDrive(i,f);for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,-1);}
-    chips(center,b.bottom,width*.5f+.6f,std::clamp(int(width*(b.top-b.bottom)*14),6,30),i+113);
+    auto sheetAt=[&](Vec2 q){return MeshVertex{planePoint(f,q),q.x/f.width,q.y/f.height};};
+    for(const auto&t:glass::teeth(f.width,f.height,seed)){for(int k=1;k+1<t.n;++k){tri(sheetAt(t.p[0]),sheetAt(t.p[size_t(k)]),sheetAt(t.p[size_t(k+1)]),paneSheet,1.05f);tri(sheetAt(t.p[0]),sheetAt(t.p[size_t(k+1)]),sheetAt(t.p[size_t(k)]),paneSheet,1.05f);}
+     for(int k=1;k<t.n;++k)crackEdge(f,t.p[size_t(k)],t.p[size_t((k+1)%t.n)],.0045f,crackSheets[15]);}
+    if(!falling(i)){const auto shards=glass::fracture(f.width,f.height,paneHit(i,f),seed);const Vec2 drive=paneDrive(i,f);const auto loose=loosePieces(i,f,shards);for(int id=0;id<int(shards.size());++id)if(!loose[size_t(id)])drawShard(f,shards[size_t(id)],id,drive,-1);}
+    glassGrit(f,paneDrive(i,f),std::clamp(int(width*(b.top-b.bottom)*45),40,240),seed^0x51edu,b.bottom);(void)center;
    }
   }if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}
  }
  for(const auto&e:game.breakEvents())if(e.level==level){float t=game.elapsed()-e.time;if(t<0||t>2.5f)continue;
   if(e.pane&&e.material==PropMaterial::Glass&&e.index>=0&&e.index<int(w.breakables().size())&&!w.breakableIntact(e.index)){
    const auto f=paneFrame(w.breakables()[size_t(e.index)]);const auto shards=glass::fracture(f.width,f.height,paneHit(e.index,f),paneSeed(e.index));const Vec2 drive=paneDrive(e.index,f);
-   for(int id=0;id<int(shards.size());++id)drawShard(f,shards[size_t(id)],id,drive,t);}
+   const auto loose=loosePieces(e.index,f,shards);for(int id=0;id<int(shards.size());++id)if(!loose[size_t(id)])drawShard(f,shards[size_t(id)],id,drive,t);}
   int count=e.pane?std::clamp(int(e.width*e.height*12),6,16):propMaterialTraits(e.material).shards;
   // A prop's chips are bits of its own sheet; glass stays glass.
-  const Texture&chipSheet=e.model>=0&&e.model<FacilityModelCount&&e.material!=PropMaterial::Glass?facilityTexture(e.model,0):e.material==PropMaterial::Ceramic?m_paleSteel:m_glassTexture;
+  const Texture&chipSheet=e.model>=0&&e.model<FacilityModelCount&&e.material!=PropMaterial::Glass?facilityTexture(e.model,0):e.material==PropMaterial::Ceramic?m_paleSteel:shardTexture;
   for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},chipSheet,1.5f);}
  }
  auto drawClutter=[&](const Clutter&c){
@@ -1942,6 +2053,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
   }
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
+  if(c.kind==6&&c.shardOf==ShardOf::Glass){
+   // A piece of a pane: a thin sheet of its outline, both faces.
+   std::array<Vec2,5> outline{};const int n=glass::shardOutline(c.piece,outline);std::array<MeshVertex,5> top{},bottom{};
+   for(int k=0;k<n;++k){const float x=outline[size_t(k)].x*size[0],y=outline[size_t(k)].y*size[1];const auto rt=c.rotate(x,y,size[2]*.5f),rb=c.rotate(x,y,-size[2]*.5f);
+    top[size_t(k)]={{c.pos.x+rt[0],c.pos.y+rt[1],mid+rt[2]},outline[size_t(k)].x+.5f,outline[size_t(k)].y+.5f};bottom[size_t(k)]={{c.pos.x+rb[0],c.pos.y+rb[1],mid+rb[2]},outline[size_t(k)].x+.5f,outline[size_t(k)].y+.5f};}
+   for(int k=1;k+1<n;++k){tri(top[0],top[size_t(k)],top[size_t(k+1)],shardTexture,1.05f);tri(bottom[0],bottom[size_t(k+1)],bottom[size_t(k)],shardTexture,1.05f);}
+   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;return;}
   if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
    for(auto face:mesh.triangles){for(auto&v:face.v){auto p=v.p-center;auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
   }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
@@ -2522,7 +2640,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(const auto&mark:game.bulletImpacts())if(mark.level==level){
   if(mark.tint==-3){
    // Each hit's own spider-web, its rays reaching further as the pane weakens.
-   const int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);if(pane<0)continue;const auto&b=w.breakables()[size_t(pane)];const auto f=paneFrame(b);
+   const int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);if(pane<0||w.paneGlass(pane))continue;const auto&b=w.breakables()[size_t(pane)];const auto f=paneFrame(b);
    const float limit=b.holds?180.f:b.health>0?b.health:20.f,strain=std::clamp(w.breakableDamage(pane)/limit,0.f,1.f);
    const auto&line=crackLines[size_t(int(w.breakableOpacity(pane)*16))];
    const Point3 d=Point3{mark.pos.x,mark.pos.y,mark.z}-f.origin;const Vec2 hit{d.x*f.along.x+d.y*f.along.y,d.z};

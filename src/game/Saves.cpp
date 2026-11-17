@@ -146,6 +146,14 @@ template<class A> int Game::archiveSave(A& a,int version){
   // Version 21: which leads have torn. The cables themselves are hung again on load.
   if(version>=21){std::vector<std::uint16_t> torn;if constexpr(!A::reading)for(size_t i=0;i<w.m_leadRopes.size();++i)if(w.m_leadRopes[i].torn)torn.push_back(std::uint16_t(i));
    list(torn,[&](std::uint16_t&i){a(i);if(i>=w.leads().size())throw std::runtime_error("invalid lead");});if constexpr(A::reading)for(auto i:torn)w.m_leadRopes[i].torn=true;}
+  // Version 27: each pane's hits (glass that breaks a piece at a time; GlassFracture.h), one number a hit:
+  // where on the pane (16 bits each way), the hole's radius and the strain (8 bits each). The gone glass is worked out again.
+  if(version>=27){std::vector<std::pair<std::uint16_t,std::vector<std::uint64_t>>> panes;
+   if constexpr(!A::reading)for(const auto&[i,hits]:w.packedPaneHits()){std::vector<std::uint64_t> packed;for(const auto&h:hits)packed.push_back(std::uint64_t(h.u)<<32|std::uint64_t(h.v)<<16|std::uint64_t(h.radius)<<8|h.strain);panes.push_back({i,packed});}
+   list(panes,[&](std::pair<std::uint16_t,std::vector<std::uint64_t>>&pane){a(pane.first);if(pane.first>=w.breakables().size())throw std::runtime_error("invalid pane");
+    list(pane.second,[&](std::uint64_t&h){a(h);if(h>>48)throw std::runtime_error("invalid pane hit");},64);},4096);
+   if constexpr(A::reading){std::vector<std::pair<std::uint16_t,std::vector<glass::PackedHit>>> hits;
+    for(const auto&[i,packed]:panes){std::vector<glass::PackedHit> one;for(auto h:packed)one.push_back({std::uint16_t(h>>32),std::uint16_t(h>>16),std::uint8_t(h>>8),std::uint8_t(h)});hits.push_back({i,one});}w.restorePaneHits(hits);}}
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
  }catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}

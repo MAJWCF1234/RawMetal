@@ -1,0 +1,10 @@
+# glass-holds from the side, at a grazing angle: the sag and the crushed white heart.
+# Shots "before", "holes" and "after". Tubes: glass.
+world room
+camera 8.7 4.9 -999 66 -3
+light 8.2 8.0 3.2 1.3 9
+light 12.2 8.6 2.9 1.5 7
+glass holds
+view grazing
+size 480 270
+frames 480

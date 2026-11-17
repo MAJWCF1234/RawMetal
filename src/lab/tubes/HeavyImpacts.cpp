@@ -37,7 +37,8 @@ std::shared_ptr<CustomCampaign> paneRoom(PaneRoom r){auto m=regression::room();m
  if(r.floor)kit::breakable(*m,7,7,10,10,1.f,1.03f,17,r.holds);else kit::breakable(*m,9.97f,5,10.03f,11,0,3,17,r.holds);return regression::campaign(m);}
 void watch(Game& g,PaneRun& out){for(const auto& s:g.sounds()){if(s.sound==Sound::JunkGlass)out.crackSound=true;if(s.sound==Sound::GlassShatter){out.shatter=true;out.stimulus|=s.aiRadius>=14;}}
  for(const auto& c:LabAccess::clutter(g))if(c.model>=0&&!c.broken)out.peak=std::max(out.peak,std::sqrt(lengthSq(c.velocity)+c.vz*c.vz));}
-void finish(Game& g,PaneRun& out,int index=0){const World& w=g.world();out.broken=!w.breakableIntact(0);const auto& b=w.breakables()[0];
+// Broken: down, or (glass breaking a piece at a time) holed through where the prop struck it; holds glass only counts down.
+void finish(Game& g,PaneRun& out,int index=0){const World& w=g.world();const auto& b=w.breakables()[0];out.broken=!w.breakableIntact(0)||(!b.holds&&w.paneGlass(0)&&w.paneGlass(0)->missing>0);
  const float limit=b.holds?180.f:b.health>0?b.health:20.f;out.damage=out.broken?limit:w.breakableDamage(0);out.strain=out.damage/limit;
  const auto& c=LabAccess::clutter(g)[size_t(index)];out.x=c.pos.x;out.propBroken=c.broken;out.through=b.bottom>.5f?c.z<b.bottom-.1f:c.pos.x>10.2f;}
 // A prop let go with a velocity at the room's upright pane (x = 10) or over its glass floor.

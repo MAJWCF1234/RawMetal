@@ -90,6 +90,20 @@ struct LabAccess {
  static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
  static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}
  static void damagePane(Game& g,int index,float amount,Point3 at,Point3 direction){g.damagePane(g.m_level,index,amount,at,direction);}
+ static bool damagePane(Game& g,int index,float amount,Point3 at,Point3 direction,PaneBlow blow){return g.damagePane(g.m_level,index,amount,at,direction,blow);}
+ // A round of `gun` from `origin` toward `at`, as the player fires it.
+ static ShotHit fireFrom(Game& g,Point3 origin,Point3 at,const HitscanDef& gun){Point3 d{at.x-origin.x,at.y-origin.y,at.z-origin.z};const float n=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);d=d*(1/std::max(n,1e-4f));
+  const auto hit=g.traceShot(origin,d,40,-1,false,&gun);g.resolveShot(hit,origin,d,gun,true);return hit;}
+ static ShotHit trace(Game& g,Point3 origin,Point3 direction,float distance){return g.traceShot(origin,direction,distance);}
+ static void landShards(Game& g){g.landShards();}
+ // The marks drawn on breaking glass, in each pane's plane (Scene3D records them while asked).
+ static void recordGlassDecals(SoftwareRenderer& r,bool on){r.m_recordGlassDecals=on;r.m_glassDecals.clear();}
+ static const std::vector<SoftwareRenderer::GlassDecal>& glassDecals(const SoftwareRenderer& r){return r.m_glassDecals;}
+ static Vec2& velocity(Game& g){return g.m_velocity;}
+ static Vec2& crunchFrom(Game& g){return g.m_glassCrunchLast;}
+ static void updateGlass(Game& g,float dt){g.updateGlass(dt);}
+ static std::vector<SoundEvent>& sounds(Game& g){return g.m_sounds;}
+ static std::vector<AiStimulus> stimuli(const Game& g){return g.aiStimuli();}
  static void breakClutter(Game& g,size_t index,Point3 direction){g.breakClutter(g.m_level,index,direction);g.landShards();}
  static void blastProps(Game& g,Point3 at,bool tiles){g.blastProps(at,tiles);}
  // The player's hand on the prop in front of him (or off the one he holds), as the use key does.

@@ -40,6 +40,8 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal,ShotTrace* trace)
   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top});box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f});box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f});
  };
  auto solid=[&](size_t index){const auto&s=m_structures[index];if(isBreakableStructure(int(index))){int i=int(index)-m_breakableFirst;if(!breakableIntact(i))return;Point3 n;float t=rayBoxFraction(from,delta,{s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top},&n);
+   // Where a piece of the pane is gone, the round (or the thrown thing) goes on untouched.
+   if(t<1&&paneGlass(i)&&paneGlass(i)->missing&&paneOpenAt(i,from+delta*t))return;
    if(trace&&breakables()[i].material==17&&!breakables()[i].holds){if(t<trace->passedAt[1]){int slot=t<trace->passedAt[0]?0:1;if(slot==0){trace->passed[1]=trace->passed[0];trace->passedAt[1]=trace->passedAt[0];trace->passedNormal[1]=trace->passedNormal[0];}trace->passed[slot]=i;trace->passedAt[slot]=t;trace->passedNormal[slot]=n;}}
    else if(t<=nearest){nearest=t;normal=n;if(trace)trace->blocking=i;}
   }else if(shapedGround||s.material==17)structure(s);
@@ -118,9 +120,34 @@ namespace retro {
 bool World::breakableIntact(int i)const{return i>=0&&i<int(breakables().size())&&std::find(m_brokenBreakables.begin(),m_brokenBreakables.end(),i)==m_brokenBreakables.end();}
 int World::breakableAt(float x,float y,float z,float margin)const{for(int i=0;i<int(breakables().size());++i){const auto&b=breakables()[i];if(breakableIntact(i)&&x>=b.x1-margin&&x<=b.x2+margin&&y>=b.y1-margin&&y<=b.y2+margin&&z>=b.bottom-margin&&z<=b.top+margin)return i;}return -1;}
 void World::removeBreakable(int i){if(i<0||i>=int(breakables().size()))return;if(std::find(m_brokenBreakables.begin(),m_brokenBreakables.end(),i)==m_brokenBreakables.end()){m_brokenBreakables.push_back(std::uint16_t(i));std::sort(m_brokenBreakables.begin(),m_brokenBreakables.end());}int index=breakableStructure(i);for(auto&cell:m_structureCells)cell.erase(std::remove(cell.begin(),cell.end(),index),cell.end());if(index<int(m_structures.size())){auto&s=m_structures[index];s.x2=s.x1;s.y2=s.y1;s.top=s.bottom;}m_lightSolids.clear();m_lightNodes.clear();}
-bool World::damageBreakable(int i,float amount){if(!breakableIntact(i)||!std::isfinite(amount)||amount<=0)return false;const auto&b=breakables()[i];m_breakableAge[i]=0;m_breakableDamage[i]=std::min(b.holds?180.f:1000000.f,m_breakableDamage[i]+amount);if(!b.holds&&m_breakableDamage[i]>=(b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f)){removeBreakable(i);return true;}return false;}
+// A glass pane comes down whole only once it has taken its area's worth: its health (20 by
+// default) for a 0.6 m2 pane, more for a larger one (which breaks a piece at a time first;
+// Game::damagePane). Holds glass never does, unless the design gives it a health of its own.
+float World::breakableLimit(int i)const{const auto&b=breakables()[size_t(i)];if(b.holds)return b.health>0?b.health:1e30f;
+ if(b.material==17){const auto f=paneFrame(i);return (b.health>0?b.health:20.f)*std::max(1.f,f.width*f.height/.6f);}return b.health>0?b.health:b.material==22?8.f:35.f;}
+bool World::damageBreakable(int i,float amount){if(!breakableIntact(i)||!std::isfinite(amount)||amount<=0)return false;const auto&b=breakables()[i];m_breakableAge[i]=0;m_breakableDamage[i]=std::min(b.holds?std::max(180.f,b.health):1000000.f,m_breakableDamage[i]+amount);if(m_breakableDamage[i]>=breakableLimit(i)){removeBreakable(i);return true;}return false;}
+void World::solvePane(int i){auto&p=m_paneGlass.at(size_t(i));const auto&b=breakables()[size_t(i)];p.missing=glass::solve(paneLattice(i),p.hits,b.holds,p.gone);++p.revision;}
+std::vector<std::uint8_t> World::addPaneHit(int i,glass::Hit hit){auto&p=m_paneGlass.at(size_t(i));const auto f=paneFrame(i);auto before=p.gone;
+ if(before.empty())before.assign(size_t(paneLattice(i).cells()),0);
+ // A pane keeps at most 48 hits (a save's bound is 64): past that a hit joins the nearest, which keeps the larger hole and both strains.
+ if(p.hits.size()>=48){auto&near=*std::min_element(p.hits.begin(),p.hits.end(),[&](const glass::Hit&a,const glass::Hit&b){return lengthSq(Vec2{a.u-hit.u,a.v-hit.v})<lengthSq(Vec2{b.u-hit.u,b.v-hit.v});});
+  near=glass::quantized({near.u,near.v,std::max(near.radius,hit.radius),std::min(1.f,near.strain+hit.strain)},f.width,f.height);}
+ else p.hits.push_back(glass::quantized(hit,f.width,f.height));solvePane(i);return before;}
+void World::healPaneCracks(int i){auto&p=m_paneGlass.at(size_t(i));const auto n=p.hits.size();std::erase_if(p.hits,[](const glass::Hit&h){return h.radius<=0;});if(p.hits.size()!=n){if(p.hits.empty())p={};else solvePane(i);}}
+bool World::paneOpenAt(int i,Point3 at)const{const auto*p=paneGlass(i);if(!p||!p->missing)return false;const auto f=paneFrame(i);const auto l=paneLattice(i);
+ const int c=l.at(f.clamp(f.local(at)));return c>=0&&size_t(c)<p->gone.size()&&p->gone[size_t(c)];}
+bool World::paneColumnOpen(int structure,float x,float y,float feet,float height)const{if(!isBreakableStructure(structure))return false;const int i=structure-m_breakableFirst;const auto*p=paneGlass(i);if(!p||!p->missing)return false;
+ const auto f=paneFrame(i);if(f.flat)return paneOpenAt(i,{x,y,f.origin.z});
+ const float lo=std::max(0.f,feet-f.origin.z),hi=std::min(f.height,feet+height-f.origin.z);if(hi<lo)return true;
+ const auto l=paneLattice(i);const float u=f.local({x,y,f.origin.z}).x;const int steps=std::max(1,int(std::ceil((hi-lo)/.03f)));
+ for(int k=0;k<=steps;++k){const int c=l.at(f.clamp({u,lo+(hi-lo)*float(k)/float(steps)}));if(c<0||size_t(c)>=p->gone.size()||!p->gone[size_t(c)])return false;}return true;}
+std::vector<std::pair<std::uint16_t,std::vector<glass::PackedHit>>> World::packedPaneHits()const{std::vector<std::pair<std::uint16_t,std::vector<glass::PackedHit>>> out;
+ for(int i=0;i<int(m_paneGlass.size());++i)if(!m_paneGlass[size_t(i)].hits.empty()){const auto f=paneFrame(i);std::vector<glass::PackedHit> hits;for(const auto&h:m_paneGlass[size_t(i)].hits)hits.push_back(glass::pack(h,f.width,f.height));out.push_back({std::uint16_t(i),std::move(hits)});}
+ return out;}
+void World::restorePaneHits(const std::vector<std::pair<std::uint16_t,std::vector<glass::PackedHit>>>& hits){m_paneGlass.assign(breakables().size(),{});
+ for(const auto&[i,packed]:hits)if(i<m_paneGlass.size()){const auto f=paneFrame(i);auto&p=m_paneGlass[i];for(const auto&h:packed)p.hits.push_back(glass::unpack(h,f.width,f.height));solvePane(i);}}
 }
 
 namespace retro {
-void World::ageBreakables(float dt){for(int i=0;i<int(breakables().size());++i)if(breakables()[i].holds&&m_breakableDamage[i]>0){m_breakableAge[i]=std::min(21.f,m_breakableAge[i]+std::max(0.f,dt));if(m_breakableAge[i]>=21)m_breakableDamage[i]=0;}}
+void World::ageBreakables(float dt){for(int i=0;i<int(breakables().size());++i)if(breakables()[i].holds&&m_breakableDamage[i]>0){m_breakableAge[i]=std::min(21.f,m_breakableAge[i]+std::max(0.f,dt));if(m_breakableAge[i]>=21){m_breakableDamage[i]=0;healPaneCracks(i);}}}
 }
