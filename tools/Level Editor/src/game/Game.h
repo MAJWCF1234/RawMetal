@@ -1201,6 +1201,8 @@ private:
     // clip's level, leadBodyAtClip), at worst (0 or less: clear of it).
     float leadThrough(int level,int index)const;
     static constexpr float LeadShock=6.f;
+    // What a carried prop that will not break absorbs before a blow tears it out of the hands.
+    static constexpr float ShieldKnockAway=60.f;
     bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
@@ -1240,7 +1242,10 @@ private:
     void applyNpcPunchHit(size_t actor);
     bool applyEnemyDamage(Enemy& enemy,float amount,bool bloodDecal=true,bool closeHitStop=false,int level=-1);
     void updateVrMelee(const InputState& input,float dt);
-    void receiveDamage(float amount,Vec2 source,bool blockable=true);
+    // True when the blow reached the player. A carried prop held toward the source takes it instead
+    // (shieldBlow): breakable props take the damage until they burst, solid ones are knocked away.
+    bool receiveDamage(float amount,Vec2 source,bool blockable=true,bool shieldable=true);
+    bool shieldBlow(float amount,Vec2 source);
     void updateEnemies(float dt);
     // Hunter.cpp: the bite that takes a man's head, feeding on him, the
     // recurring hunter's flight, return and ear, and its walk in after the

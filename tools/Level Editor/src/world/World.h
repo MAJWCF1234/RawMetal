@@ -10,6 +10,7 @@
 #include "../core/Math.h"
 #include "WorldDefinition.h"
 #include "ScriptDefinition.h"
+#include "TerrainField.h"
 
 namespace retro {
 struct Door {
@@ -83,7 +84,10 @@ struct WorldProp {int kind;Vec2 position;float height,footprint,yaw;Vec2 halfSiz
 // part of a large fixture that crosses the map border.
 struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool solid=false;float core=1;bool visible=true;
  // A chair authored fixed in place (FIXTURE field 14): not turned loose with the others.
- bool anchored=false;};
+ bool anchored=false;
+ // FIXTURE fields 15 and 16: the ground's rise per metre east and south under it. The
+ // model is sheared to lie along that slope (plants and rocks hug a hillside; trunks stay upright).
+ float slopeX=0,slopeY=0;};
 // Bare: a light with no housing (a fire, a lamp head that already has its model).
 enum class WorldLightMount { Ceiling, Wall, Bare };
 struct WorldLight {
@@ -407,27 +411,8 @@ struct AuthoredNavHint {
     float z=0;
     int hint=0; // 0 Path, 1 Cover — matches ai::NodeHint
 };
-// Campaign-authored outdoor terrain (TERRAIN / TERRAIN_FLAT records). A seeded
-// fractal heightfield in world space, so every stitched chunk samples one
-// continuous surface. Flats level pads, roads and building sites, blending
-// back into the hills over `blend` metres. Heights are 1 m voxel tops.
-struct TerrainFlat {float x1=0,y1=0,x2=0,y2=0,height=2,blend=4;};
-// Ground cover painted over authored terrain: one texture kind per rectangle
-// (world metres), with a noisy border `edge` metres wide.
-enum GroundKind:int {GroundShortGrass,GroundLeafyGrass,GroundClover,GroundWild,GroundDry,GroundLitter,GroundGravel,GroundMud,GroundKinds,GroundMeadow=GroundKinds};
-struct GroundPaint {float x1=0,y1=0,x2=0,y2=0;int kind=GroundMeadow;float edge=1.5f;};
-struct TerrainShape {
-    std::uint32_t seed=1;
-    float base=2,amplitude=3,scale=36,roughness=.45f;
-    std::vector<TerrainFlat> flats;
-    // Any GROUND record turns on painted cover: a noise meadow of grass, clover,
-    // wild and dry ground everywhere, then the rectangles in order.
-    std::vector<GroundPaint> ground;
-    // HORIZON: unreachable land around the playable maps, rising `rise` metres
-    // over `depth` metres and wooded every `spacing` metres with these models
-    // (drawn only as Painterly Horizon LOD impostors).
-    float horizonDepth=0,horizonSpacing=6,horizonRise=0;std::vector<int> horizonModels;
-};
+// Campaign-authored outdoor terrain (TERRAIN, TERRAIN_FLAT, TERRAIN_SCULPT,
+// GROUND, HORIZON): TerrainShape and its sampling live in TerrainField.h.
 // Surface sets for a map's layer walls, floor and ceiling (-1 keeps the
 // legacy choice by chunk index). Structure materials 26-29 and 31-35 are the
 // matching box finishes: 26 rock, 27 clinic tile, 28 lab panel, 29 corrugated
