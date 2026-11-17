@@ -22,18 +22,18 @@ void forceLegacyProps(int mode){forced()=mode;}
 // Coulomb friction against a hard floor (static, sliding), restitution, rolling resistance (metres).
 Material propMaterial(PropMaterial m){
  switch(m){
-  case PropMaterial::Paper:return {.55f,.45f,.05f,.04f};
-  case PropMaterial::Cardboard:return {.6f,.5f,.12f,.03f};
-  case PropMaterial::Plastic:return {.45f,.35f,.4f,.006f};
-  case PropMaterial::Wood:return {.62f,.45f,.3f,.008f};
-  case PropMaterial::Metal:return {.5f,.38f,.32f,.004f};
-  case PropMaterial::Glass:return {.45f,.35f,.45f,.004f};
-  case PropMaterial::Ceramic:return {.5f,.4f,.3f,.005f};
-  case PropMaterial::Electronic:return {.5f,.4f,.2f,.006f};
-  case PropMaterial::Cloth:return {.85f,.7f,.02f,.08f};
-  case PropMaterial::Organic:return {.7f,.55f,.15f,.03f};
+  case PropMaterial::Paper:return {.55f,.45f,.05f,.01f};
+  case PropMaterial::Cardboard:return {.6f,.5f,.12f,.008f};
+  case PropMaterial::Plastic:return {.45f,.35f,.4f,.002f};
+  case PropMaterial::Wood:return {.62f,.45f,.3f,.002f};
+  case PropMaterial::Metal:return {.5f,.38f,.32f,.001f};
+  case PropMaterial::Glass:return {.45f,.35f,.45f,.0015f};
+  case PropMaterial::Ceramic:return {.5f,.4f,.3f,.0015f};
+  case PropMaterial::Electronic:return {.5f,.4f,.2f,.002f};
+  case PropMaterial::Cloth:return {.85f,.7f,.02f,.02f};
+  case PropMaterial::Organic:return {.7f,.55f,.15f,.006f};
   default:return rubber();}}
-Material rubber(){return {.95f,.85f,.82f,.012f};}
+Material rubber(){return {.95f,.85f,.82f,.002f};}
 
 namespace {
 enum class Kind {Box,Upright,AlongX,AlongY,Ball,OfficeChair,LegChair,Table,Wheelchair,Lamp};
@@ -70,8 +70,8 @@ Shape build(int m,std::array<float,3> d){
   case Kind::AlongX:s.add(PartKind::Cylinder,{},{std::min(hy,hz),std::min(hy,hz),hx},Quat::axisAngle({0,1,0},kPi*.5f));break;
   case Kind::Ball:{const float r=std::min({hx,hy,hz});s.add(PartKind::Sphere,{0,0,bottom+r},{r,r,r});break;}
   case Kind::OfficeChair:{const float b=backSide(m),seat=bottom+.47f*Z;
-   slab(-hx,hx,-hy,hy,bottom,bottom+.12f*Z);                     // the wheeled star
-   slab(-.06f*X,.06f*X,-.06f*Y,.06f*Y,bottom+.12f*Z,seat);        // the column
+   slab(-hx,hx,-hy,hy,bottom,bottom+.06f*Z);                     // the wheeled star (spokes: thin, light)
+   slab(-.06f*X,.06f*X,-.06f*Y,.06f*Y,bottom+.06f*Z,seat);        // the column
    slab(-.46f*X,.46f*X,-.46f*Y,.46f*Y,seat,seat+.1f*Z);          // the seat
    {const float y0=b>0?hy-.12f*Y:-hy,y1=b>0?hy:-hy+.12f*Y;slab(-.42f*X,.42f*X,y0,y1,seat+.1f*Z,hz);} // the back
    break;}
@@ -96,7 +96,7 @@ const Shape& propShape(int model,std::array<float,3> dims){
  std::lock_guard<std::mutex> hold(lock);auto& slot=cache[key];if(!slot)slot=std::make_unique<Shape>(build(model,dims));return *slot;}
 Material propMaterialOf(const Clutter& c){Material m=propMaterial(c.material());
  // On casters or wheels: it rolls away under a shove rather than dragging its feet (and so is not bowled over).
- using namespace model;if(c.model==office_chair||c.model==lab_boardroom_chair||c.model==med_wheelchair||c.model==med_crash_cart){m.staticFriction=.12f;m.dynamicFriction=.08f;m.rolling=.01f;}
+ using namespace model;if(c.model==office_chair||c.model==lab_boardroom_chair||c.model==med_wheelchair||c.model==med_crash_cart){m.staticFriction=.12f;m.dynamicFriction=.08f;m.rolling=.004f;}
  return m;}
 float propSoftHertz(const Clutter& c){return soft::isSoft(c.model)?tune("props.pad_hertz",4.f):0.f;}
 

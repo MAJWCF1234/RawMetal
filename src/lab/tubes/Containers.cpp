@@ -12,6 +12,7 @@
 // bottles and a bin of junk; the crate is tipped over: shots "before" and "after".
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
+#include "game/physics/PropBodies.h"
 #include "lab/LabFixture.h"
 #include "game/Containers.h"
 #include "game/EngineRegressionScene.h"
@@ -48,13 +49,29 @@ std::vector<Point3> localOf(const Game& g,int box,int model){std::vector<Point3>
 float drift(const std::vector<Point3>& a,const std::vector<Point3>& b){float w=0;for(size_t i=0;i<a.size()&&i<b.size();++i){const Point3 d=a[i]-b[i];w=std::max(w,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}return w;}
 void run(Game& g,float seconds,InputState in={},float hz=60){for(int i=0;i<int(seconds*hz);++i)g.update(in,1.f/hz);}
 std::shared_ptr<CustomCampaign> filledRoom(Vec2 at,float sunk=0,Vec2 start={3,3}){auto m=regression::room();m->definition.playerStart=start;fill(*m,at,sunk);return regression::campaign(m);}
+// Tipped over: the crate given a spin and a lift. On the rigid core what lies in it has its own weight
+// (3 kg of bottles in a 2.5 kg crate), and a crate spun about its middle meets the floor with its low edge
+// and rocks back, as a real one does: there it is tipped over, crate and contents turned together a
+// hundred degrees about its bottom edge onto its side, and let go to pour.
+void tip(Game& g,int crate){auto& list=LabAccess::clutter(g);auto& c=list[size_t(crate)];
+ std::vector<int> inside;for(int i=0;i<int(list.size());++i)if(i!=crate&&containers::holds(c,list[size_t(i)]))inside.push_back(i);
+ if(rigid::legacyProps()){c.rollSpeed=-7;c.velocity={0,.6f};c.vz=1.2f;c.sleeping=false;c.restTime=0;c.tipTime=1.5f;return;}
+ const rigid::Quat q0=rigid::propOrientation(c);const rigid::V3 axis=q0.rotate({1,0,0});const auto s=c.size();
+ const rigid::V3 pivot=rigid::propCentre(c)+q0.rotate({0,-s[1]*.5f,-s[2]*.5f});const rigid::Quat turn=rigid::Quat::axisAngle(axis,1.75f);
+ inside.push_back(crate);
+ for(int i:inside){auto& v=list[size_t(i)];const rigid::V3 centre=pivot+turn.rotate(rigid::propCentre(v)-pivot);const rigid::Quat q=(turn*rigid::propOrientation(v)).normalized();
+  v.orient={q.w,q.x,q.y,q.z};q.toEuler(v.yaw,v.pitch,v.roll);v.orientEuler={v.yaw,v.pitch,v.roll};v.pos={centre.x,centre.y};v.z=centre.z-v.extent()[2];
+  v.velocity={};v.vz=0;v.spin=v.pitchSpeed=v.rollSpeed=0;v.sleeping=false;v.restTime=0;}}
+// How high its underside is: its box's lowest corner on the old physics; on the rigid core its shape's own
+// lowest point (a bottle is a cylinder: lying turned on its side, its box's corner is 2 cm under its round).
+float underside(const Clutter& v){if(rigid::legacyProps()||v.model<0)return v.z;rigid::Body b;rigid::toBody(v,b);float z=1e9f;for(int p=0;p<b.shape->count;++p)z=std::min(z,rigid::support(b,p,{0,0,-1}).z);return z;}
 bool allAsleep(const Game& g){for(const auto& v:g.clutter())if(v.model>=0&&!v.broken&&!v.sleeping)return false;return true;}
 
 const bool tube=add({
  .name="containers",.summary="props in open containers rest on the inner floor, ride along when it is carried, shoved or thrown, spill when it tips or breaks, and keep through saves and authoring",
  .fixtures={"containers-room","containers-starter"},
  .author=[](Scene&,AuthoredMapData& m){fill(m,{9.f,8.f});},
- .step=[](Scene& s,float){if(s.frame!=40||s.fixture->value("containers","room")!="room")return;auto& list=LabAccess::clutter(s.g());const int crate=find(s.g(),model::market_crate);if(crate<0)return;auto& c=list[size_t(crate)];c.rollSpeed=-7;c.velocity={0,.6f};c.vz=1.2f;c.sleeping=false;c.restTime=0;c.tipTime=1.5f;},
+ .step=[](Scene& s,float){if(s.frame!=40||s.fixture->value("containers","room")!="room")return;auto& list=LabAccess::clutter(s.g());const int crate=find(s.g(),model::market_crate);if(crate<0)return;tip(s.g(),crate);},
  .capture=[](Scene& s,const Frame&){if(s.frame==39)s.shoot("before");if(s.last())s.shoot("after");},
  .metrics=[](Scene& s,Report& r){Game& scene=s.g();
   if(s.fixture->value("containers","room")!="room"){
@@ -72,7 +89,7 @@ const bool tube=add({
     countIn(scene,box,model::office_paper_stack)==1&&countIn(scene,box,model::office_file_binder)==2);}
   // 1. Dropped in: rests on the inner floor.
   for(float hz:{60.f,144.f}){Game g(regression::campaign(regression::room()));LabAccess::player(g).pos={3,3};auto crate=make(model::market_crate,{10,8},0);crate.sleeping=true;auto b=make(model::glass_bottle,{10.05f,8.1f},.7f);
-   LabAccess::clutter(g)={crate,b};run(g,3,{},hz);const auto& v=g.clutter()[1];const float above=v.z-containers::inner(g.clutter()[0]).floor;
+   LabAccess::clutter(g)={crate,b};run(g,3,{},hz);const auto& v=g.clutter()[1];const float above=underside(v)-containers::inner(g.clutter()[0]).floor;
    r.metric("drop_rest_above_floor_"+fixed(hz,0)+"hz",above,"m");
    r.check("a bottle dropped over a crate rests on its inner floor, held, asleep at "+fixed(hz,0)+" Hz",containers::holds(g.clutter()[0],v)&&std::fabs(above)<.006f&&v.sleeping&&!v.broken&&std::fabs(g.clutter()[0].pos.x-10)<.01f,"z above floor "+fixed(above));}
   // 2. Thrown in: a pumpkin lobbed into a basket and a bottle into a crate.
@@ -80,7 +97,7 @@ const bool tube=add({
    const int itemModel=boxModel==model::market_basket?model::market_pumpkin:model::glass_bottle;auto item=make(itemModel,{8.8f,8},.5f);
    // An underhand lob that clears the near rim: up at 2.2 m/s, across to come down on the middle.
    const float floor=containers::inner(box).floor+.02f,vz=2.2f,t=(vz+std::sqrt(vz*vz+4*7*(.5f-floor)))/14.f;item.velocity={1.2f/t,0};item.vz=vz;item.projectile=true;item.spin=2;item.sleeping=false;
-   {Game bare(regression::campaign(regression::room()));LabAccess::player(bare).pos={3,3};auto away=box;away.pos={20,20};LabAccess::clutter(bare)={away,item};run(bare,3);const auto& u=bare.clutter()[1];
+   {Game bare(regression::campaign(regression::room()));LabAccess::player(bare).pos={3,3};auto away=box;away.pos={20,20};LabAccess::clutter(bare)={away,item};run(bare,rigid::legacyProps()?3.f:6.f); /* the rigid core: it lands on its side and rolls on a few metres first */const auto& u=bare.clutter()[1];
     r.check("the same throw on the open floor settles and sleeps (no endless rocking)",u.sleeping,"z "+fixed(u.z)+" turn "+fixed(std::fabs(u.spin)+std::fabs(u.pitchSpeed)+std::fabs(u.rollSpeed))+" pitch "+fixed(u.pitch)+" roll "+fixed(u.roll)+" at "+fixed(u.pos.x));}
    LabAccess::clutter(g)={box,item};run(g,3);const auto& v=g.clutter()[1];const bool in=containers::holds(g.clutter()[0],v);
    r.metric(std::string(boxModel==model::market_basket?"lob_basket":"lob_crate")+"_rest_z",v.z,"m");
@@ -118,7 +135,7 @@ const bool tube=add({
    std::string trace;for(int t=0;t<180;++t){LabAccess::stepProps(cart,1.f/120);if(t%30==0){const auto& a=cart.clutter()[0];const auto& b=cart.clutter()[1];trace+=" t"+std::to_string(t)+" cart "+fixed(a.pos.x)+" v "+fixed(a.velocity.x)+" up "+fixed(a.rotate(0,0,1)[2])+" pill "+fixed(b.pos.x)+","+fixed(b.z)+" v "+fixed(b.velocity.x)+(b.riding?" R":"")+(b.sleeping?" S":"");}}
    const auto& v=cart.clutter()[1];r.check("a cart yanked from under its tray load leaves it to fall",rests&&(v.broken||v.z<.75f),trace);}
   // 6. Tipped past its rim: they pour out.
-  {Game g(filledRoom({10,8}));const int crate=find(g,model::market_crate);run(g,.2f);auto& c=LabAccess::clutter(g)[size_t(crate)];c.rollSpeed=-7;c.velocity={0,.6f};c.vz=1.2f;c.sleeping=false;c.tipTime=1.5f;
+  {Game g(filledRoom({10,8}));const int crate=find(g,model::market_crate);run(g,.2f);tip(g,crate);
    run(g,4);int out=0;for(const auto& v:g.clutter())if(v.model==model::glass_bottle&&!containers::holds(g.clutter()[size_t(crate)],v))++out;
    r.metric("tip_bottles_out",out);r.check("a crate tipped over spills its bottles",out>=4,std::to_string(out)+" of 6 out, crate up "+fixed(g.clutter()[size_t(crate)].rotate(0,0,1)[2]));}
   // 7. Broken (a shot, a blow): what it held falls to the floor.

@@ -33,7 +33,10 @@ void Quat::toEuler(float& yaw,float& pitch,float& roll)const{
  const M3 r=matrix();const float cr=std::sqrt(r.m[2][0]*r.m[2][0]+r.m[2][2]*r.m[2][2]);
  roll=std::atan2(r.m[2][1],cr);
  if(cr>1e-5f){pitch=std::atan2(-r.m[2][0],r.m[2][2]);yaw=std::atan2(-r.m[0][1],r.m[1][1]);}
- else{pitch=0;yaw=std::atan2(r.m[1][0],r.m[0][0]);}}
+ else{pitch=0;yaw=std::atan2(r.m[1][0],r.m[0][0]);}
+ // The same turn is also (yaw+pi, pitch+pi, pi-roll): keep the one whose pitch is within a quarter turn, so the
+ // angles say how far it is over (a chair 100 degrees over reads roll 100, not pitch 170 with roll 80).
+ if(std::fabs(pitch)>kPi*.5f){pitch=pitch>0?pitch-kPi:pitch+kPi;roll=roll>0?kPi-roll:-kPi-roll;yaw=yaw>0?yaw-kPi:yaw+kPi;}}
 
 // ---- Shapes ---------------------------------------------------------------------------------------
 namespace {
@@ -257,7 +260,7 @@ void Space::collide(float dt){
    manifolds.push_back(m);
    // A moving body touching a sleeping one wakes it (and the sleeper's island follows next step).
    float deepest=1e30f;for(int k=0;k<m.count;++k)deepest=std::min(deepest,m.points[size_t(k)].separation);
-   if(deepest<settings.linearSlop+std::max(0.f,margin-settings.speculative)){   // touching, or closing within the step
+   if(deepest<margin){   // within reach this step: a sleeper treated as fixed would stop a blow dead
     auto rousing=[&](const Body& mover,const Body& other){const float speed=len(mover.v-other.v)+len(mover.w)*mover.shape->bound;return speed>2*settings.sleepLinear||(mover.kinematic&&speed>1e-3f);};
     if(a.sleeping&&!b.sleeping&&rousing(b,a))wake(i);
     if(b.sleeping&&!a.sleeping&&rousing(a,b))wake(j);}}}
@@ -292,7 +295,7 @@ void Space::warmStart(){
   for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 P=m.normal*c.normalImpulse+m.t1*c.tangentImpulse[0]+m.t2*c.tangentImpulse[1];
    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}
    if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}
-  const V3 R{m.rollingImpulse[0],m.rollingImpulse[1],m.rollingImpulse[2]};
+  const V3 R=m.t1*m.rollingImpulse[0]+m.t2*m.rollingImpulse[1]+m.normal*m.rollingImpulse[2];   // stored along the contact's own axes
   if(ma)A.w=A.w-A.invInertia*R;if(mb)B->w=B->w+B->invInertia*R;}
  for(auto*c:constraints)c->warmStart(*this);
 }
@@ -327,8 +330,9 @@ void Space::solve(float h,bool useBias){
    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}
    if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}
   // Rolling and twisting resistance: an angular friction on the relative spin, held to rolling * load.
-  if(m.material.rolling>0&&total>0){float arm=0;for(int k=0;k<m.count;++k)arm+=std::fabs(dot(m.points[size_t(k)].rA,m.normal));arm/=float(std::max(1,m.count));
-   const float limit=m.material.rolling*total*arm;   // the resisting torque: a coefficient times the load times the rolling radius
+  // (Run with no load too: a warm-started impulse is then taken back out, not left to spin a body in the air.)
+  if(m.material.rolling>0||m.rollingImpulse[0]!=0||m.rollingImpulse[1]!=0||m.rollingImpulse[2]!=0){
+   const float limit=m.material.rolling*total;   // the resisting torque: the load times the rolling resistance's length
    const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B->invInertia:M3::zero();
    for(int r=0;r<3;++r){const V3 axis=r==0?m.t1:r==1?m.t2:m.normal;const float k=dot(axis,iA*axis)+dot(axis,iB*axis);if(k<=0)continue;
     const V3 rel=(B?B->w:V3{})-A.w;const float old=m.rollingImpulse[r];float next=std::clamp(old-dot(rel,axis)/k,-limit,limit);m.rollingImpulse[r]=next;const V3 R=axis*(next-old);
@@ -336,11 +340,19 @@ void Space::solve(float h,bool useBias){
  }
 }
 void Space::restitution(){
- for(auto&m:manifolds){if(m.material.restitution<=0)continue;Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
-  for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];if(c.relativeVelocity>-settings.restitutionThreshold||c.maxNormalImpulse<=0)continue;
-   const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));const float vn=dot(dv,m.normal);
-   float impulse=-c.normalMass*(vn+m.material.restitution*c.relativeVelocity);const float next=std::max(c.normalImpulse+impulse,0.f);impulse=next-c.normalImpulse;c.normalImpulse=next;c.maxNormalImpulse=std::max(c.maxNormalImpulse,impulse);
-   const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}}
+ // Once per manifold, at the middle of its points weighted by what they took: a body landing flat on four
+ // points bounces straight, where a point-by-point pass would twist it (each corner's fix turns the body
+ // under the next) and hand it more than its restitution.
+ for(auto&m:manifolds){if(m.material.restitution<=0||m.count==0)continue;Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
+  float weight=0,approach=0;V3 at{};
+  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];if(c.relativeVelocity>-settings.restitutionThreshold||c.maxNormalImpulse<=0)continue;weight+=c.maxNormalImpulse;at=at+c.p*c.maxNormalImpulse;approach+=c.relativeVelocity*c.maxNormalImpulse;}
+  if(weight<=0)continue;at=at*(1/weight);approach/=weight;
+  const V3 rA=at-A.x,rB=B?at-B->x:at;const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
+  const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);if(k<=0)continue;
+  const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
+  const float impulse=std::max(0.f,-(vn+m.material.restitution*approach)/k);if(impulse<=0)continue;
+  const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(rA,P);}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(rB,P);}
+  for(int k2=0;k2<m.count;++k2){auto&c=m.points[size_t(k2)];c.normalImpulse+=impulse*(c.maxNormalImpulse/weight);c.maxNormalImpulse=std::max(c.maxNormalImpulse,c.normalImpulse);}}
 }
 void Space::storeImpulses(){
  std::vector<std::pair<std::uint64_t,Cached>> next;next.reserve(manifolds.size());
@@ -354,6 +366,11 @@ void Space::storeImpulses(){
 void Space::integrateVelocities(float h){
  for(auto&b:bodies){if(!b.movable())continue;
   b.v=b.v+(b.gravity+b.force*b.invMass)*h;b.w=b.w+(b.invInertia*b.torque)*h;
+  // The gyroscopic torque, implicitly (one Newton step in the body frame): a long thin body spun off
+  // its axis keeps its angular momentum instead of gaining energy from the turning inertia tensor.
+  {const V3 w=b.q.unrotate(b.w);const M3& I=b.inertiaLocal;const V3 Iw=I*w;const V3 f=cross(w,Iw)*h;
+   auto skew=[](V3 a){M3 m=M3::zero();m.m[0][1]=-a.z;m.m[0][2]=a.y;m.m[1][0]=a.z;m.m[1][2]=-a.x;m.m[2][0]=-a.y;m.m[2][1]=a.x;return m;};
+   const M3 J=I+(skew(w)*I+skew(Iw)*-1.f)*h;const M3 Ji=J.inverse();b.w=b.q.rotate(w-Ji*f);}
   b.v=b.v*(1/(1+h*b.linearDamping));b.w=b.w*(1/(1+h*b.angularDamping));
   const float sv=len(b.v),sw=len(b.w);if(sv>settings.maxLinear)b.v=b.v*(settings.maxLinear/sv);if(sw>settings.maxAngular)b.w=b.w*(settings.maxAngular/sw);}
 }

@@ -86,8 +86,9 @@ struct Shape {
  Part& add(PartKind kind,V3 centre,V3 half,Quat turn={}){auto& p=parts[size_t(count++)];p={kind,centre,turn,half};return p;}
 };
 
-// rolling: the rolling resistance coefficient (resisting torque over load times rolling radius), also on twist.
-struct Material {float staticFriction=.6f,dynamicFriction=.45f,restitution=.2f,rolling=.01f;
+// rolling: the rolling resistance as a length (the resisting torque over the load: the give of the surfaces
+// under it, so a bottle stops sooner than a drum), and on twisting too.
+struct Material {float staticFriction=.6f,dynamicFriction=.45f,restitution=.2f,rolling=.002f;
  // Two materials meeting: friction as the geometric mean, restitution the larger (a ball bounces off a floor).
  static Material mix(const Material& a,const Material& b){return {std::sqrt(a.staticFriction*b.staticFriction),std::sqrt(a.dynamicFriction*b.dynamicFriction),std::max(a.restitution,b.restitution),std::max(a.rolling,b.rolling)};}
 };
@@ -95,7 +96,8 @@ struct Material {float staticFriction=.6f,dynamicFriction=.45f,restitution=.2f,r
 // ---- Bodies ---------------------------------------------------------------------------------------
 struct Body {
  V3 x{};Quat q{};V3 v{},w{};          // centre of mass (world), orientation, velocities (world)
- float invMass=1;M3 invInertiaLocal=M3::zero();M3 invInertia=M3::zero(); // world inverse inertia (updated each substep)
+ float invMass=1;M3 invInertiaLocal=M3::zero();M3 invInertia=M3::zero(); // world inverse inertia (updated each step)
+ M3 inertiaLocal=M3::zero();                                              // body-frame inertia (the gyroscopic step)
  const Shape* shape=nullptr;Material material{};
  bool kinematic=false;   // moved by the caller (a held prop): infinite mass, never integrated here; its v and w push others
  float softHertz=0;      // a padded body (a mattress): contacts on it are springs of this stiffness, so a load sinks in
@@ -113,7 +115,7 @@ struct Body {
  V3 boundsLo{},boundsHi{};
  V3 pointVelocity(V3 p)const{return v+cross(w,p-x);}
  V3 toWorld(V3 local)const{return x+q.rotate(local-shape->com);} // a body-frame point (box origin) to world
- void setMass(float mass){invMass=kinematic||mass<=0?0:1/mass;invInertiaLocal=kinematic||mass<=0?M3::zero():(shape->inertia*mass).inverse();}
+ void setMass(float mass){invMass=kinematic||mass<=0?0:1/mass;inertiaLocal=kinematic||mass<=0?M3::zero():shape->inertia*mass;invInertiaLocal=kinematic||mass<=0?M3::zero():inertiaLocal.inverse();}
  void updateInertia(){const M3 r=q.matrix();invInertia=r*invInertiaLocal*r.transposed();}
  // An impulse at a world point (wakes it).
  void applyImpulse(V3 impulse,V3 at){if(invMass<=0)return;v=v+impulse*invMass;w=w+invInertia*cross(at-x,impulse);sleeping=false;sleepTime=0;}

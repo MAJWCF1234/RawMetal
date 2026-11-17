@@ -59,6 +59,10 @@ void author(Map& m,const std::string& scene){
   kit::wall(m,15,4,15.03f,10,0,3);kit::prop(m,model::mug,13,6,0,0);kit::prop(m,model::wooden_crate,13,8,0,0,.6f);}
  else if(scene=="office"||scene=="side"){   // heavy-impacts' knock(): a crate thrown at a chair standing still
   const int target=scene=="office"?model::office_chair:model::wooden_chair;kit::prop(m,target,10,8,0,scene=="side"?kPi*.5f:0.f);kit::prop(m,model::wooden_crate,8.875f,8,0,0);}
+ else if(scene=="tip"){kit::prop(m,model::market_crate,10,8,0,kPi*.5f);
+  for(int i=0;i<6;++i){const float ox=-.24f+.1f*float(i%3)*2.4f,oy=i<3?-.09f:.09f;kit::prop(m,model::glass_bottle,10+ox,8+oy,.02f,float(i));}}
+ else if(scene=="keys"){kit::prop(m,model::keyboard,8,8,0,0);kit::prop(m,model::keyboard,8.46f,8,0,0);}
+ else if(scene=="lob"){kit::prop(m,model::glass_bottle,8.8f,8,.5f,0);kit::prop(m,model::market_pumpkin,8.8f,12,.5f,0);}
  else if(scene=="drop"){
   const int models[]={model::market_pumpkin,model::trash_can,model::wooden_crate,model::glass_bottle,model::prop_cardboard_box,model::office_chair};
   for(int i=0;i<6;++i)kit::prop(m,models[i],6+1.6f*float(i),12,1.5f,0,i==2?.6f:1.f);}
@@ -69,11 +73,15 @@ void wakeAll(Game& g){for(auto& c:LabAccess::clutter(g)){c.sleeping=false;c.rest
 void launch(Game& g,const std::string& scene){auto& list=LabAccess::clutter(g);
  auto toss=[](Clutter& c,Vec2 v,float vz){c.velocity=v;c.vz=vz;c.spin=0;c.pitchSpeed=0;c.rollSpeed=0;c.projectile=true;c.sleeping=false;c.restTime=0;};
  for(auto& c:list){
+  if(scene=="tip"&&c.model==model::market_crate){c.rollSpeed=-7;c.velocity={0,.6f};c.vz=1.2f;c.sleeping=false;c.restTime=0;c.tipTime=1.5f;
+   const rigid::V3 w=rigid::propAngular(c),o=rigid::propCentre(c);for(auto& v:list)if(v.model==model::glass_bottle){const rigid::V3 r=rigid::propCentre(v)-o,u=rigid::cross(w,r);v.velocity=c.velocity+Vec2{u.x,u.y};v.vz=c.vz+u.z;rigid::setPropAngular(v,w);v.sleeping=false;v.restTime=0;}}
+  if(scene=="keys"&&c.pos.x<8.2f){c.velocity={2,0};c.sleeping=false;c.soundOwner=0;}
+  if(scene=="lob"){const float vz=2.2f,t=(vz+std::sqrt(vz*vz+4*7*(.5f-.04f)))/14.f;c.velocity={1.2f/t,0};c.vz=vz;c.projectile=true;c.spin=2;c.sleeping=false;c.restTime=0;}
   if((scene=="office"||scene=="side")&&c.model==model::wooden_crate){c.z=.35f;c.velocity={4.74f,0};c.vz=1;c.sleeping=false;c.restTime=0;}
   if(scene=="chairs"&&c.model==model::wooden_crate){c.z=.5f;toss(c,{6,0},1.2f);}
   if(scene=="door"&&c.model==model::wooden_crate&&c.pos.y<10){c.z=.4f;toss(c,{0,9},1.5f);}
   if(scene=="door"&&c.pos.x<14&&c.pos.y<9){c.z=.6f;toss(c,{25,0},.5f);}
-  if(scene=="ramp"&&c.model==model::ind_barrel){c.sleeping=false;c.restTime=0;if(c.pos.x>9)c.velocity={1.2f,0};else c.velocity={0,-.3f};}}
+  if(scene=="ramp"&&c.model==model::ind_barrel){c.sleeping=false;c.restTime=0;if(c.pos.x>9)c.velocity={1.2f,0};else c.velocity={0,-.7f};}}
  if(scene=="ramp"){ // the two crates set on the ramps' slopes, flat on them
   for(float angle:{20.f,35.f}){const float a=angle*kPi/180,x=angle<30?14.5f:17.f,run=1.2f/std::tan(a),y0=12-run*.5f,along=run*.5f;
    Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims=Game::propTraits(c.model).size;for(auto& d:c.dims)d*=.5f;c.roll=a;c.pos={x,y0+along};
@@ -87,7 +95,7 @@ Sim simulate(const std::string& scene,float seconds,bool legacy){
   if(asleep&&s.sleptAt<0)s.sleptAt=float(i+1)/60;if(!asleep)s.sleptAt=-1;}
  s.end=LabAccess::clutter(g);s.seconds=seconds;s.frames=int(seconds*60);s.meanMs=float(total/s.frames);rigid::forceLegacyProps(-1);return s;}
 // ---- The bare core: a plane world (tilted by `slope` about x) ----
-struct CoreRun {float bounce=0,slide=0,rolled=0;};
+struct CoreRun {float bounce=0,slide=0,rolled=0,speed=0,spin=0;};
 CoreRun core(rigid::PartKind kind,rigid::Material mat,float slope,rigid::V3 v0,float drop,float seconds){
  using namespace rigid;Space space;Shape shape;
  if(kind==PartKind::Sphere)shape.add(kind,{},{.11f,.11f,.11f});else if(kind==PartKind::Cylinder)shape.add(kind,{},{.033f,.033f,.06f},Quat::axisAngle({0,1,0},kPi*.5f));else shape.add(kind,{},{.2f,.2f,.2f});shape.finish();
@@ -101,7 +109,7 @@ CoreRun core(rigid::PartKind kind,rigid::Material mat,float slope,rigid::V3 v0,f
  CoreRun r;const V3 start=space.bodies[0].x;bool landed=false;float peak=0;const Quat q0=space.bodies[0].q;
  for(int i=0;i<int(seconds*120);++i){space.step(1.f/120);const auto& body=space.bodies[0];const float height=dot(body.x-start,n)+drop;
   if(!landed&&!space.manifolds.empty()&&space.events.size())landed=true;else if(landed)peak=std::max(peak,height-reach*0);}
- const auto& body=space.bodies[0];r.bounce=peak;const V3 d=body.x-start;r.slide=len(d-n*dot(d,n));const Quat dq=body.q*q0.conj();r.rolled=2*std::acos(std::clamp(std::fabs(dq.w),0.f,1.f));(void)reach;return r;}
+ const auto& body=space.bodies[0];r.speed=len(body.v);r.spin=len(body.w);r.bounce=peak;const V3 d=body.x-start;r.slide=len(d-n*dot(d,n));const Quat dq=body.q*q0.conj();r.rolled=2*std::acos(std::clamp(std::fabs(dq.w),0.f,1.f));(void)reach;return r;}
 // ---- Perf ----
 struct Cost {double meanMs=0,peakMs=0,stepMs=0;int bodies=0,awake=0;};
 Cost cost(int awake,int asleep,bool legacy){
@@ -139,7 +147,12 @@ const bool ab=add({
     <<" rad; a wooden crate on 20 degrees moves "<<fixed(hold.slide*1000,1)<<" mm, on 35 degrees "<<fixed(slide.slide,2)<<" m\n";
    check(ball.bounce>.6f&&ball.bounce<1.3f&&steel.bounce<ball.bounce*.6f,"core: a rubber ball bounces high (restitution .82), metal much lower");
    check(hold.slide<.01f&&slide.slide>.5f,"core: wood holds on 20 degrees (friction .62) and slides on 35");
-   check(can.slide>.5f,"core: a can rolls");}
+   check(can.slide>.5f,"core: a can rolls");
+   // A ball sent rolling (2 m/s, with a turn about the vertical) slows by its rolling resistance and nothing gains energy.
+   {const auto roll=core(rigid::PartKind::Sphere,rigid::propMaterial(PropMaterial::Organic),0,{2,0,0},0,3);r<<"  an organic ball sent at 2 m/s: after 3 s "<<fixed(roll.speed,3)<<" m/s, spin "<<fixed(roll.spin,2)<<" rad/s, "<<fixed(roll.slide,2)<<" m\n";
+    check(roll.speed<1.4f,"core: a rolling ball slows (no energy from the solver)");
+    const auto bare=core(rigid::PartKind::Sphere,{.7f,.55f,.15f,0},0,{2,0,0},0,3),slick=core(rigid::PartKind::Sphere,{0,0,.15f,0},0,{2,0,0},0,3);
+    r<<"  no rolling resistance: "<<fixed(bare.speed,3)<<" m/s spin "<<fixed(bare.spin,2)<<"; no friction: "<<fixed(slick.speed,3)<<" m/s spin "<<fixed(slick.spin,2)<<"\n";}}
   // Ramp, stairs and the crates on slopes.
   {auto [o,n]=both("ramp",8);r<<"\nRAMP AND STAIRS (8 s)\n";
    for(int pass=0;pass<2;++pass){const Sim& s=pass?n:o;r<<"  "<<(pass?"new":"old")<<": ";for(size_t k=0;k<s.end.size()&&k<s.start.size();++k){const auto& a=s.start[k];const auto& b=s.end[k];
@@ -187,10 +200,11 @@ const bool traced=add({.name="rigid-trace",.summary="a rigid scene traced frame 
  LabAccess::player(g).pos={3,3};if(scene=="ward"){LabAccess::player(g).pos={12,12};const auto& fx=g.world().fixtures();
   for(const auto& f:fx)if(f.model==model::med_ward_bed&&f.visible){const float crown=g.world().floorHeight(f.position.x,f.position.y)+f.base+f.height*.404f/.842f;
    Clutter c;c.kind=7;c.model=model::med_corpse_supine;const auto& sz=model::propSize[c.model];c.dims={sz[0],sz[1],sz[2]};const Vec2 along{std::cos(f.yaw),-std::sin(f.yaw)};
-   c.pos=f.position;c.z=crown+.05f;c.yaw=std::atan2(-along.x,along.y);LabAccess::clutter(g).push_back(c);r<<"bed at "<<f.position.x<<","<<f.position.y<<" yaw "<<f.yaw<<" size "<<f.width<<"x"<<f.depth<<"x"<<f.height<<" crown "<<crown<<'
-';break;}}
+   c.pos=f.position;c.z=crown+.05f;c.yaw=std::atan2(-along.x,along.y);LabAccess::clutter(g).push_back(c);
+   for(const auto& st:g.world().structures())if(st.x2>f.position.x-1.1f&&st.x1<f.position.x+1.1f&&st.y2>f.position.y-.6f&&st.y1<f.position.y+.6f&&st.top>crown-.1f&&st.top<crown+.4f)
+    r<<"structure "<<st.x1<<","<<st.y1<<" - "<<st.x2<<","<<st.y2<<" z "<<st.bottom<<".."<<st.top<<" solid "<<st.solid<<" material "<<st.material<<'\n';r<<"bed at "<<f.position.x<<","<<f.position.y<<" yaw "<<f.yaw<<" size "<<f.width<<"x"<<f.depth<<"x"<<f.height<<" crown "<<crown<<'\n';break;}}
  else launch(g,scene);
- for(int i=0;i<180;++i){g.update({},1.f/60);const auto& st=LabAccess::rigidStats(g);r<<"frame "<<i<<" steps "<<st.steps<<" bodies "<<st.bodies<<" awake "<<st.awake<<" manifolds "<<st.manifolds<<" world "<<st.worldManifolds<<" events "<<st.events.size()<<'\n';
+ for(int i=0;i<(std::getenv("RM_RIGID_FRAMES")?std::atoi(std::getenv("RM_RIGID_FRAMES")):180);++i){g.update({},1.f/60);const auto& st=LabAccess::rigidStats(g);r<<"frame "<<i<<" steps "<<st.steps<<" bodies "<<st.bodies<<" awake "<<st.awake<<" manifolds "<<st.manifolds<<" world "<<st.worldManifolds<<" events "<<st.events.size()<<'\n';
   const auto& list=LabAccess::clutter(g);for(size_t k=0;k<list.size();++k){const auto& c=list[k];if(c.model<0)continue;
    r<<"  #"<<k<<" m"<<c.model<<" pos "<<fixed(c.pos.x,3)<<","<<fixed(c.pos.y,3)<<","<<fixed(c.z,3)<<" v "<<fixed(c.velocity.x,2)<<","<<fixed(c.velocity.y,2)<<","<<fixed(c.vz,2)<<" ypr "<<fixed(c.yaw,2)<<","<<fixed(c.pitch,2)<<","<<fixed(c.roll,2)
     <<" w "<<fixed(c.rollSpeed,2)<<","<<fixed(c.pitchSpeed,2)<<","<<fixed(c.spin,2)<<(c.sleeping?" asleep":"")<<(c.riding?" riding":"")<<(c.broken?" broken":"")<<'\n';}
