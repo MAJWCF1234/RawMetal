@@ -56,11 +56,11 @@ def main():
         image = image.convert('RGB')
         w, h = image.size
         factor = item['factor']
-        if factor not in (2, 4) or min(w, h) < 4 or max(w, h) > 2048:
+        if factor not in (2, 4) or min(w, h) < 4 or max(w, h) > 4096:
             raise ValueError('Unsupported neural texture dimensions/factor')
         lw, lh = (w+factor-1)//factor, (h+factor-1)//factor
-        if min(lw, lh) < 2:
-            raise ValueError('Reduced image too small')
+        if min(lw, lh) < 2 or max(lw, lh) > 2048:
+            raise ValueError('Reduced image too small or too large')
         padded = Image.fromarray(np.pad(np.asarray(image), ((0, lh*factor-h), (0, lw*factor-w), (0, 0)), mode='edge'))
         low = padded.resize((lw, lh), Image.Resampling.BICUBIC)
         stream = io.BytesIO()

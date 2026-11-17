@@ -8,11 +8,13 @@
 #include "world/CampaignMaps.h"
 #include <algorithm>
 namespace retro {bool testDoorLeaves();} // game/Movement.cpp
+namespace retro {bool testSkyboxes();}
 namespace retro::lab {
 namespace {
 bool engine(const char* name,const char* summary,bool(*run)()){return add({.name=std::string("engine.")+name,.summary=summary,.standalone=run});}
 const bool registered=[]{
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);
+ engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);

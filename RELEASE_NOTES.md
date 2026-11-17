@@ -4,6 +4,18 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.15 - Open sky (2026-11-17)
+
+A patch for the weather above an outdoor map.
+
+- **Forty-seven skies.** The paid Brutal panoramas are in the engine as neural packets — same AI reconstitute path as the wasteland sky — so they store small and still draw at full size. Outdoor terrain follows every terrain sky, not only the old two.
+- **Map sky.** The Campaign Builder has a Map sky control: pick any catalog sky per map, with undo, redo, and save/reopen.
+- **Containment desks.** A monitoring CRT that already sits on a table no longer grows a second freestanding desk under it.
+
+Verified with the engine skyboxes suite (decode, terrain, native and software switching) and the Builder's skybox picker checks.
+
+---
+
 ## v1.4.14 - Wet hit (2026-11-16)
 
 A patch for the sound when a round meets water.

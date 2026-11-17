@@ -591,6 +591,9 @@ public:
     const TerrainShape* terrainShape()const{return m_exclusionTerrain&&m_mapData?m_mapData->terrain.get():nullptr;}
     float outskirtHeight(float worldX,float worldY,float outside)const;
     const char* skyboxId()const{return m_mapData?m_mapData->skybox.c_str():horrorMode()?"brutal_wasteland":"industrial_night";}
+    // Live MAP.skybox edits (tests, builder preview). Terrain settle may have
+    // copied the authored map; this updates the world's owned copy only.
+    void setSkybox(std::string id);
     const char* customMapName()const{return m_mapData?m_mapData->name.c_str():"";}
     bool openNorthBoundary()const{return m_openNorthBoundary;}
     bool openSouthBoundary()const{return m_openSouthBoundary;}

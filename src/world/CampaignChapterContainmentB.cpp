@@ -1060,7 +1060,8 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  m.lights.push_back(lamp({20.f,7.8f},f+2.35f,.55f,5.5f,4600,.04f,WorldLightMount::Wall,blN));
  wallDoor(m,17.f,23.f,13.f,13.2f,19.6f,20.8f,f,roof,-1);
  cbFix(m,model::lab_control_board,22.9f,10.6f,f+.95f,cbW,false);
- terminal(m,{22.2f,10.6f},"EMERGENCY BARRICADE / SOUTH","LOWERED 03:20 ON SECTOR LOSS. ACCUMULATOR BLED DOWN 03:41 BY ORDER. RAISE NEEDS 180 BAR.",
+ // Freestanding desk clear of the wall board — not stacked under the console.
+ terminal(m,{20.6f,10.6f},"EMERGENCY BARRICADE / SOUTH","LOWERED 03:20 ON SECTOR LOSS. ACCUMULATOR BLED DOWN 03:41 BY ORDER. RAISE NEEDS 180 BAR.",
   "PUMP SET: SOUTH WALL, WEST OF LINE B. RAISE ON ORDER OF THE INVESTIGATOR ONLY. HE HAS NOT ORDERED IT.",0,stateId("cont_barricade"),stateId("conb_ec_pressure"));
  m.terminals.back().yaw=cbW;
  cbFix(m,model::lab_status_display,22.95f,12.f,f+1.8f,cbW,false);

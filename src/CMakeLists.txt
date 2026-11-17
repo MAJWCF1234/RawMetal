@@ -232,6 +232,7 @@ add_executable(RawMetal WIN32
     renderer/GoreFx.cpp
     renderer/Particles.cpp
     renderer/ParticlesTest.cpp
+    renderer/SkyboxTest.cpp
     renderer/Impostors.cpp
     renderer/Performance.cpp
     renderer/GpuRenderer.cpp

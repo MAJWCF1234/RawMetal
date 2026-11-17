@@ -2406,20 +2406,21 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(onDesk){
    }else if(w.campaign()&&w.level()>=6&&terminal.reactorAction==0){
     // Personnel records belong on a computer, visually distinct from switchgear.
-    // A grounded service bench carries the CRT on four legs; the narrow post
-    // made the screen look perched in empty space. Its compact top also keeps
-    // the screen and keyboard readable from the aisle.
-    float deskTop=h+.75f;
-    box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
-    for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
-     box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
-    box({x+.30f,y-.27f,h+.16f},{x+.36f,y+.27f,h+.21f},m_metal,.85f);
+    // Floor terminals get a grounded service bench. Authored height means the CRT
+    // already sits on a built island or console — do not stack another table on it.
     float terminalYaw=w.level()==6&&!w.authored()?-kPi*.5f:terminal.yaw;
+    float deskTop=terminal.z>.2f?h:h+.75f;
+    if(terminal.z<=.2f){
+     box({x-.48f,y-.36f,deskTop},{x+.42f,y+.36f,deskTop+.065f},m_metal,.95f);
+     for(float legX:{x-.39f,x+.33f})for(float legY:{y-.27f,y+.27f})
+      box({legX-.045f,legY-.045f,h},{legX+.045f,legY+.045f,deskTop},m_panelMetal,.9f);
+     box({x+.30f,y-.27f,h+.16f},{x+.36f,y+.27f,h+.21f},m_metal,.85f);
+    }
     float keyboardX=x+std::sin(terminalYaw)*.22f,keyboardY=y+std::cos(terminalYaw)*.22f;
     float halfX=std::fabs(std::cos(terminalYaw))*.14f+std::fabs(std::sin(terminalYaw))*.105f;
     float halfY=std::fabs(std::sin(terminalYaw))*.14f+std::fabs(std::cos(terminalYaw))*.105f;
     box({keyboardX-halfX,keyboardY-halfY,deskTop+.07f},{keyboardX+halfX,keyboardY+halfY,deskTop+.10f},m_panelMetal,1.f);
-    facility(11,x,y,deskTop+.065f,.386509f,.53235f,.50505f,terminalYaw);
+    facility(11,x,y,deskTop+(terminal.z>.2f?0.f:.065f),.386509f,.53235f,.50505f,terminalYaw);
    }else if(!onFurniture){
     box({x-.24f,y-.24f,h},{x+.24f,y+.24f,h+.405f},m_panelMetal,.9f);
     box({x-.27f,y-.27f,h+.405f},{x+.27f,y+.27f,h+.445f},m_panelMetal,1.f);

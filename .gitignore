@@ -62,3 +62,7 @@ tools/level-editor/editor-assets.rmblob
 fbx2obj.obj
 
 selftest-*.txt
+
+# Paid skybox PNG masters (re-import via tools/library/register_skyboxes.py)
+src/assets/Skyboxes/Brutal/*.png
+

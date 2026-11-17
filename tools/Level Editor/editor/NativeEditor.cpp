@@ -3,6 +3,7 @@
 #define _UNICODE
 #include <windows.h>
 #include "../src/world/ModelIds.h"
+#include "../src/world/SkyboxCatalog.h"
 #include "NativeCommands.h"
 #include "NativeDocument.h"
 #include "NativeObjects.h"
@@ -733,7 +734,7 @@ enum {
   DoorToolList=660,DoorKindList,DoorAxisList,DoorSwingList,DoorHingeList,DoorLockList,DoorStrengthList,DoorOpenSlider,
   EmitterPresetList=690,EmitterKindList,EmitterRestyleList,EmitterHeadingSlider,EmitterStrengthSlider,
   LightViewButton=700,ThirdPersonToggle,FilmWrite,FilmRender,FilmMaker,
-  LightMenuBase=710
+  MapSkyList=705,LightMenuBase=710
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -951,7 +952,7 @@ struct Editor {
        recordList = nullptr, modelList = nullptr, materialList = nullptr,
        roleList = nullptr, groundList = nullptr, surfaceList = nullptr,
        heightList = nullptr,
-       musicList = nullptr,
+       musicList = nullptr, mapSkyList = nullptr,
        snapList = nullptr, modelSearch = nullptr, mapSearch = nullptr,
        statusText = nullptr;
   std::vector<std::string> musicNames;
@@ -982,7 +983,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, menuTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -2822,6 +2823,7 @@ struct Editor {
         SendMessageW(layerList, CB_SETCURSEL, item, 0);
     }
     refreshRecords();
+    refreshMapSky();
     if (musicList) {
       int cue = 0;
       auto maps = doc.records("MAP", map);
@@ -2833,6 +2835,40 @@ struct Editor {
       SendMessageW(musicList, CB_SETCURSEL, cue, 0);
     }
     InvalidateRect(plan, nullptr, FALSE);
+  }
+  void refreshMapSky() {
+    if (!mapSkyList) return;
+    const int count = int(retro::SkyboxCatalog.size());
+    if (SendMessageW(mapSkyList, CB_GETCOUNT, 0, 0) > count)
+      SendMessageW(mapSkyList, CB_DELETESTRING, count, 0);
+    auto maps = doc.records("MAP", map);
+    EnableWindow(mapSkyList, !maps.empty());
+    int selection = -1;
+    if (!maps.empty()) {
+      const auto fields = NativeDocument::fields(doc.lines[maps.front()]);
+      const std::string id = fields.size() > 11 ? decoded(fields[11]) : "";
+      if (const auto* sky = retro::findSkybox(id))
+        selection = int(sky - retro::SkyboxCatalog.data());
+      else {
+        const wchar_t* text = id.empty() ? L"Unspecified sky" : L"Custom map sky";
+        selection = int(SendMessageW(mapSkyList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text)));
+      }
+    }
+    SendMessageW(mapSkyList, CB_SETCURSEL, selection, 0);
+  }
+  void selectMapSky(int index) {
+    if (index < 0 || index >= int(retro::SkyboxCatalog.size())) return;
+    const auto maps = doc.records("MAP", map);
+    if (maps.empty()) return;
+    auto fields = NativeDocument::fields(doc.lines[maps.front()]);
+    const auto& sky = retro::SkyboxCatalog[size_t(index)];
+    if (fields.size() > 11 && decoded(fields[11]) == sky.id) return;
+    if (fields.size() < 12) fields.resize(12);
+    fields[11] = sky.id;
+    remember();
+    doc.replace(maps.front(), fields);
+    publish(true, false);
+    refresh();
   }
   void selectMusic(int cue) {
     if (cue < 0 || cue >= int(musicNames.size()))
@@ -3249,10 +3285,12 @@ struct Editor {
       auto f = NativeDocument::fields(doc.lines[index]);
       if (f.size() < 12)
         continue;
-      if (f[8] == "0" && f[11] == "industrial_night") {
+      if (f[8] == "0") {
         f[8] = "1";
-        f[11] = "brutal_wasteland";
+        if (f[11] == "industrial_night")
+          f[11] = "brutal_wasteland";
         doc.replace(index, f);
+        refreshMapSky();
         opened = true;
       }
     }
@@ -4126,7 +4164,7 @@ struct Editor {
     if (!terrain.empty())
       selectRecord(int(terrain.front()));
     message(opened
-                ? L"Outdoors on. Terrain and the tree line are in the fields; this map now uses the wasteland sky."
+                ? L"Outdoors on. The Map sky control selects the sky above the terrain."
                 : L"Terrain and the tree line are selected. Edit the numbers, or paint ground and pads on the plan.");
   }
   void applySurfaceSet(int id) {
@@ -4474,6 +4512,8 @@ struct Editor {
       // Leaving a field must not rebuild the fields under the next click.
       if (s.kind == "MAP" || s.kind == "CAMPAIGN")
         refreshMaps();
+      if (s.kind == "MAP")
+        refreshMapSky();
       refreshLinks();
       InvalidateRect(plan, nullptr, FALSE);
     } else if (s.kind == "MAP")
@@ -4725,9 +4765,11 @@ struct Editor {
     placeControl(GetDlgItem(window,AutoDressing),lx,346,lw,30,TRUE);
     placeControl(musicList, lx, 382, 160, 300, TRUE);
     placeControl(GetDlgItem(window, ListenMusic), lx + 168, 380, lw - 168, 30, TRUE);
+    caption(lx, 419, 62, L"Map sky");
+    placeControl(mapSkyList, lx + 64, 414, lw - 64, 320, TRUE);
     for (size_t g = 0; g < groupTabs.size(); ++g)
-      placeControl(groupTabs[g], lx + int(g) * 49, 412, 46, 36, TRUE);
-    placeControl(toolShelf, lx, 456, lw, std::max(80, h - 456 - 54), TRUE);
+      placeControl(groupTabs[g], lx + int(g) * 49, 446, 46, 36, TRUE);
+    placeControl(toolShelf, lx, 490, lw, std::max(80, h - 490 - 54), TRUE);
     laps.lap("layout_left");
     layoutTools();
     // The black plan and the 3D picture, each in its own warm bezel.
@@ -5355,6 +5397,32 @@ struct Editor {
       return all;
     }() << "\n";
     (void)keep;
+  }
+  void verifyMapSky() {
+    auto require=[](bool okay,const char* message){if(!okay)throw std::runtime_error(message);};
+    doc.newCampaign("Map skybox test");doc.addRoom("First map");doc.addRoom("Second map");
+    map=layer=0;
+    auto field=[&](int id){return NativeDocument::fields(doc.lines.at(doc.records("MAP",id).at(0))).at(11);};
+    auto second=doc.records("MAP",1).at(0);auto fields=NativeDocument::fields(doc.lines[second]);
+    fields.at(11)="some_custom_sky";doc.replace(second,fields);refresh();
+    auto list=GetDlgItem(window,MapSkyList);
+    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=50,"Map skybox picker must list the three original and 47 purchased skies");
+    auto choose=[&](int index){SendMessageW(list,CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(MapSkyList,CBN_SELCHANGE),reinterpret_cast<LPARAM>(list));};
+    const auto initial=field(0);const auto steps=history.size();
+    choose(3);const auto first=field(0);choose(4);const auto next=field(0);
+    require(first!=initial&&first!=next&&first.starts_with("skybox_")&&next.starts_with("skybox_")&&dirty&&history.size()==steps+2,"Each sky selection must change the MAP record and create one undo step");
+    SendMessageW(window,WM_COMMAND,Undo,0);
+    require(field(0)==first&&SendMessageW(list,CB_GETCURSEL,0,0)==3,"Undo must restore the first sky in the picker");
+    SendMessageW(window,WM_COMMAND,Redo,0);
+    require(field(0)==next&&SendMessageW(list,CB_GETCURSEL,0,0)==4,"Redo must restore the second sky in the picker");
+    auto changeMap=[&](int i){SendMessageW(mapList,LB_SETCURSEL,i,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(MapList,LBN_SELCHANGE),reinterpret_cast<LPARAM>(mapList));};
+    changeMap(1);require(map==1&&field(1)=="some_custom_sky"&&SendMessageW(list,CB_GETCURSEL,0,0)>=50,"Switching maps must preserve an unrecognized custom sky");
+    changeMap(0);require(map==0&&SendMessageW(list,CB_GETCURSEL,0,0)==4,"The picker must follow the selected map");
+    auto out=session/L"skybox-roundtrip.rmc";doc.save(out);doc.open(out);refresh();
+    require(field(0)==next&&field(1)=="some_custom_sky"&&SendMessageW(list,CB_GETCURSEL,0,0)==4,"Reopening the map must restore the selected sky");
+    SendMessageW(window,WM_COMMAND,Outdoors,0);
+    require(NativeDocument::fields(doc.lines.at(doc.records("MAP",0).at(0))).at(8)=="1"&&field(0)==next,
+            "Outdoors must open this map while retaining the selected sky");
   }
   void verifyEditing() {
     richDetail = smartSnap = false;
@@ -9025,6 +9093,9 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
               SendMessageW(e->musicList, CB_SETCURSEL, 7, 0);
               SendMessageW(h, WM_COMMAND, MAKEWPARAM(MusicList, CBN_SELCHANGE),
                            reinterpret_cast<LPARAM>(e->musicList));
+              SendMessageW(e->mapSkyList, CB_SETCURSEL, 3, 0);
+              SendMessageW(h, WM_COMMAND, MAKEWPARAM(MapSkyList, CBN_SELCHANGE),
+                           reinterpret_cast<LPARAM>(e->mapSkyList));
               e->chooseKind("SIGN");
               e->apply();
               e->moveSelected(.25f, 0);
@@ -9032,6 +9103,18 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             }
             if (frame <= e->testFrame + 2)
               return 0;
+            if (e->testStage == 1) {
+              if (NativeDocument::fields(e->doc.lines[e->doc.records("MAP", e->map).front()]).at(11) != "skybox_emx_1") {
+                std::ofstream(e->root / L"native-editor-ui-test.txt") << "FAIL: first map sky selection\n";
+                e->dirty = false; DestroyWindow(h); return 0;
+              }
+              e->testStage = 2;
+              e->testFrame = frame;
+              SendMessageW(e->mapSkyList, CB_SETCURSEL, 4, 0);
+              SendMessageW(h, WM_COMMAND, MAKEWPARAM(MapSkyList, CBN_SELCHANGE),
+                           reinterpret_cast<LPARAM>(e->mapSkyList));
+              return 0;
+            }
             auto out =
                 e->root / L".build" / L"native-ui" / L"background-ui.rmc";
             e->doc.save(out);
@@ -9043,9 +9126,11 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                                 reopened
                                     .lines[reopened.records("MAP", 0).front()])
                                     .at(19) == "7" &&
-                            SendMessageW(e->musicList, CB_GETCURSEL, 0, 0) == 7
+                            SendMessageW(e->musicList, CB_GETCURSEL, 0, 0) == 7 &&
+                            NativeDocument::fields(reopened.lines[reopened.records("MAP", e->map).front()]).at(11) == "skybox_emx_2" &&
+                            SendMessageW(e->mapSkyList, CB_GETCURSEL, 0, 0) == 4
                         ? "PASS: hidden native UI authored, engine "
-                          "reloaded/rendered, map OST selection retained, "
+                          "reloaded/rendered, map OST and skybox retained, "
                           "save/reopen exact\n"
                         : "FAIL: saved document differs\n");
             e->dirty = false;
@@ -9174,6 +9259,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if (id == MusicList && notification == CBN_SELCHANGE) {
         e->selectMusic(int(SendMessageW(e->musicList, CB_GETCURSEL, 0, 0)));
+        return 0;
+      }
+      if (id == MapSkyList && notification == CBN_SELCHANGE) {
+        e->selectMapSky(int(SendMessageW(e->mapSkyList, CB_GETCURSEL, 0, 0)));
         return 0;
       }
       if (id == ListenMusic) {
@@ -9629,7 +9718,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The test modes check every document query against a full scan of the lines.
     if (argc > 1)
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
-                        L"--fun-test", L"--simulate-test", L"--script"})
+                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -9751,6 +9840,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     }
     if (argc > 1 && std::wstring(argv[1]) == L"--fun-test")
       e.backgroundTest = e.funTest = true;
+    if (argc > 1 && std::wstring(argv[1]) == L"--skybox-test")
+      e.backgroundTest = e.skyTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--simulate-test") // Simulate (F6), NativeSimulate.h
       e.backgroundTest = simulate::testRun = true;
     int demoScene = argc > 2 && std::wstring(argv[1]) == L"--demo" ? _wtoi(argv[2]) : 0;
@@ -9982,6 +10073,11 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       SendMessageW(e.musicList, CB_ADDSTRING, 0,
                    reinterpret_cast<LPARAM>(wide(name).c_str()));
     e.button(L"♫ Listen", ListenMusic);
+    e.mapSkyList = e.controlWindow(L"COMBOBOX", L"",
+                                   CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, MapSkyList);
+    for (const auto& sky : retro::SkyboxCatalog)
+      SendMessageW(e.mapSkyList, CB_ADDSTRING, 0,
+                   reinterpret_cast<LPARAM>(wide(std::string(sky.label)).c_str()));
     e.kindList = e.controlWindow(L"COMBOBOX", L"",
                                  CBS_DROPDOWNLIST | WS_VSCROLL, KindList);
     for (auto &s : e.schemas) {
@@ -10278,6 +10374,12 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.verifyRemake();
       DestroyWindow(e.window);
       return 0;
+    }
+    if (e.skyTest) {
+      std::ofstream report(e.root / L"native-editor-skybox-test.txt");
+      try {e.verifyMapSky();report<<"PASS: skybox selection, map switching, undo, redo and save/reopen\n";}
+      catch(const std::exception& error){report<<"FAIL: "<<error.what()<<"\n";e.dirty=false;DestroyWindow(e.window);return 1;}
+      e.dirty=false;DestroyWindow(e.window);return 0;
     }
     if (e.funTest) {
       try {

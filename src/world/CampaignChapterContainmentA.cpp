@@ -805,6 +805,7 @@ std::shared_ptr<const Map> makeContainmentA(){
  wall(m,8.f,10.4f,16.f,11.1f,f,f+.88f,20);wall(m,7.95f,10.35f,16.05f,11.15f,f+.88f,f+.92f,28);
  for(float x:{9.f,11.2f,13.4f,15.2f})kit::prop(m,model::crt_monitor,x,10.75f,f+.92f,.42f,.4f,.38f,0);
  for(auto [x,yaw]:{std::pair{9.f,.15f},{13.4f,-.3f}})kit::prop(m,model::office_chair,x,11.8f,f,.55f,.55f,.95f,yaw);
+ // Height .92 is the island top: the CRT sits on that desk, it does not spawn another table.
  terminal(m,{12.3f,10.7f},"CONTAINMENT A / CELLS","A1 CLEAR. A2 OCCUPIED, ACTIVE. NOT FED SINCE 00:00. STANDS AT THE GLASS. A3 SAMPLE R-12, FIELD STABLE.",
   "A4 VACATED 02:40. S2 SEALED 03:10. BATTERY 31%: AT ZERO THE GLASS LOCKS STAY SHUT. THEY DO NOT FAIL OPEN.",.92f);
  m.terminals.back().yaw=0;
@@ -1137,7 +1138,8 @@ std::shared_ptr<const Map> makeContainmentB(){
  m.darkZones.push_back({14.7f,19.2f,23.f,23.f,-1000,1000,0,1,false,false});
  // the booth: what is left of Kessler's detail
  caFix(m,model::lab_control_board,22.86f,12.2f,f+.95f,caW,false);
- terminal(m,{22.2f,11.f},"CONTAINMENT B / CELL STATE","ALL CELLS: LOCKS RELEASED 02:00:00. NO OPERATOR INPUT. NO FAULT LOGGED. FEED LOST 02:14.",
+ // Freestanding desk clear of the wall board — not stacked under the console.
+ terminal(m,{20.8f,11.2f},"CONTAINMENT B / CELL STATE","ALL CELLS: LOCKS RELEASED 02:00:00. NO OPERATOR INPUT. NO FAULT LOGGED. FEED LOST 02:14.",
   "INNER DOOR HELD 02:01-02:09 (KESSLER). BOOTH SEALED 02:10. TWO IN BOOTH.",0);
  m.terminals.back().yaw=caW;
  caFix(m,model::lab_specimen_crate,21.6f,14.f,f,.2f,true,.7f);

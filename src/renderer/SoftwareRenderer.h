@@ -242,6 +242,8 @@ private:
     Texture m_murkWater;
     Texture m_terrainDirt,m_terrainRock,m_coastSand,m_coastRock;
     Texture m_ashfallSky,m_coastSky;
+    // Selected MAP sky from SkyboxCatalog (paid panoramas lazy-loaded by resource).
+    Texture m_mapSky;int m_mapSkyResource=0;
     Mesh m_consoleMesh{240};
     Texture m_consoleTexture;
     std::array<Texture,3> m_hazmatTextures;
@@ -445,6 +447,7 @@ private:
     Texture makePaint(std::uint32_t color);
     static Texture loadEmbeddedPng(int id);
     static void prepareDecal(Texture& texture,bool clampEdges=true);
+    const Texture* mapSky(int resource);
     void drawSky(const Game& game);
     void drawScene(const Game& game,bool clearDepth=true,int level=-1);
     void drawViewModel(const Game& game);

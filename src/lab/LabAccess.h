@@ -31,6 +31,8 @@
 #endif
 namespace retro {
 struct LabAccess {
+ static SoftwareRenderer::Texture skyTexture(int resource){return SoftwareRenderer::loadTexture(resource);}
+ static void setSkybox(Game& g,std::string id){g.m_world.setSkybox(std::move(id));}
  // ---- Game ----
  static Player& player(Game& g){return g.m_player;}
  static void setCamera(Game& g,Vec2 pos,float z,float yaw,float pitch){g.m_inspectionCamera=true;g.m_player.pos=pos;g.m_player.angle=yaw;g.m_player.pitch=pitch;

@@ -16,7 +16,8 @@ struct Shape{uint32_t w,h,lw,lh,model,scale;};
 Shape inspect(const Bytes&p){
  if(p.size()<33||std::memcmp(p.data(),"NTX1",4))throw std::runtime_error("Invalid neural texture header");
  Shape s{word(p,4),word(p,8),word(p,12),word(p,16),word(p,20),word(p,24)};
- if(s.w<4||s.h<4||s.w>2048||s.h>2048||s.lw<2||s.lh<2||s.lw>1024||s.lh>1024||(s.scale!=2&&s.scale!=4)||s.lw!=(s.w+s.scale-1)/s.scale||s.lh!=(s.h+s.scale-1)/s.scale||s.model==0||s.model>65535||word(p,28)!=0)throw std::runtime_error("Invalid neural texture dimensions/model");
+ // 4096 lets paid sky panoramas ship as neural packets (x2 from 2048x512).
+ if(s.w<4||s.h<4||s.w>4096||s.h>4096||s.lw<2||s.lh<2||s.lw>2048||s.lh>2048||(s.scale!=2&&s.scale!=4)||s.lw!=(s.w+s.scale-1)/s.scale||s.lh!=(s.h+s.scale-1)/s.scale||s.model==0||s.model>65535||word(p,28)!=0)throw std::runtime_error("Invalid neural texture dimensions/model");
  return s;
 }
 struct Layer{uint32_t in,out,k;std::vector<float> values;};
