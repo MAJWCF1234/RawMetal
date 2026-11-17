@@ -12,6 +12,7 @@
 #include "../audio/Sound.h"
 #include "../audio/NpcVoiceCatalog.h"
 #include "Combat.h"
+#include "SaveSections.h"
 #include "ai/guard/Config.h"
 #include "ai/guard/GuardCtx.h"
 #include "ai/Scheduler.h"
@@ -533,6 +534,39 @@ public:
     static bool testSavesInPlay(std::ostream& report);
     // Why the last load on this thread was refused ("" when it loaded): also written to RawMetal-load.txt.
     static const std::string& lastLoadFailure();
+    // The save container (SaveSections.h, docs/Systems/save-format.md): sections, the refit of
+    // older saves, and the stores for entity overrides and map variables.
+    // Parts: load paths, damage, stores, hooks and the misplaced folder (Core); formats 12-27 on a room; the
+    // campaign formats in two halves; the real saves found on this machine and in lab/fixtures/saves.
+    enum SaveTestPart {SaveTestCore=1,SaveTestCampaignEarly=2,SaveTestCampaignLate=4,SaveTestRealSaves=8,SaveTestRoomFormats=16,SaveTestAll=31};
+    static bool testSaveFormat(std::ostream& report,int parts=SaveTestAll);
+    // Adds (or, under a name already taken, replaces) a save section. Call it at start-up,
+    // before the first save or load; the built-in sections come first, then these in order.
+    static void registerSaveSection(SaveSection section);
+    // Every section this build reads and writes, in order.
+    static std::vector<std::string> saveSectionNames();
+    // The save format a loaded game came from (0: not loaded from a save).
+    int loadedSaveVersion()const{return m_loadedSaveVersion;}
+    // What loading an older save from a file did about it (refitSaveFile).
+    struct SaveRefit {int from=0;bool rewritten=false;std::filesystem::path backup;std::string note;std::vector<std::string> skipped;};
+    // Runtime changes to an entity's properties, kept by the save ("entities" section). `chunk` is
+    // the map (-1: the campaign); `entity` its name, or entityIdKey(kind,index) for one without a
+    // name. A false return: a name empty, too long (128) or with control characters, a text past
+    // 4096 bytes, a real number not finite, or the store full.
+    bool setEntityProperty(int chunk,std::string_view entity,std::string_view property,SaveValue value);
+    const SaveValue* entityProperty(int chunk,std::string_view entity,std::string_view property)const;
+    const SaveStore::Properties* entityProperties(int chunk,std::string_view entity)const;
+    bool clearEntityProperty(int chunk,std::string_view entity,std::string_view property);
+    static std::string entityIdKey(std::string_view kind,int index){return "#"+std::string(kind)+":"+std::to_string(index);}
+    // Named values scripts set, kept by the save ("variables" section): per map (chunk), or -1
+    // for the whole campaign. Same limits as entity properties.
+    bool setMapVariable(int chunk,std::string_view name,SaveValue value);
+    const SaveValue* mapVariable(int chunk,std::string_view name)const;
+    bool clearMapVariable(int chunk,std::string_view name);
+    const SaveStore& saveStore()const{return m_saveStore;}
+    // The save folder an older build wrote by mistake (%LOCALAPPDATA%RawMetalsaves, a lost
+    // backslash): its saves and settings are copied into the right one, never over a newer file.
+    static void adoptMisplacedSaves(const std::wstring& localAppData);
     static bool testNpcVoices();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
@@ -689,7 +723,11 @@ public:
     // clutter; an older build would draw them twice (its fixed chair and the saved loose one), so
     // it refuses a 26. Older saves load here: the props they lack come back where they were put.
     // docs/Systems/save-format.md keeps the whole history.
-    static constexpr int SaveVersion=27;
+    // 28: the section container (SaveSections.h). Sections are added without a new format; a 1-27
+    // save is refitted into it on load and rewritten, the original kept beside it as .v<N>.bak.
+    static constexpr int SaveVersion=28;
+    // The last positional (text) format; archiveSave writes and reads 1..this.
+    static constexpr int LegacySaveVersion=27;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1101,8 +1139,26 @@ private:
     void finishLoad();
     bool loadReady()const;
     std::shared_ptr<LoadJob> m_loadJob;bool m_asyncLoads=false;
-    // Returns how many chunks the archive carried; later ones are authored fresh.
+    // Returns how many chunks the archive carried; later ones are authored fresh. Formats 1-27
+    // only (the positional text archive); format 28 is sections (encodeSections/decodeSections).
     template<class Archive> int archiveSave(Archive& archive,int version=2);
+    // One chunk's parts, as the positional archive (every part, in its old order) and the format
+    // 28 sections ("world", "creatures", "pickups", "props") both keep them.
+    enum ChunkPart:unsigned {ChunkWorld=1,ChunkCreatures=2,ChunkPickups=4,ChunkProps=8,ChunkAll=15};
+    template<class Archive> void archiveChunk(Archive& archive,int version,int index,unsigned parts);
+    bool adoptSavedCampaign();
+    std::string encodeSections(int& repaired);
+    int decodeSections(const std::string& payload,std::uint32_t hash);
+    static std::vector<SaveSection> builtInSaveSections();
+    static std::vector<SaveSection> currentSaveSections();
+    // A 1-27 save, read into this game: the per-version upgrade steps to the current form.
+    void refitLegacySave(int fromVersion);
+    // After a load of an older format from `path`: the original kept beside it as
+    // <file>.v<old>.bak (never over another file), the file rewritten in the current format.
+    SaveRefit refitSaveFile(const std::filesystem::path& path,const std::string& original)const;
+    void noteRefit(const std::filesystem::path& path,const SaveRefit& refit);
+    int m_loadedSaveVersion=0;
+    SaveStore m_saveStore;
     bool nearReactorDisk()const;
     void useReactorAction(int action);
     World* reactorWorld();
