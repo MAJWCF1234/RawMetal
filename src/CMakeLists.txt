@@ -179,6 +179,8 @@ add_executable(RawMetal WIN32
     game/GlassPanes.cpp
     game/Containers.cpp
     game/SoftBodies.cpp
+    game/Buoyancy.cpp
+    game/WaterFx.cpp
     game/Ragdoll.cpp
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp
@@ -235,6 +237,7 @@ add_executable(RawMetal WIN32
     renderer/Humanoid.cpp
     renderer/GoreFx.cpp
     renderer/Particles.cpp
+    renderer/WaterRipples.cpp
     renderer/ParticlesTest.cpp
     renderer/SkyboxTest.cpp
     renderer/Impostors.cpp

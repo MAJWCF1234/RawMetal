@@ -86,6 +86,10 @@ struct LabAccess {
    const int of=music?1:v.loop?2:0;if(of!=bus){v.left=v.right=v.smoothLeft=v.smoothRight=0;}}}
  // Keep the actual mixed voice of one sound, for measuring an impact separately from its gunshot.
  static void onlySound(AudioEngine& a,Sound sound){std::erase_if(a.m_voices,[&](const auto& v){return v.sound!=sound;});}
+ // Water (WaterFx.cpp): a splash raised as the game raises one; what the AI hears this frame.
+ static void waterSplash(Game& g,Point3 at,float power,WaterSplashKind kind,float delay=0){g.raiseWaterSplash(g.m_level,at,{0,0,-1},power,kind,delay);}
+ static std::vector<AiStimulus> stimuli(const Game& g){return g.aiStimuli();}
+ static Vec2& velocity(Game& g){return g.m_velocity;}
  // Things that break, and what they leave (tubes/Debris.cpp).
  static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
  static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}
@@ -99,11 +103,9 @@ struct LabAccess {
  // The marks drawn on breaking glass, in each pane's plane (Scene3D records them while asked).
  static void recordGlassDecals(SoftwareRenderer& r,bool on){r.m_recordGlassDecals=on;r.m_glassDecals.clear();}
  static const std::vector<SoftwareRenderer::GlassDecal>& glassDecals(const SoftwareRenderer& r){return r.m_glassDecals;}
- static Vec2& velocity(Game& g){return g.m_velocity;}
  static Vec2& crunchFrom(Game& g){return g.m_glassCrunchLast;}
  static void updateGlass(Game& g,float dt){g.updateGlass(dt);}
  static std::vector<SoundEvent>& sounds(Game& g){return g.m_sounds;}
- static std::vector<AiStimulus> stimuli(const Game& g){return g.aiStimuli();}
  static void breakClutter(Game& g,size_t index,Point3 direction){g.breakClutter(g.m_level,index,direction);g.landShards();}
  static void blastProps(Game& g,Point3 at,bool tiles){g.blastProps(at,tiles);}
  // The player's hand on the prop in front of him (or off the one he holds), as the use key does.

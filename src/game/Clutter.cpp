@@ -1,4 +1,5 @@
 #include "Game.h"
+#include "Buoyancy.h"
 #include <fstream>
 #include <limits>
 #include "../world/ModelIds.h"
@@ -410,6 +411,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     if(clear)c.pos=next;c.velocity+=normal*.8f;c.sleeping=false;c.restTime=0;
    }
   }
+  if(c.sleeping&&c.model>=0&&!c.broken&&buoyancy::floats(c)){auto q=c.pos+shift;const auto&w=physicalWorld(q);if(w.waterSurface(q.x,q.y)>c.z+.02f){c.sleeping=false;c.restTime=0;}}
   if(c.sleeping)continue;
   if(slow[index]&&m_propHalfStep)continue;float itemDt=dt*(slow[index]?2:1);int steps=c.model>=0&&lengthSq(c.velocity)+c.vz*c.vz<1?1:std::max(1,int(std::ceil(itemDt*(slow[index]?90:180))));float step=itemDt/steps;
   auto impact=[&](float speed){if(speed<.65f||c.impactCooldown>0)return;float gain=std::clamp(speed*.12f,.12f,.85f);if(c.model<0&&c.impactSound()==Sound::JunkSoft)gain*=.65f;
@@ -469,15 +471,9 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    if((c.model<0||c.pitch!=oldPitch||c.roll!=oldRoll||c.yaw!=oldYaw)&&!fits(c.pos,std::max(c.z,floor))){c.pitch=oldPitch;c.roll=oldRoll;c.yaw=oldYaw;c.pitchSpeed*=-.2f;c.rollSpeed*=-.2f;c.spin*=-.2f;extent=oldExtent;c.z=center-extent[2];}
    if(c.model>=0&&c.material()==PropMaterial::Paper){float drag=std::exp(-3.f*step);c.velocity=c.velocity*drag;c.vz*=std::exp(-5.f*step);c.pitchSpeed*=drag;c.rollSpeed*=drag;}
    c.vz-=14.f*step;
-   float water=supportWorld.waterSurface(local.x,local.y);
-   float immersed=std::clamp((water-c.z)/std::max(.01f,(extent[2]*2)),0.f,1.f);
-   const bool buoyant=c.model>=0?propMaterialTraits(c.material()).floats:c.kind!=3&&c.kind!=4;
-   if(immersed>0){
-    if(buoyant){float floatHeight=water-(extent[2]*2)*.5f;
-     c.vz+=(14.f+std::clamp((floatHeight-c.z)*80.f,-12.f,22.f))*step;
-    }else c.vz+=8.f*immersed*step;
-    float drag=std::exp(-5.f*immersed*step);c.velocity=c.velocity*drag;c.vz*=drag;c.spin*=drag;c.pitchSpeed*=drag;c.rollSpeed*=drag;
-   }
+   // In water it floats or sinks by its density, and a fall into it splashes (Buoyancy.cpp).
+   const float water=supportWorld.waterSurface(local.x,local.y);const auto wet=buoyancy::step(c,water,floor,m_elapsed,index,step);const float immersed=wet.immersed;
+   if(wet.entered&&c.impactCooldown<=0){raiseWaterSplash(supportWorld.level(),{local.x,local.y,water},{c.velocity.x,c.velocity.y,c.vz},buoyancy::splashPower(c.mass(),wet.speed),WaterSplashKind::Entry);c.impactCooldown=.2f;}
    if(c.model>=0){auto delta=Point3{c.velocity.x*step,c.velocity.y*step,c.vz*step};float distance=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);if(distance>.02f){auto q=c.pos+shift;const auto&readWorld=physicalWorld(q);int targetLevel=readWorld.level();auto&w=targetLevel==m_level?m_world:m_chunks[targetLevel].world;Point3 from{q.x,q.y,c.z+extent[2]},n;ShotTrace trace;auto travel=delta*(1+std::max({extent[0],extent[1],extent[2]})/distance);float t=w.shotFraction(from,from+travel,n,&trace);
     for(int j=0;j<2;++j)if(trace.passed[j]>=0&&trace.passedAt[j]<t){const auto pn=trace.passedNormal[j];const float keep=strike(targetLevel,trace.passed[j],std::fabs(c.velocity.x*pn.x+c.velocity.y*pn.y+c.vz*pn.z),from+travel*trace.passedAt[j],delta*(1/distance));if(keep>0){c.velocity=c.velocity*keep;c.vz*=keep;}else{t=trace.passedAt[j];n=pn;break;}}
     if(t<1){float closing=c.velocity.x*n.x+c.velocity.y*n.y+c.vz*n.z;const float keep=trace.blocking>=0?strike(targetLevel,trace.blocking,std::fabs(closing),from+travel*t,delta*(1/distance)):0.f;
@@ -542,7 +538,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     // across the face, so a tall thin prop (a bottle) otherwise rocks there for ever and never sleeps.
     if(c.model>=0&&c.tipTime<=0&&length(c.velocity)<.05f){auto settle=[](float& a,float& w){const float face=std::round(a/(kPi*.5f))*(kPi*.5f);if(std::fabs(a-face)<.02f&&std::fabs(w)<1.2f){a=face;w=0;}};settle(c.pitch,c.pitchSpeed);settle(c.roll,c.rollSpeed);}
     if(length(c.velocity)<.5f)c.projectile=false;
-    if(!(immersed>0&&buoyant)&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
+    if(!wet.afloat&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
    }else{c.z=z;c.restTime=0;}
    if(c.model<0&&c.projectile){auto point=c.pos+shift;const auto&contactWorld=physicalWorld(point);int targetLevel=contactWorld.level();auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;

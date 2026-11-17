@@ -144,7 +144,9 @@ Texture makeBlended(){
    if(cell<=SolidChunk3){const float edge=.62f+.18f*std::sin(angle*3.f+float(cell)*1.9f)+.1f*std::sin(angle*5.f+float(cell)*.7f);a=clamp01((edge-r)*14.f);
     const float grain=fbm(Point3{dx*4.f,dy*4.f,float(cell)},61u,3);c=Point3{.36f,.34f,.31f}*(.8f+.35f*grain+.2f*(-dy));}
    else if(cell<SolidGrit){const float bead=clamp01((.55f-r)*10.f);const float shine=clamp01(1-std::sqrt((dx+.25f)*(dx+.25f)+(dy+.3f)*(dy+.3f))*2.6f);
-    a=bead*(cell==SolidDrop?.8f:.6f);c=Point3{.62f,.68f,.72f}*(.75f+.25f*(1-r))+Point3{1,1,1}*(shine*.45f);}
+    if(cell==SolidDrop){a=bead*.8f;c=Point3{.62f,.68f,.72f}*(.75f+.25f*(1-r))+Point3{1,1,1}*(shine*.45f);}
+    // A splash's bead: clear blue-white water, thin in the middle, its rim and a hard glint brighter.
+    else{const float glint=clamp01(1-std::sqrt((dx+.22f)*(dx+.22f)+(dy+.26f)*(dy+.26f))*4.f);a=bead*(.32f+.4f*r*r)+glint*.5f;c=Point3{.66f,.8f,.92f}*(.8f+.3f*r)+Point3{1,1,1}*(glint*.9f);}}
    else if(cell==SolidGrit){const float across=std::exp(-dx*dx*30.f),along=clamp01(1-std::fabs(dy));a=across*along*.85f;c={.62f,.58f,.5f};}
    else{a=std::exp(-r*r*5.f)*clamp01((1.f-r)*3.f);c={.95f,.9f,.8f};}
    t.pixels[size_t((y0+y)*AtlasW+x0+x)]=pack(c,a);}}
@@ -210,6 +212,9 @@ struct Source {
  Point3 travel{0,0,1};   // drifting kinds: where one goes over its life on drag alone; ballistic kinds: how fast it leaves
  float cone=-1;          // half angle of the spread round `travel` (radians; -1 the kind's own)
  bool radial=false;      // thrown out level in every direction (a blast's ring along the floor)
+ float rise=.04f;        // radial: how steeply up it leaves (a splash's crown leans out and up)
+ float ring=0;           // radial: born on a circle this wide round `at` (a crown's wall), not in the box
+ bool bead=false;        // splash water: round translucent beads, drawn out only when fast (not drips' streaks)
  float size=.1f,grow=.3f,life=2,strength=1;
  float rate=0;int count=0;float t0=0,spread=0,until=1e30f; // a stream of `rate` a second (from t0 until `until`), or a burst of `count` over `spread` s
  float floor=-1e9f;
@@ -317,7 +322,7 @@ const ParticleMemory::Path& flight(ParticleMemory& memory,const World& w,std::ui
   ++arc;path.arcs=arc+1;path.from[size_t(arc)]=at+n*.02f;path.velocity[size_t(arc)]=out;path.start[size_t(arc)]=t;}
  return memory.paths.emplace(key,path).first->second;}
 
-struct Live {Species sp;std::uint32_t id;Point3 c{},velocity{};float r=0,alpha=0,turn=0,u=0,light=1,depth=0,tall=1;int variant=0,cell=-1;bool streak=false,resting=false,flat=false;};
+struct Live {bool bead=false;Species sp;std::uint32_t id;Point3 c{},velocity{};float r=0,alpha=0,turn=0,u=0,light=1,depth=0,tall=1;int variant=0,cell=-1;bool streak=false,resting=false,flat=false;};
 // Where along a thrown thing's flight it was at `time` (held at the ends).
 Point3 alongPath(const std::vector<ParticleCrumb>& path,float time){
  if(path.empty())return {};if(time<=path.front().time)return path.front().at;if(time>=path.back().time)return path.back().at;
@@ -347,7 +352,7 @@ struct Frame {
    if(rnd(id,3)>=keep){++stats.thinned;return;}
    const float u=age/life;
    // Its own way out of the source: round `travel` within the cone, or level round the compass.
-   Point3 base=s.radial?Point3{std::cos(rnd(id,4)*kTwoPi),std::sin(rnd(id,4)*kTwoPi),.04f}:unit(s.travel,Up);
+   Point3 base=s.radial?Point3{std::cos(rnd(id,4)*kTwoPi),std::sin(rnd(id,4)*kTwoPi),s.rise}:unit(s.travel,Up);
    const float cone=s.cone>=0?s.cone:b.cone,theta=cone*std::sqrt(rnd(id,5)),phi=rnd(id,6)*kTwoPi;
    const Point3 t1=unit(std::fabs(base.z)<.9f?cross(base,Up):cross(base,Point3{1,0,0}),{1,0,0}),t2=cross(base,t1);
    const Point3 dir=unit(base*std::cos(theta)+(t1*std::cos(phi)+t2*std::sin(phi))*std::sin(theta),base);
@@ -355,8 +360,8 @@ struct Frame {
    // (Born along a flight, a puff leaves within a few centimetres of where the thing was; the box is then
    // only the flight's reach.)
    const Point3 within=s.path?Point3{.025f,.025f,.025f}:s.box;
-   const Point3 spawn=(s.path?alongPath(*s.path,born):s.at)+Point3{within.x*(2*rnd(id,8)-1),within.y*(2*rnd(id,9)-1),within.z*(2*rnd(id,10)-1)};
-   Live p;p.sp=s.species;p.id=id;p.u=u;p.variant=int(rnd(id,11)*Variants)%Variants;p.turn=rnd(id,12)*kTwoPi+b.spin*(rnd(id,13)*2-1)*age;p.tall=s.tall;p.flat=s.radial;
+   const Point3 spawn=(s.path?alongPath(*s.path,born):s.at)+Point3{within.x*(2*rnd(id,8)-1),within.y*(2*rnd(id,9)-1),within.z*(2*rnd(id,10)-1)}+(s.radial&&s.ring>0?Point3{base.x,base.y,0}*(s.ring*(.85f+.3f*rnd(id,19))):Point3{});
+   Live p;p.bead=s.bead;p.sp=s.species;p.id=id;p.u=u;p.variant=int(rnd(id,11)*Variants)%Variants;p.turn=rnd(id,12)*kTwoPi+b.spin*(rnd(id,13)*2-1)*age;p.tall=s.tall;p.flat=s.radial;
    // (A big billow, a cooling tower's vapour, keeps the swell it was given: only a small fast leak or
    // jet is held to a few times its own width.)
    const float swell=std::min(s.grow,std::max(s.grow*growScale(s.species),s.size*2.5f));
@@ -371,7 +376,7 @@ struct Frame {
     if(age>=path.restAt){
      if(path.splash){const float since=age-path.restAt;if(since>.3f)return;
       // A drop lands: a breath of spray and two beads thrown up out of it.
-      Live mist=p;mist.sp=Species::Mist;mist.c=path.rest+Point3{0,0,.03f+.08f*since};mist.r=.015f+.06f*since;mist.alpha=.3f*(1-since/.3f)*s.strength;mist.variant=p.variant;blended.push_back(mist);
+      Live mist=p;mist.sp=Species::Mist;mist.c=path.rest+Point3{0,0,.03f+.08f*since};mist.r=.015f+.06f*since;mist.alpha=(s.bead?.08f:.3f)*(1-since/.3f)*s.strength;mist.variant=p.variant;blended.push_back(mist);
       for(int k=0;k<2;++k){const float a=rnd(id,40+k)*kTwoPi;Live bead=p;bead.c=path.rest+Point3{std::cos(a)*.25f*since,std::sin(a)*.25f*since,1.4f*since-4.9f*since*since+.01f};if(bead.c.z<path.rest.z)continue;
        bead.r=p.r*.6f;bead.velocity={std::cos(a)*.25f,std::sin(a)*.25f,1.4f-9.8f*since};bead.streak=true;bead.cell=SolidDrop+1;blended.push_back(bead);}
       return;}
@@ -379,8 +384,8 @@ struct Frame {
      p.c=path.rest+Point3{0,0,p.r*.45f};p.resting=true;p.turn=rnd(id,12)*kTwoPi;p.alpha*=1-smooth(.85f,1.f,u);}
     else{int arc=0;while(arc+1<path.arcs&&age>=path.start[size_t(arc+1)])++arc;const float since=age-path.start[size_t(arc)];
      p.c=motion(path.from[size_t(arc)],path.velocity[size_t(arc)],g,b.drag,since);p.velocity=velocityAt(path.velocity[size_t(arc)],g,b.drag,since);}
-    p.streak=b.streak&&!p.resting;
-    p.cell=s.species==Species::Chunk?int(rnd(id,15)*4)%4:s.species==Species::Drop?SolidDrop:SolidGrit;
+    p.streak=b.streak&&!p.resting&&(!s.bead||span(p.velocity)>3.6f);
+    p.cell=s.species==Species::Chunk?int(rnd(id,15)*4)%4:s.species==Species::Drop?(s.bead?SolidDrop+1:SolidDrop):SolidGrit;
     blended.push_back(p);return;}
    // Drifting: thrown along `dir` and slowed by the air, lifted by its heat (or sinking), turned by the swirl.
    const float k=b.drag,nominal=s.life;Point3 v0=k>1e-4f?dir*(reach*k/std::max(1e-3f,1-std::exp(-k*nominal))):dir*(reach/nominal);
@@ -502,13 +507,29 @@ void gather(const Game& game,const World& w,const Particles::View& view,const Pa
   // Struck overhead, the ceiling sheds for a second or two.
   if(n.z<-.6f){Source pour=grit;pour.seed^=0x77u;pour.at=b.point+Point3{0,0,-.03f};pour.box={.08f,.08f,0};pour.travel={0,0,-.2f};pour.count=0;pour.rate=16;pour.until=b.time+1.4f;out.push_back(pour);}}};
  hits(game.hitBursts());if(extra)hits(extra->hits);
- // A round entering water kicks a short crown of real falling drops out of the surface, with fine
- // spray over it. Drops use the same water collision and secondary splashes as authored drips.
+ // Water meeting water (WaterSplash: Hitscan.cpp, WaterFx.cpp) throws clear beads, not sparks. A round:
+ // a tight column and a small crown. A fall: the crown, a ring wall of beads rising out of the surface
+ // and falling back inside its arc, then the jet out of its middle, and a low local puff. A step: a
+ // few beads; a wake: a low wash ahead. Each by the root of its energy. The beads use the same water
+ // collision and secondary splashes as authored drips, and must survive the 640x360 game target.
  auto splashes=[&](const std::vector<WaterSplash>& list){for(const auto&b:list){const float age=now-b.time;if(b.level!=level||age<0||age>2.5f)continue;
-  const float power=std::clamp(b.power,.5f,1.8f);const auto seed=seedAt(b.point,b.time,0x91u);const Point3 along{b.direction.x,b.direction.y,0};
-  // These beads must survive the 640x360 game target and remain visible around shotgun recoil.
-  Source drops;drops.species=Species::Drop;drops.seed=seed;drops.at=b.point+Up*.035f;drops.box={.045f,.045f,.008f};drops.travel=Up*(3.f+.8f*power)+along*.75f;drops.cone=1.25f;drops.size=.019f;drops.grow=0;drops.life=1.6f;drops.count=int(32*power);drops.t0=b.time;drops.spread=.06f;drops.strength=1;drops.floor=b.point.z;out.push_back(drops);
-  Source mist;mist.species=Species::Mist;mist.seed=seed^0x36a9f1u;mist.at=b.point+Up*.05f;mist.box={.06f,.06f,.012f};mist.travel=Up*.4f+along*.2f;mist.cone=1.15f;mist.size=.07f;mist.grow=.3f;mist.life=.7f;mist.count=10;mist.t0=b.time;mist.spread=.08f;mist.strength=.9f;mist.floor=b.point.z;out.push_back(mist);
+  const auto seed=seedAt(b.point,b.time,0x91u);const Point3 along{b.direction.x,b.direction.y,0};const bool shot=b.kind==WaterSplashKind::Shot;
+  const float p=shot?std::clamp(b.power,.5f,1.8f):std::clamp(b.power,.1f,3.f);
+  auto beads=[&](std::uint32_t salt){Source d;d.species=Species::Drop;d.bead=true;d.seed=seed^salt;d.at=b.point+Up*.03f;d.grow=0;d.t0=b.time;d.strength=1;d.floor=b.point.z;return d;};
+  if(b.kind==WaterSplashKind::Step||b.kind==WaterSplashKind::Wake){const bool wake=b.kind==WaterSplashKind::Wake;
+   Source d=beads(0x7f4a7c15u);d.box={.05f,.05f,.006f};d.travel=Up*(wake?.7f+.4f*p:.9f+1.2f*p)+along*(wake?.6f:0.f);d.cone=wake?.6f:.7f;d.size=.011f;d.life=.9f;
+   d.count=int((wake?3:5)+(wake?4:8)*p);d.spread=.05f;out.push_back(d);continue;}
+  // The crown: thrown out and steeply up from a ring round the entry, a second, steeper wall inside it.
+  Source crown=beads(0x5a17c0u);crown.radial=true;crown.ring=shot?.03f:.08f+.07f*p;crown.rise=shot?2.2f:1.9f;crown.cone=.12f;crown.box={.01f,.01f,.004f};
+  crown.travel={shot?.9f+.3f*p:1.4f+.6f*p,0,0};crown.size=shot?.011f:.015f+.003f*p;crown.life=1.1f;crown.count=shot?int(10+6*p):int(36+34*p);crown.spread=shot?.03f:.08f;out.push_back(crown);
+  if(!shot){Source wall=crown;wall.seed^=0x2c1b3c6du;wall.ring*=.7f;wall.rise=3.f;wall.travel={.9f+.45f*p,0,0};wall.count=int(20+16*p);wall.t0=b.time+.03f;out.push_back(wall);}
+  // The column (a round) or the jet (a fall, once the crown has risen round it).
+  Source jet=beads(0);jet.box={.02f,.02f,.01f};jet.cone=shot?.12f:.1f;jet.travel=Up*(shot?2.f+.5f*p:1.5f+.9f*p)+along*(shot?.25f:0.f);jet.size=shot?.015f:.017f+.003f*p;
+  jet.life=1.2f;jet.count=shot?int(22*p):int(10+10*p);jet.t0=b.time+(shot?0.f:.16f+.04f*p);jet.spread=shot?.05f:.14f;out.push_back(jet);
+  // A low puff of spray hugging the water, gone in well under a second.
+  Source mist;mist.species=Species::Mist;mist.seed=seed^0x36a9f1u;mist.at=b.point+Up*.04f;const float spread=shot?.04f:.04f+.05f*p;mist.box={spread,spread,.01f};
+  mist.travel=Up*(shot?.12f:.1f+.12f*std::min(p,2.f))+along*.1f;mist.cone=1.2f;mist.size=shot?.05f:.06f+.03f*p;mist.grow=shot?.12f:.12f+.08f*p;mist.life=shot?.55f:.6f+.07f*p;
+  mist.count=shot?4:int(4+3*p);mist.t0=b.time;mist.spread=.05f;mist.strength=shot?.35f:.3f;mist.floor=b.point.z;out.push_back(mist);
  }};
  splashes(game.waterSplashes());if(extra)splashes(extra->splashes);
  // Gun smoke: a shot leaves a wisp in front of the muzzle that drifts on and hangs (a shotgun's pellets are one shot).
@@ -621,7 +642,7 @@ ParticleStats Particles::draw(ParticleMemory& memory,const Game& game,const View
  auto corners=[&](const Live&p,float tall,Point3& u,Point3& v){
   const Point3 f=unit(p.c-view.eye,view.forward);
   if(p.streak){const Point3 along=p.velocity-f*dot3(p.velocity,f);const float l=span(along);
-   if(l>.25f){const Point3 a=along*(1.f/l);const float stretch=1.f+std::min(6.f,l*.06f/std::max(.002f,p.r));v=a*(p.r*stretch);u=unit(cross(f,a),{1,0,0})*p.r*.6f;return;}}
+   if(l>.25f){const Point3 a=along*(1.f/l);const float stretch=p.bead?1.f+std::min(1.4f,l*.012f/std::max(.002f,p.r)):1.f+std::min(6.f,l*.06f/std::max(.002f,p.r));v=a*(p.r*stretch);u=unit(cross(f,a),{1,0,0})*p.r*(p.bead?.85f:.6f);return;}}
   // Vapour on the move is laid along its flight and drawn out by its speed: a jet's threads run the
   // way it goes.
   if(p.sp==Species::Steam||p.sp==Species::Mist){const Point3 along=p.velocity-f*dot3(p.velocity,f);const float l=span(along);
@@ -632,7 +653,7 @@ ParticleStats Particles::draw(ParticleMemory& memory,const Game& game,const View
   u=(right*cs+up*sn)*p.r;v=(up*cs-right*sn)*(p.r*tall*p.tall);};
  for(const auto&p:frame.blended){const Behaviour& b=behaviour(p.sp);Point3 u,v;corners(p,1,u,v);
   Rect r;float scale=1.f;bool selfLit=false;CardLook look;
-  if(b.row==RowSolid||p.sp==Species::Mote){r=cellRect(RowSolid,p.sp==Species::Mote||p.cell<0?SolidMote:p.cell);look.opacity=std::clamp(p.alpha,0.f,1.f);
+  if(b.row==RowSolid||p.sp==Species::Mote){r=cellRect(RowSolid,p.sp==Species::Mote||p.cell<0?SolidMote:p.cell);look.opacity=std::clamp(p.alpha*(p.bead?.8f:1.f),0.f,1.f);if(p.bead)scale=1.35f;
    if(b.row==RowSolid&&p.alpha<.15f)continue;}
   else{
    // Its frame by its age (smoke and fire change fastest young), blended on toward the next; its own

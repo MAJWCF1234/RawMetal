@@ -1,0 +1,8 @@
+# The Starter Map's welcome basin (WATER, 42 cm, a floating crate, hat and box, a can on the bed).
+# Tubes: water-ripples raises a fall, a round and a step on it at frame 12: shots "before",
+# "after" (8 frames on) and "later" (38 frames on).
+world custom "custom maps/Starter Map.rmc"
+map 0
+camera 15.5 11.9 -999 90 -52
+size 960 540
+frames 135
