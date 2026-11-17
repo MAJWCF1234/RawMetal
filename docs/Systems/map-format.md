@@ -31,13 +31,16 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
 - Prop and creature overrides are not saved. On load, the save reconcile takes them from the authored prop or spawn it matches (`Enemy::adoptTraits`, `Clutter::traits`).
 
 ## Custom properties
-- `p.key=value` on a named record. Scripts see a whole number: text reads 0, and true or yes reads 1.
-- Each property is a StateId (`entityPropertyState`: map index, map name, entity, key). The parser files the authored ones and the ones scripts name in `AuthoredMapData::propertySeeds`.
+- `p.key=value` on a record. Scripts see a whole number: text reads 0, and true or yes reads 1.
 - A named prop's `frozen` is a property too. A script lets the prop go with `STATE @name.frozen 0`.
-- All runtime access goes through four functions in src/game/EntityProperties.cpp: `seedEntityProperties`, `entityProperty`, `entityPropertyInt` and `setEntityPropertyInt`.
-  - Authored values are given once a game. A load keeps what scripts made of them.
-  - Today the values are script states, saved with the rest.
-  - The save format's entity-property store can take over behind these functions. `Game::m_entityProperties` already maps each id to its map, entity and key.
+- Scripts reach a property as `@name.key`, so it needs a `name=`. A record without one still keeps its properties, under its id key (`#prop:3` for CLUTTER record 3, `Game::entityIdKey`).
+- The parser resolves each property to a StateId (`entityPropertyState`: map index, map name, entity, key). That is only an identifier. `AuthoredMapData::propertySeeds` files the authored values and the properties scripts name.
+- All runtime access goes through src/game/EntityProperties.cpp: `seedEntityProperties`, `isEntityProperty`, `entityPropertyInt` and `setEntityPropertyInt`.
+  - The authored value is the map's.
+  - What scripts change goes to the save's entity store: `Game::setEntityProperty(map, entity, "p.key", value)` (`"frozen"` for the flag).
+  - A read takes the store's value when there is one, else the authored value.
+  - The store is saved in the `entities` section (save format 28, docs/Systems/save-format.md) and emptied by a new game. A format 27 save still loads; it has no store, so the authored values stand.
+  - No script state is written for a property.
 
 ## Prefabs
 - `PREFAB|name` ... `PREFAB_END` holds records in metres from the prefab's origin, with `@` in their map field. A prefab must be defined above its first `PREFAB_PLACE`.

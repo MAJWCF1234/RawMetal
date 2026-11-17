@@ -42,6 +42,7 @@ PREFAB_PLACE|0|desk_pair|18|18|0|1.5707964|b_
 CLUTTER|0|7|8|8|0|0|17|0.6|0.6|0.6|0|0|#0|name=red_crate|tint=1,0.25,0.25|mass=3|impact=metal_bang
 CLUTTER|0|7|9.6|9.4|0|0|17|0.6|0.6|0.6|0|0|#0
 CLUTTER|0|7|10|8|1.2|0|17|0.5|0.5|0.5|0|0|#0|name=held_box|frozen=1
+CLUTTER|0|0|14|14|-999|0|p.weight=7
 FIXTURE|0|27|6|16|0|0.42|0.4|0.38|0|1|name=vault|p.code=1234|p.owner=Jenkins|future.key=7
 TIMED_SEQUENCE|0|fmt_clock|fmt_clock_done|0|0|1|1|-1|-0.5|60000|60000|0|0|0|0|1
 ACTOR|0|fmt_clock|4|1.6|0|0|0|name=turncoat|faction=enemy|display=Turncoat

@@ -22,6 +22,8 @@ std::string mapFormatTestText(){
   "CLUTTER|0|7|8|8|0|0|17|0.6|0.6|0.6|0|0|#0|name=red_crate|tint=1,0.25,0.25|mass=3|impact=metal_bang\n"
   "CLUTTER|0|7|9.6|9.4|0|0|17|0.6|0.6|0.6|0|0|#0\n"
   "CLUTTER|0|7|10|8|1.2|0|17|0.5|0.5|0.5|0|0|#0|name=held_box|frozen=1\n"
+  // A record without a name may carry properties too: they are kept under its id key, #prop:3.
+  "CLUTTER|0|0|14|14|-999|0|p.weight=7\n"
   // A monitor with properties a script reads and writes, and a key no build knows yet.
   "FIXTURE|0|27|6|16|0|0.42|0.4|0.38|0|1|name=vault|p.code=1234|p.owner=Jenkins|future.key=7\n"
   // A facility guard (ACTOR_FACTION 2, ally) turned hostile by faction=enemy.
@@ -101,13 +103,29 @@ bool Game::testMapFormat(){
   for(int i=0;i<90;++i)g.update({},1.f/60);held=prop("held_box");
   check(held&&!held->pinned&&held->z<heldZ-.5f,"the script's @held_box.frozen 0 lets the box fall (z "+std::to_string(held?held->z:-1)+")");
 
+  // ---- The values scripts change live in the save's entity store (save format 28) ----
+  {const auto* opened=g.entityProperty(0,"vault","p.opened");const auto* frozen=g.entityProperty(0,"held_box","frozen");
+   check(opened&&std::holds_alternative<std::int64_t>(*opened)&&std::get<std::int64_t>(*opened)==1&&frozen&&std::holds_alternative<std::int64_t>(*frozen)&&std::get<std::int64_t>(*frozen)==0,
+    "the script's writes are in the entity store: vault p.opened 1, held_box frozen 0");
+   check(g.entityProperty(0,"vault","p.code")==nullptr&&g.state(entityPropertyState(0,"Format room","vault","opened"))==0,"the store holds only what scripts changed (not the authored code), and no script state is written");
+   check(g.entityPropertyInt(0,"#prop:3","weight")==7,"a record without a name keeps its property under its id key (#prop:3)");}
+
   // ---- A save keeps the scripts' values; the load takes the overrides from the map ----
   const auto saved=g.encodeSave();Game loaded(campaign);
   check(loaded.decodeSave(saved),"the game saves and loads");
+  check(!loaded.saveStore().entities.empty()&&loaded.saveStore().entities==g.saveStore().entities,"the entity store comes back whole through the save's entities section");
   check(loaded.entityPropertyInt(0,"vault","opened")==1&&loaded.entityPropertyInt(0,"vault","code")==1234,"after the load the script's opened=1 stands and the authored code is not given again");
   const Enemy* rex2=nullptr;for(const auto& e:loaded.m_enemies)if(e.traits&&e.traits->name=="rex")rex2=&e;
   bool tinted=false;for(const auto& c:loaded.m_clutter)tinted|=c.traits&&c.traits->name=="red_crate"&&c.traits->tinted;
   check(rex2&&rex2->faction==AiFaction::Facility&&tinted,"after the load the creature is still an ally and the crate still red");
+  {Game fresh(campaign);check(fresh.saveStore().entities.empty()&&fresh.entityPropertyInt(0,"vault","opened")==0&&fresh.entityPropertyInt(0,"vault","code")==1234,"a new game starts from the map's values, with an empty store");}
+
+  // ---- A format 27 save (the last before the section container) still loads ----
+  {const auto old=g.legacySaveText(Game::LegacySaveVersion);Game older(campaign);const bool ok=older.decodeSave(old);
+   const Enemy* rex3=nullptr;for(const auto& e:older.m_enemies)if(e.traits&&e.traits->name=="rex")rex3=&e;
+   bool red=false,held=false;for(const auto& c:older.m_clutter){red|=c.traits&&c.traits->name=="red_crate"&&c.traits->tinted;held|=c.traits&&c.traits->name=="held_box";}
+   check(ok&&old.rfind("RAWMETAL_SAVE 27 ",0)==0&&rex3&&rex3->faction==AiFaction::Facility&&red&&held&&older.entityPropertyInt(0,"vault","code")==1234,
+    "a format 27 save of the room loads: the overrides come from the map again ("+(ok?std::string("loaded"):Game::lastLoadFailure())+")");}
  }catch(const std::exception& e){check(false,std::string("threw: ")+e.what());}
  report<<(failed?"FAILED ":"PASSED ")<<failed<<" failures\n";
  return failed==0;

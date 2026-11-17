@@ -186,7 +186,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  std::vector<std::pair<std::string,NamedFields>> campaignFields;std::map<std::string,int> campaignOrdinals;
  std::map<std::pair<const AuthoredMapData*,std::string>,int> ordinals;
  // Records with a name and custom properties (or a frozen flag), given their states once every MAP is read.
- struct Named {std::shared_ptr<AuthoredMapData> map;int mapIndex;std::shared_ptr<EntityTraits> traits;};std::vector<Named> namedEntities;
+ struct Named {std::shared_ptr<AuthoredMapData> map;int mapIndex;std::shared_ptr<EntityTraits> traits;std::string key;};std::vector<Named> namedEntities;
  // @entity.key in a script: resolved once every record (and name) is read.
  struct PropertyRef {std::shared_ptr<AuthoredMapData> map;int mapIndex;size_t event,slot;bool action;std::string text;int line;};std::vector<PropertyRef> propertyRefs;
  auto propertyRef=[](std::string_view v){return v.size()>3&&v[0]=='@'&&v.find('.')!=std::string_view::npos;};
@@ -213,7 +213,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   if(!traits->name.empty()){
    if(const auto* other=map->entity(traits->name))throw std::runtime_error("the name "+traits->name+" is already taken on map "+std::to_string(mapIndex)+" (by a "+other->tag+"); names are unique per map");
    map->entityNames.push_back({traits->name,tag,ordinal});
-   if(!traits->properties.empty()||(traits->frozen>=0&&tag=="CLUTTER"))namedEntities.push_back({map,mapIndex,traits});}
+   if(!traits->properties.empty()||(traits->frozen>=0&&tag=="CLUTTER"))namedEntities.push_back({map,mapIndex,traits,traits->name});}
+  // A record without a name keeps its properties under its id key ("#prop:3", Game::entityIdKey).
+  else if(!traits->properties.empty()){std::string kind=tag=="CLUTTER"?"prop":tag;for(auto& c:kind)c=char(std::tolower(static_cast<unsigned char>(c)));
+   namedEntities.push_back({map,mapIndex,traits,"#"+kind+":"+std::to_string(ordinal)});}
   const bool overrides=traits->looks()||traits->physical()||traits->body()||traits->scale!=1||traits->solid>=0;
   // Things whose systems read overrides carry them; every record keeps its fields and name.
   if(tag=="FIXTURE")map->fixtures.back().traits=traits;else if(tag=="CLUTTER")map->clutterSpawns.back().traits=traits;
@@ -838,8 +841,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  if(!maps.empty()&&maps[0])for(auto& [key,value]:campaignFields)maps[0]->recordFields[key]=std::move(value);
  for(auto& n:namedEntities){
   auto& t=*n.traits;
-  for(const auto& [key,value]:t.properties)n.map->propertySeeds.push_back({entityPropertyState(n.mapIndex,n.map->name,t.name,key),entityPropertyValue(value),t.name,key});
-  if(t.frozen>=0&&t.tag=="CLUTTER"){t.frozenState=entityPropertyState(n.mapIndex,n.map->name,t.name,"frozen");n.map->propertySeeds.push_back({t.frozenState,t.frozen,t.name,"frozen"});}
+  for(const auto& [key,value]:t.properties)n.map->propertySeeds.push_back({entityPropertyState(n.mapIndex,n.map->name,n.key,key),entityPropertyValue(value),n.key,key});
+  if(t.frozen>=0&&t.tag=="CLUTTER"&&!t.name.empty()){t.frozenState=entityPropertyState(n.mapIndex,n.map->name,t.name,"frozen");n.map->propertySeeds.push_back({t.frozenState,t.frozen,t.name,"frozen"});}
  }
  for(const auto& ref:propertyRefs){
   try{

@@ -81,7 +81,7 @@ void Game::seedClutter(){
 }
 void Game::refreshPinnedClutter(){
  auto pin=[&](std::vector<Clutter>& list){for(auto& c:list)if(c.traits){const auto& t=*c.traits;
-  const bool was=c.pinned;c.pinned=t.anchored>0||(t.frozenState&&entityProperty(t.frozenState)?entityPropertyInt(t.frozenState)!=0:t.frozen>0);
+  const bool was=c.pinned;c.pinned=t.anchored>0||(t.frozenState&&isEntityProperty(t.frozenState)?entityPropertyInt(t.frozenState)!=0:t.frozen>0);
   if(c.pinned){c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;c.projectile=false;}else if(was){c.sleeping=false;c.restTime=0;}}};
  pin(m_clutter);for(int level=0;level<chunkCount();++level)if(level!=m_level)pin(m_chunks[level].clutter);
 }

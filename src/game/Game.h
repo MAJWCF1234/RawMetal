@@ -745,6 +745,8 @@ public:
     static constexpr int SaveVersion=28;
     // The last positional (text) format; archiveSave writes and reads 1..this.
     static constexpr int LegacySaveVersion=27;
+    // That format's save of this game (tests: an old save still loads).
+    std::string legacySaveText(int version);
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1223,13 +1225,13 @@ private:
     void seedScripts();
     // ---- Map format 2 entity properties (EntityTraits.h, docs/Systems/map-format.md) ----
     // Every read and write of a named record's property goes through these four: scripts
-    // (@entity.key conditions and STATE/ADD), a prop's `frozen`, and the seeding of authored
-    // values. Today the values live in script states (saved with them); a store keyed by
-    // map, entity and property can take over here without touching the callers.
-    struct EntityPropertyRef {int level=-1;std::string entity,key;};
+    // (@entity.key conditions and STATE/ADD) and a prop's `frozen`. The authored value is the
+    // map's; what scripts change goes to the save's entity store (setEntityProperty, the
+    // "entities" section) under the map, the entity and "p.<key>" ("frozen" for the flag).
+    struct EntityPropertyRef {int level=-1;std::string entity,key;int authored=0;};
     std::unordered_map<StateId,EntityPropertyRef> m_entityProperties;
     void seedEntityProperties();
-    bool entityProperty(StateId id)const{return m_entityProperties.count(id)!=0;}
+    bool isEntityProperty(StateId id)const{return m_entityProperties.count(id)!=0;}
     int entityPropertyInt(StateId id)const;
     void setEntityPropertyInt(StateId id,int value);
     int entityPropertyInt(int level,std::string_view entity,std::string_view key)const;

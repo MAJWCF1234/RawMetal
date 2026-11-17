@@ -79,7 +79,7 @@ void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announc
 }
 void Game::executeScriptAction(const ScriptAction& action){
  switch(action.type){
-  case ScriptAction::Type::SetState:if(entityProperty(action.id))setEntityPropertyInt(action.id,action.value);else setState(action.id,action.value);break;
+  case ScriptAction::Type::SetState:if(isEntityProperty(action.id))setEntityPropertyInt(action.id,action.value);else setState(action.id,action.value);break;
   case ScriptAction::Type::SetObjective:setObjective(action.id,static_cast<ObjectiveStatus>(std::clamp(action.value,0,3)));break;
   case ScriptAction::Type::GiveItem:
    // The pistol comes loaded and in hand: a full magazine per count.
@@ -97,7 +97,7 @@ void Game::executeScriptAction(const ScriptAction& action){
   // Deferred: the script pass is still iterating this world's events.
   // (Only a custom world hands off: the prologue is a campaign chunk now.)
   case ScriptAction::Type::EnterMainCampaign:if(m_worldId==WorldId::Custom)m_pendingMainCampaign=true;break;
-  case ScriptAction::Type::AddState:if(entityProperty(action.id))setEntityPropertyInt(action.id,entityPropertyInt(action.id)+action.value);else setState(action.id,std::clamp(state(action.id)+action.value,-100000,100000));break;
+  case ScriptAction::Type::AddState:if(isEntityProperty(action.id))setEntityPropertyInt(action.id,entityPropertyInt(action.id)+action.value);else setState(action.id,std::clamp(state(action.id)+action.value,-100000,100000));break;
   case ScriptAction::Type::ShowMessage:{
    std::string text;
    for(size_t i=0;i<action.text.size();){
@@ -141,7 +141,7 @@ void Game::updateReceivingBreach(){
 int Game::scriptValue(const ScriptEvent& event,const ScriptCondition& c)const{
  using S=ScriptCondition::Source;
  switch(c.source){
-  case S::State:return entityProperty(c.id)?entityPropertyInt(c.id):state(c.id);
+  case S::State:return isEntityProperty(c.id)?entityPropertyInt(c.id):state(c.id);
   case S::Kills:return event.level==m_level?m_kills:m_chunks[event.level].kills;
   case S::Remaining:return hostilesRemaining(event.level);
   case S::Health:return int(std::ceil(m_player.health));
