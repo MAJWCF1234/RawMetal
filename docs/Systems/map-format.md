@@ -8,7 +8,7 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
 - The exporter writes `FORMAT|2` only when a map has named fields, so exports of older content are unchanged.
 
 ## Named fields
-- Any record may end with `key=value` fields after its positional ones. The run is read from the end; a key is a letter or `_`, then letters, digits, `_`, `.` or `-`. Values are percent-encoded like every other text field (`|` is `%7C`).
+- Any record may end with `key=value` fields after its positional ones. The run is read from the end; a key is a lower-case letter, then letters, digits, `_`, `.` or `-`, so rows of tiles, titles and labels are never read as keys. A `ROW` never has named fields. Values are percent-encoded like every other text field (`|` is `%7C`).
 - Every named field is kept as written, in order, by record key (`AuthoredMapData::recordFields`, `recordFieldKey`: tag, parent record, ordinal). The exporter writes them back after the record's own fields, so **unknown keys survive** an older build's export and the Builder's save.
 - Known keys are parsed by `parseEntityTraits` into `EntityTraits`. A bad value for a known key is an error that names it. An unknown key is kept and ignored.
 - Named fields on records the exporter writes another way (a `PRIM`, which is written as its `STRUCT` boxes, and a `PREFAB_PLACE`, whose records are written out) are listed in the export's notes.

@@ -74,11 +74,12 @@ struct NativeDocument {
     bool prefab = false;
     for (size_t i = 0; i < lines.size(); ++i) {
       std::string_view kind, map;
-      if (!field(lines[i], 0, kind) || !field(lines[i], 1, map))
-        continue; // fewer than two fields: never a record
-      // FORMAT and a PREFAB block's lines are no map's records: the tools leave them be.
-      if (outsideMaps(kind, prefab))
+      if (!field(lines[i], 0, kind))
         continue;
+      // FORMAT and a PREFAB block's lines are no map's records: the tools leave them be.
+      // (PREFAB_END has one field: it must still close the block.)
+      if (outsideMaps(kind, prefab) || !field(lines[i], 1, map))
+        continue; // fewer than two fields: never a record
       next.byKind[std::string(kind)].push_back(i);
       next.byKindMap[key(kind, map)].push_back(i);
       next.byMap[std::string(map)].push_back(i);
@@ -108,7 +109,7 @@ struct NativeDocument {
       std::vector<size_t> slow;
       bool prefab = false;
       for (size_t i = 0; i < lines.size(); ++i)
-        if (auto f = fields(lines[i]); f.size() >= 2 && !outsideMaps(f[0], prefab) && f[1] == std::to_string(map))
+        if (auto f = fields(lines[i]); !outsideMaps(f[0], prefab) && f.size() >= 2 && f[1] == std::to_string(map))
           slow.push_back(i);
       if (slow != out)
         throw std::logic_error("document index out of date (map " + std::to_string(map) + ")");
@@ -121,7 +122,7 @@ struct NativeDocument {
   // before; replace() keeps the line's named fields; the inspector reads and writes
   // them with named()/replaceNamed(). The key rule is the engine's (EntityTraits.cpp).
   static bool namedKey(std::string_view key) {
-    if (key.empty() || key.size() > 48 || !(std::isalpha((unsigned char)key[0]) || key[0] == '_'))
+    if (key.empty() || key.size() > 48 || !(key[0] >= 'a' && key[0] <= 'z'))
       return false;
     return std::all_of(key.begin(), key.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '.' || c == '-'; });
   }
@@ -147,7 +148,9 @@ struct NativeDocument {
   // How many of f's fields are positional (the named run is read from the end).
   static size_t positionalCount(const std::vector<std::string> &f) {
     size_t n = f.size();
-    while (n > 1 && namedField(f[n - 1]))
+    // A ROW is its 24 tiles and nothing more (a tile row may hold "=").
+    const size_t floor = !f.empty() && f[0] == "ROW" ? 5 : 1;
+    while (n > floor && namedField(f[n - 1]))
       --n;
     return n;
   }
@@ -333,7 +336,7 @@ struct NativeDocument {
     bool prefab = false;
     for (size_t i = 0; i < lines.size(); ++i) {
       auto f = fields(lines[i]);
-      if (f.size() < 2 || outsideMaps(f[0], prefab) || f[0] != kind)
+      if (outsideMaps(f[0], prefab) || f.size() < 2 || f[0] != kind)
         continue;
       if (map < 0 || f[1] == std::to_string(map))
         out.push_back(i);

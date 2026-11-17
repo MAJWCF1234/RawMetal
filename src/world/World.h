@@ -509,7 +509,7 @@ struct AuthoredMapData {
     // name= on any record: the record kind and its index among that kind's records here.
     struct EntityName {std::string name,tag;int index=-1;};
     std::vector<EntityName> entityNames;
-    const EntityName* entity(std::string_view name)const{for(const auto& e:entityNames)if(e.name==name)return &e;return nullptr;}
+    const EntityName* entity(std::string_view entityName)const{for(const auto& e:entityNames)if(e.name==entityName)return &e;return nullptr;}
     // Custom properties (p.key) and a named prop's `frozen`: script states seeded once a game.
     // seeded false: a property only a script names (no p.key on the record); it starts at 0.
     struct PropertySeed {StateId id=0;int value=0;std::string entity,key;bool seeded=true;};

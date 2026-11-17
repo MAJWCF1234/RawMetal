@@ -1008,7 +1008,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -9940,7 +9940,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The test modes check every document query against a full scan of the lines.
     if (argc > 1)
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
-                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test"})
+                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10051,6 +10051,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // Outdoors (NativeOutdoorRegression.inc): terrain maps, mixed maps, the Terrain, Nature and Water tools, pictures.
     if (argc > 1 && std::wstring(argv[1]) == L"--outdoor-test")
       e.backgroundTest = e.outdoorTest = true;
+    // Map format 2 alone (NativeFormatRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--format-test")
+      e.backgroundTest = e.formatTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10615,6 +10618,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.verifyEditing();
       DestroyWindow(e.window);
       return 0;
+    }
+    if (e.formatTest) {
+      int code = 0;
+      try { e.verifyFormatTwo(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-format-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
     }
     if (e.outdoorTest) {
       int code = e.runOutdoorTest();

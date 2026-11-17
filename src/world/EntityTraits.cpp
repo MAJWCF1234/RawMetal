@@ -44,7 +44,8 @@ Point3 colour(const NamedField& f){
 
 bool namedFieldKey(std::string_view key){
  if(key.empty()||key.size()>48)return false;const unsigned char first=static_cast<unsigned char>(key[0]);
- if(!((first>='a'&&first<='z')||(first>='A'&&first<='Z')||first=='_'))return false;
+ // Lower case first: tile rows, titles and labels (upper case by habit) are never read as keys.
+ if(!(first>='a'&&first<='z'))return false;
  return std::all_of(key.begin(),key.end(),[](char c){return keyChar(static_cast<unsigned char>(c));});
 }
 bool splitNamedField(std::string_view field,NamedField& out){
@@ -53,7 +54,9 @@ bool splitNamedField(std::string_view field,NamedField& out){
 }
 NamedFields peelNamedFields(std::vector<std::string>& f){
  size_t first=f.size();NamedField n;
- while(first>1&&splitNamedField(f[first-1],n))--first;
+ // A ROW is its 24 tiles and nothing more (a tile row may hold "=").
+ const size_t floor=!f.empty()&&f[0]=="ROW"?5:1;
+ while(first>floor&&splitNamedField(f[first-1],n))--first;
  NamedFields out;out.reserve(f.size()-first);
  for(size_t i=first;i<f.size();++i){splitNamedField(f[i],n);out.push_back(n);}
  f.resize(first);return out;

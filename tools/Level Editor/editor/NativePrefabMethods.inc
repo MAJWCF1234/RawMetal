@@ -47,7 +47,7 @@
     std::vector<std::string> place{"PREFAB_PLACE",std::to_string(map),encoded(name),nativeNumber(ox),nativeNumber(oy),"0","0"};
     if(prefabNamed(name))place.push_back(placePrefix(name));
     addAuthored(place);
-    selectedRecords.clear();record=int(doc.records("PREFAB_PLACE",map).back());
+    selectedRecords.clear();{auto places=doc.records("PREFAB_PLACE",map);if(places.empty())throw std::runtime_error("the new PREFAB_PLACE is not on the map");record=int(places.back());}
     publish();selectRecord(record);
     message(wide("Made "+name+" of "+std::to_string(body.size())+" things. Place prefab sets down another; Ctrl+Z takes it back."));
     return true;
@@ -65,7 +65,7 @@
       if(prefabNamed(names.back()))place.push_back(placePrefix(names.back()));
     }
     remember();addAuthored(place);
-    record=int(doc.records("PREFAB_PLACE",map).back());selectedRecords.clear();
+    {auto places=doc.records("PREFAB_PLACE",map);if(places.empty())throw std::runtime_error("the new PREFAB_PLACE is not on the map");record=int(places.back());}selectedRecords.clear();
     publish();selectRecord(record);
     message(L"Placed. R turns it a quarter; Ctrl+Z takes it back.");
     return true;

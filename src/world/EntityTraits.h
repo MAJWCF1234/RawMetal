@@ -28,7 +28,8 @@ using NamedFields=std::vector<NamedField>;
 // without one is version 1, which has no named fields.
 inline constexpr int MapFormatVersion=2;
 
-// A key: a letter or '_', then letters, digits, '_', '.' or '-' (at most 48).
+// A key: a lower-case letter, then letters, digits, _ . or - (at most 48). Rows of
+// tiles, titles and labels never start that way, so they are never read as keys.
 bool namedFieldKey(std::string_view key);
 // "key=value" with a valid key; the value is the text after the first '='.
 bool splitNamedField(std::string_view field,NamedField& out);
