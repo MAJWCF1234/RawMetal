@@ -105,7 +105,7 @@ const bool tube=add({
   // 3. Let go from the hands over a crate.
   {Game g(regression::campaign(regression::room()));auto& p=LabAccess::player(g);p.pos={8.6f,8};p.angle=0;p.pitch=-121;auto crate=make(model::market_crate,{9.19f,8},0,kPi*.5f);crate.sleeping=true;auto b=make(model::glass_bottle,{9.f,8},.95f);
    LabAccess::clutter(g)={crate,b};const bool grabbed=LabAccess::grab(g)&&LabAccess::held(g)==1;run(g,.4f);InputState let;let.use=true;g.update(let,1.f/60);run(g,3);const auto& v=g.clutter()[1];
-   r.check("a bottle let go from the hands over a crate drops into it",grabbed&&containers::holds(g.clutter()[0],v)&&v.sleeping&&!v.broken,std::string("grabbed ")+(grabbed?"yes":"no")+" z "+fixed(v.z)+" at "+fixed(v.pos.x));}
+   r.check("a bottle let go from the hands over a crate drops into it",grabbed&&containers::holds(g.clutter()[0],v)&&v.sleeping&&!v.broken,std::string("grabbed ")+(grabbed?"yes":"no")+" z "+fixed(v.z)+" underside "+fixed(underside(v),3)+" at "+fixed(v.pos.x)+" in "+std::to_string(containers::holds(g.clutter()[0],v))+" asleep "+std::to_string(v.sleeping)+" broken "+std::to_string(v.broken)+" riding "+std::to_string(v.riding)+" v "+fixed(length(v.velocity))+" tilt "+fixed(std::fabs(v.pitch)+std::fabs(v.roll)));}
   // 4. Carried: the basket picked up (the look is not into it, so the hand takes the basket), walked, turned, set down.
   {Game g(filledRoom({10,8},0,{8.95f,8}));auto& p=LabAccess::player(g);p.angle=0;p.pitch=0;const int basket=find(g,model::market_basket);run(g,.2f);const auto before=localOf(g,basket,model::market_pumpkin);
    const bool picked=LabAccess::grab(g)&&LabAccess::held(g)==basket;float worst=0,lowest=99;int insideAll=4;

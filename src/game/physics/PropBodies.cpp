@@ -26,7 +26,7 @@ Material propMaterial(PropMaterial m){
   case PropMaterial::Cardboard:return {.6f,.5f,.12f,.008f};
   case PropMaterial::Plastic:return {.45f,.35f,.4f,.002f};
   case PropMaterial::Wood:return {.62f,.45f,.3f,.002f};
-  case PropMaterial::Metal:return {.5f,.38f,.32f,.001f};
+  case PropMaterial::Metal:return {.45f,.38f,.32f,.001f};
   case PropMaterial::Glass:return {.45f,.35f,.45f,.0015f};
   case PropMaterial::Ceramic:return {.5f,.4f,.3f,.0015f};
   case PropMaterial::Electronic:return {.5f,.4f,.2f,.002f};
@@ -95,8 +95,9 @@ const Shape& propShape(int model,std::array<float,3> dims){
  const std::array<int,4> key{model,int(std::lround(dims[0]*1e4f)),int(std::lround(dims[1]*1e4f)),int(std::lround(dims[2]*1e4f))};
  std::lock_guard<std::mutex> hold(lock);auto& slot=cache[key];if(!slot)slot=std::make_unique<Shape>(build(model,dims));return *slot;}
 Material propMaterialOf(const Clutter& c){Material m=propMaterial(c.material());
- // On casters or wheels: it rolls away under a shove rather than dragging its feet (and so is not bowled over).
- using namespace model;if(c.model==office_chair||c.model==lab_boardroom_chair||c.model==med_wheelchair||c.model==med_crash_cart){m.staticFriction=.12f;m.dynamicFriction=.08f;m.rolling=.004f;}
+ // On casters or wheels: it rolls away under a shove rather than dragging its feet (and so is not bowled over;
+ // casters turning across the way still drag, so not ice).
+ using namespace model;if(c.model==office_chair||c.model==lab_boardroom_chair||c.model==med_wheelchair||c.model==med_crash_cart){m.staticFriction=.3f;m.dynamicFriction=.25f;m.rolling=.004f;}
  return m;}
 float propSoftHertz(const Clutter& c){return soft::isSoft(c.model)?tune("props.pad_hertz",4.f):0.f;}
 
@@ -114,6 +115,8 @@ void fromBody(const Body& b,Clutter& c){
  const V3 centre=b.x-q.rotate(b.shape->com);c.pos={centre.x,centre.y};c.z=centre.z-c.extent()[2];
  c.velocity={b.v.x,b.v.y};c.vz=b.v.z;setPropAngular(c,b.w);c.sleeping=b.sleeping;c.restTime=b.sleepTime;}
 
+std::array<float,3> propExtent(const Clutter& c){if(c.model<0||legacyProps())return c.extent();Body b;toBody(c,b);const V3 m=propCentre(c);std::array<float,3> e{0,0,0};
+ for(int p=0;p<b.shape->count;++p){V3 lo,hi;partBounds(b,p,lo,hi);e[0]=std::max({e[0],hi.x-m.x,m.x-lo.x});e[1]=std::max({e[1],hi.y-m.y,m.y-lo.y});e[2]=std::max({e[2],hi.z-m.z,m.z-lo.z});}return e;}
 bool captureProp(const Clutter& c,std::array<float,4>& q,std::array<float,3>& w,std::int32_t& island){
  if(c.model<0||c.broken)return false;const Quat o=propOrientation(c);q={o.x,o.y,o.z,o.w};const V3 a=propAngular(c);w={a.x,a.y,a.z};island=c.sleeping?std::max(0,c.island):-1;return true;}
 void restoreProp(Clutter& c,const std::array<float,4>& q,const std::array<float,3>& w,std::int32_t island){

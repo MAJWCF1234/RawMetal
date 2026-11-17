@@ -25,7 +25,7 @@ constexpr float PaneTap=2,PaneRearm=.3f;
 float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:150.f):b.material==22?40.f:300.f;}
 float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
 // The ground's material against a prop: a hard floor that takes no bounce of its own.
-const rigid::Material Ground{.7f,.6f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
+const rigid::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
 struct Hit {rigid::V3 p{},n{};float sep=0;int kind=0;};
 // Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad.
 int keepFour(std::vector<Hit>& h,rigid::V3 n){
@@ -55,7 +55,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",2.f));space.settings.contactHertz=tune("props.contact_hertz",30.f);
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",60.f);
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<Hit> hits;std::array<V3,8> feature{};
  // Each world's ramps (ShapeRamp, not solid: the slope its step proxies stand for), found once a frame.
@@ -82,7 +82,22 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    for(V3 d:downs){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(0);}}
    for(V3 d:{V3{1,0,0},V3{-1,0,0},V3{0,1,0},V3{0,-1,0},V3{0,0,1}}){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(round?1:0);}}}
   const bool ceilingNear=cw.clearanceAbove(cq.x,cq.y,b.boundsLo.z,true)<b.boundsHi.z+margin+.3f;
+  // The usual case, asked once: one flat floor under the whole footprint (no ramp) and every column round
+  // and through it open from that floor to over the body. Then each point needs only that floor's height.
+  bool flat=downs.size()==1;float flatFloor=0;const World* flatWorld=nullptr;
+  if(flat){const float lo=b.boundsLo.z,hi=b.boundsHi.z;const float x0=b.boundsLo.x,x1=b.boundsHi.x,y0=b.boundsLo.y,y1=b.boundsHi.y;
+   const int nx=std::max(1,int(std::ceil((x1-x0)/.1f))),ny=std::max(1,int(std::ceil((y1-y0)/.1f)));
+   auto column=[&](float x,float y,bool first)->bool{Vec2 q{x,y};q=q+shift;const World& w=physicalWorld(q);if(first)flatWorld=&w;else if(&w!=flatWorld)return false;
+    const float fs=w.supportBelow(q.x,q.y,lo+.06f,true);if(first)flatFloor=fs;else if(std::fabs(fs-flatFloor)>1e-4f)return false;
+    return w.fits(q.x,q.y,flatFloor+.004f,std::max(.01f,hi+margin-flatFloor-.004f),true,true)&&!w.doorBlocks(q.x,q.y,flatFloor+.004f,std::max(.01f,hi+margin-flatFloor-.004f));};
+   flat=column((x0+x1)*.5f,(y0+y1)*.5f,true);
+   for(int i=0;i<=nx&&flat;++i){const float x=x0+(x1-x0)*float(i)/float(nx);flat=column(x,y0,false)&&column(x,y1,false);}
+   for(int j=1;j<ny&&flat;++j){const float y=y0+(y1-y0)*float(j)/float(ny);flat=column(x0,y,false)&&column(x1,y,false);}}
   for(size_t si=0;si<samples.size();++si){const V3 p=samples[si];const bool round=curved[si]!=0;
+   if(flat){Vec2 q{p.x,p.y};q=q+shift;const World& w=physicalWorld(q);const float s=flatFloor-softSinkAt(w.level(),q,flatFloor);
+    if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0});
+    if(ceilingNear&&p.z>b.x.z){const float cl=w.clearanceAbove(q.x,q.y,p.z-.05f,true);if(cl-p.z<margin)hits.push_back({p,{0,0,-1},cl-p.z,1});}
+    continue;}
    Vec2 q{p.x,p.y};q=q+shift;const World& w=physicalWorld(q);const Vec2 k=q-(Vec2{p.x,p.y}+shift); // world-local = list + shift + k
    // A ramp collides in the World as 10 cm steps; a body meets its true slope (and not those steps).
    {bool onRamp=false;for(int r:rampsOf(w)){const auto&st=w.structures()[size_t(r)];if(q.x<st.x1||q.x>st.x2||q.y<st.y1||q.y>st.y2||p.z>st.top+.1f||p.z<st.bottom-.3f)continue;
@@ -128,7 +143,9 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    out.push_back(m);}
  };
  space.filter=[&](const Space& sp,int a,int b){const Body& A=sp.bodies[size_t(a)];const Body& B=sp.bodies[size_t(b)];
-  if(A.user==PlayerBody||B.user==PlayerBody){const Body& prop=A.user==PlayerBody?B:A;const Body& player=A.user==PlayerBody?A:B;(void)player;return prop.kinematic?false:len(prop.v)<2.5f;}return true;};
+  if(A.user==PlayerBody||B.user==PlayerBody){const Body& prop=A.user==PlayerBody?B:A;const Body& player=A.user==PlayerBody?A:B;(void)player;
+   // Light props only: one of 8 kg and up stops him (Movement) and is shoved by the old rule's slow push.
+   return prop.kinematic||prop.invMass<1/8.f?false:len(prop.v)<2.5f;}return true;};
  space.sweep=[&](Space&,int,V3 from,V3 to,V3& normal)->float{Vec2 q{from.x,from.y};q=q+shift;const World& w=physicalWorld(q);const Vec2 k=q-(Vec2{from.x,from.y}+shift);
   const V3 a{q.x,q.y,from.z},bb{to.x+shift.x+k.x,to.y+shift.y+k.y,to.z};return w.shotFraction(a,bb,normal);};
  // ---- A prop's own reactions (as the old step had them) ----
@@ -154,12 +171,16 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(!c.everyOutlinePoint([&](Vec2 o){auto q=p+o+shift;const auto&w=physicalWorld(q);return w.fits(q.x,q.y,c.z+.02f,std::max(.01f,propHeight-.04f),true,true)&&!w.doorBlocks(q.x,q.y,c.z+.02f,std::max(.01f,propHeight-.04f));}))return false;}return true;};
   auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt){if(!nearby(actor,feet,height,radius))return;Vec2 n{};float penetration;
    if(!overlap(actor-c.pos,radius,n,penetration))return;
-   float closing=std::max(0.f,dot(c.velocity-actorVelocity,n));const bool falling=c.vz<0&&c.z>=feet+height-.12f;float speed=std::max(closing,falling?-c.vz:0.f);
+   // Closing only as far as the prop itself comes at the body (a body walking into a prop being pushed away
+   // from it is not struck by it).
+   float closing=std::min(std::max(0.f,dot(c.velocity-actorVelocity,n)),std::max(0.f,dot(c.velocity,n)));const bool falling=c.vz<0&&c.z>=feet+height-.12f;float speed=std::max(closing,falling?-c.vz:0.f);
    if(falling&&!c.everyOutlinePoint([&](Vec2 offset){auto p=c.pos+offset+shift;const auto&w=physicalWorld(p);return w.supportBelow(p.x,p.y,c.z+.025f,true)<feet+height;}))return;
    if(speed>=1.5f&&c.bodyImpactCooldown<=0){float damage=std::clamp((.5f*c.mass()*speed*speed-2.f)*.2f,0.f,80.f);if(damage>0){hurt(damage,n);c.bodyImpactCooldown=.25f;c.projectile=false;impact(index,speed);}}
    if(c.broken)return;if(falling){c.z=feet+height;c.vz=std::max(0.f,-c.vz*.12f);return;}
    float moved=0;if(mass>=8&&closing>.001f){float bodySpeed=1.15f*closing*mass/(mass+actorMass);auto delta=n*(penetration+.001f+bodySpeed*.08f);moved=std::max(0.f,dot(move(delta),n));}
-   float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&sweepFits(c.pos,next))c.pos=next;
+   // Out of the body only when the prop came into it: one the body walks into is the body's to stop (Movement),
+   // or the player's own body in the solver pushes it; set out of his hull each step, a barrel would ride at a sprint.
+   float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&closing>.001f&&sweepFits(c.pos,next))c.pos=next;
    if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}};
   contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);});
   for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
@@ -172,7 +193,14 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  std::vector<int> bodyOf(list.size(),-1);std::vector<char> wasAsleep;std::vector<V3> before;
  for(int step=0;step<steps;++step){
   space.bodies.clear();std::fill(bodyOf.begin(),bodyOf.end(),-1);
-  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];Body b;toBody(c,b);b.user=i;
+  // What can be touched this step: the awake props (and the hand's, and the player's), a metre and a half
+  // round. A sleeping prop out of all their reach is not built at all (500 asleep cost next to nothing).
+  struct Reach {float x0,y0,x1,y1;};std::vector<Reach> reaches;
+  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held)continue;const auto e=c.extent();const float r=1.5f+len(V3{c.velocity.x,c.velocity.y,c.vz})*RigidStep;
+   reaches.push_back({c.pos.x-e[0]-r,c.pos.y-e[1]-r,c.pos.x+e[0]+r,c.pos.y+e[1]+r});}
+  if(level==m_level)reaches.push_back({m_player.pos.x-1.5f,m_player.pos.y-1.5f,m_player.pos.x+1.5f,m_player.pos.y+1.5f});
+  auto reachable=[&](const Clutter& c){const auto e=c.extent();for(const auto&r:reaches)if(c.pos.x+e[0]>=r.x0&&c.pos.x-e[0]<=r.x1&&c.pos.y+e[1]>=r.y0&&c.pos.y-e[1]<=r.y1)return true;return false;};
+  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held&&!reachable(c))continue;Body b;toBody(c,b);b.user=i;
    if(i==held){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w={};
     if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand])b.v=m_vrHandVelocity[m_vrCarryHand];else b.v={m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
    if(c.material()==PropMaterial::Paper){b.linearDamping=3;b.angularDamping=3;}
@@ -181,9 +209,16 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   // he walks into by contact, and what is pinned against a wall stops him in the solver rather than going
   // into the wall. What comes at him fast is left to bodyContacts (the blow, its damage).
   if(level==m_level&&!m_noclip&&!m_inspectionCamera){static Shape hull;static float hullHeight=-1;const float h=m_player.hullHeight();
-   if(hull.count==0||hullHeight!=h){hull=Shape{};hull.add(PartKind::Box,{},{.2f,.2f,h*.5f});hull.finish();hullHeight=h;}
-   Body p;p.shape=&hull;p.x={m_player.pos.x,m_player.pos.y,m_player.z+h*.5f};p.v={m_velocity.x,m_velocity.y,0};p.gravity={};p.user=PlayerBody;
-   p.invMass=1/70.f;p.invInertiaLocal=M3::zero();p.inertiaLocal=M3::zero();p.invInertia=M3::zero();p.material={.6f,.5f,0,0};p.linearDamping=0;p.angularDamping=0;space.bodies.push_back(p);}
+   // From his step height up: he never stands on, or treads down, what his body pushes (the low things at his
+   // feet are moved by the old rule, simulateClutter).
+   const float body=std::max(.2f,h-.25f);
+   if(hull.count==0||hullHeight!=body){hull=Shape{};hull.add(PartKind::Box,{},{.2f,.2f,body*.5f});hull.finish();hullHeight=body;}
+   Body p;p.shape=&hull;p.x={m_player.pos.x,m_player.pos.y,m_player.z+.25f+body*.5f};p.v={m_velocity.x,m_velocity.y,0};p.gravity={};p.user=PlayerBody;
+   p.invMass=1/70.f;p.invInertiaLocal=M3::zero();p.inertiaLocal=M3::zero();p.invInertia=M3::zero();p.material={.6f,.5f,0,0};p.linearDamping=0;p.angularDamping=0;
+   // A shove, not a blow: his contacts are springs (a limited push), so a crate he walks into gets going over a
+   // moment and what is in it goes along; one pinned against a wall gives under him instead of into the wall.
+   p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;   // never what keeps an island awake (his own speed still does)
+   space.bodies.push_back(p);}
   wasAsleep.assign(space.bodies.size(),0);before.assign(space.bodies.size(),{});
   for(size_t bi=0;bi<space.bodies.size();++bi){wasAsleep[bi]=space.bodies[bi].sleeping;before[bi]=space.bodies[bi].v;}
   // ---- Before the step: water, and panes ahead of a fast prop ----
@@ -209,7 +244,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
       const float mass=b.invMass>0?1/b.invMass:1;const float height=std::max(.01f,c.height());
       // Lifted at the middle of what is under (so a thing half in tips as it should), drawn halfway to its own
       // middle (water.lever): a prop's mass is in its walls, not spread as a solid block's.
-      b.applyForce({0,0,mass*buoyancy::Gravity*buoyancy::WaterDensity/rho*f},b.x+(middle-b.x)*tune("water.lever",.5f));
+      b.applyForce({0,0,mass*buoyancy::Gravity*buoyancy::WaterDensity/rho*f},b.x+(middle-b.x)*tune("water.lever",.35f));
       const float horizontal=std::sqrt(b.v.x*b.v.x+b.v.y*b.v.y);const float hk=std::exp(-(1.1f+k*horizontal)*f*RigidStep);b.v.x*=hk;b.v.y*=hk;
       const float bob=floater?2*tune("water.bob_damping",.2f)*std::sqrt(buoyancy::Gravity*buoyancy::WaterDensity/(rho*height)):tune("water.sink_drag",2.6f);
       b.v.z*=std::exp(-(1.1f+bob+k*std::fabs(b.v.z))*f*RigidStep);b.w=b.w*std::exp(-2.6f*f*RigidStep);
@@ -219,18 +254,19 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
        // on a corner as a solid block of its density would: the water rights it toward its nearest face.
        // A swell rocks it a few degrees and heaves it, a slow drift carries it (each on its own phase).
        V3 axis{};float best=-1;for(int a=0;a<3;++a){const V3 v=turn.column(a);const float d=std::fabs(v.z);if(d>best){best=d;axis=v.z<0?neg(v):v;}}
-       b.w=b.w+cross(axis,V3{0,0,1})*(tune("water.right",60.f)*RigidStep);
+       b.w=b.w+cross(axis,V3{0,0,1})*(tune("water.right",80.f)*RigidStep);
        const float phase=float(index%97)*.61f,swell=tune("water.swell",1.f);
        b.w=b.w+V3{std::cos(c.yaw),std::sin(c.yaw),0}*(1.5f*swell*std::sin(1.6f*m_elapsed+phase*1.7f+1.f)*RigidStep)+V3{-std::sin(c.yaw),std::cos(c.yaw),0}*(1.5f*swell*std::sin(1.9f*m_elapsed+phase)*RigidStep);
        b.v.z+=.45f*swell*std::sin(2.4f*m_elapsed+phase*2.3f)*RigidStep;const float drift=tune("water.drift",.03f);
        b.v.x+=std::cos(.23f*m_elapsed+phase)*drift*RigidStep;b.v.y+=std::sin(.19f*m_elapsed+phase*1.3f)*drift*RigidStep;b.sleepTime=0;}}}}
    // A fast prop's way ahead this step: the panes it would pass (a thrown thing meets glass at its speed).
    const float speed=len(b.v);if(speed*RigidStep>.01f){Vec2 q2{b.x.x,b.x.y};q2=q2+shift;const World& rw=physicalWorld(q2);const int paneLevel=rw.level();auto&pw=paneLevel==m_level?m_world:m_chunks[paneLevel].world;
-    const auto e=c.extent();const V3 delta=b.v*RigidStep;const float distance=len(delta);const V3 from{q2.x,q2.y,b.x.z};const V3 travel=delta*(1+std::max({e[0],e[1],e[2]})/distance);
+    const auto e=c.extent();const V3 delta=b.v*RigidStep;const float distance=len(delta);const V3 from{q2.x,q2.y,b.x.z};const V3 travel=delta*(1+(std::max({e[0],e[1],e[2]})+space.settings.speculative+distance)/distance);   // as far ahead as its contacts reach
     V3 n;ShotTrace trace;float t=pw.shotFraction(from,from+travel,n,&trace);const float m=c.mass();
-    for(int j=0;j<2;++j)if(trace.passed[j]>=0&&trace.passedAt[j]<t){const auto pn=trace.passedNormal[j];const float closing=std::fabs(dot(b.v,pn));
+    const V3 arriving=b.v+b.gravity*RigidStep;   // the speed it meets the glass at, a step on
+    for(int j=0;j<2;++j)if(trace.passed[j]>=0&&trace.passedAt[j]<t){const auto pn=trace.passedNormal[j];const float closing=std::fabs(dot(arriving,pn));
      const float keep=strike(index,paneLevel,trace.passed[j],.5f*m*closing*closing,from+travel*trace.passedAt[j],delta*(1/distance));if(keep>0){b.v=b.v*keep;}else break;}
-    if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(b.v,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
+    if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
   space.step(RigidStep);
@@ -254,6 +290,15 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      const float meff=ev.effectiveMass>0?ev.effectiveMass:ca.mass();const float keep=strike(a,pw.level(),pi,.5f*meff*ev.approach*ev.approach,{q.x,q.y,ev.point.z},ev.normal);
      if(keep>0){const V3 v=before[size_t(ev.a)]*keep;ca.velocity={v.x,v.y};ca.vz=v.z;ca.sleeping=false;ca.restTime=0;}break;}}
   }
+  // What his body pushes goes no faster than the old push had it (his pace, by 4 kg over its mass, and 0.2 m/s):
+  // a sprint into a chair sends it off, not flying.
+  {const float pace=length(m_velocity);
+   for(const auto&m:space.manifolds){if(m.b<0)continue;const Body& A=space.bodies[size_t(m.a)];const Body& B=space.bodies[size_t(m.b)];const int prop=A.user==PlayerBody?B.user:B.user==PlayerBody?A.user:-2;if(prop<0)continue;
+    auto&c=list[size_t(prop)];const float cap=pace*std::min(1.f,4/c.mass())+.2f,speed=length(c.velocity);if(speed>cap&&speed>0)c.velocity=c.velocity*(cap/speed);}}
+  // What the player's body is shoving (a container so marked carries its contents along: Containers.h).
+  for(const auto&m:space.manifolds){if(m.b<0)continue;const Body& A=space.bodies[size_t(m.a)];const Body& B=space.bodies[size_t(m.b)];
+   if(A.user==PlayerBody&&B.user>=0)list[size_t(B.user)].blockedTime=std::max(list[size_t(B.user)].blockedTime,.25f);
+   if(B.user==PlayerBody&&A.user>=0)list[size_t(A.user)].blockedTime=std::max(list[size_t(A.user)].blockedTime,.25f);}
   // Bodies struck by what moves.
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.sleeping||b.user<0)continue;bodyContacts(b.user);}
   for(int i=0;i<int(list.size());++i)if(list[size_t(i)].broken){auto&c=list[size_t(i)];c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=true;c.restTime=0;}

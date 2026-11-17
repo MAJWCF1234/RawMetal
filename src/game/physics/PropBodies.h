@@ -33,6 +33,9 @@ void setPropAngular(Clutter& c,V3 w);
 // A Body from a prop (pose, velocities, mass, inertia, shape, material) and the prop from its body.
 void toBody(const Clutter& c,Body& b);
 void fromBody(const Body& b,Clutter& c);
+// The half-widths of the prop's own shape's world box about the middle of its prop box (x, y, up): what it
+// really takes up (a jar turned 45 degrees is as wide as its round, not as its box's diagonal).
+std::array<float,3> propExtent(const Clutter& c);
 // The middle of the prop's box, world (list coordinates).
 inline V3 propCentre(const Clutter& c){return {c.pos.x,c.pos.y,c.z+c.extent()[2]};}
 

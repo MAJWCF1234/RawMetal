@@ -34,9 +34,10 @@ void Quat::toEuler(float& yaw,float& pitch,float& roll)const{
  roll=std::atan2(r.m[2][1],cr);
  if(cr>1e-5f){pitch=std::atan2(-r.m[2][0],r.m[2][2]);yaw=std::atan2(-r.m[0][1],r.m[1][1]);}
  else{pitch=0;yaw=std::atan2(r.m[1][0],r.m[0][0]);}
- // The same turn is also (yaw+pi, pitch+pi, pi-roll): keep the one whose pitch is within a quarter turn, so the
+ // The same turn is also (yaw+pi, pitch+pi, pi-roll): keep the one with the smaller of the two largest, so the
  // angles say how far it is over (a chair 100 degrees over reads roll 100, not pitch 170 with roll 80).
- if(std::fabs(pitch)>kPi*.5f){pitch=pitch>0?pitch-kPi:pitch+kPi;roll=roll>0?kPi-roll:-kPi-roll;yaw=yaw>0?yaw-kPi:yaw+kPi;}}
+ {const float p2=pitch>0?pitch-kPi:pitch+kPi,r2=roll>0?kPi-roll:-kPi-roll;
+  if(std::max(std::fabs(p2),std::fabs(r2))<std::max(std::fabs(pitch),std::fabs(roll))-1e-4f){pitch=p2;roll=r2;yaw=yaw>0?yaw-kPi:yaw+kPi;}}}
 
 // ---- Shapes ---------------------------------------------------------------------------------------
 namespace {
@@ -430,7 +431,7 @@ void Space::step(float dt){
  for(auto&b:bodies){b.force={};b.torque={};}
  // What struck what: the approach speed and the impulse it took (sounds, breaking, glass).
  for(size_t mi=0;mi<manifolds.size();++mi){const auto&m=manifolds[mi];float approach=0,impulse=0,mass=0;V3 at{};
-  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];impulse+=total[mi*4+size_t(k)];if(-c.relativeVelocity>approach){approach=-c.relativeVelocity;at=c.p;mass=c.normalMass;}}
+  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];impulse+=total[mi*4+size_t(k)];if(-c.relativeVelocity>approach){approach=-c.relativeVelocity;at=c.p+m.normal*(std::max(0.f,c.separation)*(m.b<0?1.f:.5f));mass=c.normalMass;}}   // where the surfaces met
   if(approach>.3f)events.push_back({m.a,m.b,m.partA,m.partB,at,m.normal,approach,impulse,mass,m.surface});}
  continuous(dt,start);
  islands(dt);
