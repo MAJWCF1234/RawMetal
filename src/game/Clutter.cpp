@@ -864,6 +864,8 @@ bool Game::testGlass(){
   const int cutOut=glass::solve(l,cut,false,ring),centre=l.at({1.2f,1.1f});check(centre>=0&&ring[size_t(centre)]==1,"a ring of holes cuts its middle loose, and it falls out");
   std::vector<std::uint8_t> laminated;glass::solve(l,cut,true,laminated);check(laminated[size_t(centre)]==0&&cutOut>0,"laminated glass keeps a piece the holes cut loose");
   const glass::Hit h{1.234f,.987f,.123f,.456f};const auto q=glass::quantized(h,2.4f,2.2f);const auto back=glass::unpack(glass::pack(q,2.4f,2.2f),2.4f,2.2f);
+  {const auto cut=glass::clipToTriangle({{0,0},{1,0},{1,1},{0,1}},{Vec2{0,0},Vec2{1,0},Vec2{0,1}});float area=0;for(size_t k=0;k<cut.size();++k){const auto a=cut[k],b=cut[(k+1)%cut.size()];area+=a.x*b.y-b.x*a.y;}
+   check(std::fabs(std::fabs(area)*.5f-.5f)<1e-5f,"a mark is cut to the triangle of glass it lies on");}
   check(back.u==q.u&&back.v==q.v&&back.radius==q.radius&&back.strain==q.strain&&std::fabs(q.u-h.u)<1e-4f&&std::fabs(q.radius-h.radius)<.0025f,"a hit packs to six bytes and back exactly");}
  {Game g(room());g.m_player.pos={3,3};const Point3 dir{1,0,0};g.damagePane(0,0,24,{10,8,1.2f},dir);g.damagePane(0,0,24,{10,8.22f,1.25f},dir);g.damagePane(0,0,24,{10,8.1f,1.42f},dir);g.landShards();
   int shards=0;for(const auto&c:g.m_clutter)shards+=c.kind==6&&c.shardOf==ShardOf::Glass;const auto*p=g.world().paneGlass(0);

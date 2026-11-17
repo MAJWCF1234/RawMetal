@@ -1945,19 +1945,27 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   else for(int c=0;c<l.cells();++c){if(whole&&p->gone[size_t(c)])continue;const auto t=l.triangle(c);face(t[0],t[1],t[2],sheet(t[0]),sheet(t[1]),sheet(t[2]),paneSheet,.012f,1.05f);}
   // Where it meets the frame: a band of its darker edge, only where glass is left.
   const float band=std::min(.03f,std::min(f.width,f.height)*.1f);
-  auto strip=[&](Vec2 a,Vec2 c,Vec2 inA,Vec2 inC){const Vec2 a2=a+inA*band,c2=c+inC*band;face(a,c,c2,{0,0},{1,0},{1,1},paneEdge,.0125f,1.05f);face(a,c2,a2,{0,0},{1,1},{0,1},paneEdge,.0125f,1.05f);};
+  static const std::vector<std::uint8_t> noneGone;const auto&goneCells=whole?p->gone:noneGone;
+  // A mark on the glass, cut to the triangles still standing (glass::onGlass); uv maps a point in the plane to the texture.
+  auto mark=[&](const std::vector<Vec2>&poly,auto&&uv,const Texture&t,float off,float light){glass::onGlass(l,goneCells,poly,[&](int,const std::vector<Vec2>&piece){
+    if(m_recordGlassDecals)m_glassDecals.push_back({level,i,piece});
+    for(size_t m=1;m+1<piece.size();++m)face(piece[0],piece[m],piece[m+1],uv(piece[0]),uv(piece[m]),uv(piece[m+1]),t,off,light);});};
+  auto anywhere=[](Vec2 q){return q*8.f;};
+  auto strip=[&](Vec2 a,Vec2 c,Vec2 inA,Vec2 inC){const Vec2 a2=a+inA*band,c2=c+inC*band;if(!p){face(a,c,c2,{0,0},{1,0},{1,1},paneEdge,.0125f,1.05f);face(a,c2,a2,{0,0},{1,1},{0,1},paneEdge,.0125f,1.05f);}
+   else mark({a,c,c2,a2},anywhere,paneEdge,.0125f,1.05f);};
   const auto nb=whole?l.neighbours():std::vector<std::array<int,3>>{};
   if(!whole){const float W=f.width,H=f.height;strip({0,0},{W,0},{0,1},{0,1});strip({W,0},{W,H},{-1,0},{-1,0});strip({W,H},{0,H},{0,-1},{0,-1});strip({0,H},{0,0},{1,0},{1,0});}
   else for(int c=0;c<l.cells();++c)if(!p->gone[size_t(c)]){const auto k=l.corners(c);const Vec2 centre=l.centre(c);
    for(int e=0;e<3;++e)if(nb[size_t(c)][size_t(e)]<0){const Vec2 a=l.point(k[size_t(e)]),d=l.point(k[size_t((e+1)%3)]);if(!(l.onFrame(k[size_t(e)])&&l.onFrame(k[size_t((e+1)%3)])))continue;
     strip(a,d,normalized(centre-a),normalized(centre-d));}}
   if(!p)return;
+  // A crack or a rim line, cut where the glass is gone: it stops at a hole's jagged edge.
   auto line=[&](Vec2 a,Vec2 e,float width,const Texture&t){const Vec2 run=e-a;const float len=length(run);if(len<.002f)return;const Vec2 n=Vec2{-run.y,run.x}*(width*.5f/len);
-   for(float side:{-.014f,.014f})quad(f.at(a-n,side+bow(a)),f.at(e-n,side+bow(e)),f.at(e+n,side+bow(e)),f.at(a+n,side+bow(a)),t,1.25f);};
+   mark({a-n,e-n,e+n,a+n},anywhere,t,.014f,1.25f);};
   const float opacity=w.breakableOpacity(i);
   for(int k=0;k<int(p->hits.size());++k){const auto&h=p->hits[size_t(k)];const Vec2 c{h.u,h.v};const float reach=std::clamp(h.strain*.6f+strain*.5f+(h.radius>0?.25f:0.f),0.f,1.f);const std::uint32_t seed=paneSeed(i)*31u+std::uint32_t(k);
    const auto segs=glass::cracks(c,reach,seed);float far=.05f;for(const auto&g:segs)far=std::max(far,length(g.b-c));
-   for(size_t j=0;j<segs.size();++j){const auto&g=segs[j];const Vec2 a=f.clamp(g.a),e=f.clamp(g.b),mid=(a+e)*.5f;if(gone(mid))continue;const Vec2 run=e-a,out=mid-c;const float len=length(run),ol=length(out);if(len<.002f)continue;
+   for(size_t j=0;j<segs.size();++j){const auto&g=segs[j];const Vec2 a=f.clamp(g.a),e=f.clamp(g.b),mid=(a+e)*.5f;if(gone(a)&&gone(e)&&gone(mid))continue;const Vec2 run=e-a,out=mid-c;const float len=length(run),ol=length(out);if(len<.002f)continue;
     const bool ring=ol>1e-4f&&std::fabs(dot(run,out))/(len*ol)<.55f;const float fade=std::clamp(1.f-ol/far,0.f,1.f),jitter=.6f+.4f*glass::hashUnit(seed,900,std::uint32_t(j));
     const float strength=(ring?.45f*(.35f+.65f*fade):.35f+.65f*fade)*jitter*opacity;
     line(a,e,(ring?.0028f:.0032f+.011f*fade*fade)*(b.holds?1.2f:1.f)*(.8f+.4f*jitter),crackSheets[size_t(std::clamp(int(strength*16+.5f),1,16))]);}
@@ -1967,14 +1975,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(h.radius<=.15f){const float local=std::min(3.f,glass::strainAt(p->hits,c));float size=.03f+.03f*h.strain+(b.holds?.065f*local:0.f);
     const float open=h.radius*1.3f;if(open>0&&open>.2f*size)size=std::max(size,open/.48f);const Texture&star=open<=0?starSheet:open<=.2f*size?piercedSheet:ringSheet;
     const float turn=glass::hashUnit(seed,901)*kTwoPi,cs=std::cos(turn)*size,sn=std::sin(turn)*size;const Vec2 ax{cs,sn},ay{-sn,cs};
-    const Vec2 q0=f.clamp(c-ax-ay),q1=f.clamp(c+ax-ay),q2=f.clamp(c+ax+ay),q3=f.clamp(c-ax+ay);
-    for(int layer=0;layer<(b.holds?1+int(local):1);++layer){face(q0,q1,q2,{0,0},{1,0},{1,1},star,.0145f+.0005f*float(layer),1.25f);face(q0,q2,q3,{0,0},{1,1},{0,1},star,.0145f+.0005f*float(layer),1.25f);}}}
-  // A hole's rim: a bright jagged edge and a frosted, chipped band into the glass round it.
+    const float s2=size*size;auto starUv=[&](Vec2 q){const Vec2 d=q-c;return Vec2{.5f+.5f*dot(d,ax)/s2,.5f+.5f*dot(d,ay)/s2};};
+    const std::vector<Vec2> square{c-ax-ay,c+ax-ay,c+ax+ay,c-ax+ay};
+    for(int layer=0;layer<(b.holds?1+int(local):1);++layer)mark(square,starUv,star,.0145f+.0005f*float(layer),1.25f);}}
+  // A hole's rim, cut into the glass left round it and facing into the hole: a bright chipped edge along it and a
+  // frosted band behind that.
   if(whole&&p->missing)for(int c=0;c<l.cells();++c)if(p->gone[size_t(c)]){const auto k=l.corners(c);
    for(int e=0;e<3;++e){const int n=nb[size_t(c)][size_t(e)];if(n<0||p->gone[size_t(n)])continue;const Vec2 a=l.point(k[size_t(e)]),d=l.point(k[size_t((e+1)%3)]),in=l.centre(n);
     const std::uint32_t key=std::uint32_t(c*3+e);const float r1=glass::hashUnit(paneSeed(i),key,1),r2=glass::hashUnit(paneSeed(i),key,2),r3=glass::hashUnit(paneSeed(i),key,3);
-    line(a,d,.004f+.007f*r1,crackSheets[16]);const Vec2 a2=a+normalized(in-a)*(.008f+.03f*r2),d2=d+normalized(in-d)*(.008f+.03f*r3);
-    face(a,d,d2,{0,0},{1,0},{1,1},frostSheet,.0135f,1.25f);face(a,d2,a2,{0,0},{1,1},{0,1},frostSheet,.0135f,1.25f);}}};
+    const Vec2 ia=normalized(in-a),id=normalized(in-d),a1=a+ia*(.003f+.005f*r1),d1=d+id*(.003f+.005f*r2),a2=a+ia*(.01f+.03f*r2),d2=d+id*(.01f+.03f*r3);
+    mark({a,d,d1,a1},anywhere,crackSheets[16],.014f,1.25f);mark({a1,d1,d2,a2},anywhere,frostSheet,.0135f,1.25f);}}};
  // Grit and splinters a pane leaves on the floor: mostly small, a few bigger pieces near it, most on the side the
  // blow drove them; dark clear glass, each with its glint.
  auto glassGrit=[&](const PaneFrame&f,Vec2 drive,int count,std::uint32_t seed,float floorZ){if(f.flat)return;const Vec2 n{f.normal.x,f.normal.y};const float side=dot(drive,n)<0?-1.f:1.f;
@@ -2008,7 +2018,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(auto p=w.paneGlass(i)){key^=std::uint64_t(p->revision)*977+std::uint64_t(w.breakableOpacity(i)*16)*13+std::uint64_t(p->missing)*7919;key*=1099511628211ull;}
    if(auto g=game.glassBreak(level,i)){key^=std::uint64_t(std::int64_t(g->at.x*256)*31+std::int64_t(g->at.y*256)*977+std::int64_t(g->at.z*256)*7919);key*=1099511628211ull;}}
   bool build=!m_gpuFrame||m_gpu->beginStaticCache(3*Game::MaxChunks+level,key);
-  if(build){if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
+  if(build){if(m_recordGlassDecals)std::erase_if(m_glassDecals,[&](const GlassDecal&d){return d.level==level;});if(m_gpuFrame){++m_breakableGeometryBuilds;m_staticGeometryBuild=true;}for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];bool alongX=b.x2-b.x1>b.y2-b.y1;Vec2 center{(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f};float width=std::max(b.x2-b.x1,b.y2-b.y1);
    if(w.breakableIntact(i)){if(b.material!=17){box({b.x1,b.y1,b.bottom},{b.x2,b.y2,b.top},b.material==22?m_dropCeiling:m_crateTexture,1.f);continue;}const auto*p=w.paneGlass(i);paneBody(i,b,p);if(p&&p->missing){const auto f=paneFrame(b);glassGrit(f,paneDrive(i,f),std::clamp(int(float(p->missing)*.7f),6,180),paneSeed(i)^0x9e37u,b.bottom);}
    }else if(b.material==17){const auto f=paneFrame(b);const auto seed=paneSeed(i);
     auto sheetAt=[&](Vec2 q){return MeshVertex{planePoint(f,q),q.x/f.width,q.y/f.height};};

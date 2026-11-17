@@ -222,6 +222,25 @@ inline std::vector<std::uint8_t> loosePieces(const std::vector<Shard>& shards,co
   if(taken<most&&shards[i].ring>=2&&shards[i].shape.area()>=.012f){out[i]=1;++taken;}}
  return out;}
 
+// The part of a mark (a crack, a crushed star, a rim; any polygon in the pane's plane) that lies on
+// triangle t: Sutherland-Hodgman against its three edges. Marks are drawn only on the glass left,
+// piece by piece, so they go with any piece that falls and never hang over a hole.
+inline std::vector<Vec2> clipToTriangle(std::vector<Vec2> poly,const std::array<Vec2,3>& t){
+ const float sign=(t[1].x-t[0].x)*(t[2].y-t[0].y)-(t[1].y-t[0].y)*(t[2].x-t[0].x)<0?-1.f:1.f;
+ for(int e=0;e<3&&poly.size()>=3;++e){const Vec2 a=t[size_t(e)],b=t[size_t((e+1)%3)];auto side=[&](Vec2 q){return sign*((b.x-a.x)*(q.y-a.y)-(b.y-a.y)*(q.x-a.x));};
+  std::vector<Vec2> out;for(size_t i=0;i<poly.size();++i){const Vec2 q=poly[i],r=poly[(i+1)%poly.size()];const float sq=side(q),sr=side(r);
+   if(sq>=0)out.push_back(q);if((sq>=0)!=(sr>=0))out.push_back(q+(r-q)*(sq/(sq-sr)));}
+  poly=std::move(out);}
+ return poly;}
+// Each piece of the mark that lies on glass still standing (gone: the pane's gone triangles, empty: none): f(cell, piece).
+template<class F> void onGlass(const Lattice& l,const std::vector<std::uint8_t>& gone,const std::vector<Vec2>& poly,F&& f){
+ if(poly.size()<3)return;Vec2 lo{1e9f,1e9f},hi{-1e9f,-1e9f};for(const auto q:poly){lo={std::min(lo.x,q.x),std::min(lo.y,q.y)};hi={std::max(hi.x,q.x),std::max(hi.y,q.y)};}
+ const int i0=std::max(0,int(std::floor(lo.x/l.width*float(l.nx)))-1),i1=std::min(l.nx-1,int(std::floor(hi.x/l.width*float(l.nx)))+1);
+ const int j0=std::max(0,int(std::floor(lo.y/l.height*float(l.ny)))-1),j1=std::min(l.ny-1,int(std::floor(hi.y/l.height*float(l.ny)))+1);
+ for(int j=j0;j<=j1;++j)for(int i=i0;i<=i1;++i)for(int k=0;k<2;++k){const int c=(j*l.nx+i)*2+k;if(size_t(c)<gone.size()&&gone[size_t(c)])continue;
+  auto piece=clipToTriangle(poly,l.triangle(c));if(piece.size()<3)continue;
+  float area=0;for(size_t m=0;m<piece.size();++m){const Vec2 a=piece[m],b=piece[(m+1)%piece.size()];area+=a.x*b.y-b.x*a.y;}if(std::fabs(area)>2e-8f)f(c,piece);}}
+
 // A glass shard prop's outline in its own unit square (x, y in -0.5..0.5), by its piece
 // number: a sliver, a wedge, a blade or a broken quad, so a floor of them is not one shape.
 inline int shardOutline(int piece,std::array<Vec2,5>& p){

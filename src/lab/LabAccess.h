@@ -96,6 +96,9 @@ struct LabAccess {
   const auto hit=g.traceShot(origin,d,40,-1,false,&gun);g.resolveShot(hit,origin,d,gun,true);return hit;}
  static ShotHit trace(Game& g,Point3 origin,Point3 direction,float distance){return g.traceShot(origin,direction,distance);}
  static void landShards(Game& g){g.landShards();}
+ // The marks drawn on breaking glass, in each pane's plane (Scene3D records them while asked).
+ static void recordGlassDecals(SoftwareRenderer& r,bool on){r.m_recordGlassDecals=on;r.m_glassDecals.clear();}
+ static const std::vector<SoftwareRenderer::GlassDecal>& glassDecals(const SoftwareRenderer& r){return r.m_glassDecals;}
  static Vec2& velocity(Game& g){return g.m_velocity;}
  static Vec2& crunchFrom(Game& g){return g.m_glassCrunchLast;}
  static void updateGlass(Game& g,float dt){g.updateGlass(dt);}

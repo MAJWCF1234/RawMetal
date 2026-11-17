@@ -371,6 +371,10 @@ private:
  std::array<std::array<Point3,2>,kCleanupBodies> m_cleanupPalms{};
  std::array<std::vector<std::array<std::uint8_t,4>>,kCleanupBodies> m_cleanupWeights;
     Texture m_glassTexture;
+    // The lab's view of the marks drawn on breaking glass (cracks, stars, rims, edge bands), each piece in its
+    // pane's plane, recorded only while m_recordGlassDecals is set (each level's list remade when it is rebuilt).
+    struct GlassDecal {int level=0,pane=0;std::vector<Vec2> piece;};
+    bool m_recordGlassDecals=false;std::vector<GlassDecal> m_glassDecals;
     // Pink/black checker for any surface whose texture is missing; see
     // assets/materials/PROP-SURFACES-SOURCE.md for the purchased replacements.
     Texture m_officeWall,m_dropCeiling,m_securityCarpet,m_officeTile;

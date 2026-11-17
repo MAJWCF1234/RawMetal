@@ -38,6 +38,21 @@ int missing(Game& g){const auto* p=glassOf(g);return p?p->missing:0;}
 int hits(Game& g){const auto* p=glassOf(g);return p?int(p->hits.size()):0;}
 struct Shards {int props=0,broken=0,awake=0;float highest=-9;};
 Shards shards(Game& g){Shards s;for(const auto& c:LabAccess::clutter(g))if(c.kind==6&&c.shardOf==ShardOf::Glass){if(c.broken)++s.broken;else ++s.props;s.awake+=!c.sleeping;s.highest=std::max(s.highest,c.z);}return s;}
+// Every mark drawn on the scene's pane (crack, crushed star, rim, edge band) checked against a 4 mm mask of the
+// triangles still standing: how many of its points lie where the glass is gone (must be none), and how many in all.
+struct MarkCheck {long long points=0,overHoles=0,control=0;int pieces=0;std::string where;};
+MarkCheck marksOnGlass(Scene& s){MarkCheck out;Game& g=s.g();if(!s.renderer)return out;const World& w=g.world();const auto* p=w.paneGlass(0);if(!p)return out;
+ const auto f=w.paneFrame(0);const auto l=w.paneLattice(0);constexpr float Cell=.004f;const int nx=int(std::ceil(f.width/Cell)),ny=int(std::ceil(f.height/Cell));std::vector<std::uint8_t> mask(size_t(nx*ny),0);
+ auto inside=[](Vec2 q,const std::vector<Vec2>& poly,float eps){float sign=0;for(size_t i=0;i<poly.size();++i){const Vec2 a=poly[i],b=poly[(i+1)%poly.size()];const float c=(b.x-a.x)*(q.y-a.y)-(b.y-a.y)*(q.x-a.x);
+  if(std::fabs(c)<=eps*length(b-a))continue;if(sign==0)sign=c;else if((c>0)!=(sign>0))return false;}return sign!=0;};
+ auto raster=[&](const std::vector<Vec2>& poly,float eps,auto&& visit){Vec2 lo{1e9f,1e9f},hi{-1e9f,-1e9f};for(auto q:poly){lo={std::min(lo.x,q.x),std::min(lo.y,q.y)};hi={std::max(hi.x,q.x),std::max(hi.y,q.y)};}
+  for(int y=std::max(0,int(lo.y/Cell));y<=std::min(ny-1,int(hi.y/Cell));++y)for(int x=std::max(0,int(lo.x/Cell));x<=std::min(nx-1,int(hi.x/Cell));++x){const Vec2 q{(float(x)+.5f)*Cell,(float(y)+.5f)*Cell};if(inside(q,poly,eps))visit(size_t(y*nx+x));}};
+ for(int c=0;c<l.cells();++c)if(!(size_t(c)<p->gone.size()&&p->gone[size_t(c)])){const auto t=l.triangle(c);raster(std::vector<Vec2>{t[0],t[1],t[2]},1e-5f,[&](size_t k){mask[k]=1;});}
+ for(const auto& d:LabAccess::glassDecals(*s.renderer)){if(d.level!=g.level()||d.pane!=0)continue;++out.pieces;raster(d.piece,-1e-4f,[&](size_t k){++out.points;if(!mask[k]){++out.overHoles;if(out.where.size()<300){const Vec2 q{(float(k%size_t(nx))+.5f)*Cell,(float(k/size_t(nx))+.5f)*Cell};const int c=l.at(q);
+  out.where+=" ("+fixed(q.x,3)+","+fixed(q.y,3)+" cell "+std::to_string(c)+(c>=0&&p->gone[size_t(c)]?" gone":" kept")+" n"+std::to_string(d.piece.size())+")";}}});}
+ // The control: an uncut square over the first hole must show up as over a hole.
+ for(const auto& h:p->hits)if(h.radius>0){const float r=h.radius*.6f;raster(std::vector<Vec2>{{h.u-r,h.v-r},{h.u+r,h.v-r},{h.u+r,h.v+r},{h.u-r,h.v+r}},-1e-4f,[&](size_t k){out.control+=!mask[k];});break;}
+ return out;}
 void run(Game& g,float seconds){for(int i=0;i<int(seconds*60);++i)g.update({},1.f/60);}
 const HitscanDef& handgun(){return playerWeaponDef(WeaponId::Handgun).hitscan;}
 const HitscanDef& shotgun(){return playerWeaponDef(WeaponId::Shotgun).hitscan;}
@@ -57,7 +72,7 @@ const bool tube=add({
  .author=[](Scene& s,AuthoredMapData& m){const bool holds=s.fixture->value("glass","pane")=="holds";kit::breakable(m,9.97f,6.4f,10.03f,9.6f,0,2.4f,17,holds);if(!holds)kit::prop(m,model::wooden_crate,8.4f,8.9f,0,0);
   kit::wall(m,9.93f,6.28f,10.07f,6.4f,0,2.52f,20);kit::wall(m,9.93f,9.6f,10.07f,9.72f,0,2.52f,20);kit::wall(m,9.93f,6.28f,10.07f,9.72f,2.4f,2.52f,20);
   kit::wall(m,13.2f,5.2f,13.4f,10.8f,0,3.2f,14);kit::prop(m,model::ind_barrel,11.9f,7.1f,0,0);},
- .step=[](Scene& s,float){Game& g=s.g();const bool holds=s.fixture->value("glass","pane")=="holds";const int k=(s.frame-Volley)/VolleyEvery;
+ .step=[](Scene& s,float){Game& g=s.g();if(s.frame==0&&s.renderer)LabAccess::recordGlassDecals(*s.renderer,true);const bool holds=s.fixture->value("glass","pane")=="holds";const int k=(s.frame-Volley)/VolleyEvery;
   if(s.frame>=Volley&&(s.frame-Volley)%VolleyEvery==0){
    if(holds&&k<12)LabAccess::fireFrom(g,{7.6f,8,1.3f},{10,7.7f,1.3f},shotgun());
    if(!holds&&k<9){const float a=float(k)*2.1f,r=.05f+.045f*float(k);LabAccess::fireFrom(g,{7.6f,7.6f,1.4f},{10,7.4f+std::cos(a)*r,1.45f+std::sin(a)*r},handgun());}}
@@ -65,7 +80,10 @@ const bool tube=add({
   if(holds&&s.frame>=HoldsMore&&(s.frame-HoldsMore)%VolleyEvery==0&&(s.frame-HoldsMore)/VolleyEvery<4){const float a=float((s.frame-HoldsMore)/VolleyEvery)*1.7f;LabAccess::fireFrom(g,{7.6f,8,1.3f},{10,7.7f+std::cos(a)*.6f,1.3f+std::sin(a)*.45f},shotgun());}
   if(!holds&&s.frame==Throw)for(auto& c:LabAccess::clutter(g))if(c.model==model::wooden_crate){c.z=.55f;thrown(c,{1,0},9,1.2f);}},
  .capture=[](Scene& s,const Frame&){const bool holds=s.fixture->value("glass","pane")=="holds";if(s.frame==Volley-1)s.shoot("before");if(s.frame==(holds?HoldsMore-1:Throw-1))s.shoot("holes");if(s.last())s.shoot("after");},
- .metrics=[](Scene& s,Report& r){Game& g=s.g();const bool holds=s.fixture->value("glass","pane")=="holds";
+ .metrics=[](Scene& s,Report& r){Game& g=s.g();
+  {const auto m=marksOnGlass(s);if(s.renderer)LabAccess::recordGlassDecals(*s.renderer,false);r.metric("marks_pieces",m.pieces);r.metric("marks_points",double(m.points));r.metric("marks_points_over_holes",double(m.overHoles));
+   r.metric("marks_control_points_over_holes",double(m.control));
+   r.check("every crack, crushed star and rim lies on glass still standing: none over a hole (an uncut mark over one is seen)",m.pieces>0&&m.points>0&&m.overHoles==0&&m.control>0,std::to_string(m.overHoles)+" of "+std::to_string(m.points)+" mark points over holes, in "+std::to_string(m.pieces)+" pieces"+m.where);}const bool holds=s.fixture->value("glass","pane")=="holds";
   // The grazing views film the same scenes from the side; the numbers run once, head-on.
   if(s.fixture->value("view","head-on")=="grazing"){r.metric("scene_missing",missing(g));r.check("scene (grazing view): the pane stands with its damage",g.world().breakableIntact(0)&&hits(g)>0);return;}
   if(holds){r.metric("scene_holds_hits",hits(g));r.metric("scene_holds_missing",missing(g));r.metric("scene_holds_strain",g.world().breakableDamage(0)/180.f);
