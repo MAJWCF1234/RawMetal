@@ -110,6 +110,8 @@ def sync_builder():
                 if any(k in mine for k in tags):
                     # Its menu tag / New campaign row replaces the game's one line, and nothing more.
                     return mine if len(lines(game)) <= 1 else None
+                if all(line.startswith('#include') for line in lines(mine) + lines(game)):
+                    return game + mine               # includes on both sides: keep every one
                 if 'editorGhost' in mine or 'editorView' in mine:
                     return game + mine               # the game's new lines, then the Builder's ghosted-floor lines
                 return None                          # anything else is a person's merge
