@@ -177,7 +177,7 @@
     std::vector<std::pair<float,float>> corners;float z=layerElevation();
     if(floorTransformSelection){auto b=tileBounds();corners={{float(b[0]),float(b[1])},{float(b[2]),float(b[1])},{float(b[2]),float(b[3])},{float(b[0]),float(b[3])}};}
     else{if(selectedRecords.size()>1)return false;auto f=NativeDocument::fields(doc.lines[size_t(record)]);int schema=schemaFor(f);if(schema<0)return false;corners=nativeCorners(schemas[size_t(schema)].fields,f);
-      if(auto box=creationBox(f))z=(box->bottom+box->top)*.5f;}
+      if(auto box=worldBox(f))z=(box->bottom+box->top)*.5f;}
     float a=dx*dx+dy*dy+dz*dz,best=.024f;int corner=-1;
     for(size_t i=0;i<corners.size();++i){auto p=corners[i];float t=((p.first-ox)*dx+(p.second-oy)*dy+(z-oz)*dz)/a;if(t<=.05f)continue;
       float x=ox+t*dx-p.first,y=oy+t*dy-p.second,h=oz+t*dz-z,angle=std::sqrt(x*x+y*y+h*h)/(t*std::sqrt(a));
@@ -196,7 +196,7 @@
     x=ox+t*dx;y=oy+t*dy;z=oz+t*dz;return std::isfinite(x)&&std::isfinite(y)&&std::isfinite(z);
   }
   bool beginBodyDrag3D(float ox,float oy,float oz,float dx,float dy,float dz) {
-    if(record<0)return false;auto box=creationBox(NativeDocument::fields(doc.lines[size_t(record)]));if(!box)return false;
+    if(record<0)return false;auto box=worldBox(NativeDocument::fields(doc.lines[size_t(record)]));if(!box)return false;
     float t=0;if(!rayNativeBox(ox,oy,oz,dx,dy,dz,box->x,box->y,box->w,box->d,box->bottom,box->top,box->yaw,t))return false;
     float length=std::sqrt(dx*dx+dy*dy+dz*dz);if(length<.0001f)return false;
     bodyNx=dx/length;bodyNy=dy/length;bodyNz=dz/length;bodyAnchorX=ox+t*dx;bodyAnchorY=oy+t*dy;bodyAnchorZ=oz+t*dz;

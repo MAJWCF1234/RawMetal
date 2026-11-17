@@ -69,7 +69,7 @@ std::string_view tagOf(std::string_view line){if(!line.empty()&&line.back()=='\r
 template<class F> void eachLine(const std::string& text,F&& f){size_t at=0;while(at<text.size()){size_t end=text.find('\n',at);if(end==std::string::npos)end=text.size();f(std::string_view(text).substr(at,end-at));at=end+1;}}
 }
 LiveCampaign::Split LiveCampaign::split(const std::string& text){
- Split s;s.global=1469598103934665603ull;
+ Split s;s.global=s.world=1469598103934665603ull;
  auto mix=[](std::uint64_t& h,std::string_view line){for(unsigned char c:line){h^=c;h*=1099511628211ull;}h^=0x0a;h*=1099511628211ull;};
  eachLine(text,[&](std::string_view line){
   int owner=-1;auto tag=tagOf(line);
@@ -82,7 +82,7 @@ LiveCampaign::Split LiveCampaign::split(const std::string& text){
    if(!index.empty()&&index.size()<4&&std::all_of(index.begin(),index.end(),[](char c){return c>='0'&&c<='9';}))owner=std::stoi(std::string(index));
   }
   s.owner.push_back(owner);
-  if(owner<0)mix(s.global,line);
+  if(owner<0){mix(s.global,line);if(tag!="TERRAIN_FLAT"&&tag!="TERRAIN_SCULPT"&&tag!="GROUND")mix(s.world,line);}
   else{if(size_t(owner)>=s.maps.size())s.maps.resize(size_t(owner)+1,1469598103934665603ull);mix(s.maps[size_t(owner)],line);}
  });
  return s;
@@ -115,6 +115,15 @@ std::shared_ptr<const CustomCampaign> LiveCampaign::load(const std::string& text
  std::vector<char> validate(s.maps.size(),0);
  if(comparable&&shown>=0)for(int j:changed)if(j!=shown)validate[size_t(j)]=1;
  auto next=loadCustomCampaignText(text,source,validate);
+ // Only the land changed (a Terrain brush stroke, ground paint, a pad): the maps whose own
+ // lines are the same and whose ground it left alone keep their parsed data, so the scene
+ // rebuilds the map on show and the neighbours the stroke reached, not every map.
+ if(m_good&&s.world==m_split.world&&s.global!=m_split.global&&s.maps.size()==m_split.maps.size()&&next->maps.size()==m_good->maps.size()){
+  auto kept=std::make_shared<CustomCampaign>(*next);int reused=0;
+  for(size_t j=0;j<kept->maps.size();++j)if(int(j)!=shown&&s.maps[j]==m_split.maps[j]&&m_good->maps[j]&&kept->maps[j]&&
+   sameTerrainOver(m_good->maps[j]->terrain.get(),kept->maps[j]->terrain.get(),kept->maps[j]->definition.origin.x,kept->maps[j]->definition.origin.y)){kept->maps[j]=m_good->maps[j];++reused;}
+  if(reused){m_good=kept;m_split=std::move(s);how="whole campaign";return kept;}
+ }
  m_good=next;m_split=std::move(s);how="whole campaign";return next;
 }
 bool LiveCampaign::test(const std::filesystem::path& file,std::string& report){

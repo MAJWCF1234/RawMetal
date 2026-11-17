@@ -166,6 +166,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    TerrainFlat flat{number(f,1,"flat x1"),number(f,2,"flat y1"),number(f,3,"flat x2"),number(f,4,"flat y2"),number(f,5,"flat height"),number(f,6,"flat blend")};
    if(flat.x2<flat.x1||flat.y2<flat.y1||flat.blend<0||flat.blend>60||flat.height<World::TerrainMinZ+2||flat.height>World::TerrainMaxZ-4)throw std::runtime_error("invalid TERRAIN_FLAT");
    if(terrain->flats.size()>=512)throw std::runtime_error("too many TERRAIN_FLAT records");terrain->flats.push_back(flat);
+  }else if(tag=="TERRAIN_SCULPT"){
+   // TERRAIN_SCULPT|x|y|cols|rows|offsets in world metres: raised and lowered ground, one
+   // offset a metre cell in decimetres (N*v repeats), added after the flats (TerrainField.h).
+   if(f.size()!=6)throw std::runtime_error("malformed TERRAIN_SCULPT record");if(!terrain)terrain=std::make_shared<TerrainShape>();
+   TerrainSculpt sculpt{integer(f,1,"sculpt x"),integer(f,2,"sculpt y"),integer(f,3,"sculpt columns"),integer(f,4,"sculpt rows"),{}};
+   if(sculpt.cols<1||sculpt.rows<1||sculpt.cols*sculpt.rows>TerrainSculptMaxCells||std::abs(sculpt.x)>100000||std::abs(sculpt.y)>100000)throw std::runtime_error("invalid TERRAIN_SCULPT grid");
+   std::string why;if(!parseTerrainSculptValues(f[5],size_t(sculpt.cols*sculpt.rows),sculpt.offsets,why))throw std::runtime_error("invalid TERRAIN_SCULPT: "+why);
+   if(terrain->sculpts.size()>=512)throw std::runtime_error("too many TERRAIN_SCULPT records");terrain->sculpts.push_back(std::move(sculpt));
   }else if(tag=="HORIZON"){
    // HORIZON|depth|spacing|rise|model,model,...: wooded land beyond the zone edge.
    if(f.size()!=5)throw std::runtime_error("malformed HORIZON record");if(!terrain)terrain=std::make_shared<TerrainShape>();
@@ -353,7 +361,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>=13)map->fixtures.back().visible=boolean(f,12,"fixture visible");
    // 14th field 1: a chair that stays where it was put (chairs on a floor are otherwise loose).
    if(f.size()>=14)map->fixtures.back().anchored=boolean(f,13,"fixture anchored");
-   if(f.size()>14)throw std::runtime_error("malformed FIXTURE record");
+   // 15th and 16th fields: the slope it lies along (rise per metre east, south).
+   if(f.size()==15||f.size()>16)throw std::runtime_error("malformed FIXTURE record");
+   if(f.size()==16){map->fixtures.back().slopeX=number(f,14,"fixture slope east");map->fixtures.back().slopeY=number(f,15,"fixture slope south");
+    if(std::abs(map->fixtures.back().slopeX)>2||std::abs(map->fixtures.back().slopeY)>2)throw std::runtime_error("fixture slope is -2 to 2 (rise per metre)");}
    const auto& fixture=map->fixtures.back();if(fixture.model<0||fixture.model>=FacilityModelCount||fixture.width<=0||fixture.depth<=0||fixture.height<=0)throw std::runtime_error("invalid fixture model or dimensions");
   }else if(tag=="PROP"){
    if(f.size()<11)throw std::runtime_error("malformed PROP record");auto map=mapAt(maps,f);map->props.push_back({

@@ -52,7 +52,7 @@ inline void runNativeCommands(NativeDocument &doc,
             return false;
           auto &kind = fields[0];
           return kind != "MAP" && kind != "LAYER" && kind != "ROW" &&
-                 kind != "CAMPAIGN" && kind != "TERRAIN" && kind != "GROUND" &&
+                 kind != "CAMPAIGN" && kind != "TERRAIN" && kind != "GROUND" && kind != "TERRAIN_SCULPT" &&
                  kind != "HORIZON" && kind != "TERRAIN_FLAT";
         });
       } else

@@ -1060,7 +1060,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // used part once per draw, preserving the documented fallback bindings.
  struct FacilityMaterials {std::vector<const Texture*> parts;bool ready=false,hasGloss=false;};
  std::array<FacilityMaterials,FacilityModelCount> facilityMaterials;
- auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1){
+ auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1,float slopeX=0.f,float slopeY=0.f){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
   float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
@@ -1088,7 +1088,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tri(face.v[0],face.v[1],face.v[2],*texture,light);
   };
   for(auto face:mesh.triangles){
-   for(auto&v:face.v){auto p=v.p-center;p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};v.p={x+p.x*c+p.z*s,y-p.x*s+p.z*c,base+p.y+height*.5f};}
+   for(auto&v:face.v){auto p=v.p-center;p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};const float ex=p.x*c+p.z*s,ey=-p.x*s+p.z*c;v.p={x+ex,y+ey,base+p.y+height*.5f+ex*slopeX+ey*slopeY};}
    if(partFixture<0||unsigned(face.part)>=32||(parts&(1u<<face.part))!=0){drawFace(face);continue;}
    std::vector<std::array<MeshVertex,3>> pieces{{{face.v[0],face.v[1],face.v[2]}}};
    if(partFixture>=0)for(int j=0;j<int(w.breakables().size());++j){const auto&part=w.breakables()[j];if(part.fixture!=partFixture||w.breakableIntact(j)||(parts&part.part)!=0||unsigned(face.part)>=32||!(part.part&(1u<<face.part)))continue;
@@ -1536,7 +1536,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   GpuRenderer::LodTag tag;
   if(impostor){const auto&mesh=m_facilityMeshes[size_t(fixture.model)];float scale=fixture.height/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
    tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
-  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+  facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);
   if(impostor){
    tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;
    tag.farFade=fixture.height<1.4f?tag.lod*2.6f:0.f;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;
@@ -1864,7 +1864,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
- if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data())))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data())))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);
  // Seeded debris is derived from persistent tombstones, never a second simulated population.
  auto chips=[&](Vec2 center,float z,float width,int count,int seed){for(int i=0;i<count;++i){unsigned h=(unsigned(i+seed)*2654435761u);float a=float(h%6283)*.001f,r=float((h>>12)%1000)*.001f*width;float x=center.x+std::cos(a)*r,y=center.y+std::sin(a)*r,s=.008f+float((h>>22)%20)*.001f;float floor=w.supportBelow(x,y,z+.1f)+.008f;tri({{x-s,y-s,floor},0,0},{{x+s,y-s,floor},1,0},{{x,y+s,floor},.5f,1},m_glassTexture,1.3f);}};
  // Fixture parts have a separate cache; a screen hit never rebuilds the chunk.

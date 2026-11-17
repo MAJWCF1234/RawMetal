@@ -1,0 +1,161 @@
+#pragma once
+// Campaign-authored outdoor terrain (TERRAIN, TERRAIN_FLAT, TERRAIN_SCULPT and
+// GROUND records): the shape and the height and cover it gives every world
+// metre. A seeded fractal heightfield in world space, so every stitched chunk
+// samples one continuous surface. Flats level pads, roads and building sites,
+// blending back into the hills over `blend` metres; sculpt grids then raise or
+// lower single metres. Heights are 1 m voxel tops.
+//
+// Header-only and free of the World so the Campaign Builder samples the very
+// same ground the engine builds (tools/Level Editor/editor).
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace retro {
+struct TerrainFlat {float x1=0,y1=0,x2=0,y2=0,height=2,blend=4;};
+// Ground cover painted over authored terrain: one texture kind per rectangle
+// (world metres), with a noisy border `edge` metres wide.
+enum GroundKind:int {GroundShortGrass,GroundLeafyGrass,GroundClover,GroundWild,GroundDry,GroundLitter,GroundGravel,GroundMud,GroundKinds,GroundMeadow=GroundKinds};
+struct GroundPaint {float x1=0,y1=0,x2=0,y2=0;int kind=GroundMeadow;float edge=1.5f;};
+// TERRAIN_SCULPT|x|y|cols|rows|offsets: a grid of height offsets added to the
+// ground after the flats, one per world metre cell from (x, y), row by row.
+// The offset of cell (i, j) holds at its centre (x+i+.5, y+j+.5) and blends
+// to its neighbours' between centres. Offsets are written in decimetres.
+struct TerrainSculpt {int x=0,y=0,cols=0,rows=0;std::vector<float> offsets;};
+struct TerrainShape {
+    std::uint32_t seed=1;
+    float base=2,amplitude=3,scale=36,roughness=.45f;
+    std::vector<TerrainFlat> flats;
+    std::vector<TerrainSculpt> sculpts;
+    // Any GROUND record turns on painted cover: a noise meadow of grass, clover,
+    // wild and dry ground everywhere, then the rectangles in order.
+    std::vector<GroundPaint> ground;
+    // HORIZON: unreachable land around the playable maps, rising `rise` metres
+    // over `depth` metres and wooded every `spacing` metres with these models
+    // (drawn only as Painterly Horizon LOD impostors).
+    float horizonDepth=0,horizonSpacing=6,horizonRise=0;std::vector<int> horizonModels;
+};
+// The voxel tops terrain may take (World::TerrainMinZ + 1 to TerrainMaxZ - 2).
+inline constexpr int TerrainFieldLowestTop=-11,TerrainFieldHighestTop=18;
+inline constexpr int TerrainSculptMaxCells=4096;
+inline constexpr float TerrainSculptMaxOffset=30.f;
+
+// Smooth value noise: a hashed lattice, quintic-blended, summed over octaves.
+inline float terrainLatticeValue(std::uint32_t seed,int x,int y){
+ std::uint32_t h=seed*0x9E3779B1u^std::uint32_t(x)*0x85EBCA77u^std::uint32_t(y)*0xC2B2AE3Du;
+ h^=h>>15;h*=0x2C1B3C6Du;h^=h>>12;h*=0x297A2D39u;h^=h>>15;return float(h&0xffffff)/float(0xffffff)*2.f-1.f;
+}
+inline float terrainValueNoise(std::uint32_t seed,float x,float y){
+ int ix=int(std::floor(x)),iy=int(std::floor(y));float fx=x-ix,fy=y-iy;
+ auto fade=[](float t){return t*t*t*(t*(t*6-15)+10);};float u=fade(fx),v=fade(fy);
+ float a=terrainLatticeValue(seed,ix,iy),b=terrainLatticeValue(seed,ix+1,iy),c=terrainLatticeValue(seed,ix,iy+1),d=terrainLatticeValue(seed,ix+1,iy+1);
+ return (a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v;
+}
+// The sculpted offset of one world metre cell (0 where no grid covers it).
+inline float terrainSculptCell(const TerrainShape& shape,int cx,int cy){
+ for(auto it=shape.sculpts.rbegin();it!=shape.sculpts.rend();++it){const auto& s=*it;
+  if(cx>=s.x&&cy>=s.y&&cx<s.x+s.cols&&cy<s.y+s.rows)return s.offsets[size_t((cy-s.y)*s.cols+(cx-s.x))];}
+ return 0;
+}
+// Sculpted offset at any world point: the cell centres' offsets, bilinear.
+inline float terrainSculptOffset(const TerrainShape& shape,float wx,float wy){
+ if(shape.sculpts.empty())return 0;
+ float px=wx-.5f,py=wy-.5f;int ix=int(std::floor(px)),iy=int(std::floor(py));float tx=px-ix,ty=py-iy;
+ float a=terrainSculptCell(shape,ix,iy),b=terrainSculptCell(shape,ix+1,iy),c=terrainSculptCell(shape,ix,iy+1),d=terrainSculptCell(shape,ix+1,iy+1);
+ return (a*(1-tx)+b*tx)*(1-ty)+(c*(1-tx)+d*tx)*ty;
+}
+// The noise and the flats, before any sculpting.
+inline float authoredTerrainBaseHeight(const TerrainShape& shape,float wx,float wy){
+ float sum=0,amp=1,freq=1/std::max(4.f,shape.scale),norm=0;
+ for(int octave=0;octave<4;++octave){sum+=terrainValueNoise(shape.seed+std::uint32_t(octave)*101u,wx*freq,wy*freq)*amp;norm+=amp;amp*=shape.roughness;freq*=2.03f;}
+ float h=shape.base+shape.amplitude*sum/norm;
+ for(const auto& flat:shape.flats){
+  float dx=std::max({flat.x1-wx,0.f,wx-flat.x2}),dy=std::max({flat.y1-wy,0.f,wy-flat.y2});
+  float d=std::sqrt(dx*dx+dy*dy),t=flat.blend>0?std::clamp(1-d/flat.blend,0.f,1.f):(d<=0?1.f:0.f);
+  t=t*t*(3-2*t);h=h+(flat.height-h)*t;
+ }
+ return h;
+}
+// The continuous (unquantized) surface height of an authored terrain shape.
+inline float authoredTerrainHeight(const TerrainShape& shape,float wx,float wy){
+ return authoredTerrainBaseHeight(shape,wx,wy)+terrainSculptOffset(shape,wx,wy);
+}
+// The voxel top of world metre cell (wx, wy): solid ground fills up to it.
+inline int authoredTerrainTop(const TerrainShape& shape,int wx,int wy){
+ return std::clamp(int(std::lround(authoredTerrainHeight(shape,wx+.5f,wy+.5f))),TerrainFieldLowestTop,TerrainFieldHighestTop);
+}
+// Where the walked surface lies over a point, as the engine's Surface Nets
+// density gives it: the voxel tops at the four surrounding sample corners,
+// blended bilinearly in x and y and linearly in z (World::terrainSurfaceBelow
+// over the whole column). (lx, ly) are map metres; (ox, oy) the map origin.
+inline float authoredTerrainSurface(const TerrainShape& shape,float ox,float oy,float lx,float ly){
+ int x0=int(std::floor(lx)),y0=int(std::floor(ly));float tx=lx-x0,ty=ly-y0;
+ int corner[4]={authoredTerrainTop(shape,int(ox)+x0,int(oy)+y0),authoredTerrainTop(shape,int(ox)+x0+1,int(oy)+y0),
+                authoredTerrainTop(shape,int(ox)+x0,int(oy)+y0+1),authoredTerrainTop(shape,int(ox)+x0+1,int(oy)+y0+1)};
+ float weight[4]={(1-tx)*(1-ty),tx*(1-ty),(1-tx)*ty,tx*ty};
+ auto density=[&](int z){float d=0;for(int i=0;i<4;++i)d+=weight[i]*(z<=corner[i]?1.f:-1.f);return d;};
+ int high=*std::max_element(corner,corner+4),low=*std::min_element(corner,corner+4);
+ for(int z=high;z>=low;--z){float below=density(z),above=density(z+1);
+  if(below>0&&above<=0)return float(z)+below/(below-above);}
+ return float(low)+.5f;
+}
+inline int authoredGroundKind(const TerrainShape& shape,float wx,float wy){
+ // Meadow: two noise fields pick grass, leafy grass, clover, wild and dry
+ // patches a few metres across, PSX-style hard edges between triangles.
+ float a=terrainValueNoise(shape.seed+7001u,wx*.11f,wy*.11f)+terrainValueNoise(shape.seed+7002u,wx*.31f,wy*.31f)*.35f;
+ float b=terrainValueNoise(shape.seed+7003u,wx*.07f,wy*.07f)+terrainValueNoise(shape.seed+7004u,wx*.23f,wy*.23f)*.4f;
+ // Green dominates; wild and dry ground are occasional clearings.
+ int kind=a>.62f?GroundDry:a>.42f?GroundWild:b>.38f?GroundClover:b<-.2f?GroundLeafyGrass:GroundShortGrass;
+ for(const auto& paint:shape.ground){
+  float jitter=terrainValueNoise(shape.seed+7005u,wx*.6f,wy*.6f)*paint.edge;
+  float dx=std::max(paint.x1-wx,wx-paint.x2),dy=std::max(paint.y1-wy,wy-paint.y2);
+  if(std::max(dx,dy)<jitter)kind=paint.kind==GroundMeadow?kind:paint.kind;
+ }
+ return kind;
+}
+// Whether two shapes give one 24 m map (origin ox, oy) the same ground: its voxel tops and
+// heights a few metres round it, and the cover paint that can reach it, in its order. The
+// Campaign Builder's live picture rebuilds only the maps a terrain edit reached.
+inline bool sameTerrainOver(const TerrainShape* a,const TerrainShape* b,float ox,float oy){
+ if(a==b)return true;if(!a||!b)return false;
+ if(a->seed!=b->seed||a->base!=b->base||a->amplitude!=b->amplitude||a->scale!=b->scale||a->roughness!=b->roughness||a->horizonDepth!=b->horizonDepth||
+    a->horizonSpacing!=b->horizonSpacing||a->horizonRise!=b->horizonRise||a->horizonModels!=b->horizonModels||a->ground.empty()!=b->ground.empty())return false;
+ auto reaching=[&](const TerrainShape& s){std::vector<float> out;for(const auto& g:s.ground)if(g.x2>=ox-10&&g.x1<=ox+34&&g.y2>=oy-10&&g.y1<=oy+34)out.insert(out.end(),{g.x1,g.y1,g.x2,g.y2,float(g.kind),g.edge});return out;};
+ if(reaching(*a)!=reaching(*b))return false;
+ for(int y=int(oy)-3;y<int(oy)+27;++y)for(int x=int(ox)-3;x<int(ox)+27;++x)
+  if(authoredTerrainTop(*a,x,y)!=authoredTerrainTop(*b,x,y)||std::abs(authoredTerrainHeight(*a,x+.5f,y+.5f)-authoredTerrainHeight(*b,x+.5f,y+.5f))>1e-4f)return false;
+ return true;
+}
+// TERRAIN_SCULPT offsets as text: whole decimetres, comma separated, a run of
+// one value written N*v ("24*0,3,5,22*0"). Returns false with why on a fault.
+inline bool parseTerrainSculptValues(const std::string& text,size_t count,std::vector<float>& out,std::string& why){
+ out.clear();out.reserve(count);size_t at=0;
+ while(at<=text.size()){
+  size_t end=text.find(',',at);if(end==std::string::npos)end=text.size();
+  std::string item=text.substr(at,end-at);size_t star=item.find('*');long repeat=1;
+  try{
+   if(star!=std::string::npos){size_t used=0;repeat=std::stol(item.substr(0,star),&used);if(used!=star||repeat<1)throw 0;item=item.substr(star+1);}
+   size_t used=0;long value=std::stol(item,&used);if(used!=item.size())throw 0;
+   if(std::abs(value)>long(TerrainSculptMaxOffset*10)){why="sculpt offset beyond 30 m";return false;}
+   if(out.size()+size_t(repeat)>count){why="more sculpt offsets than cells";return false;}
+   out.insert(out.end(),size_t(repeat),float(value)/10.f);
+  }catch(...){why="sculpt offsets are whole decimetres, N*v repeats";return false;}
+  if(end==text.size())break;at=end+1;
+ }
+ if(out.size()!=count){why="fewer sculpt offsets than cells";return false;}
+ return true;
+}
+inline std::string formatTerrainSculptValues(const std::vector<float>& offsets){
+ std::string text;
+ for(size_t i=0;i<offsets.size();){
+  long v=std::lround(offsets[i]*10.f);size_t run=1;while(i+run<offsets.size()&&std::lround(offsets[i+run]*10.f)==v)++run;
+  if(!text.empty())text+=',';
+  if(run>2)text+=std::to_string(run)+'*';else run=1;
+  text+=std::to_string(v);i+=run;
+ }
+ return text;
+}
+}

@@ -18,6 +18,64 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Outdoors: the land, its plants and water
+
+The builder samples the campaign's ground exactly as the engine builds it
+(`src/world/TerrainField.h`, shared by both: the `TERRAIN` noise, the
+`TERRAIN_FLAT` pads, `TERRAIN_SCULPT` grids and the `GROUND` cover). On a map
+that is outdoors under a terrain sky (`zone_overcast`, `brutal_wasteland`):
+
+- **The plan draws the land**: hill shade, the ground cover's colours and a
+  contour every metre, with water filled in blue (dark when murky).
+- **3D picks stand on the ground.** A click, a drag, a brush or an object drag
+  in the 3D view meets the hill where the pointer is, not the map's zero plane
+  under it. Picking and hover outlines, handles and drags use where things
+  stand on the ground; a hill hides what is behind it.
+- **Absolute heights start on the ground.** Triggers, pipes, crushers and sounds
+  keep absolute heights outdoors, so new ones are made at the ground under the
+  click; a dragged pool's surface sits just under its lowest bank.
+- **Floors over land.** The 3D view's floor bands stand on the ground under the
+  upper storeys, and the top band reaches the sky: land and trees above the
+  ceiling are never ghosted or hidden as another storey.
+- **Seams.** When a map becomes outdoors next to an indoor map it opens onto
+  (Make outdoors, a ground paint, or + Map), the land is levelled at -1 along
+  the seam (`TERRAIN_FLAT`, walked at -0.5) and three concrete steps climb to
+  the indoor floor across every open metre: the guide's doorway recipe.
+
+**Terrain** (World page) paints the land. **Brush**: Raise, Lower, Smooth,
+Flatten to a level (where you press, or a level typed in **Level**), Ramp
+(press at one level, drag to another: a slope between them), Paint the ground
+(the cover picked under it). **Size** 1 to 12 m across, **Strength** 0.1 to 1 m a
+dab. Each stroke is one Ctrl+Z; the 3D view follows the stroke. Heights are
+written as `TERRAIN_SCULPT|x|y|24|24|offsets` (one 24 x 24 grid a map, at its
+origin, in decimetres, `N*v` repeats); a brush over a seam writes the
+neighbour's grid too, so the land stays one surface. Ground paint is written
+as the fewest `GROUND` boxes covering the stroke.
+
+**Nature** paints plants from the purchased nature pack as `FIXTURE` records:
+**Plant** Trees, Bushes, Grass, Rocks, Plants & ferns or a Woodland mix, at a
+**Density**, with **Sizes** from one size to wide variety and a random turn.
+Trees are spaced apart, solid at the trunk only (core 0.1), upright, and never
+on a cliff; **Align to slope** lays the rest along the hill (FIXTURE fields 15
+and 16, the slope; the engine shears the model so it hugs the ground) and sinks
+tree roots into it. Nothing grows in walls, blocks, shapes, stairs, doors,
+furniture or water. **Erase** (or Alt) clears plants under the brush, with their
+collision copies in neighbouring maps.
+
+**Water** has three ways: **Draw a pool** (drag; outdoors it finds its bank),
+**Fill a hollow** (click: the water rises until it would spill out of the map
+and floods every metre below that level as `WATER` boxes at one surface) and
+**Surface from the bank** (pick a pool, click its bank: the surface goes to the
+ground there). A picked pool has corner handles and **Murk** (WATER murk) and
+**Wet banks** (a `WET` box 1.5 m round it) sliders, one Ctrl+Z each.
+
+`RawMetalEditor.exe --outdoor-test` drives all of it through the plan's mouse,
+3D pick rays, the tool boxes and sliders on the Ashfall Exclusion Zone and a
+new indoor/outdoor campaign, saves and reopens byte for byte, has the engine
+validate it, and renders the builder's 3D picture before and after
+(`native-editor-outdoor-test.txt`; pictures `.build/interaction/outdoor-*.bmp`
+and `outdoor-*.ppm`). `--editing-test` runs the same checks without pictures.
+
 ### Emitter tool: the air's own stuff
 
 **Emitter** (Decor page, where Smoke was) places `EMITTER` records, the steam,
