@@ -741,7 +741,9 @@ enum {
   MapSkyList=705,LightMenuBase=710,
   // The Terrain and Nature tools and water outdoors (NativeOutdoorMethods.inc).
   TerrainModeList=740,TerrainSizeList,TerrainStrengthList,TerrainHeightBox,NatureSetList,NatureDensityList,NatureScaleList,NatureModeList,
-  NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider
+  NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider,
+  // Prefabs (NativePrefabMethods.inc).
+  MakePrefab=780,PlacePrefab
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -968,6 +970,19 @@ struct Editor {
   std::vector<std::string> musicNames;
   bool auditionMusic = false;
   std::vector<HWND> fieldInputs, fieldLabels, buttons, tools;
+  // Map format 2: the inspector's rows past the positional fields are the record's named
+  // fields (namedKeys[i], "+" for the add row); labels come from the guide's named-field table.
+  size_t positionalInputs = 0;
+  std::vector<std::string> namedKeys;
+  std::map<std::string, std::string> namedLabels;
+  std::wstring namedLabel(const std::string &key) const {
+    auto it = namedLabels.find(key);
+    if (it != namedLabels.end())
+      return wide(it->second + "  (" + key + ")");
+    if (key.rfind("p.", 0) == 0)
+      return wide("Custom property " + key.substr(2) + "  (" + key + ")");
+    return wide(key + "  (kept for a newer build)");
+  }
   std::vector<bool> fieldShown;
   std::vector<Schema> schemas;
   std::vector<std::pair<int, std::string>> models;
@@ -1062,6 +1077,8 @@ struct Editor {
 #include "NativeFilmmaker.inc"
 #include "NativeOutdoorMethods.inc"
 #include "NativeOutdoorRegression.inc"
+#include "NativePrefabMethods.inc"
+#include "NativeFormatRegression.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -2367,6 +2384,12 @@ struct Editor {
         from = next + 5;
       }
     }
+    // Map format 2 named fields: <tr data-named="key" data-label="Label"> rows in the guide.
+    {
+      std::regex named("<tr data-named=\"([^\"]+)\" data-label=\"([^\"]+)\">");
+      for (std::sregex_iterator it(text.begin(), text.end(), named), end; it != end; ++it)
+        namedLabels[(*it)[1]] = html((*it)[2]);
+    }
     schemas.erase(std::remove_if(schemas.begin(), schemas.end(),
                                  [](auto &s) { return s.kind == "LEAD"; }),
                   schemas.end());
@@ -2601,6 +2624,26 @@ struct Editor {
       setControlText(poolInputs[slot], wide(value).c_str());
       fieldLabels.push_back(poolLabels[slot]);
       fieldInputs.push_back(poolInputs[slot]);
+    }
+    positionalInputs = fieldInputs.size();
+    namedKeys.clear();
+    if (!fresh && record >= 0) {
+      // The record's named fields, then a row to add one (key=value). An emptied row is removed.
+      auto named = NativeDocument::named(doc.lines[size_t(record)]);
+      named.emplace_back("+", "");
+      for (auto &[key, value] : named) {
+        size_t slot = fieldInputs.size();
+        if (slot >= poolInputs.size()) {
+          poolLabels.push_back(controlWindow(L"STATIC", L"", 0, 0, form));
+          poolInputs.push_back(controlWindow(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 1000 + int(slot), form));
+        }
+        setControlText(poolLabels[slot], key == "+" ? L"Add a field: key=value (tint, scale, mass, frozen, faction, p.name...)" : namedLabel(key).c_str());
+        setControlText(poolInputs[slot], wide(key == "+" ? std::string() : decoded(value)).c_str());
+        fieldLabels.push_back(poolLabels[slot]);
+        fieldInputs.push_back(poolInputs[slot]);
+        fieldShown.push_back(true);
+        namedKeys.push_back(key);
+      }
     }
     laps.lap("fields_texts");
     for (size_t i = fieldInputs.size(); i < poolInputs.size(); ++i)
@@ -3037,10 +3080,17 @@ struct Editor {
       return;
     auto f = NativeDocument::fields(doc.lines[size_t(record)]);
     size_t first = schemas[size_t(kind)].scoped ? 2 : 1;
+    auto named = NativeDocument::named(doc.lines[size_t(record)]);
+    // A named field added or removed changes the rows: build them again.
+    if (named.size() + 1 != namedKeys.size()) {
+      fillFields(false);
+      return;
+    }
     for (size_t i = 0; i < fieldInputs.size(); ++i)
-      SetWindowTextW(
-          fieldInputs[i],
-          wide(i + first < f.size() ? decoded(f[i + first]) : "").c_str());
+      if (i < positionalInputs)
+        SetWindowTextW(fieldInputs[i], wide(i + first < f.size() ? decoded(f[i + first]) : "").c_str());
+      else
+        SetWindowTextW(fieldInputs[i], wide(i - positionalInputs < named.size() ? decoded(named[i - positionalInputs].second) : "").c_str());
   }
   void moveSelected(float dx, float dy) {
     if(record>=0&&!editableRecord(size_t(record))){message(L"Unlock and show this floor before editing its content.");return;}
@@ -3129,7 +3179,7 @@ struct Editor {
       return;
     }
     remember();
-    addAuthored(f);
+    addAuthored(NativeDocument::withNamed(f, doc.lines[size_t(record)])); // overrides go with the copy; its name does not
     int created = -1;
     for (size_t i = 0; i < doc.lines.size(); ++i)
       if (doc.lines[i].starts_with("--- CUSTOM_CAMPAIGN_DATA_END ---")) {
@@ -4534,22 +4584,49 @@ struct Editor {
     std::vector<std::string> f{s.kind};
     if (s.scoped)
       f.push_back(std::to_string(map));
-    for (auto h : fieldInputs)
-      f.push_back(encoded(utf8(label(h))));
+    NativeDocument::Named named;
+    for (size_t i = 0; i < fieldInputs.size(); ++i) {
+      auto text = utf8(label(fieldInputs[i]));
+      if (i < positionalInputs || i - positionalInputs >= namedKeys.size()) {
+        f.push_back(encoded(text));
+        continue;
+      }
+      const auto &key = namedKeys[i - positionalInputs];
+      if (key == "+") {
+        // The add row: key=value with a valid key (anything else is said, not written).
+        auto eq = text.find('=');
+        if (text.empty())
+          continue;
+        if (eq == std::string::npos || !NativeDocument::namedKey(text.substr(0, eq))) {
+          message(L"A field is key=value: tint=1,0.4,0.4, mass=3, frozen=1, faction=enemy, p.code=1234.");
+          continue;
+        }
+        auto k = text.substr(0, eq);
+        if (std::any_of(named.begin(), named.end(), [&](auto &n) { return n.first == k; })) {
+          message(wide("The record already has " + k + "; edit its own row."));
+          continue;
+        }
+        named.emplace_back(k, encoded(text.substr(eq + 1)));
+      } else if (!text.empty())
+        named.emplace_back(key, encoded(text));
+    }
     while (f.size() > size_t(s.required) && f.back().empty())
       f.pop_back();
     normalize(f);
     std::vector<std::string> before;
     if (record >= 0) {
       before = NativeDocument::fields(doc.lines[size_t(record)]);
-      if (before == f)
+      if (before == f && NativeDocument::named(doc.lines[size_t(record)]) == named)
         return; // leaving a field unchanged is not an edit
     }
     remember();
     int selected = record;
     if (record >= 0) {
-      doc.replace(size_t(record), f);
+      const bool rows = NativeDocument::named(doc.lines[size_t(record)]).size() != named.size();
+      selected = record = int(doc.replaceNamed(size_t(record), f, named));
       relink(before, f);
+      if (rows)
+        quiet = false; // the named rows changed: rebuild the inspector
     } else {
       addAuthored(f);
       for (size_t i = 0; i < doc.lines.size(); ++i)
@@ -4854,7 +4931,7 @@ struct Editor {
     for (int id : {AutoDetail, NewObject, Apply})
       ShowWindow(GetDlgItem(window, id), SW_HIDE);
     if(!layersDock){
-    ShowWindow(form,SW_SHOW);for(int id:{TurnSelected,Duplicate,Remove,Advanced})ShowWindow(GetDlgItem(window,id),SW_SHOW);
+    ShowWindow(form,SW_SHOW);for(int id:{TurnSelected,Duplicate,Remove,Advanced,MakePrefab,PlacePrefab})ShowWindow(GetDlgItem(window,id),SW_SHOW);
     const auto &info = toolInfo[std::clamp(tool, 0, ToolCount - 1)];
     headingCaption = captions.size();
     caption(rx, y, 312, std::wstring(info.glyph) + L"  " + info.name);
@@ -5024,6 +5101,9 @@ struct Editor {
     placeControl(GetDlgItem(window, Duplicate), rx + 106, y, 100, 34, TRUE);
     placeControl(GetDlgItem(window, Remove), rx + 212, y, 100, 34, TRUE);
     y += 42;
+    placeControl(GetDlgItem(window, MakePrefab), rx, y, 153, 30, TRUE);
+    placeControl(GetDlgItem(window, PlacePrefab), rx + 159, y, 153, 30, TRUE);
+    y += 38;
     bool lamp = lightPicked();
     for (HWND c : {brightSlider, reachSlider, warmSlider, GetDlgItem(window, FlickerToggle)})
       if (c)
@@ -5118,7 +5198,7 @@ struct Editor {
     }else{
       for(HWND c:{form,partsGrid.hwnd,paintGrid.hwnd,brightSlider,reachSlider,warmSlider,timeSlider})if(c)ShowWindow(c,SW_HIDE);
       for(HWND c:partTabButtons)ShowWindow(c,SW_HIDE);for(HWND c:swatches)ShowWindow(c,SW_HIDE);
-      for(int id:{TurnSelected,Duplicate,Remove,Advanced,NewObject,Apply,FlickerToggle,OutlineWalls,OutlineBlock,OutlineTerraces})ShowWindow(GetDlgItem(window,id),SW_HIDE);
+      for(int id:{TurnSelected,Duplicate,Remove,Advanced,NewObject,Apply,FlickerToggle,OutlineWalls,OutlineBlock,OutlineTerraces,MakePrefab,PlacePrefab})ShowWindow(GetDlgItem(window,id),SW_HIDE);
       layoutLayerDock(rx,y,312,h-100);
     }
     bool fresh = !restoredFrom.empty();
@@ -5968,6 +6048,7 @@ struct Editor {
     verifyLayerRegressions();
     verifyDressingRegressions();
     verifyOutdoorRegressions(false); // NativeOutdoorRegression.inc, without the engine pictures
+    verifyFormatTwo(); // NativeFormatRegression.inc: named fields, the inspector, prefabs
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -9747,6 +9828,12 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->fillFields(true);
         InvalidateRect(e->plan, nullptr, FALSE);
         break;
+      case MakePrefab:
+        e->makePrefab();
+        break;
+      case PlacePrefab:
+        e->placePrefab();
+        break;
       case Duplicate:
         e->copySelected();
         break;
@@ -10175,6 +10262,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
              {Apply, L"Apply"},
              {Remove, L"Delete"},
              {Duplicate, L"Copy"},
+             {MakePrefab, L"\u2756 Make prefab"},
+             {PlacePrefab, L"Place prefab"},
              {TurnSelected, L"⟳ Turn"},
              {Advanced, L"Advanced"},
              {AutoDetail, L"Auto lamps and door: on"},

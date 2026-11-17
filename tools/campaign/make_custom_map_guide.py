@@ -381,6 +381,8 @@ def terrain_diagram():
 # ---- record reference ---------------------------------------------------------------------------
 RECORDS = [
     ('Campaign and maps', [
+        ('FORMAT|version', 'The map format, as the first record of the file: <code>FORMAT|2</code> turns on named fields, names, custom properties and prefabs (section 9). '
+         'A file without it is version 1 and loads exactly as it always did. A build refuses a file whose version is newer than it reads.'),
         ('CAMPAIGN|name|startMap', 'Once per file. The name appears in the CUSTOM MAPS menu; startMap is the map you spawn in.'),
         ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed|hazeR|hazeG|hazeB|hazeDensity|wetness]',
          'One per map, numbered 0, 1, 2... with no gaps. origin places the 24 x 24 m map in the world: maps touch at multiples of 24. '
@@ -463,7 +465,52 @@ RECORDS = [
         ('SCRIPT_ACTION|map|event|MESSAGE|text|seconds', 'A caption for 0.5 to 15 seconds, up to 96 characters. {name} in the text shows that state\'s value: RELAYS {relays} / 2.'),
         ('TIMED_SEQUENCE|map|startState|doneState|x1|y1|x2|y2|bottom|top|duration|finish|soundInterval|soundCutoff|sound|gain|pitch[|loop]', 'A clock that runs once startState is set: it drives SEQUENCE_CUE lines and ACTOR movement.'),
         ('ACTOR|map|clockState|visual|height|loop|tool|index  +  ACTOR_KEY|map|index|timeMs|x|y|z|yaw|clip|phase', 'A person following keyframes on a clock. Two keys at the same spot (clip 0) make them stand idle, as in the Life room.')]),
+    ('Prefabs (FORMAT|2)', [
+        ('PREFAB|name', 'Starts a prefab: the records up to PREFAB_END are a group, placed as often as you like by PREFAB_PLACE. Write their positions in metres from the group\'s own origin, '
+         'and put <code>@</code> in their map field (it is replaced by the placement\'s map). A prefab may hold FIXTURE, CLUTTER, PROP, LIGHT, CREATURE, PICKUP, CRATE, CRATE_PLATE, NAV_HINT, '
+         'TERMINAL, SIGN, AMBIENT, EMITTER, PIPE, PRIM, STRUCT, HAZARD, WATER, DARK, ZONE, SHELTER, COMPACTOR and WET; not the records that name others by number (ACTOR, LEAD, SCRIPT_...). '
+         'Define it above its first PREFAB_PLACE. The Campaign Builder\'s <b>Make prefab</b> writes one from what you picked.'),
+        ('PREFAB_END', 'Ends the PREFAB block.'),
+        ('PREFAB_PLACE|map|prefab|x|y|z|yaw[|prefix]', 'Sets the prefab down: its origin at x, y (map metres), raised by z, turned by yaw (radians, 1.5708 a quarter turn). '
+         'Points and yaws turn with it; boxes (STRUCT, HAZARD, WATER...) and quarter facings (PRIM, STRUCT) only by quarter turns. prefix goes before every name= in it, '
+         'so the same prefab placed twice gives a_desk and b_desk: names are unique per map. The Builder\'s <b>Place prefab</b> adds one.')]),
 ]
+
+# Named fields (FORMAT|2), section 9 of the guide. The Campaign Builder reads the
+# data-named / data-label rows for its inspector; the engine's own list is
+# src/world/EntityTraits.cpp knownNamedKeys (keep the two the same).
+# key, label, value, applies to, what it does
+NAMED_FIELDS = [
+    ('name', 'Name', 'letters, digits, _ or -', 'any record', 'Names the record so scripts (and later physics joints) can point at it. Unique on its map: a second record with the same name is refused.'),
+    ('p.KEY', 'Custom property', 'a number or text', 'any named record', 'Your own value on the thing, read and written by scripts as <code>@name.KEY</code>. Scripts see a whole number (text reads 0; true reads 1). '
+     'It starts at the value written here once a game; after that it is whatever scripts made it, and saves keep it.'),
+    ('mass', 'Mass (kg)', '0.01 to 1000', 'CLUTTER, loose chairs', 'How heavy the prop is: how far a blow throws it, how hard it hits, whether you can lift it (25 kg and over you cannot).'),
+    ('health', 'Health', '0 to 100000', 'CLUTTER', 'The damage it takes before it breaks, instead of its model\'s own.'),
+    ('breakable', 'Breakable', '1 or 0', 'CLUTTER', '0: it never breaks, however hard it is hit or shot. 1 on a model that does not break gives it 20 health.'),
+    ('density', 'Density (kg/m3)', '10 to 20000', 'CLUTTER', 'How it sits in WATER: under 1000 it floats, riding at that share of its height; over, it sinks.'),
+    ('floats', 'Floats', '1 or 0', 'CLUTTER', 'Floats or sinks whatever its material says.'),
+    ('friction', 'Friction', '0 to 4', 'CLUTTER', 'How fast it slides to a stop: about 1 is ordinary, 0 is ice, 4 stops at once.'),
+    ('restitution', 'Bounce', '0 to 1', 'CLUTTER', 'How much of its speed it keeps off a floor or another prop: 0 dead, 1 a rubber ball.'),
+    ('frozen', 'Frozen', '1 or 0', 'CLUTTER', 'Held exactly where it was put, even in the air: nothing moves it and it cannot be picked up. On a named prop it is a property: '
+     '<code>SCRIPT_ACTION|map|event|STATE|@name.frozen|0</code> lets it go.'),
+    ('anchored', 'Anchored', '1 or 0', 'CLUTTER, FIXTURE', 'Fixed in place for good. On a chair FIXTURE it is the same as the anchored field: the chair is not turned loose.'),
+    ('volume', 'Container volume (litres)', '0 to 5000', 'CLUTTER', 'An open-top container holding this much: the rim stands where the opening holds it. 0: not a container. Any model can be made one.'),
+    ('soft', 'Soft', '1 or 0', 'CLUTTER', '0 makes a padded model (a mattress, a cushion) rigid.'),
+    ('solid', 'Solid', '1 or 0', 'FIXTURE', 'Whether you collide with it, as the solid field.'),
+    ('material', 'Material', 'paper cardboard plastic wood metal glass ceramic electronic cloth organic', 'CLUTTER', 'What it is made of: how it sounds, bounces, floats and breaks.'),
+    ('tint', 'Tint', 'r,g,b (each 0 to 4) or #rrggbb', 'CLUTTER, FIXTURE', 'Multiplies its texture: <code>1,0.25,0.25</code> paints a crate red, <code>0.5,0.5,1</code> cools a desk blue.'),
+    ('scale', 'Size', '0.05 to 20', 'CLUTTER 7, FIXTURE, CREATURE, ACTOR', 'Multiplies its size (and a body\'s reach), on top of its width, depth and height.'),
+    ('texture', 'Texture of model', 'a model ID', 'CLUTTER, FIXTURE', 'Draws it with another model\'s sheet.'),
+    ('emissive', 'Glow', '0 to 8', 'CLUTTER, FIXTURE', 'It gives off light in its own (tinted) colour: 0.5 a faint glow, 2 a lit sign. It lights nothing else; add a LIGHT for that.'),
+    ('impact', 'Impact sound', 'a sound bank name', 'CLUTTER', 'What it sounds like when it strikes something: metal_bang, glass_bang, debris... (the AMBIENT names).'),
+    ('faction', 'Side', 'ally enemy neutral player creature raider wary', 'CREATURE, ACTOR', 'Whose side it is on, as the console summon\'s: an ally fights creatures and raiders, an enemy fights you, a neutral runs.'),
+    ('ai', 'AI', 'creature: idle patrol wander guard hunt follow; actor: scripted civilian escort guard', 'CREATURE, ACTOR', 'Its standing order (a creature) or its mind (a man). A man made guard holds the spot he stands on.'),
+    ('hp', 'Health (body)', '1 to 100000', 'CREATURE, ACTOR', 'How much it takes to kill. A man given hp can die (his damage and dead states are made for him).'),
+    ('weapon', 'Weapon', 'rifle handgun none', 'ACTOR', 'What a man carries; none disarms him.'),
+    ('role', 'Squad role', 'assault engineer sharpshooter heavy medic rusher', 'ACTOR', 'A guard\'s role in his squad.'),
+    ('display', 'Display name', '1 to 40 characters', 'CREATURE, ACTOR', 'The name the game shows for it (the console, what you aim at).'),
+]
+
 
 def table(header, rows):
     out = '<table><tr>%s</tr>' % ''.join('<th>%s</th>' % esc(h) for h in header)
@@ -504,7 +551,7 @@ def main():
     o.append('<h1>Making custom maps</h1><p class="lede">A custom map is one <b>.rmc</b> file: a RawMetal Campaign. Put it in <code>custom maps</code> beside the game, '
              'start the game, and pick it under <b>CUSTOM MAPS</b> on the title screen. Inside, an .rmc is readable text you write by hand. This guide shows how it works, with '
              '<b>Starter Map.rmc</b> as the worked example: a walkable debug world with every part of a map lined up and labelled.</p>')
-    o.append('<nav><a href="#start">Quick start</a><a href="#editor">Editor workflow</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#scripting">Scripting</a><a href="#records">Records</a>'
+    o.append('<nav><a href="#start">Quick start</a><a href="#editor">Editor workflow</a><a href="#file">The file</a><a href="#space">Space and height</a><a href="#levels">Levels</a><a href="#stitch">Stitching maps</a><a href="#outdoors">Outdoors and terrain</a><a href="#scripting">Scripting</a><a href="#records">Records</a><a href="#format2">Format 2</a>'
              '<a href="#starter">Starter Map tour</a><a href="#values">Value tables</a><a href="#models">All models</a><a href="#errors">When it fails</a></nav>')
 
     o.append('<h2 id="start">1. Quick start</h2>')
@@ -632,7 +679,28 @@ def main():
     o.append('<p>The format also covers armed guards, dialogue and cargo lifts (the Ashfall Exclusion Zone and the shipped chapters '
              'are built from them). This guide covers the parts every map needs.</p>')
 
-    o.append('<h2 id="starter">9. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
+    o.append('<h2 id="format2">9. Format 2: names, overrides, properties, prefabs</h2>'
+             '<p>Start the file with <code>FORMAT|2</code> and any record can carry <b>named fields</b> after its own: <code>key=value</code>, as many as you like, in any order. '
+             'They change that one thing without a new record kind:</p><pre>%s</pre>' % esc(
+                 'FORMAT|2\nCAMPAIGN|My map|0\n...\n'
+                 'CLUTTER|0|7|8|8|0|0|17|0.6|0.6|0.6|0|0|#0|name=red_crate|tint=1,0.25,0.25|mass=3\n'
+                 'CLUTTER|0|7|10|8|1.2|0|17|0.5|0.5|0.5|0|0|#0|name=held_box|frozen=1\n'
+                 'FIXTURE|0|27|6|16|0|0.42|0.4|0.38|0|1|name=vault|p.code=1234\n'
+                 'ACTOR|0|clock|4|1.6|0|0|0|name=turncoat|faction=enemy\n'
+                 'CREATURE|0|0|4|20|0|1|0||||faction=ally|ai=guard|display=Rex|hp=500\n'
+                 'SCRIPT_REQUIRE|0|open|@vault.code|=|1234\n'
+                 'SCRIPT_ACTION|0|open|STATE|@held_box.frozen|0'))
+    o.append('<ul><li>A key the game does not know is kept as it is, so a map made for a newer build keeps its fields through an older game\'s export and the Builder\'s save.</li>'
+             '<li>Values with a <code>|</code> in them are written <code>%7C</code>, as everywhere else.</li>'
+             '<li><b>Scripts</b> name a record\'s property as <code>@name.key</code> (<code>@2:name.key</code> for a record on map 2) wherever they take a state: '
+             'SCRIPT_REQUIRE, and SCRIPT_ACTION STATE and ADD.</li>'
+             '<li>In the Campaign Builder the inspector lists every named field under the record\'s own, with these labels; empty a row to remove it and use the last row to add one.</li></ul>')
+    o.append('<table><tr><th>Field</th><th>Name</th><th>Value</th><th>On</th><th>What it does</th></tr>' + ''.join(
+        '<tr data-named="%s" data-label="%s"><td><code>%s=</code></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>' % (esc(k), esc(label), esc(k), esc(label), esc(v), esc(on), d)
+        for k, label, v, on, d in NAMED_FIELDS) + '</table>')
+    o.append('<p><b>Prefabs</b> are the PREFAB, PREFAB_END and PREFAB_PLACE records in section 8: a group written once and set down anywhere, turned and raised, its names prefixed.</p>')
+
+    o.append('<h2 id="starter">10. The Starter Map tour</h2><p>Pick <b>STARTER MAP</b> under CUSTOM MAPS. Everything stands on a plinth with a sign: '
              'the big text is its ID (the number you type in the record), the small text its name. Stand next to anything and the HUD, top left, '
              'names it in full. Nothing in it can hurt you unless you climb into a hazard pen, walk the gas strip in Scripts, wake a creature (by hitting it, or with a switch that wakes one) '
              "or step onto the Machine room's electrodes.</p><div class=\"shots\">")
@@ -675,7 +743,7 @@ def main():
         ('girder', '0.5 x 4 x 0.6', 'a steel I-beam'), ('quadpier', '1 x 1 x 3', 'four slender piers you can walk between'),
         ('band', '3 x 0.08 x 0.25', 'a string course on a facade'), ('spout', '0.25 x 0.8 x 0.2', 'a rain scupper'),
         ('chase', '0.8 x 0.2 x 3', 'a recessed service channel'), ('lattice', '2 x 0.2 x 2.4', 'a cobogo screen with 0.24 m holes')]
-    o.append('<h2 id="values">10. Value tables</h2>')
+    o.append('<h2 id="values">11. Value tables</h2>')
     o.append('<h3>STRUCT materials</h3>' + table(['material', 'look'], sorted(starter.MATERIALS.items())))
     o.append('<h3>The player\'s scale</h3><p>Build to these and everything works: the PRIM defaults already do.</p>' + table(['measure', 'metres', 'what it means'], [
         ('standing height / eyes', '1.6 / 1.42', 'openings to walk through need 1.75 m clear; put windows and slots around 1.42'),
@@ -693,7 +761,7 @@ def main():
                      (starter.CLUTTER_KINDS + ['a model: see CLUTTER 7'])[k] if k < 8 else '') for k in range(max(8, len(starter.CREATURES)))]))
     o.append('<h3>ACTOR visuals</h3>' + table(['visual', 'body'], list(enumerate(starter.ACTORS))))
 
-    o.append('<h2 id="models">11. All %d models</h2><p>Use the ID as the FIXTURE model. Width x depth x height is the model\'s own size in metres: '
+    o.append('<h2 id="models">12. All %d models</h2><p>Use the ID as the FIXTURE model. Width x depth x height is the model\'s own size in metres: '
              'stretch all three by the same factor to keep it in proportion. "Where" is its plinth in the Starter Map (map name, x, y).</p>' % len(models))
     o.append('<div class="warn">Models 13 (electrical cabinet) and 47 (open container) still draw almost black in custom maps. For a container use 48 (closed).</div>')
     rows = []
@@ -744,7 +812,7 @@ def main():
              'It repairs conflicting generated placements while keeping valid ones stable. Unmarked older maps are user-authored. '
              'Manually editing a generated item makes it yours. New walls take priority and remove the furniture or items they physically intersect; Undo restores both.</p>')
 
-    o.append('<h2 id="errors">12. When it fails</h2>')
+    o.append('<h2 id="errors">13. When it fails</h2>')
     o.append(table(['You see', 'Why, and the fix'], [
         ('The map is not in CUSTOM MAPS', 'Open RawMetal-custom-maps.txt beside the game. Each file is OK or ERROR with the line number and record. The file must end in .rmc and sit directly in custom maps (not a subfolder). A name like My Map.rmc.txt means Notepad added .txt: rename it to end in .rmc only.'),
         ('ERROR custom map rows must be exactly 24 characters', 'Count the tiles: every ROW has 24 characters, no spaces.'),

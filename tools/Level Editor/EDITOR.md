@@ -548,6 +548,27 @@ campaign is saved to `.build/remake/`, with per-map timing in
 `.build/remake-progress.txt`. `--demo 1`..`8` opens real UI states for
 screenshots (6-8 are the People, Logic and World pages).
 
+## Named fields and prefabs (map format 2)
+
+The inspector shows a picked record's own fields, then its **named fields**
+(`key=value` after the positional ones; docs/Systems/map-format.md), each
+labelled from the guide's named-field table: Tint, Mass, Frozen, Side, Custom
+property code... The last row adds one: type `tint=1,0.4,0.4`, `frozen=1`,
+`faction=enemy` or `p.code=1234` and leave the box. Empty a row to remove that
+field. The first named field puts `FORMAT|2` at the top of the file. A key the
+Builder does not know is listed as it is and kept. Moving, turning, copying and
+every other tool keep a record's named fields; a copy leaves its `name=`
+behind, since names are unique per map. Everything is one Ctrl+Z.
+
+**Make prefab** (under Copy) turns the picked things into a `PREFAB` block,
+written above the first map in metres from their middle, and puts one
+`PREFAB_PLACE` where they stood. **Place prefab** adds another: a metre along
+from the picked placement, or of the newest prefab at the cursor. A prefab
+that names things gets a fresh name prefix per placement. R turns a placement
+a quarter. The engine places the records when it reads the file; the Builder
+keeps the block as written. `--editing-test` covers all of it
+(`native-editor-format-test.txt`).
+
 ## Native details
 
 - Save writes RMC directly; unchanged records stay byte-identical. Save as...

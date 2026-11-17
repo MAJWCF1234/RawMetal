@@ -51,7 +51,7 @@ inline void runNativeCommands(NativeDocument &doc,
           if (fields.size() < 2 || fields[1] != map)
             return false;
           auto &kind = fields[0];
-          return kind != "MAP" && kind != "LAYER" && kind != "ROW" &&
+          return kind != "MAP" && kind != "LAYER" && kind != "ROW" && kind != "FORMAT" &&
                  kind != "CAMPAIGN" && kind != "TERRAIN" && kind != "GROUND" && kind != "TERRAIN_SCULPT" &&
                  kind != "HORIZON" && kind != "TERRAIN_FLAT";
         });
