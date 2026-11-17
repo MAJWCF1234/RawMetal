@@ -761,12 +761,29 @@ __declspec(noinline) bool Game::testVrMelee(){
  support.setVrHand(0,{5.1f,4.5f,.7f},{1,0,0},true,{3,0,0});support.updateVrMelee(input,.05f);if(support.m_enemies[0].hp!=28)return false;
  std::ofstream("vr-melee-test.txt")<<"PASS: gripped swept fist contact, open-hand rejection, cooldown, stationary rejection, lethal hit and wall occlusion\n";return true;
 }
-void Game::receiveDamage(float amount,Vec2 source,bool blockable){
+bool Game::shieldBlow(float amount,Vec2 source){
+ if(!holdingClutter()||amount<=0)return false;auto&c=m_clutter[size_t(m_heldClutter)];if(c.model<0||c.broken)return false;
+ // A mug is not a shield: the prop must cover a body's width and be worth swinging at.
+ const auto size=c.size();if(std::max(size[0],size[1])<.3f||size[2]<.25f||c.mass()<1.5f)return false;
+ Vec2 toSource=source-m_player.pos,toProp=c.pos-m_player.pos;if(lengthSq(toSource)<1e-6f||lengthSq(toProp)<1e-6f)return false;
+ toSource=normalized(toSource);toProp=normalized(toProp);if(dot(toSource,toProp)<.5f)return false;   // held within 60 degrees of the blow
+ const Point3 away{-toSource.x,-toSource.y,0},at{c.pos.x,c.pos.y,c.z+c.height()*.5f};
+ sound(c.impactSound(),.9f,.85f);m_verticalSpringVelocity-=.35f;m_damageFlash=std::max(m_damageFlash,.15f);
+ const size_t held=size_t(m_heldClutter);damageClutter(m_level,held,amount,at,away);   // a breakable prop bursts in the hands
+ if(holdingClutter()&&propTraits(c.model).health<=0&&c.damage>=ShieldKnockAway){
+  // A prop that will not break is torn out of the hands once it has taken enough.
+  c.damage=0;c.velocity=Vec2{away.x,away.y}*(3.f/std::sqrt(std::max(1.f,c.mass())));c.vz=1.f;c.projectile=false;c.sleeping=false;c.restTime=0;m_heldClutter=-1;
+ }
+ return true;
+}
+bool Game::receiveDamage(float amount,Vec2 source,bool blockable,bool shieldable){
+ if(shieldable&&shieldBlow(amount,source))return false;
  const auto&melee=kUnarmedMelee;Vec2 facing{std::cos(m_player.angle),std::sin(m_player.angle)};
  bool blocked=blockable&&m_guarding&&unarmed()&&dot(normalized(source-m_player.pos),facing)>melee.guardFrontDot;
  if(blocked){amount*=melee.guardScale;m_verticalSpringVelocity-=.45f;sound(Sound::PunchHit,.35f,.75f);}
  else sound(Sound::Hurt,.7f,.92f);
  if(!m_god)m_player.health=std::max(0.f,m_player.health-amount);m_damageFlash=blocked?.25f:1.f;
+ return true;
 }
 Game Game::weaponInspection(int mode,float age){auto game=validationScene(Enemy::Kind::Huntsman,3);
  if(mode==1||mode==3){game.m_player.pool(WeaponId::Shotgun).total=0;game.m_holster=1;game.m_punchAge=age;game.m_punchLeft=false;game.m_guarding=mode==3;}

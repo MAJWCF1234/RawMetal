@@ -461,7 +461,7 @@ void Game::updateEnemies(float dt){
     if(caught){
      e.stalkMode=Enemy::StalkMode::Grab;e.stalkTimer=Hold;e.attackCooldown=traits.cooldown;enemySound(e,1,.95f,.82f);
      if(friendly>=0)damageFriendly(size_t(friendly),traits.damage,e.pos,{ShotKind::Enemy,m_level,int(&e-m_enemies.data())});
-     else{receiveDamage(traits.damage,e.pos);m_grabbed=Hold;}
+     else if(receiveDamage(traits.damage,e.pos))m_grabbed=Hold;else sprawl(Sprawl);   // a held crate takes the lunge: nothing to hold on to
     }else if(blocked||e.stalkTimer<=0)sprawl(Sprawl);
     continue;
    }

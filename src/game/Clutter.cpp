@@ -430,7 +430,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     // Inelastic normal impulse against a human-sized body; tangential motion survives.
     if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}
    };
-   contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false);});
+   contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);});
    for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
     contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;npc.pose.position=sweepBody(before,delta,[&](Vec2 next){return friendlyBodyFits(npc.level,next,npc.pose.z,height);});return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);});
    }
@@ -627,6 +627,19 @@ bool Game::testProps(){
   c.pos={7,6};c.z=.75f;soft.m_clutter={c};check(soft.interactClutter(),"soft release grabs monitor");soft.update({},1.f/60);
   InputState drop;drop.use=true;soft.update(drop,1.f/60);
   check(!soft.holdingClutter()&&length(soft.m_clutter[0].velocity)<.8f&&std::fabs(soft.m_clutter[0].vz)<.8f&&!soft.m_clutter[0].projectile,"releasing still does not fling from the grab snap");
+  // A carried crate is a shield: blows from in front strike it until it bursts, then the next one lands.
+  {Game shield(regression::campaign(regression::room()));shield.m_player.pos={6,6};shield.m_player.angle=0;shield.m_player.pitch=0;
+   Clutter crate;crate.kind=7;crate.model=model::packing_crate;crate.dims={.7f,.5f,.42f};crate.pos={7,6};crate.z=0;shield.m_clutter={crate};
+   check(shield.interactClutter(),"shield grabs the crate");shield.update({},1.f/60);const float hp=shield.player().health;
+   const bool firstHeld=!shield.receiveDamage(20,shield.player().pos+Vec2{1.5f,0})&&shield.player().health==hp&&shield.m_clutter[0].damage>0;
+   const bool behind=shield.receiveDamage(10,shield.player().pos-Vec2{1.5f,0})&&shield.player().health==hp-10;
+   int blows=0;while(shield.holdingClutter()&&blows<40){shield.receiveDamage(20,shield.player().pos+Vec2{1.5f,0});++blows;}
+   const float before=shield.player().health;const bool exposed=shield.receiveDamage(20,shield.player().pos+Vec2{1.5f,0})&&shield.player().health==before-20;
+   check(firstHeld&&behind&&!shield.holdingClutter()&&blows<40&&(shield.m_clutter[0].broken||!shield.m_clutter.empty())&&exposed,
+    "a held crate takes the blows from in front, not from behind, until it bursts or is torn away, and then the player is hit");
+   Game cup(regression::campaign(regression::room()));cup.m_player.pos={6,6};cup.m_player.angle=0;Clutter mug;mug.kind=7;mug.model=model::mug;mug.dims={.09f,.09f,.1f};mug.pos={6.6f,6};mug.z=.9f;cup.m_clutter={mug};
+   cup.interactClutter();cup.update({},1.f/60);const float cupHp=cup.player().health;
+   check(cup.holdingClutter()&&cup.receiveDamage(15,cup.player().pos+Vec2{1.5f,0})&&cup.player().health==cupHp-15,"a mug is no shield");}
   // Dropped on the move: the hand path already holds the walk, so the walk is counted once.
   Game walk(regression::campaign(regression::room()));walk.m_player.pos={5,6};walk.m_player.angle=0;walk.m_player.pitch=0;
   c.pos={6,6};c.z=.75f;walk.m_clutter={c};check(walk.interactClutter(),"walking release grabs monitor");
