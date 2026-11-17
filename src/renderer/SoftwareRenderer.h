@@ -66,6 +66,9 @@ public:
     static bool testVisibility();
     static bool testGpuActors();
     void setGpuActorPreparation(bool enabled){m_gpuActorPreparation=enabled;}
+    // Creatures through the actor stream (one light record a body, faces lit on the GPU), or each
+    // face transformed, lit and uploaded on the CPU as before. Also the tune knob creature_stream.
+    void setCreatureStream(bool enabled){m_creatureStream=enabled;}
     void setPanelCaching(bool enabled){m_panelCaching=enabled;}
     void setActorEmitCaching(bool enabled){m_actorEmitCaching=enabled;}
     static bool testCablePerformance();
@@ -152,6 +155,7 @@ private:
     std::string m_gpuName;
     bool m_gpuFrame=false;
     bool m_gpuActorPreparation=true;
+    bool m_creatureStream=true;
     bool m_panelCaching=true;
     bool m_actorEmitCaching=true;
     bool m_actorStreamWriting=true;

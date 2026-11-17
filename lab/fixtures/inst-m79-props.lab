@@ -1,0 +1,7 @@
+# Instancing: Chapter 2, map 79 (Materials Intake / Dock Hall), its loose props. Tubes: instancing.
+world campaign
+map 79
+camera 12 1.6 -999 90 -6
+open-doors
+size 960 540
+frames 24
