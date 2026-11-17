@@ -240,6 +240,14 @@ const bool traced=add({.name="rigid-trace",.summary="a rigid scene traced frame 
     <<" w "<<fixed(c.rollSpeed,2)<<","<<fixed(c.pitchSpeed,2)<<","<<fixed(c.spin,2)<<(c.sleeping?" asleep":"")<<(c.riding?" riding":"")<<(c.broken?" broken":"")<<'\n';}
   for(const auto& m:st.manifoldsSeen){r<<"   M a"<<m.a<<" b"<<m.b<<" n "<<fixed(m.normal.x,2)<<","<<fixed(m.normal.y,2)<<","<<fixed(m.normal.z,2)<<" pts";for(int k=0;k<m.count;++k)r<<" ("<<fixed(m.points[size_t(k)].p.x,2)<<","<<fixed(m.points[size_t(k)].p.y,2)<<","<<fixed(m.points[size_t(k)].p.z,2)<<" s"<<fixed(m.points[size_t(k)].separation*1000,1)<<" j"<<fixed(m.points[size_t(k)].normalImpulse,3)<<")";r<<'\n';}}
  rigid::forceLegacyProps(-1);return true;}});
+// What the World has round a point of a campaign map (RM_RIGID_PROBE="map x y z"): rigid-probe.txt.
+const bool probed=add({.name="rigid-probe",.summary="the solids round a point of a map (debugging)",.standalone=[]{
+ const char* e=std::getenv("RM_RIGID_PROBE");int map=79;float x=21.56f,y=1.8f,z=-11.28f;if(e)std::sscanf(e,"%d %f %f %f",&map,&x,&y,&z);
+ std::ofstream r("rigid-probe.txt");Game g;LabAccess::loadLevel(g,map);const World& w=g.world();
+ r<<"fits "<<w.fits(x,y,z-.005f,.01f,false,true)<<" support "<<w.supportBelow(x,y,z,true)<<" clear "<<w.clearanceAbove(x,y,z,true)<<'\n';
+ for(const auto& st:w.structures())if(x>st.x1-.3f&&x<st.x2+.3f&&y>st.y1-.3f&&y<st.y2+.3f)r<<"structure "<<st.x1<<","<<st.y1<<" - "<<st.x2<<","<<st.y2<<" z "<<st.bottom<<".."<<st.top<<" solid "<<st.solid<<" rail "<<st.rail<<" material "<<st.material<<'\n';
+ for(const auto& f:w.fixtures())if(length(f.position-Vec2{x,y})<1.2f)r<<"fixture model "<<f.model<<" at "<<f.position.x<<","<<f.position.y<<" "<<f.width<<"x"<<f.depth<<"x"<<f.height<<" base "<<f.base<<" yaw "<<f.yaw<<" solid "<<f.solid<<'\n';
+ r<<"tile "<<w.tile(int(x),int(y))<<'\n';return true;}});
 // The filmed scenes: the same fixture on each physics.
 void film(const char* name,bool legacy){add({.name=name,.summary=legacy?"the prop scenes on the old physics (RM_PROPS=legacy), for side by side":"the prop scenes on the rigid core",
  .fixtures={"rigid-stack","rigid-ramp","rigid-chairs","rigid-door"},

@@ -213,7 +213,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand])b.v=m_vrHandVelocity[m_vrCarryHand];else b.v={m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
    if(c.material()==PropMaterial::Paper){b.linearDamping=3;b.angularDamping=3;}
    bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
-  // The player: a 70 kg body at his own velocity (no gravity, no turning, not written back). He shoves what
+  // The player: a body at his own velocity (no gravity, no turning, not written back; 20 kg of push, so what
+  // he pins against a wall is not squeezed into it). He shoves what
   // he walks into by contact, and what is pinned against a wall stops him in the solver rather than going
   // into the wall. What comes at him fast is left to bodyContacts (the blow, its damage).
   if(level==m_level&&!m_noclip&&!m_inspectionCamera){static Shape hull;static float hullHeight=-1;const float h=m_player.hullHeight();
@@ -222,7 +223,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    const float body=std::max(.2f,h-.25f);
    if(hull.count==0||hullHeight!=body){hull=Shape{};hull.add(PartKind::Box,{},{.2f,.2f,body*.5f});hull.finish();hullHeight=body;}
    Body p;p.shape=&hull;p.x={m_player.pos.x,m_player.pos.y,m_player.z+.25f+body*.5f};p.v={m_velocity.x,m_velocity.y,0};p.gravity={};p.user=PlayerBody;
-   p.invMass=1/70.f;p.invInertiaLocal=M3::zero();p.inertiaLocal=M3::zero();p.invInertia=M3::zero();p.material={.6f,.5f,0,0};p.linearDamping=0;p.angularDamping=0;
+   p.invMass=1/tune("props.player_mass",20.f);p.invInertiaLocal=M3::zero();p.inertiaLocal=M3::zero();p.invInertia=M3::zero();p.material={.6f,.5f,0,0};p.linearDamping=0;p.angularDamping=0;
    // A shove, not a blow: his contacts are springs (a limited push), so a crate he walks into gets going over a
    // moment and what is in it goes along; one pinned against a wall gives under him instead of into the wall.
    p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;   // never what keeps an island awake (his own speed still does)

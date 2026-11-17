@@ -36,7 +36,7 @@ Material propMaterial(PropMaterial m){
 Material rubber(){return {.95f,.85f,.82f,.002f};}
 
 namespace {
-enum class Kind {Box,Upright,AlongX,AlongY,Ball,OfficeChair,LegChair,Table,Wheelchair,Lamp};
+enum class Kind {Box,Upright,AlongX,AlongY,Ball,OfficeChair,LegChair,Table,Wheelchair,Lamp,Body};
 Kind kindOf(int m){
  using namespace model;
  if(m==ind_barrel||m==drum||m==scrap_drum||m==scrap_burn_barrel||m==gas_cylinder||m==glass_bottle||m==mug||m==med_pill_bottle||m==med_specimen_jar||m==med_extinguisher||m==anl_cell_core)return Kind::Upright;
@@ -48,6 +48,7 @@ Kind kindOf(int m){
  if(m==wooden_table||m==bench)return Kind::Table;
  if(m==med_wheelchair)return Kind::Wheelchair;
  if(m==lab_desk_lamp)return Kind::Lamp;
+ if(m==med_corpse_supine)return Kind::Body;
  return Kind::Box;}
 // Which way a chair's back lies along its own y (model_fronts.json: an OBJ front of -z faces local -y,
 // so the back is at +y; +z faces +y, the back at -y).
@@ -87,6 +88,8 @@ Shape build(int m,std::array<float,3> d){
   case Kind::Wheelchair:{const float b=backSide(m);slab(-hx,hx,-hy,hy,bottom,bottom+.58f*Z);
    const float y0=b>0?hy-.14f*Y:-hy,y1=b>0?hy:-hy+.14f*Y;slab(-hx,hx,y0,y1,bottom+.58f*Z,hz);break;}
   case Kind::Lamp:slab(-hx,hx,-hy,-hy+.55f*Y,bottom,bottom+.12f*Z);slab(-.18f*X,.18f*X,-hy,-hy+.25f*Y,bottom+.12f*Z,hz);slab(-.3f*X,.3f*X,-hy,hy,hz-.2f*Z,hz);break;
+  case Kind::Body:{   // a body on its back, along its own y: torso and head, legs; its model's box has the arms out
+   slab(-.3f*X,.3f*X,-.05f*Y,.38f*Y,bottom,bottom+.55f*Z);slab(-.17f*X,.17f*X,.38f*Y,hy,bottom,bottom+.6f*Z);slab(-.25f*X,.25f*X,-hy,-.05f*Y,bottom,bottom+.38f*Z);break;}
   default:s.add(PartKind::Box,{},{std::max(.005f,hx),std::max(.005f,hy),std::max(.005f,hz)});}
  s.finish();return s;}
 }

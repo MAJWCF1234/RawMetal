@@ -7,6 +7,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
+#include "game/physics/PropBodies.h"
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -19,7 +20,18 @@ struct Rig {std::vector<Trial> trials;size_t current=0;int frame=0;bool staged=f
 std::map<const Scene*,std::unique_ptr<Rig>> rigs;
 Rig& rig(Scene& s){auto& r=rigs[&s];if(!r)r=std::make_unique<Rig>();return *r;}
 // Densely, every 3 cm round the prop's outline and across it: is any of it in a solid?
+bool inSolidBox(const World& w,const Clutter& c,std::string* why=nullptr);
+// On the rigid core (game/physics) a prop is its own shape, not its box (a chair stands over a pipe between its
+// legs; a box tipped against a wall has its bounding box's corner in the wall, not itself): its surface every
+// 3 cm, each point drawn 4 mm in toward its part's middle, asked of the World.
 bool inSolid(const World& w,const Clutter& c,std::string* why=nullptr){
+ if(rigid::legacyProps()||c.model<0)return inSolidBox(w,c,why);
+ rigid::Body b;rigid::toBody(c,b);std::vector<rigid::V3> pts;
+ for(int p=0;p<b.shape->count;++p){const size_t first=pts.size();rigid::surfaceSamples(b,p,.03f,pts);rigid::V3 lo,hi;rigid::partBounds(b,p,lo,hi);const rigid::V3 mid=(lo+hi)*.5f;
+  for(size_t k=first;k<pts.size();++k){const rigid::V3 d=mid-pts[k];const float l=rigid::len(d);if(l>.004f)pts[k]=pts[k]+d*(.004f/l);}}
+ for(const auto& q:pts)if(!w.fits(q.x,q.y,q.z-.005f,.01f,false,true)){if(why)*why="at "+fixed(q.x)+","+fixed(q.y)+" z "+fixed(q.z,3)+" (its own shape) sleeping "+std::to_string(c.sleeping);return true;}
+ return false;}
+bool inSolidBox(const World& w,const Clutter& c,std::string* why){
  auto local=c;local.yaw=0;const auto e=local.extent();const float co=std::cos(c.yaw),si=std::sin(c.yaw),h=c.height();
  const int nx=std::max(2,int(std::ceil(2*e[0]/.03f))),ny=std::max(2,int(std::ceil(2*e[1]/.03f)));
  for(int i=0;i<=nx;++i)for(int j=0;j<=ny;++j){const float x=-e[0]*.98f+1.96f*e[0]*float(i)/float(nx),y=-e[1]*.98f+1.96f*e[1]*float(j)/float(ny);
