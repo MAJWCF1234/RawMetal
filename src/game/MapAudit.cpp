@@ -2,6 +2,7 @@
 #include <functional>
 #include <cctype>
 #include "Game.h"
+#include "Containers.h"
 #include <cstdlib>
 #include "../world/CampaignMaps.h"
 #include "../world/CampaignExport.h"
@@ -151,13 +152,13 @@ bool Game::auditMapScene(Game& game,int level){
  auto footprint=[](const Clutter& c){auto points=c.footprintOffsets();for(auto& p:points)p+=c.pos;return points;};
  auto intersects=[](const Clutter& a,const Clutter& b){auto aa=a,bb=b;aa.yaw=bb.yaw=0;auto ae=aa.extent(),be=bb.extent();Vec2 ax{std::cos(a.yaw),std::sin(a.yaw)},ay{-ax.y,ax.x},bx{std::cos(b.yaw),std::sin(b.yaw)},by{-bx.y,bx.x},d=b.pos-a.pos;for(Vec2 n:{ax,ay,bx,by})if(std::fabs(dot(d,n))>=ae[0]*std::fabs(dot(ax,n))+ae[1]*std::fabs(dot(ay,n))+be[0]*std::fabs(dot(bx,n))+be[1]*std::fabs(dot(by,n))-.01f)return false;return true;};
  for(const auto&c:game.m_clutter)if(c.model>=0){++propCount;auto e=c.extent();std::string name="prop model "+std::to_string(c.model)+" at "+at(c.pos);float low=1e9f,high=-1e9f;bool buried=false;
-  for(auto p:footprint(c)){float support=w.supportBelow(p.x,p.y,c.z+.05f,true);for(const auto&other:game.m_clutter)if(&c!=&other&&other.model>=0&&!other.broken){auto oe=other.extent();if(other.footprintContains(p)&&other.z+other.supportHeight()<=c.z+.025f)support=std::max(support,other.z+other.supportHeight());}low=std::min(low,support);high=std::max(high,support);buried|=!w.fits(p.x,p.y,c.z+.011f,std::max(.001f,c.height()-.02f),true,true);}
+  for(auto p:footprint(c)){float support=w.supportBelow(p.x,p.y,c.z+.05f,true);for(const auto&other:game.m_clutter)if(&c!=&other&&other.model>=0&&!other.broken){auto oe=other.extent();if(other.footprintContains(p))support=std::max(support,containers::supportAt(other,p,c.z));}low=std::min(low,support);high=std::max(high,support);buried|=!w.fits(p.x,p.y,c.z+.011f,std::max(.001f,c.height()-.02f),true,true);}
   if(std::getenv("RAWMETAL_AUDIT_VERBOSE"))report<<"PROP "<<c.model<<" at "<<c.pos.x<<' '<<c.pos.y<<" z "<<c.z<<" dims "<<c.dims[0]<<' '<<c.dims[1]<<' '<<c.dims[2]<<" yaw "<<-c.yaw<<" support "<<low<<' '<<high<<" buried "<<buried<<'\n';
   if(c.z-high>.02f)fail("FLOATING "+name);if(c.z-high<-.01f||buried)fail("BURIED "+name);if(high-low>.04f)fail("HANGING "+name);
   if(c.mass()>60||std::max({c.dims[0],c.dims[1],c.dims[2]})>3.f)fail("TOO HEAVY "+name);
   for(const auto&f:w.fixtures())if(f.solid){float base=w.floorHeight(f.position.x,f.position.y)+f.base;if(std::min(c.z+c.height(),base+f.height)-std::max(c.z,base)<=.01f)continue;bool overlap=false;float cosine=std::cos(f.yaw),sine=std::sin(f.yaw);for(auto p:footprint(c)){auto delta=p-f.position;if(std::fabs(delta.x*cosine-delta.y*sine)<f.width*f.core*.5f&&std::fabs(delta.x*sine+delta.y*cosine)<f.depth*f.core*.5f)overlap=true;}if(overlap){bool surface=false;for(auto p:footprint(c)){auto delta=p-f.position;float px=std::fabs(delta.x*cosine-delta.y*sine),py=std::fabs(delta.x*sine+delta.y*cosine);if(px>=f.width*f.core*.5f||py>=f.depth*f.core*.5f)continue;float top=w.fixtureSurface(f,p.x,p.y,c.z+.011f,true),bottom=w.fixtureSurface(f,p.x,p.y,c.z+.011f,false);surface|=top<c.z+c.height()-.01f||bottom>c.z+.025f;}if(surface)fail("OVERLAP "+name+" with solid fixture");}}
   const auto&own=model::propSize[c.model];float minRatio=1e9f,maxRatio=0;for(int a=0;a<3;++a)if(own[a]>0){minRatio=std::min(minRatio,c.dims[a]/own[a]);maxRatio=std::max(maxRatio,c.dims[a]/own[a]);}if(model::size[c.model][0]>0&&maxRatio>minRatio*1.2f)fail("DISTORTED "+name);
-  for(const auto&other:game.m_clutter)if(&other>&c&&other.model>=0){auto oe=other.extent();if(std::min(c.z+c.supportHeight(),other.z+other.supportHeight())-std::max(c.z,other.z)>.01f&&intersects(c,other))fail("OVERLAP "+name);}
+  for(const auto&other:game.m_clutter)if(&other>&c&&other.model>=0){auto oe=other.extent();if(std::min(c.z+c.supportHeight(),other.z+other.supportHeight())-std::max(c.z,other.z)>.01f&&intersects(c,other)&&!containers::holds(c,other)&&!containers::holds(other,c))fail("OVERLAP "+name);}
  }
  if(propCount>120)report<<"WARN "<<propCount<<" props exceeds 120 per chunk\n";
  for(int i=0;i<int(w.breakables().size());++i){const auto&b=w.breakables()[i];std::string name="breakable["+std::to_string(i)+"]";

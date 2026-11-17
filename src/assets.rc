@@ -1375,3 +1375,11 @@
 2845 RCDATA "assets/ai/brutal/skybox_plain_emx_13-x2.ntx"
 2846 RCDATA "assets/ai/brutal/skybox_plain_emx_14-x2.ntx"
 // END GENERATED BRUTAL SKYBOXES
+2847 RCDATA "assets/library/market_basket.obj"
+2848 RCDATA "assets/library/market_basket_market.png"
+2849 RCDATA "assets/library/market_crate.obj"
+2850 RCDATA "assets/library/market_crate_market.png"
+2851 RCDATA "assets/library/market_pumpkin.obj"
+2852 RCDATA "assets/library/market_pumpkin_market_misc.png"
+2853 RCDATA "assets/library/glass_bottle.obj"
+2854 RCDATA "assets/library/glass_bottle_glass_bottle_mx_1.png"

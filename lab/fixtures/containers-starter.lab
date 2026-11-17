@@ -1,0 +1,8 @@
+# The Starter Map exhibit "IN A BOX" (PROPS, map 5): a basket of fruit, a crate of bottles and a bin of
+# junk, authored on their inner floors. Shots "before" and "after". Tubes: containers.
+world custom "custom maps/Starter Map.rmc"
+map 5
+camera 19.35 16.35 0.9 90 -165
+containers starter
+size 480 270
+frames 60
