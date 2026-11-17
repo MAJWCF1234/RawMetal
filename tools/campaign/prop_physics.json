@@ -270,7 +270,7 @@
     "health": 0,
     "soft": {
       "top": 0.63,
-      "sink": 0.06,
+      "sink": 0.07,
       "rect": [
         -0.44,
         0.44,
@@ -320,7 +320,7 @@
     "health": 0,
     "soft": {
       "top": 0.404,
-      "sink": 0.05,
+      "sink": 0.07,
       "rect": [
         -0.95,
         0.95,
@@ -335,7 +335,7 @@
     "health": 0,
     "soft": {
       "top": 0.118,
-      "sink": 0.06
+      "sink": 0.09
     }
   },
   "scrap_bedroll": {
@@ -440,13 +440,13 @@
   "scrap_mattress": {
     "soft": {
       "top": 0.2,
-      "sink": 0.07
+      "sink": 0.1
     }
   },
   "med_ward_bed_tossed": {
     "soft": {
       "top": 0.404,
-      "sink": 0.05,
+      "sink": 0.07,
       "rect": [
         -1.048,
         1.048,
@@ -458,7 +458,7 @@
   "office_couch_green": {
     "soft": {
       "top": 0.63,
-      "sink": 0.06,
+      "sink": 0.07,
       "rect": [
         -0.86,
         0.86,
@@ -466,5 +466,8 @@
         0.62
       ]
     }
+  },
+  "med_corpse_supine": {
+    "mass": 70
   }
 }

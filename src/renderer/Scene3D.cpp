@@ -1062,6 +1062,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  struct FacilityMaterials {std::vector<const Texture*> parts;bool ready=false,hasGloss=false;};
  std::array<FacilityMaterials,FacilityModelCount> facilityMaterials;
  const SoftPad* facilitySoft=nullptr;   // the pad pressing the next padded fixture drawn (SoftBodies)
+ // The way to the nearest lamp over pressed padding at `at` (straight up, a little off, without one).
+ auto softLight=[&](Point3 at){Point3 best{.3f,.2f,.93f};float nearest=1e9f;
+  for(const auto&l:w.lights()){if(l.intensity<=0)continue;const auto e=l.emitter();if(e.z<at.z+.3f)continue;const Point3 d{e.x-at.x,e.y-at.y,e.z-at.z};const float d2=d.x*d.x+d.y*d.y+d.z*d.z;if(d2<nearest){nearest=d2;best=d;}}
+  const float l=std::sqrt(best.x*best.x+best.y*best.y+best.z*best.z);return best*(1/l);};
  auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
@@ -1080,20 +1084,23 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   float c=std::cos(yaw),s=std::sin(yaw);
   auto lights=exteriorLight(receiver,width,depth,height,yaw,materials.hasGloss);
   Point3 flatNormal{};   // a bent padded face is lit as it lies flat: its dent shades by the bend alone (no glint off the slope)
+  float softFace=1;      // and its lamps by its vertices' pressed shade (the per-pixel lamps ride the face light, not the vertex)
   auto drawFace=[&](const MeshTriangle&face){
    auto n=facilitySoft?flatNormal:cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);
    selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
    // Pack exports include thin panels and mixed winding. Keep both sides;
    // the shared depth buffer selects the visible exterior without opening holes.
-   float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));
+   float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*softFace;
    const Texture*texture=materials.parts[size_t(face.part)];
    if(fittingTone&&!texture->emission.empty())texture=&lampFace(*texture,*fittingTone);
    tri(face.v[0],face.v[1],face.v[2],*texture,light);
   };
+  const Point3 softL=facilitySoft?softLight({x,y,base+height}):Point3{0,0,1};
   for(auto face:facilitySoft?softmesh::refined(model,mesh):mesh.triangles){
    auto place=[&](Point3 p){p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};return Point3{x+p.x*c+p.z*s,y-p.x*s+p.z*c,base+p.y+height*.5f};};
    if(facilitySoft){const Point3 a=place(face.v[0].p-center);flatNormal=cross3(place(face.v[1].p-center)-a,place(face.v[2].p-center)-a);}
-   for(auto&v:face.v){auto p=v.p-center;if(facilitySoft){const float bent=softmesh::bend(model,*facilitySoft,mesh,v.p);p.y-=bent;v.light*=softmesh::shade(model,bent);}v.p=place(p);}
+   softFace=facilitySoft?0.f:1.f;
+   for(auto&v:face.v){auto p=v.p-center;if(facilitySoft){const float bent=softmesh::bend(model,*facilitySoft,mesh,v.p),k=softmesh::shade(model,*facilitySoft,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;softFace+=k/3;}v.p=place(p);}
    if(partFixture<0||unsigned(face.part)>=32||(parts&(1u<<face.part))!=0){drawFace(face);continue;}
    std::vector<std::array<MeshVertex,3>> pieces{{{face.v[0],face.v[1],face.v[2]}}};
    if(partFixture>=0)for(int j=0;j<int(w.breakables().size());++j){const auto&part=w.breakables()[j];if(part.fixture!=partFixture||w.breakableIntact(j)||(parts&part.part)!=0||unsigned(face.part)>=32||!(part.part&(1u<<face.part)))continue;
@@ -1869,9 +1876,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
- for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&(!staticFixtures||soft::isSoft(fixture.model))){
-  facilitySoft=soft::isSoft(fixture.model)?game.softPad(level,int(&fixture-w.fixtures().data()),-1):nullptr;
-  facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);facilitySoft=nullptr;}
+ if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model))facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);
+ // Padded fixtures have their own cache, drawn and lit as the static fixtures are: rebuilt only when a pad
+ // on them moves (SoftPad::version) or wakes or sleeps, so undeformed they look exactly as they always did.
+ {uint64_t key=geometryKey;bool any=false;auto mix=[&](std::uint64_t v){key^=v;key*=1099511628211ull;};
+  for(int i=0;i<int(w.fixtures().size());++i){const auto&f=w.fixtures()[size_t(i)];if(!f.visible||w.fixtureHasParts(i)||!soft::isSoft(f.model))continue;any=true;mix(std::uint64_t(i)+1);if(const auto*p=game.softPad(level,i,-1))mix(0x9e3779b97f4a7c15ull+p->version);}
+  if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(44*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;
+   for(int i=0;i<int(w.fixtures().size());++i){const auto&f=w.fixtures()[size_t(i)];if(!f.visible||w.fixtureHasParts(i)||!soft::isSoft(f.model))continue;
+    facilitySoft=game.softPad(level,i,-1);facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw);facilitySoft=nullptr;}
+   if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
  // Seeded debris is derived from persistent tombstones, never a second simulated population.
  auto chips=[&](Vec2 center,float z,float width,int count,int seed){for(int i=0;i<count;++i){unsigned h=(unsigned(i+seed)*2654435761u);float a=float(h%6283)*.001f,r=float((h>>12)%1000)*.001f*width;float x=center.x+std::cos(a)*r,y=center.y+std::sin(a)*r,s=.008f+float((h>>22)%20)*.001f;float floor=w.supportBelow(x,y,z+.1f)+.008f;tri({{x-s,y-s,floor},0,0},{{x+s,y-s,floor},1,0},{{x,y+s,floor},.5f,1},m_glassTexture,1.3f);}};
  // Fixture parts have a separate cache; a screen hit never rebuilds the chunk.
@@ -1950,8 +1963,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
   }
   objectLighting=true;objectLight=illumination({c.pos.x,c.pos.y,mid},{0,0,1});
-  if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const SoftPad* pad=softPadOf(c);
-   for(auto face:pad?softmesh::refined(c.model,mesh):mesh.triangles){for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p);p.y-=bent;v.light*=softmesh::shade(c.model,bent);}auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
+  if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const SoftPad* pad=softPadOf(c);const Point3 softL=pad?softLight({c.pos.x,c.pos.y,c.z+c.height()}):Point3{0,0,1};
+   for(auto face:pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],facilityTexture(c.model,face.part),light);}
   }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
    // An eighth of the thing that broke, cut from its own mesh: its faces clipped to that eighth of
    // its box (clean cut edges, its own UVs), drawn with its own sheet about the eighth's centre (Clutter::shards).
@@ -1998,9 +2011,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  };
  std::array<std::vector<const Clutter*>,36> resting;
- for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame&&!softPadOf(c)){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
+ for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
  if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;float bottom=1000,top=-1000;for(const auto*c:resting[cell]){bottom=std::min(bottom,c->z);top=std::max(top,c->z+c->height());}if(!sphereVisible({(cell%6)*4.f+2,(cell/6)*4.f+2,(bottom+top)*.5f},3.f+(top-bottom)*.5f))continue;
-  auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));}
+  auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));if(const auto*p=softPadOf(*c))hash(0x9e3779b97f4a7c15ull+p->version);}
   if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){++m_propGeometryBuilds;m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
  }
  // Electrical leads: a thin tube through each cable's points every frame, lit

@@ -1,7 +1,7 @@
 # The Starter Map's containers in a plain room: a basket of fruit, a crate of bottles, a bin of junk.
 # At frame 40 the crate is tipped over and spills. Shots "before" and "after". Tubes: containers.
 world room
-camera 10.05 5.7 -999 90 -52
+camera 9.95 7.15 1.9 90 -150
 light 10 7.6 3.0 1.5 9
 light 8.5 6 3.0 .8 7
 size 480 270

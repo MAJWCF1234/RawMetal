@@ -1253,7 +1253,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  for(float y:{20.85f,21.3f,21.8f})kit::prop(m,model::lab_field_meter,9.5f,y,f+.972f,.25f,.33f,.15f,mdW+y*.1f);        // survey meters
  for(int i=0;i<5;++i)mdSet(m,model::office_file_binder,9.53f,20.75f+i*.11f,f+1.656f,.09f,.3f,.42f,kPi*.5f);
  wall(m,7.f,19.2f,7.7f,19.75f,f,f+.85f,8);m.pipes.push_back({{7.35f,19.75f},{7.35f,19.8f},f+.55f,.04f,f+.55f,6});   // source safe
- mdFix(m,model::wooden_chair,7.55f,21.9f,f,.417f,.525f,.95f,mdE,true);
+ mdFix(m,model::wooden_chair,7.55f,21.9f,f,.417f,.525f,.95f,mdE,true);m.fixtures.back().anchored=true;   // the lead apron rig stands on it: it stays put (not a v1.4.8 loose chair)
  {const float px=7.5f,py=21.9f;
   m.pipes.push_back({{px,py},{px,py},f+.47f,.15f,f+1.06f,2});m.pipes.push_back({{px,py},{px,py},f+1.06f,.04f,f+1.11f,2});
   m.pipes.push_back({{px,py},{px,py},f+1.11f,.085f,f+1.34f,2});

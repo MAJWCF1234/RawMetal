@@ -1,9 +1,8 @@
-# Medical Ward C North (map 75): the player stands on a strapped ward bed's mattress, by a strap.
-# Shots "before" (beside the bed) and "after" (on it). Tubes: softbody.
+# Medical Ward C North (map 75): a strapped ward bed seen from its foot; a body is laid on its mattress.
+# Shots "before" (empty) and "after" (the body in its dent, the straps on it). Tubes: softbody.
 world campaign
 map 75
 camera 12 12 -999 0 0
-scenery-only
 soft ward
 size 480 270
-frames 120
+frames 300

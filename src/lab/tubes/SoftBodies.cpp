@@ -26,6 +26,8 @@ namespace retro::lab {
 namespace {
 std::string fixed(double v,int d=3){char b[32];std::snprintf(b,sizeof b,"%.*f",d,v);return b;}
 constexpr Vec2 Mattress{10,8};
+// The ward is shot once its lamps and probes have settled (a loaded machine bakes them late).
+constexpr int WardBefore=150;
 std::shared_ptr<CustomCampaign> mattressRoom(Vec2 start={8.4f,8}){auto m=regression::room();m->definition.playerStart=start;kit::prop(*m,model::med_mattress_stained,Mattress.x,Mattress.y,0,1.9f,.9f,.118f,0);return regression::campaign(m);}
 float peakOf(const Game& g){float d=0;for(const auto& p:g.softPads())d=std::max(d,p.peak());return d;}
 void run(Game& g,float seconds,InputState in={},float* lowest=nullptr,float* highest=nullptr){for(int i=0;i<int(seconds*60);++i){g.update(in,1.f/60);if(lowest)*lowest=std::min(*lowest,g.player().z);if(highest)*highest=std::max(*highest,g.player().z);}}
@@ -48,39 +50,62 @@ void standOnBed(Game& g,const Bed& b){const auto& f=g.world().fixtures()[size_t(
  p.pos=f.position+along*best;p.angle=std::atan2(along.y,along.x);p.z=bedCrown(g,f);p.grounded=true;p.verticalVelocity=0;p.pitch=-112;}
 // The foot of the bed: the end of its axis with open floor past it.
 Vec2 bedFoot(const Game& g,const retro::Fixture& f){const Vec2 along=bedAxis(f);for(float e:{1.f,-1.f}){const Vec2 q=f.position+along*(e*1.3f);if(g.world().tile(int(q.x),int(q.y))!='#'&&g.world().fits(q.x,q.y,g.world().floorHeight(q.x,q.y)+.02f,.5f))return along*e;}return along;}
-// Inspection views: the mattress from its long side, the ward bed from its foot.
-void sideView(Game& g){LabAccess::setCamera(g,{Mattress.x+.25f,Mattress.y-1.55f},-999,kPi*.5f,-104);}
+// Inspection views: the floor mattress at a low grazing angle (the eye 40 cm over the floor, so a dent
+// reads in its outline), the ward bed from its foot.
+void grazeView(Game& g){const Vec2 at{Mattress.x-1.35f,Mattress.y-1.05f},to=Mattress-at;LabAccess::setCamera(g,at,-.92f,std::atan2(to.y,to.x),-30);}
 void footView(Game& g,const Bed& b){const auto& f=g.world().fixtures()[size_t(b.fixture)];const Vec2 e=bedFoot(g,f),at=f.position+e*1.35f;LabAccess::setCamera(g,at,-999,std::atan2(-e.y,-e.x),-100);}
+// A body (the med_corpse_supine model, 70 kg) laid along padding at `at`, its length along `along`.
+void body(Game& g,Vec2 at,float top,Vec2 along){Clutter c;c.kind=7;c.model=model::med_corpse_supine;const auto& s=model::propSize[c.model];c.dims={s[0],s[1],s[2]};
+ c.pos=at;c.z=top;c.yaw=std::atan2(-along.x,along.y);c.sleeping=true;LabAccess::clutter(g).push_back(c);}
+// The frame against an earlier shot: mean absolute channel difference and the share of pixels off by more than 8.
+std::pair<double,double> compare(const Scene& s,const std::string& label){const Scene::Shot* shot=nullptr;for(const auto& x:s.shots)if(x.label==label)shot=&x;if(!shot||!s.renderer)return {-1,-1};
+ const auto* now=s.renderer->pixels();const size_t n=shot->pixels.size();double sum=0;size_t off=0;
+ for(size_t i=0;i<n;++i){int worst=0;for(int k=0;k<24;k+=8){const int d=std::abs(int((shot->pixels[i]>>k)&255)-int((now[i]>>k)&255));sum+=d;worst=std::max(worst,d);}off+=worst>8;}
+ return {sum/double(n*3),double(off)/double(n)};}
 std::shared_ptr<Game> wardGame(){auto g=std::make_shared<Game>(WorldId::Campaign);LabAccess::loadLevel(*g,75);LabAccess::enemies(*g).clear();LabAccess::setGod(*g,true);return g;}
 
 const bool tube=add({
  .name="softbody",.summary="mattresses, the bedroll, ward beds and cushions give under the player, props, creatures and the dead, recover and sleep; straps stay on the mattress",
  .fixtures={"soft-mattress","soft-ward"},
  .author=[](Scene& s,AuthoredMapData& m){if(s.fixture->value("soft","mattress")=="mattress")kit::prop(m,model::med_mattress_stained,Mattress.x,Mattress.y,0,1.9f,.9f,.118f,0);},
- // Film: the view (frames 0-3, "before" at 3); the player walks on / is stood on the bed and stays;
- // a crate drops on the mattress's far end; on the last frame the view again ("after": the dents he
- // and the crate leave, a frame after he is lifted off to hold the camera).
+ // Film, floor mattress: the grazing view ("before", frame 3). The player steps on (frame 5) and is
+ // lifted off to hold the camera with his pad zeroed (frame 7, "flat-pad": the pressed padding's draw
+ // path, undeformed, against "before" pixel for pixel). He stands on it again and a 9 kg crate drops on
+ // its far end (frame 9); the last frame is the view again ("after": the dent he left a frame ago, the crate's).
+ // Ward bed (map 75): the view from the foot ("before"), a body laid on the mattress, "after".
  .setup=[](Scene& s){Game& g=s.g();LabAccess::enemies(g).clear();LabAccess::setGod(g,true);
-  if(s.fixture->value("soft","mattress")=="mattress")sideView(g);else{const auto b=strappedBed(g);if(b.fixture>=0)footView(g,b);}},
+  if(s.fixture->value("soft","mattress")=="mattress")grazeView(g);else{const auto b=strappedBed(g);if(b.fixture>=0)footView(g,b);}},
  .step=[](Scene& s,float){Game& g=s.g();auto& p=LabAccess::player(g);const bool mattress=s.fixture->value("soft","mattress")=="mattress";const bool last=s.frame==s.frames-1;
   if(mattress){
-   if(s.frame==5){LabAccess::playerCamera(g);p.pos={8.3f,Mattress.y-.15f};p.z=0;p.angle=0;p.pitch=-60;p.grounded=true;}
-   if(s.frame>5&&!last&&p.pos.x<Mattress.x-.45f){s.input.forward=true;p.angle=0;}
-   if(s.frame==60){Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims={.45f,.45f,.45f};c.pos={Mattress.x+.6f,Mattress.y+.1f};c.z=.9f;c.sleeping=false;LabAccess::clutter(g).push_back(c);}
-   if(last)sideView(g);}
-  else{const auto b=strappedBed(g);if(b.fixture<0)return;if(s.frame==5){LabAccess::playerCamera(g);standOnBed(g,b);const auto& f=g.world().fixtures()[size_t(b.fixture)];p.pos=f.position+bedFoot(g,f)*.38f;}if(last)footView(g,b);}},
- .capture=[](Scene& s,const Frame&){if(s.frame==3)s.shoot("before");if(s.last()){s.shoot("after");s.board["soft.shot_peak"]=peakOf(s.g());}},
+   if(s.frame==5||s.frame==9){LabAccess::playerCamera(g);p.pos={Mattress.x-.45f,Mattress.y+(s.frame==5?0.f:.12f)};p.z=.118f;p.angle=0;p.pitch=-60;p.grounded=true;p.verticalVelocity=0;}
+   if(s.frame==7){grazeView(g);for(auto& pad:LabAccess::softPads(g)){std::fill(pad.depth.begin(),pad.depth.end(),0.f);std::fill(pad.speed.begin(),pad.speed.end(),0.f);}}
+   if(s.frame==9){Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims={.45f,.45f,.45f};c.pos={Mattress.x+.55f,Mattress.y};c.z=.5f;c.sleeping=false;LabAccess::clutter(g).push_back(c);}
+   if(last)grazeView(g);}
+  else{const auto b=strappedBed(g);if(b.fixture<0)return;const auto& f=g.world().fixtures()[size_t(b.fixture)];
+   if(s.frame==WardBefore+2)body(g,f.position+bedAxis(f)*(-dot(bedFoot(g,f),bedAxis(f))*.08f),bedCrown(g,f),bedAxis(f));}},
+ .capture=[](Scene& s,const Frame&){if(s.frame==(s.fixture->value("soft","mattress")=="mattress"?3:WardBefore))s.shoot("before");
+  if(s.frame==7&&s.fixture->value("soft","mattress")=="mattress"){const auto [mean,share]=compare(s,"before");s.board["soft.flat_mean"]=mean;s.board["soft.flat_share"]=share;s.board["soft.flat_pads"]=double(s.g().softPads().size());s.shoot("flat-pad");}
+  if(s.last()){s.shoot("after");s.board["soft.shot_peak"]=peakOf(s.g());}},
  .metrics=[](Scene& s,Report& r){
   r.metric("scene_dent_at_after_shot",s.board["soft.shot_peak"],"m");
+  if(s.fixture->value("soft","mattress")=="mattress"){r.metric("flat_pad_mean_diff",s.board["soft.flat_mean"]);r.metric("flat_pad_pixels_off",s.board["soft.flat_share"]);
+   r.check("a pressed pad drawn undeformed matches the plain mattress pixel for pixel (same lighting, texture and tone)",s.board["soft.flat_pads"]>0&&s.board["soft.flat_mean"]>=0&&s.board["soft.flat_mean"]<.6&&s.board["soft.flat_share"]<.003,
+    "mean "+fixed(s.board["soft.flat_mean"])+" off "+fixed(s.board["soft.flat_share"]*100,2)+"% pads "+fixed(s.board["soft.flat_pads"],0));
+   r.check("scene: the dents are in the after shot",s.board["soft.shot_peak"]>.04f,fixed(s.board["soft.shot_peak"]));}
   if(s.fixture->value("soft","mattress")!="mattress"){
    // ---- the ward bed (map 75) ----
    auto gp=wardGame();Game& g=*gp;const auto bed=strappedBed(g);r.check("map 75 has a strapped ward bed",bed.fixture>=0&&!bed.straps.empty(),std::to_string(bed.straps.size())+" straps");if(bed.fixture<0)return;
    const auto& f=g.world().fixtures()[size_t(bed.fixture)];const float crown=g.world().floorHeight(f.position.x,f.position.y)+f.base+f.height*.404f/.842f;
    standOnBed(g,bed);run(g,1.5f);auto& p=LabAccess::player(g);const auto* pad=g.softPad(g.level(),bed.fixture,-1);
    const float sink=crown-p.z;r.metric("ward_stand_sink",sink,"m");r.metric("ward_peak",pad?pad->peak():0,"m");
-   r.check("the player stands on the ward bed's mattress (not its 84 cm box) and it gives under him",pad&&p.grounded&&sink>.015f&&sink<.06f&&p.z<crown+.01f,"z "+fixed(p.z)+" crown "+fixed(crown)+" sink "+fixed(sink));
+   r.check("the player stands on the ward bed's mattress (not its 84 cm box) and it gives under him",pad&&p.grounded&&sink>.04f&&sink<.08f&&p.z<crown+.01f,"z "+fixed(p.z)+" crown "+fixed(crown)+" sink "+fixed(sink));
    float under=0;std::string where;for(int si:bed.straps){const auto& v=g.world().structures()[size_t(si)];for(float a:{.2f,.5f,.8f})for(float b:{.2f,.5f,.8f}){const Vec2 q{v.x1+(v.x2-v.x1)*a,v.y1+(v.y2-v.y1)*b};if(pad&&pad->covers(q))under=std::max(under,pad->depthAt(q));}}
    r.metric("ward_depth_under_straps",under,"m");
+   // A body dropped onto the mattress (5 cm up) lies in it.
+   {auto g3=wardGame();auto& q=LabAccess::player(*g3);q.pos={12,12};body(*g3,f.position,crown+.05f,bedAxis(f));LabAccess::clutter(*g3).back().sleeping=false;const size_t k=LabAccess::clutter(*g3).size()-1;
+    std::string trace;for(int i=0;i<150;++i){g3->update({},1.f/60);if(i%30==0){const auto& v=g3->clutter()[k];trace+=" t"+std::to_string(i)+" z "+fixed(v.z-crown)+" p "+fixed(v.pitch)+" r "+fixed(v.roll);}}
+    const auto& v=g3->clutter()[k];const float sunk=crown-v.z;r.metric("ward_body_sink",sunk,"m");
+    r.check("a body dropped on the ward bed lies flat in the mattress, sunk a few cm",std::fabs(v.pitch)+std::fabs(v.roll)<.05f&&sunk>.01f&&sunk<.07f,"sunk "+fixed(sunk)+trace);}
    r.check("where the straps cross the mattress it does not go down: they still lie on it (rule K)",under<.004f,"deepest under a strap "+fixed(under,4));
    // The cost: a ward of beds and nobody on them.
    {auto g2=wardGame();auto& q=LabAccess::player(*g2);q.pos={12,12};const auto t0=std::chrono::steady_clock::now();for(int i=0;i<600;++i)LabAccess::stepSoft(*g2,1.f/60);
@@ -94,10 +119,11 @@ const bool tube=add({
   const float top=.118f;
   {Game g(mattressRoom());walkOn(g);float lowest=9,highest=-9;run(g,1.5f,{},&lowest,&highest);const float stand=top-g.player().z,peak=peakOf(g);
    r.metric("stand_sink",stand,"m");r.metric("stand_peak_depth",peak,"m");
-   r.check("the player walks onto the floor mattress and sinks a few cm standing on it",g.player().pos.x>Mattress.x-.3f&&stand>.02f&&stand<.06f&&peak>=stand-.005f,"sink "+fixed(stand)+" peak "+fixed(peak));
+   r.check("the player walks onto the floor mattress and sinks 6-10 cm standing on it",g.player().pos.x>Mattress.x-.3f&&stand>.06f&&stand<.10f&&peak>=stand-.005f,"sink "+fixed(stand)+" peak "+fixed(peak));
+   {float rise=0;for(const auto& p:g.softPads())rise=std::max(rise,p.rise());r.metric("stand_rim_rise",rise,"m");r.check("round his feet the pushed-aside padding rises in a low rim",rise>.004f&&rise<.03f,fixed(rise,4));}
    r.check("the mattress is not shoved away by standing on it",length(g.clutter()[0].pos-Mattress)<.01f,fixed(length(g.clutter()[0].pos-Mattress)));
    InputState kneel;kneel.crouch=true;run(g,1.f,kneel);const float crouch=top-g.player().z;r.metric("crouch_sink",crouch,"m");
-   r.check("kneeling presses it a little deeper",crouch>stand&&crouch<.07f,fixed(crouch));
+   r.check("kneeling presses it a little deeper",crouch>stand&&crouch<.125f,fixed(crouch));
    InputState prone;prone.prone=true;run(g,.05f,prone);run(g,1.f);const float lying=top-g.player().z;r.metric("prone_sink",lying,"m");
    r.check("lying on it spreads the weight: shallower",g.player().prone&&lying<stand&&lying>.005f,fixed(lying));
    // Off it: it springs back and sleeps.
@@ -119,7 +145,7 @@ const bool tube=add({
   // A crate dropped on it sinks in and rests there; it holds the dent asleep (no stepping).
   {Game g(mattressRoom({3,3}));Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims={.45f,.45f,.45f};c.pos=Mattress;c.z=.9f;LabAccess::clutter(g).push_back(c);run(g,3);
    const auto& v=g.clutter()[1];const float in=top-v.z;r.metric("crate_rest_sink",in,"m");
-   r.check("a 9 kg crate dropped on it rests sunk in it, asleep, on the mattress",v.sleeping&&in>.003f&&in<.03f&&!v.broken,"sunk "+fixed(in,4));
+   r.check("a 9 kg crate dropped on it rests sunk 2-3 cm in it, asleep, on the mattress",v.sleeping&&in>.018f&&in<.035f&&!v.broken,"sunk "+fixed(in,4));
    const auto* pad=g.softPad(g.level(),-1,0);r.check("under a load that does not change the pad holds its dent without stepping",pad&&pad->still>.3f,pad?fixed(pad->still,2):"no pad");}
   // A creature walking over it and a dead one lying on it.
   {Game g(mattressRoom({3,3}));Enemy e;e.pos={Mattress.x-.3f,Mattress.y};e.z=0;e.moving=true;LabAccess::enemies(g)={e};for(int i=0;i<30;++i)LabAccess::stepSoft(g,1.f/60);const float walking=peakOf(g);

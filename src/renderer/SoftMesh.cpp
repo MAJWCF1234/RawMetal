@@ -6,7 +6,7 @@
 #include <mutex>
 namespace retro::softmesh {
 namespace {
-float band(int model){return std::max(.08f,model::soft[model][1]*1.5f);}
+float band(int model){return std::min(std::max(.08f,model::soft[model][1]*1.5f),model::soft[model][0]*.9f);}
 // Height weight of a mesh point: 1 at the padding's top, 0 a band below it or anywhere above it.
 float weight(int model,const Mesh& mesh,const Point3& p){
  const auto& k=model::soft[model];const float y=p.y-mesh.minimum.y,b=band(model);
@@ -39,5 +39,14 @@ float bend(int model,const SoftPad& pad,const Mesh& mesh,const Point3& p){
  const float up=pad.sink/std::max(1e-4f,model::soft[model][1]);   // world metres per mesh metre, upward
  return depth*w/std::max(1e-4f,up);
 }
-float shade(int model,float bent){return 1.f-.6f*std::clamp(1.4f*bent/std::max(1e-4f,model::soft[model][1]),0.f,1.f);}
+float shade(int model,const SoftPad& pad,const Mesh& mesh,const Point3& p,float bent,Point3 light){
+ const float w=weight(model,mesh,p);if(w<=0)return 1;const Point3 c=(mesh.minimum+mesh.maximum)*.5f;
+ const Point3 bentNormal=pad.normalMesh(p.x-c.x,p.z-c.z);
+ // The slope is drawn three times as steep for the light as it lies: a 6 cm hollow tilts its sides
+ // some 15 degrees, which a lamp overhead barely tells from flat.
+ Point3 n{bentNormal.x*w*3,bentNormal.y*w*3,1-w+bentNormal.z*w};const float l=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);n=n*(1/l);
+ const float flat=std::max(.15f,light.z),lit=std::max(.15f,n.x*light.x+n.y*light.y+n.z*light.z);
+ const float hollow=1.f-.4f*std::clamp(bent/std::max(1e-4f,model::soft[model][1]),0.f,1.f);
+ return std::clamp(lit/flat*hollow,.3f,1.6f);
+}
 }

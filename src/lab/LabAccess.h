@@ -97,6 +97,7 @@ struct LabAccess {
  static int held(const Game& g){return g.m_heldClutter;}
  static bool shieldBlow(Game& g,float amount,Vec2 source){return g.shieldBlow(amount,source);}
  static void stepSoft(Game& g,float dt){g.updateSoftBodies(dt);}
+ static std::vector<SoftPad>& softPads(Game& g){return g.m_softPads;}
  // ---- SoftwareRenderer ----
  using Corpse=SoftwareRenderer::Corpse;
  static std::unordered_map<std::uint64_t,Corpse>& corpses(SoftwareRenderer& r){return r.m_corpses;}

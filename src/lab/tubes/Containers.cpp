@@ -24,7 +24,8 @@ namespace retro::lab {
 namespace {
 std::string fixed(double v,int d=3){char b[32];std::snprintf(b,sizeof b,"%.*f",d,v);return b;}
 constexpr float BottleScale=.75f,BasketScale=.55f,PumpkinScale=.28f;
-float scaleOf(int model){return model==model::glass_bottle?BottleScale:model==model::market_basket?BasketScale:model==model::market_pumpkin?PumpkinScale:1.f;}
+float scaleOf(int model){return model==model::glass_bottle?BottleScale:model==model::market_basket?BasketScale:model==model::market_pumpkin?PumpkinScale:
+ model==model::prop_cardboard_box_open||model==model::office_file_binder||model==model::office_paper_stack?.7f:1.f;}
 Clutter make(int model,Vec2 at,float z,float yaw=0){Clutter c;c.kind=7;c.model=model;const auto& s=model::propSize[model];const float k=scaleOf(model);c.dims={s[0]*k,s[1]*k,s[2]*k};c.pos=at;c.z=z;c.yaw=yaw;return c;}
 void author(AuthoredMapData& m,int model,float x,float y,float z,float yaw=0){const float k=scaleOf(model);kit::prop(m,model,x,y,z,yaw,k);}
 // The Starter Map's three, about (x, y): a basket of fruit, a crate of bottles, a bin of junk.
@@ -34,6 +35,9 @@ void fill(AuthoredMapData& m,Vec2 at,float sunk=0){
  const Vec2 fruit[]={{-.07f,-.08f},{.07f,-.07f},{-.06f,.08f},{.07f,.08f}};for(auto o:fruit)author(m,model::market_pumpkin,at.x+o.x,at.y+o.y,bf,o.x*9);
  author(m,model::market_crate,at.x+1.1f,at.y,0,kPi*.5f);
  for(int i=0;i<6;++i){const float ox=-.24f+.1f*float(i%3)*2.4f,oy=i<3?-.09f:.09f;author(m,model::glass_bottle,at.x+1.1f+ox,at.y+oy,sunk>0?0.f:cf,float(i));}
+ // Files in a box, behind them: a paper stack on its floor and two binders stood on it.
+ {const Vec2 b{at.x-.05f,at.y+.95f};const float floor=.01f*.7f;author(m,model::prop_cardboard_box_open,b.x,b.y,0,0);author(m,model::office_paper_stack,b.x,b.y,floor,0);
+  for(float x:{-.07f,.07f})author(m,model::office_file_binder,b.x+x,b.y,floor+.021f,0);}
  author(m,model::trash_can,at.x+2.1f,at.y,0,0);
  author(m,model::mug,at.x+2.06f,at.y-.05f,.03f,.5f);author(m,model::med_pill_bottle,at.x+2.14f,at.y+.06f,.03f,1.f);author(m,model::item_bandage,at.x+2.1f,at.y+.07f,-999,2.f);
 }
@@ -63,7 +67,9 @@ const bool tube=add({
   {const int crate=find(scene,model::market_crate);int out=0;for(const auto& v:scene.clutter())if(v.model==model::glass_bottle&&!containers::holds(scene.clutter()[size_t(crate)],v))++out;
    r.metric("scene_bottles_spilled",out);r.check("scene: the tipped crate spills its bottles",out>=3,std::to_string(out)+" of 6 out");
    const int basket=find(scene,model::market_basket),bin=find(scene,model::trash_can);
-   r.check("scene: the basket keeps its fruit and the bin its junk",countIn(scene,basket,model::market_pumpkin)==4&&countIn(scene,bin,model::mug)+countIn(scene,bin,model::med_pill_bottle)+countIn(scene,bin,model::item_bandage)==3);}
+   const int box=find(scene,model::prop_cardboard_box_open);
+   r.check("scene: the basket keeps its fruit, the bin its junk and the box its files",countIn(scene,basket,model::market_pumpkin)==4&&countIn(scene,bin,model::mug)+countIn(scene,bin,model::med_pill_bottle)+countIn(scene,bin,model::item_bandage)==3&&
+    countIn(scene,box,model::office_paper_stack)==1&&countIn(scene,box,model::office_file_binder)==2);}
   // 1. Dropped in: rests on the inner floor.
   for(float hz:{60.f,144.f}){Game g(regression::campaign(regression::room()));LabAccess::player(g).pos={3,3};auto crate=make(model::market_crate,{10,8},0);crate.sleeping=true;auto b=make(model::glass_bottle,{10.05f,8.1f},.7f);
    LabAccess::clutter(g)={crate,b};run(g,3,{},hz);const auto& v=g.clutter()[1];const float above=v.z-containers::inner(g.clutter()[0]).floor;

@@ -19,6 +19,8 @@ struct SoftPad {
  // Seconds flat and untouched (asleep past a quarter), seconds settled under an unchanged load (then it
  // holds its shape without stepping), and that load's fingerprint.
  float quiet=0,still=0;std::uint64_t signature=0;
+ // Bumped every step it moves: the renderer's cached padding is rebuilt when it changes.
+ std::uint32_t version=0;
  Vec2 toMesh(Vec2 p)const{const Vec2 d=p-origin;return {dot(d,axisX)/scaleX,dot(d,axisZ)/scaleZ};}
  bool covers(Vec2 p,float margin=0)const{const Vec2 m=toMesh(p);return m.x>=rect[0]-margin/scaleX&&m.x<=rect[1]+margin/scaleX&&m.y>=rect[2]-margin/scaleZ&&m.y<=rect[3]+margin/scaleZ;}
  // Depth (metres, down) at a mesh point: the grid read bilinearly, eased to nothing at the rect's edge
@@ -26,6 +28,9 @@ struct SoftPad {
  float depthMesh(float mx,float mz)const;
  float depthAt(Vec2 p)const{const Vec2 m=toMesh(p);return depthMesh(m.x,m.y);}
  float peak()const;
+ float rise()const;   // the highest the pushed-aside rim stands over the top
+ // The pressed surface's world normal at a mesh point (straight up where it lies flat).
+ Point3 normalMesh(float mx,float mz)const;
 };
 namespace soft {
 bool isSoft(int model);

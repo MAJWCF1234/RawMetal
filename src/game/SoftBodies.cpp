@@ -17,6 +17,12 @@ float SoftPad::depthMesh(float mx,float mz)const{
  return d*std::clamp(edge/.05f,0.f,1.f);
 }
 float SoftPad::peak()const{float m=0;for(float d:depth)m=std::max(m,std::fabs(d));return m;}
+float SoftPad::rise()const{float m=0;for(float d:depth)m=std::max(m,-d);return m;}
+Point3 SoftPad::normalMesh(float mx,float mz)const{
+ // The pressed surface's own slope (it lies at top - depth): 4 cm each way along its axes, in the world.
+ const float h=.04f,du=(depthMesh(mx+h/scaleX,mz)-depthMesh(mx-h/scaleX,mz))/(2*h),dv=(depthMesh(mx,mz+h/scaleZ)-depthMesh(mx,mz-h/scaleZ))/(2*h);
+ const Vec2 g=axisX*du+axisZ*dv;const float l=std::sqrt(g.x*g.x+g.y*g.y+1);return {g.x/l,g.y/l,1/l};
+}
 namespace {
 struct Press {Vec2 at;float radius,load;};
 struct Kick {Vec2 at;float radius,speed;};
@@ -87,8 +93,8 @@ void Game::updateSoftBodies(float dt){
   // The player: standing, walking (a foot at a time), kneeling, lying, landing.
   if(grounded&&f.covers(player,.12f)&&m_player.z>=low&&m_player.z<=high){playerOn=true;
    if(m_player.prone)press.push_back({player,.42f,.75f});
-   else if(moving>.4f){const float phase=m_elapsed*8.5f,s=std::sin(phase);press.push_back({player+side*(s>0?.1f:-.1f)+forward*(.08f*std::cos(phase)),.15f,1.f+.3f*std::fabs(s)});}
-   else press.push_back({player,m_player.crouched?.17f:.2f,m_player.crouched?1.1f:1.f});
+   else if(moving>.4f){const float phase=m_elapsed*8.5f,s=std::sin(phase);press.push_back({player+side*(s>0?.1f:-.1f)+forward*(.08f*std::cos(phase)),.17f,1.f+.15f*std::fabs(s)});}
+   else press.push_back({player,.2f,m_player.crouched?1.2f:1.f});
    if(landed&&landSpeed>.5f)kick.push_back({player,.32f,std::min(landSpeed,9.f)*.45f});}
   // Props lying on it, and props landing on it.
   for(int i=0;i<int(m_clutter.size());++i){if(i==selfClutter||i==m_heldClutter)continue;const auto& v=m_clutter[size_t(i)];if(v.model<0||v.broken||v.z<low||v.z>high+.05f||!f.covers(v.pos))continue;
@@ -106,10 +112,13 @@ void Game::updateSoftBodies(float dt){
   const size_t n=p.depth.size();std::vector<float> force(n,0.f),accel(n,0.f);
   for(int j=0;j<p.ny;++j)for(int i=0;i<p.nx;++i){const Vec2 q=nodeAt(p,i,j);float f=0;const size_t at=size_t(j*p.nx+i);
    // A load over a small patch (a kneel, a foot) presses deeper than the same load lying spread out.
-   for(const auto& c:press)f+=c.load*std::clamp(.2f/c.radius,.3f,2.f)*falloff(length(q-c.at)/c.radius);
+   // Foam stiffens as it packs: the give goes as the root of the load (a 9 kg crate a third of a
+   // person's). Round a press the padding it pushed aside rises in a low rim.
+   for(const auto& c:press){const float r=length(q-c.at)/c.radius,rim=r>1.f&&r<1.8f?std::pow(std::sin(kPi*(r-1.f)/.8f),2.f):0.f;
+    f+=std::sqrt(c.load)*std::clamp(.2f/c.radius,.3f,2.f)*(falloff(r)-.32f*rim);}
    force[at]=f*K*p.sink*gain;
    for(const auto& c:kick)p.speed[at]+=c.speed*falloff(length(q-c.at)/c.radius);}
-  const int count=std::max(1,int(std::ceil(dt*120)));const float h=dt/float(count);
+  ++p.version;const int count=std::max(1,int(std::ceil(dt*120)));const float h=dt/float(count);
   for(int t=0;t<count;++t){
    for(int j=0;j<p.ny;++j)for(int i=0;i<p.nx;++i){const size_t at=size_t(j*p.nx+i);const float d=p.depth[at];
     auto nb=[&](int a,int b){a=std::clamp(a,0,p.nx-1);b=std::clamp(b,0,p.ny-1);return p.depth[size_t(b*p.nx+a)];};
