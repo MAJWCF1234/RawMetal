@@ -13,6 +13,8 @@
 #include <limits>
 #include <type_traits>
 #include <stdexcept>
+#include <mutex>
+#include <cctype>
 
 namespace retro {
 namespace {
@@ -51,11 +53,62 @@ void writeAtomic(const std::filesystem::path& path,const std::string& data){auto
 // the menu shows it short and RawMetal-load.txt keeps it whole.
 thread_local std::string t_loadFailure;
 bool refuse(const std::string& why){t_loadFailure=why.empty()?"unknown error":why;return false;}
-// Appends one refused load to RawMetal-load.txt beside the other RawMetal-*.txt reports.
-void logLoadFailure(const std::filesystem::path& path,const std::string& why){
+// Sections the last format 28 load on this thread skipped (unknown to this build), and how many
+// chunks its "game" section said it carries.
+thread_local std::vector<std::string> t_skippedSections;
+thread_local int t_sectionChunks=0;
+// Appends one line, stamped, to RawMetal-load.txt beside the other RawMetal-*.txt reports.
+void appendLoadLog(const std::string& line){
  try{std::ofstream log("RawMetal-load.txt",std::ios::app);SYSTEMTIME t;GetLocalTime(&t);char stamp[32];std::snprintf(stamp,sizeof stamp,"%04d-%02d-%02d %02d:%02d:%02d",t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond);
-  log<<stamp<<" load refused: "<<path.string()<<" (this build reads save versions 1-"<<Game::SaveVersion<<"): "<<why<<'\n';}catch(...){}
+  log<<stamp<<' '<<line<<'\n';}catch(...){}
 }
+void logLoadFailure(const std::filesystem::path& path,const std::string& why){
+ appendLoadLog("load refused: "+path.string()+" (this build reads save versions 1-"+std::to_string(Game::SaveVersion)+"): "+why);
+}
+// Writes a file that must not exist yet: a backup never replaces another file.
+bool writeNew(const std::filesystem::path& path,const std::string& data){
+ HANDLE file=CreateFileW(path.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);if(file==INVALID_HANDLE_VALUE)return false;
+ DWORD written=0;const bool ok=WriteFile(file,data.data(),DWORD(data.size()),&written,nullptr)&&written==data.size()&&FlushFileBuffers(file);CloseHandle(file);
+ if(!ok){std::error_code e;std::filesystem::remove(path,e);}return ok;
+}
+// A list in an archive: its count, bounded, then each entry.
+template<class A,class V,class F> void archiveList(A& a,V& values,F visit,int limit=1024){int count=int(values.size());a(count);if(count<0||count>limit)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(size_t(count));for(auto&v:values)visit(v);}
+// A section frame: name length and name, version, flags, body length, body checksum.
+constexpr size_t MaxSectionName=48;
+constexpr std::uint16_t SectionRequired=1;
+bool validSectionName(std::string_view name){if(name.empty()||name.size()>MaxSectionName)return false;for(char c:name)if(!(std::isalnum(static_cast<unsigned char>(c))||c=='.'||c=='-'||c=='_'))return false;return true;}
+template<class T> void putFixed(std::string& out,T v){for(size_t i=0;i<sizeof(T);++i)out.push_back(char((std::uint64_t(v)>>(8*i))&0xff));}
+template<class T> T getFixed(const std::string& in,size_t at){std::uint64_t v=0;for(size_t i=0;i<sizeof(T);++i)v|=std::uint64_t(static_cast<unsigned char>(in[at+i]))<<(8*i);return T(v);}
+struct SectionFrame {std::string name;int version=0;std::uint16_t flags=0;size_t offset=0,size=0;};
+// Splits a format 28 payload into its sections, checking every frame and body. Throws the reason.
+std::vector<SectionFrame> sectionFrames(const std::string& payload,std::uint32_t(*sum)(const std::string&,size_t,size_t)){
+ std::vector<SectionFrame> frames;size_t at=0;
+ while(at<payload.size()){
+  const std::string which="section "+std::to_string(frames.size()+1);
+  const size_t length=static_cast<unsigned char>(payload[at]);
+  if(length==0||length>MaxSectionName)throw std::runtime_error(which+" has a bad name (damaged save)");
+  if(payload.size()-at<1+length+12)throw std::runtime_error("truncated save: "+which+"'s frame is cut off");
+  SectionFrame f;f.name=payload.substr(at+1,length);if(!validSectionName(f.name))throw std::runtime_error(which+" has a bad name (damaged save)");at+=1+length;
+  f.version=getFixed<std::uint16_t>(payload,at);f.flags=getFixed<std::uint16_t>(payload,at+2);const auto size=getFixed<std::uint32_t>(payload,at+4),check=getFixed<std::uint32_t>(payload,at+8);at+=12;
+  if(size>payload.size()-at)throw std::runtime_error("truncated save: section '"+f.name+"' holds "+std::to_string(size)+" bytes, "+std::to_string(payload.size()-at)+" left");
+  f.offset=at;f.size=size;if(sum(payload,at,size)!=check)throw std::runtime_error("section '"+f.name+"' is damaged (checksum mismatch)");
+  if(f.version<1)throw std::runtime_error("section '"+f.name+"' has version 0");
+  for(const auto& other:frames)if(other.name==f.name)throw std::runtime_error("section '"+f.name+"' appears twice");
+  frames.push_back(std::move(f));at+=size;
+ }
+ return frames;
+}
+std::uint32_t rangeChecksum(const std::string& data,size_t at,size_t size){uint32_t hash=2166136261u;for(size_t i=at;i<at+size;++i){hash^=static_cast<unsigned char>(data[i]);hash*=16777619u;}return hash;}
+void appendSection(std::string& payload,const std::string& name,std::uint16_t version,std::uint16_t flags,const std::string& body){
+ payload.push_back(char(name.size()));payload+=name;putFixed(payload,version);putFixed(payload,flags);putFixed(payload,std::uint32_t(body.size()));putFixed(payload,rangeChecksum(body,0,body.size()));payload+=body;
+}
+// The section registry: the built-in sections first, then those systems register.
+struct SectionRegistry {std::mutex lock;std::vector<SaveSection> sections;bool ready=false;};
+SectionRegistry& sectionRegistry(){static SectionRegistry registry;return registry;}
+}
+// What the rigid-body solver plugs into the "physics" section (SaveSections.h).
+PhysicsSaveHooks& physicsSaveHooks(){static PhysicsSaveHooks hooks;return hooks;}
+namespace {
 // The menu line: the reason, upper case, short enough for the pause menu.
 std::string loadFailureLine(const std::string& lead,const std::string& why){std::string line=lead+" / "+why;for(auto&c:line)c=char(std::toupper(static_cast<unsigned char>(c)));if(line.size()>58)line=line.substr(0,55)+"...";return line;}
 std::string readFile(const std::filesystem::path& path){
@@ -63,7 +116,21 @@ std::string readFile(const std::filesystem::path& path){
  std::ifstream in(path,std::ios::binary);std::string data(size,'\0');if(!in.read(data.data(),std::streamsize(size)))throw std::runtime_error("unreadable save");return data;
 }
 }
+// The campaign a save names (its world and custom campaign key), from those installed or built in.
+bool Game::adoptSavedCampaign(){
+ if(m_worldId==WorldId::Custom){
+  auto found=std::find_if(m_customCampaigns.begin(),m_customCampaigns.end(),[&](const auto& campaign){return campaign&&campaign->key==m_customCampaignKey;});
+  if(found!=m_customCampaigns.end())m_customCampaign=*found;
+  else if(auto builtIn=builtInCampaignForKey(m_customCampaignKey))m_customCampaign=builtIn;
+  else return false;
+ }else {m_customCampaign.reset();m_customCampaignKey=0;}
+ return true;
+}
+// The positional text archive of formats 1-27, frozen: it reads every older save, and tests write
+// one in any of those versions (a field the version lacked is left out, or for physics props before
+// 17, the props themselves). Format 28 is sections (encodeSections).
 template<class A> int Game::archiveSave(A& a,int version){
+ if(version<1||version>LegacySaveVersion)throw std::runtime_error("the positional archive holds versions 1-"+std::to_string(LegacySaveVersion));
  if(version>=9){
   a(m_worldId);
   bool known=m_worldId==WorldId::Campaign||m_worldId==WorldId::Ashfall||(version>=12&&m_worldId==WorldId::Custom);
@@ -71,14 +138,7 @@ template<class A> int Game::archiveSave(A& a,int version){
  }else if constexpr(A::reading)m_worldId=WorldId::Campaign;
  if(version>=12){
   a(m_customCampaignKey);
-  if constexpr(A::reading){
-   if(m_worldId==WorldId::Custom){
-    auto found=std::find_if(m_customCampaigns.begin(),m_customCampaigns.end(),[&](const auto& campaign){return campaign&&campaign->key==m_customCampaignKey;});
-    if(found!=m_customCampaigns.end())m_customCampaign=*found;
-    else if(auto builtIn=builtInCampaignForKey(m_customCampaignKey))m_customCampaign=builtIn;
-    else throw std::runtime_error("Custom campaign required by save is not installed");
-   }else {m_customCampaign.reset();m_customCampaignKey=0;}
-  }
+  if constexpr(A::reading)if(!adoptSavedCampaign())throw std::runtime_error("Custom campaign required by save is not installed");
  }else if constexpr(A::reading){m_customCampaign.reset();m_customCampaignKey=0;}
  auto vec=[&](Vec2& v){a(v.x,v.y);};
  a(m_level,m_elapsed,m_won,m_medkits,m_weaponEquipped,m_heldClutter);
@@ -94,7 +154,7 @@ template<class A> int Game::archiveSave(A& a,int version){
  // Version 19: the handgun's pool, the firearm in hand, a switch under way and the reload's length.
  if(version>=19){auto&nine=p.pool(WeaponId::Handgun);a(nine.total,nine.loaded,m_equippedWeapon,m_switchTarget,m_switchRaise,m_reloadLength,m_emptyReload);
   if(!playerFirearm(m_equippedWeapon)||(m_switchTarget!=WeaponId::Fists&&!playerFirearm(m_switchTarget)))throw std::runtime_error("invalid saved weapon");}
- else if constexpr(A::reading){m_equippedWeapon=WeaponId::Shotgun;m_switchTarget=WeaponId::Fists;m_switchRaise=false;p.pool(WeaponId::Handgun)={};m_reloadLength=m_reloadTimer>0?playerWeaponDef(WeaponId::Shotgun).cycle.reloadTime:0;m_emptyReload=false;}
+ // Older: the upgrade step to 19 (refitLegacySave) sets the shotgun in hand and an empty 9 mm pool.
  auto list=[&](auto& values,auto visit,int limit=1024){int count=int(values.size());a(count);if(count<0||count>limit)throw std::runtime_error("invalid collection");if constexpr(A::reading)values.resize(count);for(auto&v:values)visit(v);};
  if(version>=6){
   list(m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");},8192);
@@ -109,7 +169,17 @@ template<class A> int Game::archiveSave(A& a,int version){
  }
  int archivedChunks=version>=12?chunkCount():version>=11?worldChunkCount(m_worldId):version>=10?(m_worldId==WorldId::Campaign?6:12):version>=7?6:4;
  if(version>=11){a(archivedChunks);int available=version>=12?chunkCount():worldChunkCount(m_worldId);if(archivedChunks<1||archivedChunks>available||archivedChunks>MaxChunks)throw std::runtime_error("Invalid chunk count");}
- for(int index=0;index<archivedChunks;++index)try{auto&c=m_chunks[index];if constexpr(A::reading){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
+ for(int index=0;index<archivedChunks;++index)try{archiveChunk(a,version,index,ChunkAll);}catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}
+ return archivedChunks;
+}
+// One chunk's parts. The positional archive (1-27) takes every part in this order; format 28 keeps
+// each part in its own section ("world", "creatures", "pickups", "props"), every chunk in turn, with
+// `version` the format (28: every field the positional archive gained up to 27).
+template<class A> void Game::archiveChunk(A& a,int version,int index,unsigned parts){
+ auto vec=[&](Vec2& v){a(v.x,v.y);};
+ auto list=[&](auto& values,auto visit,int limit=1024){archiveList(a,values,visit,limit);};
+ auto&c=m_chunks[index];if constexpr(A::reading)if(parts&ChunkWorld){c.world=makeWorld(index);if(loadProgressCounter)++*loadProgressCounter;}auto&w=c.world;
+ if(parts&ChunkWorld){
   a(c.kills,c.resident,w.m_controlReleased,w.m_liftPhase,w.m_liftHeight,w.m_liftTimer,w.m_liftVelocity,w.m_liftCaught,w.m_reactorStage,w.m_reactorFault);
   if(version>=16)list(w.m_destroyedTiles,[&](std::pair<int,int>&t){a(t.first,t.second);if(t.first<0||t.second<0||t.first>=World::Width||t.second>=World::Height)throw std::runtime_error("invalid destroyed tile");});
   if(version>=17){list(w.m_brokenBreakables,[&](std::uint16_t&i){a(i);if(i>=w.breakables().size())throw std::runtime_error("invalid broken pane");});
@@ -128,21 +198,29 @@ template<class A> int Game::archiveSave(A& a,int version){
     float rest=-1,damage=0;bool broken=false;if(version>=24){a(rest,damage,broken);if(rest>1||!(damage>=0&&damage<1e6f))throw std::runtime_error("invalid door");}
     if(door<int(w.m_doors.size())){auto&d=w.m_doors[door];d.open=open;d.opening=opening;d.rest=rest<0?-1.f:std::min(rest,d.maxOpen);d.damage=damage;d.broken=broken&&d.breakable();}}
   }else for(auto&d:w.m_doors){a(d.open,d.opening);if(d.open<0||d.open>1)throw std::runtime_error("invalid door");if(version>=24)a(d.rest,d.damage,d.broken);}
+ }
+ if(parts&ChunkCreatures)
   list(c.enemies,[&](Enemy&e){vec(e.pos);a(e.hp,e.attackCooldown,e.painFlash,e.alive,e.kind,e.maxHp,e.deathTime,e.windup,e.strike,e.heading,e.gait,e.moving,e.voiceTimer,e.idleTimer,e.z,e.awareness,e.searchTime,e.verticalVelocity,e.repathTimer,e.lastKnownZ);vec(e.waypoint);vec(e.home);vec(e.lastKnown);a(e.state);if(version>=5)a(e.stalkMode,e.stalkTimer,e.stalkSide);if(version>=14)a(e.scriptSpawned);if(version>=15)a(e.wakeState);
    if(version>=16){a(e.homeZ,e.scale,e.originLevel,e.surfaceMode);vec(e.originHome);vec(e.surfaceNormal);if(e.scale<.25f||e.scale>4||e.originLevel<-1||e.originLevel>=MaxChunks||e.surfaceMode<0||e.surfaceMode>2)throw std::runtime_error("invalid creature fields");}
-   // Before version 20 the recognition meter was not kept: a creature on a Chase has the player made out.
-   if(version>=20)a(e.recognition);else if constexpr(A::reading)e.recognition=e.state==Enemy::State::Chase&&e.awareness>0?1.f:0.f;
+   // Before version 20 the recognition meter was not kept: the upgrade step to 20 rebuilds it.
+   if(version>=20)a(e.recognition);
    // Version 22: a recurring hunter's name and prey, and its walk in through a seam.
    if(version>=22){a(e.hunter,e.prey,e.arrive);if(e.prey<-1||e.prey>4096||!(e.arrive>=0&&e.arrive<=30))throw std::runtime_error("invalid creature fields");}
    if(int(e.kind)>(version>=23?int(Enemy::Kind::Machine):version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0||!(e.recognition>=0&&e.recognition<=1))throw std::runtime_error("invalid creature (kind "+std::to_string(int(e.kind))+", state "+std::to_string(int(e.state))+", stalk "+std::to_string(int(e.stalkMode))+" for "+std::to_string(e.stalkTimer)+" s, max hp "+std::to_string(e.maxHp)+", recognition "+std::to_string(e.recognition)+")");},4096);
+ if(parts&ChunkPickups)
   list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
+ if(parts&ChunkProps){
   // A save older than version 17 had no physics props: one written in that form leaves them out.
   std::vector<Clutter> olderClutter;
   decltype((c.clutter)) clutterList=[&]()->decltype((c.clutter)){if constexpr(!A::reading){if(version<17){olderClutter=c.clutter;std::erase_if(olderClutter,[](const Clutter&v){return v.kind==ClutterModelKind;});return olderClutter;}}return c.clutter;}();
-  list(clutterList,[&](Clutter&v){vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>3.f;})))throw std::runtime_error("invalid prop");}
+  // Each read prop starts as a new one: resizing keeps the fresh game's props in place, and a format
+  // before 17, which carries no model, would leave one of them a junk kind still holding its model.
+  list(clutterList,[&](Clutter&v){if constexpr(A::reading)v=Clutter{};vec(v.pos);vec(v.velocity);a(v.z,v.vz,v.yaw,v.spin,v.kind,v.projectile,v.impactCooldown,v.pitch,v.roll,v.pitchSpeed,v.rollSpeed,v.restTime,v.sleeping);if(v.kind<0||v.kind>(version>=17?7:6))throw std::runtime_error("invalid clutter");if(version>=17){a(v.model,v.damage,v.authored,v.broken,v.homeZ);vec(v.home);for(auto&d:v.dims)a(d);if((v.kind==7)!=(v.model>=0)||v.model>=FacilityModelCount||v.damage<0||(v.kind==7&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return d<=0||d>3.f;})))throw std::runtime_error("invalid prop");}
    // Version 25: what a shard was broken from, so it is drawn as a piece of it (Clutter::shards).
    if(version>=25){a(v.shardOf,v.piece,v.shardModel);for(auto&d:v.from)a(d);
     if(int(v.shardOf)<0||int(v.shardOf)>=int(ShardOf::Count)||v.piece<0||v.piece>7||v.shardModel<-1||v.shardModel>=FacilityModelCount||std::any_of(v.from.begin(),v.from.end(),[](float d){return !(d>=0&&d<=30.f);})||(v.kind==6&&std::any_of(v.dims.begin(),v.dims.end(),[](float d){return !(d>=0&&d<=3.f);})))throw std::runtime_error("invalid shard");}},16384); // a map whose props were all broken holds thousands of pieces
+ }
+ if(parts&ChunkWorld){
   // Version 21: which leads have torn. The cables themselves are hung again on load.
   if(version>=21){std::vector<std::uint16_t> torn;if constexpr(!A::reading)for(size_t i=0;i<w.m_leadRopes.size();++i)if(w.m_leadRopes[i].torn)torn.push_back(std::uint16_t(i));
    list(torn,[&](std::uint16_t&i){a(i);if(i>=w.leads().size())throw std::runtime_error("invalid lead");});if constexpr(A::reading)for(auto i:torn)w.m_leadRopes[i].torn=true;}
@@ -156,46 +234,255 @@ template<class A> int Game::archiveSave(A& a,int version){
     for(const auto&[i,packed]:panes){std::vector<glass::PackedHit> one;for(auto h:packed)one.push_back({std::uint16_t(h>>32),std::uint16_t(h>>16),std::uint8_t(h>>8),std::uint8_t(h)});hits.push_back({i,one});}w.restorePaneHits(hits);}}
   if(int(w.m_liftPhase)>int(World::LiftPhase::Crashed)||int(w.m_reactorStage)>int(World::ReactorStage::Released)||w.m_liftHeight<-9||w.m_liftHeight>9||w.m_liftTimer<0||c.kills<0)throw std::runtime_error("invalid world state");
   if constexpr(A::reading){w.restoreLift(w);if(!c.resident)w.unloadGeometry();}
- }catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}
- return archivedChunks;
+ }
 }
 std::string Game::encodeSave()const{
  // Each pool is clamped to its own magazine or tube.
  Game snapshot=*this;for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=snapshot.m_player.pool(id);rounds.loaded=std::clamp(rounds.loaded,0,std::clamp(rounds.total,0,playerWeaponDef(id).cycle.tubeCapacity));}
- snapshot.m_player.pool(WeaponId::Fists)={};snapshot.stripSummons();snapshot.storeChunk();Writer writer;snapshot.archiveSave(writer,SaveVersion);auto payload=writer.stream.str();
- if(writer.repaired)try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"save on map "<<m_level<<": "<<writer.repaired<<" non-finite or out-of-range numbers written as the nearest a load accepts\n";}catch(...){}
- return "RAWMETAL_SAVE "+std::to_string(SaveVersion)+" "+std::to_string(checksum(payload))+"\n"+payload;
+ snapshot.m_player.pool(WeaponId::Fists)={};snapshot.stripSummons();snapshot.storeChunk();int repaired=0;auto payload=snapshot.encodeSections(repaired);
+ if(repaired)try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"save on map "<<m_level<<": "<<repaired<<" non-finite or out-of-range numbers written as the nearest a load accepts\n";}catch(...){}
+ auto data="RAWMETAL_SAVE "+std::to_string(SaveVersion)+" "+std::to_string(checksum(payload))+"\n"+payload;
+ // A save no build would load is not written: the slot keeps what it had.
+ if(data.size()>MaxSaveBytes)throw std::runtime_error("save is larger than 64 MB");
+ return data;
+}
+// ---- Format 28: sections ----
+std::vector<SaveSection> Game::currentSaveSections(){
+ auto& registry=sectionRegistry();std::lock_guard guard(registry.lock);
+ if(!registry.ready){registry.sections=builtInSaveSections();registry.ready=true;}
+ return registry.sections;
+}
+void Game::registerSaveSection(SaveSection section){
+ if(!validSectionName(section.name)||section.version<1||!section.write||!section.read)throw std::invalid_argument("save section '"+section.name+"': a name of 1-48 letters, digits, '.', '-' or '_', a version from 1, write and read");
+ auto& registry=sectionRegistry();std::lock_guard guard(registry.lock);
+ if(!registry.ready){registry.sections=builtInSaveSections();registry.ready=true;}
+ for(auto& existing:registry.sections)if(existing.name==section.name){existing=std::move(section);return;}
+ registry.sections.push_back(std::move(section));
+}
+std::vector<std::string> Game::saveSectionNames(){std::vector<std::string> names;for(const auto& s:currentSaveSections())names.push_back(s.name);return names;}
+std::string Game::encodeSections(int& repaired){
+ std::string payload;
+ for(const auto& section:currentSaveSections()){SaveOut out;section.write(*this,out);repaired+=out.repaired;
+  if(out.bytes.empty()&&!section.core)continue;
+  if(out.bytes.size()>MaxSaveBytes)throw std::runtime_error("save section '"+section.name+"' is larger than 64 MB");
+  appendSection(payload,section.name,section.version,section.required?SectionRequired:0,out.bytes);}
+ return payload;
+}
+int Game::decodeSections(const std::string& payload,std::uint32_t hash){
+ const auto frames=sectionFrames(payload,rangeChecksum);
+ if(checksum(payload)!=hash)throw std::runtime_error("checksum mismatch (file damaged or truncated)");
+ const auto sections=currentSaveSections();t_skippedSections.clear();t_sectionChunks=0;
+ auto known=[&](const SectionFrame& f)->const SaveSection*{for(const auto& s:sections)if(s.name==f.name&&f.version<=s.version)return &s;return nullptr;};
+ for(const auto& f:frames)if(!known(f)){
+  if(f.flags&SectionRequired)throw std::runtime_error("section '"+f.name+"' (version "+std::to_string(f.version)+") is needed and this build does not read it (a newer build wrote the save)");
+  t_skippedSections.push_back(f.name+" v"+std::to_string(f.version));}
+ for(const auto& section:sections){
+  const SectionFrame* found=nullptr;for(const auto& f:frames)if(f.name==section.name)found=&f;
+  if(found&&found->version>section.version){if(section.core)throw std::runtime_error("section '"+section.name+"' is version "+std::to_string(found->version)+"; this build reads up to "+std::to_string(section.version));found=nullptr;}
+  if(!found){if(section.core)throw std::runtime_error("missing section '"+section.name+"'");if(section.absent)section.absent(*this);continue;}
+  SaveIn in(payload.data()+found->offset,found->size);
+  try{section.read(*this,in,found->version);if(in.left())throw std::runtime_error(std::to_string(in.left())+" bytes left unread");}
+  catch(const std::exception& error){throw std::runtime_error("section '"+section.name+"': "+error.what());}
+  if(found->version<section.version&&section.upgrade)section.upgrade(*this,found->version);
+ }
+ return t_sectionChunks;
+}
+// The sections this build writes, in the order they are read. A section that indexes another's
+// lists comes after it (physics after props).
+std::vector<SaveSection> Game::builtInSaveSections(){
+ std::vector<SaveSection> list;
+ auto add=[&](const char* name,bool core,auto body){
+  list.push_back({.name=name,.version=1,.core=core,
+   .write=[body](Game& g,SaveOut& out){body(g,out,1);},
+   .read=[body](Game& g,SaveIn& in,int version){body(g,in,version);}});};
+ // The world the save belongs to, where in it, and how many chunks the chunk sections carry.
+ add("game",true,[](Game& g,auto& a,int){
+  a(g.m_worldId);if(int(g.m_worldId)>int(WorldId::Custom))throw std::runtime_error("Unknown saved world");
+  a(g.m_customCampaignKey);if constexpr(std::decay_t<decltype(a)>::reading)if(!g.adoptSavedCampaign())throw std::runtime_error("Custom campaign required by save is not installed");
+  int chunks=g.chunkCount();a(g.m_level,g.m_elapsed,g.m_won,chunks);
+  if(chunks<1||chunks>g.chunkCount()||chunks>MaxChunks)throw std::runtime_error("Invalid chunk count");t_sectionChunks=chunks;});
+ // The body, the camera, the weapon in hand and its motion, and the prop held.
+ add("player",true,[](Game& g,auto& a,int){auto&p=g.m_player;
+  a(p.pos.x,p.pos.y,p.angle,p.pitch,p.health,p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye,g.m_velocity.x,g.m_velocity.y);
+  a(g.m_weaponKick,g.m_shotCooldown,g.m_reloadTimer,g.m_shotAge,g.m_holster,g.m_punchAge,g.m_punchLeft,g.m_guarding,g.m_verticalSpring,g.m_verticalSpringVelocity,g.m_stepDistance,g.m_stepVariant,g.m_jumpBuffer,g.m_coyote);
+  auto&m=g.m_weaponMotion;a(m.yaw,m.pitch,m.bob,m.back,m.elbow,m.bolt,m.roll,g.m_sway.x,g.m_sway.y,g.m_swayVelocity.x,g.m_swayVelocity.y,g.m_elbowVelocity);
+  a(g.m_weaponEquipped,g.m_equippedWeapon,g.m_switchTarget,g.m_switchRaise,g.m_reloadLength,g.m_emptyReload,g.m_heldClutter);
+  if(!playerFirearm(g.m_equippedWeapon)||(g.m_switchTarget!=WeaponId::Fists&&!playerFirearm(g.m_switchTarget)))throw std::runtime_error("invalid saved weapon");});
+ // What she carries: first aid, each firearm's rounds, where each item sits in the grid, quest items.
+ add("inventory",true,[](Game& g,auto& a,int){
+  a(g.m_medkits);for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=g.m_player.pool(id);a(rounds.total,rounds.loaded);}
+  for(auto&cell:g.m_itemCells)a(cell);
+  archiveList(a,g.m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});});
+ // The hung hazmat suit's simulation.
+ add("hazmat",true,[](Game& g,auto& a,int){auto&h=g.m_hazmat;a(h.initialized,h.sleeping,h.quiet,h.accumulator);
+  for(auto&points:{&h.p,&h.previous})for(auto&p:*points){a(p.x,p.y,p.z);if(p.x<0||p.x>24||p.y<0||p.y>24||p.z<-12||p.z>20)throw std::runtime_error("Invalid hazmat pose");}
+  if(h.accumulator<0||h.accumulator>.06f||h.quiet<0||h.quiet>10)throw std::runtime_error("Invalid hazmat simulation");});
+ // Script and story state: every state flag (NPCs, grenades and drones keep theirs here too),
+ // objectives and the one-shot events that have fired.
+ add("script",true,[](Game& g,auto& a,int){
+  archiveList(a,g.m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");},8192);
+  if constexpr(std::decay_t<decltype(a)>::reading)for(size_t i=1;i<g.m_states.size();++i)if(g.m_states[i-1].id>=g.m_states[i].id)throw std::runtime_error("unsorted or duplicate saved state");
+  archiveList(a,g.m_objectives,[&](StateValue&v){a(v.id,v.value);if(v.id==0||v.value<0||v.value>3)throw std::runtime_error("invalid objective");});
+  archiveList(a,g.m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});});
+ // Each chunk in turn: its world (lift and reactor, broken tiles and breakables, pane damage and
+ // glass hits, doors, torn leads), its creatures, its pickups, its props and their pieces.
+ auto chunks=[&](const char* name,unsigned part){add(name,true,[part](Game& g,auto& a,int){
+  int count=std::decay_t<decltype(a)>::reading?0:g.chunkCount();a(count);if(count!=t_sectionChunks&&std::decay_t<decltype(a)>::reading)throw std::runtime_error("holds "+std::to_string(count)+" maps, the save "+std::to_string(t_sectionChunks));
+  for(int index=0;index<count;++index)try{g.archiveChunk(a,SaveVersion,index,part);}catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}});};
+ chunks("world",ChunkWorld);chunks("creatures",ChunkCreatures);chunks("pickups",ChunkPickups);chunks("props",ChunkProps);
+ // Runtime changes to entities' properties (the map's named entities and their `p.` properties).
+ add("entities",false,[](Game& g,auto& a,int){auto&store=g.m_saveStore.entities;if constexpr(!std::decay_t<decltype(a)>::reading)if(store.empty())return; // an empty store is not written
+  int count=int(store.size());a(count);
+  if(count<0||size_t(count)>SaveStore::MaxEntities)throw std::runtime_error("invalid entity count");
+  if constexpr(std::decay_t<decltype(a)>::reading){for(int i=0;i<count;++i){int chunk=0;std::string name;a(chunk);a.text(name,SaveStore::MaxName);
+    if(chunk<-1||chunk>=MaxChunks||name.empty())throw std::runtime_error("invalid entity");int properties=0;a(properties);if(properties<1||size_t(properties)>SaveStore::MaxProperties)throw std::runtime_error("invalid property count");
+    auto [at,fresh]=store.try_emplace(SaveStore::Key{chunk,name});if(!fresh)throw std::runtime_error("entity '"+name+"' twice");
+    for(int p=0;p<properties;++p){std::string key;a.text(key,SaveStore::MaxName);SaveValue value;a.value(value,SaveStore::MaxText);if(key.empty()||!at->second.try_emplace(key,std::move(value)).second)throw std::runtime_error("invalid property of '"+name+"'");}}}
+  else for(auto& [key,properties]:store){int chunk=key.first;std::string name=key.second;a(chunk);a.text(name);int n=int(properties.size());a(n);for(auto& [property,value]:properties){std::string k=property;auto v=value;a.text(k);a.value(v);}}});
+ // Named values scripts set, per map or for the campaign.
+ add("variables",false,[](Game& g,auto& a,int){auto&store=g.m_saveStore.variables;if constexpr(!std::decay_t<decltype(a)>::reading)if(store.empty())return;
+  int count=int(store.size());a(count);
+  if(count<0||size_t(count)>SaveStore::MaxVariables)throw std::runtime_error("invalid variable count");
+  if constexpr(std::decay_t<decltype(a)>::reading){for(int i=0;i<count;++i){int chunk=0;std::string name;a(chunk);a.text(name,SaveStore::MaxName);SaveValue value;a.value(value,SaveStore::MaxText);
+    if(chunk<-1||chunk>=MaxChunks||name.empty()||!store.try_emplace(SaveStore::Key{chunk,name},std::move(value)).second)throw std::runtime_error("invalid variable '"+name+"'");}}
+  else for(auto& [key,value]:store){int chunk=key.first;std::string name=key.second;auto v=value;a(chunk);a.text(name);a.value(v);}});
+ // The rigid-body solver's state for props (PropBody: orientation, angular velocity, sleep
+ // island), per chunk, by each prop's place in the chunk's props. Written only once the solver
+ // sets physicsSaveHooks(); read before the reconciliation, which keeps the props' fields.
+ add("physics",false,[](Game& g,auto& a,int){const auto& hooks=physicsSaveHooks();
+  auto norm=[](const PropBody& b){return std::sqrt(b.orientation[0]*b.orientation[0]+b.orientation[1]*b.orientation[1]+b.orientation[2]*b.orientation[2]+b.orientation[3]*b.orientation[3]);};
+  // Written: a unit quaternion (a degenerate one is the identity), spin clamped to 1000 rad/s.
+  // Read: refused unless near unit and in range, then made exactly unit.
+  auto body=[&](PropBody& b){
+   if constexpr(!std::decay_t<decltype(a)>::reading){const float length=norm(b);if(std::isfinite(length)&&length>1e-6f)for(auto&q:b.orientation)q/=length;else b.orientation={0,0,0,1};
+    for(auto&w:b.angularVelocity)w=std::isfinite(w)?std::clamp(w,-1000.f,1000.f):0.f;b.island=std::max(b.island,-1);}
+   for(auto&q:b.orientation)a(q);for(auto&w:b.angularVelocity)a(w);a(b.island);
+   if constexpr(std::decay_t<decltype(a)>::reading){const float length=norm(b);
+    if(!(length>.9f&&length<1.1f)||std::any_of(b.angularVelocity.begin(),b.angularVelocity.end(),[](float w){return std::fabs(w)>1000.f;})||b.island<-1)throw std::runtime_error("invalid prop body");
+    for(auto&q:b.orientation)q/=length;}};
+  if constexpr(std::decay_t<decltype(a)>::reading){int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid chunk count");int last=-1;
+   for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks)throw std::runtime_error("invalid chunk");last=level;auto&props=g.m_chunks[size_t(level)].clutter;
+    if(count<1||size_t(count)>props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop count");int lastProp=-1;
+    for(int k=0;k<count;++k){int index=0;a(index);if(index<=lastProp||size_t(index)>=props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop index");lastProp=index;PropBody b;body(b);if(hooks.restore)hooks.restore(props[size_t(index)],b);}}}
+  else{if(!hooks.capture)return;std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;
+   for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;const auto&props=g.m_chunks[size_t(level)].clutter;
+    for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});}if(!bodies.empty())captured.push_back({level,std::move(bodies)});}
+   if(captured.empty())return;int chunks=int(captured.size());a(chunks);
+   for(auto& [level,bodies]:captured){int l=level,count=int(bodies.size());a(l,count);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}});
+ return list;
+}
+// ---- The stores the "entities" and "variables" sections keep ----
+namespace {
+bool storeName(std::string_view name){return !name.empty()&&name.size()<=SaveStore::MaxName&&std::none_of(name.begin(),name.end(),[](char c){return static_cast<unsigned char>(c)<32;});}
+bool storeValue(const SaveValue& value){if(auto* d=std::get_if<double>(&value))return std::isfinite(*d);if(auto* s=std::get_if<std::string>(&value))return s->size()<=SaveStore::MaxText;return true;}
+}
+bool Game::setEntityProperty(int chunk,std::string_view entity,std::string_view property,SaveValue value){
+ if(chunk<-1||chunk>=MaxChunks||!storeName(entity)||!storeName(property)||!storeValue(value))return false;
+ auto& store=m_saveStore.entities;auto at=store.find(SaveStore::Key{chunk,std::string(entity)});
+ if(at==store.end()){if(store.size()>=SaveStore::MaxEntities)return false;at=store.emplace(SaveStore::Key{chunk,std::string(entity)},SaveStore::Properties{}).first;}
+ auto& properties=at->second;auto found=properties.find(property);
+ if(found!=properties.end()){found->second=std::move(value);return true;}
+ if(properties.size()>=SaveStore::MaxProperties){if(properties.empty())store.erase(at);return false;}
+ properties.emplace(std::string(property),std::move(value));return true;
+}
+const SaveStore::Properties* Game::entityProperties(int chunk,std::string_view entity)const{auto at=m_saveStore.entities.find(SaveStore::Key{chunk,std::string(entity)});return at==m_saveStore.entities.end()?nullptr:&at->second;}
+const SaveValue* Game::entityProperty(int chunk,std::string_view entity,std::string_view property)const{
+ const auto* properties=entityProperties(chunk,entity);if(!properties)return nullptr;auto found=properties->find(property);return found==properties->end()?nullptr:&found->second;}
+bool Game::clearEntityProperty(int chunk,std::string_view entity,std::string_view property){
+ auto at=m_saveStore.entities.find(SaveStore::Key{chunk,std::string(entity)});if(at==m_saveStore.entities.end())return false;
+ auto found=at->second.find(property);if(found==at->second.end())return false;at->second.erase(found);if(at->second.empty())m_saveStore.entities.erase(at);return true;}
+bool Game::setMapVariable(int chunk,std::string_view name,SaveValue value){
+ if(chunk<-1||chunk>=MaxChunks||!storeName(name)||!storeValue(value))return false;
+ auto& store=m_saveStore.variables;auto at=store.find(SaveStore::Key{chunk,std::string(name)});
+ if(at!=store.end()){at->second=std::move(value);return true;}
+ if(store.size()>=SaveStore::MaxVariables)return false;store.emplace(SaveStore::Key{chunk,std::string(name)},std::move(value));return true;}
+const SaveValue* Game::mapVariable(int chunk,std::string_view name)const{auto at=m_saveStore.variables.find(SaveStore::Key{chunk,std::string(name)});return at==m_saveStore.variables.end()?nullptr:&at->second;}
+bool Game::clearMapVariable(int chunk,std::string_view name){return m_saveStore.variables.erase(SaveStore::Key{chunk,std::string(name)})>0;}
+// From 1.0.4 to 1.5.0 the game asked for L"\RawMetal\saves" and L"\RawMetal\settings.ini": "\R"
+// and "\s" are no escapes, so it wrote <LOCALAPPDATA>RawMetalsaves and RawMetalsettings.ini.
+// Each file there comes into the right place unless the right place holds one as new; one it
+// would replace is kept beside it first as <file>.older.bak (-2, -3... never over a file).
+// Copies keep their times, so a second start adopts nothing; the old folder is left as it was.
+void Game::adoptMisplacedSaves(const std::wstring& localAppData){
+ if(localAppData.empty())return;
+ const std::filesystem::path root(localAppData);
+ auto adopt=[](const std::filesystem::path& from,const std::filesystem::path& to){
+  std::error_code error;if(!std::filesystem::is_regular_file(from,error))return;
+  if(std::filesystem::exists(to,error)){
+   if(std::filesystem::last_write_time(to,error)>=std::filesystem::last_write_time(from,error)||error)return;
+   std::string older;try{older=readFile(to);}catch(const std::exception&){return;}
+   bool kept=false;for(int n=1;n<100&&!kept;++n){auto backup=to;backup+=n>1?L".older-"+std::to_wstring(n)+L".bak":std::wstring(L".older.bak");if(!std::filesystem::exists(backup,error))kept=writeNew(backup,older);}
+   if(!kept)return;
+  }
+  std::filesystem::create_directories(to.parent_path(),error);
+  if(CopyFileW(from.c_str(),to.c_str(),FALSE))appendLoadLog("adopted "+from.string()+" as "+to.string()+" (the folder older builds wrote by mistake)");
+ };
+ std::error_code error;const std::filesystem::path wrongSaves(localAppData+L"RawMetalsaves");
+ if(std::filesystem::is_directory(wrongSaves,error))for(const auto& entry:std::filesystem::directory_iterator(wrongSaves,error)){
+  const auto extension=entry.path().extension();if(extension==L".rms"||extension==L".label"||extension==L".bak")adopt(entry.path(),root/L"RawMetal"/L"saves"/entry.path().filename());}
+ adopt(std::filesystem::path(localAppData+L"RawMetalsettings.ini"),root/L"RawMetal"/L"settings.ini");
+}
+// Earlier builds represented a broken crate as four unrelated prop models (kinds 0-3) spawned
+// together: that recognizable quartet becomes the current textured splinters (kind 6).
+static void migrateCrateDebris(std::vector<Clutter>&items){std::vector<bool>used(items.size());
+ for(size_t i=0;i<items.size();++i){if(used[i]||items[i].kind!=0)continue;size_t group[4]={i};bool complete=true;
+  for(int kind=1;kind<4;++kind){float best=1.21f;size_t found=items.size();for(size_t j=0;j<items.size();++j){if(used[j]||int(j)==int(i)||items[j].kind!=kind||std::fabs(items[j].z-items[i].z)>.30f)continue;float d=lengthSq(items[j].pos-items[i].pos);if(d<best){best=d;found=j;}}
+   if(found==items.size()){complete=false;break;}group[kind]=found;}
+  if(!complete)continue;Vec2 center{};for(auto index:group)center+=items[index].pos*.25f;float spread=0;for(auto index:group)spread=std::max(spread,lengthSq(items[index].pos-center));
+  bool outward=items[group[0]].pos.x>center.x+.01f&&items[group[1]].pos.y>center.y+.01f&&items[group[2]].pos.x<center.x-.01f&&items[group[3]].pos.y<center.y-.01f;
+  if(spread>.0064f&&!outward)continue;
+  for(int part=0;part<4;++part){auto&shard=items[group[part]];float centerZ=shard.z+shard.height()*.5f;shard.kind=6;shard.z=centerZ-shard.height()*.5f;shard.yaw=part*1.5707963f;shard.pitch=part%2?-.14f:.14f;shard.roll=part%2?.10f:-.10f;shard.spin=part%2?2.5f:-2.5f;shard.pitchSpeed=part%2?1.5f:-1.5f;shard.rollSpeed=part%2?-1.5f:1.5f;shard.sleeping=false;shard.restTime=0;if(lengthSq(shard.velocity)<.01f)shard.velocity={std::cos(part*1.5707963f)*1.25f,std::sin(part*1.5707963f)*1.25f};if(std::fabs(shard.vz)<.1f)shard.vz=.75f;used[group[part]]=true;}
+ }
+}
+// ---- Formats 1-27: the upgrade chain ----
+// A save of an older format is read by the positional archive, which leaves a field its version
+// lacked at the fresh game's value. These steps then bring it to the current form, oldest first:
+// each runs when the save predates the version it names. (The authored-map reconciliation in
+// prepareLoad runs after them for every save; it also wakes, from version 15, creatures that
+// were never disturbed, and gives a save before 8 the authored props by kind.)
+void Game::refitLegacySave(int from){
+ struct Step {int to;void(*apply)(Game&);};
+ const Step steps[]={
+  // 2: the shotgun's tube was not saved; it holds what it can of the rounds, not reloading.
+  {2,[](Game& g){auto&shells=g.m_player.pool(WeaponId::Shotgun);shells.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,shells.total);g.m_reloadTimer=0;}},
+  // 19: the one ammunition pair was the shotgun's. The shotgun is in hand, no switch under way, the
+  // 9 mm pool empty, a reload under way the shotgun's; the 9 mm stack takes the first 1x2 cell clear of the others.
+  {19,[](Game& g){g.m_equippedWeapon=WeaponId::Shotgun;g.m_switchTarget=WeaponId::Fists;g.m_switchRaise=false;g.m_player.pool(WeaponId::Handgun)={};
+   g.m_reloadLength=g.m_reloadTimer>0?playerWeaponDef(WeaponId::Shotgun).cycle.reloadTime:0;g.m_emptyReload=false;
+   auto taken=[&](int c){for(int i=0;i<3;++i){int at=g.m_itemCells[size_t(i)],w=i==0?4:i==2?2:1;for(int r=c/6;r<c/6+2;++r)if(r>=at/6&&r<at/6+2&&c%6>=at%6&&c%6<at%6+w)return true;}return false;};
+   for(int c=0;c<24;++c)if(!taken(c)){g.m_itemCells[3]=c;break;}}},
+  // 20: how far a creature had made the player out was not kept: one on a Chase has.
+  {20,[](Game& g){for(auto&chunk:g.m_chunks)for(auto&e:chunk.enemies)e.recognition=e.state==Enemy::State::Chase&&e.awareness>0?1.f:0.f;}},
+ };
+ for(const auto& step:steps)if(from<step.to)step.apply(*this);
 }
 bool Game::decodeSave(const std::string& data){
  Game next;if(!prepareLoad(data,next))return false;
  *this=std::move(next);return true;
 }
 bool Game::prepareLoad(const std::string& data,Game& next)const{
- t_loadFailure.clear();
+ t_loadFailure.clear();t_skippedSections.clear();
  try {
   if(data.size()>MaxSaveBytes)return refuse("save is larger than 64 MB");auto split=data.find('\n');if(split==std::string::npos)return refuse("no header line (empty or truncated file)");
   std::istringstream header(data.substr(0,split));std::string magic;int version=0;uint32_t hash=0;
   if(!(header>>magic>>version>>hash)||magic!="RAWMETAL_SAVE")return refuse("not a RawMetal save (bad header)");if(version<1)return refuse("invalid save version "+std::to_string(version));if(version>SaveVersion)return refuse("save version "+std::to_string(version)+" is from a newer build (this build reads up to "+std::to_string(SaveVersion)+")");header>>std::ws;if(!header.eof())return refuse("extra text on the header line");
-  auto payload=data.substr(split+1);if(checksum(payload)!=hash)return refuse("checksum mismatch (file damaged or truncated)");
-  next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;Reader reader(payload);
-  // A save made inside the prologue when it was its own custom world: its map
-  // has since moved onto the campaign grid, so the night shift starts over.
-  auto oldPrologue=[&]{return next.m_worldId==WorldId::Custom&&next.m_customCampaignKey==loadEmbeddedPrologueCampaign()->key;};
-  int archived=0;try{archived=next.archiveSave(reader,version);}catch(const std::exception&){if(!oldPrologue())throw;}
-  if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}if(version==1){auto&shells=next.m_player.pool(WeaponId::Shotgun);shells.loaded=std::min(weaponDef(WeaponId::Shotgun).cycle.tubeCapacity,shells.total);next.m_reloadTimer=0;}reader.stream>>std::ws;if(!reader.stream.eof())return refuse("unread data after the version "+std::to_string(version)+" archive");
-  // Earlier builds represented a broken crate as four unrelated prop models
-  // (kinds 0-3) spawned together. Convert that recognizable saved quartet to
-  // the current textured splinter kind so existing saves receive the repair.
-  auto migrateCrateDebris=[](std::vector<Clutter>&items){std::vector<bool>used(items.size());
-   for(size_t i=0;i<items.size();++i){if(used[i]||items[i].kind!=0)continue;size_t group[4]={i};bool complete=true;
-    for(int kind=1;kind<4;++kind){float best=1.21f;size_t found=items.size();for(size_t j=0;j<items.size();++j){if(used[j]||int(j)==int(i)||items[j].kind!=kind||std::fabs(items[j].z-items[i].z)>.30f)continue;float d=lengthSq(items[j].pos-items[i].pos);if(d<best){best=d;found=j;}}
-     if(found==items.size()){complete=false;break;}group[kind]=found;}
-    if(!complete)continue;Vec2 center{};for(auto index:group)center+=items[index].pos*.25f;float spread=0;for(auto index:group)spread=std::max(spread,lengthSq(items[index].pos-center));
-    bool outward=items[group[0]].pos.x>center.x+.01f&&items[group[1]].pos.y>center.y+.01f&&items[group[2]].pos.x<center.x-.01f&&items[group[3]].pos.y<center.y-.01f;
-    if(spread>.0064f&&!outward)continue;
-    for(int part=0;part<4;++part){auto&shard=items[group[part]];float centerZ=shard.z+shard.height()*.5f;shard.kind=6;shard.z=centerZ-shard.height()*.5f;shard.yaw=part*1.5707963f;shard.pitch=part%2?-.14f:.14f;shard.roll=part%2?.10f:-.10f;shard.spin=part%2?2.5f:-2.5f;shard.pitchSpeed=part%2?1.5f:-1.5f;shard.rollSpeed=part%2?-1.5f:1.5f;shard.sleeping=false;shard.restTime=0;if(lengthSq(shard.velocity)<.01f)shard.velocity={std::cos(part*1.5707963f)*1.25f,std::sin(part*1.5707963f)*1.25f};if(std::fabs(shard.vz)<.1f)shard.vz=.75f;used[group[part]]=true;}
-   }
-  };
+  auto payload=data.substr(split+1);
+  next.m_customCampaigns=m_customCampaigns;next.m_customMapDirectory=m_customMapDirectory;
+  int archived=0;
+  if(version>LegacySaveVersion)archived=next.decodeSections(payload,hash);
+  else{
+   if(checksum(payload)!=hash)return refuse("checksum mismatch (file damaged or truncated)");
+   Reader reader(payload);
+   // A save made inside the prologue when it was its own custom world: its map
+   // has since moved onto the campaign grid, so the night shift starts over.
+   auto oldPrologue=[&]{return next.m_worldId==WorldId::Custom&&next.m_customCampaignKey==loadEmbeddedPrologueCampaign()->key;};
+   try{archived=next.archiveSave(reader,version);}catch(const std::exception&){if(!oldPrologue())throw;}
+   if(oldPrologue()){next=Game();next.startNewGame();adoptSession(next);return true;}
+   reader.stream>>std::ws;if(!reader.stream.eof())return refuse("unread data after the version "+std::to_string(version)+" archive");
+   next.refitLegacySave(version);
+  }
+  next.m_loadedSaveVersion=version;
+  // Every load, as before the sections: a broken crate's old quartet of junk props becomes splinters.
   for(auto&chunk:next.m_chunks)migrateCrateDebris(chunk.clutter);
   for(int level=0;level<next.chunkCount();++level)next.restoreCrates(next.m_chunks[level].world,level);
   if(next.chunkCount()>3&&next.m_chunks[3].world.hasLift()){
@@ -282,9 +569,6 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
    try{std::ofstream log("RawMetal-load.txt",std::ios::app);log<<"load: the player was saved off map "<<next.m_level<<"; set at its start\n";}catch(...){}}
   p.eye=std::clamp(p.eye,.1f,2.6f);p.pitch=std::clamp(p.pitch,-220.f,220.f);p.health=std::min(p.health,100.f);
   if(next.m_level<0||next.m_level>=next.chunkCount()||next.m_elapsed<0||next.m_reloadTimer<0||next.m_reloadTimer>8||p.health>100||p.pos.x<-2||p.pos.x>26||p.pos.y<-2||p.pos.y>26||p.z<-100||p.z>100||p.eye<.1f||p.eye>2.6f||std::fabs(p.pitch)>220.f||next.m_medkits<0)return refuse("player or map out of range (map "+std::to_string(next.m_level)+", health "+std::to_string(p.health)+", at "+std::to_string(p.pos.x)+","+std::to_string(p.pos.y)+","+std::to_string(p.z)+")");
-  // A save from before the 9 mm stack gives it the first 1x2 cell clear of the others.
-  if(version<19){auto taken=[&](int c){for(int i=0;i<3;++i){int at=next.m_itemCells[size_t(i)],w=i==0?4:i==2?2:1;for(int r=c/6;r<c/6+2;++r)if(r>=at/6&&r<at/6+2&&c%6>=at%6&&c%6<at%6+w)return true;}return false;};
-   for(int c=0;c<24;++c)if(!taken(c)){next.m_itemCells[3]=c;break;}}
   for(int i=0;i<int(next.m_itemCells.size());++i){int cell=next.m_itemCells[size_t(i)],width=i==0?4:i==2?2:1;if(cell<0||cell/6+2>5||cell%6+width>6)return refuse("invalid inventory cell");}
   next.ensureChunk(next.m_level);auto&c=next.m_chunks[next.m_level];next.m_world=c.world;next.m_enemies=c.enemies;next.m_pickups=c.pickups;next.m_clutter=c.clutter;next.m_kills=c.kills;
   if(next.m_world.hasLift()&&!next.m_hazmat.initialized)next.m_hazmat.seed(next.m_world);
@@ -344,8 +628,47 @@ void Game::adoptSession(Game& next)const{
 // counters; the main thread reads them after `done`, then joins.
 struct LoadJob {
  std::thread worker;std::atomic<bool> done{false};std::atomic<int> progress{0};int expected=1,slot=-1;bool ok=false;std::optional<Game> result;std::string failure;std::filesystem::path path;
+ Game::SaveRefit refit;
  ~LoadJob(){if(worker.joinable())worker.join();}
 };
+static std::string saveLabel(int level,float elapsed,float health){return "MAP "+std::to_string(level)+" / "+std::to_string(int(elapsed/60))+" MIN / HP "+std::to_string(int(health));}
+static std::filesystem::path labelPath(const std::filesystem::path& save){auto path=save;path+=".label";return path;}
+// The refit of an older save, run on the game just loaded from it (on the load's own thread).
+// The original is kept beside it first, as <file>.v<old>.bak, or <file>.v<old>-2.bak and on when
+// that name holds something else: a backup is never written over. Then the game is written in the
+// current format, but only once that form has been loaded back; the swap is atomic. Anything
+// failing leaves the original file in place, and the loaded game is never touched.
+Game::SaveRefit Game::refitSaveFile(const std::filesystem::path& path,const std::string& original)const{
+ SaveRefit refit;refit.from=m_loadedSaveVersion;refit.skipped=t_skippedSections;
+ if(refit.from<=0||refit.from>=SaveVersion)return refit;
+ try{
+  const auto stem=path.filename().wstring()+L".v"+std::to_wstring(refit.from);
+  for(int n=1;n<100&&refit.backup.empty();++n){
+   const auto candidate=path.parent_path()/(stem+(n>1?L"-"+std::to_wstring(n):L"")+L".bak");std::error_code error;
+   if(std::filesystem::exists(candidate,error)){try{if(readFile(candidate)==original)refit.backup=candidate;}catch(const std::exception&){}continue;}
+   if(error)break;
+   if(writeNew(candidate,original))refit.backup=candidate;else break;
+  }
+  if(refit.backup.empty()){refit.note="no backup could be written beside it";return refit;}
+  const auto current=encodeSave();
+  Game probe;if(!prepareLoad(current,probe)){refit.note="the rewritten save did not load back ("+t_loadFailure+")";t_loadFailure.clear();return refit;}
+  writeAtomic(path,current);refit.rewritten=true;
+  try{writeAtomic(labelPath(path),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}
+ }catch(const std::exception& error){refit.note=error.what();}
+ return refit;
+}
+// After a load from a file: RawMetal-load.txt and the HUD notice say what the refit did.
+void Game::noteRefit(const std::filesystem::path& path,const SaveRefit& refit){
+ if(!refit.skipped.empty()){std::string names;for(const auto& s:refit.skipped)names+=(names.empty()?"":", ")+s;appendLoadLog("load: "+path.string()+" has sections this build does not read, skipped: "+names);}
+ if(refit.from<=0||refit.from>=SaveVersion)return;
+ if(refit.rewritten){
+  appendLoadLog("save refit: "+path.string()+" was format "+std::to_string(refit.from)+", rewritten as format "+std::to_string(SaveVersion)+"; the original is kept as "+refit.backup.filename().string());
+  m_pickupNotice="SAVE UPDATED TO THE NEW FORMAT / OLD COPY KEPT";m_pickupNoticeTime=5;
+ }else{
+  appendLoadLog("save refit skipped: "+path.string()+" (format "+std::to_string(refit.from)+"): "+(refit.note.empty()?std::string("unknown error"):refit.note)+". It loaded as it is and stays in its old format"+(refit.backup.empty()?std::string():"; a copy is kept as "+refit.backup.filename().string()));
+  m_pickupNotice="OLD SAVE LOADED / NOT UPDATED (SEE RAWMETAL-LOAD.TXT)";m_pickupNoticeTime=5;
+ }
+}
 bool Game::loadReady()const{return m_loadJob&&m_loadJob->done.load();}
 float Game::loadProgress()const{if(!m_loadJob)return 1.f;return std::clamp(float(m_loadJob->progress.load())/float(m_loadJob->expected),0.f,.99f);}
 bool Game::beginLoad(std::string data,int slot){
@@ -355,19 +678,20 @@ bool Game::beginLoad(std::string data,int slot){
  // does nothing else until the job is done.
  job->worker=std::thread([job,this,data=std::move(data)]{loadProgressCounter=&job->progress;
   try{job->result.emplace();job->ok=prepareLoad(data,*job->result);if(!job->ok)job->failure=t_loadFailure;}catch(const std::exception& error){job->ok=false;job->failure=error.what();}catch(...){job->ok=false;job->failure="unknown error";}
-  loadProgressCounter=nullptr;job->done.store(true);});
+  loadProgressCounter=nullptr;
+  // An older save is refitted here, on the worker, while the loading bar still shows.
+  if(job->ok)try{job->refit=job->result->refitSaveFile(job->path,data);}catch(...){}
+  job->done.store(true);});
  m_loadJob=std::move(job);m_menuMessage.clear();return true;
 }
 void Game::finishLoad(){
  auto job=std::move(m_loadJob);m_loadJob.reset();if(job->worker.joinable())job->worker.join();
- if(job->ok){*this=std::move(*job->result);return;}
+ if(job->ok){*this=std::move(*job->result);noteRefit(job->path,job->refit);return;}
  logLoadFailure(job->path,job->failure);
  if(job->slot>=0){m_menuMessage=loadFailureLine("LOAD FAILED",job->failure);m_menuPage=MenuPage::Load;m_menuSelection=job->slot;}
  else m_menuMessage=loadFailureLine("AUTOSAVE FAILED",job->failure);
 }
 const std::string& Game::lastLoadFailure(){return t_loadFailure;}
-static std::string saveLabel(int level,float elapsed,float health){return "MAP "+std::to_string(level)+" / "+std::to_string(int(elapsed/60))+" MIN / HP "+std::to_string(int(health));}
-static std::filesystem::path labelPath(const std::filesystem::path& save){auto path=save;path+=".label";return path;}
 bool Game::saveSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
  try {writeAtomic(slotPath(m_saveDirectory,slot),encodeSave());try{writeAtomic(labelPath(slotPath(m_saveDirectory,slot)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();m_menuMessage="GAME SAVED";return true;}catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
@@ -375,13 +699,13 @@ bool Game::saveSlot(int slot){
 bool Game::saveCheckpoint(){if(m_saveDirectory.empty())return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());try{writeAtomic(labelPath(checkpointPath(m_saveDirectory)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
 bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}
  const auto path=checkpointPath(m_saveDirectory);std::string why;
- try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),-1);if(decodeSave(data))return true;why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
+ try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),-1);if(decodeSave(data)){noteRefit(path,refitSaveFile(path,data));return true;}why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
  logLoadFailure(path,why);m_menuMessage=loadFailureLine("AUTOSAVE FAILED",why);return false;}
 bool Game::loadSlot(int slot){
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
  const auto path=slotPath(m_saveDirectory,slot);std::string why;std::error_code missing;
  if(!std::filesystem::exists(path,missing)){m_menuMessage="LOAD FAILED / EMPTY SLOT";return false;}
- try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),slot);if(decodeSave(data))return true;why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
+ try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),slot);if(decodeSave(data)){noteRefit(path,refitSaveFile(path,data));return true;}why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
  logLoadFailure(path,why);m_menuMessage=loadFailureLine("LOAD FAILED",why);return false;
 }
 // What a save's menu row says: its sidecar label when it is newer than the
@@ -601,9 +925,11 @@ bool Game::testSaves(){
 
 namespace retro {
 bool Game::testPropSaves(){
- // A late save is big: past the old 2 MB cap and past 1024 pieces in one map, it still loads.
+ // A late save is big: past 1024 pieces in one map, and past the old 2 MB cap as the text archive
+ // wrote it (format 28 writes the same in about two thirds of that), it still loads, byte-exact.
  {Game big(regression::campaign(regression::room()));for(int i=0;i<16000;++i){Clutter c{};c.pos={2.0123457f+float(i%180)*.1f,2.0123457f+float(i/180)*.25f};c.z=.0123457f;c.yaw=c.pitch=c.roll=.1234567f*float(i%7);c.restTime=1.2345678f;c.sleeping=true;big.m_clutter.push_back(c);}
-  const auto bytes=big.encodeSave();Game loaded(big.m_customCampaign);if(bytes.size()<=2u*1024*1024||!loaded.decodeSave(bytes)||loaded.m_clutter.size()<16000){std::ofstream("prop-saves-big.txt")<<"bytes "<<bytes.size()<<" loaded "<<loaded.m_clutter.size()<<" "<<lastLoadFailure()<<std::endl;return false;}}
+  const auto bytes=big.encodeSave();Game text=big;text.storeChunk();Writer writer;text.archiveSave(writer,LegacySaveVersion);const size_t textBytes=writer.stream.str().size();
+  Game loaded(big.m_customCampaign);if(textBytes<=2u*1024*1024||!loaded.decodeSave(bytes)||loaded.m_clutter.size()<16000||loaded.encodeSave()!=bytes){std::ofstream("prop-saves-big.txt")<<"bytes "<<bytes.size()<<" (text "<<textBytes<<") loaded "<<loaded.m_clutter.size()<<" "<<lastLoadFailure()<<std::endl;return false;}}
  auto map=regression::room();map->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});auto campaign=regression::campaign(map);Game g(campaign);g.storeChunk();g.m_chunks[0].clutter.clear();g.m_heldClutter=-1;Writer writer;g.archiveSave(writer,16);auto payload=writer.stream.str();Game loaded(campaign);if(!loaded.decodeSave("RAWMETAL_SAVE 16 "+std::to_string(checksum(payload))+"\n"+payload)||loaded.m_clutter.size()!=1||loaded.m_clutter[0].model!=27)return false;
  loaded.m_heldClutter=0;auto bytes=loaded.encodeSave();Game held(campaign);if(!held.decodeSave(bytes)||held.m_heldClutter!=0||held.encodeSave()!=bytes)return false;
  // Version 21 keeps which leads have torn; a version 20 or 19 save opens on the map's own leads, clipped.
@@ -715,6 +1041,235 @@ bool Game::testSavesInPlay(std::ostream& report){
  }
  std::filesystem::remove_all(directory,ignored);
  report<<(passed?"PASS":"FAIL")<<" saves in play: "<<saves<<" saves, "<<refused<<" refused\n";
+ return passed;
+}
+}
+namespace retro {
+// The section container (format 28), the refit of formats 1-27, and the stores and hooks other
+// systems use (docs/Systems/save-format.md). Real saves are copied into a temp folder first: the
+// originals are only read, and checked unchanged at the end.
+bool Game::testSaveFormat(std::ostream& report,int parts){
+ bool passed=true;
+ auto encode=[](const Game& g){try{return g.encodeSave();}catch(const std::exception& error){return std::string("<save failed: ")+error.what()+">";}};
+ auto check=[&](bool ok,const std::string& label,const std::string& detail=""){report<<(ok?"PASS ":"FAIL ")<<label<<(detail.empty()?"":" ("+detail+")")<<'\n';report.flush();passed&=ok;return ok;};
+ using clock=std::chrono::steady_clock;auto seconds=[](clock::time_point t){return std::chrono::duration<double>(clock::now()-t).count();};
+ auto legacy=[](Game g,int version){g.storeChunk();Writer writer;g.archiveSave(writer,version);auto payload=writer.stream.str();return "RAWMETAL_SAVE "+std::to_string(version)+" "+std::to_string(checksum(payload))+"\n"+payload;};
+ auto header=[](const std::string& data){return data.substr(0,data.find('\n'));};
+ auto payloadOf=[](const std::string& data){return data.substr(data.find('\n')+1);};
+ auto wrap=[](const std::string& payload){return "RAWMETAL_SAVE "+std::to_string(SaveVersion)+" "+std::to_string(checksum(payload))+"\n"+payload;};
+ auto names=[&](const std::string& data){std::vector<std::string> n;for(const auto& f:sectionFrames(payloadOf(data),rangeChecksum))n.push_back(f.name);return n;};
+ auto has=[&](const std::string& data,const std::string& name){const auto n=names(data);return std::find(n.begin(),n.end(),name)!=n.end();};
+ // The save rebuilt a section at a time: edit may change a section's name, version, flags or body, or return false to drop it.
+ auto rebuild=[&](const std::string& data,auto edit){const auto payload=payloadOf(data);std::string out;
+  for(const auto& f:sectionFrames(payload,rangeChecksum)){std::string name=f.name;int version=f.version;std::uint16_t flags=f.flags;std::string body=payload.substr(f.offset,f.size);if(edit(name,version,flags,body))appendSection(out,name,std::uint16_t(version),flags,body);}
+  return out;};
+ auto contains=[](const std::string& text,const std::string& part){return text.find(part)!=std::string::npos;};
+ auto put=[](const std::filesystem::path& p,const std::string& data){std::ofstream f(p,std::ios::binary|std::ios::trunc);f.write(data.data(),std::streamsize(data.size()));};
+ auto get=[](const std::filesystem::path& p){try{return readFile(p);}catch(const std::exception&){return std::string("<missing>");}};
+ auto logText=[]{std::ifstream in("RawMetal-load.txt",std::ios::binary);return std::string((std::istreambuf_iterator<char>(in)),std::istreambuf_iterator<char>());};
+ const auto root=std::filesystem::temp_directory_path()/("rm-save-format-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));
+ std::error_code ignored;std::filesystem::create_directories(root,ignored);
+
+ auto refitMap=regression::room();refitMap->creatureSpawns.push_back({Enemy::Kind::Warden,{9,9},0});refitMap->pickupSpawns.push_back({{12,12},PickupKind::Ammo});refitMap->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});
+ const auto room=regression::campaign(refitMap);
+ // ---- 1. Every positional version the archive can still write: load, refit with its backup, keep the game, re-save byte-exact ----
+ // Formats 1-11 cannot hold a custom campaign, so they are the main campaign (a full load of it
+ // takes seconds); 12-27 are a custom room with a creature, a pickup and a prop, and 19 and 27 the
+ // campaign as well. RM_SAVE_FORMAT_ALL=1 runs every format on the campaign.
+ const auto refitDir=root/"legacy";std::filesystem::create_directories(refitDir,ignored);int good=0,ran=0;
+ auto refitVersions=[&](const std::string& world,std::function<Game()> fresh,int pickupChunk,int deadChunk,const std::vector<int>& versions){
+  Game source=fresh();source.m_player.health=63;source.m_elapsed=754.5f;source.m_medkits=2;source.m_player.pool(WeaponId::Shotgun)={17,3};
+  source.setState(stateId("refit_probe"),5);source.giveQuestItem(stateId("refit_fuse"));
+  auto pickupsOf=[](Game& g,int c)->std::vector<Pickup>&{return c==g.m_level?g.m_pickups:g.m_chunks[size_t(c)].pickups;};
+  auto enemiesOf=[](Game& g,int c)->std::vector<Enemy>&{return c==g.m_level?g.m_enemies:g.m_chunks[size_t(c)].enemies;};
+  Pickup taken{};bool hasTaken=false;for(auto& p:pickupsOf(source,pickupChunk))if(int(p.kind)<=int(PickupKind::Ammo)){p.active=false;taken=p;hasTaken=true;break;}
+  if(pickupChunk==source.m_level)source.m_kills=1;else source.m_chunks[size_t(pickupChunk)].kills=1;
+  Enemy dead{};bool hasDead=false;if(!enemiesOf(source,deadChunk).empty()){auto&e=enemiesOf(source,deadChunk)[0];e.alive=false;e.hp=0;dead=e;hasDead=true;}
+  source.storeChunk();
+  {const auto encodeStart=clock::now();const auto sections=encode(source);const double encodeTime=seconds(encodeStart);
+   Game probe=fresh();const auto t=clock::now();probe.decodeSave(sections);const double loadTime=seconds(t);
+   const auto text=legacy(source,LegacySaveVersion);Game textProbe=fresh();const auto t27=clock::now();textProbe.decodeSave(text);const double textTime=seconds(t27);
+   report<<"  "<<world<<": a save is "<<text.size()<<" bytes as format 27 text, "<<sections.size()<<" bytes as format 28 ("<<names(sections).size()<<" sections); writing it takes "<<std::fixed<<std::setprecision(2)<<encodeTime<<" s, a whole load "<<loadTime<<" s (format 27: "<<textTime<<" s)\n";}
+  const auto dir=refitDir;
+  for(int version:versions){const auto t0=clock::now();Game g=source;++ran;
+   // What this version could not hold is left out: its reader would refuse it.
+   const int maxKind=version>=23?int(Enemy::Kind::Machine):version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2;
+   auto strip=[&](std::vector<Enemy>& enemies,std::vector<Pickup>& pickups){std::erase_if(enemies,[&](const Enemy&e){return int(e.kind)>maxKind;});if(version<19)std::erase_if(pickups,[](const Pickup&p){return int(p.kind)>int(PickupKind::Ammo);});};
+   strip(g.m_enemies,g.m_pickups);for(auto&chunk:g.m_chunks)strip(chunk.enemies,chunk.pickups);
+   const bool deadKept=hasDead&&std::any_of(g.m_chunks[size_t(deadChunk)].enemies.begin(),g.m_chunks[size_t(deadChunk)].enemies.end(),[&](const Enemy&e){return !e.alive&&e.kind==dead.kind&&lengthSq(e.home-dead.home)<.0004f;});
+   const auto data=legacy(g,version);const auto path=dir/(world+"-v"+std::to_string(version)+".rms");put(path,data);
+   Game loaded=fresh();const bool ok=loaded.decodeSave(data);const std::string why=ok?std::string():lastLoadFailure();
+   const auto refit=ok?loaded.refitSaveFile(path,data):SaveRefit{};
+   const auto backup=dir/(world+"-v"+std::to_string(version)+".rms.v"+std::to_string(version)+".bak");
+   const auto rewritten=get(path);const auto first=ok?encode(loaded):std::string();
+   Game second=fresh();const bool again=ok&&second.decodeSave(rewritten);const auto secondBytes=again?encode(second):std::string();
+   const auto twice=again?second.refitSaveFile(path,rewritten):SaveRefit{};
+   auto kept=[&](const Game& l){
+    bool k=l.m_level==0&&l.m_player.health==63&&std::fabs(l.m_elapsed-754.5f)<.01f&&l.m_medkits==2&&l.m_player.pool(WeaponId::Shotgun).total==17&&
+     l.m_player.pool(WeaponId::Shotgun).loaded==(version>=2?3:std::min(17,weaponDef(WeaponId::Shotgun).cycle.tubeCapacity))&&l.m_chunks[size_t(pickupChunk)].kills==1;
+    if(version>=6)k&=l.state(stateId("refit_probe"))==5&&l.hasQuestItem(stateId("refit_fuse"));
+    if(hasTaken)k&=std::any_of(l.m_chunks[size_t(pickupChunk)].pickups.begin(),l.m_chunks[size_t(pickupChunk)].pickups.end(),[&](const Pickup&p){return p.kind==taken.kind&&lengthSq(p.pos-taken.pos)<.0004f&&!p.active;});
+    if(deadKept)k&=std::any_of(l.m_chunks[size_t(deadChunk)].enemies.begin(),l.m_chunks[size_t(deadChunk)].enemies.end(),[&](const Enemy&e){return e.kind==dead.kind&&lengthSq(e.home-dead.home)<.0004f&&!e.alive;});
+    return k;};
+   const bool keptFirst=ok&&kept(loaded),keptSecond=again&&kept(second),exact=again&&first==rewritten&&secondBytes==rewritten;
+   const bool fine=ok&&loaded.loadedSaveVersion()==version&&refit.rewritten&&refit.backup==backup&&get(backup)==data&&header(rewritten).rfind("RAWMETAL_SAVE 28 ",0)==0&&exact&&keptFirst&&keptSecond&&second.loadedSaveVersion()==SaveVersion&&!twice.rewritten&&twice.backup.empty();
+   good+=fine;std::ostringstream detail;detail<<"loaded "<<ok<<(why.empty()?"":" ["+why+"]")<<", rewritten "<<refit.rewritten<<(refit.note.empty()?"":" ["+refit.note+"]")<<", backup "<<(get(backup)==data)<<", state kept "<<keptFirst<<"/"<<keptSecond<<", byte-exact "<<exact<<", "<<data.size()<<" -> "<<rewritten.size()<<" bytes, "<<std::fixed<<std::setprecision(2)<<seconds(t0)<<" s";
+   check(fine,world+": format "+std::to_string(version)+" save loads, is refitted to 28 beside its backup, keeps its game and re-saves byte-exact",detail.str());
+  }
+ };
+ // A full campaign load takes seconds, so the campaign formats are split over two parts (each a
+ // lab tube under its ten minutes): 1-6, then 7-11, 19 and 27 (with RM_SAVE_FORMAT_ALL, 1-13 and 14-27).
+ {const bool everything=std::getenv("RM_SAVE_FORMAT_ALL")!=nullptr;std::vector<int> early,late,onRoom;
+  for(int v=1;v<=LegacySaveVersion;++v){if(v<=6||(everything&&v<=13))early.push_back(v);else if(v<=11||v==19||v==27||everything)late.push_back(v);if(v>=12)onRoom.push_back(v);}
+  if(parts&SaveTestCampaignEarly)refitVersions("campaign",[]{return Game();},1,3,early);
+  if(parts&SaveTestCampaignLate)refitVersions("campaign",[]{return Game();},1,3,late);
+  if(parts&SaveTestRoomFormats)refitVersions("room",[room]{return Game(room);},0,0,onRoom);
+  if(ran)check(good==ran,"every positional format in this part refits",std::to_string(good)+" of "+std::to_string(ran));
+ }
+
+ // ---- 2. The load paths: a backup never written over, a failed rewrite, a second load, the worker ----
+ if(parts&SaveTestCore){Game source(room);source.m_player.health=58;const auto data=legacy(source,19);
+  {const auto dir=root/"ui";std::filesystem::create_directories(dir,ignored);const auto path=dir/"checkpoint.rms";put(path,data);
+   auto taken=dir/"checkpoint.rms.v19.bak";put(taken,"someone else's file");
+   Game ui(room);ui.setAsyncLoads(false);ui.setSaveDirectory(dir.wstring());const bool loaded=ui.loadCheckpoint();const auto now=get(path);
+   check(loaded&&ui.player().health==58&&get(taken)=="someone else's file"&&get(dir/"checkpoint.rms.v19-2.bak")==data&&header(now).rfind("RAWMETAL_SAVE 28 ",0)==0&&ui.pickupNotice()=="SAVE UPDATED TO THE NEW FORMAT / OLD COPY KEPT"&&ui.pickupNoticeTime()>0,
+    "Loading an old autosave rewrites it as 28, keeps the original as .v19-2.bak beside a .v19.bak it does not touch, and says so",ui.pickupNotice());
+   check(contains(logText(),"save refit: "+path.string()+" was format 19, rewritten as format 28; the original is kept as checkpoint.rms.v19-2.bak"),"RawMetal-load.txt records the refit");
+   Game again(room);again.setAsyncLoads(false);again.setSaveDirectory(dir.wstring());const bool reloaded=again.loadCheckpoint();
+   check(reloaded&&get(path)==now&&!std::filesystem::exists(dir/"checkpoint.rms.v19-3.bak",ignored)&&again.pickupNotice().empty(),"A refitted save loads again with no second backup and no notice");
+   put(dir/"slot-2.rms",data);Game slot(room);slot.setAsyncLoads(false);slot.setSaveDirectory(dir.wstring());
+   check(slot.loadSlot(1)&&get(dir/"slot-2.rms.v19.bak")==data&&header(get(dir/"slot-2.rms")).rfind("RAWMETAL_SAVE 28 ",0)==0,"A manual slot is refitted the same way");}
+  {const auto dir=root/"fails";std::filesystem::create_directories(dir,ignored);const auto path=dir/"checkpoint.rms";put(path,data);
+   auto temp=path;temp+=L".tmp";std::filesystem::create_directories(temp,ignored); // the atomic write's temporary cannot be made
+   Game ui(room);ui.setAsyncLoads(false);ui.setSaveDirectory(dir.wstring());const bool loaded=ui.loadCheckpoint();
+   check(loaded&&ui.player().health==58&&get(path)==data&&get(dir/"checkpoint.rms.v19.bak")==data&&contains(ui.pickupNotice(),"NOT UPDATED")&&contains(logText(),"save refit skipped: "+path.string()),
+    "A rewrite that fails leaves the original file, its backup and the loaded game intact, and says so",ui.pickupNotice());}
+  {const auto dir=root/"worker";std::filesystem::create_directories(dir,ignored);const auto path=dir/"checkpoint.rms";put(path,data);
+   Game ui(room);ui.setSaveDirectory(dir.wstring());ui.setAsyncLoads(true);const bool began=ui.loadCheckpoint();
+   for(int i=0;i<12000&&ui.loading();++i){ui.update({},.001f);Sleep(5);}
+   check(began&&!ui.loading()&&ui.player().health==58&&get(dir/"checkpoint.rms.v19.bak")==data&&header(get(path)).rfind("RAWMETAL_SAVE 28 ",0)==0&&ui.pickupNotice()=="SAVE UPDATED TO THE NEW FORMAT / OLD COPY KEPT","A load on the worker thread refits too and the notice shows when it lands",ui.pickupNotice());}
+ }
+
+ // ---- 3. Real saves from past releases: copied into a temp folder, never the originals ----
+ if(parts&SaveTestRealSaves){std::vector<std::filesystem::path> sources;
+  if(const char* extra=std::getenv("RM_REAL_SAVES")){std::stringstream list(extra);std::string one;while(std::getline(list,one,';'))if(!one.empty())sources.push_back(one);}
+  wchar_t local[32768]{};const DWORD length=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);
+  if(length>0&&length<32768){sources.push_back(std::filesystem::path(local)/L"RawMetal"/L"saves");sources.push_back(std::filesystem::path(std::wstring(local)+L"RawMetalsaves"));}
+  for(auto at=std::filesystem::current_path();;at=at.parent_path()){if(std::filesystem::is_directory(at/"lab"/"fixtures"/"saves",ignored)){sources.push_back(at/"lab"/"fixtures"/"saves");break;}if(at==at.parent_path())break;}
+  struct Original {std::filesystem::path path;std::string bytes;std::filesystem::file_time_type time;};std::vector<Original> originals;std::vector<std::string> seen;
+  const auto dir=root/"real";std::filesystem::create_directories(dir,ignored);int tested=0;
+  for(const auto& source:sources){if(!std::filesystem::is_directory(source,ignored))continue;
+   for(const auto& entry:std::filesystem::directory_iterator(source,ignored)){if(entry.path().extension()!=".rms"||!entry.is_regular_file(ignored))continue;
+    const auto bytes=get(entry.path());originals.push_back({entry.path(),bytes,std::filesystem::last_write_time(entry.path(),ignored)});
+    if(std::find(seen.begin(),seen.end(),bytes)!=seen.end())continue;seen.push_back(bytes);
+    const auto copy=dir/(std::to_string(++tested)+"-"+entry.path().filename().string());std::filesystem::copy_file(entry.path(),copy,ignored);
+    const auto data=get(copy);const auto t0=clock::now();Game loaded;const bool ok=loaded.decodeSave(data);const std::string why=ok?std::string():lastLoadFailure();
+    const int from=ok?loaded.loadedSaveVersion():0;const auto refit=ok?loaded.refitSaveFile(copy,data):SaveRefit{};const auto now=get(copy);
+    Game second;const bool again=ok&&second.decodeSave(now);const bool exact=again&&encode(second)==now;
+    const bool same=again&&second.m_level==loaded.m_level&&second.m_player.health==loaded.m_player.health&&second.m_elapsed==loaded.m_elapsed&&second.m_player.pools==loaded.m_player.pools&&
+     std::equal(second.m_states.begin(),second.m_states.end(),loaded.m_states.begin(),loaded.m_states.end(),[](const StateValue&a,const StateValue&b){return a.id==b.id&&a.value==b.value;})&&
+     std::equal(second.m_questItems.begin(),second.m_questItems.end(),loaded.m_questItems.begin(),loaded.m_questItems.end(),[](const QuestItemStack&a,const QuestItemStack&b){return a.id==b.id&&a.count==b.count;});
+    const bool refitted=from>=SaveVersion||(refit.rewritten&&get(refit.backup)==data);const bool good=ok&&refitted&&exact&&same;
+    std::ostringstream detail;detail<<entry.path().string()<<", "<<header(data)<<", "<<data.size()<<" -> "<<now.size()<<" bytes, map "<<loaded.m_level<<", "<<loaded.m_states.size()<<" states, "<<std::fixed<<std::setprecision(2)<<seconds(t0)<<" s"<<(why.empty()?"":", refused: "+why)<<(refit.note.empty()?"":", "+refit.note);
+    check(good,"Real save "+entry.path().filename().string()+" (format "+std::to_string(from)+") loads, refits, re-saves byte-exact and keeps its game",detail.str());}}
+  check(tested>0,"Real saves were found to test",std::to_string(tested)+" distinct saves");
+  bool untouched=true;for(const auto& o:originals){untouched&=get(o.path)==o.bytes&&std::filesystem::last_write_time(o.path,ignored)==o.time;
+   for(int v=1;v<=SaveVersion;++v)untouched&=!std::filesystem::exists(std::filesystem::path(o.path.wstring()+L".v"+std::to_wstring(v)+L".bak"),ignored);}
+  check(untouched,"The original real saves are unchanged and nothing was written beside them",std::to_string(originals.size())+" files read");
+ }
+
+ // ---- 4. Damaged sections are refused with the reason, the live game untouched ----
+ if(parts&SaveTestCore){auto campaign=regression::campaign(regression::room());
+ {Game g(campaign);g.m_player.health=71;g.setMapVariable(-1,"probe",std::int64_t(1));const auto data=encode(g);
+  put("save-format-sample.rms",data); // beside the report, for tools/dev/savedump.py
+  Game live(campaign);const bool base=live.decodeSave(data);const auto before=encode(live);
+  auto refused=[&](const std::string& bytes,const std::string& expect,const std::string& label){const bool loaded=live.decodeSave(bytes);const auto why=loaded?std::string("(loaded)"):lastLoadFailure();check(!loaded&&contains(why,expect),label,why);};
+  check(base&&before==data,"The probe save round-trips byte-exact");
+  refused(data.substr(0,data.size()-1),"truncated save: section 'variables'","A save cut short inside its last section is refused");
+  refused(data.substr(0,data.find('\n')+4),"truncated save","A save cut short inside a section frame is refused");
+  refused(data.substr(0,data.find('\n')+1),"checksum mismatch","A save with nothing after its header is refused");
+  {auto payload=payloadOf(data);for(const auto& f:sectionFrames(payload,rangeChecksum))if(f.name=="player"){payload[f.offset+2]^=0x40;break;}
+   refused(wrap(payload),"section 'player' is damaged (checksum mismatch)","A section whose bytes changed is refused by name");}
+  {const float nan=std::numeric_limits<float>::quiet_NaN();refused(wrap(rebuild(data,[&](std::string& name,int&,std::uint16_t&,std::string& body){if(name=="player")std::memcpy(body.data(),&nan,4);return true;})),"section 'player': invalid number","A section holding a value no game can have is refused by name");}
+  refused(wrap(rebuild(data,[](std::string& name,int&,std::uint16_t&,std::string&){return name!="props";})),"missing section 'props'","A save without a core section is refused");
+  refused(wrap(rebuild(data,[](std::string& name,int&,std::uint16_t&,std::string& body){if(name=="inventory")body.push_back('\0');return true;})),"section 'inventory': 1 bytes left unread","A section longer than its layout is refused");
+  refused(wrap(rebuild(data,[](std::string& name,int& version,std::uint16_t&,std::string&){if(name=="props")version=9;return true;})),"this build reads up to 1","A core section newer than this build reads is refused");
+  {auto payload=payloadOf(data);for(const auto& f:sectionFrames(payload,rangeChecksum))if(f.name=="player"){appendSection(payload,"player",1,0,payload.substr(f.offset,f.size));break;}
+   refused(wrap(payload),"section 'player' appears twice","A section written twice is refused");}
+  {auto payload=payloadOf(data);appendSection(payload,"zz.future",1,SectionRequired,"1234");refused(wrap(payload),"section 'zz.future' (version 1) is needed","An unknown section flagged required is refused: the save needs a newer build");}
+  {auto payload=payloadOf(data);payload.push_back('\0');refused(wrap(payload),"bad name","A frame with no name is refused");}
+  check(encode(live)==before,"Every refusal leaves the live game as it was");
+  // ---- 5. Unknown sections are skipped ----
+  {auto payload=payloadOf(data);appendSection(payload,"zz.future",3,0,std::string("\x01\x02\xff\x00 any bytes",14));const auto extended=wrap(payload);
+   Game later(campaign);const bool loaded=later.decodeSave(extended);const auto refit=loaded?later.refitSaveFile(root/"none.rms",extended):SaveRefit{};
+   check(loaded&&encode(later)==data&&refit.skipped==std::vector<std::string>{"zz.future v3"}&&!refit.rewritten,"An unknown section is skipped (and named for the load log); the game loads and re-saves without it",loaded?std::to_string(refit.skipped.size())+" skipped":lastLoadFailure());}
+  {Game later(campaign);const bool loaded=later.decodeSave(wrap(rebuild(data,[](std::string& name,int& version,std::uint16_t&,std::string&){if(name=="variables")version=7;return true;})));
+   check(loaded&&!later.mapVariable(-1,"probe")&&later.player().health==71,"A newer layout of an optional section is skipped like an unknown one",loaded?"":lastLoadFailure());}
+ }
+
+ // ---- 6. The section API: the entity and variable stores, a registered section, the physics hook ----
+ {Game g(campaign);const auto plain=encode(g);
+  check(!has(plain,"entities")&&!has(plain,"variables")&&!has(plain,"physics")&&has(plain,"props"),"Empty stores and an unhooked physics section are not written");
+  const bool set=g.setEntityProperty(3,"door_lab","p.locked",true)&&g.setEntityProperty(3,"door_lab","p.code",std::int64_t(1234567890123))&&g.setEntityProperty(-1,entityIdKey("prop",17),"p.mass",2.5)
+   &&g.setEntityProperty(0,"sign_\xc3\xbc","p.text",std::string("Ashfall \xc3\xbc\nline two"))&&g.setEntityProperty(0,"sign_\xc3\xbc","p.empty",std::string())
+   &&g.setMapVariable(-1,"alarm_count",std::int64_t(-3))&&g.setMapVariable(0,"lights",std::string("off"))&&g.setMapVariable(0,"ratio",.125)&&g.setMapVariable(0,"done",false);
+  const bool limits=!g.setMapVariable(0,"",true)&&!g.setMapVariable(0,std::string(129,'x'),true)&&!g.setMapVariable(0,"nan",std::numeric_limits<double>::quiet_NaN())&&!g.setMapVariable(-2,"x",true)&&!g.setMapVariable(0,"long",std::string(4097,'y'))
+   &&!g.setEntityProperty(0,"bad\x01name","p",true)&&!g.mapVariable(0,"nan")&&g.setMapVariable(0,"temp",true)&&g.clearMapVariable(0,"temp")&&!g.mapVariable(0,"temp")
+   &&g.setEntityProperty(1,"gone","p.x",true)&&g.clearEntityProperty(1,"gone","p.x")&&!g.entityProperties(1,"gone");
+  check(set&&limits,"The stores take each kind of value and refuse empty, long, control-character and non-finite ones");
+  const auto bytes=encode(g);Game back(campaign);const bool loaded=back.decodeSave(bytes);
+  const auto* code=loaded?back.entityProperty(3,"door_lab","p.code"):nullptr;const auto* text=loaded?back.entityProperty(0,"sign_\xc3\xbc","p.text"):nullptr;
+  check(loaded&&back.saveStore()==g.saveStore()&&encode(back)==bytes&&has(bytes,"entities")&&has(bytes,"variables")&&code&&std::get<std::int64_t>(*code)==1234567890123&&text&&std::get<std::string>(*text)=="Ashfall \xc3\xbc\nline two"&&back.entityProperties(3,"door_lab")->size()==2,
+   "Entity properties and map variables round-trip through the save, byte-exact",std::to_string(g.saveStore().entities.size())+" entities, "+std::to_string(g.saveStore().variables.size())+" variables");
+  // A system's own section, with an older layout upgraded.
+  static int counter=0,upgradedFrom=0;static bool writing=false;
+  auto counterSection=[]{return SaveSection{.name="test.counter",.version=2,
+   .write=[](Game&,SaveOut& out){if(writing){int v=counter;out(v);}},.read=[](Game&,SaveIn& in,int version){int v=0;in(v);counter=version==1?v*10:v;},.upgrade=[](Game&,int from){upgradedFrom=from;}};};
+  registerSaveSection(counterSection());registerSaveSection(counterSection());
+  bool refusedName=false;try{registerSaveSection({.name="bad name!",.write=[](Game&,SaveOut&){},.read=[](Game&,SaveIn&,int){}});}catch(const std::invalid_argument&){refusedName=true;}
+  const auto all=saveSectionNames();
+  writing=true;counter=7;const auto withCounter=encode(g);counter=0;upgradedFrom=0;Game c1(campaign);const bool c1ok=c1.decodeSave(withCounter);const int afterCurrent=counter;
+  counter=0;Game c2(campaign);const bool c2ok=c2.decodeSave(wrap(rebuild(withCounter,[](std::string& name,int& version,std::uint16_t&,std::string&){if(name=="test.counter")version=1;return true;})));
+  writing=false;const bool dropped=!has(encode(g),"test.counter");
+  check(refusedName&&std::count(all.begin(),all.end(),"test.counter")==1&&all.back()=="test.counter"&&has(withCounter,"test.counter")&&c1ok&&afterCurrent==7&&c2ok&&counter==70&&upgradedFrom==1&&dropped,
+   "A registered section is written, read, upgraded from its older layout, replaced by name and left out when it writes nothing");
+  // The physics section, through the hooks the rigid-body solver sets.
+  {static std::vector<PropBody> restored;auto map=regression::room();map->clutterSpawns.push_back({7,{8,8},0,0,27,.42f,.4f,.38f});auto props=regression::campaign(map);Game p(props);
+   int prop=-1;for(int i=0;i<int(p.m_clutter.size());++i)if(p.m_clutter[size_t(i)].model>=0){prop=i;break;}
+   if(prop>=0){auto&c=p.m_clutter[size_t(prop)];c.yaw=.6f;c.spin=1.5f;c.sleeping=true;}
+   physicsSaveHooks()={[](const Clutter& c,PropBody& b){if(c.model<0)return false;b.orientation={0,0,std::sin(c.yaw*.5f),std::cos(c.yaw*.5f)};b.angularVelocity={0,0,c.spin};b.island=c.sleeping?3:-1;return true;},
+                       [](Clutter&,const PropBody& b){restored.push_back(b);}};
+   const auto bytes=encode(p);restored.clear();Game q(props);const bool ok=q.decodeSave(bytes);const auto again=ok?encode(q):std::string();
+   const bool body=restored.size()==1&&std::fabs(restored[0].orientation[2]-std::sin(.3f))<1e-6f&&std::fabs(restored[0].orientation[3]-std::cos(.3f))<1e-6f&&restored[0].angularVelocity[2]==1.5f&&restored[0].island==3;
+   const auto broken=wrap(rebuild(bytes,[](std::string& name,int&,std::uint16_t&,std::string& b){if(name=="physics"){const float w=2;std::memcpy(b.data()+b.size()-17,&w,4);}return true;}));
+   Game bad(props);const bool badLoaded=bad.decodeSave(broken);const auto why=badLoaded?std::string("(loaded)"):lastLoadFailure();
+   physicsSaveHooks()={};Game plainLoad(props);const bool plainOk=plainLoad.decodeSave(bytes);const bool unhooked=plainOk&&!has(encode(plainLoad),"physics");
+   check(prop>=0&&has(bytes,"physics")&&ok&&body&&again==bytes,"The physics section carries a prop's orientation, angular velocity and sleep island to the solver's restore hook",std::to_string(restored.size())+" bodies");
+   check(!badLoaded&&contains(why,"section 'physics': invalid prop body"),"A prop body whose quaternion is not unit is refused",why);
+   check(unhooked,"Without the solver's hooks a saved physics section is read, checked and dropped");}
+ }
+
+ // ---- 7. The save folder 1.0.4-1.5.0 wrote by mistake is adopted, in a temp folder ----
+ {const auto local=root/"local";const std::filesystem::path wrong(local.wstring()+L"RawMetalsaves"),wrongSettings(local.wstring()+L"RawMetalsettings.ini"),right=local/"RawMetal"/"saves",settings=local/"RawMetal"/"settings.ini";
+  std::filesystem::create_directories(wrong,ignored);std::filesystem::create_directories(right,ignored);
+  const auto now=std::filesystem::file_time_type::clock::now();auto at=[&](const std::filesystem::path& p,const std::string& data,int hoursAgo){put(p,data);std::filesystem::last_write_time(p,now-std::chrono::hours(hoursAgo),ignored);};
+  at(wrong/"checkpoint.rms","newer checkpoint",1);at(right/"checkpoint.rms","older checkpoint",48);
+  at(wrong/"slot-1.rms","only here",2);at(wrong/"slot-1.rms.label","MAP 3",2);
+  at(wrong/"slot-2.rms","stale",72);at(right/"slot-2.rms","current",3);
+  at(wrong/"checkpoint.rms.tmp","half written",1);
+  at(wrongSettings,"0.5 0.5 0.5 1 0 1 1",1);
+  adoptMisplacedSaves(local.wstring());
+  const bool first=get(right/"checkpoint.rms")=="newer checkpoint"&&get(right/"checkpoint.rms.older.bak")=="older checkpoint"&&get(right/"slot-1.rms")=="only here"&&get(right/"slot-1.rms.label")=="MAP 3"
+   &&get(right/"slot-2.rms")=="current"&&!std::filesystem::exists(right/"slot-2.rms.older.bak",ignored)&&!std::filesystem::exists(right/"checkpoint.rms.tmp",ignored)&&get(settings)=="0.5 0.5 0.5 1 0 1 1"
+   &&get(wrong/"checkpoint.rms")=="newer checkpoint"&&get(wrong/"slot-2.rms")=="stale"&&get(wrongSettings)=="0.5 0.5 0.5 1 0 1 1";
+  adoptMisplacedSaves(local.wstring());
+  const bool second=get(right/"checkpoint.rms")=="newer checkpoint"&&!std::filesystem::exists(right/"checkpoint.rms.older-2.bak",ignored)&&get(right/"checkpoint.rms.older.bak")=="older checkpoint";
+  check(first,"Saves and settings in the mistaken %LOCALAPPDATA%RawMetalsaves come into RawMetal\\saves; a newer file there is kept; one replaced is kept as .older.bak; the old folder is left as it was");
+  check(second,"A second start adopts nothing more");
+ }
+ }
+ std::filesystem::remove_all(root,ignored);
+ report<<(passed?"PASS":"FAIL")<<" save format\n";
  return passed;
 }
 }
