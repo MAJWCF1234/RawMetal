@@ -123,6 +123,9 @@ struct LabAccess {
  static Corpse* trackCorpse(SoftwareRenderer& r,const Game& g,int level,size_t track){const World& w=g.chunkWorld(level);if(track>=w.actorTracks().size())return nullptr;
   return r.humanCorpse(g,w,level,w.actorTracks()[track],w.actorPose(track),-1,0xB000000000000000ull|(std::uint64_t(std::uint32_t(level))<<32)|track);}
  // Between tubes (and before a determinism repeat): nothing a scene left in the renderer carries over.
+ // The Vulkan renderer behind it (null on the software path), and where library models begin.
+ static GpuRenderer* gpu(SoftwareRenderer& r){return r.m_gpu.get();}
+ static constexpr int firstLibraryModel(){return SoftwareRenderer::FirstLibraryModel;}
  static void resetRenderer(SoftwareRenderer& r){r.m_corpses.clear();r.m_corpseClock=0;r.m_goreBursts.clear();r.forgetScene();}
  // The men's bodies: 0-5 the civilians (civilianActorBody), 6.. the cleanup crew (cleanupActorBody).
  static Mesh& humanMesh(SoftwareRenderer& r,int i){return i<6?r.civilianMesh(i):*r.cleanupMeshes()[size_t(i-6)];}

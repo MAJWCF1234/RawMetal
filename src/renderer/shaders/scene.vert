@@ -8,6 +8,8 @@ layout(location=4) in vec2 uv1;
 layout(location=5) in vec2 uv2;
 layout(location=6) in vec4 settings;
 layout(location=7) in float actorIndex;
+// The face's own scalar on its side's brightness (GpuRenderer::ActorTriangle::light).
+layout(location=8) in float faceLight;
 #else
 layout(location=0) in vec4 position;
 layout(location=1) in vec2 uv;
@@ -90,7 +92,11 @@ void main(){
   int side=0;float alignment=-1.e30;
   for(int i=0;i<6;++i){float match=dot(n,actors.actor[index].normalBrightness[i].xyz);if(match>alignment){alignment=match;side=i;}}
   vec4 source0=actors.actor[index].light0[side],source1=actors.actor[index].light1[side];
+#ifdef RAWMETAL_ACTOR_INSTANCES
+  adjustedLighting=vec4(actors.actor[index].normalBrightness[side].w*faceLight,position.w,0.22,0.0);
+#else
   adjustedLighting=vec4(actors.actor[index].normalBrightness[side].w,position.w,0.22,0.0);
+#endif
   adjustedLight0=vec4(0);adjustedLight1=vec4(0);
   bool tangentActive=worldNormal.z>=0.0&&(source0.w!=0.0||source1.w!=0.0);
   if(tangentActive){

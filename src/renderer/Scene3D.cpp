@@ -11,6 +11,7 @@
 #include "Projection.h"
 #include "RenderProfile.h"
 #include "../core/FrameProfile.h"
+#include "../core/Tune.h"
 #include "SoftwareRenderer.h"
 #include "GpuRenderer.h"
 #include "ElectricFx.h"
@@ -3297,6 +3298,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(m_goreBursts.size()>=32)m_goreBursts.erase(m_goreBursts.begin());
    m_goreBursts.push_back(burst);}};
  const auto&creatures=game.chunkEnemies(level);
+ const bool creatureStream=m_gpuFrame&&m_gpuActorPreparation&&m_creatureStream&&!m_staticGeometryBuild&&retro::tune("creature_stream",1.f)>.5f;
  for(size_t slotIndex=0;slotIndex<creatures.size();++slotIndex){const auto&e=creatures[slotIndex];
   const std::uint64_t key=(std::uint64_t(std::uint32_t(level))<<32)|std::uint64_t(slotIndex);
   if(!e.visible()){m_remains.erase(key);continue;}
@@ -3366,14 +3368,29 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto enemyLights=e.alive?exteriorLight(receiver,std::max(.2f,stance.range.x*stance.scale),std::max(.2f,stance.range.z*stance.scale),std::max(.2f,stance.range.y*stance.scale),kPi*.5f-e.heading,true)
                           :exteriorLight(receiver+Point3{0,0,.1f},heap,heap,.4f,kPi*.5f-e.heading,true);
   if(!e.alive)m_dissolve=e.dissolve();
+  // The actor stream (as people are drawn): the posed faces go up as they stand, one light record
+  // for the body, and the GPU picks each face's side and lights it as selectFaceLight and tri() do
+  // here; the face's own scalar rides in ActorTriangle::light. Not while it dissolves (the stream has
+  // no dissolve) and not near the far limit, where tri() drops the faces wholly past it.
+  const float creatureReach=e.alive?1.8f:slot->carcass.radius()+.25f;
+  const int gpuCreature=creatureStream&&m_dissolve<=0.f&&cameraPoint(receiver,game).z+creatureReach*4.f<farPlane?m_gpu->beginActor(enemyLights.normals,enemyLights.brightness,enemyLights.gloss,game.chunkOffset(level),player.pos,receiver):-1;
+  GpuRenderer::ActorStream creatureFaces;if(gpuCreature>=0)creatureFaces=m_gpu->beginActorStream(faces->size());
+  std::uint32_t creatureEmitted=0,creatureRun=0;const Texture* runSheet=nullptr;GpuRenderer::ActorMaterial runMaterial{};
+  std::array<std::pair<const Texture*,GpuRenderer::ActorMaterial>,10> creatureMaterials{};size_t creatureMaterialCount=0;
+  auto flushCreatureRun=[&]{if(runSheet)m_gpu->actorStreamRun(creatureFaces.start+creatureRun,creatureEmitted-creatureRun,runMaterial);creatureRun=creatureEmitted;};
   for(const auto&face:*faces){
    Point3 n=faceNormal(face);float len=std::sqrt(goreDot(n,n));
-   selectFaceLight(enemyLights,n,centroid(face)-receiver);
+   if(gpuCreature<0)selectFaceLight(enemyLights,n,centroid(face)-receiver);
    float light=.72f+.35f*std::fabs(n.z)/std::max(.001f,len)+(e.alive?e.painFlash*.22f:0.f);
    // Thin wasp wings transmit light from the far side of the membrane.
    if(wasp&&face.part==1&&keyLight&&len>.00001f){auto toLamp=keyLight->emitter()-receiver;float inv=1.f/std::sqrt(std::max(.00001f,toLamp.x*toLamp.x+toLamp.y*toLamp.y+toLamp.z*toLamp.z));light+=.3f*std::max(0.f,-(n.x*toLamp.x+n.y*toLamp.y+n.z*toLamp.z)*inv/len);}
    const size_t part=size_t(std::clamp(face.part,0,int(parts.size())-1));
-   tri(face.v[0],face.v[1],face.v[2],wasp&&face.part==1?m_wingTexture:*parts[part],light*partLight[part]);
+   const Texture&sheet=wasp&&face.part==1?m_wingTexture:*parts[part];
+   if(gpuCreature<0)tri(face.v[0],face.v[1],face.v[2],sheet,light*partLight[part]);
+   else if(std::max({face.v[0].p.z,face.v[1].p.z,face.v[2].p.z})>=dormantFloor){
+    if(&sheet!=runSheet){flushCreatureRun();runSheet=&sheet;size_t k=0;while(k<creatureMaterialCount&&creatureMaterials[k].first!=&sheet)++k;
+     if(k==creatureMaterialCount){runMaterial=m_gpu->prepareActorMaterial(sheet,m_emissionScale);if(k<creatureMaterials.size()){creatureMaterials[k]={&sheet,runMaterial};++creatureMaterialCount;}}else runMaterial=creatureMaterials[k].second;}
+    GpuRenderer::writeActorTriangle(creatureFaces.triangles[creatureEmitted++],face,gpuCreature,runMaterial,light*partLight[part]);}
    if(keyLight){
     static const Texture shadow=[](){Texture t{1,1,{0x3d000000u}};t.transparent=true;return t;}();
     MeshVertex cast[3];auto emitter=keyLight->emitter();
@@ -3389,6 +3406,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadow,1.f);}
    }
   }
+  if(gpuCreature>=0){flushCreatureRun();m_gpu->endActorStream(creatureFaces,creatureEmitted);}
   const size_t tone=size_t(visual.fluid);
   if(!e.alive){auto&carcass=slot->carcass;
    // What runs out of it: a pool that spreads under where it came to rest.

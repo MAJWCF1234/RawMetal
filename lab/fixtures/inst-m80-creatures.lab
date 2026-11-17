@@ -1,0 +1,10 @@
+# Instancing: Chapter 2, map 80, three creatures close under its lamps (the creature stream against
+# the CPU path, pixel for pixel, with per-pixel lamps and shadows). Tubes: instancing.
+world campaign
+map 80
+camera 22 11.5 -12 180 0
+spawn creature Huntsman 18.5 11.5 -12
+spawn creature Transformed 19.2 12.8 -12 200
+spawn creature Wasp 19.6 10.2 -12
+size 960 540
+frames 24

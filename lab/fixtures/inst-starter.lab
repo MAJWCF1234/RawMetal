@@ -1,0 +1,7 @@
+# Instancing: the generated Starter Map's welcome hall. Tubes: instancing.
+world custom "custom maps/Starter Map.rmc"
+map 0
+camera 12 2.2 -999 90 -6
+open-doors
+size 960 540
+frames 24
