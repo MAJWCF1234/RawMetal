@@ -51,7 +51,7 @@ RULES = [
      ['engine-regression', 'gameplay-fixes', 'campaign-maps', 'service-maps', 'streaming', 'progression', 'chapter-route', 'chapter-sequence'],
      [EXTRA_CAMPAIGN], False, True),
     (r'^src/game/Game\.(h|cpp)$',
-     ['systems', 'gameplay-fixes'], [], False, False),  # shared header; keep light unless a sibling file pulls more
+     ['systems', 'gameplay-fixes', 'saves', 'props', 'clutter'], [], False, False),  # shared header: the save version and the prop struct live here
     (r'^src/game/',
      ['systems', 'gameplay-fixes', 'engine-regression'], [], False, False),
     (r'^src/renderer/SoftwareRenderer\.(cpp|h)$',
@@ -66,6 +66,10 @@ RULES = [
     (r'^src/world/Campaign',
      ['campaign-maps', 'chapter-route', 'chapter-sequence', 'service-maps', 'streaming', 'mechanisms'],
      [EXTRA_CAMPAIGN], False, True),
+    # World.cpp/h build every map's runtime state (loose chairs, fixtures, nav): what reads it reaches far.
+    (r'^src/world/World\.(h|cpp)$',
+     ['primitives', 'streaming', 'service-maps', 'glass', 'props', 'clutter', 'saves', 'campaign-maps',
+      'creature-behaviour', 'chimera-hunt', 'movement'], [EXTRA_CAMPAIGN], False, True),
     (r'^src/world/',
      ['primitives', 'streaming', 'service-maps', 'glass'], [EXTRA_CAMPAIGN], False, True),
     (r'^src/platform/',
@@ -80,14 +84,14 @@ RULES = [
     (r'^src/app\.rc$',
      [], [], False, False),
     (r'^src/',
-     None, None, None, None),  # any other src file → full
+     None, None, None, None),  # any other src file -> full
     # Builder engine sync copies src/; do not re-expand the game suite from the copy.
     (r'^tools/Level Editor/ENGINE_SYNC$',
      [], [], False, False),
     (r'^tools/Level Editor/src/',
      [], [], False, False),
     (r'^tools/Level Editor/',
-     [], [], False, True),  # builder UI / project files → builder open checks
+     [], [], False, True),  # builder UI / project files -> builder open checks
     (r'^tools/release/',
      [], [], False, False),
     (r'^tools/dev/',
@@ -107,8 +111,38 @@ def _run(cmd):
     return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
 
+def published_release_commit():
+    """The newest release actually published (a v* tag on origin) below HEAD.
+
+    A ship that stopped after its release commit (a failed build or test) leaves a 'release:' commit
+    that was never published; diffing from it would leave everything before it untested.
+    """
+    out = _run(['git', 'ls-remote', '--tags', 'origin', 'v*'])
+    if out.returncode != 0 or not out.stdout.strip():
+        return None
+    head = _run(['git', 'rev-parse', 'HEAD']).stdout.strip()
+    tags = {}
+    for line in out.stdout.splitlines():
+        sha, _, ref = line.partition('\t')
+        m = re.match(r'refs/tags/v(\d+)\.(\d+)\.(\d+)(\^\{\})?$', ref.strip())
+        if m:
+            key = tuple(int(g) for g in m.groups()[:3])
+            if m.group(4) or key not in tags:   # a peeled annotated tag names the commit itself
+                tags[key] = sha.strip()
+    for key in sorted(tags, reverse=True):
+        sha = tags[key]
+        if sha == head:
+            continue
+        if _run(['git', 'merge-base', '--is-ancestor', sha, 'HEAD']).returncode == 0:
+            return sha
+    return None
+
+
 def previous_release_commit():
-    """Last shipped release commit that is not the version on HEAD (if HEAD is that release)."""
+    """The last published release (origin's v* tags); offline, the last 'release:' commit not on HEAD."""
+    published = published_release_commit()
+    if published:
+        return published
     log = _run(['git', 'log', '--grep', '^release: v', '-n', '8', '--format=%H%x09%s'])
     if log.returncode != 0 or not log.stdout.strip():
         return None
@@ -149,7 +183,7 @@ def select(base=None, suite_names=None):
     """Return a dict describing what to run for the current diff.
 
     keys: mode ('full'|'subset'|'none'), tests (list), extras (list of flags),
-    audio (bool), builder_open (bool), files, base, reasons (file → rule summary)
+    audio (bool), builder_open (bool), files, base, reasons (file -> rule summary)
     """
     files, base = changed_files(base)
     if suite_names is None:
@@ -173,7 +207,7 @@ def select(base=None, suite_names=None):
                 return dict(mode='full', tests=list(suite_names),
                             extras=[EXTRA_GORE, EXTRA_CARCASS, EXTRA_CAMPAIGN, EXTRA_RENDER],
                             audio=True, builder_open=True, files=files, base=base,
-                            reasons={path: f'unscoped ({pattern}) → full suite'})
+                            reasons={path: f'unscoped ({pattern}) -> full suite'})
             tests.update(rule_tests)
             extras.update(rule_extras or [])
             audio = audio or bool(rule_audio)
@@ -184,7 +218,7 @@ def select(base=None, suite_names=None):
             return dict(mode='full', tests=list(suite_names),
                         extras=[EXTRA_GORE, EXTRA_CARCASS, EXTRA_CAMPAIGN, EXTRA_RENDER],
                         audio=True, builder_open=True, files=files, base=base,
-                        reasons={path: 'unmatched src → full suite'})
+                        reasons={path: 'unmatched src -> full suite'})
         if not matched:
             reasons[path] = 'ignored'
 

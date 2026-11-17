@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.4.16 - Set down (2026-11-17)
+
+A small patch for what you put down.
+
+- **Dropping on the move.** A box let go of while walking was thrown, not dropped: the hand's path already carried your walk, and the walk was counted again on top of it. It left your hands at nearly twice your pace, flying, and could crack a window or hurt whoever it met. It falls at your side now. A flick of the look still flings it, as it should.
+- **The release checks.** A release now retests everything changed since the last release that actually went out, not since the last one that was only attempted, and changes to the map and game cores bring the save, prop and creature tests with them.
+
+Verified with tools/release/ship.py and the clutter and props suites, with a new check that a prop dropped mid-stride falls at a share of the walk and is not thrown.
+
+---
+
 ## v1.4.15 - Open sky (2026-11-17)
 
 A patch for the weather above an outdoor map.

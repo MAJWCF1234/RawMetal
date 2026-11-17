@@ -90,7 +90,7 @@ int Game::nearbyClutter(int grabHand)const{
 bool Game::interactClutter(int grabHand){
  m_carryClutter=-1;
  if(holdingClutter()){
-  auto&c=m_clutter[m_heldClutter];
+  auto&c=m_clutter[m_heldClutter];float thrown=-1;   // desktop: the throw's own speed, the walk left out
   if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}
   else{
    // Desktop: the held prop follows look. Releasing mid-spin or mid-flick keeps that path
@@ -99,13 +99,15 @@ bool Game::interactClutter(int grabHand){
    const Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x};
    const Vec2 lookVel=right*(m_lookYawRate*hold*std::cos(pitch))+forward*(-hold*std::sin(pitch)*pitchRate);
    const float lookVz=hold*std::cos(pitch)*pitchRate;
-   const Vec2 hand=lengthSq(lookVel)>lengthSq(m_carryHandVelocity)?lookVel:m_carryHandVelocity;
+   // The hand path already carries the walk; take the walk out once so a drop on the move is a drop.
+   const Vec2 carried=m_carryHandVelocity-m_velocity;
+   const Vec2 hand=lengthSq(lookVel)>lengthSq(carried)?lookVel:carried;
    const float handVz=std::fabs(lookVz)>std::fabs(m_carryHandVz)?lookVz:m_carryHandVz;
-   c.velocity=m_velocity*.35f+hand;c.vz=handVz;
+   c.velocity=m_velocity*.35f+hand;c.vz=handVz;thrown=length(hand)+std::fabs(handVz);
    c.velocity={std::clamp(c.velocity.x,-12.f,12.f),std::clamp(c.velocity.y,-12.f,12.f)};c.vz=std::clamp(c.vz,-12.f,12.f);
   }
-  if(c.model>=0){float factor=std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f);c.velocity=c.velocity*factor;c.vz*=factor;}
-  const float releaseSpeed=length(c.velocity)+std::fabs(c.vz);
+  float factor=1;if(c.model>=0){factor=std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f);c.velocity=c.velocity*factor;c.vz*=factor;}
+  const float releaseSpeed=thrown>=0?thrown*factor:length(c.velocity)+std::fabs(c.vz);
   c.projectile=releaseSpeed>1.2f;c.soundOwner=c.projectile?-1:c.soundOwner;c.pitchSpeed=0;c.rollSpeed=0;c.spin=c.projectile?(c.velocity.x+c.velocity.y)*.4f:0;
   c.sleeping=false;c.restTime=0;m_heldClutter=-1;m_carryHandVelocity={};m_carryHandVz=0;return true;
  }
@@ -625,6 +627,12 @@ bool Game::testProps(){
   c.pos={7,6};c.z=.75f;soft.m_clutter={c};check(soft.interactClutter(),"soft release grabs monitor");soft.update({},1.f/60);
   InputState drop;drop.use=true;soft.update(drop,1.f/60);
   check(!soft.holdingClutter()&&length(soft.m_clutter[0].velocity)<.8f&&std::fabs(soft.m_clutter[0].vz)<.8f&&!soft.m_clutter[0].projectile,"releasing still does not fling from the grab snap");
+  // Dropped on the move: the hand path already holds the walk, so the walk is counted once.
+  Game walk(regression::campaign(regression::room()));walk.m_player.pos={5,6};walk.m_player.angle=0;walk.m_player.pitch=0;
+  c.pos={6,6};c.z=.75f;walk.m_clutter={c};check(walk.interactClutter(),"walking release grabs monitor");
+  InputState stride;stride.forward=true;for(int i=0;i<40;++i)walk.update(stride,1.f/60);
+  const float pace=length(walk.m_velocity);stride.use=true;walk.update(stride,1.f/60);
+  check(!walk.holdingClutter()&&pace>1.f&&length(walk.m_clutter[0].velocity)<pace*.6f&&!walk.m_clutter[0].projectile,"a prop dropped while walking falls at a share of the walk, not thrown");
  }
  {auto room=regression::room();room->structures.push_back({7.5f,3,7.6f,10,0,3.4f});Game carry(regression::campaign(room));carry.m_player.pos={6,6};carry.m_player.angle=0;
   Clutter c;c.kind=7;c.model=model::crt_monitor;c.dims={.42f,.4f,.38f};c.pos={6.8f,6};c.z=.75f;carry.m_clutter={c};carry.interactClutter();carry.update({},1.f/120);

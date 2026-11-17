@@ -99,13 +99,27 @@ def sync_builder():
             if '<<<<<<< editor' not in text:
                 continue
             blocks = pattern.findall(text)
-            builder_only = lambda mine: 'CAMPAIGN BUILDER' in mine or 'editorGhost' in mine or 'editorView' in mine
-            if blocks and all(builder_only(mine) for mine, _ in blocks):
-                # The Builder's menu tag replaces the game's; its editor-view lines (ghosted upper floors)
-                # go after the game's new lines, so both survive.
-                text = pattern.sub(lambda m: m.group(1) if 'CAMPAIGN BUILDER' in m.group(1) else m.group(2) + m.group(1), text)
+            tags = ('CAMPAIGN BUILDER', 'NEW CAMPAIGN')
+            keys = tags + ('editorGhost', 'editorView', 'setEditorView', 'EditorView.h', 'm_editorFloors', 'drawEditorGuides')
+            lines = lambda part: [line.strip() for line in part.splitlines() if line.strip()]
+
+            def resolve(mine, game):
+                """The Builder's side of a conflict it alone owns, never at the cost of a game line."""
+                if set(lines(game)) <= set(lines(mine)):
+                    return mine                      # the Builder side already holds every game line
+                if any(k in mine for k in tags):
+                    # Its menu tag / New campaign row replaces the game's one line, and nothing more.
+                    return mine if len(lines(game)) <= 1 else None
+                if 'editorGhost' in mine or 'editorView' in mine:
+                    return game + mine               # the game's new lines, then the Builder's ghosted-floor lines
+                return None                          # anything else is a person's merge
+
+            merged = [resolve(mine, game) for mine, game in blocks] if blocks and all(any(k in mine for k in keys) for mine, _ in blocks) else None
+            if merged and all(m is not None for m in merged):
+                it = iter(merged)
+                text = pattern.sub(lambda m: next(it), text)
                 open(path, 'wb').write(text.encode('utf-8'))
-                say(f'kept the Builder lines (and the game\'s) in {os.path.relpath(path, ROOT)}')
+                say(f"kept the Builder lines (and the game's) in {os.path.relpath(path, ROOT)}")
             else:
                 sys.exit(f'ship: the Builder sync has a real conflict in {path}; merge it by hand, then run again.')
     run([sys.executable, 'tools/editor/sync_engine.py'], 'sync2.txt')
