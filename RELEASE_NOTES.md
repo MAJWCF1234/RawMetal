@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.0 - Things that give (2026-11-17)
+
+The world answers back now. What you hold, what you break, what you fall into.
+
+- **Glass.** A window takes a round where the round hits it: a hole, a white star, cracks running out from it. Hit it again and the holes join and pieces fall out, real shards that tumble, ring and break again on the floor. Big panes come down in parts. A thrown crate punches its own shape through and keeps going. Rounds and props pass only where the glass is gone. Shards crunch underfoot, and things hear it. Reinforced glass webs, sags and crushes white, and holds.
+- **A crate between you and it.** Hold a crate, a chair or a box toward something that wants you, and its blows land on what you hold until it bursts in your hands. A thing that will not break is torn away instead. Then you are on your own.
+- **Things in things.** Baskets, crates, bins and carts hold what you put in them. Carry the crate and the bottles come with it. Tip it and they spill.
+- **Soft things.** Mattresses, bedrolls and ward beds give under a body and rise again after.
+- **Water.** It holds up what floats and takes down what doesn't: crates bob, monitors sink to the bed. Jumping in, wading, throwing things in and shooting the water all splash and send rings across it. A loud splash is heard.
+- **The dead.** A corpse takes each round on the part it hit, lies on crates and beds instead of inside them, is moved by a heavy prop, and settles without twitching into place.
+- **Plants.** Grass, ferns, bushes and trees move in the wind, bend when you push through and spring back, and flinch when shot.
+- **The Builder, outdoors.** Picking, placing, water and triggers now follow the land instead of the map's zero. New Terrain tools raise, lower, smooth, flatten, ramp and paint the ground; Nature brushes scatter the purchased trees, bushes, grass and rocks; Water draws pools, fills hollows and takes its level from a bank. An indoor map now meets an outdoor one with steps instead of a wall of earth.
+- **The console.** `summon` brings creatures, guards, soldiers and civilians, on your side, against you or on none, with their own orders. `ally`, `enemy`, `kill`, `freeze`, `killall`, `list` and `help summon` work on what you aim at. Creatures and men on opposing sides fight each other. Summons do not survive a save. See docs/Systems/console.md.
+- **Drawing creatures.** Creatures draw through the same instanced stream as people, cutting the CPU's share of a busy outdoor frame by more than half.
+- **Saves** are version 27: windows keep their holes. Older saves load.
+
+Verified with tools/release/ship.py on the full suite, the feature lab's tubes for every system above (glass, soft bodies, containers, water, ragdolls, plants, summons, instancing), the Campaign Builder's outdoor test, and before-and-after pictures of each.
+
+---
+
 ## v1.4.16 - Set down (2026-11-17)
 
 A small patch for what you put down.
