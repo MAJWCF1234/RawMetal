@@ -82,7 +82,7 @@ void Game::dropGlassPieces(int level,int index,const std::vector<glass::Piece>& 
  for(size_t i=0;i<pieces.size();++i){const auto&piece=pieces[i];// A round's own hole is crushed to the spray of chips (its break event); what it loosens round it falls as pieces.
   if(piece.area<.0012f||(piece.blown&&!blownProps)||made>=PiecesPerBlow||lying+made>=GlassShardsMost)continue;
   const std::uint32_t key=std::uint32_t(std::lround(piece.centre.x*997)+std::lround(piece.centre.y*6007));const float h0=glass::hashUnit(key,11,std::uint32_t(index)),h1=glass::hashUnit(key,12),h2=glass::hashUnit(key,13),h3=glass::hashUnit(key,14);
-  Clutter c;c.kind=6;c.shardOf=ShardOf::Glass;c.piece=int(h0*8)&7;c.dims={std::clamp(piece.high.x-piece.low.x,.03f,.4f),std::clamp(piece.high.y-piece.low.y,.03f,.4f),.006f};
+  Clutter c;c.kind=6;c.shardOf=ShardOf::Glass;c.piece=int(h0*8)&7;c.dims={std::clamp(piece.high.x-piece.low.x,.03f,.28f),std::clamp(piece.high.y-piece.low.y,.03f,.28f),.006f};
   const Point3 centre=f.at(piece.centre,(f.flat?-1.f:side)*(half+.025f));
   if(f.flat){c.yaw=h1*kTwoPi;}else{c.yaw=std::atan2(f.along.y,f.along.x);c.roll=kPi*.5f+(h1-.5f)*.3f;}
   c.pos={centre.x,centre.y};c.z=centre.z-c.extent()[2];

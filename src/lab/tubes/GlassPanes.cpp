@@ -51,8 +51,12 @@ int roundsToBring(Pane p,const HitscanDef& gun,float step){Game g(room(p));int r
 constexpr int Volley=12,VolleyEvery=5,Throw=230,HoldsMore=260;
 const bool tube=add({
  .name="glass",.summary="glass breaks a piece at a time: rounds hole it, close holes let pieces fall as shard props, thrown props punch holes their size, bodies and fists break it, holds glass spiderwebs and sags, glass crunches underfoot, saves keep the holes",
- .friends={"heavy-impacts","debris"},.fixtures={"glass-pane","glass-holds"},
- .author=[](Scene& s,AuthoredMapData& m){const bool holds=s.fixture->value("glass","pane")=="holds";kit::breakable(m,9.97f,6.4f,10.03f,9.6f,0,2.4f,17,holds);if(!holds)kit::prop(m,model::wooden_crate,8.4f,8.9f,0,0);},
+ .friends={"heavy-impacts","debris"},.fixtures={"glass-pane","glass-pane-grazing","glass-holds","glass-holds-grazing"},
+ // The pane in a steel frame, a yellow wall and a barrel behind it under their own lamp (the fixture's), so its
+ // tint, its glints and its holes read against something.
+ .author=[](Scene& s,AuthoredMapData& m){const bool holds=s.fixture->value("glass","pane")=="holds";kit::breakable(m,9.97f,6.4f,10.03f,9.6f,0,2.4f,17,holds);if(!holds)kit::prop(m,model::wooden_crate,8.4f,8.9f,0,0);
+  kit::wall(m,9.93f,6.28f,10.07f,6.4f,0,2.52f,20);kit::wall(m,9.93f,9.6f,10.07f,9.72f,0,2.52f,20);kit::wall(m,9.93f,6.28f,10.07f,9.72f,2.4f,2.52f,20);
+  kit::wall(m,13.2f,5.2f,13.4f,10.8f,0,3.2f,14);kit::prop(m,model::ind_barrel,11.9f,7.1f,0,0);},
  .step=[](Scene& s,float){Game& g=s.g();const bool holds=s.fixture->value("glass","pane")=="holds";const int k=(s.frame-Volley)/VolleyEvery;
   if(s.frame>=Volley&&(s.frame-Volley)%VolleyEvery==0){
    if(holds&&k<12)LabAccess::fireFrom(g,{7.6f,8,1.3f},{10,7.7f,1.3f},shotgun());
@@ -62,6 +66,8 @@ const bool tube=add({
   if(!holds&&s.frame==Throw)for(auto& c:LabAccess::clutter(g))if(c.model==model::wooden_crate){c.z=.55f;thrown(c,{1,0},9,1.2f);}},
  .capture=[](Scene& s,const Frame&){const bool holds=s.fixture->value("glass","pane")=="holds";if(s.frame==Volley-1)s.shoot("before");if(s.frame==(holds?HoldsMore-1:Throw-1))s.shoot("holes");if(s.last())s.shoot("after");},
  .metrics=[](Scene& s,Report& r){Game& g=s.g();const bool holds=s.fixture->value("glass","pane")=="holds";
+  // The grazing views film the same scenes from the side; the numbers run once, head-on.
+  if(s.fixture->value("view","head-on")=="grazing"){r.metric("scene_missing",missing(g));r.check("scene (grazing view): the pane stands with its damage",g.world().breakableIntact(0)&&hits(g)>0);return;}
   if(holds){r.metric("scene_holds_hits",hits(g));r.metric("scene_holds_missing",missing(g));r.metric("scene_holds_strain",g.world().breakableDamage(0)/180.f);
    r.check("scene: holds glass spiderwebs, sags and opens only a small hole where it was hammered, and stands",g.world().breakableIntact(0)&&hits(g)>=10&&missing(g)>=1&&missing(g)<40,std::to_string(hits(g))+" hits, "+std::to_string(missing(g))+" pieces gone");return;}
   {const auto sh=shards(g);float crate=0;for(const auto& c:LabAccess::clutter(g))if(c.model==model::wooden_crate)crate=c.pos.x;
