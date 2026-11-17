@@ -6,6 +6,7 @@
 #include "../core/Ray.h"
 #include "CampaignMaps.h"
 #include "CampaignExport.h"
+#include "SkyboxCatalog.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -207,7 +208,13 @@ bool insideFixture(const Fixture&fixture,float x,float y,float margin=0){
  return std::fabs(dx*c-dy*s)<fixture.width*fixture.core*.5f+margin&&std::fabs(dx*s+dy*c)<fixture.depth*fixture.core*.5f+margin;
 }
 constexpr float ShelfTiers[]={.17f,.54f,.92f};
-bool benchTerminal(const World& world,const Terminal& terminal){return terminal.paper()?terminal.paperOnBench():world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;} // Reactor consoles keep their own housing.
+bool benchTerminal(const World& world,const Terminal& terminal){
+ if(terminal.paper())return terminal.paperOnBench();
+ // An authored height means the CRT sits on existing furniture or a built island —
+ // do not invent a second freestanding desk (Containment A's monitoring table).
+ if(terminal.z>.2f)return false;
+ return world.campaign()&&world.level()>=6&&!terminal.control&&terminal.reactorAction==0;
+} // Reactor consoles keep their own housing.
 bool insideTerminal(const World& world,const Terminal& terminal,float x,float y){
  if(terminal.paper()&&!terminal.paperOnBench())return false; // the wall or the desk does the colliding
  if(benchTerminal(world,terminal))return x>terminal.position.x-.48f&&x<terminal.position.x+.42f&&std::fabs(y-terminal.position.y)<.36f;
@@ -425,9 +432,9 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // Keep recessed sources below their own opaque housing, including custom fittings.
  for(auto&l:m_lights)if(l.mount==WorldLightMount::Ceiling&&l.fitting>=0){float mount=clearanceAbove(l.position.x,l.position.y,l.z);l.z=std::min(l.z,mount-l.fittingHeight-.06f);}
  if(hasLift())refreshReactorTerminals();
- // Outdoor wasteland custom packs own a world-space Surface Nets heightfield so
- // the facility and NPCs sit on dirt/rock instead of a flat authored slab.
- if(outdoors()&&(m_mapData->skybox=="brutal_wasteland"||m_mapData->skybox=="zone_overcast")){
+ // Outdoor terrain skies own a world-space Surface Nets heightfield so the
+ // facility and NPCs sit on dirt/rock instead of a flat authored slab.
+ if(outdoors()&&terrainSkybox(m_mapData->skybox)){
   m_exclusionTerrain=true;m_internalWallHeight=2.8f;buildTerrain();settleExclusionFacilityOnTerrain();
  }
 }
@@ -596,6 +603,12 @@ Haze World::haze(Vec2 p,float z)const{
  if(zoneSky())return {.55f,.64f,.74f,.0035f};
  if(outdoors()&&std::string_view(skyboxId())=="brutal_wasteland")return coast()?Haze{.62f,.74f,.85f,.006f}:Haze{.39f,.39f,.40f,.012f};
  return outdoors()?Haze{.43f,.52f,.62f,.010f}:Haze{.11f,.15f,.18f,.008f};
+}
+void World::setSkybox(std::string id){
+ if(!m_mapData||m_mapData->skybox==id)return;
+ auto data=std::make_shared<AuthoredMapData>(*m_mapData);
+ data->skybox=std::move(id);
+ m_mapData=std::move(data);
 }
 void World::buildTerrain(){
  m_terrain.clear();

@@ -46,6 +46,7 @@
 #include <numeric>
 #include <vector>
 namespace retro{bool testDoorLeaves();} // game/Movement.cpp
+namespace retro{bool testSkyboxes();}
 
 // Own argv strings for the lifetime of every dispatch, including exception handling.
 struct CommandArguments {
@@ -1959,6 +1960,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         // early in the chain must not hide the result of everything after it.
         const std::pair<const char*,bool(*)()> tests[]={
          {"projection",retro::SoftwareRenderer::testProjection},{"command-arguments",commandArgumentsTest},{"content-integrity",contentIntegrityTest},{"load-validation",loadValidationTest},
+         {"skyboxes",retro::testSkyboxes},
          {"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
          {"combat",retro::Game::testCombat},{"weapon-motion",retro::Game::testWeaponMotion},{"audio-events",retro::Game::testAudioEvents},
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},

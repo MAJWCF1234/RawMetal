@@ -8,6 +8,7 @@
 #include "FrameWorker.h"
 #include "MinimapCache.h"
 #include "../world/ModelIds.h"
+#include "../world/SkyboxCatalog.h"
 #include "SignArt.h"
 #include "../world/CustomCampaign.h"
 #include <filesystem>
@@ -697,11 +698,29 @@ std::uint32_t SoftwareRenderer::sample(const Texture&t,float u,float v,float lod
  auto a=fetch(level);if(size_t(level)==t.mips.size())return a;auto b=fetch(level+1);float blend=lod-level;std::uint32_t result=0;
  for(int channel=0;channel<4;++channel){int shift=channel*8;auto value=unsigned(((a>>shift)&255)*(1-blend)+((b>>shift)&255)*blend);result|=value<<shift;}return result;
 }
+const SoftwareRenderer::Texture* SoftwareRenderer::mapSky(int resource){
+ if(resource<=0)return nullptr;
+ if(m_mapSkyResource==resource&&!m_mapSky.pixels.empty())return &m_mapSky;
+ // Paid skies are RCDATA PNGs in assets.rc. loadTexture covers the release EXE
+ // and the lab's loose RMT1 path from the same resource IDs.
+ m_mapSky=loadTexture(resource);
+ if(std::abs(m_mapSky.width*3-m_mapSky.height*4)<=4)m_mapSky.clampEdges=true;
+ else prepareDecal(m_mapSky,false);
+ m_mapSkyResource=resource;
+ if(m_gpu)m_gpu->prepare(m_mapSky);
+ return &m_mapSky;
+}
 void SoftwareRenderer::drawSky(const Game& game){
  const auto& world=game.world();
- if(!world.outdoors()||std::strcmp(world.skyboxId(),"brutal_wasteland")!=0)return;
- const auto& sky=world.coast()?m_coastSky:m_ashfallSky;
- if(sky.pixels.empty())return;
+ if(!world.outdoors())return;
+ const Texture* sky=nullptr;
+ if(const auto* def=findSkybox(world.skyboxId())){
+  if(def->resource>=2800)sky=mapSky(def->resource);
+  else if(def->resource==252||def->id=="brutal_wasteland")sky=world.coast()?&m_coastSky:&m_ashfallSky;
+  // Catalog entries with resource 0 (industrial_night, zone_overcast) keep the
+  // clear colour / haze only — no panorama texture.
+ }else return; // Unregistered MAP.skybox: no panorama (editor custom IDs included).
+ if(!sky||sky->pixels.empty())return;
  // Support the two common single-image sky formats used by the supplied pack:
  // a 4x3 horizontal cube cross, or an equirectangular panorama. The sky is
  // camera-centred and goes through the normal triangle path, so software and
@@ -711,7 +730,7 @@ void SoftwareRenderer::drawSky(const Game& game){
   auto camera=cameraPoint(eye+direction*radius,game);
   return MeshVertex{camera,u,v,1.f+std::max(0.f,camera.z)*.018f};
  };
- if(std::abs(sky.width*3-sky.height*4)<=4){
+ if(std::abs(sky->width*3-sky->height*4)<=4){
   struct Face{int column,row;Point3 tl,tr,br,bl;};
   // Standard horizontal cross, remapped from Y-up cubemap coordinates to the
   // game's Z-up world: up / left-front-right-back / down.
@@ -727,7 +746,7 @@ void SoftwareRenderer::drawSky(const Game& game){
   for(const auto& face:faces){
    float u0=face.column*du,u1=(face.column+1)*du,v0=face.row*dv,v1=(face.row+1)*dv;
    auto a=point(face.tl,u0,v0),b=point(face.tr,u1,v0),c=point(face.br,u1,v1),d=point(face.bl,u0,v1);
-   triangle3D(a,b,c,sky,1.f);triangle3D(a,c,d,sky,1.f);
+   triangle3D(a,b,c,*sky,1.f);triangle3D(a,c,d,*sky,1.f);
   }
   return;
  }
@@ -741,7 +760,7 @@ void SoftwareRenderer::drawSky(const Game& game){
    auto direction=[](float longitude,float latitude){float ring=std::cos(latitude);return Point3{ring*std::cos(longitude),ring*std::sin(longitude),std::sin(latitude)};};
    auto a=point(direction(lon0,lat0),u0,v0),b=point(direction(lon1,lat0),u1,v0);
    auto c=point(direction(lon1,lat1),u1,v1),d=point(direction(lon0,lat1),u0,v1);
-   triangle3D(a,b,c,sky,1.f);triangle3D(a,c,d,sky,1.f);
+   triangle3D(a,b,c,*sky,1.f);triangle3D(a,c,d,*sky,1.f);
   }
  }
 }
@@ -1230,17 +1249,17 @@ void SoftwareRenderer::drawTitle(const Game& game){
  for(int y=0;y<m_height;y+=2)fill(0,y,m_width,1,black,.16f);
  for(int i=0;i<700;++i){unsigned h=unsigned(i)*2654435761u^tick*40503u;h^=h>>15;h*=2246822519u;h^=h>>13;blend(int(h%unsigned(m_width)),int((h>>10)%unsigned(m_height)),(h>>5)&1?bone:black,.09f);}
  // Header strip.
- fill(40,25,5,5,red,1);uiText(52,20,"RAW METAL  //  CAMPAIGN BUILDER",dim,0,11,1,1);
- const char* clock="BUILD AND PLAY";uiText(m_width-40-uiTextWidth(clock,3,11),20,clock,dim,3,11);
+ fill(40,25,5,5,red,1);uiText(52,20,"DEPTHWORKS INDUSTRIAL  //  SITE 9 EXTRACTION COMPLEX",dim,0,11,1,1);
+ const char* clock="SHIFT 03 / 03:14 AM";uiText(m_width-40-uiTextWidth(clock,3,11),20,clock,dim,3,11);
  fill(40,38,m_width-80,1,bone,.10f);
  // Wordmark: a red plate misregistered under bone type, torn every few seconds.
- const char* mark="RAW METAL";const int markX=36,markY=44;
+ const char* mark="DEPTHWORKS";const int markX=36,markY=44;
  uiText(markX+3,markY+2,mark,red,2,74,.85f,2);uiText(markX,markY,mark,bone,2,74,1,2);
  if(tick>60&&(tick/7)%23==0){unsigned h=tick*747796405u;int band=markY+12+int(h%50),shift=6+int((h>>8)%14);
   for(int y=band;y<std::min(m_height,band+4+int((h>>4)%6));++y){auto row=m_pixels.begin()+size_t(y)*m_width;std::rotate(row,row+m_width-shift,row+m_width);}}
  fill(40,134,4,16,red,1);
- uiText(52,133,game.titleHeading(),red,0,15,1,3);
- uiText(52,153,game.titleDetail(),dim,1,13);
+ uiText(52,133,game.customMapsOpen()?"CUSTOM MAP ARCHIVE":"CONTAINMENT FAILURE",red,0,15,1,3);
+ uiText(52,153,game.customMapsOpen()?"Drop .rmc campaign files in /custom maps":"Something broke loose below the foundry. Nobody is coming.",dim,1,13);
  const char* normalLabels[]={"NEW CAMPAIGN","PROJECTS","STARTER MAP","SETTINGS","QUIT"};
  for(int row=0;row<game.titleRows();++row){
   int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
@@ -1252,17 +1271,17 @@ void SoftwareRenderer::drawTitle(const Game& game){
   uiText(TitleMenuLayout::X+24,y,label,selected?bone:dim,0,19,selected?1.f:.8f,1);
   if(selected)uiText(TitleMenuLayout::X+TitleMenuLayout::Width-16,y+1,">",bone,0,19,.8f);
  }
- // Workshop readout. The alarm board belonged to the night-shift title.
+ // Facility status readout.
  const int sx=m_width-218,sy=196;
- uiText(sx,sy,"WORKSHOP",dim,0,11,1,2);fill(sx,sy+16,178,1,bone,.14f);
- const char* keys[]={"SHOWCASE","NEW MAP","PROJECTS","PICTURE"};const char* values[]={"STARTER","BLANK","ON DISK","LIVE"};
- for(int i=0;i<4;++i){uiText(sx,sy+24+i*17,keys[i],dim,3,11,.85f);uiText(sx+178-uiTextWidth(values[i],3,11),sy+24+i*17,values[i],i==0?amber:bone,3,11);}
- if(blink)fill(sx,sy+101,6,6,red,1);uiText(sx+12,sy+96,"DRAG A ROOM TO START",red,0,11,blink?1.f:.55f,1);
+ uiText(sx,sy,"FACILITY STATUS",dim,0,11,1,2);fill(sx,sy+16,178,1,bone,.14f);
+ const char* keys[]={"MAIN POWER","SERVICE LIFT","CONTAINMENT","PERSONNEL"};const char* values[]={"DEGRADED","EMERGENCY","FAILED","UNACCOUNTED"};
+ for(int i=0;i<4;++i){uiText(sx,sy+24+i*17,keys[i],dim,3,11,.85f);uiText(sx+178-uiTextWidth(values[i],3,11),sy+24+i*17,values[i],i<2?amber:red,3,11);}
+ if(blink)fill(sx,sy+101,6,6,red,1);uiText(sx+12,sy+96,"ALARM ACTIVE / ALL LEVELS",red,0,11,blink?1.f:.55f,1);
  // Footer: key caps and build tag.
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="CAMPAIGN BUILDER";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.4.15  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
@@ -1580,9 +1599,7 @@ void SoftwareRenderer::renderVrEye(const Game&game,int eye){
   for(int side=0;side<2;++side)m_vrHandMeshes[side]=hands[side].tracked?m_armsMesh.trackedHand(side==0,side==1&&pistol?pistolCurls(hands[side].curls):hands[side].curls):std::vector<MeshTriangle>{};}m_vrReuseScene=eye==1;render(game);m_vrReuseScene=false;}
  catch(...){m_vrRendering=false;m_vrReuseScene=false;throw;}
  m_vrRendering=false;
-}}
-
-namespace retro {
+}
 void SoftwareRenderer::drawEditorGuides(const Game& game){
  const auto& eye=game.player();float ca=std::cos(eye.angle),sa=std::sin(eye.angle),cp=std::cos(eye.pitch/140.f),sp=std::sin(eye.pitch/140.f);
  float focal=Projection{float(m_height)/float(m_width)}.focal(float(m_width));
