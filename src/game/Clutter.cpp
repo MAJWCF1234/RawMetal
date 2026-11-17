@@ -2,6 +2,7 @@
 #include <fstream>
 #include <limits>
 #include "../world/ModelIds.h"
+#include "Containers.h"
 #include "../core/Ray.h"
 #include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
@@ -46,7 +47,7 @@ void Game::knockClutter(int level,size_t index,Point3 at,Point3 impulse){
  c.spin+=std::clamp(torque.z/std::max(.001f,inertia),-14.f,14.f);c.pitchSpeed+=std::clamp(torque.y/std::max(.001f,inertia),-14.f,14.f);c.rollSpeed+=std::clamp(torque.x/std::max(.001f,inertia),-14.f,14.f);
 }
 void Game::breakClutter(int level,size_t index,Point3 direction){
- auto&list=level==m_level?m_clutter:m_chunks[level].clutter;auto&c=list.at(index);if(c.model<0||c.broken)return;int owner=c.soundOwner;knockClutter(level,index,{c.pos.x,c.pos.y,c.z},{});c.soundOwner=owner;c.broken=true;if(level==m_level&&int(index)==m_heldClutter)m_heldClutter=-1;c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;
+ auto&list=level==m_level?m_clutter:m_chunks[level].clutter;auto&c=list.at(index);if(c.model<0||c.broken)return;containers::release(list,index);int owner=c.soundOwner;knockClutter(level,index,{c.pos.x,c.pos.y,c.z},{});c.soundOwner=owner;c.broken=true;if(level==m_level&&int(index)==m_heldClutter)m_heldClutter=-1;c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;
  m_breakEvents.push_back({c.pos,c.z,direction,m_elapsed,level,c.material(),c.footprint(),c.height()});m_breakEvents.back().model=c.model;if(m_breakEvents.size()>24)m_breakEvents.erase(m_breakEvents.begin());
  const auto&t=propMaterialTraits(c.material());auto shift=chunkOffset(level)-chunkOffset(m_level);SoundEvent sound{t.breakSound,c.pos+shift,1,t.breakPitch,true,17,c.z};sound.owner=owner;sound.aiRadius=c.material()==PropMaterial::Ceramic?7:8;m_sounds.push_back(sound);if(c.breakState)setState(c.breakState,1);
  if(c.material()==PropMaterial::Organic||c.material()==PropMaterial::Glass)m_bulletImpacts.push_back({c.pos,c.z+.005f,{},m_elapsed,level,true,c.material()==PropMaterial::Glass?1:int(CreatureKind::Mutant),1});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
@@ -70,11 +71,12 @@ void Game::seedClutter(){
   c.model=spawn.model;c.dims={spawn.width,spawn.depth,spawn.height};c.pitch=spawn.pitch;c.roll=spawn.roll;c.breakState=spawn.breakState;
   c.z=spawn.z==-999?m_world.supportBelow(c.pos.x,c.pos.y,m_world.floorHeight(c.pos.x,c.pos.y)+.5f):spawn.z;
   if(c.model>=0){c.authored=true;c.home=c.pos+chunkOffset(m_level);c.homeZ=spawn.z==-999?c.z:spawn.z;auto e=c.extent();float support=-100;
-   for(auto offset:c.footprintOffsets()){float x=offset.x,y=offset.y;float z=m_world.supportBelow(c.pos.x+x,c.pos.y+y,c.z+.05f,true);for(const auto&other:m_clutter){auto oe=other.extent();if(!other.broken&&(other.model>=0?other.footprintContains(c.pos+Vec2{x,y}):(std::fabs(c.pos.x+x-other.pos.x)<=oe[0]&&std::fabs(c.pos.y+y-other.pos.y)<=oe[1]))&&other.z+other.supportHeight()<=c.z+.03f)z=std::max(z,other.z+other.supportHeight());}support=std::max(support,z);}
+   for(auto offset:c.footprintOffsets()){float x=offset.x,y=offset.y;float z=m_world.supportBelow(c.pos.x+x,c.pos.y+y,c.z+.05f,true);for(const auto&other:m_clutter){auto oe=other.extent();if(other.broken)continue;if(other.model>=0){if(other.footprintContains(c.pos+Vec2{x,y}))z=std::max(z,containers::supportAt(other,c.pos+Vec2{x,y},c.z+.005f));}else if(std::fabs(c.pos.x+x-other.pos.x)<=oe[0]&&std::fabs(c.pos.y+y-other.pos.y)<=oe[1]&&other.z+other.supportHeight()<=c.z+.03f)z=std::max(z,other.z+other.supportHeight());}support=std::max(support,z);}
    if(c.z-support>=-.025f&&c.z-support<=.03f){c.z=support;c.sleeping=true;}
   }
   m_clutter.push_back(c);
  }
+ containers::settleAuthored(m_clutter);m_softPads.clear();
 }
 float Game::clutterPathFraction(Point3 from,Point3 to,Point3&normal)const{
  float nearest=1;auto origin=chunkOffset(m_level);for(int level=0;level<chunkCount();++level){auto shift=origin-chunkOffset(level);Point3 offset{shift.x,shift.y,0},n;auto local=from+offset,end=to+offset;if(rayBoxFraction(local,end-local,{0,0,-1000},{24,24,1000})>=1)continue;float t=chunkResident(level)?(level==m_level?m_world:m_chunks[level].world).shotFraction(local,end,n):rayBoxFraction(local,end-local,{0,0,-1000},{24,24,1000},&n);if(t<nearest){nearest=t;normal=n;}}return nearest;
@@ -84,7 +86,11 @@ int Game::nearbyClutter(int grabHand)const{
  if(m_vrInputActive){int best=-1;float reach=.6f*.6f;for(int i=0;i<int(m_clutter.size());++i)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){const auto&c=m_clutter[i];auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(!c.broken&&distance<reach&&visible(c)){best=i;reach=distance;}}return best;}
  int best=-1;float distance=1.5f,verticalReach=std::max(1.2f,m_player.hullHeight()+.3f);Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(int i=0;i<int(m_clutter.size());++i){auto&c=m_clutter[i];auto delta=c.pos-m_player.pos;float d=length(delta);
-  if(!c.broken&&d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<verticalReach&&visible(c)){best=i;distance=d;}}
+  if(!c.broken&&d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<verticalReach){
+   // What lies in a container is taken out when the look goes into its opening; otherwise the hand finds the container.
+   for(const auto&box:m_clutter)if(containers::holds(box,c)){const float rim=box.z+containers::inner(box).rim,eye=m_player.z+m_player.eye,down=-std::sin(m_player.pitch/140.f);
+    const Vec2 aim=m_player.pos+forward*(down>.05f?std::max(0.f,eye-rim)/down*std::cos(m_player.pitch/140.f):99.f);if(!containers::overInner(box,aim))d+=.35f;break;}
+   if(d<distance&&visible(c)){best=i;distance=d;}}}
  return best;
 }
 bool Game::interactClutter(int grabHand){
@@ -215,6 +221,7 @@ void Game::resolveHeldPropBodies(){
 }
 void Game::updateClutter(const InputState&input,float dt){
  landShards();
+ std::vector<std::pair<int,containers::Snapshot>> contents;for(int level=0;level<chunkCount();++level)if(level==m_level||chunkResident(level)){auto&list=level==m_level?m_clutter:m_chunks[level].clutter;contents.push_back({level,containers::capture(list,level==m_level?m_heldClutter:-1)});}
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(!holdingClutter())m_carryClutter=-1;
  if(holdingClutter()){
@@ -259,6 +266,8 @@ void Game::updateClutter(const InputState&input,float dt){
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
  for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
+ for(const auto&[level,snapshot]:contents)containers::carry(level==m_level?m_clutter:m_chunks[level].clutter,snapshot,level==m_level?m_heldClutter:-1);
+ updateSoftBodies(dt);
  landShards();
  // Leads follow their props where the props have just been put.
  for(int level=0;level<chunkCount();++level)if(chunkResident(level))updateLeads(level,dt);
@@ -372,20 +381,20 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
  // One broad phase per resident list. Query neighbouring cells as movers cross a bucket.
  std::array<std::vector<int>,24*24> buckets;
  if(list.size()>32)for(int i=0;i<int(list.size());++i){const auto&v=list[i];if(v.model<0||v.broken)continue;auto e=shapes[i];for(int y=std::max(0,int(v.pos.y-e[1]));y<=std::min(23,int(v.pos.y+e[1]));++y)for(int x=std::max(0,int(v.pos.x-e[0]));x<=std::min(23,int(v.pos.x+e[0]));++x)buckets[y*24+x].push_back(i);}
- auto support=[&](int self,Vec2 p,float feet){float top=-100;auto consider=[&](int j){if(j==self||j==held)return;const auto&v=list[j];if(v.broken||v.model<0||v.z+v.supportHeight()>feet+.025f||!v.footprintContains(p))return;top=std::max(top,v.z+v.supportHeight());};
+ auto support=[&](int self,Vec2 p,float feet){float top=-100;auto consider=[&](int j){if(j==self||j==held)return;const auto&v=list[j];if(v.broken||v.model<0||!v.footprintContains(p))return;const float s=containers::supportAt(v,p,feet);if(s>-100)top=std::max(top,s-softSinkAt(level,p,s));};
   if(list.size()>32){for(int y=std::max(0,int(p.y)-1);y<=std::min(23,int(p.y)+1);++y)for(int x=std::max(0,int(p.x)-1);x<=std::min(23,int(p.x)+1);++x)for(int j:buckets[y*24+x])consider(j);}else for(int j=0;j<int(list.size());++j)consider(j);return top;};
  struct RankedProp{float distance;int level,index;};std::vector<RankedProp> nearest;for(int l=0;l<chunkCount();++l)if(chunkResident(l)){auto offset=chunkOffset(l)-chunkOffset(m_level);const auto&items=chunkClutter(l);for(int i=0;i<int(items.size());++i){const auto&v=items[i];if(v.model>=0&&!v.broken&&!v.sleeping&&!dormantEntity(v.z)&&!(l==m_level&&i==m_heldClutter))nearest.push_back({lengthSq(v.pos+offset-m_player.pos),l,i});}}std::sort(nearest.begin(),nearest.end(),[](const RankedProp&a,const RankedProp&b){if(a.distance!=b.distance)return a.distance<b.distance;return a.level!=b.level?a.level<b.level:a.index<b.index;});std::vector<bool> slow(list.size());for(size_t rank=48;rank<nearest.size();++rank)if(nearest[rank].level==level)slow[nearest[rank].index]=true;
- for(int index=0;index<initialCount;++index){if(index==held)continue;auto&c=list[index];
+ for(int index=0;index<initialCount;++index){if(index==held||list[index].riding)continue;auto&c=list[index];
   if(c.broken||dormantEntity(c.z))continue;
   if(c.model>=0){auto e=c.extent();auto delta=c.pos-(m_player.pos-shift);
-   bool pushing=c.mass()>=8&&std::fabs(delta.x)<e[0]+.27f&&std::fabs(delta.y)<e[1]+.27f&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z&&(m_velocity.x*m_velocity.x+m_velocity.y*m_velocity.y>.001f||m_propPushAttempt);
+   bool pushing=c.mass()>=8&&std::fabs(delta.x)<e[0]+.27f&&std::fabs(delta.y)<e[1]+.27f&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()-softGive(c)>m_player.z&&(m_velocity.x*m_velocity.x+m_velocity.y*m_velocity.y>.001f||m_propPushAttempt);
    if(pushing){c.blockedTime+=dt;Vec2 n=length(delta)>.001f?delta*(1/length(delta)):Vec2{1,0};c.velocity+=n*(dt*4/std::sqrt(c.mass()));c.sleeping=false;c.soundOwner=-1;}else if(std::fabs(delta.x)>e[0]+.4f||std::fabs(delta.y)>e[1]+.4f)c.blockedTime=0;
    float nx=e[0]+.2f-std::fabs(delta.x),ny=e[1]+.2f-std::fabs(delta.y);
-   if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};if(c.mass()<8||dot(c.velocity,n)>=-.05f){auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){return sweepFits(c,c.pos,p,c.z,c.height());};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}}
+   if(nx>0&&ny>0&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()-softGive(c)>m_player.z){Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};if(c.mass()<8||dot(c.velocity,n)>=-.05f){auto next=c.pos+n*(std::min(nx,ny)+.001f);auto fit=[&](Vec2 p){return sweepFits(c,c.pos,p,c.z,c.height());};if(fit(next))c.pos=next;else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){c.pos=next;n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}}
   }else if(length(m_velocity)>.5f&&length(c.pos-(m_player.pos-shift))<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.model>=0){auto probe=c.pos+shift;const auto&under=physicalWorld(probe);if(probe.x<0||probe.x>=24||probe.y<0||probe.y>=24||!chunkResident(under.level())){c.sleeping=true;c.restTime=-1;continue;}if(c.restTime<0){c.sleeping=false;c.restTime=0;}}
   if(c.model>=0){auto e=c.extent();
-   auto kick=[&](Vec2 actor,float z,float height,Vec2 velocity,int owner,float reach=.22f){auto delta=c.pos-actor;float nx=e[0]+reach-std::fabs(delta.x),ny=e[1]+reach-std::fabs(delta.y);if(nx<=0||ny<=0||c.z>=z+height||c.z+c.height()<=z||lengthSq(velocity)<.001f)return;Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};
+   auto kick=[&](Vec2 actor,float z,float height,Vec2 velocity,int owner,float reach=.22f){auto delta=c.pos-actor;float nx=e[0]+reach-std::fabs(delta.x),ny=e[1]+reach-std::fabs(delta.y);if(nx<=0||ny<=0||c.z>=z+height||c.z+c.height()<=z||lengthSq(velocity)<.001f||(softGive(c)>0&&c.height()<.3f))return;Vec2 n=nx<ny?Vec2{delta.x<0?-1.f:1.f,0}:Vec2{0,delta.y<0?-1.f:1.f};
     // An approaching heavy prop reaches the body solver before a walking pose can kick it away.
     if(c.mass()>=8&&dot(c.velocity,n)<-.05f)return;
     float speed=std::max(.25f,dot(velocity,n)*std::min(1.f,4/c.mass()));c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.soundOwner=owner;c.sleeping=false;c.restTime=0;};
@@ -413,7 +422,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    AiTargetRef attacker;if(c.soundOwner>=0&&size_t(c.soundOwner)<m_friendlyActors.size())attacker={ShotKind::Npc,m_friendlyActors[size_t(c.soundOwner)].level,c.soundOwner};else if(c.projectile)attacker={ShotKind::Player,m_level,0};
    // Sweep the descending base through the head plane before vertical integration. Sampling only
    // the current overlap lets a fast fall skip a body, or be pushed aside on the next frame.
-   auto nearby=[&](Vec2 actor,float feet,float height,float radius){return std::fabs(actor.x-c.pos.x)<e[0]+radius&&std::fabs(actor.y-c.pos.y)<e[1]+radius&&c.z+std::min(0.f,c.vz*fallStep)<feet+height&&c.z+propHeight>feet;};
+   auto nearby=[&](Vec2 actor,float feet,float height,float radius){return std::fabs(actor.x-c.pos.x)<e[0]+radius&&std::fabs(actor.y-c.pos.y)<e[1]+radius&&c.z+std::min(0.f,c.vz*fallStep)<feet+height&&c.z+propHeight-softGive(c)>feet;};
    auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt){if(!nearby(actor,feet,height,radius))return;Vec2 n{};float penetration;
     if(!footprint.overlap(actor-c.pos,radius,n,penetration))return;
     float closing=std::max(0.f,dot(c.velocity-actorVelocity,n));const bool falling=c.vz<0&&c.z>=feet+height-.12f;float speed=std::max(closing,falling?-c.vz:0.f);
@@ -498,7 +507,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
    floor=-100;float ceiling=100;
    // What it rests on and what is over it, under its whole outline (a desk's edge between two of
    // the nine footprint points let a falling prop settle half inside it).
-   auto under=[&](Vec2 offset){auto sample=c.pos+offset;auto p=sample+shift;const auto&w=physicalWorld(p);floor=std::max(floor,w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0));if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z,c.model>=0));return true;};
+   auto under=[&](Vec2 offset){auto sample=c.pos+offset;auto p=sample+shift;const auto&w=physicalWorld(p);{const float s=w.supportBelow(p.x,p.y,std::max(c.z,center-oldExtent[2])+.025f,c.model>=0);floor=std::max(floor,s-(c.model>=0?softSinkAt(w.level(),p,s):0.f));}if(c.model>=0)floor=std::max(floor,support(index,sample,std::max(c.z,center-oldExtent[2])));ceiling=std::min(ceiling,w.clearanceAbove(p.x,p.y,c.z,c.model>=0));return true;};
    if(c.model>=0)c.everyOutlinePoint(under);else for(auto offset:c.footprintOffsets())under(offset);
    float z=c.z+c.vz*step;
    // Coming down on a flat pane (a glass floor, a skylight, a ceiling tile from above): it takes the
@@ -526,6 +535,9 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     // moment, so a blow that tips a chair past its balance carries it over; otherwise the old damping.
     auto offFace=[](float a){const float r=std::fmod(std::fabs(a),kPi*.5f);return std::min(r,kPi*.5f-r);};const float turnDamping=c.model>=0&&c.tipTime>0&&std::max(offFace(c.pitch),offFace(c.roll))>.12f?std::exp(-1.5f*step):damping;
     c.pitchSpeed*=turnDamping;c.rollSpeed*=turnDamping;c.spin*=damping;
+    // Settled on a face to within a degree, slow and not knocked: on it. The edge torque's sign flips
+    // across the face, so a tall thin prop (a bottle) otherwise rocks there for ever and never sleeps.
+    if(c.model>=0&&c.tipTime<=0&&length(c.velocity)<.05f){auto settle=[](float& a,float& w){const float face=std::round(a/(kPi*.5f))*(kPi*.5f);if(std::fabs(a-face)<.02f&&std::fabs(w)<1.2f){a=face;w=0;}};settle(c.pitch,c.pitchSpeed);settle(c.roll,c.rollSpeed);}
     if(length(c.velocity)<.5f)c.projectile=false;
     if(!(immersed>0&&buoyant)&&length(c.velocity)<.035f&&std::fabs(c.vz)<.05f&&std::fabs(c.pitchSpeed)+std::fabs(c.rollSpeed)+std::fabs(c.spin)<.45f)c.restTime+=step;else c.restTime=0;
     if(c.restTime>.35f){c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;break;}
@@ -542,9 +554,9 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
  }
  if(std::none_of(list.begin(),list.end(),[](const Clutter&c){return c.model>=0&&!c.broken&&!c.sleeping;}))return;
  shapes.resize(list.size());for(size_t i=0;i<list.size();++i)shapes[i]=list[i].extent();std::vector<int> seen(list.size(),-1),candidates;
- for(int i=0;i<int(list.size());++i){auto&a=list[i];if(a.model<0||a.broken||i==held)continue;
+ for(int i=0;i<int(list.size());++i){auto&a=list[i];if(a.model<0||a.broken||i==held||a.riding)continue;
   candidates.clear();auto ae=shapes[i];if(list.size()>32){for(int y=std::max(0,int(a.pos.y-ae[1])-1);y<=std::min(23,int(a.pos.y+ae[1])+1);++y)for(int x=std::max(0,int(a.pos.x-ae[0])-1);x<=std::min(23,int(a.pos.x+ae[0])+1);++x)for(int j:buckets[y*24+x])if(j>i&&seen[j]!=i){seen[j]=i;candidates.push_back(j);}}else for(int j=i+1;j<int(list.size());++j)candidates.push_back(j);
-  for(int j:candidates){auto&b=list[j];if(b.model<0||b.broken||j==held||(a.sleeping&&b.sleeping)||std::min(a.z+a.supportHeight(),b.z+b.supportHeight())-std::max(a.z,b.z)<=.02f)continue;
+  for(int j:candidates){auto&b=list[j];if(b.model<0||b.broken||j==held||b.riding||(a.sleeping&&b.sleeping)||containers::holds(a,b)||containers::holds(b,a)||std::min(a.z+a.supportHeight(),b.z+b.supportHeight())-std::max(a.z,b.z)<=.02f)continue;
    auto be=shapes[j];Vec2 d=b.pos-a.pos;if(std::fabs(d.x)>ae[0]+be[0]||std::fabs(d.y)>ae[1]+be[1])continue;
    bool flat=std::fabs(a.pitch)+std::fabs(a.roll)+std::fabs(b.pitch)+std::fabs(b.roll)<.1f;float penetration=100;Vec2 normal{};bool overlap=true;
    Vec2 ax{std::cos(a.yaw),std::sin(a.yaw)},ay{-ax.y,ax.x},bx{std::cos(b.yaw),std::sin(b.yaw)},by{-bx.y,bx.x};

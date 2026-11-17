@@ -1,0 +1,9 @@
+# A floor mattress (med_mattress_stained) in a plain room, seen from the player's eyes: he walks onto
+# it and stands; a crate drops onto it beside him. Shots "before" and "after". Tubes: softbody.
+world room
+camera 8.2 8 -999 0 -95
+light 10 8 3.0 1.5 9
+light 8 6.5 3.0 .8 7
+soft mattress
+size 480 270
+frames 150

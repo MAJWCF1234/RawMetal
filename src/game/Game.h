@@ -29,6 +29,7 @@
 #include <cstdint>
 #include "Ragdoll.h"
 #include "Electricity.h"
+#include "SoftBodies.h"
 
 namespace retro {
 // Bumped once per chunk built while a save loads on a worker thread, so the
@@ -225,6 +226,8 @@ struct Clutter {
  float tipTime=0;
  // Separate from sound throttling: a resting body contact must not deal repeated damage.
  float bodyImpactCooldown=0;
+ // Carried along in a moving container this step (Containers.h): the solver leaves it be (not saved).
+ bool riding=false;
  // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
@@ -357,6 +360,13 @@ public:
     const std::vector<Enemy>& chunkEnemies(int level)const{return level==m_level?m_enemies:m_chunks.at(size_t(level)).enemies;}
     const std::vector<Pickup>& chunkPickups(int level)const{return level==m_level?m_pickups:m_chunks.at(size_t(level)).pickups;}
     const std::vector<Clutter>& chunkClutter(int level)const{return level==m_level?m_clutter:m_chunks.at(size_t(level)).clutter;}
+    // Soft padding (SoftBodies.cpp): the awake pad of a fixture or a prop (one of the two, the other -1),
+    // and how far an awake pad covering p with its top within 3 cm of `surface` is pressed down there.
+    const SoftPad* softPad(int level,int fixture,int clutter)const;
+    float softSinkAt(int level,Vec2 p,float surface)const;
+    const std::vector<SoftPad>& softPads()const{return m_softPads;}
+    // How far below its top a soft prop gives (0 if it is hard): a body standing that deep in it is on it.
+    static float softGive(const Clutter& c);
     const World& worldAt(Vec2& local)const;
     bool hearingRayClear(Vec2 from,float fromZ,Vec2 to,float toZ)const;
     bool soundRayClear(Vec2 from,float fromZ,Vec2 to,float toZ,float nearTrim=0,float farTrim=0)const;
@@ -1172,6 +1182,9 @@ private:
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
+    void updateSoftBodies(float dt);
+    // The player on a soft prop (a floor mattress, a bedroll): its pressed top under p, or `height`.
+    float softGround(Vec2 p,float feet,float height,float radius)const;
     void knockClutter(int level,size_t index,Point3 at,Point3 impulse);
     bool damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction);
     void breakClutter(int level,size_t index,Point3 direction);
@@ -1403,6 +1416,7 @@ private:
     std::vector<AiStimulus> m_guardShots;
     std::vector<Pickup> m_pickups;
     std::vector<Clutter> m_clutter;
+    std::vector<SoftPad> m_softPads;int m_softLevel=-1;bool m_softGrounded=true;float m_softAirSpeed=0;
     std::vector<BulletImpact> m_bulletImpacts;
     std::vector<ShotRay> m_shotRays;std::vector<HitBurst> m_hitBursts;
     std::vector<WaterSplash> m_waterSplashes;

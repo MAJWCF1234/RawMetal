@@ -59,6 +59,23 @@ def main():
         dims = (e['width'], e['depth'], e['height']) if e else physics.get(names.get(slot), {}).get('size', (0,0,0))
         out.append(' {%.3ff,%.3ff,%.3ff},' % tuple(dims))
     out.append('};')
+    # Open-top containers (Containers.cpp): inner floor, rim and wall thickness in the model's own
+    # metres (scaled with the prop's dims); all 0 where the model holds nothing.
+    out.append('inline constexpr float container[][3]={')
+    for slot in range(max(sizes) + 1):
+        c = physics.get(names.get(slot), {}).get('container')
+        out.append(' {%.3ff,%.3ff,%.3ff},' % ((c['floor'], c['rim'], c['wall']) if c else (0, 0, 0)))
+    out.append('};')
+    # Soft padding (SoftBodies.cpp): the top of the padding and how far it gives under a person in the
+    # model's own metres, then its rect (mesh x0, x1, z0, z1 about the mesh centre); sink 0 where hard.
+    out.append('inline constexpr float soft[][6]={')
+    for slot in range(max(sizes) + 1):
+        c = physics.get(names.get(slot), {}).get('soft')
+        e = sizes.get(slot)
+        dims = (e['width'], e['depth']) if e else physics.get(names.get(slot), {}).get('size', (0, 0, 0))[:2]
+        rect = c.get('rect', [-dims[0] / 2, dims[0] / 2, -dims[1] / 2, dims[1] / 2]) if c else [0, 0, 0, 0]
+        out.append(' {%.3ff,%.3ff,%.3ff,%.3ff,%.3ff,%.3ff},' % tuple(([c['top'], c['sink']] if c else [0, 0]) + list(rect)))
+    out.append('};')
     out.append('}')
     open(os.path.join(ROOT, 'src', 'world', 'ModelIds.h'), 'w', newline='\n').write('\n'.join(out) + '\n')
     print('ModelIds.h: %d models' % len(rows))

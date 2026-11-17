@@ -95,6 +95,8 @@ struct LabAccess {
  // The player's hand on the prop in front of him (or off the one he holds), as the use key does.
  static bool grab(Game& g){return g.interactClutter();}
  static int held(const Game& g){return g.m_heldClutter;}
+ static bool shieldBlow(Game& g,float amount,Vec2 source){return g.shieldBlow(amount,source);}
+ static void stepSoft(Game& g,float dt){g.updateSoftBodies(dt);}
  // ---- SoftwareRenderer ----
  using Corpse=SoftwareRenderer::Corpse;
  static std::unordered_map<std::uint64_t,Corpse>& corpses(SoftwareRenderer& r){return r.m_corpses;}

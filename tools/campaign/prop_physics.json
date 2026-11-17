@@ -147,7 +147,12 @@
   "prop_cardboard_box_open": {
     "material": "Cardboard",
     "mass": 2.5,
-    "health": 0
+    "health": 0,
+    "container": {
+      "floor": 0.01,
+      "rim": 0.36,
+      "wall": 0.012
+    }
   },
   "lab_potted_plant": {
     "material": "Ceramic",
@@ -262,7 +267,17 @@
   "office_armchair_green": {
     "material": "Cloth",
     "mass": 22,
-    "health": 0
+    "health": 0,
+    "soft": {
+      "top": 0.63,
+      "sink": 0.06,
+      "rect": [
+        -0.44,
+        0.44,
+        -0.26,
+        0.6
+      ]
+    }
   },
   "trash_can": {
     "material": "Metal",
@@ -272,7 +287,12 @@
       0.35,
       0.35,
       0.6
-    ]
+    ],
+    "container": {
+      "floor": 0.03,
+      "rim": 0.6,
+      "wall": 0.02
+    }
   },
   "lab_specimen_crate": {
     "material": "Wood",
@@ -287,22 +307,45 @@
   "med_crash_cart": {
     "material": "Metal",
     "mass": 35,
-    "health": 0
+    "health": 0,
+    "container": {
+      "floor": 0.809,
+      "rim": 0.833,
+      "wall": 0.03
+    }
   },
   "med_ward_bed": {
     "material": "Metal",
     "mass": 55,
-    "health": 0
+    "health": 0,
+    "soft": {
+      "top": 0.404,
+      "sink": 0.05,
+      "rect": [
+        -0.95,
+        0.95,
+        -0.45,
+        0.45
+      ]
+    }
   },
   "med_mattress_stained": {
     "material": "Cloth",
     "mass": 9,
-    "health": 0
+    "health": 0,
+    "soft": {
+      "top": 0.118,
+      "sink": 0.06
+    }
   },
   "scrap_bedroll": {
     "material": "Cloth",
     "mass": 3,
-    "health": 0
+    "health": 0,
+    "soft": {
+      "top": 0.14,
+      "sink": 0.04
+    }
   },
   "gas_cylinder": {
     "material": "Metal",
@@ -363,5 +406,65 @@
       0.201,
       0.305
     ]
+  },
+  "market_basket": {
+    "material": "Wood",
+    "mass": 1.2,
+    "health": 0,
+    "container": {
+      "floor": 0.4,
+      "rim": 0.62,
+      "wall": 0.12
+    }
+  },
+  "market_crate": {
+    "material": "Wood",
+    "mass": 2.5,
+    "health": 14,
+    "container": {
+      "floor": 0.02,
+      "rim": 0.244,
+      "wall": 0.02
+    }
+  },
+  "market_pumpkin": {
+    "material": "Organic",
+    "mass": 0.35,
+    "health": 3
+  },
+  "glass_bottle": {
+    "material": "Glass",
+    "mass": 0.5,
+    "health": 2
+  },
+  "scrap_mattress": {
+    "soft": {
+      "top": 0.2,
+      "sink": 0.07
+    }
+  },
+  "med_ward_bed_tossed": {
+    "soft": {
+      "top": 0.404,
+      "sink": 0.05,
+      "rect": [
+        -1.048,
+        1.048,
+        -0.762,
+        0.762
+      ]
+    }
+  },
+  "office_couch_green": {
+    "soft": {
+      "top": 0.63,
+      "sink": 0.06,
+      "rect": [
+        -0.86,
+        0.86,
+        -0.26,
+        0.62
+      ]
+    }
   }
 }

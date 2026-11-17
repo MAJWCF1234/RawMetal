@@ -506,11 +506,44 @@ def build():
         props.append({'w': .4, 'd': .4, 'h': .3, 'title': 'CLUTTER %d' % k, 'sub': name, 'zone': 'CLUTTER kind %d / %s' % (k, name),
                       'emit': (lambda k: lambda m, cx, cy, base: s.rec(m, 'CLUTTER', m['index'], k, cx, cy, base, 0))(k)})
     for name, p in physics.items():
-        if name not in slot: continue
+        if name not in slot or 'material' not in p: continue    # a fixture's padding only (soft), not a prop
         w, d, h = p.get('size', catalogue[name])
         props.append({'w': max(w, .2), 'd': max(d, .2), 'h': h, 'title': 'PROP %d' % slot[name], 'sub': name,
                       'zone': 'CLUTTER 7 / #%d %s / %g kg' % (slot[name], name, p.get('mass', 0)),
                       'emit': (lambda sl, w, d, h: lambda m, cx, cy, base: s.rec(m, 'CLUTTER', m['index'], 7, cx, cy, base, 0, sl, w, d, h, 0, 0, ''))(slot[name], w, d, h)})
+    # Props in props (Containers.cpp): a basket of fruit, a crate of bottles and a bin of junk, ordinary
+    # props authored on their containers' inner floors. Pick one up, shove it, tip it, throw things in.
+    def prop(m, name, x, y, z, yaw=0, k=1.0):
+        w, d, h = p_size(name)
+        s.rec(m, 'CLUTTER', m['index'], 7, round(x, 3), round(y, 3), round(z, 3), round(yaw, 3), slot[name], round(w * k, 3), round(d * k, 3), round(h * k, 3), 0, 0, '')
+
+    def p_size(name):
+        return physics.get(name, {}).get('size', catalogue.get(name))
+
+    def held(m, cx, cy, base):
+        basket = .55; bf = physics['market_basket']['container']['floor'] * basket
+        prop(m, 'market_basket', cx - 1.1, cy, base, .2, basket)
+        for ox, oy in ((-.07, -.08), (.07, -.07), (-.06, .08), (.07, .08)):
+            prop(m, 'market_pumpkin', cx - 1.1 + ox, cy + oy, base + bf, ox * 9, .28)
+        cf = physics['market_crate']['container']['floor']
+        prop(m, 'market_crate', cx, cy, base, HALF)
+        for i in range(6):
+            prop(m, 'glass_bottle', cx - .24 + .24 * (i % 3), cy + (-.09 if i < 3 else .09), base + cf, i, .75)
+        bin_floor = physics['trash_can']['container']['floor']
+        prop(m, 'trash_can', cx + 1.0, cy, base)
+        prop(m, 'mug', cx + .96, cy - .05, base + bin_floor, .5)
+        prop(m, 'med_pill_bottle', cx + 1.04, cy + .06, base + bin_floor, 1)
+        prop(m, 'office_paper_stack', cx + 1.0, cy + .02, base + bin_floor + .1, 2, .4)
+
+    def padded(m, cx, cy, base):
+        """Soft padding (SoftBodies.cpp): walk on the floor mattress and the bedroll, drop things on them."""
+        prop(m, 'med_mattress_stained', cx - .6, cy, base, 0)
+        prop(m, 'scrap_bedroll', cx + 1.0, cy, base, HALF)
+
+    props.append({'w': 3.0, 'd': .8, 'h': .5, 'title': 'IN A BOX', 'sub': 'basket, crate, bin',
+                  'zone': 'CLUTTER 7 / containers: basket of fruit, crate of bottles, bin', 'emit': held})
+    props.append({'w': 3.1, 'd': 2.0, 'h': .2, 'title': 'SOFT', 'sub': 'floor mattress, bedroll',
+                  'zone': 'CLUTTER 7 / soft: floor mattress, bedroll', 'emit': padded})
     s.museum('PROPS', props, ACCENT['PROPS'], [None], 1)
 
     groups = {t: [] for t, _ in SECTIONS}

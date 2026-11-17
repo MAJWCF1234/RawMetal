@@ -176,6 +176,8 @@ add_executable(RawMetal WIN32
     game/Crates.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
+    game/Containers.cpp
+    game/SoftBodies.cpp
     game/Ragdoll.cpp
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp
@@ -224,6 +226,7 @@ add_executable(RawMetal WIN32
     renderer/Wetness.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
+    renderer/SoftMesh.cpp
     renderer/ClaireOutside.cpp
     renderer/ThirdPersonTest.cpp
     renderer/ElectricFx.cpp
