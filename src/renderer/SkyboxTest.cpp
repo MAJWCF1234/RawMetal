@@ -36,7 +36,7 @@ bool testSkyboxes(){
  for(const auto& sky:SkyboxCatalog)if(sky.resource>=2800){
   ++registered;check(resources.insert(sky.resource).second,"unique resource for "+std::string(sky.id));
   const auto texture=LabAccess::skyTexture(sky.resource);
-  check(texture.width==4096&&texture.height==1024,"original 4096x1024 texture decodes: "+std::string(sky.id));
+  check(texture.width==2048&&texture.height==512,"embedded 2048x512 neural sky decodes: "+std::string(sky.id));
   map->skybox=std::string(sky.id);World rebuilt(0,map);check(rebuilt.hasTerrain(),"changing sky preserves outdoor terrain: "+map->skybox);
   LabAccess::setSkybox(game,std::string(sky.id));gpu->render(game);const auto hash=skyHash(*gpu);check(hash!=fallback,"native game draws selected paid sky: "+std::string(sky.id));
   if(!first)first=hash;

@@ -2,10 +2,10 @@
 """Register paid Brutal Skyboxes as neural packets for the engine.
 
 Original 4096x1024 PNGs stay under src/assets/Skyboxes/Brutal/ as the donor
-masters. The engine embeds assets/ai/<stem>-x2.ntx packets that reconstruct
-through the shared texture-x2 model (resource 348), same path as the legacy
-wasteland sky. Run from any directory. --check verifies donors, packets and
-generated registration without writing.
+masters. The engine embeds assets/ai/brutal/<stem>-x2.ntx packets that
+reconstruct 2048x512 panoramas (legacy wasteland resolution) through the
+shared texture-x2 model (resource 348). Run from any directory. --check
+verifies donors, packets and generated registration without writing.
 """
 from __future__ import annotations
 
@@ -26,7 +26,9 @@ DEFAULT_SOURCE = Path(
     r"\Brutal Skyboxes\Textures\Skyboxes"
 )
 FIRST_RESOURCE = 2800
-EXPECTED_SIZE = (4096, 1024)
+DONOR_SIZE = (4096, 1024)
+# Match the legacy wasteland sky (resource 252) so the 47-pack fits the cart.
+EMBED_SIZE = (2048, 512)
 NEURAL_FACTOR = 2
 NEURAL_MODEL_RESOURCE = 348
 STEMS = tuple(
@@ -80,9 +82,10 @@ def encode_neural_packet(png: Path) -> bytes:
     if image.getextrema()[3] != (255, 255):
         raise ValueError(f"Refusing to strip alpha from sky panorama: {png}")
     image = image.convert("RGB")
+    if image.size != DONOR_SIZE:
+        raise ValueError(f"Expected donor {DONOR_SIZE}, got {image.size}: {png}")
+    image = image.resize(EMBED_SIZE, Image.Resampling.LANCZOS)
     width, height = image.size
-    if (width, height) != EXPECTED_SIZE:
-        raise ValueError(f"Expected {EXPECTED_SIZE}, got {(width, height)}: {png}")
     low_w = (width + NEURAL_FACTOR - 1) // NEURAL_FACTOR
     low_h = (height + NEURAL_FACTOR - 1) // NEURAL_FACTOR
     padded = Image.fromarray(
@@ -173,8 +176,9 @@ def provenance_text(source: Path, records: list[dict]) -> str:
         "",
         "Donor masters stay as original lossless 4096 x 1024 PNGs in this folder.",
         "The engine embeds neural `assets/ai/brutal/<stem>-x2.ntx` packets that",
-        "reconstruct through `texture-x2.ntm` (resource 348), the same AI path as",
-        "the legacy wasteland sky. No donor PNG is modified.",
+        "reconstruct 2048 x 512 panoramas through `texture-x2.ntm` (resource 348),",
+        "the same AI path and resolution as the legacy wasteland sky.",
+        "No donor PNG is modified.",
         "Legacy resource 252 keeps `assets/ai/skybox_plain_emx_14-x2.ntx` unchanged.",
         "No license text was present in the supplied extracted skybox directory; purchase",
         "and distribution rights remain governed by the original asset package terms.",
@@ -232,8 +236,8 @@ def register(root: Path, source: Path, check: bool) -> dict:
     for index, stem in enumerate(STEMS):
         donor = source / f"{stem}.png"
         size = png_size(donor)
-        if size != EXPECTED_SIZE:
-            raise ValueError(f"Expected original {EXPECTED_SIZE} resolution, got {size}: {donor}")
+        if size != DONOR_SIZE:
+            raise ValueError(f"Expected original {DONOR_SIZE} resolution, got {size}: {donor}")
         records.append({
             "stem": stem,
             "resource": FIRST_RESOURCE + index,
@@ -258,18 +262,18 @@ def register(root: Path, source: Path, check: bool) -> dict:
             if check:
                 raise ValueError(f"Imported PNG is missing or differs from the original: {imported}")
             shutil.copyfile(donor, imported)
-        if png_size(imported) != EXPECTED_SIZE or sha256(imported) != record["sha256"]:
+        if png_size(imported) != DONOR_SIZE or sha256(imported) != record["sha256"]:
             raise ValueError(f"Post-import verification failed: {imported}")
         packet = encode_neural_packet(imported)
         packet_path = neural / ntx_name(record["stem"])
         write_bytes(packet_path, packet, check)
         width, height, low_w, low_h, model, factor = ntx_header(packet_path)
         if (
-            (width, height) != EXPECTED_SIZE
+            (width, height) != EMBED_SIZE
             or model != NEURAL_MODEL_RESOURCE
             or factor != NEURAL_FACTOR
-            or low_w != EXPECTED_SIZE[0] // NEURAL_FACTOR
-            or low_h != EXPECTED_SIZE[1] // NEURAL_FACTOR
+            or low_w != EMBED_SIZE[0] // NEURAL_FACTOR
+            or low_h != EMBED_SIZE[1] // NEURAL_FACTOR
         ):
             raise ValueError(f"Neural sky header mismatch: {packet_path}")
         record["ntx_bytes"] = packet_path.stat().st_size
@@ -280,8 +284,10 @@ def register(root: Path, source: Path, check: bool) -> dict:
     return {
         "mode": "check" if check else "register",
         "count": len(records),
-        "width": EXPECTED_SIZE[0],
-        "height": EXPECTED_SIZE[1],
+        "donor_width": DONOR_SIZE[0],
+        "donor_height": DONOR_SIZE[1],
+        "embed_width": EMBED_SIZE[0],
+        "embed_height": EMBED_SIZE[1],
         "png_bytes": sum(record["bytes"] for record in records),
         "ntx_bytes": ntx_total,
         "resources": [FIRST_RESOURCE, FIRST_RESOURCE + len(records) - 1],
