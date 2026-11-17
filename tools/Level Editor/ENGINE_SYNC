@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit b51071b04da95b79d92aab95cb554082ab6c77db
-# 2026-11-17 02:27, fix: pack Brutal skies at wasteland resolution under the cart ceiling
+commit 2fdc435c3cf6aeb12886c826be588289622ba344
+# 2026-11-17 06:22, release: v1.4.16, set down
