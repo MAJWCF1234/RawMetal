@@ -61,6 +61,10 @@ public:
  // The impostor's centre is the midpoint of its quad's opposite (uv -1/+1) corners.
  struct LodTag {float lod=0;bool impostor=false;float z=0,half=0,yaw=0,farFade=0;int columns=0,rows=0;};
  void setLodTag(const LodTag* tag);
+ // Plant physbones (Foliage.h): the static triangles submitted next are plant `slot`'s (-1: none);
+ // scene.vert bends them by the plant state set each frame (wind, then per slot), read after the lamp grid.
+ void setPlantTag(int slot);
+ void setPlants(const float* data,size_t floats);
  // Light probes (LightProbes.h) of a map drawn this frame, at its world offset. Its irradiance
  // grid is uploaded when its key is new; its reflection probes are each captured once (six faces
  // through the scene pipeline, once the lamps' shadows are drawn), a few a frame in the window

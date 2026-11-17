@@ -585,6 +585,9 @@ struct GpuRenderer::Impl {
   }
  }
  static constexpr size_t LampBufferBytes=sizeof(LampHeader)+size_t(MaxLamps)*2*16+size_t(MaxLampCells)*LampsPerCell*4;
+ // Plant physbones after the lamp grid (scene.vert: lampGrid.plants): wind, then two vec4 a plant.
+ static constexpr size_t PlantBytes=size_t(8+8*16384)*4,LampTotalBytes=LampBufferBytes+PlantBytes;
+ int plantSlot=-1;std::vector<float> plantData;
  std::array<Buffer,FrameCount> lampBuffers{};std::array<uint64_t,FrameCount> lampUploaded{};
  std::vector<uint8_t> lampData;uint64_t lampGeneration=1,lampKey=0;bool pixelLighting=false;
  // Per-frame lamp power rewrites only the records' intensity; the key, grid and
@@ -752,7 +755,7 @@ struct GpuRenderer::Impl {
    auto cache=staticCaches.find(slot.level);if(cache==staticCaches.end()||!cache->second.buffer.handle)continue;
    if(!prepared){
     auto view=vrProjection;view[16]=0.f;view[18]=view[19]=0.f;view[26]=1.f;view[27]=Projection::nearPlane;std::memcpy(captureBuffers[size_t(frameIndex)].mapped,view.data(),sizeof(view));
-    VkDescriptorBufferInfo lampInfo{lampBuffers[size_t(frameIndex)].handle,0,LampBufferBytes};VkDescriptorImageInfo images[2]={{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{shadowSampler,sunAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkDescriptorBufferInfo lampInfo{lampBuffers[size_t(frameIndex)].handle,0,LampTotalBytes};VkDescriptorImageInfo images[2]={{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{shadowSampler,sunAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
     VkWriteDescriptorSet writes[3]{};for(auto&w:writes){w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=captureSets[size_t(frameIndex)];w.descriptorCount=1;}
     writes[0].dstBinding=2;writes[0].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;writes[0].pBufferInfo=&lampInfo;
     writes[1].dstBinding=3;writes[1].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[1].pImageInfo=&images[0];
@@ -1180,10 +1183,10 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
   VkDescriptorBufferInfo buffers[]={{m->projectionBuffers[i].handle,0,sizeof(m->vrProjection)},{m->actorBuffers[i].handle,0,MaxGpuActors*sizeof(ActorLighting)}};
   VkWriteDescriptorSet writes[2]{};for(int binding=0;binding<2;++binding){auto&write=writes[binding];write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=m->projectionSets[i];write.dstBinding=binding;write.descriptorCount=1;write.descriptorType=binding?VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;write.pBufferInfo=&buffers[binding];}
   vkUpdateDescriptorSets(m->device,2,writes,0,nullptr);
-  m->makeBuffer(m->lampBuffers[i],Impl::LampBufferBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampBufferBytes);
+  m->makeBuffer(m->lampBuffers[i],Impl::LampTotalBytes,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);std::memset(m->lampBuffers[i].mapped,0,Impl::LampTotalBytes);
   // (The look's values are there from the first frame: a probe captured before any header is written reads them.)
   Impl::writeLook(reinterpret_cast<float*>(static_cast<uint8_t*>(m->lampBuffers[i].mapped)+offsetof(Impl::LampHeader,reflections))+(Impl::MaxReflections-1)*12);
-  VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampBufferBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
+  VkDescriptorBufferInfo lampInfo{m->lampBuffers[i].handle,0,Impl::LampTotalBytes};VkWriteDescriptorSet lampWrite{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};lampWrite.dstSet=m->projectionSets[i];lampWrite.dstBinding=2;lampWrite.descriptorCount=1;lampWrite.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;lampWrite.pBufferInfo=&lampInfo;vkUpdateDescriptorSets(m->device,1,&lampWrite,0,nullptr);
  }
  {
   // Lamp shadow atlas: depth-only faces sampled with hardware comparison.
@@ -1593,6 +1596,8 @@ void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
 void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}
 void GpuRenderer::setLodTag(const LodTag* tag){m->lodTag=tag;}
+void GpuRenderer::setPlantTag(int slot){m->plantSlot=slot;}
+void GpuRenderer::setPlants(const float* data,size_t floats){m->plantData.assign(data,data+std::min(floats,Impl::PlantBytes/4));}
 void GpuRenderer::useProbes(int level,const ProbeBake* bake,std::uint64_t key,Vec2 offset){
  if(!bake||bake->volume.empty()||!m->irradianceAtlas.handle)return;const auto&v=bake->volume;
  int slot=-1;for(int i=0;i<Impl::ProbeSlots;++i)if(m->probeSlots[size_t(i)].level==level){slot=i;break;}
@@ -1747,6 +1752,8 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
     out.worldNormal[0]=0.f;out.worldNormal[1]=0.f;out.worldNormal[2]=1.f;out.worldNormal[3]=-(1000.f+tag->lod);}
    else if(out.worldNormal[3]<=0.f)out.worldNormal[3]=-tag->lod;
   }
+  // A plant's (static, world space): w carries its slot past 1, for scene.vert to bend it.
+  if(m->capturing&&m->plantSlot>=0)out.position[3]=2.f+float(m->plantSlot);
   target.push_back(out);
  }
  if(m->capturing){auto&batches=m->staticCaches.at(m->captureSlot).batches;if(!batches.empty()&&!batches.back().clear&&batches.back().material==key)batches.back().count+=3;else batches.push_back({key,start,3,false,false,-1,sortKey});}
@@ -1769,6 +1776,8 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   {auto torch=v[8]>.5f?WorldLight::tone(5600,0,{1,1,1}):Point3{};float scatter[4]={torch.x,torch.y,torch.z,m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer?1.f:0.f};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,scatter),scatter,sizeof(scatter));}
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+3*sizeof(int32_t),&m->storm,sizeof(int32_t));}
+ static_assert(sizeof(Impl::LampHeader)==16*(7+12+4+4+1+1+16+144+288),"scene.vert reads lampGrid.plants at this offset");
+ if(!m->plantData.empty())std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+Impl::LampBufferBytes,m->plantData.data(),m->plantData.size()*4);
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
  m->flushUploads();
@@ -1857,7 +1866,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   auto runStage=[&](Impl::FullscreenStage& stage,std::initializer_list<VkImageView> sources,const float* push=nullptr,VkFramebuffer framebuffer=VK_NULL_HANDLE,VkExtent2D extent={0,0}){
    VkDescriptorImageInfo images[12]{};VkWriteDescriptorSet writes[12]{};uint32_t count=0;
    for(auto view:sources){images[count]={view==m->reflectionAtlas.view?m->reflectionSampler:m->sceneSampler,view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&w=writes[count];w.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;w.dstSet=stage.sets[m->frameIndex];w.dstBinding=count;w.descriptorCount=1;w.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;w.pImageInfo=&images[count];++count;}
-   VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampBufferBytes};
+   VkDescriptorBufferInfo lampInfo{m->lampBuffers[m->frameIndex].handle,0,Impl::LampTotalBytes};
    if(stage.lampAccess){
     auto&grid=writes[count];grid.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;grid.dstSet=stage.sets[m->frameIndex];grid.dstBinding=count;grid.descriptorCount=1;grid.descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;grid.pBufferInfo=&lampInfo;
     images[count]={m->shadowSampler,m->shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};auto&atlas=writes[count+1];atlas.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;atlas.dstSet=stage.sets[m->frameIndex];atlas.dstBinding=count+1;atlas.descriptorCount=1;atlas.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;atlas.pImageInfo=&images[count];count+=2;

@@ -13,6 +13,7 @@
 namespace retro::signart{struct Design;}
 namespace retro::humanoid{struct Labels;}
 #include "Carcass.h"
+#include "Foliage.h"
 #include "../core/CleanupBodies.h"
 
 namespace retro {
@@ -260,9 +261,20 @@ private:
     // A dead man: his mesh as a body (Carcass) that falls from where he died, rolls off what it lies
     // over and comes to rest, and the face of the posed mesh each of its faces is. Kept by actor emit
     // slot; `base` is the session time he died at, for a fall that is still being watched.
-    struct Corpse {std::uint64_t signature=0;float seen=0,base=0;bool live=false;std::vector<int> faces;Carcass carcass;};
+    // `rayClock`: the newest round already put into him (the killing round lands on the part it hit).
+    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0;bool live=false;std::vector<int> faces;Carcass carcass;};
     std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
     Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
+    // What a body on `level` near `centre` can lie on or be shoved by that the world does not hold: the
+    // level's props, and the player, creatures and men moving about (not `selfActor`, the man himself).
+    void corpseSolids(const Game& game,int level,Point3 centre,float radius,int selfActor,std::vector<Carcass::Solid>& out);
+    // Where each mover was last seen (player 0, creatures 1<<32|i, men 2<<32|i), for its velocity.
+    struct Mover {Point3 at{},velocity{};float time=-1;};std::unordered_map<std::uint64_t,Mover> m_movers;
+    // Plant physbones (Foliage.h): every cutout plant baked into a static cache has a slot; the springs
+    // near the eye are stepped each GPU frame and handed to scene.vert with the wind.
+    PlantBones m_plants;std::unordered_map<int,bool> m_plantModels;
+    bool plantModel(int model);
+    void updatePlants(const Game& game);
     // A man's body model cut into the parts he bends at (Humanoid.h), once per model; civilians by their arm joints.
     static const humanoid::Labels& humanParts(const Mesh& mesh,int civilianBody);
     std::vector<HitBurst> m_goreBursts;

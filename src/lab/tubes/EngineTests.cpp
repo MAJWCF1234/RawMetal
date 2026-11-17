@@ -20,6 +20,7 @@ const bool registered=[]{
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);
+ engine("gore","--gore-test: the carcass test, then creatures shot and blown apart as the renderer draws them",+[]{std::ofstream r("gore-render-test.txt");return Carcass::test()&&SoftwareRenderer::testGore(r);});
  engine("chimera-hunt","--each-test=chimera-hunt: the bite, the meal, the return",&Game::testChimeraHunt);
  // The voices: what the game raises, what the mixer plays, the bank and saves (tubes/DeathVoices.cpp leans on them).
  engine("audio","--audio-test: the bank decodes, masks, speech caps, the mix (smoke; --audio-test=full for every map)",+[]{return AudioEngine::test(false);});

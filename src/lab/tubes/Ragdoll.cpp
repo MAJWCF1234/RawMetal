@@ -10,6 +10,12 @@
 // creature KIND, kill-frame, from DEG (where the shot comes from, off the way he faces: 0 in front,
 // 180 behind, 90 his left), push 0 (no push: dropped where he stands), headless 1,
 // box[1-6] X1 Y1 X2 Y2 BOTTOM TOP (furniture, steps, walls), topple 1 (a standing fall must go over).
+// fixture[1-2] MODEL X Y YAWDEG (a solid world fixture: a bed), prop[1-3] MODEL X Y YAWDEG (a loose prop
+// he can fall on: Clutter), shoot N (killed by N shotgun rounds from the camera at aim-z, not by a
+// push), shoot-again S (one more round S seconds after), throw MODEL S (a prop thrown into the body
+// S seconds after the kill, from throw-from DEG off the way the shot came).
+// Also measured: the jitter in his last quarter second awake and the jump when he goes to sleep, what a
+// step of his body costs, how far into any prop he goes, and for shot or thrown-at bodies how they answer.
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
@@ -61,9 +67,13 @@ void bestFit(const std::vector<Point3>& a,const std::vector<Point3>& b,Point3& c
  axes[0]={1-2*(y*y+z*z),2*(x*y+w*z),2*(x*z-w*y)};axes[1]={2*(x*y-w*z),1-2*(x*x+z*z),2*(y*z+w*x)};axes[2]={2*(x*z+w*y),2*(y*z-w*x),1-2*(x*x+y*y)};}
 // A body under watch: the shape each corner had when it died, the group (part or section) of each
 // triangle, how far each corner is from the seam to another group.
-struct Watch {bool ready=false,human=false;int body=0;std::vector<Point3> rest;std::vector<int> group;std::vector<float> seam;int groups=0;double volume=0;Point3 feet{};float facing=0;
+struct Watch {bool ready=false,human=false;int body=0;
+ // Per-frame motion (the most any corner moved since the last frame), the last 15 of it; the jump into sleep.
+ std::vector<Point3> was;std::vector<float> recent;float jitter=-1,sleepPop=0,easeStep=0;bool slept=false;long long steps0=-1;double ms0=0;int awakeFrames=0;
+ // Shot: the most any section moved in the first 5 frames, its part, and the mean; thrown at: where it lay, how far it went, whether it slept again.
+ std::vector<Point3> sectionsAt;std::vector<float> sectionMove;Point3 restAt{};float shoved=-1,resleep=-1;bool thrown=false;int insideProps=0;std::vector<Point3> rest;std::vector<int> group;std::vector<float> seam;int groups=0;double volume=0;Point3 feet{};float facing=0;
  // Per frame, the worst seen.
- float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0;float settled=-1,fell=-1;
+ float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0,wallMoving=0,wallAtDeath=-1;float settled=-1,fell=-1;
  // Where its middle was once it had fallen (down within 0.6 m of the floor), and the farthest it went from there: the slide.
  Point3 down{};float slide=0;};
 // Each group's own enclosed volume about its own middle, summed: a rigid turn of a part leaves it as it is, a squash does not.
@@ -86,8 +96,9 @@ void shapeError(const Watch& w,const std::vector<MeshTriangle>& now,float& core,
   Point3 ca,cb,R[3];bestFit(a,b,ca,cb,R);
   for(int c:list){Point3 d=w.rest[size_t(c)]-ca;Point3 at=cb+R[0]*d.x+R[1]*d.y+R[2]*d.z;const float e=len3(at-now[size_t(c/3)].v[c%3].p);all=std::max(all,e);if(w.seam[size_t(c)]>=.06f){core=std::max(core,e);if(each)(*each)[size_t(w.group[size_t(c/3)])]=std::max((*each)[size_t(w.group[size_t(c/3)])],e);}}}}
 // Corners more than 1.5 cm inside the floor or anything solid, and the lowest gap over the floor under the body.
-int insideCount(const std::vector<MeshTriangle>& t,const World& world,float& lowest,Point3* where=nullptr){
- int n=0;lowest=1e9f;for(auto& f:t)for(auto& v:f.v){const Point3 p=v.p;if(!world.fits(p.x,p.y,p.z+.015f,.001f,false)){++n;if(where)*where=p;}
+// `walls`: of those, the ones not under a floor or top within 30 cm over them (in a wall's side, not sunk into what they lie on).
+int insideCount(const std::vector<MeshTriangle>& t,const World& world,float& lowest,Point3* where=nullptr,int* walls=nullptr){
+ int n=0;lowest=1e9f;if(walls)*walls=0;for(auto& f:t)for(auto& v:f.v){const Point3 p=v.p;if(!world.fits(p.x,p.y,p.z+.015f,.001f,false)){++n;if(where)*where=p;if(walls&&world.supportBelow(p.x,p.y,p.z+.3f)<p.z+.015f)++*walls;}
   float floor=world.supportBelow(p.x,p.y,p.z+.06f);for(auto [dx,dy]:{std::pair{.05f,0.f},{-.05f,0.f},{0.f,.05f},{0.f,-.05f}})floor=std::min(floor,world.supportBelow(p.x+dx,p.y+dy,p.z+.06f));lowest=std::min(lowest,p.z-floor);}
  return n;}
 
@@ -110,27 +121,41 @@ Carcass* bodyOf(Scene& s,Watch* w=nullptr){
  (void)w;for(size_t i=0;i<LabAccess::enemies(g).size();++i)if(!LabAccess::enemies(g)[i].alive)return LabAccess::remains(*s.renderer,g.level(),i);return nullptr;}
 const bool fall=add({
  .name="ragdoll-fall",.summary="a man (or a creature) killed in a set way falls, lies and holds his shape: limits, no self-overlap, rigid sections, nothing in the floor or a wall (Carcass, humanCorpse)",
- .friends={"blood"},.fixtures={"ragdoll-drop","ragdoll-shot-front","ragdoll-shot-behind","ragdoll-shot-side","ragdoll-table","ragdoll-stairs","ragdoll-wall","ragdoll-headless","ragdoll-brute","ragdoll-chimera"},
+ .friends={"blood"},.fixtures={"ragdoll-drop","ragdoll-shot-front","ragdoll-shot-behind","ragdoll-shot-side","ragdoll-table","ragdoll-stairs","ragdoll-wall","ragdoll-headless","ragdoll-brute","ragdoll-chimera",
+  "ragdoll-shotgun","ragdoll-crate","ragdoll-bed","ragdoll-thrown"},
  .author=[](Scene& s,AuthoredMapData& m){
   const auto& fx=*s.fixture;
   for(const char* k:{"box","box2","box3","box4","box5","box6"}){const auto v=fx.value(k);if(v.empty())continue;float a[6]{};if(std::sscanf(v.c_str(),"%f %f %f %f %f %f",a,a+1,a+2,a+3,a+4,a+5)==6)m.structures.push_back({a[0],a[1],a[2],a[3],a[4],a[5]});}
+  for(const char* k:{"fixture","fixture1","fixture2"}){const auto v=fx.value(k);if(v.empty())continue;int model=0;float x=0,y=0,yaw=0;if(std::sscanf(v.c_str(),"%d %f %f %f",&model,&x,&y,&yaw)<3)continue;
+   const auto size=Game::propTraits(model).size;retro::Fixture f{model,{x,y},0,size[0],size[1],size[2],yaw*0.01745329f};f.solid=true;m.fixtures.push_back(f);}
   if(!fx.value("creature").empty())return;
   if(m.actorTracks.empty()){auto man=regression::guard({12,12},{12,12},AiFaction::Raider);m.actorTracks.push_back(man);}
   const int body=int(fx.number("body",6));auto& t=m.actorTracks[0];
   t.visual=body<6?(body==0?ActorVisual::Worker:ActorVisual(int(ActorVisual::Scientist)+body-1)):body>=12?ActorVisual::Investigator:ActorVisual(int(ActorVisual::Cleanup)+body-6);
   t.scale=1.75f;t.ai.armed=false;for(auto& k:t.keys)k.z=fx.number("man-z",0);},
  .setup=[](Scene& s){LabAccess::setGod(s.g(),true);watches().erase(&s);strips().erase(&s);
+  for(const char* k:{"prop","prop1","prop2","prop3"}){const auto v=s.fixture->value(k);if(v.empty())continue;int model=0;float x=0,y=0,yaw=0;if(std::sscanf(v.c_str(),"%d %f %f %f",&model,&x,&y,&yaw)<3)continue;
+   Clutter c;c.kind=7;c.model=model;c.dims=Game::propTraits(model).size;c.pos={x,y};c.yaw=yaw*0.01745329f;c.z=s.g().world().floorHeight(x,y);c.home=c.pos;c.homeZ=c.z;LabAccess::clutter(s.g()).push_back(c);}
   if(!s.fixture->value("creature").empty()){const auto at=s.fixture->value("creature-at","12 12");float x=12,y=12;std::sscanf(at.c_str(),"%f %f",&x,&y);
    static const char* names[]={"huntsman","wasp","brute","warden","mutant","snatcher","chimera","transformed","machine"};int kind=0;
    for(int i=0;i<9;++i)if(s.fixture->value("creature")==names[i])kind=i;
    CreatureSpawn c{CreatureKind(kind),{x,y},0};LabAccess::spawnCreature(s.g(),c);}},
  .step=[](Scene& s,float){
-  if(s.frame!=killFrame(s))return;Game& g=s.g();const float from=s.fixture->number("from",0)*0.01745329f;const bool push=s.fixture->number("push",1)!=0;
+  Game& g=s.g();
+  // A prop thrown into the body (as the player throws it: forward and up, tumbling).
+  if(const auto tv=s.fixture->value("throw");!tv.empty()&&!g.npcActors().empty()){int model=0;float after=1;std::sscanf(tv.c_str(),"%d %f",&model,&after);
+   if(s.frame==killFrame(s)+int(after*60)){auto* c=LabAccess::humanCorpse(*s.renderer,g,0);if(c){const Point3 at=c->carcass.centre();const float a=g.npcActors()[0].pose.yaw+s.fixture->number("throw-from",90)*0.01745329f;const Vec2 dir=facingOf(a);
+     Clutter p;p.kind=7;p.model=model;p.dims=Game::propTraits(model).size;p.pos=Vec2{at.x,at.y}-dir*1.4f;p.z=at.z+.15f;p.velocity=dir*7.f;p.vz=1.f;p.spin=2;p.projectile=true;p.sleeping=false;LabAccess::clutter(g).push_back(p);watches()[&s].thrown=true;}}}
+  if(const float again=s.fixture->number("shoot-again",0);again>0&&s.frame==killFrame(s)+int(again*60)&&!g.npcActors().empty()&&g.npcDeath(0).dead){auto* c=LabAccess::humanCorpse(*s.renderer,g,0);if(c)LabAccess::fireAt(g,c->carcass.centre());}
+  if(s.frame!=killFrame(s))return;const float from=s.fixture->number("from",0)*0.01745329f;const bool push=s.fixture->number("push",1)!=0;
   if(s.fixture->value("creature").empty()){if(g.npcActors().empty())return;const auto& n=g.npcActors()[0];const Vec2 f=facingOf(n.pose.yaw);
    // The shot comes from `from` off the way he faces; dropped (push 0): from straight above, no push.
    const Vec2 dir{f.x*std::cos(from)-f.y*std::sin(from),f.x*std::sin(from)+f.y*std::cos(from)};
    if(s.fixture->number("headless",0)!=0)LabAccess::behead(g,0);
-   LabAccess::killNpc(g,0,push?n.pose.position+dir*3.f:n.pose.position);}
+   // Shot dead with a shotgun from where the camera stands: the rounds land where they land.
+   if(const int rounds=int(s.fixture->number("shoot",0));rounds>0){const Point3 aim{n.pose.position.x,n.pose.position.y,n.pose.z+s.fixture->number("aim-z",1.25f)};
+    for(int r=0;r<rounds&&!g.npcDeath(0).dead;++r)LabAccess::fireAt(g,aim);if(!g.npcDeath(0).dead)LabAccess::killNpc(g,0,LabAccess::player(g).pos);}
+   else LabAccess::killNpc(g,0,push?n.pose.position+dir*3.f:n.pose.position);}
   else{auto& list=LabAccess::enemies(g);if(list.empty())return;auto& e=list[0];const Vec2 f{std::cos(e.heading),std::sin(e.heading)};const Vec2 dir{f.x*std::cos(from)-f.y*std::sin(from),f.x*std::sin(from)+f.y*std::cos(from)};
    LabAccess::damageEnemy(g,e,1e4f);e.deathPush=push?Point3{-dir.x*1.6f,-dir.y*1.6f,.3f}:Point3{};}},
  .capture=[](Scene& s,const Frame&){
@@ -156,7 +181,25 @@ const bool fall=add({
     #endif
     w.feet={e.pos.x,e.pos.y,e.z};w.facing=std::atan2(e.pos.x,e.pos.y);}
    if(rest.size()!=c->triangles().size()*3)return;prepare(w,rest,group);}
-  const auto& tri=c->triangles();float core=0,all=0;shapeError(w,tri,core,all);w.shapeCore=std::max(w.shapeCore,core);w.shapeAll=std::max(w.shapeAll,all);
+  const auto& tri=c->triangles();
+  {// Motion this frame, jitter before sleep, the jump into sleep, and the cost of a step.
+   if(w.steps0<0){w.steps0=Carcass::stepsTaken();w.ms0=Carcass::stepMilliseconds();}
+   float most=0;if(w.was.size()==tri.size()*3){for(size_t i=0;i<tri.size();++i)for(int k=0;k<3;++k)most=std::max(most,len3(tri[i].v[k].p-w.was[i*3+size_t(k)]));}
+   w.was.resize(tri.size()*3);for(size_t i=0;i<tri.size();++i)for(int k=0;k<3;++k)w.was[i*3+size_t(k)]=tri[i].v[k].p;
+   if(!c->asleep()&&!c->easing()){w.recent.push_back(most);if(w.recent.size()>15)w.recent.erase(w.recent.begin());++w.awakeFrames;}
+   else if(c->easing())w.easeStep=std::max(w.easeStep,most);
+   else if(c->asleep()&&!w.slept){w.slept=true;w.sleepPop=most;float j=0;for(size_t i=0;i+1<w.recent.size();++i)j=std::max(j,w.recent[i]);w.jitter=j;}
+   // How each section moves in the first frames: the part a round hit goes first.
+   const int since=s.frame-killFrame(s);if(since>=0&&since<=5){std::vector<Point3> at(size_t(c->sections()));std::vector<int> n(at.size(),0);
+    for(size_t t=0;t<tri.size();++t){const int sec=c->sectionOf(int(t));if(sec<0)continue;at[size_t(sec)]=at[size_t(sec)]+tri[t].v[0].p;++n[size_t(sec)];}for(size_t i=0;i<at.size();++i)if(n[i])at[i]=at[i]*(1.f/float(n[i]));
+    if(since==0){w.sectionsAt=at;w.sectionMove.assign(at.size(),0.f);}else if(w.sectionsAt.size()==at.size())for(size_t i=0;i<at.size();++i)w.sectionMove[i]=len3(at[i]-w.sectionsAt[i]);}
+   // Thrown at: where it lay before, how far it went, and when it slept again.
+   if(w.thrown){if(w.shoved<0){w.restAt=c->centre();w.shoved=0;}else{w.shoved=std::max(w.shoved,std::hypot(c->centre().x-w.restAt.x,c->centre().y-w.restAt.y));if(c->shoved()&&c->asleep()&&w.resleep<0)w.resleep=s.time;}}
+   // Into a prop: corners more than 1.5 cm inside any loose prop's box.
+   int inProps=0;for(const auto& p:LabAccess::clutter(g)){if(p.broken||p.model<0)continue;const auto sz=p.size();const float h=p.height(),cy=std::cos(p.yaw),sy=std::sin(p.yaw);
+    for(const auto& f:tri)for(const auto& v:f.v){const float dx=v.p.x-p.pos.x,dy=v.p.y-p.pos.y,lx=dx*cy+dy*sy,ly=-dx*sy+dy*cy;if(std::fabs(lx)<sz[0]*.5f-.015f&&std::fabs(ly)<sz[1]*.5f-.015f&&v.p.z>p.z+.015f&&v.p.z<p.z+h-.015f)++inProps;}}
+   if(c->asleep())w.insideProps=std::max(w.insideProps,inProps);}
+  float core=0,all=0;shapeError(w,tri,core,all);w.shapeCore=std::max(w.shapeCore,core);w.shapeAll=std::max(w.shapeAll,all);
   if(std::getenv("RM_RAGDOLL_DEBUG")){static std::ofstream log("ragdoll-debug.txt");log<<"frame "<<s.frame<<" age "<<c->age()<<" core "<<core<<" all "<<all<<" asleep "<<c->asleep()<<" motion "<<c->motion()<<" groups:";
    {std::vector<float> each;float a,b;shapeError(w,tri,a,b,&each);for(size_t g=0;g<each.size();++g)log<<' '<<(w.human?humanoid::name(int(g)):"s")<<'='<<fixed(each[g]*100,1);log<<'\n';}
    #ifdef RAWMETAL_CARCASS_RIG
@@ -172,7 +215,7 @@ const bool fall=add({
   for(const auto& j:c->jointStates()){if(j.cut)continue;const float over=std::max({j.bend-j.bendHi,j.bendLo-j.bend,std::fabs(j.side)-j.sideMax,std::fabs(j.twist)-j.twistMax,0.f});w.limitDeg=std::max(w.limitDeg,over*57.2958f);}
   w.overlap=std::max(w.overlap,c->overlap());
   #endif
-  if(!c->asleep()&&(s.frame-killFrame(s))%2==0){float low=0;w.insideMoving=std::max(w.insideMoving,insideCount(tri,world,low));w.lowestMoving=std::min(w.lowestMoving,low);}
+  if(!c->asleep()&&(s.frame-killFrame(s))%2==0){float low=0;int walls=0;w.insideMoving=std::max(w.insideMoving,insideCount(tri,world,low,nullptr,&walls));w.wallMoving=std::max(w.wallMoving,walls);if(w.wallAtDeath<0)w.wallAtDeath=walls;w.lowestMoving=std::min(w.lowestMoving,low);}
   if(w.settled<0&&c->asleep())w.settled=c->age();
   if(w.fell<0){float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);if(top-w.feet.z<.6f){w.fell=c->age();w.down=c->centre();}}
   else w.slide=std::max(w.slide,std::hypot(c->centre().x-w.down.x,c->centre().y-w.down.y));
@@ -192,8 +235,22 @@ const bool fall=add({
   float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);
   const Point3 ctr=c->centre();const float drift=std::hypot(ctr.x-w.feet.x,ctr.y-w.feet.y);
   r.metric("settle_s",w.settled,"s");r.metric("fell_s",w.fell,"s");r.metric("shape_core_cm",w.shapeCore*100,"cm");r.metric("shape_all_cm",w.shapeAll*100,"cm");r.metric("volume_dev_pct",w.volumeDev*100,"%");
-  r.metric("inside_moving",w.insideMoving);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("slide_after_fall_m",w.slide,"m");
+  r.metric("inside_moving",w.insideMoving);r.metric("in_walls_moving",w.wallMoving);r.metric("in_walls_at_death",w.wallAtDeath);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("slide_after_fall_m",w.slide,"m");
   r.check("once down it does not slide (centre within 0.3 m of where it fell)",w.fell<0||w.slide<.3f,fixed(w.slide,2)+" m");
+  r.metric("rest_jitter_mm",w.jitter*1000,"mm");r.metric("sleep_pop_mm",w.sleepPop*1000,"mm");r.metric("ease_step_mm",w.easeStep*1000,"mm");r.metric("awake_frames",w.awakeFrames);r.metric("inside_props_rest",w.insideProps);
+  {const long long steps=Carcass::stepsTaken()-w.steps0;const double ms=Carcass::stepMilliseconds()-w.ms0;r.metric("steps",double(steps));r.metric("ms_per_step",steps>0?ms/double(steps):0,"ms");
+   r.metric("ms_per_awake_second",steps>0?ms/double(steps)*60:0,"ms");}
+  r.check("its last quarter second awake is still (no corner moves 4 mm a frame)",w.jitter>=0&&w.jitter<.004f,fixed(w.jitter*1000,1)+" mm");
+  r.check("going to sleep does not make it jump (1.5 cm a frame)",w.sleepPop<.0155f,fixed(w.sleepPop*1000,1)+" mm");
+  r.check("settling toward sleep moves nothing more than 1.5 cm a frame",w.easeStep<.0155f,fixed(w.easeStep*1000,1)+" mm");
+  r.check("no section inside another by more than 1 cm while it settles or at rest",w.overlap<=.01f,fixed(w.overlap*100,2)+" cm");
+  r.check("at rest nothing of it is inside a loose prop (1.5 cm)",w.insideProps==0,std::to_string(w.insideProps)+" corners");
+  if(s.fixture->number("shoot",0)>0&&!w.sectionMove.empty()){float most=0,mean=0;int at=0;for(size_t i=0;i<w.sectionMove.size();++i){mean+=w.sectionMove[i];if(w.sectionMove[i]>most){most=w.sectionMove[i];at=int(i);}}mean/=float(w.sectionMove.size());
+   r.metric("hit_section_move_cm",most*100,"cm");r.metric("mean_section_move_cm",mean*100,"cm");r.metric("hit_lead",mean>0?most/mean:0);
+   r.check("the part the rounds hit goes first (it moves 1.5x the mean of his parts in 5 frames)",mean>0&&most>=1.5f*mean,std::string(w.human?humanoid::name(c->partOf(at)):"s")+" "+fixed(most*100,1)+" cm vs "+fixed(mean*100,1)+" cm");}
+  if(!s.fixture->value("throw").empty()){r.metric("shoved_m",w.shoved,"m");r.metric("resleep_s",w.resleep,"s");
+   r.check("a prop thrown into him shoves him (5 cm or more)",w.shoved>=.05f,fixed(w.shoved,2)+" m");
+   r.check("and he comes to rest again",w.resleep>0,w.resleep>0?"asleep again at "+fixed(w.resleep,2)+" s":"still awake");}
   #ifdef RAWMETAL_CARCASS_RIG
   r.metric("limit_excess_deg",w.limitDeg,"deg");r.metric("overlap_cm",w.overlap*100,"cm");r.metric("sections",c->sections());
   r.check("every joint within its limits every frame (2 deg)",w.limitDeg<=2.f,fixed(w.limitDeg,1)+" deg past at worst");
@@ -210,10 +267,20 @@ const bool fall=add({
    for(size_t i=0;i<corpse->faces.size();++i)if(labels.part[size_t(corpse->faces[i])]==humanoid::Head||labels.part[size_t(corpse->faces[i])]==humanoid::Chest){hx+=tri[i].v[0].p.x;hy+=tri[i].v[0].p.y;++hn;}
    const float reach=hn?std::hypot(hx/float(hn)-w.feet.x,hy/float(hn)-w.feet.y):0;r.metric("upper_body_from_feet_m",reach,"m");
    if(s.fixture->number("topple",0)!=0)r.check("he goes over from the hips, not down in a heap (chest 0.7 m or more from where his feet were)",reach>=.7f,fixed(reach,2)+" m");
+   // Lying, not propped up: at rest his trunk (pelvis to chest) is within 40 degrees of level, unless his hips are
+   // down on what is under them (sitting against a wall). Leaning upright on a rail reads as standing or floating.
+   {Point3 pelvis{},chest{};int np=0,nc=0;float hips=1e9f;
+    for(size_t i=0;i<corpse->faces.size();++i){const int part=labels.part[size_t(corpse->faces[i])];const Point3 c=(tri[i].v[0].p+tri[i].v[1].p+tri[i].v[2].p)*(1.f/3);
+     if(part==humanoid::Pelvis){pelvis=pelvis+c;++np;for(const auto& v:tri[i].v)hips=std::min(hips,v.p.z-world.supportBelow(v.p.x,v.p.y,v.p.z+.05f));}
+     if(part==humanoid::Chest){chest=chest+c;++nc;}}
+    if(np&&nc){pelvis=pelvis*(1.f/float(np));chest=chest*(1.f/float(nc));const Point3 d=chest-pelvis;const float deg=std::atan2(std::fabs(d.z),std::hypot(d.x,d.y))*57.2958f;
+     r.metric("torso_deg",deg,"deg");r.metric("hips_over_support_m",hips,"m");
+     r.check("at rest he lies: trunk within 40 deg of level, or hips down on what is under them (sitting)",deg<=40.f||hips<=.12f,fixed(deg,0)+" deg, hips "+fixed(hips,2)+" m over what is under them");}}
    // The same death made again lies the same.
    const auto first=tri;LabAccess::corpses(*s.renderer).clear();auto* again=LabAccess::humanCorpse(*s.renderer,g,0);bool same=again&&again->carcass.triangles().size()==first.size();
    if(same){const auto& t=again->carcass.triangles();for(size_t i=0;i<t.size()&&same;++i)for(int k=0;k<3;++k)same&=t[i].v[k].p.x==first[i].v[k].p.x&&t[i].v[k].p.y==first[i].v[k].p.y&&t[i].v[k].p.z==first[i].v[k].p.z;}
-   r.check("the same death made again lies exactly the same",same);}},
+   // (Not when rounds or a prop came at him after: a body made again knows only how he died.)
+   if(s.fixture->number("shoot",0)==0&&s.fixture->value("throw").empty())r.check("the same death made again lies exactly the same",same);else r.metric("remade_same",same);}},
  .reporter=[](Scene& s,Overlay& o){
   Carcass* c=bodyOf(s);if(!c)return;
   #ifdef RAWMETAL_CARCASS_RIG
