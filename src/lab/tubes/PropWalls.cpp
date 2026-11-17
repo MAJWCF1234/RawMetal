@@ -63,7 +63,7 @@ const bool tube=add({
   rep.metric("props_shoved",double(r.trials.size()));rep.metric("props_moved",moved);rep.metric("large_in_solid",inside);rep.metric("small_in_solid",insideSmall);rep.metric("beyond_wall",crossed);rep.metric("furthest_m",furthest,"m");
   rep.check("the map has props to shove, and the shoves move them",r.trials.size()>=3&&moved>=int(r.trials.size())/2,std::to_string(moved)+" of "+std::to_string(r.trials.size())+" moved");
   rep.metric("large_worst_frames_inside",worstFrames);rep.metric("large_ending_inside",endsInside);
-  rep.check("no large shoved prop (30 cm across, 10 cm tall) ends inside a solid, or stays in one more than 3 frames (a thin solid's corner between two outline points)",endsInside==0&&worstFrames<=3,r.log.empty()?"0":r.log.substr(0,900));
+  rep.check("no large shoved prop (30 cm across, 10 cm tall) ends inside a solid, or stays in one more than 3 frames (a thin solid's corner between two outline points)",endsInside==0&&worstFrames<=3,r.log.empty()?"0":r.log.substr(0,4000));
   rep.check("no shoved prop passes through a wall (its middle, frame to frame)",crossed==0,std::to_string(crossed));
   std::string list;for(const auto& t:r.trials){const auto& c=LabAccess::clutter(s.g())[t.index];list+="#"+std::to_string(t.index)+" m"+std::to_string(c.model)+" "+fixed(c.dims[0])+"x"+fixed(c.dims[1])+"x"+fixed(c.dims[2])+" "+fixed(c.mass(),0)+"kg wall "+fixed(t.wall)+" moved "+fixed(t.moved)+"; ";}
   rep.check("diagnostic: the props",true,list.substr(0,1500));},

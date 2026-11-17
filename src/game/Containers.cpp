@@ -33,9 +33,9 @@ float supportAt(const Clutter& v,Vec2 p,float feet){
  if(isContainer(v)&&!v.broken&&upright(v)){const auto in=inner(v);const float s=v.z+(overInner(v,p)?in.floor:std::min(in.rim,v.supportHeight()));return s<=feet+.025f?s:-100.f;}
  const float top=v.z+v.supportHeight();return top<=feet+.025f?top:-100.f;
 }
-Snapshot capture(std::vector<Clutter>& list,int held){
+Snapshot capture(std::vector<Clutter>& list,int held,bool onlyHeld){
  Snapshot s;std::vector<int> boxes;std::vector<char> rode(list.size());
- for(int i=0;i<int(list.size());++i){rode[size_t(i)]=list[size_t(i)].riding;list[size_t(i)].riding=false;if(isContainer(list[size_t(i)])&&!list[size_t(i)].broken&&upright(list[size_t(i)]))boxes.push_back(i);}
+ for(int i=0;i<int(list.size());++i){rode[size_t(i)]=list[size_t(i)].riding;list[size_t(i)].riding=false;if(isContainer(list[size_t(i)])&&!list[size_t(i)].broken&&upright(list[size_t(i)])&&(!onlyHeld||i==held))boxes.push_back(i);}
  if(boxes.empty())return s;
  std::vector<int> seen;
  for(int j=0;j<int(list.size());++j){if(j==held)continue;const auto& item=list[size_t(j)];if(item.model<0||item.broken)continue;

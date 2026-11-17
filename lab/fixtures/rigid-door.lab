@@ -1,0 +1,8 @@
+# A crate thrown through a doorway; a mug and a crate thrown at a 3 cm wall at 25 m/s (tubes rigid, rigid-legacy).
+world room
+camera 11.9 7.0 -999 90 -8
+light 12 10 3.2 1.4 10
+light 14 7 3 1 8
+rigid door
+size 480 270
+frames 300

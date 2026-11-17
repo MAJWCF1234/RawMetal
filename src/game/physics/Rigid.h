@@ -86,7 +86,8 @@ struct Shape {
  Part& add(PartKind kind,V3 centre,V3 half,Quat turn={}){auto& p=parts[size_t(count++)];p={kind,centre,turn,half};return p;}
 };
 
-struct Material {float staticFriction=.6f,dynamicFriction=.45f,restitution=.2f,rolling=.02f;
+// rolling: the rolling resistance coefficient (resisting torque over load times rolling radius), also on twist.
+struct Material {float staticFriction=.6f,dynamicFriction=.45f,restitution=.2f,rolling=.01f;
  // Two materials meeting: friction as the geometric mean, restitution the larger (a ball bounces off a floor).
  static Material mix(const Material& a,const Material& b){return {std::sqrt(a.staticFriction*b.staticFriction),std::sqrt(a.dynamicFriction*b.dynamicFriction),std::max(a.restitution,b.restitution),std::max(a.rolling,b.rolling)};}
 };
@@ -96,7 +97,8 @@ struct Body {
  V3 x{};Quat q{};V3 v{},w{};          // centre of mass (world), orientation, velocities (world)
  float invMass=1;M3 invInertiaLocal=M3::zero();M3 invInertia=M3::zero(); // world inverse inertia (updated each substep)
  const Shape* shape=nullptr;Material material{};
- bool kinematic=false;   // moved by the caller (a held prop): infinite mass, its v and w push others
+ bool kinematic=false;   // moved by the caller (a held prop): infinite mass, never integrated here; its v and w push others
+ float softHertz=0;      // a padded body (a mattress): contacts on it are springs of this stiffness, so a load sinks in
  bool sleeping=false;    // takes part in collisions as an immovable body until woken
  bool ccd=false;         // swept against the world this step (set by the space for fast bodies)
  float sleepTime=0;      // seconds slow enough to sleep

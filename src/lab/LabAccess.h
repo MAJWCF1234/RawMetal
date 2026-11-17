@@ -96,6 +96,8 @@ struct LabAccess {
  static Vec2& velocity(Game& g){return g.m_velocity;}
  // Things that break, and what they leave (tubes/Debris.cpp).
  static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
+ static const Game::RigidStats& rigidStats(const Game& g){return g.m_rigidStats;}
+ static Vec2& carryHandVelocity(Game& g){return g.m_carryHandVelocity;}
  static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}
  static void damagePane(Game& g,int index,float amount,Point3 at,Point3 direction){g.damagePane(g.m_level,index,amount,at,direction);}
  static bool damagePane(Game& g,int index,float amount,Point3 at,Point3 direction,PaneBlow blow){return g.damagePane(g.m_level,index,amount,at,direction,blow);}

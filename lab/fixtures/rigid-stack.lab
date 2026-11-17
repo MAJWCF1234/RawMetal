@@ -1,0 +1,8 @@
+# The rigid core against the old physics (tubes rigid, rigid-legacy): a ten-crate tower, a pyramid and a mixed stack, woken.
+world room
+camera 9.3 5.6 -999 90 -3
+light 9.5 10 3.2 1.4 10
+light 6 11 3 1 8
+rigid stack
+size 480 270
+frames 300

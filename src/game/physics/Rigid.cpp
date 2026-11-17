@@ -233,7 +233,9 @@ void Space::collide(float dt){
   for(int p=0;p<b.shape->count;++p){V3 l,h;partBounds(b,p,l,h);lo={std::min(lo.x,l.x),std::min(lo.y,l.y),std::min(lo.z,l.z)};hi={std::max(hi.x,h.x),std::max(hi.y,h.y),std::max(hi.z,h.z)};}
   b.boundsLo=lo;b.boundsHi=hi;reach[size_t(i)]=settings.speculative+(b.sleeping?0.f:std::min(1.f,(len(b.v)+len(b.w)*b.shape->bound)*dt));}
  // The world under and round each moving body.
- if(worldContacts)for(int i=0;i<n;++i){const auto&b=bodies[size_t(i)];if(b.sleeping||b.invMass<=0)continue;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);}
+ std::vector<char> grounded(size_t(n),0);
+ auto ground=[&](int i){const auto&b=bodies[size_t(i)];if(!worldContacts||grounded[size_t(i)]||b.sleeping||b.invMass<=0)return;grounded[size_t(i)]=1;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);};
+ for(int i=0;i<n;++i)ground(i);
  // Pairs: sweep and prune along x.
  std::vector<int> order;order.reserve(size_t(n));for(int i=0;i<n;++i)order.push_back(i);
  std::sort(order.begin(),order.end(),[&](int a,int b){const float la=bodies[size_t(a)].boundsLo.x-reach[size_t(a)],lb=bodies[size_t(b)].boundsLo.x-reach[size_t(b)];return la!=lb?la<lb:a<b;});
@@ -250,13 +252,17 @@ void Space::collide(float dt){
   for(int pa=0;pa<a.shape->count;++pa)for(int pb=0;pb<b.shape->count;++pb){
    if(a.shape->count>1||b.shape->count>1){V3 l1,h1,l2,h2;partBounds(a,pa,l1,h1);partBounds(b,pb,l2,h2);
     if(l1.x>h2.x+margin||l2.x>h1.x+margin||l1.y>h2.y+margin||l2.y>h1.y+margin||l1.z>h2.z+margin||l2.z>h1.z+margin)continue;}
-   ++pairsTested;Manifold m;if(!collideParts(a,pa,b,pb,margin,m))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);manifolds.push_back(m);
+   ++pairsTested;Manifold m;if(!collideParts(a,pa,b,pb,margin,m))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
+   {const float sa=a.softHertz,sb=b.softHertz;m.surface.hertz=sa>0&&sb>0?std::min(sa,sb):std::max(sa,sb);}
+   manifolds.push_back(m);
    // A moving body touching a sleeping one wakes it (and the sleeper's island follows next step).
    float deepest=1e30f;for(int k=0;k<m.count;++k)deepest=std::min(deepest,m.points[size_t(k)].separation);
-   if(deepest<settings.linearSlop){
+   if(deepest<settings.linearSlop+std::max(0.f,margin-settings.speculative)){   // touching, or closing within the step
     auto rousing=[&](const Body& mover,const Body& other){const float speed=len(mover.v-other.v)+len(mover.w)*mover.shape->bound;return speed>2*settings.sleepLinear||(mover.kinematic&&speed>1e-3f);};
     if(a.sleeping&&!b.sleeping&&rousing(b,a))wake(i);
     if(b.sleeping&&!a.sleeping&&rousing(a,b))wake(j);}}}
+ // Woken by a touch: the world under it this step too.
+ for(int i=0;i<n;++i)ground(i);
 }
 void Space::prepare(float h){
  (void)h;
@@ -321,7 +327,9 @@ void Space::solve(float h,bool useBias){
    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}
    if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}
   // Rolling and twisting resistance: an angular friction on the relative spin, held to rolling * load.
-  if(m.material.rolling>0&&total>0){const float limit=m.material.rolling*total;const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B->invInertia:M3::zero();
+  if(m.material.rolling>0&&total>0){float arm=0;for(int k=0;k<m.count;++k)arm+=std::fabs(dot(m.points[size_t(k)].rA,m.normal));arm/=float(std::max(1,m.count));
+   const float limit=m.material.rolling*total*arm;   // the resisting torque: a coefficient times the load times the rolling radius
+   const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B->invInertia:M3::zero();
    for(int r=0;r<3;++r){const V3 axis=r==0?m.t1:r==1?m.t2:m.normal;const float k=dot(axis,iA*axis)+dot(axis,iB*axis);if(k<=0)continue;
     const V3 rel=(B?B->w:V3{})-A.w;const float old=m.rollingImpulse[r];float next=std::clamp(old-dot(rel,axis)/k,-limit,limit);m.rollingImpulse[r]=next;const V3 R=axis*(next-old);
     if(ma)A.w=A.w-iA*R;if(mb)B->w=B->w+iB*R;}}
@@ -350,7 +358,7 @@ void Space::integrateVelocities(float h){
   const float sv=len(b.v),sw=len(b.w);if(sv>settings.maxLinear)b.v=b.v*(settings.maxLinear/sv);if(sw>settings.maxAngular)b.w=b.w*(settings.maxAngular/sw);}
 }
 void Space::integratePositions(float h){
- for(auto&b:bodies){if(b.sleeping||(!b.movable()&&!b.kinematic))continue;
+ for(auto&b:bodies){if(!b.movable())continue;
   b.x=b.x+b.v*h;b.q=integrate(b.q,b.w,h);b.dp=b.dp+b.v*h;b.dq=integrate(b.dq,b.w,h);}
 }
 void Space::continuous(float dt,const std::vector<V3>& start){
@@ -366,7 +374,7 @@ void Space::continuous(float dt,const std::vector<V3>& start){
   const float vn=dot(b.v,n);if(vn<0)b.v=b.v-n*(vn*(1+b.material.restitution));(void)dt;}
 }
 void Space::islands(float dt){
- const int n=int(bodies.size());std::vector<int> parent(size_t(n));for(int i=0;i<n;++i)parent[size_t(i)]=i;
+ const int n=int(bodies.size());std::vector<int> parent(static_cast<size_t>(n));for(int i=0;i<n;++i)parent[size_t(i)]=i;
  auto find=[&](int i){while(parent[size_t(i)]!=i){parent[size_t(i)]=parent[size_t(parent[size_t(i)])];i=parent[size_t(i)];}return i;};
  auto unite=[&](int a,int b){a=find(a);b=find(b);if(a!=b)parent[size_t(std::max(a,b))]=std::min(a,b);};
  std::vector<char> pinned(size_t(n),0);

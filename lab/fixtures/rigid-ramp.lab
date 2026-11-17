@@ -1,0 +1,8 @@
+# A barrel down a ramp, another off a landing down stairs, crates on 20 and 35 degree ramps (tubes rigid, rigid-legacy).
+world room
+camera 12.4 6.2 -999 92 -10
+light 10 12 3.2 1.4 10
+light 15 12 3.2 1.2 10
+rigid ramp
+size 480 270
+frames 360

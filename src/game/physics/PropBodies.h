@@ -1,0 +1,50 @@
+#pragma once
+// Props as rigid bodies (Rigid.h): each model's collision shape and material, the switch between the
+// rigid core and the old prop physics, and the mapping between a Clutter and a Body.
+//
+// Shapes come from the catalog (the prop's own dims, prop_physics.json's mass and container volume) with
+// a table of overrides by model: an oriented box by default; a cylinder for barrels, drums, bottles,
+// jars, cans and cylinders (a tyre and a pipe lie along their own axis); a sphere for a pumpkin;
+// compound boxes for chairs (legs or base, seat, back on the side the model's front table says), tables,
+// a wheelchair, a lamp's L; an open container (model::container) is its floor and four walls up to its
+// rim, so what lies in it rests on the inner floor and pours out when it tips.
+#include "Rigid.h"
+#include "../Game.h"
+namespace retro::rigid {
+// The old physics (simulateClutter's yaw-mostly box) instead of the rigid core: RM_PROPS=legacy (or old),
+// or the knob props.legacy 1. forceLegacyProps overrides both (the lab's A/B tubes): 1 old, 0 new, -1 off.
+bool legacyProps();
+void forceLegacyProps(int mode);
+// The rigid material of a prop material. Index PropMaterial::Count is rubber (lab bodies only).
+Material propMaterial(PropMaterial m);
+Material rubber();
+// A prop's own material: its material's, with the model's overrides (casters and wheels roll freely).
+Material propMaterialOf(const Clutter& c);
+// The shape for a model at a size (cached; the reference stays valid).
+const Shape& propShape(int model,std::array<float,3> dims);
+inline const Shape& propShape(const Clutter& c){return propShape(c.model,c.size());}
+// How stiff a padded prop's top is (Body::softHertz), 0 for a hard one.
+float propSoftHertz(const Clutter& c);
+// The prop's orientation (its quaternion if yaw/pitch/roll are still the ones the core wrote, else
+// from them) and angular velocity (world, from spin/pitchSpeed/rollSpeed), and back.
+Quat propOrientation(const Clutter& c);
+V3 propAngular(const Clutter& c);
+void setPropAngular(Clutter& c,V3 w);
+// A Body from a prop (pose, velocities, mass, inertia, shape, material) and the prop from its body.
+void toBody(const Clutter& c,Body& b);
+void fromBody(const Body& b,Clutter& c);
+// The middle of the prop's box, world (list coordinates).
+inline V3 propCentre(const Clutter& c){return {c.pos.x,c.pos.y,c.z+c.extent()[2]};}
+
+// ---- Saves (the "physics" save section, SaveSections.h's PhysicsSaveHooks/PropBody) ---------------
+// What a prop keeps through a save beyond its old fields: its orientation as a unit quaternion in
+// x, y, z, w order (4 floats), its angular velocity in world axes, radians per second (3 floats), and
+// the sleep island it rests in (int32, -1 awake). capture returns false for a prop with no solver state
+// (junk, shards, a broken tombstone). restore puts them on the loaded prop: its yaw/pitch/roll and
+// spin/pitchSpeed/rollSpeed are rewritten from them, so a save without the section still loads (the
+// quaternion then comes from yaw/pitch/roll, the angular velocity from the three speeds).
+// At merge: physicsSaveHooks()={[](const Clutter& c,PropBody& b){return captureProp(c,b.orientation,b.angularVelocity,b.island);},
+//                              [](Clutter& c,const PropBody& b){restoreProp(c,b.orientation,b.angularVelocity,b.island);}};
+bool captureProp(const Clutter& c,std::array<float,4>& orientationXyzw,std::array<float,3>& angularVelocity,std::int32_t& island);
+void restoreProp(Clutter& c,const std::array<float,4>& orientationXyzw,const std::array<float,3>& angularVelocity,std::int32_t island);
+}
