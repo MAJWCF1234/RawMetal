@@ -493,6 +493,8 @@ void gather(const Game& game,const World& w,const Particles::View& view,const Pa
  auto hits=[&](const std::vector<HitBurst>& list){for(const auto&b:list){if(b.level!=level||b.material==ImpactMaterial::Flesh)continue;const float age=now-b.time;if(age<0||age>6.f)continue;
   static const float strengths[]={1.f,.35f,.6f,1.25f,.95f,.8f,1.4f,.3f,0.f,.5f};const float strength=strengths[std::clamp(int(b.material),0,9)]*std::clamp(b.power,.4f,2.f);
   const Point3 n=unit(b.direction);const std::uint32_t seed=seedAt(b.point,b.time,0x51u);
+  // Glass struck throws glints (its break events' chips), not a dust cloud.
+  if(b.material==ImpactMaterial::Glass)continue;
   Source cloud;cloud.species=b.material==ImpactMaterial::Metal?Species::Smoke:Species::Cloud;cloud.seed=seed;cloud.at=b.point+n*.05f;cloud.travel=n*.7f+Up*.12f;cloud.cone=1.1f;cloud.size=.06f;cloud.grow=.7f*std::sqrt(strength);
   cloud.life=3.4f;cloud.count=b.material==ImpactMaterial::Metal?4:10;cloud.t0=b.time;cloud.spread=.08f;cloud.strength=std::min(1.4f,strength*1.25f);cloud.floor=b.floor;out.push_back(cloud);
   if(b.material==ImpactMaterial::Metal||b.material==ImpactMaterial::Glass)continue;

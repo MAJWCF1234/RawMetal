@@ -207,13 +207,18 @@ struct BreakEvent {Vec2 pos{};float z=0;Point3 direction{};float time=0;int leve
 // What a shard (clutter kind 6) was broken from, so it is drawn as a piece of that thing: a crate's
 // splinter (the old look), an eighth of an exploded barrel's hull, a chunk of a drop-ceiling tile, or
 // an eighth of a broken prop or fixture part cut from its own mesh with its own sheet.
-enum class ShardOf:int {Crate,Barrel,Ceiling,Model,Count};
+// Glass: a piece of a pane (GlassFracture.h), a thin sheet whose outline its piece number picks.
+enum class ShardOf:int {Crate,Barrel,Ceiling,Model,Glass,Count};
 // The drawn size of a 'B' barrel (Scene3D draws it 1.1 m tall in a .94 m footprint): its shards are eighths of it.
 inline constexpr std::array<float,3> kBarrelSize{.74f,.74f,1.1f};
 // Where a pane gave way and which way the blow came from, so its shards fall
 // from the hole and lie where they landed. Not saved: a reloaded pane breaks
 // about its centre.
 struct GlassBreak {int level=0,index=0;Point3 at{},direction{};};
+// What struck a pane (Game::damagePane): a round holes it where it hits; a fist punches a
+// fist-sized hole; a prop (radius: its own) punches a hole its size once the blow beats the
+// glass there; a body coming through, or a blast, takes the whole pane.
+struct PaneBlow {enum Kind {Round,Fist,Prop,Body,Blast};Kind kind=Round;float radius=-1;};
 struct Clutter {
  Vec2 pos{},velocity{};float z=0,vz=0,yaw=0,spin=0;int kind=0;bool projectile=false;float impactCooldown=0;
  float pitch=0,roll=0,pitchSpeed=0,rollSpeed=0,restTime=0;bool sleeping=false;
@@ -656,7 +661,7 @@ public:
     // clutter; an older build would draw them twice (its fixed chair and the saved loose one), so
     // it refuses a 26. Older saves load here: the props they lack come back where they were put.
     // docs/Systems/save-format.md keeps the whole history.
-    static constexpr int SaveVersion=26;
+    static constexpr int SaveVersion=27;
     // The torch lights with the item, its switch (flashlight_on) and power:
     // inside a jamming DarkZone it sputters for FlashlightJamTime, then dies.
     float playerExposure()const{return m_playerExposure;}
@@ -1166,7 +1171,17 @@ private:
     // clip's level, leadBodyAtClip), at worst (0 or less: clear of it).
     float leadThrough(int level,int index)const;
     static constexpr float LeadShock=6.f;
-    bool damagePane(int level,int index,float amount,Point3 at,Point3 direction);
+    bool damagePane(int level,int index,float amount,Point3 at,Point3 direction,PaneBlow blow={});
+    // The glass (GlassPanes.cpp): what a blow does to a pane that stays up (0 a crack, 1 a hole,
+    // 2 it comes down), the resistance left at a point (what a prop's blow must beat there), the
+    // shards a blow or a fall lets go, a shard landing hard, and bodies and feet meeting glass.
+    int glassBlow(int level,int index,float amount,Point3 at,Point3 direction,PaneBlow blow);
+    float paneResistance(int level,int index,Point3 at)const;
+    void dropGlassPieces(int level,int index,const std::vector<glass::Piece>& pieces,Point3 direction,float blowRadius,bool blownProps);
+    void dropCollapsedPane(int level,int index,Point3 at,Point3 direction);
+    void crackGlassShard(int level,size_t index,float speed);
+    void updateGlass(float dt);
+    float m_glassCrunchWalked=0,m_glassBodyRearm=0;Vec2 m_glassCrunchLast{};
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);

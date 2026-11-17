@@ -176,6 +176,7 @@ add_executable(RawMetal WIN32
     game/Crates.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
+    game/GlassPanes.cpp
     game/Ragdoll.cpp
     audio/AudioEngine.cpp
     audio/DecodeMusic.cpp

@@ -1,0 +1,12 @@
+# A 3.2 x 2.4 m pane across the plain room (x = 10). Nine handgun rounds in a widening
+# spiral hole it until pieces fall out as shards; when their dust off the far wall has
+# settled a thrown crate goes through it.
+# Shots "before", "holes" and "after".
+# Tubes: glass (its numbers run here too).
+world room
+camera 7.1 7.7 -999 8 -3
+light 8.5 8.5 3.2 1.4 9
+light 11.5 8 3.2 1 8
+glass pane
+size 480 270
+frames 320

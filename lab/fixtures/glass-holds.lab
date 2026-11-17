@@ -1,0 +1,12 @@
+# The same pane as holds (laminated) glass: twelve shotgun rounds on one spot spiderweb it,
+# sag it and at last open a small hole there ("holes", once their smoke has cleared); four
+# more round it only crack it ("after").
+# Shots "before", "holes" and "after".
+# Tubes: glass.
+world room
+camera 7.1 7.7 -999 8 -3
+light 8.5 8.5 3.2 1.4 9
+light 11.5 8 3.2 1 8
+glass holds
+size 480 270
+frames 480

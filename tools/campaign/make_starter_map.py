@@ -10,7 +10,8 @@ with a clear corridor down the west side joining the rows:
   WELCOME     map tiles, structure materials, pipes, stairs, doors, water, pickups,
               terminals and signs
   LIGHTS      colour temperatures, tints, gels, flicker, timed and wall lamps, darkness
-  HAZARDS     the eight hazard kinds fenced off, a compactor, smoke, glass, cables
+  HAZARDS     the eight hazard kinds fenced off, a compactor, smoke, cables, glass that
+              breaks a piece at a time and holds glass, with things to throw at them
   LIFE        every creature (asleep until hurt) and every actor body, standing still
   LEVELS      a second layer: a deck over the hall, a stair up, a hole to look down
   SCRIPTS     east of Levels: counters, AND/ANY gates, repeat, live values (@kills,
@@ -430,9 +431,17 @@ def build():
     s.rec(m, 'COMPACTOR', 2, 18.7, 9.9, 22.3, 13.3, 0, 2.6, 5)
     s.sign(m, 20.5, 9.59, .7, 1.6, .36, 'COMPACTOR', 'crushes on a cycle', red)
     s.zone(m, 18.4, 8.4, 22.6, 13.6, 'COMPACTOR / crushes every 5 s')
+    # Glass breaks a piece at a time: rounds hole it, close holes let pieces fall as shards, a
+    # thrown prop punches a hole its size and goes through, a fist or a dive breaks it, and the
+    # rest comes down when half is gone. West of it, holds (laminated) glass: it spiderwebs and
+    # sags, opens a small hole only where it is hammered, and never comes down (health 0).
     s.rec(m, 'BREAKABLE', 2, 7.0, 11.75, 9.4, 11.8, 0, 2.2, 17, 20, 0, 'starter_glass_broken', NEVER)
-    s.post_sign(m, 8.2, 11.1, 'BREAKABLE', 'glass, material 17', red, 1.3)
-    s.zone(m, 7, 9.9, 9.4, 12.2, 'BREAKABLE / glass pane')
+    s.rec(m, 'BREAKABLE', 2, 3.6, 11.75, 6.4, 11.8, 0, 2.2, 17, 0, 1, '', NEVER)
+    s.post_sign(m, 8.2, 11.1, 'BREAKABLE', 'glass 17; west: holds glass', red, 1.6)
+    s.zone(m, 7, 9.9, 9.4, 12.2, 'BREAKABLE / glass: breaks a piece at a time')
+    s.zone(m, 3.6, 9.9, 6.4, 12.2, 'BREAKABLE holds / cracks and sags, never falls')
+    s.index.append({'map': 2, 'section': 'HAZARDS', 'x': 8.2, 'y': 11.75, 'title': 'BREAKABLE', 'name': 'glass, breaks a piece at a time'})
+    s.index.append({'map': 2, 'section': 'HAZARDS', 'x': 5.0, 'y': 11.75, 'title': 'BREAKABLE holds', 'name': 'laminated glass'})
     for x in (11.0, 14.0):
         s.struct(m, x - .05, 11.7, x + .05, 11.8, 0, 1.6, 2)
     s.rec(m, 'LEAD', 2, 11.05, 11.75, 1.3, 13.95, 11.75, 1.3, 3.4, .008, 8, 1)
@@ -501,6 +510,12 @@ def build():
     allm = models()
     slot = {n: i for i, n, *_ in allm}
     catalogue = {n: (w, d, h) for _, n, w, d, h, _ in allm}
+    # Things to throw at the HAZARDS glass: each punches a hole its size and goes on through.
+    hz = next(mm for mm in s.maps if mm['name'] == 'Hazards')
+    for name, x, y in (('wooden_crate', 8.6, 10.35), ('crt_monitor', 7.5, 10.3), ('mug', 5.0, 10.4), ('wooden_chair', 6.7, 10.2)):
+        if name in physics and name in slot:
+            w, d, h = physics[name].get('size', catalogue[name])
+            s.rec(hz, 'CLUTTER', hz['index'], 7, x, y, 0, 0, slot[name], w, d, h, 0, 0, '')
     props = []
     for k, name in enumerate(CLUTTER_KINDS):
         props.append({'w': .4, 'd': .4, 'h': .3, 'title': 'CLUTTER %d' % k, 'sub': name, 'zone': 'CLUTTER kind %d / %s' % (k, name),

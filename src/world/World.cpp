@@ -420,7 +420,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
- m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);
+ m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);m_paneGlass.assign(breakables().size(),{});
  m_leadRopes.assign(leads().size(),{});for(size_t i=0;i<m_leadRopes.size();++i)m_leadRopes[i].torn=leads()[i].loose;
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
@@ -1457,7 +1457,7 @@ float World::supportBelowUncached(float x,float y,float feet,bool cavities)const
  if(insideCargoLift(x,y)&&m_cargoLiftHeight<=feet+.025f)result=std::max(result,m_cargoLiftHeight);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z+c.size<=feet+.025f)result=std::max(result,c.z+c.size);
  for(size_t i=0;i<actorTracks().size();++i){const auto& t=actorTracks()[i];const auto& p=m_actorPoses[i];if(t.platform&&std::fabs(x-p.position.x)<=t.footprint.x*.5f&&std::fabs(y-p.position.y)<=t.footprint.y*.5f&&p.z<=feet+.025f)result=std::max(result,p.z);}
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f)result=std::max(result,s.top);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.top<=feet+.025f&&!paneColumnOpen(index,x,y,s.bottom,s.top-s.bottom))result=std::max(result,s.top);}
  return result;
 }
 float World::structureSupportBelow(float x,float y,float radius,float feet)const{
@@ -1485,7 +1485,7 @@ float World::clearanceAboveIndexed(float x,float y,float feet)const{
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f&&!paneColumnOpen(index,x,y,s.bottom,s.top-s.bottom))ceiling=std::min(ceiling,s.bottom);}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
@@ -1537,7 +1537,7 @@ bool World::fitsUncached(float x,float y,float feet,float height,bool dynamic,bo
   }else if(feet<base+f.height-.025f&&feet+height>base+.005f)return false;
  }}
  for(auto index:collisionCandidates(1,x,y)){const auto&p=m_props[index];if(std::fabs(x-p.position.x)<p.halfSize.x&&std::fabs(y-p.position.y)<p.halfSize.y){float base=floorHeight(p.position.x,p.position.y)+p.base;if(feet<base+p.height-.025f&&feet+height>base+.005f)return false;}}
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f)return false;}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&feet<s.top-.025f&&feet+height>s.bottom+.005f&&!paneColumnOpen(index,x,y,std::max(feet,s.bottom+.005f),std::min(feet+height,s.top-.025f)-std::max(feet,s.bottom+.005f)))return false;}
  for(auto index:collisionCandidates(2,x,y)){const auto&t=m_terminals[index];if(!dynamic&&hasLift()&&t.control)continue;float base=floorHeight(t.position.x,t.position.y)+t.z;if(insideTerminal(*this,t,x,y)&&feet<base+terminalHeight(*this,t,x,y)-.025f&&feet+height>base)return false;}
  return true;
 }
@@ -1627,7 +1627,7 @@ float World::clearanceAboveReference(float x,float y,float feet)const{
  if(insideLift(x,y)&&feet<m_liftHeight+2.6f)ceiling=std::min(ceiling,m_liftHeight+2.6f);
  if(insideCargoLift(x,y)&&feet<m_cargoLiftHeight+2.4f)ceiling=std::min(ceiling,m_cargoLiftHeight+2.4f);
  for(const auto& c:m_pushCrates)if(std::fabs(x-c.position.x)<c.size*.5f&&std::fabs(y-c.position.y)<c.size*.5f&&c.z>=feet+.025f)ceiling=std::min(ceiling,c.z);
- for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f)ceiling=std::min(ceiling,s.bottom);}
+ for(auto index:structureIndices(x,y)){auto&s=m_structures[index];if(s.solid&&x>=s.x1&&x<s.x2&&y>=s.y1&&y<s.y2&&s.bottom>=feet+.025f&&!paneColumnOpen(index,x,y,s.bottom,s.top-s.bottom))ceiling=std::min(ceiling,s.bottom);}
  for(auto&t:m_terminals){float base=floorHeight(t.position.x,t.position.y)+t.z;if(base>feet+.025f&&insideTerminal(*this,t,x,y))ceiling=std::min(ceiling,base);}
  return ceiling;
 }
