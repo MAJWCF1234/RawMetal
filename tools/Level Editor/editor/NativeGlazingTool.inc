@@ -193,3 +193,103 @@
     glazingLookList = choices(GlazingLookList, {L"Aluminium", L"Painted metal", L"Steel", L"Wood"}, 0);
     glazingDoorList = choices(GlazingDoorList, {L"No doorway", L"Doorway in the middle", L"Doorway at the start", L"Doorway at the end"}, 0);
   }
+  // ---- One pane at a time: a click on a bay of a storefront ----
+  // The panes of a GLAZING are numbered as the engine frames them (Openings.cpp applyGlazing): bay by
+  // bay along the wall, bottom to top in each, and a doorway bay has one pane (its transom) or none.
+  struct GlazingBays {
+    bool alongX = true;
+    float a0 = 0, length = 1;
+    int bays = 1, rows = 1, door = -1;
+    bool transom = false;
+    std::string panes;
+    char pane = 'c';
+    // The pane numbers in bay `bay`, bottom to top.
+    std::vector<int> panesIn(int bay) const {
+      std::vector<int> out;
+      for (int i = 0, index = 0; i < bays; ++i) {
+        const int count = i == door ? (transom ? 1 : 0) : rows;
+        for (int r = 0; r < count; ++r, ++index)
+          if (i == bay)
+            out.push_back(index);
+      }
+      return out;
+    }
+  };
+  static GlazingBays glazingBays(const std::string &line) {
+    auto f = NativeDocument::fields(line);
+    GlazingBays g;
+    float x1 = number(f.size() > 2 ? f[2] : "", 0), y1 = number(f.size() > 3 ? f[3] : "", 0), x2 = number(f.size() > 4 ? f[4] : "", 1),
+          y2 = number(f.size() > 5 ? f[5] : "", 1);
+    float spacing = 1.2f, head = 2.6f, doorHead = 2.1f;
+    int cols = 0;
+    for (auto &[k, v] : NativeDocument::named(line)) {
+      if (k == "cols") cols = int(number(v, 0));
+      else if (k == "spacing") spacing = number(v, 1.2f);
+      else if (k == "rows") g.rows = std::max(1, int(number(v, 1)));
+      else if (k == "door") g.door = int(number(v, -1));
+      else if (k == "head") head = number(v, 2.6f);
+      else if (k == "door_head") doorHead = number(v, 2.1f);
+      else if (k == "pane" && !v.empty()) g.pane = v[0];
+      else if (k == "panes") g.panes = v;
+    }
+    g.alongX = x2 - x1 >= y2 - y1;
+    g.a0 = g.alongX ? x1 : y1, g.length = std::max(.01f, g.alongX ? x2 - x1 : y2 - y1);
+    g.bays = cols > 0 ? cols : std::max(1, int(std::lround(g.length / std::max(.3f, spacing))));
+    if (g.door >= g.bays)
+      g.door = -1;
+    g.transom = g.door >= 0 && head - doorHead > .3f;
+    return g;
+  }
+  // A click on a storefront with the Window wall tool: the bay under it takes the pane kind picked in
+  // Panes (every pane in it, or with Shift only the bottom one), written into its panes= letters. One undo.
+  bool paintGlazingBay(float x, float y, bool bottomOnly) {
+    for (auto i : doc.records("GLAZING", map)) {
+      auto f = NativeDocument::fields(doc.lines[i]);
+      if (f.size() < 8)
+        continue;
+      float x1 = number(f[2], 0), y1 = number(f[3], 0), x2 = number(f[4], 0), y2 = number(f[5], 0);
+      if (x < x1 - .3f || x > x2 + .3f || y < y1 - .3f || y > y2 + .3f)
+        continue;
+      auto g = glazingBays(doc.lines[i]);
+      const float along = g.alongX ? x : y;
+      const int bay = std::clamp(int(std::floor((along - g.a0) / g.length * float(g.bays))), 0, g.bays - 1);
+      auto targets = g.panesIn(bay);
+      if (targets.empty()) {
+        message(L"That bay is an open doorway: it has no pane.");
+        return true;
+      }
+      if (bottomOnly)
+        targets.resize(1);
+      const int pick = std::clamp(listIndex(glazingPaneList), 0, 8);
+      const char letter = pick == 8 ? "cdmx"[size_t(bay) % 4] : glazingPaneLetters[pick];
+      std::string panes = g.panes;
+      const int needed = targets.back() + 1;
+      while (int(panes.size()) < needed)
+        panes += g.pane;
+      for (int t : targets)
+        panes[size_t(t)] = letter;
+      auto named = NativeDocument::named(doc.lines[i]);
+      bool had = false;
+      for (auto &[k, v] : named)
+        if (k == "panes")
+          v = panes, had = true;
+      if (!had)
+        named.push_back({"panes", panes});
+      remember();
+      doc.ensureFormat2();
+      // ensureFormat2 may have put FORMAT|2 in above the record: find it again.
+      size_t at = i;
+      if (NativeDocument::fields(doc.lines[at]) != f)
+        for (auto j : doc.records("GLAZING", map))
+          if (NativeDocument::fields(doc.lines[j]) == f)
+            at = j;
+      record = int(doc.replaceNamed(at, f, named));
+      publish();
+      selectRecord(record);
+      static const wchar_t *kinds[] = {L"clear", L"dirty", L"tinted", L"frosted", L"wired", L"chain-link mesh", L"pre-cracked", L"empty"};
+      const wchar_t *kind = kinds[std::string_view(glazingPaneLetters).find(letter)];
+      message(std::wstring(L"Bay ") + std::to_wstring(bay + 1) + (targets.size() == 1 ? L": its pane is " : L": its panes are ") + kind + L" now.");
+      return true;
+    }
+    return false;
+  }

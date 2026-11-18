@@ -116,6 +116,37 @@
     SendMessageW(window, WM_COMMAND, Undo, 0);
     require(doc.records("GLAZING", map).size() == 1, "undo did not bring the deleted storefront back");
     report << "PASS: deleting a storefront leaves the wall exactly as it was; undo brings it back\n" << std::flush;
+    // ---- One bay at a time: a click on bay 0 makes its panes mesh; the bottom pane of bay 1 alone frosted ----
+    {
+      pick(GlazingTool);
+      box(glazingPaneList, GlazingPaneList, 5); // chain-link mesh
+      const auto panesBefore = named(doc.records("GLAZING", map)[0], "panes");
+      const size_t u = history.size();
+      mouse(WM_LBUTTONDOWN, 3.5f, 12.5f);
+      mouse(WM_LBUTTONUP, 3.5f, 12.5f);
+      auto gl = doc.records("GLAZING", map);
+      require(gl.size() == 1, "a click on a storefront's bay made another storefront");
+      const auto bays = glazingBays(doc.lines[gl[0]]);
+      const auto in0 = bays.panesIn(0), in1 = bays.panesIn(1);
+      const auto after = named(gl[0], "panes");
+      require(!in0.empty() && !in1.empty() && int(after.size()) > in1.back(), "bays 0 and 1 have no panes to paint: " + doc.lines[gl[0]]);
+      for (int i = 0; i < int(after.size()); ++i) {
+        const bool painted = std::find(in0.begin(), in0.end(), i) != in0.end();
+        require(painted ? after[size_t(i)] == 'm' : i >= int(panesBefore.size()) || after[size_t(i)] == panesBefore[size_t(i)],
+                "a click on bay 0 did not make just its panes mesh: " + panesBefore + " -> " + after);
+      }
+      require(history.size() == u + 1 && rowsBefore() == tiles && validateDocument(), "painting a bay was not one Undo, touched the wall, or the engine refused it");
+      box(glazingPaneList, GlazingPaneList, 3); // frosted
+      require(paintGlazingBay(6.5f, 12.5f, true), "Shift+click on bay 1 found no storefront");
+      const auto after2 = named(doc.records("GLAZING", map)[0], "panes");
+      require(after2[size_t(in1[0])] == 'f' && (in1.size() < 2 || after2[size_t(in1[1])] == after[size_t(in1[1])]), "Shift+click did not frost only bay 1's bottom pane: " + after2);
+      SendMessageW(window, WM_COMMAND, Undo, 0);
+      SendMessageW(window, WM_COMMAND, Undo, 0);
+      require(named(doc.records("GLAZING", map)[0], "panes") == panesBefore, "undo did not take the bays' pane kinds back");
+      report << "PASS: a click on a bay gives all its panes the kind picked (" << after << "), Shift+click its bottom pane only (" << after2
+             << "); one Undo each; the wall untouched; the engine reads it\n" << std::flush;
+      box(glazingPaneList, GlazingPaneList, 8);
+    }
     // ---- The Glass tool: a window in the wall, a thin pane in the gap ----
     pick(GlassTool);
     drag(19.2f, 12.4f, 21.8f, 12.4f);

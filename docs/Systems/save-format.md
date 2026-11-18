@@ -95,6 +95,9 @@ g.setMapVariable(-1, "alarm_count", std::int64_t(3));  g.mapVariable(5, "lights"
 - **Order.** The stores are ordered maps, so their bytes are deterministic.
 - **Who applies them.** The store only keeps the values. The system that spawns an entity reads its overrides when it does.
 
+### Window walls and breaches
+A `GLAZING` record's glass panes are breakables after the map's own `BREAKABLE`s, numbered in record order and bay by bay, so the `world` section's broken breakables, pane damage and glass hits address them like any other pane. A save stays exact while the map's `GLAZING` records stay as they were. A `BREACH` keeps nothing at run time: the hole is the map's, not the save's. Hanging creepers keep no state either; their swing is the renderer's.
+
 ### The physics section
 `PropBody` holds a prop's orientation quaternion (x, y, z, w; unit), its angular velocity (rad/s, world axes) and its sleep island (-1 for none). The solver sets `physicsSaveHooks()`:
 - `capture(const Clutter&, PropBody&)` returns true for a prop that has solver state;

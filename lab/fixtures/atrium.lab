@@ -1,0 +1,9 @@
+# The Starter Map's atrium (Showcase Atrium, south of Predator) as shipped. Pictures from the balcony,
+# the hall and the storefront, the creepers over the breach against the light court, a walk through the
+# breach, a volley into one clear pane and the shattered pane. Tubes: atrium.
+world custom "custom maps/Starter Map.rmc"
+map 44
+camera 15.6 4.0 -999 90 0
+scenery-only
+size 1600 900
+frames 270

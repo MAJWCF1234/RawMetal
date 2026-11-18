@@ -15,16 +15,17 @@ float hashUnit(unsigned v){v^=v>>16;v*=0x7feb352du;v^=v>>15;v*=0x846ca68bu;v^=v>
 }
 bool PlantBones::enabled(){static const bool on=[]{const char* v=std::getenv("RM_PLANTS");return !v||v[0]!='0';}();return on;}
 void PlantBones::clear(){const bool held=still;*this=PlantBones{};still=held;}
-int PlantBones::add(int level,int fixture,Point3 root,float height,float radius){
- if(auto it=m_slots.find(key(level,fixture));it!=m_slots.end()){auto&i=m_info[size_t(it->second)];i.root=root;i.height=std::max(.05f,height);i.radius=radius;return it->second;}
+int PlantBones::add(int level,int fixture,Point3 root,float height,float radius,bool hanging){
+ if(auto it=m_slots.find(key(level,fixture));it!=m_slots.end()){auto&i=m_info[size_t(it->second)];i.root=root;i.height=std::max(.05f,height);i.radius=radius;i.hanging=hanging;
+  float* g=m_gpu.data()+8+size_t(it->second)*8;g[4]=root.z;g[5]=i.height;g[7]=hanging?1.f:0.f;return it->second;}
  if(int(m_info.size())>=MaxPlants)return -1;
- const int slot=int(m_info.size());Info i;i.level=level;i.root=root;i.height=std::max(.05f,height);i.radius=std::max(.1f,radius);
+ const int slot=int(m_info.size());Info i;i.level=level;i.root=root;i.height=std::max(.05f,height);i.radius=std::max(.1f,radius);i.hanging=hanging;
  // Grass gives most and swings fastest; a bush less; a tree hardly, and slowly.
  i.flex=i.height<1.3f?1.f:i.height<3.f?.6f:.2f;i.omega=6.2831853f*std::clamp(1.6f/std::sqrt(i.height),.35f,2.8f);
  m_info.push_back(i);m_state.emplace_back();m_slots[key(level,fixture)]=slot;
  // A tall canopy spreads over the cells round its root.
  const int r=int(std::ceil(i.radius/Cell));for(int dy=-r;dy<=r;++dy)for(int dx=-r;dx<=r;++dx)m_grid[cellKey(level,cellOf(root.x)+dx,cellOf(root.y)+dy)].push_back(slot);
- m_gpu.resize(8+size_t(m_info.size())*8,0.f);float* g=m_gpu.data()+8+size_t(slot)*8;g[4]=root.z;g[5]=i.height;g[6]=i.flex;g[7]=0;
+ m_gpu.resize(8+size_t(m_info.size())*8,0.f);float* g=m_gpu.data()+8+size_t(slot)*8;g[4]=root.z;g[5]=i.height;g[6]=i.flex;g[7]=hanging?1.f:0.f;
  return slot;}
 template<class F> void PlantBones::around(int level,float x,float y,float reach,F&& f)const{
  // A canopy is listed in every cell it spreads over: each plant is visited once a look.
@@ -47,7 +48,9 @@ void PlantBones::update(const Game& game,const std::vector<Pusher>& extra,float 
   const float gust=.5f+.5f*std::sin(now*.37f)*std::sin(now*.11f+1.f);
   const float speed=open?tune("plants.wind",1.f)*(1.f+.35f*std::sin(now*.21f)+.25f*std::sin(now*.57f+1.3f))*(1.f+2.5f*storm):0.f;
   const float a=.7f+.35f*std::sin(now*.031f);
-  m_gpu[0]=std::cos(a)*speed*.05f;m_gpu[1]=std::sin(a)*speed*.05f;m_gpu[2]=std::fmod(now,3600.f);m_gpu[3]=open?gust*(1.f+storm):0.f;}
+  m_gpu[0]=std::cos(a)*speed*.05f;m_gpu[1]=std::sin(a)*speed*.05f;m_gpu[2]=std::fmod(now,3600.f);m_gpu[3]=open?gust*(1.f+storm):0.f;
+  // [1].x: the draft a hanging creeper drifts in (0 while held still).
+  m_gpu[4]=1.f;}
  const Vec2 active=game.chunkOffset(game.level());
  const Point3 eye{game.player().pos.x,game.player().pos.y,game.player().z};
  // Who pushes through plants this frame, each in its own level's frame.
@@ -64,7 +67,7 @@ void PlantBones::update(const Game& game,const std::vector<Pusher>& extra,float 
   around(p.level,p.feet.x,p.feet.y,p.radius+1.2f,[&](int slot,const Info&i){
    ++m_stats.looked;if(i.height>2.6f)return;
    const float reach=p.radius+i.radius*.75f;const float dx=i.root.x-p.feet.x,dy=i.root.y-p.feet.y,d=std::hypot(dx,dy);
-   if(d>=reach||p.feet.z>i.root.z+i.height||p.feet.z+p.height<i.root.z-.05f)return;
+   if(d>=reach||p.feet.z>i.high()||p.feet.z+p.height<i.low()-.05f)return;
    if(!lookable(i))return;
    // Bent away from the middle of what pushes through, the more the deeper it is in; trodden flat underfoot.
    float ux=dx,uy=dy;if(d<.02f){const float a=hashUnit(unsigned(slot)*2654435761u)*6.2831853f;ux=std::cos(a);uy=std::sin(a);}else{ux/=d;uy/=d;}
@@ -77,13 +80,13 @@ void PlantBones::update(const Game& game,const std::vector<Pusher>& extra,float 
    std::vector<int> hit;const float range=std::min(ray.range,LookReach);
    for(float t=0;t<=range+1.f;t+=.2f){const Point3 at=ray.origin+ray.direction*t;
     around(ray.level,at.x,at.y,1.f,[&](int slot,const Info&i){if(std::find(hit.begin(),hit.end(),slot)!=hit.end())return;
-     if(std::hypot(at.x-i.root.x,at.y-i.root.y)>std::max(.3f,i.radius*.8f)||at.z<i.root.z-.1f||at.z>i.root.z+i.height+.1f)return;hit.push_back(slot);
+     if(std::hypot(at.x-i.root.x,at.y-i.root.y)>std::max(.3f,i.radius*.8f)||at.z<i.low()-.1f||at.z>i.high()+.1f)return;hit.push_back(slot);
      // Across the round's way, to the side of the stem it passed.
      float sx=-ray.direction.y,sy=ray.direction.x;if((i.root.x-at.x)*sx+(i.root.y-at.y)*sy>0){sx=-sx;sy=-sy;}const float l=std::max(.001f,std::hypot(sx,sy));
      strike(slot,i,(sx/l)*.5f+ray.direction.x,(sy/l)*.5f+ray.direction.y,1.f);});}}
   m_rays=newest;}
  {float newest=m_impacts;for(const auto&b:game.bulletImpacts()){if(b.time<=m_impacts)continue;newest=std::max(newest,b.time);
-   around(b.level,b.pos.x,b.pos.y,1.f,[&](int slot,const Info&i){const float dx=i.root.x-b.pos.x,dy=i.root.y-b.pos.y,d=std::hypot(dx,dy);if(d>i.radius+.5f||b.z>i.root.z+i.height+.3f)return;
+   around(b.level,b.pos.x,b.pos.y,1.f,[&](int slot,const Info&i){const float dx=i.root.x-b.pos.x,dy=i.root.y-b.pos.y,d=std::hypot(dx,dy);if(d>i.radius+.5f||b.z>i.high()+.3f||b.z<i.low()-.3f)return;
     strike(slot,i,d>.01f?dx/d:0.f,d>.01f?dy/d:0.f,.6f);});}
   m_impacts=newest;}
  {float newest=m_splashes;for(const auto&w:game.waterSplashes()){if(w.time<=m_splashes)continue;newest=std::max(newest,w.time);

@@ -69,8 +69,9 @@ vec3 stableUnit(vec3 v){
 // stem keeps its length.
 vec3 bendPlant(vec3 p,int slot,float fixedWeight){
  vec4 wind=lampGrid.plants[0];vec4 bone=lampGrid.plants[2+2*slot];vec4 info=lampGrid.plants[3+2*slot];
- float h=max(info.y,0.05);
- float w=fixedWeight>=0.0?fixedWeight:clamp((p.z-info.x)/h,0.0,1.0);float w2=w*w;
+ float h=max(info.y,0.05);bool hanging=info.w>0.5;
+ // A hanging plant is rooted at its top: the weight grows down it.
+ float w=fixedWeight>=0.0?fixedWeight:clamp((hanging?info.x-p.z:p.z-info.x)/h,0.0,1.0);float w2=w*w;
  float t=wind.z,ph=float(slot)*2.39996;
  float f=clamp(1.6/sqrt(h),0.35,2.8)*6.2831853;
  float strength=length(wind.xy);vec2 along=strength>1.0e-6?wind.xy/strength:vec2(1.0,0.0);
@@ -80,7 +81,10 @@ vec3 bendPlant(vec3 p,int slot,float fixedWeight){
  vec2 sway=wind.xy*(info.z*h)*swing;
  float flutter=sin(t*11.0+dot(p,vec3(7.1,5.3,3.7)))*0.24*strength*info.z*w;
  vec2 d=(sway+bone.xy)*w2+bone.zw*w2*w2+vec2(flutter,flutter*0.7);
- p.xy+=d;p.z-=0.5*dot(d,d)/max(h*w,0.05);
+ // Indoors there is no wind, but a creeper still drifts in the draft: a slow swing, a few centimetres at its tip.
+ if(hanging)d+=vec2(sin(t*0.83+ph),sin(t*0.61+ph*1.7))*(0.025*h*w2*lampGrid.plants[1].x);
+ // Bent out, a standing stem drops and a hanging one lifts, so each keeps its length.
+ p.xy+=d;p.z+=(hanging?0.5:-0.5)*dot(d,d)/max(h*w,0.05);
  return p;
 }
 

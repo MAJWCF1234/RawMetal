@@ -9,6 +9,7 @@
 #include "lab/LabFixture.h"
 #include "game/EngineRegressionScene.h"
 #include "game/ai/Navigation.h"
+#include "game/ai/Nodes.h"
 #include "world/CampaignKit.h"
 #include <cmath>
 #include <cstdio>
@@ -42,6 +43,24 @@ const bool tube=add({
   const bool aiArch=aiWalkSegment(w,{4,6},0,{4,2.5f},1.7f),aiSquare=aiWalkSegment(w,{16,6},0,{16,2.5f},1.7f);
   r.check("the creatures' walk test goes through the ragged breach, the arch and the square hole, and not through the wall",aiThrough&&!aiWall&&aiArch&&aiSquare,
    std::string("ragged ")+(aiThrough?"yes":"no")+", wall "+(aiWall?"yes":"no")+", arch "+(aiArch?"yes":"no")+", square "+(aiSquare?"yes":"no"));
+  // The creatures' node graph routes round the wall through the breach: from in front of the solid wall to
+  // behind it, each waypoint a walk the creatures can make, and the way passes through the hole.
+  {const auto walk=[&w](Vec2 a,float feet,Vec2 b,float h,float* end){return aiWalkSegment(w,a,feet,b,h,end);};
+   const ai::NodeGraph graph=ai::buildNodeGraph(w,1.7f,walk);Vec2 at{5,13};const Vec2 goal{5,7.5f};bool viaHole=false,walkable=true;int hops=0;
+   for(;hops<40&&std::hypot(at.x-goal.x,at.y-goal.y)>.3f;++hops){const Vec2 next=ai::graphWaypoint(graph,at,0,goal,0,1.7f,walk);
+    if(std::hypot(next.x-at.x,next.y-at.y)<.01f)break;walkable&=aiWalkSegment(w,at,0,next,1.7f);
+    if((at.y-10.5f)*(next.y-10.5f)<=0){const float t=(10.5f-at.y)/(next.y-at.y);const float x=at.x+(next.x-at.x)*t;viaHole|=x>8&&x<11;}at=next;}
+   const bool arrived=std::hypot(at.x-goal.x,at.y-goal.y)<=.3f;
+   r.metric("route_hops",hops);
+   r.check("the creatures' route from one side of the wall to the other goes through the breach, every leg walkable",arrived&&viaHole&&walkable,
+    std::string(arrived?"arrived":"did not arrive")+" in "+std::to_string(hops)+" legs, "+(viaHole?"through the hole":"not through the hole"));}
+  // Light: the lamp behind the breach sees the floor in front of it through the hole (the probes' and
+  // shadows' occlusion ray); the floor in front of the solid wall is in its shadow.
+  {Point3 n;const Point3 lamp{9.5f,7.2f,2.8f};const float lit=w.lightRayHit(lamp,{9.5f,13.f,.05f},n),dark=w.lightRayHit(lamp,{4.f,13.f,.05f},n);
+   r.check("the lamp's light reaches the floor through the breach, and the wall beside it shades the floor",lit>=.999f&&dark<.999f,"through "+fixed(lit,3)+", beside "+fixed(dark,3));
+   // Sight (the creatures' and the guards' eye ray): through the hole at head height, not through the wall.
+   const bool see=w.rayClear({9.5f,13},1.5f,{9.5f,7},1.5f,true,true,false,true),seeWall=w.rayClear({5,13},1.5f,{5,7},1.5f,true,true,false,true);
+   r.check("eyes see through the breach and not through the wall beside it",see&&!seeWall);}
   const auto hole=LabAccess::trace(g,{9.5f,14,1.3f},{0,-1,0},8),solid=LabAccess::trace(g,{5,14,1.3f},{0,-1,0},8);
   const auto lamp=LabAccess::trace(g,{9.5f,7,2.4f},Point3{0,.9439f,-.3304f},6);
   r.check("rounds and light go through the breach (the lamp behind it reaches the floor in front); the wall stops them",hole.kind!=ShotKind::Solid&&solid.kind==ShotKind::Solid&&lamp.kind!=ShotKind::Solid,

@@ -285,6 +285,7 @@ private:
     // near the eye are stepped each GPU frame and handed to scene.vert with the wind.
     PlantBones m_plants;std::unordered_map<int,bool> m_plantModels;
     bool plantModel(int model);
+    static bool hangingPlant(int model);
     void updatePlants(const Game& game);
     // A man's body model cut into the parts he bends at (Humanoid.h), once per model; civilians by their arm joints.
     static const humanoid::Labels& humanParts(const Mesh& mesh,int civilianBody);
@@ -448,7 +449,8 @@ private:
         Mesh{2414},Mesh{2418},Mesh{2422},Mesh{2426},
         Mesh{2429},Mesh{2431},Mesh{2433},
         Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853},
-        Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862}};
+        Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862},
+        Mesh{2865}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

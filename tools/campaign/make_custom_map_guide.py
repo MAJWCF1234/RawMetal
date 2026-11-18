@@ -428,10 +428,20 @@ RECORDS = [
          '<code>door=</code> a bay (from 0) left open to the floor as a doorway, with a transom pane over <code>door_head=</code> 2.1, <code>pane=</code> the kind of every pane and <code>panes=</code> one letter a pane, '
          'bay by bay along the wall and bottom to top in each: c clear, d dirty, t tinted, f frosted, w wired (holds), m chain-link mesh (stops a body, never breaks; light and rounds go through), e empty, x pre-cracked. '
          '<code>infill=0</code> leaves the cut tiles open above and below, <code>cut=0</code> stands it in an opening without cutting, <code>wall=</code> the STRUCT material of the infill (3, the wall finish), <code>health=</code> each pane\'s health. '
-         'The Campaign Builder\'s Window wall tool writes it: drag along a wall or into an opening.')]),
+         'The Campaign Builder\'s Window wall tool writes it: drag along a wall or into an opening; click a bay of one to give its panes the kind picked (Shift: the bottom pane only).'),
+        ('BREACH|map|x1|y1|x2|y2|bottom|top', 'A hole broken through a wall: the box of wall it goes through (along its longer side; across, the wall\'s thickness), from the floor at bottom; top is how high the wall it builds back goes. '
+         'It cuts the wall there (# tiles and wall STRUCT boxes) to the hole\'s outline and builds the rest of the cut tiles back round it, chips the broken edge proud of the hole on either face, hangs rebar from the lip and stands bars out of the jambs, and drops rubble on the floor either side. '
+         'You walk, see and shoot through it, light comes through it, and the creatures\' walk and their paths go through it. Delete the record and the wall is whole again. '
+         'With FORMAT|2 its named fields set it up (all optional): <code>shape=</code> ragged (knocked through: tall in the middle, falling away to the sides), arch or rect, <code>edge=</code> concrete (with rebar), brick or clean, '
+         '<code>sill=</code> 0 and <code>head=</code> 2.3 above bottom (the hole\'s foot and top), <code>rebar=0</code> leaves the bars out, <code>rubble=</code> 0-60 pieces (10), <code>seed=</code> another ragged outline and rubble, '
+         '<code>toward=-1</code> throws most of the rubble to the other side, <code>infill=0</code> leaves the cut tiles open round the hole, <code>wall=</code> the STRUCT material of what is built back (3). '
+         'The Campaign Builder\'s Breach tool writes it: drag along a wall.')]),
     ('Things in the map', [
         ('FIXTURE|map|model|x|y|base|width|depth|height|yaw|solid[|core|visible|anchored|slopeX|slopeY]', 'A model from the model list, centred at x,y, its base this high, stretched to width x depth x height (use the listed size to keep it in proportion). solid 1 blocks you. A chair (office, wooden or boardroom) standing on the floor is loose in play: it slides and goes over when something heavy hits it. anchored 1 keeps it fixed where it was put (give core and visible too, 1 and 1 as usual). '
-         'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game.'),
+         'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game. '
+         'Growth (the Campaign Builder\'s Growth brush) is FIXTUREs too, solid 0: ivy (ivy_wall_a, ivy_wall_b, growth_vine_sheet) and moss (growth_moss_wall) stand flat on a wall\'s face, a centimetre off it, turned out from it (yaw 0 faces south); '
+         'creepers (growth_ivy_creeper, growth_hanging_vine, ivy_strand) hang from a ceiling or a ledge, their base their length below it; grass tufts and growth_moss_floor lie on a floor or a ledge\'s top. '
+         'Creepers, grass, ferns, bushes and trees are plants: they bend in the wind outdoors, a creeper drifts indoors, and each parts round whoever walks through it and flinches when shot.'),
         ('CLUTTER|map|kind|x|y|z|yaw', 'A loose object that can be knocked about: kinds 0-6. z -999 drops it to the floor.'),
         ('CLUTTER|map|7|x|y|z|yaw|model|width|depth|height|pitch|roll|breakState', 'A loose model you can pick up and throw (see the Props room). breakState may be empty.'),
         ('PICKUP|map|kind|x|y', 'Health (0), shotgun ammo (1) or handgun ammo (2).'),
@@ -525,8 +535,8 @@ NAMED_FIELDS = [
     ('cols', 'Bays', '0 to 48 (0: by spacing)', 'GLAZING', 'How many bays the window wall is split into.'),
     ('spacing', 'Mullion spacing (m)', '0.3 to 8', 'GLAZING', 'Metres between mullions when cols is 0.'),
     ('rows', 'Rows', '1 to 8', 'GLAZING', 'Rows of panes from sill to head, with a transom between them.'),
-    ('sill', 'Sill height (m)', '0 up to the head', 'GLAZING', 'Where the glass starts, above the floor.'),
-    ('head', 'Head height (m)', 'up to top - bottom', 'GLAZING', 'Where the glass stops, above the floor.'),
+    ('sill', 'Sill height (m)', '0 up to the head', 'GLAZING, BREACH', 'Where the glass (or the hole) starts, above the floor.'),
+    ('head', 'Head height (m)', 'up to top - bottom', 'GLAZING, BREACH', 'Where the glass (or the hole) stops, above the floor.'),
     ('frame', 'Frame width (m)', '0.02 to 0.3', 'GLAZING', 'The face of every mullion, transom, sill and head.'),
     ('depth', 'Frame depth (m)', '0.02 to 1', 'GLAZING', 'How deep the frame stands in the wall.'),
     ('look', 'Frame look', 'aluminium metal steel dark-steel wood, or a material', 'GLAZING', 'What the frame is made of.'),
@@ -534,9 +544,15 @@ NAMED_FIELDS = [
     ('door_head', 'Doorway height (m)', '1.5 up to the head', 'GLAZING', 'The top of the doorway.'),
     ('pane', 'Pane kind', 'c d t f w m e x', 'GLAZING', 'Every pane\'s kind: clear, dirty, tinted, frosted, wired, mesh, empty, pre-cracked.'),
     ('panes', 'Pane kinds', 'a letter a pane', 'GLAZING', 'Each pane\'s own kind, bay by bay along the wall and bottom to top; panes past the end take pane.'),
-    ('infill', 'Fill the wall back', '1 or 0', 'GLAZING', 'Builds the cut wall tiles back below the sill and above the head.'),
+    ('infill', 'Fill the wall back', '1 or 0', 'GLAZING, BREACH', 'Builds the cut wall tiles back below the sill and above the head (round the hole).'),
     ('cut', 'Cut the wall', '1 or 0', 'GLAZING', '0 stands it in an opening without cutting anything.'),
-    ('wall', 'Infill material', 'a STRUCT material', 'GLAZING', 'What the wall built back below the sill and above the head is made of (3, the wall finish).'),
+    ('wall', 'Infill material', 'a STRUCT material', 'GLAZING, BREACH', 'What the wall built back below the sill and above the head (or round the hole) is made of (3, the wall finish).'),
+    ('shape', 'Hole shape', 'ragged arch rect', 'BREACH', 'Ragged is knocked through: tall in the middle, falling away to the sides, with notches and teeth.'),
+    ('edge', 'Broken edge', 'concrete brick clean', 'BREACH', 'What shows in the broken edge: a concrete core with rebar, brick, or a clean cut.'),
+    ('rebar', 'Rebar', '1 or 0', 'BREACH', 'Bars hanging from the lip and standing out of the jambs (concrete only).'),
+    ('rubble', 'Rubble pieces', '0 to 60', 'BREACH', 'Pieces of wall on the floor either side.'),
+    ('seed', 'Seed', 'a whole number', 'BREACH', 'Another seed gives another ragged outline, chips and rubble.'),
+    ('toward', 'Rubble side', '1 or -1', 'BREACH', 'Which side of the wall most of the rubble falls: -1 throws it to the other side.'),
 ]
 
 

@@ -1393,3 +1393,6 @@
 2862 RCDATA "assets/library/growth_hanging_vine.obj"
 2863 RCDATA "assets/library/growth_hanging_vine_stem.png"
 2864 RCDATA "assets/library/growth_hanging_vine_tip.png"
+2865 RCDATA "assets/library/growth_ivy_creeper.obj"
+2866 RCDATA "assets/library/growth_ivy_creeper_ivy.png"
+2867 RCDATA "assets/library/growth_ivy_creeper_ivy_x.png"

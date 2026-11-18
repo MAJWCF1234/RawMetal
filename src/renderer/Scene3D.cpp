@@ -1606,12 +1606,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // carries its real mesh and a shared multi-view impostor in the static
   // cache; the shaders hand one to the other with distance. Ground plants
   // fold into the painted ground beyond a few crossfades.
-  const Impostor* impostor=m_gpuFrame&&s_impostors&&w.zoneSky()?impostorFor(fixture.model):nullptr;
+  // (Not for a hanging creeper: its impostor would bend from the wrong end.)
+  const Impostor* impostor=m_gpuFrame&&s_impostors&&w.zoneSky()&&!hangingPlant(fixture.model)?impostorFor(fixture.model):nullptr;
   GpuRenderer::LodTag tag;
   if(impostor){const auto&mesh=m_facilityMeshes[size_t(fixture.model)];float scale=fixture.height/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
    tag.half=impostor->radius*scale;tag.lod=std::clamp(8.f+7.f*tag.half,12.f,60.f);m_gpu->setLodTag(&tag);}
   // A plant gets its physbones slot: its mesh and its impostor bend in scene.vert.
-  if(m_gpuFrame&&m_gpu&&plantModel(fixture.model))m_gpu->setPlantTag(m_plants.add(w.level(),int(&fixture-w.fixtures().data()),{fixture.position.x,fixture.position.y,base},fixture.height,std::max(fixture.width,fixture.depth)*.5f));
+  // A hanging one is rooted at its top.
+  if(m_gpuFrame&&m_gpu&&plantModel(fixture.model)){const bool hangs=hangingPlant(fixture.model);
+   m_gpu->setPlantTag(m_plants.add(w.level(),int(&fixture-w.fixtures().data()),{fixture.position.x,fixture.position.y,hangs?base+fixture.height:base},fixture.height,std::max(fixture.width,fixture.depth)*.5f,hangs));}
   facilityLook=fixture.traits.get();facility(fixture.model,fixture.position.x,fixture.position.y,base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);facilityLook=nullptr;
   if(impostor){
    tag.impostor=true;tag.z=base+fixture.height*.5f;tag.yaw=fixture.yaw;

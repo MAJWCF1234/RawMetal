@@ -79,7 +79,30 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - each pane breaking alone;
   - the mesh;
   - the doorway;
-  - a save and load.
+  - a save and load;
+  - walls never hurt (every pane down, every other box and tile as it was);
+  - the frame looks, a grid-wide `pane=` and an empty pane.
+- The Builder's Window wall tool writes the record from the tool's boxes. A click on a bay of a storefront gives every pane in it the kind picked in Panes (Shift: the bottom pane only) by rewriting its `panes=` letters, one Undo. The document's tiles never change: the cut, and putting the wall back when the record goes, are the engine's.
+
+## Openings: breaches
+`BREACH|map|x1|y1|x2|y2|bottom|top` is a hole broken through a wall, its options as named fields (`shape edge sill head rebar rubble seed toward infill wall`).
+- `AuthoredMapData::breaches` keeps the record; the exporter writes it back the same way.
+- `applyOpenings` cuts it after the glazings, with the same cut (`cutWall`): the hole's outline as boxes (one for `rect`, slices of a half circle for `arch`, ragged strips for `ragged`), the wall's tiles and wall boxes cut to it, the rest of the cut tiles built back round it.
+- The broken edge is non-solid `STRUCT` chips (concrete 15 or brick 31), rebar (material 8), and rubble `FIXTURE`s, all from `seed`, so a map plays the same every time.
+- The hole is a real gap: the player, the creatures' walk test (`aiWalkSegment`) and their node graph, rounds and the light-occlusion ray (`World::lightRayHit`, which the probes and shadows use) all go through it.
+- The lab tube `breach` (src/lab/tubes/Breach.cpp) checks the cut, the edge, a walk through, the creatures' walk and route, rounds and the lamp's light through it, and a save.
+- The Builder's Breach tool writes it from a drag along a wall (# tiles or a wall `STRUCT`) and refuses one on open floor.
+
+## Growth
+The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothing in the format is new:
+- ivy (`ivy_wall_a`, `ivy_wall_b`, `growth_vine_sheet`) and wall moss (`growth_moss_wall`) flat on a wall's face, a centimetre off it, `yaw` turning their face out;
+- creepers (`growth_ivy_creeper`, `growth_hanging_vine`, `ivy_strand`) hanging from a ceiling or over a ledge's lip, their base their length below it;
+- grass (the Nature brush's tufts) and `growth_moss_floor` on a floor or a ledge's top.
+- Creepers are hanging plants (`SoftwareRenderer::hangingPlant`, `PlantBones::add(..., hanging)`): rooted at their top, they drift in an indoor draft and part round whoever walks through them. The lab tube `growth` (src/lab/tubes/Growth.cpp) checks it.
+- The brush's density, size and seed are its own settings, not map data; a typed seed repeats a stroke exactly.
+
+## The Starter Map atrium
+`Showcase Atrium` (map 44, south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
@@ -92,3 +115,4 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - a save and load.
 - The lab tube `map-format` (src/lab/tubes/MapFormat.cpp, fixtures `lab/fixtures/map-format*.lab` and `.rmc`) draws the room. The tinted crate must read red, the frozen box must hang, and the script must free it.
 - The Builder's `--editing-test` runs `verifyFormatTwo` (tools/Level Editor/editor/NativeFormatRegression.inc) and writes `native-editor-format-test.txt`.
+- It runs the Window wall, Breach and Growth tools' regressions too; `--glazing-test`, `--breach-test` and `--growth-test` run each alone (place, edit, Undo/Redo, delete, save and reopen, the engine reading every step).

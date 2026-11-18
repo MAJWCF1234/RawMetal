@@ -10,7 +10,10 @@
 //  - mesh: rounds at the mesh pass through it and it stands; it stops a body;
 //  - the doorway: the player walks through the door bay; the glass bays stop him;
 //  - saves: a save of the broken pane and a holed one loads back exactly;
-//  - the pre-cracked pane starts with its cracks.
+//  - the pre-cracked pane starts with its cracks;
+//  - walls are never hurt: with every glass pane brought down, every other box and every tile is as it was,
+//    and a map without the record is the plain wall;
+//  - the frame looks (aluminium, painted metal, wood), a grid-wide pane kind and an empty pane.
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
@@ -84,6 +87,23 @@ const bool tube=add({
    bool same=loaded&&back.world().breakables().size()==g.world().breakables().size();
    for(int i=0;same&&i<int(g.world().breakables().size());++i){same&=back.world().breakableIntact(i)==g.world().breakableIntact(i);const auto* a=g.world().paneGlass(i);const auto* b=back.world().paneGlass(i);same&=(!a)==(!b)&&(!a||a->gone==b->gone);}
    r.check("a save keeps the broken pane, the holed one and the pre-cracked one exactly",same&&!back.world().breakableIntact(1)&&back.world().paneGlass(4)&&LabAccess::encodeSave(back)==bytes);}
+  // ---- walls are never hurt ----
+  {Game g(room());auto walls=[](const World& w){std::string out;for(int y=0;y<24;++y)for(int x=0;x<24;++x)out+=w.tile(x,y);
+    for(int i=0;i<int(w.structures().size());++i){if(w.isBreakableStructure(i))continue;const auto& s=w.structures()[size_t(i)];char b[96];
+     std::snprintf(b,sizeof b,"|%.3f %.3f %.3f %.3f %.3f %.3f %d %d",s.x1,s.y1,s.x2,s.y2,s.bottom,s.top,s.material,int(s.solid));out+=b;}
+    return out;};
+   const auto before=walls(g.world());int down=0;for(int i=0;i<int(g.world().breakables().size());++i)if(i!=3)down+=bring(g,i)>0;
+   for(int k=0;k<20;++k){InputState in;g.update(in,1.f/60);}
+   r.check("with every glass pane brought down, every wall box and tile is as it was",down==5&&walls(g.world())==before,std::to_string(down)+" panes down");
+   auto plain=regression::room();plain->layers[0].rows[10]=std::string(24,'#');Game bare(regression::campaign(plain));bool whole=true;for(int x=0;x<24;++x)whole&=bare.world().tile(x,10)=='#';
+   r.check("without the GLAZING record the wall is whole (the record is the only change)",whole&&bare.world().breakables().empty());}
+  // ---- frame looks, a grid-wide kind and an empty pane ----
+  for(auto [look,material]:{std::pair{"aluminium",20},std::pair{"metal",12},std::pair{"wood",51}}){auto m=regression::room();m->layers[0].rows[10]=std::string(24,'#');
+   Glazing gl=storefront();gl.look=material;gl.panes.clear();gl.pane='t';gl.door=-1;gl.columns=3;gl.rows=1;m->glazings.push_back(gl);Game g(regression::campaign(m));int frame=0,tinted=0;
+   for(const auto& s:g.world().structures())frame+=s.material==material&&s.solid;for(const auto& b:g.world().breakables())tinted+=b.glaze==Glaze::Tinted;
+   r.check(std::string("a ")+look+" frame: its members are solid "+look+", every pane takes pane=t",frame>=4&&tinted==3,std::to_string(frame)+" members, "+std::to_string(tinted)+" tinted");}
+  {auto m=regression::room();m->layers[0].rows[10]=std::string(24,'#');Glazing gl=storefront();gl.panes="cecececec";gl.door=-1;m->glazings.push_back(gl);Game g(regression::campaign(m));
+   r.check("an empty pane (e) leaves its gap open: only the clear panes are glass",int(g.world().breakables().size())==4,std::to_string(g.world().breakables().size())+" panes");}
  },
  .reporter=[](Scene& s,Overlay& o){const World& w=s.g().world();for(int i=0;i<int(w.breakables().size());++i){const auto& b=w.breakables()[size_t(i)];
   o.box({b.x1,b.y1,b.bottom},{b.x2,b.y2,b.top},w.breakableIntact(i)?0x40c0ff:0xff4040);o.label({(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f,b.top+.05f},std::to_string(i)+" "+glazeWord(b.glaze));}
