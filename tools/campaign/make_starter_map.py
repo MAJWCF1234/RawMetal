@@ -1389,13 +1389,13 @@ def joints_corner(s, m, slot, body):
     i = m['index']
     s.format2 = True                                                  # JOINT takes named fields
 
-    def prop(name, x, y, z, dims=None, yaw=0.0, mass=None, k=1.0, pitch=0.0):
+    def prop(name, x, y, z, dims=None, yaw=0.0, mass=None, k=1.0, pitch=0.0, extra=()):
         n = sum(1 for r in m['records'] if r.startswith('CLUTTER|'))
         if dims is None:
             h = body(name, x, y, z, yaw, k, pitch)
         else:
             s.rec(m, 'CLUTTER', i, 7, round(x, 3), round(y, 3), round(z, 3), round(yaw, 3), slot[name],
-                  dims[0], dims[1], dims[2], round(pitch, 3), 0, '', *(['mass=%g' % mass] if mass else []))
+                  dims[0], dims[1], dims[2], round(pitch, 3), 0, '', *(['mass=%g' % mass] if mass else []), *extra)
             h = dims[2]
         return n, h
 
@@ -1423,7 +1423,8 @@ def joints_corner(s, m, slot, body):
     # A gate on a sprung hinge: walk through it and it swings shut behind you.
     gate, h = prop('packing_crate', 13.6, 13.6, .04, (1.1, .05, 1.0), 0, 8)
     joint('hinge', gate, -1, (13.03, 13.6, .54), axis='z', min=-100, max=100, stiffness=.8, damping=.35)
-    # A rope bridge: seven planks hinged end to end between two plinths, sagging by its slack.
+    # A rope bridge: seven wooden planks hinged end to end between two plinths, sagging by its slack, a rope
+    # along each side from plank to plank and up to a post at each corner of the plinths.
     s.struct(m, 5.2, 11.9, 6.2, 13.3, 0, .6, 40)
     s.struct(m, 9.8, 11.9, 10.8, 13.3, 0, .6, 40)
     s.rec(m, 'PRIM', i, 'stairs', 4.64, 12.6, 0, 1.0, 0, .6, 1, 40)
@@ -1432,7 +1433,7 @@ def joints_corner(s, m, slot, body):
     half, run = (x1 - x0) / 2, .52 * n / 2
     depth = (run * run - half * half) ** .5
     ends = [(x0 + (x1 - x0) * t, z0 - depth * (1 - abs(2 * t - 1))) for t in (k / n for k in range(n + 1))]
-    planks = []
+    planks, mids = [], []
     for k in range(n):
         (ax, az), (bx, bz) = ends[k], ends[k + 1]
         import math
@@ -1441,13 +1442,25 @@ def joints_corner(s, m, slot, body):
         mx, mz = (ax + bx) / 2, (az + bz) / 2
         # Its top through the two pins; a prop's z is the bottom of its turned box.
         ext = l / 2 * abs(math.sin(tilt)) + .025 * math.cos(tilt)
-        p, _ = prop('packing_crate', mx, 12.6, mz - .025 - ext, (round(l, 3), .7, .05), 0, 9, pitch=tilt)   # 8 kg and up bear the player
+        p, _ = prop('scrap_bridge_plank', mx, 12.6, mz - .025 - ext, (round(l, 3), .8, .05), 0, 9, pitch=tilt, extra=('material=wood', 'tint=0.62,0.43,0.26'))   # 8 kg and up bear the player; weathered wood
         planks.append(p)
+        mids.append((mx, mz))
     for k in range(n + 1):
         ex, ez = ends[k]
         a = planks[k] if k < n else planks[n - 1]
         b = -1 if k in (0, n) else planks[k - 1]
         joint('hinge', a, b, (ex, 12.6, ez), axis='y')
+    for side in (-.36, .36):
+        y = 12.6 + side
+        for x in (6.14, 9.86):
+            s.struct(m, x - .04, y - .04 + side * .15, x + .04, y + .04 + side * .15, .6, 1.35, 12)   # a post
+        for k in range(n - 1):
+            (ax, az), (bx, bz) = mids[k], mids[k + 1]
+            joint('rope', planks[k + 1], planks[k], (bx, y, bz + .03), (ax, y, az + .03), radius=.013)
+        for k, x in ((0, 6.14), (n - 1, 9.86)):
+            mx, mz = mids[k]
+            reach = math.hypot(mx - x, mz + .03 - 1.33)
+            joint('rope', planks[k], -1, (mx, y, mz + .03), (x, y + side * .15, 1.33), radius=.013, length=round(reach + .12, 3))
     # The lift: a platform on a rail (a slider) hung over a pulley against a 60 kg counterweight. Empty, it rests
     # at the landing's edge; your weight, or a load, takes it down, and it comes back up empty. The slider's
     # motor holds no speed with 200 N: a brake.

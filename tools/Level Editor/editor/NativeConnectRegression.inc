@@ -248,7 +248,7 @@
     remember();
     authorKind("JOINT", 1.4f, 13.8f, 3.4f, 11.f);
     require(!doc.records("JOINT", map).empty() && doc.text() != keep, "the drag from the crate made no joint");
-    const auto ppm = engine(L"connect-chain-3d", 6.6f, 16.4f, 1.7f, -135.f, 6.f);
+    const auto ppm = engine(L"connect-chain-3d", 9.0f, 16.0f, 1.6f, -151.f, 9.f);
     SendMessageW(window, WM_COMMAND, Undo, 0);
     require(doc.text() == keep, "undo did not take the picture's chain back");
     mouse(WM_LBUTTONDOWN, 1.4f, 13.8f);
