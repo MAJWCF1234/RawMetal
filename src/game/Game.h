@@ -1334,10 +1334,13 @@ private:
     // Vectra's step for a list's model props (RigidClutter.cpp; the old one: vectra::legacyProps()).
     void simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held);
     // A list's rigid-body state between frames: the fixed step's leftover time and the contacts' warm start.
-    struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;};
+    struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;
+     // A region of the world found to be one flat floor with every column round it open (RigidClutter.cpp),
+     // kept per prop: asked again only when the prop leaves it or a door moves.
+     struct Flat {const void* world=nullptr;float x0=0,y0=0,x1=0,y1=0,lo=0,hi=0,floor=0,doors=0;bool flat=false,valid=false;};std::vector<Flat> flat;};
     std::map<int,RigidPropState> m_rigidProps;
     // What the last rigid step did (the lab's perf and debug views).
-    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
+    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);
     // The player on a soft prop (a floor mattress, a bedroll): its pressed top under p, or `height`.
     float softGround(Vec2 p,float feet,float height,float radius)const;

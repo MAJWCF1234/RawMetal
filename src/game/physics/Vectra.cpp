@@ -208,6 +208,10 @@ void surfaceSamples(const Body& b,int part,float spacing,std::vector<V3>& out){
   put({0,0,-h});put({0,0,h});if(r>spacing)for(int i=0;i<6;++i){const float a=kPi/3*float(i);put({std::cos(a)*r*.5f,std::sin(a)*r*.5f,-h});put({std::cos(a)*r*.5f,std::sin(a)*r*.5f,h});}
   return;}
  const float r=p.half.x;for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k)if(i||j||k)put(norm(V3{float(i),float(j),float(k)})*r);}
+namespace {
+// Two polyhedral parts whose hulls the caller already has (collide builds each part's once a step).
+int collideBuilt(const Body& A,int pa,const Hull& ha,const Body& B,int pb,const Hull& hb,float margin,Manifold& m){m.count=0;m.a=-1;m.b=-1;m.partA=pa;m.partB=pb;return hullHull(A,B,ha,hb,margin,m);}
+}
 int collideParts(const Body& A,int pa,const Body& B,int pb,float margin,Manifold& m){
  m.count=0;m.a=-1;m.b=-1;m.partA=pa;m.partB=pb;
  const auto&a=A.shape->parts[size_t(pa)];const auto&b=B.shape->parts[size_t(pb)];
@@ -255,11 +259,17 @@ void Space::collide(float dt){
    if(a.boundsLo.y>b.boundsHi.y+r||b.boundsLo.y>a.boundsHi.y+r||a.boundsLo.z>b.boundsHi.z+r||b.boundsLo.z>a.boundsHi.z+r)continue;
    if(filter&&!filter(*this,i,j))continue;pairs.push_back({std::min(i,j),std::max(i,j)});}}
  std::sort(pairs.begin(),pairs.end());
+ // Each polyhedral part's hull, built once a step when a pair first needs it (a crate in a heap meets six).
+ std::vector<int> first(size_t(n)+1,0);for(int i=0;i<n;++i)first[size_t(i)+1]=first[size_t(i)]+bodies[size_t(i)].shape->count;
+ std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
+ auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
  for(auto [i,j]:pairs){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
   for(int pa=0;pa<a.shape->count;++pa)for(int pb=0;pb<b.shape->count;++pb){
    if(a.shape->count>1||b.shape->count>1){V3 l1,h1,l2,h2;partBounds(a,pa,l1,h1);partBounds(b,pb,l2,h2);
     if(l1.x>h2.x+margin||l2.x>h1.x+margin||l1.y>h2.y+margin||l2.y>h1.y+margin||l1.z>h2.z+margin||l2.z>h1.z+margin)continue;}
-   ++pairsTested;Manifold m;if(!collideParts(a,pa,b,pb,margin,m))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
+   ++pairsTested;Manifold m;
+   const bool polyhedra=a.shape->parts[size_t(pa)].kind!=PartKind::Sphere&&b.shape->parts[size_t(pb)].kind!=PartKind::Sphere;
+   if(!(polyhedra?collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m):collideParts(a,pa,b,pb,margin,m)))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
    {const float sa=a.softHertz,sb=b.softHertz;m.surface.hertz=sa>0&&sb>0?std::min(sa,sb):std::max(sa,sb);}
    manifolds.push_back(m);
    // A moving body touching a sleeping one wakes it (and the sleeper's island follows next step).
@@ -279,17 +289,22 @@ void Space::prepare(float h){
   const Body& A=bodies[size_t(m.a)];const Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;
   const float mA=A.movable()?A.invMass:0,mB=B&&B->movable()?B->invMass:0;const M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B&&B->movable()?B->invInertia:M3::zero();
   basis(m.normal,m.t1,m.t2);
-  const auto key=m.key();auto it=std::lower_bound(cache.begin(),cache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
-  const Cached* old=it!=cache.end()&&it->first==key?&it->second:nullptr;
+  const auto key=keyOf(m);auto it=std::lower_bound(cache.begin(),cache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
+  const Cached* old=it!=cache.end()&&it->first==key?&it->second:nullptr;m.cold=old==nullptr;
   if(old)for(int r=0;r<3;++r)m.rollingImpulse[r]=old->rolling[r];
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
    c.rA=c.p-A.x;c.rB=B?c.p-B->x:c.p;
-   const V3 cnA=cross(c.rA,m.normal),cnB=cross(c.rB,m.normal);
-   const float kn=mA+mB+dot(cnA,iA*cnA)+(B?dot(cnB,iB*cnB):0.f);c.normalMass=kn>0?1/kn:0;
-   for(int t=0;t<2;++t){const V3 tan=t?m.t2:m.t1;const V3 ta=cross(c.rA,tan),tb=cross(c.rB,tan);const float kt=mA+mB+dot(ta,iA*ta)+(B?dot(tb,iB*tb):0.f);c.tangentMass[t]=kt>0?1/kt:0;}
+   const V3 cnA=cross(c.rA,m.normal),cnB=cross(c.rB,m.normal);c.wnA=iA*cnA;c.wnB=B?iB*cnB:V3{};
+   const float kn=mA+mB+dot(cnA,c.wnA)+(B?dot(cnB,c.wnB):0.f);c.normalMass=kn>0?1/kn:0;
+   for(int t=0;t<2;++t){const V3 tan=t?m.t2:m.t1;const V3 ta=cross(c.rA,tan),tb=cross(c.rB,tan);c.wtA[t]=iA*ta;c.wtB[t]=B?iB*tb:V3{};const float kt=mA+mB+dot(ta,c.wtA[t])+(B?dot(tb,c.wtB[t]):0.f);c.tangentMass[t]=kt>0?1/kt:0;}
    const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));c.relativeVelocity=dot(dv,m.normal);
-   if(old){float best=.02f*.02f;for(int j=0;j<old->count;++j){const auto&o=old->points[size_t(j)];const float d=lenSq(o.localA-c.localA);if(d<best){best=d;c.normalImpulse=o.normalImpulse;c.tangentImpulse[0]=o.tangentImpulse[0];c.tangentImpulse[1]=o.tangentImpulse[1];}}}
+   if(old){float best=.02f*.02f;for(int j=0;j<old->count;++j){const auto&o=old->points[size_t(j)];const float d=lenSq(o.localA-c.localA);if(d<best){best=d;c.normalImpulse=o.normal;c.tangentImpulse[0]=o.tangent[0];c.tangentImpulse[1]=o.tangent[1];}}}
   }
+  // The middle of the points (solve's impact), and the rolling and twisting axes.
+  if(m.count>1){V3 mid{};for(int k=0;k<m.count;++k)mid=mid+m.points[size_t(k)].p;mid=mid*(1.f/float(m.count));
+   m.midA=mid-A.x;m.midB=B?mid-B->x:mid;const V3 cA=cross(m.midA,m.normal),cB=cross(m.midB,m.normal);m.midWA=iA*cA;m.midWB=B?iB*cB:V3{};
+   const float k=mA+dot(cA,m.midWA)+mB+(B?dot(cB,m.midWB):0.f);m.midMass=k>0?1/k:0;}
+  for(int r=0;r<3;++r){const V3 axis=r==0?m.t1:r==1?m.t2:m.normal;m.rollWA[r]=iA*axis;m.rollWB[r]=B?iB*axis:V3{};const float k=dot(axis,m.rollWA[r])+dot(axis,m.rollWB[r]);m.rollMass[r]=k>0?1/k:0;}
   // Static or dynamic friction by how fast the surfaces slide when the step begins.
   float slide=0;for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));slide=std::max(slide,len(dv-m.normal*dot(dv,m.normal)));}
   m.material.dynamicFriction=slide<.08f?m.material.staticFriction:m.material.dynamicFriction;
@@ -298,29 +313,28 @@ void Space::prepare(float h){
 void Space::warmStart(){
  for(auto&m:manifolds){Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
   for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 P=m.normal*c.normalImpulse+m.t1*c.tangentImpulse[0]+m.t2*c.tangentImpulse[1];
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}
-  const V3 R=m.t1*m.rollingImpulse[0]+m.t2*m.rollingImpulse[1]+m.normal*m.rollingImpulse[2];   // stored along the contact's own axes
-  if(ma)A.w=A.w-A.invInertia*R;if(mb)B->w=B->w+B->invInertia*R;}
+   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-(c.wnA*c.normalImpulse+c.wtA[0]*c.tangentImpulse[0]+c.wtA[1]*c.tangentImpulse[1]);}
+   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+(c.wnB*c.normalImpulse+c.wtB[0]*c.tangentImpulse[0]+c.wtB[1]*c.tangentImpulse[1]);}}
+  // (Rolling impulses are stored along the contact's own axes.)
+  if(ma)A.w=A.w-(m.rollWA[0]*m.rollingImpulse[0]+m.rollWA[1]*m.rollingImpulse[1]+m.rollWA[2]*m.rollingImpulse[2]);
+  if(mb)B->w=B->w+(m.rollWB[0]*m.rollingImpulse[0]+m.rollWB[1]*m.rollingImpulse[1]+m.rollWB[2]*m.rollingImpulse[2]);}
  for(auto*c:constraints)c->warmStart(*this);
 }
-void Space::solve(float h,bool useBias){
- for(auto*c:constraints)c->solve(*this,h,useBias);
+void Space::solve(float h,bool useBias,bool coldOnly){
+ if(!coldOnly)for(auto*c:constraints)c->solve(*this,h,useBias);
  const float inv=1/h;
  const Soft soft=makeSoft(std::min(settings.contactHertz,.25f*inv),settings.contactDampingRatio,h),hard=makeSoft(std::min(2*settings.contactHertz,.25f*inv),settings.contactDampingRatio,h);
- for(auto&m:manifolds){Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
+ for(auto&m:manifolds){if(coldOnly&&!m.cold)continue;Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
   const Soft s=m.surface.hertz>0?makeSoft(std::min(m.surface.hertz,.25f*inv),1.f,h):B&&B->movable()?soft:hard;
   const V3 dpA=A.dp,dpB=B?B->dp:V3{};const Quat dqA=A.dq,dqB=B?B->dq:Quat{};
   float total=0;
   // A face meeting a face (two to four points): first the approach at the manifold's middle, shared evenly by
   // its points. Point by point alone, the first corner solved takes the whole blow and tips the body under the
   // rest: a basket landing flat on four corners came up spinning at 7 rad/s.
-  if(m.count>1){V3 mid{};for(int k=0;k<m.count;++k)mid=mid+m.points[size_t(k)].p;mid=mid*(1.f/float(m.count));
-   const V3 rA=mid-A.x,rB=B?mid-B->x:mid;const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
-   const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);
-   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
-   if(k>0&&vn<-settings.restitutionThreshold){const float lambda=-vn/k;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
-    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(rA,P);}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(rB,P);}
+  if(m.count>1&&m.midMass>0){
+   const V3 dv=velocityOf(B,m.midB,m.surface.velocity)-(A.v+cross(A.w,m.midA));const float vn=dot(dv,m.normal);
+   if(vn<-settings.middleThreshold){const float lambda=-vn*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
+    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+m.midWB*lambda;}
     for(int j=0;j<m.count;++j){auto&c=m.points[size_t(j)];c.normalImpulse+=lambda/float(m.count);c.maxNormalImpulse=std::max(c.maxNormalImpulse,lambda/float(m.count));}}}
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
    // The gap now, from how far each body has moved and turned since the step began.
@@ -334,24 +348,23 @@ void Space::solve(float h,bool useBias){
    float impulse=-c.normalMass*massScale*(vn+bias)-impulseScale*c.normalImpulse;
    const float next=std::max(c.normalImpulse+impulse,0.f);impulse=next-c.normalImpulse;c.normalImpulse=next;c.maxNormalImpulse=std::max(c.maxNormalImpulse,impulse);total+=next;
    const V3 P=m.normal*impulse;
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}
+   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-c.wnA*impulse;}
+   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+c.wnB*impulse;}}
   // Friction: a cone on each point's two tangent impulses, by this step's normal impulse.
   const float mu=m.material.dynamicFriction;
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));
    const float o1=c.tangentImpulse[0],o2=c.tangentImpulse[1];float n1=o1-c.tangentMass[0]*dot(dv,m.t1),n2=o2-c.tangentMass[1]*dot(dv,m.t2);
    const float limit=mu*c.normalImpulse,mag=std::sqrt(n1*n1+n2*n2);if(mag>limit&&mag>0){n1*=limit/mag;n2*=limit/mag;}
-   c.tangentImpulse[0]=n1;c.tangentImpulse[1]=n2;const V3 P=m.t1*(n1-o1)+m.t2*(n2-o2);
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(c.rA,P);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(c.rB,P);}}
+   c.tangentImpulse[0]=n1;c.tangentImpulse[1]=n2;const float d1=n1-o1,d2=n2-o2;const V3 P=m.t1*d1+m.t2*d2;
+   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-(c.wtA[0]*d1+c.wtA[1]*d2);}
+   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+(c.wtB[0]*d1+c.wtB[1]*d2);}}
   // Rolling and twisting resistance: an angular friction on the relative spin, held to rolling * load.
   // (Run with no load too: a warm-started impulse is then taken back out, not left to spin a body in the air.)
   if(m.material.rolling>0||m.rollingImpulse[0]!=0||m.rollingImpulse[1]!=0||m.rollingImpulse[2]!=0){
    const float limit=m.material.rolling*total;   // the resisting torque: the load times the rolling resistance's length
-   const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B->invInertia:M3::zero();
-   for(int r=0;r<3;++r){const V3 axis=r==0?m.t1:r==1?m.t2:m.normal;const float k=dot(axis,iA*axis)+dot(axis,iB*axis);if(k<=0)continue;
-    const V3 rel=(B?B->w:V3{})-A.w;const float old=m.rollingImpulse[r];float next=std::clamp(old-dot(rel,axis)/k,-limit,limit);m.rollingImpulse[r]=next;const V3 R=axis*(next-old);
-    if(ma)A.w=A.w-iA*R;if(mb)B->w=B->w+iB*R;}}
+   for(int r=0;r<3;++r){if(m.rollMass[r]<=0)continue;const V3 axis=r==0?m.t1:r==1?m.t2:m.normal;
+    const V3 rel=(B?B->w:V3{})-A.w;const float old=m.rollingImpulse[r];float next=std::clamp(old-dot(rel,axis)*m.rollMass[r],-limit,limit);m.rollingImpulse[r]=next;const float d=next-old;
+    if(ma)A.w=A.w-m.rollWA[r]*d;if(mb)B->w=B->w+m.rollWB[r]*d;}}
  }
 }
 void Space::restitution(){
@@ -370,8 +383,13 @@ void Space::restitution(){
   for(int k2=0;k2<m.count;++k2){auto&c=m.points[size_t(k2)];c.normalImpulse+=impulse*(c.maxNormalImpulse/weight);c.maxNormalImpulse=std::max(c.maxNormalImpulse,c.normalImpulse);}}
 }
 void Space::storeImpulses(){
- std::vector<std::pair<std::uint64_t,Cached>> next;next.reserve(manifolds.size());
- for(const auto&m:manifolds){Cached c;c.count=m.count;for(int k=0;k<m.count;++k)c.points[size_t(k)]=m.points[size_t(k)];for(int r=0;r<3;++r)c.rolling[r]=m.rollingImpulse[r];next.push_back({m.key(),c});}
+ std::vector<std::pair<std::uint64_t,Cached>> next;next.reserve(manifolds.size()+cache.size());
+ for(const auto&m:manifolds){Cached c;c.count=m.count;for(int k=0;k<m.count;++k){const auto&p=m.points[size_t(k)];c.points[size_t(k)]={p.localA,p.normalImpulse,{p.tangentImpulse[0],p.tangentImpulse[1]}};}for(int r=0;r<3;++r)c.rolling[r]=m.rollingImpulse[r];next.push_back({keyOf(m),c});}
+ // What a sleeping body held (its contacts are not built while it sleeps) is kept for when it wakes: a stack
+ // woken by a shot then starts from the impulses it slept on, not from nothing.
+ {std::vector<int> awake;for(int i=0;i<int(bodies.size());++i)if(!bodies[size_t(i)].sleeping)awake.push_back(idOf(i));std::sort(awake.begin(),awake.end());
+  auto up=[&](int id){return id>=0&&std::binary_search(awake.begin(),awake.end(),id);};
+  for(const auto&e:cache){const int idA=int(e.first>>40),idB=int((e.first>>20)&0xfffff)-1;if(!up(idA)&&!up(idB))next.push_back(e);}}
  std::stable_sort(next.begin(),next.end(),[](const auto& a,const auto& b){return a.first<b.first;});
  // Two manifolds with one key (two world clusters a body could not tell apart): keep the first.
  next.erase(std::unique(next.begin(),next.end(),[](const auto& a,const auto& b){return a.first==b.first;}),next.end());
@@ -439,7 +457,9 @@ void Space::step(float dt){
  std::vector<V3> start;start.reserve(bodies.size());for(const auto&b:bodies)start.push_back(b.x);
  std::vector<float> total(manifolds.size()*4,0.f);
  for(int s=0;s<sub;++s){
-  integrateVelocities(h);warmStart();solve(h,true);integratePositions(h);
+  integrateVelocities(h);warmStart();solve(h,true);
+  if(s==0&&settings.coldIterations>0&&std::any_of(manifolds.begin(),manifolds.end(),[](const Manifold& m){return m.cold;}))for(int k=0;k<settings.coldIterations;++k)solve(h,true,true);
+  integratePositions(h);
   for(int r=0;r<settings.relaxIterations;++r)solve(h,false);
   for(size_t m=0;m<manifolds.size();++m)for(int k=0;k<manifolds[m].count;++k)total[m*4+size_t(k)]+=manifolds[m].points[size_t(k)].normalImpulse;}
  restitution();storeImpulses();solveMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-s0).count();

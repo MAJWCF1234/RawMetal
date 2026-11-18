@@ -26,6 +26,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 namespace retro::lab {
@@ -131,38 +132,43 @@ CoreRun core(vectra::PartKind kind,vectra::Material mat,float slope,vectra::V3 v
   if(!landed&&!space.manifolds.empty()&&space.events.size())landed=true;else if(landed)peak=std::max(peak,height-reach*0);}
  const auto& body=space.bodies[0];r.speed=len(body.v);r.spin=len(body.w);r.bounce=peak;const V3 d=body.x-start;r.slide=len(d-n*dot(d,n));const Quat dq=body.q*q0.conj();r.rolled=2*std::acos(std::clamp(std::fabs(dq.w),0.f,1.f));(void)reach;return r;}
 // ---- Perf ----
-struct Cost {double meanMs=0,peakMs=0,stepMs=0,worldMs=0,pairMs=0,solveMs=0;int bodies=0,awake=0;};
+struct Cost {double meanMs=0,peakMs=0,stepMs=0,worldMs=0,pairMs=0,solveMs=0,rigidMs=0,buildMs=0,preMs=0,postMs=0;int bodies=0,awake=0;double manifolds=0,pairs=0;std::string timeline;};
 Cost cost(int awake,int asleep,bool legacy){
  vectra::forceLegacyProps(legacy?1:0);auto m=regression::room();m->definition.playerStart={3,3};Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};auto& list=LabAccess::clutter(g);
  for(int i=0;i<asleep;++i){Clutter c;c.kind=7;c.model=model::packing_crate;c.dims=Game::propTraits(c.model).size;for(auto& d:c.dims)d*=.4f;c.pos={1.6f+float(i%25)*.82f,13+float(i/25)*.52f};c.z=0;c.sleeping=true;list.push_back(c);}
  for(int i=0;i<awake;++i){Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims=Game::propTraits(c.model).size;for(auto& d:c.dims)d*=.5f;c.pos={5+float(i%10)*.36f,4+float((i/10)%5)*.36f};c.z=.3f+float(i/50)*.4f;c.yaw=.3f*float(i%7);c.sleeping=false;list.push_back(c);}
  Cost out;double total=0,step=0;int steps=0,frames=0;
  for(int i=0;i<90;++i){const auto t0=std::chrono::steady_clock::now();LabAccess::stepProps(g,1.f/60);const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
-  if(i>=10){total+=ms;out.peakMs=std::max(out.peakMs,ms);++frames;const auto& st=LabAccess::rigidStats(g);if(!legacy&&st.steps){step+=st.ms/st.steps;++steps;out.worldMs+=st.worldMs;out.pairMs+=st.pairMs;out.solveMs+=st.solveMs;out.awake=std::max(out.awake,st.awake);out.bodies=st.bodies;}}}
- out.meanMs=total/std::max(1,frames);out.stepMs=steps?step/steps:out.meanMs;if(frames){out.worldMs/=frames;out.pairMs/=frames;out.solveMs/=frames;}vectra::forceLegacyProps(-1);return out;}
+  if(i%10==9){int up=0;for(const auto& c:list)up+=c.model>=0&&!c.sleeping;out.timeline+=std::to_string(up)+" ";}
+  if(i>=10){total+=ms;out.peakMs=std::max(out.peakMs,ms);++frames;const auto& st=LabAccess::rigidStats(g);if(!legacy&&st.steps){step+=st.ms/st.steps;++steps;out.worldMs+=st.worldMs;out.pairMs+=st.pairMs;out.solveMs+=st.solveMs;out.awake=std::max(out.awake,st.awake);out.bodies=st.bodies;out.rigidMs+=st.ms;out.manifolds+=st.manifolds;out.pairs+=st.worldManifolds;out.buildMs+=st.buildMs;out.preMs+=st.preMs;out.postMs+=st.postMs;}}}
+ out.meanMs=total/std::max(1,frames);out.stepMs=steps?step/steps:out.meanMs;if(frames){for(double* v:{&out.manifolds,&out.pairs,&out.worldMs,&out.pairMs,&out.solveMs,&out.rigidMs,&out.buildMs,&out.preMs,&out.postMs})*v/=frames;}vectra::forceLegacyProps(-1);return out;}
+// The cost of a scene as the least of `runs` runs (the machine's noise is all upward).
+Cost leastCost(int awake,int asleep,bool legacy,int runs=5){Cost best;best.meanMs=1e9;double peak=0;for(int i=0;i<runs;++i){const Cost c=cost(awake,asleep,legacy);peak=std::max(peak,c.peakMs);if(c.meanMs<best.meanMs)best=c;}best.peakMs=std::min(best.peakMs,peak);return best;}
+std::string breakdown(const Cost& c){return "rigid "+fixed(c.rigidMs,3)+" (bodies "+fixed(c.buildMs,3)+", water/panes "+fixed(c.preMs,3)+", world "+fixed(c.worldMs,3)+", pairs "+fixed(c.pairMs,3)+", solve "+fixed(c.solveMs,3)+", after "+fixed(c.postMs,3)+"), outside "+fixed(c.meanMs-c.rigidMs,3)+"; manifolds "+fixed(c.manifolds,1)+" ("+fixed(c.pairs,1)+" with the world)";}
 
 const bool ab=add({
  .name="rigid-ab",.summary="Vectra against the legacy prop physics: stacks, materials, a barrel on a ramp and stairs, chairs, a doorway, tunnelling, cost",
  .standalone=[]{
   std::ofstream r("rigid-ab.txt");bool ok=true;auto check=[&](bool pass,const std::string& what){r<<(pass?"PASS ":"FAIL ")<<what<<'\n';ok&=pass;r.flush();};
+  const char* only=std::getenv("RM_RIGID_ONLY");auto want=[&](const char* k){return !only||std::strstr(only,k)!=nullptr;};
   auto both=[&](const std::string& scene,float seconds){return std::pair<Sim,Sim>{simulate(scene,seconds,true),simulate(scene,seconds,false)};};
   r<<"Legacy (RM_PROPS=legacy) against Vectra, each scene fresh, Game::update at 60 Hz.\n\n";
   auto floorCheck=[&](const char* scene,const Sim& o,const Sim& n){r<<"  under the floor at the end: legacy "<<fixed(o.below*1000,1)<<" mm"<<(o.belowWhat.empty()?"":" ("+o.belowWhat+")")<<", Vectra "<<fixed(n.below*1000,1)<<" mm"<<(n.belowWhat.empty()?"":" ("+n.belowWhat+")")<<"\n";
    check(n.below<.005f,std::string("Vectra: in the ")+scene+" scene nothing ends under the floor it rests on (its own lowest point within 5 mm)");};
   // Stacking.
-  {auto [o,n]=both("stack",30);r<<"STACKS (woken, 30 s): tower of 10 crates (0.24 m), pyramid 4-3-2-1, mixed stack\n";
+  if(want("stack")){auto [o,n]=both("stack",30);r<<"STACKS (woken, 30 s): tower of 10 crates (0.24 m), pyramid 4-3-2-1, mixed stack\n";
    auto report=[&](const char* name,const Sim& s){int fell=0;float drift=0,topDrift=0;for(size_t k=0;k<s.end.size()&&k<s.start.size();++k){const auto& a=s.start[k];const auto& b=s.end[k];if(a.model<0)continue;
      if(tilt(b)>.3f||b.z<a.z-.1f)++fell;drift=std::max(drift,length(b.pos-a.pos));if(k==9)topDrift=length(b.pos-a.pos);}
     r<<"  "<<name<<": fell "<<fell<<", largest drift "<<fixed(drift*1000,1)<<" mm, tower top drift "<<fixed(topDrift*1000,1)<<" mm, all asleep at "<<(s.sleptAt<0?std::string("never"):fixed(s.sleptAt,2)+" s")<<", "<<fixed(s.meanMs,3)<<" ms a frame\n";return std::pair<int,float>{fell,drift};};
    report("legacy",o);auto [fell,drift]=report("Vectra",n);
    check(fell==0&&drift<.02f&&n.sleptAt>0&&n.sleptAt<5,"Vectra: every stack stands 30 s (nothing falls, drift under 2 cm) and sleeps within 5 s");floorCheck("stack",o,n);}
   // Materials: dropped from 1.5 m.
-  {auto [o,n]=both("drop",4);r<<"\nDROPPED FROM 1.5 m: the highest each comes back up after its first landing (m)\n";
+  if(want("drop")){auto [o,n]=both("drop",4);r<<"\nDROPPED FROM 1.5 m: the highest each comes back up after its first landing (m)\n";
    const char* names[]={"pumpkin (organic)","trash can (metal)","crate (wood)","bottle (glass)","cardboard box","office chair"};
    for(int pass=0;pass<2;++pass){const Sim& s=pass?n:o;r<<"  "<<(pass?"Vectra":"legacy")<<":";for(int i=0;i<6&&i<int(s.end.size());++i)r<<" "<<names[i]<<" ends "<<fixed(s.end[size_t(i)].z,3)<<(s.end[size_t(i)].broken?" (broke)":"")<<";";r<<'\n';}
    bool rest=true;for(int i=0;i<6;++i){const auto& c=n.end[size_t(i)];rest&=c.broken||(c.z>-.02f&&c.z<.6f);}check(rest,"Vectra: everything dropped lands on the floor and stays out of it");floorCheck("drop",o,n);}
   // The bare core: rubber ball, metal can, crate on a 30 degree plane.
-  {const auto ball=core(vectra::PartKind::Sphere,vectra::rubber(),0,{},1.5f,3);const auto can=core(vectra::PartKind::Cylinder,vectra::propMaterial(PropMaterial::Metal),0,{0,2,0},0,3);
+  if(want("core")){const auto ball=core(vectra::PartKind::Sphere,vectra::rubber(),0,{},1.5f,3);const auto can=core(vectra::PartKind::Cylinder,vectra::propMaterial(PropMaterial::Metal),0,{0,2,0},0,3);
    const auto steel=core(vectra::PartKind::Sphere,vectra::propMaterial(PropMaterial::Metal),0,{},1.5f,3);
    const auto hold=core(vectra::PartKind::Box,vectra::propMaterial(PropMaterial::Wood),20*kPi/180,{},.01f,3),slide=core(vectra::PartKind::Box,vectra::propMaterial(PropMaterial::Wood),35*kPi/180,{},.01f,3);
    r<<"\nBARE CORE (a plane): rubber ball dropped 1.5 m comes back to "<<fixed(ball.bounce,2)<<" m; a metal ball to "<<fixed(steel.bounce,2)<<" m; a metal can sent rolling at 2 m/s goes "<<fixed(can.slide,2)<<" m turning "<<fixed(can.rolled,2)
@@ -176,7 +182,7 @@ const bool ab=add({
     const auto bare=core(vectra::PartKind::Sphere,{.7f,.55f,.15f,0},0,{2,0,0},0,3),slick=core(vectra::PartKind::Sphere,{0,0,.15f,0},0,{2,0,0},0,3);
     r<<"  no rolling resistance: "<<fixed(bare.speed,3)<<" m/s spin "<<fixed(bare.spin,2)<<"; no friction: "<<fixed(slick.speed,3)<<" m/s spin "<<fixed(slick.spin,2)<<"\n";}}
   // Ramp, stairs and the crates on slopes.
-  {auto [o,n]=both("ramp",8);r<<"\nRAMP AND STAIRS (8 s)\n";
+  if(want("ramp")){auto [o,n]=both("ramp",8);r<<"\nRAMP AND STAIRS (8 s)\n";
    for(int pass=0;pass<2;++pass){const Sim& s=pass?n:o;r<<"  "<<(pass?"Vectra":"legacy")<<": ";for(size_t k=0;k<s.end.size()&&k<s.start.size();++k){const auto& a=s.start[k];const auto& b=s.end[k];
      r<<(a.model==model::ind_barrel?"barrel":"crate")<<" from "<<fixed(a.pos.x,1)<<","<<fixed(a.pos.y,1)<<","<<fixed(a.z,2)<<" to "<<fixed(b.pos.x,2)<<","<<fixed(b.pos.y,2)<<","<<fixed(b.z,2)<<" turned "<<fixed(turnBetween(a,b),1)<<" rad; ";}r<<'\n';}
    const auto& rampBarrel=n.end[0];const auto& stairBarrel=n.end[1];
@@ -185,7 +191,7 @@ const bool ab=add({
    if(n.end.size()>=4){const float held=length(n.end[2].pos-n.start[2].pos),slid=length(n.end[3].pos-n.start[3].pos);r<<"  new: crate on 20 degrees moved "<<fixed(held,3)<<" m, on 35 degrees "<<fixed(slid,3)<<" m\n";
     check(held<.05f&&slid>.3f,"Vectra: a crate holds on a 20 degree ramp and slides off a 35 degree one");}floorCheck("ramp",o,n);}
   // Chairs.
-  {auto [o,n]=both("chairs",5);r<<"\nCHAIRS AND A TABLE struck by a thrown 9 kg crate (5 s): tilt (rad) and resting\n";int over=0;
+  if(want("chairs")){auto [o,n]=both("chairs",5);r<<"\nCHAIRS AND A TABLE struck by a thrown 9 kg crate (5 s): tilt (rad) and resting\n";int over=0;
    for(int pass=0;pass<2;++pass){const Sim& s=pass?n:o;r<<"  "<<(pass?"Vectra":"legacy")<<":";for(size_t k=0;k<3&&k<s.end.size();++k){const auto& c=s.end[k];r<<" "<<(k==0?"office chair":k==1?"wooden chair":"table")<<" tilt "<<fixed(tilt(c),2)<<" moved "<<fixed(length(c.pos-s.start[k].pos),2)<<(c.sleeping?" asleep":" awake")<<";";if(pass&&tilt(c)>.9f)++over;}r<<'\n';}
    bool still=true;for(const auto& c:n.end)still&=c.sleeping||c.broken;(void)over;
    check(tilt(n.end[0])>.9f,"Vectra: the office chair struck by the crate goes over");
@@ -193,12 +199,12 @@ const bool ab=add({
    check(length(n.end[2].pos-n.start[2].pos)>.2f||tilt(n.end[2])>.9f,"Vectra: the table struck by the crate is knocked aside or over");
    check(still,"Vectra: everything struck comes to rest");floorCheck("chairs",o,n);}
   // The doorway and the thin wall.
-  {auto [o,n]=both("door",4);r<<"\nDOORWAY AND A 3 cm WALL (4 s)\n";
+  if(want("door")){auto [o,n]=both("door",4);r<<"\nDOORWAY AND A 3 cm WALL (4 s)\n";
    for(int pass=0;pass<2;++pass){const Sim& s=pass?n:o;r<<"  "<<(pass?"Vectra":"legacy")<<": crate thrown at the door ends at y "<<fixed(s.end[0].pos.y,2)<<"; mug at x "<<fixed(s.end[1].pos.x,2)<<(s.end[1].broken?" (broke)":"")<<", crate at x "<<fixed(s.end[2].pos.x,2)<<"\n";}
    check(n.end[0].pos.y>12.5f,"Vectra: a crate thrown through the doorway goes through");
    check(n.end[1].pos.x<15&&n.end[2].pos.x<15,"Vectra: nothing thrown at 25 m/s passes the 3 cm wall");floorCheck("door",o,n);}
   // Saves: the physics section's fields (PropBodies.h captureProp/restoreProp) and an old save's Euler angles.
-  {vectra::forceLegacyProps(0);Game g(campaign("drop"));LabAccess::player(g).pos={3,3};launch(g,"drop");for(int i=0;i<20;++i)g.update({},1.f/60);
+  if(want("saves")){vectra::forceLegacyProps(0);Game g(campaign("drop"));LabAccess::player(g).pos={3,3};launch(g,"drop");for(int i=0;i<20;++i)g.update({},1.f/60);
    struct Kept {std::array<float,4> q;std::array<float,3> w;std::int32_t island;bool has;};std::vector<Kept> kept;
    for(const auto& c:LabAccess::clutter(g)){Kept k{};k.has=vectra::captureProp(c,k.q,k.w,k.island);kept.push_back(k);}
    const auto data=LabAccess::encodeSave(g);Game loaded(campaign("drop"));const bool decoded=LabAccess::decodeSave(loaded,data);Game old(campaign("drop"));LabAccess::decodeSave(old,data);
@@ -211,8 +217,9 @@ const bool ab=add({
    r<<"\nSAVES: "<<n<<" props mid-fall; with the physics section the quaternion comes back within "<<exact<<", the spin within "<<spin<<"; from an old save's yaw/pitch/roll alone within "<<fixed(fromEuler*1000,3)<<" mrad\n";
    check(decoded&&n>0&&exact<1e-6f&&spin<1e-4f&&fromEuler<1e-3f,"saves: orientation and angular velocity come back through the physics section, and an old save's Euler angles give the same turn");}
   // Cost.
-  {const auto o100=cost(100,0,true),n100=cost(100,0,false),o500=cost(1,500,true),n500=cost(1,500,false);
+  if(want("cost")){const auto o100=leastCost(100,0,true),n100=leastCost(100,0,false),o500=leastCost(1,500,true),n500=leastCost(1,500,false);
    r<<"\nCOST (updateClutter a 60 Hz frame; new also per 120 Hz step)\n  100 awake: legacy "<<fixed(o100.meanMs,3)<<" ms (peak "<<fixed(o100.peakMs,2)<<"), Vectra "<<fixed(n100.meanMs,3)<<" ms (peak "<<fixed(n100.peakMs,2)<<"), "<<fixed(n100.stepMs,3)<<" ms a step, "<<n100.awake<<" awake bodies\n"
+    <<"  Vectra's frame: "<<breakdown(n100)<<"\n  awake each 10 frames: legacy "<<o100.timeline<<"; Vectra "<<n100.timeline<<"\n"
     <<"  500 asleep + 1 awake: legacy "<<fixed(o500.meanMs,3)<<" ms, Vectra "<<fixed(n500.meanMs,3)<<" ms, "<<fixed(n500.stepMs,3)<<" ms a step ("<<n500.bodies<<" bodies)\n";
    check(n100.stepMs<8&&n500.stepMs<1.5,"Vectra: 100 awake bodies under 8 ms a step, 500 asleep under 1.5 ms");}
   return ok;}});
@@ -236,7 +243,7 @@ const bool traced=add({.name="rigid-trace",.summary="a rigid scene traced frame 
   if(scene=="barrelpane"||(scene=="shovecrate"&&i<90)){in.forward=true;in.sprint=true;LabAccess::player(g).angle=scene=="barrelpane"?0.f:kPi*.5f;}g.update(in,1.f/60);
   if(scene=="barrelpane"||scene=="shovecrate")r<<"player "<<fixed(LabAccess::player(g).pos.x,3)<<","<<fixed(LabAccess::player(g).pos.y,3)<<" pane damage "<<fixed(g.world().breakables().empty()?0.f:g.world().breakableDamage(0),2)<<'\n';const auto& st=LabAccess::rigidStats(g);r<<"frame "<<i<<" steps "<<st.steps<<" bodies "<<st.bodies<<" awake "<<st.awake<<" manifolds "<<st.manifolds<<" world "<<st.worldManifolds<<" events "<<st.events.size()<<'\n';
   const auto& list=LabAccess::clutter(g);for(size_t k=0;k<list.size();++k){const auto& c=list[k];if(c.model<0)continue;
-   r<<"  #"<<k<<" m"<<c.model<<" pos "<<fixed(c.pos.x,3)<<","<<fixed(c.pos.y,3)<<","<<fixed(c.z,3)<<" v "<<fixed(c.velocity.x,2)<<","<<fixed(c.velocity.y,2)<<","<<fixed(c.vz,2)<<" ypr "<<fixed(c.yaw,2)<<","<<fixed(c.pitch,2)<<","<<fixed(c.roll,2)
+   r<<"  #"<<k<<" m"<<c.model<<" pos "<<fixed(c.pos.x,4)<<","<<fixed(c.pos.y,4)<<","<<fixed(c.z,4)<<" v "<<fixed(c.velocity.x,3)<<","<<fixed(c.velocity.y,3)<<","<<fixed(c.vz,3)<<" ypr "<<fixed(c.yaw,3)<<","<<fixed(c.pitch,3)<<","<<fixed(c.roll,3)<<" mrad "<<fixed(c.pitch*1000,2)<<","<<fixed(c.roll*1000,2)
     <<" w "<<fixed(c.rollSpeed,2)<<","<<fixed(c.pitchSpeed,2)<<","<<fixed(c.spin,2)<<(c.sleeping?" asleep":"")<<(c.riding?" riding":"")<<(c.broken?" broken":"")<<'\n';}
   for(const auto& m:st.manifoldsSeen){r<<"   M a"<<m.a<<" b"<<m.b<<" n "<<fixed(m.normal.x,2)<<","<<fixed(m.normal.y,2)<<","<<fixed(m.normal.z,2)<<" pts";for(int k=0;k<m.count;++k)r<<" ("<<fixed(m.points[size_t(k)].p.x,2)<<","<<fixed(m.points[size_t(k)].p.y,2)<<","<<fixed(m.points[size_t(k)].p.z,2)<<" s"<<fixed(m.points[size_t(k)].separation*1000,1)<<" j"<<fixed(m.points[size_t(k)].normalImpulse,3)<<")";r<<'\n';}}
  vectra::forceLegacyProps(-1);return true;}});

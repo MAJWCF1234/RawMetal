@@ -108,6 +108,7 @@ struct Body {
  V3 force{},torque{};    // accumulated this step (cleared by step)
  V3 gravity{0,0,-14.f};  // per body: water or a hand may change it
  int user=-1;            // the caller's index (a Clutter's index in its list)
+ int id=-1;              // the caller's lasting name for it (warm starting matches by it; -1: its index here)
  std::uint32_t group=0;  // bodies sharing a nonzero group do not collide (a container and what rides in it)
  // Derived per step.
  V3 dp{};Quat dq{};      // motion since the step began (TGS-soft: contact separation updates from it)
@@ -131,6 +132,9 @@ struct ContactPoint {
  float relativeVelocity=0;            // approach speed along the normal when the step began (for restitution and sounds)
  // Prepared each step.
  V3 rA{},rB{};float normalMass=0,tangentMass[2]{0,0},adjustedSeparation=0;
+ // The turn a unit impulse along the normal and each tangent gives each body (its world inverse inertia times
+ // r x axis): constant through the step, so each impulse is applied without a matrix product.
+ V3 wnA{},wnB{},wtA[2]{},wtB[2]{};
  std::uint32_t feature=0;             // what the point came from (narrow phase), for matching
 };
 // The world thing a static contact touched, for the caller (a pane, a soft pad...): free for its use.
@@ -144,8 +148,12 @@ struct Manifold {
  Surface surface{};
  V3 t1{},t2{};
  float rollingImpulse[3]{0,0,0};
+ // Prepared each step: the middle of the points (an impact's), and the rolling axes' turns and masses.
+ V3 midA{},midB{},midWA{},midWB{};float midMass=0;V3 rollWA[3]{},rollWB[3]{};float rollMass[3]{0,0,0};
+ bool cold=false;                     // no impulses to start from (new this step): solved more on its first substep
  bool world()const{return b<0;}
- std::uint64_t key()const{return (std::uint64_t(std::uint32_t(a))<<40)^(std::uint64_t(std::uint32_t(b+1)&0xfffff)<<20)^(std::uint64_t(partA)<<8)^std::uint64_t(partB);}
+ // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster.
+ static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA))<<40)^(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<20)^(std::uint64_t(partA)<<8)^std::uint64_t(partB);}
 };
 
 // ---- Narrow phase ---------------------------------------------------------------------------------
@@ -176,12 +184,17 @@ struct Constraint {
 // ---- The space ------------------------------------------------------------------------------------
 struct Settings {
  int substeps=4,relaxIterations=1;
- // Four substeps a step and 60 Hz contacts: a ten-crate tower stands within a millimetre (two substeps at
- // 60 Hz sit on the 0.25 x substep-rate limit and jitter; 30 Hz lets a tall stack sink 8 mm a contact).
- float contactHertz=60,contactDampingRatio=10,pushout=3;  // soft contact: stiffness, damping, max push-out speed (m/s)
- float linearSlop=.004f,speculative=.04f;                  // allowed penetration, speculative reach
+ // Four substeps a step and 120 Hz contacts, critically damped, with a millimetre of slop: a ten-crate tower
+ // woken settles in 0.27 s and its top drifts under half a millimetre. (60 Hz over-damped ten times let each
+ // contact sink 4 mm under its load and the tower lean 2 mm before it slept, at 0.53 s.)
+ float contactHertz=120,contactDampingRatio=1,pushout=3;   // soft contact: stiffness, damping, max push-out speed (m/s)
+ float linearSlop=.001f,speculative=.04f;                  // allowed penetration, speculative reach
  float restitutionThreshold=1.f;                           // below this approach speed nothing bounces
+ float middleThreshold=1.f;                               // an approach faster than this is first met at the manifold's middle
  float sleepLinear=.06f,sleepAngular=.12f,sleepTime=.2f;  // islands under these for this long sleep
+ // Contacts with nothing to warm start from (a stack just woken, or set down whole) are iterated this many
+ // more times on the step's first substep, so the weight reaches the floor before anything moves under it.
+ int coldIterations=8;
  float maxLinear=40,maxAngular=60;
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
@@ -200,7 +213,8 @@ struct Space {
  // Pairs the caller rules out (a held prop and what it carries...).
  std::function<bool(const Space&,int a,int b)> filter;
  // Warm-start cache (persistent between steps): key -> points.
- struct Cached {std::array<ContactPoint,4> points{};int count=0;float rolling[3]{0,0,0};};
+ struct CachedPoint {V3 localA{};float normal=0,tangent[2]{0,0};};
+ struct Cached {std::array<CachedPoint,4> points{};int count=0;float rolling[3]{0,0,0};};
  std::vector<std::pair<std::uint64_t,Cached>> cache;   // sorted by key
  std::vector<Manifold> manifolds;   // this step's
  std::vector<ContactEvent> events;  // this step's impacts (approach over .3 m/s or an impulse)
@@ -212,13 +226,15 @@ struct Space {
  // Islands: groups of touching, moving bodies (filled by step).
  std::vector<int> islandOf;
  void wake(int body);
+ int idOf(int body)const{return body<0?-1:bodies[size_t(body)].id>=0?bodies[size_t(body)].id:body;}
+ std::uint64_t keyOf(const Manifold& m)const{return Manifold::key(idOf(m.a),idOf(m.b),m.partA,m.partB);}
  // A soft spring pulling a body to a pose (phase 3: gravity gloves): applied as velocity, contacts still hold.
  void drive(int body,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce);
 private:
  void collide(float margin);
  void prepare(float h);
  void warmStart();
- void solve(float h,bool useBias);
+ void solve(float h,bool useBias,bool coldOnly=false);
  void restitution();
  void storeImpulses();
  void integrateVelocities(float h);

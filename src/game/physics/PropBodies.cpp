@@ -13,15 +13,15 @@ namespace retro::vectra {
 namespace {
 int& forced(){static int mode=-1;return mode;}
 }
-// Legacy stays the default until Vectra beats it on every row of the scorecard (cost, settling, maps,
-// emergence): RM_PROPS=vectra (or the knob props.legacy 0) runs Vectra; RM_PROPS=legacy forces legacy.
+// Vectra is the default; legacy stays selectable as a fallback: RM_PROPS=legacy (or the knob props.legacy 1)
+// runs the old prop physics; RM_PROPS=vectra forces Vectra.
 bool legacyProps(){
  if(forced()>=0)return forced()==1;
  static const int env=[]{const char* v=std::getenv("RM_PROPS");if(!v)return -1;
   if(std::strcmp(v,"vectra")==0||std::strcmp(v,"new")==0||std::strcmp(v,"0")==0)return 0;
   return (std::strcmp(v,"legacy")==0||std::strcmp(v,"old")==0||std::strcmp(v,"1")==0)?1:-1;}();
  if(env>=0)return env==1;
- return tune("props.legacy",1.f)>.5f;}
+ return tune("props.legacy",0.f)>.5f;}
 void forceLegacyProps(int mode){forced()=mode;}
 
 // Coulomb friction against a hard floor (static, sliding), restitution, rolling resistance (metres).

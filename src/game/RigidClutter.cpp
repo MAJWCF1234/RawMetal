@@ -42,6 +42,7 @@ int keepFour(std::vector<Hit>& h,vectra::V3 n){
 void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held){
  using namespace vectra;
  auto& rp=m_rigidProps[level];
+ if(level==m_level){m_rigidStats.steps=0;m_rigidStats.ms=m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;}
  const Vec2 shift=chunkOffset(level)-chunkOffset(m_level);
  // A point in this list's coordinates, in the world that holds it (p becomes that world's own coordinates).
  auto physicalWorld=[&](Vec2& p)->const World&{auto local=p-shift;if(local.x>=0&&local.x<24&&local.y>=0&&local.y<24){p=local;return level==m_level?m_world:m_chunks[level].world;}return worldAt(p);};
@@ -55,9 +56,13 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",60.f);
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<Hit> hits;std::array<V3,8> feature{};
+ if(rp.flat.size()<list.size())rp.flat.resize(list.size());
+ // How every door of a world stands (the flat-floor memo is good while it is unchanged).
+ std::vector<std::pair<const World*,float>> doorStates;
+ auto doorSignature=[&](const World& w){for(const auto&[k,v]:doorStates)if(k==&w)return v;float sum=0;int i=0;for(const auto&d:w.doors()){sum+=(d.open+(d.opening?2.f:0.f))*float(1+(i++%7));}doorStates.push_back({&w,sum});return sum;};
  // Each world's ramps (ShapeRamp, not solid: the slope its step proxies stand for), found once a frame.
  std::vector<std::pair<const World*,std::vector<int>>> ramps;
  auto rampsOf=[&](const World& w)->const std::vector<int>&{for(const auto&[k,v]:ramps)if(k==&w)return v;std::vector<int> found;
@@ -78,21 +83,34 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(b.boundsHi.x+shift.x+k.x<st.x1||b.boundsLo.x+shift.x+k.x>st.x2||b.boundsHi.y+shift.y+k.y<st.y1||b.boundsLo.y+shift.y+k.y>st.y2)continue;
     const int f=st.facing%4;const float run=f==0||f==2?st.y2-st.y1:st.x2-st.x1;if(run<=1e-3f)continue;const float g=(st.top-st.bottom)/run;
     const Vec2 up=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0};downs.push_back(neg(norm(V3{-g*up.x,-g*up.y,1})));}}
-  for(int p=0;p<b.shape->count;++p){const bool round=b.shape->parts[size_t(p)].kind!=PartKind::Box;const size_t before=samples.size();surfaceSamples(b,p,spacing,samples);curved.resize(samples.size(),round?1:0);(void)before;
-   for(V3 d:downs){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(0);}}
-   for(V3 d:{V3{1,0,0},V3{-1,0,0},V3{0,1,0},V3{0,-1,0},V3{0,0,1}}){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(round?1:0);}}}
   const bool ceilingNear=cw.clearanceAbove(cq.x,cq.y,b.boundsLo.z,true)<b.boundsHi.z+margin+.3f;
   // The usual case, asked once: one flat floor under the whole footprint (no ramp) and every column round
   // and through it open from that floor to over the body. Then each point needs only that floor's height.
   bool flat=downs.size()==1;float flatFloor=0;const World* flatWorld=nullptr;
   if(flat){const float lo=b.boundsLo.z,hi=b.boundsHi.z;const float reachXY=margin-sp.settings.speculative+.02f,x0=b.boundsLo.x-reachXY,x1=b.boundsHi.x+reachXY,y0=b.boundsLo.y-reachXY,y1=b.boundsHi.y+reachXY;
-   const int nx=std::max(1,int(std::ceil((x1-x0)/.1f))),ny=std::max(1,int(std::ceil((y1-y0)/.1f)));
-   auto column=[&](float x,float y,bool first)->bool{Vec2 q{x,y};q=q+shift;const World& w=physicalWorld(q);if(first)flatWorld=&w;else if(&w!=flatWorld)return false;
-    const float fs=w.supportBelow(q.x,q.y,lo+.06f,true);if(first)flatFloor=fs;else if(std::fabs(fs-flatFloor)>1e-4f)return false;
-    return w.fits(q.x,q.y,flatFloor+.004f,std::max(.01f,hi+margin-flatFloor-.004f),true,true)&&!w.doorBlocks(q.x,q.y,flatFloor+.004f,std::max(.01f,hi+margin-flatFloor-.004f));};
-   flat=column((x0+x1)*.5f,(y0+y1)*.5f,true);
-   for(int i=0;i<=nx&&flat;++i){const float x=x0+(x1-x0)*float(i)/float(nx);flat=column(x,y0,false)&&column(x,y1,false);}
-   for(int j=1;j<ny&&flat;++j){const float y=y0+(y1-y0)*float(j)/float(ny);flat=column(x0,y,false)&&column(x1,y,false);}}
+   // Asked before for a region round this one (and no door has moved since): the same answer. A prop at rest
+   // or sliding about keeps its answer; it is asked again each 4 cm it goes, or 2 cm it falls.
+   Vec2 mq{(x0+x1)*.5f,(y0+y1)*.5f};mq=mq+shift;const World& cw2=physicalWorld(mq);const float doors=doorSignature(cw2);
+   auto& memo=rp.flat[size_t(b.user)];
+   if(memo.valid&&memo.world==&cw2&&memo.doors==doors&&x0>=memo.x0&&x1<=memo.x1&&y0>=memo.y0&&y1<=memo.y1&&std::fabs(lo-memo.lo)<.02f&&hi+margin<=memo.hi){flat=memo.flat;flatFloor=memo.floor;flatWorld=&cw2;}
+   else{const float grow=.04f,X0=x0-grow,X1=x1+grow,Y0=y0-grow,Y1=y1+grow,top=hi+margin+.06f;
+    const int nx=std::max(1,int(std::ceil((X1-X0)/.1f))),ny=std::max(1,int(std::ceil((Y1-Y0)/.1f)));
+    auto column=[&](float x,float y,bool first)->bool{Vec2 q{x,y};q=q+shift;const World& w=physicalWorld(q);if(first)flatWorld=&w;else if(&w!=flatWorld)return false;
+     const float fs=w.supportBelow(q.x,q.y,lo+.06f,true);if(first)flatFloor=fs;else if(std::fabs(fs-flatFloor)>1e-4f)return false;
+     return w.fits(q.x,q.y,flatFloor+.004f,std::max(.01f,top-flatFloor-.004f),true,true)&&!w.doorBlocks(q.x,q.y,flatFloor+.004f,std::max(.01f,top-flatFloor-.004f));};
+    flat=column((X0+X1)*.5f,(Y0+Y1)*.5f,true);
+    for(int i=0;i<=nx&&flat;++i){const float x=X0+(X1-X0)*float(i)/float(nx);flat=column(x,Y0,false)&&column(x,Y1,false);}
+    for(int j=1;j<ny&&flat;++j){const float y=Y0+(Y1-Y0)*float(j)/float(ny);flat=column(X0,y,false)&&column(X1,y,false);}
+    memo={&cw2,X0,Y0,X1,Y1,lo,top,flatFloor,doors,flat,flatWorld==&cw2};}}
+  // On one flat floor with nothing over it, only the lowest points can touch anything (every column round is
+  // open): those alone. Otherwise every part's surface points too, for the walls and what is overhead.
+  const bool lowestOnly=flat&&!ceilingNear;
+  for(int p=0;p<b.shape->count;++p){const bool round=b.shape->parts[size_t(p)].kind!=PartKind::Box;
+   // (A box's eight corners even so: the next to come down as it settles is a contact before it arrives.)
+   if(!lowestOnly||!round){surfaceSamples(b,p,lowestOnly?100.f:spacing,samples);curved.resize(samples.size(),round?1:0);}
+   for(V3 d:downs){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(0);}}
+   if(lowestOnly)continue;
+   for(V3 d:{V3{1,0,0},V3{-1,0,0},V3{0,1,0},V3{0,-1,0},V3{0,0,1}}){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(round?1:0);}}}
   for(size_t si=0;si<samples.size();++si){const V3 p=samples[si];const bool round=curved[si]!=0;
    if(flat){Vec2 q{p.x,p.y};q=q+shift;const World& w=physicalWorld(q);const float s=flatFloor-softSinkAt(w.level(),q,flatFloor);
     if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0});
@@ -139,7 +157,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // a real contact out of the four (a barrel left on one rim).
    {float deepest=1e30f;for(const auto&h:group)deepest=std::min(deepest,h.sep);std::erase_if(group,[&](const Hit& h){return h.sep>deepest+.012f;});}
    keepFour(group,n);
-   if(g==0){ // the floor's slope at the points kept (a ramp, terrain), by differences of the support
+   if(g==0&&!flat){ // the floor's slope at the points kept (a ramp, terrain), by differences of the support
     V3 sum{};for(auto&h:group){Vec2 q{h.p.x,h.p.y};q=q+shift;const World& w=physicalWorld(q);const float s=h.p.z-h.sep,d=.04f;
      auto at=[&](float x,float y){const float v=w.supportBelow(x,y,s+.06f,true);return std::fabs(v-s)<.06f?v:s;};
      const float gx=(at(q.x+d,q.y)-at(q.x-d,q.y))/(2*d),gy=(at(q.x,q.y+d)-at(q.x,q.y-d))/(2*d);h.n=norm(V3{-gx,-gy,1});sum=sum+h.n;}
@@ -197,9 +215,11 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!hullFits(next+chunkOffset(target)-chunkOffset(m_level),enemy.z,enemy.hull(),enemy.radius(),false,false))break;reached=next;}enemy.pos=reached;return enemy.pos-before;},
     [&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}});}}
  };
- m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=0;
+ m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;
+ using Clock=std::chrono::steady_clock;auto since=[](Clock::time_point t){return std::chrono::duration<double,std::milli>(Clock::now()-t).count();};
  std::vector<int> bodyOf(list.size(),-1);std::vector<char> wasAsleep;std::vector<V3> before;
  for(int step=0;step<steps;++step){
+  auto mark=Clock::now();
   space.bodies.clear();std::fill(bodyOf.begin(),bodyOf.end(),-1);
   // What can be touched this step: the awake props (and the hand's, and the player's), a metre and a half
   // round. A sleeping prop out of all their reach is not built at all (500 asleep cost next to nothing).
@@ -212,7 +232,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(i==held){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w={};
     if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand])b.v=m_vrHandVelocity[m_vrCarryHand];else b.v={m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
    if(c.material()==PropMaterial::Paper){b.linearDamping=3;b.angularDamping=3;}
-   bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
+   b.id=i;bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
   // The player: a body at his own velocity (no gravity, no turning, not written back; 20 kg of push, so what
   // he pins against a wall is not squeezed into it). He shoves what
   // he walks into by contact, and what is pinned against a wall stops him in the solver rather than going
@@ -226,8 +246,9 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    p.invMass=1/tune("props.player_mass",20.f);p.invInertiaLocal=M3::zero();p.inertiaLocal=M3::zero();p.invInertia=M3::zero();p.material={.6f,.5f,0,0};p.linearDamping=0;p.angularDamping=0;
    // A shove, not a blow: his contacts are springs (a limited push), so a crate he walks into gets going over a
    // moment and what is in it goes along; one pinned against a wall gives under him instead of into the wall.
-   p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;   // never what keeps an island awake (his own speed still does)
+   p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;p.id=(1<<19)-1;   // never what keeps an island awake (his own speed still does)
    space.bodies.push_back(p);}
+  m_rigidStats.buildMs+=since(mark);mark=Clock::now();
   wasAsleep.assign(space.bodies.size(),0);before.assign(space.bodies.size(),{});
   for(size_t bi=0;bi<space.bodies.size();++bi){wasAsleep[bi]=space.bodies[bi].sleeping;before[bi]=space.bodies[bi].v;}
   // ---- Before the step: water, and panes ahead of a fast prop ----
@@ -278,7 +299,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
-  space.step(RigidStep);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
+  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0)continue;auto&c=list[size_t(b.user)];
    if(wasAsleep[bi]&&b.sleeping)continue;fromBody(b,c);c.island=b.sleeping?space.islandOf.empty()?-1:std::max(0,space.islandOf[bi]):-1;
@@ -309,6 +330,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   for(const auto&m:space.manifolds){if(m.b<0)continue;const Body& A=space.bodies[size_t(m.a)];const Body& B=space.bodies[size_t(m.b)];
    if(A.user==PlayerBody&&B.user>=0)list[size_t(B.user)].blockedTime=std::max(list[size_t(B.user)].blockedTime,.25f);
    if(B.user==PlayerBody&&A.user>=0)list[size_t(A.user)].blockedTime=std::max(list[size_t(A.user)].blockedTime,.25f);}
+  m_rigidStats.postMs+=since(mark);
   // Bodies struck by what moves.
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.sleeping||b.user<0)continue;bodyContacts(b.user);}
   for(int i=0;i<int(list.size());++i)if(list[size_t(i)].broken){auto&c=list[size_t(i)];c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=true;c.restTime=0;}
@@ -316,7 +338,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  rp.cache.swap(space.cache);
  int awake=0;for(const auto&b:space.bodies)awake+=b.movable()&&b.user>=0;
  m_rigidStats.bodies=int(space.bodies.size());m_rigidStats.awake=awake;m_rigidStats.manifolds=int(space.manifolds.size());m_rigidStats.worldManifolds=space.worldManifolds;m_rigidStats.steps=steps;
- m_rigidStats.manifoldsSeen=space.manifolds;
+ m_rigidStats.manifoldsSeen=std::move(space.manifolds);
  m_rigidStats.ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
 }
 }
