@@ -44,10 +44,12 @@ void Game::holeLiquid(Clutter& c,Point3 at){if(!c.liquid.holds()||c.liquid.holed
  // On the inner wall where the round went in, at its height.
  const Inner in=innerOf(c);const float r=std::sqrt(l.x*l.x+l.y*l.y);const float wall=l.z>in.shoulder?in.neck:in.r;const float k=r>1e-4f?wall/r:0.f;c.liquid.hole={l.x*k,l.y*k,std::clamp(l.z,in.bottom+.01f,in.top-.01f)};c.liquid.holed=true;
  c.sleeping=false;c.restTime=0;}
-void Game::emitLiquid(Point3 at,Point3 velocity,liquid::Kind kind,float volume,int drops){
- if(drops<=0||volume<=0)return;const float each=volume/float(drops);
+void Game::emitLiquid(Point3 at,Point3 velocity,liquid::Kind kind,float volume,int drops,int stream){
+ if(drops<=0||volume<=0)return;const float each=volume/float(drops),spread=stream?.012f:.18f;
  for(int i=0;i<drops&&int(m_liquidDrops.size())<MaxDrops;++i){const float h=float((m_liquidDrops.size()*2654435761u+unsigned(i)*40503u)%1000)/1000.f,a=h*6.283f;
-  const Point3 jitter{std::cos(a)*.18f*h,std::sin(a)*.18f*h,(h-.5f)*.2f};m_liquidDrops.push_back({at,velocity+jitter,kind,each});}}
+  // A stream's drops leave along it a little apart (so it reads as one run of liquid); a spill's fly every way.
+  const float lead=stream?float(i)/float(drops):0.f;const Point3 jitter{std::cos(a)*spread*h,std::sin(a)*spread*h,(h-.5f)*spread};
+  m_liquidDrops.push_back({at+velocity*(lead/60.f),velocity+jitter,kind,each,stream});}}
 void Game::spillLiquid(int level,Clutter& c,Point3 velocity,float share){
  if(!c.liquid.holds()||c.liquid.level<=0||level!=m_level)return;const float volume=c.liquid.level*share*liquid::capacity(c.model,c.size());const V3 m=vectra::propCentre(c);
  for(int i=0;i<24;++i){const float a=float(i)*2.399963f,r=.6f+.25f*float(i%4);emitLiquid(p3(m),velocity+Point3{std::cos(a)*r,std::sin(a)*r,.8f+.15f*float(i%5)},c.liquid.kind,volume/24.f,1);}
@@ -75,14 +77,14 @@ void Game::updateLiquids(float dt){
   L.plane=planeFor(in,n,L.level);
   // Out of the mouth and the hole: the head of liquid over each, along the surface's normal.
   L.pouring=0;if(L.level<=0)continue;const float cap=liquid::capacity(c.model,c.size());
-  auto run=[&](V3 at,float radius,V3 outward){const float head=L.plane-vectra::dot(n,at);if(head<=.002f)return;
+  auto run=[&](V3 at,float radius,V3 outward,int stream){const float head=L.plane-vectra::dot(n,at);if(head<=.002f)return;
    const float speed=std::sqrt(2*Gravity*std::min(head,.3f))*tr.run;const float flow=kPi*radius*radius*speed*.6f;   // m^3/s
    float out=std::min(flow*dt,L.level*cap);L.level-=out/std::max(cap,1e-6f);L.pouring+=flow*1000.f;
    const V3 wAt=x+q.rotate(at),wOut=q.rotate(outward);const V3 wv=v+wOut*(speed*.8f);
    // A few drops a frame along the stream (fewer for a thick oil): what they carry is what left.
-   const int drops=std::clamp(int(flow*1e5f*dt)+1,1,4);emitLiquid(p3(wAt),p3(wv),L.kind,out,drops);};
-  const float mouth=std::max(.008f,in.neck*.8f);run({0,0,in.top},mouth,{0,0,1});
-  if(L.holed){const V3 h=v3(L.hole);run(h,.006f,vectra::norm(V3{h.x,h.y,0},{1,0,0}));}
+   const int drops=std::clamp(int(flow*1e5f*dt)+1,1,4);emitLiquid(p3(wAt),p3(wv),L.kind,out,drops,stream);};
+  const float mouth=std::max(.008f,in.neck*.8f);run({0,0,in.top},mouth,{0,0,1},index*2+1);
+  if(L.holed){const V3 h=v3(L.hole);run(h,.006f,vectra::norm(V3{h.x,h.y,0},{1,0,0}),index*2+2);}
   if(L.level<.002f)L.level=0;
   if(L.pouring>0){c.sleeping=false;c.restTime=0;}}
  // The drops: flying, then into water (a splash) or onto a floor (a puddle).
@@ -97,7 +99,7 @@ void Game::updateLiquids(float dt){
     const float thick=d.kind==liquid::Kind::Oil?.004f:.0025f;into->radius=std::min(1.2f,std::sqrt(total/(kPi*thick))+.03f);}
    gone=true;}
   else if(next.z<-50)gone=true;
-  if(gone){d=m_liquidDrops.back();m_liquidDrops.pop_back();continue;}
+  if(gone){m_liquidDrops.erase(m_liquidDrops.begin()+long(i));continue;}   // (kept in order: a stream is drawn from them)
   d.p=next;++i;}
 }
 void Game::registerLiquidSave(){

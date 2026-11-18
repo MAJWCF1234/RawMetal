@@ -508,7 +508,7 @@ public:
     Point3 vrHandProxy(int hand)const{return m_vrHandProxy[size_t(hand&1)];}
     bool vrHandBlocked(int hand)const{return m_vrHandBlocked[size_t(hand&1)];}
     // Liquids (Liquids.cpp): drops in the air and the puddles they made, this map's, in its own coordinates.
-    struct LiquidDrop {Point3 p{},v{};liquid::Kind kind=liquid::Kind::Water;float volume=0;};
+    struct LiquidDrop {Point3 p{},v{};liquid::Kind kind=liquid::Kind::Water;float volume=0;int stream=0;};   // stream: the mouth or hole it ran from (0: a spill), drops of one stream in the order they left
     struct Puddle {Point3 at{};liquid::Kind kind=liquid::Kind::Water;float volume=0,radius=0;};
     const std::vector<LiquidDrop>& liquidDrops()const{return m_liquidDrops;}
     const std::vector<Puddle>& puddles()const{return m_puddles;}
@@ -1351,7 +1351,7 @@ private:
     void addVrHandBodies(vectra::Space& space,std::vector<Clutter>& list,float h);void settleVrHands(const vectra::Space& space,int held);void followVrHands();
     // Liquids.cpp
     std::vector<LiquidDrop> m_liquidDrops;std::vector<Puddle> m_puddles;
-    void updateLiquids(float dt);void spillLiquid(int level,Clutter& c,Point3 velocity,float share);void seedLiquid(Clutter& c);void emitLiquid(Point3 at,Point3 velocity,liquid::Kind kind,float volume,int drops);
+    void updateLiquids(float dt);void spillLiquid(int level,Clutter& c,Point3 velocity,float share);void seedLiquid(Clutter& c);void emitLiquid(Point3 at,Point3 velocity,liquid::Kind kind,float volume,int drops,int stream=0);
     // Held heavy props: sweep bodies along a hand move, or re-clear overlaps after AI.
     void pushBodiesFromCarried(Clutter& prop,const Clutter& previous);
     void resolveHeldPropBodies();

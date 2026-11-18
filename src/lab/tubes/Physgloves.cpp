@@ -18,7 +18,7 @@
 namespace retro::lab {
 namespace {
 std::string f2(double v,int d=2){char b[32];std::snprintf(b,sizeof b,"%.*f",d,v);return b;}
-struct Watch {std::map<std::string,double> v;int a=-1,b=-1;Point3 start{},startB{};int pulledAt=-1;};
+struct Watch {std::map<std::string,double> v;int a=-1,b=-1;Point3 start{},startB{};int pulledAt=-1;std::vector<Point3> path;};
 std::map<const Scene*,Watch>& watches(){static std::map<const Scene*,Watch> w;return w;}
 Point3 mid(const Clutter& c){return {c.pos.x,c.pos.y,c.z+c.height()*.5f};}
 float dist(Point3 a,Point3 b){const Point3 d=a-b;return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);}
@@ -37,13 +37,14 @@ const bool registered=add({
  .setup=[](Scene& s){watches().erase(&s);auto& w=watches()[&s];Game& g=s.g();LabAccess::setGod(g,true);const std::string scene=s.fixture->value("scene");
   if(scene=="hung"){w.a=-1;float best=1e9f;const auto& l=LabAccess::clutter(g);for(int i=0;i<int(l.size());++i)if(l[size_t(i)].model==model::wooden_crate&&l[size_t(i)].z>2.f){const float d=length(l[size_t(i)].pos-Vec2{12,11.2f});if(d<best){best=d;w.a=i;}}
    LabAccess::playerCamera(g);auto& p=LabAccess::player(g);p.pos={12.f,15.6f};p.z=0;p.angle=-kPi/2;p.pitch=140.f*std::atan2(3.1f-1.42f,4.4f);}
-  else{LabAccess::playerCamera(g);auto& p=LabAccess::player(g);p.pos=scene=="starter"?Vec2{2.6f,19.4f}:Stand;p.z=0;p.angle=0;
+  else{LabAccess::playerCamera(g);auto& p=LabAccess::player(g);p.pos=scene=="starter"?Vec2{2.6f,19.4f}:scene=="pull"?Vec2{5.4f,8.5f}:Stand;p.z=0;p.angle=0;
    if(scene=="starter"){const auto& l=LabAccess::clutter(g);float best=1e9f;for(int i=0;i<int(l.size());++i)if(l[size_t(i)].model==model::mug&&l[size_t(i)].z>1.5f){const float d=length(l[size_t(i)].pos-Vec2{1.7f,22.7f});if(d<best){best=d;w.a=i;}}}
    else if(scene=="container"){w.a=findModel(g,model::glass_bottle);w.b=findModel(g,model::market_crate);}
    else if(scene=="heavy"){w.a=findModel(g,model::drum);w.b=findModel(g,model::wooden_crate);}
    else w.a=findModel(g,scene=="pull"?model::prop_cardboard_box:model::mug);
    // Looking at the target's middle.
-   if(w.a>=0){const auto m=mid(LabAccess::clutter(g)[size_t(w.a)]);p.angle=std::atan2(m.y-p.pos.y,m.x-p.pos.x);p.pitch=140.f*std::atan2(m.z-1.42f,length(Vec2{m.x,m.y}-p.pos));}}
+   if(w.a>=0){auto m=mid(LabAccess::clutter(g)[size_t(w.a)]);if(scene=="container")m.z+=.13f;   // (at its neck, over the crate's rim)
+   p.angle=std::atan2(m.y-p.pos.y,m.x-p.pos.x);p.pitch=140.f*std::atan2(m.z-1.42f,length(Vec2{m.x,m.y}-p.pos));}}
   if(w.a>=0)w.start=mid(LabAccess::clutter(g)[size_t(w.a)]);if(w.b>=0)w.startB=mid(LabAccess::clutter(g)[size_t(w.b)]);},
  .step=[](Scene& s,float){auto& w=watches()[&s];Game& g=s.g();const std::string scene=s.fixture->value("scene");const int f=s.frame;auto& p=LabAccess::player(g);
   const int pull=20;
@@ -61,17 +62,27 @@ const bool registered=add({
   if(scene=="heavy"&&f==pull+62)s.input.physglove=true;
   if(scene=="miss"&&f>=pull+4)p.angle=kPi*.5f;   // turned aside as it comes
   if(g.physgloves().flying>=0&&w.pulledAt<0)w.pulledAt=f;
+  if(w.pulledAt>=0&&w.a>=0&&LabAccess::held(g)!=w.a&&w.path.size()<120)w.path.push_back(mid(LabAccess::clutter(g)[size_t(w.a)]));
   if(w.a>=0){const auto& c=LabAccess::clutter(g)[size_t(w.a)];const auto m=mid(c);
    w.v["maxRise"]=std::max(w.v["maxRise"],double(m.z-w.start.z));
    w.v["moved"]=std::max(w.v["moved"],double(length(Vec2{m.x,m.y}-Vec2{w.start.x,w.start.y})));
    w.v["toward"]=std::max(w.v["toward"],double(length(Vec2{w.start.x,w.start.y}-p.pos)-length(Vec2{m.x,m.y}-p.pos)));
    if(LabAccess::held(g)==w.a&&w.v["caughtAt"]==0)w.v["caughtAt"]=f;}
   if(w.b>=0){const auto m=mid(LabAccess::clutter(g)[size_t(w.b)]);w.v["movedB"]=std::max(w.v["movedB"],double(length(Vec2{m.x,m.y}-Vec2{w.startB.x,w.startB.y})));w.v["towardB"]=std::max(w.v["towardB"],double(length(Vec2{w.startB.x,w.startB.y}-p.pos)-length(Vec2{m.x,m.y}-p.pos)));}},
- .capture=[](Scene& s,const Frame& f){auto& w=watches()[&s];if(w.pulledAt<0){if(f.index==19)s.shoot("highlighted");return;}const int since=f.index-w.pulledAt;
-  for(int k:{1,9,17,25,33})if(since==k){s.shoot("flight-"+std::to_string(k));
-   // The pull seen from the side as well (the arc across the room): drawn from a second camera, then the player put back.
-   if(s.fixture->value("scene")=="pull"){Game& g=s.g();const Player keep=LabAccess::player(g);LabAccess::setCamera(g,{6.6f,4.3f},0,kPi*.5f,16.f);s.renderer->render(g);s.shoot("side-"+std::to_string(k));
-    LabAccess::player(g)=keep;LabAccess::playerCamera(g);}}},
+ .capture=[](Scene& s,const Frame& f){auto& w=watches()[&s];const bool pull=s.fixture->value("scene")=="pull";
+  // The pull seen from beside the arc (a second camera; the player put back after): its path so far as a dotted trail
+  // and the hand it flies to marked (the lab draws no hands).
+  auto side=[&](const std::string& label){if(!pull||w.a<0)return;Game& g=s.g();const Player keep=LabAccess::player(g);const Point3 hand=g.physgloveCatchPoint(-1,LabAccess::clutter(g)[size_t(w.a)]);
+   LabAccess::setCamera(g,{7.45f,4.75f},0,kPi*.5f,26.f);s.renderer->render(g);s.shoot(label);auto& shot=s.shots.back();const int W=shot.width,H=shot.height;
+   auto put=[&](int x,int y,std::uint32_t c){if(x>=0&&y>=0&&x<W&&y<H)shot.pixels[size_t(y*W+x)]=c;};
+   for(size_t k=0;k+1<w.path.size();k+=2){const auto q=project(s,w.path[k]);if(!q.visible)continue;for(int dy=-3;dy<=3;++dy)for(int dx=-3;dx<=3;++dx)if(dx*dx+dy*dy<=9)put(int(q.x)+dx,int(q.y)+dy,0xfff0d890);}
+   if(const auto q=project(s,hand);q.visible){const auto e=project(s,hand+Point3{0,0,.05f});const float r=std::max(6.f,std::fabs(e.y-q.y));
+    for(int y=int(q.y-r)-2;y<=int(q.y+r)+2;++y)for(int x=int(q.x-r)-2;x<=int(q.x+r)+2;++x){const float d=std::sqrt((x-q.x)*(x-q.x)+(y-q.y)*(y-q.y));if(d<=r)put(x,y,0xffd8a888);else if(d<=r+2)put(x,y,0xff3a2418);}}
+   LabAccess::player(g)=keep;LabAccess::playerCamera(g);};
+  if(w.pulledAt<0){if(f.index==19){s.shoot("highlighted");side("side-0-target");}return;}const int since=f.index-w.pulledAt;
+  for(int k:{1,9,17,25,33})if(since==k)s.shoot("flight-"+std::to_string(k));
+  for(int k:{4,10,16,22})if(since==k)side("side-"+std::to_string(k));
+  if(w.v["caughtAt"]>0&&f.index==int(w.v["caughtAt"])+2)side("side-caught");},
  .metrics=[](Scene& s,Report& r){auto& w=watches()[&s];Game& g=s.g();const std::string scene=s.fixture->value("scene");const auto& gl=g.physgloves();
   r.metric("pulls",gl.pulls);r.metric("catches",gl.catches);r.metric("misses",gl.misses);r.metric("max_rise",w.v["maxRise"],"m");r.metric("moved",w.v["moved"],"m");
   if(w.v["caughtAt"]>0&&w.pulledAt>=0)r.metric("flight",(w.v["caughtAt"]-w.pulledAt)/60.,"s");

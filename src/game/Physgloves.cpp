@@ -1,7 +1,8 @@
 // Physgloves: point at a loose prop in reach, flick, and it pops toward the hand on a ballistic arc that lands
 // where the hand is; caught inside a generous window, or it falls on as anything thrown does.
-//  - Aim: desktop, the look (the eye and the crosshair); VR, each hand's pointing. The prop nearest the line,
-//    within 7 m, seen from the eye or the hand, not pinned, not in the hand. What lies in a container or
+//  - Aim: desktop, the look (the eye and the crosshair); VR, each hand's pointing. The first prop the aim's ray meets
+//    in its true shape (Vectra's queries), or failing that the nearest a 0.2 m sphere cast along it meets, within
+//    7 m, seen from the eye and the hand, not pinned, not in the hand. What lies in a container or
 //    hangs on a joint is as good a target as anything: the pull wakes it, and a rope it hangs from holds it,
 //    so a hung crate swings out toward the hand on its rope.
 //  - Flick: desktop, G, or hold the middle mouse button empty-handed (the look stays put on the target) and flick
@@ -15,6 +16,7 @@
 //  - The target is drawn a little brighter, pulsing (Scene3D: drawClutter), so you see what you would pull.
 #include "Game.h"
 #include "physics/PropBodies.h"
+#include "physics/PropQueries.h"
 #include "Containers.h"
 #include "../world/ModelIds.h"
 #include <cmath>
@@ -30,24 +32,27 @@ Point3 Game::physgloveCatchPoint(int hand,const Clutter& c)const{
  const float reach=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f,pitch=m_player.pitch/140.f;
  return {m_player.pos.x+std::cos(m_player.angle)*reach*std::cos(pitch),m_player.pos.y+std::sin(m_player.angle)*reach*std::cos(pitch),m_player.z+m_player.eye+reach*std::sin(pitch)};
 }
-// TODO(integration): main's Vectra query API (physics/PropQueries.h rayCastProp / sphereCastProp) can replace the cone
-// test below with a cast against each prop's own shape, and the eye-visibility check with one against props too.
+// Aiming through Vectra's queries (physics/PropQueries.h), against each prop's true shape and turn:
+//  - the ray along the aim: the first prop it meets is the target, if it may be pulled (a pinned prop, or one held,
+//    in front of it blocks it, as a crate in front of a mug does);
+//  - missing everything, a sphere cast of 0.2 m along the same line (aim assist), its nearest loose prop;
+//  - the world between the eye (and the VR hand) and where the cast met the prop must be clear.
 int Game::physgloveAim(int hand)const{
  Point3 from,dir;
  if(m_vrInputActive){if(hand<0||hand>1||!m_vrHandValid[size_t(hand)])return -1;from=m_vrHandPosition[size_t(hand)];dir=m_vrHandDirection[size_t(hand)];}
  else{const float pitch=m_player.pitch/140.f;from={m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye};dir={std::cos(m_player.angle)*std::cos(pitch),std::sin(m_player.angle)*std::cos(pitch),std::sin(pitch)};}
  const float n=lengthOf(dir);if(n<1e-4f)return -1;dir=dir*(1/n);
- int best=-1;float score=1e9f;
- for(int i=0;i<int(m_clutter.size());++i){const auto&c=m_clutter[size_t(i)];
-  if(i==m_heldClutter||i==m_physglove.flying||c.model<0||c.broken||c.pinned||dormantEntity(c.z))continue;
-  const Point3 m=middleOf(c),d=m-from;const float dist=lengthOf(d),along=d.x*dir.x+d.y*dir.y+d.z*dir.z;if(dist<.35f||dist>Reach||along<=.2f)continue;
-  // Off the line by no more than its own half size and a cone of about 6 degrees (a mug at 6 m is still found).
-  const float off=std::sqrt(std::max(0.f,dist*dist-along*along)),allowed=.12f+.1f*dist+c.footprint()*.5f;if(off>allowed)continue;
-  const float s=off/dist+dist*.004f;if(s>=score)continue;
-  Point3 normal;if(clutterPathFraction(from,m,normal)<.999f)continue;
-  // Seen from the eye too (a VR hand round a corner does not pull what the eye cannot see).
-  if(m_vrInputActive&&clutterPathFraction({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},m,normal)<.999f)continue;
-  best=i;score=s;}
+ const vectra::V3 o{from.x,from.y,from.z},d{dir.x,dir.y,dir.z};
+ auto loose=[&](int i){const auto&c=m_clutter[size_t(i)];return i!=m_heldClutter&&i!=m_physglove.flying&&!c.pinned&&!dormantEntity(c.z);};
+ auto seen=[&](const vectra::QueryHit& h){const Point3 at{h.point.x-dir.x*.02f,h.point.y-dir.y*.02f,h.point.z-dir.z*.02f};Point3 normal;
+  if(clutterPathFraction(from,at,normal)<.999f)return false;
+  return !m_vrInputActive||clutterPathFraction({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},at,normal)>=.999f;};
+ int best=-1;vectra::QueryHit bestHit;float reach=Reach;
+ for(int i=0;i<int(m_clutter.size());++i){const auto&c=m_clutter[size_t(i)];if(c.model<0||c.broken||i==m_heldClutter||i==m_physglove.flying)continue;
+  vectra::QueryHit h;if(vectra::rayCastProp(c,o,d,reach,h)&&h.distance>.3f){best=i;bestHit=h;reach=h.distance;}}
+ if(best>=0)return loose(best)&&seen(bestHit)?best:-1;
+ for(int i=0;i<int(m_clutter.size());++i){const auto&c=m_clutter[size_t(i)];if(c.model<0||c.broken||!loose(i))continue;
+  vectra::QueryHit h;if(vectra::sphereCastProp(c,o,.2f,d,reach,h)&&h.distance>.3f&&seen(h)){best=i;bestHit=h;reach=h.distance;}}
  return best;
 }
 bool Game::physglovePull(int index,int hand){
@@ -97,6 +102,8 @@ void Game::updatePhysgloves(const InputState& input,float dt){
     m_heldClutter=s.flying;if(vr)m_vrCarryHand=hand;c.velocity={};c.vz=0;c.spin=c.pitchSpeed=c.rollSpeed=0;c.projectile=false;c.sleeping=false;c.restTime=0;
     m_carryHandVelocity={};m_carryHandVz=0;sound(Sound::Pickup,.3f,.85f);++s.catches;s.flying=-1;}
    else if(s.flight>=s.window){if(!s.lurch)++s.misses;s.flying=-1;}}}
+ // An inspection or test camera is no player: nothing is targeted (or drawn glowing) from it.
+ if(m_inspectionCamera){s.target=-1;s.locked=false;return;}
  const bool held=holdingClutter();
  if(m_vrInputActive&&input.vrTracked){
   for(int hand=0;hand<2;++hand){const bool grip=input.vrGrip[size_t(hand)],pressed=grip&&!s.grip[size_t(hand)];s.grip[size_t(hand)]=grip;

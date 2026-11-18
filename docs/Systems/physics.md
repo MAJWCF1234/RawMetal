@@ -354,9 +354,10 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 
 ### Physgloves (src/game/Physgloves.cpp; tube `physgloves`)
 
-- **Aim.** Desktop: the look. VR: each hand's pointing. The target is the loose prop nearest the line within 7 m
-  (a cone of about 6 degrees plus its own half size), seen from the eye (and from the hand in VR), not pinned and
-  not in the hand. It is drawn a little brighter, pulsing (Scene3D `drawClutter`), and never from the resting cache.
+- **Aim.** Desktop: the look. VR: each hand's pointing. The target is the first prop the aim's ray meets in its
+  true shape and turn (`rayCastProp`, PropQueries.h); a pinned or held prop in front blocks it. Missing everything,
+  a 0.2 m `sphereCastProp` along the same line finds the nearest loose prop (aim assist). Within 7 m, the world
+  clear between the eye (and the VR hand) and where the cast met it. It is drawn a little brighter, pulsing (Scene3D `drawClutter`), and never from the resting cache.
 - **Flick.** Desktop: `G`, or hold the middle mouse button empty-handed (the look stays on the target) and flick
   the mouse back. VR: close the hand while pointing (it locks on), then snap the wrist back toward the face or up
   (1.3 m/s).
