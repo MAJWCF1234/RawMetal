@@ -384,8 +384,15 @@ Not the default yet. ragdoll-fall, 14 fixtures (lab, 2026-11-18):
 - **Hand.** The held prop spins with the hand (its turn since the last frame), so a crate swung round carries
   what stands on it by friction and flings it off when jerked.
 - **Water.** Each part is 27 cells, each under the surface by its own share. The lift acts at the middle of
-  what is under, drawn toward the body's middle (a prop's mass is in its walls), so a floater rights itself
-  onto a face. Drag, swell and drift are as before. A body coming through the surface splashes.
+  what is under, drawn toward the body's middle (`water.lever`: a prop's mass is in its walls), and the water
+  rights a floater onto its nearest face it can float on: one whose waterplane's lever over the draft (BM) beats
+  the drop from the middle of what is under to its own (BG, taken at `water.hollow` of a solid block's). A crate
+  rides on any face; a plank, a log or a pipe only lying flat; a drum or a bottle on its side. Linear drag is
+  linear plus quadratic in the speed, as before; the turn is resisted by each wet cell's own speed through the
+  water, by its square (half rho Cd A |u| u at the cell, `water.turn_drag` the Cd), so a long thing spun or
+  tipping is checked by its reach. A sealed drum dropped in upright bobs, tips onto its side and settles; a plank
+  dropped in on its end lies flat (before, the nearest face held them upright and on end: tube `vectra-gaps`,
+  water). Swell and drift are as before. A body coming through the surface splashes.
 - **Glass.** A pane takes the energy the contact's effective mass brings into it (the look-ahead above for
   a fast throw).
 - **Sounds, AI hearing and breaking** come from each contact's approach speed. Breaking uses the speed of the
@@ -454,6 +461,8 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `props.pad_hertz` | 4 | padded props' contact stiffness |
 | `water.right` | 80 | how strongly a floater rights itself |
 | `water.lever` | 0.35 | how far the lift is drawn toward the body's middle |
+| `water.hollow` | 0.5 | how much of a solid block's drop to the middle of what is under counts against a face (which faces a floater rides on) |
+| `water.turn_drag` | 1 | the drag coefficient on a wet cell's speed from the turn (quadratic) |
 
 ## Phase 3
 

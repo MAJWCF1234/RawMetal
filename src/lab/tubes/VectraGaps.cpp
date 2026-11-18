@@ -5,12 +5,16 @@
 //  seams (in the game's World): a crate and a bottle slid across the joins of a platform's boxes and onto a ramp's foot
 //    neither rise off what is under them nor gain vertical speed past the slope's (RM_GAPS=seams runs this part alone,
 //    RM_GAPS_TRACE=1 prints the ramp runs frame by frame, 2 with their world manifolds).
+//  water (in the game): a sealed drum dropped in upright bobs, tips onto its side and settles; a crate rides at its
+//    density's draft; a plank dropped in on its end ends lying flat (before: the drum stayed upright, the plank on end).
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
+#include "game/Buoyancy.h"
 #include "game/EngineRegressionScene.h"
 #include "game/physics/PropBodies.h"
 #include "game/physics/Vectra.h"
 #include "world/CampaignKit.h"
+#include "world/EntityTraits.h"
 #include "world/ModelIds.h"
 #include "world/Primitives.h"
 #include <algorithm>
@@ -76,11 +80,39 @@ void seams(std::ostream& out,const Check& check){
  out<<"up the ramp's foot: the crate's lowest point rose "<<f3(crateUp.rise*1000,2)<<" mm over the slope, its vertical speed past the slope's at most "<<f3(crateUp.vz,3)<<" m/s ("<<f3(crateUp.went,2)<<" m); the bottle "<<f3(bottleUp.rise*1000,2)<<" mm, "<<f3(bottleUp.vz,3)<<" m/s ("<<f3(bottleUp.went,2)<<" m)\n";
  check(crate.rise<.004f&&crate.vz<.08f&&bottle.rise<.004f&&bottle.vz<.08f&&crate.went>1.7f&&bottle.went>1.7f,"seams: a crate and a bottle slid across the joins of a platform's boxes do not jump");
  check(crateUp.rise<.01f&&crateUp.vz<.15f&&bottleUp.rise<.01f&&bottleUp.vz<.15f&&crateUp.went>1.1f&&bottleUp.went>1.1f,"seams: a crate and a bottle slid onto a ramp's foot go up it without jumping");}
-const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams",.standalone=[]{
+// ---- Water (game: RigidClutter.cpp's water on Vectra bodies) ----
+// A deep pool (x 3-11, y 6-14, bed 1.15 m under the surface). A sealed drum (density 220) dropped in nearly upright bobs,
+// tips onto its side and settles there; a wooden crate rides at its density's draft; a 2 m plank dropped standing on end
+// ends lying flat.
+void water(std::ostream& out,const Check& check){
+ constexpr float Bed=-1.2f,Surface=-.05f;
+ auto pool=[&]{auto m=regression::room();m->definition.playerStart={2,2};m->waterVolumes.push_back({3,6,11,14,Bed,Surface});return regression::campaign(m);};
+ auto make=[](int model,Vec2 at,float z){Clutter c;c.kind=7;c.model=model;c.dims=Game::propTraits(model).size;c.pos=at;c.z=z;c.sleeping=false;return c;};
+ auto up=[](const Clutter& c){vectra::Body b;vectra::toBody(c,b);return std::fabs(b.q.rotate({0,0,1}).z);};   // its own z against the world's
+ struct Run {float tilt=0,bob=0,settleSpin=0,settleVz=0,draft=0;bool afloat=false;};
+ auto drop=[&](Clutter c,float seconds)->Run{Game g(pool());LabAccess::player(g).pos={2,2};LabAccess::clutter(g)={c};Run r;float lo=1e9f,hi=-1e9f,entered=-1;
+  for(int i=0;i<int(seconds*60);++i){g.update({},1.f/60);const auto& d=LabAccess::clutter(g)[0];const float t=float(i+1)/60;
+   if(entered<0&&d.z<Surface)entered=t;if(entered>=0&&t<entered+2){lo=std::min(lo,d.z);hi=std::max(hi,d.z);}
+   if(t>seconds-1){r.settleSpin=std::max(r.settleSpin,len(vectra::propAngular(d)));r.settleVz=std::max(r.settleVz,std::fabs(d.vz));}}
+  const auto& d=LabAccess::clutter(g)[0];r.tilt=std::acos(std::clamp(up(d),0.f,1.f));r.bob=hi-lo;r.draft=(Surface-d.z)/std::max(.01f,d.extent()[2]*2);r.afloat=d.z<Surface&&d.z+d.extent()[2]*2>Surface;return r;};
+ // The drum: sealed and empty (density 220), dropped 30 cm over the surface leaning 5 degrees.
+ Clutter drum=make(model::ind_barrel,{7,10},Surface+.3f);{auto t=std::make_shared<EntityTraits>();t->density=220;t->floats=1;drum.traits=t;}drum.roll=.09f;
+ const Run d=drop(drum,8);
+ out<<"a sealed drum dropped in upright: it went "<<f3(d.bob*100,1)<<" cm up and down in its first 2 s in, ended "<<f3(d.tilt*57.3f,1)<<" deg over (on its side is 90), afloat "<<d.afloat<<"; in its last second it turned at most "<<f3(d.settleSpin,3)<<" rad/s and rose or fell at most "<<f3(d.settleVz,3)<<" m/s\n";
+ check(d.afloat&&d.bob>.03f&&d.tilt>1.3f&&d.settleSpin<.5f&&d.settleVz<.08f,"water: a drum dropped in bobs, tips onto its side and settles there afloat");
+ Clutter crate=make(model::wooden_crate,{7,10},Surface+.3f);const float density=buoyancy::density(crate);const Run c=drop(crate,8);
+ out<<"a wooden crate: draft "<<f3(c.draft,3)<<" of its height (its density "<<f3(density,0)<<" says "<<f3(density/1000,3)<<"), "<<f3(c.tilt*57.3f,1)<<" deg off a face\n";
+ check(c.afloat&&std::fabs(c.draft-density/1000)<.1f&&c.tilt<.15f,"water: a crate floats level at the depth its density says");
+ Clutter plank=make(model::scrap_bridge_plank,{7,10},Surface+.2f);plank.roll=kPi*.5f-.15f;   // its 2 m length nearly upright
+ const Run p=drop(plank,10);
+ out<<"a 2 m plank dropped in standing on its end: it ends "<<f3(p.tilt*57.3f,1)<<" deg off lying flat, afloat "<<p.afloat<<"\n";
+ check(p.afloat&&p.tilt<.2f,"water: a plank dropped in on its end ends lying flat");}
+const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams, water",.standalone=[]{
  std::ofstream out("vectra-gaps.txt");bool ok=true;
  auto check=[&](bool pass,const std::string& what){out<<(pass?"PASS ":"FAIL ")<<what<<'\n';out.flush();ok&=pass;};
  const char* only=std::getenv("RM_GAPS");auto want=[&](const char* part){return !only||std::string(only).find(part)!=std::string::npos;};
  if(want("seams")){out<<"---- seams ----\n";seams(out,check);}
+ if(want("water")){out<<"---- water ----\n";water(out,check);}
  if(want("joints")){
  // ---- Friction and detents on hinges and sliders ----
  out<<"---- joint friction and detents ----\n";

@@ -96,6 +96,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<int> partOf;std::vector<Hit> hits;std::array<V3,8> feature{};
+ struct WetCell {V3 r;float area;};std::vector<WetCell> wetCells;   // a body's cells under water this step (its arm to each, wet face area)
  if(rp.flat.size()<list.size())rp.flat.resize(list.size());
  // How every door of a world stands (the flat-floor memo is good while it is unchanged).
  std::vector<std::pair<const World*,float>> doorStates;
@@ -454,12 +455,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(bottom<surface){
      // The share of its volume under the surface and that volume's middle: each part in 27 cells, each cell
      // under by how much of its own height is (so the share runs smoothly as it sinks or rocks).
-     float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();
+     float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();wetCells.clear();
      for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];const V3 half=part.kind==PartKind::Cylinder?V3{part.half.x*.886f,part.half.x*.886f,part.half.z}:part.kind==PartKind::Sphere?V3{part.half.x*.806f,part.half.x*.806f,part.half.x*.806f}:part.half;
       const float vol=half.x*half.y*half.z;const M3 r=turn*part.turn.matrix();
       const float tall=(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
       for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){const V3 l=part.centre+part.turn.rotate(V3{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f});const V3 at=b.toWorld(l);
-       const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);}}}
+       const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);wetCells.push_back({at-b.x,wet*std::pow(vol*8.f/27.f,2.f/3.f)});}}}
      const float f=all>0?under/all:0.f;
      if(f>0){middle=middle*(1/under);const float rho=buoyancy::density(c),k=buoyancy::drag(c)*tune("water.drag",1.f);const bool floater=rho<buoyancy::WaterDensity;
       const float mass=b.invMass>0?1/b.invMass:1;const float height=std::max(.01f,c.height());
@@ -469,12 +470,25 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
       const float horizontal=std::sqrt(b.v.x*b.v.x+b.v.y*b.v.y);const float hk=std::exp(-(1.1f+k*horizontal)*f*RigidStep);b.v.x*=hk;b.v.y*=hk;
       const float bob=floater?2*tune("water.bob_damping",.2f)*std::sqrt(buoyancy::Gravity*buoyancy::WaterDensity/(rho*height)):tune("water.sink_drag",2.6f);
       b.v.z*=std::exp(-(1.1f+bob+k*std::fabs(b.v.z))*f*RigidStep);b.w=b.w*std::exp(-2.6f*f*RigidStep);
+      // The water against its turning, cell by cell: each wet cell's own speed through the water from the turn, resisted by
+      // its square (half rho Cd A |u| u, water.turn_drag the Cd) at the cell, so the drag grows with the reach: a plank or a
+      // log spun in the water slows far sooner than a mug, and a drum tipping over is checked as it goes, not flung.
+      {b.updateInertia();V3 tau{};const float cd=tune("water.turn_drag",1.f)*.5f*buoyancy::WaterDensity;
+       for(const auto&cell:wetCells){const V3 u=cross(b.w,cell.r);tau=tau+cross(cell.r,u*(-cd*cell.area*len(u)));}
+       V3 dw=b.invInertia*tau*RigidStep;const float most=len(b.w),l=len(dw);if(l>most&&l>0)dw=dw*(most/l);b.w=b.w+dw;}
       const float bed=w.supportBelow(q.x,q.y,bottom+.025f,true);const bool afloat=floater&&surface-bed>height*rho/buoyancy::WaterDensity*.9f;
       if(afloat&&f<.999f){
        // Afloat: a prop's mass lies in its walls (a crate's planks, a box's card), so it rides on a face, not
-       // on a corner as a solid block of its density would: the water rights it toward its nearest face.
+       // on a corner as a solid block of its density would: the water rights it toward its nearest face it can float on.
+       // A face is one when its waterplane's lever over what is under (BM, a^2 / 6 h s for a box of half extent h across
+       // the face and a the lesser of the others, s its density over water's) beats the drop from the middle of what is
+       // under to its own (BG, h (1 - s)), that drop taken at water.hollow of a solid block's (its mass in its walls):
+       // a crate rides on any face; a plank, a log or a pipe only lying flat; a drum or a bottle on its side, so one
+       // dropped upright bobs, tips over and settles. (Nearest of all faces, as before, when none is.)
        // A swell rocks it a few degrees and heaves it, a slow drift carries it (each on its own phase).
-       V3 axis{};float best=-1;for(int a=0;a<3;++a){const V3 v=turn.column(a);const float d=std::fabs(v.z);if(d>best){best=d;axis=v.z<0?neg(v):v;}}
+       const auto dims=c.size();const float sr=std::clamp(rho/buoyancy::WaterDensity,.05f,.95f),hollow=tune("water.hollow",.5f);
+       auto floatsOn=[&](int a){const float h=std::max(.005f,dims[size_t(a)]*.5f),w=std::min(dims[size_t((a+1)%3)],dims[size_t((a+2)%3)])*.5f;return w*w/(6*h*sr)>hollow*h*(1-sr);};
+       V3 axis{};float best=-1;for(int pass=0;pass<2&&best<0;++pass)for(int a=0;a<3;++a){if(pass==0&&!floatsOn(a))continue;const V3 v=turn.column(a);const float d=std::fabs(v.z);if(d>best){best=d;axis=v.z<0?neg(v):v;}}
        b.w=b.w+cross(axis,V3{0,0,1})*(tune("water.right",80.f)*RigidStep);
        const float phase=float(index%97)*.61f,swell=tune("water.swell",1.f);
        b.w=b.w+V3{std::cos(c.yaw),std::sin(c.yaw),0}*(1.5f*swell*std::sin(1.6f*m_elapsed+phase*1.7f+1.f)*RigidStep)+V3{-std::sin(c.yaw),std::cos(c.yaw),0}*(1.5f*swell*std::sin(1.9f*m_elapsed+phase)*RigidStep);
