@@ -4,6 +4,31 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.1 - Ground to stand on (2026-11-17)
+
+Things have weight now, and the places you build have somewhere to stand.
+
+- **Vectra.** The props have a new physics engine, Vectra, and it is the default. Every crate, chair, barrel and bottle is a real body now, turning any way it is pushed. Stacks stand and settle faster than before. Barrels roll down ramps and tumble down stairs. A crate holds on a gentle slope and slides off a steep one. A plank on a crate makes a seesaw, a row of boards falls like dominoes, and a wardrobe pushed high tips while one pushed low slides. A busy room costs less than it did. The old physics is still there behind a switch (`RM_PROPS=legacy`) for anyone who misses it. See docs/Systems/physics.md.
+- **Weight.** A crate meets a man now; it no longer passes through him. Heavy things knock people and creatures back by what they weigh and how fast they come: a thrown crate shoves a guard off his feet, a rolling drum takes him down, and a mug only annoys him. Harm follows weight too. A dropped crate crushes the mug under it, and a creature hit hard enough forgets what it was reaching for.
+- **Mattresses.** They bend now. Carried by one end they sag, let go over a step they drape, and struck they shiver and lie still.
+- **Building on a hill.** In the editor, a room drawn on a slope finds its own footing: a level pad cut into the ground, a foundation under the low side, stilts you can walk beneath, or terraces with steps between. Pull a floor's edge up and it settles at a step, half a storey or a storey. Doors left high get steps down to the ground on their own. No more stepped floors, jagged walls or daylight under them.
+- **Flooring.** Pick a look (planks, tile, carpet, stone, brick, grating) and drag it out. On a hill it follows the ground as a path or levels into a patio.
+- **Stairs and balconies** take their own materials now, for steps, fronts and rails, and decks, edges and railings. Click them with Paint.
+- **Glass you can place.** The Window wall tool cuts a wall and fills it with a framed grid, clear, dirty, frosted, wired, mesh or already cracked, a doorway in it if you like. Every pane breaks on its own. Plain glass snaps into walls and openings.
+- **Holes in walls.** The Breach tool breaks through a wall, ragged, arched or square, with broken edges, rebar and rubble. You can walk through it, see through it and shoot through it, and so can they.
+- **Growth.** A Growth brush lays ivy and moss on walls, creepers hanging from ceilings and ledges, and grass up through the floor. Creepers sway, part as you pass and flinch when shot.
+- **Ten new skies**, from clear day to a black sun over red ash, and each one lights the land beneath it. Night is dark now.
+- **A quieter editor.** Placing a room no longer plays a horror sting. The editor clicks and chimes softly instead.
+- **Nothing lost.** If the editor falls over, it keeps a record of what you were doing and gives you your work back when it opens again.
+- **Maps** can name things, change one thing's colour, weight or loyalty without touching the rest, keep values for scripts, and stamp out prefabs. See docs/Systems/map-format.md.
+- **Saves** are version 28, built in sections so they can grow. An older save is brought up to date when it loads, and the original is kept beside it. Since v1.0.4 saves and settings had been written to the wrong folder; they are found and brought home.
+- **The Starter Map** has an overgrown atrium, a house on a hillside and a physics room to try it all in.
+- **Fixes.** A Quarantine Ward terminal no longer sinks its desk into the counter, and the map audit now catches a desk standing on other furniture.
+
+Verified with tools/release/ship.py on the full suite, the feature lab's tubes for every system above, the editor's test modes, and before-and-after pictures of each.
+
+---
+
 ## v1.5.0 - Things that give (2026-11-17)
 
 The world answers back now. What you hold, what you break, what you fall into.
