@@ -1,0 +1,7 @@
+# every joint in the room moving at once (SHOWCASE: PHYSICS, the joints corner; tube joints-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 11.5 19.5 -999 -90 12
+scene cost
+size 640 360
+frames 160

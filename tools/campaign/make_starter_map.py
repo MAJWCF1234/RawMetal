@@ -1377,6 +1377,93 @@ def physics_room(s, slot, catalogue):
     exhibit(m, (10, 14.5, 21, 22), 'PHYSICS / chairs, a table, a can to roll', 'TUMBLE', 'throw the crates at them', 15, 18)
     for x, y in ((5, 5), (15, 4), (5, 18), (15, 18)):
         s.rec(m, 'LIGHT', i, x, y, 4.6, 0, 0, 1.1, 10, 4300)
+    joints_corner(s, m, slot, body)
+
+
+def joints_corner(s, m, slot, body):
+    """The joints corner of SHOWCASE: PHYSICS, in the band across the room's middle (y 8-14) and beside the
+    landing: Vectra's joints (JOINT records, docs/Systems/physics.md). Cage lamps on chains that swing when hit or
+    shot, a crate on a rope to shoot down, a seesaw on a hinge, a gate on a sprung hinge, a rope bridge of planks
+    between two plinths, and a lift on a rail hung over a pulley against a counterweight: it rests at the landing,
+    takes you (or a load) down, and goes back up empty."""
+    i = m['index']
+    s.format2 = True                                                  # JOINT takes named fields
+
+    def prop(name, x, y, z, dims=None, yaw=0.0, mass=None, k=1.0, pitch=0.0):
+        n = sum(1 for r in m['records'] if r.startswith('CLUTTER|'))
+        if dims is None:
+            h = body(name, x, y, z, yaw, k, pitch)
+        else:
+            s.rec(m, 'CLUTTER', i, 7, round(x, 3), round(y, 3), round(z, 3), round(yaw, 3), slot[name],
+                  dims[0], dims[1], dims[2], round(pitch, 3), 0, '', *(['mass=%g' % mass] if mass else []))
+            h = dims[2]
+        return n, h
+
+    def joint(kind, a, b, at, to=None, **named):
+        fields = ['JOINT', i, kind, a, b, *[round(v, 3) for v in at]] + ([round(v, 3) for v in to] if to else [])
+        s.rec(m, *fields, *['%s=%s' % (k, v) for k, v in named.items()])
+
+    ceiling = 5.0
+    # Cage lamps on chains from the ceiling, each with its light riding it (LIGHT's prop): shoot one, or
+    # throw something at it, and it swings with its light.
+    for x, y, drop in ((2.6, 9.4, 1.5), (8.0, 9.2, 1.9), (15.6, 9.6, 1.6)):
+        top = ceiling - drop
+        lamp, h = prop('mine_cage_lamp', x, y, top - .36, (.21, .2, .36), 0, 1.5)
+        joint('chain', lamp, -1, (x, y, top), (x, y, ceiling))
+        s.rec(m, 'LIGHT', i, x, y, top - .2, 2, 0, 1.2, 7, 2700, 0, '', '', '', '', '', '', '', '', '', '', '', '', '', '', 1, lamp)
+    # A crate on a rope: shoot the rope and it drops (or hit the crate hard enough and the rope gives).
+    crate, h = prop('wooden_crate', 12.0, 11.2, 2.4, (.55, .55, .55), .3, 14)
+    joint('rope', crate, -1, (12.0, 11.2, 2.4 + .55), (12.0, 11.2, ceiling), breaks=2600, radius=.012)
+    # A seesaw: a plank on a hinge over a low block. Stand on an end, or drop a crate on it.
+    s.struct(m, 2.45, 12.2, 2.55, 12.8, 0, .3, 40)                   # a narrow block 5 cm under the pin: room to tip
+    plank, h = prop('packing_crate', 2.5, 12.5, .35, (2.6, .4, .05), 0, 12)
+    joint('hinge', plank, -1, (2.5, 12.5, .35), axis='y', min=-14, max=14)
+    for k in range(2):
+        prop('wooden_crate', 1.4 + .6 * k, 13.8, 0, (.4, .4, .4), .2 * k, 9)
+    # A gate on a sprung hinge: walk through it and it swings shut behind you.
+    gate, h = prop('packing_crate', 13.6, 13.6, .04, (1.1, .05, 1.0), 0, 8)
+    joint('hinge', gate, -1, (13.03, 13.6, .54), axis='z', min=-100, max=100, stiffness=.8, damping=.35)
+    # A rope bridge: seven planks hinged end to end between two plinths, sagging by its slack.
+    s.struct(m, 5.2, 11.9, 6.2, 13.3, 0, .6, 40)
+    s.struct(m, 9.8, 11.9, 10.8, 13.3, 0, .6, 40)
+    s.rec(m, 'PRIM', i, 'stairs', 4.64, 12.6, 0, 1.0, 0, .6, 1, 40)
+    s.rec(m, 'PRIM', i, 'stairs', 11.36, 12.6, 0, 1.0, 0, .6, 3, 40)
+    x0, x1, z0, n = 6.2, 9.8, .6, 7
+    half, run = (x1 - x0) / 2, .52 * n / 2
+    depth = (run * run - half * half) ** .5
+    ends = [(x0 + (x1 - x0) * t, z0 - depth * (1 - abs(2 * t - 1))) for t in (k / n for k in range(n + 1))]
+    planks = []
+    for k in range(n):
+        (ax, az), (bx, bz) = ends[k], ends[k + 1]
+        import math
+        tilt = -math.atan2(bz - az, bx - ax)
+        l = math.hypot(bx - ax, bz - az) - .02
+        mx, mz = (ax + bx) / 2, (az + bz) / 2
+        # Its top through the two pins; a prop's z is the bottom of its turned box.
+        ext = l / 2 * abs(math.sin(tilt)) + .025 * math.cos(tilt)
+        p, _ = prop('packing_crate', mx, 12.6, mz - .025 - ext, (round(l, 3), .7, .05), 0, 9, pitch=tilt)   # 8 kg and up bear the player
+        planks.append(p)
+    for k in range(n + 1):
+        ex, ez = ends[k]
+        a = planks[k] if k < n else planks[n - 1]
+        b = -1 if k in (0, n) else planks[k - 1]
+        joint('hinge', a, b, (ex, 12.6, ez), axis='y')
+    # The lift: a platform on a rail (a slider) hung over a pulley against a 60 kg counterweight. Empty, it rests
+    # at the landing's edge; your weight, or a load, takes it down, and it comes back up empty. The slider's
+    # motor holds no speed with 200 N: a brake.
+    platform, h = prop('packing_crate', 17.45, 3.5, 1.1, (.9, .9, .1), 0, 40)
+    weight, h = prop('packing_crate', 17.45, 6.3, 0, (.5, .5, .5), 0, 60)
+    joint('slider', platform, -1, (17.45, 3.5, 1.15), axis='z', min=0, max=1.08, motor='speed', speed=0, force=200)
+    joint('pulley', platform, weight, (17.45, 3.5, 1.2), (17.45, 6.3, .5), over='17.45,3.5,4.8', over2='17.45,6.3,4.8')
+    prop('wooden_crate', 16.6, 2.2, 1.2, (.45, .45, .45), .4, 25)    # a load on the landing for it
+    # A dead man on the top step of the stairs off the landing, facing down them: the first time he is seen he
+    # goes down as a body (Carcass) and comes to rest on the steps.
+    s.rec(m, 'TIMED_SEQUENCE', i, 'sc_joints_clock', 'sc_joints_clock_done', 0, 0, 24, 24, -100, 100, 60000, 60000, 0, 0, 0, 0, 1, 1)
+    s.rec(m, 'ACTOR', i, 'sc_joints_clock', 7, 1.75, 0, 0, 0)
+    s.rec(m, 'ACTOR_KEY', i, 0, 0, 18.55, 2.1, 1.0, 0, 4, 1)
+    s.rec(m, 'ACTOR_KEY', i, 0, 60000, 18.55, 2.1, 1.0, 0, 4, 1)
+    s.zone(m, 1, 8, 22, 14.5, 'PHYSICS / joints: chains, a rope, hinges, a bridge')
+    s.index.append({'map': m['index'], 'section': 'SHOWCASE', 'x': 8, 'y': 11, 'title': 'JOINTS', 'name': 'lamps on chains, a crate on a rope, a seesaw, a gate, a rope bridge, a lift'})
 
 
 KEEP_SHUT = {'Lights', 'Hazards', 'Life', 'Levels', 'Scripts', 'Architecture', 'Architecture 2',

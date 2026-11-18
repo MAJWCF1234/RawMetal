@@ -756,6 +756,46 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="GLAZING"){
    // GLAZING|map|x1|y1|x2|y2|bottom|top, then named fields: a window wall or storefront (World.h Glazing, Openings.cpp).
    auto map=mapAt(maps,f);map->glazings.push_back(parseGlazing(f,namedFields));
+  }else if(tag=="JOINT"){
+   // JOINT|map|kind|propA|propB|x|y|z[|x2|y2|z2], then named fields: a joint between props, or a prop and
+   // the room (propB -1). World.h PropJoint; docs/Systems/map-format.md lists the words and fields.
+   if(f.size()!=8&&f.size()!=11)throw std::runtime_error("malformed JOINT record (JOINT|map|kind|propA|propB|x|y|z[|x2|y2|z2])");auto map=mapAt(maps,f);PropJoint j;
+   if(!parsePropJointWord(f[2],j.kind))throw std::runtime_error("joint kind is hinge, ball, slider, weld, rope, chain, spring, rod, pulley or winch: "+f[2]);
+   j.propA=integer(f,3,"joint prop");j.propB=integer(f,4,"joint other prop");if(j.propA<0||j.propB<-1||j.propA==j.propB)throw std::runtime_error("invalid joint props");
+   j.at={number(f,5,"joint x"),number(f,6,"joint y"),number(f,7,"joint z")};j.to=j.at;
+   if(f.size()==11)j.to={number(f,8,"joint x2"),number(f,9,"joint y2"),number(f,10,"joint z2")};
+   else if(j.rope())throw std::runtime_error("a rope, chain, spring, rod, pulley or winch joint needs its other end (x2|y2|z2)");
+   if(j.kind==PropJointKind::Pulley&&j.propB<0)throw std::runtime_error("a pulley joins two props");
+   auto num=[](const std::string& v,const char* what){size_t used=0;float x=0;try{x=std::stof(v,&used);}catch(...){used=0;}if(used!=v.size()||!std::isfinite(x))throw std::runtime_error(std::string("invalid joint ")+what+": "+v);return x;};
+   auto vec=[&](const std::string& v,const char* what)->Point3{if(v=="x")return {1,0,0};if(v=="y")return {0,1,0};if(v=="z")return {0,0,1};
+    const auto a=v.find(','),b=a==std::string::npos?a:v.find(',',a+1);if(b==std::string::npos)throw std::runtime_error(std::string("joint ")+what+" is x, y, z or three numbers a,b,c: "+v);
+    return {num(v.substr(0,a),what),num(v.substr(a+1,b-a-1),what),num(v.substr(b+1),what)};};
+   const bool angular=j.kind==PropJointKind::Hinge;const float unit=angular?kPi/180:1.f;
+   bool overSet=false,over2Set=false;j.axis=j.kind==PropJointKind::Hinge?Point3{1,0,0}:Point3{0,0,1};
+   for(const auto& n:namedFields){const std::string& k=n.key;const std::string& v=n.value;
+    if(k=="axis"){j.axis=vec(v,"axis");{const float l=std::sqrt(j.axis.x*j.axis.x+j.axis.y*j.axis.y+j.axis.z*j.axis.z);if(l<1e-4f)throw std::runtime_error("joint axis must not be zero");j.axis=j.axis*(1/l);}}
+    else if(k=="length"){j.length=num(v,"length");if(j.length<0||j.length>30)throw std::runtime_error("joint length is 0 to 30 m");}
+    else if(k=="min"){j.lower=num(v,"min")*unit;j.limited=true;}
+    else if(k=="max"){j.upper=num(v,"max")*unit;j.limited=true;}
+    else if(k=="cone"){j.cone=num(v,"cone");if(j.cone<0||j.cone>179)throw std::runtime_error("joint cone is 0 to 179 degrees");}
+    else if(k=="cone2"){j.cone2=num(v,"cone2");if(j.cone2<0||j.cone2>179)throw std::runtime_error("joint cone2 is 0 to 179 degrees");}
+    else if(k=="twist"){j.twist=num(v,"twist");if(j.twist<0||j.twist>179)throw std::runtime_error("joint twist is 0 to 179 degrees");}
+    else if(k=="stiffness"){j.hertz=num(v,"stiffness");if(j.hertz<0||j.hertz>60)throw std::runtime_error("joint stiffness is 0 to 60 Hz");}
+    else if(k=="damping"){j.damping=num(v,"damping");if(j.damping<0||j.damping>10)throw std::runtime_error("joint damping is 0 to 10");}
+    else if(k=="motor"){if(v=="speed")j.motor=1;else if(v=="servo")j.motor=2;else if(v=="off"||v=="none")j.motor=0;else throw std::runtime_error("joint motor is speed, servo or off: "+v);}
+    else if(k=="speed")j.speed=num(v,"speed")*unit;
+    else if(k=="force"){j.force=num(v,"force");if(j.force<0)throw std::runtime_error("joint force must not be negative");}
+    else if(k=="target")j.target=num(v,"target")*unit;
+    else if(k=="breaks"){j.breakForce=num(v,"breaks");if(j.breakForce<0)throw std::runtime_error("joint breaks must not be negative");}
+    else if(k=="over"){j.over=vec(v,"over");overSet=true;}
+    else if(k=="over2"){j.over2=vec(v,"over2");over2Set=true;}
+    else if(k=="ratio"){j.ratio=num(v,"ratio");if(j.ratio<.1f||j.ratio>10)throw std::runtime_error("joint ratio is 0.1 to 10");}
+    else if(k=="state"||k=="switch"){const std::vector<std::string> one{v};(k=="state"?j.snapState:j.motorState)=scriptName(one,0,k=="state"?"joint state":"joint switch");}
+    else if(k=="radius"){j.radius=num(v,"radius");if(j.radius<0||j.radius>.1f)throw std::runtime_error("joint radius is 0 to 0.1 m");}}
+   if(j.limited&&j.lower>j.upper)throw std::runtime_error("joint min is more than its max");
+   if(j.kind==PropJointKind::Pulley&&(!overSet||!over2Set))throw std::runtime_error("a pulley needs over= and over2= (where each rope goes over)");
+   if(j.kind==PropJointKind::Winch&&j.motor==0)j.motor=1;
+   map->joints.push_back(j);
   }else if(tag=="BREACH"){
    // BREACH|map|x1|y1|x2|y2|bottom|top, then named fields: a hole broken through a wall (World.h Breach, Openings.cpp).
    auto map=mapAt(maps,f);map->breaches.push_back(parseBreach(f,namedFields));

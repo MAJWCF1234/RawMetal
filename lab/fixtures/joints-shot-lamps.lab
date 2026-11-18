@@ -1,0 +1,9 @@
+# The judged picture of joints-lamps (1600 x 900; tube joints-room, pictures only).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 8.0 13.6 -999 -90 55
+scene lamps
+pictures 1
+
+size 1600 900
+frames 60

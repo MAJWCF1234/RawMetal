@@ -1,0 +1,9 @@
+# The judged picture of the rope bridge from beside it, a crate on it (1600 x 900; tube joints-room, pictures only).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 7.6 16.4 -999 -96 -14
+scene bridgeview
+pictures 1
+shoot-at 100
+size 1600 900
+frames 102

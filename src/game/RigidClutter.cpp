@@ -55,6 +55,11 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  // A sleeping prop the moving player walks into is stepped too (his body in the solver wakes it).
  if(!any&&level==m_level&&lengthSq(m_velocity)>1e-4f)for(int i=0;i<int(list.size())&&!any;++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];const auto e=c.extent();
   any=std::fabs(c.pos.x-m_player.pos.x)<e[0]+.35f&&std::fabs(c.pos.y-m_player.pos.y)<e[1]+.35f&&c.z<m_player.z+m_player.hullHeight()&&c.z+c.height()>m_player.z;}
+ // A motor at work on a joint keeps the list stepping (a winch reels in whatever sleeps on it).
+ if(!any){const auto&jw=chunkWorld(level);for(size_t k=0;k<jw.joints().size()&&k<jw.jointStates().size()&&!any;++k){const auto&j=jw.joints()[k];const auto&st=jw.jointStates()[k];
+   any=j.motor==1&&!st.broken&&st.motorOn&&st.speed!=0&&(!j.motorState||state(j.motorState))&&!(j.kind==PropJointKind::Winch&&(st.speed>0?st.length>=0&&st.length<=(j.limited?j.lower:.2f)+1e-3f:st.length>=(j.limited?j.upper:1e9f)-1e-3f));}}
+ // The player stepping onto a jointed prop (a lift, a seesaw, a bridge) wakes it under his weight.
+ if(!any&&level==m_level&&!m_noclip&&!m_inspectionCamera&&std::fabs(jointedPropTop(m_player.pos,m_player.z+.1f,.2f)-m_player.z)<.08f)any=true;
  rp.accumulator+=dt;if(!any){rp.accumulator=std::min(rp.accumulator,RigidStep);return;}
  int steps=0;while(rp.accumulator>=RigidStep-1e-6f&&steps<RigidMaxSteps){rp.accumulator-=RigidStep;++steps;}
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
@@ -245,7 +250,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // or the player's own body in the solver pushes it; set out of his hull each step, a barrel would ride at a sprint.
    float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&closing>.001f&&sweepFits(c.pos,next))c.pos=next;
    if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}};
-  contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);},[&](float dv,Vec2){m_verticalSpringVelocity-=std::min(1.f,dv*.4f);});
+  // A jointed prop he stands on (a bridge's plank, a lift) carries him; it does not strike or shove him.
+  if(!onJointedTop(level,index,m_player.pos,m_player.z))contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);},[&](float dv,Vec2){m_verticalSpringVelocity-=std::min(1.f,dv*.4f);});
   // (Men and creatures are bodies in the solver (actor bodies, below): a prop meets them by contact.)
   if(false)for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
    contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;reached=next;}npc.pose.position=reached;return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);},[](float,Vec2){});}
@@ -317,6 +323,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   const auto&r=B[size_t(rec.body[size_t(c.boneRoot)])];
   if(!rec.held){const V3 centre=r.x-r.q.rotate(ax*(float(c.boneRoot-1)*third));setFrame(c,r.q,centre);const V3 v=r.v+cross(r.w,centre-r.x);c.velocity={v.x,v.y};c.vz=v.z;setPropAngular(c,r.w);}
   c.sleeping=asleep&&!rec.held;c.restTime=rest;if(len(r.v)<.5f)c.projectile=false;};
+ // Joints between props (PropJoints.cpp): each joint's props, so both are built whenever either is.
+ const auto jointPairs=jointedProps(level,list);std::deque<Joint> propJoints;std::vector<int> propJointOf;std::vector<char> jointNeed;
  for(int step=0;step<steps;++step){
   auto mark=Clock::now();
   space.bodies.clear();std::fill(bodyOf.begin(),bodyOf.end(),-1);
@@ -328,7 +336,10 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   if(level==m_level)reaches.push_back({m_player.pos.x-1.5f,m_player.pos.y-1.5f,m_player.pos.x+1.5f,m_player.pos.y+1.5f});
   auto reachable=[&](const Clutter& c){const auto e=c.extent();for(const auto&r:reaches)if(c.pos.x+e[0]>=r.x0&&c.pos.x-e[0]<=r.x1&&c.pos.y+e[1]>=r.y0&&c.pos.y-e[1]<=r.y1)return true;return false;};
   chains.clear();hinges.clear();space.constraints.clear();chainBody.assign(0,0);
-  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held&&!reachable(c))continue;
+  jointNeed.assign(list.size(),0);
+  if(!jointPairs.empty()){auto built=[&](int i){if(i<0||!inPlay(i))return false;const auto&c=list[size_t(i)];return !c.sleeping||i==held||reachable(c)||jointNeed[size_t(i)];};
+   for(bool more=true;more;){more=false;for(auto [a,b]:jointPairs)if((built(a)||built(b))&&(!jointNeed[size_t(a)]||(b>=0&&!jointNeed[size_t(b)]))){jointNeed[size_t(a)]=1;if(b>=0)jointNeed[size_t(b)]=1;more=true;}}}
+  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held&&!reachable(c)&&!jointNeed[size_t(i)])continue;
    if(chained(c)){buildChain(i,i==held);continue;}
    Body b;toBody(c,b);b.user=i;
    if(i==held){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w=heldSpin;
@@ -358,6 +369,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    a.material={.6f,.5f,0,0};a.linearDamping=0;a.angularDamping=0;a.sleepTime=1e9f;a.id=(1<<19)-2-int(k);actors[k].body=int(space.bodies.size());actors[k].start=a.x;space.bodies.push_back(a);}
   chainBody.resize(space.bodies.size(),0);for(const auto&ch:chains)for(int k=0;k<3;++k)chainBody[size_t(ch.body[size_t(k)])]=1;
   for(auto&h:hinges)space.constraints.push_back(&h);
+  propJoints.clear();propJointOf.clear();addPropJoints(level,list,bodyOf,space,propJoints,propJointOf);
   m_rigidStats.buildMs+=since(mark);mark=Clock::now();
   wasAsleep.assign(space.bodies.size(),0);before.assign(space.bodies.size(),{});
   for(size_t bi=0;bi<space.bodies.size();++bi){wasAsleep[bi]=space.bodies[bi].sleeping;before[bi]=space.bodies[bi].v;}
@@ -409,7 +421,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
-  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
+  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
   for(const auto&rec:chains){bool still=true;for(int k:rec.body)still&=wasAsleep[size_t(k)]&&space.bodies[size_t(k)].sleeping;if(!still)writeChain(rec);}
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];

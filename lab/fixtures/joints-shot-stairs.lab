@@ -1,0 +1,9 @@
+# The judged picture of the dead man gone down the stairs off the landing (1600 x 900; tube joints-room, pictures only).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 21.6 5.0 -999 -128 -26
+scene stairs
+pictures 1
+shoot-at 170
+size 1600 900
+frames 172

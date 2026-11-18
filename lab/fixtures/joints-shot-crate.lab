@@ -1,0 +1,9 @@
+# The judged picture of joints-crate (1600 x 900; tube joints-room, pictures only).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 12.4 15.6 -999 -95 34
+scene crate
+pictures 1
+
+size 1600 900
+frames 56

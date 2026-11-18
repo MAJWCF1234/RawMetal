@@ -435,7 +435,16 @@ RECORDS = [
          'With FORMAT|2 its named fields set it up (all optional): <code>shape=</code> ragged (knocked through: tall in the middle, falling away to the sides), arch or rect, <code>edge=</code> concrete (with rebar), brick or clean, '
          '<code>sill=</code> 0 and <code>head=</code> 2.3 above bottom (the hole\'s foot and top), <code>rebar=0</code> leaves the bars out, <code>rubble=</code> 0-60 pieces (10), <code>seed=</code> another ragged outline and rubble, '
          '<code>toward=-1</code> throws most of the rubble to the other side, <code>infill=0</code> leaves the cut tiles open round the hole, <code>wall=</code> the STRUCT material of what is built back (3). '
-         'The Campaign Builder\'s Breach tool writes it: drag along a wall.')]),
+         'The Campaign Builder\'s Breach tool writes it: drag along a wall.'),
+        ('JOINT|map|kind|propA|propB|x|y|z[|x2|y2|z2]', 'Joins a loose prop (propA, a CLUTTER record of this map counted from 0) to another (propB) or to the room (propB -1: a wall, the ceiling or the floor), where they meet at x,y,z (absolute). '
+         'kind is <code>hinge</code> (turns about one pin: a hatch, a gate, a seesaw), <code>ball</code> (turns every way, within a cone: a lamp on a bracket), <code>slider</code> (runs along a rail), <code>weld</code> (held fast until it breaks), '
+         '<code>rope</code> or <code>chain</code> (at most its length: slack when nearer, drawn as hemp or as links), <code>spring</code> (pulled back to its length), <code>rod</code> (always its length), <code>pulley</code> (a rope over two wheels between two props: as one goes down the other comes up) '
+         'or <code>winch</code> (a chain that reels itself in). A rope, chain, spring, rod, pulley or winch needs its other end x2|y2|z2 (on propB, or the point in the room it hangs from; a pulley\'s end on propB). '
+         'The pose the props are laid out in is the joint\'s rest. With FORMAT|2 its named fields set it up (all optional): <code>axis=</code> the pin or rail (x, y, z or a,b,c), <code>length=</code>, <code>min=</code> and <code>max=</code> (degrees for a hinge, metres for a slider, a winch\'s shortest and longest), '
+         '<code>cone=</code>, <code>cone2=</code> and <code>twist=</code> (a ball\'s, in degrees), <code>stiffness=</code> (Hz) and <code>damping=</code> (a spring, or a hinge or slider springing back to its rest), '
+         '<code>motor=</code> speed or servo with <code>speed=</code>, <code>force=</code> and <code>target=</code> (degrees or metres), <code>switch=</code> a state the motor runs on, <code>breaks=</code> the pull (N) that snaps it, <code>state=</code> a state set when it snaps, '
+         '<code>over=</code> and <code>over2=</code> (a pulley\'s wheels, a,b,c), <code>ratio=</code> and <code>radius=</code> (how thick it is drawn). A rope or chain is cut by a round through it. '
+         'A LIGHT riding a hung prop (its prop field) swings with it. The Campaign Builder\'s Connect tool writes it: drag from a prop to another, a wall or the ceiling.')]),
     ('Things in the map', [
         ('FIXTURE|map|model|x|y|base|width|depth|height|yaw|solid[|core|visible|anchored|slopeX|slopeY]', 'A model from the model list, centred at x,y, its base this high, stretched to width x depth x height (use the listed size to keep it in proportion). solid 1 blocks you. A chair (office, wooden or boardroom) standing on the floor is loose in play: it slides and goes over when something heavy hits it. anchored 1 keeps it fixed where it was put (give core and visible too, 1 and 1 as usual). '
          'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game. '
@@ -552,6 +561,26 @@ NAMED_FIELDS = [
     ('rubble', 'Rubble pieces', '0 to 60', 'BREACH', 'Pieces of wall on the floor either side.'),
     ('seed', 'Seed', 'a whole number', 'BREACH', 'Another seed gives another ragged outline, chips and rubble.'),
     ('toward', 'Rubble side', '1 or -1', 'BREACH', 'Which side of the wall most of the rubble falls: -1 throws it to the other side.'),
+    ('axis', 'Pin or rail', 'x y z or a,b,c', 'JOINT', 'The way a hinge turns about or a slider runs along (a hinge: x if left out; a slider: z).'),
+    ('length', 'Length (m)', '0 to 30', 'JOINT', 'A rope, chain, spring, rod or winch: its length; a pulley: both ropes together. Left out: as laid out.'),
+    ('min', 'Least', 'degrees (hinge) or metres', 'JOINT', 'How far a hinge turns one way (negative), a slider runs back, or a winch reels in.'),
+    ('max', 'Most', 'degrees (hinge) or metres', 'JOINT', 'How far a hinge turns the other way, a slider runs on, or a winch pays out.'),
+    ('cone', 'Swing (degrees)', '0 to 179', 'JOINT ball', 'How far a ball joint swings from where it was laid out.'),
+    ('cone2', 'Swing across (degrees)', '0 to 179', 'JOINT ball', 'The swing the other way, for an oval cone (a shoulder). The cone if left out.'),
+    ('twist', 'Twist (degrees)', '0 to 179', 'JOINT ball', 'How far a ball joint twists either way.'),
+    ('stiffness', 'Springiness (Hz)', '0 to 60', 'JOINT', 'A spring: how stiff (3 if left out). A hinge or slider with it springs back to where it was laid out.'),
+    ('damping', 'Damping', '0 to 10', 'JOINT', 'How soon a spring stops bouncing: 0 bounces on, 1 settles at once (0.5).'),
+    ('motor', 'Motor', 'speed servo off', 'JOINT', 'speed: turns (or runs, or reels) at a speed; servo: goes to the target and holds there.'),
+    ('speed', 'Motor speed', 'degrees or metres a second', 'JOINT', 'How fast the motor goes. 0 with a force: a brake.'),
+    ('force', 'Motor force', 'newtons (N m about a hinge)', 'JOINT', 'The most the motor pushes with: a load heavier than this stalls it.'),
+    ('target', 'Motor target', 'degrees or metres', 'JOINT', 'Where a servo goes to (a winch: the length it reels to).'),
+    ('switch', 'Runs while', 'a state name', 'JOINT', 'The motor runs only while this state is set (a lever).'),
+    ('breaks', 'Snaps at (N)', '0 and up', 'JOINT', 'The pull that snaps it, with a sound; 0 or left out never. A rope or chain also snaps when shot through.'),
+    ('state', 'Sets when it snaps', 'a state name', 'JOINT', 'A state set to 1 when it snaps or is shot through: a script hears it.'),
+    ('over', 'Wheel', 'a,b,c', 'JOINT pulley', 'Where propA\'s rope goes over (absolute).'),
+    ('over2', 'Second wheel', 'a,b,c', 'JOINT pulley', 'Where propB\'s rope goes over (absolute).'),
+    ('ratio', 'Ratio', '0.1 to 10', 'JOINT pulley', 'How much rope one side pays out for the other\'s: 2 lifts twice the load half as far.'),
+    ('radius', 'Thickness (m)', '0 to 0.1', 'JOINT', 'How thick the rope or chain is drawn.'),
     ('tread', 'Step tops material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "What the steps are walked on: the top 4 cm of each step. The Builder's Paint tool sets it on a click on a step top."),
     ('riser', 'Step fronts material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "The step fronts and the body under the tops. Blank: the step tops' material."),
     ('stringer', 'Side rails material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side rails (with the rails field on).'),

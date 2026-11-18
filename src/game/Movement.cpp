@@ -24,6 +24,7 @@ float Game::groundHeight(Vec2 p)const{
 }
 float Game::groundHeight(Vec2 p,float feet,float radius)const{
  auto center=p;const auto&world=worldAt(center);float height=std::max(world.supportBelow(center.x,center.y,feet),world.structureSupportBelow(center.x,center.y,radius,feet));
+ height=std::max(height,jointedPropTop(p,feet,radius));   // a lift's platform, a seesaw, a bridge's planks (PropJoints.cpp)
  const World* checked=&world;
  for(float x:{-radius,radius})for(float y:{-radius,radius}){auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);height=std::max(height,w.supportBelow(corner.x,corner.y,feet));
   if(checked!=&w){auto local=corner-Vec2{x,y};height=std::max(height,w.structureSupportBelow(local.x,local.y,radius,feet));checked=&w;}}
@@ -39,7 +40,7 @@ bool Game::hullFits(Vec2 p,float feet,float height,float radius,bool creatures,b
  }
  // Heavy dressing blocks an approaching hull, but always permits retreat.
  if(props)for(int level=0;level<chunkCount();++level)if(chunkResident(level)){auto shift=chunkOffset(level)-chunkOffset(m_level);const auto&items=chunkClutter(level);
-  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()-softGive(c)||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+radius-std::fabs(q.x-at.x),e[1]+radius-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
+  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()-softGive(c)||onJointedTop(level,i,p,feet)||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+radius-std::fabs(q.x-at.x),e[1]+radius-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
  }
   // Full footprint overlap also catches thin walls between the point samples.
  auto center=p;const auto&w=worldAt(center);

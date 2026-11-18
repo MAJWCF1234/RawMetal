@@ -307,6 +307,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   // Window walls are written as their records (their named fields ride with them), never as the boxes and panes they make.
   for(const auto& g:m.glazings)line(Rec("GLAZING").i(mi).n(g.x1).n(g.y1).n(g.x2).n(g.y2).n(g.bottom).n(g.top));
   for(const auto& b:m.breaches)line(Rec("BREACH").i(mi).n(b.x1).n(b.y1).n(b.x2).n(b.y2).n(b.bottom).n(b.top));
+  // Joints: the record's own fields (its options ride as its named fields, kept as written).
+  for(const auto& j:m.joints){Rec r("JOINT");r.i(mi).f(propJointWord(j.kind)).i(j.propA).i(j.propB).n(j.at.x).n(j.at.y).n(j.at.z);if(j.rope())r.n(j.to.x).n(j.to.y).n(j.to.z);line(r);}
   for(const auto& p:m.pipes)line(Rec("PIPE").i(mi).n(p.start.x).n(p.start.y).n(p.end.x).n(p.end.y).n(p.z).n(p.radius).n(p.endZ).i(p.material));
   {const auto ports=leadPorts();
    for(size_t li=0;li<m.leads.size();++li){const auto& l=m.leads[li];

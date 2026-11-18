@@ -107,6 +107,13 @@ The section is written per chunk, by each prop's index in the chunk's props list
 
 When writing, a quaternion is normalised (a degenerate one becomes the identity) and spin is clamped to 1000 rad/s. When reading, anything not near unit or out of range is refused. Without the hooks, the section is not written, and a saved one is read, checked and dropped.
 
+**Version 2: joints.** After the props, when any map has `JOINT` records, the section keeps each map's joints (World.h
+`PropJointState`), in the map's JOINT order: chunk count, then per chunk its index and joint count, and per joint snapped
+(bool), motor on (bool), a winch's reeled length (float, -1 as authored), the motor's target and speed (floats). A map without
+joints writes the section exactly as version 1 did. A version 1 section (or a version 2 one that stops after the props) loads
+with every joint as the map has it, and so does a save whose map has since changed its number of joints. An older build skips
+a version 2 section (it is optional), losing the props' turns but nothing else.
+
 ## Refitting older saves (formats 1-27)
 A format 1-27 save loads in two stages:
 1. **The frozen positional reader.** It leaves a field the version lacked at the fresh game's value.

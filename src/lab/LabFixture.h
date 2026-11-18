@@ -27,7 +27,7 @@
 namespace retro::lab {
 struct Fixture {
  std::string name,path,world="campaign",customPath,campaignText,save;
- int map=0;bool hasCamera=false,openDoors=false,sceneryOnly=false,software=false;
+ int map=0;std::string mapName;bool hasCamera=false,openDoors=false,sceneryOnly=false,software=false;
  Vec2 cameraPos{};float cameraZ=-999,cameraYaw=0,cameraPitch=0; // yaw in radians once parsed
  int width=480,height=270,frames=0;float step=0;
  struct State {StateId id;int value;};std::vector<State> states;

@@ -349,7 +349,7 @@ std::vector<SaveSection> Game::builtInSaveSections(){
  // The rigid-body solver's state for props (PropBody: orientation, angular velocity, sleep
  // island), per chunk, by each prop's place in the chunk's props. Written only once the solver
  // sets physicsSaveHooks(); read before the reconciliation, which keeps the props' fields.
- add("physics",false,[](Game& g,auto& a,int){const auto& hooks=physicsSaveHooks();
+ add("physics",false,[](Game& g,auto& a,int version){const auto& hooks=physicsSaveHooks();
   auto norm=[](const PropBody& b){return std::sqrt(b.orientation[0]*b.orientation[0]+b.orientation[1]*b.orientation[1]+b.orientation[2]*b.orientation[2]+b.orientation[3]*b.orientation[3]);};
   // Written: a unit quaternion (a degenerate one is the identity), spin clamped to 1000 rad/s.
   // Read: refused unless near unit and in range, then made exactly unit.
@@ -364,11 +364,25 @@ std::vector<SaveSection> Game::builtInSaveSections(){
    for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks)throw std::runtime_error("invalid chunk");last=level;auto&props=g.m_chunks[size_t(level)].clutter;
     if(count<1||size_t(count)>props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop count");int lastProp=-1;
     for(int k=0;k<count;++k){int index=0;a(index);if(index<=lastProp||size_t(index)>=props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop index");lastProp=index;PropBody b;body(b);if(hooks.restore)hooks.restore(props[size_t(index)],b);}}}
-  else{if(!hooks.capture)return;std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;
-   for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;const auto&props=g.m_chunks[size_t(level)].clutter;
+  else{std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;
+   if(hooks.capture)for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;const auto&props=g.m_chunks[size_t(level)].clutter;
     for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});}if(!bodies.empty())captured.push_back({level,std::move(bodies)});}
-   if(captured.empty())return;int chunks=int(captured.size());a(chunks);
-   for(auto& [level,bodies]:captured){int l=level,count=int(bodies.size());a(l,count);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}});
+   bool joints=false;for(int level=0;level<g.chunkCount();++level)joints|=!g.m_chunks[size_t(level)].world.jointStates().empty();
+   if(captured.empty()&&!joints)return;int chunks=int(captured.size());a(chunks);
+   for(auto& [level,bodies]:captured){int l=level,count=int(bodies.size());a(l,count);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}
+  // Version 2: the joints between props (World.h PropJointState), after the props and only when a map has joints,
+  // per chunk that has any, in the map's JOINT order: snapped, its motor on, a winch's reeled length (-1 as
+  // authored), the motor's target and speed. A map without joints writes the section as version 1 did. A save
+  // from a map whose joints have since changed in number keeps the map's.
+  if constexpr(std::decay_t<decltype(a)>::reading){if(version<2||!a.left())return;int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid joint chunk count");int last=-1;
+   for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks||count<1||count>4096)throw std::runtime_error("invalid joint chunk");last=level;
+    std::vector<PropJointState> read(static_cast<size_t>(count));for(auto& j:read){a(j.broken,j.motorOn,j.length,j.target,j.speed);
+     if(!std::isfinite(j.length)||j.length<-1||j.length>100||!std::isfinite(j.target)||std::fabs(j.target)>1000||!std::isfinite(j.speed)||std::fabs(j.speed)>1000)throw std::runtime_error("map "+std::to_string(level)+": invalid joint");}
+    auto& states=g.m_chunks[size_t(level)].world.m_jointStates;if(states.size()==read.size())states=std::move(read);}}
+  else{std::vector<int> levels;for(int level=0;level<g.chunkCount();++level)if(!g.m_chunks[size_t(level)].world.jointStates().empty())levels.push_back(level);
+   if(levels.empty())return;int chunks=int(levels.size());a(chunks);for(int level:levels){auto states=g.m_chunks[size_t(level)].world.jointStates();int l=level,count=int(states.size());a(l,count);
+    for(auto& j:states){bool broken=j.broken,on=j.motorOn;float length=std::clamp(j.length,-1.f,100.f),target=j.target,speed=j.speed;a(broken,on,length,target,speed);}}}});
+ list.back().version=2;
  return list;
 }
 // ---- The stores the "entities" and "variables" sections keep ----
@@ -1249,7 +1263,9 @@ bool Game::testSaveFormat(std::ostream& report,int parts){
    physicsSaveHooks()={};Game plainLoad(props);const bool plainOk=plainLoad.decodeSave(bytes);const bool unhooked=plainOk&&!has(encode(plainLoad),"physics");physicsSaveHooks()=keptHooks;
    check(prop>=0&&has(bytes,"physics")&&ok&&body&&again==bytes,"The physics section carries a prop's orientation, angular velocity and sleep island to the solver's restore hook",std::to_string(restored.size())+" bodies");
    check(!badLoaded&&contains(why,"section 'physics': invalid prop body"),"A prop body whose quaternion is not unit is refused",why);
-   check(unhooked,"Without the solver's hooks a saved physics section is read, checked and dropped");}
+   check(unhooked,"Without the solver's hooks a saved physics section is read, checked and dropped");
+   {physicsSaveHooks()={nullptr,[](Clutter&,const PropBody& b){restored.push_back(b);}};restored.clear();Game old(props);const bool oldOk=old.decodeSave(wrap(rebuild(bytes,[](std::string& name,int& version,std::uint16_t&,std::string&){if(name=="physics")version=1;return true;})));physicsSaveHooks()=keptHooks;
+    check(oldOk&&restored.size()==1,"A physics section from before joints (version 1) still loads",oldOk?std::to_string(restored.size())+" bodies":lastLoadFailure());}}
  }
 
  // ---- 7. The save folder 1.0.4-1.5.0 wrote by mistake is adopted, in a temp folder ----

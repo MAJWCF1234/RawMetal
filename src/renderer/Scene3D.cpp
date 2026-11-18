@@ -2407,6 +2407,35 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tri({rim(a,.62f,dome*.7f),0,0,1},{rim(b,.62f,dome*.7f),1,0,1},{lens+face*dome,.5f,.5f,1},t,glow);
    tri({rim(a,1.34f,.0012f),0,0,bezel},{rim(b,1.34f,.0012f),1,0,bezel},{rim(b,1,0),1,1,bezel},m_paleSteel,1.f);tri({rim(a,1.34f,.0012f),0,0,bezel},{rim(b,1,0),1,1,bezel},{rim(a,1,0),0,1,bezel},m_paleSteel,1.f);}
   objectLighting=false;movingGeometry=false;}
+ // Joints' ropes and chains (PropJoints.cpp jointLine): from the fixing to the prop, sagging by their slack; a
+ // chain in beads of links, a rope a plain hemp tube; a pulley's two runs over its wheels; a snapped one's stub.
+ if(!w.joints().empty()){static const Texture hemp{1,1,{0xff8c7552u}};
+  auto unitOf=[](Point3 v){const float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
+  auto crossOf=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+  for(int index=0;index<int(w.joints().size());++index){std::array<Point3,4> pts{};int count=0;if(!game.jointLine(level,index,pts,count)||count<2)continue;
+   const auto&spec=w.joints()[size_t(index)];const bool broken=size_t(index)<w.jointStates().size()&&w.jointStates()[size_t(index)].broken;
+   const bool chain=spec.kind==PropJointKind::Chain||spec.kind==PropJointKind::Winch;const float radius=spec.radius>0?spec.radius:chain?.011f:.012f;
+   Point3 lo=pts[0],hi=pts[0];for(int k=1;k<count;++k){lo={std::min(lo.x,pts[size_t(k)].x),std::min(lo.y,pts[size_t(k)].y),std::min(lo.z,pts[size_t(k)].z)};hi={std::max(hi.x,pts[size_t(k)].x),std::max(hi.y,pts[size_t(k)].y),std::max(hi.z,pts[size_t(k)].z)};}
+   {const auto span=hi-lo;if(!sphereVisible((lo+hi)*.5f,std::sqrt(span.x*span.x+span.y*span.y+span.z*span.z)*.5f+.4f))continue;}
+   float length=spec.length>0?spec.length:std::sqrt((spec.to.x-spec.at.x)*(spec.to.x-spec.at.x)+(spec.to.y-spec.at.y)*(spec.to.y-spec.at.y)+(spec.to.z-spec.at.z)*(spec.to.z-spec.at.z));if(spec.kind==PropJointKind::Winch&&size_t(index)<w.jointStates().size()&&w.jointStates()[size_t(index)].length>0)length=w.jointStates()[size_t(index)].length;
+   movingGeometry=true;objectLighting=true;objectLight=1;objectNormalLighting=nullptr;
+   for(int seg=0;seg+1<count;++seg){const Point3 a=pts[size_t(seg)],b=pts[size_t(seg+1)];const auto ab=b-a;const float span=std::sqrt(ab.x*ab.x+ab.y*ab.y+ab.z*ab.z);if(span<1e-3f)continue;
+    // Slack hangs as a parabola as deep as its spare length asks (length = span + 8 d^2 / 3 span).
+    const float sag=count==2&&!broken&&length>span?std::sqrt(3*span*(length-span)/8):0.f;
+    const int pieces=std::clamp(int(span/(chain?.022f:.08f)),2,chain?160:40);std::vector<Point3> c(size_t(pieces+1));std::vector<float> lit(c.size());
+    for(int k=0;k<=pieces;++k){const float t=float(k)/float(pieces);c[size_t(k)]=a+ab*t-Point3{0,0,4*sag*t*(1-t)};lit[size_t(k)]=illumination(c[size_t(k)],{0,0,1});}
+    std::vector<Point3> across(c.size()),up(c.size());
+    for(size_t k=0;k<c.size();++k){const auto t=unitOf(c[std::min(k+1,c.size()-1)]-c[k?k-1:0]);auto u=k?across[k-1]-t*(across[k-1].x*t.x+across[k-1].y*t.y+across[k-1].z*t.z):crossOf(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
+     u=unitOf(u);if(u.x==0&&u.y==0&&u.z==0)u=unitOf(crossOf(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1}));across[k]=u;up[k]=crossOf(t,u);}
+    constexpr int sides=6;const Texture&finish=chain?m_paleSteel:hemp;
+    auto ring=[&](size_t k,int side,float r){const float q=float(side%sides)*kTwoPi/sides;const auto o=across[k]*std::cos(q)+up[k]*std::sin(q);return MeshVertex{c[k]+o*r,float(side)/sides*.05f,float(k)*.06f,lit[k]*(.68f+.32f*(.5f+.5f*o.z))};};
+    for(size_t k=0;k+1<c.size();++k){const float r0=chain?(k%2?radius*.55f:radius*1.5f):radius,r1=chain?((k+1)%2?radius*.55f:radius*1.5f):radius;
+     for(int side=0;side<sides;++side){auto p=ring(k,side,r0),q=ring(k,side+1,r0),s=ring(k+1,side+1,r1),u=ring(k+1,side,r1);tri(p,q,s,finish,1.f);tri(p,s,u,finish,1.f);}}}
+   objectLighting=false;
+   // The fixing in the ceiling or wall, and a pulley's wheels.
+   if(spec.propB<0||spec.kind==PropJointKind::Pulley){const float h=radius*2.4f;box(pts[0]-Point3{h,h,h},pts[0]+Point3{h,h,h},m_paleSteel,.95f);}
+   if(spec.kind==PropJointKind::Pulley)for(int k:{1,2}){const float h=.05f;box(pts[size_t(k)]-Point3{h,.02f,h},pts[size_t(k)]+Point3{h,.02f,h},m_paleSteel,1.f);}
+   movingGeometry=false;}}
 
  // Services belong to the map; custom worlds never inherit campaign pipework.
  // Pipes and their mounting brackets do not animate. Keep the complete

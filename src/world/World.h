@@ -211,6 +211,34 @@ struct Lead {Point3 anchor{},end{},offset{};int prop=-1;bool loose=false;float l
  Point3 socket{},terminal{};int panel=-1,socketPort=-1,terminalPort=-1,lamp=-1;int creature=-1;bool chain=false;
  bool socketed()const{return socket.x!=0||socket.y!=0||socket.z!=0;}bool plugged()const{return terminal.x!=0||terminal.y!=0||terminal.z!=0;}
  static constexpr float TearMargin=.3f,PlugHead=.018f;};
+// A joint between props, or a prop and the room (JOINT record; Vectra's Joint, docs/Systems/physics.md):
+// `kind` is what it is, `propA` the CLUTTER record (from 0) it holds, `propB` another or -1 for the room
+// (a wall, a ceiling, a floor). `at` is where they join (absolute), `to` the far end of a rope, chain,
+// spring or rod (on propB, or the point in the room it hangs from); a pulley's ropes run from `at` up over
+// `over` and from `to` up over `over2`. `axis` is a hinge's pin or a slider's rail. The rest are its
+// options (named fields): limits (degrees for a hinge, metres for a slider, a winch's shortest and
+// longest), a ball's cone and twist (degrees), a spring's stiffness (Hz) and damping, a motor (speed or
+// servo: speed, force, target), what snaps it (newtons; 0 never), and how it is drawn (`radius`).
+// The pose its props stand in when the map is laid out is its rest.
+enum class PropJointKind:std::uint8_t {Hinge,Ball,Slider,Weld,Rope,Chain,Spring,Distance,Pulley,Winch};
+struct PropJoint {
+ PropJointKind kind=PropJointKind::Rope;int propA=-1,propB=-1;
+ Point3 at{},to{},axis{0,0,1},over{},over2{};
+ float length=0;                     // rope, chain, spring, rod, winch: its length (0: as laid out); pulley: both ropes'
+ bool limited=false;float lower=0,upper=0;
+ float cone=-1,cone2=-1,twist=-1;    // ball: the cone either way and the twist either way (degrees; < 0 free)
+ float hertz=0,damping=.5f;          // spring: stiffness (Hz) and damping ratio; a hinge or slider: a spring to its rest
+ int motor=0;float speed=0,force=0,target=0;   // 0 none, 1 speed, 2 servo
+ StateId motorState=0;               // switch=: the motor runs only while this state is set (0: always)
+ StateId snapState=0;                // state=: set to 1 when it snaps (or is shot through)
+ float breakForce=0,ratio=1,radius=0;
+ bool rope()const{return kind==PropJointKind::Rope||kind==PropJointKind::Chain||kind==PropJointKind::Spring||kind==PropJointKind::Distance||kind==PropJointKind::Pulley||kind==PropJointKind::Winch;}
+};
+const char* propJointWord(PropJointKind kind);
+bool parsePropJointWord(std::string_view word,PropJointKind& out);
+// A joint as it plays (World::jointStates, saved in the physics section): snapped, the length a winch
+// has reeled to, what its motor is set to, and what it pulled with last (N, for sounds and the Builder).
+struct PropJointState {bool broken=false;float length=-1,target=0,speed=0;bool motorOn=true;float force=0;int hintA=-1,hintB=-1;float brokenAt=-1e9f;};
 // An empty suit hung by its hood from a hook (absolute), its front toward `facing`. Game
 // hangs the hazmat ragdoll from it (Ragdoll::hang): limp, swaying when brushed or shot.
 struct HungSuit {Point3 hook{};float facing=0;};
@@ -523,6 +551,7 @@ struct AuthoredMapData {
     std::vector<PipeRun> pipes;
     std::vector<Lead> leads;
     std::vector<HungSuit> hungSuits;
+    std::vector<PropJoint> joints;
     std::vector<WorldLight> lights;
     std::vector<CreatureSpawn> creatureSpawns;
     std::vector<PickupSpawn> pickupSpawns;
@@ -718,6 +747,8 @@ public:
     const std::vector<Lead>& leads()const{static const std::vector<Lead> none;return m_mapData?m_mapData->leads:none;}
     const std::vector<HungSuit>& hungSuits()const{static const std::vector<HungSuit> none;return m_mapData?m_mapData->hungSuits:none;}
     const std::vector<LeadRope>& leadRopes()const{return m_leadRopes;}
+    const std::vector<PropJoint>& joints()const{static const std::vector<PropJoint> none;return m_mapData?m_mapData->joints:none;}
+    const std::vector<PropJointState>& jointStates()const{return m_jointStates;}
     // Hang lead i's cable at rest from its anchor to `end` (its clip or fixed
     // end) and let it settle asleep; `body` is the prop it is clipped to (null:
     // none), which the cable hangs clear of. Limp (end null) it is only laid
@@ -823,7 +854,7 @@ public:
     void updateLift(float dt);
     void restoreLift(const World& saved);
     // A rebuilt chunk takes back what play changed: lift, reactor and broken crates.
-    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_leadRopes.size()==m_leadRopes.size())m_leadRopes=saved.m_leadRopes;m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;if(saved.m_paneGlass.size()==m_paneGlass.size())m_paneGlass=saved.m_paneGlass;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
+    void restoreDynamic(const World& saved){restoreLift(saved);if(saved.m_jointStates.size()==m_jointStates.size())m_jointStates=saved.m_jointStates;if(saved.m_leadRopes.size()==m_leadRopes.size())m_leadRopes=saved.m_leadRopes;m_breakableDamage=saved.m_breakableDamage;m_breakableAge=saved.m_breakableAge;if(saved.m_paneGlass.size()==m_paneGlass.size())m_paneGlass=saved.m_paneGlass;for(auto i:saved.m_brokenBreakables)removeBreakable(i);if(saved.m_pushCrates.size()==m_pushCrates.size())m_pushCrates=saved.m_pushCrates;if(!saved.m_destroyedTiles.empty()){m_destroyedTiles=saved.m_destroyedTiles;m_lightSolids.clear();m_lightNodes.clear();}}
     const char* liftStatus()const;
     float liftLampPower()const;
     float liftMotorGain()const;
@@ -913,6 +944,7 @@ private:
     std::vector<PaneGlass> m_paneGlass;
     void solvePane(int i);
     std::vector<LeadRope> m_leadRopes;
+    std::vector<PropJointState> m_jointStates;
     void removeBreakable(int i);
     // Never copied: a plan belongs to the World it was made on.
     struct DoorPlanSlot {const std::vector<char>* open=nullptr;DoorPlanSlot()=default;DoorPlanSlot(const DoorPlanSlot&){}DoorPlanSlot& operator=(const DoorPlanSlot&){return *this;}};
