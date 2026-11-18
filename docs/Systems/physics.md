@@ -275,7 +275,10 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
   shut that friction stops 1.5 cm short clicks shut; latched at 60 N, a 20 N pull leaves it, 150 N opens it (tube
   `vectra-gaps`). Doors latch where they were drawn shut, hatches stay shut, drawers catch (the Connect tool's defaults).
 - **Breaking.** `force` and `torque` are what the joint carried over the last step (its impulses over the substep). Past
-  `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after.
+  `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after. A board nailed across a
+  doorway, a sign on a wall, a shelf's welded breakables are a `weld` (or a `ball`, one nail) with `breaks=` (the
+  Connect tool's Nailed writes a weld at 600 N): a 2 kg box at 1 m/s pulls it with 11 N and it holds; a 30 kg crate
+  at 6 m/s tears it off (tube `vectra-gaps`, breaking).
 - **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
   the cache per level), so a joint built afresh each step starts from what it carried.
 - **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints. A held
@@ -507,10 +510,16 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
   bottle's body, a screen). Each piece is a library model (OBJ, a json sidecar with its shape, mass share, offset
   and size as fractions of the prop) registered as any library model; `make_gibs.py --table` writes GibSets.h and
   the pieces' masses (by bounding volume) and materials into prop_physics.json.
-- `Game::breakClutter` puts each piece where it sat in the prop, turned as the prop was, at the prop's speed plus
-  a throw out from its middle and along the blow. Each is an ordinary model prop: a Vectra body (a box, or a
-  cylinder for a bottle neck), saved with the props, carried and pulled like any. Glass pieces shatter further by
-  the usual break speed. A prop with no set is sliced into eighths as before.
+- `Game::breakClutter` puts each piece where it sat in the prop, turned as the prop was, at the prop's velocity at
+  that place (its linear velocity plus its spin crossed with the piece's offset: the blow that broke it is already
+  in both, the solver's or the round's knock), spinning as the prop spun, plus a throw out from its middle and
+  1.2 m/s along the blow (the direction a caller passes, held to a unit: a prop broken by its speed passes its
+  velocity). A 50 N s blow on a 9 kg crate's top edge sends its planks on at 6.9 m/s along it, the top ones 8.6 and
+  the bottom 5.4; a crate spun at 8 rad/s comes apart with its sides going opposite ways (tube `vectra-gaps`,
+  breaking). Each is an ordinary model prop: a Vectra body (a box, or a cylinder for a bottle neck), saved with the
+  props, carried and pulled like any. Glass pieces shatter further by the usual break speed. A prop with no set is
+  sliced into eighths as before, and the slices too go on at the velocity their places had (they popped out in
+  place, the blow's way their only motion).
 - Sets: wooden_chair (four legs, seat, back), scrap_chair (frame, seat, back), wooden_crate (lid, floor, four
   side planks, two ends), packing_crate (lid, floor, two sides, two ends), glass_bottle (neck, four shards),
   crt_monitor (stand, casing, a screen cracked in three).

@@ -7,6 +7,8 @@
 //    RM_GAPS_TRACE=1 prints the ramp runs frame by frame, 2 with their world manifolds).
 //  water (in the game): a sealed drum dropped in upright bobs, tips onto its side and settles; a crate rides at its
 //    density's draft; a plank dropped in on its end ends lying flat (before: the drum stayed upright, the plank on end).
+//  breaking (in the game): a crate smashed by a fast blow throws its planks along it; a spinning crate's pieces go on at
+//    their places' velocities; a board nailed across a doorway holds a nudge and snaps under a heavy shove.
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "game/Buoyancy.h"
@@ -107,11 +109,50 @@ void water(std::ostream& out,const Check& check){
  const Run p=drop(plank,10);
  out<<"a 2 m plank dropped in standing on its end: it ends "<<f3(p.tilt*57.3f,1)<<" deg off lying flat, afloat "<<p.afloat<<"\n";
  check(p.afloat&&p.tilt<.2f,"water: a plank dropped in on its end ends lying flat");}
-const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams, water",.standalone=[]{
+// ---- Breaking (game: Game::breakClutter, PropJoints.cpp) ----
+// A wooden crate (it has authored gibs) struck hard at its top edge and broken: its planks go off along the blow. A
+// wooden crate spun at 8 rad/s and broken where it stands: each piece goes on at the velocity its place had (the side at
+// -y going +x, the side at +y going -x), not popping out alike. A board nailed across a doorway (a weld to the room,
+// breaks 600 N): a 2 kg box at 1 m/s leaves it; the 30 kg crate at 6 m/s tears it off.
+void breaking(std::ostream& out,const Check& check){
+ auto heavy=[](Clutter& c,float mass){auto t=std::make_shared<EntityTraits>();t->mass=mass;c.traits=t;};
+ auto pieces=[](const std::vector<Clutter>& list,size_t from){std::vector<const Clutter*> p;for(size_t i=from;i<list.size();++i)if(!list[i].broken)p.push_back(&list[i]);return p;};
+ // The smash: a 50 N s blow (a sledgehammer's, a shotgun's at the muzzle) on a wooden crate's face at its top edge, as a
+ // melee hit or a round gives it (knockClutter), then broken by it (damageClutter's break): its planks go on along the
+ // blow, the top ones faster (the blow's turn).
+ {auto m=regression::room();m->definition.playerStart={2,2};kit::prop(*m,model::wooden_crate,10,10,0,0,.6f);Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};auto& list=LabAccess::clutter(g);
+  for(int i=0;i<10;++i)g.update({},1.f/60);const auto c=list[0];const size_t whole=list.size();const float top=c.z+c.height();
+  LabAccess::knock(g,0,{c.pos.x-c.extent()[0],c.pos.y,top-.02f},{50,0,0});const float speed=list[0].velocity.x;LabAccess::breakClutter(g,0,{1,0,0});
+  V3 mean{};int n=0;float high=0,low=0;int nh=0,nl=0;const float mid=c.z+c.height()*.5f;
+  for(const auto* q:pieces(list,whole)){mean=mean+V3{q->velocity.x,q->velocity.y,0};++n;if(q->z+q->extent()[2]>mid+.03f){high+=q->velocity.x;++nh;}else if(q->z+q->extent()[2]<mid-.03f){low+=q->velocity.x;++nl;}}
+  if(n)mean=mean*(1.f/float(n));if(nh)high/=float(nh);if(nl)low/=float(nl);
+  out<<"a 50 N s blow on a wooden crate's top edge ("<<f3(c.mass(),1)<<" kg, its middle sent at "<<f3(speed,2)<<" m/s) and it broken: "<<n<<" pieces going on at "<<f3(mean.x,2)<<","<<f3(mean.y,2)<<" m/s on average, the top ones "<<f3(high,2)<<", the bottom ones "<<f3(low,2)<<"\n";
+  check(n>=3&&mean.x>speed*.8f&&std::fabs(mean.y)<.5f*mean.x&&high>low+.5f,"breaking: a crate smashed by a fast blow throws its planks along the blow, the struck side's fastest");}
+ // The spin.
+ {auto m=regression::room();m->definition.playerStart={2,2};kit::prop(*m,model::wooden_crate,10,10,0,0,.6f);Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};auto& list=LabAccess::clutter(g);
+  for(int i=0;i<10;++i)g.update({},1.f/60);auto& c=list[0];vectra::setPropAngular(c,{0,0,8});c.velocity={};c.vz=0;c.sleeping=false;const size_t whole=list.size();const Vec2 at=c.pos;const float depth=c.dims[1];
+  LabAccess::breakClutter(g,0,{0,0,0});float minus=0,plus=0;int nm=0,np=0;
+  for(const auto* q:pieces(list,whole)){if(q->pos.y<at.y-.08f){minus+=q->velocity.x;++nm;}else if(q->pos.y>at.y+.08f){plus+=q->velocity.x;++np;}}
+  if(nm)minus/=float(nm);if(np)plus/=float(np);
+  out<<"a wooden crate spun at 8 rad/s and broken: its pieces at -y go "<<f3(minus,2)<<" m/s along x, at +y "<<f3(plus,2)<<" (the spin gives them about +-"<<f3(8*depth*.3f,2)<<")\n";
+  check(nm>0&&np>0&&minus-plus>1.5f,"breaking: the pieces of a spinning crate go on at the velocity their place had");}
+ // The nailed board.
+ float pull[2]{};bool snapped[2]{};
+ for(int heavyRam=0;heavyRam<2;++heavyRam){auto m=regression::room();m->definition.playerStart={2,2};
+  kit::prop(*m,model::scrap_bridge_plank,10,10,.05f,1.2f,.03f,.15f,0);   // the board, standing across x
+  PropJoint j;j.kind=PropJointKind::Weld;j.propA=0;j.propB=-1;j.at={10,10,.125f};j.to=j.at;j.breakForce=600;m->joints.push_back(j);
+  kit::prop(*m,heavyRam?model::wooden_crate:model::prop_cardboard_box,10,8.6f,0,0,heavyRam?.5f:.4f);
+  Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};auto& list=LabAccess::clutter(g);for(int i=0;i<10;++i)g.update({},1.f/60);
+  auto& r=list[1];heavy(r,heavyRam?30.f:2.f);r.velocity={0,heavyRam?6.f:1.f};r.sleeping=false;r.restTime=0;
+  for(int i=0;i<90;++i){g.update({},1.f/60);const auto& st=g.world().jointStates();if(!st.empty()){pull[heavyRam]=std::max(pull[heavyRam],st[0].force);snapped[heavyRam]|=st[0].broken;}}}
+ out<<"a board nailed across a doorway (breaks at 600 N): a 2 kg box at 1 m/s pulled it with "<<f3(pull[0],0)<<" N, it "<<(snapped[0]?"snapped":"held")<<"; a 30 kg crate at 6 m/s: "<<(snapped[1]?"it snapped":"it held, "+f3(pull[1],0)+" N")<<"\n";
+ check(!snapped[0]&&snapped[1],"breaking: a nailed board holds against a nudge and snaps off under a heavy shove");}
+const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams, water, breaking",.standalone=[]{
  std::ofstream out("vectra-gaps.txt");bool ok=true;
  auto check=[&](bool pass,const std::string& what){out<<(pass?"PASS ":"FAIL ")<<what<<'\n';out.flush();ok&=pass;};
  const char* only=std::getenv("RM_GAPS");auto want=[&](const char* part){return !only||std::string(only).find(part)!=std::string::npos;};
  if(want("seams")){out<<"---- seams ----\n";seams(out,check);}
+ if(want("breaking")){out<<"---- breaking ----"<<std::endl;breaking(out,check);}
  if(want("water")){out<<"---- water ----\n";water(out,check);}
  if(want("joints")){
  // ---- Friction and detents on hinges and sliders ----
