@@ -139,6 +139,22 @@ CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they 
   the rest; a LIGHT riding it stays, riding nothing.
 - A map without JOINT records is unchanged. The tube `joints-room` plays the Starter Map's.
 
+## Cloth
+`CLOTH|map|kind|x|y|z[|x2|y2|z2]` hangs a curtain, a strap or a cable (World.h `ClothSpec`, parsed in CustomCampaign.cpp,
+written back by CampaignExport.cpp; physics.md has how they play). Heights are absolute.
+- `kind`: `curtain` hangs from a rail from x,y,z to x2,y2,z2 (its top edge); `strap` hangs from x,y,z (x2,y2,z2, if given,
+  is the way its face turns across); `cable` hangs from x,y,z to x2,y2,z2, sagging by its spare length. A curtain and a cable
+  need x2|y2|z2; a curtain's rail is at least 0.2 m long.
+- Named fields (all optional): `drop` (how far a curtain hangs, 0.1-8 m; 1.6), `length` (a strap's, 1 m; a cable's, 1.15
+  times the span between its ends; 0.1-20 m), `width` (a strap's, 0.01-0.5 m; 0.05), `radius` (a cable's thickness,
+  0.003-0.1 m; 0.012), `mass` (kg in all; a curtain 0.35 kg a square metre, a strap 0.25 kg, a cable 0.4 kg a metre),
+  `stiffness` (how firmly its links hold, 1-120 Hz; 30), `loose=1` (a cable's far end lies free toward x2,y2,z2).
+- The Builder's Hang cloth tool (Decor) writes it: a curtain dragged along where its top hangs (from the ceiling to just over
+  the floor, or a shorter drop picked), a strap clicked where it hangs from, a cable dragged from end to end, a loose cable
+  from where it leaves the wall to where its end lies.
+- A map without CLOTH records is unchanged. The Starter Map's SHOWCASE: PHYSICS has a curtain on a frame, a strap and a loose
+  cable over a crate (make_starter_map.py `cloth_corner`); the tube `cloth-room` plays them.
+
 ## Light shafts
 `STRUCT` material 53 (`LightShaftMaterial`) is a god ray: sunlight falling on the slant through its box, in at the top on the side away from its `facing` (field 12) and down to the floor on the facing side.
 - It is drawn as soft additive cards, warm gold, so it shows without any haze; it casts no shadow. Its light is shaped by the world it falls in (`lightShaftShape`, Scene3D.cpp): over the box's far face a grid finds where the light comes through (the breach's hole, the glass, not the wall or the frame round them) and where each ray lands (the floor, or the first thing in its way). The cards run from the opening's outline to where the light is caught, so a shaft never reaches past a wall or into the room behind.

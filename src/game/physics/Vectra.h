@@ -26,6 +26,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <vector>
 namespace retro::vectra {
 using V3=Point3;
@@ -71,20 +72,51 @@ struct Quat {
 inline Quat integrate(const Quat& q,V3 w,float dt){const Quat spin{0,w.x,w.y,w.z};Quat d=spin*q;const float h=dt*.5f;return Quat{q.w+d.w*h,q.x+d.x*h,q.y+d.y*h,q.z+d.z*h}.normalized();}
 
 // ---- Shapes ---------------------------------------------------------------------------------------
-enum class PartKind:std::uint8_t {Box,Cylinder,Sphere};
+enum class PartKind:std::uint8_t {Box,Cylinder,Sphere,Capsule,Hull};
+// A convex polyhedron in a part's frame: the box and the prism (unit, scaled by the part's half) and a general hull (in
+// metres about the part's centre). The separating axis test, the face clip and the queries all read it.
+// A general hull has at most MaxVerts corners and MaxFaces faces (ConvexHull::build simplifies to that).
+struct ConvexHull {
+ static constexpr int MaxVerts=32,MaxFaces=60,MaxFaceVerts=32,MaxEdges=90,MaxDirs=12;
+ int nv=0;V3 v[MaxVerts]{};
+ struct Face {int n=0;int idx[MaxFaceVerts]{};V3 normal{};float d=0;};int nf=0;Face f[MaxFaces]{};
+ // Edges (vertex pairs), each with its two faces (-1 when the hull is not closed there), and for the box and the prism
+ // their distinct directions (`edir` into `dir`; a general hull's edges are paired by its Gauss map instead).
+ int ne=0;int e[MaxEdges][2]{};int ef[MaxEdges][2]{};int edir[MaxEdges]{};int nd=0;V3 dir[MaxDirs]{};
+ // Each edge's way round its first face (ef[0]): 1 if that face goes from e[0] to e[1], -1 the other way (the arc of its
+ // two faces' normals on the Gauss map lies in the plane at right angles to it, however nearly opposite they are).
+ int ewind[MaxEdges]{};
+ bool general=false;   // a general hull (its edges by the Gauss map, not by direction)
+ V3 mid{};             // the mean of its corners: inside it
+ V3 half{};            // its box's half extents (its corners are about the box's middle: ConvexHull::build centres them)
+ float volume=0,reach=0;V3 centroid{};M3 inertia=M3::zero();   // mass properties: volume, centre, inertia per kg about it
+ // The hull of `points` (metres), simplified to at most maxVerts corners (the farthest out first: the corners along the
+ // axes and the diagonals, then each the farthest outside the hull so far). Its corners are moved so its box is about
+ // the origin; `shift` returns how far (add it to the part's centre). False for fewer than four points or a flat set.
+ static bool build(const std::vector<V3>& points,ConvexHull& out,V3* shift=nullptr,int maxVerts=MaxVerts);
+};
 // A convex part in the body's frame (origin: the middle of the prop's box, as Clutter has it).
 // Box: half extents. Cylinder: radius half.x (= half.y), half height half.z along its own z. Sphere: radius half.x.
-struct Part {PartKind kind=PartKind::Box;V3 centre{};Quat turn{};V3 half{.1f,.1f,.1f};};
+// Capsule: radius half.x (= half.y), its segment's half length half.z along its own z (the round ends go a radius
+// past it). Hull: `hull` (owned by the Shape), half its box's half extents.
+struct Part {PartKind kind=PartKind::Box;V3 centre{};Quat turn{};V3 half{.1f,.1f,.1f};const ConvexHull* hull=nullptr;};
 struct Shape {
  std::array<Part,8> parts{};int count=0;
  V3 com{};            // centre of mass in the body frame (from the parts' volumes)
  M3 inertia{};        // per kilogram, about the centre of mass, in the body frame
  float bound=0;       // radius of a sphere about the centre of mass holding every part
  bool hollow=false;   // an open container (its inner volume is open)
+ std::vector<std::shared_ptr<const ConvexHull>> hulls;   // the hulls its parts use (kept with every copy)
  // Fill com, inertia and bound from the parts (uniform density).
  void finish();
- Part& add(PartKind kind,V3 centre,V3 half,Quat turn={}){auto& p=parts[size_t(count++)];p={kind,centre,turn,half};return p;}
+ Part& add(PartKind kind,V3 centre,V3 half,Quat turn={}){auto& p=parts[size_t(count++)];p={kind,centre,turn,half,nullptr};return p;}
+ // A capsule from a radius and its segment's half length, along the part's z.
+ Part& addCapsule(V3 centre,float radius,float halfLength,Quat turn={}){return add(PartKind::Capsule,centre,{radius,radius,std::max(0.f,halfLength)},turn);}
+ // A hull part: its corners about `centre` in the part's frame.
+ Part& addHull(std::shared_ptr<const ConvexHull> hull,V3 centre,Quat turn={}){auto& p=add(PartKind::Hull,centre,hull->half,turn);p.hull=hull.get();hulls.push_back(std::move(hull));return p;}
 };
+// The box of equal volume about a part's centre of volume (its centre and half extents, part frame): what the water reads.
+void partVolumeBox(const Part& p,V3& centre,V3& half);
 
 // rolling: the rolling resistance as a length (the resisting torque over the load: the give of the surfaces
 // under it, so a bottle stops sooner than a drum), and on twisting too.

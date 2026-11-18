@@ -314,6 +314,7 @@ void Game::updateClutter(const InputState&input,float dt){
   if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){float speed=9.f*(c.model>=0?std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f):1.f);c.velocity=forward*(speed*std::cos(pitch));c.vz=2.f+speed*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;c.soundOwner=-1;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
+ stepCloth(dt);   // curtains, straps and cables (Cloth.cpp), against the props as they now are
  for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
  updateLiquids(dt);followVrHands();
  for(const auto&[level,snapshot]:contents)containers::carry(level==m_level?m_clutter:m_chunks[level].clutter,snapshot,level==m_level?m_heldClutter:-1);

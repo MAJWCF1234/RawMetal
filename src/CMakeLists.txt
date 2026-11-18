@@ -82,6 +82,7 @@ add_executable(RawMetal WIN32
     game/Game.cpp
     game/RigidClutter.cpp
     game/PropJoints.cpp
+    game/Cloth.cpp
     game/Physgloves.cpp
     game/TwoHand.cpp
     game/VrHands.cpp

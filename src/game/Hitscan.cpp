@@ -104,6 +104,7 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  if(playerFired)startleScriptedActors(hit,origin,direction);
  // A rope or chain the round passed through on its way is cut (PropJoints.cpp).
  if(!m_blastShot)cutJointsByShot(origin,hit.point);
+ shootCloth(origin,hit.point);   // a round through a curtain, a strap or a cable knocks it (Cloth.cpp)
  if(!m_blastShot&&hit.waterLevel>=0&&hit.waterLevel<chunkCount()&&chunkResident(hit.waterLevel)&&hit.waterDistance>.002f){
   const auto shift=chunkOffset(m_level)-chunkOffset(hit.waterLevel);const auto travel=(hit.waterPoint-origin)*(1.f/hit.waterDistance);
   const float power=std::clamp(hitscanDamageAt(inputDefinition,hit.waterDistance)/24.f,.65f,1.5f);

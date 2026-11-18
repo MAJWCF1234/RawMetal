@@ -56,10 +56,12 @@ vectra::Material floorGrip(const World& w,float x,float y,float floor){
   m={mixTo(m.staticFriction,water.staticFriction),mixTo(m.dynamicFriction,water.dynamicFriction),m.restitution,mixTo(m.rolling,water.rolling)};}
  return m;}
 struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0,part=0;};
-// Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad.
+// Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad. (The deepest is the
+// first within a third of a millimetre of it: points on one resting face are all as deep, and the first stays first
+// from step to step where the deepest by a hair would change.)
 int keepFour(std::vector<Hit>& h,vectra::V3 n){
  using namespace vectra;if(h.size()<=4)return int(h.size());int pick[4]{0,-1,-1,-1};
- for(int i=1;i<int(h.size());++i)if(h[size_t(i)].sep<h[size_t(pick[0])].sep)pick[0]=i;
+ {float least=1e30f;for(const auto& x:h)least=std::min(least,x.sep);for(int i=0;i<int(h.size());++i)if(h[size_t(i)].sep<=least+.0003f){pick[0]=i;break;}}
  float best=-1;for(int i=0;i<int(h.size());++i){const float d=lenSq(h[size_t(i)].p-h[size_t(pick[0])].p);if(d>best){best=d;pick[1]=i;}}
  auto area=[&](V3 a,V3 b,V3 c){return std::fabs(dot(cross(b-a,c-a),n));};
  best=-1;for(int i=0;i<int(h.size());++i){if(i==pick[0]||i==pick[1])continue;const float a=area(h[size_t(pick[0])].p,h[size_t(pick[1])].p,h[size_t(i)].p);if(a>best){best=a;pick[2]=i;}}
@@ -161,9 +163,11 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   // On one flat floor with nothing over it, only the lowest points can touch anything (every column round is
   // open): those alone. Otherwise every part's surface points too, for the walls and what is overhead.
   const bool lowestOnly=flat&&!ceilingNear;
-  for(int p=0;p<b.shape->count;++p){const bool round=b.shape->parts[size_t(p)].kind!=PartKind::Box;
-   // (A box's eight corners even so: the next to come down as it settles is a contact before it arrives.)
-   if(!lowestOnly||!round){surfaceSamples(b,p,lowestOnly?100.f:spacing,samples);curved.resize(samples.size(),round?1:0);}
+  for(int p=0;p<b.shape->count;++p){const PartKind kind=b.shape->parts[size_t(p)].kind;const bool round=kind==PartKind::Cylinder||kind==PartKind::Sphere||kind==PartKind::Capsule;   // (a hull is flat-faced: any of its points stands)
+   // (A box's eight corners even so: the next to come down as it settles is a contact before it arrives. A hull's lowest
+   // feature alone, as a round part's: its many corners and face middles on the face it rests on are all equally deep,
+   // and the four kept would change from step to step.)
+   if(!lowestOnly||(!round&&kind!=PartKind::Hull)){surfaceSamples(b,p,lowestOnly?100.f:spacing,samples);curved.resize(samples.size(),round?1:0);}
    for(V3 d:downs){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(0);}}
    if(lowestOnly){partOf.resize(samples.size(),p);continue;}
    for(V3 d:{V3{1,0,0},V3{-1,0,0},V3{0,1,0},V3{0,-1,0},V3{0,0,1}}){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(round?1:0);}}
@@ -458,10 +462,10 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      // The share of its volume under the surface and that volume's middle: each part in 27 cells, each cell
      // under by how much of its own height is (so the share runs smoothly as it sinks or rocks).
      float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();wetCells.clear();
-     for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];const V3 half=part.kind==PartKind::Cylinder?V3{part.half.x*.886f,part.half.x*.886f,part.half.z}:part.kind==PartKind::Sphere?V3{part.half.x*.806f,part.half.x*.806f,part.half.x*.806f}:part.half;
+     for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];V3 cellsAt,half;partVolumeBox(part,cellsAt,half);
       const float vol=half.x*half.y*half.z;const M3 r=turn*part.turn.matrix();
       const float tall=(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
-      for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){const V3 l=part.centre+part.turn.rotate(V3{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f});const V3 at=b.toWorld(l);
+      for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){const V3 l=cellsAt+part.turn.rotate(V3{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f});const V3 at=b.toWorld(l);
        const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);wetCells.push_back({at-b.x,wet*std::pow(vol*8.f/27.f,2.f/3.f)});}}}
      const float f=all>0?under/all:0.f;
      if(f>0){middle=middle*(1/under);const float rho=buoyancy::density(c),k=buoyancy::drag(c)*tune("water.drag",1.f);const bool floater=rho<buoyancy::WaterDensity;

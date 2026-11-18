@@ -768,7 +768,9 @@ enum {
   // The Connect tool (NativeConnectTool.inc).
   ConnectKindList=2630,
   // The Cave tool (NativeCaveTool.inc).
-  CaveModeList=2640,CaveSizeList,CaveDepthList
+  CaveModeList=2640,CaveSizeList,CaveDepthList,
+  // The Hang cloth tool (NativeClothTool.inc).
+  ClothKindList=2650,ClothDropList
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -832,12 +834,13 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Growth", L"❦", L"Paint ivy and moss on walls, creepers hanging from ceilings and ledges, and grass through the floor. What, brush size, density, size and seed on the right; Erase (or Alt) clears it. Ctrl+Z takes a stroke back.", 1, "", 'G'},
     {L"Connect", L"⛓", L"Join a loose thing to another thing, a wall or the ceiling: a rope, chain, hinge, spring, weld, motor or pulley (pick on the right). Drag from the thing to what it joins, or click one then the other. Hanging lamp: click under a ceiling.", 1, "JOINT", 'l'},
     {L"Cave", L"◗", L"Dig the underground: brush tunnels and click caverns into the land at the depth picked, drag a cave mouth in from the hillside, fill back, pull a wall, smooth it, level a floor. Ctrl+Z takes a stroke back.", 4, "CAVE", 'T'},
+    {L"Hang cloth", L"≋", L"Hang a curtain, a strap or a cable (pick on the right). Curtain: drag along where its top hangs. Strap: click where it hangs from. Cable: drag from one end to the other; a loose cable from the wall to where its end lies. It sways when walked through and drapes over things.", 1, "CLOTH", 'l'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
                      TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
-                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50, CaveTool = 51;
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50, CaveTool = 51, ClothTool = 52;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -1128,6 +1131,7 @@ struct Editor {
 #include "NativeGlazingTool.inc"
 #include "NativeGlazingRegression.inc"
 #include "NativeBreachTool.inc"
+#include "NativeClothTool.inc"
 #include "NativeBreachRegression.inc"
 #include "NativeConnectTool.inc"
 #include "NativeConnectRegression.inc"
@@ -4000,6 +4004,9 @@ struct Editor {
     } else if (k == "BREACH") {
       if (!breachFields(f, ax, ay, bx, by, floorZ)) // on a wall only (NativeBreachTool.inc)
         return -1;
+    } else if (k == "CLOTH") {
+      if (!clothFields(f, s, ax, ay, bx, by, floorZ)) // a curtain, a strap or a cable (NativeClothTool.inc)
+        return -1;
     } else if (k == "DARK") {
     }
     while (f.size() > size_t(std::max(2, s.required)) && f.back().empty())
@@ -4210,7 +4217,7 @@ struct Editor {
         authorBox(l, t, r, b);
         return;
       }
-      if (info.shape == 'l' && tool != 10 && tool != FilmTool && tool != ConnectTool && std::hypot(bx - ax, by - ay) < .1f) {
+      if (info.shape == 'l' && tool != 10 && tool != FilmTool && tool != ConnectTool && tool != ClothTool && std::hypot(bx - ax, by - ay) < .1f) {
         message(L"Drag from one end to the other.");
         return;
       }
@@ -5109,6 +5116,9 @@ struct Editor {
     for (HWND list : breachControls())
       if (list)
         ShowWindow(list, SW_HIDE);
+    for (HWND list : clothControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
     for (HWND list : connectControls())
       if (list)
         ShowWindow(list, SW_HIDE);
@@ -5271,6 +5281,8 @@ struct Editor {
       glazingRows(row);
     if (tool == BreachTool)
       breachRows(row);
+    if (tool == ClothTool)
+      clothRows(row);
     if (tool == ConnectTool)
       connectRows(row);
     if (tool == GrowthTool)
@@ -9866,6 +9878,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->breachControlChanged(id, notification);
         return 0;
       }
+      if (id >= ClothKindList && id <= ClothDropList) {
+        e->clothControlChanged(id, notification);
+        return 0;
+      }
       if (id == ConnectKindList) {
         e->connectControlChanged(id, notification);
         return 0;
@@ -10760,6 +10776,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.button(L"Align to slope: on", NatureAlignToggle);
     e.makeGlazingControls(choices);
     e.makeBreachControls(choices);
+    e.makeClothControls(choices);
     e.makeConnectControls(choices);
     e.makeGrowthControls(choices);
     e.makeCaveControls(choices);

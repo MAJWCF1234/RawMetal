@@ -139,6 +139,21 @@ The engine cuts the hole, chips its edge, hangs rebar and drops rubble. You walk
 see and shoot through it, light comes through it, and the creatures route through
 it. `--breach-test` (and `--editing-test`) drives it; the lab tube `breach` plays it.
 
+### Hanging cloth
+
+**Hang cloth** (Decor page) writes one `CLOTH` record (NativeClothTool.inc). The
+boxes on the right:
+- **Hang**: Curtain (drag along where its top goes: it hangs from the ceiling),
+  Strap (click where it hangs from), Cable (drag from one end to the other: it sags
+  between them), Loose cable (drag from where it leaves the wall, at waist height,
+  to where its free end lies on the floor).
+- **How long**: a curtain to just over the floor or 1, 1.6 or 2.2 m down; a strap
+  1 m, short, medium or long.
+
+While the button is held the 3D view shows it hanging (the usual ghost). In play it
+sways, parts round whoever walks through it, drapes over things and swings when shot;
+the lab tubes `cloth` and `cloth-room` play it.
+
 ### Growth
 
 **Growth** (Decor page) is a brush that paints a building going back to green:

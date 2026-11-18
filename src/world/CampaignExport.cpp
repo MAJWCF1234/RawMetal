@@ -324,6 +324,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   for(const auto& b:m.breaches)line(Rec("BREACH").i(mi).n(b.x1).n(b.y1).n(b.x2).n(b.y2).n(b.bottom).n(b.top));
   // Joints: the record's own fields (its options ride as its named fields, kept as written).
   for(const auto& j:m.joints){Rec r("JOINT");r.i(mi).f(propJointWord(j.kind)).i(j.propA).i(j.propB).n(j.at.x).n(j.at.y).n(j.at.z);if(j.rope())r.n(j.to.x).n(j.to.y).n(j.to.z);line(r);}
+  // Curtains, straps and cables likewise (a strap hung from a point alone writes its one end).
+  for(const auto& c:m.cloths){Rec r("CLOTH");r.i(mi).f(clothWord(c.kind)).n(c.at.x).n(c.at.y).n(c.at.z);if(c.kind!=ClothKind::Strap||c.to.x!=c.at.x||c.to.y!=c.at.y||c.to.z!=c.at.z)r.n(c.to.x).n(c.to.y).n(c.to.z);line(r);}
   for(const auto& p:m.pipes)line(Rec("PIPE").i(mi).n(p.start.x).n(p.start.y).n(p.end.x).n(p.end.y).n(p.z).n(p.radius).n(p.endZ).i(p.material));
   {const auto ports=leadPorts();
    for(size_t li=0;li<m.leads.size();++li){const auto& l=m.leads[li];

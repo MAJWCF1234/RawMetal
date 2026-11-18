@@ -4,6 +4,13 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.4
+
+- Vectra has capsule and convex hull parts. Pipes, bottles, extinguishers and gas cylinders roll smoothly as true rounds; rocks, cones, lamps, rubble and the broken pieces of bottles, monitors and chairs collide by their own shapes (hulls built from their meshes) and come to rest on their real faces; rays and shots meet those shapes exactly.
+- Curtains, straps and cables (the CLOTH record): they hang, sway and part when walked through, drape over things, swing when shot, ripple in the wind outdoors and settle. The editor's Hang cloth tool on the Decor page places them, and the Starter Map's physics room has a curtain, a strap and a loose cable.
+
+---
+
 ## v1.5.3 - Doors that stay (2026-11-18)
 
 A fix for the small things that should have held, and a lighter game to carry them.

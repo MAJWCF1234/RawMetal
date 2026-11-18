@@ -45,41 +45,176 @@ void Quat::toEuler(float& yaw,float& pitch,float& roll)const{
 
 // ---- Shapes ---------------------------------------------------------------------------------------
 namespace {
-float partVolume(const Part& p){switch(p.kind){case PartKind::Box:return 8*p.half.x*p.half.y*p.half.z;case PartKind::Cylinder:return kPi*p.half.x*p.half.x*2*p.half.z;default:return 4.f/3*kPi*p.half.x*p.half.x*p.half.x;}}
-V3 partInertia(const Part& p){ // per kilogram, principal, about the part's own centre
+float capsuleVolume(float r,float h){return kPi*r*r*2*h+4.f/3*kPi*r*r*r;}
+float partVolume(const Part& p){switch(p.kind){case PartKind::Box:return 8*p.half.x*p.half.y*p.half.z;case PartKind::Cylinder:return kPi*p.half.x*p.half.x*2*p.half.z;
+  case PartKind::Capsule:return capsuleVolume(p.half.x,p.half.z);case PartKind::Hull:return p.hull?p.hull->volume:8*p.half.x*p.half.y*p.half.z;
+  default:return 4.f/3*kPi*p.half.x*p.half.x*p.half.x;}}
+M3 partInertia(const Part& p){ // per kilogram, about the part's own centre of volume, in the part's frame
  const V3 h=p.half;switch(p.kind){
-  case PartKind::Box:return {(h.y*h.y+h.z*h.z)/3,(h.x*h.x+h.z*h.z)/3,(h.x*h.x+h.y*h.y)/3};
-  case PartKind::Cylinder:{const float r2=h.x*h.x,l2=h.z*h.z;return {r2/4+l2/3,r2/4+l2/3,r2/2};}
-  default:{const float s=.4f*h.x*h.x;return {s,s,s};}}}
-float partReach(const Part& p){switch(p.kind){case PartKind::Box:return len(p.half);case PartKind::Cylinder:return std::sqrt(p.half.x*p.half.x+p.half.z*p.half.z);default:return p.half.x;}}
+  case PartKind::Box:return M3::diagonal({(h.y*h.y+h.z*h.z)/3,(h.x*h.x+h.z*h.z)/3,(h.x*h.x+h.y*h.y)/3});
+  case PartKind::Cylinder:{const float r2=h.x*h.x,l2=h.z*h.z;return M3::diagonal({r2/4+l2/3,r2/4+l2/3,r2/2});}
+  case PartKind::Capsule:{   // the cylinder between the ends and the two half balls beyond them
+   const float r=h.x,H=2*h.z,mc=kPi*r*r*H,ms=4.f/3*kPi*r*r*r,m=std::max(1e-12f,mc+ms);
+   const float axis=(mc*r*r/2+ms*2*r*r/5)/m,across=(mc*(H*H/12+r*r/4)+ms*(2*r*r/5+H*H/4+3*H*r/8))/m;return M3::diagonal({across,across,axis});}
+  case PartKind::Hull:if(p.hull)return p.hull->inertia;return M3::diagonal({(h.y*h.y+h.z*h.z)/3,(h.x*h.x+h.z*h.z)/3,(h.x*h.x+h.y*h.y)/3});
+  default:{const float s=.4f*h.x*h.x;return M3::diagonal({s,s,s});}}}
+V3 partMassCentre(const Part& p){return p.kind==PartKind::Hull&&p.hull?p.centre+p.turn.rotate(p.hull->centroid):p.centre;}
+float partReach(const Part& p){switch(p.kind){case PartKind::Box:return len(p.half);case PartKind::Cylinder:return std::sqrt(p.half.x*p.half.x+p.half.z*p.half.z);
+  case PartKind::Capsule:return p.half.z+p.half.x;case PartKind::Hull:return p.hull?p.hull->reach:len(p.half);default:return p.half.x;}}
 }
 void Shape::finish(){
- float total=0;V3 centre{};for(int i=0;i<count;++i){const float v=std::max(1e-9f,partVolume(parts[size_t(i)]));total+=v;centre=centre+parts[size_t(i)].centre*v;}
+ float total=0;V3 centre{};for(int i=0;i<count;++i){const float v=std::max(1e-9f,partVolume(parts[size_t(i)]));total+=v;centre=centre+partMassCentre(parts[size_t(i)])*v;}
  com=total>0?centre*(1/total):V3{};M3 sum=M3::zero();bound=0;
  for(int i=0;i<count;++i){const auto&p=parts[size_t(i)];const float share=std::max(1e-9f,partVolume(p))/total;
-  const M3 r=p.turn.matrix();M3 local=r*M3::diagonal(partInertia(p))*r.transposed();
-  const V3 d=p.centre-com;M3 shift=M3::diagonal({dot(d,d),dot(d,d),dot(d,d)});
+  const M3 r=p.turn.matrix();M3 local=r*partInertia(p)*r.transposed();
+  const V3 d=partMassCentre(p)-com;M3 shift=M3::diagonal({dot(d,d),dot(d,d),dot(d,d)});
   for(int a=0;a<3;++a)for(int b=0;b<3;++b)shift.m[a][b]-=comp(d,a)*comp(d,b);
-  sum=sum+(local+shift)*share;bound=std::max(bound,len(d)+partReach(p));}
+  sum=sum+(local+shift)*share;bound=std::max(bound,len(p.centre-com)+partReach(p));}
  inertia=sum;}
+void partVolumeBox(const Part& p,V3& centre,V3& half){
+ centre=partMassCentre(p);
+ switch(p.kind){
+  case PartKind::Cylinder:half={p.half.x*.886f,p.half.x*.886f,p.half.z};return;
+  case PartKind::Sphere:half={p.half.x*.806f,p.half.x*.806f,p.half.x*.806f};return;
+  case PartKind::Capsule:half={p.half.x*.886f,p.half.x*.886f,p.half.z+p.half.x*2.f/3};return;   // the round ends' volume as a third of a radius more each
+  case PartKind::Hull:{const float box=std::max(1e-12f,8*p.half.x*p.half.y*p.half.z),k=p.hull?std::cbrt(std::clamp(p.hull->volume/box,1e-3f,1.f)):1.f;half=p.half*k;return;}
+  default:half=p.half;}}
+
+// ---- Convex hulls ---------------------------------------------------------------------------------
+namespace {
+struct Plane {V3 n;float d;};
+// The supporting planes of a point set (every triple whose plane has every point on one side), outward, without repeats.
+void hullPlanes(const std::vector<V3>& pts,float eps,std::vector<Plane>& out){
+ out.clear();const int n=int(pts.size());
+ for(int i=0;i<n;++i)for(int j=i+1;j<n;++j)for(int k=j+1;k<n;++k){
+  V3 nn=cross(pts[size_t(j)]-pts[size_t(i)],pts[size_t(k)]-pts[size_t(i)]);const float l=len(nn);if(l<1e-10f)continue;nn=nn*(1/l);float d=dot(nn,pts[size_t(i)]);
+  int above=0,below=0;for(int m=0;m<n&&!(above&&below);++m){const float s=dot(nn,pts[size_t(m)])-d;if(s>eps)++above;else if(s<-eps)++below;}
+  if((above&&below)||(!above&&!below))continue;if(above){nn=neg(nn);d=-d;}
+  bool seen=false;for(const auto& p:out)if(dot(p.n,nn)>1-1e-5f&&std::fabs(p.d-d)<eps){seen=true;break;}if(!seen)out.push_back({nn,d});}}
+float outside(const std::vector<Plane>& planes,V3 p){float s=-1e30f;for(const auto& q:planes)s=std::max(s,dot(q.n,p)-q.d);return s;}
+}
+// The hull of pts as outward triangles (anticlockwise seen from outside), point by point: a point more than tol outside
+// some faces removes them and joins their horizon to itself. False for a flat or tiny set.
+static bool incrementalHull(const std::vector<V3>& pts,float tol,std::vector<std::array<int,3>>& tris){
+ tris.clear();const int n=int(pts.size());if(n<4)return false;
+ // A first tetrahedron: the two farthest apart along x, y or z, the farthest from their line, the farthest from their plane.
+ int i0=0,i1=0;float span=-1;for(int axis=0;axis<3;++axis){int lo=0,hi=0;for(int i=1;i<n;++i){if(comp(pts[size_t(i)],axis)<comp(pts[size_t(lo)],axis))lo=i;if(comp(pts[size_t(i)],axis)>comp(pts[size_t(hi)],axis))hi=i;}
+  const float d=comp(pts[size_t(hi)],axis)-comp(pts[size_t(lo)],axis);if(d>span){span=d;i0=lo;i1=hi;}}
+ if(span<=tol)return false;
+ int i2=-1;float far=tol;const V3 ax=norm(pts[size_t(i1)]-pts[size_t(i0)]);for(int i=0;i<n;++i){const V3 d=pts[size_t(i)]-pts[size_t(i0)];const float l=len(d-ax*dot(d,ax));if(l>far){far=l;i2=i;}}
+ if(i2<0)return false;
+ const V3 pn=norm(cross(pts[size_t(i1)]-pts[size_t(i0)],pts[size_t(i2)]-pts[size_t(i0)]));int i3=-1;far=tol;for(int i=0;i<n;++i){const float d=std::fabs(dot(pn,pts[size_t(i)]-pts[size_t(i0)]));if(d>far){far=d;i3=i;}}
+ if(i3<0)return false;
+ if(dot(pn,pts[size_t(i3)]-pts[size_t(i0)])>0)std::swap(i1,i2);   // the fourth below the first face: that face is outward
+ tris={{i0,i1,i2},{i0,i3,i1},{i1,i3,i2},{i2,i3,i0}};
+ auto plane=[&](const std::array<int,3>& t,V3& nn,float& d){nn=norm(cross(pts[size_t(t[1])]-pts[size_t(t[0])],pts[size_t(t[2])]-pts[size_t(t[0])]));d=dot(nn,pts[size_t(t[0])]);};
+ std::vector<char> used(size_t(n),0);used[size_t(i0)]=used[size_t(i1)]=used[size_t(i2)]=used[size_t(i3)]=1;
+ // Each remaining point, the farthest outside first (the hull grows by its true corners, not by points it will swallow).
+ for(;;){int best=-1;float most=tol;
+  for(int i=0;i<n;++i){if(used[size_t(i)])continue;float o=-1e30f;for(const auto& t:tris){V3 nn;float d;plane(t,nn,d);o=std::max(o,dot(nn,pts[size_t(i)])-d);}if(o>most){most=o;best=i;}}
+  if(best<0)break;used[size_t(best)]=1;const V3 p=pts[size_t(best)];
+  std::vector<char> seen(tris.size(),0);for(size_t t=0;t<tris.size();++t){V3 nn;float d;plane(tris[t],nn,d);seen[t]=dot(nn,p)-d>tol;}
+  std::vector<std::pair<int,int>> horizon;
+  for(size_t t=0;t<tris.size();++t){if(!seen[t])continue;for(int j=0;j<3;++j){const int a=tris[t][size_t(j)],b=tris[t][size_t((j+1)%3)];bool inner=false;
+    for(size_t u=0;u<tris.size();++u){if(u==t||!seen[u])continue;for(int k=0;k<3;++k)if(tris[u][size_t(k)]==b&&tris[u][size_t((k+1)%3)]==a)inner=true;}
+    if(!inner)horizon.push_back({a,b});}}
+  std::vector<std::array<int,3>> kept;for(size_t t=0;t<tris.size();++t)if(!seen[t])kept.push_back(tris[t]);
+  for(auto e:horizon)kept.push_back({e.first,e.second,best});
+  tris.swap(kept);if(tris.size()>size_t(4*ConvexHull::MaxFaces))return false;}
+ return true;}
+bool ConvexHull::build(const std::vector<V3>& points,ConvexHull& out,V3* shift,int maxVerts){
+ out=ConvexHull{};out.general=true;maxVerts=std::clamp(maxVerts,4,MaxVerts);
+ std::vector<V3> pts;V3 lo{1e30f,1e30f,1e30f},hi{-1e30f,-1e30f,-1e30f};
+ for(V3 p:points){bool seen=false;for(V3 q:pts)if(lenSq(p-q)<1e-12f){seen=true;break;}if(seen)continue;pts.push_back(p);
+  lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};}
+ if(pts.size()<4)return false;
+ const float scale=std::max({hi.x-lo.x,hi.y-lo.y,hi.z-lo.z,1e-4f}),eps=1e-4f*scale+1e-6f;
+ // Simplified to the cap: the farthest along the axes and the diagonals first (its box is kept), then each the farthest
+ // outside the hull of those so far, until every point is within a millimetre in a metre of it.
+ std::vector<V3> sel;
+ if(int(pts.size())<=maxVerts)sel=pts;
+ else{const V3 mid=(lo+hi)*.5f;
+  for(int dx=-1;dx<=1;++dx)for(int dy=-1;dy<=1;++dy)for(int dz=-1;dz<=1;++dz){if(!dx&&!dy&&!dz)continue;const V3 d{float(dx),float(dy),float(dz)};
+   int best=0;float far=-1e30f;for(size_t i=0;i<pts.size();++i){const float s=dot(pts[i]-mid,d);if(s>far+1e-7f){far=s;best=int(i);}}
+   bool seen=false;for(V3 q:sel)if(lenSq(q-pts[size_t(best)])<1e-12f)seen=true;if(!seen&&int(sel.size())<maxVerts)sel.push_back(pts[size_t(best)]);}
+  std::vector<Plane> planes;
+  while(int(sel.size())<maxVerts){hullPlanes(sel,eps,planes);if(planes.empty())break;int best=-1;float far=1e-3f*scale;
+   for(size_t i=0;i<pts.size();++i){const float s=outside(planes,pts[i]);if(s>far){far=s;best=int(i);}}
+   if(best<0)break;sel.push_back(pts[size_t(best)]);}}
+ // The hull as triangles, point by point (each point that sees faces replaces them by a fan from it to their horizon, so
+ // every edge always joins exactly two), then neighbours that lie in one plane merged into one face along their shared
+ // boundary (a box's side is one face of four corners, not two triangles).
+ const ConvexHull blank=out;bool closed=false;
+ for(float k:{1e-5f,1e-4f,1e-3f}){const float tol=k*scale+1e-7f;out=blank;
+  std::vector<std::array<int,3>> tris;
+  if(!incrementalHull(sel,tol,tris))continue;
+  // Merge: neighbouring triangles within a degree of each other, each one's corners within 0.3% of the hull's size of the
+  // other's plane, are one face (a mesh's flat side simplified to a few corners comes out as slivers a quarter of a degree
+  // apart: as separate faces, a piece resting on them took one or the other step by step and rocked).
+  const int nt=int(tris.size());std::vector<V3> tn(static_cast<size_t>(nt));std::vector<float> td(static_cast<size_t>(nt));
+  for(int t=0;t<nt;++t){const auto& T=tris[size_t(t)];tn[size_t(t)]=norm(cross(sel[size_t(T[1])]-sel[size_t(T[0])],sel[size_t(T[2])]-sel[size_t(T[0])]));td[size_t(t)]=dot(tn[size_t(t)],sel[size_t(T[0])]);}
+  std::vector<int> group(static_cast<size_t>(nt));for(int t=0;t<nt;++t)group[size_t(t)]=t;
+  auto root=[&](int t){while(group[size_t(t)]!=t)t=group[size_t(t)]=group[size_t(group[size_t(t)])];return t;};
+  const float flat=std::max(tol*4,.003f*scale);auto flatWith=[&](int a,int b){if(dot(tn[size_t(a)],tn[size_t(b)])<.99985f)return false;for(int j=0;j<3;++j){if(std::fabs(dot(tn[size_t(a)],sel[size_t(tris[size_t(b)][size_t(j)])])-td[size_t(a)])>flat)return false;if(std::fabs(dot(tn[size_t(b)],sel[size_t(tris[size_t(a)][size_t(j)])])-td[size_t(b)])>flat)return false;}return true;};
+  for(int a=0;a<nt;++a)for(int b=a+1;b<nt;++b){int shared=0;for(int i:tris[size_t(a)])for(int j:tris[size_t(b)])shared+=i==j;if(shared==2&&flatWith(a,b)){const int ra=root(a),rb=root(b);if(ra!=rb)group[size_t(rb)]=ra;}}
+  // Each group's boundary (its directed edges whose reverse is not in it), chained into a loop.
+  std::vector<std::vector<int>> loops;std::vector<V3> normals;bool fits=true;
+  for(int g=0;g<nt&&fits;++g){if(root(g)!=g)continue;std::vector<std::pair<int,int>> edges;V3 n{};
+   for(int t=0;t<nt;++t)if(root(t)==g){const auto& T=tris[size_t(t)];n=n+cross(sel[size_t(T[1])]-sel[size_t(T[0])],sel[size_t(T[2])]-sel[size_t(T[0])]);for(int j=0;j<3;++j)edges.push_back({T[size_t(j)],T[size_t((j+1)%3)]});}
+   std::vector<std::pair<int,int>> rim;for(auto ed:edges){bool inner=false;for(auto o:edges)if(o.first==ed.second&&o.second==ed.first){inner=true;break;}if(!inner)rim.push_back(ed);}
+   std::vector<int> loop;if(rim.empty()){fits=false;break;}loop.push_back(rim[0].first);int at=rim[0].second;
+   while(at!=loop[0]&&int(loop.size())<=int(rim.size())){loop.push_back(at);int next=-1;for(auto ed:rim)if(ed.first==at){next=ed.second;break;}if(next<0){fits=false;break;}at=next;}
+   if(!fits||int(loop.size())!=int(rim.size())){fits=false;break;}
+   loops.push_back(loop);normals.push_back(norm(n));}
+  if(!fits||loops.size()<4||int(loops.size())>MaxFaces)continue;
+  // The corners the faces use, numbered afresh.
+  std::vector<int> remap(sel.size(),-1);
+  for(auto& loop:loops)for(int& i:loop){if(remap[size_t(i)]<0){if(out.nv>=MaxVerts){fits=false;break;}remap[size_t(i)]=out.nv;out.v[out.nv++]=sel[size_t(i)];}i=remap[size_t(i)];}
+  if(!fits)continue;
+  for(size_t f=0;f<loops.size();++f){if(int(loops[f].size())>MaxFaceVerts){fits=false;break;}auto& F=out.f[out.nf++];F.n=int(loops[f].size());for(int j=0;j<F.n;++j)F.idx[j]=loops[f][size_t(j)];F.normal=normals[f];}
+  if(!fits)continue;
+  // Edges and the two faces each joins.
+  for(int f=0;f<out.nf&&fits;++f){const auto& F=out.f[f];for(int j=0;j<F.n&&fits;++j){int a=F.idx[j],b=F.idx[(j+1)%F.n];const int wind=a<b?1:-1;if(a>b)std::swap(a,b);int found=-1;
+    for(int m=0;m<out.ne;++m)if(out.e[m][0]==a&&out.e[m][1]==b){found=m;break;}
+    if(found<0){if(out.ne>=MaxEdges){fits=false;break;}found=out.ne++;out.e[found][0]=a;out.e[found][1]=b;out.ef[found][0]=f;out.ef[found][1]=-1;out.ewind[found]=wind;}
+    else if(out.ef[found][1]<0&&out.ef[found][0]!=f)out.ef[found][1]=f;else fits=false;}}
+  if(!fits)continue;
+  for(int m=0;m<out.ne;++m)fits&=out.ef[m][1]>=0;
+  if(fits&&out.nv-out.ne+out.nf==2){closed=true;break;}}
+ if(!closed)return false;
+ // Centred on its box.
+ V3 blo{1e30f,1e30f,1e30f},bhi{-1e30f,-1e30f,-1e30f};for(int i=0;i<out.nv;++i){const V3 p=out.v[i];blo={std::min(blo.x,p.x),std::min(blo.y,p.y),std::min(blo.z,p.z)};bhi={std::max(bhi.x,p.x),std::max(bhi.y,p.y),std::max(bhi.z,p.z)};}
+ const V3 c=(blo+bhi)*.5f;for(int i=0;i<out.nv;++i)out.v[i]=out.v[i]-c;out.half=(bhi-blo)*.5f;if(shift)*shift=c;
+ for(int f=0;f<out.nf;++f)out.f[f].d=dot(out.f[f].normal,out.v[out.f[f].idx[0]]);
+ // Mass properties by tetrahedra from the corners' mean (inside it): volume, centre and the covariance, then the inertia.
+ V3 mid{};for(int i=0;i<out.nv;++i)mid=mid+out.v[i];mid=mid*(1.f/float(out.nv));out.mid=mid;
+ double vol=0,cx=0,cy=0,cz=0,C[3][3]{};
+ for(int f=0;f<out.nf;++f){const auto& F=out.f[f];for(int k=1;k+1<F.n;++k){
+   const V3 a=out.v[F.idx[0]]-mid,b=out.v[F.idx[k]]-mid,cc=out.v[F.idx[k+1]]-mid;const double v=double(dot(a,cross(b,cc)))/6;if(v<=0)continue;
+   vol+=v;const V3 s=a+b+cc;cx+=v*s.x/4;cy+=v*s.y/4;cz+=v*s.z/4;
+   const V3 q[4]={a,b,cc,s};for(int r=0;r<4;++r)for(int i=0;i<3;++i)for(int j=0;j<3;++j)C[i][j]+=v/20*double(comp(q[r],i))*double(comp(q[r],j));}}
+ if(vol<=1e-12)return false;
+ const double g[3]{cx/vol,cy/vol,cz/vol};
+ for(int i=0;i<3;++i)for(int j=0;j<3;++j)C[i][j]-=vol*g[i]*g[j];
+ const double tr=C[0][0]+C[1][1]+C[2][2];
+ for(int i=0;i<3;++i)for(int j=0;j<3;++j)out.inertia.m[i][j]=float(((i==j?tr:0)-C[i][j])/vol);
+ out.volume=float(vol);out.centroid=mid+V3{float(g[0]),float(g[1]),float(g[2])};
+ for(int i=0;i<out.nv;++i)out.reach=std::max(out.reach,len(out.v[i]));
+ return true;}
 
 // ---- Polyhedra ------------------------------------------------------------------------------------
 namespace {
 constexpr int PrismSides=12;
-struct Template {
- int nv=0;V3 v[2*PrismSides]{};
- struct Face {int n=0;int idx[PrismSides]{};V3 normal{};};int nf=0;Face f[PrismSides+2]{};
- int ne=0;int e[3*PrismSides][2]{};int edir[3*PrismSides]{};int nd=0;V3 dir[PrismSides]{};
-};
+using Template=ConvexHull;
 Template build(const std::vector<V3>& verts,const std::vector<std::vector<int>>& faces){
  Template t;t.nv=int(verts.size());for(size_t i=0;i<verts.size();++i)t.v[i]=verts[i];
- V3 centre{};for(auto v:verts)centre=centre+v;centre=centre*(1.f/float(verts.size()));
+ V3 centre{};for(auto v:verts)centre=centre+v;centre=centre*(1.f/float(verts.size()));t.mid=centre;
  for(const auto& face:faces){auto&f=t.f[t.nf++];f.n=int(face.size());for(size_t k=0;k<face.size();++k)f.idx[k]=face[k];
   // Newell's normal; wind the face anticlockwise seen from outside.
   V3 n{},mid{};for(int k=0;k<f.n;++k){const V3 a=verts[size_t(f.idx[k])],b=verts[size_t(f.idx[(k+1)%f.n])];n.x+=(a.y-b.y)*(a.z+b.z);n.y+=(a.z-b.z)*(a.x+b.x);n.z+=(a.x-b.x)*(a.y+b.y);mid=mid+a;}
-  mid=mid*(1.f/float(f.n));n=norm(n);if(dot(n,mid-centre)<0){std::reverse(f.idx,f.idx+f.n);n=neg(n);}f.normal=n;
-  for(int k=0;k<f.n;++k){int a=f.idx[k],b=f.idx[(k+1)%f.n];if(a>b)std::swap(a,b);bool seen=false;for(int j=0;j<t.ne;++j)if(t.e[j][0]==a&&t.e[j][1]==b)seen=true;
-   if(seen)continue;t.e[t.ne][0]=a;t.e[t.ne][1]=b;const V3 d=norm(verts[size_t(b)]-verts[size_t(a)]);int found=-1;
+  mid=mid*(1.f/float(f.n));n=norm(n);if(dot(n,mid-centre)<0){std::reverse(f.idx,f.idx+f.n);n=neg(n);}f.normal=n;f.d=dot(n,verts[size_t(f.idx[0])]);
+  for(int k=0;k<f.n;++k){int a=f.idx[k],b=f.idx[(k+1)%f.n];const int wind=a<b?1:-1;if(a>b)std::swap(a,b);int seen=-1;for(int j=0;j<t.ne;++j)if(t.e[j][0]==a&&t.e[j][1]==b)seen=j;
+   if(seen>=0){t.ef[seen][1]=t.nf-1;continue;}t.e[t.ne][0]=a;t.e[t.ne][1]=b;t.ef[t.ne][0]=t.nf-1;t.ef[t.ne][1]=-1;t.ewind[t.ne]=wind;const V3 d=norm(verts[size_t(b)]-verts[size_t(a)]);int found=-1;
    for(int j=0;j<t.nd;++j)if(lenSq(cross(t.dir[j],d))<1e-6f){found=j;break;}if(found<0){found=t.nd;t.dir[t.nd++]=d;}t.edir[t.ne++]=found;}}
  return t;}
 const Template& boxTemplate(){static const Template t=[]{std::vector<V3> v;for(int i=0;i<8;++i)v.push_back({i&1?1.f:-1.f,i&2?1.f:-1.f,i&4?1.f:-1.f});
@@ -91,19 +226,42 @@ const Template& prismTemplate(){static const Template t=[]{std::vector<V3> v;
  std::vector<std::vector<int>> f;std::vector<int> bottom,top;for(int i=0;i<PrismSides;++i){bottom.push_back(i);top.push_back(PrismSides+i);}f.push_back(bottom);f.push_back(top);
  for(int i=0;i<PrismSides;++i){const int j=(i+1)%PrismSides;f.push_back({i,j,PrismSides+j,PrismSides+i});}
  return build(v,f);}();return t;}
-struct Hull {const Template* t=nullptr;V3 v[2*PrismSides];V3 n[PrismSides+2];float d[PrismSides+2];V3 dir[PrismSides];V3 centre;};
+// A polyhedral part in the world this step (its template's corners, face planes and edge directions turned and placed).
+struct Hull {const Template* t=nullptr;V3 v[Template::MaxVerts];V3 n[Template::MaxFaces];float d[Template::MaxFaces];V3 dir[Template::MaxDirs];V3 centre,inner;};
+bool polyhedral(PartKind k){return k==PartKind::Box||k==PartKind::Cylinder||k==PartKind::Hull;}
 void partFrame(const Body& b,int part,V3& centre,Quat& turn){const auto&p=b.shape->parts[size_t(part)];centre=b.x+b.q.rotate(p.centre-b.shape->com);turn=b.q*p.turn;}
 V3 scaleOf(const Part& p){return p.kind==PartKind::Cylinder?V3{p.half.x,p.half.x,p.half.z}:p.half;}
+const Template& templateOf(const Part& p){return p.kind==PartKind::Cylinder?prismTemplate():p.kind==PartKind::Hull&&p.hull?*p.hull:boxTemplate();}
 Hull hullOf(const Body& b,int part){
- Hull h;const auto&p=b.shape->parts[size_t(part)];h.t=p.kind==PartKind::Cylinder?&prismTemplate():&boxTemplate();Quat turn;partFrame(b,part,h.centre,turn);const V3 s=scaleOf(p);
+ Hull h;const auto&p=b.shape->parts[size_t(part)];h.t=&templateOf(p);Quat turn;partFrame(b,part,h.centre,turn);const V3 s=h.t->general?V3{1,1,1}:scaleOf(p);
  for(int i=0;i<h.t->nv;++i)h.v[i]=h.centre+turn.rotate(mulv(h.t->v[i],s));
  for(int f=0;f<h.t->nf;++f){h.n[f]=turn.rotate(h.t->f[f].normal);h.d[f]=dot(h.n[f],h.v[h.t->f[f].idx[0]]);}
- for(int i=0;i<h.t->nd;++i)h.dir[i]=turn.rotate(h.t->dir[i]);return h;}
+ for(int i=0;i<h.t->nd;++i)h.dir[i]=turn.rotate(h.t->dir[i]);h.inner=h.centre+turn.rotate(mulv(h.t->mid,s));return h;}
 struct FaceQuery {int index=-1;float separation=-1e30f;};
 FaceQuery queryFaces(const Hull& a,const Hull& b){FaceQuery q;
  for(int f=0;f<a.t->nf;++f){float lo=1e30f;for(int i=0;i<b.t->nv;++i)lo=std::min(lo,dot(a.n[f],b.v[i]));const float s=lo-a.d[f];if(s>q.separation){q.separation=s;q.index=f;}}return q;}
-struct EdgeQuery {int dirA=-1,dirB=-1;float separation=-1e30f;V3 axis{};};
+struct EdgeQuery {int dirA=-1,dirB=-1,ea=-1,eb=-1;float separation=-1e30f;V3 axis{};};
+// The edge pairs: a general hull's by the Gauss map (Gregorius): arcs ab (A's two faces' normals) and cd (B's, negated)
+// that cross make the edges' cross a face of the Minkowski difference, the only edge axes worth testing.
 EdgeQuery queryEdges(const Hull& a,const Hull& b){EdgeQuery q;const V3 between=b.centre-a.centre;
+ if(a.t->general||b.t->general){
+  // A general hull: every pair of edges whose arcs cross on the Gauss map (an edge with one face known: its axis by
+  // the two hulls' projections, which any axis allows).
+  // (B's edges, its arcs' ends negated and their cross, worked out once: most pairs are rejected by two dot products.)
+  V3 eB[Template::MaxEdges],pB[Template::MaxEdges],cB[Template::MaxEdges],dB[Template::MaxEdges],dxcB[Template::MaxEdges];bool arcB[Template::MaxEdges];
+  for(int j=0;j<b.t->ne;++j){pB[j]=b.v[b.t->e[j][0]];eB[j]=b.v[b.t->e[j][1]]-pB[j];const int f0=b.t->ef[j][0],f1=b.t->ef[j][1];arcB[j]=f1>=0;
+   if(arcB[j]){cB[j]=neg(b.n[f0]);dB[j]=neg(b.n[f1]);dxcB[j]=eB[j]*float(-b.t->ewind[j]);}}   // cross(d, c), along the edge (robust)
+  for(int i=0;i<a.t->ne;++i){const V3 P=a.v[a.t->e[i][0]],eA=a.v[a.t->e[i][1]]-P;const int fa0=a.t->ef[i][0],fa1=a.t->ef[i][1];const bool arcA=fa1>=0;
+   const V3 na=arcA?a.n[fa0]:V3{},nb=arcA?a.n[fa1]:V3{},bxa=eA*float(-a.t->ewind[i]);const float lA=len(eA);   // (bxa: cross(b, a), along the edge)
+   for(int j=0;j<b.t->ne;++j){
+    if(arcA&&arcB[j]){   // minkowskiFace(na, nb, cB, dB), cheapest test first
+     const float cba=dot(cB[j],bxa),dba=dot(dB[j],bxa);if(cba*dba>=0)continue;
+     const float adc=dot(na,dxcB[j]),bdc=dot(nb,dxcB[j]);if(adc*bdc>=0||cba*bdc<=0)continue;}
+    V3 axis=cross(eA,eB[j]);const float l=len(axis);if(l<1e-3f*lA*len(eB[j]))continue;axis=axis*(1/l);float s;
+    if(arcA&&arcB[j]){if(dot(axis,P-a.inner)<0)axis=neg(axis);s=dot(axis,pB[j]-P);}
+    else{if(dot(axis,b.inner-a.inner)<0)axis=neg(axis);float hiA=-1e30f,loB=1e30f;for(int k=0;k<a.t->nv;++k)hiA=std::max(hiA,dot(axis,a.v[k]));for(int k=0;k<b.t->nv;++k)loB=std::min(loB,dot(axis,b.v[k]));s=loB-hiA;}
+    if(s>q.separation){q.separation=s;q.ea=i;q.eb=j;q.axis=axis;}}}
+  return q;}
  for(int i=0;i<a.t->nd;++i)for(int j=0;j<b.t->nd;++j){V3 axis=cross(a.dir[i],b.dir[j]);const float l=len(axis);if(l<1e-3f)continue;axis=axis*(1/l);if(dot(axis,between)<0)axis=neg(axis);
   float hiA=-1e30f,loB=1e30f;for(int k=0;k<a.t->nv;++k)hiA=std::max(hiA,dot(axis,a.v[k]));for(int k=0;k<b.t->nv;++k)loB=std::min(loB,dot(axis,b.v[k]));
   const float s=loB-hiA;if(s>q.separation){q.separation=s;q.dirA=i;q.dirB=j;q.axis=axis;}}
@@ -123,16 +281,22 @@ void setPoint(Manifold& m,const Body& a,const Body& b,V3 p,float separation,std:
  auto&c=m.points[size_t(m.count++)];c=ContactPoint{};c.p=p;c.separation=separation;c.feature=feature;
  c.localA=a.q.unrotate(p-a.x);c.localB=b.q.unrotate(p-b.x);}
 int faceContact(const Body& A,const Body& B,const Hull& ref,int rf,const Hull& inc,bool flip,float margin,Manifold& m){
- const V3 n=ref.n[rf];int inf=0;float lo=1e30f;for(int f=0;f<inc.t->nf;++f){const float d=dot(inc.n[f],n);if(d<lo){lo=d;inf=f;}}
- V3 poly[64],next[64];int count=inc.t->f[inf].n;std::uint32_t ids[64];for(int k=0;k<count;++k){poly[k]=inc.v[inc.t->f[inf].idx[k]];}
+ const V3 n=ref.n[rf];int inf=0;float lo=1e30f;
+ if(inc.t->general){
+  // A general hull's incident face is among the faces round its deepest corner (on a many-faceted curve the face most
+  // nearly against n can lie beside the corner that goes deepest, and the clip would miss it).
+  int deep=0;float least=1e30f;for(int i=0;i<inc.t->nv;++i){const float d=dot(n,inc.v[i]);if(d<least){least=d;deep=i;}}
+  for(int f=0;f<inc.t->nf;++f){const auto& F=inc.t->f[f];bool has=false;for(int k=0;k<F.n;++k)has|=F.idx[k]==deep;if(!has)continue;const float d=dot(inc.n[f],n);if(d<lo){lo=d;inf=f;}}}
+ else for(int f=0;f<inc.t->nf;++f){const float d=dot(inc.n[f],n);if(d<lo){lo=d;inf=f;}}
+ V3 poly[72],next[72];int count=inc.t->f[inf].n;std::uint32_t ids[72];for(int k=0;k<count;++k){poly[k]=inc.v[inc.t->f[inf].idx[k]];}
  const auto&F=ref.t->f[rf];
  for(int k=0;k<F.n&&count>0;++k){const V3 a=ref.v[F.idx[k]],b=ref.v[F.idx[(k+1)%F.n]];const V3 side=norm(cross(b-a,n));const float offset=dot(side,a);int out=0;
   for(int i=0;i<count;++i){const V3 p=poly[i],q=poly[(i+1)%count];const float dp=dot(side,p)-offset,dq=dot(side,q)-offset;
-   if(dp<=0&&out<64)next[out++]=p;if(((dp<0&&dq>0)||(dp>0&&dq<0))&&out<64){   // strictly across: a vertex on the side is kept once, as itself
+   if(dp<=0&&out<72)next[out++]=p;if(((dp<0&&dq>0)||(dp>0&&dq<0))&&out<72){   // strictly across: a vertex on the side is kept once, as itself
    const float t=dp/(dp-dq);next[out++]=p+(q-p)*t;}}
   count=out;for(int i=0;i<count;++i)poly[i]=next[i];}
- V3 pts[64];float seps[64];int kept=0;
- for(int i=0;i<count;++i){const float s=dot(n,poly[i])-ref.d[rf];if(s>margin)continue;pts[kept]=poly[i]-n*(s*.5f);seps[kept]=s;ids[kept]=std::uint32_t(rf<<16|inf<<8|i);++kept;}
+ V3 pts[72];float seps[72];int kept=0;
+ for(int i=0;i<count;++i){const float s=dot(n,poly[i])-ref.d[rf];if(s>margin)continue;pts[kept]=poly[i]-n*(s*.5f);seps[kept]=s;ids[kept]=std::uint32_t(rf<<16|inf<<8|(i&0xff));++kept;}
  kept=reduce(pts,seps,ids,kept,n);m.normal=flip?neg(n):n;m.count=0;
  for(int i=0;i<kept;++i)setPoint(m,A,B,pts[i],seps[i],ids[i]);return m.count;}
 void closestSegments(V3 p1,V3 q1,V3 p2,V3 q2,V3& c1,V3& c2){
@@ -150,17 +314,86 @@ int hullHull(const Body& A,const Body& B,const Hull& a,const Hull& b,float margi
  const float faceBest=std::max(fa.separation,fb.separation);
  // Faces are preferred (a full manifold holds a stack); an edge pair wins only when it is clearly the
  // shallower way out.
- if(ed.dirA>=0&&ed.separation>.95f*faceBest+.004f){
-  float best=-1e30f;int ea=-1;for(int i=0;i<a.t->ne;++i)if(a.t->edir[i]==ed.dirA){const float d=dot(ed.axis,a.v[a.t->e[i][0]]+a.v[a.t->e[i][1]]);if(d>best){best=d;ea=i;}}
-  best=1e30f;int eb=-1;for(int i=0;i<b.t->ne;++i)if(b.t->edir[i]==ed.dirB){const float d=dot(ed.axis,b.v[b.t->e[i][0]]+b.v[b.t->e[i][1]]);if(d<best){best=d;eb=i;}}
+ if((ed.dirA>=0||ed.ea>=0)&&ed.separation>.95f*faceBest+.004f){
+  int ea=ed.ea,eb=ed.eb;
+  if(ea<0){float best=-1e30f;for(int i=0;i<a.t->ne;++i)if(a.t->edir[i]==ed.dirA){const float d=dot(ed.axis,a.v[a.t->e[i][0]]+a.v[a.t->e[i][1]]);if(d>best){best=d;ea=i;}}
+   best=1e30f;for(int i=0;i<b.t->ne;++i)if(b.t->edir[i]==ed.dirB){const float d=dot(ed.axis,b.v[b.t->e[i][0]]+b.v[b.t->e[i][1]]);if(d<best){best=d;eb=i;}}}
   if(ea>=0&&eb>=0){V3 c1,c2;closestSegments(a.v[a.t->e[ea][0]],a.v[a.t->e[ea][1]],b.v[b.t->e[eb][0]],b.v[b.t->e[eb][1]],c1,c2);
    m.normal=ed.axis;m.count=0;setPoint(m,A,B,(c1+c2)*.5f,dot(c2-c1,ed.axis),std::uint32_t(0x1000000|ea<<8|eb));return 1;}}
  if(fb.separation>.98f*fa.separation+.001f)return faceContact(A,B,b,fb.index,a,true,margin,m);
  return faceContact(A,B,a,fa.index,b,false,margin,m);}
+// A point's nearest place on a placed hull: the surface point, the outward normal there and the signed distance
+// (negative inside: then the nearest face's).
+void nearestOnHull(const Hull& h,V3 point,V3& surface,V3& normal,float& distance){
+ const Template& t=*h.t;float most=-1e30f;int face=0;
+ for(int f=0;f<t.nf;++f){const float s=dot(h.n[f],point)-h.d[f];if(s>most){most=s;face=f;}}
+ if(most<=0){surface=point-h.n[face]*most;normal=h.n[face];distance=most;return;}
+ float best=1e30f;V3 q=point;int qf=face;
+ for(int f=0;f<t.nf;++f){const float s=dot(h.n[f],point)-h.d[f];if(s<=0)continue;const auto& F=t.f[f];const V3 p=point-h.n[f]*s;bool in=true;
+  for(int k=0;k<F.n;++k){const V3 a=h.v[F.idx[k]],b=h.v[F.idx[(k+1)%F.n]];if(dot(cross(b-a,h.n[f]),p-a)>0){in=false;break;}}
+  if(in){if(s<best){best=s;q=p;qf=f;}continue;}
+  for(int k=0;k<F.n;++k){const V3 a=h.v[F.idx[k]],b=h.v[F.idx[(k+1)%F.n]],ab=b-a;const float l=lenSq(ab);const float u=l>1e-12f?std::clamp(dot(point-a,ab)/l,0.f,1.f):0.f;const V3 c=a+ab*u;const float d=len(point-c);if(d<best){best=d;q=c;qf=f;}}}
+ surface=q;distance=best;normal=norm(point-q,h.n[qf]);}
+// A round part's core (a capsule's segment; a sphere's one point) and its radius, in the world.
+void coreOf(const Body& b,int part,V3& p0,V3& p1,float& r){const auto&p=b.shape->parts[size_t(part)];V3 c;Quat t;partFrame(b,part,c,t);r=p.half.x;
+ if(p.kind==PartKind::Capsule){const V3 a=t.rotate({0,0,p.half.z});p0=c-a;p1=c+a;}else p0=p1=c;}
+// Two round parts (capsule against capsule or sphere): their cores' nearest points, and a second point when the two lie
+// side by side (a pipe on a pipe rests on its length, not one point).
+int roundRound(const Body& A,int pa,const Body& B,int pb,float margin,Manifold& m){
+ V3 a0,a1,b0,b1;float ra,rb;coreOf(A,pa,a0,a1,ra);coreOf(B,pb,b0,b1,rb);
+ V3 c1,c2;closestSegments(a0,a1,b0,b1,c1,c2);const V3 d=c2-c1;const float dist=len(d);
+ V3 n;if(dist>1e-6f)n=d*(1/dist);else{const V3 ua=a1-a0;if(lenSq(ua)>1e-12f){V3 t1,t2;basis(norm(ua),t1,t2);n=t1;}else n=norm(B.x-A.x);}
+ const float sep=dist-ra-rb;if(sep>margin)return 0;
+ m.normal=n;m.count=0;
+ const V3 ua=a1-a0,ub=b1-b0;const float la=len(ua),lb=len(ub);
+ if(la>1e-4f&&lb>1e-4f&&std::fabs(dot(ua,ub))>.98f*la*lb){
+  const V3 u=ua*(1/la);const float t0=dot(b0-a0,u),t1=dot(b1-a0,u);float sLo=0,sHi=1;
+  if(std::fabs(t1-t0)>1e-6f){float s0=(0-t0)/(t1-t0),s1=(la-t0)/(t1-t0);if(s0>s1)std::swap(s0,s1);sLo=std::max(0.f,s0);sHi=std::min(1.f,s1);}
+  if(sHi-sLo>1e-3f){for(float s:{sLo,sHi}){const V3 q=b0+ub*s;const V3 p=a0+u*std::clamp(dot(q-a0,u),0.f,la);const float si=dot(q-p,n)-ra-rb;if(si<=margin)setPoint(m,A,B,p+n*(ra+si*.5f),si,0x2000000u|std::uint32_t(m.count));}
+   if(m.count)return m.count;}}
+ setPoint(m,A,B,c1+n*(ra+sep*.5f),sep,0x2000000);return 1;}
+// A capsule against a polyhedron (a box, a cylinder's prism, a hull). Its segment kept clear of the polyhedron: their
+// exact nearest points (each end against the polyhedron, the segment against each of its edges); gone into it: the
+// shallowest way out by the faces and the crosses of its edges with the segment. Lying along a face, the segment
+// clipped to the face's sides gives two points.
+int capsuleHull(const Body& A,int pa,const Body& B,int pb,const Hull& h,bool capsuleA,float margin,Manifold& m){
+ V3 s0,s1;float r;if(capsuleA)coreOf(A,pa,s0,s1,r);else coreOf(B,pb,s0,s1,r);
+ const Template& t=*h.t;const V3 seg=s1-s0;const float segLen=len(seg);
+ float faceSep=-1e30f;int face=0;for(int f=0;f<t.nf;++f){const float s=std::min(dot(h.n[f],s0),dot(h.n[f],s1))-h.d[f];if(s>faceSep){faceSep=s;face=f;}}
+ if(faceSep>r+margin)return 0;
+ float lo=0,hi=1;for(int f=0;f<t.nf&&lo<=hi;++f){const float a=dot(h.n[f],s0)-h.d[f],b=dot(h.n[f],seg);if(std::fabs(b)<1e-12f){if(a>0)lo=2;continue;}const float x=-a/b;if(b>0)hi=std::min(hi,x);else lo=std::max(lo,x);}
+ V3 n,core;float sep;
+ if(lo>hi){
+  float best=1e30f;V3 onHull{},onCore{};
+  for(V3 end:{s0,s1}){V3 q,nn;float d;nearestOnHull(h,end,q,nn,d);if(d<best){best=d;onHull=q;onCore=end;}}
+  for(int e=0;e<t.ne;++e){V3 c1,c2;closestSegments(h.v[t.e[e][0]],h.v[t.e[e][1]],s0,s1,c1,c2);const float d=len(c2-c1);if(d<best-1e-7f){best=d;onHull=c1;onCore=c2;}}
+  n=norm(onCore-onHull,h.n[face]);sep=best-r;core=onCore;}
+ else{
+  sep=faceSep-r;n=h.n[face];core=dot(n,s0)<=dot(n,s1)?s0:s1;
+  if(segLen>1e-5f){float best=-1e30f;V3 axisBest{};int eBest=-1;const V3 segMid=(s0+s1)*.5f;
+   for(int e=0;e<t.ne;++e){V3 axis=cross(h.v[t.e[e][1]]-h.v[t.e[e][0]],seg);const float l=len(axis);if(l<1e-6f)continue;axis=axis*(1/l);if(dot(axis,segMid-h.inner)<0)axis=neg(axis);
+    float top=-1e30f;for(int k=0;k<t.nv;++k)top=std::max(top,dot(axis,h.v[k]));const float s=std::min(dot(axis,s0),dot(axis,s1))-top;if(s>best){best=s;axisBest=axis;eBest=e;}}
+   if(eBest>=0&&best>.95f*faceSep+.004f){V3 c1,c2;closestSegments(h.v[t.e[eBest][0]],h.v[t.e[eBest][1]],s0,s1,c1,c2);n=axisBest;sep=best-r;core=c2;}}}
+ if(sep>margin)return 0;
+ m.count=0;m.normal=capsuleA?neg(n):n;
+ // Along a face: the segment clipped to its sides.
+ if(segLen>1e-4f){int fb=-1;float most=.98f;for(int f=0;f<t.nf;++f){const float d=dot(h.n[f],n);if(d>most){most=d;fb=f;}}
+  if(fb>=0&&std::fabs(dot(seg,h.n[fb]))<.3f*segLen){const auto& F=t.f[fb];const V3 nf=h.n[fb];float a0=0,a1=1;
+   for(int k=0;k<F.n&&a0<=a1;++k){const V3 a=h.v[F.idx[k]],b=h.v[F.idx[(k+1)%F.n]];const V3 side=norm(cross(b-a,nf));const float o=dot(side,s0)-dot(side,a),dd=dot(side,seg);
+    if(std::fabs(dd)<1e-12f){if(o>0)a0=2;continue;}const float x=-o/dd;if(dd>0)a1=std::min(a1,x);else a0=std::max(a0,x);}
+   if(a1-a0>1e-3f){m.normal=capsuleA?neg(nf):nf;
+    for(float x:{a0,a1}){const V3 p=s0+seg*x;const float si=dot(nf,p)-h.d[fb]-r;if(si<=margin)setPoint(m,A,B,p-nf*(r+si*.5f),si,0x3000000u|std::uint32_t(m.count));}
+    if(m.count)return m.count;m.normal=capsuleA?neg(n):n;}}}
+ setPoint(m,A,B,core-n*(r+sep*.5f),sep,0x3000000);return 1;}
 // A point's nearest place on a part (sphere centre against box or cylinder): the surface point and the
 // outward normal there, and whether the point is inside.
 bool nearestOnPart(const Body& b,int part,V3 point,V3& surface,V3& normal,float& distance){
- const auto&p=b.shape->parts[size_t(part)];V3 centre;Quat turn;partFrame(b,part,centre,turn);const V3 l=turn.unrotate(point-centre);V3 q,n;bool inside;
+ const auto&p=b.shape->parts[size_t(part)];
+ if(p.kind==PartKind::Hull){const Hull h=hullOf(b,part);nearestOnHull(h,point,surface,normal,distance);return distance<0;}
+ if(p.kind==PartKind::Capsule){V3 s0,s1;float r;coreOf(b,part,s0,s1,r);const V3 sg=s1-s0;const float l=lenSq(sg);const V3 c=s0+sg*(l>1e-12f?std::clamp(dot(point-s0,sg)/l,0.f,1.f):0.f);
+  const V3 d=point-c;const float dist=len(d);V3 n;if(dist>1e-6f)n=d*(1/dist);else{V3 t1,t2;basis(norm(sg),t1,t2);n=t1;}
+  surface=c+n*r;normal=n;distance=dist-r;return distance<0;}
+ V3 centre;Quat turn;partFrame(b,part,centre,turn);const V3 l=turn.unrotate(point-centre);V3 q,n;bool inside;
  if(p.kind==PartKind::Box){const V3 h=p.half;q={std::clamp(l.x,-h.x,h.x),std::clamp(l.y,-h.y,h.y),std::clamp(l.z,-h.z,h.z)};inside=lenSq(q-l)<1e-12f;
   if(inside){const float dx=h.x-std::fabs(l.x),dy=h.y-std::fabs(l.y),dz=h.z-std::fabs(l.z);
    if(dx<=dy&&dx<=dz){n={l.x<0?-1.f:1.f,0,0};q.x=n.x*h.x;}else if(dy<=dz){n={0,l.y<0?-1.f:1.f,0};q.y=n.y*h.y;}else{n={0,0,l.z<0?-1.f:1.f};q.z=n.z*h.z;}}
@@ -176,6 +409,7 @@ bool nearestPoint(const Body& b,int part,V3 point,V3& surface,V3& normal,float& 
 void partBounds(const Body& b,int part,V3& lo,V3& hi){
  const auto&p=b.shape->parts[size_t(part)];V3 centre;Quat turn;partFrame(b,part,centre,turn);
  if(p.kind==PartKind::Sphere){const V3 r{p.half.x,p.half.x,p.half.x};lo=centre-r;hi=centre+r;return;}
+ if(p.kind==PartKind::Capsule){const V3 a=turn.rotate({0,0,p.half.z});const V3 e{std::fabs(a.x)+p.half.x,std::fabs(a.y)+p.half.x,std::fabs(a.z)+p.half.x};lo=centre-e;hi=centre+e;return;}
  const M3 m=turn.matrix();const V3 s=scaleOf(p);V3 e{};
  for(int i=0;i<3;++i){const float v=std::fabs(m.m[i][0])*s.x+std::fabs(m.m[i][1])*s.y+std::fabs(m.m[i][2])*s.z;if(i==0)e.x=v;else if(i==1)e.y=v;else e.z=v;}
  if(p.kind==PartKind::Cylinder){ // a disc's extent along each world axis: r*sqrt(1-a_i^2) + h*|a_i|
@@ -185,6 +419,8 @@ V3 support(const Body& b,int part,V3 d){
  const auto&p=b.shape->parts[size_t(part)];V3 centre;Quat turn;partFrame(b,part,centre,turn);const V3 l=turn.unrotate(d);
  if(p.kind==PartKind::Box)return centre+turn.rotate({l.x<0?-p.half.x:p.half.x,l.y<0?-p.half.y:p.half.y,l.z<0?-p.half.z:p.half.z});
  if(p.kind==PartKind::Cylinder){const float rho=std::sqrt(l.x*l.x+l.y*l.y);const V3 r=rho>1e-6f?V3{l.x/rho*p.half.x,l.y/rho*p.half.x,0}:V3{};return centre+turn.rotate({r.x,r.y,l.z<0?-p.half.z:p.half.z});}
+ if(p.kind==PartKind::Capsule)return centre+turn.rotate({0,0,l.z<0?-p.half.z:p.half.z})+norm(d)*p.half.x;
+ if(p.kind==PartKind::Hull&&p.hull){const auto& t=*p.hull;int best=0;float far=-1e30f;for(int i=0;i<t.nv;++i){const float s=dot(t.v[i],l);if(s>far){far=s;best=i;}}return centre+turn.rotate(t.v[best]);}
  return centre+norm(d)*p.half.x;}
 int supportFeature(const Body& b,int part,V3 d,std::array<V3,8>& out){
  const auto&p=b.shape->parts[size_t(part)];V3 centre;Quat turn;partFrame(b,part,centre,turn);const V3 l=norm(turn.unrotate(d));constexpr float flat=.12f;int n=0;
@@ -199,6 +435,25 @@ int supportFeature(const Body& b,int part,V3 d,std::array<V3,8>& out){
   if(std::fabs(l.z)<flat){out[size_t(n++)]=centre+turn.rotate({radial.x,radial.y,-h});out[size_t(n++)]=centre+turn.rotate({radial.x,radial.y,h});
    if(h>.15f)out[size_t(n++)]=centre+turn.rotate({radial.x,radial.y,0});return n;}
   out[size_t(n++)]=centre+turn.rotate({radial.x,radial.y,l.z<0?-h:h});return n;}
+ if(p.kind==PartKind::Capsule){const float r=p.half.x,h=p.half.z;const V3 off=turn.rotate(l)*r;
+  // Lying along the way asked: its two ends' points that way (exact on a floor: the round touches along its length).
+  if(std::fabs(l.z)<flat&&h>1e-4f){out[size_t(n++)]=centre+turn.rotate({0,0,-h})+off;out[size_t(n++)]=centre+turn.rotate({0,0,h})+off;if(h>.15f)out[size_t(n++)]=centre+off;return n;}
+  out[size_t(n++)]=centre+turn.rotate({0,0,l.z<0?-h:h})+off;return n;}
+ if(p.kind==PartKind::Hull&&p.hull){const auto& t=*p.hull;
+  // At most four, as a box's face gives. The face most nearly facing the way, if within a few degrees: its own widest four
+  // corners, by no depth, so the same corners hold it step after step whatever its tenth of a degree of tilt (by depth the
+  // deepest by a hair changed, and a shard resting on a many-cornered face rocked on and never slept). And the hull's
+  // deepest corner with them when it is a millimetre or more under that face's lowest (on a many-faceted back, the face most
+  // nearly facing the way can lie beside the corner that goes deepest: a broken monitor's casing sank 5 cm into the floor).
+  // No face that near: the corners within a millimetre of the farthest.
+  float far=-1e30f;int deep=0;for(int i=0;i<t.nv;++i){const float d=dot(t.v[i],l);if(d>far){far=d;deep=i;}}
+  int face=-1;float most=.993f;for(int f=0;f<t.nf;++f){const float c=dot(t.f[f].normal,l);if(c>most){most=c;face=f;}}
+  V3 p[ConvexHull::MaxVerts+1];float s[ConvexHull::MaxVerts+1];std::uint32_t id[ConvexHull::MaxVerts+1];int k=0;
+  if(face>=0){const auto& F=t.f[face];float low=-1e30f;
+   for(int j=0;j<F.n;++j){p[k]=t.v[F.idx[j]];s[k]=0;id[k]=std::uint32_t(j);low=std::max(low,dot(p[k],l));++k;}
+   if(far>low+.001f){p[k]=t.v[deep];s[k]=-1;id[k]=std::uint32_t(100+deep);++k;}}
+  else for(int i=0;i<t.nv;++i)if(dot(t.v[i],l)>=far-.001f){p[k]=t.v[i];s[k]=-dot(p[k],l);id[k]=std::uint32_t(i);++k;}
+  k=reduce(p,s,id,k,l);for(int j=0;j<k;++j)out[size_t(n++)]=centre+turn.rotate(p[j]);return n;}
  out[size_t(n++)]=centre+norm(d)*p.half.x;return n;}
 void surfaceSamples(const Body& b,int part,float spacing,std::vector<V3>& out){
  const auto&p=b.shape->parts[size_t(part)];V3 centre;Quat turn;partFrame(b,part,centre,turn);
@@ -211,6 +466,19 @@ void surfaceSamples(const Body& b,int part,float spacing,std::vector<V3>& out){
  if(p.kind==PartKind::Cylinder){const float r=p.half.x,h=p.half.z;const int around=std::clamp(int(std::ceil(2*kPi*r/spacing)),8,24),along=std::max(1,int(std::ceil(2*h/spacing)));
   for(int k=0;k<=along;++k){const float z=-h+2*h*float(k)/float(along);for(int i=0;i<around;++i){const float a=2*kPi*float(i)/float(around);put({std::cos(a)*r,std::sin(a)*r,z});}}
   put({0,0,-h});put({0,0,h});if(r>spacing)for(int i=0;i<6;++i){const float a=kPi/3*float(i);put({std::cos(a)*r*.5f,std::sin(a)*r*.5f,-h});put({std::cos(a)*r*.5f,std::sin(a)*r*.5f,h});}
+  return;}
+ if(p.kind==PartKind::Capsule){const float r=p.half.x,h=p.half.z;const int around=std::clamp(int(std::ceil(2*kPi*r/spacing)),8,24),along=std::max(1,int(std::ceil(2*h/spacing)));
+  for(int k=0;k<=along;++k){const float z=-h+2*h*float(k)/float(along);for(int i=0;i<around;++i){const float a=2*kPi*float(i)/float(around);put({std::cos(a)*r,std::sin(a)*r,z});}}
+  // Each round end: a ring half way round it and its pole.
+  for(float s:{-1.f,1.f}){put({0,0,s*(h+r)});const int ring=std::max(6,around*3/4);for(int i=0;i<ring;++i){const float a=2*kPi*float(i)/float(ring);put({std::cos(a)*r*.7071f,std::sin(a)*r*.7071f,s*(h+r*.7071f)});}}
+  return;}
+ if(p.kind==PartKind::Hull&&p.hull){const auto& t=*p.hull;
+  for(int i=0;i<t.nv;++i)put(t.v[i]);
+  for(int e=0;e<t.ne;++e){const V3 a=t.v[t.e[e][0]],c=t.v[t.e[e][1]];const int k=int(std::ceil(len(c-a)/spacing));for(int s=1;s<k;++s)put(a+(c-a)*(float(s)/float(k)));}
+  // Across each face: a fan from its middle, every `spacing`.
+  for(int f=0;f<t.nf;++f){const auto& F=t.f[f];V3 mid{};for(int k=0;k<F.n;++k)mid=mid+t.v[F.idx[k]];mid=mid*(1.f/float(F.n));put(mid);
+   for(int k=0;k<F.n;++k){const V3 a=t.v[F.idx[k]],c=t.v[F.idx[(k+1)%F.n]];const int m=int(std::ceil(std::max(len(a-mid),len(c-mid))/spacing));
+    for(int i=1;i<m;++i)for(int j=0;i+j<m;++j){if(i==0&&j==0)continue;put(mid+(a-mid)*(float(i)/float(m))+(c-mid)*(float(j)/float(m)));}}}
   return;}
  const float r=p.half.x;for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k)if(i||j||k)put(norm(V3{float(i),float(j),float(k)})*r);}
 namespace {
@@ -230,6 +498,9 @@ int collideParts(const Body& A,int pa,const Body& B,int pb,float margin,Manifold
    n=neg(outward);sep=dist-r;point=surface+outward*(sep*.5f);if(dist<0)sep=dist-r;}
   if(sep>margin)return 0;
   m.normal=swap?neg(n):n;setPoint(m,A,B,point,sep,0x2000000);return 1;}
+ if(a.kind==PartKind::Capsule&&b.kind==PartKind::Capsule)return roundRound(A,pa,B,pb,margin,m);
+ if(a.kind==PartKind::Capsule){const Hull hb=hullOf(B,pb);return capsuleHull(A,pa,B,pb,hb,true,margin,m);}
+ if(b.kind==PartKind::Capsule){const Hull ha=hullOf(A,pa);return capsuleHull(A,pa,B,pb,ha,false,margin,m);}
  const Hull ha=hullOf(A,pa),hb=hullOf(B,pb);return hullHull(A,B,ha,hb,margin,m);}
 
 // ---- The solver -----------------------------------------------------------------------------------
@@ -288,8 +559,13 @@ void Space::collide(float dt){
    if(a.shape->count>1||b.shape->count>1){V3 l1,h1,l2,h2;partBounds(a,pa,l1,h1);partBounds(b,pb,l2,h2);
     if(l1.x>h2.x+margin||l2.x>h1.x+margin||l1.y>h2.y+margin||l2.y>h1.y+margin||l1.z>h2.z+margin||l2.z>h1.z+margin)continue;}
    ++pairsTested;Manifold m;
-   const bool polyhedra=a.shape->parts[size_t(pa)].kind!=PartKind::Sphere&&b.shape->parts[size_t(pb)].kind!=PartKind::Sphere;
-   if(!(polyhedra?collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m):collideParts(a,pa,b,pb,margin,m)))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
+   const PartKind ka=a.shape->parts[size_t(pa)].kind,kb=b.shape->parts[size_t(pb)].kind;
+   int found;
+   if(polyhedral(ka)&&polyhedral(kb))found=collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m);
+   else if(ka==PartKind::Capsule&&polyhedral(kb)){m.count=0;m.partA=pa;m.partB=pb;found=capsuleHull(a,pa,b,pb,hull(j,pb),true,margin,m);}
+   else if(kb==PartKind::Capsule&&polyhedral(ka)){m.count=0;m.partA=pa;m.partB=pb;found=capsuleHull(a,pa,b,pb,hull(i,pa),false,margin,m);}
+   else found=collideParts(a,pa,b,pb,margin,m);
+   if(!found)continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
    {const float sa=a.softHertz,sb=b.softHertz;m.surface.hertz=sa>0&&sb>0?std::min(sa,sb):std::max(sa,sb);}
    manifolds.push_back(m);
    // A moving body touching a sleeping one wakes it, and what that touches wakes with it (the rounds below).

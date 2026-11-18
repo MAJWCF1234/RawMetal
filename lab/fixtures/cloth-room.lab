@@ -1,0 +1,6 @@
+# the cloth corner: a curtain walked through, a strap, a loose cable over a crate (SHOWCASE: PHYSICS; tube cloth-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 19.2 8.2 -999 85 -8
+size 640 360
+frames 420

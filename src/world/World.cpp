@@ -2010,4 +2010,7 @@ const char* propJointWord(PropJointKind kind){switch(kind){case PropJointKind::H
 bool parsePropJointWord(std::string_view w,PropJointKind& out){
  for(int k=0;k<=int(PropJointKind::Winch);++k)if(w==propJointWord(PropJointKind(k))){out=PropJointKind(k);return true;}
  if(w=="distance"){out=PropJointKind::Distance;return true;}return false;}
+const char* clothWord(ClothKind kind){switch(kind){case ClothKind::Strap:return "strap";case ClothKind::Cable:return "cable";default:return "curtain";}}
+bool parseClothWord(std::string_view w,ClothKind& out){
+ for(int k=0;k<=int(ClothKind::Cable);++k)if(w==clothWord(ClothKind(k))){out=ClothKind(k);return true;}return false;}
 }

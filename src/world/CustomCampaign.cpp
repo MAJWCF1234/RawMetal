@@ -822,6 +822,27 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(j.kind==PropJointKind::Pulley&&(!overSet||!over2Set))throw std::runtime_error("a pulley needs over= and over2= (where each rope goes over)");
    if(j.kind==PropJointKind::Winch&&j.motor==0)j.motor=1;
    map->joints.push_back(j);
+  }else if(tag=="CLOTH"){
+   // CLOTH|map|kind|x|y|z[|x2|y2|z2], then named fields: a curtain on its rail, a strap, a cable (World.h ClothSpec,
+   // game/Cloth.cpp; docs/Systems/map-format.md).
+   if(f.size()!=6&&f.size()!=9)throw std::runtime_error("malformed CLOTH record (CLOTH|map|kind|x|y|z[|x2|y2|z2])");auto map=mapAt(maps,f);ClothSpec c;
+   if(!parseClothWord(f[2],c.kind))throw std::runtime_error("cloth kind is curtain, strap or cable: "+f[2]);
+   c.at={number(f,3,"cloth x"),number(f,4,"cloth y"),number(f,5,"cloth z")};c.to=c.at;
+   if(f.size()==9)c.to={number(f,6,"cloth x2"),number(f,7,"cloth y2"),number(f,8,"cloth z2")};
+   else if(c.kind!=ClothKind::Strap)throw std::runtime_error("a curtain or a cable needs its other end (x2|y2|z2)");
+   auto num=[](const std::string& v,const char* what,float lo,float hi){size_t used=0;float x=0;try{x=std::stof(v,&used);}catch(...){used=0;}
+    if(used!=v.size()||!std::isfinite(x)||x<lo||x>hi)throw std::runtime_error(std::string("cloth ")+what+" is "+std::to_string(lo).substr(0,4)+" to "+std::to_string(hi).substr(0,4)+": "+v);return x;};
+   for(const auto& n:namedFields){const std::string& k=n.key;const std::string& v=n.value;
+    if(k=="drop")c.drop=num(v,"drop",.1f,8);
+    else if(k=="length")c.length=num(v,"length",.1f,20);
+    else if(k=="width")c.width=num(v,"width",.01f,.5f);
+    else if(k=="radius")c.radius=num(v,"radius",.003f,.1f);
+    else if(k=="mass")c.mass=num(v,"mass",.01f,50);
+    else if(k=="stiffness")c.stiffness=num(v,"stiffness",1,120);
+    else if(k=="loose"){if(v=="1"||v=="yes"||v=="true")c.loose=true;else if(v=="0"||v=="no"||v=="false")c.loose=false;else throw std::runtime_error("cloth loose is 1 or 0: "+v);}}
+   if(c.kind==ClothKind::Curtain){const float dx=c.to.x-c.at.x,dy=c.to.y-c.at.y;if(dx*dx+dy*dy<.04f)throw std::runtime_error("a curtain's rail is at least 0.2 m long");}
+   if(c.loose&&c.kind!=ClothKind::Cable)throw std::runtime_error("cloth loose= is for a cable");
+   map->cloths.push_back(c);
   }else if(tag=="BREACH"){
    // BREACH|map|x1|y1|x2|y2|bottom|top, then named fields: a hole broken through a wall (World.h Breach, Openings.cpp).
    auto map=mapAt(maps,f);map->breaches.push_back(parseBreach(f,namedFields));

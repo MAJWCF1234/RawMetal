@@ -8,22 +8,27 @@
 namespace retro::vectra {
 namespace {
 // ---- Support-mapped convex shapes ----------------------------------------------------------------
-// A point (a sphere's centre, with its radius as a margin), an oriented box or an upright cylinder in its
-// own frame. GJK works on the core; the margin is taken off its distance.
+// A point (a sphere's centre, with its radius as a margin), a segment (a capsule's, half length h.z along its own z,
+// its radius the margin), an oriented box, an upright cylinder or a convex hull in its own frame. GJK works on the
+// core; the margin is taken off its distance.
 struct Convex {
- enum Kind:std::uint8_t {Point,Box,Cylinder} kind=Point;
- V3 c{};Quat q{};V3 h{};float r=0;
+ enum Kind:std::uint8_t {Point,Box,Cylinder,Segment,Hull} kind=Point;
+ V3 c{};Quat q{};V3 h{};float r=0;const ConvexHull* hull=nullptr;
  V3 support(V3 d)const{
   if(kind==Point)return c;
   const V3 l=q.unrotate(d);
+  if(kind==Segment)return c+q.rotate({0,0,l.z<0?-h.z:h.z});
+  if(kind==Hull){int best=0;float far=-1e30f;for(int i=0;i<hull->nv;++i){const float s=dot(hull->v[i],l);if(s>far){far=s;best=i;}}return c+q.rotate(hull->v[best]);}
   if(kind==Box)return c+q.rotate({l.x<0?-h.x:h.x,l.y<0?-h.y:h.y,l.z<0?-h.z:h.z});
   const float rho=std::sqrt(l.x*l.x+l.y*l.y);V3 s=rho>1e-9f?V3{l.x/rho*h.x,l.y/rho*h.x,0}:V3{};s.z=l.z<0?-h.z:h.z;return c+q.rotate(s);}
 };
 void frameOf(const Body& b,int part,V3& centre,Quat& turn){const auto& p=b.shape->parts[size_t(part)];centre=b.x+b.q.rotate(p.centre-b.shape->com);turn=b.q*p.turn;}
 Convex convexOf(const Body& b,int part){const auto& p=b.shape->parts[size_t(part)];Convex k;frameOf(b,part,k.c,k.q);
- if(p.kind==PartKind::Sphere){k.kind=Convex::Point;k.r=p.half.x;}else{k.kind=p.kind==PartKind::Box?Convex::Box:Convex::Cylinder;k.h=p.half;}return k;}
-float reachOf(const Part& p){switch(p.kind){case PartKind::Box:return len(p.half);case PartKind::Cylinder:return std::sqrt(p.half.x*p.half.x+p.half.z*p.half.z);default:return p.half.x;}}
-float reachOf(const Convex& k){return k.kind==Convex::Point?k.r:k.kind==Convex::Box?len(k.h):std::sqrt(k.h.x*k.h.x+k.h.z*k.h.z);}
+ if(p.kind==PartKind::Sphere){k.kind=Convex::Point;k.r=p.half.x;}
+ else if(p.kind==PartKind::Capsule){k.kind=Convex::Segment;k.r=p.half.x;k.h={0,0,p.half.z};}
+ else if(p.kind==PartKind::Hull&&p.hull){k.kind=Convex::Hull;k.hull=p.hull;k.h=p.half;}
+ else{k.kind=p.kind==PartKind::Cylinder?Convex::Cylinder:Convex::Box;k.h=p.half;}return k;}
+float reachOf(const Convex& k){switch(k.kind){case Convex::Point:return k.r;case Convex::Box:return len(k.h);case Convex::Segment:return k.h.z+k.r;case Convex::Hull:return k.hull->reach;default:return std::sqrt(k.h.x*k.h.x+k.h.z*k.h.z);}}
 
 // ---- GJK distance ---------------------------------------------------------------------------------
 struct Vert {V3 w,a,b;};   // w = a - b: a point of the Minkowski difference and the two points it came from
@@ -98,6 +103,21 @@ bool rayConvex(const Convex& k,V3 origin,V3 dir,float maxD,float& t,V3& normal,b
   const float b=dot(m,dir);if(b>0)return false;const float disc=b*b-c;if(disc<0)return false;
   t=-b-std::sqrt(disc);if(t>maxD)return false;normal=norm(m+dir*t);return true;}
  const V3 o=k.q.unrotate(origin-k.c),d=k.q.unrotate(dir);
+ if(k.kind==Convex::Segment){   // a capsule: its round side between the ends, and a ball at each end
+  const float r=k.r,hz=k.h.z;const float z=std::clamp(o.z,-hz,hz);const V3 off{o.x,o.y,o.z-z};
+  if(lenSq(off)<=r*r){inside=true;t=0;normal=neg(dir);return true;}
+  float best=1e30f;V3 n{};const float A=d.x*d.x+d.y*d.y;
+  if(A>1e-12f){const float B=o.x*d.x+o.y*d.y,C=o.x*o.x+o.y*o.y-r*r,disc=B*B-A*C;
+   if(disc>=0){const float s=(-B-std::sqrt(disc))/A;if(s>=0&&std::fabs(o.z+d.z*s)<=hz){best=s;const V3 p=o+d*s;n={p.x/r,p.y/r,0};}}}
+  for(float side:{-1.f,1.f}){const V3 m=o-V3{0,0,side*hz};const float b=dot(m,d),c=dot(m,m)-r*r;if(c>0&&b>0)continue;const float disc=b*b-c;if(disc<0)continue;
+   const float s=-b-std::sqrt(disc);if(s<0||s>=best)continue;best=s;n=norm(m+d*s);}
+  if(best>maxD)return false;t=best;normal=k.q.rotate(n);return true;}
+ if(k.kind==Convex::Hull){   // its faces' planes: the last way in before the first way out
+  float t0=0,t1=maxD;int face=-1;const auto& H=*k.hull;bool in=true;
+  for(int f=0;f<H.nf;++f){const V3 n=H.f[f].normal;const float a=dot(n,o)-H.f[f].d,b=dot(n,d);if(a>0)in=false;
+   if(std::fabs(b)<1e-12f){if(a>0)return false;continue;}const float s=-a/b;if(b<0){if(s>t0){t0=s;face=f;}}else t1=std::min(t1,s);if(t0>t1)return false;}
+  if(in){inside=true;t=0;normal=neg(dir);return true;}
+  if(face<0)return false;t=t0;normal=k.q.rotate(H.f[face].normal);return true;}
  if(k.kind==Convex::Box){float t0=-1e30f,t1=1e30f;int axis=-1;float sign=0;
   for(int i=0;i<3;++i){const float oi=comp(o,i),di=comp(d,i),hi=comp(k.h,i);
    if(std::fabs(di)<1e-12f){if(std::fabs(oi)>hi)return false;continue;}
@@ -231,6 +251,13 @@ void edgeProbes(const Body& b,int part,float spacing,std::vector<V3>& out){
   for(int i=0;i<around;++i){const float a=2*kPi*float(i)/float(around);put({std::cos(a)*r,std::sin(a)*r,-hz});put({std::cos(a)*r,std::sin(a)*r,hz});}
   for(int i=0;i<8;++i){const float a=kPi/4*float(i);for(int k=1;k<along;++k)put({std::cos(a)*r,std::sin(a)*r,-hz+2*hz*float(k)/float(along)});}
   put({0,0,-hz});put({0,0,hz});return;}
+ if(p.kind==PartKind::Capsule){const float r=p.half.x,hz=p.half.z;const int around=std::clamp(int(std::ceil(2*kPi*r/spacing)),8,32),along=std::max(1,int(std::ceil(2*hz/spacing)));
+  for(int i=0;i<around;++i){const float a=2*kPi*float(i)/float(around);for(int k=0;k<=along;++k)put({std::cos(a)*r,std::sin(a)*r,-hz+2*hz*float(k)/float(along)});
+   put({std::cos(a)*r*.7071f,std::sin(a)*r*.7071f,-hz-r*.7071f});put({std::cos(a)*r*.7071f,std::sin(a)*r*.7071f,hz+r*.7071f});}
+  put({0,0,-hz-r});put({0,0,hz+r});return;}
+ if(p.kind==PartKind::Hull&&p.hull){const auto& t=*p.hull;for(int i=0;i<t.nv;++i)put(t.v[i]);
+  for(int e=0;e<t.ne;++e){const V3 a=t.v[t.e[e][0]],c=t.v[t.e[e][1]];const int n=int(std::ceil(len(c-a)/spacing));for(int k=1;k<n;++k)put(a+(c-a)*(float(k)/float(n)));}
+  return;}
  const float r=p.half.x;for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k)if(i||j||k)put(norm(V3{float(i),float(j),float(k)})*r);}
 
 // ---- Continuous collision (Space::continuous) -------------------------------------------------------
@@ -308,7 +335,7 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
   m.q0=b.movable()?(b.dq.conj()*b.q).normalized():b.q;m.begin();b.ccd=false;if(!b.shape)continue;
   // Fast for its size: it could cross something thinner than itself within this step, by going or by turning
   // (a plank's end sweeps far while its middle hardly moves).
-  float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto& part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box?std::min({part.half.x,part.half.y,part.half.z}):std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
+  float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto& part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box||part.kind==PartKind::Hull?std::min({part.half.x,part.half.y,part.half.z}):part.kind==PartKind::Capsule?part.half.x:std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
   const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;if(!b.movable()||held[size_t(i)])continue;
   b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
  const float target=2*s.settings.linearSlop;std::vector<V3> probes;std::vector<ProbeHit> hits;
