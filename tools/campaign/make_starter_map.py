@@ -1182,7 +1182,7 @@ def atrium(s, slot, catalogue):
     def piece(name, k, x, y, z, yaw):
         w, d, h = catalogue[name]
         # The pack's moss is a bright block green: the brush tints it down to old damp moss.
-        tint = ('tint=0.55,0.62,0.42',) if name in ('growth_moss_floor', 'growth_moss_wall') else ()
+        tint = ('tint=0.4,0.42,0.3',) if name in ('growth_moss_floor', 'growth_moss_wall') else ()
         s.rec(m, 'FIXTURE', i, slot[name], round(x, 3), round(y, 3), round(z, 3), round(w * k, 3), round(max(d * k, .005), 3), round(max(h * k, .005), 3), round(yaw, 4), 0, *tint)
     def on_face(name, k, at, along, nx, ny, z):
         """Flat on a wall's face at `at` (x for an east/west face, y for a north/south one), turned out along (nx, ny)."""
@@ -1211,7 +1211,7 @@ def atrium(s, slot, catalogue):
     on_face('ivy_wall_b', 1.0, 18, 11.8, -1, 0, 0)
     on_face('ivy_wall_a', .9, 18, 2.8, -1, 0, 4.2)
     for y, k in ((5.5, .85), (6.5, 1.0), (7.4, .75), (8.2, .9)):
-        hang('ivy_strand', k, 18, y, -1, 0, 3.12)
+        hang('growth_ivy_creeper', k, 18, y, -1, 0, 3.12)
     # The storefront's head: ivy over it and strands hanging in front of the glass and the doorway.
     on_face('ivy_wall_a', 1.1, 16, 6.2, 0, -1, 3.25)
     on_face('ivy_wall_b', 1.2, 16, 10.0, 0, -1, 3.2)
@@ -1219,16 +1219,14 @@ def atrium(s, slot, catalogue):
     on_face('ivy_wall_b', 1.0, 16, 2.4, 0, -1, 0)
     on_face('creeper', .85, 16, 17.0, 0, -1, 0)
     for x, k in ((4.9, .8), (7.3, .95), (8.95, .85), (11.1, .7), (12.9, .9), (15.0, .8)):
-        hang('ivy_strand', k, 16, x, 0, -1, 3.12)
+        hang('growth_ivy_creeper', k, 16, x, 0, -1, 3.12)
     # The columns: vines up two faces, moss at the foot.
     for cx, cy in ((10, 10), (14, 10)):
         on_face('growth_vine_sheet', .44, cy - .3, cx, 0, -1, .1)
         on_face('growth_vine_sheet', .44, cx + .3, cy, 1, 0, 1.3)
         on_face('growth_moss_wall', .7, cy + .3, cx, 0, 1, 0)
     # Moss low on the walls, where the damp is.
-    for name, at, along, nx, ny in (('growth_moss_wall', 1, 3.2, 1, 0), ('growth_moss_wall', 1, 6.4, 1, 0), ('growth_moss_wall', 18, 10.4, -1, 0),
-                                    ('growth_moss_wall', 18, 14.4, -1, 0), ('growth_moss_wall', 16, 1.6, 0, -1), ('growth_moss_wall', 16, 17.2, 0, -1),
-                                    ('growth_moss_wall', 1, 13.8, 0, 1), ('growth_moss_wall', 1, 9.6, 0, 1)):
+    for name, at, along, nx, ny in (('growth_moss_wall', 16, 1.6, 0, -1), ('growth_moss_wall', 16, 17.2, 0, -1)):
         on_face(name, rng.uniform(.8, 1.2), at, along, nx, ny, rng.uniform(0, .25))
     # The light court: ivy all over its walls.
     on_face('ivy_wall_a', 1.2, 23, 3.2, -1, 0, 0)
@@ -1240,12 +1238,12 @@ def atrium(s, slot, catalogue):
     on_face('ivy_wall_a', 1.15, 23, 5.4, 0, -1, 0)
     on_face('ivy_wall_b', 1.1, 23, 17.4, 0, -1, .9)
     for x, k in ((6.0, .9), (13.6, .8)):
-        hang('ivy_strand', k, 17, x, 0, 1, 3.12)
+        hang('growth_ivy_creeper', k, 17, x, 0, 1, 3.12)
     # Creepers over the balcony's lip, and from the ceiling where the light comes in and in the shop.
     for x, k in ((3.6, .8), (4.5, .95), (5.6, .75), (6.6, .9)):
-        hang('ivy_strand', k, 5, x, 0, 1, 3.64)
+        hang('growth_ivy_creeper', k, 5, x, 0, 1, 3.64)
     for y, k in ((1.8, .85), (2.9, .7), (4.1, .9)):
-        hang('ivy_strand', k, 7, y, 1, 0, 3.64)
+        hang('growth_ivy_creeper', k, 7, y, 1, 0, 3.64)
     for x, y, k in ((14.6, 5.4, 1.5), (15.9, 7.6, 1.75), (13.2, 8.4, 1.3), (16.6, 4.2, 1.2), (11.2, 5.8, 1.4), (8.4, 6.6, 1.25),
                     (20.4, 7.4, 1.6), (21.2, 12.6, 1.4), (9.5, 19.4, 1.5), (16.2, 20.6, 1.6), (4.6, 20.2, 1.3)):
         name = 'growth_hanging_vine' if (x, y) in ((21.2, 12.6), (16.2, 20.6)) else 'growth_ivy_creeper'

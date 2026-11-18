@@ -110,7 +110,7 @@
                                shortNumber(w), shortNumber(d), shortNumber(h), shortNumber(yaw), "0"};
     // The texture pack's moss is a bright block green: tinted down to old, damp moss (a FORMAT|2 tint).
     if (slot == retro::model::growth_moss_floor || slot == retro::model::growth_moss_wall)
-      doc.ensureFormat2(), f.push_back("tint=0.55,0.62,0.42");
+      doc.ensureFormat2(), f.push_back("tint=0.4,0.42,0.3");
     addAuthored(f);
     growthPlaced.push_back({px, py, z + h * .5f});
     ++stroke.planted;

@@ -45,7 +45,7 @@ const bool tube=add({
  .friends={"storefront","breach","growth"},.fixtures={"atrium"},
  .setup=[](Scene& s){auto& r=runs()[&s];r=Run{};const World& w=s.g().world();
   // The creeper over the breach's lip the walk goes through: the strand nearest (17.9, 6.6).
-  float best=1e9f;for(size_t i=0;i<w.fixtures().size();++i){const auto& f=w.fixtures()[i];if(f.model!=model::ivy_strand)continue;const float d=std::hypot(f.position.x-17.9f,f.position.y-6.6f);
+  float best=1e9f;for(size_t i=0;i<w.fixtures().size();++i){const auto& f=w.fixtures()[i];if(f.model!=model::growth_ivy_creeper)continue;const float d=std::hypot(f.position.x-17.5f,f.position.y-6.6f);
    if(d<best){best=d;r.strand=int(i);r.height=f.height;}}
   r.pane=target(w);},
  .step=[](Scene& s,float){auto& r=runs()[&s];Game& g=s.g();
@@ -58,7 +58,7 @@ const bool tube=add({
   if(r.slot<0&&r.strand>=0)r.slot=plants.slotOf(g.level(),r.strand);
   if(r.slot>=0&&s.frame>=WalkFrom&&s.frame<WalkTo+30){const Point3 tip=plants.tip(r.slot);r.pushTip=std::max(r.pushTip,std::hypot(tip.x,tip.y));}
   if(s.frame==Wide){view(s,"atrium from the balcony",{6.4f,4.5f},3.6f,50,-24);view(s,"the hall to the breach",{3.0f,14.2f},0,-28,2);view(s,"atrium from the hall",{15.8f,2.2f},0,128,-6);view(s,"the storefront",{6.6f,10.6f},0,62,-4);}
-  if(s.frame==Close)view(s,"creepers over the breach, the court's light behind",{15.9f,7.3f},0,-12,4);
+  if(s.frame==Close)view(s,"creepers over the breach, the court's light behind",{14.2f,7.4f},0,-6,4);view(s,"creepers in the hall",{11.4f,10.2f},0,-52,16);
   if(s.frame==PaneShot&&r.pane>=0){const auto c=centre(g.world(),r.pane);view(s,"the shattered pane",{c.x-1.2f,13.1f},0,74,-10);}},
  .metrics=[](Scene& s,Report& rep){auto& r=runs()[&s];const int level=atriumLevel();
   rep.check("the Starter Map has its atrium",level>=0&&s.g().level()==level,"level "+std::to_string(level)+", playing "+std::to_string(s.g().level()));if(level<0)return;
