@@ -76,7 +76,8 @@ struct Watch {bool ready=false,human=false;int body=0;
  // Per frame, the worst seen.
  float shapeCore=0,shapeAll=0,volumeDev=0,limitDeg=0,overlap=0,lowestMoving=1e9f;int insideMoving=0,wallMoving=0,wallAtDeath=-1;float settled=-1,fell=-1;
  // Where its middle was once it had fallen (down within 0.6 m of the floor), and the farthest it went from there: the slide.
- Point3 down{};float slide=0;};
+ // Down again lower (a step further down a stair) starts the measure again from there: going down is falling, not sliding.
+ Point3 down{};float slide=0,slideFirst=0;int levels=0;std::vector<std::pair<float,float>> track;};
 // Each group's own enclosed volume about its own middle, summed: a rigid turn of a part leaves it as it is, a squash does not.
 double volumeOf(const std::vector<MeshTriangle>& t,const std::vector<int>& group){std::map<int,std::pair<Point3,int>> mid;for(size_t i=0;i<t.size();++i){auto& m=mid[group[i]];m.first=m.first+t[i].v[0].p;++m.second;}
  std::map<int,double> vol;for(size_t i=0;i<t.size();++i){const auto& m=mid[group[i]];const Point3 c=m.first*(1.f/float(m.second));vol[group[i]]+=dot3(t[i].v[0].p-c,cross3(t[i].v[1].p-c,t[i].v[2].p-c))/6.0;}double v=0;for(auto& [g,x]:vol)v+=std::fabs(x);return v;}
@@ -226,7 +227,8 @@ const bool fall=add({
   if(!c->asleep()&&(s.frame-killFrame(s))%2==0){float low=0;int walls=0;w.insideMoving=std::max(w.insideMoving,insideCount(tri,world,low,nullptr,&walls));w.wallMoving=std::max(w.wallMoving,walls);if(w.wallAtDeath<0)w.wallAtDeath=walls;w.lowestMoving=std::min(w.lowestMoving,low);}
   if(w.settled<0&&c->asleep())w.settled=c->age();
   if(w.fell<0){float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);if(top-w.feet.z<.6f){w.fell=c->age();w.down=c->centre();}}
-  else w.slide=std::max(w.slide,std::hypot(c->centre().x-w.down.x,c->centre().y-w.down.y));
+  else{if(c->centre().z<w.down.z-.1f){w.slideFirst=std::max(w.slideFirst,w.slide);++w.levels;w.down=c->centre();w.slide=0;}w.slide=std::max(w.slide,std::hypot(c->centre().x-w.down.x,c->centre().y-w.down.y));}
+  if(w.fell>=0&&(s.frame%6)==0)w.track.push_back({c->centre().z,std::hypot(c->centre().x-w.feet.x,c->centre().y-w.feet.y)});
   // The strips: the fall from the front and the side, every other frame (30 fps) for 2.5 s.
   const int since=s.frame-killFrame(s);
   if(since>=0&&since<150&&since%2==0){Player& cam=LabAccess::player(g);const Player was=cam;const Vec2 f=facingOf(w.facing),side{f.y,-f.x};const Point3 aim{w.feet.x,w.feet.y,w.feet.z+.45f};
@@ -243,8 +245,10 @@ const bool fall=add({
   float top=-1e9f;for(auto& f:tri)for(auto& v:f.v)top=std::max(top,v.p.z);
   const Point3 ctr=c->centre();const float drift=std::hypot(ctr.x-w.feet.x,ctr.y-w.feet.y);
   r.metric("settle_s",w.settled,"s");r.metric("fell_s",w.fell,"s");r.metric("shape_core_cm",w.shapeCore*100,"cm");r.metric("shape_all_cm",w.shapeAll*100,"cm");r.metric("volume_dev_pct",w.volumeDev*100,"%");
-  r.metric("inside_moving",w.insideMoving);r.metric("in_walls_moving",w.wallMoving);r.metric("in_walls_at_death",w.wallAtDeath);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("slide_after_fall_m",w.slide,"m");
-  r.check("once down it does not slide (centre within 0.3 m of where it fell)",w.fell<0||w.slide<.3f,fixed(w.slide,2)+" m");
+  r.metric("inside_moving",w.insideMoving);r.metric("in_walls_moving",w.wallMoving);r.metric("in_walls_at_death",w.wallAtDeath);r.metric("inside_rest",inside);r.metric("lowest_rest_m",low,"m");r.metric("lowest_moving_m",w.lowestMoving,"m");r.metric("top_rest_m",top-w.feet.z,"m");r.metric("centre_from_feet_m",drift,"m");r.metric("centre_dx_m",ctr.x-w.feet.x,"m");r.metric("centre_dy_m",ctr.y-w.feet.y,"m");r.metric("slide_after_fall_m",w.slide,"m");
+  r.metric("slide_levels",w.levels);r.metric("slide_above_m",w.slideFirst,"m");
+  if(std::getenv("RM_RAGDOLL_DEBUG")){std::ofstream t("ragdoll-track.txt");for(auto [z,d]:w.track)t<<z<<' '<<d<<"\n";}
+  r.check("once down it does not slide (centre within 0.3 m of where it fell)",w.fell<0||std::max(w.slide,w.slideFirst)<.3f,fixed(std::max(w.slide,w.slideFirst),2)+" m");
   r.metric("rest_jitter_mm",w.jitter*1000,"mm");r.metric("sleep_pop_mm",w.sleepPop*1000,"mm");r.metric("ease_step_mm",w.easeStep*1000,"mm");r.metric("awake_frames",w.awakeFrames);r.metric("inside_props_rest",w.insideProps);
   {const long long steps=Carcass::stepsTaken()-w.steps0;const double ms=Carcass::stepMilliseconds()-w.ms0;r.metric("steps",double(steps));r.metric("ms_per_step",steps>0?ms/double(steps):0,"ms");
    r.metric("ms_per_awake_second",steps>0?ms/double(steps)*60:0,"ms");}
@@ -283,7 +287,12 @@ const bool fall=add({
      if(part==humanoid::Chest){chest=chest+c;++nc;}}
     if(np&&nc){pelvis=pelvis*(1.f/float(np));chest=chest*(1.f/float(nc));const Point3 d=chest-pelvis;const float deg=std::atan2(std::fabs(d.z),std::hypot(d.x,d.y))*57.2958f;
      r.metric("torso_deg",deg,"deg");r.metric("hips_over_support_m",hips,"m");
-     r.check("at rest he lies: trunk within 40 deg of level, or hips down on what is under them (sitting)",deg<=40.f||hips<=.12f,fixed(deg,0)+" deg, hips "+fixed(hips,2)+" m over what is under them");}}
+     r.check("at rest he lies: trunk within 40 deg of level, or hips down on what is under them (sitting)",deg<=40.f||hips<=.12f,fixed(deg,0)+" deg, hips "+fixed(hips,2)+" m over what is under them");
+     // Never held up in a crouch: dead weight does not stand on bent knees (leaning on a bed's end, say). Lying, slumped
+     // sitting and draped over an edge on straight legs all pass.
+     {float knee=0;int kn=0;for(const auto& j:c->jointStates())if(!j.cut&&(j.part==humanoid::ShinL||j.part==humanoid::ShinR)){knee+=std::fabs(j.bend);++kn;}knee=kn?knee/float(kn)*57.2958f:0.f;
+      r.metric("knee_deg",knee,"deg");
+      r.check("at rest he is not held up in a crouch (hips over 0.35 m above what is under them on knees bent past 45 deg)",!(hips>.35f&&knee>45.f),"hips "+fixed(hips,2)+" m, knees "+fixed(knee,0)+" deg");}}}
    // Saved and loaded, he lies exactly as he lay, whatever moved him after he died (the physics section's bodies, layout 4),
    // and saves again byte for byte.
    // (Saved here; loaded after the check below, which makes the death again in this game.)

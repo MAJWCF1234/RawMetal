@@ -41,7 +41,7 @@ long long Steps=0;double StepMs=0;
 // A body's state on Vectra (stepVectra): its sections' bodies, kept while it lasts, and its joints.
 struct Carcass::VectraState {
  vectra::Space space;std::deque<vectra::Shape> shapes,solidShapes;std::vector<vectra::Joint> joints;std::vector<int> bodyOf;std::vector<char> paired;
- int sections=0,cuts=-1;bool built=false,kicked=false,wake=false;
+ int sections=0,cuts=-1;bool built=false,kicked=false,wake=false;std::vector<float> friction;
  // Each section's outermost skin (rest coordinates): the vertices farthest out over many ways, which meet the floor and
  // the walls along with its points, so no corner of its mesh goes into them between the points.
  struct SkinPoint {Point3 rest{},probe{1e9f,1e9f,1e9f},safe{};float floor=-100;};std::vector<std::vector<SkinPoint>> skin;};
@@ -871,7 +871,7 @@ void Carcass::stepVectra(const World& world){
      J.frictionTorque=tune("carcass.vfriction",1.f)*s.mass*kg*14.f*span(s.comRest-jt.rest);}
     else{J.a=vs.bodyOf[size_t(jt.a)];J.b=vs.bodyOf[size_t(jt.b)];J.anchorA=jt.rest-m_sections[size_t(jt.a)].comRest;J.anchorB=jt.rest-m_sections[size_t(jt.b)].comRest;}
     vs.joints.push_back(J);}
-   space.constraints.clear();for(auto&J:vs.joints)space.constraints.push_back(&J);}}
+   space.constraints.clear();for(auto&J:vs.joints)space.constraints.push_back(&J);vs.friction.clear();}}
  // ---- The props near it: kinematic boxes, going at their share of their own speed (rebuilt each step).
  space.bodies.resize(size_t(sections));vs.solidShapes.clear();bool movers=false;
  if(!(switchedOff()&16))for(const auto&o:m_solids){const float reach=m_radius+span(o.half)+.3f;const Point3 d=o.centre-m_centre;if(dot3(d,d)>reach*reach||o.half.x<=0)continue;
@@ -883,6 +883,18 @@ void Carcass::stepVectra(const World& world){
  // While a prop goes through it the limits are held by the solver alone: put back by position they would press one part
  // into another against the prop.
  space.settings.projectIterations=movers?0:std::max(0,int(tune("carcass.vproject",2)));
+ // Friction at the joints never holds him up against his own weight: crouched on bent knees with his hips well over
+ // what is under them (leant on a bed's end, a rail), it is let go, so he slumps down as dead weight does. Lying,
+ // sitting slumped, or draped over an edge on straight legs, it holds, and a limb lands and stays.
+ {if(vs.friction.size()!=vs.joints.size()){vs.friction.clear();for(const auto&J:vs.joints)vs.friction.push_back(J.frictionTorque);}
+  bool crouched=false;
+  if(m_rigged){float hips=1e9f,knees=0;int kn=0;
+   for(const auto&s:m_sections){if(s.members.empty())continue;
+    if(s.part==0)for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region>=0&&p.floor>-50.f)hips=std::min(hips,p.x.z-p.floor);}
+    if((s.part==10||s.part==11)&&s.limited&&s.parent>=0&&s.joint>=0&&!m_joints[size_t(s.joint)].cut){float rel[4];relative(s,rel);knees+=std::fabs(decompose(rel,s.twistAxis,s.bendAxis,s.sideAxis).bend);++kn;}}
+   crouched=m_motion<tune("carcass.vcrouchStill",.01f)&&kn>0&&hips<1e8f&&hips>tune("carcass.vcrouchHips",.3f)&&knees/float(kn)>tune("carcass.vcrouchKnees",40.f)*.01745f;}
+  const float share=crouched?0.f:1.f;
+  for(size_t i=0;i<vs.joints.size();++i)vs.joints[i].frictionTorque=vs.friction[i]*share;}
   // ---- What meets what. Joined sections do not meet; the others meet by their skins (pairContacts).
  const auto& paired=vs.paired;
  space.filter=[&](const Space& sp,int a,int b){const int ua=sp.bodies[size_t(a)].user,ub=sp.bodies[size_t(b)].user;if(ua<0||ub<0)return true;if(switchedOff()&4)return false;return !paired[size_t(ua)*size_t(R)+size_t(ub)];};
@@ -928,7 +940,8 @@ void Carcass::stepVectra(const World& world){
    for(int k:pick){const auto&h=hits[size_t(k)];auto&c=m.points[size_t(m.count++)];c=ContactPoint{};c.p={h.p.x,h.p.y,h.p.z};c.separation=h.sep;c.localA=body.q.unrotate(c.p-body.x);c.localB=c.p;c.feature=std::uint32_t(h.particle);}
    out.push_back(m);};
   emit(floor,{0,0,-1},0);
-  if(!wall.empty()){Point3 n{};for(auto w:wallN)n=n+w;n=unit(n);emit(wall,{n.x,n.y,0},1);}};
+  // Each point in a wall meets that wall on its own (the risers of two steps, a bed's end and its side are not one face).
+  for(size_t h=0;h<wall.size();++h){std::vector<Hit> one{wall[h]};emit(one,{wallN[h].x,wallN[h].y,0},2+(wall[h].particle>=100000?1000+wall[h].particle-100000:wall[h].particle));}};
  space.step(Tick);
  space.pairContacts=nullptr;space.worldContacts=nullptr;space.filter=nullptr;
  // ---- Back to the sections and their points.

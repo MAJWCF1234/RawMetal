@@ -1,4 +1,4 @@
-# Picture (1600 x 900): a man shot from behind beside a ward bed falls across it. Tube: ragdoll-fall (run by name).
+# Picture (1600 x 900): a man shot from behind at the foot of a ward bed (the ragdoll-bed death), seen from the side. Tube: ragdoll-fall (run by name).
 world room
 camera 14.6 11.2 -999 150 -26
 light 12 12 3.2 1.8 10
