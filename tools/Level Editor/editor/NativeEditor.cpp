@@ -763,7 +763,9 @@ enum {
   // The Breach tool (NativeBreachTool.inc).
   BreachShapeList=800,BreachEdgeList,BreachSizeList,BreachRubbleList,
   // The Growth brush (NativeGrowthTool.inc).
-  GrowthKindList=810,GrowthModeList,GrowthSizeList,GrowthDensityList,GrowthScaleList,GrowthSeedBox
+  GrowthKindList=810,GrowthModeList,GrowthSizeList,GrowthDensityList,GrowthScaleList,GrowthSeedBox,
+  // The Connect tool (NativeConnectTool.inc).
+  ConnectKindList=2630
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -825,12 +827,13 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Window wall", L"▦", L"Drag along a wall, or across an opening: a framed storefront of glass panes. Bays, rows, heights, panes, frame and a doorway on the right. Click a bay of one to give its panes the kind picked (Shift: the bottom pane only).", 0, "GLAZING", 'r'},
     {L"Breach", L"◠", L"Drag along a wall to break a hole through it: ragged, arched or square, with a chipped edge, rebar and rubble. You walk, see and shoot through it, and light comes through.", 0, "BREACH", 'r'},
     {L"Growth", L"❦", L"Paint ivy and moss on walls, creepers hanging from ceilings and ledges, and grass through the floor. What, brush size, density, size and seed on the right; Erase (or Alt) clears it. Ctrl+Z takes a stroke back.", 1, "", 'G'},
+    {L"Connect", L"⛓", L"Join a loose thing to another thing, a wall or the ceiling: a rope, chain, hinge, spring, weld, motor or pulley (pick on the right). Drag from the thing to what it joins, or click one then the other. Hanging lamp: click under a ceiling.", 1, "JOINT", 'l'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
                      TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
-                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49;
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -1033,6 +1036,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
+  bool connectTest = false;
   bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
@@ -1113,6 +1117,8 @@ struct Editor {
 #include "NativeGlazingRegression.inc"
 #include "NativeBreachTool.inc"
 #include "NativeBreachRegression.inc"
+#include "NativeConnectTool.inc"
+#include "NativeConnectRegression.inc"
 #include "NativeGrowthTool.inc"
 #include "NativeGrowthRegression.inc"
 #include "NativeEditorPictures.inc"
@@ -3951,6 +3957,9 @@ struct Editor {
       auto run = wallRunAt(ax, ay, bx, by);
       glazingBox(f, run, floorZ, creationCeiling());
       glazingFields(f, run, floorZ, creationCeiling(), glassWindow);
+    } else if (k == "JOINT") {
+      if (!connectFields(f, ax, ay, bx, by, floorZ)) // a thing joined to a thing, a wall or the ceiling (NativeConnectTool.inc)
+        return -1;
     } else if (k == "BREACH") {
       if (!breachFields(f, ax, ay, bx, by, floorZ)) // on a wall only (NativeBreachTool.inc)
         return -1;
@@ -4164,7 +4173,7 @@ struct Editor {
         authorBox(l, t, r, b);
         return;
       }
-      if (info.shape == 'l' && tool != 10 && tool != FilmTool && std::hypot(bx - ax, by - ay) < .1f) {
+      if (info.shape == 'l' && tool != 10 && tool != FilmTool && tool != ConnectTool && std::hypot(bx - ax, by - ay) < .1f) {
         message(L"Drag from one end to the other.");
         return;
       }
@@ -5053,6 +5062,9 @@ struct Editor {
     for (HWND list : breachControls())
       if (list)
         ShowWindow(list, SW_HIDE);
+    for (HWND list : connectControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
     for (HWND list : growthControls())
       if (list)
         ShowWindow(list, SW_HIDE);
@@ -5209,6 +5221,8 @@ struct Editor {
       glazingRows(row);
     if (tool == BreachTool)
       breachRows(row);
+    if (tool == ConnectTool)
+      connectRows(row);
     if (tool == GrowthTool)
       growthRows(row);
     if (tool == FilmTool) {
@@ -6203,6 +6217,7 @@ struct Editor {
     verifyFormatTwo(); // NativeFormatRegression.inc: named fields, the inspector, prefabs
     verifyGlazingRegressions(false); // NativeGlazingRegression.inc: the Window wall and Glass tools
     verifyBreachRegressions(false);  // NativeBreachRegression.inc: the Breach tool
+    verifyConnectRegressions(false); // NativeConnectRegression.inc: the Connect tool
     verifyGrowthRegressions(false);  // NativeGrowthRegression.inc: the Growth brush
     verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
     verifyGround(false); // NativeGroundRegression.inc: rooms on the land, footings, raise, patios
@@ -8723,7 +8738,15 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       drawDoor(dc, stretching ? e->plannedDoor(e->dragFX, e->dragFY, hx, hy) : e->plannedDoor(hx, hy, hx, hy), ghost, true);
     else if (stretching && (shape == 't' || shape == 'R' || shape == 'w' || shape == 'c'))
       tileBox(e->dragFX, e->dragFY, hx, hy);
-    else if (stretching && shape == 'l') {
+    else if (!stretching && e->tool == ConnectTool && e->connectPending) {
+      // Connect, its first thing clicked: the joint's line from it to the pointer.
+      auto p = ui::dashedPen(3, ghost);
+      auto old = SelectObject(dc, p);
+      MoveToEx(dc, int(ox + e->connectFromX * cell), int(oy + e->connectFromY * cell), nullptr);
+      LineTo(dc, int(ox + hx * cell), int(oy + hy * cell));
+      SelectObject(dc, old);
+      DeleteObject(p);
+    } else if (stretching && shape == 'l') {
       auto p = ui::dashedPen(3, ghost);
       auto old = SelectObject(dc, p);
       MoveToEx(dc, int(ox + e->snapped(e->dragFX) * cell), int(oy + e->dragFY * cell), nullptr);
@@ -9786,6 +9809,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->breachControlChanged(id, notification);
         return 0;
       }
+      if (id == ConnectKindList) {
+        e->connectControlChanged(id, notification);
+        return 0;
+      }
       if (id >= GrowthKindList && id <= GrowthSeedBox) {
         e->growthControlChanged(id, notification);
         return 0;
@@ -10137,7 +10164,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
-                        L"--glazing-test", L"--breach-test", L"--growth-test"})
+                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10257,6 +10284,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The Breach tool and the Growth brush alone (--editing-test runs them too).
     if (argc > 1 && std::wstring(argv[1]) == L"--breach-test")
       e.backgroundTest = e.breachTest = true;
+    // The Connect tool alone, with its pictures (--editing-test runs it too, without them).
+    if (argc > 1 && std::wstring(argv[1]) == L"--connect-test")
+      e.backgroundTest = e.connectTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--growth-test")
       e.backgroundTest = e.growthTest = true;
     // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
@@ -10663,6 +10693,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.button(L"Align to slope: on", NatureAlignToggle);
     e.makeGlazingControls(choices);
     e.makeBreachControls(choices);
+    e.makeConnectControls(choices);
     e.makeGrowthControls(choices);
     e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
     for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
@@ -10889,6 +10920,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.finishTest) {
       int code = 0;
       try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.connectTest) {
+      int code = 0;
+      try { e.verifyConnectRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-connect-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

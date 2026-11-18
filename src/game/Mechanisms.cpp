@@ -13,7 +13,9 @@ std::uint32_t timeSlot(double t,double rate){double slot=std::fmod(std::floor(t*
 }
 bool Game::lampSwitchedOn(const WorldLight& lamp)const{bool on=!lamp.enabledState||state(lamp.enabledState)==lamp.enabledValue;return lamp.invert?!on:on;}
 float Game::lampPower(const WorldLight& lamp)const{
- if(lamp.prop>=0){if(lamp.propLevel<0||lamp.propLevel>=chunkCount())return 0;const auto&spawns=chunkWorld(lamp.propLevel).clutterSpawns();if(lamp.prop>=int(spawns.size()))return 0;const auto&spawn=spawns[lamp.prop];auto home=spawn.position+chunkOffset(lamp.propLevel);bool present=false;
+ // A lamp on a hung prop (a swinging lamp) moves with it and burns while it is whole (PropJoints.cpp).
+ bool hungLit=true;Point3 hungAt;const bool hung=lamp.prop>=0&&hungLampAt(lamp,hungAt,&hungLit);if(hung&&!hungLit)return 0;
+ if(lamp.prop>=0&&!hung){if(lamp.propLevel<0||lamp.propLevel>=chunkCount())return 0;const auto&spawns=chunkWorld(lamp.propLevel).clutterSpawns();if(lamp.prop>=int(spawns.size()))return 0;const auto&spawn=spawns[lamp.prop];auto home=spawn.position+chunkOffset(lamp.propLevel);bool present=false;
   for(const auto&c:chunkClutter(lamp.propLevel))if(c.authored&&c.model==spawn.model&&lengthSq(c.home-home)<.0004f&&std::fabs(c.homeZ-spawn.z)<.05f){present=!c.broken&&lengthSq(c.pos-spawn.position)<.0025f&&std::fabs(c.z-spawn.z)<.06f&&std::fabs(c.pitch)<.2f&&std::fabs(c.roll)<.2f;break;}if(!present)return 0;
  }
 

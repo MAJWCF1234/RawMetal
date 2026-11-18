@@ -64,7 +64,7 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - heights rise by `z`;
   - boxes and quarter facings (`STRUCT`, `PRIM`, `HAZARD`, `WATER`...) turn only by quarter turns;
   - `prefix` goes before every `name=` inside.
-- Records that name others by number (`ACTOR*`, `LEAD`, `CHAIN`, `BREAKABLE`, `SCRIPT_*`, `DIALOGUE*`, `TIMED_SEQUENCE`, a `LIGHT` riding a prop) cannot go in a prefab.
+- Records that name others by number (`ACTOR*`, `LEAD`, `CHAIN`, `JOINT`, `BREAKABLE`, `SCRIPT_*`, `DIALOGUE*`, `TIMED_SEQUENCE`, a `LIGHT` riding a prop) cannot go in a prefab.
 - The exporter writes the placed records (a flat map). The Builder keeps the blocks as written.
 
 ## Campaign Builder
@@ -115,6 +115,22 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
 - grass (the Nature brush's tufts) and `growth_moss_floor` on a floor or a ledge's top.
 - Creepers are hanging plants (`SoftwareRenderer::hangingPlant`, `PlantBones::add(..., hanging)`): rooted at their top, they drift in an indoor draft and part round whoever walks through them. The lab tube `growth` (src/lab/tubes/Growth.cpp) checks it.
 - The brush's density, size and seed are its own settings, not map data; a typed seed repeats a stroke exactly.
+
+## Joints
+`JOINT|map|kind|propA|propB|x|y|z[|x2|y2|z2]` joins a loose prop to another, or to the room (World.h `PropJoint`, parsed in
+CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they play).
+- `propA` and `propB` are CLUTTER records of the map counted from 0; `propB -1` is the room (a wall, the ceiling, the floor).
+- `kind`: `hinge ball slider weld rope chain spring rod pulley winch` (`distance` reads as `rod`). x,y,z is where they meet
+  (absolute heights). A rope, chain, spring, rod, pulley or winch needs its other end x2|y2|z2 (on propB, or the point in the
+  room it hangs from); a pulley joins two props.
+- The pose its props are laid out in is the joint's rest.
+- Named fields (all optional): `axis` (x, y, z or a,b,c; a hinge x, a slider z), `length`, `min` and `max` (degrees for a
+  hinge, metres for a slider or a winch), `cone`, `cone2`, `twist` (a ball's, degrees), `stiffness` (Hz) and `damping`,
+  `motor` (speed servo off) with `speed`, `force`, `target`, `switch` (a state the motor runs on), `breaks` (N), `state` (set
+  when it snaps), `over` and `over2` (a pulley's wheels), `ratio`, `radius` (how thick it is drawn).
+- The Builder's Connect tool writes it. Deleting a CLUTTER record in the Builder takes the joints on it with it and renumbers
+  the rest; a LIGHT riding it stays, riding nothing.
+- A map without JOINT records is unchanged. The tube `joints-room` plays the Starter Map's.
 
 ## Light shafts
 `STRUCT` material 53 (`LightShaftMaterial`) is a god ray: sunlight falling on the slant through its box, in at the top on the side away from its `facing` (field 12) and down to the floor on the facing side.

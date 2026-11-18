@@ -113,6 +113,12 @@ When writing, a quaternion is normalised (a degenerate one becomes the identity)
 - each segment's pose: its middle (world, x, y, z) and its turn (quaternion x, y, z, w).
 
 The hooks `captureChain` and `restoreChain` fill and restore it; the hinges restore from the bends, so every segment lies where it was saved and a draped mattress loads draped, still asleep, and re-saves byte-exact. A bend outside half a turn, a rate over 1000 rad/s, a root outside 0-2, a non-finite middle or a turn far from unit refuses the save. A layout 1 section (v1.5.1) has no such list: its mattresses load lying straight, as they always did. The lab tube `mattress` checks both.
+**Layout 3: joints.** After the chained props, when any map has `JOINT` records, the section keeps each map's joints (World.h
+`PropJointState`), in the map's JOINT order: chunk count, then per chunk its index and joint count, and per joint snapped
+(bool), motor on (bool), a winch's reeled length (float, -1 as authored), the motor's target and speed (floats). A section of
+layout 1 or 2 (or a layout 3 one that stops before the joints) loads
+with every joint as the map has it, and so does a save whose map has since changed its number of joints. An older build skips
+a newer section (it is optional), losing the props' turns but nothing else.
 
 ## Refitting older saves (formats 1-27)
 A format 1-27 save loads in two stages:

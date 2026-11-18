@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <deque>
 #include <map>
 #include <atomic>
 #include <filesystem>
@@ -999,6 +1000,17 @@ public:
     // the state gate alone; lampPower adds the timed window and flicker (0..1).
     bool lampSwitchedOn(const WorldLight& lamp)const;
     float lampPower(const WorldLight& lamp)const;
+    // A lamp riding a prop that hangs on a joint (a swinging lamp): where its light is now (map coordinates), lit
+    // while its prop is whole. False for any other lamp.
+    bool hungLampAt(const WorldLight& lamp,Point3& at,bool* lit=nullptr)const;
+    // A joint's prop in its level's list (-1: the room or not there), and a rope's or chain's line as it is now:
+    // its ends (map coordinates; a pulley's four points: end, wheel, wheel, end). False when there is nothing to draw.
+    int jointProp(int level,int spawn,int hint=-1)const;
+    bool jointLine(int level,int joint,std::array<Point3,4>& points,int& count)const;
+    // The highest top of a jointed prop under p within a step of `feet` (Movement's ground), or -1e9.
+    float jointedPropTop(Vec2 p,float feet,float radius)const;
+    // Feet at p on (or over) the top face of prop i of `level` when a joint holds it: it does not block him (a tilted plank).
+    bool onJointedTop(int level,int i,Vec2 p,float feet)const;
     bool darkZoneActive(const DarkZone& zone)const;
     // 0 lit .. 1 true darkness: the player's eye inside an active DarkZone of
     // the current map, eased over about .3 s (and immediate after a load).
@@ -1360,6 +1372,16 @@ private:
      std::vector<std::pair<std::uint64_t,Vec2>> actorLast;   // where each man and creature near props was last frame (their bodies' speed)
      struct Flat {const void* world=nullptr;float x0=0,y0=0,x1=0,y1=0,lo=0,hi=0,floor=0,doors=0;bool flat=false,valid=false;};std::vector<Flat> flat;};
     std::map<int,RigidPropState> m_rigidProps;
+    // ---- Joints between props (PropJoints.cpp; World.h PropJoint, Vectra's Joint) ----
+    // Each step, the level's joints as Vectra joints between the props' bodies (or a prop and the room), their
+    // frames set from where the map laid the props out; what snapped is marked, sounded and its state= set.
+    std::map<int,std::vector<std::pair<std::uint64_t,vectra::Space::JointCached>>> m_jointCache;   // warm starting, per level
+    std::vector<std::pair<int,int>> jointedProps(int level,const std::vector<Clutter>& list);           // each joint's props (list indices; -1 the room)
+    void addPropJoints(int level,std::vector<Clutter>& list,const std::vector<int>& bodyOf,vectra::Space& space,std::deque<vectra::Joint>& out,std::vector<int>& which);
+    void afterPropJoints(int level,std::vector<Clutter>& list,vectra::Space& space,std::deque<vectra::Joint>& joints,const std::vector<int>& which);
+    void snapPropJoint(int level,int joint,Point3 at,bool quiet=false);
+    // A round along origin..end cuts every rope or chain it passes within its thickness of.
+    void cutJointsByShot(Point3 origin,Point3 end);
     // What the last rigid step did (the lab's perf and debug views).
     struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);

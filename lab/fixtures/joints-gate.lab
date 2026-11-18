@@ -1,0 +1,7 @@
+# the sprung gate: the player walks through it (SHOWCASE: PHYSICS, the joints corner; tube joints-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 13.55 15.2 -999 -90 0
+scene gate
+size 640 360
+frames 250

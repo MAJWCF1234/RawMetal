@@ -116,8 +116,12 @@ static void buildScene(Scene& s,const Fixture& fx,const std::vector<const Featur
   const WorldId id=fx.world=="ashfall"?WorldId::Ashfall:WorldId::Campaign;
   s.game=std::make_unique<Game>(Game::mapInspection(fx.hasCamera?fx.cameraPos:Vec2{12,12},fx.cameraYaw,fx.cameraPitch,fx.map,fx.openDoors,fx.cameraZ,fx.sceneryOnly,id));
  }else if(fx.world=="custom"){
-  s.game=std::make_unique<Game>(loadCustomCampaignFile(fs::path(fx.customPath).is_absolute()?fs::path(fx.customPath):fs::path(labRoot())/fx.customPath));
-  if(s.game->level()!=fx.map)LabAccess::loadLevel(*s.game,fx.map);
+  auto campaign=loadCustomCampaignFile(fs::path(fx.customPath).is_absolute()?fs::path(fx.customPath):fs::path(labRoot())/fx.customPath);
+  // `map-name`: the map by its name, so a fixture keeps its place when maps are added before it.
+  int map=fx.map;if(!fx.mapName.empty()){map=-1;for(size_t k=0;k<campaign->maps.size();++k){const auto& n=campaign->maps[k]->name;   // as written, or after the campaign's "Name / "
+   if(n==fx.mapName||(n.size()>fx.mapName.size()+3&&n.ends_with(" / "+fx.mapName)))map=int(k);}if(map<0)throw std::runtime_error("lab: no map named "+fx.mapName);}
+  s.game=std::make_unique<Game>(campaign);
+  if(s.game->level()!=map)LabAccess::loadLevel(*s.game,map);
  }else throw std::runtime_error("lab: unknown world "+fx.world);
  Game& g=*s.game;
  if(!fx.save.empty()&&!LabAccess::decodeSave(g,readAll(fx.save)))throw std::runtime_error("lab: the save "+fx.save+" would not load");

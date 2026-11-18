@@ -14,6 +14,8 @@ The prop physics that came before Vectra, a yaw-mostly box with tipping by rule,
   `rigid` and `rigid-legacy` film the same scenes on each. `vectra-emergence` checks behaviour that comes from
   the solver alone. `rigid-trace` and `rigid-probe` are for debugging.
   `tools/dev/rigid_sheet.py` lays the films side by side.
+  `src/lab/tubes/Joints.cpp`: `joints` (every joint kind on the bare core at 60 and 144 steps a second).
+  `src/lab/tubes/JointsRoom.cpp`: `joints-room` (the Starter Map's joints corner played).
   `src/lab/tubes/VectraShove.cpp`: `vectra-shove` (props against people and things by weight, legacy and Vectra),
   `mattress` (the chained mattress) and `vectra-feel` (the pictures, fixtures `feel-*`).
 
@@ -150,18 +152,69 @@ use .3/.25.
 Padded props, mattresses and bedrolls (`model::soft`), are 4 Hz springs, so a load sinks in. A padded fixture
 gives where `softSinkAt` says it does.
 
-## Joints and the chained mattress
+## Joints
 
-`vectra::Hinge` is the first joint (`Space::constraints`): two anchors held together, the turn about every axis
-but the hinge held (soft, 60 Hz), and about the hinge a spring (`hertz`, `damping`) toward no bend, stopped past
-`limit`. A chained prop (PropBodies.h `chained`) is built as three segment bodies, each a third of its length,
-joined by two hinges about its width (`pad.hertz` 2.5, `pad.damping` .25, `pad.limit` 1.5 rad). Its own frame
-is the middle segment's, or while it is carried the end nearest the player (`Clutter::boneRoot`); the two
-joints' bends and their rates are `Clutter::bend` and `bendSpeed`. So it sags held by one end, drapes over a
-step or a bed's edge, flops when dropped, and a blow off its middle (a shot) swings the end struck about its
-joint. The renderer cuts its mesh to 9 cm and carries each vertex by its segment, blended over 6 cm at the
-joints (`chainSkin`). The bends are not in saves yet: a loaded mattress lies straight and drapes again within a
-second. The ward beds' padding (SoftBodies, a fixture) keeps its own soft grid.
+`vectra::Joint` (Vectra.h, `src/game/physics/Joints.cpp`) joins two bodies, or a body and the world (`b = -1`). Its rows are solved
+in the same substeps as the contacts: before them, and once more after them, `Settings::jointIterations` (4) times each pass.
+Locked rows are springs of `jointHertz` (60) with damping ratio `jointDamping` (2), warm started, and relaxed without the bias as
+the contacts are. Limits are one-sided rows: a gap closes within the substep, a pass is pushed out softly.
+
+Each body carries the joint's frame: an anchor (from its centre of mass, unturned) and a turn whose z is the joint's axis.
+`attach` sets both from the bodies as they stand, so the pose they stand in then is the joint's rest.
+
+| Kind | Holds | Free | Options |
+| --- | --- | --- | --- |
+| hinge | the anchors together, z of B on z of A | the turn about z | limits, spring, motor (speed or servo) |
+| ball | the anchors together | every turn | an elliptical cone (`coneX`, `coneY`), a twist limit |
+| slider | the turn, B's anchor on A's z line | travel along z | limits, spring, motor |
+| weld | everything | nothing | |
+| distance | the anchors `length` apart | | |
+| rope | the anchors at most `length` apart (slack when nearer) | | a winch: its motor reels the length in at `motorSpeed` while the pull is under `motorMaxForce` |
+| spring | pulled toward `length` (`springHertz`, `springDamping`) | | limits on the length |
+| pulley | `lengthA + ratio * lengthB <= length` over `groundA` and `groundB` | | a motor turning the wheel |
+
+- **Motors.** Speed holds a speed with at most `motorMaxForce` (a speed of 0 with a force is a brake). Servo drives to
+  `motorTarget` at up to `motorSpeed` (a hinge's angle goes round). A motor at work keeps its bodies awake.
+- **Breaking.** `force` and `torque` are what the joint carried over the last step (its impulses over the substep). Past
+  `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after.
+- **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
+  the cache per level), so a joint built afresh each step starts from what it carried.
+- **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints.
+- **Mass ratios.** A 1 kg lamp on a 50 kg cabinet, and a 50 kg weight under two 1 kg links, hold within 2 cm at 60 and
+  144 steps a second; five 20 kg crates dropped on a bridge of 2 kg planks open its pins up to 6 cm as they land and under
+  1.5 cm once they lie on it (tube `joints`).
+- **The mattress** (PropBodies.h `chained`) keeps its API: `vectra::Hinge` is now a Joint, its fields (`axisA`, `rest`,
+  `hertz`, `damping`, `limit`) set the hinge's spring and limits. A chained prop is three segment bodies, each a third of its
+  length, joined by two hinges about its width (`pad.hertz` 2.5, `pad.damping` .25, `pad.limit` 1.5 rad); its frame is the
+  middle segment's, or while carried the end nearest the player (`Clutter::boneRoot`); `Clutter::bend` and `bendSpeed` are
+  the joints' bends. The renderer skins its mesh by segment (`chainSkin`).
+
+### Joints between props in play
+
+`src/game/PropJoints.cpp`. A map's `JOINT` records (map-format.md) become Vectra joints in each step of the props
+(`Game::simulateRigidProps`):
+- A joint's frames come from where the map laid its props out (their home pose), whatever has happened to them since.
+- Both props of a joint are built whenever either is: a sleeping lamp is not left behind by its chain.
+- What snaps (past `breaks=`, pulled half a metre apart (`joints.tear`), its prop broken, or a rope or chain shot through
+  by a round: `cutJointsByShot` from `resolveShot`) is marked in the world's `PropJointState`, sounded (`LiftSnap`, heard),
+  and sets its `state=`. A snapped rope from the ceiling leaves a stub hanging.
+- The player stands on jointed props of 8 kg and more (`jointedPropTop`, in Movement's ground): a lift's platform, a seesaw,
+  a bridge's planks. His weight (75 kg) is on the prop where he stands, and his mass in its inertia. A jointed prop under his
+  feet neither blocks him (`onJointedTop`) nor strikes him.
+- A `LIGHT` riding a hung prop (its prop field) moves with it and burns while the prop is whole (`hungLampAt`, `lampPower`).
+- Ropes and chains are drawn by Scene3D from `jointLine`: a hemp tube or beads of links, sagging by their slack, a pulley's
+  two runs over its wheels.
+- The Starter Map's SHOWCASE: PHYSICS has the joints corner (make_starter_map.py `joints_corner`): cage lamps on chains,
+  a crate on a rope to shoot down, a seesaw, a sprung gate, a rope bridge, and a lift on a slider hung over a pulley against
+  a counterweight. The tube `joints-room` plays each (fixtures `joints-*.lab`; `joints-shot-*.lab` take the 1600 x 900 pictures).
+
+### Corpses on Vectra (opt-in)
+
+`Carcass::stepVectra` (RM_RAGDOLL=vectra, or the knob `carcass.vectra 1`) steps a corpse's sections as Vectra bodies (their
+points' mass and inertia, their capsule as a box), its joints as Vectra balls with the rig's limits (an elliptical cone centred
+on the bend's range, the side either way, and the twist), the floor and walls against the sections' skin points, and the props
+round it as kinematic boxes. It is not the default: on the ragdoll-fall fixtures it still lets limits pass (by up to 55
+degrees), lets sections overlap by 2-4 cm and jumps going to sleep, where the position-based step passes six of fourteen.
 
 ## How the rest of the game meets it
 
@@ -236,6 +289,7 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `props.cold` | 8 | extra iterations for contacts with nothing to warm start from |
 | `props.sleep_time`, `props.sleep_linear`, `props.sleep_angular` | 0.2, 0.06, 0.12 | sleeping |
 | `pad.hertz`, `pad.damping`, `pad.limit` | 2.5, 0.25, 1.5 | the mattress hinges |
+| `joints.tear` | 0.5 | how far a jointed prop is pulled from its joint before the joint gives (m) |
 | `props.sample_spacing` | 0.12 | spacing of the world contact samples |
 | `props.player_hertz` | 5 | the player body's contact stiffness |
 | `props.player_mass` | 20 | the player body's mass (kg) |
@@ -243,10 +297,7 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `water.right` | 80 | how strongly a floater rights itself |
 | `water.lever` | 0.35 | how far the lift is drawn toward the body's middle |
 
-## For phase 2 and 3
+## For phase 3
 
-- **Joints.** A joint is a `vectra::Constraint`: prepare, warmStart, solve(useBias) and storeImpulses, between
-  two bodies or a body and the world. It goes in `Space::constraints`. It is solved in the same substeps,
-  before the contacts, and islands link through it.
 - **Gravity gloves.** `Space::drive` pulls a body to a pose with a capped spring. It sets velocity, so
   contacts still hold.

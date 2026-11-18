@@ -1,0 +1,7 @@
+# the crate on a rope: the rope shot through, the crate falls (SHOWCASE: PHYSICS, the joints corner; tube joints-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 12.4 15.6 -999 -95 34
+scene crate
+size 640 360
+frames 100
