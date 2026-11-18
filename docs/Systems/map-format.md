@@ -150,6 +150,17 @@ CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they 
 `Showcase Atrium` (map 149; south of Predator, tools/campaign/make_starter_map.py `atrium`) and `Showcase Shapes` (map 60, built last on the forest's map in its cell, as the Hillside is, so no other map's number moves: every shape, the ten new ones at full size, a building of overlapping prims) are found by name in lab fixtures (`map-name`). A pane's cracks are drawn from its map's number and its own (GlassFracture.h `paneSeed`), so renumbering a map with glass changes how it breaks.
 `Showcase Atrium` (south of Predator; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 
+## Underground (CAVE)
+`CAVE|op|x1|y1|z1|x2|y2|z2|radius[|rough[|strength]]` is campaign-wide, in world metres like `TERRAIN_SCULPT` (src/world/CaveField.h).
+- The terrain is a density field that Surface Nets skins (World::buildTerrain) and the collision walks (`terrainSurfaceBelow`/`Above`, `fits`). A cave is a change to that field, so the walls, roof, floor, collision and the mouth where a tunnel breaks the hillside all come from the same samples.
+- `carve` digs a rough tube round the line, its floor flat 0.6 radius under it (a point: a cavern); `fill` puts rock back; `move` pulls the field round point 1 to point 2 over `radius` (the Move brush); `smooth` evens it; `flatten` levels a floor at z1. `rough` (0.35) noises the walls, `strength` (1) scales move, smooth and flatten.
+- `buildCaveVolume` works the strokes out once, after the flats, the footings' pads and the sculpts, over world-metre samples covering their boxes (`TerrainShape::caveVolume`); every chunk and the Campaign Builder sample the same field. The bottom two sample rows (-13, -12) are never carved, so the field always closes under the deepest floor.
+- Changed samples are `TerrainCave`: drawn with the mine pack's rock (`mine_tunnel_straight_rocks_w`) on walls and roofs and its rough soil on floors.
+- `cave=1` on a FIXTURE, CLUTTER, CREATURE, PICKUP or LIGHT measures it from the floor of the cave under it (`World::caveFloor`), not the land's top. WATER heights are absolute, so a pool in a cave is an ordinary WATER record.
+- Under a carved roof (`World::underRock`) the game is dark (`Game::darknessTarget`): the sky's ambient goes, lamps, lanterns and the torch still light.
+- The exporter writes the records back as read; `sameTerrainOver` compares the strokes that reach a map, so the Builder's live picture rebuilds only the maps a stroke reached. Old maps have no CAVE records and load as before; saves are unaffected.
+- The Builder's **Cave** tool writes them: dig (brush a tunnel at the depth picked, click a cavern), cave mouth (drag in from the hillside), fill back, move the wall, smooth, flatten the floor. The Terrain tool's **Move** brush drags the land after the pointer (Shift lifts it). `--cave-test` (NativeCaveRegression.inc; `--editing-test` runs it too) drives both. The lab tube `caves` (src/lab/tubes/Caves.cpp, lab/fixtures/caves.rmc) checks the carving renders, no holes, a walk in, the rock holding, `cave=1`, darkness and an export round trip.
+
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
   - version 1 left alone, and every refusal;

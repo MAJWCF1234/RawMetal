@@ -1440,7 +1440,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const auto origin=w.definition().origin;
    // Painted ground carries over small banks; only real rock (deep relief or
    // high bluffs) shows stone, so one-metre steps read as grassy slopes.
-   int kind=(az>=std::max(ax,ay)*1.35f||face.material!=TerrainRock)?w.groundKind((a.p.x+b.p.x+c.p.x)/3+origin.x,(a.p.y+b.p.y+c.p.y)/3+origin.y):-1;
+   int kind=face.material==TerrainCave?-1:(az>=std::max(ax,ay)*1.35f||face.material!=TerrainRock)?w.groundKind((a.p.x+b.p.x+c.p.x)/3+origin.x,(a.p.y+b.p.y+c.p.y)/3+origin.y):-1;
    int cover=0;
    if(kind>=0&&kind<=GroundWild&&!plantCover.empty()){int cx=int((a.p.x+b.p.x+c.p.x)/3),cy=int((a.p.y+b.p.y+c.p.y)/3);
     if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height)cover=plantCover[size_t(cy*World::Width+cx)];
@@ -1448,6 +1448,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(kind>=0){auto found=m_facilityTextures.find(groundNames[kind]);if(found!=m_facilityTextures.end())terrainMaterial=&found->second;}
    groundShade=1.f-.16f*std::min(1.f,cover/8.f);
   }
+  // The carved underground (CAVE records): the mine pack's own rock on walls and roofs, its rough soil
+  // underfoot (a face looking up is a floor).
+  if(face.material==TerrainCave){const bool floor=n.z>0&&az>=std::max(ax,ay)*1.35f;
+   auto found=m_facilityTextures.find(floor?"mine_tunnel_straight_soilrough":"mine_tunnel_straight_rocks_w");
+   if(found!=m_facilityTextures.end())terrainMaterial=&found->second;else terrainMaterial=&m_terrainRock;}
   auto uv=[&](MeshVertex&v){float wx=v.p.x+w.definition().origin.x,wy=v.p.y+w.definition().origin.y,wz=v.p.z;
    constexpr float scale=.28f;
    if(az>=ax&&az>=ay){v.u=wx*scale;v.v=wy*scale;}

@@ -183,7 +183,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
  const auto* campaignFields=!sources.empty()&&sources[0].map?&sources[0].map->recordFields:nullptr;
  auto named=[&](const Rec& r)->std::string{
   const auto bar=r.s.find('|');const std::string tag=r.s.substr(0,bar);
-  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
+  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="CAVE"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
   const auto* table=global?campaignFields:fieldsOf;if(!table||table->empty())return {};
   std::string key;
   if(tag=="SIGN_ART"){const auto end=r.s.find('|',bar+1);key=recordFieldKey(tag,"*",0)+"/"+decodeField(r.s.substr(bar+1,end-bar-1));}
@@ -206,6 +206,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   line(Rec("TERRAIN").i(t.seed).n(t.base).n(t.amplitude).n(t.scale).n(t.roughness));
   for(const auto& flat:t.flats)line(Rec("TERRAIN_FLAT").n(flat.x1).n(flat.y1).n(flat.x2).n(flat.y2).n(flat.height).n(flat.blend));
   for(const auto& sculpt:t.sculpts)line(Rec("TERRAIN_SCULPT").i(sculpt.x).i(sculpt.y).i(sculpt.cols).i(sculpt.rows).f(formatTerrainSculptValues(sculpt.offsets)));
+  for(const auto& cave:t.caves){Rec r("CAVE");const auto fields=caveFields(cave);for(size_t k=1;k<fields.size();++k)r.f(fields[k]);line(r);}
   if(t.horizonDepth>0||!t.horizonModels.empty()){std::string models;for(size_t k=0;k<t.horizonModels.size();++k)models+=(k?",":"")+std::to_string(t.horizonModels[k]);
    line(Rec("HORIZON").n(t.horizonDepth).n(t.horizonSpacing).n(t.horizonRise).f(models));}
   for(const auto& g:t.ground)line(Rec("GROUND").n(g.x1).n(g.y1).n(g.x2).n(g.y2).i(g.kind).n(g.edge));

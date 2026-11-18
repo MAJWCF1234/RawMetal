@@ -394,7 +394,7 @@ inline bool seeThroughMaterial(int material){return material==17||material==Chai
 // collision queries the same voxel density field.
 struct TerrainVertex {float x=0,y=0,z=0,u=0,v=0;};
 // Shared terrain material IDs, independent of campaign/custom world identity.
-enum TerrainMaterial : std::uint8_t { TerrainSoil, TerrainRock };
+enum TerrainMaterial : std::uint8_t { TerrainSoil, TerrainRock, TerrainCave }; // TerrainCave: a sample a CAVE record changed (CaveField.h)
 struct TerrainTriangle {TerrainVertex a,b,c;std::uint8_t material=TerrainSoil;};
 struct Span {float floor,ceiling;uint16_t flags=0;};
 using MapRows = std::array<std::string_view,24>;
@@ -901,6 +901,14 @@ public:
     bool metalFloor(int x,int)const{return !outdoors()&&!m_mapData&&x>=7&&x<=16;}
     std::vector<Vec2> machines()const;
     float floorHeight(float x,float y)const;
+    // The carved underground (CAVE records, CaveField.h): whether this map's land has any,
+    // the floor of the first cave under the land's top at (x, y) (the top where none is),
+    // and whether rock hangs over a point (a cave's roof: the sky does not reach under it).
+    bool hasCaves()const;
+    float caveFloor(float x,float y)const;
+    bool underRock(float x,float y,float z)const;
+    // The land over or under a point (its density field): the first rock above feet, 128 for open sky.
+    float terrainCeilingAt(float x,float y,float feet)const{return terrainSurfaceAbove(x,y,feet);}
     // What a shot struck at a point on a solid surface (level-local) with that surface's normal.
     ImpactMaterial impactMaterial(Point3 point,Point3 normal)const;
     float supportHeight(float x,float y,bool dynamic=true,bool shelfCavities=false)const;

@@ -195,7 +195,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  struct PrefabLine {int line;std::string text;};std::map<std::string,std::vector<PrefabLine>> prefabs;std::string openPrefab;
  // After a record is read: its named fields kept by key, its name filed, its overrides attached.
  auto noteRecord=[&](const std::string& tag,const std::vector<std::string>& f,const NamedFields& namedFields){
-  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
+  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="CAVE"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
   if(global){if(namedFields.empty())++campaignOrdinals[tag];else{const int ordinal=campaignOrdinals[tag]++;
     campaignFields.emplace_back(tag=="SIGN_ART"?recordFieldKey(tag,"*",0)+"/"+decode(f[1]):recordFieldKey(tag,"*",ordinal),namedFields);
     if(findNamedField(namedFields,"name"))throw std::runtime_error("a campaign-wide record takes no name");parseEntityTraits(tag,namedFields);}
@@ -278,6 +278,18 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(sculpt.cols<1||sculpt.rows<1||sculpt.cols*sculpt.rows>TerrainSculptMaxCells||std::abs(sculpt.x)>100000||std::abs(sculpt.y)>100000)throw std::runtime_error("invalid TERRAIN_SCULPT grid");
    std::string why;if(!parseTerrainSculptValues(f[5],size_t(sculpt.cols*sculpt.rows),sculpt.offsets,why))throw std::runtime_error("invalid TERRAIN_SCULPT: "+why);
    if(terrain->sculpts.size()>=512)throw std::runtime_error("too many TERRAIN_SCULPT records");terrain->sculpts.push_back(std::move(sculpt));
+  }else if(tag=="CAVE"){
+   // CAVE|op|x1|y1|z1|x2|y2|z2|radius[|rough[|strength]] in world metres: a tunnel carved into the land (carve),
+   // filled back (fill), its wall pulled (move), evened (smooth) or floored (flatten); CaveField.h.
+   if(f.size()<9||f.size()>11)throw std::runtime_error("malformed CAVE record");if(!terrain)terrain=std::make_shared<TerrainShape>();
+   CaveStroke cave;cave.op=caveOpFromWord(f[1]);if(cave.op<0)throw std::runtime_error("CAVE op is carve, fill, move, smooth or flatten, not "+f[1]);
+   cave.x1=number(f,2,"cave x1");cave.y1=number(f,3,"cave y1");cave.z1=number(f,4,"cave z1");cave.x2=number(f,5,"cave x2");cave.y2=number(f,6,"cave y2");cave.z2=number(f,7,"cave z2");cave.radius=number(f,8,"cave radius");
+   if(f.size()>=10&&!f[9].empty())cave.rough=number(f,9,"cave rough");if(f.size()>=11&&!f[10].empty())cave.strength=number(f,10,"cave strength");
+   for(float v:{cave.x1,cave.y1,cave.x2,cave.y2})if(!std::isfinite(v)||std::abs(v)>100000)throw std::runtime_error("CAVE point out of range");
+   for(float v:{cave.z1,cave.z2})if(!std::isfinite(v)||v<World::TerrainMinZ||v>World::TerrainMaxZ)throw std::runtime_error("CAVE height out of range ("+std::to_string(World::TerrainMinZ)+" to "+std::to_string(World::TerrainMaxZ)+")");
+   if(!(cave.radius>=CaveMinRadius&&cave.radius<=CaveMaxRadius)||!(cave.rough>=0&&cave.rough<=1)||!(cave.strength>=0&&cave.strength<=1))throw std::runtime_error("CAVE radius is 0.5 to 8 m, rough and strength 0 to 1");
+   if(std::hypot(cave.x2-cave.x1,cave.y2-cave.y1)>64)throw std::runtime_error("a CAVE stroke is at most 64 m long");
+   if(terrain->caves.size()>=size_t(CaveMaxStrokes))throw std::runtime_error("too many CAVE records");terrain->caves.push_back(cave);
   }else if(tag=="HORIZON"){
    // HORIZON|depth|spacing|rise|model,model,...: wooded land beyond the zone edge.
    if(f.size()!=5)throw std::runtime_error("malformed HORIZON record");if(!terrain)terrain=std::make_shared<TerrainShape>();
@@ -967,6 +979,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(land){auto made=footingPads(footing.spec,footing.parts,origin.x,origin.y);pads.insert(pads.end(),made.begin(),made.end());}}}
   if(terrain->flats.size()+pads.size()>4096)throw std::runtime_error("too many footings on the land");
   terrain->flats.insert(terrain->flats.end(),pads.begin(),pads.end());}
+ // The underground, carved once into the finished land (CaveField.h): every chunk samples the same field.
+ if(terrain&&!terrain->caves.empty())buildTerrainCaves(*terrain);
  for(auto& map:maps)if(map)for(auto& footing:map->footings)if(footing.parts.empty())footing.parts=planFooting(footing.spec,false,[](float,float){return 0.f;});
  for(size_t i=0;i<maps.size();++i){
   if(!maps[i]||!declared[i])throw std::runtime_error("custom campaign maps require contiguous MAP records");

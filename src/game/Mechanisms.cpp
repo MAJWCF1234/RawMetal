@@ -47,6 +47,9 @@ float Game::darknessTarget(bool* jamming)const{
  float eye=m_player.z+m_player.eye;bool dark=false,jam=false;
  for(const auto& zone:m_world.darkZones())
   if(m_player.pos.x>=zone.x1&&m_player.pos.x<zone.x2&&m_player.pos.y>=zone.y1&&m_player.pos.y<zone.y2&&eye>=zone.bottom&&eye<zone.top&&darkZoneActive(zone)){dark=true;jam|=zone.jamFlashlight;}
+ // Underground (CAVE records): under a carved roof the sky's light does not reach; lamps, lanterns and the
+ // torch still do.
+ if(!dark&&m_world.underRock(m_player.pos.x,m_player.pos.y,eye))dark=true;
  if(jamming)*jamming=jam;return dark?1.f:0.f;
 }
 // Before the first update after a load (inspection frames, a restored save)
