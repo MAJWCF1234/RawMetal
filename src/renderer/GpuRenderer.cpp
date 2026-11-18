@@ -1,4 +1,7 @@
 #include "Projection.h"
+#include <mutex>
+#include <atomic>
+#include <thread>
 #include <unordered_set>
 #include "GpuRenderer.h"
 #include "../core/FrameProfile.h"
@@ -495,10 +498,12 @@ struct GpuRenderer::Impl {
 
  int presentScaleCached=0;
  const void* lastPixels=nullptr;uint64_t lastGeneration=0,lastMaterial=0;uint32_t lastSort=0;
+ // Materials made so far plus places kept (prepare with reserveSlot); kept places hold until a clear.
+ uint32_t sortCount=0;bool keptSlots=true;
  void clearMaterials(){
   vkDeviceWaitIdle(device);
   for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
-  materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;
+  materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;sortCount=0;keptSlots=false;
   for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}staticCaches.clear();std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));shadowAtlasFresh=true;
   // Replayed actor batches carry material keys; stale keys would throw at draw.
   actorEmitCaches.clear();actorEmitHits=0;
@@ -1025,41 +1030,75 @@ struct GpuRenderer::Impl {
   for(size_t level=0;level<pending.levels.size();++level){pendingUploadBytes=padded(pendingUploadBytes);VkBufferImageCopy copy{};copy.bufferOffset=pendingUploadBytes;copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,uint32_t(level),0,1};copy.imageExtent=extent(level);pending.copies.push_back(copy);pendingUploadBytes+=pending.levels[level].size();uploadStats[3]+=pending.levels[level].size();}
   pendingUploads.push_back(std::move(pending));++uploadStats[0];if(pendingUploadBytes>=UploadBatchLimit)flushUploads();
  }
- uint64_t material(const SoftwareRenderer::Texture&t){
-  int scale=SoftwareRenderer::texturePresentScale();if(scale!=1&&scale!=2&&scale!=4)scale=1;
-  if(presentScaleCached&&presentScaleCached!=scale)clearMaterials();
-  presentScaleCached=scale;
-  // Plain constant colours share one image. Atlas keys use a lifetime token,
-  // never an allocator address that can later belong to different maps.
-  // Constant keys are odd and generation keys even, so the domains cannot alias.
-  // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
-  uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
-  uint64_t key=base^(uint64_t(unsigned(scale))<<56);auto found=materials.find(key);if(found!=materials.end())return key;
-  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;mat.soft=(t.transparent||t.additive)&&t.soft;
-  mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
+ // A material's pixels as the GPU takes them (colour mips, normal moments, emission,
+ // relief/surface map): pure work on the texture, so many are made at once on all cores.
+ struct MaterialPayload {int w=1,h=1;std::vector<std::vector<uint8_t>> color,normal,emission,relief;bool packedRelief=false;};
+ static MaterialPayload materialPayload(const SoftwareRenderer::Texture&t,int scale){
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
-  int presentW=std::max(1,t.width*scale),presentH=std::max(1,t.height*scale);
+  MaterialPayload p;p.w=std::max(1,t.width*scale);p.h=std::max(1,t.height*scale);
   auto color=upsamplePixels(t.pixels,t.width,t.height,scale);
-  auto emission=upsamplePixels(t.emission,t.width,t.height,scale);
   // sRGB formats decode before hardware bilinear/trilinear filtering. The
   // software reference keeps its original atlases and mip representation.
-  std::vector<std::vector<uint8_t>> levels;
-  if(t.additive){levels.push_back(bytes(color));if(scale==1)for(const auto&level:t.mips)levels.push_back(bytes(level));}
-  else levels=diffuseBytes(presentW,presentH,color);
-  mat.colorLevels=uint32_t(levels.size());
-  upload(mat.color,presentW,presentH,t.additive?VK_FORMAT_B8G8R8A8_UNORM:VK_FORMAT_B8G8R8A8_SRGB,std::move(levels),4);
+  if(t.additive){p.color.push_back(bytes(color));if(scale==1)for(const auto&level:t.mips)p.color.push_back(bytes(level));}
+  else p.color=diffuseBytes(p.w,p.h,color);
   // Store raw first moments so hardware interpolation also preserves variance.
   // Generate this GPU chain from the original normals, leaving CPU source
   // levels unchanged and including odd last rows/columns at every reduction.
-  if(!t.normalLevels.empty()){auto normals=upsampleNormals(t.normalLevels.front(),t.width,t.height,scale);upload(mat.normal,presentW,presentH,VK_FORMAT_R16G16B16A16_SNORM,normalBytes(presentW,presentH,normals),8);}
-  if(!t.emission.empty())upload(mat.emission,presentW,presentH,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(presentW,presentH,emission)),8);
-  else if(!blackEmission.view)upload(blackEmission,1,1,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(1,1,{0xff000000u})),8);
+  if(!t.normalLevels.empty()){auto normals=upsampleNormals(t.normalLevels.front(),t.width,t.height,scale);p.normal=normalBytes(p.w,p.h,normals);}
+  if(!t.emission.empty()){auto emission=upsamplePixels(t.emission,t.width,t.height,scale);p.emission=emissionBytes(emissionMips(p.w,p.h,emission));}
   if(!t.surfaceMap.empty()&&t.surfaceMap.size()==t.pixels.size()){
    // The surface map rides in the relief slot (r keeps the relief the parallax step reads).
    std::vector<uint32_t> packed(t.surfaceMap.size());const bool relief=t.relief.size()==packed.size();
    for(size_t i=0;i<packed.size();++i){const uint32_t s=t.surfaceMap[i];packed[i]=(relief?uint32_t(t.relief[i]):128u)|((s&255u)<<8)|(((s>>8)&255u)<<16)|(((s>>16)&255u)<<24);}
-   upload(mat.relief,presentW,presentH,VK_FORMAT_R8G8B8A8_UNORM,surfaceBytes(presentW,presentH,upsamplePixels(packed,t.width,t.height,scale)),4);}
-  else if(!t.relief.empty()){auto relief=upsampleRelief(t.relief,t.width,t.height,scale);upload(mat.relief,presentW,presentH,VK_FORMAT_R8_UNORM,{bytes(relief)},1);}
+   p.relief=surfaceBytes(p.w,p.h,upsamplePixels(packed,t.width,t.height,scale));p.packedRelief=true;}
+  else if(!t.relief.empty()){auto relief=upsampleRelief(t.relief,t.width,t.height,scale);p.relief={bytes(relief)};}
+  return p;
+ }
+ int materialScale(){
+  int scale=SoftwareRenderer::texturePresentScale();if(scale!=1&&scale!=2&&scale!=4)scale=1;
+  if(presentScaleCached&&presentScaleCached!=scale)clearMaterials();
+  presentScaleCached=scale;return scale;
+ }
+  // Plain constant colours share one image. Atlas keys use a lifetime token,
+  // never an allocator address that can later belong to different maps.
+  // Constant keys are odd and generation keys even, so the domains cannot alias.
+  // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
+ static uint64_t materialKey(const SoftwareRenderer::Texture&t,int scale){
+  uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
+  return base^(uint64_t(unsigned(scale))<<56);
+ }
+ uint64_t material(const SoftwareRenderer::Texture&t){
+  const int scale=materialScale();const uint64_t key=materialKey(t,scale);if(materials.find(key)!=materials.end())return key;
+  return createMaterial(t,key,materialPayload(t,scale),sortSlot(t));
+ }
+ uint32_t sortSlot(const SoftwareRenderer::Texture&t){return t.sortSlot&&keptSlots?t.sortSlot:++sortCount;}
+ // Many at once: payloads on every core a batch at a time (bounded memory), each made in
+ // the order given, so the materials, their sort keys and uploads are as one by one.
+ void prepareMaterials(const std::vector<const SoftwareRenderer::Texture*>& textures){
+  std::vector<GpuRenderer::PrepareItem> items;items.reserve(textures.size());for(const auto*t:textures)items.push_back({t,nullptr});prepareMaterials(items);
+ }
+ void prepareMaterials(const std::vector<GpuRenderer::PrepareItem>& items){
+  const int scale=materialScale();std::vector<const SoftwareRenderer::Texture*> todo;std::vector<uint64_t> keys;std::vector<uint32_t> slots;std::unordered_set<uint64_t> seen;
+  for(const auto&item:items){
+   if(!item.texture){if(item.reserveSlot)*item.reserveSlot=++sortCount;continue;}
+   const auto key=materialKey(*item.texture,scale);if(materials.count(key)||!seen.insert(key).second)continue;
+   todo.push_back(item.texture);keys.push_back(key);slots.push_back(sortSlot(*item.texture));}
+  const unsigned threads=std::clamp(std::thread::hardware_concurrency(),1u,16u);const size_t batch=size_t(threads)*2;
+  for(size_t from=0;from<todo.size();from+=batch){const size_t to=std::min(todo.size(),from+batch);
+   std::vector<MaterialPayload> payloads(to-from);std::atomic<size_t> next{from};std::exception_ptr failure;std::mutex failureLock;std::vector<std::thread> workers;
+   for(unsigned i=0;i<std::min<size_t>(threads,to-from);++i)workers.emplace_back([&]{for(size_t k;(k=next++)<to;)try{payloads[k-from]=materialPayload(*todo[k],scale);}catch(...){std::lock_guard hold(failureLock);if(!failure)failure=std::current_exception();}});
+   for(auto&worker:workers)worker.join();if(failure)std::rethrow_exception(failure);
+   for(size_t k=from;k<to;++k)createMaterial(*todo[k],keys[k],std::move(payloads[k-from]),slots[k]);}
+ }
+ uint64_t createMaterial(const SoftwareRenderer::Texture&t,uint64_t key,MaterialPayload p,uint32_t slot){
+  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;mat.soft=(t.transparent||t.additive)&&t.soft;
+  mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|(slot&0xffffffu);
+  mat.colorLevels=uint32_t(p.color.size());
+  upload(mat.color,p.w,p.h,t.additive?VK_FORMAT_B8G8R8A8_UNORM:VK_FORMAT_B8G8R8A8_SRGB,std::move(p.color),4);
+  if(!p.normal.empty())upload(mat.normal,p.w,p.h,VK_FORMAT_R16G16B16A16_SNORM,std::move(p.normal),8);
+  if(!p.emission.empty())upload(mat.emission,p.w,p.h,VK_FORMAT_R16G16B16A16_SFLOAT,std::move(p.emission),8);
+  else if(!blackEmission.view)upload(blackEmission,1,1,VK_FORMAT_R16G16B16A16_SFLOAT,emissionBytes(emissionMips(1,1,{0xff000000u})),8);
+  if(!p.relief.empty())upload(mat.relief,p.w,p.h,p.packedRelief?VK_FORMAT_R8G8B8A8_UNORM:VK_FORMAT_R8_UNORM,std::move(p.relief),p.packedRelief?4:1);
   VkDescriptorSetAllocateInfo alloc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};alloc.descriptorPool=descriptors;alloc.descriptorSetCount=1;alloc.pSetLayouts=&setLayout;check(vkAllocateDescriptorSets(device,&alloc,&mat.set),"Allocate material descriptors");
   VkDescriptorImageInfo images[]={{t.clampEdges?clamp:wrap,mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.normal.view?mat.normal.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{t.clampEdges?clamp:wrap,mat.emission.view?mat.emission.view:blackEmission.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},{wrap,mat.relief.view?mat.relief.view:mat.color.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
   VkWriteDescriptorSet writes[4]{};for(uint32_t n=0;n<4;++n){writes[n].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[n].dstSet=mat.set;writes[n].dstBinding=n;writes[n].descriptorCount=1;writes[n].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[n].pImageInfo=&images[n];}vkUpdateDescriptorSets(device,4,writes,0,nullptr);return key;
@@ -1420,6 +1459,8 @@ void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
  m->barrier(image,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,material.colorLevels,cmd);m->submitUploadCommands();
 }
 void GpuRenderer::prepare(const SoftwareRenderer::Texture&texture){m->material(texture);}
+void GpuRenderer::prepare(const std::vector<const SoftwareRenderer::Texture*>& textures){m->prepareMaterials(textures);}
+void GpuRenderer::prepare(const std::vector<PrepareItem>& items){m->prepareMaterials(items);}
 void GpuRenderer::flushUploads(){m->flushUploads();}
 std::array<std::uint64_t,4> GpuRenderer::uploadStatistics()const{return m->uploadStats;}
 // The second VR eye draws the first eye's geometry again: every triangle is

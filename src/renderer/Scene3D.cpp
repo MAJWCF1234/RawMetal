@@ -1445,7 +1445,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(kind>=0&&kind<=GroundWild&&!plantCover.empty()){int cx=int((a.p.x+b.p.x+c.p.x)/3),cy=int((a.p.y+b.p.y+c.p.y)/3);
     if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height)cover=plantCover[size_t(cy*World::Width+cx)];
     if(cover>=4)kind=GroundLeafyGrass;}
-   if(kind>=0){auto found=m_facilityTextures.find(groundNames[kind]);if(found!=m_facilityTextures.end())terrainMaterial=&found->second;}
+   if(kind>=0){if(const auto* found=findFacilityTexture(groundNames[kind]))terrainMaterial=found;}
    groundShade=1.f-.16f*std::min(1.f,cover/8.f);
   }
   // The carved underground (CAVE records): the mine pack's own rock on walls and roofs, its rough soil
@@ -1478,7 +1478,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto hash=[](int x,int y,unsigned salt){unsigned h=unsigned(x)*73856093u^unsigned(y)*19349663u^salt*83492791u;h^=h>>13;h*=0x5bd1e995u;h^=h>>15;return float(h&0xffffffu)/16777216.f;};
   const Texture* cover[3]={&m_terrainDirt,&m_terrainDirt,&m_terrainDirt};
   {const char* names[3]={"ground_leafygrass","ground_wild","ground_litter"};
-   for(int i=0;i<3;++i){auto found=m_facilityTextures.find(names[i]);if(found!=m_facilityTextures.end())cover[i]=&found->second;}}
+   for(int i=0;i<3;++i)if(const auto* found=findFacilityTexture(names[i]))cover[i]=found;}
   objectLighting=true;
   for(float gy=ry0;gy<ry1-.01f;gy+=cell)for(float gx=rx0;gx<rx1-.01f;gx+=cell){
    float cx=std::min(gx+cell,rx1),cy=std::min(gy+cell,ry1);

@@ -37,10 +37,17 @@ void SoftwareRenderer::deriveSurfaceNormal(Texture& texture,float strength){
  // once per texel rather than repeating three pow calls for all 25 samples.
  // Keep the original float expression and neighborhood summation order.
  std::vector<float> linearLuminance(texture.pixels.size());
- for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float r=std::pow(float((p>>16)&255)/255.f,2.2f),g=std::pow(float((p>>8)&255)/255.f,2.2f),b=std::pow(float(p&255)/255.f,2.2f);linearLuminance[i]=.2126f*r+.7152f*g+.0722f*b;}
+ // The same pow per channel value, looked up (256 values, not three pows a texel).
+ static const auto decode=[]{std::array<float,256> t{};for(int i=0;i<256;++i)t[size_t(i)]=std::pow(float(i)/255.f,2.2f);return t;}();
+ for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float r=decode[(p>>16)&255],g=decode[(p>>8)&255],b=decode[p&255];linearLuminance[i]=.2126f*r+.7152f*g+.0722f*b;}
  auto luminance=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;return linearLuminance[size_t(y*texture.width+x)];};
  std::vector<float> height(texture.pixels.size());
- for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float neighborhood=0;for(int oy=-2;oy<=2;++oy)for(int ox=-2;ox<=2;++ox)neighborhood+=luminance(x+ox,y+oy);height[size_t(y*texture.width+x)]=luminance(x,y)-neighborhood/25.f;}
+ // Away from the edges no tap wraps: index directly, adding in the same order.
+ for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float neighborhood=0;
+  if(x>=2&&y>=2&&x+2<texture.width&&y+2<texture.height){const float* row=linearLuminance.data()+size_t(y-2)*texture.width+x;
+   for(int oy=0;oy<5;++oy,row+=texture.width)for(int ox=-2;ox<=2;++ox)neighborhood+=row[ox];}
+  else for(int oy=-2;oy<=2;++oy)for(int ox=-2;ox<=2;++ox)neighborhood+=luminance(x+ox,y+oy);
+  height[size_t(y*texture.width+x)]=luminance(x,y)-neighborhood/25.f;}
  auto sampleHeight=[&](int x,int y){x=(x%texture.width+texture.width)%texture.width;y=(y%texture.height+texture.height)%texture.height;return height[size_t(y*texture.width+x)];};
  texture.normalLevels.clear();std::vector<Point3> normals;normals.reserve(height.size());
  for(int y=0;y<texture.height;++y)for(int x=0;x<texture.width;++x){float dx=(sampleHeight(x+1,y)-sampleHeight(x-1,y))*.5f,dy=(sampleHeight(x,y+1)-sampleHeight(x,y-1))*.5f;Point3 n{-dx*strength,dy*strength,1.f};float length=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);normals.push_back(n*(1.f/length));}
