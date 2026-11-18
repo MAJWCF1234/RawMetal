@@ -59,7 +59,7 @@
     choose(ConnectRope);
     drag(6, 6, 6.5f, 8);
     require(joints().size() == 1, "a drag from a crate made " + std::to_string(joints().size()) + " JOINT records");
-    {auto f = last();require(f.size() == 11 && f[2] == "rope" && f[3] == "0" && f[4] == "-1" && f[8] == "6.5" && f[9] == "8" && std::fabs(std::stof(f[10]) - creationCeiling()) < .01f,
+    {auto f = last();require(f.size() == 11 && f[2] == "rope" && f[3] == "0" && f[4] == "-1" && std::fabs(std::stof(f[8]) - 6.5f) < .05f && std::fabs(std::stof(f[9]) - 8.f) < .05f && /* a drag lands through screen pixels */ std::fabs(std::stof(f[10]) - creationCeiling()) < .01f,
       "the rope does not run from crate A's top to the ceiling over the drag's end: " + doc.lines[joints().back()]);}
     require(validateDocument(), "the engine refused the rope");
     report << "PASS: a drag from a crate to open floor hangs it by a rope from the ceiling there; the engine reads it\n" << std::flush;
