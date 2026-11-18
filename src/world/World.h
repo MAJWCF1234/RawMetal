@@ -334,7 +334,13 @@ struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 // Past ShapeRoundel the shapes are the engine's own (a STRUCT record cannot name them): a breach's broken
 // lip and foot (a box whose lower, or upper, edge slopes by `skew` from u -half to u +half), a broken
 // chunk (the box's corners pulled in at random), and a rod on the slant across its box (rebar).
-enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel,ShapeLip,ShapeFoot,ShapeShard,ShapeRod};
+// From ShapeWedge on they are PRIM kinds again (a STRUCT may name them): a gable wedge, a cone, a
+// pyramid, a spiral stair (skew: -1 winds it clockwise), a culvert, a buttress, a bevelled block,
+// an octagonal prism and a curved wall (skew: the culvert's shell or the wall's thickness, 0 the default).
+enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel,ShapeLip,ShapeFoot,ShapeShard,ShapeRod,
+ ShapeWedge,ShapeCone,ShapePyramid,ShapeSpiral,ShapeCulvert,ShapeButtress,ShapeChamfer,ShapeOctagon,ShapeArcWall};
+// The shapes a STRUCT record may name: the box, the PRIM shapes, not a breach's broken pieces.
+inline bool authoredShape(int shape){return (shape>=ShapeBox&&shape<=ShapeRoundel)||(shape>=ShapeWedge&&shape<=ShapeArcWall);}
 // topFinish: a named walking face (STAIR tread=, LAYER deck=) split off the top 4 cm once the map
 // is built and grounded (World::splitFinishes). trim, trimWidth: a flooring's edge band (STRUCT
 // trim=, trimwidth=), split off its sides the same way, so on terrain every piece keeps one height.
@@ -594,6 +600,11 @@ struct AuthoredMapData {
     std::vector<Glazing> glazings;
     // Holes broken through walls (BREACH records, Openings.cpp), applied the same way.
     std::vector<Breach> breaches;
+    // PRIM records (Primitives.h addPrimitive): each expands into structures[first, first+count)
+    // when it is read, and the exporter writes it back as the PRIM it was, so its named fields
+    // (name=, tint=, hand=...) ride on it. Options are its named fields: hand, rails, thick.
+    struct PrimitiveRecord {std::string kind;float x=0,y=0,z=0,w=0,d=0,h=0;int facing=0,material=40;bool solid=true,solidWritten=false;int hand=1,rails=3;float thick=0;size_t first=0,count=0;};
+    std::vector<PrimitiveRecord> primitives;
 };
 // The map as it plays: `map` itself, or a copy with its records' overrides
 // applied (sizes, anchoring, a body's side, AI, health, weapon). World loads this.

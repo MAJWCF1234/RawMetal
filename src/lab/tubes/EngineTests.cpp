@@ -6,6 +6,7 @@
 #include "renderer/Carcass.h"
 #include "world/CampaignExport.h"
 #include "world/CampaignMaps.h"
+#include "world/Primitives.h"
 #include <algorithm>
 namespace retro {bool testDoorLeaves();} // game/Movement.cpp
 namespace retro {bool testSkyboxes();}
@@ -19,6 +20,7 @@ const bool registered=[]{
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
  engine("map-format","--each-test=map-format: named fields, names, overrides, prefabs, properties, FORMAT 2",&Game::testMapFormat);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
+ engine("primitives","--each-test=primitives: every PRIM kind expands, scaled to the player; the new shapes walked",&testPrimitives);
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);
  engine("gore","--gore-test: the carcass test, then creatures shot and blown apart as the renderer draws them",+[]{std::ofstream r("gore-render-test.txt");return Carcass::test()&&SoftwareRenderer::testGore(r);});
