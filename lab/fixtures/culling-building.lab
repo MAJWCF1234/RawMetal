@@ -4,7 +4,7 @@
 # lost, no flush faces drawn twice. Tube: culling.
 world custom "custom maps/Starter Map.rmc"
 map-name Starter Map / Showcase Shapes
-camera 11.6 12.9 .8 40 6
+camera 10.6 11.6 -999 40 18
 scenery-only
 size 1600 900
 frames 12

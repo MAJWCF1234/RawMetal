@@ -3,7 +3,7 @@
 # stair, the culvert, the curved wall and the catwalk in front. Tube: culling.
 world custom "custom maps/Starter Map.rmc"
 map-name Starter Map / Showcase Shapes
-camera 12 14.2 3 -90 -32
+camera 12 18.6 4.7 -90 -84
 scenery-only
 size 1600 900
 frames 12

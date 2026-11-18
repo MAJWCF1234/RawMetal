@@ -2,7 +2,7 @@
 # Shapes, south-west). Tube: culling.
 world custom "custom maps/Starter Map.rmc"
 map-name Starter Map / Showcase Shapes
-camera 6.4 12.0 2.2 90 -38
+camera 6.2 13.95 3.2 90 -100
 scenery-only
 size 1600 900
 frames 12

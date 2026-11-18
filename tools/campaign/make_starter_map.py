@@ -710,8 +710,8 @@ def shapes_room(s):
     for y in (17.0, 19.4):                                             # brick buttresses, east and west, on the floor
         prim('buttress', 14.2, y, 0, .5, 1.2, 3.1, 3, 31)
         prim('buttress', 21.0, y, 0, .5, 1.2, 3.1, 1, 31)
-    for (x, y, w, f) in ((15.525, 15.8, 2.15, 0), (19.675, 15.8, 2.15, 0), (bx, 20.6, 6.3, 2), (14.8, 18.2, 5.1, 3), (20.4, 18.2, 5.1, 1)):
-        prim('band', x, y, 2.5, w, .5, .2, f, 42)                      # a concrete band through the walls (stopping in the arch's piers)
+    for (x, y, w, f) in ((15.6, 15.8, 2.0, 0), (19.6, 15.8, 2.0, 0), (bx, 20.6, 6.0, 2), (14.8, 18.2, 5.2, 3), (20.4, 18.2, 5.2, 1)):
+        prim('band', x, y, 2.5, w, .4, .2, f, 42)                      # a concrete band flush with the brick (stopping in the arch's piers): drawn once, no z-fighting
     prim('box', bx, by, 3.75, 6.6, 5.8, .3, 0, 42)                     # concrete roof slab over the walls' tops
     prim('dome', bx, by, 3.95, 4.6, 4.0, 2.2, 0, 19)                   # copper dome sunk into the slab
     for x, y in ((3, 6), (12, 6), (19, 6), (5, 13), (18, 13), (5, 20), (17.6, 22.6), (11, 19)):
