@@ -159,7 +159,9 @@ public:
     CullStats cullStatsTotal()const{CullStats t;for(const auto& [w,s]:m_cullStats){t.indexMs+=s.indexMs;t.clipMs+=s.clipMs;t.passMs+=s.passMs;t.pieces+=s.pieces;t.facesCut+=s.facesCut;t.facesBuried+=s.facesBuried;t.triangles+=s.triangles;}return t;}
     // The next frame rebuilds every bake: a new scene may sit at the address the
     // last one had, with the same epoch, and must not inherit its buffers.
-    void forgetScene(){m_lightingGame=nullptr;}
+    // The culling stats are kept per world drawn, by address: a new scene starts them afresh, so an old
+    // scene's worlds (or one reused at the same address) are not counted into its totals.
+    void forgetScene(){m_lightingGame=nullptr;m_cullStats.clear();}
     // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
     std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
