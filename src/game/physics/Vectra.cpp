@@ -323,7 +323,7 @@ void Space::warmStart(){
 void Space::solve(float h,bool useBias,bool coldOnly){
  if(!coldOnly)for(auto*c:constraints)c->solve(*this,h,useBias);
  const float inv=1/h;
- const Soft soft=makeSoft(std::min(settings.contactHertz,.25f*inv),settings.contactDampingRatio,h),hard=makeSoft(std::min(2*settings.contactHertz,.25f*inv),settings.contactDampingRatio,h);
+ const Soft soft=makeSoft(std::min(settings.contactHertz,.25f*inv),settings.contactDampingRatio,h),hard=makeSoft(std::min(2*settings.contactHertz,.25f*inv),settings.worldDampingRatio,h);
  for(auto&m:manifolds){if(coldOnly&&!m.cold)continue;Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
   const Soft s=m.surface.hertz>0?makeSoft(std::min(m.surface.hertz,.25f*inv),1.f,h):B&&B->movable()?soft:hard;
   const V3 dpA=A.dp,dpB=B?B->dp:V3{};const Quat dqA=A.dq,dqB=B?B->dq:Quat{};

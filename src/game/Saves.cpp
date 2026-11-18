@@ -354,12 +354,12 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   // Written: a unit quaternion (a degenerate one is the identity), spin clamped to 1000 rad/s.
   // Read: refused unless near unit and in range, then made exactly unit.
   auto body=[&](PropBody& b){
-   if constexpr(!std::decay_t<decltype(a)>::reading){const float length=norm(b);if(std::isfinite(length)&&length>1e-6f)for(auto&q:b.orientation)q/=length;else b.orientation={0,0,0,1};
+   if constexpr(!std::decay_t<decltype(a)>::reading){const float length=norm(b);if(std::isfinite(length)&&length>1e-6f){if(std::fabs(length-1)>2e-6f)for(auto&q:b.orientation)q/=length;}else b.orientation={0,0,0,1};   // (unit to a float's last bits is left as it is: a re-save writes the same bytes)
     for(auto&w:b.angularVelocity)w=std::isfinite(w)?std::clamp(w,-1000.f,1000.f):0.f;b.island=std::max(b.island,-1);}
    for(auto&q:b.orientation)a(q);for(auto&w:b.angularVelocity)a(w);a(b.island);
    if constexpr(std::decay_t<decltype(a)>::reading){const float length=norm(b);
     if(!(length>.9f&&length<1.1f)||std::any_of(b.angularVelocity.begin(),b.angularVelocity.end(),[](float w){return std::fabs(w)>1000.f;})||b.island<-1)throw std::runtime_error("invalid prop body");
-    for(auto&q:b.orientation)q/=length;}};
+    if(std::fabs(length-1)>2e-6f)for(auto&q:b.orientation)q/=length;}};
   if constexpr(std::decay_t<decltype(a)>::reading){int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid chunk count");int last=-1;
    for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks)throw std::runtime_error("invalid chunk");last=level;auto&props=g.m_chunks[size_t(level)].clutter;
     if(count<1||size_t(count)>props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop count");int lastProp=-1;

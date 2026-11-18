@@ -156,8 +156,9 @@ const bool tube=add({
   // 9. Saved and loaded: still in it.
   {auto campaign=filledRoom({10,8},0,{11.1f,6.9f});Game g(campaign);auto& p=LabAccess::player(g);p.angle=kPi*.5f;InputState shove;shove.forward=true;for(int i=0;i<40;++i){p.angle=kPi*.5f;g.update(shove,1.f/60);}run(g,3);
    const auto bytes=LabAccess::encodeSave(g);Game loaded(campaign);const bool decoded=LabAccess::decodeSave(loaded,bytes);const int crate=find(loaded,model::market_crate),basket=find(loaded,model::market_basket);
-   const bool same=decoded&&LabAccess::encodeSave(loaded)==bytes&&countIn(loaded,crate,model::glass_bottle)==6&&countIn(loaded,basket,model::market_pumpkin)==4;run(loaded,2);
-   r.check("a save keeps the bottles in the moved crate and the fruit in the basket, byte for byte",same&&countIn(loaded,crate,model::glass_bottle)==6&&allAsleep(loaded),"moved crate at "+fixed(loaded.clutter()[size_t(crate)].pos.x)+","+fixed(loaded.clutter()[size_t(crate)].pos.y));}
+   const bool exact=LabAccess::encodeSave(loaded)==bytes;const int bottles=countIn(loaded,crate,model::glass_bottle),fruit=countIn(loaded,basket,model::market_pumpkin);
+   const bool same=decoded&&exact&&bottles==6&&fruit==4;run(loaded,2);
+   r.check("a save keeps the bottles in the moved crate and the fruit in the basket, byte for byte",same&&countIn(loaded,crate,model::glass_bottle)==6&&allAsleep(loaded),"moved crate at "+fixed(loaded.clutter()[size_t(crate)].pos.x)+","+fixed(loaded.clutter()[size_t(crate)].pos.y)+" decoded "+std::to_string(decoded)+" byte-exact "+std::to_string(exact)+" in "+std::to_string(bottles)+"/"+std::to_string(fruit)+" then "+std::to_string(countIn(loaded,crate,model::glass_bottle))+" asleep "+std::to_string(allAsleep(loaded)));}
   // 10. Authored: in the container at its floor (sunk), at -999 and on its inner floor, all seed inside, asleep.
   for(float sunk:{0.f,1.f}){Game g(filledRoom({10,8},sunk));const int crate=find(g,model::market_crate),basket=find(g,model::market_basket),bin=find(g,model::trash_can);
    const float floor=g.clutter()[size_t(crate)].z+containers::inner(g.clutter()[size_t(crate)]).floor;bool level=true;for(const auto& v:g.clutter())if(v.model==model::glass_bottle)level&=std::fabs(v.z-floor)<.002f;

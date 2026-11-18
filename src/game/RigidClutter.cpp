@@ -27,7 +27,7 @@ float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:1
 float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
 // The ground's material against a prop: a hard floor that takes no bounce of its own.
 const vectra::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
-struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0;};
+struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0,part=0;};
 // Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad.
 int keepFour(std::vector<Hit>& h,vectra::V3 n){
  using namespace vectra;if(h.size()<=4)return int(h.size());int pick[4]{0,-1,-1,-1};
@@ -57,9 +57,9 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));
  space.cache.swap(rp.cache);
- std::vector<V3> samples;std::vector<char> curved;std::vector<Hit> hits;std::array<V3,8> feature{};
+ std::vector<V3> samples;std::vector<char> curved;std::vector<int> partOf;std::vector<Hit> hits;std::array<V3,8> feature{};
  if(rp.flat.size()<list.size())rp.flat.resize(list.size());
  // How every door of a world stands (the flat-floor memo is good while it is unchanged).
  std::vector<std::pair<const World*,float>> doorStates;
@@ -74,7 +74,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  const float worldSlop=space.settings.linearSlop-.0005f;
  // ---- The world round a body ----
  space.worldContacts=[&](Space& sp,int bi,float margin,std::vector<Manifold>& out){
-  const Body& b=sp.bodies[size_t(bi)];if(b.user<0)return;samples.clear();curved.clear();hits.clear();
+  const Body& b=sp.bodies[size_t(bi)];if(b.user<0)return;samples.clear();curved.clear();partOf.clear();hits.clear();
   Vec2 cq{b.x.x,b.x.y};cq=cq+shift;const World& cw=physicalWorld(cq);
   // The exact lowest points along the floor's normal (and a ramp's, under the body), and every part's
   // surface points. A curved part's sampled points meet only walls and ceilings: on a floor they would
@@ -110,11 +110,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // (A box's eight corners even so: the next to come down as it settles is a contact before it arrives.)
    if(!lowestOnly||!round){surfaceSamples(b,p,lowestOnly?100.f:spacing,samples);curved.resize(samples.size(),round?1:0);}
    for(V3 d:downs){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(0);}}
-   if(lowestOnly)continue;
-   for(V3 d:{V3{1,0,0},V3{-1,0,0},V3{0,1,0},V3{0,-1,0},V3{0,0,1}}){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(round?1:0);}}}
+   if(lowestOnly){partOf.resize(samples.size(),p);continue;}
+   for(V3 d:{V3{1,0,0},V3{-1,0,0},V3{0,1,0},V3{0,-1,0},V3{0,0,1}}){const int n=supportFeature(b,p,d,feature);for(int k=0;k<n;++k){samples.push_back(feature[size_t(k)]);curved.push_back(round?1:0);}}
+   partOf.resize(samples.size(),p);}
   for(size_t si=0;si<samples.size();++si){const V3 p=samples[si];const bool round=curved[si]!=0;
    if(flat){Vec2 q{p.x,p.y};q=q+shift;const World& w=physicalWorld(q);const float s=flatFloor-softSinkAt(w.level(),q,flatFloor);
-    if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0});
+    if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0,partOf[si]});
     if(ceilingNear&&p.z>b.x.z){const float cl=w.clearanceAbove(q.x,q.y,p.z-.05f,true);if(cl-p.z<margin)hits.push_back({p,{0,0,-1},cl-p.z,1});}
     continue;}
    Vec2 q{p.x,p.y};q=q+shift;const World& w=physicalWorld(q);const Vec2 k=q-(Vec2{p.x,p.y}+shift); // world-local = list + shift + k
@@ -127,7 +128,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      if(p.z-slope<margin&&!round)hits.push_back({p,n,(p.z-slope)*n.z,3});break;}
     if(onRamp)continue;}
    float s=w.supportBelow(q.x,q.y,p.z+.06f,true);s-=softSinkAt(w.level(),q,s);
-   if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0});
+   if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0,partOf[si]});
    // Every point is asked about walls too, from just over what it stands on: a thin thing on the floor
    // (a keyboard, a bottle on its side) is all floor points, and would otherwise roll through a wall.
    const float base=std::max(p.z-.005f,s+.004f);
@@ -149,7 +150,9 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   }
   if(hits.empty())return;
   // Group: the floor, the ceiling, the walls by the way they face (eight ways round).
-  auto groupOf=[](const Hit& h){if(h.kind<2)return h.kind;if(h.kind==3)return 30;const float a=std::atan2(h.n.y,h.n.x);return 2+(int(std::lround(a/(kPi*.25f)))+8)%8+(h.n.z>.5f?8:h.n.z<-.5f?16:0);};
+  // (The floor under each part of a compound is its own manifold: a chair on its back rests on its back and its
+  // seat's edge at once, not on whichever four of their corners were picked this step, rocking between them.)
+  auto groupOf=[](const Hit& h){if(h.kind==0)return h.part==0?0:40+h.part;if(h.kind<2)return h.kind;if(h.kind==3)return 30;const float a=std::atan2(h.n.y,h.n.x);return 2+(int(std::lround(a/(kPi*.25f)))+8)%8+(h.n.z>.5f?8:h.n.z<-.5f?16:0);};
   std::vector<int> groups;for(const auto&h:hits){const int g=groupOf(h);if(std::find(groups.begin(),groups.end(),g)==groups.end())groups.push_back(g);}
   std::sort(groups.begin(),groups.end());
   std::vector<Hit> group;
@@ -158,7 +161,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // a real contact out of the four (a barrel left on one rim).
    {float deepest=1e30f;for(const auto&h:group)deepest=std::min(deepest,h.sep);std::erase_if(group,[&](const Hit& h){return h.sep>deepest+.012f;});}
    keepFour(group,n);
-   if(g==0&&!flat){ // the floor's slope at the points kept (a ramp, terrain), by differences of the support
+   if((g==0||g>=40)&&!flat){ // the floor's slope at the points kept (a ramp, terrain), by differences of the support
     V3 sum{};for(auto&h:group){Vec2 q{h.p.x,h.p.y};q=q+shift;const World& w=physicalWorld(q);const float s=h.p.z-h.sep,d=.04f;
      auto at=[&](float x,float y){const float v=w.supportBelow(x,y,s+.06f,true);return std::fabs(v-s)<.06f?v:s;};
      const float gx=(at(q.x+d,q.y)-at(q.x-d,q.y))/(2*d),gy=(at(q.x,q.y+d)-at(q.x,q.y-d))/(2*d);h.n=norm(V3{-gx,-gy,1});sum=sum+h.n;}

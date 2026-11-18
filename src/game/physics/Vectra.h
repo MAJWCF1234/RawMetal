@@ -206,6 +206,7 @@ struct Settings {
  // woken settles in 0.27 s and its top drifts under half a millimetre. (60 Hz over-damped ten times let each
  // contact sink 4 mm under its load and the tower lean 2 mm before it slept, at 0.53 s.)
  float contactHertz=120,contactDampingRatio=2,pushout=1;   // soft contact: stiffness, damping, max push-out speed (m/s)
+ float worldDampingRatio=2;                                // against the world (twice the stiffness): its own damping
  float linearSlop=.001f,speculative=.04f;                  // allowed penetration, speculative reach
  float restitutionThreshold=1.f;                           // below this approach speed nothing bounces
  float middleThreshold=1.f;                               // an approach faster than this is first met at the manifold's middle

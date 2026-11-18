@@ -44,9 +44,11 @@ float supportAt(const Clutter& v,Vec2 p,float feet){
 }
 Snapshot capture(std::vector<Clutter>& list,int held,bool onlyHeld){
  Snapshot s;std::vector<int> boxes;std::vector<char> rode(list.size());
- // (onlyHeld: a container still on the move after a shove keeps carrying what rode in it till it stops.)
- auto carrying=[&](int i){const auto&c=list[size_t(i)];if(i==held||c.blockedTime>0)return true;if(lengthSq(c.velocity)+c.vz*c.vz<.04f)return false;
-  for(const auto&v:list)if(v.riding&&holds(c,v))return true;return false;};
+ // (onlyHeld, Vectra: the container in the hand, and one the player is shoving (blockedTime), carry their contents
+ // rigidly: neither the hand nor his shove is a body with mass, and a sprint's shove sets the container going
+ // faster than friction could take what stands in it. One thrown, let fall or knocked takes what is in it along
+ // by its floor and walls, and their weight is on it when it lands.)
+ auto carrying=[&](int i){return i==held||list[size_t(i)].blockedTime>0;};
  std::vector<char> carries(list.size(),0);if(onlyHeld)for(int i=0;i<int(list.size());++i)if(isContainer(list[size_t(i)]))carries[size_t(i)]=carrying(i);
  for(int i=0;i<int(list.size());++i){rode[size_t(i)]=list[size_t(i)].riding;list[size_t(i)].riding=false;if(isContainer(list[size_t(i)])&&!list[size_t(i)].broken&&upright(list[size_t(i)])&&(!onlyHeld||carries[size_t(i)]))boxes.push_back(i);}
  if(boxes.empty())return s;
