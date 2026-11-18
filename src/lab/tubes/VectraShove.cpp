@@ -116,14 +116,14 @@ const bool pad=add({.name="mattress",.summary="the chained mattress: sags carrie
 const bool feel=add({.name="vectra-feel",.summary="pictures: a crate shoving a guard, a heavy and a light throw, a mattress draped over a step",
  .fixtures={"feel-shove","feel-throw","feel-mattress"},
  .author=[](Scene& s,AuthoredMapData& m){const std::string k=s.fixture->value("feel","shove");m.definition.playerStart={2,2};
-  if(k=="shove")m.actorTracks.push_back(regression::guard({11,8},{11,8}));
-  if(k=="throw"){m.actorTracks.push_back(regression::guard({11,7},{11,7}));m.actorTracks.push_back(regression::guard({11,9.4f},{11,9.4f}));}
+  if(k=="shove")m.actorTracks.push_back(regression::guard({11,8},{11,8},AiFaction::Player));
+  if(k=="throw"){m.actorTracks.push_back(regression::guard({10.2f,9},{10.2f,9},AiFaction::Player));m.actorTracks.push_back(regression::guard({11.8f,9},{11.8f,9},AiFaction::Player));}
   if(k=="mattress")m.structures.push_back({10,4,16,12,0,.4f,false,40});},
  .setup=[](Scene& s){LabAccess::player(s.g()).pos={2,2};LabAccess::setGod(s.g(),true);},
  .step=[](Scene& s,float){const std::string k=s.fixture->value("feel","shove");auto& l=LabAccess::clutter(s.g());
   if(s.frame==20){
    if(k=="shove"){auto c=prop(model::wooden_crate,{9.2f,8},.5f,.8f);c.velocity={5.5f,0};c.vz=.6f;c.projectile=true;l={c};}
-   if(k=="throw"){auto a=prop(model::mug,{9.4f,7},.9f);a.velocity={9,0};a.vz=.6f;a.projectile=true;auto b=prop(model::wooden_crate,{9.2f,9.4f},.5f,.8f);b.velocity={5.5f,0};b.vz=.6f;b.projectile=true;l={a,b};}
+   if(k=="throw"){auto a=prop(model::mug,{10.2f,7.4f},.9f);a.velocity={0,9};a.vz=.6f;a.projectile=true;auto b=prop(model::wooden_crate,{11.8f,7.2f},.5f,.8f);b.velocity={0,5.5f};b.vz=.6f;b.projectile=true;l={a,b};}
    if(k=="mattress"){auto c=prop(model::med_mattress_stained,{10.25f,8},.6f);l={c};}}},
  .capture=[](Scene& s,const Frame&){if(s.frame==19)s.shoot("a-before");if(s.frame==34)s.shoot("b-contact");if(s.frame==60)s.shoot("c-after");if(s.last())s.shoot("d-end");},
  .metrics=[](Scene& s,Report& r){r.check("ran",true);}});

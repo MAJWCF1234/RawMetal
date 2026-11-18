@@ -202,9 +202,10 @@ private:
 // ---- The space ------------------------------------------------------------------------------------
 struct Settings {
  int substeps=4,relaxIterations=1;
- // Four substeps a step and 120 Hz contacts, critically damped, with a millimetre of slop: a ten-crate tower
- // woken settles in 0.27 s and its top drifts under half a millimetre. (60 Hz over-damped ten times let each
- // contact sink 4 mm under its load and the tower lean 2 mm before it slept, at 0.53 s.)
+ // Four substeps a step and 120 Hz contacts, damping ratio 2, a millimetre of slop, push-out at most 1 m/s: a
+ // ten-crate tower woken settles in 0.27 s and its top drifts 0.6 mm. (60 Hz over-damped ten times let each
+ // contact sink 4 mm under its load and the tower lean 2 mm before it slept, at 0.53 s; critically damped
+ // with a 3 m/s push-out, a crate shoved into a chair could throw it faster than it struck.)
  float contactHertz=120,contactDampingRatio=2,pushout=1;   // soft contact: stiffness, damping, max push-out speed (m/s)
  float worldDampingRatio=2;                                // against the world (twice the stiffness): its own damping
  float linearSlop=.001f,speculative=.04f;                  // allowed penetration, speculative reach
