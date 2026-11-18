@@ -1,0 +1,10 @@
+# Close on a seam of the Showcase Shapes building: its west wall, the concrete band flush with the
+# brick (unculled the two faces fight), a brick buttress through the band. Tube: culling.
+world custom "custom maps/Starter Map.rmc"
+map-name Starter Map / Showcase Shapes
+camera 12.5 17.6 -999 12 48
+scenery-only
+size 1600 900
+frames 12
+step 0
+culling-shot seam

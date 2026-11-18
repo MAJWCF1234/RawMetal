@@ -173,8 +173,9 @@ void surfaceSamples(const Body& body,int part,float spacing,std::vector<V3>& out
 // (negative inside): for the corners of the world's boxes against a body.
 bool nearestPoint(const Body& body,int part,V3 point,V3& surface,V3& normal,float& distance);
 
-// ---- Phase 2 hook: joints -------------------------------------------------------------------------
+// ---- Joints ---------------------------------------------------------------------------------------
 struct Space;
+struct Joint;
 struct Constraint {
  virtual ~Constraint()=default;
  virtual int bodyA()const=0;virtual int bodyB()const=0;   // -1: the world
@@ -182,25 +183,102 @@ struct Constraint {
  virtual void warmStart(Space&)=0;                        // each substep
  virtual void solve(Space&,float h,bool useBias)=0;       // each substep (bias) and relax (no bias)
  virtual void storeImpulses(){}                           // after the step: keep for warm starting
+ virtual void finish(Space&,float h){(void)h;}            // after the step: what it carried, breaking, the cache
+ virtual void project(Space&){}                           // after the step (Settings::projectIterations): what is still open put back by position
+ virtual Joint* joint(){return nullptr;}
 };
 
-// A springy hinge between two bodies (phase 2's first joint; the mattress chain's links): the two anchors held
-// together, the turn about every axis but the hinge held, and about the hinge a spring of `hertz` (damping
-// ratio `damping`) toward no bend, stopped hard past +-`limit`. The bend about the hinge is `angle()`.
-struct Hinge:Constraint {
- int a=-1,b=-1;
- V3 anchorA{},anchorB{};   // the joint in each body's frame (from its centre of mass, unturned)
+// A joint between two bodies, or a body and the world (b = -1), solved in the same substeps as the contacts
+// (TGS-soft: the locked rows are springs of Settings::jointHertz, warm started, relaxed without bias).
+// Every kind is rows on the joint's two frames: each body carries one (`anchor`, from its centre of mass,
+// and `frame`, a turn whose z is the joint's axis); for the world they are a world point and turn.
+// `attach` sets them from the bodies as they stand, so the pose they have then is the joint's rest.
+//  - Hinge: the anchors together, z of B held on z of A; about z a spring, a motor and limits.
+//  - Ball: the anchors together; z of B within an elliptical cone about z of A (coneX toward A's x,
+//    coneY toward its y; < 0 free), and the twist about it within twistLower..twistUpper.
+//  - Slider: the frames' turn held, B's anchor held on A's z line; along it a spring, a motor and limits.
+//  - Weld: everything held.
+//  - Distance: the anchors held `length` apart (a rod). Rope: at most `length` apart, slack when nearer.
+//    Spring: pulled toward `length` by a spring (springHertz, springDamping), within lower..upper if limited.
+//    A rope's motor is a winch: it reels its length in at motorSpeed (out when negative) while the pull is under
+//    motorMaxForce, to motorTarget (servo) or within lower..upper (speed).
+//  - Pulley: a rope over groundA to A's anchor and over groundB to B's: lengthA + ratio * lengthB <= length.
+//    Its motor turns the wheel: lengthA shrinks at motorSpeed (B's side pays out), with at most motorMaxForce.
+// Motors (hinge, slider, pulley): Speed holds a speed with at most motorMaxForce (N, or N m about a hinge);
+// Servo drives to motorTarget (rad or m) at up to motorSpeed. Breaking: a joint whose pull (N) passes
+// breakForce or whose twist (N m) passes breakTorque over a step snaps (Space::jointEvents) and holds
+// nothing after.
+enum class JointKind:std::uint8_t {Hinge,Ball,Slider,Weld,Distance,Rope,Spring,Pulley};
+enum class JointMotor:std::uint8_t {Off,Speed,Servo};
+const char* jointKindName(JointKind kind);
+struct Joint:Constraint {
+ JointKind kind=JointKind::Ball;
+ int a=-1,b=-1;               // body indices in the space; b = -1: the world
+ V3 anchorA{},anchorB{};      // in each body's frame, from its centre of mass (unturned); the world's: a world point
+ Quat frameA{},frameB{};      // the joint's frame in each body (the world's: in world axes); z is its axis
+ // Hinge angle (rad), slider travel (m), spring or rope length (m): held within lower..upper when limited.
+ bool limited=false;float lower=0,upper=0;
+ // Ball: the cone (rad; < 0 free) and the twist's limits (rad) when twistLimited.
+ float coneX=-1,coneY=-1;bool twistLimited=false;float twistLower=0,twistUpper=0;
+ // Ball: the swing's own limits, as a rig measures a bend (when swingLimited; the cone is then not used). The turn of B's
+ // frame from A's is split into a twist about z and the swing after it (r = swing * twist); the swing as a turn vector has
+ // its x part (a bend about A's x) within swingLower.x..swingUpper.x and its y part within swingLower.y..swingUpper.y.
+ // Its rows, and the twist's, take their axes from the split's own rates (worked out numerically each pass), so a limit
+ // holds exactly where it is measured at any bend: an elbow stops at its own angle, not at a cone's rim.
+ bool swingLimited=false;V3 swingLower{},swingUpper{};
+ // Ball: friction on the turn (N m): B's turn against A's is held still until more than this twists it, then turns
+ // against it (a limp limb lands and stays where it lands, rather than flopping on). 0: none.
+ float frictionTorque=0;
+ // Position correction: after the step, the anchors and the limits put back by moving the bodies (as much as each one's
+ // mass and inertia lets), Settings::projectIterations times. For chains of light bodies (a ragdoll's limbs) that must
+ // never be seen past a limit or pulled open, whatever hits them.
+ bool positionCorrection=false;
+ // A spring on the axis toward springTarget (hinge, slider), or on the length toward `length` (Spring). 0 Hz: none.
+ float springHertz=0,springDamping=.7f,springTarget=0;
+ JointMotor motor=JointMotor::Off;float motorSpeed=0,motorMaxForce=0,motorTarget=0,servoGain=6;
+ float length=1;              // distance, rope, spring: the length (m); pulley: lengthA + ratio * lengthB
+ V3 groundA{},groundB{};float ratio=1;   // pulley: where each rope goes over (world)
+ float breakForce=0,breakTorque=0;bool broken=false;
+ float lockHertz=0,lockDamping=0;        // the locked rows' stiffness (0: the space's)
+ std::uint64_t key=0;         // a lasting name: warm starting across rebuilt spaces (Space::jointCache); 0 none
+ // What it carried last step (N, N m).
+ float force=0,torque=0;
+ // Accumulated impulses (world vectors; scalars along their row's axis).
+ V3 linearImpulse{},angularImpulse{};float lowerImpulse=0,upperImpulse=0,motorImpulse=0,springImpulse=0,axialImpulse=0,coneImpulse=0,twistLowerImpulse=0,twistUpperImpulse=0;
+ float swingImpulse[4]{0,0,0,0};   // the swing's limits: x lower, x upper, y lower, y upper
+ // Set the anchors and frames from the bodies as they stand: the joint at `at`, its axis `axis` (world).
+ void attach(const Space& s,V3 at,V3 axis={0,0,1});
+ // Distance, rope, spring: the two ends (world); `length` becomes their distance unless keepLength.
+ void attachEnds(const Space& s,V3 atA,V3 atB,bool keepLength=false);
+ // The same from two bodies posed as they should rest (B null: the world).
+ void attach(const Body& A,const Body* B,V3 at,V3 axis={0,0,1});
+ void attachEnds(const Body& A,const Body* B,V3 atA,V3 atB,bool keepLength=false);
+ // Pulley: each end and the point its rope goes over; `length` becomes the ropes' as they are.
+ void attachPulley(const Space& s,V3 atA,V3 overA,V3 atB,V3 overB,float ratio=1);
+ float angle(const Space& s)const;      // hinge: the turn about z; slider: travel along z; distance kinds: length; pulley: lengthA + ratio*lengthB
+ float twist(const Space& s)const;      // ball: the twist about z
+ V3 swingTwist(const Space& s)const;    // ball: the swing's x and y parts and the twist (swingLimited's measure)
+ float swing(const Space& s)const;      // ball: how far z of B is from z of A
+ V3 worldA(const Space& s)const;V3 worldB(const Space& s)const;   // the anchors in the world now
+ bool driving(const Space& s)const;     // a motor at work (a speed, or a servo or winch short of its target): it keeps its bodies awake
+ int bodyA()const override{return a;}int bodyB()const override{return b;}
+ void prepare(Space&,float h)override;void warmStart(Space&)override;void solve(Space&,float h,bool useBias)override;
+ void finish(Space&,float h)override;void project(Space&)override;Joint* joint()override{return this;}
+ // Prepared each step.
+ struct Prep {float mA=0,mB=0;M3 iA=M3::zero(),iB=M3::zero();M3 pointMass{};M3 turnMass{};float h=1.f/480;} prep;
+};
+// The mattress chain's springy hinge (the first joint), now a Joint: the two anchors held together, the turn
+// about every axis but the hinge held (soft, lockHertz), and about the hinge a spring of `hertz` (damping
+// ratio `damping`) toward no bend, stopped past +-`limit`. The bend about the hinge is `angle()`.
+struct Hinge:Joint {
  V3 axisA{0,1,0};          // the hinge axis in A's frame
  Quat rest{};              // B's turn relative to A unbent (A's inverse turn times B's)
- float hertz=4,damping=.3f,limit=1.2f,lockHertz=60;
- // Solver state.
- V3 rA{},rB{},linear{},angular{};float hinge=0;M3 linearMass{},angularMass{};float hingeMass=0;
- int bodyA()const override{return a;}int bodyB()const override{return b;}
- float angle(const Space& s)const;
- void prepare(Space&,float h)override;void warmStart(Space&)override;void solve(Space&,float h,bool useBias)override;
-private:
- float h_=1.f/480;
+ float hertz=4,damping=.3f,limit=1.2f;
+ Hinge(){kind=JointKind::Hinge;lockHertz=60;lockDamping=1;}
+ void prepare(Space&,float h)override;
 };
+// What snapped this step.
+struct JointEvent {Joint* joint=nullptr;float force=0,torque=0;V3 at{};};
 
 // ---- The space ------------------------------------------------------------------------------------
 struct Settings {
@@ -219,6 +297,11 @@ struct Settings {
  // more times on the step's first substep, so the weight reaches the floor before anything moves under it.
  int coldIterations=8;
  float maxLinear=40,maxAngular=60;
+ // Joints: their locked rows are springs of jointHertz (damping ratio jointDamping), and they are solved
+ // jointIterations times in each pass (a chain, or a heavy load hung on a light link, converges sooner).
+ float jointHertz=60,jointDamping=2;int jointIterations=4;
+ // Joints with `positionCorrection` set are put back by position this many times after each step.
+ int projectIterations=3;float projectSlack=.002f;   // and only what is past a limit by more than projectSlack (rad)
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
 struct ContactEvent {int a=-1,b=-1,partA=0,partB=0;V3 point{},normal{};float approach=0,impulse=0,effectiveMass=0;Surface surface{};};
@@ -235,12 +318,20 @@ struct Space {
  std::function<float(Space&,int body,V3 from,V3 to,V3& normal)> sweep;
  // Pairs the caller rules out (a held prop and what it carries...).
  std::function<bool(const Space&,int a,int b)> filter;
+ // Pairs whose contacts the caller makes itself (a ragdoll's sections against each other: the skin of one against the
+ // other's body as the caller knows it). It appends manifolds between a and b (warm started by their parts, which the
+ // caller numbers) and returns true, and the parts' own narrow phase is skipped for that pair.
+ std::function<bool(Space&,int a,int b,float margin,std::vector<Manifold>&)> pairContacts;
  // Warm-start cache (persistent between steps): key -> points.
  struct CachedPoint {V3 localA{};float normal=0,tangent[2]{0,0};};
  struct Cached {std::array<CachedPoint,4> points{};int count=0;float rolling[3]{0,0,0};};
  std::vector<std::pair<std::uint64_t,Cached>> cache;   // sorted by key
  std::vector<Manifold> manifolds;   // this step's
  std::vector<ContactEvent> events;  // this step's impacts (approach over .3 m/s or an impulse)
+ std::vector<JointEvent> jointEvents;   // the joints that snapped this step
+ // Joints' impulses by Joint::key, kept between steps for a caller that builds its joints afresh each step.
+ struct JointCached {V3 linear{},angular{};float lower=0,upper=0,motor=0,spring=0,axial=0,cone=0,twistLower=0,twistUpper=0,swing[4]{0,0,0,0};};
+ std::vector<std::pair<std::uint64_t,JointCached>> jointCache;   // sorted by key
  // Stats.
  int pairsTested=0,worldManifolds=0,iterationsRun=0;
  double worldMs=0,pairMs=0,solveMs=0;   // where the last step's time went (collide's world and pair halves, the substeps)

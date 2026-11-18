@@ -134,7 +134,7 @@ void caTrail(Map& m,std::initializer_list<Vec2> points,float f,unsigned seed){
    if(std::fabs(d.x)>std::fabs(d.y))wall(m,c.x-r,c.y-s,c.x+r,c.y+s,f+.004f,f+.008f,16);else wall(m,c.x-s,c.y-r,c.x+s,c.y+r,f+.004f,f+.008f,16);}}
   prev=&p;}
 }
-void caPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=true){expandPrimitive({kind,x,y,z,w,d,h,facing,mat,solid},m.structures);}
+void caPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=true){addPrimitive(m,{kind,x,y,z,w,d,h,facing,mat,solid});}
 void caModel(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,bool solid=false){m.fixtures.push_back({caBedrock(model),{x,y},z-m.layers.front().elevation,w,d,h,yaw,solid});}
 unsigned caSeed(float x,float y){unsigned h=unsigned(x*97.f)*2654435761u^unsigned(y*131.f)*40503u;h^=h>>13;h*=1274126177u;return h^(h>>16);}
 // Resonance growth and crystal. Rock first: what came up through the floors and the walls is the

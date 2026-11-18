@@ -1,6 +1,7 @@
 #include "../core/FrameProfile.h"
 #include "Game.h"
 #include "../core/Ray.h"
+#include "physics/PropQueries.h"
 namespace retro {
 namespace {
 float magnitude(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
@@ -38,7 +39,10 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   {const auto&suits=hungSuits(m_level);for(size_t s=0;s<suits.size();++s){int joint=-1;float distance=suits[s].rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);
    if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,int(s+1)*Ragdoll::Count+joint,distance,distance,origin+ray*distance,{}};}}
   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&list=chunkClutter(level);auto shift=chunkOffset(level)-activeOrigin;
-   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0)continue;auto e=c.extent();Point3 center{c.pos.x+shift.x,c.pos.y+shift.y,c.z+e[2]},n;float distance=rayBoxFraction(origin,ray*range,center-Point3{e[0],e[1],e[2]},center+Point3{e[0],e[1],e[2]},&n)*range;if(distance>=hit.distance)continue;
+   // Each prop in its own shape as it is turned (a crate's corner, the gap under a chair's seat), not its box.
+   const Point3 local=origin-Point3{shift.x,shift.y,0};
+   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0)continue;vectra::QueryHit q;if(!vectra::rayCastProp(c,local,ray,std::min(range,hit.distance),q))continue;
+    const float distance=q.distance;const Point3 n=q.normal;if(distance>=hit.distance)continue;
     float block=propMaterialTraits(c.material()).blockMass;if(block>0&&c.mass()>=block)hit={ShotKind::Prop,level,int(i),distance,distance,origin+ray*distance,n};else passages.push_back({2,level,int(i),distance,origin+ray*distance,n});
    }
   }
@@ -98,6 +102,8 @@ void Game::startleScriptedActors(const ShotHit& hit,Point3 origin,Point3 directi
 }
 void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const HitscanDef& inputDefinition,bool playerFired,float damageOverride,AiTargetRef attacker){
  if(playerFired)startleScriptedActors(hit,origin,direction);
+ // A rope or chain the round passed through on its way is cut (PropJoints.cpp).
+ if(!m_blastShot)cutJointsByShot(origin,hit.point);
  if(!m_blastShot&&hit.waterLevel>=0&&hit.waterLevel<chunkCount()&&chunkResident(hit.waterLevel)&&hit.waterDistance>.002f){
   const auto shift=chunkOffset(m_level)-chunkOffset(hit.waterLevel);const auto travel=(hit.waterPoint-origin)*(1.f/hit.waterDistance);
   const float power=std::clamp(hitscanDamageAt(inputDefinition,hit.waterDistance)/24.f,.65f,1.5f);
@@ -107,7 +113,9 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  // The bodies it passes through answer to the ray itself (Carcass): they block nothing.
  m_shotRays.push_back({origin,direction,hit.kind==ShotKind::None?60.f:hit.distance,m_elapsed,damageOverride>0?damageOverride:hitscanDamageAt(inputDefinition,hit.distance),inputDefinition.ragdollImpulse,m_level});if(m_shotRays.size()>24)m_shotRays.erase(m_shotRays.begin());
  HitscanDef definition=inputDefinition;float attenuation=1;
- auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*propDamage/definition.dmgNear));damageClutter(level,size_t(index),propDamage,point,direction);};
+ auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};auto&target=(level==m_level?m_clutter:m_chunks[level].clutter).at(size_t(index));const bool sealed=target.liquid.holds()&&!target.liquid.holed;damageClutter(level,size_t(index),propDamage,point,direction);
+  // A round through a bottle of liquid gives it little of its push (it holes it and goes on).
+  const float push=sealed&&target.liquid.holed?.12f:1.f;knockClutter(level,size_t(index),point,direction*(push*definition.propImpulse*propDamage/definition.dmgNear));};
  for(const auto&p:hit.passed)if(p.kind){if(p.kind==2)prop(p.level,p.index,p.point,p.distance);else{auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,hitscanDamageAt(definition,p.distance)*attenuation,p.point+Point3{shift.x,shift.y,0},direction);attenuation*=.8f;}}
  if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point,hit.distance);return;}
  definition.dmgNear*=attenuation;definition.dmgMid*=attenuation;definition.dmgFar*=attenuation;definition.actorDamage*=attenuation;if(damageOverride>0)damageOverride*=attenuation;

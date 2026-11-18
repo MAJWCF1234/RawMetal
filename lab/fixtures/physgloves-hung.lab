@@ -1,0 +1,7 @@
+# Physgloves: the Starter Map's crate on a rope (SHOWCASE: PHYSICS) pulled; it swings out on its rope (tube physgloves).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 12 15.6 -999 -90 20
+scene hung
+size 640 360
+frames 110

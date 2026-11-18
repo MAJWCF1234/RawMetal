@@ -73,7 +73,10 @@ struct Item {
   std::wstring name; // shown under the tile
   int value = 0;     // model slot, shape kind or material id
   int group = 0;     // tab or palette section
+  int section = -1;  // a group within a tab (the Shapes page's: PrimitiveKinds.h sections)
 };
+// The Shapes page's groups, in plain words (retro::prim::Section order).
+inline const wchar_t *const shapeSections[] = {L"Walls & openings", L"Supports", L"Roofs & slabs", L"Stairs & steps", L"Details", L"New shapes"};
 
 inline bool has(const std::string &name, std::initializer_list<const char *> words) {
   for (auto w : words)
@@ -144,8 +147,6 @@ inline int tabOf(const std::string &n) {
     return Machines;
   return Props;
 }
-inline const char *const primNames[] = {"Box", "Pillar", "Stairs", "Ramp", "Column", "Arch", "Vault roof", "Dome",
-                                        "Door frame", "Window"};
 
 // The paint palette: STRUCT materials grouped, then the room finishes.
 inline const wchar_t *const paintGroups[] = {L"Concrete & stone", L"Metal", L"Tile", L"Painted", L"Wood",
@@ -196,6 +197,8 @@ struct Grid {
   int selected = -1, hot = -1, scroll = 0, cell = 100, content = 0;
   bool showGroups = false; // section headings between groups (the paint palette)
   const wchar_t *const *groupNames = nullptr;
+  bool showSections = false; // headings between items' sections (the Shapes page)
+  const wchar_t *const *sectionNames = nullptr;
   std::function<void(int, bool)> onPick;
   std::function<void(int)> onHover;
   std::function<COLORREF(const Item &)> placeholder;
@@ -213,12 +216,14 @@ struct Grid {
     spots.clear(), headings.clear();
     int x = 0, y = 4, last = -999;
     for (size_t i = 0; i < items.size(); ++i) {
-      if (showGroups && items[i].group != last) {
+      const int key = showSections ? items[i].section : items[i].group;
+      if ((showGroups || showSections) && key != last) {
         if (x)
           x = 0, y += w + 16;
-        last = items[i].group;
-        if (groupNames)
-          headings.push_back({RECT{6, y, r.right - 4, y + 20}, groupNames[last]});
+        last = key;
+        const wchar_t *const *names = showSections ? sectionNames : groupNames;
+        if (names && last >= 0)
+          headings.push_back({RECT{6, y, r.right - 4, y + 20}, names[last]});
         y += 22;
       }
       spots.push_back({RECT{x * w + 3, y, (x + 1) * w - 3, y + w + 10}, int(i)});

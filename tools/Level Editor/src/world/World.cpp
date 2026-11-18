@@ -406,6 +406,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
  m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);m_paneGlass.assign(breakables().size(),{});
  m_leadRopes.assign(leads().size(),{});for(size_t i=0;i<m_leadRopes.size();++i)m_leadRopes[i].torn=leads()[i].loose;
+ m_jointStates.assign(joints().size(),{});for(size_t i=0;i<m_jointStates.size();++i){const auto& j=joints()[i];auto& s=m_jointStates[i];s.target=j.target;s.speed=j.speed;}
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
  // A pre-cracked pane (BREAKABLE cracked=, GLAZING pane x) starts with its star cracks, the same ones every load;
  // they are hits like any other, so a save keeps them with the rest.
@@ -1980,4 +1981,10 @@ void World::stepLead(int i,float dt,const Point3* end,const LeadBody* body){
  // Still for half a second (nothing faster than 5 cm/s): asleep until its prop moves.
  r.rest=fastest<.05f?r.rest+dt:0.f;if(r.rest>.5f){r.sleeping=true;r.previous=r.points;}
 }
+
+const char* propJointWord(PropJointKind kind){switch(kind){case PropJointKind::Hinge:return "hinge";case PropJointKind::Ball:return "ball";case PropJointKind::Slider:return "slider";case PropJointKind::Weld:return "weld";
+ case PropJointKind::Rope:return "rope";case PropJointKind::Chain:return "chain";case PropJointKind::Spring:return "spring";case PropJointKind::Distance:return "rod";case PropJointKind::Pulley:return "pulley";case PropJointKind::Winch:return "winch";}return "rope";}
+bool parsePropJointWord(std::string_view w,PropJointKind& out){
+ for(int k=0;k<=int(PropJointKind::Winch);++k)if(w==propJointWord(PropJointKind(k))){out=PropJointKind(k);return true;}
+ if(w=="distance"){out=PropJointKind::Distance;return true;}return false;}
 }

@@ -1,0 +1,14 @@
+# The Starter Map's Showcase Shapes: the building of overlapping prims in four materials (a stone
+# base, brick walls and buttresses, a concrete arch, bands and roof slab, a copper dome), drawn with
+# culling and without. Its geometry is checked: nothing kept inside another solid, nothing that shows
+# lost, no flush faces drawn twice. Tube: culling.
+world custom "custom maps/Starter Map.rmc"
+map-name Starter Map / Showcase Shapes
+camera 10.6 11.6 -999 40 18
+scenery-only
+size 1600 900
+frames 12
+step 0
+culling-area 13.5 14 22 22
+culling-fewer 1
+culling-shot building

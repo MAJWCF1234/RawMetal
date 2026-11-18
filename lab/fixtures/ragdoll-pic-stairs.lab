@@ -1,0 +1,19 @@
+# Picture (1600 x 900): a man shot on a stair landing falls down the steps, kept at set frames for a strip. Tube: ragdoll-fall (run by name).
+world room
+camera 15.4 14.6 -999 -150 -22
+light 12 12.8 3.4 1.8 10
+light 14.5 13.5 2.6 1.4 8
+light 9.5 14.5 3 1.1 8
+size 1600 900
+frames 240
+kill-frame 12
+scenario down the stairs
+from 180
+man-z 0.9
+box 10.5 10.5 13.5 12.4 0 0.9
+box2 10.5 12.4 13.5 12.7 0 0.72
+box3 10.5 12.7 13.5 13.0 0 0.54
+box4 10.5 13.0 13.5 13.3 0 0.36
+box5 10.5 13.3 13.5 13.6 0 0.18
+body 7
+shoot-frames 12 36 54 66 78 90 108 140 239

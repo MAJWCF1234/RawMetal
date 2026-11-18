@@ -11,6 +11,7 @@
 #include "LightProbes.h"
 #include <future>
 namespace retro::signart{struct Design;}
+namespace retro::cull{struct CullIndex;}
 namespace retro::humanoid{struct Labels;}
 #include "Carcass.h"
 #include "Foliage.h"
@@ -152,9 +153,21 @@ public:
     // 0 = final attachment (ordinary gameplay).
     void setCleanupInspectionStage(int stage){m_cleanupInspectionStage=stage;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
+    // Faces buried where solids overlap (ShapeCulling.h) are left out when the map's geometry is
+    // built; off draws every face, as builds before it did (the lab compares the two).
+    void setFaceCulling(bool on){m_faceCulling=on;}
+    bool faceCulling()const{return m_faceCulling;}
+    // A world's last architecture pass: its solids, the time to index them and to clip faces,
+    // faces cut or buried, and the triangles it drew (structures and map tiles).
+    struct CullStats {double indexMs=0,clipMs=0,passMs=0;int pieces=0,facesCut=0,facesBuried=0;long long triangles=0;};
+    CullStats cullStats(const void* world)const{auto it=m_cullStats.find(world);return it==m_cullStats.end()?CullStats{}:it->second;}
+    // Every world drawn so far (a map and its neighbours), added up.
+    CullStats cullStatsTotal()const{CullStats t;for(const auto& [w,s]:m_cullStats){t.indexMs+=s.indexMs;t.clipMs+=s.clipMs;t.passMs+=s.passMs;t.pieces+=s.pieces;t.facesCut+=s.facesCut;t.facesBuried+=s.facesBuried;t.triangles+=s.triangles;}return t;}
     // The next frame rebuilds every bake: a new scene may sit at the address the
     // last one had, with the same epoch, and must not inherit its buffers.
-    void forgetScene(){m_lightingGame=nullptr;}
+    // The culling stats are kept per world drawn, by address: a new scene starts them afresh, so an old
+    // scene's worlds (or one reused at the same address) are not counted into its totals.
+    void forgetScene(){m_lightingGame=nullptr;m_cullStats.clear();}
     // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
     std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
@@ -200,6 +213,9 @@ private:
     // The CPU rasteriser's wetness for the next triangle (Wetness.h, the map's mask at its corners; 0 dry).
     float m_triangleWet=0;
     std::uint64_t m_staticGeometryBuilds=0,m_propGeometryBuilds=0,m_breakableGeometryBuilds=0;
+    bool m_faceCulling=true;std::unordered_map<const void*,CullStats> m_cullStats;std::uint64_t m_trianglesSubmitted=0;
+    // Per world drawn (a map and its neighbours each have theirs): the key it was built for, and it.
+    std::unordered_map<const void*,std::pair<std::uint64_t,std::shared_ptr<cull::CullIndex>>> m_cullIndexes;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
     bool m_poseReady=false;
@@ -281,7 +297,8 @@ private:
     Texture m_blood;
     // What a creature leaves: its body where it fell (Carcass), the wounds on it, and the blood its
     // stumps throw. Kept by level and slot, rebuilt from the creature's own death clock when asked.
-    struct Remains {std::uint64_t signature=0;float seen=0,rayClock=0;int serial=-1,woundsSeen=0;Vec2 at{};Point3 pool{};bool pooled=false;
+    // `published`: the clock of the pose last put in the game's book (Game::corpsePoses) for the save.
+    struct Remains {std::uint64_t signature=0;float seen=0,rayClock=0,published=-1;int serial=-1,woundsSeen=0;Vec2 at{};Point3 pool{};bool pooled=false,publishedAsleep=false;
      // A wound: the face it is on and where on it, which side shows, and the faces round it that carry its mark.
      struct Wound {int face=0;float side=1,size=.06f,b1=.33f,b2=.33f;std::vector<int> patch;};std::vector<Wound> wounds;Carcass carcass;};
     std::unordered_map<std::uint64_t,Remains> m_remains;float m_remainsClock=0;
@@ -289,7 +306,12 @@ private:
     // over and comes to rest, and the face of the posed mesh each of its faces is. Kept by actor emit
     // slot; `base` is the session time he died at, for a fall that is still being watched.
     // `rayClock`: the newest round already put into him (the killing round lands on the part it hit).
-    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0;bool live=false;std::vector<int> faces;Carcass carcass;};
+    // `published`: the clock of the pose last put in the game's book (Game::corpsePoses) for the save.
+    // `laid`: where he was laid into the world when his body was made (x, y, z, yaw), kept with his pose for the save.
+    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0,published=-1;bool live=false,publishedAsleep=false;std::array<float,4> laid{};std::vector<int> faces;Carcass carcass;};
+    // A body's pose into the game's book (what a save keeps), when it has moved since; and back out of it after a load.
+    static void publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep,const std::array<float,4>& laid={});
+    static bool restoreSaved(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,Carcass& carcass);
     std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
     Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
     // What a body on `level` near `centre` can lie on or be shoved by that the world does not hold: the
@@ -467,7 +489,8 @@ private:
         Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853},
         Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862},
         Mesh{2865},
-        Mesh{2868},Mesh{2870}};
+        Mesh{2868},Mesh{2870},
+        Mesh{2910},Mesh{2911},Mesh{2912},Mesh{2913},Mesh{2914},Mesh{2916},Mesh{2917},Mesh{2918},Mesh{2919},Mesh{2920},Mesh{2921},Mesh{2922},Mesh{2923},Mesh{2924},Mesh{2926},Mesh{2927},Mesh{2928},Mesh{2930},Mesh{2931},Mesh{2932},Mesh{2933},Mesh{2935},Mesh{2936},Mesh{2937},Mesh{2938},Mesh{2939},Mesh{2940},Mesh{2941},Mesh{2942},Mesh{2944},Mesh{2945},Mesh{2946},Mesh{2947}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

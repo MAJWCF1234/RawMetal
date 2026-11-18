@@ -26,7 +26,9 @@ with a clear corridor down the west side joining the rows:
               DEAD AND BLOOD (bodies that settle, a creature of each fluid), MACHINE,
               PREDATOR (a hunter and its prey), SOUND (AMBIENT, REVERB, music cues), and south
               of Predator the ATRIUM: a storefront of mixed panes (GLAZING), a ragged hole
-              (BREACH) with light through it, and the Growth brush's ivy, moss, creepers and grass
+              (BREACH) with light through it, and the Growth brush's ivy, moss, creepers and grass;
+              west of Physics the SHAPES: every PRIM kind in miniature, the ten newest at full
+              size, and a building of overlapping prims in four materials, its seams culled clean
 
 Writes "custom maps/Starter Map.rmc" by default. The file is also the worked
 example for custom maps/GUIDE.html (tools/campaign/make_custom_map_guide.py).
@@ -302,6 +304,8 @@ def models():
     fronts = json.load(open(os.path.join(ROOT, 'tools', 'dev', 'model_fronts.json')))
     result = []
     for slot, name in sorted(names):
+        if name.startswith('gib_'):
+            continue   # authored gibs (tools/library/make_gibs.py) are pieces of props, not models to show
         w, d, h = sizes[slot] if slot < len(sizes) and sizes[slot] != (0, 0, 0) else LEGACY_SIZE.get(slot, (1, 1, 1))
         # Unlisted engine models (0-62) face -z: yaw 0 shows their front, as the shipped maps place them.
         front = fronts.get(name, {}).get('front', '+z') if isinstance(fronts.get(name), dict) else '+z' if slot >= 63 else '-z'
@@ -601,7 +605,130 @@ def build():
     building(s, slot, catalogue)
     physics_room(s, slot, catalogue)
     atrium(s, slot, catalogue)  # south of Predator, built last too
+    shapes_room(s)              # west of Physics, on the forest's map there (every number stays)
     return s
+
+
+def prim_kinds():
+    """The PRIM kinds as the engine knows them (src/world/PrimitiveKinds.h, the one table the
+    engine, the Campaign Builder and the guide read): name, plain name, palette group, default
+    w, d, h, what it builds. The table's order is the Builder's palette order."""
+    text = open(os.path.join(ROOT, 'src', 'world', 'PrimitiveKinds.h'), encoding='utf-8').read()
+    groups = {'WallsAndOpenings': 'Walls & openings', 'Supports': 'Supports', 'RoofsAndSlabs': 'Roofs & slabs',
+              'StairsAndSteps': 'Stairs & steps', 'Details': 'Details', 'NewShapes': 'New shapes'}
+    consts = {'GuardHeight': 1.1}
+    out = []
+    for m in re.finditer(r'\{"(\w+)","([^"]+)",(\w+),([\w.]+?)f?,([\w.]+?)f?,([\w.]+?)f?,Outline::\w+,"([^"]*)"\}', text):
+        num = lambda v: consts[v] if v in consts else float(v)
+        out.append({'kind': m.group(1), 'label': m.group(2), 'group': groups[m.group(3)],
+                    'w': num(m.group(4)), 'd': num(m.group(5)), 'h': num(m.group(6)), 'blurb': m.group(7)})
+    return out
+
+
+def prim_size(k, w=0, d=0, h=0):
+    """A kind's size as the engine resolves it (PrimitiveKinds.h resolve): 0 takes the default;
+    stairs, big steps and ramps run as deep as their rise needs."""
+    w, h = w or k['w'], h or k['h']
+    d = d or k['d']
+    if d <= 0:
+        d = {'stairs': math.ceil(h / .17 - 1e-4) * .28, 'megastep': math.ceil(h / .45 - 1e-4) * .9,
+             'ramp': max(1.0, h * 4)}.get(k['kind'], 1.0)
+    return w, d, h
+
+
+def shapes_room(s):
+    """SHOWCASE: SHAPES, west of Physics, in from the Dead and Blood's south wall: the shapes the
+    Campaign Builder's Shape tool lays (PRIM). The north half stands the ten newest at full size:
+    a roof wedge, a pyramid roof, a spire, a buttressed wall, eight-sided pillars and bevelled
+    blocks, a spiral stair to climb, a culvert to walk through, a curved wall and a catwalk. The
+    south-west quarter is the whole palette in miniature, every kind in the Builder's order behind
+    a full-size arch. The south-east quarter is one building made of overlapping prims in four
+    materials (a stone base, brick walls and buttresses, a concrete arch, bands and roof, a copper
+    dome): where they overlap the engine draws only what shows, so the seams are clean."""
+    # Built on the map the forest grew in its cell, as the Hillside is, never a new one: every map keeps its number,
+    # the Physics room and the Atrium after it too (a pane's cracks are drawn from its map's number: the Atrium's
+    # storefront breaks as it always has).
+    m = next(x for x in s.maps if (x['col'], x['row']) == (4 + OX, 2 + OY))
+    i = m['index']
+    s.raised = [e for e in s.raised if e[0] is not m]
+    s.absolute = [e for e in s.absolute if e[0] is not m]
+    s.index = [e for e in s.index if e['map'] != i]
+    s.doors = {k: v for k, v in s.doors.items() if k[0] != i}
+    m.clear()
+    m.update(name='Showcase Shapes', records=[], ceiling=7.0, surface='concrete', ambient=.3, walls=set(), lights=True,
+             index=i, col=4 + OX, row=2 + OY, outdoor=False, layers=[])
+    s.format2 = True                                                  # hand=, rails= on the PRIMs
+    dead = next(x for x in s.maps if x['name'] == 'Showcase Dead and Blood')
+    dead['walls'] = (dead['walls'] | {(x, 23) for x in range(24)}) - {(11, 23), (12, 23)}
+    m['walls'] |= {(x, 0) for x in range(24) if x not in (11, 12)} | {(0, y) for y in range(24)} | {(23, y) for y in range(24)} | {(x, 23) for x in range(24)}
+    for other in s.maps:
+        if (other['col'], other['row']) in ((m['col'] + 1, m['row']), (m['col'] - 1, m['row']), (m['col'], m['row'] + 1)):
+            s.closed.add(frozenset(((m['col'], m['row']), (other['col'], other['row']))))
+    s.zone(m, 9, 0, 15, 3, '', 'SHOWCASE: SHAPES')
+    kinds = {k['kind']: k for k in prim_kinds()}
+
+    def prim(kind, x, y, z, w, d, h, facing, material, zone=None, named=''):
+        s.rec(m, 'PRIM', i, kind, x, y, z, w, d, h, facing, material)
+        if named: m['records'][-1] += '|' + named
+        if zone:
+            k = kinds[kind]
+            fw, fd, _ = prim_size(k, w, d, h)
+            if facing % 2: fw, fd = fd, fw
+            s.zone(m, x - fw / 2 - .3, y - fd / 2 - .3, x + fw / 2 + .3, y + fd / 2 + .3, ('PRIM %s / %s' % (kind, zone))[:40])
+            s.index.append({'map': i, 'section': 'SHOWCASE', 'x': x, 'y': y, 'title': 'PRIM %s' % kind, 'name': k['label']})
+
+    # ---- North: the ten newest at their default sizes, sized for the 1.6 m player ----
+    prim('wedge', 3.0, 5.0, 0, 0, 0, 0, 0, 48, 'roof wedge, ridge along facing')
+    prim('pyramid', 7.8, 5.0, 0, 0, 0, 0, 0, 33, 'pyramid roof')
+    prim('cone', 11.9, 5.0, 0, 0, 0, 0, 0, 19, 'spire')
+    s.struct(m, 14.4, 3.2, 17.6, 3.6, 0, 3.0, 31)                     # a brick wall the buttresses prop
+    prim('buttress', 14.9, 4.35, 0, 0, 0, 0, 0, 33, 'buttress, propping the wall')
+    prim('buttress', 17.1, 4.35, 0, 0, 0, 0, 0, 33)
+    prim('octagon', 19.8, 4.0, 0, 0, 0, 0, 0, 42, 'eight-sided pillar')
+    prim('octagon', 21.6, 4.0, 0, 0, 0, 2.4, 0, 46)
+    prim('chamfer', 19.8, 6.6, 0, 0, 0, 0, 0, 33, 'bevelled blocks')
+    prim('chamfer', 21.4, 6.6, 0, 1.4, .8, .6, 0, 42)
+    prim('spiral', 3.2, 10.6, 0, 0, 0, 0, 0, 47, 'spiral stair: climb it')
+    s.struct(m, 1.0, 9.5, 2.15, 10.9, 2.9, 3.0, 7)                    # a grating landing off its 3 m top tread
+    prim('pillar', 1.35, 10.55, 0, .14, .14, 2.9, 0, 2)
+    prim('culvert', 7.6, 10.4, 0, 0, 0, 0, 0, 42, 'culvert: walk through')
+    prim('arcwall', 12.2, 10.0, 0, 0, 0, 0, 2, 31, 'curved wall, bowing north')
+    prim('catwalk', 17.6, 9.6, 1.02, 0, 0, 0, 1, 2, 'catwalk on posts')
+    for x in (15.9, 19.3):                                             # posts under its stringers
+        for y in (9.05, 10.15):
+            prim('pillar', x, y, 0, .12, .12, .77, 0, 2)
+    prim('stairs', 20.44, 9.6, 0, 1.1, 0, 1.02, 3, 46)                 # up to its east end
+    # ---- South-west: the whole palette in miniature, in the Builder's order ----
+    prim('arch', 6.0, 13.4, 0, 0, 0, 0, 0, 42, 'the gate: an arch at full size')
+    order = [k for k in prim_kinds() if k['kind'] != 'arch']
+    for n, k in enumerate(order):
+        col, row = n % 7, n // 7
+        x, y = 1.6 + col * 1.55, 14.85 + row * 1.25
+        w, d, h = prim_size(k)
+        scale = min(1.0, 1.05 / max(w, d), 1.2 / h)
+        sw, sd, sh = round(w * scale, 3), round(d * scale, 3), round(h * scale, 3)
+        z = .3 if k['kind'] in ('window', 'canopy', 'band', 'spout', 'girder', 'waffle', 'corbel') else 0
+        prim(k['kind'], x, y, z, sw, sd, sh, 0, [42, 31, 33, 46, 19, 47][n % 6])
+        s.zone(m, x - .7, y - .6, x + .7, y + .6, ('%s: %s' % (k['group'], k['label']))[:40])
+    s.index.append({'map': i, 'section': 'SHOWCASE', 'x': 6, 'y': 19, 'title': 'EVERY SHAPE', 'name': 'the palette in miniature'})
+    # ---- South-east: one building of overlapping prims in four materials ----
+    bx, by = 17.6, 18.2
+    prim('box', bx, by, 0, 7.0, 6.0, .6, 0, 33, 'a building of prims: seams culled')   # ancient stone base
+    for x1, x2, y1, y2 in ((14.6, 16.65, 15.6, 16.0), (18.55, 20.6, 15.6, 16.0),       # brick walls; the south
+                           (14.6, 20.6, 20.4, 20.8), (14.6, 15.0, 15.6, 20.8), (20.2, 20.6, 15.6, 20.8)):  # pair stop inside the arch's piers
+        prim('box', (x1 + x2) / 2, (y1 + y2) / 2, .5, x2 - x1, y2 - y1, 3.3, 0, 31)
+    prim('arch', bx, 15.8, .5, 2.6, .8, 3.4, 0, 42)                   # concrete arch, proud of the brick both sides
+    prim('stairs', bx, 14.64, 0, 1.6, 0, .6, 0, 33)                    # stone steps up to it
+    for y in (17.0, 19.4):                                             # brick buttresses, east and west, on the floor
+        prim('buttress', 14.2, y, 0, .5, 1.2, 3.1, 3, 31)
+        prim('buttress', 21.0, y, 0, .5, 1.2, 3.1, 1, 31)
+    for (x, y, w, f) in ((15.6, 15.8, 2.0, 0), (19.6, 15.8, 2.0, 0), (bx, 20.6, 6.0, 2), (14.8, 18.2, 5.2, 3), (20.4, 18.2, 5.2, 1)):
+        prim('band', x, y, 2.5, w, .4, .2, f, 42)                      # a concrete band flush with the brick (stopping in the arch's piers): drawn once, no z-fighting
+    prim('box', bx, by, 3.75, 6.6, 5.8, .3, 0, 42)                     # concrete roof slab over the walls' tops
+    prim('dome', bx, by, 3.95, 4.6, 4.0, 2.2, 0, 19)                   # copper dome sunk into the slab
+    for x, y in ((3, 6), (12, 6), (19, 6), (5, 13), (18, 13), (5, 20), (17.6, 22.6), (11, 19)):
+        s.rec(m, 'LIGHT', i, x, y, 6.6, 0, 0, 1.2, 11, 4300)
+    s.sign(m, 12.0, 1.06, 3.4, 3.2, .8, 'SHAPES', 'every PRIM kind; seams culled', SHOW, 0)
 
 
 def prim_exhibit(s, m, grey=0xa0a8b0):
@@ -1377,6 +1504,161 @@ def physics_room(s, slot, catalogue):
     exhibit(m, (10, 14.5, 21, 22), 'PHYSICS / chairs, a table, a can to roll', 'TUMBLE', 'throw the crates at them', 15, 18)
     for x, y in ((5, 5), (15, 4), (5, 18), (15, 18)):
         s.rec(m, 'LIGHT', i, x, y, 4.6, 0, 0, 1.1, 10, 4300)
+    joints_corner(s, m, slot, body)
+    phase3_corner(s, m, slot, body, catalogue)
+
+
+def phase3_corner(s, m, slot, body, catalog):
+    """The phase-3 corner of SHOWCASE: PHYSICS, along the south wall west of TUMBLE (x 1-9.6, y 19-23):
+    Physgloves targets (things on a high shelf, a crate hung on a rope, mugs in an open crate); a table of
+    breakables that come apart in their authored gibs (tools/library/make_gibs.py); bottles of water, oil and a
+    green chemical to slosh, pour, shoot and break (Liquids.h: p.liquid, p.fill); a crate to carry in two VR hands."""
+    i = m['index']
+    s.format2 = True
+
+    physics = json.load(open(os.path.join(ROOT, 'tools', 'campaign', 'prop_physics.json')))
+
+    def s_size(name):
+        return physics.get(name, {}).get('size', catalog[name])
+
+    n_clutter = lambda: sum(1 for r in m['records'] if r.startswith('CLUTTER|'))
+    # Physgloves: a high shelf against the south wall (its top 1.9 m up) with light things on it to pull down.
+    s.struct(m, 1.3, 22.45, 3.5, 22.95, 1.86, 1.9, 40)
+    for x in (1.4, 3.4):
+        s.struct(m, x - .04, 22.6, x + .04, 22.68, 0, 1.86, 40)
+    body('mug', 1.7, 22.7, 1.9)
+    body('glass_bottle', 2.15, 22.7, 1.9)
+    body('binder', 2.6, 22.7, 1.9, HALF)
+    body('mug', 3.1, 22.65, 1.9, .4)
+    # A crate hung on a rope from the ceiling: pull it and it swings out to you on its rope.
+    crate = n_clutter()
+    s.rec(m, 'CLUTTER', i, 7, 4.6, 21.9, 2.3, .2, slot['wooden_crate'], .42, .42, .42, 0, 0, '', 'mass=5')
+    s.rec(m, 'JOINT', i, 'rope', crate, -1, 4.6, 21.9, 2.72, 4.6, 21.9, 5.0, 'radius=0.012')
+    # An open crate of mugs on the floor: pull them out of it.
+    body('market_crate', 1.9, 20.3, 0)
+    for x, y in ((1.8, 20.25), (2.0, 20.35)):
+        body('mug', x, y, -999)
+    # A table of breakables (each breaks into its authored gibs): a monitor and a bottle on it, chairs and crates by it.
+    top = body('wooden_table', 6.4, 21.9, 0, 0)
+    body('crt_monitor', 6.1, 21.95, top, PI, .9)
+    body('glass_bottle', 6.95, 21.8, top)
+    body('wooden_chair', 6.0, 20.9, 0, PI)
+    body('wooden_chair', 7.1, 20.95, 0, PI + .3)
+    body('scrap_chair', 5.0, 20.6, 0, 2.6)
+    body('packing_crate', 7.9, 22.4, 0, .1, .6)
+    # Bottles of water, oil and a green chemical on a low bench: slosh them, pour them, shoot them (a round holes one
+    # and it leaks), break them (it spills).
+    s.struct(m, 8.4, 21.4, 9.5, 22.0, 0, .7, 40)
+    for k, (kind, fill) in enumerate((('water', .75), ('oil', .7), ('chemical', .8))):
+        w, d, h = s_size('glass_bottle')
+        s.rec(m, 'CLUTTER', i, 7, round(8.65 + .38 * k, 3), 21.7, .7, 0, slot['glass_bottle'], w, d, h, 0, 0, '',
+              'p.liquid=%s' % kind, 'p.fill=%g' % fill)
+    # A crate to carry in two VR hands (one alone takes it, the other closing on its far side makes it two-handed).
+    body('wooden_crate', 8.9, 19.8, 0, .25, .75)
+    s.sign(m, 5.4, 22.96, 2.9, 3.2, .7, 'PHYSICS: PHASE 3', 'Physgloves (G), gibs, liquids, two hands', SHOW, PI)
+    s.rec(m, 'LIGHT', i, 5.2, 21.2, 4.6, 0, 0, 1.1, 9, 4300)
+    s.zone(m, 1, 19, 9.6, 23, 'PHYSICS / phase 3: Physgloves, gibs, liquids, two hands')
+    s.index.append({'map': i, 'section': 'SHOWCASE', 'x': 5, 'y': 21, 'title': 'PHASE 3',
+                    'name': 'Physgloves targets, a hung crate, breakables with authored gibs, bottles of water, oil and chemical, a crate for two hands'})
+
+
+def joints_corner(s, m, slot, body):
+    """The joints corner of SHOWCASE: PHYSICS, in the band across the room's middle (y 8-14) and beside the
+    landing: Vectra's joints (JOINT records, docs/Systems/physics.md). Cage lamps on chains that swing when hit or
+    shot, a crate on a rope to shoot down, a seesaw on a hinge, a gate on a sprung hinge, a rope bridge of planks
+    between two plinths, and a lift on a rail hung over a pulley against a counterweight: it rests at the landing,
+    takes you (or a load) down, and goes back up empty."""
+    i = m['index']
+    s.format2 = True                                                  # JOINT takes named fields
+
+    def prop(name, x, y, z, dims=None, yaw=0.0, mass=None, k=1.0, pitch=0.0, extra=()):
+        n = sum(1 for r in m['records'] if r.startswith('CLUTTER|'))
+        if dims is None:
+            h = body(name, x, y, z, yaw, k, pitch)
+        else:
+            s.rec(m, 'CLUTTER', i, 7, round(x, 3), round(y, 3), round(z, 3), round(yaw, 3), slot[name],
+                  dims[0], dims[1], dims[2], round(pitch, 3), 0, '', *(['mass=%g' % mass] if mass else []), *extra)
+            h = dims[2]
+        return n, h
+
+    def joint(kind, a, b, at, to=None, **named):
+        fields = ['JOINT', i, kind, a, b, *[round(v, 3) for v in at]] + ([round(v, 3) for v in to] if to else [])
+        s.rec(m, *fields, *['%s=%s' % (k, v) for k, v in named.items()])
+
+    ceiling = 5.0
+    # Cage lamps on chains from the ceiling, each with its light riding it (LIGHT's prop): shoot one, or
+    # throw something at it, and it swings with its light.
+    for x, y, drop in ((2.6, 9.4, 1.5), (8.0, 9.2, 1.9), (15.6, 9.6, 1.6)):
+        top = ceiling - drop
+        lamp, h = prop('mine_cage_lamp', x, y, top - .36, (.21, .2, .36), 0, 1.5)
+        joint('chain', lamp, -1, (x, y, top), (x, y, ceiling))
+        s.rec(m, 'LIGHT', i, x, y, top - .2, 2, 0, 1.2, 7, 2700, 0, '', '', '', '', '', '', '', '', '', '', '', '', '', '', 1, lamp)
+    # A crate on a rope: shoot the rope and it drops (or hit the crate hard enough and the rope gives).
+    crate, h = prop('wooden_crate', 12.0, 11.2, 2.4, (.55, .55, .55), .3, 14)
+    joint('rope', crate, -1, (12.0, 11.2, 2.4 + .55), (12.0, 11.2, ceiling), breaks=2600, radius=.012)
+    # A seesaw: a plank on a hinge over a low block. Stand on an end, or drop a crate on it.
+    s.struct(m, 2.45, 12.2, 2.55, 12.8, 0, .3, 40)                   # a narrow block 5 cm under the pin: room to tip
+    plank, h = prop('packing_crate', 2.5, 12.5, .35, (2.6, .4, .05), 0, 12)
+    joint('hinge', plank, -1, (2.5, 12.5, .35), axis='y', min=-14, max=14)
+    for k in range(2):
+        prop('wooden_crate', 1.4 + .6 * k, 13.8, 0, (.4, .4, .4), .2 * k, 9)
+    # A gate on a sprung hinge: walk through it and it swings shut behind you.
+    gate, h = prop('packing_crate', 13.6, 13.6, .04, (1.1, .05, 1.0), 0, 8)
+    joint('hinge', gate, -1, (13.03, 13.6, .54), axis='z', min=-100, max=100, stiffness=.8, damping=.35)
+    # A rope bridge: seven wooden planks hinged end to end between two plinths, sagging by its slack, a rope
+    # along each side from plank to plank and up to a post at each corner of the plinths.
+    s.struct(m, 5.2, 11.9, 6.2, 13.3, 0, .6, 40)
+    s.struct(m, 9.8, 11.9, 10.8, 13.3, 0, .6, 40)
+    s.rec(m, 'PRIM', i, 'stairs', 4.64, 12.6, 0, 1.0, 0, .6, 1, 40)
+    s.rec(m, 'PRIM', i, 'stairs', 11.36, 12.6, 0, 1.0, 0, .6, 3, 40)
+    x0, x1, z0, n = 6.2, 9.8, .6, 7
+    half, run = (x1 - x0) / 2, .52 * n / 2
+    depth = (run * run - half * half) ** .5
+    ends = [(x0 + (x1 - x0) * t, z0 - depth * (1 - abs(2 * t - 1))) for t in (k / n for k in range(n + 1))]
+    planks, mids = [], []
+    for k in range(n):
+        (ax, az), (bx, bz) = ends[k], ends[k + 1]
+        import math
+        tilt = -math.atan2(bz - az, bx - ax)
+        l = math.hypot(bx - ax, bz - az) - .02
+        mx, mz = (ax + bx) / 2, (az + bz) / 2
+        # Its top through the two pins; a prop's z is the bottom of its turned box.
+        ext = l / 2 * abs(math.sin(tilt)) + .025 * math.cos(tilt)
+        p, _ = prop('scrap_bridge_plank', mx, 12.6, mz - .025 - ext, (round(l, 3), .8, .05), 0, 9, pitch=tilt, extra=('material=wood', 'tint=0.62,0.43,0.26'))   # 8 kg and up bear the player; weathered wood
+        planks.append(p)
+        mids.append((mx, mz))
+    for k in range(n + 1):
+        ex, ez = ends[k]
+        a = planks[k] if k < n else planks[n - 1]
+        b = -1 if k in (0, n) else planks[k - 1]
+        joint('hinge', a, b, (ex, 12.6, ez), axis='y')
+    for side in (-.36, .36):
+        y = 12.6 + side
+        for x in (6.14, 9.86):
+            s.struct(m, x - .04, y - .04 + side * .15, x + .04, y + .04 + side * .15, .6, 1.35, 12)   # a post
+        for k in range(n - 1):
+            (ax, az), (bx, bz) = mids[k], mids[k + 1]
+            joint('rope', planks[k + 1], planks[k], (bx, y, bz + .03), (ax, y, az + .03), radius=.013)
+        for k, x in ((0, 6.14), (n - 1, 9.86)):
+            mx, mz = mids[k]
+            reach = math.hypot(mx - x, mz + .03 - 1.33)
+            joint('rope', planks[k], -1, (mx, y, mz + .03), (x, y + side * .15, 1.33), radius=.013, length=round(reach + .12, 3))
+    # The lift: a platform on a rail (a slider) hung over a pulley against a 60 kg counterweight. Empty, it rests
+    # at the landing's edge; your weight, or a load, takes it down, and it comes back up empty. The slider's
+    # motor holds no speed with 200 N: a brake.
+    platform, h = prop('packing_crate', 17.45, 3.5, 1.1, (.9, .9, .1), 0, 40)
+    weight, h = prop('packing_crate', 17.45, 6.3, 0, (.5, .5, .5), 0, 60)
+    joint('slider', platform, -1, (17.45, 3.5, 1.15), axis='z', min=0, max=1.08, motor='speed', speed=0, force=200)
+    joint('pulley', platform, weight, (17.45, 3.5, 1.2), (17.45, 6.3, .5), over='17.45,3.5,4.8', over2='17.45,6.3,4.8')
+    prop('wooden_crate', 16.6, 2.2, 1.2, (.45, .45, .45), .4, 25)    # a load on the landing for it
+    # A dead man on the top step of the stairs off the landing, facing down them: the first time he is seen he
+    # goes down as a body (Carcass) and comes to rest on the steps.
+    s.rec(m, 'TIMED_SEQUENCE', i, 'sc_joints_clock', 'sc_joints_clock_done', 0, 0, 24, 24, -100, 100, 60000, 60000, 0, 0, 0, 0, 1, 1)
+    s.rec(m, 'ACTOR', i, 'sc_joints_clock', 7, 1.75, 0, 0, 0)
+    s.rec(m, 'ACTOR_KEY', i, 0, 0, 18.55, 2.1, 1.0, 0, 4, 1)
+    s.rec(m, 'ACTOR_KEY', i, 0, 60000, 18.55, 2.1, 1.0, 0, 4, 1)
+    s.zone(m, 1, 8, 22, 14.5, 'PHYSICS / joints: chains, a rope, hinges, a bridge')
+    s.index.append({'map': m['index'], 'section': 'SHOWCASE', 'x': 8, 'y': 11, 'title': 'JOINTS', 'name': 'lamps on chains, a crate on a rope, a seesaw, a gate, a rope bridge, a lift'})
 
 
 KEEP_SHUT = {'Lights', 'Hazards', 'Life', 'Levels', 'Scripts', 'Architecture', 'Architecture 2',

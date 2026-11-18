@@ -88,7 +88,7 @@ void cbGlaze(Map& m,float x1,float y1,float x2,float y2,float f,float roof,float
  wall(m,x1,y1,x2,y2,f+head,f+head+.08f,20);if(roof>f+head+.08f)wall(m,x1,y1,x2,y2,f+head+.08f,roof,mat);
  if(alongX)wall(m,x1,y1-.03f,x2,y2+.03f,f+sill,f+head,CollisionProxyMaterial);else wall(m,x1-.03f,y1,x2+.03f,y2,f+sill,f+head,CollisionProxyMaterial);
 }
-void cbPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=true){expandPrimitive({kind,x,y,z,w,d,h,facing,mat,solid},m.structures);}
+void cbPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=true){addPrimitive(m,{kind,x,y,z,w,d,h,facing,mat,solid});}
 void cbModel(Map& m,int model,float x,float y,float z,float w,float d,float h,float yaw,bool solid=false){m.fixtures.push_back({cbBedrock(model),{x,y},z-m.layers.front().elevation,w,d,h,yaw,solid});}
 unsigned cbSeed(float x,float y){unsigned h=unsigned(x*97.f)*2654435761u^unsigned(y*131.f)*40503u;h^=h>>13;h*=1274126177u;return h^(h>>16);}
 // Resonance growth and crystal, the same as CampaignChapterContainmentA.cpp builds them. Rock first: what came up through the floors and the walls is the

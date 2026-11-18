@@ -16,6 +16,9 @@ bool floats(const Clutter& c){if(c.traits&&c.traits->floats>=0)return c.traits->
 float density(const Clutter& c){
  // Map format 2: density= is taken as given; floats= alone keeps the material's range on its side of water.
  if(c.traits&&c.traits->density>0)return c.traits->density;
+ // A bottle holding liquid (Liquids.h) is hollow: it displaces its outer shape (its shoulders and neck taken off), so
+ // an empty one floats and a full one sinks.
+ if(c.liquid.holds()){const auto s=c.size();const float outer=kPi*.25f*s[0]*s[1]*s[2]*.45f;return std::clamp(c.mass()/std::max(outer,1e-5f),150.f,3000.f);}
  const float bulk=c.mass()/volume(c);
  if(c.model<0)return floats(c)?450.f:2400.f;
  const float low=least(c.material());

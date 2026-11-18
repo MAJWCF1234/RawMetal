@@ -64,7 +64,7 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - heights rise by `z`;
   - boxes and quarter facings (`STRUCT`, `PRIM`, `HAZARD`, `WATER`...) turn only by quarter turns;
   - `prefix` goes before every `name=` inside.
-- Records that name others by number (`ACTOR*`, `LEAD`, `CHAIN`, `BREAKABLE`, `SCRIPT_*`, `DIALOGUE*`, `TIMED_SEQUENCE`, a `LIGHT` riding a prop) cannot go in a prefab.
+- Records that name others by number (`ACTOR*`, `LEAD`, `CHAIN`, `JOINT`, `BREAKABLE`, `SCRIPT_*`, `DIALOGUE*`, `TIMED_SEQUENCE`, a `LIGHT` riding a prop) cannot go in a prefab.
 - The exporter writes the placed records (a flat map). The Builder keeps the blocks as written.
 
 ## Campaign Builder
@@ -116,6 +116,22 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
 - Creepers are hanging plants (`SoftwareRenderer::hangingPlant`, `PlantBones::add(..., hanging)`): rooted at their top, they drift in an indoor draft and part round whoever walks through them. The lab tube `growth` (src/lab/tubes/Growth.cpp) checks it.
 - The brush's density, size and seed are its own settings, not map data; a typed seed repeats a stroke exactly.
 
+## Joints
+`JOINT|map|kind|propA|propB|x|y|z[|x2|y2|z2]` joins a loose prop to another, or to the room (World.h `PropJoint`, parsed in
+CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they play).
+- `propA` and `propB` are CLUTTER records of the map counted from 0; `propB -1` is the room (a wall, the ceiling, the floor).
+- `kind`: `hinge ball slider weld rope chain spring rod pulley winch` (`distance` reads as `rod`). x,y,z is where they meet
+  (absolute heights). A rope, chain, spring, rod, pulley or winch needs its other end x2|y2|z2 (on propB, or the point in the
+  room it hangs from); a pulley joins two props.
+- The pose its props are laid out in is the joint's rest.
+- Named fields (all optional): `axis` (x, y, z or a,b,c; a hinge x, a slider z), `length`, `min` and `max` (degrees for a
+  hinge, metres for a slider or a winch), `cone`, `cone2`, `twist` (a ball's, degrees), `stiffness` (Hz) and `damping`,
+  `motor` (speed servo off) with `speed`, `force`, `target`, `switch` (a state the motor runs on), `breaks` (N), `state` (set
+  when it snaps), `over` and `over2` (a pulley's wheels), `ratio`, `radius` (how thick it is drawn).
+- The Builder's Connect tool writes it. Deleting a CLUTTER record in the Builder takes the joints on it with it and renumbers
+  the rest; a LIGHT riding it stays, riding nothing.
+- A map without JOINT records is unchanged. The tube `joints-room` plays the Starter Map's.
+
 ## Light shafts
 `STRUCT` material 53 (`LightShaftMaterial`) is a god ray: sunlight falling on the slant through its box, in at the top on the side away from its `facing` (field 12) and down to the floor on the facing side.
 - It is drawn as soft additive cards, warm gold, so it shows without any haze; it casts no shadow. Its light is shaped by the world it falls in (`lightShaftShape`, Scene3D.cpp): over the box's far face a grid finds where the light comes through (the breach's hole, the glass, not the wall or the frame round them) and where each ray lands (the floor, or the first thing in its way). The cards run from the opening's outline to where the light is caught, so a shaft never reaches past a wall or into the room behind.
@@ -123,8 +139,16 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
 - It is never solid (the parser makes it so), and like glass it lets light, sight and rounds through (`seeThroughMaterial`).
 - The Builder's Block tool places one: pick material 53 and drag its box; R turns its facing once the record has one (the inspector lists `facing`). The lab tube `atrium` checks the Starter Map's five.
 
+## Shapes (PRIM)
+`PRIM|map|kind|x|y|z|w|d|h|facing|material[|solid]` lays a ready-made building part. The kinds, their plain names, palette groups, player-scaled defaults and plan outlines are one table, `src/world/PrimitiveKinds.h`, read by the engine (`Primitives.cpp`), the Campaign Builder's Shape tool and the guide generator.
+- Ten new kinds: `wedge` (gable roof), `cone` (spire), `pyramid` (hip roof), `spiral` (spiral stair), `culvert` (a round pipe sunk into the floor), `buttress`, `chamfer` (bevelled block), `octagon` (eight-sided pillar), `arcwall` (curved wall) and `catwalk`. They draw true to their shape (STRUCT shapes 12-20) over collision boxes; the spiral stair, culvert and catwalk are walked, the steep ones are not (`--each-test=primitives`).
+- Options as named fields: `hand=left|right` (spiral), `rails=both|left|right|none` (catwalk), `thick=` metres (arcwall, culvert).
+- A PRIM is kept as a record (`AuthoredMapData::primitives`, the boxes it laid): the exporter writes it back as the PRIM it was, its named fields with it. One whose boxes were changed after it was laid is written as its boxes.
+- Where solids overlap, the renderer leaves out faces buried inside another and draws flush faces once (the later record's): `src/renderer/ShapeCulling.h`, done when the map's geometry is built; collision is untouched. The lab tube `culling` checks it.
+
 ## The Starter Map atrium
-`Showcase Atrium` (map 149, the last room built; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
+`Showcase Atrium` (map 149; south of Predator, tools/campaign/make_starter_map.py `atrium`) and `Showcase Shapes` (map 60, built last on the forest's map in its cell, as the Hillside is, so no other map's number moves: every shape, the ten new ones at full size, a building of overlapping prims) are found by name in lab fixtures (`map-name`). A pane's cracks are drawn from its map's number and its own (GlassFracture.h `paneSeed`), so renumbering a map with glass changes how it breaks.
+`Showcase Atrium` (south of Predator; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:

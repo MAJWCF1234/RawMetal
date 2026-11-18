@@ -7,26 +7,11 @@
 
 namespace retro {
 namespace {
-constexpr float MaxRiser=.17f,Tread=.28f,RampStep=.1f;
+constexpr float MaxRiser=PrimMaxRiser,Tread=PrimTread,RampStep=PrimRampStep;
 static_assert(MaxRiser<PlayerStep&&RampStep<PlayerStep);
-struct Defaults {float w,d,h;};
-struct Kind {std::string_view name;Defaults defaults;};
 // Sizes a player reads as right: a 1.2 m stair at 0.28 m treads, a 2.2 m door,
-// a 1 m rail, a 3 m storey.
-constexpr Kind kinds[]={
- {"box",{1,1,1}},{"pillar",{.5f,.5f,3}},{"stairs",{1.2f,0,1}},{"ramp",{1.2f,0,.6f}},
- {"column",{.6f,.6f,3}},{"arch",{2.4f,.6f,3.4f}},{"vault",{4,4,3}},{"doorframe",{1.2f,.3f,2.2f}},
- {"window",{3,.3f,1}},{"fins",{3,.4f,3}},{"canopy",{3,1.5f,.25f}},{"railing",{2,.06f,GuardHeight}},
- {"corbel",{.6f,.6f,.6f}},{"plinth",{2,2,.45f}},
- // Openings through thick walls: each is the wall panel with its opening left open.
- {"slit",{1.2f,.4f,3}},{"clerestory",{3,.4f,3}},{"embrasure",{1.6f,.8f,3}},{"roundel",{2,.4f,3}},
- {"niche",{1,.5f,1.6f}},{"hood",{1,.5f,1.6f}},
- // Masses and structure.
- {"batter",{3,1,2.5f}},{"waffle",{4,4,.6f}},{"pilotis",{.6f,.6f,3.5f}},{"megastep",{3,0,1.35f}},
- {"lightwell",{4,4,GuardHeight}},{"bridge",{3,8,3}},{"core",{4,4,8}},{"dome",{4,4,2}},{"strut",{.35f,3,3}},
- {"girder",{.5f,4,.6f}},{"quadpier",{1,1,3}},
- // Detailing.
- {"band",{3,.08f,.25f}},{"spout",{.25f,.8f,.2f}},{"chase",{.8f,.2f,3}},{"lattice",{2,.2f,2.4f}}};
+// a 1 m rail, a 3 m storey (PrimitiveKinds.h).
+const auto& kinds=prim::kinds;
 
 // The primitive's frame: u across it, v along its facing, both from its centre.
 struct Frame {
@@ -38,13 +23,12 @@ struct Frame {
 }
 
 void expandPrimitive(const Primitive& p,std::vector<Structure>& out){
- const Kind* kind=nullptr;for(const auto& k:kinds)if(k.name==p.kind)kind=&k;
+ const prim::KindInfo* kind=prim::find(p.kind);
  if(!kind)throw std::runtime_error("unknown primitive kind '"+std::string(p.kind)+"'");
  if(p.facing<0||p.facing>3)throw std::runtime_error("primitive facing "+std::to_string(p.facing)+" must be 0-3");
- float w=p.w>0?p.w:kind->defaults.w,h=p.h>0?p.h:kind->defaults.h,d=p.d;
+ const auto size=prim::resolve(p.kind,p.w,p.d,p.h);const float w=size.w,h=size.h,d=size.d;
  const int risers=int(std::ceil(h/MaxRiser-1e-4f));
  const int megasteps=int(std::ceil(h/.45f-1e-4f));
- if(d<=0)d=p.kind=="stairs"?risers*Tread:p.kind=="megastep"?megasteps*.9f:p.kind=="ramp"?std::max(1.f,h*4):kind->defaults.d;
  if(p.w<0||p.d<0||p.h<0||w<=0||d<=0||h<=0)throw std::runtime_error("primitive "+std::string(p.kind)+" sizes must be positive");
  const Frame frame{p.x,p.y,p.facing};const float hw=w*.5f,hd=d*.5f,z=p.z;
  auto box=[&](float u0,float u1,float v0,float v1,float bottom,float top,int material,bool solid,bool rail=false,std::uint8_t shape=ShapeBox){
@@ -190,6 +174,65 @@ void expandPrimitive(const Primitive& p,std::vector<Structure>& out){
   for(int i=1;i<nu;++i){const float u=-hw+w*i/nu;part(u-bar*.5f,u+bar*.5f,-hd*.6f,hd*.6f,z+bar,z+h-bar);}
   for(int j=1;j<nz;++j){const float zz=z+h*j/nz;part(-hw+bar,hw-bar,-hd*.6f,hd*.6f,zz-bar*.5f,zz+bar*.5f);}
  }
+ // New shapes. Each is drawn true to its shape; its collision boxes step the way the player
+ // reads it: a slope gentler than 1:2 in 0.1 m steps she walks up, a steeper one in 0.5 m steps.
+ else if(k=="wedge"){
+  // A gable: the ridge along facing at h, the eaves at z on both long sides.
+  shape(ShapeWedge);const float step=h<=hw*.5f?RampStep:PrimSteepStep;const int steps=std::max(1,int(std::ceil(h/step-1e-4f)));
+  for(int i=0;i<steps;++i){const float r=hw*(1-float(i)/steps);proxy(-r,r,-hd,hd,z,z+h*(i+.5f)/steps);}
+ }else if(k=="cone"||k=="pyramid"){
+  // A spire or a hip roof: layers shrinking to the point, round ones as crossing boxes.
+  shape(k=="cone"?ShapeCone:ShapePyramid);const float step=h<=std::min(hw,hd)*.5f?RampStep:PrimSteepStep;const int layers=std::max(1,int(std::ceil(h/step-1e-4f)));
+  for(int j=0;j<layers;++j){const float s=1-float(j)/layers,ru=hw*s,rv=hd*s,top=z+h*(j+.5f)/layers;
+   if(k=="pyramid")proxy(-ru,ru,-rv,rv,z,top);
+   else{proxy(-ru*.92f,ru*.92f,-rv*.38f,rv*.38f,z,top);proxy(-ru*.38f,ru*.38f,-rv*.92f,rv*.92f,z,top);proxy(-ru*.7f,ru*.7f,-rv*.7f,rv*.7f,z,top);}}
+ }else if(k=="spiral"){
+  // Treads winding round a post: 0.17 m risers, a whole turn rising over her headroom. Each tread
+  // collides as four boxes out along its middle; the post as one.
+  shape(ShapeSpiral);out.back().skew=p.hand<0?-1.f:1.f;
+  const auto sp=prim::spiralOf(w,d,h);proxy(-sp.post,sp.post,-sp.post,sp.post,z,z+h);
+  for(int i=0;i<sp.risers;++i){const auto [a0,a1]=prim::spiralTread(sp,i,p.hand);const float am=(a0+a1)*.5f,top=z+sp.riser*(i+1),half=std::fabs(a1-a0)*.5f;
+   for(int j=0;j<4;++j){const float r=sp.post+(sp.radius-sp.post)*(j+.5f)/4,e=std::max(.05f,std::min(r*std::sin(half)*1.05f,(sp.radius-sp.post)/8*1.15f));
+    const float cu=r*std::cos(am),cv=r*std::sin(am);proxy(cu-e,cu+e,cv-e,cv+e,top-prim::SpiralTreadThickness,top);}}
+ }else if(k=="culvert"){
+  // A round pipe sunk into the floor at z: its shell in slices across it, the floor inside it the
+  // floor it stands on, walked through along its facing.
+  shape(ShapeCulvert);out.back().skew=p.thick;const auto c=prim::culvertOf(w,h,p.thick);const float centre=z+c.centre,inner=c.radius-c.shell;
+  constexpr int slices=16;
+  for(int i=0;i<slices;++i){const float u0=-hw+w*i/slices,u1=-hw+w*(i+1)/slices,m=(u0+u1)*.5f;
+   const float outer=std::sqrt(std::max(0.f,c.radius*c.radius-m*m)),top=centre+outer,low=std::max(z,centre-outer);if(top<=z+.01f)continue;
+   if(std::fabs(m)<inner){const float in=std::sqrt(inner*inner-m*m);proxy(u0,u1,-hd,hd,centre+in,top);if(centre-in>z+.01f)proxy(u0,u1,-hd,hd,low,centre-in);}
+   else proxy(u0,u1,-hd,hd,low,top);}
+ }else if(k=="buttress"){
+  // Full height at the wall behind it (-d/2), falling to 0.3 of it at its face; too steep to climb.
+  shape(ShapeButtress);const int slices=std::max(2,int(std::ceil(d/.25f)));
+  for(int i=0;i<slices;++i){const float t=(i+.5f)/slices;proxy(-hw,hw,-hd+d*i/slices,-hd+d*(i+1)/slices,z,z+h*(1-.7f*t));}
+ }else if(k=="chamfer"){shape(ShapeChamfer);proxy(-hw,hw,-hd,hd,z,z+h);}
+ else if(k=="octagon"){
+  shape(ShapeOctagon);const float r=hw,q=hd;
+  proxy(-r*.92f,r*.92f,-q*.38f,q*.38f,z,z+h);proxy(-r*.38f,r*.38f,-q*.92f,q*.92f,z,z+h);proxy(-r*.65f,r*.65f,-q*.65f,q*.65f,z,z+h);
+ }else if(k=="arcwall"){
+  // The wall's plan in slices across it, each as deep as the wall is there.
+  shape(ShapeArcWall);out.back().skew=p.thick;const auto plan=prim::outline("arcwall",w,d,p.thick);constexpr int slices=16;
+  auto span=[&](float u,float& lo,float& hi){
+   for(size_t a=0,b=plan.size()-1;a<plan.size();b=a++){const auto [ua,va]=plan[b];const auto [ub,vb]=plan[a];
+    if((ua-u)*(ub-u)>0||ua==ub)continue;const float v=va+(vb-va)*(u-ua)/(ub-ua);lo=std::min(lo,v);hi=std::max(hi,v);}};
+  for(int i=0;i<slices;++i){const float u0=-hw+w*i/slices,u1=-hw+w*(i+1)/slices;float lo=1e9f,hi=-1e9f;
+   for(float u:{u0+1e-3f,(u0+u1)*.5f,u1-1e-3f})span(u,lo,hi);if(hi>lo)proxy(u0,u1,std::max(-hd,lo),std::min(hd,hi),z,z+h);}
+ }else if(k=="catwalk"){
+  // A grating deck you walk on at z, steel stringers under its edges, guard rails h high
+  // along the sides asked for (rails: 1 the left as you walk toward facing, 2 the right).
+  constexpr float deck=.05f,stringer=.06f;
+  box(-hw,hw,-hd,hd,z-deck,z,7,p.solid);
+  part(-hw,-hw+stringer,-hd,hd,z-.25f,z-deck);part(hw-stringer,hw,-hd,hd,z-.25f,z-deck);
+  if(p.rails&1)box(hw-.05f,hw,-hd,hd,z,z+h,p.material,p.solid,true);
+  if(p.rails&2)box(-hw,-hw+.05f,-hd,hd,z,z+h,p.material,p.solid,true);
+ }
+}
+
+void addPrimitive(AuthoredMapData& map,const Primitive& p,bool solidWritten){
+ const size_t first=map.structures.size();expandPrimitive(p,map.structures);
+ map.primitives.push_back({std::string(p.kind),p.x,p.y,p.z,p.w,p.d,p.h,p.facing,p.material,p.solid,solidWritten,p.hand,p.rails,p.thick,first,map.structures.size()-first});
 }
 
 bool testPrimitives(){
@@ -262,6 +305,44 @@ bool testPrimitives(){
   check(make("plinth").back().top>PlayerStep&&make("megastep")[0].top>PlayerStep,"plinth and megastep: seat heights you jump onto");
   const auto roundel=roundelOpening(2,3);
   check(std::fabs(roundel.centre-1.5f)<.01f&&roundel.centre-roundel.radius<1.42f&&roundel.centre+roundel.radius>1.42f,"roundel: the opening frames the player's eye height");
+ }
+ {
+  // The new shapes at their defaults, walked as Movement walks: the highest collision top under
+  // her 0.4 m hull within a step of her feet carries her; anything else under her head stops her.
+  auto make=[](std::string_view kind,int hand=1,float w=0,float h=0){std::vector<Structure> o;Primitive p{kind,0,0,0,w,0,h,0,40};p.hand=hand;expandPrimitive(p,o);return o;};
+  struct Walked {bool through=true;float top=0,rise=0,room=1e9f;};
+  auto walk=[](const std::vector<Structure>& parts,const std::vector<Vec2>& path){
+   Walked out;float feet=0;constexpr float r=PlayerRadius;
+   for(const auto& at:path){
+    auto under=[&](const Structure& s){return s.solid&&at.x+r>s.x1&&at.x-r<s.x2&&at.y+r>s.y1&&at.y-r<s.y2;};
+    float support=0;for(const auto& s:parts)if(under(s)&&s.top<=feet+PlayerStep+1e-4f)support=std::max(support,s.top);
+    for(const auto& s:parts)if(under(s)&&s.top>support+1e-3f){if(s.bottom<support+PlayerHeight-1e-3f){out.through=false;return out;}out.room=std::min(out.room,s.bottom-support);}
+    out.rise=std::max(out.rise,support-feet);feet=support;out.top=std::max(out.top,feet);}
+   return out;};
+  auto line=[](Vec2 a,Vec2 b){std::vector<Vec2> p;for(int i=0;i<=400;++i)p.push_back(a+(b-a)*(i/400.f));return p;};
+  for(int hand:{1,-1}){
+   const auto sp=prim::spiralOf(2.4f,2.4f,3);const float r=(sp.post+sp.radius)*.5f+.05f;std::vector<Vec2> path;
+   const auto first=prim::spiralTread(sp,0,hand),last=prim::spiralTread(sp,sp.risers-1,hand);
+   // From the floor a tread short of the first, round and up to the middle of the last.
+   const float from=(first.first+first.second)*.5f-(first.second-first.first),to=(last.first+last.second)*.5f;
+   for(int i=0;i<=1600;++i){const float a=from+(to-from)*i/1600.f;path.push_back({r*std::cos(a),r*std::sin(a)});}
+   const auto w=walk(make("spiral",hand),path);
+   check(w.through&&w.rise<=PlayerStep&&std::fabs(w.top-3)<.01f&&w.room>=PlayerHeight,std::string("spiral stair (hand ")+(hand>0?"right":"left")+"): walked to its 3 m top in 0.17 m risers under 1.6 m+ of headroom ("+(w.through?"walked":"stopped")+", top "+std::to_string(w.top)+", rise "+std::to_string(w.rise)+", room "+std::to_string(w.room)+")");
+  }
+  {const auto w=walk(make("culvert"),line({0,-3},{0,3}));
+   const auto c=prim::culvertOf(2.6f,2.2f,0);const float shoulder=c.centre+std::sqrt((c.radius-c.shell)*(c.radius-c.shell)-PlayerRadius*PlayerRadius);
+   check(w.through&&w.top<.01f&&shoulder>=PlayerHeadroom,"culvert: walked through on the floor, 1.75 m+ clear at her shoulder");}
+  {const auto parts=make("catwalk");const auto w=walk(parts,line({0,-2.5f},{0,2.5f}));bool rails=true;int railCount=0;
+   for(const auto& s:parts)if(s.rail){++railCount;rails&=s.top>=GuardHeight-1e-4f;}
+   check(w.through&&w.top<1e-4f&&railCount==2&&rails,"catwalk: a grating deck walked at z between two 1.1 m guard rails");}
+  check(walk(make("wedge"),line({-2,0},{0,0})).through==false&&walk(make("pyramid"),line({-2.5f,0},{0,0})).through==false&&
+        walk(make("cone"),line({-1.5f,0},{0,0})).through==false&&walk(make("buttress"),line({0,1.5f},{0,-.5f})).through==false,
+        "roof wedge, pyramid, spire and buttress: too steep to climb at their defaults");
+  {const auto w=walk(make("wedge",1,4,.8f),line({-2.4f,0},{0,0}));check(w.through&&w.rise<=RampStep+1e-4f&&w.top>.7f,"a 1:2.5 roof wedge is walked up to its ridge in 0.1 m steps");}
+  check(!walk(make("arcwall"),line({0,-1.5f},{0,1.5f})).through&&walk(make("arcwall"),line({-2.6f,-1},{2.6f,-1})).through,"curved wall: it stops her, and she walks past behind its chord");
+  {const auto o=make("octagon");bool inside=true;for(size_t i=1;i<o.size();++i)inside&=o[i].x1>=-.3f-1e-4f&&o[i].x2<=.3f+1e-4f&&o[i].y1>=-.3f-1e-4f&&o[i].y2<=.3f+1e-4f;
+   check(o[0].shape==ShapeOctagon&&inside&&o.size()==4,"eight-sided pillar: drawn true over boxes inside its 0.6 m");}
+  {const auto o=make("chamfer");check(o[0].shape==ShapeChamfer&&o.size()==2&&std::fabs(o[1].top-1)<1e-4f,"bevelled block: stood on at its full 1 m");}
  }
  std::vector<Structure> ghost;expandPrimitive({"ramp",0,0,0,1,2,.4f,0,40,false},ghost);
  check(ghost.size()==1,"a non-solid primitive adds no collision proxies");

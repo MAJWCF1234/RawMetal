@@ -18,6 +18,57 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Connect: ropes, chains, hinges and the rest
+
+**Connect** (Decor page, the chain icon) joins a loose thing to another thing, a
+wall or the ceiling. Pick how on the right (**Join with**), then drag from the
+thing to what it joins, or click the thing and then click what it joins. While
+the drag is held the 3D view shows the joint as the game will play it (the drag
+preview), and the plan shows a dashed line from the thing to the pointer.
+- **Rope** and **Chain**: from the thing's top to the ceiling over the drag's end,
+  or to the other thing. Shoot the rope in play and it drops.
+- **Hinge**: drag from a standing panel (a gate) and its pin stands at the end
+  you drag toward; from a flat thing outward and it turns about that edge (a
+  hatch); across a plank to where it should balance (a seesaw).
+- **Spring**: hangs and bounces back. **Weld**: held fast until hit hard enough.
+- **Motor**: a hinge that turns by itself (a fan, a turntable).
+- **Pulley**: drag from one thing to another; each hangs from a wheel in the
+  ceiling over it, and as one goes down the other comes up.
+- **Hanging lamp**: click under a ceiling and a caged lamp hangs there on a
+  chain, its light swinging with it.
+
+It writes one `JOINT` record (the lamp also its loose prop and its `LIGHT`); its
+options are named fields with sensible defaults, listed in the inspector by the
+guide's labels. Deleting a thing takes its joints with it and renumbers the
+rest. `--connect-test` drives it (native-editor-connect-test.txt; the pictures
+in `.build/interaction/connect-*.bmp`); `--editing-test` runs it too.
+
+### Shapes
+
+**Shape** (Build page) lays ready-made building parts (PRIM records). The parts
+browser's Shapes page shows every kind with its picture, in six groups: Walls &
+openings, Supports, Roofs & slabs, Stairs & steps, Details and New shapes (the
+roof wedge, spire, pyramid roof, spiral stair, culvert, buttress, bevelled block,
+eight-sided pillar, curved wall and catwalk). The kinds, plain names and usual
+sizes are `src/world/PrimitiveKinds.h`, the engine's own table.
+
+- A click places the shape at its usual size; a drag sizes it from the corner
+  pressed, with a ghost showing its outline, the way it faces and its size.
+  Sizes snap softly to ones a player reads as right (1.2 m doors, 2.2 m heads,
+  3 m storeys); R turns the next shape a quarter.
+- Picked, a shape shows its real outline and an arrow the way it faces, on the
+  plan and in 3D. In 3D its handles: the green ones on its sides stretch that
+  side (the far side stays), the yellow one on top raises it, the cyan one in
+  front lifts it off the floor, the blue ring above it turns it a quarter at a
+  time. The sizes show in the status line as you drag; each drag is one undo.
+- The inspector says Width, Depth, Height, Faces, Material and Solid; the
+  numbers for where it stands are under Advanced.
+- Picking uses the shape's real turned outline (a curved wall is picked on the
+  wall, not in the hollow behind its bow).
+- `--shape-test` runs it alone (`native-editor-shape-test.txt`, pictures
+  `.build/interaction/shape-palette.bmp` and `shape-handle-drag.bmp`);
+  `--editing-test` runs it too.
+
 ### Glass and window walls
 
 **Window wall** (Build page) makes a storefront. Drag along a wall, or across an

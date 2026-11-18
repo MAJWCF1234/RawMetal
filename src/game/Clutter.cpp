@@ -12,6 +12,7 @@
 #include "../world/GlassFracture.h"
 #include "ai/WalkQueryCache.h"
 #include "physics/PropBodies.h"
+#include "../world/GibSets.h"
 namespace retro {
 PropTraits Game::propTraits(int id){
  if(id<0||id>=FacilityModelCount)return {PropMaterial::Plastic,1,0,{.1f,.1f,.1f}};
@@ -37,7 +38,10 @@ std::vector<Clutter> Clutter::shards(ShardOf of,Point3 centre,std::array<float,3
   const float sign=i%2?1.f:-1.f;c.spin=sign*(3.f+float(i%3));c.pitchSpeed=-sign*(2.5f+float(i%2));c.rollSpeed=sign*2.f;out.push_back(c);}
  return out;
 }
-float Clutter::mass()const{if(traits&&traits->mass>0)return traits->mass;if(model<0)return 1;auto t=Game::propTraits(model);return model::mass[model]>0?t.mass:std::clamp(140*dims[0]*dims[1]*dims[2],.05f,30.f);}
+float Clutter::mass()const{
+ // What it holds weighs too (Liquids.h).
+ const float held=liquid.holds()?liquid.level*liquid::capacity(model,size())*liquid::of(liquid.kind).density:0.f;
+ if(traits&&traits->mass>0)return traits->mass+held;if(model<0)return 1;auto t=Game::propTraits(model);return (model::mass[model]>0?t.mass:std::clamp(140*dims[0]*dims[1]*dims[2],.05f,30.f))+held;}
 // The cart handle rises above its load-bearing tray. Preserve that space for desktop items.
 float Clutter::supportHeight()const{return model==model::med_crash_cart&&std::fabs(pitch)+std::fabs(roll)<.1f?dims[2]*.809f:height();}
 void Game::knockClutter(int level,size_t index,Point3 at,Point3 impulse){
@@ -59,13 +63,26 @@ void Game::knockClutter(int level,size_t index,Point3 at,Point3 impulse){
  c.spin+=std::clamp(torque.z/std::max(.001f,inertia),-14.f,14.f);c.pitchSpeed+=std::clamp(torque.y/std::max(.001f,inertia),-14.f,14.f);c.rollSpeed+=std::clamp(torque.x/std::max(.001f,inertia),-14.f,14.f);
 }
 void Game::breakClutter(int level,size_t index,Point3 direction){
- auto&list=level==m_level?m_clutter:m_chunks[level].clutter;auto&c=list.at(index);if(c.model<0||c.broken||(c.traits&&c.traits->breakable==0))return;containers::release(list,index);int owner=c.soundOwner;knockClutter(level,index,{c.pos.x,c.pos.y,c.z},{});c.soundOwner=owner;c.broken=true;if(level==m_level&&int(index)==m_heldClutter)m_heldClutter=-1;c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;
+ auto&list=level==m_level?m_clutter:m_chunks[level].clutter;auto&c=list.at(index);if(c.model<0||c.broken||(c.traits&&c.traits->breakable==0))return;const Clutter before=c;containers::release(list,index);int owner=c.soundOwner;knockClutter(level,index,{c.pos.x,c.pos.y,c.z},{});c.soundOwner=owner;c.broken=true;if(level==m_level&&int(index)==m_heldClutter)m_heldClutter=-1;c.sleeping=true;c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;
+ spillLiquid(level,c,{before.velocity.x,before.velocity.y,before.vz},1);   // a bottle broken spills all it held
  m_breakEvents.push_back({c.pos,c.z,direction,m_elapsed,level,c.material(),c.footprint(),c.height()});m_breakEvents.back().model=c.model;if(m_breakEvents.size()>24)m_breakEvents.erase(m_breakEvents.begin());
  const auto&t=propMaterialTraits(c.material());auto shift=chunkOffset(level)-chunkOffset(m_level);SoundEvent sound{t.breakSound,c.pos+shift,1,t.breakPitch,true,17,c.z};sound.owner=owner;sound.aiRadius=c.material()==PropMaterial::Ceramic?7:8;m_sounds.push_back(sound);if(c.breakState)setState(c.breakState,1);
  if(c.material()==PropMaterial::Organic||c.material()==PropMaterial::Glass)m_bulletImpacts.push_back({c.pos,c.z+.005f,{},m_elapsed,level,true,c.material()==PropMaterial::Glass?1:int(CreatureKind::Mutant),1});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
  // A solid prop (wood, plastic, metal, electronics, cardboard) comes apart in pieces of itself, cut
  // from its own mesh with its own sheet; glass and pottery shatter to chips, food and paper to nothing.
  // Queued, not added here: callers hold references into the list (landShards adds them).
+ // A prop with authored gibs (GibSets.h, cut in Blender by tools/library/make_gibs.py) comes apart into those:
+ // each a prop of its own (a Vectra body, saved as any prop is), where it sat in the prop as it stood, turned as
+ // it was, going on at the prop's speed and thrown out from its middle and along the blow.
+ if(const auto* set=gibs::setOf(c.model)){const vectra::Quat q=vectra::propOrientation(c);const vectra::V3 centre=vectra::propCentre(c),dir{direction.x,direction.y,direction.z};
+  const vectra::V3 moving{before.velocity.x,before.velocity.y,before.vz};
+  for(int k=0;k<set->count;++k){const auto& p=gibs::pieces[size_t(set->first+k)];Clutter g;g.kind=c.kind;g.model=p.model;g.dims={p.size[0]*c.dims[0],p.size[1]*c.dims[1],p.size[2]*c.dims[2]};
+   const vectra::V3 off=q.rotate({p.offset[0]*c.dims[0],p.offset[1]*c.dims[1],p.offset[2]*c.dims[2]}),at=centre+off;
+   g.orient={q.w,q.x,q.y,q.z};q.toEuler(g.yaw,g.pitch,g.roll);g.orientEuler={g.yaw,g.pitch,g.roll};g.pos={at.x,at.y};g.z=at.z-g.extent()[2];
+   const float h=float((k*2654435761u)%1000)/1000.f;const vectra::V3 out=vectra::norm(vectra::V3{off.x,off.y,0},vectra::V3{std::cos(h*6.283f),std::sin(h*6.283f),0});
+   const vectra::V3 v=moving+out*(1.1f+.6f*h)+dir*1.2f+vectra::V3{0,0,1.2f+.8f*h};g.velocity={v.x,v.y};g.vz=v.z;
+   vectra::setPropAngular(g,vectra::V3{(h-.5f)*8.f,(.5f-h)*6.f,(h-.3f)*5.f});g.sleeping=false;g.soundOwner=owner;m_pendingShards.push_back({level,g});}
+  return;}
  {const auto m=c.material();const float big=std::max({c.dims[0],c.dims[1],c.dims[2]});
   if((m==PropMaterial::Wood||m==PropMaterial::Plastic||m==PropMaterial::Metal||m==PropMaterial::Electronic||m==PropMaterial::Cardboard)&&big>=.12f){
    const Point3 centre{c.pos.x,c.pos.y,c.z+c.height()*.5f};const Point3 d=direction;
@@ -75,7 +92,9 @@ void Game::landShards(){
  for(auto&[level,c]:m_pendingShards){if(level==m_level)m_clutter.push_back(c);else if(level>=0&&level<chunkCount())m_chunks[level].clutter.push_back(c);}
  m_pendingShards.clear();
 }
-bool Game::damageClutter(int level,size_t index,float amount,Point3,Point3 direction){auto&c=(level==m_level?m_clutter:m_chunks[level].clutter).at(index);if(c.model<0||c.broken)return false;c.damage+=std::max(0.f,amount);float health=c.traits&&c.traits->health>=0?c.traits->health:propTraits(c.model).health;if(c.traits&&c.traits->breakable>0&&health<=0)health=20;if(health>0&&c.damage>=health){breakClutter(level,index,direction);return true;}return false;}
+bool Game::damageClutter(int level,size_t index,float amount,Point3 at,Point3 direction){auto&c=(level==m_level?m_clutter:m_chunks[level].clutter).at(index);if(c.model<0||c.broken)return false;
+ // A bottle holding liquid takes its first round as a hole it leaks from (Liquids.h); the next breaks it.
+ if(level==m_level&&c.liquid.holds()&&!c.liquid.holed&&amount<60){holeLiquid(c,at);return false;}c.damage+=std::max(0.f,amount);float health=c.traits&&c.traits->health>=0?c.traits->health:propTraits(c.model).health;if(c.traits&&c.traits->breakable>0&&health<=0)health=20;if(health>0&&c.damage>=health){breakClutter(level,index,direction);return true;}return false;}
 void Game::seedClutter(){
  m_heldClutter=-1;m_carryClutter=-1;m_clutter.clear();
  for(const auto& spawn:m_world.clutterSpawns()){
@@ -86,7 +105,7 @@ void Game::seedClutter(){
    for(auto offset:c.footprintOffsets()){float x=offset.x,y=offset.y;float z=m_world.supportBelow(c.pos.x+x,c.pos.y+y,c.z+.05f,true);for(const auto&other:m_clutter){auto oe=other.extent();if(other.broken)continue;if(other.model>=0){if(other.footprintContains(c.pos+Vec2{x,y}))z=std::max(z,containers::supportAt(other,c.pos+Vec2{x,y},c.z+.005f));}else if(std::fabs(c.pos.x+x-other.pos.x)<=oe[0]&&std::fabs(c.pos.y+y-other.pos.y)<=oe[1]&&other.z+other.supportHeight()<=c.z+.03f)z=std::max(z,other.z+other.supportHeight());}support=std::max(support,z);}
    if(c.z-support>=-.025f&&c.z-support<=.03f){c.z=support;c.sleeping=true;}
   }
-  m_clutter.push_back(c);
+  seedLiquid(c);m_clutter.push_back(c);
  }
  containers::settleAuthored(m_clutter);m_softPads.clear();refreshPinnedClutter();
 }
@@ -115,7 +134,7 @@ bool Game::interactClutter(int grabHand){
  m_carryClutter=-1;
  if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float thrown=-1;   // desktop: the throw's own speed, the walk left out
-  if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=m_vrHandVelocity[m_vrCarryHand];c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}
+  if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand]){auto v=carryVelocity();c.velocity={std::clamp(v.x,-12.f,12.f),std::clamp(v.y,-12.f,12.f)};c.vz=std::clamp(v.z,-12.f,12.f);}
   else{
    // Desktop: the held prop follows look. Releasing mid-spin or mid-flick keeps that path
    // (and this frame's mouse rate, so a same-frame whip still flings it).
@@ -238,14 +257,15 @@ void Game::resolveHeldPropBodies(){
  const Clutter at=prop;pushBodiesFromCarried(prop,at);
 }
 void Game::updateClutter(const InputState&input,float dt){
- landShards();refreshPinnedClutter();
+ landShards();refreshPinnedClutter();updatePhysgloves(input,dt);
  std::vector<std::pair<int,containers::Snapshot>> contents;for(int level=0;level<chunkCount();++level)if(level==m_level||chunkResident(level)){auto&list=level==m_level?m_clutter:m_chunks[level].clutter;contents.push_back({level,containers::capture(list,level==m_level?m_heldClutter:-1,!vectra::legacyProps())});
    // Vectra: what a carrying container holds rides from this step (out of the solver, set in place by
    // carry), not from the next: a crate shoved at a sprint would otherwise hit its own bottles at 5 m/s.
    if(!vectra::legacyProps())for(const auto&r:contents.back().second.riders)list[size_t(r.item)].riding=true;}
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
- if(!holdingClutter())m_carryClutter=-1;
- if(holdingClutter()){
+ if(!holdingClutter()){m_carryClutter=-1;m_vrSecondHand=-1;}
+ if(holdingClutter()&&m_vrSecondHand>=0&&m_vrInputActive)updateTwoHandCarry(input,m_clutter[size_t(m_heldClutter)]);   // two hands on it (VR)
+ else if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;
   if(m_carryClutter!=m_heldClutter){m_carryClutter=m_heldClutter;m_carryDistance=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f;m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
   const Clutter previous=c;const float oldOffset=m_carryYawOffset;
@@ -287,6 +307,7 @@ void Game::updateClutter(const InputState&input,float dt){
  }
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
  for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
+ updateLiquids(dt);followVrHands();
  for(const auto&[level,snapshot]:contents)containers::carry(level==m_level?m_clutter:m_chunks[level].clutter,snapshot,level==m_level?m_heldClutter:-1);
  updateSoftBodies(dt);
  landShards();
@@ -455,7 +476,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     float speed=std::max(.25f,dot(velocity,n)*std::min(1.f,4/c.mass()));c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.soundOwner=owner;c.sleeping=false;c.restTime=0;};
    for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];if(npc.pose.clip!=1||!autonomousActor(npc.track())||npcHeld(a))continue;auto offset=chunkOffset(npc.level)-chunkOffset(level);Vec2 velocity{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};if(npc.pose.clip!=1)velocity={};kick(npc.pose.position+offset,npc.pose.z,friendlyHullHeight(a,npc.track()),velocity,int(a));}
    const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;for(const auto&e:enemies)if(e.alive&&e.moving)kick(e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom(),{std::cos(e.heading),std::sin(e.heading)},-1,std::max(.22f,e.radius()+.05f));   // walks through props (hullFits props=false), shoving them from its whole body
-   if(m_vrInputActive&&level==m_level)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]){auto p=m_vrHandPosition[hand],v=m_vrHandVelocity[hand];if(p.z>=c.z-.08f&&p.z<=c.z+c.height()+.08f&&std::fabs(p.x-c.pos.x)<e[0]+.08f&&std::fabs(p.y-c.pos.y)<e[1]+.08f){knockClutter(level,index,p,v*(std::min(2.f,c.mass())*.35f));c.soundOwner=-1;}}
+   if(m_vrInputActive&&level==m_level&&!rigidCore)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]){auto p=m_vrHandPosition[hand],v=m_vrHandVelocity[hand];if(p.z>=c.z-.08f&&p.z<=c.z+c.height()+.08f&&std::fabs(p.x-c.pos.x)<e[0]+.08f&&std::fabs(p.y-c.pos.y)<e[1]+.08f){knockClutter(level,index,p,v*(std::min(2.f,c.mass())*.35f));c.soundOwner=-1;}}
   }
   if(c.model>=0){const auto&w=level==m_level?m_world:m_chunks[level].world;auto e=c.extent();
    for(const auto&door:w.doors()){if(!door.opening&&door.open<=0)continue;const Vec2 centre=door.centre();float base=w.floorHeight(centre.x,centre.y)+door.z;if(c.z>=base+2.5f||c.z+c.height()<=base)continue;

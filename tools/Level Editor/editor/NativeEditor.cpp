@@ -6,6 +6,7 @@
 #include "../src/world/SkyboxCatalog.h"
 #include "../src/world/TerrainField.h" // the ground the engine builds, sampled the same here (NativeOutdoorMethods.inc)
 #include "../src/world/Footing.h" // footings planned as the engine plans them (NativeGroundMethods.inc)
+#include "../src/world/PrimitiveKinds.h" // the Shape tool's kinds, sizes and outlines (NativeShapeTool.inc)
 #include "NativeCommands.h"
 #include "NativeDocument.h"
 #include "NativeObjects.h"
@@ -763,7 +764,9 @@ enum {
   // The Breach tool (NativeBreachTool.inc).
   BreachShapeList=800,BreachEdgeList,BreachSizeList,BreachRubbleList,
   // The Growth brush (NativeGrowthTool.inc).
-  GrowthKindList=810,GrowthModeList,GrowthSizeList,GrowthDensityList,GrowthScaleList,GrowthSeedBox
+  GrowthKindList=810,GrowthModeList,GrowthSizeList,GrowthDensityList,GrowthScaleList,GrowthSeedBox,
+  // The Connect tool (NativeConnectTool.inc).
+  ConnectKindList=2630
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -784,7 +787,7 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Lamp", L"☀", L"Click to hang a lamp.", 1, "LIGHT", 'p'},
     {L"Sign", L"✎", L"Click a wall to put up the sign shown in the Sign designer. Click a sign to change it.", 1, "SIGN", 'p'},
     {L"Furniture", L"⌂", L"Pick a model on the right, then click to place it.", 1, "FIXTURE", 'p'},
-    {L"Shape", L"▲", L"Click to place an arch, pillar or dome. Pick which on the right.", 0, "PRIM", 'p'},
+    {L"Shape", L"▲", L"Click for the usual size, or drag to size it. R turns it. Pick the shape on the right.", 0, "PRIM", 'r'},
     {L"Pipe", L"═", L"Drag from one end of the pipe to the other.", 1, "PIPE", 'l'},
     {L"Water", L"≈", L"Drag a pool of water.", 1, "WATER", 'r'},
     {L"Stairs", L"⇗", L"Drag a box. The stairs climb the long way. R turns them.", 0, "STAIR", 'r'},
@@ -825,12 +828,13 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Window wall", L"▦", L"Drag along a wall, or across an opening: a framed storefront of glass panes. Bays, rows, heights, panes, frame and a doorway on the right. Click a bay of one to give its panes the kind picked (Shift: the bottom pane only).", 0, "GLAZING", 'r'},
     {L"Breach", L"◠", L"Drag along a wall to break a hole through it: ragged, arched or square, with a chipped edge, rebar and rubble. You walk, see and shoot through it, and light comes through.", 0, "BREACH", 'r'},
     {L"Growth", L"❦", L"Paint ivy and moss on walls, creepers hanging from ceilings and ledges, and grass through the floor. What, brush size, density, size and seed on the right; Erase (or Alt) clears it. Ctrl+Z takes a stroke back.", 1, "", 'G'},
+    {L"Connect", L"⛓", L"Join a loose thing to another thing, a wall or the ceiling: a rope, chain, hinge, spring, weld, motor or pulley (pick on the right). Drag from the thing to what it joins, or click one then the other. Hanging lamp: click under a ceiling.", 1, "JOINT", 'l'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
                      TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
-                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49;
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -926,7 +930,13 @@ static constexpr Friendly friendlyFields[] = {
     {"# EDITOR_FILM", "btilt", L"...tilted to (degrees)"},
     {"# EDITOR_FILM", "claire", L"Turned on Claire at the start (1 yes)"},
     {"COMPACTOR", "period", L"Seconds per crush"},
-    {"PRIM", "h", L"Height (0 = usual)"},
+    {"PRIM", "kind", L"Shape"},
+    {"PRIM", "w", L"Width (m; 0 = usual)"},
+    {"PRIM", "d", L"Depth (m; 0 = usual)"},
+    {"PRIM", "h", L"Height (m; 0 = usual)"},
+    {"PRIM", "facing", L"Faces: 0 south, 1 east, 2 north, 3 west"},
+    {"PRIM", "material", L"Material"},
+    {"PRIM", "solid", L"Solid (1 yes, 0 walk through)"},
     {"SURFACE", "wall", L"Walls (-1 to 12)"},
     {"SURFACE", "floor", L"Floor (-1 to 12)"},
     {"SURFACE", "ceiling", L"Ceiling (-1 to 12)"},
@@ -1033,7 +1043,8 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false;
+  bool connectTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1089,6 +1100,8 @@ struct Editor {
 #include "NativeShots.inc"
 #include "NativeSelectionMethods.inc"
 #include "NativeGizmoMethods.inc"
+#include "NativeShapeTool.inc"
+#include "NativeShapeRegression.inc"
 #include "NativeLayerDockMethods.inc"
 #include "NativeCampaignMethods.inc"
 #include "NativeCorridorTests.inc"
@@ -1113,6 +1126,8 @@ struct Editor {
 #include "NativeGlazingRegression.inc"
 #include "NativeBreachTool.inc"
 #include "NativeBreachRegression.inc"
+#include "NativeConnectTool.inc"
+#include "NativeConnectRegression.inc"
 #include "NativeGrowthTool.inc"
 #include "NativeGrowthRegression.inc"
 #include "NativeEditorPictures.inc"
@@ -1705,8 +1720,8 @@ struct Editor {
     std::vector<parts::Item> out;
     for (auto &[id, name] : models)
       out.push_back({"model-" + std::to_string(id), parts::nice(name), id, parts::tabOf(name)});
-    for (int k = 0; k < 10; ++k)
-      out.push_back({"prim-" + std::to_string(k), wide(parts::primNames[k]), k, parts::Shapes});
+    for (int k = 0; k < retro::prim::kindCount; ++k)
+      out.push_back({"prim-" + std::to_string(k), wide(retro::prim::kinds[size_t(k)].label), k, parts::Shapes, int(retro::prim::kinds[size_t(k)].section)});
     for (int n = 1, count = stampCount(); n <= count; ++n)
       out.push_back({"stamp-" + std::to_string(n), L"Stamp " + std::to_wstring(n), n, parts::Stamps});
     return out;
@@ -1725,10 +1740,16 @@ struct Editor {
         in = lowered(utf8(item.name)).find(query) != std::string::npos || item.key.find(query) != std::string::npos;
       if (!in)
         continue;
-      if (item.key == current)
-        pick = int(shown.size());
       shown.push_back(item);
     }
+    // The Shapes page in its groups, in plain words (the shapes' order within each).
+    partsGrid.showSections = partTab == parts::Shapes && query.empty();
+    partsGrid.sectionNames = parts::shapeSections;
+    if (partsGrid.showSections)
+      std::stable_sort(shown.begin(), shown.end(), [](const parts::Item &a, const parts::Item &b) { return a.section < b.section; });
+    for (size_t i = 0; i < shown.size(); ++i)
+      if (shown[i].key == current)
+        pick = int(i);
     partsGrid.set(std::move(shown), pick);
     for (HWND b : partTabButtons)
       InvalidateRect(b, nullptr, FALSE);
@@ -2013,6 +2034,7 @@ struct Editor {
     }
   }
   // The engine draws every missing picture once, in the background.
+  std::string thumbsOnly; // makeThumbnails draws only the pictures named so (a test's prefix)
   void makeThumbnails(bool wait) {
     if (shotsProcess.hProcess)
       return;
@@ -2031,6 +2053,8 @@ struct Editor {
       base.replace(index, f);
     }
     auto needed = [&](const std::string &key) {
+      if (!thumbsOnly.empty() && key.rfind(thumbsOnly, 0) != 0)
+        return false; // a test asked for one kind of picture only
       return !thumbs.exists(key) && !fs::exists(folder / (wide(key) + L".failed"), ec);
     };
     auto shot = [&](const std::string &key, const NativeDocument &d, float x, float y, float eye, float yaw, float targetZ, float dist) {
@@ -2064,17 +2088,26 @@ struct Editor {
       float eye = std::clamp(h * .55f + dist * .3f, .25f, 8.f);
       shot("model-" + std::to_string(id), doc2, 12 + dist * .7071f, 12 + dist * .7071f, eye, 225, h * .45f, dist);
     }
-    for (int k = 0; k < 10; ++k) {
+    for (int k = 0; k < retro::prim::kindCount; ++k) {
       if (!needed("prim-" + std::to_string(k)))
         continue;
       NativeDocument doc2 = base;
-      // An arch must clear a standing player: the engine refuses a 2 m one, so it is shown at its usual 2.4 x 3.4 m.
-      bool arch = std::string(primKinds[k]) == "arch";
-      doc2.add({"PRIM", "0", primKinds[k], "12", "12", "0", arch ? "2.4" : "2", arch ? "0.6" : "2", arch ? "3.4" : "2", "0", "5"});
-      doc2.add({"LIGHT", "0", "14", "10", "4", "0", "0", "1.8", "14", "4400"});
-      doc2.add({"LIGHT", "0", "14.4", "14.4", "3", "0", "0", "1.2", "12", "5200"});
-      float away = arch ? 6.6f : 3.6f;
-      shot("prim-" + std::to_string(k), doc2, 12 + away * .7071f, 12 + away * .7071f, arch ? 2.6f : 2.3f, 225, arch ? 1.7f : 1.f, away);
+      // Each shape at its usual size (an arch must clear a standing player, so none is shown smaller),
+      // framed by that size; the first ten keep the framing their pictures always had.
+      const auto &info = retro::prim::kinds[size_t(k)];
+      const auto usual = retro::prim::resolve(info.name, 0, 0, 0);
+      const bool arch = info.name == "arch";
+      const float s = std::max({usual.w, usual.d, usual.h});
+      if (k < 10)
+        doc2.add({"PRIM", "0", std::string(info.name), "12", "12", "0", arch ? "2.4" : "2", arch ? "0.6" : "2", arch ? "3.4" : "2", "0", "5"});
+      else
+        doc2.add({"PRIM", "0", std::string(info.name), "12", "12", "0", "0", "0", "0", "0", info.name == "wedge" || info.name == "pyramid" ? "48" : info.name == "cone" ? "19" : "5"});
+      doc2.add({"LIGHT", "0", "14", "10", trimmed(std::max(4.f, usual.h + 1.5f)), "0", "0", "1.8", "14", "4400"});
+      doc2.add({"LIGHT", "0", "14.4", "14.4", trimmed(std::max(3.f, usual.h + .5f)), "0", "0", "1.2", "12", "5200"});
+      const float away = k < 10 ? (arch ? 6.6f : 3.6f) : std::clamp(s * 1.5f + 1.2f, 3.f, 11.f);
+      const float eye = k < 10 ? (arch ? 2.6f : 2.3f) : std::clamp(usual.h * .7f + away * .3f, 1.2f, 7.f);
+      const float target = k < 10 ? (arch ? 1.7f : 1.f) : usual.h * .45f;
+      shot("prim-" + std::to_string(k), doc2, 12 + away * .7071f, 12 + away * .7071f, eye, 225, target, away);
     }
     for (auto &[id, name] : structureMaterials) {
       if (!parts::paintable(name))
@@ -3123,6 +3156,14 @@ struct Editor {
     for (auto index : objects()) {
       if (!activeFloorRecord(index)) continue;
       auto h = *handleFor(index);
+      if (auto pf = NativeDocument::fields(doc.lines[index]); primRecord(pf)) {
+        if (!primHit(pf, x, y))
+          continue;
+        float score = std::hypot(x - h.x, y - h.y) + h.width * h.depth * .01f;
+        if (score < best)
+          hit = int(index), best = score;
+        continue;
+      }
       float px=x-h.x,py=y-h.y,w=h.width,d=h.depth;
       if(auto box=creationBox(NativeDocument::fields(doc.lines[index]))){float c=std::cos(box->yaw),s=std::sin(box->yaw),vx=x-box->x,vy=y-box->y;px=vx*c-vy*s;py=vx*s+vy*c;w=box->w;d=box->d;}
       float dx=std::max(0.f,std::abs(px)-w*.5f),dy=std::max(0.f,std::abs(py)-d*.5f);
@@ -3827,8 +3868,6 @@ struct Editor {
     auto s = modelList ? SendMessageW(modelList, CB_GETCURSEL, 0, 0) : -1;
     return s < 0 ? 0 : int(SendMessageW(modelList, CB_GETITEMDATA, s, 0));
   }
-  static constexpr const char *primKinds[] = {"box", "pillar", "stairs", "ramp", "column",
-                                              "arch", "vault", "dome", "doorframe", "window"};
   // Builds one record of this kind from a gesture. Box kinds take the dragged
   // corners, line kinds the two ends, point kinds the release point.
   int authorKind(const std::string &kindName, float ax, float ay, float bx, float by) {
@@ -3904,8 +3943,7 @@ struct Editor {
       if (model)
         sized(selectedModel()), set("pitch", "0"), set("roll", "0"), set("breakState", "");
     } else if (k == "PRIM") {
-      set("kind", primKinds[std::clamp(listIndex(primList), 0, int(std::size(primKinds)) - 1)]);
-      set("z", n(lift)), set("w", "0"), set("d", "0"), set("h", "0"), set("facing", "0");
+      authorShape(set, ax, ay, bx, by, lift); // NativeShapeTool.inc: a click the usual size, a drag its own
       set("material", std::to_string(structureMaterial));
     } else if (k == "TERMINAL") {
       set("z", n(lift)), set("control", "0"), set("title", "COMPUTER"), set("line1", "HELLO."), set("line2", "");
@@ -3951,6 +3989,9 @@ struct Editor {
       auto run = wallRunAt(ax, ay, bx, by);
       glazingBox(f, run, floorZ, creationCeiling());
       glazingFields(f, run, floorZ, creationCeiling(), glassWindow);
+    } else if (k == "JOINT") {
+      if (!connectFields(f, ax, ay, bx, by, floorZ)) // a thing joined to a thing, a wall or the ceiling (NativeConnectTool.inc)
+        return -1;
     } else if (k == "BREACH") {
       if (!breachFields(f, ax, ay, bx, by, floorZ)) // on a wall only (NativeBreachTool.inc)
         return -1;
@@ -4164,7 +4205,7 @@ struct Editor {
         authorBox(l, t, r, b);
         return;
       }
-      if (info.shape == 'l' && tool != 10 && tool != FilmTool && std::hypot(bx - ax, by - ay) < .1f) {
+      if (info.shape == 'l' && tool != 10 && tool != FilmTool && tool != ConnectTool && std::hypot(bx - ax, by - ay) < .1f) {
         message(L"Drag from one end to the other.");
         return;
       }
@@ -4438,7 +4479,7 @@ struct Editor {
         return;
       }
       int modifiers=0;in>>modifiers;bool extend=(modifiers&1)!=0;
-      if(!extend&&(beginHeightDrag(ox,oy,oz,dx,dy,dz)||beginFootprintDrag3D(ox,oy,oz,dx,dy,dz)))return;
+      if(!extend&&(beginPrimHandle3D(ox,oy,oz,dx,dy,dz)||beginHeightDrag(ox,oy,oz,dx,dy,dz)||beginFootprintDrag3D(ox,oy,oz,dx,dy,dz)))return;
       int hit = selectAlongRay(ox, oy, oz, dx, dy, dz);
       if(hit<0){pickMapSurface(ox,oy,oz,dx,dy,dz);return;}
       if(!extend&&selected(hit))selectRecord(hit,true);else selectionPick(hit,extend);
@@ -4446,6 +4487,7 @@ struct Editor {
       beginBodyDrag3D(ox,oy,oz,dx,dy,dz);
       return;
     }
+    if(held&&primHandle>=0&&objectDrag){applyPrimHandle3D(ox,oy,oz,dx,dy,dz);if(objectMoved&&liveTurn()){publish();lastDragPublish=GetTickCount64();}return;}
     if(held&&bodyDragging&&objectDrag){applyBodyDrag3D(ox,oy,oz,dx,dy,dz);if(objectMoved&&liveTurn()){publish();lastDragPublish=GetTickCount64();}return;}
     if(held&&verticalDragging&&objectDrag){float z;if(verticalRay(ox,oy,oz,dx,dy,dz,z)){applyHeightDelta(z-verticalStart);if(objectMoved&&liveTurn())publish();}return;}
     if(held&&viewDrag&&objectDrag&&resizeHandle>=0){float fx,fy;if(floorPoint(ox,oy,oz,dx,dy,dz,resizePlane,fx,fy)){applyCornerDrag(fx-viewGrabX,fy-viewGrabY);if(objectMoved&&liveTurn())publish();}return;}
@@ -4526,6 +4568,7 @@ struct Editor {
     }
     objectDrag = objectMoved = false;
     viewDrag = verticalDragging = bodyDragging = false;
+    primHandle = -1;
     dragMates.clear();dragSelection.clear();resizeHandle=-1;
     InvalidateRect(plan, nullptr, FALSE);
   }
@@ -4636,6 +4679,11 @@ struct Editor {
         turnDoorGhost(); // the Door tool turns the door it is about to fit
       else if (tool == FilmTool && !filmPicked())
         turnFilm(); // the Film camera tool turns the camera it is about to place
+      else if (tool == 9) { // the Shape tool turns the shape it is about to place
+        primFacing = (primFacing + 1) & 3;
+        message(L"The next shape faces " + wide(retro::prim::facingWord(primFacing)) + L".");
+        InvalidateRect(plan, nullptr, FALSE);
+      }
       else
       rotateSelected();
       return true;
@@ -5053,6 +5101,9 @@ struct Editor {
     for (HWND list : breachControls())
       if (list)
         ShowWindow(list, SW_HIDE);
+    for (HWND list : connectControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
     for (HWND list : growthControls())
       if (list)
         ShowWindow(list, SW_HIDE);
@@ -5209,6 +5260,8 @@ struct Editor {
       glazingRows(row);
     if (tool == BreachTool)
       breachRows(row);
+    if (tool == ConnectTool)
+      connectRows(row);
     if (tool == GrowthTool)
       growthRows(row);
     if (tool == FilmTool) {
@@ -6203,7 +6256,9 @@ struct Editor {
     verifyFormatTwo(); // NativeFormatRegression.inc: named fields, the inspector, prefabs
     verifyGlazingRegressions(false); // NativeGlazingRegression.inc: the Window wall and Glass tools
     verifyBreachRegressions(false);  // NativeBreachRegression.inc: the Breach tool
+    verifyConnectRegressions(false); // NativeConnectRegression.inc: the Connect tool
     verifyGrowthRegressions(false);  // NativeGrowthRegression.inc: the Growth brush
+    verifyShapes(false);             // NativeShapeRegression.inc: the Shape tool's palette, sizing, handles and picking
     verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
     verifyGround(false); // NativeGroundRegression.inc: rooms on the land, footings, raise, patios
     verifyFlooring(); // NativeFlooringRegression.inc: the Flooring tool
@@ -6511,8 +6566,8 @@ struct Editor {
         } else if (k == "CLUTTER")
           choose(clutterList, ClutterList, std::clamp(std::stoi(f[2]), 0, 6));
         if (k == "PRIM") {
-          for (int p = 0; p < int(std::size(primKinds)); ++p)
-            if (f[2] == primKinds[p])
+          for (int p = 0; p < retro::prim::kindCount; ++p)
+            if (f[2] == retro::prim::kinds[size_t(p)].name)
               choose(primList, PrimList, p);
           choose(heightList, HeightList, 0);
         }
@@ -8702,6 +8757,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       for(size_t i=0;i<corners.size();++i){auto test=f;if(!resizeNative(test,e->schemas[size_t(schema)].fields,int(i),corners[i].first,corners[i].second,0))continue;
         int x=int(ox+corners[i].first*cell),y=int(oy+corners[i].second*cell);RECT q{x-5,y-5,x+6,y+6};FillRect(dc,&q,brush);}
       DeleteObject(brush);}}
+  e->drawShapeSelection(dc, ox, oy, cell); // a picked shape: its real outline and the way it faces
   if(e->selectingArea)outline(std::min(e->areaX,e->areaEndX),std::min(e->areaY,e->areaEndY),std::max(e->areaX,e->areaEndX),std::max(e->areaY,e->areaEndY),ui::Selected,1,PS_DASH);
   // Ghost of what the tool will make: the stretched box or line while
   // dragging (here or in 3D), else a marker under the pointer.
@@ -8716,14 +8772,24 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       if (shape == 'R' && e->autoDetail)
         outline(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ui::Lamp, 1, PS_DOT);
     };
-    if (shape == 'T' || shape == 'N' || shape == 'G')
+    if (e->tool == 9)
+      e->drawShapeGhost(dc, ox, oy, cell, stretching, hx, hy, ghost);
+    else if (shape == 'T' || shape == 'N' || shape == 'G')
       e->drawBrushRing(dc, ox, oy, cell, hx, hy);
     else if (shape == 'd')
       // The door this click or drag fits, in the wall's direction, as R has turned it.
       drawDoor(dc, stretching ? e->plannedDoor(e->dragFX, e->dragFY, hx, hy) : e->plannedDoor(hx, hy, hx, hy), ghost, true);
     else if (stretching && (shape == 't' || shape == 'R' || shape == 'w' || shape == 'c'))
       tileBox(e->dragFX, e->dragFY, hx, hy);
-    else if (stretching && shape == 'l') {
+    else if (!stretching && e->tool == ConnectTool && e->connectPending) {
+      // Connect, its first thing clicked: the joint's line from it to the pointer.
+      auto p = ui::dashedPen(3, ghost);
+      auto old = SelectObject(dc, p);
+      MoveToEx(dc, int(ox + e->connectFromX * cell), int(oy + e->connectFromY * cell), nullptr);
+      LineTo(dc, int(ox + hx * cell), int(oy + hy * cell));
+      SelectObject(dc, old);
+      DeleteObject(p);
+    } else if (stretching && shape == 'l') {
       auto p = ui::dashedPen(3, ghost);
       auto old = SelectObject(dc, p);
       MoveToEx(dc, int(ox + e->snapped(e->dragFX) * cell), int(oy + e->dragFY * cell), nullptr);
@@ -9786,6 +9852,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->breachControlChanged(id, notification);
         return 0;
       }
+      if (id == ConnectKindList) {
+        e->connectControlChanged(id, notification);
+        return 0;
+      }
       if (id >= GrowthKindList && id <= GrowthSeedBox) {
         e->growthControlChanged(id, notification);
         return 0;
@@ -10137,7 +10207,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
-                        L"--glazing-test", L"--breach-test", L"--growth-test"})
+                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10257,8 +10327,14 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The Breach tool and the Growth brush alone (--editing-test runs them too).
     if (argc > 1 && std::wstring(argv[1]) == L"--breach-test")
       e.backgroundTest = e.breachTest = true;
+    // The Connect tool alone, with its pictures (--editing-test runs it too, without them).
+    if (argc > 1 && std::wstring(argv[1]) == L"--connect-test")
+      e.backgroundTest = e.connectTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--growth-test")
       e.backgroundTest = e.growthTest = true;
+    // The Shape tool alone, with its pictures (NativeShapeRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--shape-test")
+      e.backgroundTest = e.shapeTest = true;
     // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
     if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
       e.backgroundTest = e.picturesTest = true;
@@ -10663,6 +10739,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.button(L"Align to slope: on", NatureAlignToggle);
     e.makeGlazingControls(choices);
     e.makeBreachControls(choices);
+    e.makeConnectControls(choices);
     e.makeGrowthControls(choices);
     e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
     for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
@@ -10673,7 +10750,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
     e.tileList = choices(TileList, {L"Crate", L"Barrel (explodes)", L"Tank"});
-    e.primList = choices(PrimList, {L"Box", L"Pillar", L"Stairs", L"Ramp", L"Column", L"Arch", L"Vault roof", L"Dome", L"Door frame", L"Window"}, 5);
+    e.primList = choices(PrimList, {}, 0);
+    for (const auto &k : retro::prim::kinds) // every shape, in its plain name (PrimitiveKinds.h), as the palette shows them
+      SendMessageW(e.primList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide(k.label).c_str()));
+    SendMessageW(e.primList, CB_SETCURSEL, 5, 0);
     e.brushList = choices(BrushList, {L"Brush (hold and paint)", L"Box (drag a rectangle)", L"Fill (click an area)"});
     e.behaviourList = choices(BehaviourList, {L"Goes about their day", L"Stands still"});
     e.clutterList = choices(ClutterList, {L"Paper", L"Cardboard", L"Bottle", L"Electronics", L"More electronics", L"Plastic", L"Wood", L"A model (pick below)"});
@@ -10889,6 +10969,20 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.finishTest) {
       int code = 0;
       try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.connectTest) {
+      int code = 0;
+      try { e.verifyConnectRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-connect-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.shapeTest) {
+      int code = 0;
+      try { e.verifyShapes(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-shape-test.txt", std::ios::app) << "FAIL: " << error.what() << '\n'; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

@@ -1,0 +1,7 @@
+# the pulley lift: ridden down from the landing, back up empty, taken down by a 50 kg crate (SHOWCASE: PHYSICS, the joints corner; tube joints-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 15.6 6.4 -999 -57 28
+scene lift
+size 640 360
+frames 420

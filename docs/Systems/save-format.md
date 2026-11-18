@@ -55,6 +55,7 @@ The same game always writes the same bytes. A fresh campaign save is about two t
 | `entities` | no | runtime changes to entity properties (the store below). Written only when not empty. |
 | `variables` | no | named values scripts set (the store below). Written only when not empty. |
 | `physics` | no | the rigid-body solver's prop state. Written only once the solver installs its hooks. |
+| `liquids` | no | per chunk, each prop holding liquid by its place in the props (Liquids.cpp): kind, level, the surface's normal and offset in the bottle's frame, and the hole a round made. Written only when a prop holds liquid; a save without it fills the map's bottles as authored. |
 
 Settings are not in the save, by design: a loaded game keeps the session's settings (`adoptSession`).
 
@@ -113,6 +114,23 @@ When writing, a quaternion is normalised (a degenerate one becomes the identity)
 - each segment's pose: its middle (world, x, y, z) and its turn (quaternion x, y, z, w).
 
 The hooks `captureChain` and `restoreChain` fill and restore it; the hinges restore from the bends, so every segment lies where it was saved and a draped mattress loads draped, still asleep, and re-saves byte-exact. A bend outside half a turn, a rate over 1000 rad/s, a root outside 0-2, a non-finite middle or a turn far from unit refuses the save. A layout 1 section (v1.5.1) has no such list: its mattresses load lying straight, as they always did. The lab tube `mattress` checks both.
+**Layout 3: joints.** After the chained props, when any map has `JOINT` records, the section keeps each map's joints (World.h
+`PropJointState`), in the map's JOINT order: chunk count, then per chunk its index and joint count, and per joint snapped
+(bool), motor on (bool), a winch's reeled length (float, -1 as authored), the motor's target and speed (floats). A section of
+layout 1 or 2 (or a layout 3 one that stops before the joints) loads
+with every joint as the map has it, and so does a save whose map has since changed its number of joints. An older build skips
+a newer section (it is optional), losing the props' turns but nothing else.
+
+**Layout 4: dead bodies.** After the joints (a joint chunk count of 0 when no map has joints), when there are any, the
+section keeps each dead body's pose (SaveSections.h `CorpsePose`, the renderer's `Carcass::Pose`): their count, then per
+body its map, the renderer's slot for it, the identity of the death that made it (to the millimetre), a creature's or a
+man's, its clock, asleep, shoved, each joint cut or not (count, then flags), each section's middle, turn (w x y z), centre
+of mass, velocity and spin (count, then 16 floats) and where it was laid (x, y, z, yaw). The renderer keeps each body's
+current pose in the game's book (`Game::corpsePoses`) as it moves; after a load a body made for the same death is laid
+where the save laid it and takes its pose back, bit for bit, so one shoved, shot or knocked about lies as it lay (lab
+check in `ragdoll-fall`: saved, loaded, the same triangles, and saved again the same bytes). A count past 4096, a section
+count outside 1-64, more than 256 joints or a turn far from unit refuses the save. A section of layout 1-3 loads with every
+body made again by its death, as before.
 
 ## Refitting older saves (formats 1-27)
 A format 1-27 save loads in two stages:
@@ -202,6 +220,7 @@ In every refit test, each save loads, is refitted with its backup, keeps its gam
 | 27 | v1.5.0 | Each glass pane's hits (where, hole radius, crack strain; one number per hit), so its holes and fallen pieces come back exactly. Glass shards are `ShardOf::Glass`. The last positional format. |
 | 28 | | The section container. Sections: `game`, `player`, `inventory`, `hazmat`, `script`, `world`, `creatures`, `pickups`, `props`, then the optional `entities`, `variables` and `physics`. Formats 1-27 are refitted on load and rewritten, the original kept as `.v<N>.bak`. Saves and settings return to `%LOCALAPPDATA%\RawMetal`. |
 | 28 (physics layout 2) | | No new format: the `physics` section's layout 2 keeps the chained props' segments (a mattress's bend). A v1.5.1 save (layout 1) loads with its mattresses straight; a v1.5.1 build skips a layout 2 section as an unknown version, so it loads the save without the bends. |
+| 28 (physics layout 4) | | No new format: the `physics` section's layout 4 keeps the dead bodies' poses after the joints. An older build skips it as an unknown layout, and its bodies are made again by their deaths. |
 
 ## Map format, for the v1.4.8 change
 Custom maps (`.rmc`) are unchanged for existing content.

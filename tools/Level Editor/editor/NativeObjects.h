@@ -1,5 +1,6 @@
 #pragma once
 #include "NativeDocument.h"
+#include "../src/world/PrimitiveKinds.h"
 #include <array>
 #include <cmath>
 #include <optional>
@@ -199,6 +200,11 @@ nativeHandle(const std::vector<std::string> &names,
     if (handle.points.size() == 1) {
       handle.width = std::max(.35f, number("width", number("w", .5f)));
       handle.depth = std::max(.35f, number("depth", number("d", .5f)));
+      // A shape's 0 sizes are its kind's usual ones (PrimitiveKinds.h), not a stub.
+      if (fields[0] == "PRIM" && fields.size() > 8) {
+        auto s = retro::prim::resolve(fields[2], number("w", 0), number("d", 0), number("h", 0));
+        handle.width = std::max(.1f, s.w), handle.depth = std::max(.1f, s.d);
+      }
     }
     return handle;
   } catch (...) {

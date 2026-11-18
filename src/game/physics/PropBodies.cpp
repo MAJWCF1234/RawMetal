@@ -4,6 +4,7 @@
 #include "../SaveSections.h"
 #include "../../core/Tune.h"
 #include "../../world/ModelIds.h"
+#include "../../world/GibSets.h"
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -44,6 +45,7 @@ namespace {
 enum class Kind {Box,Upright,AlongX,AlongY,Ball,OfficeChair,LegChair,Table,Wheelchair,Lamp,Body};
 Kind kindOf(int m){
  using namespace model;
+ if(const auto* piece=gibs::pieceOf(m))return piece->cylinder?Kind::Upright:Kind::Box;   // an authored gib (GibSets.h): its own box, a bottle neck round
  if(m==ind_barrel||m==drum||m==scrap_drum||m==scrap_burn_barrel||m==gas_cylinder||m==glass_bottle||m==mug||m==med_pill_bottle||m==med_specimen_jar||m==med_extinguisher||m==anl_cell_core)return Kind::Upright;
  if(m==tire)return Kind::AlongY;
  if(m==pwr_pipe_straight)return Kind::AlongX;

@@ -1,0 +1,7 @@
+# a cage lamp on its chain, shot: it swings with its light (SHOWCASE: PHYSICS, the joints corner; tube joints-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 8.6 13.8 -999 -100 40
+scene lamps
+size 640 360
+frames 120

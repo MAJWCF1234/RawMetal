@@ -1,0 +1,11 @@
+# The ten new PRIM kinds in the Showcase Shapes room, from above the south of the north half: roof
+# wedge, pyramid, spire, buttresses, eight-sided pillars and bevelled blocks behind; the spiral
+# stair, the culvert, the curved wall and the catwalk in front. Tube: culling.
+world custom "custom maps/Starter Map.rmc"
+map-name Starter Map / Showcase Shapes
+camera 13.4 18.8 4.7 -80 -80
+scenery-only
+size 1600 900
+frames 12
+step 0
+culling-shot new-shapes-east

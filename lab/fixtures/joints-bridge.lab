@@ -1,0 +1,7 @@
+# the rope bridge: the player walks over it (SHOWCASE: PHYSICS, the joints corner; tube joints-room).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 5.6 12.6 0.6 0 -18
+scene bridge
+size 640 360
+frames 400

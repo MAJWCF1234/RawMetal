@@ -43,6 +43,7 @@ struct LabAccess {
  static void stepProps(Game& g,float dt,const InputState& input={}){g.updateClutter(input,dt);}
  static auto& friendlies(Game& g){return g.m_friendlyActors;}
  static std::vector<BulletImpact>& impacts(Game& g){return g.m_bulletImpacts;}
+ static std::vector<BreakEvent>& breakEvents(Game& g){return g.m_breakEvents;}
  static std::vector<HitBurst>& bursts(Game& g){return g.m_hitBursts;}
  static void hitBurst(Game& g,Point3 p,Point3 dir,ImpactMaterial m,int species,float power,bool kill){g.hitBurst(g.m_level,p,dir,m,species,power,kill);}
  static float& elapsed(Game& g){return g.m_elapsed;}
@@ -56,6 +57,10 @@ struct LabAccess {
  static bool decodeSave(Game& g,const std::string& data){return g.decodeSave(data);}
  static std::string encodeSave(const Game& g){return g.encodeSave();}
  static std::string legacySaveText(Game& g,int version){return g.legacySaveText(version);}
+ static std::shared_ptr<const CustomCampaign> campaignOf(const Game& g){return g.m_customCampaign;}
+ // Why the player cannot go on to `next`: 0 he can; 1 the ground is more than a step up; 2 blocked by the world; 3 by a prop.
+ static int moveBlock(const Game& g,Vec2 next){const auto& p=g.m_player;float feet=p.z;const float ground=g.groundHeight(next);if(ground>feet+.215f)return 1;if(ground>feet)feet=ground;
+  if(!g.hullFits(next,feet,p.hullHeight(),.2f,false,false))return 2;if(!g.hullFits(next,feet,p.hullHeight()))return 3;return 0;}
  static bool damageEnemy(Game& g,Enemy& e,float amount){return g.applyEnemyDamage(e,amount,false,false);}
  static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);g.equipWeapon(id);}
  // A console line, as typed (Summon.cpp and the rest), and what it printed.

@@ -354,7 +354,8 @@ std::vector<SaveSection> Game::builtInSaveSections(){
  // island), per chunk, by each prop's place in the chunk's props. Written only once the solver
  // sets physicsSaveHooks(); read before the reconciliation, which keeps the props' fields.
  // Layout 2 adds the chained props' segments after them (ChainPose: a mattress's bend, so a draped one
- // loads draped); a layout 1 section (v1.5.1) has none, and its mattresses load lying straight.
+ // loads draped); a layout 1 section has none, and its mattresses load lying straight. Layout 3 adds the
+ // joints between props after the chains.
  add("physics",false,[](Game& g,auto& a,int version){const auto& hooks=physicsSaveHooks();
   auto norm=[](const PropBody& b){return std::sqrt(b.orientation[0]*b.orientation[0]+b.orientation[1]*b.orientation[1]+b.orientation[2]*b.orientation[2]+b.orientation[3]*b.orientation[3]);};
   // Written: a unit quaternion (a degenerate one is the identity), spin clamped to 1000 rad/s.
@@ -382,13 +383,43 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   if constexpr(std::decay_t<decltype(a)>::reading){
    entries([&](Clutter& prop){PropBody b;body(b);if(hooks.restore)hooks.restore(prop,b);},"prop");
    if(version>=2)entries([&](Clutter& prop){ChainPose c;chain(c);if(hooks.restoreChain)hooks.restoreChain(prop,c);},"chained prop");}
-  else{if(!hooks.capture)return;std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;std::vector<std::pair<int,std::vector<std::pair<int,ChainPose>>>> chains;
-   for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;std::vector<std::pair<int,ChainPose>> poses;const auto&props=g.m_chunks[size_t(level)].clutter;
+  else{std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;std::vector<std::pair<int,std::vector<std::pair<int,ChainPose>>>> chains;
+   if(hooks.capture)for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;std::vector<std::pair<int,ChainPose>> poses;const auto&props=g.m_chunks[size_t(level)].clutter;
     for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});ChainPose c;if(version>=2&&hooks.captureChain&&hooks.captureChain(props[i],c))poses.push_back({int(i),c});}
     if(!bodies.empty())captured.push_back({level,std::move(bodies)});if(!poses.empty())chains.push_back({level,std::move(poses)});}
-   if(captured.empty()&&chains.empty())return;
+   bool joints=false;for(int level=0;level<g.chunkCount();++level)joints|=!g.m_chunks[size_t(level)].world.jointStates().empty();
+   if(captured.empty()&&chains.empty()&&!joints&&!(version>=4&&!g.m_corpsePoses.empty()))return;
    {int count=int(captured.size());a(count);for(auto& [level,bodies]:captured){int l=level,n=int(bodies.size());a(l,n);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}
-   if(version>=2){int count=int(chains.size());a(count);for(auto& [level,poses]:chains){int l=level,n=int(poses.size());a(l,n);for(auto& [index,c]:poses){int i=index;a(i);chain(c);}}}}},2);
+   if(version>=2){int count=int(chains.size());a(count);for(auto& [level,poses]:chains){int l=level,n=int(poses.size());a(l,n);for(auto& [index,c]:poses){int i=index;a(i);chain(c);}}}}
+  // Layout 3: the joints between props (World.h PropJointState), after the chains and only when a map has
+  // joints, per chunk that has any, in the map's JOINT order: snapped, its motor on, a winch's reeled length
+  // (-1 as authored), the motor's target and speed. A save from a map whose joints have since changed in
+  // number keeps the map's.
+  // Layout 4: the dead bodies' poses (SaveSections.h CorpsePose), after the joints (a joint chunk count of 0 when no
+  // map has joints): their count, then each body's map, slot, signature, a creature's or not, its clock, asleep,
+  // shoved, its joints' cuts (count, then each a flag), its sections (count, then 16 numbers each) and where it was laid
+  // (x, y, z, yaw). Written only
+  // when there are any; a section of layout 1-3 loads with every body made again by its death, as before.
+  auto corpse=[&](CorpsePose& c){a(c.level,c.slot,c.signature,c.creature,c.age,c.asleep,c.shoved);int joints=int(c.cut.size());a(joints);
+   if constexpr(std::decay_t<decltype(a)>::reading){if(c.level<0||c.level>=t_sectionChunks||joints<0||joints>256||!(c.age>=0&&c.age<1e7f))throw std::runtime_error("invalid body");c.cut.resize(size_t(joints));}
+   for(auto&k:c.cut){bool cutThere=k!=0;a(cutThere);k=cutThere?1:0;}
+   int sections=int(c.sections.size());a(sections);
+   if constexpr(std::decay_t<decltype(a)>::reading){if(sections<1||sections>64)throw std::runtime_error("invalid body section count");c.sections.resize(size_t(sections));}
+   for(auto&part:c.sections)for(auto&v:part)a(v);
+   for(auto&v:c.laid)a(v);
+   if constexpr(std::decay_t<decltype(a)>::reading)for(const auto&part:c.sections){const float n=part[3]*part[3]+part[4]*part[4]+part[5]*part[5]+part[6]*part[6];if(!(n>.81f&&n<1.21f))throw std::runtime_error("invalid body section turn");}};
+  if constexpr(std::decay_t<decltype(a)>::reading){if(version<3||!a.left())return;int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid joint chunk count");int last=-1;
+   for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks||count<1||count>4096)throw std::runtime_error("invalid joint chunk");last=level;
+    std::vector<PropJointState> read(static_cast<size_t>(count));for(auto& j:read){a(j.broken,j.motorOn,j.length,j.target,j.speed);
+     if(!std::isfinite(j.length)||j.length<-1||j.length>100||!std::isfinite(j.target)||std::fabs(j.target)>1000||!std::isfinite(j.speed)||std::fabs(j.speed)>1000)throw std::runtime_error("map "+std::to_string(level)+": invalid joint");}
+    auto& states=g.m_chunks[size_t(level)].world.m_jointStates;if(states.size()==read.size())states=std::move(read);}
+   if(version<4||!a.left())return;int bodies=0;a(bodies);if(bodies<0||bodies>4096)throw std::runtime_error("invalid body count");
+   for(int i=0;i<bodies;++i){CorpsePose c;corpse(c);c.loaded=true;const auto key=std::make_tuple(c.creature,int(c.level),c.slot);if(!g.m_corpsePoses.emplace(key,std::move(c)).second)throw std::runtime_error("body saved twice");}}
+  else{std::vector<int> levels;for(int level=0;level<g.chunkCount();++level)if(!g.m_chunks[size_t(level)].world.jointStates().empty())levels.push_back(level);
+   std::vector<CorpsePose> bodies;if(version>=4)for(const auto& [key,c]:g.m_corpsePoses)if(c.level>=0&&c.level<g.chunkCount()&&!c.sections.empty())bodies.push_back(c);
+   if(levels.empty()&&bodies.empty())return;int chunks=int(levels.size());a(chunks);for(int level:levels){auto states=g.m_chunks[size_t(level)].world.jointStates();int l=level,count=int(states.size());a(l,count);
+    for(auto& j:states){bool broken=j.broken,on=j.motorOn;float length=std::clamp(j.length,-1.f,100.f),target=j.target,speed=j.speed;a(broken,on,length,target,speed);}}
+   if(!bodies.empty()){int n=int(bodies.size());a(n);for(auto&c:bodies)corpse(c);}}},4);
  return list;
 }
 // ---- The stores the "entities" and "variables" sections keep ----
@@ -1269,7 +1300,9 @@ bool Game::testSaveFormat(std::ostream& report,int parts){
    physicsSaveHooks()={};Game plainLoad(props);const bool plainOk=plainLoad.decodeSave(bytes);const bool unhooked=plainOk&&!has(encode(plainLoad),"physics");physicsSaveHooks()=keptHooks;
    check(prop>=0&&has(bytes,"physics")&&ok&&body&&again==bytes,"The physics section carries a prop's orientation, angular velocity and sleep island to the solver's restore hook",std::to_string(restored.size())+" bodies");
    check(!badLoaded&&contains(why,"section 'physics': invalid prop body"),"A prop body whose quaternion is not unit is refused",why);
-   check(unhooked,"Without the solver's hooks a saved physics section is read, checked and dropped");}
+   check(unhooked,"Without the solver's hooks a saved physics section is read, checked and dropped");
+   {physicsSaveHooks()={nullptr,[](Clutter&,const PropBody& b){restored.push_back(b);}};restored.clear();Game old(props);const bool oldOk=old.decodeSave(wrap(rebuild(bytes,[](std::string& name,int& version,std::uint16_t&,std::string& b){if(name=="physics"){version=1;b.pop_back();}return true;}) /* layout 1: the bodies alone, without layout 2's chained-prop count (here none, one byte) */));physicsSaveHooks()=keptHooks;
+    check(oldOk&&restored.size()==1,"A physics section from before joints (version 1) still loads",oldOk?std::to_string(restored.size())+" bodies":lastLoadFailure());}}
  }
 
  // ---- 7. The save folder 1.0.4-1.5.0 wrote by mistake is adopted, in a temp folder ----

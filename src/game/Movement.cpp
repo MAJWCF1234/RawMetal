@@ -24,6 +24,7 @@ float Game::groundHeight(Vec2 p)const{
 }
 float Game::groundHeight(Vec2 p,float feet,float radius)const{
  auto center=p;const auto&world=worldAt(center);float height=std::max(world.supportBelow(center.x,center.y,feet),world.structureSupportBelow(center.x,center.y,radius,feet));
+ height=std::max(height,jointedPropTop(p,feet,radius));   // a lift's platform, a seesaw, a bridge's planks (PropJoints.cpp)
  const World* checked=&world;
  for(float x:{-radius,radius})for(float y:{-radius,radius}){auto corner=p+Vec2{x,y};const auto&w=worldAt(corner);height=std::max(height,w.supportBelow(corner.x,corner.y,feet));
   if(checked!=&w){auto local=corner-Vec2{x,y};height=std::max(height,w.structureSupportBelow(local.x,local.y,radius,feet));checked=&w;}}
@@ -39,7 +40,7 @@ bool Game::hullFits(Vec2 p,float feet,float height,float radius,bool creatures,b
  }
  // Heavy dressing blocks an approaching hull, but always permits retreat.
  if(props)for(int level=0;level<chunkCount();++level)if(chunkResident(level)){auto shift=chunkOffset(level)-chunkOffset(m_level);const auto&items=chunkClutter(level);
-  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()-softGive(c)||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+radius-std::fabs(q.x-at.x),e[1]+radius-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
+  for(int i=0;i<int(items.size());++i){const auto&c=items[i];if(c.model<0||c.broken||c.mass()<8||c.blockedTime>=.5f||(level==m_level&&i==m_heldClutter)||feet>=c.z+c.height()-softGive(c)||onJointedTop(level,i,p,feet)||feet+height<=c.z)continue;auto e=c.extent();auto at=c.pos+shift;auto penetration=[&](Vec2 q){return std::min(e[0]+radius-std::fabs(q.x-at.x),e[1]+radius-std::fabs(q.y-at.y));};if(penetration(p)>0&&penetration(p)>penetration(m_player.pos)+.00001f)return false;}
  }
   // Full footprint overlap also catches thin walls between the point samples.
  auto center=p;const auto&w=worldAt(center);
@@ -330,7 +331,13 @@ void Game::updateInteraction(const InputState& input,float dt){
  if(input.vrTracked){
   auto previous=m_previousVrGrip;m_previousVrGrip=input.vrGrip;
   if(holdingClutter()){
-   if(!input.vrGrip[m_vrCarryHand])interactClutter();
+   // Two hands (TwoHand.cpp): the free hand closing on a large held prop takes it too; letting go with either
+   // leaves it in the other (if it can hold it alone), with both it is thrown at the two hands' speed.
+   const int other=1-m_vrCarryHand;
+   if(m_vrSecondHand<0&&input.vrGrip[size_t(other)]&&!previous[size_t(other)])grabSecondHand(other);
+   if(m_vrSecondHand>=0&&!input.vrGrip[size_t(m_vrSecondHand)]&&input.vrGrip[size_t(m_vrCarryHand)])m_vrSecondHand=-1;
+   if(!input.vrGrip[m_vrCarryHand]&&m_vrSecondHand>=0&&input.vrGrip[size_t(m_vrSecondHand)]){m_vrCarryHand=m_vrSecondHand;m_vrSecondHand=-1;if(m_clutter[size_t(m_heldClutter)].mass()>25)interactClutter();}
+   else if(!input.vrGrip[m_vrCarryHand]){interactClutter();m_vrSecondHand=-1;}
    m_previousUse=input.use;m_world.updateDoors(dt);return;
   }
   if(m_logTime==0)for(int hand=0;hand<2;++hand)if(input.vrGrip[hand]&&!previous[hand]&&interactClutter(hand)){m_previousUse=input.use;m_world.updateDoors(dt);return;}

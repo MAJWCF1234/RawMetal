@@ -196,14 +196,14 @@ def main():
     # since the Starter Map's numbering moves whenever a room is added.
     with open(os.path.join(ROOT, 'custom maps', 'Starter Map.rmc'), encoding='utf-8') as fh:
         names = [line.split('|')[2].strip() for line in fh if line.startswith('MAP|')]
-    hillside = names.index('Starter Map / Hillside')
+    names.index('Starter Map / Hillside')  # it must be there
     for name, cam, shot in (('floors-starter-hillside', (18, 23, -999, -133, -12), 'starter-hillside'),
                             ('floors-starter-house', (9.2, 12.4, -999, -146, -6), 'starter-house'),
                             ('floors-starter-stilts', (18.5, 16.5, -999, -128, 2), 'starter-stilts')):
         x, y, z, yaw, pitch = cam
         with open(os.path.join(OUT, name + '.lab'), 'w', encoding='ascii', newline='\n') as fh:
             fh.write('\n'.join(['# %s (tools/dev/floors_fixtures.py): the Starter Map Hillside. Tube: floors.' % name,
-                                'world custom "custom maps/Starter Map.rmc"', 'map %d' % hillside,
+                                'world custom "custom maps/Starter Map.rmc"', 'map-name Starter Map / Hillside',
                                 'camera %s %s %s %s %s' % (f(float(x)), f(float(y)), f(float(z)), f(float(yaw)), f(round(math.radians(pitch) * 140, 1))),
                                 'size 1280 720', 'frames 30', 'floors-shot %s' % shot]) + '\n')
     print('wrote floors.rmc and %d scenes' % (len(labs) + 3))

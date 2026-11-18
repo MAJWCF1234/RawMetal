@@ -1,5 +1,6 @@
 #include "../core/FrameProfile.h"
 #include "Game.h"
+#include "physics/PropQueries.h"
 #include "../world/CustomCampaign.h"
 
 #include <algorithm>
@@ -584,7 +585,7 @@ void Game::update(const InputState& input, float dt) {
         // on the committed pose, so the path always ends where the player is.
         {perf::Scope profile(perf::LockerDoors);updateLockerDoors(dt);}const bool choreographed=lockerViewLocked();
         if(!choreographed&&!talking()){
-        if(input.vrTracked||!input.rotateProp||!holdingClutter()){
+        if((input.vrTracked||!input.rotateProp||!holdingClutter())&&!(m_physglove.locked&&!input.vrTracked)){   // (the Physgloves hold the look on their target while the middle button is down)
          const float invDt=1.f/std::max(dt,.001f),sens=m_settings.sensitivity,invert=m_settings.invertMouse?-1.f:1.f;
          m_lookYawRate=input.mouseDx*.0022f*sens*invDt;
          m_lookPitchRate=-input.mouseDy*.308f*sens*invert*invDt;
@@ -817,9 +818,14 @@ bool Game::shieldBlow(float amount,Vec2 source){
  if(!holdingClutter()||amount<=0)return false;auto&c=m_clutter[size_t(m_heldClutter)];if(c.model<0||c.broken)return false;
  // A mug is not a shield: the prop must cover a body's width and be worth swinging at.
  const auto size=c.size();if(std::max(size[0],size[1])<.3f||size[2]<.25f||c.mass()<1.5f)return false;
- Vec2 toSource=source-m_player.pos,toProp=c.pos-m_player.pos;if(lengthSq(toSource)<1e-6f||lengthSq(toProp)<1e-6f)return false;
- toSource=normalized(toSource);toProp=normalized(toProp);if(dot(toSource,toProp)<.5f)return false;   // held within 60 degrees of the blow
- const Point3 away{-toSource.x,-toSource.y,0},at{c.pos.x,c.pos.y,c.z+c.height()*.5f};
+ Vec2 toSource=source-m_player.pos;const float apart=length(toSource);if(apart<1e-3f)return false;toSource=toSource*(1/apart);
+ // The blow's way: from the attacker's reach (an arm's length and a stride out at most) in to the front of the
+ // player's body, a forearm's breadth across his upper body. It lands on the prop only if that way meets the
+ // prop as it is held and turned (Vectra's box cast against its own shape), not by the side it is held on.
+ constexpr float ShieldBlowReach=1.6f;const float reach=std::min(apart,ShieldBlowReach),travel=std::max(.05f,reach-.2f);
+ const Point3 from{m_player.pos.x+toSource.x*reach,m_player.pos.y+toSource.y*reach,m_player.z+m_player.eye-.25f},way{-toSource.x,-toSource.y,0};
+ vectra::QueryHit met;if(!vectra::boxCastProp(c,from,{.05f,.12f,.3f},vectra::Quat::axisAngle({0,0,1},std::atan2(way.y,way.x)),way,travel,met))return false;
+ const Point3 away{-toSource.x,-toSource.y,0},at=met.point;
  sound(c.impactSound(),.9f,.85f);m_verticalSpringVelocity-=.35f;m_damageFlash=std::max(m_damageFlash,.15f);
  const size_t held=size_t(m_heldClutter);damageClutter(m_level,held,amount,at,away);   // a breakable prop bursts in the hands
  if(holdingClutter()&&(c.traits&&c.traits->health>=0?c.traits->health:propTraits(c.model).health)<=0&&c.damage>=ShieldKnockAway*std::clamp(c.mass()/9.f,.5f,3.f)){   // a heavier shield takes more before it goes

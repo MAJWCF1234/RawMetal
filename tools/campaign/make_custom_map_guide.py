@@ -50,6 +50,8 @@ SHOWCASE_SHOTS = [
     ('show-dead', 'Showcase Dead and Blood', 6.5, 11, -90, -8, 0, 'The dead: bodies over a table edge and down a stair settle where they fall.'),
     ('show-blood', 'Showcase Dead and Blood', 6.5, 12.5, 90, -8, 0, 'A creature of each fluid asleep in a pen: blood, goo, ichor.'),
     ('show-predator', 'Showcase Predator', 12.5, 12.5, -90, -6, 0, 'Predator: a Chimera hunter and the man it comes for, behind glass.'),
+    ('show-shapes', 'Showcase Shapes', 12, 1.8, 90, -10, 0, 'Shapes: the ten newest PRIM kinds at full size: roof wedge, pyramid, spire, buttresses, pillars, bevelled blocks, spiral stair, culvert, curved wall, catwalk.'),
+    ('show-building', 'Showcase Shapes', 11.5, 14.0, 30, -6, 0, 'A building of overlapping prims in four materials, its buried faces culled: clean seams.'),
 ]
 SHOWCASE = [  # room, what stands in it, what to do
     ('Doors', 'Sliding, grille (leaf 1), hinged left and right, painted panel (leaf 2), one ajar (open 0.4); three along Y (axis 1) in the closet walls; '
@@ -66,6 +68,9 @@ SHOWCASE = [  # room, what stands in it, what to do
      'MACHINE POWER wakes it; it comes for you and shorts out on the band. ELECTRODES cuts the band. Rounds spark off it; it bleeds oil.'),
     ('Predator', 'A Chimera with a hunter name (sc_beast) and a prey (ACTOR 0) in a glass pen, a run behind it.',
      'RELEASE: it takes the man and feeds. Shoot it (the glass breaks first): badly hurt, it runs for the run and is gone; sc_beast counts it.'),
+    ('Shapes', 'The ten newest PRIM kinds at full size, every kind in miniature in the Builder\'s palette order behind a full-size arch, and a building of '
+     'overlapping prims: a stone base, brick walls and buttresses, a concrete arch, bands and roof slab, a copper dome.',
+     'Climb the spiral stair, walk the catwalk and through the culvert. Look at the building\'s seams: where prims overlap only what shows is drawn.'),
     ('Sound and the Dead Room', 'AMBIENT beds (mode 0), now-and-then sounds (mode 1) and a PA line on a state (mode 2) in a hall with REVERB 0.6 / 4.5 s and '
      'music cue 6; south of it a curtained room with REVERB 0.04 / 0.2 s and music cue 11 (silence).',
      'PA TEST plays the line; walk between the two rooms to hear the reverb and the score change.'),
@@ -407,11 +412,13 @@ RECORDS = [
         ('STORM|calmMs|warningMs|stormMs|damage|ash', 'An ash storm cycle for the whole campaign: calm, a warning, then a storm doing damage per second to anyone outside a SHELTER. ash 0-1 is the haze between storms.'),
         ('SHELTER|map|x1|y1|x2|y2|bottom|top', 'Map metres. Under this box the storm does no harm. Heights are from the ground at its centre.')]),
     ('Building', [
-        ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid|shape|facing]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it. shape 0-7 draws a ramp, column, arch, vault, dome, strut or roundel in the box (usually written by PRIM), facing 0-3 its quarter turn. Material 53 is a light shaft: god rays falling on the slant through the box, from its top on the side away from facing down to the floor on the facing side, drawn as soft glowing cards; it is never solid and stops no light, sight or round (pick it in the Block tool, R turns it).'),
+        ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid|shape|facing]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it. shape 0-7 draws a ramp, column, arch, vault, dome, strut or roundel in the box, 12-20 a roof wedge, spire, pyramid, spiral stair, culvert, buttress, bevelled block, eight-sided pillar or curved wall (usually written by PRIM), facing 0-3 its quarter turn. Material 53 is a light shaft: god rays falling on the slant through the box, from its top on the side away from facing down to the floor on the facing side, drawn as soft glowing cards; it is never solid and stops no light, sight or round (pick it in the Block tool, R turns it).'),
         ('PRIM|map|kind|x|y|z|w|d|h|facing|material[|solid]', 'A ready-made building part, centred at x,y and standing on z. w runs across it, d along its facing, h up; '
          'facing 0 +y (south), 1 +x (east), 2 -y (north), 3 -x (west) is the way it rises or opens. Give 0 for a size and it takes the default, sized for the 1.6 m player. '
-         'Ramps, columns, arches, vaults, domes, struts and roundels are true curved or sloped shapes with invisible collision boxes inside; the rest are built from STRUCT boxes. '
-         'Outdoors z is measured from the ground. Kinds and defaults are in the value tables; see them all in the Architecture rooms.'),
+         'Ramps, columns, arches, vaults, domes, struts, roundels and the new roof wedges, spires, pyramids, spiral stairs, culverts, buttresses, bevelled blocks, eight-sided pillars and curved walls are true curved or sloped shapes with invisible collision boxes inside; the rest are built from STRUCT boxes. '
+         'Where prims and boxes overlap, the faces buried inside another solid are not drawn and faces lying flush are drawn once, so a building made of overlapping prims in several materials reads as one piece with clean seams. '
+         'With FORMAT|2: hand= (spiral), rails= (catwalk), thick= (curved wall, culvert). '
+         'Outdoors z is measured from the ground. Kinds and defaults are in the value tables; see them all in the Architecture rooms and the Showcase Shapes room.'),
         ('STAIR|map|x1|y1|x2|y2|bottom|top|steps|alongY|ascending[|openUnderside|tread|rails]', 'A flight of steps inside the box. alongY 1 climbs along y, ascending 1 rises toward the larger coordinate. Optional open underside, tread thickness (0.12) and side rails.'),
         ('DOOR|map|left|right|y|z|entry|transfer|swinging|needClear|sign[|state|value|control|swing|maxOpen|open|opening|leaf|label|locked|axis|hinge|strength|lock]', 'A door across x left..right at y (use a tile line + 0.5, between # tiles); with axis 1 it stands in a wall that runs north-south instead, across y left..right at x = the y field. swinging 0 slides, 1 swings. needClear 1 keeps it shut until the map\'s creatures are dead; state/value lock it until a state is set. transfer 1 makes it the exit to the next chapter, entry 1 the door you arrive through: leave both 0. sign 0. Optional: control 1 waits for the plant\'s control release; swing 1 or -1 is the side a swinging leaf opens to; maxOpen 0-1 how far it opens; open 0-1 how open it starts and opening 1 if it starts opening. leaf 0 the standard leaf, 1 a steel grille you can see and hear through (sliding doors), 2 a clean painted panel. label names it in the prompt (GATE gives E / OPEN GATE). locked is what the prompt says while it is locked (TIME LOCK / 20 S). axis 0 (or blank) along x, 1 along y; for an axis 1 door swing 1 opens toward +x. hinge 1 hangs a swinging leaf from right instead of left. Entry and transfer doors stay axis 0. strength (swinging doors) is how much battering the leaf takes before a Brute, Chimera or Machine breaks it down (blank: it never gives, and they do not try). lock is what the door shows of its lock: 0 nothing, 1 a keycard reader, 2 a key cylinder, 3 a power release; the reader lamp shows red while the door is locked and green once it is not.'),
         ('PIPE|map|x1|y1|x2|y2|z|radius|endZ|material', 'A pipe from (x1,y1) at height z to (x2,y2) at endZ. Same x,y and different heights make a riser. material 0-6.'),
@@ -435,7 +442,16 @@ RECORDS = [
          'With FORMAT|2 its named fields set it up (all optional): <code>shape=</code> ragged (knocked through: tall in the middle, falling away to the sides), arch or rect, <code>edge=</code> concrete (with rebar), brick or clean, '
          '<code>sill=</code> 0 and <code>head=</code> 2.3 above bottom (the hole\'s foot and top), <code>rebar=0</code> leaves the bars out, <code>rubble=</code> 0-60 pieces (10), <code>seed=</code> another ragged outline and rubble, '
          '<code>toward=-1</code> throws most of the rubble to the other side, <code>infill=0</code> leaves the cut tiles open round the hole, <code>wall=</code> the STRUCT material of what is built back (3). '
-         'The Campaign Builder\'s Breach tool writes it: drag along a wall.')]),
+         'The Campaign Builder\'s Breach tool writes it: drag along a wall.'),
+        ('JOINT|map|kind|propA|propB|x|y|z[|x2|y2|z2]', 'Joins a loose prop (propA, a CLUTTER record of this map counted from 0) to another (propB) or to the room (propB -1: a wall, the ceiling or the floor), where they meet at x,y,z (absolute). '
+         'kind is <code>hinge</code> (turns about one pin: a hatch, a gate, a seesaw), <code>ball</code> (turns every way, within a cone: a lamp on a bracket), <code>slider</code> (runs along a rail), <code>weld</code> (held fast until it breaks), '
+         '<code>rope</code> or <code>chain</code> (at most its length: slack when nearer, drawn as hemp or as links), <code>spring</code> (pulled back to its length), <code>rod</code> (always its length), <code>pulley</code> (a rope over two wheels between two props: as one goes down the other comes up) '
+         'or <code>winch</code> (a chain that reels itself in). A rope, chain, spring, rod, pulley or winch needs its other end x2|y2|z2 (on propB, or the point in the room it hangs from; a pulley\'s end on propB). '
+         'The pose the props are laid out in is the joint\'s rest. With FORMAT|2 its named fields set it up (all optional): <code>axis=</code> the pin or rail (x, y, z or a,b,c), <code>length=</code>, <code>min=</code> and <code>max=</code> (degrees for a hinge, metres for a slider, a winch\'s shortest and longest), '
+         '<code>cone=</code>, <code>cone2=</code> and <code>twist=</code> (a ball\'s, in degrees), <code>stiffness=</code> (Hz) and <code>damping=</code> (a spring, or a hinge or slider springing back to its rest), '
+         '<code>motor=</code> speed or servo with <code>speed=</code>, <code>force=</code> and <code>target=</code> (degrees or metres), <code>switch=</code> a state the motor runs on, <code>breaks=</code> the pull (N) that snaps it, <code>state=</code> a state set when it snaps, '
+         '<code>over=</code> and <code>over2=</code> (a pulley\'s wheels, a,b,c), <code>ratio=</code> and <code>radius=</code> (how thick it is drawn). A rope or chain is cut by a round through it. '
+         'A LIGHT riding a hung prop (its prop field) swings with it. The Campaign Builder\'s Connect tool writes it: drag from a prop to another, a wall or the ceiling.')]),
     ('Things in the map', [
         ('FIXTURE|map|model|x|y|base|width|depth|height|yaw|solid[|core|visible|anchored|slopeX|slopeY]', 'A model from the model list, centred at x,y, its base this high, stretched to width x depth x height (use the listed size to keep it in proportion). solid 1 blocks you. A chair (office, wooden or boardroom) standing on the floor is loose in play: it slides and goes over when something heavy hits it. anchored 1 keeps it fixed where it was put (give core and visible too, 1 and 1 as usual). '
          'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game. '
@@ -552,6 +568,26 @@ NAMED_FIELDS = [
     ('rubble', 'Rubble pieces', '0 to 60', 'BREACH', 'Pieces of wall on the floor either side.'),
     ('seed', 'Seed', 'a whole number', 'BREACH', 'Another seed gives another ragged outline, chips and rubble.'),
     ('toward', 'Rubble side', '1 or -1', 'BREACH', 'Which side of the wall most of the rubble falls: -1 throws it to the other side.'),
+    ('axis', 'Pin or rail', 'x y z or a,b,c', 'JOINT', 'The way a hinge turns about or a slider runs along (a hinge: x if left out; a slider: z).'),
+    ('length', 'Length (m)', '0 to 30', 'JOINT', 'A rope, chain, spring, rod or winch: its length; a pulley: both ropes together. Left out: as laid out.'),
+    ('min', 'Least', 'degrees (hinge) or metres', 'JOINT', 'How far a hinge turns one way (negative), a slider runs back, or a winch reels in.'),
+    ('max', 'Most', 'degrees (hinge) or metres', 'JOINT', 'How far a hinge turns the other way, a slider runs on, or a winch pays out.'),
+    ('cone', 'Swing (degrees)', '0 to 179', 'JOINT ball', 'How far a ball joint swings from where it was laid out.'),
+    ('cone2', 'Swing across (degrees)', '0 to 179', 'JOINT ball', 'The swing the other way, for an oval cone (a shoulder). The cone if left out.'),
+    ('twist', 'Twist (degrees)', '0 to 179', 'JOINT ball', 'How far a ball joint twists either way.'),
+    ('stiffness', 'Springiness (Hz)', '0 to 60', 'JOINT', 'A spring: how stiff (3 if left out). A hinge or slider with it springs back to where it was laid out.'),
+    ('damping', 'Damping', '0 to 10', 'JOINT', 'How soon a spring stops bouncing: 0 bounces on, 1 settles at once (0.5).'),
+    ('motor', 'Motor', 'speed servo off', 'JOINT', 'speed: turns (or runs, or reels) at a speed; servo: goes to the target and holds there.'),
+    ('speed', 'Motor speed', 'degrees or metres a second', 'JOINT', 'How fast the motor goes. 0 with a force: a brake.'),
+    ('force', 'Motor force', 'newtons (N m about a hinge)', 'JOINT', 'The most the motor pushes with: a load heavier than this stalls it.'),
+    ('target', 'Motor target', 'degrees or metres', 'JOINT', 'Where a servo goes to (a winch: the length it reels to).'),
+    ('switch', 'Runs while', 'a state name', 'JOINT', 'The motor runs only while this state is set (a lever).'),
+    ('breaks', 'Snaps at (N)', '0 and up', 'JOINT', 'The pull that snaps it, with a sound; 0 or left out never. A rope or chain also snaps when shot through.'),
+    ('state', 'Sets when it snaps', 'a state name', 'JOINT', 'A state set to 1 when it snaps or is shot through: a script hears it.'),
+    ('over', 'Wheel', 'a,b,c', 'JOINT pulley', 'Where propA\'s rope goes over (absolute).'),
+    ('over2', 'Second wheel', 'a,b,c', 'JOINT pulley', 'Where propB\'s rope goes over (absolute).'),
+    ('ratio', 'Ratio', '0.1 to 10', 'JOINT pulley', 'How much rope one side pays out for the other\'s: 2 lifts twice the load half as far.'),
+    ('radius', 'Thickness (m)', '0 to 0.1', 'JOINT', 'How thick the rope or chain is drawn.'),
     ('tread', 'Step tops material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "What the steps are walked on: the top 4 cm of each step. The Builder's Paint tool sets it on a click on a step top."),
     ('riser', 'Step fronts material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "The step fronts and the body under the tops. Blank: the step tops' material."),
     ('stringer', 'Side rails material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side rails (with the rails field on).'),
@@ -569,6 +605,10 @@ NAMED_FIELDS = [
     ('capwidth', 'Floor edge width (m)', '0.02 to 0.5', 'STRUCT with cap', 'How wide that band is. 0.1 if left out.'),
     ('steps', 'Steps at doors', '1 or 0', 'STRUCT with footing', '0: no steps from a door on a raised edge down to the ground outside (they come by themselves where the drop is over 0.25 m).'),
     ('terrace', 'Terrace length (m)', '1 to 12', 'STRUCT with footing=stepped', 'How long each terrace is along the footprint. 3 if left out.'),
+    # PRIM options, read by the PRIM parser (CustomCampaign.cpp).
+    ('hand', 'Winds', 'left or right', 'PRIM spiral', 'Which way a spiral stair winds as you climb it: right (if left out) turns anticlockwise on the plan, left the other way.'),
+    ('rails', 'Guard rails', 'both left right none', 'PRIM catwalk', "Which sides of a catwalk have a 1.1 m guard rail, as you walk toward its facing: both if left out."),
+    ('thick', 'Thickness (m)', '0.05 to 1.5', 'PRIM arcwall, culvert', "A curved wall's thickness (0.3 if left out) or a culvert's concrete shell (0.2)."),
 ]
 
 
@@ -793,29 +833,12 @@ def main():
             o.append('<figure><img src="guide/%s.jpg" alt="%s"><figcaption>%s</figcaption></figure>' % (name, esc(name), esc(caption)))
     o.append('</div>')
 
-    PRIM_KINDS = [
-        ('box', '1 x 1 x 1', 'a plain box'), ('pillar', '0.5 x 0.5 x 3', 'a square pier'),
-        ('stairs', '1.2 x (from h) x 1', 'a flight of 0.17 m risers on 0.28 m treads, rising toward facing'),
-        ('ramp', '1.2 x (4 x h) x 0.6', 'a 1:4 slope, walked without steps'), ('column', '0.6 x 0.6 x 3', 'a round column'),
-        ('arch', '2.4 x 0.6 x 3.4', 'a wall with a round-headed opening; refused if a standing player could not walk through'),
-        ('vault', '4 x 4 x 3', 'a barrel-vaulted roof, open at both ends, 2 m+ walkable under'),
-        ('dome', '4 x 4 x 2', 'a half ellipsoid'), ('doorframe', '1.2 x 0.3 x 2.2', 'jambs and lintel round a game-size door opening'),
-        ('window', '3 x 0.3 x 1', 'a ribbon window with sill, head, mullions and glass; set z to about 0.9 so it frames the eye line'),
-        ('fins', '3 x 0.4 x 3', 'vertical louvres with 0.38 m gaps: see through, not walk through'),
-        ('canopy', '3 x 1.5 x 0.25', 'a cantilevered slab with a lip; set z to 2.6 or more'),
-        ('railing', '2 x 0.06 x 1.1', 'a guard rail'), ('corbel', '0.6 x 0.6 x 0.6', 'stepped brackets'),
-        ('plinth', '2 x 2 x 0.45', 'a podium at seat height, jumped onto'),
-        ('slit', '1.2 x 0.4 x 3', 'a wall with a 0.25 m arrow slit'), ('clerestory', '3 x 0.4 x 3', 'a wall with a slot above head height'),
-        ('embrasure', '1.6 x 0.8 x 3', 'a deep wall with an 0.8 m opening at eye height'),
-        ('roundel', '2 x 0.4 x 3', 'a wall with a round opening centred near eye height'),
-        ('niche', '1 x 0.5 x 1.6', 'an alcove in a wall face'), ('hood', '1 x 0.5 x 1.6', 'an alcove with a projecting hood'),
-        ('batter', '3 x 1 x 2.5', 'a wall leaning back, too steep to climb'), ('waffle', '4 x 4 x 0.6', 'a coffered slab with ribs under it; z is its underside'),
-        ('pilotis', '0.6 x 0.6 x 3.5', 'a column with a flared capital'), ('megastep', '3 x (from h) x 1.35', '0.45 m risers you jump, or sit on'),
-        ('lightwell', '4 x 4 x 1.1', 'a parapet round a shaft'), ('bridge', '3 x 8 x 3', 'an enclosed span you walk through, with an eye-level slot'),
-        ('core', '4 x 4 x 8', 'a stair or lift tower with a 1.2 x 2.2 m door in its face'), ('strut', '0.35 x 3 x 3', 'a diagonal brace'),
-        ('girder', '0.5 x 4 x 0.6', 'a steel I-beam'), ('quadpier', '1 x 1 x 3', 'four slender piers you can walk between'),
-        ('band', '3 x 0.08 x 0.25', 'a string course on a facade'), ('spout', '0.25 x 0.8 x 0.2', 'a rain scupper'),
-        ('chase', '0.8 x 0.2 x 3', 'a recessed service channel'), ('lattice', '2 x 0.2 x 2.4', 'a cobogo screen with 0.24 m holes')]
+    def size(k):
+        w, d, h = k['w'], k['d'], k['h']
+        g = lambda v: ('%g' % round(v, 2))
+        return '%s x %s x %s' % (g(w), g(d) if d > 0 else '(from h)', g(h))
+    # The engine's own table (src/world/PrimitiveKinds.h), grouped as the Builder's Shape palette shows it.
+    PRIM_KINDS = [(k['kind'], k['label'], k['group'], size(k), k['blurb']) for k in starter.prim_kinds()]
     o.append('<h2 id="values">11. Value tables</h2>')
     o.append('<h3>STRUCT materials</h3>' + table(['material', 'look'], sorted(starter.MATERIALS.items())))
     o.append('<h3>The player\'s scale</h3><p>Build to these and everything works: the PRIM defaults already do.</p>' + table(['measure', 'metres', 'what it means'], [
@@ -825,7 +848,7 @@ def main():
         ('automatic step', '0.215', 'risers and ledges up to this are walked; stairs use 0.17'),
         ('jump / crouch-jump', '1.04 / 1.1', 'guard rails and parapets of 1.1 m need a crouch-jump'),
         ('doors', '1.2 x 2.2', 'the doorframe and core door size')]))
-    o.append('<h3>PRIM kinds</h3>' + table(['kind', 'default w x d x h', 'what it builds'], PRIM_KINDS))
+    o.append('<h3>PRIM kinds</h3><p>In the Campaign Builder\'s Shape palette order, with the plain name and group it shows them under.</p>' + table(['kind', 'in the Builder', 'group', 'default w x d x h', 'what it builds'], PRIM_KINDS))
     o.append('<h3>SURFACE sets</h3>' + table(['value', 'finish'], [(-1, 'default')] + list(enumerate(starter.SURFACES))))
     o.append('<h3>Creatures, pickups, hazards, clutter</h3>')
     o.append(table(['value', 'CREATURE kind', 'PICKUP kind', 'HAZARD kind', 'CLUTTER kind'],

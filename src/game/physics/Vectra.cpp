@@ -10,6 +10,7 @@
 //    holds with four substeps and few iterations, and speculative contacts (positive separation) catch
 //    what closes within the step.
 #include "Vectra.h"
+#include "Queries.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -265,6 +266,7 @@ void Space::collide(float dt){
  std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
  auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
  for(auto [i,j]:pairs){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
+  if(pairContacts&&pairContacts(*this,i,j,margin,manifolds)){++pairsTested;continue;}
   for(int pa=0;pa<a.shape->count;++pa)for(int pb=0;pb<b.shape->count;++pb){
    if(a.shape->count>1||b.shape->count>1){V3 l1,h1,l2,h2;partBounds(a,pa,l1,h1);partBounds(b,pb,l2,h2);
     if(l1.x>h2.x+margin||l2.x>h1.x+margin||l1.y>h2.y+margin||l2.y>h1.y+margin||l1.z>h2.z+margin||l2.z>h1.z+margin)continue;}
@@ -367,6 +369,9 @@ void Space::solve(float h,bool useBias,bool coldOnly){
     const V3 rel=(B?B->w:V3{})-A.w;const float old=m.rollingImpulse[r];float next=std::clamp(old-dot(rel,axis)*m.rollMass[r],-limit,limit);m.rollingImpulse[r]=next;const float d=next-old;
     if(ma)A.w=A.w-m.rollWA[r]*d;if(mb)B->w=B->w+m.rollWB[r]*d;}}
  }
+ // The joints again after the contacts, so a load landing on a jointed body does not leave its joints open
+ // (the contacts' last word would).
+ if(!coldOnly&&!constraints.empty())for(auto*c:constraints)c->solve(*this,h,useBias);
 }
 void Space::restitution(){
  // Once per manifold, at the middle of its points weighted by what they took: a body landing flat on four
@@ -412,18 +417,8 @@ void Space::integratePositions(float h){
  for(auto&b:bodies){if(!b.movable())continue;
   b.x=b.x+b.v*h;b.q=integrate(b.q,b.w,h);b.dp=b.dp+b.v*h;b.dq=integrate(b.dq,b.w,h);}
 }
-void Space::continuous(float dt,const std::vector<V3>& start){
- if(!sweep)return;
- for(int i=0;i<int(bodies.size());++i){auto&b=bodies[size_t(i)];if(!b.movable())continue;const V3 from=start[size_t(i)];const V3 move=b.x-from;const float dist=len(move);
-  // Fast for its size: it could cross something thinner than itself within this step.
-  float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box?std::min({part.half.x,part.half.y,part.half.z}):std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
-  b.ccd=dist>std::max(.02f,small*.5f);if(!b.ccd)continue;
-  V3 n;const float t=sweep(*this,i,from,b.x,n);if(t>=1)continue;
-  // Back to where it meets the surface, resting its own reach off it, and its way into it taken out.
-  float extent=0;for(int p=0;p<b.shape->count;++p)extent=std::max(extent,dot(b.x-support(b,p,neg(n)),n));
-  b.x=from+move*t+n*extent;
-  const float vn=dot(b.v,n);if(vn<0)b.v=b.v-n*(vn*(1+b.material.restitution));(void)dt;}
-}
+// Fast bodies swept through the step, turning as well as going, against the world and each other (Queries.h).
+void Space::continuous(float dt,const std::vector<V3>& start){continuousCollision(*this,dt,start);}
 void Space::islands(float dt){
  const int n=int(bodies.size());std::vector<int> parent(static_cast<size_t>(n));for(int i=0;i<n;++i)parent[size_t(i)]=i;
  auto find=[&](int i){while(parent[size_t(i)]!=i){parent[size_t(i)]=parent[size_t(parent[size_t(i)])];i=parent[size_t(i)];}return i;};
@@ -448,39 +443,15 @@ void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularH
  const V3 want=(targetX-b.x)*(wl/(1+wl*dt));V3 dv=want-b.v;const float cap=maxForce*b.invMass*dt,l=len(dv);if(l>cap&&l>0)dv=dv*(cap/l);b.v=b.v+dv;
  Quat d=targetQ*b.q.conj();if(d.w<0)d={-d.w,-d.x,-d.y,-d.z};const float s=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
  const V3 axis=s>1e-6f?V3{d.x/s,d.y/s,d.z/s}:V3{};const float angle=2*std::atan2(s,d.w);b.w=axis*(angle*wa/(1+wa*dt));}
-// ---- The hinge -------------------------------------------------------------------------------------
-namespace {
-M3 skewOf(V3 a){M3 m=M3::zero();m.m[0][1]=-a.z;m.m[0][2]=a.y;m.m[1][0]=a.z;m.m[1][2]=-a.x;m.m[2][0]=-a.y;m.m[2][1]=a.x;return m;}
-// The rotation vector (axis times angle) of a unit quaternion, the short way round.
-V3 rotationOf(Quat q){if(q.w<0)q={-q.w,-q.x,-q.y,-q.z};const float s=std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z);if(s<1e-7f)return V3{q.x,q.y,q.z}*2.f;return V3{q.x,q.y,q.z}*(2*std::atan2(s,q.w)/s);}
-}
-float Hinge::angle(const Space& s)const{const Body& A=s.bodies[size_t(a)];const Body& B=s.bodies[size_t(b)];const Quat err=(A.q*rest).conj()*B.q;return dot(rotationOf(err),axisA);}
-void Hinge::prepare(Space& s,float h){h_=h;Body& A=s.bodies[size_t(a)];Body& B=s.bodies[size_t(b)];
- const M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B.movable()?B.invInertia:M3::zero();const float mA=A.movable()?A.invMass:0,mB=B.movable()?B.invMass:0;
- rA=A.q.rotate(anchorA);rB=B.q.rotate(anchorB);
- const M3 sa=skewOf(rA),sb=skewOf(rB);M3 k=M3::diagonal({mA+mB,mA+mB,mA+mB})+(sa*iA*sa.transposed())+(sb*iB*sb.transposed());linearMass=k.inverse();
- angularMass=(iA+iB).inverse();const V3 n=A.q.rotate(axisA);const float kh=dot(n,(iA+iB)*n);hingeMass=kh>0?1/kh:0;}
-void Hinge::warmStart(Space& s){Body& A=s.bodies[size_t(a)];Body& B=s.bodies[size_t(b)];const V3 n=A.q.rotate(axisA);const V3 L=angular+n*hinge;
- if(A.movable()){A.v=A.v-linear*A.invMass;A.w=A.w-A.invInertia*(cross(rA,linear)+L);}
- if(B.movable()){B.v=B.v+linear*B.invMass;B.w=B.w+B.invInertia*(cross(rB,linear)+L);}}
-void Hinge::solve(Space& s,float h,bool useBias){Body& A=s.bodies[size_t(a)];Body& B=s.bodies[size_t(b)];const bool ma=A.movable(),mb=B.movable();if(!ma&&!mb)return;
- auto apply=[&](V3 P,V3 L){if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*(cross(rA,P)+L);}if(mb){B.v=B.v+P*B.invMass;B.w=B.w+B.invInertia*(cross(rB,P)+L);}};
- const Soft lock=makeSoft(std::min(lockHertz,.25f/h),1.f,h);
- // The anchors together.
- {const V3 ra=A.q.rotate(anchorA),rb=B.q.rotate(anchorB);const V3 C=(B.x+rb)-(A.x+ra);const V3 dv=(B.v+cross(B.w,rB))-(A.v+cross(A.w,rA));
-  V3 bias{};float ms=1,is=0;if(useBias){bias=C*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
-  const V3 P=(linearMass*(dv+bias))*-ms-linear*is;linear=linear+P;apply(P,{});}
- const Quat err=(A.q*rest).conj()*B.q;const V3 e=(A.q*rest).rotate(rotationOf(err));const V3 n=A.q.rotate(axisA);const float theta=dot(e,n);const V3 off=e-n*theta;
- // The other two axes held.
- {const V3 w=B.w-A.w;const V3 wo=w-n*dot(w,n);V3 bias{};float ms=1,is=0;if(useBias){bias=off*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
-  V3 L=(angularMass*(wo+bias))*-ms-angular*is;L=L-n*dot(L,n);angular=angular+L;apply({},L);}
- // About the hinge: the spring, and the stop.
- {const float wn=dot(B.w-A.w,n);const bool stopped=std::fabs(theta)>limit;
-  const Soft spring=stopped?lock:makeSoft(std::min(hertz,.25f/h),damping,h);const float target=stopped?(theta>0?limit:-limit):0.f;
-  const float bias=(theta-target)*spring.biasRate;float impulse=-hingeMass*spring.massScale*(wn+bias)-spring.impulseScale*hinge;
-  hinge+=impulse;apply({},n*impulse);}}
 void Space::step(float dt){
- events.clear();if(dt<=0||bodies.empty()){manifolds.clear();return;}
+ events.clear();jointEvents.clear();if(dt<=0||bodies.empty()){manifolds.clear();return;}
+ // A joint does not hold a moving body to a sleeping one: what is joined to something awake wakes (through
+ // the whole chain).
+ for(bool woke=true;woke;){woke=false;for(auto*c:constraints){const int a=c->bodyA(),b=c->bodyB();if(a<0||b<0)continue;if(auto*j=c->joint();j&&j->broken)continue;
+   auto&A=bodies[size_t(a)];auto&B=bodies[size_t(b)];if(A.invMass<=0||B.invMass<=0)continue;
+   if(A.sleeping!=B.sleeping){wake(A.sleeping?a:b);woke=true;}}}
+ // A motor at work keeps what it drives awake.
+ for(auto*c:constraints)if(auto*j=c->joint();j&&j->driving(*this))for(int i:{j->a,j->b})if(i>=0&&bodies[size_t(i)].invMass>0){wake(i);bodies[size_t(i)].sleepTime=0;}
  const int sub=std::max(1,settings.substeps);const float h=dt/float(sub);
  for(auto&b:bodies){if(b.shape&&b.invMass>0)b.updateInertia();b.dp={};b.dq={};}
  collide(dt);
@@ -494,7 +465,7 @@ void Space::step(float dt){
   integratePositions(h);
   for(int r=0;r<settings.relaxIterations;++r)solve(h,false);
   for(size_t m=0;m<manifolds.size();++m)for(int k=0;k<manifolds[m].count;++k)total[m*4+size_t(k)]+=manifolds[m].points[size_t(k)].normalImpulse;}
- restitution();storeImpulses();solveMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-s0).count();
+ restitution();storeImpulses();for(auto*c:constraints)c->finish(*this,h);solveMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-s0).count();
  for(auto&b:bodies){b.force={};b.torque={};}
  // What struck what: the approach speed and the impulse it took (sounds, breaking, glass).
  for(size_t mi=0;mi<manifolds.size();++mi){const auto&m=manifolds[mi];float approach=0,impulse=0,mass=0;V3 at{};
@@ -503,6 +474,8 @@ void Space::step(float dt){
   if(m.count>1&&m.midMass>mass)mass=m.midMass;
   if(approach>.3f)events.push_back({m.a,m.b,m.partA,m.partB,at,m.normal,approach,impulse,mass,m.surface});}
  continuous(dt,start);
+ // What the substeps left open of a joint that asks for it (a ragdoll's), put back by position.
+ for(int it=0;it<settings.projectIterations;++it)for(auto*c:constraints)c->project(*this);
  islands(dt);
  ++iterationsRun;
 }

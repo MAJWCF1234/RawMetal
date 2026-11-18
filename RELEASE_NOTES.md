@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.2 - Held together (2026-11-18)
+
+Things hang now, and swing, and come apart along their seams. The dead fall like the dead.
+
+- **Joints.** Vectra holds things together: hinges, ball joints, sliders, welds, ropes, springs, pulleys and motors, each with its limits, each able to snap when asked too much of. Lamps sway on their chains when struck. A crate hangs on a rope until you shoot the rope. There are seesaws, sprung gates, a rope bridge that sags under you, and a pulley lift with its counterweight. You can stand on what is held together.
+- **Connect.** In the editor, pick Rope, Chain, Hinge, Spring, Weld, Motor, Pulley or Hanging lamp, and drag from one thing to another, to a wall, or to the ceiling. A ghost shows what you are making. Hinges find their own pins. One click under a ceiling hangs a caged lamp on its chain.
+- **The dead.** Bodies are Vectra bodies now, jointed as a body is, with the bend and twist a knee or a shoulder allows. They tumble down stairs, drape over table edges and lie still where they stop, without the small jump the old ones gave as they settled, and they never rest crouched against a wall like something waiting. A save keeps every body exactly as it lay. The old bodies are still there behind a switch (`RM_RAGDOLL=legacy`).
+- **Physgloves.** Point at something loose and flick, and it comes to your hand on a long arc. Catch it. Light things fly; heavy things only lurch toward you; a thing on a rope pulls at its rope. They work at a desk and in VR.
+- **Pieces.** A chair breaks into its legs, its seat and its back. A crate comes apart into planks, a bottle into its neck and its shards, a monitor into its casing and its glass. The pieces are cut from the props themselves.
+- **Liquid.** Bottles hold water, oil, and something green that glows. It moves when the bottle moves, pours when the bottle tips, runs from the hole a round leaves, and spills all at once when the glass gives. It pools on the floor, dark and wet. A full bottle sinks; an empty one floats.
+- **Two hands.** In VR your hands are solid. They push things and do not pass through them, and a crate or a chair can be carried in both, turning as your hands turn.
+- **Aim.** A round meets a thing where the thing is, not where a box drawn around it would be. Shots pass the corner of a turned crate and through the gap under a chair. A crate held up as a shield stops only the blows that reach it.
+- **Speed.** Fast and spinning things no longer pass through thin posts, thin walls or each other.
+- **Building.** The editor offers every shape the engine knows, forty-five of them, as pictures in plain groups. Ten are new: a roof wedge, a spire, a pyramid roof, a spiral stair, a culvert, a buttress, a bevelled block, an eight-sided pillar, a curved wall and a catwalk. Drag a shape to size, or stretch, raise, lift and turn it with handles in the 3D view. Where shapes overlap, the faces buried inside are cut away, so a building of stone, brick, concrete and copper reads as one.
+- **The Starter Map** has a joints corner, a room of shapes, and a bench of bottles and breakables to try.
+
+Verified with tools/release/ship.py, the feature lab's tubes for every system above, the editor's test modes, and pictures of each.
+
+---
+
 ## v1.5.1 - Ground to stand on (2026-11-17)
 
 Things have weight now, and the places you build have somewhere to stand.
