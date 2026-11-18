@@ -10,6 +10,7 @@
 //    holds with four substeps and few iterations, and speculative contacts (positive separation) catch
 //    what closes within the step.
 #include "Vectra.h"
+#include "Queries.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -415,18 +416,8 @@ void Space::integratePositions(float h){
  for(auto&b:bodies){if(!b.movable())continue;
   b.x=b.x+b.v*h;b.q=integrate(b.q,b.w,h);b.dp=b.dp+b.v*h;b.dq=integrate(b.dq,b.w,h);}
 }
-void Space::continuous(float dt,const std::vector<V3>& start){
- if(!sweep)return;
- for(int i=0;i<int(bodies.size());++i){auto&b=bodies[size_t(i)];if(!b.movable())continue;const V3 from=start[size_t(i)];const V3 move=b.x-from;const float dist=len(move);
-  // Fast for its size: it could cross something thinner than itself within this step.
-  float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box?std::min({part.half.x,part.half.y,part.half.z}):std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
-  b.ccd=dist>std::max(.02f,small*.5f);if(!b.ccd)continue;
-  V3 n;const float t=sweep(*this,i,from,b.x,n);if(t>=1)continue;
-  // Back to where it meets the surface, resting its own reach off it, and its way into it taken out.
-  float extent=0;for(int p=0;p<b.shape->count;++p)extent=std::max(extent,dot(b.x-support(b,p,neg(n)),n));
-  b.x=from+move*t+n*extent;
-  const float vn=dot(b.v,n);if(vn<0)b.v=b.v-n*(vn*(1+b.material.restitution));(void)dt;}
-}
+// Fast bodies swept through the step, turning as well as going, against the world and each other (Queries.h).
+void Space::continuous(float dt,const std::vector<V3>& start){continuousCollision(*this,dt,start);}
 void Space::islands(float dt){
  const int n=int(bodies.size());std::vector<int> parent(static_cast<size_t>(n));for(int i=0;i<n;++i)parent[size_t(i)]=i;
  auto find=[&](int i){while(parent[size_t(i)]!=i){parent[size_t(i)]=parent[size_t(parent[size_t(i)])];i=parent[size_t(i)];}return i;};

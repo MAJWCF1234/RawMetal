@@ -6,6 +6,7 @@ The prop physics that came before Vectra, a yaw-mostly box with tipping by rule,
 **Vectra is the default**; legacy stays selectable as a fallback (below).
 
 - Core: `src/game/physics/Vectra.h`, `Vectra.cpp` (namespace `retro::vectra`). It has no game code in it.
+  Its queries and continuous collision: `Queries.h`, `.cpp`; props through them: `PropQueries.h`, `.cpp`.
 - Props as bodies: `src/game/physics/PropBodies.h`, `.cpp`. The shape and material catalogue, the switch, the
   Clutter-to-body mapping and the save fields live here.
 - Game step: `src/game/RigidClutter.cpp` (`Game::simulateRigidProps`). It covers world contacts, glass, water,
@@ -13,7 +14,8 @@ The prop physics that came before Vectra, a yaw-mostly box with tipping by rule,
 - Tubes: `src/lab/tubes/RigidProps.cpp`. `rigid-ab` compares Vectra and legacy and prints the numbers.
   `rigid` and `rigid-legacy` film the same scenes on each. `vectra-emergence` checks behaviour that comes from
   the solver alone. `rigid-trace` and `rigid-probe` are for debugging.
-  `tools/dev/rigid_sheet.py` lays the films side by side.
+  `tools/dev/rigid_sheet.py` lays the films side by side. `src/lab/tubes/VectraQueries.cpp`: `vectra-queries` and
+  `vectra-ccd` (below).
   `src/lab/tubes/Joints.cpp`: `joints` (every joint kind on the bare core at 60 and 144 steps a second).
   `src/lab/tubes/JointsRoom.cpp`: `joints-room` (the Starter Map's joints corner played).
   `src/lab/tubes/VectraShove.cpp`: `vectra-shove` (props against people and things by weight, legacy and Vectra),
@@ -123,10 +125,60 @@ A sleeping prop out of reach of every awake prop and of the player is not built 
 ## Continuous collision
 
 - Speculative contacts look as far ahead as the body moves in a step, for floors, walls and other props.
-- A body moving more than half its smallest size in a step is also swept by its middle against the world.
-  If the sweep crosses a surface, the body is set back against that surface with its velocity into it removed.
+  They stay the first line; the sweeps below catch what passes them.
+- A body is **fast** when, in a step, its centre goes or its reach turns (angle times its bounding radius)
+  more than half its smallest size (2 cm at least). A plank spinning in place is fast though its middle is
+  still. `Space::continuous` runs `continuousCollision` (`Queries.cpp`) on each fast body, in index order:
+  - **Against the world.** Points along its edges (corners, every 2.5 cm along each edge, a cylinder's rims
+    and side lines) are ray cast by `Space::sweep` through the step, in pieces of at most 0.15 rad of its turn.
+    Trailing points and points that hardly move are skipped. A point that strikes a surface counts when it
+    went through what it struck (a ray back from where it ends finds a face between) or ends more than 2 cm
+    into it; shallower is the contacts' business. The body goes back to that moment, 1 mm off the surface, and
+    takes a blow at the middle of the points that struck that face together (so a plank's face hitting a post
+    along its height is not flipped over by one corner). If no edge point strikes anything, the old sweep of
+    its middle still runs.
+  - **Against other bodies.** Each body whose swept sphere comes near it (and that the Space's filter and
+    groups allow) is tested for a time of impact: conservative advancement on the GJK distance, with the gap's
+    closing speed bounded by their approach along the normal plus each one's turn times its reach. Pairs
+    already touching when the step began are left to the contacts. At the time of impact the body (and the
+    other, if it was fast too) goes back to that moment and the two take a blow at the point (restitution as
+    the contacts mix it).
+  - Each answer is reported as a `ContactEvent`, so sounds, breaking and glass hear it as a contact.
 - Glass gets a look-ahead ray along the body's path: a pane it will meet this step is struck with the energy
   of the speed it will arrive at.
+- `vectra-ccd` checks it: a plank spinning at 60 rad/s beside a 3 cm post (the world's and a fixed body), two
+  thin boards and two crates thrown at each other at 25 m/s, a bottle at 30 m/s at a 3 cm wall.
+
+## Queries
+
+`src/game/physics/Queries.h` asks bodies what a ray, a shape or a region meets, in their true pose. No state;
+any thread. `PropQueries.h` puts a prop (or a chained pad's three segments) through the same queries.
+
+- **Rays** meet each part exactly: a turned box by its slabs, a cylinder by its round and caps (the true
+  cylinder, not the solver's prism), a sphere by its round. A compound meets only its parts.
+- **Sphere and box casts** sweep a shape along a line by conservative advancement on a GJK distance (support
+  functions), so a turned box meets a turned cylinder as it is.
+- **Overlaps** of a sphere or a box with a body.
+- **Many bodies**: lists are pruned by each body's bounding sphere first; `rayCast(Space&)` by the boxes the last
+  step found (moved and grown by the motion since). `rayCastAll` gives every hit in order.
+- **Distance and time of impact**: `partDistance`, `bodyDistance`, `timeOfImpact` (above).
+- Each hit gives the distance, point, outward normal, body and part, and whether the cast began inside.
+
+What uses them:
+- **Gunfire** (`Game::traceShot`): each prop by `rayCastProp`. A round past a turned crate's corner passes; one
+  through the gap under a chair's seat passes the chair. The blockMass rule is unchanged: a light prop is a
+  passage the round goes on through, a heavy one stops it. Water passages, glass, bodies and ragdolls are as
+  before. The VR fist's sweep goes through `traceShot` too.
+- **Shielding** (`Game::shieldBlow`): the blow's way, a box 10 x 24 x 60 cm swept from the attacker's reach
+  (at most 1.6 m out) to the front of the player's body over his upper body, must meet the held prop as it is
+  held. A blow from a side it does not cover lands on him (the old rule took anything within 60 degrees).
+  A mug is still not a shield.
+- `vectra-queries` checks the core against hand-worked distances, gunfire past a turned crate and under a
+  chair, and shielding from in front, the side and 45 degrees off.
+- Left for later: the Physgloves' targeting and the carry's placement (Clutter.cpp, phase 3's) still use
+  boxes and the prop's middle; `rayCastProp`/`sphereCastProp` are the drop-in. Character contact can use
+  `boxCast`/`sphereCast` for the hull sweep and `overlapBox` for a man standing in a prop, and
+  `timeOfImpact` for a fast prop against a moving body.
 
 ## Materials
 
@@ -260,7 +312,8 @@ degrees), lets sections overlap by 2-4 cm and jumps going to sleep, where the po
     blow that breaks it.
   - **Glass** takes the energy at the manifold's middle: a 20 kg box dropped 1.2 m goes through a glass floor,
     a 1 kg box does not.
-  - **The shield.** A carried prop that does not break is torn out of the hands once it has taken
+  - **The shield.** A blow is the prop's only if its way meets the prop as held (Queries, above). A carried prop
+    that does not break is torn out of the hands once it has taken
     `ShieldKnockAway` times its mass over 9 kg (half to three times): a 20 kg crate takes 9 blows, a 4 kg one 2.
 - **Cables, saves and the renderer** read yaw, pitch and roll as before.
 

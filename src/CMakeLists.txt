@@ -85,6 +85,8 @@ add_executable(RawMetal WIN32
     game/physics/Vectra.cpp
     game/physics/Joints.cpp
     game/physics/PropBodies.cpp
+    game/physics/Queries.cpp
+    game/physics/PropQueries.cpp
     game/Script.cpp
     game/Settings.cpp
     game/Saves.cpp
