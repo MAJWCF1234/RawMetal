@@ -196,6 +196,21 @@ float terminalHeight(const World& world,const Terminal& terminal,float x,float y
 }
 }
 
+bool World::terminalBench(const Terminal& terminal)const{return benchTerminal(*this,terminal);}
+namespace {const SkyboxDef* litSky(const World& w){const auto* sky=w.outdoors()?findSkybox(w.skyboxId()):nullptr;return sky&&sky->sunIntensity>=0?sky:nullptr;}}
+SunLight World::sun()const{
+ if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};
+ if(const auto* sky=litSky(*this)){const float az=sky->sunAzimuth*kPi/180.f,el=sky->sunElevation*kPi/180.f;
+  s.direction={std::cos(el)*std::cos(az),std::cos(el)*std::sin(az),std::sin(el)};s.intensity=sky->sunIntensity;s.r=sky->sunR;s.g=sky->sunG;s.b=sky->sunB;return s;}
+ if(zoneSky()){d={-.62f,.48f,.42f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.6f;s.r=1.f;s.g=.86f;s.b=.66f;return s;}
+ float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;
+}
+float World::outdoorAmbient()const{
+ if(const auto* sky=litSky(*this))return sky->ambient*std::clamp(definition().ambient/.3f,.25f,3.f);
+ return sun().intensity>0?.26f:.48f;
+}
+Point3 World::skyAmbientTone()const{if(const auto* sky=litSky(*this))return {sky->ambientR,sky->ambientG,sky->ambientB};return {1,1,1};}
+float World::skyExposure()const{if(const auto* sky=litSky(*this))return sky->exposure;return 1.f;}
 void World::buildPopulation(){
  using C=CreatureKind;using P=PickupKind;
  if(!campaign()){
@@ -565,6 +580,8 @@ Haze World::haze(Vec2 p,float z)const{
  if(definition().haze[3]>=0)return definition().haze;
  if(zoneSky())return {.55f,.64f,.74f,.0035f};
  if(outdoors()&&std::string_view(skyboxId())=="brutal_wasteland")return coast()?Haze{.62f,.74f,.85f,.006f}:Haze{.39f,.39f,.40f,.012f};
+ // A catalog sky with its own air (make_skies.py's: night, storm, dawn...) hazes the land to match it.
+ if(outdoors())if(const auto* sky=findSkybox(skyboxId());sky&&sky->hazeDensity>=0)return {sky->hazeR,sky->hazeG,sky->hazeB,sky->hazeDensity};
  return outdoors()?Haze{.43f,.52f,.62f,.010f}:Haze{.11f,.15f,.18f,.008f};
 }
 void World::setSkybox(std::string id){

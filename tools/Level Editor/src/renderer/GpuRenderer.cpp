@@ -537,7 +537,7 @@ struct GpuRenderer::Impl {
  // its world origin and height cell, then its atlas band and layer count. Each reflection probe: its
  // world position and atlas probe index, then its room box (lo, hi).
  static constexpr int ProbeCellsPerVolume=IrradianceVolume::Width*IrradianceVolume::Width;
- struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];float skyAmbient[4];
   float probeInfo[4];float probeVolumes[ProbeSlots*8];float reflections[MaxReflections*12];
   // Each probe volume's 24 x 24 one-metre cells: the reflection probe (record + 1, 0 none) a point in the
   // cell reads, resolved here once per probe set so a pixel does one lookup (scene.frag probeAt).
@@ -556,7 +556,7 @@ struct GpuRenderer::Impl {
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
- int skyStyle=0,storm=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
+ int skyStyle=0,storm=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};float skyAmbient[4]{1,1,1,0};float skyExposure=1;Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
  void renderSunShadows(VkCommandBuffer cmd){
   if(!sunPipeline||!sunAtlas.handle)return;
   if(!sunLayoutReady){
@@ -1607,6 +1607,7 @@ void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::arra
 }
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
+void GpuRenderer::setSkyAmbient(float r,float g,float b,bool on,float exposure){m->skyAmbient[0]=r;m->skyAmbient[1]=g;m->skyAmbient[2]=b;m->skyAmbient[3]=on?1.f:0.f;m->skyExposure=std::clamp(exposure,.1f,1.f);}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
 void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}
 void GpuRenderer::setLodTag(const LodTag* tag){m->lodTag=tag;}
@@ -1792,9 +1793,10 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    static_assert(offsetof(Impl::LampHeader,flashTones)==offsetof(Impl::LampHeader,flashes)+64);std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flashes),m->weaponFlashes.data(),sizeof(m->weaponFlashes));
   // The shadow stage runs (and carries the shafts) exactly when compose does below.
   {auto torch=v[8]>.5f?WorldLight::tone(5600,0,{1,1,1}):Point3{};float scatter[4]={torch.x,torch.y,torch.z,m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer?1.f:0.f};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,scatter),scatter,sizeof(scatter));}
+  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,skyAmbient),m->skyAmbient,sizeof(m->skyAmbient));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+3*sizeof(int32_t),&m->storm,sizeof(int32_t));}
- static_assert(sizeof(Impl::LampHeader)==16*(7+12+4+4+1+1+16+144+288),"scene.vert reads lampGrid.plants at this offset");
+ static_assert(sizeof(Impl::LampHeader)==16*(7+12+4+4+1+1+1+16+144+288),"scene.vert reads lampGrid.plants at this offset");
  if(!m->plantData.empty())std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+Impl::LampBufferBytes,m->plantData.data(),m->plantData.size()*4);
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
@@ -1921,7 +1923,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
    // stay dark; over-lit rooms come down instead of washing out.
    // Low key (.08) and a 1.3x ceiling: darkness stays dark instead of being metered up.
    // True darkness caps it at 1x: a black room is never metered up.
-   float exposureParams[32]={m->surface?.045f:1.f,.08f,.3f,1.3f-.3f*m->darkness, .55f,m->surface?.12f:1.f};
+   float exposureParams[32]={m->surface?.045f:1.f,.08f,.3f*m->skyExposure,(1.3f-.3f*m->darkness)*m->skyExposure, .55f,m->surface?.12f:1.f};
    runStage(m->exposureStage,{m->target.view,m->exposureImages[size_t(read)].view},exposureParams,m->exposureFrames[size_t(write)],VkExtent2D{1,1});
    m->barrier(m->exposureImages[size_t(write)],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,1,cmd);
    m->exposureLayouts[size_t(write)]=VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;m->exposureWrite=write;
