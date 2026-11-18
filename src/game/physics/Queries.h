@@ -76,12 +76,15 @@ void edgeProbes(const Body& b,int part,float spacing,std::vector<V3>& out);
 // ---- Continuous collision ----
 // What Space::continuous runs after a step (`start`: each body's centre of mass when the step began; its turn
 // then is its dq undone). A body is fast for its size when its centre went, or its reach turned, more than
-// half its least thickness (2 cm at least). For each fast body, in index order:
+// half its least thickness (2 cm at least); a body a joint holds never is (put back alone, it would open its joints).
+// RM_CCD=off turns it all off. For each fast body, in index order:
 //  - against the world: the points along its edges (corners, every 2.5 cm along edges, a cylinder's rims) ray
 //    cast through the step in pieces of at most 0.15 rad of its turn, by Space::sweep; a point that strikes
 //    something and went through it, or ends more than 2 cm into it, is a time of impact;
-//  - against other bodies (pruned by swept spheres, the Space's filter and groups): a time of impact by
-//    conservative advancement, for any pair not already touching when the step began;
+//  - against other bodies (pruned by swept spheres; not pairs the Space's filter or groups rule out, a holding
+//    joint joins, the caller meets itself by pairContacts, with a soft body, or going together, the other moving in
+//    this one's frame no further than the thinner is thick): a time of impact by conservative advancement, for any
+//    pair not already touching when the step began;
 //  - the first is answered: the body (and a fast other) back to that moment, and a blow at the point that
 //    takes out the approach (restitution as the contacts give it), reported as a ContactEvent.
 // The speculative contacts stay the first line; this catches what passes them.
