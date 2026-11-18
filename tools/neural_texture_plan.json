@@ -17,7 +17,7 @@
   {"id":289,"source":"assets/facility/cargo/packing-crate.png","factor":"auto"},
   {"id":102,"source":"assets/materials/grating.png","factor":"auto"},
   {"id":103,"source":"assets/metal.png","factor":"auto"},
-  {"id":106,"source":"assets/arms/arms_gloves_01.png","factor":"auto"},
+  {"id":106,"source":"assets/arms/arms_gloves_01.png","factor":"auto","lossy":false},
   {"id":112,"source":"assets/remington.png","factor":"auto"},
   {"id":174,"source":"assets/facility/wall_8.png","factor":"auto"},
   {"id":175,"source":"assets/facility/wall_5.png","factor":"auto"},
@@ -119,5 +119,6 @@
   {"library":"ivy_*","factor":"auto"},
   {"library":"chainlink_fence","factor":"auto"},
   {"library":"rock_*","factor":"auto"},
-  {"library":"*","factor":"auto"}
+  {"library":"*","factor":"auto"},
+  {"library":"player/*","factor":"auto","lossy":false}
 ]

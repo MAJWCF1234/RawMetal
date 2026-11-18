@@ -7,15 +7,16 @@
     "saving": 2048,
     "x4_min_side": 32,
     "smooth": 0.5,
-    "detail": 0.9
+    "detail": 0.9,
+    "detail_loss": 0.4
   },
   "model": "src\\assets\\ai\\texture-n2.ntm",
   "model_sha256": "8d2492ee0341f9db1fa7166d8f8ac2d90e398430aef76a7a396fb56d05941e1f",
   "marked": 511,
-  "neural": 135,
-  "raw": 306,
+  "neural": 130,
+  "raw": 311,
   "kept_ntx1": 70,
-  "bytes_saved": 4338222,
-  "x4": 5,
-  "lossy_storage": 83
+  "bytes_saved": 9259514,
+  "x4": 4,
+  "lossy_storage": 77
 }

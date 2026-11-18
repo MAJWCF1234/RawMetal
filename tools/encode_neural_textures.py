@@ -7,7 +7,9 @@ Plan entries (one JSON list):
       every library texture (src/assets/library, by file name or a glob on
       its path under the library folder, e.g. "textures/surface_*") that
       assets.rc embeds; library entries are how new parts get marked
-factor is 2, 4 or "auto" (try x4, then x2).
+factor is 2, 4 or "auto" (try x4, then x2). "lossy": false keeps an entry's
+stored texels lossless (first-person arms and the player's body are seen up
+close). A later entry overrides an earlier one for the same texture.
 
 For each marked texture the encoder reduces the master (edge-padded bicubic),
 refines the reduced texels by gradient descent through the shared NTM2 head so
@@ -19,8 +21,9 @@ smallest packet that passes the quality gate wins:
   the worst 1% of 8x8 blocks at SSIM >= 0.50 (local damage: text, grain),
   at least 20% and 2 KB smaller than the lossless WebP of the master, and x4
   only where the stored image keeps at least 32 texels a side; each choice
-  keeps 90% of the detail (luma gradient energy) the x2 lossless one does,
-  or loses under 0.4 luma levels per texel more than it. A smooth image
+  keeps 90% of the detail (luma gradient energy) the x2 lossless one does
+  (a sky panorama may instead lose under 0.4 luma levels per texel more than
+  it: a flat sky's dither is not detail, and a sky is seen far off). A smooth image
   (over half its 8x8 blocks flat to 2 levels: skies, glows) keeps lossless
   texels, since VP8's blocks would show as bands across its gradients.
 
@@ -97,6 +100,7 @@ def resolve(plan, entries):
     chosen = {}
     for item in plan:
         factors = (4, 2) if item.get('factor') == 'auto' else (int(item['factor']),)
+        spec = (factors, bool(item.get('lossy', True)))
         if 'library' in item:
             pattern = item['library']
             for number, path in entries.items():
@@ -107,9 +111,9 @@ def resolve(plan, entries):
                 if name.startswith('skies/'):
                     continue  # panoramas: tools/library/make_skies.py encodes those at their embedded size
                 if fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(name, pattern + '.png'):
-                    chosen[number] = (master, factors)
+                    chosen[number] = (master, spec)
         else:
-            chosen[int(item['id'])] = (item['source'], factors)
+            chosen[int(item['id'])] = (item['source'], spec)
     return sorted((n, m, f) for n, (m, f) in chosen.items())
 
 
@@ -176,10 +180,10 @@ def detail(original, recon):
     return gradient_energy(recon, seen)/base if base > 1e-9 else 1.0
 
 
-def keeps_detail(m, reference, base):
-    """Within 90% of the detail x2 lossless keeps, or losing under 0.4 luma
-    levels of gradient per texel more than it (a flat sky's dither is not detail)."""
-    return m['detail'] >= GATE['detail']*reference or (reference-m['detail'])*base <= GATE['detail_loss']
+def keeps_detail(m, reference, base, sky=False):
+    """Within 90% of the detail x2 lossless keeps; a sky may instead lose
+    under 0.4 luma levels of gradient per texel more (its flat dither)."""
+    return m['detail'] >= GATE['detail']*reference or (sky and (reference-m['detail'])*base <= GATE['detail_loss'])
 
 
 def looks_right(m):
@@ -213,7 +217,7 @@ def packet(w, h, lw, lh, factor, colour, lossy, alpha):
     return body
 
 
-def encode(model, source, factors, steps):
+def encode(model, source, factors, steps, sky=False, lossy=True):
     rgba = (source if isinstance(source, Image.Image) else Image.open(source)).convert('RGBA')
     w, h = rgba.size
     original = np.asarray(rgba)
@@ -252,17 +256,17 @@ def encode(model, source, factors, steps):
             nonlocal reference
             if reference is None:
                 reference = m['detail']
-            ok = passes(m, len(data), baseline) and keeps_detail(m, reference, energy)
+            ok = passes(m, len(data), baseline) and keeps_detail(m, reference, energy, sky)
             candidates.append(dict(factor=factor, quality=quality or 0, bytes=len(data), data=data, recon=recon, ok=ok, **m))
             return candidates[-1]
         # Lossless is this factor's best quality: if it fails, every lossy
         # choice fails too. Otherwise climb from the smallest (lowest VP8
         # quality) and stop at the first that passes. Every choice must keep
-        # 90% of the detail (luma gradient energy) x2 lossless keeps, or lose
-        # under 0.4 levels per texel more: VP8 and x4 smear ridges and grain
-        # that SSIM and PSNR forgive.
+        # 90% of the detail (luma gradient energy) x2 lossless keeps (a sky:
+        # or lose under 0.4 levels per texel more): VP8 and x4 smear ridges
+        # and grain that SSIM and PSNR forgive.
         first = attempt(None)
-        if not looks_right(first) or not keeps_detail(first, reference, energy) or smooth:
+        if not looks_right(first) or not keeps_detail(first, reference, energy, sky) or smooth or not lossy:
             continue  # smooth images keep lossless texels: VP8 blocks show as bands in a gradient
         for quality in QUALITIES[:0:-1]:
             if attempt(quality)['ok']:
@@ -276,7 +280,7 @@ def encode(model, source, factors, steps):
 _shared = None
 
 
-def neural_packet(image, factors=(4, 2)):
+def neural_packet(image, factors=(4, 2), sky=True):
     """(NTX2 packet, metrics) for a PIL image under the same gate, or (None,
     metrics) when nothing passes. The sky tools (tools/library) use this."""
     global _shared
@@ -284,7 +288,7 @@ def neural_packet(image, factors=(4, 2)):
         _shared = read_model2(MODEL)
         for p in _shared.parameters():
             p.requires_grad_(False)
-    result = encode(_shared, image, factors, 0)
+    result = encode(_shared, image, factors, 0, sky)
     best = {k: v for k, v in (result['best'] or {}).items() if k not in ('data', 'recon')}
     return (result['best']['data'] if result['passed'] else None), best
 
@@ -313,9 +317,9 @@ def _start_worker(model_path, threads):
 
 
 def _encode_job(job):
-    path, factors, steps = job
+    path, (factors, lossy), steps = job
     try:
-        return encode(_worker, Path(path), factors, steps)
+        return encode(_worker, Path(path), factors, steps, lossy=lossy)
     except ValueError as error:
         return str(error)
 
