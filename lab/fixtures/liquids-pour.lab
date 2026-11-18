@@ -1,0 +1,9 @@
+# Liquid in bottles: pour (tube liquids).
+world room
+camera 11.2 6.3 -999 132 -56
+light 8.5 8.5 3.0 1.6 9
+light 7 7 2.8 1.1 8
+light 9.8 9.5 2.8 .9 8
+scene pour
+size 1600 900
+frames 200

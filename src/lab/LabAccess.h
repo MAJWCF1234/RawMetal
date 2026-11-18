@@ -43,6 +43,7 @@ struct LabAccess {
  static void stepProps(Game& g,float dt,const InputState& input={}){g.updateClutter(input,dt);}
  static auto& friendlies(Game& g){return g.m_friendlyActors;}
  static std::vector<BulletImpact>& impacts(Game& g){return g.m_bulletImpacts;}
+ static std::vector<BreakEvent>& breakEvents(Game& g){return g.m_breakEvents;}
  static std::vector<HitBurst>& bursts(Game& g){return g.m_hitBursts;}
  static void hitBurst(Game& g,Point3 p,Point3 dir,ImpactMaterial m,int species,float power,bool kill){g.hitBurst(g.m_level,p,dir,m,species,power,kill);}
  static float& elapsed(Game& g){return g.m_elapsed;}

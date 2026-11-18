@@ -401,7 +401,77 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `water.right` | 80 | how strongly a floater rights itself |
 | `water.lever` | 0.35 | how far the lift is drawn toward the body's middle |
 
-## For phase 3
+## Phase 3
 
-- **Gravity gloves.** `Space::drive` pulls a body to a pose with a capped spring. It sets velocity, so
-  contacts still hold.
+### Physgloves (src/game/Physgloves.cpp; tube `physgloves`)
+
+- **Aim.** Desktop: the look. VR: each hand's pointing. The target is the first prop the aim's ray meets in its
+  true shape and turn (`rayCastProp`, PropQueries.h); a pinned or held prop in front blocks it. Missing everything,
+  a 0.2 m `sphereCastProp` along the same line finds the nearest loose prop (aim assist). Within 7 m, the world
+  clear between the eye (and the VR hand) and where the cast met it. It is drawn a little brighter, pulsing (Scene3D `drawClutter`), and never from the resting cache.
+- **Flick.** Desktop: `G`, or hold the middle mouse button empty-handed (the look stays on the target) and flick
+  the mouse back. VR: close the hand while pointing (it locks on), then snap the wrist back toward the face or up
+  (1.3 m/s).
+- **The arc.** The velocity that takes the prop's middle to the catch point (before the eye at carry reach, or in
+  the VR hand) in 0.42 to 0.95 s by distance, under the props' own 14 m/s^2. Up to 6 kg it flies all the way;
+  heavier, the speed is cut by 6 / mass, so a 9 kg crate hops part way and a 35 kg drum lurches. Something lying
+  in an open container is first popped straight up over its rim, then sent. A prop on a joint is tugged: the joint
+  holds it, so the hung crate swings out toward the hand on its rope; it is never caught.
+- **The catch.** Inside the flight time plus 0.3 s: desktop, its middle within 0.55 m of the hold point; VR,
+  within 0.45 m of a closed hand. Otherwise it goes on as it was going (turned away, walked off, hand open).
+  It does not strike the one who pulled it.
+
+### Two-hand VR carry and hands as bodies (TwoHand.cpp, VrHands.cpp; tube `vr-hands`)
+
+- A large held prop (0.45 m across, or 4 kg and up) is taken by the free hand closing within 12 cm of its shape.
+  Each hand keeps its grip point in the prop's frame; the prop turns by the turn that carries the line between the
+  hands at the grab onto the line now (one hand up: it tilts), then about that line by the roll of the hands' mean
+  pointing (both wrists forward: it rolls), and its grips' midpoint stays at the hands' midpoint. A pose that does
+  not fit the world is not taken (it stops, it is not dropped). Letting go with one hand leaves it in the other;
+  with both, it is thrown at the mean of the two hands' velocities.
+- A tracked hand holding nothing is a kinematic 4.5 cm sphere in the solver, its velocity toward the tracked hand
+  capped at 2.5 m/s, so a swat moves a light thing no faster than that. Props of 12 kg and up, and pinned ones, are
+  left out of its contacts. After each step the drawn hand (the proxy, `Game::vrHandOffset`) goes on toward the
+  tracked one 2 cm at a time and is set out of every prop along its nearest face: it stops at a drum's surface and
+  never passes into or through a prop. The old overlap knock (`knockClutter` from a hand inside a box) runs under
+  legacy only.
+
+### Authored gibs (tools/library/make_gibs.py, src/world/GibSets.h; tube `gibs`)
+
+- Pieces are made in Blender, headless, from the prop's own mesh by a recipe per prop: the pack mesh's own loose
+  parts grouped by where they lie (a chair's legs, seat and back), the mesh cut with planes (bmesh bisect, the cut
+  capped with an inner material: a crate's lid, floor and walls), and random plane fractures for brittle things (a
+  bottle's body, a screen). Each piece is a library model (OBJ, a json sidecar with its shape, mass share, offset
+  and size as fractions of the prop) registered as any library model; `make_gibs.py --table` writes GibSets.h and
+  the pieces' masses (by bounding volume) and materials into prop_physics.json.
+- `Game::breakClutter` puts each piece where it sat in the prop, turned as the prop was, at the prop's speed plus
+  a throw out from its middle and along the blow. Each is an ordinary model prop: a Vectra body (a box, or a
+  cylinder for a bottle neck), saved with the props, carried and pulled like any. Glass pieces shatter further by
+  the usual break speed. A prop with no set is sliced into eighths as before.
+- Sets: wooden_chair (four legs, seat, back), scrap_chair (frame, seat, back), wooden_crate (lid, floor, four
+  side planks, two ends), packing_crate (lid, floor, two sides, two ends), glass_bottle (neck, four shards),
+  crt_monitor (stand, casing, a screen cracked in three).
+
+### Liquid in bottles (Liquids.h, Liquids.cpp; tube `liquids`)
+
+- A vessel (glass bottle, specimen jar, pill bottle) holds a level of water, oil or a green chemical (glowing).
+  Authored with a CLUTTER record's `p.liquid=water|oil|chemical` and `p.fill=0..1`.
+- The surface is a plane in the bottle's frame. Its normal is a damped spring (water 2.4 Hz, damping 0.07; oil
+  1.5 Hz, 0.35) toward the effective gravity (gravity less the bottle's acceleration, from its middle's own path);
+  the bottle's turn carries the old surface with it by the liquid's thickness. Its offset is found from the volume
+  (the inner cylinder, 0.85 of the radius, mouth at the top). It is drawn as the inner cylinder cut by that plane
+  inside the bottle's glass, which is drawn clear while it holds liquid.
+- Past the mouth it pours at sqrt(2 g h) by the head over the mouth, times the kind's run (oil 0.32). A round
+  holes a bottle that holds liquid (its first round; the next breaks it) and it leaks from the hole down to it.
+  Broken, it spills all it held. Drops fly; on standing water they splash into it (`raiseWaterSplash`), on a floor
+  they pool (`Game::puddles`, merged by kind, drawn as films). The baked wetness mask is not touched.
+- Its mass is in `Clutter::mass` (a full glass bottle weighs 1.6 kg, empty 0.5), and a bottle holding liquid
+  displaces its outer shape in water: an empty one floats, a full one sinks.
+- Saves keep each bottle's kind, level, surface and hole (the `liquids` section, save-format.md). Drops and
+  puddles are not saved.
+
+### The Starter Map
+
+SHOWCASE: PHYSICS has a phase-3 corner along its south wall (make_starter_map.py `phase3_corner`): a high shelf of
+things to pull, a crate hung on a rope, mugs in an open crate, a table of breakables with authored gibs, bottles of
+water, oil and chemical on a bench, and a crate for two-hand carrying. Fixture `physgloves-starter`.

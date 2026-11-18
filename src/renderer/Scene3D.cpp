@@ -2386,6 +2386,39 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},chipSheet,1.5f);}
  }
  auto softPadOf=[&](const Clutter&c)->const SoftPad*{if(!soft::isSoft(c))return nullptr;const auto&list=game.chunkClutter(level);const auto i=&c-list.data();return i>=0&&i<std::ptrdiff_t(list.size())?game.softPad(level,-1,int(i)):nullptr;};
+ // The prop the Physgloves point at (Physgloves.cpp): drawn a little brighter, a slow pulse, and never from the resting cache.
+ const Clutter* gloveTarget=level==game.level()&&game.physgloves().target>=0&&game.physgloves().target<int(game.clutter().size())?&game.clutter()[size_t(game.physgloves().target)]:nullptr;
+ const float glovePulse=1.22f+.12f*std::sin(game.elapsed()*7.f);
+ // And wrapped in a faint warm glow: its faces again, 6% larger, additive.
+ static const Texture gloveGlow=[]{Texture t{2,2,std::vector<std::uint32_t>(4,0x60c08a3au)};t.additive=true;return t;}();
+ // Liquid (Liquids.h): seen through the bottle's glass, which is drawn clear while it holds some, the liquid inside is
+ // a translucent tint of its kind (water nearly clear, oil a dark amber, the chemical a glowing green) with a glossy
+ // surface: the inner shape (12 sides) cut by its surface plane, the cut drawn as the surface, a little brighter.
+ static const std::array<Texture,3> liquidSheets=[]{std::array<Texture,3> out;constexpr unsigned alpha[3]={92u,215u,150u};
+  for(int k=0;k<3;++k){const auto& tr=liquid::traits[k];Texture t{4,4,std::vector<std::uint32_t>(16)};const float lift=k==0?.25f:0.f;
+   for(int i=0;i<16;++i){const float j=.95f+.05f*float((i*7)%5)/4.f;auto ch=[&](float v){return unsigned(std::clamp((v+lift*(1-v))*j,0.f,1.f)*255);};t.pixels[size_t(i)]=(alpha[k]<<24)|(ch(tr.r)<<16)|(ch(tr.g)<<8)|ch(tr.b);}
+   t.transparent=true;SoftwareRenderer::applyMaterial(t,int(Material::Water),"bottled liquid");t.glossStrength=.9f;
+   if(tr.glow>0){t.emission.resize(16);for(size_t i=0;i<16;++i){const auto e=t.pixels[i];t.emission[i]=0xff000000u|(unsigned(float((e>>16)&255)*tr.glow)<<16)|(unsigned(float((e>>8)&255)*tr.glow)<<8)|unsigned(float(e&255)*tr.glow);}}
+   out[size_t(k)]=std::move(t);}return out;}();
+ auto glassOf=[&](const Clutter& c,const Texture& t)->const Texture&{if(!c.liquid.holds())return t;static std::unordered_map<const Texture*,Texture> clear;auto it=clear.find(&t);
+  if(it==clear.end()){Texture g=t;for(auto& p:g.pixels)p=(p&0xffffffu)|(66u<<24);g.transparent=true;SoftwareRenderer::applyMaterial(g,int(Material::Glass),"bottle glass");it=clear.emplace(&t,std::move(g)).first;}return it->second;};
+ auto liquidIn=[&](const Clutter& c,float mid){const auto& L=c.liquid;if(!L.holds()||L.level<=.001f)return;const auto in=liquid::innerOf(c.model,c.size());
+  const Texture& sheet=liquidSheets[size_t(std::clamp(int(L.kind),0,2))];const Point3 n=L.normal;const float pl=L.plane;constexpr int S=12;
+  auto world=[&](Point3 p){const auto w=c.rotate(p.x,p.y,p.z);return Point3{c.pos.x+w[0],c.pos.y+w[1],mid+w[2]};};
+  auto side=[&](Point3 p){return n.x*p.x+n.y*p.y+n.z*p.z-pl;};
+  std::vector<Point3> cut;std::vector<Point3> face,out;std::array<Point3,S> lo{},hi{};
+  auto fill=[&](const std::vector<Point3>& poly,float light){out.clear();for(size_t k=0;k<poly.size();++k){const Point3 a=poly[k],b=poly[(k+1)%poly.size()];const float da=side(a),db=side(b);
+    if(da<=0)out.push_back(a);if((da<=0)!=(db<=0)){const Point3 p=a+(b-a)*(da/(da-db));out.push_back(p);cut.push_back(p);}}
+   for(size_t k=1;k+1<out.size();++k){const MeshVertex A{world(out[0]),.5f,.5f,1},B{world(out[k]),.2f,.8f,1},C{world(out[k+1]),.8f,.2f,1};tri(A,B,C,sheet,light);tri(A,C,B,sheet,light);}};
+  // The body, then the neck (each a convex prism, cut and capped on its own).
+  for(int part=0;part<2;++part){const float r=part?in.neck:in.r,z0=part?in.shoulder:in.bottom,z1=part?in.top*.97f:in.shoulder;if(z1-z0<.002f)continue;cut.clear();
+  for(int i=0;i<S;++i){const float a=float(i)*6.2831853f/S;lo[size_t(i)]={r*std::cos(a),r*std::sin(a),z0};hi[size_t(i)]={r*std::cos(a),r*std::sin(a),z1};}
+  for(int i=0;i<S;++i){const int j=(i+1)%S;face={lo[size_t(i)],lo[size_t(j)],hi[size_t(j)],hi[size_t(i)]};fill(face,.85f);}
+  face.assign(lo.rbegin(),lo.rend());fill(face,.7f);face.assign(hi.begin(),hi.end());fill(face,1.05f);
+  if(cut.size()>=3){Point3 m{};for(const auto& p:cut)m=m+p;m=m*(1.f/float(cut.size()));Point3 t1=std::fabs(n.z)<.9f?Point3{-n.y,n.x,0}:Point3{1,0,0};const float tl=std::sqrt(t1.x*t1.x+t1.y*t1.y+t1.z*t1.z);t1=t1*(1/tl);
+   const Point3 t2{n.y*t1.z-n.z*t1.y,n.z*t1.x-n.x*t1.z,n.x*t1.y-n.y*t1.x};
+   std::sort(cut.begin(),cut.end(),[&](const Point3& a,const Point3& b){const Point3 da=a-m,db=b-m;return std::atan2(da.x*t2.x+da.y*t2.y+da.z*t2.z,da.x*t1.x+da.y*t1.y+da.z*t1.z)<std::atan2(db.x*t2.x+db.y*t2.y+db.z*t2.z,db.x*t1.x+db.y*t1.y+db.z*t1.z);});
+   for(size_t k=0;k<cut.size();++k){const MeshVertex A{world(m),.5f,.5f,1},B{world(cut[k]),.1f,.9f,1},C{world(cut[(k+1)%cut.size()]),.9f,.1f,1};tri(A,B,C,sheet,1.2f);tri(A,C,B,sheet,1.2f);}}}};
  auto drawClutter=[&](const Clutter&c){
   if(c.broken){if(c.material()==PropMaterial::Glass||c.material()==PropMaterial::Ceramic)chips(c.pos,c.z,.18f,10,c.model);return;}bool woodShard=c.kind==6;auto size=c.size();
   float mid=c.z+c.height()*.5f;if(!sphereVisible({c.pos.x,c.pos.y,mid},c.footprint()+c.height()))return;
@@ -2409,10 +2442,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(int k=1;k+1<n;++k){tri(top[0],top[size_t(k)],top[size_t(k+1)],shardTexture,1.05f);tri(bottom[0],bottom[size_t(k+1)],bottom[size_t(k)],shardTexture,1.05f);}
    objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;return;}
   if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const SoftPad* pad=softPadOf(c);const Point3 softL=pad?softLight({c.pos.x,c.pos.y,c.z+c.height()}):Point3{0,0,1};
+   liquidIn(c,mid);   // what it holds, inside its glass (Liquids.h)
    // A mattress bent on its bones (Clutter::bend): its mesh cut fine everywhere and each vertex carried by its segment.
    const bool boned=c.bend[0]!=0||c.bend[1]!=0;
    for(auto face:boned?softmesh::refinedAll(c.model,mesh):pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}
-    Point3 local{p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y)};if(boned)local=vectra::chainSkin(c,local);auto r=c.rotate(local.x,local.y,local.z);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],lookedTexture(c.model,face.part,c.traits.get()),light);}
+    Point3 local{p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y)};if(boned)local=vectra::chainSkin(c,local);auto r=c.rotate(local.x,local.y,local.z);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade*(&c==gloveTarget?glovePulse:1.f);tri(face.v[0],face.v[1],face.v[2],glassOf(c,lookedTexture(c.model,face.part,c.traits.get())),light);
+    if(&c==gloveTarget){auto shell=face;const Point3 o{c.pos.x,c.pos.y,mid};for(auto&v:shell.v)v.p=o+(v.p-o)*1.06f;tri(shell.v[0],shell.v[1],shell.v[2],gloveGlow,1.f);}}
   }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
    // An eighth of the thing that broke, cut from its own mesh: its faces clipped to that eighth of
    // its box (clean cut edges, its own UVs), drawn with its own sheet about the eighth's centre (Clutter::shards).
@@ -2459,11 +2494,60 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  };
  std::array<std::vector<const Clutter*>,36> resting;
- for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
+ for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame&&&c!=gloveTarget&&!c.liquid.holds()){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
  if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;float bottom=1000,top=-1000;for(const auto*c:resting[cell]){bottom=std::min(bottom,c->z);top=std::max(top,c->z+c->height());}if(!sphereVisible({(cell%6)*4.f+2,(cell/6)*4.f+2,(bottom+top)*.5f},3.f+(top-bottom)*.5f))continue;
   auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));if(const auto*p=softPadOf(*c))hash(0x9e3779b97f4a7c15ull+p->version);}
   if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){++m_propGeometryBuilds;m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
  }
+ // Liquid out of its bottle (Liquids.cpp). A stream is drawn as one translucent ribbon through its drops (in the order
+ // they left the mouth or hole), turned to face the eye, tapering as it falls and thins, its edges catching the light;
+ // where its drops have pulled apart it breaks into droplets. A spill's drops are droplets. A puddle is a soft-edged
+ // film: water a dark wet sheen that mirrors the lights, oil darker and glossy, the chemical faintly green and glowing.
+ if(level==game.level()){
+  auto tint=[](int k,float r,float g,float b){(void)k;auto ch=[](float v){return unsigned(std::clamp(v,0.f,1.f)*255);};return (ch(r)<<16)|(ch(g)<<8)|ch(b);};
+  // The ribbon's sheet: across it, bright translucent edges and a clearer middle.
+  static const std::array<Texture,3> ribbons=[&]{std::array<Texture,3> out;for(int k=0;k<3;++k){const auto& tr=liquid::traits[k];Texture t{16,2,std::vector<std::uint32_t>(32)};
+    for(int x=0;x<16;++x){const float u=(float(x)+.5f)/16.f,edge=std::pow(std::fabs(u-.5f)*2.f,3.f);const float base=k==0?.35f:k==1?.85f:.6f;const float a=std::clamp(base+edge*.45f,0.f,1.f);
+     const float l=k==0?.55f+.45f*edge:.2f+.6f*edge;const unsigned c=tint(k,tr.r*(1-l)+l,tr.g*(1-l)+l,tr.b*(1-l)+l);for(int y=0;y<2;++y)t.pixels[size_t(y*16+x)]=(unsigned(a*255)<<24)|c;}
+    t.transparent=true;t.clampEdges=true;SoftwareRenderer::applyMaterial(t,int(Material::Water),"liquid stream");t.glossStrength=.95f;
+    if(tr.glow>0){t.emission.resize(32);for(size_t i=0;i<32;++i){const auto e=t.pixels[i];t.emission[i]=0xff000000u|(unsigned(float((e>>16)&255)*tr.glow)<<16)|(unsigned(float((e>>8)&255)*tr.glow)<<8)|unsigned(float(e&255)*tr.glow);}}
+    out[size_t(k)]=std::move(t);}return out;}();
+  // A droplet: a round soft blob of the same.
+  static const std::array<Texture,3> beads=[&]{std::array<Texture,3> out;for(int k=0;k<3;++k){const auto& tr=liquid::traits[k];const int n=16;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};
+    for(int y=0;y<n;++y)for(int x=0;x<n;++x){const float dx=(float(x)+.5f)/n*2-1,dy=(float(y)+.5f)/n*2-1,r=std::sqrt(dx*dx+dy*dy);const float a=std::clamp((1-r)*3.f,0.f,1.f)*(k==1?.9f:.7f);
+     const float l=std::clamp(.75f-std::sqrt((dx+.35f)*(dx+.35f)+(dy+.35f)*(dy+.35f))*1.4f,0.f,.75f)+(k==0?.35f:0.f);t.pixels[size_t(y*n+x)]=(unsigned(a*255)<<24)|tint(k,tr.r*(1-l)+l,tr.g*(1-l)+l,tr.b*(1-l)+l);}
+    t.transparent=true;t.clampEdges=true;SoftwareRenderer::applyMaterial(t,int(Material::Water),"liquid drop");t.glossStrength=.9f;out[size_t(k)]=std::move(t);}return out;}();
+  // A puddle's film: its edge soft and uneven (a few waves round it), dark and wet.
+  static const std::array<std::array<Texture,3>,3> films=[&]{std::array<std::array<Texture,3>,3> out;for(int k=0;k<3;++k)for(int v=0;v<3;++v){const int n=64;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};
+    const float ph[4]={1.3f*float(v+1),2.9f+float(v),.7f*float(v+2),4.1f-float(v)};
+    for(int y=0;y<n;++y)for(int x=0;x<n;++x){const float dx=(float(x)+.5f)/n*2-1,dy=(float(y)+.5f)/n*2-1,r=std::sqrt(dx*dx+dy*dy),th=std::atan2(dy,dx);
+     const float edge=.74f+.09f*std::sin(2*th+ph[0])+.06f*std::sin(3*th+ph[1])+.04f*std::sin(5*th+ph[2])+.02f*std::sin(9*th+ph[3]);const float body=std::clamp((edge-r)/.16f,0.f,1.f);
+     const float a=body*body*(3-2*body)*(k==0?.62f:k==1?.9f:.55f);
+     const float rr=k==0?.05f:k==1?.035f:.16f,gg=k==0?.055f:k==1?.025f:.42f,bb=k==0?.06f:k==1?.012f:.1f;
+     t.pixels[size_t(y*n+x)]=(unsigned(a*255)<<24)|tint(k,rr,gg,bb);}
+    t.transparent=true;t.clampEdges=true;SoftwareRenderer::applyMaterial(t,int(Material::Water),"puddle");t.glossStrength=k==2?.7f:.97f;
+    if(k==2){t.emission.resize(t.pixels.size());for(size_t i=0;i<t.pixels.size();++i){const unsigned a=t.pixels[i]>>24;t.emission[i]=0xff000000u|((a*30/255)<<16)|((a*110/255)<<8)|(a*25/255);}}
+    out[size_t(k)][size_t(v)]=std::move(t);}return out;}();
+  for(const auto& p:game.puddles()){const int kind=std::clamp(int(p.kind),0,2);const unsigned h=unsigned(std::fabs(p.at.x*91.7f+p.at.y*53.3f))%997u;const auto& t=films[size_t(kind)][h%3u];
+   const float r=p.radius*1.25f,turn=float(h)*.0063f,c=std::cos(turn)*r,sn=std::sin(turn)*r,z=p.at.z+.004f;
+   const MeshVertex A{{p.at.x-c+sn,p.at.y-sn-c,z},0,0,1},B{{p.at.x+c+sn,p.at.y+sn-c,z},1,0,1},C{{p.at.x+c-sn,p.at.y+sn+c,z},1,1,1},D{{p.at.x-c-sn,p.at.y-sn+c,z},0,1,1};
+   tri(A,B,C,t,1.f);tri(A,C,D,t,1.f);}
+  const auto& pv=game.player();const Point3 eye{pv.pos.x,pv.pos.y,pv.z+pv.eye};
+  auto facing=[&](Point3 at,Point3 along,float half){Point3 to=eye-at;Point3 s{along.y*to.z-along.z*to.y,along.z*to.x-along.x*to.z,along.x*to.y-along.y*to.x};const float l=std::sqrt(s.x*s.x+s.y*s.y+s.z*s.z);
+   return l>1e-6f?s*(half/l):Point3{half,0,0};};
+  auto bead=[&](const Game::LiquidDrop& d,float size){const auto& t=beads[size_t(std::clamp(int(d.kind),0,2))];Point3 to=eye-d.p;const float l=std::sqrt(to.x*to.x+to.y*to.y+to.z*to.z);if(l<1e-4f)return;to=to*(1/l);
+   Point3 u=std::fabs(to.z)<.95f?Point3{-to.y,to.x,0}:Point3{1,0,0};const float ul=std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z);u=u*(size/ul);const Point3 w{to.y*u.z-to.z*u.y,to.z*u.x-to.x*u.z,to.x*u.y-to.y*u.x};
+   const MeshVertex A{d.p-u-w,0,0,1},B{d.p+u-w,1,0,1},C{d.p+u+w,1,1,1},D{d.p-u+w,0,1,1};tri(A,B,C,t,1.15f);tri(A,C,D,t,1.15f);};
+  std::map<int,std::vector<const Game::LiquidDrop*>> streams;for(const auto& d:game.liquidDrops()){if(d.stream>0)streams[d.stream].push_back(&d);else bead(d,.006f);}
+  for(const auto& [id,run]:streams){(void)id;if(run.empty())continue;const auto& t=ribbons[size_t(std::clamp(int(run.back()->kind),0,2))];const float width=run.back()->kind==liquid::Kind::Oil?.013f:.011f;
+   // From the newest (at the mouth) down: one ribbon while the drops stay close, droplets once they have pulled apart.
+   float along=0;bool broken=false;
+   for(size_t k=run.size()-1;k>0;--k){const auto& a=*run[k];const auto& b=*run[k-1];Point3 d=b.p-a.p;const float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
+    if(broken||l>.09f||l<1e-5f){broken=true;bead(b,std::max(.004f,width*.55f));continue;}
+    const float w0=width*std::max(.35f,1-along*.55f),w1=width*std::max(.35f,1-(along+l)*.55f);along+=l;d=d*(1/l);
+    const Point3 s0=facing(a.p,d,w0),s1=facing(b.p,d,w1);const MeshVertex A{a.p-s0,0,0,1},B{a.p+s0,1,0,1},C{b.p+s1,1,1,1},D{b.p-s1,0,1,1};
+    tri(A,B,C,t,1.2f);tri(A,C,D,t,1.2f);}
+   if(run.size()==1)bead(*run[0],width*.6f);}}
  // Electrical leads: a thin tube through each cable's points every frame, lit
  // per point like a moving prop and shaded round its girth, in its pipe finish;
  // its plugs (a test lead's) or a post where it plugs in and the clip on its
@@ -4251,7 +4335,7 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  };
  // The hand mesh sits in SteamVR's skeletal hand frame; without skeletal input
  // it falls back to the controller frame.
- for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}
+ for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}frame.position=frame.position+game.vrHandOffset(side);   // (held out of the props it pushes: VrHands.cpp)
   for(const auto&triangle:m_vrHandMeshes[side]){const int claire=claireMaterial(m_armsMesh,triangle.part);draw(triangle,claire>=0?m_claireTextures[size_t(claire)]:m_arms,frame);}}
  // Alyx-style displays (SoftwareRenderer::prepareVrDisplays): camera-facing
  // glass cards on the back of the left hand and on the gun, and title and

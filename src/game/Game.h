@@ -15,6 +15,7 @@
 #include "../audio/NpcVoiceCatalog.h"
 #include "Combat.h"
 #include "SaveSections.h"
+#include "Liquids.h"
 #include "ai/guard/Config.h"
 #include "ai/guard/GuardCtx.h"
 #include "ai/Scheduler.h"
@@ -61,6 +62,7 @@ struct InputState {
     bool fire = false;
     bool guard = false;
     bool rotateProp = false;
+    bool physglove = false;   // G: the Physgloves pull the prop pointed at (Physgloves.cpp)
     bool reload = false;
     int weaponScroll=0;
     bool use=false;
@@ -283,6 +285,8 @@ struct Clutter {
  // Held where it was put: anchored, or frozen (a named prop's `frozen` property, which a script
  // may clear). Game::refreshPinnedClutter sets it each step; the solver leaves it be.
  bool pinned=false;
+ // Liquid in it (Liquids.h: a bottle's water, oil or chemical, its sloshing surface, a hole): saved in the "liquids" section.
+ liquid::State liquid;
  PropMaterial material()const;float mass()const;float supportHeight()const;
  float friction()const{return traits&&traits->friction>=0?traits->friction*8.f:model>=0?propMaterialTraits(material()).friction:7.f;}
  float restitution()const{return traits&&traits->restitution>=0?traits->restitution:propMaterialTraits(material()).restitution;}
@@ -493,6 +497,32 @@ public:
     const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
     bool holdingClutter()const{return m_heldClutter>=0;}
     int vrCarryHand()const{return m_vrCarryHand;}
+    // Physgloves (Physgloves.cpp): point at a loose prop, flick, and it pops toward the hand on an arc to
+    // be caught. target: the prop highlighted (this map's list, -1 none); flying: the prop pulled and not
+    // yet caught or missed; lurch: it was too heavy to fly and only lurched.
+    struct PhysgloveState {int target=-1,hand=1;bool locked=false;int flying=-1,flyingHand=1;float flight=0,window=0;bool lurch=false;
+     Point3 aimedAt{};std::array<bool,2> grip{};bool key=false,popping=false;float popRim=0;int pulls=0,catches=0,misses=0;};
+    const PhysgloveState& physgloves()const{return m_physglove;}
+    // Where a prop pulled by `hand` is caught (its middle): before the eye at carry reach, or in the VR hand.
+    Point3 physgloveCatchPoint(int hand,const Clutter& c)const;
+    // The best loose prop for `hand` to pull (-1 the desktop look), or -1.
+    int physgloveAim(int hand)const;
+    bool physglovePull(int index,int hand);void physgloveLaunch(int index,int hand);
+    // VR two-hand carry (Clutter.cpp): the second hand on the held prop (-1 none), and the hand bodies
+    // (VrHands.cpp): where each drawn hand is, stopped at the surface of what it pushes into.
+    int vrSecondHand()const{return m_vrSecondHand;}
+    Point3 vrHandProxy(int hand)const{return m_vrHandProxy[size_t(hand&1)];}
+    bool vrHandBlocked(int hand)const{return m_vrHandBlocked[size_t(hand&1)];}
+    // Liquids (Liquids.cpp): drops in the air and the puddles they made, this map's, in its own coordinates.
+    struct LiquidDrop {Point3 p{},v{};liquid::Kind kind=liquid::Kind::Water;float volume=0;int stream=0;};   // stream: the mouth or hole it ran from (0: a spill), drops of one stream in the order they left
+    struct Puddle {Point3 at{};liquid::Kind kind=liquid::Kind::Water;float volume=0,radius=0;};
+    const std::vector<LiquidDrop>& liquidDrops()const{return m_liquidDrops;}
+    const std::vector<Puddle>& puddles()const{return m_puddles;}
+    // Fill a prop with liquid (a vessel only); a round holing it at a world point.
+    bool fillLiquid(Clutter& c,liquid::Kind kind,float level);void holeLiquid(Clutter& c,Point3 at);
+    static void registerLiquidSave();   // the "liquids" save section (at start-up)
+    Point3 vrHandTracked(int hand)const{return m_vrHandPosition[size_t(hand&1)];}
+    Point3 vrHandOffset(int hand)const{const size_t h=size_t(hand&1);return m_vrHandProxySet[h]?m_vrHandProxy[h]-m_vrHandPosition[h]:Point3{};}   // drawn hand minus tracked hand
     static bool testClutter();
     static PropTraits propTraits(int model);
     static bool auditMapScene(Game& game,int level);
@@ -1313,6 +1343,21 @@ private:
     // Index of the door in chunk `level` across the boundary from this chunk's door, or -1.
     int boundaryPartner(int level,const Door& door)const;
     void updateClutter(const InputState& input,float dt);
+    // Physgloves.cpp
+    PhysgloveState m_physglove;
+    void updatePhysgloves(const InputState& input,float dt);
+    // Two-hand VR carry (Clutter.cpp): the second hand's grip on the held prop, in the prop's frame at the grab.
+    int m_vrSecondHand=-1;std::array<Point3,2> m_vrGripLocal{};std::array<float,4> m_vrGripTurn{1,0,0,0};Point3 m_vrGripAxis{},m_vrGripUp{};
+    bool updateTwoHandCarry(const InputState& input,Clutter& c);bool grabSecondHand(int hand);
+    Point3 carryVelocity()const;
+    // VR hand bodies (VrHands.cpp): each hand a kinematic sphere in the solver, its drawn place held out of props.
+    std::array<Point3,2> m_vrHandProxy{};std::array<bool,2> m_vrHandBlocked{},m_vrHandProxySet{};bool m_vrHandStepped=false;
+    static constexpr int VrHandBody=-3;   // hand k is the body of user VrHandBody-k
+    bool vrHandFree(int hand)const;bool vrHandsNear(const std::vector<Clutter>& list)const;bool vrHandMeets(const vectra::Body& other)const;
+    void addVrHandBodies(vectra::Space& space,std::vector<Clutter>& list,float h);void settleVrHands(const vectra::Space& space,int held);void followVrHands();
+    // Liquids.cpp
+    std::vector<LiquidDrop> m_liquidDrops;std::vector<Puddle> m_puddles;
+    void updateLiquids(float dt);void spillLiquid(int level,Clutter& c,Point3 velocity,float share);void seedLiquid(Clutter& c);void emitLiquid(Point3 at,Point3 velocity,liquid::Kind kind,float volume,int drops,int stream=0);
     // Held heavy props: sweep bodies along a hand move, or re-clear overlaps after AI.
     void pushBodiesFromCarried(Clutter& prop,const Clutter& previous);
     void resolveHeldPropBodies();

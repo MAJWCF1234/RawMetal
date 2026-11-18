@@ -55,6 +55,7 @@ The same game always writes the same bytes. A fresh campaign save is about two t
 | `entities` | no | runtime changes to entity properties (the store below). Written only when not empty. |
 | `variables` | no | named values scripts set (the store below). Written only when not empty. |
 | `physics` | no | the rigid-body solver's prop state. Written only once the solver installs its hooks. |
+| `liquids` | no | per chunk, each prop holding liquid by its place in the props (Liquids.cpp): kind, level, the surface's normal and offset in the bottle's frame, and the hole a round made. Written only when a prop holds liquid; a save without it fills the map's bottles as authored. |
 
 Settings are not in the save, by design: a loaded game keeps the session's settings (`adoptSession`).
 

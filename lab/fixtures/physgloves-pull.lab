@@ -1,0 +1,10 @@
+# Physgloves: pull (tube physgloves): the box on the high shelf pulled and caught; pictures from the eye and from beside the arc.
+world room
+camera 5.4 8.5 -999 0 0
+light 7.2 8.5 3.2 2.8 12
+light 9 9.8 3.0 1.8 9
+light 5.6 7.4 3.0 1.6 9
+light 7.2 6.4 2.8 2.0 9
+scene pull
+size 1600 900
+frames 110
