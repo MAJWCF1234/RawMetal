@@ -265,6 +265,7 @@ void Space::collide(float dt){
  std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
  auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
  for(auto [i,j]:pairs){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
+  if(pairContacts&&pairContacts(*this,i,j,margin,manifolds)){++pairsTested;continue;}
   for(int pa=0;pa<a.shape->count;++pa)for(int pb=0;pb<b.shape->count;++pb){
    if(a.shape->count>1||b.shape->count>1){V3 l1,h1,l2,h2;partBounds(a,pa,l1,h1);partBounds(b,pb,l2,h2);
     if(l1.x>h2.x+margin||l2.x>h1.x+margin||l1.y>h2.y+margin||l2.y>h1.y+margin||l1.z>h2.z+margin||l2.z>h1.z+margin)continue;}
@@ -482,6 +483,8 @@ void Space::step(float dt){
   if(m.count>1&&m.midMass>mass)mass=m.midMass;
   if(approach>.3f)events.push_back({m.a,m.b,m.partA,m.partB,at,m.normal,approach,impulse,mass,m.surface});}
  continuous(dt,start);
+ // What the substeps left open of a joint that asks for it (a ragdoll's), put back by position.
+ for(int it=0;it<settings.projectIterations;++it)for(auto*c:constraints)c->project(*this);
  islands(dt);
  ++iterationsRun;
 }

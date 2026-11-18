@@ -206,6 +206,11 @@ const bool fall=add({
    {static std::map<const Scene*,Watch> bySection;auto& v=bySection[&s];if(!v.ready){std::vector<int> g;for(size_t t=0;t<tri.size();++t)g.push_back(std::max(0,c->sectionOf(int(t))));prepare(v,w.rest,g);}
     std::vector<float> each;float a,b;shapeError(v,tri,a,b,&each);log<<"  by section:";for(size_t g=0;g<each.size();++g)log<<' '<<humanoid::name(c->partOf(int(g)))<<'='<<fixed(each[g]*100,1);log<<'\n';}
    #endif
+   {// Each group's volume against its own at death (%).
+    auto each=[&](const std::vector<Point3>& corners){std::map<int,std::pair<Point3,int>> mid;for(size_t i=0;i*3<corners.size();++i){auto& m=mid[w.group[i]];m.first=m.first+corners[i*3];++m.second;}
+     std::map<int,double> vol;for(size_t i=0;i*3<corners.size();++i){const auto& m=mid[w.group[i]];const Point3 c=m.first*(1.f/float(m.second));vol[w.group[i]]+=dot3(corners[i*3]-c,cross3(corners[i*3+1]-c,corners[i*3+2]-c))/6.0;}return vol;};
+    std::vector<Point3> now;for(auto& t:tri)for(auto& v:t.v)now.push_back(v.p);const auto a=each(w.rest),b=each(now);log<<"  volume:";
+    for(auto& [g,v0]:a){const double v1=b.count(g)?b.at(g):0;log<<' '<<(w.human?humanoid::name(c->partOf(g)):"s")<<'='<<fixed(std::fabs(v0)*1e3,2)<<"L/"<<fixed((std::fabs(v1)/std::max(1e-9,std::fabs(v0))-1)*100,1)<<'%';}log<<"\n";}
    #ifdef RAWMETAL_CARCASS_RIG
    for(const auto& j:c->jointStates())log<<"  "<<humanoid::name(j.part)<<" from "<<humanoid::name(c->partOf(j.parent))<<" bend "<<j.bend*57.3f<<" ["<<j.bendLo*57.3f<<","<<j.bendHi*57.3f<<"] side "<<j.side*57.3f<<" /"<<j.sideMax*57.3f<<" twist "<<j.twist*57.3f<<" /"<<j.twistMax*57.3f<<'\n';
    #endif

@@ -31,6 +31,19 @@ Pose poseOf(const Joint& j,const Body& A,const Body& B,bool world){Pose p;p.rA=A
  p.qA=A.q*j.frameA;p.zA=p.qA.rotate({0,0,1});p.zB=p.qB.rotate({0,0,1});return p;}
 // The turn of B's frame about z relative to A's (swing-twist split of the relative turn), in (-pi, pi].
 float twistOf(const Pose& p){Quat r=p.qA.conj()*p.qB;if(r.w<0)r={-r.w,-r.x,-r.y,-r.z};return 2*std::atan2(r.z,r.w);}
+// The swing-twist split of a relative turn r (r = swing * twist about z): the swing's turn vector's x and y parts and
+// the twist, as a rig measures a joint (Carcass's bend, side and twist).
+V3 splitOf(Quat r){if(r.w<0)r={-r.w,-r.x,-r.y,-r.z};const float l=std::sqrt(r.w*r.w+r.z*r.z);const Quat t=l>1e-9f?Quat{r.w/l,0,0,r.z/l}:Quat{};
+ const V3 sw=rotationOf(r*t.conj());return {sw.x,sw.y,2*std::atan2(t.z,t.w)};}
+// The split now, and the world axis along which each of its parts changes at a unit rate of B's turn against A's
+// (a central difference over a small turn of B's frame in A's: the rows' exact rates at any bend).
+struct Split {V3 f{};V3 axis[3]{};};
+Split splitRows(const Pose& p){Split out;const Quat r=p.qA.conj()*p.qB;out.f=splitOf(r);constexpr float d=2e-3f;V3 col[3];
+ for(int k=0;k<3;++k){const V3 e{k==0?d*.5f:0.f,k==1?d*.5f:0.f,k==2?d*.5f:0.f};const V3 g=splitOf(Quat{1,e.x,e.y,e.z}.normalized()*r),h=splitOf(Quat{1,-e.x,-e.y,-e.z}.normalized()*r);
+  V3 df=(g-h)*(1/d);if(std::fabs(g.z-h.z)>kPi)df.z=std::remainder(g.z-h.z,2*kPi)*(1/d);col[k]=df;}
+ for(int i=0;i<3;++i)out.axis[i]=p.qA.rotate(V3{comp(col[0],i),comp(col[1],i),comp(col[2],i)});
+ return out;}
+Quat turned(const Quat& q,V3 by){const float a=len(by);return a>1e-9f?(Quat::axisAngle(by*(1/a),a)*q).normalized():q;}
 // A one-sided row: value C must stay >= 0, Cdot its rate along the row (the impulse pushes it up).
 float oneSided(float C,float Cdot,float mass,float& accumulated,const Soft& lock,float inv,bool useBias){
  float bias=0,ms=1,is=0;if(C>0)bias=C*inv;else if(useBias){bias=C*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
@@ -53,6 +66,7 @@ float Joint::angle(const Space& s)const{const Pose p=poseOf(*this,bodyAt(s,a),bo
  switch(kind){case JointKind::Hinge:return twistOf(p);case JointKind::Slider:return dot(p.pB-p.pA,p.zA);
   case JointKind::Pulley:return len(p.pA-groundA)+ratio*len(p.pB-groundB);default:return len(p.pB-p.pA);}}
 float Joint::twist(const Space& s)const{return twistOf(poseOf(*this,bodyAt(s,a),bodyAt(s,b),b<0));}
+V3 Joint::swingTwist(const Space& s)const{const Pose p=poseOf(*this,bodyAt(s,a),bodyAt(s,b),b<0);return splitOf(p.qA.conj()*p.qB);}
 float Joint::swing(const Space& s)const{const Pose p=poseOf(*this,bodyAt(s,a),bodyAt(s,b),b<0);return std::atan2(len(cross(p.zA,p.zB)),dot(p.zA,p.zB));}
 
 void Joint::prepare(Space& s,float h){prep.h=h;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);
@@ -63,8 +77,8 @@ void Joint::prepare(Space& s,float h){prep.h=h;Body& A=bodyAt(s,a);Body& B=bodyA
  prep.turnMass=(prep.iA+prep.iB).inverse();
  // Warm starting across rebuilt spaces.
  if(key){auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
-  if(it!=s.jointCache.end()&&it->first==key){const auto& c=it->second;linearImpulse=c.linear;angularImpulse=c.angular;lowerImpulse=c.lower;upperImpulse=c.upper;motorImpulse=c.motor;springImpulse=c.spring;axialImpulse=c.axial;coneImpulse=c.cone;twistLowerImpulse=c.twistLower;twistUpperImpulse=c.twistUpper;}}
- if(broken){linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=0;}
+  if(it!=s.jointCache.end()&&it->first==key){const auto& c=it->second;linearImpulse=c.linear;angularImpulse=c.angular;lowerImpulse=c.lower;upperImpulse=c.upper;motorImpulse=c.motor;springImpulse=c.spring;axialImpulse=c.axial;coneImpulse=c.cone;twistLowerImpulse=c.twistLower;twistUpperImpulse=c.twistUpper;for(int k=0;k<4;++k)swingImpulse[k]=c.swing[k];}}
+ if(broken){linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=0;for(float&k:swingImpulse)k=0;}
  // A winch reels its rope at the motor's speed while the pull is under its force (last step's pull).
  if(kind==JointKind::Rope&&motor!=JointMotor::Off&&!broken){const float dt=h*float(std::max(1,s.settings.substeps));
   float rate=motor==JointMotor::Speed?-motorSpeed:std::clamp((motorTarget-length)*servoGain,-std::fabs(motorSpeed),std::fabs(motorSpeed));
@@ -77,7 +91,8 @@ void Joint::warmStart(Space& s){if(broken)return;Body& A=bodyAt(s,a);Body& B=bod
  switch(kind){
   case JointKind::Hinge:L=L+p.zA*(lowerImpulse-upperImpulse+motorImpulse+springImpulse);break;
   case JointKind::Slider:{rA=p.pB-A.x;P=P+p.zA*(lowerImpulse-upperImpulse+motorImpulse+springImpulse);break;}
-  case JointKind::Ball:{const V3 c=cross(p.zA,p.zB);const float l=len(c);if(l>1e-6f)L=L-c*(coneImpulse/l);const V3 n=norm(p.zA+p.zB,p.zA);L=L+n*(twistLowerImpulse-twistUpperImpulse);break;}
+  case JointKind::Ball:if(swingLimited){const Split sp=splitRows(p);L=L+sp.axis[0]*(swingImpulse[0]-swingImpulse[1])+sp.axis[1]*(swingImpulse[2]-swingImpulse[3]);
+    if(twistLimited)L=L+sp.axis[2]*(twistLowerImpulse-twistUpperImpulse);break;}else{const V3 c=cross(p.zA,p.zB);const float l=len(c);if(l>1e-6f)L=L-c*(coneImpulse/l);const V3 n=norm(p.zA+p.zB,p.zA);L=L+n*(twistLowerImpulse-twistUpperImpulse);break;}
   case JointKind::Distance:case JointKind::Rope:case JointKind::Spring:{const V3 u=norm(p.pB-p.pA);P=P+u*(axialImpulse+springImpulse+lowerImpulse-upperImpulse);break;}
   case JointKind::Pulley:{const V3 uA=norm(p.pA-groundA),uB=norm(p.pB-groundB);const float t=upperImpulse,m=motorImpulse;
    const V3 PA=uA*(m-t),PB=uB*(-ratio*t-m);   // the tension pulls each end toward its wheel; the motor winds A's side in
@@ -120,6 +135,17 @@ void Joint::solve(Space& s,float h,bool useBias){if(broken)return;Body& A=bodyAt
       const float x1=(k22*b1-k12*b2)/det,x2=(k11*b2-k12*b1)/det;const V3 acc=angularImpulse;const V3 L=(t1*x1+t2*x2)*-ms-(t1*dot(acc,t1)+t2*dot(acc,t2))*is;angularImpulse=angularImpulse+L;applyTurn(L);}}
     point();break;}
    case JointKind::Ball:{
+    // Friction on the turn: the relative spin taken out, the impulse held to the friction's torque.
+    if(frictionTorque>0){const V3 old=angularImpulse;V3 next=old-prep.turnMass*relW();const float cap=frictionTorque*h,l=len(next);if(l>cap)next=next*(cap/l);angularImpulse=next;applyTurn(next-old);}
+    if(swingLimited){const Split sp=splitRows(p);
+     // Each part of the split between its limits: rows along the part's own rate.
+     auto limit=[&](V3 axis,float value,float lo,float hi,float& li,float& ui){const float mass=angular(iA,iB,axis);if(mass<=0)return;
+      {const float d=oneSided(value-lo,dot(relW(),axis),mass,li,lock,inv,useBias);applyTurn(axis*d);}
+      {const float d=oneSided(hi-value,-dot(relW(),axis),mass,ui,lock,inv,useBias);applyTurn(axis*-d);}};
+     limit(sp.axis[0],sp.f.x,swingLower.x,swingUpper.x,swingImpulse[0],swingImpulse[1]);
+     limit(sp.axis[1],sp.f.y,swingLower.y,swingUpper.y,swingImpulse[2],swingImpulse[3]);
+     if(twistLimited)limit(sp.axis[2],sp.f.z,twistLower,twistUpper,twistLowerImpulse,twistUpperImpulse);
+     point();break;}
     if(twistLimited){const V3 n=norm(p.zA+p.zB,p.zA);const float mass=angular(iA,iB,n),tw=twistOf(p);
      {const float d=oneSided(tw-twistLower,dot(relW(),n),mass,twistLowerImpulse,lock,inv,useBias);applyTurn(n*d);}
      {const float d=oneSided(twistUpper-tw,-dot(relW(),n),mass,twistUpperImpulse,lock,inv,useBias);applyTurn(n*-d);}}
@@ -167,17 +193,31 @@ void Joint::finish(Space& s,float h){
  // What it carried: the pull of its linear rows and the twist of its turning rows, over the substep.
  const float inv=1/std::max(h,1e-6f);
  float pull=len(linearImpulse)+std::fabs(axialImpulse)+std::fabs(springImpulse);float twistNow=len(angularImpulse);
- switch(kind){case JointKind::Hinge:case JointKind::Ball:twistNow+=std::fabs(lowerImpulse-upperImpulse+motorImpulse+springImpulse)+std::fabs(coneImpulse)+std::fabs(twistLowerImpulse-twistUpperImpulse);break;
+ switch(kind){case JointKind::Hinge:case JointKind::Ball:twistNow+=std::fabs(lowerImpulse-upperImpulse+motorImpulse+springImpulse)+std::fabs(coneImpulse)+std::fabs(twistLowerImpulse-twistUpperImpulse)+std::fabs(swingImpulse[0]-swingImpulse[1])+std::fabs(swingImpulse[2]-swingImpulse[3]);break;
   case JointKind::Slider:pull+=std::fabs(lowerImpulse-upperImpulse+motorImpulse);break;
   case JointKind::Rope:case JointKind::Pulley:pull+=std::fabs(upperImpulse)+std::fabs(motorImpulse);break;
   case JointKind::Spring:pull+=std::fabs(lowerImpulse)+std::fabs(upperImpulse);break;default:break;}
  force=broken?0:pull*inv;torque=broken?0:twistNow*inv;
  if(!broken&&((breakForce>0&&force>breakForce)||(breakTorque>0&&torque>breakTorque))){broken=true;s.jointEvents.push_back({this,force,torque,worldA(s)});
-  linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=0;}
- if(key){Space::JointCached c{linearImpulse,angularImpulse,lowerImpulse,upperImpulse,motorImpulse,springImpulse,axialImpulse,coneImpulse,twistLowerImpulse,twistUpperImpulse};
+  linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=0;for(float&k:swingImpulse)k=0;}
+ if(key){Space::JointCached c{linearImpulse,angularImpulse,lowerImpulse,upperImpulse,motorImpulse,springImpulse,axialImpulse,coneImpulse,twistLowerImpulse,twistUpperImpulse};for(int k=0;k<4;++k)c.swing[k]=swingImpulse[k];
   auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   if(it!=s.jointCache.end()&&it->first==key)it->second=c;else s.jointCache.insert(it,{key,c});}
 }
+// Position correction (a ball with `positionCorrection`): each part of the split past its limit turned back, then the anchors brought
+// together, each body moving by its share (its inverse mass and inertia). Velocities are left to the rows.
+void Joint::project(Space& s){if(!positionCorrection||broken||kind!=JointKind::Ball)return;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);const bool ma=A.movable(),mb=b>=0&&B.movable();if(!ma&&!mb)return;
+ const float mA=ma?A.invMass:0,mB=mb?B.invMass:0;const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B.invInertia:M3::zero();
+ if(swingLimited){constexpr float Slack=.002f;
+  for(int i=0;i<3;++i){if(i==2&&!twistLimited)continue;const Split sp=splitRows(poseOf(*this,A,B,b<0));const float value=comp(sp.f,i);
+   const float lo=i==0?swingLower.x:i==1?swingLower.y:twistLower,hi=i==0?swingUpper.x:i==1?swingUpper.y:twistUpper;
+   const float over=value<lo-Slack?value-(lo-Slack):value>hi+Slack?value-(hi+Slack):0.f;if(over==0)continue;
+   const V3 axis=sp.axis[i];const float k=dot(axis,(iA+iB)*axis);if(k<=1e-12f)continue;const V3 L=axis*(-over/k);
+   if(ma)A.q=turned(A.q,iA*L*-1.f);if(mb)B.q=turned(B.q,iB*L);}}
+ const Pose p=poseOf(*this,A,B,b<0);const V3 C=p.pB-p.pA;if(lenSq(C)<1e-8f)return;
+ const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const M3 K=M3::diagonal({mA+mB,mA+mB,mA+mB})+sa*iA*sa.transposed()+sb*iB*sb.transposed();const V3 P=K.inverse()*neg(C);
+ if(ma){A.x=A.x-P*mA;A.q=turned(A.q,iA*cross(p.rA,P)*-1.f);}
+ if(mb){B.x=B.x+P*mB;B.q=turned(B.q,iB*cross(p.rB,P));}}
 bool Joint::driving(const Space& s)const{if(broken||motor==JointMotor::Off)return false;
  if(motor==JointMotor::Speed){if(motorSpeed==0)return false;if(kind==JointKind::Rope&&limited)return motorSpeed>0?length>lower+1e-4f:length<upper-1e-4f;return true;}
  const float now=kind==JointKind::Rope?length:angle(s);const float miss=kind==JointKind::Hinge?std::remainder(motorTarget-now,2*kPi):motorTarget-now;return std::fabs(miss)>.004f;}
