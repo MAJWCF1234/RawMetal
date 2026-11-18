@@ -7,6 +7,7 @@
 // chain-link (ChainLinkMaterial): they stop a body and nothing else. The authored map keeps only
 // the record, so deleting it gives the wall back; playedMap applies it to the copy the world plays.
 #include "World.h"
+#include "ModelIds.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -55,6 +56,26 @@ std::vector<Structure> carved(std::vector<Structure> pieces,const std::vector<Bo
 bool wallBox(const Structure& s){
  return s.solid&&!s.rail&&s.shape==ShapeBox&&!seeThroughMaterial(s.material)&&s.material!=CollisionProxyMaterial&&s.material!=1&&s.material!=6&&s.top-s.bottom>=1.f;}
 
+// Cuts `holes` out of the wall whose box is x1..x2 by y1..y2 from `bottom`: its # tiles on that floor
+// open, what of each cut tile the holes do not take is built back as `wall` up to `top` (infill), and
+// wall boxes through the footprint lose the holes and keep their own finish round them.
+void cutWall(AuthoredMapData& m,float x1,float y1,float x2,float y2,float bottom,float top,const std::vector<Box>& holes,bool infill,int wall){
+ int layer=0;for(int i=0;i<int(m.layers.size());++i)if(m.layers[size_t(i)].elevation<=bottom+.05f&&(layer==0||m.layers[size_t(i)].elevation>m.layers[size_t(layer)].elevation))layer=i;
+ float highest=top;for(const auto& h:holes)highest=std::max(highest,h.z2);
+ std::vector<Structure> fill;
+ if(!m.layers.empty()){auto& rows=m.layers[size_t(layer)].rows;const float floor=m.layers[size_t(layer)].elevation;
+  for(int y=std::max(0,int(std::floor(y1+1e-3f)));y<=std::min(23,int(std::floor(y2-1e-3f)));++y)
+   for(int x=std::max(0,int(std::floor(x1+1e-3f)));x<=std::min(23,int(std::floor(x2-1e-3f)));++x){
+    if(size_t(x)>=rows[size_t(y)].size()||rows[size_t(y)][size_t(x)]!='#')continue;
+    rows[size_t(y)][size_t(x)]=layer==0?'.':'=';
+    if(infill){Structure cell{float(x),float(y),float(x+1),float(y+1),floor,highest,false,wall,true};fill.push_back(cell);}}}
+ const size_t count=m.structures.size();std::vector<Structure> kept;kept.reserve(count+8);
+ for(size_t i=0;i<count;++i){const auto& s=m.structures[i];
+  if(!wallBox(s)||std::none_of(holes.begin(),holes.end(),[&](const Box& h){return overlaps(s,h);})){kept.push_back(s);continue;}
+  for(const auto& p:carved({s},holes))kept.push_back(p);}
+ m.structures.swap(kept);
+ for(const auto& p:carved(fill,holes))m.structures.push_back(p);}
+
 void applyGlazing(AuthoredMapData& m,const Glazing& g){
  const bool alongX=g.x2-g.x1>=g.y2-g.y1;
  const float a0=alongX?g.x1:g.y1,length=alongX?g.x2-g.x1:g.y2-g.y1,thick=alongX?g.y2-g.y1:g.x2-g.x1,centre=alongX?(g.y1+g.y2)*.5f:(g.x1+g.x2)*.5f;
@@ -71,23 +92,7 @@ void applyGlazing(AuthoredMapData& m,const Glazing& g){
   const float wallHalf=thick*.5f+1e-3f;
   if(door<0||bays>1)holes.push_back(box(a0,a0+length,wallHalf,zs-fr,zh+fr));
   if(door>=0)holes.push_back(box(at(door),at(door+1),wallHalf,zb-.01f,zh+fr));
-  // Wall tiles under the footprint, on the floor the glazing stands on, open; what of each the hole
-  // does not take is built back as a box of the wall's finish.
-  int layer=0;for(int i=0;i<int(m.layers.size());++i)if(m.layers[size_t(i)].elevation<=zb+.05f&&(layer==0||m.layers[size_t(i)].elevation>m.layers[size_t(layer)].elevation))layer=i;
-  std::vector<Structure> infill;
-  if(!m.layers.empty()){auto& rows=m.layers[size_t(layer)].rows;const float floor=m.layers[size_t(layer)].elevation;
-   for(int y=std::max(0,int(std::floor(g.y1+1e-3f)));y<=std::min(23,int(std::floor(g.y2-1e-3f)));++y)
-    for(int x=std::max(0,int(std::floor(g.x1+1e-3f)));x<=std::min(23,int(std::floor(g.x2-1e-3f)));++x){
-     if(size_t(x)>=rows[size_t(y)].size()||rows[size_t(y)][size_t(x)]!='#')continue;
-     rows[size_t(y)][size_t(x)]=layer==0?'.':'=';
-     if(g.infill){Structure cell{float(x),float(y),float(x+1),float(y+1),floor,std::max(g.top,zh+fr),false,g.wall,true};infill.push_back(cell);}}}
-  // Wall boxes through the footprint lose the hole and keep their own finish above and below it.
-  const size_t count=m.structures.size();std::vector<Structure> kept;kept.reserve(count+8);
-  for(size_t i=0;i<count;++i){const auto& s=m.structures[i];
-   if(!wallBox(s)||std::none_of(holes.begin(),holes.end(),[&](const Box& h){return overlaps(s,h);})){kept.push_back(s);continue;}
-   for(const auto& p:carved({s},holes))kept.push_back(p);}
-  m.structures.swap(kept);
-  for(const auto& p:carved(infill,holes))m.structures.push_back(p);
+  cutWall(m,g.x1,g.y1,g.x2,g.y2,zb,std::max(g.top,zh+fr),holes,g.infill,g.wall);
  }
  // ---- The frame ----
  auto member=[&](float a,float b,float z1,float z2){if(b-a>.004f&&z2-z1>.004f)m.structures.push_back(structure(box(a,b,half,z1,z2),g.look));};
@@ -117,6 +122,76 @@ void applyGlazing(AuthoredMapData& m,const Glazing& g){
   for(int r=0;r<g.rows;++r){const float z1=zs+(zh-zs)*float(r)/float(g.rows),z2=zs+(zh-zs)*float(r+1)/float(g.rows);
    pane(lo,hi,r?z1+fr*.5f:z1,r+1<g.rows?z2-fr*.5f:z2);}}
 }
+}
+
+// A hole broken through a wall (BREACH): its outline as boxes (one for a square hole, a rectangle and
+// slices of a half circle for an arch, ragged strips with a lip and teeth for a broken one), the wall cut
+// to it, chips of its core standing proud of the hole's edge on one face or the other, rebar where it
+// tore, and rubble from it on the floor either side. The core shows in the reveal: concrete or brick.
+void applyBreach(AuthoredMapData& m,const Breach& b){
+ const bool alongX=b.x2-b.x1>=b.y2-b.y1;
+ const float a0=alongX?b.x1:b.y1,a1=alongX?b.x2:b.y2,width=a1-a0,thick=alongX?b.y2-b.y1:b.x2-b.x1,centre=alongX?(b.y1+b.y2)*.5f:(b.x1+b.x2)*.5f;
+ const float zs=b.bottom+b.sill,zh=b.bottom+b.head;
+ const std::uint32_t seed=b.seed*2654435761u+std::uint32_t(std::lround(a0*100))*97u+std::uint32_t(std::lround(centre*100));
+ auto rnd=[&](std::uint32_t k,std::uint32_t j=0){return glass::hashUnit(seed,k,j);};
+ auto box=[&](float a,float c,float across0,float across1,float z1,float z2){return alongX?Box{a,centre+across0,c,centre+across1,z1,z2}:Box{centre+across0,a,centre+across1,c,z1,z2};};
+ const float half=thick*.5f+1e-3f;
+ std::vector<Box> holes;
+ // Strips of the outline: along a, from bottom z1 to top z2.
+ struct Strip {float a,c,z1,z2;};std::vector<Strip> strips;
+ if(b.shape==0)strips.push_back({a0,a1,zs,zh});
+ else if(b.shape==1){const float r=width*.5f,spring=std::max(zs+.3f,zh-r);const int n=12;
+  for(int i=0;i<n;++i){const float a=a0+width*float(i)/float(n),c=a0+width*float(i+1)/float(n),x=(a+c)*.5f-(a0+r);
+   strips.push_back({a,c,zs,std::min(zh,spring+std::sqrt(std::max(0.f,r*r-x*x))*(zh-spring)/std::max(.01f,r))});}}
+ else{
+  // Strips of uneven width, 4 to 10 cm. The top is a dome (tall in the middle, falling away to the
+  // sides as a hole knocked through falls) roughened by a wandering line and the odd notch or tooth;
+  // the foot is clear in the middle and lumpy at the sides, where the wall's base was left standing.
+  std::vector<float> cuts{a0};for(int k=0;cuts.back()<a1-.05f&&k<400;++k)cuts.push_back(std::min(a1,cuts.back()+.04f+.06f*rnd(1,std::uint32_t(k))));cuts.back()=a1;
+  const int n=int(cuts.size())-1;float wander=0,lump=0;
+  for(int i=0;i<n;++i){const float a=cuts[size_t(i)],c=cuts[size_t(i+1)],t=((a+c)*.5f-a0)/width,e=1-std::fabs(2*t-1);
+   wander=.7f*wander+.3f*(rnd(2,std::uint32_t(i))-.5f)*.7f;lump=.6f*lump+.4f*rnd(3,std::uint32_t(i));
+   const float dome=(zh-zs)*(1-std::sqrt(std::max(0.f,1-std::pow(1-e,1.8f))))*.85f;
+   const float notch=rnd(4,std::uint32_t(i))<.12f?.06f+.12f*rnd(5,std::uint32_t(i)):rnd(4,std::uint32_t(i))>.92f?-.08f:0.f;
+   const float drop=std::max(0.f,dome+wander*(.25f+.2f*(1-e))+notch);
+   const float foot=b.sill>0?(.1f*lump):e>.5f?0.f:(.5f-e)*1.1f*lump;
+   strips.push_back({a,c,zs+foot,std::max(zs+foot+.25f,zh-drop)});}}
+ for(const auto& st:strips)holes.push_back(box(st.a,st.c,-half,half,st.z1,st.z2));
+ cutWall(m,b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,holes,b.infill,b.wall);
+ if(b.shape==0&&b.edge==2)return;
+ // ---- The broken edge: chips of core on the lip and the jambs, proud of the hole on one face ----
+ const int core=b.edge==1?31:15;
+ auto solidBox=[&](const Box& x,int material,bool solid){Structure s{x.x1,x.y1,x.x2,x.y2,x.z1,x.z2,false,material,solid};if(x.x2-x.x1>.003f&&x.y2-x.y1>.003f&&x.z2-x.z1>.003f)m.structures.push_back(s);};
+ if(b.shape!=0)for(size_t i=0;i<strips.size();++i){const auto& st=strips[i];
+  // Under the lip: a chip hanging from one face or the other, a jagged tooth.
+  const float face=rnd(10,std::uint32_t(i))<.5f?-1.f:1.f,deep=thick*(.2f+.45f*rnd(11,std::uint32_t(i))),hang=.025f+.11f*rnd(12,std::uint32_t(i))*rnd(13,std::uint32_t(i));
+  const float lo=face<0?-half+.002f:half-deep,hi=face<0?-half+deep:half-.002f;
+  solidBox(box(st.a,st.c,lo,hi,st.z2-hang,st.z2),core,false);
+  if(st.z1>zs+.01f||rnd(14,std::uint32_t(i))<.3f){const float lift=.02f+.06f*rnd(15,std::uint32_t(i));solidBox(box(st.a,st.c,-half*.6f,half*.6f,st.z1,st.z1+lift),core,false);}}
+ // The jambs: chips standing out of each side.
+ for(int side=0;side<2;++side)for(int k=0;k<6;++k){const float z=zs+(zh-zs)*(float(k)+rnd(20,std::uint32_t(side*8+k)))/7.f,h=.06f+.16f*rnd(21,std::uint32_t(side*8+k)),out=.02f+.07f*rnd(22,std::uint32_t(side*8+k));
+  const float face=rnd(23,std::uint32_t(side*8+k))<.5f?-1.f:1.f,deep=thick*(.25f+.4f*rnd(24,std::uint32_t(side*8+k)));
+  const float a=side?a1-out:a0,c=side?a1:a0+out,lo=face<0?-half+.002f:half-deep,hi=face<0?-half+deep:half-.002f;
+  // Only where the hole is at that height (the arch's and the ragged hole's sides close in).
+  bool open=false;for(const auto& st:strips)open|=(side?st.c>=a1-.13f:st.a<=a0+.13f)&&z>st.z1&&z+h<st.z2;
+  if(open)solidBox(box(a,c,lo,hi,z,std::min(z+h,zh)),core,false);}
+ // ---- Rebar where the wall tore: bars hanging from the lip and standing out of the jambs ----
+ if(b.rebar&&b.edge!=1){const float bar=.012f;int n=std::max(2,int(width/.22f));
+  for(int k=0;k<n;++k){const float t=(float(k)+.3f+.4f*rnd(30,std::uint32_t(k)))/float(n),a=a0+width*t;float top=zh;for(const auto& st:strips)if(a>=st.a&&a<st.c)top=st.z2;
+   const float len=.1f+.35f*rnd(31,std::uint32_t(k)),across=(rnd(32,std::uint32_t(k))-.5f)*thick*.5f,lean=(rnd(33,std::uint32_t(k))-.5f)*.12f;
+   solidBox(box(a,a+bar,across,across+bar,top-len,top+.02f),8,false);
+   if(rnd(34,std::uint32_t(k))<.5f)solidBox(box(std::min(a,a+lean),std::max(a,a+lean)+bar,across,across+bar,top-len-bar,top-len),8,false);}
+  for(int side=0;side<2;++side)for(int k=0;k<3;++k){const float z=zs+.4f+(zh-zs-.6f)*(float(k)+rnd(35,std::uint32_t(side*4+k)))/3.f,len=.08f+.22f*rnd(36,std::uint32_t(side*4+k)),across=(rnd(37,std::uint32_t(side*4+k))-.5f)*thick*.5f;
+   bool open=false;for(const auto& st:strips)open|=(side?st.c>=a1-.13f:st.a<=a0+.13f)&&z>st.z1&&z<st.z2;
+   if(open)solidBox(side?box(a1-len,a1+.02f,across,across+bar,z,z+bar):box(a0-.02f,a0+len,across,across+bar,z,z+bar),8,false);}}
+ // ---- Rubble on the floor either side, most on the side the blow went to ----
+ for(int k=0;k<b.rubble;++k){const float u=rnd(40,std::uint32_t(k)),v=rnd(41,std::uint32_t(k)),w=rnd(42,std::uint32_t(k));
+  const float a=a0-.3f+(width+.6f)*u,side=(v<.65f?1.f:-1.f)*(b.direction<0?-1.f:1.f),out=half+.05f+1.1f*w*w;
+  const float x=alongX?a:centre+side*out,y=alongX?centre+side*out:a;if(x<.2f||y<.2f||x>23.8f||y>23.8f)continue;
+  const int pick=b.edge==1&&rnd(43,std::uint32_t(k))<.6f?model::brick_pile:rnd(43,std::uint32_t(k))<.55f?model::cave_oldcity_rubble:model::rock_small;
+  const float s=pick==model::brick_pile?.12f+.12f*rnd(44,std::uint32_t(k)):pick==model::rock_small?.08f+.12f*rnd(44,std::uint32_t(k)):.22f+.3f*rnd(44,std::uint32_t(k));
+  const auto& size=model::size[size_t(pick)];
+  Fixture f{pick,{x,y},-.02f,size[0]*s,size[1]*s,size[2]*s,rnd(45,std::uint32_t(k))*kTwoPi,false};m.fixtures.push_back(f);}
 }
 
 bool parseGlazeWord(std::string_view word,Glaze& out){
@@ -155,7 +230,31 @@ Glazing parseGlazing(const std::vector<std::string>& f,const NamedFields& named)
  if(!(g.health>=0&&g.health<=10000))throw std::runtime_error("GLAZING health 0-10000");
  return g;}
 
+Breach parseBreach(const std::vector<std::string>& f,const NamedFields& named){
+ if(f.size()!=8)throw std::runtime_error("malformed BREACH record (BREACH|map|x1|y1|x2|y2|bottom|top)");
+ Breach b;b.x1=numberOf(f[2],"breach x1");b.y1=numberOf(f[3],"breach y1");b.x2=numberOf(f[4],"breach x2");b.y2=numberOf(f[5],"breach y2");
+ b.bottom=numberOf(f[6],"breach bottom");b.top=numberOf(f[7],"breach top");
+ if(!(b.x2>b.x1&&b.y2>b.y1&&b.x1>=0&&b.y1>=0&&b.x2<=24&&b.y2<=24))throw std::runtime_error("invalid BREACH box");
+ for(const auto& n:named){const std::string& k=n.key;const std::string& v=n.value;
+  if(k=="shape"){if(v=="rect"||v=="square")b.shape=0;else if(v=="arch")b.shape=1;else if(v=="ragged"||v=="broken")b.shape=2;else throw std::runtime_error("breach shape is rect, arch or ragged: "+v);}
+  else if(k=="edge"){if(v=="concrete")b.edge=0;else if(v=="brick")b.edge=1;else if(v=="clean"||v=="plain")b.edge=2;else throw std::runtime_error("breach edge is concrete, brick or clean: "+v);}
+  else if(k=="sill")b.sill=numberOf(v,"breach sill");
+  else if(k=="head")b.head=numberOf(v,"breach head");
+  else if(k=="rebar")b.rebar=flagOf(v,"breach rebar");
+  else if(k=="rubble")b.rubble=integerOf(v,"breach rubble");
+  else if(k=="seed")b.seed=std::uint32_t(integerOf(v,"breach seed"));
+  else if(k=="toward")b.direction=integerOf(v,"breach toward")<0?-1:1;
+  else if(k=="infill")b.infill=flagOf(v,"breach infill");
+  else if(k=="wall"){b.wall=integerOf(v,"breach wall");if(b.wall<0||b.wall>60)throw std::runtime_error("invalid breach wall: "+v);}}
+ const float height=b.top-b.bottom;
+ if(!(height>.5f))throw std::runtime_error("BREACH top must be above its bottom");
+ if(!(b.sill>=0&&b.head>=b.sill+.4f&&b.head<=height+1e-3f))throw std::runtime_error("BREACH sill and head: 0 <= sill, sill + 0.4 <= head <= top - bottom");
+ if(b.rubble<0||b.rubble>60)throw std::runtime_error("BREACH rubble 0-60");
+ return b;}
+
 void applyOpenings(AuthoredMapData& m){
  const auto glazings=std::move(m.glazings);m.glazings.clear();
- for(const auto& g:glazings)applyGlazing(m,g);}
+ for(const auto& g:glazings)applyGlazing(m,g);
+ const auto breaches=std::move(m.breaches);m.breaches.clear();
+ for(const auto& b:breaches)applyBreach(m,b);}
 }

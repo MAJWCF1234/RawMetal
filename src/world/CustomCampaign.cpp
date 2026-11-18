@@ -719,6 +719,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="GLAZING"){
    // GLAZING|map|x1|y1|x2|y2|bottom|top, then named fields: a window wall or storefront (World.h Glazing, Openings.cpp).
    auto map=mapAt(maps,f);map->glazings.push_back(parseGlazing(f,namedFields));
+  }else if(tag=="BREACH"){
+   // BREACH|map|x1|y1|x2|y2|bottom|top, then named fields: a hole broken through a wall (World.h Breach, Openings.cpp).
+   auto map=mapAt(maps,f);map->breaches.push_back(parseBreach(f,namedFields));
   }else if(tag=="PIPE"){
    if(f.size()<9)throw std::runtime_error("malformed PIPE record");auto map=mapAt(maps,f);map->pipes.push_back({
     {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z"),f.size()>9?integer(f,9,"pipe material"):0});

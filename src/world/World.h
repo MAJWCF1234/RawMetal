@@ -478,6 +478,15 @@ struct Glazing {
     char pane='c';std::string panes;
     bool infill=true,cut=true;int wall=3;float health=0;
 };
+// A hole broken through a wall (BREACH|map|x1|y1|x2|y2|bottom|top, then named fields; Openings.cpp):
+// the box of wall it goes through, along its longer side, from the floor at `bottom`; `top` is how high
+// the wall it fills back goes. shape 0 a square hole, 1 an arch, 2 ragged; edge 0 concrete core with
+// rebar, 1 brick, 2 clean; the hole from sill to head above the floor; rubble pieces on the floor.
+struct Breach {
+    float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;
+    int shape=2,edge=0;float sill=0,head=2.3f;bool rebar=true;int rubble=10;std::uint32_t seed=1;int direction=1;
+    bool infill=true;int wall=3;
+};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -546,6 +555,8 @@ struct AuthoredMapData {
     // Window walls (GLAZING records, Openings.cpp): each opens its wall and fills it with a framed
     // grid of breakable panes when the map is played; the authored data keeps the record itself.
     std::vector<Glazing> glazings;
+    // Holes broken through walls (BREACH records, Openings.cpp), applied the same way.
+    std::vector<Breach> breaches;
 };
 // The map as it plays: `map` itself, or a copy with its records' overrides
 // applied (sizes, anchoring, a body's side, AI, health, weapon). World loads this.
@@ -554,6 +565,7 @@ std::shared_ptr<const AuthoredMapData> playedMap(std::shared_ptr<const AuthoredM
 // bottom|top) and named fields; throws on a bad value. applyOpenings cuts and fills the played
 // copy's walls for its glazings (playedMap calls it).
 Glazing parseGlazing(const std::vector<std::string>& f,const NamedFields& named);
+Breach parseBreach(const std::vector<std::string>& f,const NamedFields& named);
 void applyOpenings(AuthoredMapData& map);
 // BREAKABLE's glaze= words: clear dirty tinted frosted wired.
 bool parseGlazeWord(std::string_view word,Glaze& out);
