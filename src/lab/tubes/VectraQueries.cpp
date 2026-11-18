@@ -62,7 +62,13 @@ const bool queries=add({.name="vectra-queries",.summary="rays, shape casts and o
   // Many bodies: the nearest, and every one along the way.
   std::vector<Body> list{b,c};list[1].x={1,0,0};std::vector<QueryHit> all;
   const bool nearest=rayCast(list,{-2,0,.1f},{1,0,0},5,h);const int n=rayCastAll(list,{-2,0,.1f},{1,0,0},5,all);
-  check(nearest&&h.body==0&&n==2&&all[0].body==0&&all[1].body==1&&std::fabs(all[1].distance-2.9f)<1e-3f,"core: over a list of bodies the nearest is the box, and every hit comes in order");}
+  check(nearest&&h.body==0&&n==2&&all[0].body==0&&all[1].body==1&&std::fabs(all[1].distance-2.9f)<1e-3f,"core: over a list of bodies the nearest is the box, and every hit comes in order");
+  // A cast cut short (its advancement given one step, as a grazing one runs out of them): a sphere passing 5 mm
+  // wide of the cylinder is no hit; one straight at a flat face, done in its one step, is.
+  {Body flat;flat.shape=&box;QueryHit g;const bool wide=sphereCast(c,{-1,.155f,0},.05f,{1,0,0},5,g),wideFull=wide;castIterations=1;
+   const bool cut=sphereCast(c,{-1,.155f,0},.05f,{1,0,0},5,g),face2=sphereCast(flat,{-2,0,0},.1f,{1,0,0},5,g);const float faceAt2=g.distance;castIterations=64;
+   r<<"  a sphere cast 5 mm wide of the cylinder: "<<(wideFull?"hit":"no hit")<<"; cut to one step: "<<(cut?"HIT":"no hit")<<"; straight at a box's face in one step: "<<(face2?"hit at "+f3(faceAt2):"no hit")<<"\n";
+   check(!wideFull&&!cut&&face2&&std::fabs(faceAt2-1.7f)<2e-3f,"core: a cast that runs out of steps before it closes in reports no hit (one that has closed in still does)");}}
  // ---- Gunfire ----
  {auto m=regression::room();m->definition.playerStart={3,3};Game g(regression::campaign(m));LabAccess::player(g).pos={3,3};
   auto& list=LabAccess::clutter(g);list.clear();
@@ -101,17 +107,17 @@ const bool queries=add({.name="vectra-queries",.summary="rays, shape casts and o
 // Watched from the plank: the post's middle in its frame. Within its length, the post going from one face's side
 // to the other's is a turn through it; nearer its middle plane than the two halves (3 cm) is a post in it.
 struct Spin {int through=0;float deepest=0;bool struck=false;V3 endV{},endW{};};
-Spin spin(bool world){
- Space space;Shape plank;plank.add(PartKind::Box,{},{.6f,.015f,.1f});plank.finish();Shape post;post.add(PartKind::Box,{},{.015f,.015f,.5f});post.finish();
- Body p;p.shape=&plank;p.material.restitution=.2f;p.linearDamping=p.angularDamping=0;p.gravity={};p.setMass(3);p.q=Quat::axisAngle({0,0,1},-.6f);p.w={0,0,60};p.updateInertia();space.bodies.push_back(p);
+Spin spin(bool world,float speed=60,float dt=1.f/120){
+ Space space;space.settings.maxAngular=std::max(space.settings.maxAngular,speed*1.5f);Shape plank;plank.add(PartKind::Box,{},{.6f,.015f,.1f});plank.finish();Shape post;post.add(PartKind::Box,{},{.015f,.015f,.5f});post.finish();
+ Body p;p.shape=&plank;p.material.restitution=.2f;p.linearDamping=p.angularDamping=0;p.gravity={};p.setMass(3);p.q=Quat::axisAngle({0,0,1},-.6f);p.w={0,0,speed};p.updateInertia();space.bodies.push_back(p);
  const V3 at{.45f,0,0},lo=at-V3{.015f,.015f,.5f},hi=at+V3{.015f,.015f,.5f};
  if(world)space.sweep=[&](Space&,int,V3 a,V3 b,V3& n)->float{return rayBoxFraction(a,b-a,lo,hi,&n);};
  else{Body s;s.shape=&post;s.kinematic=true;s.setMass(0);s.x=at;space.bodies.push_back(s);}
  Spin out;auto local=[&]{const auto& B=space.bodies[0];return B.q.unrotate(at-B.x);};V3 last=local();
- for(int i=0;i<120;++i){space.step(1.f/120);const V3 l=local();const auto& B=space.bodies[0];
+ for(int i=0;i<int(1/dt+.5f);++i){space.step(dt);const V3 l=local();const auto& B=space.bodies[0];
   if(std::fabs(l.x)<.585f&&std::fabs(last.x)<.585f&&(l.y>0)!=(last.y>0))++out.through;
   if(std::fabs(l.x)<.585f)out.deepest=std::max(out.deepest,.03f-std::fabs(l.y));
-  out.struck|=B.w.z<30;last=l;out.endV=B.v;out.endW=B.w;
+  out.struck|=B.w.z<speed*.5f;last=l;out.endV=B.v;out.endW=B.w;
   if(std::getenv("RM_SPIN_TRACE")){static std::ofstream tr("spin-trace.txt");tr<<(world?"W ":"B ")<<i<<" post at "<<l.x<<","<<l.y<<" w "<<B.w.x<<","<<B.w.y<<","<<B.w.z<<" x "<<B.x.x<<","<<B.x.y<<","<<B.x.z<<" ccd "<<B.ccd<<" events "<<space.events.size()<<std::endl;}}
  return out;}
 // Two thin boards (0.3 x 0.3 x 0.02 m) flying face on at each other at 25 m/s each, 0.32 m apart: beyond the
@@ -128,7 +134,10 @@ const bool ccd=add({.name="vectra-ccd",.summary="continuous collision: a spinnin
   auto say=[&](const char* what,const Spin& s){r<<"  "<<what<<": turned through it "<<s.through<<" times, deepest in it "<<f3(s.deepest*1000)<<" mm; after 1 s going "<<f3(len(s.endV))<<" m/s, spinning "<<f3(s.endW.z)<<" rad/s about its axis\n";};
   r<<"CORE: a plank spinning at 60 rad/s (0.5 rad a step) beside a 3 cm post\n";say("the post as the world (Space::sweep)",w);say("the post as a fixed body",b);
   check(w.struck&&w.through==0&&w.deepest<.005f,"ccd: a plank spinning at 60 rad/s does not turn through a 3 cm post (the world's, by Space::sweep)");
-  check(b.struck&&b.through==0&&b.deepest<.005f,"ccd: a plank spinning at 60 rad/s does not turn through a 3 cm post (a fixed body)");}
+  check(b.struck&&b.through==0&&b.deepest<.005f,"ccd: a plank spinning at 60 rad/s does not turn through a 3 cm post (a fixed body)");
+  // A quarter turn a step and no going at all (every point's way through the step then points behind it).
+  const Spin q=spin(true,kPi*.5f*60,1.f/60);say("a quarter turn a step (94 rad/s at 60 Hz), the post as the world",q);
+  check(q.struck&&q.through==0&&q.deepest<.005f,"ccd: a plank turning a quarter turn a step, not going, is stopped by a 3 cm post");}
  {float gap,va,vb;const bool met=boards(gap,va,vb);
   r<<"  two 2 cm boards at 25 m/s each, 0.32 m apart: "<<(met?"meet":"cross")<<"; after, 0.25 s on: "<<f3(gap)<<" m apart, going "<<f3(va)<<" and "<<f3(vb)<<" m/s\n";
   check(met&&gap>0&&va<0&&vb>0,"ccd: two thin boards flying at each other at 25 m/s meet and go back apart");}
