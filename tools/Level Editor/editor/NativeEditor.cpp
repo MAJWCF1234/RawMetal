@@ -542,6 +542,8 @@ static std::wstring plainKind(const std::string &kind) {
                              {"CREATURE", L"Creature"},
                              {"DOOR", L"Door"},
                              {"FIXTURE", L"Equipment"},
+                             {"GLAZING", L"Window wall"},
+                             {"BREACH", L"Breach"},
                              {"GROUND", L"Ground cover"},
                              {"HAZARD", L"Hazard"},
                              {"LAYER", L"Floor"},
@@ -755,7 +757,13 @@ enum {
   // Footings: a room or floor on the land, or raised (NativeGroundMethods.inc).
   FootingModeList=2610,FootingSnapList,FootingRaiseBox,FootingHeightBox,FootingStepsToggle,FootingAdvancedToggle,
   // The Flooring tool (NativeFlooringMethods.inc).
-  FlooringLookList=2620,FlooringSlopeList,FlooringTrimToggle
+  FlooringLookList=2620,FlooringSlopeList,FlooringTrimToggle,
+  // The Window wall and Glass tools (NativeGlazingTool.inc).
+  GlazingHeightList=790,GlazingBaysList,GlazingRowsList,GlazingPaneList,GlazingLookList,GlazingDoorList,
+  // The Breach tool (NativeBreachTool.inc).
+  BreachShapeList=800,BreachEdgeList,BreachSizeList,BreachRubbleList,
+  // The Growth brush (NativeGrowthTool.inc).
+  GrowthKindList=810,GrowthModeList,GrowthSizeList,GrowthDensityList,GrowthScaleList,GrowthSeedBox
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -814,11 +822,15 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Terrain", L"⛰", L"Paint the land: raise, lower, smooth, flatten, lay a ramp or paint the ground. Size and strength on the right; Ctrl+Z takes a stroke back.", 4, "", 'T'},
     {L"Nature", L"♣", L"Paint trees, bushes, grass, rocks and plants. Pick what on the right; Erase (or Alt) clears them. Walls, buildings and water stay clear.", 4, "", 'N'},
     {L"Flooring", L"▤", L"Pick a floor look on the right, then drag it out over a floor or the ground. A click floors a whole room.", 0, "STRUCT", 'r'},
+    {L"Window wall", L"▦", L"Drag along a wall, or across an opening: a framed storefront of glass panes. Bays, rows, heights, panes, frame and a doorway on the right. Click a bay of one to give its panes the kind picked (Shift: the bottom pane only).", 0, "GLAZING", 'r'},
+    {L"Breach", L"◠", L"Drag along a wall to break a hole through it: ragged, arched or square, with a chipped edge, rebar and rubble. You walk, see and shoot through it, and light comes through.", 0, "BREACH", 'r'},
+    {L"Growth", L"❦", L"Paint ivy and moss on walls, creepers hanging from ceilings and ledges, and grass through the floor. What, brush size, density, size and seed on the right; Erase (or Alt) clears it. Ctrl+Z takes a stroke back.", 1, "", 'G'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
-                     TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46;
+                     TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -1021,7 +1033,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1097,6 +1109,13 @@ struct Editor {
 #include "NativeOutdoorRegression.inc"
 #include "NativePrefabMethods.inc"
 #include "NativeFormatRegression.inc"
+#include "NativeGlazingTool.inc"
+#include "NativeGlazingRegression.inc"
+#include "NativeBreachTool.inc"
+#include "NativeBreachRegression.inc"
+#include "NativeGrowthTool.inc"
+#include "NativeGrowthRegression.inc"
+#include "NativeEditorPictures.inc"
 #include "NativeFinishRegression.inc"
 #include "NativeFlooringRegression.inc"
 #include "NativeGroundRegression.inc"
@@ -3813,6 +3832,13 @@ struct Editor {
   // Builds one record of this kind from a gesture. Box kinds take the dragged
   // corners, line kinds the two ends, point kinds the release point.
   int authorKind(const std::string &kindName, float ax, float ay, float bx, float by) {
+    // Glass dragged along a solid wall is a window cut into it (NativeGlazingTool.inc).
+    if (kindName == "BREAKABLE" && glassIntoWall(ax, ay, bx, by)) {
+      glassWindow = true;
+      int made = authorKind("GLAZING", ax, ay, bx, by);
+      glassWindow = false;
+      return made;
+    }
     bool model = kindName == "CLUTTER" && listIndex(clutterList) == 7;
     int si = schemaOf(kindName, model ? "7" : nullptr);
     if (si < 0)
@@ -3918,14 +3944,24 @@ struct Editor {
     } else if (k == "COMPACTOR") {
       set("bed", n(floorZ)), set("raised", n(floorZ + 2.6f)), set("period", "5");
     } else if (k == "BREAKABLE") {
-      set("bottom", n(floorZ)), set("top", n(floorZ + 2.2f)), set("material", "17"), set("health", "20");
+      set("material", "17"), set("health", "20");
       set("holds", "0"), set("brokenState", uniqueName("BREAKABLE", 11, "glass_broken_")), set("triggerState", "");
+      glassPaneFields(f, ax, ay, bx, by, floorZ); // thin, in the middle of the wall's line (NativeGlazingTool.inc)
+    } else if (k == "GLAZING") {
+      auto run = wallRunAt(ax, ay, bx, by);
+      glazingBox(f, run, floorZ, creationCeiling());
+      glazingFields(f, run, floorZ, creationCeiling(), glassWindow);
+    } else if (k == "BREACH") {
+      if (!breachFields(f, ax, ay, bx, by, floorZ)) // on a wall only (NativeBreachTool.inc)
+        return -1;
     } else if (k == "DARK") {
     }
     while (f.size() > size_t(std::max(2, s.required)) && f.back().empty())
       f.pop_back();
     normalize(f);
     addAuthored(f);
+    if (k == "BREAKABLE" && !glassHeader.empty())
+      addAuthored(glassHeader), glassHeader.clear();
     // A new trigger already says something, so stepping in shows it works.
     if (k == "SCRIPT_EVENT" && autoDetail)
       addAuthored({"SCRIPT_ACTION", std::to_string(map), f[2], "MESSAGE", "SOMETHING STIRS.", "4"});
@@ -4132,6 +4168,13 @@ struct Editor {
         message(L"Drag from one end to the other.");
         return;
       }
+      // A breach goes through a wall, or nowhere; a click on a storefront gives its bay the pane kind picked.
+      if (tool == BreachTool && !breachOnWall(ax, ay, bx, by)) {
+        message(L"A breach goes through a wall: drag along one (# tiles or a wall block).");
+        return;
+      }
+      if (tool == GlazingTool && std::hypot(bx - ax, by - ay) < .3f && paintGlazingBay(bx, by, !backgroundTest && (GetKeyState(VK_SHIFT) & 0x8000)))
+        return;
       remember();
       int added = authorKind(info.kind, ax, ay, bx, by);
       if (smartSnap && added >= 0 && std::string(info.kind) == "FIXTURE")
@@ -4183,6 +4226,10 @@ struct Editor {
       natureDab(x, y);
       return;
     }
+    if (brushShape == 'G') {
+      growthDab(x, y); // NativeGrowthTool.inc
+      return;
+    }
     if (brushShape == 'F') {
       // The outline lives beside the map until it becomes walls, a block or terraces.
       if (!history.empty() && history.back() == doc.text())
@@ -4217,7 +4264,7 @@ struct Editor {
   }
   bool brushTool() const {
     char s = toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape;
-    return (s == 't' && brush == 0) || s == 'F' || s == 'H' || s == 'T' || s == 'N';
+    return (s == 't' && brush == 0) || s == 'F' || s == 'H' || s == 'T' || s == 'N' || s == 'G';
   }
   bool fillTool() const { return toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape == 't' && brush == 2; }
   bool dragTool() const {
@@ -5000,6 +5047,15 @@ struct Editor {
                       GetDlgItem(window, FlooringTrimToggle)})
       if (list)
         ShowWindow(list, SW_HIDE);
+    for (HWND list : glazingControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
+    for (HWND list : breachControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
+    for (HWND list : growthControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
       ShowWindow(GetDlgItem(window, id), SW_HIDE);
     if(!layersDock){
@@ -5149,6 +5205,12 @@ struct Editor {
     }
     if (tool == WaterTool)
       row(waterModeList, L"Water");
+    if (tool == GlazingTool)
+      glazingRows(row);
+    if (tool == BreachTool)
+      breachRows(row);
+    if (tool == GrowthTool)
+      growthRows(row);
     if (tool == FilmTool) {
       int i = 0;
       for (int id : {FilmWrite, FilmRender}) {
@@ -6139,6 +6201,9 @@ struct Editor {
     verifyDressingRegressions();
     verifyOutdoorRegressions(false); // NativeOutdoorRegression.inc, without the engine pictures
     verifyFormatTwo(); // NativeFormatRegression.inc: named fields, the inspector, prefabs
+    verifyGlazingRegressions(false); // NativeGlazingRegression.inc: the Window wall and Glass tools
+    verifyBreachRegressions(false);  // NativeBreachRegression.inc: the Breach tool
+    verifyGrowthRegressions(false);  // NativeGrowthRegression.inc: the Growth brush
     verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
     verifyGround(false); // NativeGroundRegression.inc: rooms on the land, footings, raise, patios
     verifyFlooring(); // NativeFlooringRegression.inc: the Flooring tool
@@ -8651,7 +8716,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       if (shape == 'R' && e->autoDetail)
         outline(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ui::Lamp, 1, PS_DOT);
     };
-    if (shape == 'T' || shape == 'N')
+    if (shape == 'T' || shape == 'N' || shape == 'G')
       e->drawBrushRing(dc, ox, oy, cell, hx, hy);
     else if (shape == 'd')
       // The door this click or drag fits, in the wall's direction, as R has turned it.
@@ -9713,6 +9778,18 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->outdoorControlChanged(id, notification);
         return 0;
       }
+      if (id >= GlazingHeightList && id <= GlazingDoorList) {
+        e->glazingControlChanged(id, notification);
+        return 0;
+      }
+      if (id >= BreachShapeList && id <= BreachRubbleList) {
+        e->breachControlChanged(id, notification);
+        return 0;
+      }
+      if (id >= GrowthKindList && id <= GrowthSeedBox) {
+        e->growthControlChanged(id, notification);
+        return 0;
+      }
       if (id == LinkList && notification == LBN_SELCHANGE) {
         auto n = SendMessageW(e->linkList, LB_GETCURSEL, 0, 0);
         if (n >= 0)
@@ -10059,7 +10136,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (argc > 1)
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
-                        L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test"})
+                        L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
+                        L"--glazing-test", L"--breach-test", L"--growth-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10173,6 +10251,17 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // Map format 2 alone (NativeFormatRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--format-test")
       e.backgroundTest = e.formatTest = true;
+    // The Window wall and Glass tools alone (NativeGlazingRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--glazing-test")
+      e.backgroundTest = e.glazingTest = true;
+    // The Breach tool and the Growth brush alone (--editing-test runs them too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--breach-test")
+      e.backgroundTest = e.breachTest = true;
+    if (argc > 1 && std::wstring(argv[1]) == L"--growth-test")
+      e.backgroundTest = e.growthTest = true;
+    // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
+    if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
+      e.backgroundTest = e.picturesTest = true;
     // Stair and balcony finishes alone (NativeFinishRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--finish-test")
       e.backgroundTest = e.finishTest = true;
@@ -10572,6 +10661,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.natureDensityList = choices(NatureDensityList, {L"Sparse", L"Normal", L"Dense"}, 1);
     e.natureScaleList = choices(NatureScaleList, {L"All one size", L"Some variety", L"Wide variety"}, 1);
     e.button(L"Align to slope: on", NatureAlignToggle);
+    e.makeGlazingControls(choices);
+    e.makeBreachControls(choices);
+    e.makeGrowthControls(choices);
     e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
     for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
@@ -10765,6 +10857,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       DestroyWindow(e.window);
       return 0;
     }
+    if (e.glazingTest) {
+      int code = 0;
+      try { e.verifyGlazingRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-glazing-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
     if (e.groundTest) {
       int code = 0;
       std::ofstream report(e.root / L"native-editor-ground-test.txt");
@@ -10780,9 +10879,24 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       DestroyWindow(e.window);
       return code;
     }
+    if (e.picturesTest) {
+      int code = 0;
+      try { e.atriumPictures(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-atrium-pictures.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
     if (e.finishTest) {
       int code = 0;
       try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.breachTest || e.growthTest) {
+      int code = 0;
+      const wchar_t *file = e.breachTest ? L"native-editor-breach-test.txt" : L"native-editor-growth-test.txt";
+      try { e.breachTest ? e.verifyBreachRegressions(true) : e.verifyGrowthRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / file, std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

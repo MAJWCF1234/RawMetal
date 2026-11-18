@@ -1,6 +1,6 @@
 # floors-starter-stilts (tools/dev/floors_fixtures.py): the Starter Map Hillside. Tube: floors.
 world custom "custom maps/Starter Map.rmc"
-map 126
+map 124
 camera 18.5 16.5 -999 -128 4.9
 size 1280 720
 frames 30

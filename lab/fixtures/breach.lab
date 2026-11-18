@@ -1,0 +1,9 @@
+# A ragged breach (BREACH) through a wall of tiles across the plain room at y 10, a bright warm lamp
+# behind it and dust in its light; an arch (brick) and a square hole in a second wall further back.
+# Shot "breach" from the near side. Tubes: breach.
+world room
+camera 9.5 17.0 -999 -90 4
+light 9.5 7.2 2.8 3.2 12
+light 9.5 15.5 3.6 .35 7
+size 1280 720
+frames 30

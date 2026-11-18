@@ -24,7 +24,9 @@ with a clear corridor down the west side joining the rows:
               a Brute beats down), PARTICLES (every EMITTER preset on a switch), LIGHT
               (colour bleed, metals, glass, water, a corner lit by bounce, crystals), THE
               DEAD AND BLOOD (bodies that settle, a creature of each fluid), MACHINE,
-              PREDATOR (a hunter and its prey), SOUND (AMBIENT, REVERB, music cues)
+              PREDATOR (a hunter and its prey), SOUND (AMBIENT, REVERB, music cues), and south
+              of Predator the ATRIUM: a storefront of mixed panes (GLAZING), a ragged hole
+              (BREACH) with light through it, and the Growth brush's ivy, moss, creepers and grass
 
 Writes "custom maps/Starter Map.rmc" by default. The file is also the worked
 example for custom maps/GUIDE.html (tools/campaign/make_custom_map_guide.py).
@@ -80,7 +82,8 @@ MATERIALS = {0: 'default wall', 1: 'water (hidden)', 2: 'steel', 3: 'wall finish
              31: 'brick', 32: 'mine timber', 33: 'ancient stone', 34: 'growth', 35: 'crystal',
              36: 'teal dado', 37: 'green dado', 38: 'maroon dado', 39: 'curtain', 40: 'formwork', 41: 'board-form',
              42: 'cast concrete', 43: 'weathered', 44: 'stained', 45: 'ribbed', 46: 'tread plate', 47: 'rusted steel',
-             48: 'metal roofing', 49: 'asphalt', 50: 'floor tile', 51: 'plank floor'}
+             48: 'metal roofing', 49: 'asphalt', 50: 'floor tile', 51: 'plank floor',
+             52: 'chain-link mesh', 53: 'light shaft (god rays; facing: the way it falls)'}
 SURFACES = ['concrete', 'pressure works', 'brick', 'clinic tile', 'lab panel', 'rock', 'corrugated', 'office plaster',
             'mine timber', 'ancient stone', 'clinic teal', 'clinic green', 'clinic maroon']
 START_X = 2.2                     # museum rows start east of the section corridor
@@ -107,6 +110,7 @@ class Starter:
         self.sloped = 0         # absolute boxes over ground that falls further than they are tall
         self.closed = set()     # pairs of neighbouring cells whose shared edge stays shut
         self.start = 0          # the map you spawn in
+        self.format2 = False    # FORMAT|2: some record carries named fields (GLAZING, BREACH)
 
     # --- maps -------------------------------------------------------------------------------
     def new_map(self, name, col, row, ceiling=4.0, surface=None, ambient=.34, shift=True):
@@ -573,6 +577,7 @@ def build():
 
     groups = {t: [] for t, _ in SECTIONS}
     for sl, name, w, d, h, yaw in allm:
+        if name.startswith('growth_'): continue      # the Growth brush's pieces stand in the Showcase Atrium instead
         groups[next(t for t, test in SECTIONS if test(name, sl))].append((sl, name, w, d, h, yaw))
     palette = [0xc8a050, 0x60a0d0, 0xd06060, 0x60c0a0, 0xd0b040, 0xa08060, 0x8080c0, 0xc07040, 0x70b050]
     for gi, (title, _) in enumerate(SECTIONS):
@@ -592,9 +597,10 @@ def build():
     architecture(s)
     architecture_2(s)
     showcase(s, slot, catalogue)
-    s.reserved = {(5 + OX, 2 + OY)}  # SHOWCASE: PHYSICS, built after the forest (it keeps every earlier number)
+    s.reserved = {(5 + OX, 2 + OY), (6 + OX, 2 + OY)}  # SHOWCASE: PHYSICS and ATRIUM, built after the forest (every earlier number stays)
     building(s, slot, catalogue)
     physics_room(s, slot, catalogue)
+    atrium(s, slot, catalogue)  # south of Predator, built last too
     return s
 
 
@@ -1121,6 +1127,188 @@ def showcase(s, slot, catalogue):
     s.sign(s.maps[0], 10.5, 22.95, 2.85, 2.4, .4, 'SHOWCASE THIS WAY', 'through the gap, then east', SHOW)
     props = next(x for x in s.maps if x['name'] == 'Props')
     s.sign(props, 23.97, 9.4, 2.3, 1.8, .45, 'SHOWCASE >', 'doors, particles, light, sound', SHOW, -HALF)
+
+
+def atrium(s, slot, catalogue):
+    """SHOWCASE: ATRIUM, south of Predator through a door in its south wall: a concrete atrium the
+    green has come back into. A stair climbs the west wall to a balcony; a storefront of mixed panes
+    (GLAZING: clear, dirty, mesh, pre-cracked, frosted, with a doorway bay) closes the shop to the
+    south; a ragged hole (BREACH) through the east wall lets the light court's sun-warm light in, with
+    dust in it. Ivy and moss climb the walls, creepers hang from the ceiling, the balcony's lip and the
+    breach's, grass comes up through the floor where the light falls: the Campaign Builder's Growth
+    brush's pieces, placed the way it places them (on a wall's face, turned out; hanging from a top)."""
+    import random
+    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.26)
+    i = m['index']
+    m['lights'] = False
+    s.format2 = True                                                  # GLAZING and BREACH take named fields
+    rng = random.Random(1717)
+    # Built after the forest ring and the building's outer walls (every earlier map keeps its number), so it
+    # walls itself in: in from Predator's south wall (x 11-12, through the wall building() gave it); the Dead
+    # Room, the Physics room and the forest south of it stay shut.
+    pred = next(x for x in s.maps if x['name'] == 'Showcase Predator')
+    pred['walls'] = (pred['walls'] | {(x, 23) for x in range(24)}) - {(11, 23), (12, 23)}
+    m['walls'] |= {(x, 0) for x in range(24) if x not in (11, 12)} | {(0, y) for y in range(24)} | {(x, 23) for x in range(24)}
+    for other in s.maps:
+        if (other['col'], other['row']) in ((m['col'] + 1, m['row']), (m['col'] - 1, m['row']), (m['col'], m['row'] + 1)):
+            s.closed.add(frozenset(((m['col'], m['row']), (other['col'], other['row']))))
+    # The light court behind the east wall (x 19-22) and the shop behind the storefront (y 17-22).
+    m['walls'] |= {(18, y) for y in range(1, 16)} | {(x, 16) for x in range(1, 23)}
+    s.zone(m, 0, 0, 24, 1.6, '', 'SHOWCASE: ATRIUM')
+    # ---- The storefront: five bays of 2.4 m in painted metal, two rows, the middle bay a doorway ----
+    # Panes bay by bay, bottom to top: dirty, clear | mesh, dirty | the doorway's pre-cracked transom |
+    # clear, frosted | mesh, clear.
+    s.rec(m, 'GLAZING', i, 4, 16, 16, 17, 0, 6, 'cols=5', 'rows=2', 'sill=0.5', 'head=3', 'door=2', 'door_head=2.3',
+          'look=metal', 'panes=dcmdxcfmc')
+    # ---- The breach: a ragged hole knocked through the east wall into the light court ----
+    s.rec(m, 'BREACH', i, 18, 4.8, 19, 8.8, 0, 6, 'shape=ragged', 'head=3', 'rubble=26', 'seed=5', 'toward=-1')
+    # ---- The stair up the west wall to a balcony along the north wall, railed ----
+    s.rec(m, 'STAIR', i, 1.2, 5, 3.2, 11, 0, 3.6, 21, 1, 0, 0, .12, 1)
+    s.struct(m, 1, 1, 7, 5, 3.3, 3.6, 41)
+    s.struct(m, 3.2, 4.94, 7, 5, 3.6, 4.7, 20, rail=1)
+    s.struct(m, 6.94, 1, 7, 5, 3.6, 4.7, 20, rail=1)
+    for x, y in ((10, 10), (14, 10)):                                 # two columns holding the roof
+        s.struct(m, x - .3, y - .3, x + .3, y + .3, 0, 6, 42)
+    # ---- Light: warm and dim in the hall, the court bright as day, the shop cold and low ----
+    # The hall in shade, neutral and a little warm; the court behind the breach and the shop behind the glass bright as
+    # low sun, so the light pours in through the hole and the upper panes.
+    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.0, 13, 3400), (12, 12.5, 5.85, .95, 13, 3400), (12, 4.5, 5.85, .9, 12, 3400),
+                             (4.2, 3, 3.15, .7, 7, 3300), (21.2, 3.2, 5.85, 5.0, 16, 4000), (21.2, 11.4, 5.85, 4.5, 16, 4000),
+                             (21.8, 6.9, 3.4, 6.0, 17, 3700), (8.5, 22.0, 4.6, 4.2, 14, 3800), (15.5, 22.0, 4.6, 3.8, 14, 3800)):
+        s.rec(m, 'LIGHT', i, x, y, z, 0, 0, k, r, t)
+    # Dust hanging in the court's light where it comes through the hole.
+    s.rec(m, 'EMITTER', i, 18.4, 6.8, .1, 1.4, 1.8, 3.2, .0833, .013, .004, 48, 4, .9)
+    s.rec(m, 'EMITTER', i, 10.0, 14.6, .1, 3.4, 1.2, 3.0, .0833, .013, .004, 40, 4, .7)   # and in front of the glass
+    s.rec(m, 'EMITTER', i, 15.4, 6.9, .1, 2.0, 1.2, 2.8, .0833, .013, .004, 44, 4, .9)    # and in the breach's shaft
+    # Light shafts (STRUCT material 53): sunlight falling on the slant from the court through the hole, across the
+    # hall floor (facing 3, down toward -x), and from the shop through the storefront's upper panes (facing 2, -y).
+    for x1, y1, x2, y2, top, facing in ((13.0, 5.5, 18.0, 8.3, 3.0, 3), (14.6, 6.3, 18.0, 7.5, 2.8, 3),
+                                        (4.5, 12.6, 6.6, 16.0, 3.0, 2), (13.6, 12.4, 15.8, 16.0, 3.0, 2), (11.4, 13.4, 13.4, 16.0, 3.0, 2)):
+        s.rec(m, 'STRUCT', i, x1, y1, x2, y2, 0, top, 0, 53, 0, 0, facing)
+    # ---- What was left: a bench, a wheelchair, shelving in the shop, rubble ----
+    def model(name, x, y, base=0, k=1.0, yaw=0.0, solid=1):
+        w, d, h = catalogue[name]
+        s.rec(m, 'FIXTURE', i, slot[name], round(x, 3), round(y, 3), round(base, 3), round(w * k, 3), round(d * k, 3), round(h * k, 3), round(yaw, 4), solid)
+    model('bench', 12.6, 7.6, yaw=.35)
+    model('med_wheelchair', 5.4, 13.2, yaw=2.4)
+    for x in (3, 6.5, 13.5):
+        model('metal_shelf', x, 22.45, yaw=PI)
+    model('office_armchair_green', 18.6, 19.6, yaw=-1.1)
+    model('brick_pile', 20.4, 13.4, k=.8, yaw=.6, solid=0)
+    model('cave_oldcity_rubble', 9.2, 10.9, k=.45, yaw=1.9, solid=0)
+    # ---- Growth (the Growth brush's pieces) ----
+    def piece(name, k, x, y, z, yaw):
+        w, d, h = catalogue[name]
+        # The pack's moss is a bright block green: the brush tints it down to old damp moss.
+        tint = ('tint=0.4,0.42,0.3',) if name in ('growth_moss_floor', 'growth_moss_wall') else ()
+        s.rec(m, 'FIXTURE', i, slot[name], round(x, 3), round(y, 3), round(z, 3), round(w * k, 3), round(max(d * k, .005), 3), round(max(h * k, .005), 3), round(yaw, 4), 0, *tint)
+    def on_face(name, k, at, along, nx, ny, z):
+        """Flat on a wall's face at `at` (x for an east/west face, y for a north/south one), turned out along (nx, ny)."""
+        w, d, h = catalogue[name]
+        out = d * k / 2 + .01
+        x, y = (along, at + ny * out) if nx == 0 else (at + nx * out, along)
+        piece(name, k, x, y, z, math.atan2(nx, ny))
+    def hang(name, k, at, along, nx, ny, top):
+        """Hanging down a face from `top` (a ledge's lip, a wall's top)."""
+        on_face(name, k, at, along, nx, ny, top - catalogue[name][2] * k)
+    def drape(length, at, along, nx, ny, top, single=False):
+        """Ivy draping `length` metres down a face from its lip at `top`, as the Growth brush drapes it: a
+        curtain of strands of uneven length (the longest `length`), or a single strand."""
+        name = 'growth_ivy_single' if single else 'growth_ivy_curtain'
+        hang(name, length / catalogue[name][2], at, along, nx, ny, top + .02)
+    ceiling = 6.0
+    # Ivy: on the north wall over and under the balcony, draping from the top.
+    on_face('ivy_wall_a', 1.15, 1, 3.0, 0, 1, 3.62)
+    on_face('ivy_wall_b', 1.05, 1, 5.6, 0, 1, ceiling - 1.19 * 1.05 - .02)
+    on_face('ivy_wall_a', 1.0, 1, 9.0, 0, 1, ceiling - 1.66 - .02)
+    on_face('ivy_wall_b', 1.1, 1, 15.6, 0, 1, ceiling - 1.19 * 1.1 - .02)
+    on_face('growth_vine_sheet', .9, 1, 16.6, 0, 1, .05)
+    on_face('ivy_wall_b', .9, 1, 5.0, 0, 1, 1.4)
+    # The west wall behind the stair, from the floor up.
+    on_face('ivy_wall_a', 1.2, 1, 13.4, 1, 0, 0)
+    on_face('ivy_wall_b', 1.15, 1, 13.0, 1, 0, 2.1)
+    on_face('ivy_wall_a', 1.0, 1, 8.6, 1, 0, 4.2)
+    on_face('creeper', .9, 1, 15.0, 1, 0, 0)
+    # The east wall over the breach: a mat of ivy across its top and strands over its lip.
+    on_face('ivy_wall_a', 1.15, 18, 6.8, -1, 0, 3.05)
+    on_face('ivy_wall_b', 1.0, 18, 11.8, -1, 0, 0)
+    on_face('ivy_wall_a', .9, 18, 2.8, -1, 0, 4.2)
+    drape(1.7, 18, 6.9, -1, 0, 3.1)                                   # over the breach's lip
+    # The storefront's head: ivy over it and strands hanging in front of the glass and the doorway.
+    on_face('ivy_wall_a', 1.1, 16, 6.2, 0, -1, 3.25)
+    on_face('ivy_wall_b', 1.2, 16, 10.0, 0, -1, 3.2)
+    on_face('ivy_wall_a', 1.0, 16, 14.2, 0, -1, 3.4)
+    on_face('ivy_wall_b', 1.0, 16, 2.4, 0, -1, 0)
+    on_face('creeper', .85, 16, 17.0, 0, -1, 0)
+    for x, length, single in ((5.6, 1.3, False), (8.95, 1.5, True), (12.4, 1.0, False), (15.1, .7, True), (10.6, .55, True)):
+        drape(length, 16, x, 0, -1, 3.1, single)                     # in front of the glass and the doorway
+    # The columns: vines up two faces, moss at the foot.
+    for cx, cy in ((10, 10), (14, 10)):
+        on_face('growth_vine_sheet', .44, cy - .3, cx, 0, -1, .1)
+        on_face('growth_vine_sheet', .44, cx + .3, cy, 1, 0, 1.3)
+        on_face('growth_moss_wall', .7, cy + .3, cx, 0, 1, 0)
+    # Moss low on the walls, where the damp is.
+    for name, at, along, nx, ny in (('growth_moss_wall', 16, 1.6, 0, -1), ('growth_moss_wall', 16, 17.2, 0, -1)):
+        on_face(name, rng.uniform(.8, 1.2), at, along, nx, ny, rng.uniform(0, .25))
+    # The light court: ivy all over its walls.
+    on_face('ivy_wall_a', 1.2, 23, 3.2, -1, 0, 0)
+    on_face('ivy_wall_b', 1.2, 23, 9.8, -1, 0, 1.4)
+    on_face('creeper', 1.0, 23, 13.4, -1, 0, 0)
+    on_face('ivy_wall_a', 1.0, 19, 12.4, 1, 0, 0.3)
+    on_face('ivy_wall_b', 1.1, 1, 21.0, 0, 1, 3.9)
+    # The shop: ivy on its back wall, strands inside the storefront's head.
+    on_face('ivy_wall_a', 1.15, 23, 5.4, 0, -1, 0)
+    on_face('ivy_wall_b', 1.1, 23, 17.4, 0, -1, .9)
+    drape(1.2, 17, 6.0, 0, 1, 3.1)
+    drape(.9, 17, 13.6, 0, 1, 3.1, True)
+    # Ivy over the balcony's lip, and curtains of it down the walls from the ceiling: always from an edge.
+    drape(1.9, 5, 5.0, 0, 1, 3.6)
+    drape(1.2, 5, 3.7, 0, 1, 3.6, True)
+    drape(.7, 5, 6.6, 0, 1, 3.6, True)
+    drape(1.5, 7, 2.8, 1, 0, 3.6)
+    drape(2.2, 7, 4.4, 1, 0, 3.6, True)
+    for length, at, along, nx, ny, single in ((2.4, 1, 9.6, 0, 1, False), (1.6, 1, 15.4, 0, 1, False), (2.2, 16, 2.2, 0, -1, False),
+                                              (2.6, 18, 12.6, -1, 0, False), (2.8, 23, 4.2, -1, 0, False), (2.2, 23, 11.0, -1, 0, False),
+                                              (2.0, 23, 9.5, 0, -1, False), (1.6, 23, 16.0, 0, -1, False)):
+        drape(length, at, along, nx, ny, ceiling, single)
+    # Grass up through the floor: thickest where the light falls through the hole, along the walls,
+    # in a crack across the hall, all over the court and the shop, and on the balcony.
+    blocked = [(1.2, 5, 3.2, 11), (9.6, 9.6, 10.4, 10.4), (13.6, 9.6, 14.4, 10.4), (12.0, 7.2, 13.2, 8.0), (4.8, 12.6, 6.0, 13.8),
+               (2.4, 21.9, 14.4, 23), (18.1, 19.0, 19.1, 20.2)]
+    def free(x, y):
+        return not any(a - .1 < x < c + .1 and b - .1 < y < d + .1 for a, b, c, d in blocked)
+    grasses = ['grass_l', 'grass_l', 'grass_a', 'grass_b', 'grass_c', 'tall_grass_m']
+    def tuft(x, y, z=0.0, k=None):
+        if not free(x, y) and z == 0: return
+        piece(rng.choice(grasses), k or rng.uniform(.55, .95), x, y, z, rng.uniform(-PI, PI))
+    def patch(cx, cy, r, n, z=0.0, box=None):
+        for _ in range(n):
+            a, d = rng.uniform(0, 2 * PI), r * math.sqrt(rng.random())
+            x, y = cx + math.cos(a) * d, cy + math.sin(a) * d
+            if box and not (box[0] < x < box[2] and box[1] < y < box[3]): continue
+            tuft(x, y, z)
+    patch(15.6, 6.8, 2.4, 34, box=(1.2, 1.2, 17.8, 15.8))             # in the light from the hole
+    patch(20.8, 7.0, 3.6, 46, box=(19.2, 1.2, 22.8, 15.8))            # the court
+    for t in range(16):                                               # along the storefront's foot
+        tuft(1.6 + t * 1.05 + rng.uniform(-.3, .3), 15.55 + rng.uniform(-.25, .2))
+    for t in range(12):                                               # a crack across the hall
+        tuft(4.2 + t * .7 + rng.uniform(-.15, .15), 11.4 - t * .32 + rng.uniform(-.2, .2), k=rng.uniform(.45, .75))
+    for t in range(10):                                               # the foot of the north wall
+        tuft(8 + t * .9 + rng.uniform(-.2, .2), 1.4 + rng.uniform(0, .3))
+    patch(10.0, 19.8, 3.4, 26, box=(1.2, 17.2, 22.8, 22.8))           # the shop
+    patch(17.8, 21.0, 2.0, 10, box=(1.2, 17.2, 22.8, 22.8))
+    patch(4.0, 3.0, 2.4, 16, z=3.6, box=(1.3, 1.3, 6.7, 4.7))        # the balcony
+    for name, title, x, y, w in (('GLAZING', 'STOREFRONT', 10, 15.4, 'GLAZING: five bays, mixed panes, a doorway'),
+                                 ('BREACH', 'BREACH', 16.8, 6.8, 'BREACH: a ragged hole, light through it'),
+                                 ('FIXTURE', 'GROWTH', 4.0, 8.0, 'ivy, moss, creepers, grass (Growth brush)')):
+        s.index.append({'map': i, 'section': 'SHOWCASE', 'x': x, 'y': y, 'title': title, 'name': w})
+    s.zone(m, 4, 13.6, 16, 16, 'GLAZING / storefront: c d t f w m e x panes')
+    s.zone(m, 15, 4, 18, 9.5, 'BREACH / ragged, rebar, rubble; light through it')
+    s.zone(m, 19, 1, 23, 16, 'LIGHT COURT / warm lamps, dust (EMITTER 4)')
+    s.zone(m, 13, 5.5, 18, 8.3, 'STRUCT 53 / light shaft: god-ray cards')
+    s.zone(m, 1, 1, 7, 5, 'GROWTH / grass and creepers on a ledge', bottom=3.3, top=6)
+    s.zone(m, 1, 17, 23, 23, 'SHOP / behind the storefront')
+    return m
 
 
 def physics_room(s, slot, catalogue):

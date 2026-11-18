@@ -304,6 +304,9 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    else if(v.model!=-1||v.width||v.depth||v.height||v.pitch||v.roll||v.breakState)note("loose item "+std::to_string(c)+" (kind "+std::to_string(v.kind)+") carries model fields only a model prop keeps");
    line(r);}
   for(const auto& v:m.breakables){Rec r("BREAKABLE");r.i(mi).n(v.x1).n(v.y1).n(v.x2).n(v.y2).n(v.bottom).n(v.top).i(v.material).n(v.health).b(v.holds).sth(v.state).sth(v.trigger);if(v.fixture>=0)r.i(v.fixture).i((long long)v.part);line(r);}
+  // Window walls are written as their records (their named fields ride with them), never as the boxes and panes they make.
+  for(const auto& g:m.glazings)line(Rec("GLAZING").i(mi).n(g.x1).n(g.y1).n(g.x2).n(g.y2).n(g.bottom).n(g.top));
+  for(const auto& b:m.breaches)line(Rec("BREACH").i(mi).n(b.x1).n(b.y1).n(b.x2).n(b.y2).n(b.bottom).n(b.top));
   for(const auto& p:m.pipes)line(Rec("PIPE").i(mi).n(p.start.x).n(p.start.y).n(p.end.x).n(p.end.y).n(p.z).n(p.radius).n(p.endZ).i(p.material));
   {const auto ports=leadPorts();
    for(size_t li=0;li<m.leads.size();++li){const auto& l=m.leads[li];

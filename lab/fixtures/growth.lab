@@ -1,0 +1,8 @@
+# The Growth brush's pieces in the plain room, its ceiling lowered to 3.4 m: ivy, vine and moss flat on a
+# wall of tiles at y 10, a curtain of creepers across x 7-9 at y 7, strands over a low wall's lip, grass
+# where the player walks. He walks north through the creepers and the grass, then shoots one.
+# Tubes: growth.
+world room
+camera 8.0 4.0 -999 90 0
+size 1280 720
+frames 640

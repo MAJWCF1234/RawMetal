@@ -32,9 +32,12 @@ bool SoftwareRenderer::plantModel(int model){
  if(auto found=m_plantModels.find(model);found!=m_plantModels.end())return found->second;
  using namespace retro::model;
  static const int plants[]={dead_tree_a,dead_tree_b,fern_a,fern_big,grass_a,grass_b,grass_c,oak_a,oak_b,oak_c,pine_a,pine_b,sapling,wheat,tall_grass_l,tall_grass_m,grass_l,
-  goldenrod,aster,bracken,sumac,dogbane,clover_patch,creeper,bush_a,bush_b,bush_c,bush_d,grass_patch,grass_bush,leafy_a,leafy_b,aspen_a,aspen_b,lab_potted_plant};
+  goldenrod,aster,bracken,sumac,dogbane,clover_patch,creeper,bush_a,bush_b,bush_c,bush_d,grass_patch,grass_bush,leafy_a,leafy_b,aspen_a,aspen_b,lab_potted_plant,
+  growth_hanging_vine,ivy_strand,growth_ivy_creeper,growth_ivy_curtain,growth_ivy_single};
  const bool plant=std::find(std::begin(plants),std::end(plants),model)!=std::end(plants);
  m_plantModels[model]=plant;return plant;}
+// A plant that hangs (a creeper from a ceiling or a ledge, the Growth brush's hanging vines): rooted at its top.
+bool SoftwareRenderer::hangingPlant(int model){return model==retro::model::growth_hanging_vine||model==retro::model::ivy_strand||model==retro::model::growth_ivy_creeper||model==retro::model::growth_ivy_curtain||model==retro::model::growth_ivy_single;}
 const SoftwareRenderer::Impostor* SoftwareRenderer::impostorFor(int model){
  auto found=m_impostors.find(model);
  if(found!=m_impostors.end())return found->second.get();

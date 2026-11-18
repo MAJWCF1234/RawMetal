@@ -18,6 +18,98 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Glass and window walls
+
+**Window wall** (Build page) makes a storefront. Drag along a wall, or across an
+opening in one. It writes one `GLAZING` record on the wall's box: the run of `#`
+tiles, the wall `STRUCT`, or the gap between two walls. It never changes a tile.
+The engine (`src/world/Openings.cpp`) does the work when it plays the map:
+- it cuts the wall from sill to head;
+- it builds the wall back below the sill and above the head;
+- it stands a frame in the middle of the wall's thickness, with a breakable pane in
+  every gap.
+
+Delete the record and the wall is whole again. The boxes on the right:
+- **Glass**: Storefront (0.45 - 2.6 m), Window (0.9 - 2.1), Floor to ceiling,
+  Clerestory (1.8 - 2.7).
+- **Bays**: Auto (a bay every 1.2 m) or 1-8.
+- **Rows**: 1-3, with a transom between them.
+- **Panes**: Clear, Dirty, Tinted, Frosted, Wired (holds), Chain-link mesh,
+  Pre-cracked, Empty frame, or a mix of clear, dirty, mesh and cracked.
+- **Frame**: Aluminium, Painted metal, Steel or Wood.
+- **Doorway**: none, in the middle, at the start or at the end. It is a bay open
+  to the floor, with a pane over it.
+
+The choices are the record's named fields (`cols`, `rows`, `sill`, `head`,
+`pane`, `panes`, `look`, `door`; the guide lists them all). Picking the record
+shows them in the inspector, labelled, to edit one by one.
+
+One pane at a time: with the Window wall tool, **click a bay** of a storefront and
+every pane in it takes the kind picked in Panes; **Shift+click** sets its bottom
+pane only. It rewrites the record's `panes=` letters (one Undo); nothing else
+changes.
+
+**Glass** is a pane that snaps:
+- Dragged along a solid wall, it cuts a 0.9 - 2.1 m window there (a one-bay
+  `GLAZING`).
+- Dragged across an opening, it stands a 24 mm pane from the floor to 2.4 m,
+  centred in the wall's line, and closes the wall over it with a wall-finish
+  `STRUCT`.
+- On open floor, it is a thin 2.2 m screen.
+
+Every glass pane is the v1.5.0 glass: it breaks a piece at a time where it is hit,
+on its own, and a save keeps its holes. Mesh is chain-link: it stops a body, and
+light, sight and rounds pass through it. Wired glass webs and holds.
+
+`--glazing-test` (and `--editing-test`) drives both tools through the plan's mouse
+and the tool boxes:
+- an edit in the inspector, undo and redo;
+- a delete that leaves the wall as it was;
+- save and reopen;
+- the engine validating each step.
+
+It writes `native-editor-glazing-test.txt`, with pictures in
+`.build/interaction/glazing-drag.bmp` and `glazing-inspector.bmp`. The lab tube
+`storefront` plays one in the game.
+
+### Breaches
+
+**Breach** (Build page) knocks a hole through a wall. Drag along a wall (`#` tiles
+or a wall `STRUCT`): it writes one `BREACH` record on the wall's box and, like the
+Window wall, never changes a tile. On open floor it refuses, with a message. The
+boxes on the right:
+- **Shape**: Ragged (tall in the middle, falling away to the sides), Arch, Square.
+- **Size**: Walk through (2.3 m), Crawl through (1.2 m), Window hole (1 - 2.1 m),
+  Floor to ceiling.
+- **Edge**: Concrete and rebar, Bare concrete, Brick, Clean cut.
+- **Rubble**: none, some, lots.
+
+The engine cuts the hole, chips its edge, hangs rebar and drops rubble. You walk,
+see and shoot through it, light comes through it, and the creatures route through
+it. `--breach-test` (and `--editing-test`) drives it; the lab tube `breach` plays it.
+
+### Growth
+
+**Growth** (Decor page) is a brush that paints a building going back to green:
+- **Grow**: Ivy on walls, Moss on walls, Hanging creepers, Grass through the floor,
+  Moss on the floor, or Overgrown (all of it).
+- **Brush**: Grow or Erase (Alt erases too).
+- **Brush size** 0.5 - 5 m, **Density** sparse to dense, **Size** small to large.
+- **Seed**: empty is random; a number repeats a stroke exactly.
+
+It finds the surfaces under the brush itself: runs of `#` tiles and the sides of
+tall blocks for ivy and moss (flat on the face, turned out, never wider than the
+face), the ceiling and the lips of ledges (blocks standing clear of floor and
+ceiling) for creepers, and the floor and ledge tops for grass. Walls, water and
+blocks stay clear. Every piece is an ordinary `FIXTURE` (solid 0) of a purchased
+model, so the inspector, copy and prefabs handle it. Creepers are hanging plants:
+in play they drift, part as you walk through and flinch when shot. A stroke is one
+Ctrl+Z. `--growth-test` (and `--editing-test`) drives it, with pictures in
+`.build/interaction/growth-ivy.bmp` and `growth-tool.bmp`; the lab tubes `growth`
+and `atrium` play it. `--atrium-pictures` opens the Starter Map's atrium and pictures the
+Window wall tool mid-drag, the picked storefront's fields, the Breach tool and the Growth brush, the
+3D pane filled with the engine's picture of the same document (`.build/interaction/atrium-*.bmp`).
+
 ### Outdoors: the land, its plants and water
 
 The builder samples the campaign's ground exactly as the engine builds it

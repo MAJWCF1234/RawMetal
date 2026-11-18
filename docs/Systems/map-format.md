@@ -78,6 +78,53 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - Adding the first named field puts in `FORMAT|2`.
 - **Make prefab** turns the picked things into a block and one placement. **Place prefab** adds another placement with its own name prefix. Each is one Ctrl+Z.
 
+## Openings: window walls
+`GLAZING|map|x1|y1|x2|y2|bottom|top` is a new record, with its options as named fields (`cols spacing rows sill head frame depth look door door_head pane panes infill cut wall health`; the guide's section 8 and 9 list them).
+- `AuthoredMapData::glazings` keeps the record as written. The exporter writes it back the same way.
+- `playedMap` calls `applyOpenings` (src/world/Openings.cpp) on the copy the world plays. It:
+  - cuts the wall's `#` tiles and wall `STRUCT` boxes from sill to head;
+  - builds the cut tiles back below the sill and above the head;
+  - adds the frame as `STRUCT` boxes;
+  - adds every glass pane as a `BREAKABLE` after the map's own.
+- Mesh panes are `STRUCT` material 52 (`ChainLinkMaterial`). Like glass, `seeThroughMaterial` lets light, sight and rounds through it; unlike glass, it never breaks.
+- `BREAKABLE` takes `glaze=` (clear dirty tinted frosted wired) and `cracked=` (0-8 star cracks it starts with). Pre-cracks are ordinary pane hits, so the `world` section of the save keeps them with the rest.
+- The lab tube `storefront` (src/lab/tubes/Storefront.cpp) checks:
+  - the cut;
+  - each pane breaking alone;
+  - the mesh;
+  - the doorway;
+  - a save and load;
+  - walls never hurt (every pane down, every other box and tile as it was);
+  - the frame looks, a grid-wide `pane=` and an empty pane.
+- The Builder's Window wall tool writes the record from the tool's boxes. A click on a bay of a storefront gives every pane in it the kind picked in Panes (Shift: the bottom pane only) by rewriting its `panes=` letters, one Undo. The document's tiles never change: the cut, and putting the wall back when the record goes, are the engine's.
+
+## Openings: breaches
+`BREACH|map|x1|y1|x2|y2|bottom|top` is a hole broken through a wall, its options as named fields (`shape edge sill head rebar rubble seed toward infill wall`).
+- `AuthoredMapData::breaches` keeps the record; the exporter writes it back the same way.
+- `applyOpenings` cuts it after the glazings, with the same cut (`cutWall`): the hole's outline as boxes (one for `rect`, slices of a half circle for `arch`, ragged strips for `ragged`), the wall's tiles and wall boxes cut to it, the rest of the cut tiles built back round it.
+- The cut is strips 4-10 cm wide; their wall pieces stay as invisible collision proxies, and are drawn as engine-only shapes (`ShapeLip`, `ShapeFoot`) whose edge slopes from one outline corner to the next, so the hole reads as one broken line, not steps.
+- The broken edge is non-solid chunks of core (`ShapeShard`: a box with each corner pulled in at random, concrete 15 or brick 31), rebar ends on the slant (`ShapeRod`, material 8), and rubble `FIXTURE`s, all from `seed`, so a map plays the same every time.
+- The hole is a real gap: the player, the creatures' walk test (`aiWalkSegment`) and their node graph, rounds and the light-occlusion ray (`World::lightRayHit`, which the probes and shadows use) all go through it.
+- The lab tube `breach` (src/lab/tubes/Breach.cpp) checks the cut, the edge, a walk through, the creatures' walk and route, rounds and the lamp's light through it, and a save.
+- The Builder's Breach tool writes it from a drag along a wall (# tiles or a wall `STRUCT`) and refuses one on open floor.
+
+## Growth
+The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothing in the format is new:
+- ivy (`ivy_wall_a`, `ivy_wall_b`, `growth_vine_sheet`) and wall moss (`growth_moss_wall`) flat on a wall's face, a centimetre off it, `yaw` turning their face out;
+- drapes of ivy (`growth_ivy_curtain`: seven strands of uneven length side by side; `growth_ivy_single`: one strand) hanging 0.5-3 m down a wall from the ceiling's edge or over a ledge's lip, flat on the face, their base their length below the lip (never from mid-air);
+- grass (the Nature brush's tufts) and `growth_moss_floor` on a floor or a ledge's top.
+- Creepers are hanging plants (`SoftwareRenderer::hangingPlant`, `PlantBones::add(..., hanging)`): rooted at their top, they drift in an indoor draft and part round whoever walks through them. The lab tube `growth` (src/lab/tubes/Growth.cpp) checks it.
+- The brush's density, size and seed are its own settings, not map data; a typed seed repeats a stroke exactly.
+
+## Light shafts
+`STRUCT` material 53 (`LightShaftMaterial`) is a god ray: sunlight falling on the slant through its box, in at the top on the side away from its `facing` (field 12) and down to the floor on the facing side.
+- It is drawn as a bundle of soft additive cards, warm gold, faint at both ends and at the edges, so it shows without any haze; it casts no shadow.
+- It is never solid (the parser makes it so), and like glass it lets light, sight and rounds through (`seeThroughMaterial`).
+- The Builder's Block tool places one: pick material 53 and drag its box; R turns its facing once the record has one (the inspector lists `facing`). The lab tube `atrium` checks the Starter Map's five.
+
+## The Starter Map atrium
+`Showcase Atrium` (map 149, the last room built; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
+
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
   - version 1 left alone, and every refusal;
@@ -91,3 +138,4 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
 - The map-format test also covers floors: a trimmed flooring, a room raised on a brick base with a stone edge and steps at its door, each footing on a 4 m slope (one level floor, no land through it, the pad cut and filled, terraces, stilts you can stand under), a draped path, and step tops on a hill sitting exactly on their steps. The lab tube `floors` (src/lab/tubes/Floors.cpp, fixtures from tools/dev/floors_fixtures.py) draws the hall, every footing, the old way of building on a slope, paths and the Starter Map's Hillside.
 - The Builder's `--finish-test` and `--ground-test` (NativeFinishRegression.inc, NativeGroundRegression.inc) drive the Part lists, the Paint tool, the footing rows, the Raise handle, the Flooring tool and the Floor tool on the land; `--soak-test` drives random edits through every tool.
 - The Builder's `--editing-test` runs `verifyFormatTwo` (tools/Level Editor/editor/NativeFormatRegression.inc) and writes `native-editor-format-test.txt`.
+- It runs the Window wall, Breach and Growth tools' regressions too; `--glazing-test`, `--breach-test` and `--growth-test` run each alone (place, edit, Undo/Redo, delete, save and reopen, the engine reading every step).

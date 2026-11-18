@@ -407,7 +407,7 @@ RECORDS = [
         ('STORM|calmMs|warningMs|stormMs|damage|ash', 'An ash storm cycle for the whole campaign: calm, a warning, then a storm doing damage per second to anyone outside a SHELTER. ash 0-1 is the haze between storms.'),
         ('SHELTER|map|x1|y1|x2|y2|bottom|top', 'Map metres. Under this box the storm does no harm. Heights are from the ground at its centre.')]),
     ('Building', [
-        ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it.'),
+        ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid|shape|facing]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it. shape 0-7 draws a ramp, column, arch, vault, dome, strut or roundel in the box (usually written by PRIM), facing 0-3 its quarter turn. Material 53 is a light shaft: god rays falling on the slant through the box, from its top on the side away from facing down to the floor on the facing side, drawn as soft glowing cards; it is never solid and stops no light, sight or round (pick it in the Block tool, R turns it).'),
         ('PRIM|map|kind|x|y|z|w|d|h|facing|material[|solid]', 'A ready-made building part, centred at x,y and standing on z. w runs across it, d along its facing, h up; '
          'facing 0 +y (south), 1 +x (east), 2 -y (north), 3 -x (west) is the way it rises or opens. Give 0 for a size and it takes the default, sized for the 1.6 m player. '
          'Ramps, columns, arches, vaults, domes, struts and roundels are true curved or sloped shapes with invisible collision boxes inside; the rest are built from STRUCT boxes. '
@@ -417,10 +417,31 @@ RECORDS = [
         ('PIPE|map|x1|y1|x2|y2|z|radius|endZ|material', 'A pipe from (x1,y1) at height z to (x2,y2) at endZ. Same x,y and different heights make a riser. material 0-6.'),
         ('WATER|map|x1|y1|x2|y2|bed|surface[|murk]', 'A volume of water from bed up to surface height. Build a basin around it with STRUCT. murk 0 is clear coolant; up to 1 makes it still, dark standing water (a flooded store, a pool nobody drains).'),
         ('WET|map|x|y|radius|amount[|puddle]  or  WET|map|x1|y1|x2|y2|amount|puddle', 'Makes the floor wet here: a round patch or a box, amount 0 (dry) to 1 (soaked); puddle 1 lets puddles gather in its low spots. Floors are dry unless something wets them: WATER edges, drips, spray and steam EMITTERs, steam hazards, floor drains and the open sky in rain wet them on their own; WET adds a spill, a leak or a flooded corner the map knows about. The MAP wetness field scales all of it (bigger, wetter patches, and seeps along the walls of a damp map).'),
-        ('BREAKABLE|map|x1|y1|x2|y2|bottom|top|material|health|holds|brokenState|triggerState', 'A box that shatters when shot (glass is material 17). brokenState is set when it breaks.')]),
+        ('BREAKABLE|map|x1|y1|x2|y2|bottom|top|material|health|holds|brokenState|triggerState', 'A box that shatters when shot (glass is material 17). brokenState is set when it breaks. '
+         'A glass pane is a thin box (2-3 cm through) standing in the middle of a wall or an opening: it breaks a piece at a time where it is hit, and a save keeps its holes. '
+         'holds 1 is laminated glass that webs and sags but stays up. With FORMAT|2, <code>glaze=</code> clear, dirty, tinted, frosted or wired changes how it looks, and <code>cracked=</code> 1-8 starts it with that many star cracks.'),
+        ('GLAZING|map|x1|y1|x2|y2|bottom|top', 'A window wall or a storefront: the box of wall it opens (along its longer side; across, the wall\'s thickness), from the floor at bottom to top, the height of the wall it fills. '
+         'It cuts the wall there (# tiles and wall STRUCT boxes) from the sill to the head, builds the wall back below the sill and above the head where it cut tiles, and stands a frame in the middle of the wall: '
+         'a mullion between bays, a transom between rows, and a pane in every gap. Every glass pane is a BREAKABLE pane of its own, so a round breaks only the pane it hits; the frame is solid. '
+         'Delete the record and the wall is whole again. With FORMAT|2 its named fields set it up (all optional): <code>cols=</code> bays (or <code>spacing=</code> metres between mullions, 1.2), <code>rows=</code> 1-8, '
+         '<code>sill=</code> 0.45 and <code>head=</code> 2.6 above bottom, <code>frame=</code> 0.06 and <code>depth=</code> 0.12 (the members\' face and depth), <code>look=</code> aluminium, metal, steel, dark-steel, wood or a STRUCT material, '
+         '<code>door=</code> a bay (from 0) left open to the floor as a doorway, with a transom pane over <code>door_head=</code> 2.1, <code>pane=</code> the kind of every pane and <code>panes=</code> one letter a pane, '
+         'bay by bay along the wall and bottom to top in each: c clear, d dirty, t tinted, f frosted, w wired (holds), m chain-link mesh (stops a body, never breaks; light and rounds go through), e empty, x pre-cracked. '
+         '<code>infill=0</code> leaves the cut tiles open above and below, <code>cut=0</code> stands it in an opening without cutting, <code>wall=</code> the STRUCT material of the infill (3, the wall finish), <code>health=</code> each pane\'s health. '
+         'The Campaign Builder\'s Window wall tool writes it: drag along a wall or into an opening; click a bay of one to give its panes the kind picked (Shift: the bottom pane only).'),
+        ('BREACH|map|x1|y1|x2|y2|bottom|top', 'A hole broken through a wall: the box of wall it goes through (along its longer side; across, the wall\'s thickness), from the floor at bottom; top is how high the wall it builds back goes. '
+         'It cuts the wall there (# tiles and wall STRUCT boxes) to the hole\'s outline and builds the rest of the cut tiles back round it, chips the broken edge proud of the hole on either face, hangs rebar from the lip and stands bars out of the jambs, and drops rubble on the floor either side. '
+         'You walk, see and shoot through it, light comes through it, and the creatures\' walk and their paths go through it. Delete the record and the wall is whole again. '
+         'With FORMAT|2 its named fields set it up (all optional): <code>shape=</code> ragged (knocked through: tall in the middle, falling away to the sides), arch or rect, <code>edge=</code> concrete (with rebar), brick or clean, '
+         '<code>sill=</code> 0 and <code>head=</code> 2.3 above bottom (the hole\'s foot and top), <code>rebar=0</code> leaves the bars out, <code>rubble=</code> 0-60 pieces (10), <code>seed=</code> another ragged outline and rubble, '
+         '<code>toward=-1</code> throws most of the rubble to the other side, <code>infill=0</code> leaves the cut tiles open round the hole, <code>wall=</code> the STRUCT material of what is built back (3). '
+         'The Campaign Builder\'s Breach tool writes it: drag along a wall.')]),
     ('Things in the map', [
         ('FIXTURE|map|model|x|y|base|width|depth|height|yaw|solid[|core|visible|anchored|slopeX|slopeY]', 'A model from the model list, centred at x,y, its base this high, stretched to width x depth x height (use the listed size to keep it in proportion). solid 1 blocks you. A chair (office, wooden or boardroom) standing on the floor is loose in play: it slides and goes over when something heavy hits it. anchored 1 keeps it fixed where it was put (give core and visible too, 1 and 1 as usual). '
-         'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game.'),
+         'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game. '
+         'Growth (the Campaign Builder\'s Growth brush) is FIXTUREs too, solid 0: ivy (ivy_wall_a, ivy_wall_b, growth_vine_sheet) and moss (growth_moss_wall) stand flat on a wall\'s face, a centimetre off it, turned out from it (yaw 0 faces south); '
+         'drapes of ivy (growth_ivy_curtain, growth_ivy_single) hang down a wall from the ceiling\'s edge or over a ledge\'s lip, their base their length below it; grass tufts and growth_moss_floor lie on a floor or a ledge\'s top. '
+         'Creepers, grass, ferns, bushes and trees are plants: they bend in the wind outdoors, a creeper drifts indoors, and each parts round whoever walks through it and flinches when shot.'),
         ('CLUTTER|map|kind|x|y|z|yaw', 'A loose object that can be knocked about: kinds 0-6. z -999 drops it to the floor.'),
         ('CLUTTER|map|7|x|y|z|yaw|model|width|depth|height|pitch|roll|breakState', 'A loose model you can pick up and throw (see the Props room). breakState may be empty.'),
         ('PICKUP|map|kind|x|y', 'Health (0), shotgun ammo (1) or handgun ammo (2).'),
@@ -509,11 +530,33 @@ NAMED_FIELDS = [
     ('weapon', 'Weapon', 'rifle handgun none', 'ACTOR', 'What a man carries; none disarms him.'),
     ('role', 'Squad role', 'assault engineer sharpshooter heavy medic rusher', 'ACTOR', 'A guard\'s role in his squad.'),
     ('display', 'Display name', '1 to 40 characters', 'CREATURE, ACTOR', 'The name the game shows for it (the console, what you aim at).'),
+    ('glaze', 'Glass look', 'clear dirty tinted frosted wired', 'BREAKABLE (glass)', 'How the pane looks: dirty is filmed with grime, tinted bronze, frosted milky, wired has a wire mesh cast in it.'),
+    ('cracked', 'Starts cracked', '0 to 8', 'BREAKABLE (glass)', 'Star cracks the pane already has when the map loads; it is weaker there.'),
+    ('cols', 'Bays', '0 to 48 (0: by spacing)', 'GLAZING', 'How many bays the window wall is split into.'),
+    ('spacing', 'Mullion spacing (m)', '0.3 to 8', 'GLAZING', 'Metres between mullions when cols is 0.'),
+    ('rows', 'Rows', '1 to 8', 'GLAZING', 'Rows of panes from sill to head, with a transom between them.'),
+    ('sill', 'Sill height (m)', '0 up to the head', 'GLAZING, BREACH', 'Where the glass (or the hole) starts, above the floor.'),
+    ('head', 'Head height (m)', 'up to top - bottom', 'GLAZING, BREACH', 'Where the glass (or the hole) stops, above the floor.'),
+    ('frame', 'Frame width (m)', '0.02 to 0.3', 'GLAZING', 'The face of every mullion, transom, sill and head.'),
+    ('depth', 'Frame depth (m)', '0.02 to 1', 'GLAZING', 'How deep the frame stands in the wall.'),
+    ('look', 'Frame look', 'aluminium metal steel dark-steel wood, or a material', 'GLAZING', 'What the frame is made of.'),
+    ('door', 'Doorway bay', '-1 or a bay from 0', 'GLAZING', 'That bay is a doorway, open to the floor, with a pane over it.'),
+    ('door_head', 'Doorway height (m)', '1.5 up to the head', 'GLAZING', 'The top of the doorway.'),
+    ('pane', 'Pane kind', 'c d t f w m e x', 'GLAZING', 'Every pane\'s kind: clear, dirty, tinted, frosted, wired, mesh, empty, pre-cracked.'),
+    ('panes', 'Pane kinds', 'a letter a pane', 'GLAZING', 'Each pane\'s own kind, bay by bay along the wall and bottom to top; panes past the end take pane.'),
+    ('infill', 'Fill the wall back', '1 or 0', 'GLAZING, BREACH', 'Builds the cut wall tiles back below the sill and above the head (round the hole).'),
+    ('cut', 'Cut the wall', '1 or 0', 'GLAZING', '0 stands it in an opening without cutting anything.'),
+    ('wall', 'Infill material', 'a STRUCT material', 'GLAZING, BREACH', 'What the wall built back below the sill and above the head (or round the hole) is made of (3, the wall finish).'),
+    ('shape', 'Hole shape', 'ragged arch rect', 'BREACH', 'Ragged is knocked through: tall in the middle, falling away to the sides, with notches and teeth.'),
+    ('rebar', 'Rebar', '1 or 0', 'BREACH', 'Bars hanging from the lip and standing out of the jambs (concrete only).'),
+    ('rubble', 'Rubble pieces', '0 to 60', 'BREACH', 'Pieces of wall on the floor either side.'),
+    ('seed', 'Seed', 'a whole number', 'BREACH', 'Another seed gives another ragged outline, chips and rubble.'),
+    ('toward', 'Rubble side', '1 or -1', 'BREACH', 'Which side of the wall most of the rubble falls: -1 throws it to the other side.'),
     ('tread', 'Step tops material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "What the steps are walked on: the top 4 cm of each step. The Builder's Paint tool sets it on a click on a step top."),
     ('riser', 'Step fronts material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "The step fronts and the body under the tops. Blank: the step tops' material."),
     ('stringer', 'Side rails material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side rails (with the rails field on).'),
     ('deck', 'Balcony floor material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', "What the balconies (= tiles) on this storey are walked on. The Builder's Paint tool sets it on a click on a balcony."),
-    ('edge', 'Balcony edge material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', "The balconies' edges and undersides, under a 4 cm walking face. Blank: the balcony floor's."),
+    ('edge', 'Balcony edge material (LAYER) / broken edge (BREACH)', 'LAYER: a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30); BREACH: concrete brick clean', 'LAYER, BREACH', "LAYER: the balconies' edges and undersides, under a 4 cm walking face (blank: the balcony floor's). BREACH: what shows in the broken edge, a concrete core with rebar, brick, or a clean cut."),
     ('railing', 'Railing material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', 'The railings along the open balcony edges.'),
     ('trim', 'Edge trim material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT', "A flooring's edge: a band of this material along its sides, the rest the material field. The Builder's Flooring tool lays it; its Paint tool paints it on a click near the edge."),
     ('trimwidth', 'Edge trim width (m)', '0.01 to 1', 'STRUCT with trim', 'How wide the edge band is. 0.1 if left out.'),

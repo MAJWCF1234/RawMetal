@@ -171,7 +171,7 @@
   static constexpr float terrainSizes[] = {1.f, 2.f, 3.f, 5.f, 8.f, 12.f};
   static constexpr float terrainStrengths[] = {.1f, .25f, .5f, 1.f};
   int terrainMode() const { return std::clamp(listIndex(terrainModeList), 0, 5); }
-  float brushRadius() const { return terrainSizes[std::clamp(listIndex(terrainSizeList, 2), 0, int(std::size(terrainSizes)) - 1)]; }
+  float brushRadius() const { if (tool == GrowthTool) return growthRadius(); return terrainSizes[std::clamp(listIndex(terrainSizeList, 2), 0, int(std::size(terrainSizes)) - 1)]; }
   float brushStrength() const { return terrainStrengths[std::clamp(listIndex(terrainStrengthList, 1), 0, int(std::size(terrainStrengths)) - 1)]; }
   // The stroke in hand: the sculpt grids it touches (24 x 24 metres each, aligned to this map),
   // where it began, the last dab, and for ground paint the cells it has covered.
@@ -424,7 +424,9 @@
       if (terrainMode() == TerrainRamp)
         note += L" From " + wide(shortNumber(stroke.startHeight)) + L" m to " + wide(shortNumber(stroke.endHeight)) + L" m.";
       message(note + L" Ctrl+Z takes the stroke back.");
-    } else if (tool == 'N')
+    } else if (tool == 'G')
+      message(stroke.erased ? L"Cleared " + std::to_wstring(stroke.erased) + L" growth." : L"Grew " + std::to_wstring(stroke.planted) + L" pieces. Ctrl+Z takes the stroke back.");
+    else if (tool == 'N')
       message(stroke.erased ? L"Cleared " + std::to_wstring(stroke.erased) + L" plants." : L"Planted " + std::to_wstring(stroke.planted) + L".");
     stroke.grids.clear(), stroke.original.clear(), stroke.painted.clear(), stroke.plants.clear();
   }
@@ -458,7 +460,8 @@
       for (auto [m, w] : set.models)
         if (m == slot)
           return true;
-    return slot == retro::model::fallen_pine || slot == retro::model::sapling || slot == retro::model::dead_tree_a;
+    // The Growth brush's ivy, moss and creepers are plants too: never an obstacle, and Erase clears them.
+    return slot == retro::model::fallen_pine || slot == retro::model::sapling || slot == retro::model::dead_tree_a || growthModel(slot);
   }
   static bool treeModel(int slot) {
     using namespace retro::model;
