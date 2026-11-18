@@ -8,6 +8,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
+#include "game/physics/PropBodies.h"
 #include "world/CampaignKit.h"
 #include "world/ModelIds.h"
 #include "world/GibSets.h"
@@ -62,9 +63,11 @@ const bool registered=add({
   std::vector<const Clutter*> pieces;for(const auto& c:list)for(int k=0;k<set->count;++k)if(c.model==gibs::pieces[size_t(set->first+k)].model){pieces.push_back(&c);break;}
   r.metric("pieces",double(pieces.size()));
   r.check("it broke into its authored pieces, every one",int(pieces.size())==set->count,std::to_string(pieces.size())+" of "+std::to_string(set->count));
-  float mass=0,lowest=1e9f;int awake=0;for(const auto* p:pieces){mass+=p->mass();lowest=std::min(lowest,p->z);awake+=!p->sleeping;}
+  // (The lowest point of each piece's own shape: a hull lying on its side sits inside its turned box, whose corners go under the floor.)
+  float mass=0,lowest=1e9f;int awake=0;for(const auto* p:pieces){mass+=p->mass();{vectra::Body b;vectra::toBody(*p,b);for(int k=0;k<b.shape->count;++k)lowest=std::min(lowest,vectra::support(b,k,{0,0,-1}).z);}awake+=!p->sleeping;}
   r.check("the pieces weigh what the prop did (within 10%)",std::fabs(mass-w.mass)<=.1f*w.mass,f2(mass)+" kg of "+f2(w.mass));
-  r.check("they came to rest on the floor, asleep",lowest>-.02f&&awake==0,"lowest "+f2(lowest,3)+", awake "+std::to_string(awake));
+  {std::string which;for(const auto* p:pieces)if(!p->sleeping)which+=" model "+std::to_string(p->model)+" at "+f2(p->pos.x,2)+","+f2(p->pos.y,2)+","+f2(p->z,3)+" v "+f2(std::sqrt(p->velocity.x*p->velocity.x+p->velocity.y*p->velocity.y+p->vz*p->vz),3)+" turn "+f2(std::fabs(p->spin)+std::fabs(p->pitchSpeed)+std::fabs(p->rollSpeed),3)+";";
+   r.check("they came to rest on the floor, asleep",lowest>-.02f&&awake==0,"lowest "+f2(lowest,3)+", awake "+std::to_string(awake)+which);}
   if(what!="crush"){r.metric("assembled_change",w.v["assembledChange"]);
    r.check("at the break the pieces sit where they were cut from (under 12% of the prop's pixels change)",w.v["assembledChange"]<.12,f2(w.v["assembledChange"]*100,1)+"%");}
   else r.check("the crate's weight crushed the bottle",w.v.count("brokeAt")>0);

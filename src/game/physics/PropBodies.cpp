@@ -5,6 +5,7 @@
 #include "../../core/Tune.h"
 #include "../../world/ModelIds.h"
 #include "../../world/GibSets.h"
+#include "../../world/PropHulls.h"
 #include <cstdlib>
 #include <cstring>
 #include <map>
@@ -60,6 +61,14 @@ Kind kindOf(int m){
 // Which way a chair's back lies along its own y (model_fronts.json: an OBJ front of -z faces local -y,
 // so the back is at +y; +z faces +y, the back at -y).
 float backSide(int m){return m==model::lab_boardroom_chair||m==model::med_wheelchair?-1.f:1.f;}
+// The model's hull (PropHulls.h: its mesh's, for a shape clearly not a box) at these dims, or null.
+std::shared_ptr<const ConvexHull> hullAt(int m,const std::array<float,3>& d,V3& shift){
+ const auto* e=hulls::find(m);if(!e)return nullptr;std::vector<V3> pts;
+ for(int k=0;k<e->count;++k)pts.push_back({e->p[k][0]*d[0],e->p[k][1]*d[1],e->p[k][2]*d[2]});
+ auto h=std::make_shared<ConvexHull>();if(!ConvexHull::build(pts,*h,&shift))return nullptr;return h;}
+// Long for its round (2.5 diameters or more): its round is a capsule, so it rolls on its side as a true round against props
+// too.
+bool longRound(float radius,float halfLength){return halfLength>=2.5f*radius;}
 Shape build(int m,std::array<float,3> d){
  Shape s;const float X=d[0],Y=d[1],Z=d[2],hx=X*.5f,hy=Y*.5f,hz=Z*.5f,bottom=-hz;
  auto slab=[&](float x0,float x1,float y0,float y1,float z0,float z1){s.add(PartKind::Box,{(x0+x1)*.5f,(y0+y1)*.5f,(z0+z1)*.5f},{std::max(.004f,(x1-x0)*.5f),std::max(.004f,(y1-y0)*.5f),std::max(.004f,(z1-z0)*.5f)});};
@@ -73,9 +82,17 @@ Shape build(int m,std::array<float,3> d){
   slab(-hx+wall,hx-wall,-hy,-hy+wall,bottom+fl,bottom+rim);slab(-hx+wall,hx-wall,hy-wall,hy,bottom+fl,bottom+rim);
   s.hollow=true;s.finish();return s;}
  switch(kindOf(m)){
-  case Kind::Upright:s.add(PartKind::Cylinder,{},{std::min(hx,hy),std::min(hx,hy),hz});break;
+  case Kind::Upright:{const float r=std::min(hx,hy);
+   // A bottle, an extinguisher, a gas cylinder: a capsule end to end and, inside it, the cylinder it was at 0.95 of its
+   // radius (its 12-sided prism's corners 2.4% of the radius inside the round). Lying down it rolls on the capsule as a
+   // true round; it stands on the cylinder's flat base, and leant on a rim its ends catch as the cylinder's did (on the
+   // capsule's round end alone a bottle tipped against a crate's wall rolled up over it). The capsule's ends stop 2 mm inside
+   // the cylinder's, so standing it meets the floor by the base alone (two parts landing on one floor took two impacts).
+   if(longRound(r,hz)){s.addCapsule({},r,hz-r-std::max(.002f,.03f*r));s.add(PartKind::Cylinder,{},{.95f*r,.95f*r,hz});}
+   else s.add(PartKind::Cylinder,{},{r,r,hz});break;}
   case Kind::AlongY:s.add(PartKind::Cylinder,{},{std::min(hx,hz),std::min(hx,hz),hy},Quat::axisAngle({1,0,0},kPi*.5f));break;
-  case Kind::AlongX:s.add(PartKind::Cylinder,{},{std::min(hy,hz),std::min(hy,hz),hx},Quat::axisAngle({0,1,0},kPi*.5f));break;
+  case Kind::AlongX:{const float r=std::min(hy,hz);   // a pipe: a capsule along its length when it is long for its round
+   if(longRound(r,hx))s.addCapsule({},r,hx-r,Quat::axisAngle({0,1,0},kPi*.5f));else s.add(PartKind::Cylinder,{},{r,r,hx},Quat::axisAngle({0,1,0},kPi*.5f));break;}
   case Kind::Ball:{const float r=std::min({hx,hy,hz});s.add(PartKind::Sphere,{0,0,bottom+r},{r,r,r});break;}
   case Kind::OfficeChair:{const float b=backSide(m),seat=bottom+.47f*Z;
    slab(-hx,hx,-hy,hy,bottom,bottom+.06f*Z);                     // the wheeled star (spokes: thin, light)
@@ -97,7 +114,8 @@ Shape build(int m,std::array<float,3> d){
   case Kind::Lamp:slab(-hx,hx,-hy,-hy+.55f*Y,bottom,bottom+.12f*Z);slab(-.18f*X,.18f*X,-hy,-hy+.25f*Y,bottom+.12f*Z,hz);slab(-.3f*X,.3f*X,-hy,hy,hz-.2f*Z,hz);break;
   case Kind::Body:{   // a body on its back, along its own y: torso and head, legs; its model's box has the arms out
    slab(-.3f*X,.3f*X,-.05f*Y,.38f*Y,bottom,bottom+.55f*Z);slab(-.17f*X,.17f*X,.38f*Y,hy,bottom,bottom+.6f*Z);slab(-.25f*X,.25f*X,-hy,-.05f*Y,bottom,bottom+.38f*Z);break;}
-  default:s.add(PartKind::Box,{},{std::max(.005f,hx),std::max(.005f,hy),std::max(.005f,hz)});}
+  default:{V3 shift{};   // a rock, a cone, a gib's broken piece: its mesh's hull; else its box
+   if(auto h=hullAt(m,d,shift))s.addHull(std::move(h),shift);else s.add(PartKind::Box,{},{std::max(.005f,hx),std::max(.005f,hy),std::max(.005f,hz)});}}
  s.finish();return s;}
 }
 const Shape& propShape(int model,std::array<float,3> dims){

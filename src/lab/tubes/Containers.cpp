@@ -97,6 +97,9 @@ const bool tube=add({
    const int itemModel=boxModel==model::market_basket?model::market_pumpkin:model::glass_bottle;auto item=make(itemModel,{8.8f,8},.5f);
    // An underhand lob that clears the near rim: up at 2.2 m/s, across to come down on the middle.
    const float floor=containers::inner(box).floor+.02f,vz=2.2f,t=(vz+std::sqrt(vz*vz+4*7*(.5f-floor)))/14.f;item.velocity={1.2f/t,0};item.vz=vz;item.projectile=true;item.spin=2;item.sleeping=false;
+   // A bottle is tossed on its side, along the throw. (Stood up, it lands on its foot at 2.6 m/s, topples onto the far wall
+   // and, a true round since v1.5.3, rolls up over the rim, where the 12-sided prism it was caught on a flat.)
+   if(itemModel==model::glass_bottle)item.pitch=kPi*.5f;
    {Game bare(regression::campaign(regression::room()));LabAccess::player(bare).pos={3,3};auto away=box;away.pos={20,20};LabAccess::clutter(bare)={away,item};run(bare,vectra::legacyProps()?3.f:6.f); /* Vectra: it lands on its side and rolls on a few metres first */const auto& u=bare.clutter()[1];
     r.check("the same throw on the open floor settles and sleeps (no endless rocking)",u.sleeping,"z "+fixed(u.z)+" turn "+fixed(std::fabs(u.spin)+std::fabs(u.pitchSpeed)+std::fabs(u.rollSpeed))+" pitch "+fixed(u.pitch)+" roll "+fixed(u.roll)+" at "+fixed(u.pos.x));}
    LabAccess::clutter(g)={box,item};run(g,3);const auto& v=g.clutter()[1];const bool in=containers::holds(g.clutter()[0],v);

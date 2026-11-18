@@ -20,6 +20,9 @@ The prop physics that came before Vectra, a yaw-mostly box with tipping by rule,
   `src/lab/tubes/JointsRoom.cpp`: `joints-room` (the Starter Map's joints corner played).
   `src/lab/tubes/VectraShove.cpp`: `vectra-shove` (props against people and things by weight, legacy and Vectra),
   `mattress` (the chained mattress) and `vectra-feel` (the pictures, fixtures `feel-*`).
+  `src/lab/tubes/VectraShapes.cpp`: `vectra-shapes` (capsules and hulls: mass, a pipe rolling, a rock and gib shards
+  resting on their true faces, rays, cones and bottles in the game, the cost of a heap; RM_SHAPES_TRACE=1 prints a shard's
+  contacts step by step).
 
 ## Bodies
 
@@ -43,20 +46,34 @@ On the Clutter side nothing changed for the rest of the game:
 
 ## Shapes
 
-A shape is up to eight convex parts in the prop's frame: boxes, cylinders and spheres. They come from the
-catalogue (the prop's dims, and the mass and container volume in prop_physics.json), with overrides by model:
+A shape is up to eight convex parts in the prop's frame: boxes, cylinders, spheres, capsules and convex hulls. They come
+from the catalogue (the prop's dims, and the mass and container volume in prop_physics.json), with overrides by model:
 
 | Shape | Models |
 | --- | --- |
 | oriented box | the default |
-| cylinder, upright | barrels, drums, burn barrel, gas cylinder, bottle, mug, pill bottle, specimen jar, extinguisher, cell core |
-| cylinder along its own axis | tyre (y), straight pipe (x) |
+| convex hull | a model whose mesh's hull fills less than 0.7 of its box (a gib piece: 0.8) and that has no other shape here: rocks, cones, crystals, lanterns, lamps, rubble, the Blender gibs' shards and chair legs (152 models, `src/world/PropHulls.h`) |
+| cylinder, upright | barrels, drums, burn barrel, mug, specimen jar, cell core |
+| capsule round a cylinder | an upright round prop 2.5 diameters long or more: bottle, extinguisher, gas cylinder, pill bottle, a bottle's neck (a capsule end to end, its poles 2 mm inside the ends, and inside it the cylinder it was at 0.95 of its radius: it rolls on the capsule as a true round, stands on the cylinder's flat base, and leant on a rim its ends catch as the cylinder's did) |
+| cylinder along its own axis | tyre (y) |
+| capsule along its own axis | straight pipe (x), when 2.5 diameters long or more |
 | sphere | pumpkin |
 | compound | office and boardroom chairs (a thin star base, column, seat, back); wooden, scrap and platform chairs (four legs, seat, back); tables and benches (top, four legs); wheelchair; desk lamp (an L); a supine body (torso, head, legs) |
 | open container | anything with `container` in prop_physics.json: a floor slab up to the inner floor, and four walls up to the rim |
 | chained | a soft prop (mattress, bedroll, pad) 0.8 m or longer and under 0.35 m thick: three segment boxes along its length (below) |
 
 Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
+
+- **Capsules** (`PartKind::Capsule`, `Shape::addCapsule`): a segment along the part's z (`half.z` its half length) and a
+  radius (`half.x`). Mass and inertia are its cylinder's and its two half balls' (by hand in the tube).
+- **Hulls** (`PartKind::Hull`, `vectra::ConvexHull`, `Shape::addHull`; the Shape keeps the hulls its parts use): at most 32
+  corners and 60 faces. `ConvexHull::build` simplifies any point set to the cap (the farthest corners along the axes and
+  diagonals first, then each the farthest outside the hull so far), builds it point by point as triangles (each edge always
+  between two), merges neighbours in one plane into one face (a box's side is one face of four corners), and works out its
+  volume, centre and full inertia tensor by tetrahedra. Its corners are centred on its box (`half`).
+- `tools/library/make_hulls.py` takes each model's mesh into the prop's frame as the renderer draws it, keeps the models
+  whose hull is clearly not their box, and writes their hulls, simplified to 32 corners, normalised to the box, into
+  `PropHulls.h`; PropBodies scales one by the prop's dims. Run it again after importing models.
 
 ## Collision
 
@@ -65,6 +82,24 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
   directions, preferring faces. A face contact clips the incident face to the reference face's sides, which
   gives up to four points (the deepest, then the widest spread). An edge contact uses the closest points of
   the two edges. A sphere meets a box, a cylinder or another sphere exactly.
+- **Hulls** use the same separating axis test. Their edge pairs are tested only where the two edges' arcs cross on the
+  Gauss map (Gregorius; each arc's plane taken from its edge, so a glass shard's knife edge, whose faces' normals are nearly
+  opposite, is still right), with each pair rejected by two dot products first. A hull's incident face is chosen among the
+  faces round its deepest corner (on a many-faceted curve the face most nearly against the normal can miss the corner that
+  goes deepest). Its floor feature (`supportFeature`) is the four widest corners of the face most nearly facing down (within
+  7 degrees), by no depth, so a shard resting on a many-cornered face is held by the same points each step and sleeps, and
+  the hull's deepest corner with them when it is a millimetre or more under that face (a broken monitor's casing on its
+  many-faceted back had sunk 5 cm). On a flat open floor the game asks only that feature, as for a round part, and the
+  world's four contacts are kept from the first point within 0.3 mm of the deepest (`keepFour`), not the deepest by a hair.
+  Neighbouring faces within a degree of each other are one face (a mesh's flat side simplified to a few corners came out
+  as slivers a quarter of a degree apart, and a piece lying on them rocked from one to the other).
+- **Capsules** meet exactly: a sphere by the nearest point of its segment; a capsule by the segments' nearest points, two
+  points when they lie side by side; a polyhedron by the exact nearest points while the segment is clear of it (each end
+  against it, the segment against each of its edges), by the shallowest way out over its faces and the crosses of its edges
+  with the segment once the segment is in it, and lying along a face, by the segment clipped to the face's sides (two
+  points). A pipe rolled at 2 m/s over a static slab: as the 12-sided prism its vertical speed varied by 9179 e-6 m^2/s^2
+  and its speed by 5083 e-6 (it bumped to a stop at 0.21 m/s); as a capsule by 0.44 e-6 and 1.58 e-6, still rolling at
+  1.33 m/s (tube `vectra-shapes`).
 - **Prop against the world.** Vectra asks the World what it already knows: `supportBelow`, `fits`,
   `clearanceAbove` and `shotFraction`, the same queries the player and creatures collide with.
   - Each part offers points every 12 cm over its surface, plus its exact lowest points along the floor's
@@ -197,7 +232,9 @@ would cost more than it saved.
 any thread. `PropQueries.h` puts a prop (or a chained pad's three segments) through the same queries.
 
 - **Rays** meet each part exactly: a turned box by its slabs, a cylinder by its round and caps (the true
-  cylinder, not the solver's prism), a sphere by its round. A compound meets only its parts.
+  cylinder, not the solver's prism), a sphere by its round, a capsule by its round side and its end balls, a hull by its
+  faces' planes (the last way in before the first way out). A compound meets only its parts. 200 rays at a rock's hull from
+  every side all land on its surface (0.0006 mm off it at worst); its box would have stopped 155 of them sooner.
 - **Sphere and box casts** sweep a shape along a line by conservative advancement on a GJK distance (support
   functions), so a turned box meets a turned cylinder as it is.
 - **Overlaps** of a sphere or a box with a body.
@@ -528,7 +565,8 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
   1.2 m/s along the blow (the direction a caller passes, held to a unit: a prop broken by its speed passes its
   velocity). A 50 N s blow on a 9 kg crate's top edge sends its planks on at 6.9 m/s along it, the top ones 8.6 and
   the bottom 5.4; a crate spun at 8 rad/s comes apart with its sides going opposite ways (tube `vectra-gaps`,
-  breaking). Each is an ordinary model prop: a Vectra body (a box, or a cylinder for a bottle neck), saved with the
+  breaking). Each is an ordinary model prop: a Vectra body (its mesh's hull for a piece clearly not a box, so a shard lands on its
+  broken face; a capsule on a disc foot for a bottle neck; else its box), saved with the
   props, carried and pulled like any. Glass pieces shatter further by the usual break speed. A prop with no set is
   sliced into eighths as before, and the slices too go on at the velocity their places had (they popped out in
   place, the blow's way their only motion).
