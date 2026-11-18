@@ -337,6 +337,10 @@ void Space::prepare(float h){
   // Static or dynamic friction by how fast the surfaces slide when the step begins.
   float slide=0;for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));slide=std::max(slide,len(dv-m.normal*dot(dv,m.normal)));}
   m.material.dynamicFriction=slide<.08f?m.material.staticFriction:m.material.dynamicFriction;
+  // What the scrape and roll loops go by: the slide, and the turn of one over the other across the normal times the arm
+  // from the turning body's middle to the points (a rolling drum: its spin times its radius, with no slide).
+  {const V3 rel=(B?B->w:V3{})-A.w;const V3 across=rel-m.normal*dot(rel,m.normal);float arm=0;for(int k=0;k<m.count;++k)arm+=std::fabs(dot(m.points[size_t(k)].rA,m.normal));
+   m.slideSpeed=slide;m.rollSpeed=m.count>0?len(across)*arm/float(m.count):0.f;}
  }
 }
 void Space::warmStart(){

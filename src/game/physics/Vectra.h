@@ -158,6 +158,9 @@ struct Manifold {
  // Prepared each step: the middle of the points (an impact's), and the rolling axes' turns and masses.
  V3 midA{},midB{},midWA{},midWB{};float midMass=0;V3 rollWA[3]{},rollWB[3]{};float rollMass[3]{0,0,0};
  bool cold=false;                     // no impulses to start from (new this step): solved more on its first substep
+ // How fast its surfaces slide across each other (m/s, the fastest point's) and roll over each other (m/s, the relative
+ // turn across the normal times the arm to the points) when the step began: the scrape and roll loops' speeds.
+ float slideSpeed=0,rollSpeed=0;
  float scaleA=1,scaleB=1;             // the mass scaling of each body in this contact (Settings::shockNormal)
  bool world()const{return b<0;}
  // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster.

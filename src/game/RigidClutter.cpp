@@ -459,6 +459,17 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];
    if(wasAsleep[bi]&&b.sleeping)continue;fromBody(b,c);c.island=b.sleeping?space.islandOf.empty()?-1:std::max(0,space.islandOf[bi]):-1;
    if(len(b.v)<.5f)c.projectile=false;}
+  // Scrape and roll: each prop's loops (AudioEngine) ease toward the fastest slide and roll of the contacts it bears on
+  // (Manifold::slideSpeed, rollSpeed), and fall silent the moment it is held, asleep or off everything.
+  {std::vector<float> slide(list.size(),0.f),turn(list.size(),0.f);
+   for(const auto&m:space.manifolds){float load=0;for(int k=0;k<m.count;++k)load+=m.points[size_t(k)].normalImpulse;if(load<=0)continue;
+    for(int side=0;side<2;++side){const int bi=side?m.b:m.a;if(bi<0)continue;const Body& B=space.bodies[size_t(bi)];if(B.kinematic||B.user<0)continue;
+     slide[size_t(B.user)]=std::max(slide[size_t(B.user)],m.slideSpeed);turn[size_t(B.user)]=std::max(turn[size_t(B.user)],m.rollSpeed);}}
+   const float ease=std::min(1.f,RigidStep*14.f);
+   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.user<0)continue;auto&c=list[size_t(b.user)];
+    if(b.kinematic||b.sleeping||c.broken){c.scrapeLevel=c.rollLevel=0;continue;}
+    const float s=std::clamp((slide[size_t(b.user)]-.06f)/1.2f,0.f,1.f),r=std::clamp((turn[size_t(b.user)]-.06f)/1.5f,0.f,1.f);
+    c.scrapeLevel+=(s-c.scrapeLevel)*ease;c.rollLevel+=(r-c.rollLevel)*ease;if(c.scrapeLevel<.005f)c.scrapeLevel=0;if(c.rollLevel<.005f)c.rollLevel=0;}}
   // A prop leaning on him or pushed slowly into him moves him as far as it moved his body in the solver.
   for(auto&r:actors){if(r.body<0||size_t(r.body)>=space.bodies.size())continue;const V3 d=space.bodies[size_t(r.body)].x-r.start;r.pushed+=Vec2{d.x,d.y}-r.velocity*RigidStep;r.body=-1;}
   for(const auto&ev:space.events){if(ev.b<0)continue;const int ua=space.bodies[size_t(ev.a)].user,ub=space.bodies[size_t(ev.b)].user;const bool aActor=ua<=ActorBody,bActor=ub<=ActorBody;

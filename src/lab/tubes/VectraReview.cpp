@@ -111,5 +111,26 @@ const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg
   out.check(r.lift<.002f&&r.hop<(drop?.01f:.002f)&&r.drift<(drop?.01f:.005f)&&r.asleep,"and stays put on it: no spring off (a hop under "+std::string(drop?"1 cm":"2 mm")+"), no drift, asleep"+how);}
  return out.ok;}});
 
+// ---- 6. Scrape and roll ----
+struct Rub {float scrape=0,roll=0,endScrape=1,endRoll=1,travel=0;bool asleep=false;std::vector<float> trace;Point3 pose{};float dims=0;};
+Rub rub(int model,bool onSide,Vec2 v){
+ auto m=regression::room();m->definition.playerStart={2,2};Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};
+ Clutter c;c.kind=7;c.model=model;c.dims=Game::propTraits(model).size;c.pos={6,8};c.z=0;c.sleeping=false;if(onSide)c.roll=kPi*.5f;
+ LabAccess::clutter(g)={c};for(int i=0;i<20;++i)g.update({},1.f/60);   // settled where it stands
+ LabAccess::clutter(g)[0].velocity=v;LabAccess::clutter(g)[0].sleeping=false;if(onSide)LabAccess::clutter(g)[0].pitchSpeed=v.x/std::max(.1f,g.clutter()[0].dims[0]*.5f);   // rolled: spun as it goes
+const float x0=g.clutter()[0].pos.x;Rub r;r.dims=g.clutter()[0].dims[0];r.pose={g.clutter()[0].pitch,g.clutter()[0].roll,g.clutter()[0].z};
+ for(int i=0;i<300;++i){g.update({},1.f/60);const auto& k=g.clutter()[0];r.scrape=std::max(r.scrape,k.scrapeLevel);r.roll=std::max(r.roll,k.rollLevel);if(i%10==0)r.trace.push_back(onSide?k.rollLevel:k.scrapeLevel);}
+ const auto& k=g.clutter()[0];r.endScrape=k.scrapeLevel;r.endRoll=k.rollLevel;r.asleep=k.sleeping;r.travel=k.pos.x-x0;return r;}
+const bool scrapeTube=add({.name="vectra-scrape",.summary="a shoved crate raises its scrape level (Manifold::slideSpeed into Clutter::scrapeLevel, the AudioEngine's loop) that stops at rest; a rolled drum its roll level",.standalone=[]{
+ Out out("vectra-scrape.txt");
+ const Rub crate=rub(model::wooden_crate,false,{3,0}),drum=rub(model::ind_barrel,true,{2.5f,0});
+ for(auto [name,r]:{std::pair{"crate shoved at 3 m/s",crate},std::pair{"drum on its side rolled at 2.5 m/s",drum}}){
+  out.file<<name<<" (dims "<<f3(r.dims,2)<<", pitch "<<f3(r.pose.x,2)<<", roll "<<f3(r.pose.y,2)<<", z "<<f3(r.pose.z,2)<<"): went "<<f3(r.travel,2)<<" m; scrape at most "<<f3(r.scrape,3)<<", roll at most "<<f3(r.roll,3)<<"; at the end scrape "<<f3(r.endScrape,3)<<", roll "<<f3(r.endRoll,3)<<(r.asleep?", asleep":", awake")<<"\n  level each 1/6 s:";
+  for(float t:r.trace)out.file<<' '<<f3(t,2);out.file<<"\n";}
+ out.check(crate.scrape>.3f&&crate.roll<crate.scrape*.5f,"a shoved crate scrapes (its scrape level over 0.3, its roll under half that)");
+ out.check(crate.asleep&&crate.endScrape==0&&crate.endRoll==0,"and falls silent when it comes to rest");
+ out.check(drum.roll>.2f&&drum.roll>drum.scrape,"a drum rolled on its side rolls more than it scrapes");
+ out.check(drum.endRoll<.02f||!drum.asleep,"and its roll stops when it does");
+ return out.ok;}});
 }
 }
