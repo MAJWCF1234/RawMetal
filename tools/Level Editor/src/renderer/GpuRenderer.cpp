@@ -1035,7 +1035,7 @@ struct GpuRenderer::Impl {
   // Present scale lives in high bits so store-low/run-high retunes invalidate cleanly.
   uint64_t base=t.pixels.size()==1&&t.normalLevels.empty()&&t.emission.empty()&&t.relief.empty()&&!t.additive&&!t.transparent?(uint64_t(t.pixels[0])<<32)|0xffffffffu:t.generation.value<<1;
   uint64_t key=base^(uint64_t(unsigned(scale))<<56);auto found=materials.find(key);if(found!=materials.end())return key;
-  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;mat.soft=t.transparent&&t.soft;
+  auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;mat.soft=(t.transparent||t.additive)&&t.soft;
   mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
   auto bytes=[](const auto&values){std::vector<uint8_t> result(values.size()*sizeof(values[0]));std::memcpy(result.data(),values.data(),result.size());return result;};
   int presentW=std::max(1,t.width*scale),presentH=std::max(1,t.height*scale);
@@ -1759,9 +1759,10 @@ void GpuRenderer::submit(MeshVertex a,MeshVertex b,MeshVertex c,const SoftwareRe
   for(int i=0;i<2;++i){auto*dest=i?out.light1:out.light0;dest[0]=directions[i].x;dest[1]=directions[i].y;dest[2]=directions[i].z;dest[3]=weights[i];}out.surface[0]=m->capturing?(bounceAir?(*bounceAir)[size_t(corner)]:SoftwareRenderer::NoBounceAir):v.p.z;++corner;out.surface[1]=texture.emission.empty()?-(std::floor(std::clamp(texture.polish,0.f,.99f)*10.f)+std::clamp(texture.metalness,0.f,.99f)):texture.crystal?100.f+emissionScale:emissionScale;out.surface[2]=(texture.liquid?3.f:texture.transparent?2.f:texture.additive?1.f:0.f)+texture.glossStrength;out.surface[3]=m->capturing?1.f:m->renderingViewmodel?2.f:0.f;out.worldNormal[0]=worldNormal.x;out.worldNormal[1]=worldNormal.y;out.worldNormal[2]=worldNormal.z;out.worldNormal[3]=texture.parallaxScale;
   // A particle card (surface code 5; 0-4 are opaque, additive, blended, liquid and their gloss): its opacity, the depth over which it fades into what lies
   // behind it (when this frame has the room's depth to read), its flipbook blend and the step to
-  // the next frame in the atlas, in the lamp slots it has no use for.
+  // the next frame in the atlas, in the lamp slots it has no use for. A soft light card (soft and additive,
+  // a light shaft's: surface code 6) takes the same, and whether it fades edge-on (light1.z).
   if(card&&texture.soft&&!m->capturing){out.light0[0]=card->opacity;out.light0[1]=card->soft;out.light0[2]=m->softDepthLive()?1.f:0.f;out.light0[3]=0.f;
-   out.light1[0]=card->blend;out.light1[1]=card->step;out.light1[2]=0.f;out.light1[3]=0.f;out.surface[2]=5.f;}
+   out.light1[0]=card->blend;out.light1[1]=card->step;out.light1[2]=card->grazing;out.light1[3]=0.f;out.surface[2]=texture.additive?6.f:5.f;}
   // Painterly Horizon LOD markers ride in the parallax slot (negative values).
   if(const auto*tag=m->capturing?m->lodTag:nullptr){
    if(tag->impostor){out.position[0]=impostorCentre.x;out.position[1]=impostorCentre.y;out.position[2]=impostorCentre.z;out.position[3]=1.f;
@@ -1848,7 +1849,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  std::memcpy(m->projectionBuffers[m->frameIndex].mapped,m->vrProjection.data(),sizeof(m->vrProjection));vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,1,1,&m->projectionSets[m->frameIndex],0,nullptr);
  vkCmdPushConstants(cmd,m->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(m->viewState),m->viewState.data());
  VkPipeline previous=VK_NULL_HANDLE;
- struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false,liquid=false,cached=false;};std::vector<TransparentDraw> transparentDraws;
+ struct TransparentDraw{VkBuffer buffer;VkDescriptorSet material;uint32_t count,start;bool actor=false,liquid=false,cached=false,additive=false;};std::vector<TransparentDraw> transparentDraws;
  // Before the first blended draws of a split frame: the room's depth (the resolved target's alpha)
  // into softDepth, then the same attachments loaded again for the rest of the frame.
  auto splitScene=[&]{split=false;vkCmdEndRenderPass(cmd);
@@ -1863,12 +1864,14 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,2,b);
   pass.renderPass=m->passBlended;vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
   vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);previous=VK_NULL_HANDLE;};
- auto flushTransparent=[&]{if(split&&!transparentDraws.empty())splitScene();for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;++st[3];}auto pipeline=draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);++st[0];++st[1];if(draw.actor){vkCmdDraw(cmd,3,draw.count,0,draw.start);st[6]+=draw.count;}else{vkCmdDraw(cmd,draw.count,1,draw.start,0);st[draw.cached?4:5]+=draw.count/3;}}transparentDraws.clear();};
+ auto flushTransparent=[&]{if(split&&!transparentDraws.empty())splitScene();for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;++st[3];}auto pipeline=draw.additive?m->additive:draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);++st[0];++st[1];if(draw.actor){vkCmdDraw(cmd,3,draw.count,0,draw.start);st[6]+=draw.count;}else{vkCmdDraw(cmd,draw.count,1,draw.start,0);st[draw.cached?4:5]+=draw.count/3;}}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
   if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}++st[7];for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid,true});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);++st[0];++st[1];st[4]+=cached.count/3;}continue;}
   auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}
-  auto*material=m->findMaterial(batch.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
+  auto*material=m->findMaterial(batch.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}
+  // A soft light card (a light shaft's) reads the room's depth: drawn with the blended cards, after the split.
+  if(mat.additive&&mat.soft&&!batch.actor){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,false,false,false,true});continue;}auto pipeline=batch.actor?(mat.additive?m->actorAdditive:m->actorOpaque):(mat.additive?m->additive:m->opaque);
   if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}
   vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);++st[0];++st[1];
   if(batch.actor){vkCmdDraw(cmd,3,batch.count,0,batch.start);st[6]+=batch.count;}else{vkCmdDraw(cmd,batch.count,1,batch.start,0);st[5]+=batch.count/3;}

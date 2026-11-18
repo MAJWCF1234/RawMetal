@@ -450,7 +450,7 @@ void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const T
     for(int i=0;i<2;++i)response+=normalLighting->weights[i]*std::max(0.f,dot(n,tangentLights[i]));
     vertexLight*=std::clamp(response/flatResponse,.35f,1.8f);
    }
-   if(texture.additive){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f;unsigned result=0xff000000u;
+   if(texture.additive){auto old=m_pixels[index];float alpha=float(texel>>24)/255.f*(texture.soft?cardAlpha*vertexLight:1.f);unsigned result=0xff000000u;
     for(int channel=0;channel<3;++channel){float tint=channel==0?.35f:channel==1?.72f:1.f;unsigned value=std::min(255u,unsigned((old>>(channel*8))&255)+unsigned(((texel>>(channel*8))&255)*alpha*light*tint));result|=value<<(channel*8);}put(x,y,result);
    }else{if(!texture.transparent)m_zbuffer[index]=z;const float level=light*vertexLight/(1.f+z*.018f);auto color=material?materialShade(texel,U,V,level):shade(texel,level);if(wet>0)color=wetShade(color,level);
     if(!texture.emission.empty()){
@@ -607,6 +607,51 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
  // Bodies no longer drawn are let go after a while: the same one is made the same way again.
  if(m_corpses.size()>64)std::erase_if(m_corpses,[&](const auto&entry){return entry.second.seen<now-30.f;});
  return &corpse;
+}
+// A light shaft's light (STRUCT material 53), worked out once from the world it falls in. Its box is lit
+// in at the top of the side away from `facing` and down to the floor at the facing side: that slant is the
+// light's way. Over the face it comes in by (across the box's width, up its height) a grid of points; at
+// each, whether the light comes through there (nothing between the point and the light's side: the
+// breach's hole and the glass let it, the wall round them does not) and where the ray from it lands (the
+// floor, or the first thing in its way: a bench, a pillar, a wall). The cards are laid between these
+// points, so a shaft starts at the opening's outline and stops where it is caught, never past a wall.
+const LightShaftShape& lightShaftShape(const World& w,size_t index){
+ static std::mutex lock;static std::map<std::tuple<std::uint64_t,size_t,std::uint64_t>,LightShaftShape> cache;   // by the map (its serial, world and slot: never its address), the shaft and its box
+ const Structure& s=w.structures()[index];const auto identity=w.definitionIdentity();
+ const std::uint64_t id=identity.serial*1099511628211ull^(std::uint64_t(identity.world)<<40)^std::uint64_t(std::uint32_t(identity.level));
+ std::uint64_t key=1469598103934665603ull;
+ for(float v:{s.x1,s.y1,s.x2,s.y2,s.bottom,s.top,float(s.facing&3),float(w.structures().size())})key=(key^std::bit_cast<std::uint32_t>(v))*1099511628211ull;
+ std::lock_guard guard(lock);
+ if(cache.size()>512)cache.clear();
+ auto [found,fresh]=cache.try_emplace({id,index,key});LightShaftShape& shape=found->second;if(!fresh)return shape;
+ const int f=s.facing&3;const Vec2 forward=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0},side{forward.y,-forward.x};
+ const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,hw=(f%2?s.y2-s.y1:s.x2-s.x1)*.5f,hd=(f%2?s.x2-s.x1:s.y2-s.y1)*.5f,height=s.top-s.bottom;
+ auto P=[&](float u,float v,float z){return Point3{cx+side.x*u+forward.x*v,cy+side.y*u+forward.y*v,z};};
+ const Point3 run{forward.x*2*hd,forward.y*2*hd,-height};const Point3 along=run*(1.f/std::max(std::sqrt(goreDot(run,run)),1e-4f));
+ const int columns=std::clamp(int(std::ceil(2*hw/.1f))+1,4,48),rows=std::clamp(int(std::ceil(height/.1f))+1,4,48);
+ shape.columns=columns;shape.rows=rows;const size_t n=size_t(columns*rows);
+ shape.from.resize(n);shape.to.resize(n);shape.fade.assign(n,0.f);shape.lands.assign(n,0);
+ std::vector<std::uint8_t> open(n,0);Point3 normal;
+ for(int j=0;j<rows;++j)for(int i=0;i<columns;++i){const size_t k=size_t(j*columns+i);
+  const float u=-hw+2*hw*float(i)/float(columns-1),z=s.bottom+height*float(j)/float(rows-1);
+  const Point3 e=P(u,-hd,z);shape.from[k]=shape.to[k]=e;
+  if(z<=s.bottom+.01f)continue;
+  // Lit here when nothing stands between this point (a little way into the room) and the light's side.
+  const Point3 in=e+along*.25f;if(w.lightRayHit(in,in-along*1.75f,normal)<.999f)continue;
+  // Where it lands: the floor at the box's bottom, or the first solid in its way.
+  const Point3 start=e+along*.02f,end=e+run*((z-s.bottom)/height);
+  const float hit=std::min(w.lightRayHit(start,end,normal),1.f);
+  shape.to[k]=start+(end-start)*hit;shape.lands[k]=hit>=.999f||normal.z>.7f;open[k]=1;}
+ // Soft at the opening's edges: a point fades by how far it lies (across, and up or down) from the nearest
+ // point the light does not come through, or from the box's edge.
+ const float du=2*hw/float(columns-1),dz=height/float(rows-1);
+ auto ease=[](float x){x=std::clamp(x,0.f,1.f);return x*x*(3-2*x);};
+ for(int j=0;j<rows;++j)for(int i=0;i<columns;++i){const size_t k=size_t(j*columns+i);if(!open[k])continue;
+  int a=0,b=0,c=0,d=0;
+  while(i-a-1>=0&&open[size_t(j*columns+i-a-1)])++a;while(i+b+1<columns&&open[size_t(j*columns+i+b+1)])++b;
+  while(j-c-1>=0&&open[size_t((j-c-1)*columns+i)])++c;while(j+d+1<rows&&open[size_t((j+d+1)*columns+i)])++d;
+  shape.fade[k]=ease((float(std::min(a,b))+.5f)*du/.45f)*ease((float(std::min(c,d))+.5f)*dz/.35f);}
+ return shape;
 }
 void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  perf::Scope frameProfile(perf::Scene);
@@ -1590,36 +1635,6 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     for(int k=0;k<4;++k){const Point3 p0=a+o[k],p1=a+o[(k+1)%4],q1=e+o[(k+1)%4],q0=e+o[k];planar(p0,p1,q1);planar(p0,q1,q0);planar(p0,q1,p1);planar(p0,q0,q1);}}
   }
  };
- // A light shaft (STRUCT material 53, the classic god-ray cards): sunlight falling through its box on the
- // slant, in from the top on the side away from `facing` and down to the floor on the facing side. Drawn as
- // a bundle of soft additive cards that add their light to what is behind them (no haze needed), faint at both ends and at
- // their edges, warm gold; it casts no shadow and nothing collides with it.
- auto drawLightShaft=[&](const Structure& s){
-  if(hidden({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top}))return;
-  static const Texture ray=[](){const int n=32,m=64;Texture t{n,m,std::vector<std::uint32_t>(size_t(n*m))};t.additive=true;t.clampEdges=true;
-   auto pack=[](float r,float g,float b,float a){auto q=[](float v){return unsigned(std::clamp(v,0.f,1.f)*255.f+.5f);};return (q(a)<<24)|(q(r)<<16)|(q(g)<<8)|q(b);};
-   for(int y=0;y<m;++y)for(int x=0;x<n;++x){const float u=(float(x)+.5f)/float(n),v=(float(y)+.5f)/float(m);
-    // Along the ray: rising out of nothing at the opening, strongest a third of the way, gone at the floor.
-    const float along=std::pow(std::sin(kPi*v),1.4f)*(1.f-.35f*v),across=std::pow(std::sin(kPi*u),2.f);
-    const float streak=.75f+.25f*std::sin(u*31.f+std::sin(v*7.f)*2.f);
-    // Added to what is behind it (an additive card): warm gold, its strength the alpha.
-    t.pixels[size_t(y*n+x)]=pack(1.f,.82f,.5f,.5f*along*across*streak);}
-   return t;}();
-  const int f=s.facing&3;const Vec2 forward=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0},side{forward.y,-forward.x};
-  const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,hw=(f%2?s.y2-s.y1:s.x2-s.x1)*.5f,hd=(f%2?s.x2-s.x1:s.y2-s.y1)*.5f;
-  auto P=[&](float u,float v,float z){return Point3{cx+side.x*u+forward.x*v,cy+side.y*u+forward.y*v,z};};
-  // The ray's thickness along v, the same at the top and the floor; its middle runs corner to corner.
-  const float t=std::min(hd*.45f,.7f);
-  auto card=[&](float u0,float u1,float v0top,float v0floor,float scale){
-   const Point3 a=P(u0,v0top,s.top),b=P(u1,v0top,s.top),c=P(u1,v0floor,s.bottom),d=P(u0,v0floor,s.bottom);
-   objectLighting=false;
-   tri({a,0,0},{b,1,0},{c,1,1},ray,scale);tri({a,0,0},{c,1,1},{d,0,1},ray,scale);
-   tri({a,0,0},{c,1,1},{b,1,0},ray,scale);tri({a,0,0},{d,0,1},{c,1,1},ray,scale);};
-  // Cards across the ray's thickness (each its own slant) and two along it, so it reads from any side.
-  for(int k=0;k<4;++k){const float o=-t*.5f+t*float(k)/3.f;card(-hw,hw,-hd+t*.5f+o,hd-t*.5f+o,1.f);}
-  for(float u:{-hw*.35f,hw*.35f}){const Point3 a=P(u,-hd,s.top),b=P(u,-hd+t,s.top),c=P(u,hd,s.bottom),d=P(u,hd-t,s.bottom);
-   tri({a,0,0},{b,1,0},{c,1,1},ray,1.f);tri({a,0,0},{c,1,1},{d,0,1},ray,1.f);tri({a,0,0},{c,1,1},{b,1,0},ray,1.f);tri({a,0,0},{d,0,1},{c,1,1},ray,1.f);}
- };
  for(auto&s:w.structures()){
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
@@ -1628,7 +1643,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(s.material==CollisionProxyMaterial)continue;
-  if(s.material==LightShaftMaterial){drawLightShaft(s);continue;}
+  if(s.material==LightShaftMaterial)continue; // drawn every frame with the air (drawLightShafts)
   if(s.shape!=ShapeBox){drawShape(s,structureTexture(s));continue;}
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.layerSurface){
@@ -2983,7 +2998,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   float scale=track.scale/std::max(.01f,human?mesh.maximum.y-mesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
   float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
-  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  // A man a prop knocked back leans with the shove from his feet while he reels, and straightens as he
+  // finds them (Game::npcStumbleLean): everything on him (gun, hands, kit) leans with him.
+  const Vec2 lean=human&&actor>=0&&!corpse?game.npcStumbleLean(size_t(actor)):Vec2{};const float leanDrop=.5f*(lean.x*lean.x+lean.y*lean.y);
+  auto transform=[&](Point3 p){const float up=p.y*scale;return Point3{pose.position.x+(p.x*c+p.z*s)*scale+lean.x*up,pose.position.y+(-p.x*s+p.z*c)*scale+lean.y*up,pose.z+up*(1-leanDrop)};};
   if(directSupport){const auto&hand=mesh.creatureLayerPose().arms[1];auto wrist=transform(hand[2]);terminal=heldFieldTerminalFrame(wrist,transform(hand[2]+hand[3])-wrist,pose.yaw,track.scale);}
   auto medicalKit=medicalCaseFrame({pose.position.x,pose.position.y,pose.z},pose.yaw,track.scale/1.6f);
   if(directTreatment){
@@ -3976,6 +3994,60 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      triangle3D(A,B,C,sheet,shade,&cell);triangle3D(A,C,D,sheet,shade,&cell);}
    }
   }
+ }
+ // Light shafts (STRUCT material 53): god rays, drawn every frame after the room as soft light cards laid
+ // over lightShaftShape (from the opening's outline to where the floor or a surface catches the light).
+ // Two families: layers across the opening's width at six heights, and sheets down its height at five
+ // places across, so one family is broadside to the eye when the other turns edge-on and fades. Added to
+ // what lies behind them, hidden by what stands in front (the depth test), melting into the floor and the
+ // walls they meet (the soft fade, over ShaftSoft metres), never casting a shadow; and where they land, a
+ // soft warm patch on the floor: the opening's shape cast on it.
+ if(!m_staticGeometryBuild){
+  // Live knobs (lab/tune.txt): each layer's and sheet's strength, the floor patch's, and the soft fade's depth.
+  const float ShaftSoft=tune("shaft.soft",.35f),layerOpacity=tune("shaft.layer",.3f),sheetOpacity=tune("shaft.sheet",.28f),poolOpacity=tune("shaft.pool",.35f);
+  static const Texture ray=[]{const int n=32,m=64;Texture t{n,m,std::vector<std::uint32_t>(size_t(n*m))};t.additive=true;t.soft=true;
+   for(int y=0;y<m;++y)for(int x=0;x<n;++x){const float u=(float(x)+.5f)/float(n),v=(float(y)+.5f)/float(m);
+    // Along the ray (v: 0 at the opening, 1 where it lands): in out of nothing just past the opening,
+    // strongest near it, dimming as it goes and softening into the floor (the soft fade does the rest).
+    auto smooth=[](float a,float b,float x){x=std::clamp((x-a)/(b-a),0.f,1.f);return x*x*(3-2*x);};
+    const float along=smooth(0.f,.07f,v)*(1.f-.35f*v)*(1.f-.5f*smooth(.72f,1.f,v));
+    // Faint streaks across it (u wraps: a metre is about eleven texels' worth of repeats).
+    const float streak=.72f+.28f*std::sin(u*2*kPi*3+std::sin(v*7.f)*1.3f);
+    const float a=std::clamp(along*streak,0.f,1.f);
+    t.pixels[size_t(y*n+x)]=(unsigned(a*255.f+.5f)<<24)|tuneColour("shaft.colour",0xffb464);}
+   return t;}();
+  static const Texture pool=[]{const int n=16;Texture t{n,n,std::vector<std::uint32_t>(size_t(n*n))};t.additive=true;t.soft=true;
+   for(int y=0;y<n;++y)for(int x=0;x<n;++x){const float k=.85f+.15f*std::sin(float(x)*1.7f+std::sin(float(y)*1.3f)*2.f);
+    t.pixels[size_t(y*n+x)]=(unsigned(k*255.f+.5f)<<24)|tuneColour("shaft.pool.colour",0xffbc78);}
+   return t;}();
+  const bool wasObjectLighting=objectLighting;const float wasObjectLight=objectLight;const auto* wasObjectNormal=objectNormalLighting;
+  objectLighting=true;objectLight=1;objectNormalLighting=nullptr;
+  // A card from four corners (their light: each corner's fade). The CPU fades it edge-on here, card by card;
+  // scene.frag does it pixel by pixel.
+  auto card=[&](MeshVertex a,MeshVertex b,MeshVertex c,MeshVertex d,const Texture& t,CardLook look){
+   if(a.light+b.light+c.light+d.light<.004f)return;
+   if(!m_gpuFrame&&look.grazing>0){const Point3 n=cross3(b.p-a.p,d.p-a.p),to=eye-(a.p+b.p+c.p+d.p)*.25f;const float nl=std::sqrt(goreDot(n,n)),tl=std::sqrt(goreDot(to,to));
+    if(nl>1e-9f&&tl>1e-6f){const float x=std::clamp((std::fabs(goreDot(n,to))/(nl*tl)-.08f)/.42f,0.f,1.f);look.opacity*=x*x*(3-2*x);}}
+   if(look.opacity<.002f)return;
+   m_card=look;tri(a,b,c,t,1.f);tri(a,c,d,t,1.f);m_card={};};
+  for(size_t index=0;index<w.structures().size();++index){const auto& s=w.structures()[index];
+   if(s.material!=LightShaftMaterial||s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+   const Point3 lo{s.x1,s.y1,s.bottom},hi{s.x2,s.y2,s.top},half=(hi-lo)*.5f;
+   if(!sphereVisible(lo+half,std::sqrt(goreDot(half,half)))||hidden(lo,hi))continue;
+   const auto& shape=lightShaftShape(w,index);const int C=shape.columns,R=shape.rows;
+   auto at=[&](int i,int j){return size_t(j*C+i);};
+   auto corner=[&](size_t k,bool landing,float u){return MeshVertex{landing?shape.to[k]:shape.from[k],u,landing?1.f:0.f,shape.fade[k]};};
+   for(int layer=0;layer<6;++layer){const int j=std::clamp(int(std::lround((float(layer)+.5f)/6.f*float(R-1))),1,R-1);
+    for(int i=0;i+1<C;++i)card(corner(at(i,j),false,float(i)*.09f),corner(at(i+1,j),false,float(i+1)*.09f),corner(at(i+1,j),true,float(i+1)*.09f),corner(at(i,j),true,float(i)*.09f),ray,{layerOpacity,ShaftSoft,0,0,1});}
+   for(int sheet=0;sheet<5;++sheet){const int i=std::clamp(int(std::lround((float(sheet)+.5f)/5.f*float(C-1))),0,C-1);
+    for(int j=0;j+1<R;++j)card(corner(at(i,j),false,float(j)*.09f),corner(at(i,j+1),false,float(j+1)*.09f),corner(at(i,j+1),true,float(j+1)*.09f),corner(at(i,j),true,float(j)*.09f),ray,{sheetOpacity,ShaftSoft,0,0,1});}
+   for(int j=0;j+1<R;++j)for(int i=0;i+1<C;++i){const size_t k[4]={at(i,j),at(i+1,j),at(i+1,j+1),at(i,j+1)};
+    bool lands=true;float low=1e9f,high=-1e9f;for(size_t q:k){lands&=shape.lands[q]!=0;low=std::min(low,shape.to[q].z);high=std::max(high,shape.to[q].z);}
+    if(!lands||high-low>.05f)continue;
+    auto spot=[&](size_t q){Point3 p=shape.to[q];p.z+=.015f;return MeshVertex{p,p.x*.5f,p.y*.5f,shape.fade[q]};};
+    card(spot(k[0]),spot(k[1]),spot(k[2]),spot(k[3]),pool,{poolOpacity,0,0,0,0});}
+  }
+  objectLighting=wasObjectLighting;objectLight=wasObjectLight;objectNormalLighting=wasObjectNormal;
  }
  // The air's own stuff: smoke, steam, dust, debris, drips, fire and gas (Particles.cpp). Last, so on the
  // CPU path every blended card lies over the room it hangs in. Lit at its corners as moving geometry

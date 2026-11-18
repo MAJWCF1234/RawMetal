@@ -470,6 +470,9 @@ public:
     // A man a creature's bite took the head off, and seconds since (saved: a
     // reload shows him headless; the age is large after a load).
     bool npcHeadless(size_t actor)const;
+    // A man reeling from a prop's shove (RigidClutter.cpp): how far he leans with it from his feet (the
+    // shove's way, the slope of the lean); none when he is not.
+    Vec2 npcStumbleLean(size_t actor)const;
     float npcHeadlessAge(size_t actor)const;
     // How a man died, for the body the renderer makes of him: seconds since on the death clip's own
     // clock and whether that clock has run out, the clip phase he died at (a man already down dies
@@ -1374,10 +1377,17 @@ private:
     // Vectra's step for a list's model props (RigidClutter.cpp; the old one: vectra::legacyProps()).
     void simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held);
     // A man or a creature knocked back by a prop (RigidClutter.cpp): he stumbles along `velocity`, slowing,
-    // through his own hull sweeps; a creature's blow is spoilt while it lasts.
-    struct BodyKnock {int level=0;bool enemy=false;size_t index=0;Vec2 velocity{};float time=0;};
+    // through his own hull sweeps; a creature's blow is spoilt while it lasts. A shove (not a nudge) plays
+    // his stumble for `stumble` seconds (`age` so far): a man's hit clip (3), reeling while he slides and
+    // finding his feet after, held where the shove leaves him (`at`), his gun down till he has; a
+    // creature's flinch (its clip 3, through painFlash) from `flinch` down. Not saved.
+    struct BodyKnock {int level=0;bool enemy=false;size_t index=0;Vec2 velocity{};float time=0;float stumble=0,slide=0,age=0,flinch=0;Vec2 at{},push{};bool placed=false;};
     std::vector<BodyKnock> m_bodyKnocks;
     void updateBodyKnocks(float dt);
+    // After everyone has moved this frame: the knocked play their stumble (RigidClutter.cpp).
+    void poseBodyKnocks(float dt);
+    // Where in the hit clip a stumble is `age` seconds in: reeling over the slide, recovering after.
+    static float stumblePhase(float age,float slide,float stumble);
     // A list's rigid-body state between frames: the fixed step's leftover time and the contacts' warm start.
     struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;
      // A region of the world found to be one flat floor with every column round it open (RigidClutter.cpp),

@@ -24,6 +24,13 @@ struct ElectricFx;
 struct GoreFx;
 struct ParticleMemory;
 struct Particles;
+// A light shaft's light (STRUCT material 53, Scene3D.cpp), worked out once per world and shaft: a grid of
+// `columns` x `rows` points over the face its light comes in by (row 0 at the box's bottom); for each,
+// where it starts (`from`), where its ray lands (`to`: the floor or the first solid in its way), how
+// strongly it is drawn (`fade`: 0 where no light comes through, easing in from the opening's edges) and
+// whether it lands on a floor or a top (`lands`). The cards and the floor patch are laid over it.
+struct LightShaftShape {int columns=0,rows=0;std::vector<Point3> from,to;std::vector<float> fade;std::vector<std::uint8_t> lands;};
+const LightShaftShape& lightShaftShape(const World& w,size_t structure);
 class SoftwareRenderer {
     // Sparks and arcs draw with the scene's own textures (ElectricFx.cpp).
     friend struct ElectricFx;
@@ -222,11 +229,14 @@ private:
         std::uint8_t material=0; std::vector<std::uint32_t> surfaceMap;
         // soft: a particle atlas (Particles.cpp). Its cards take their opacity, the depth over which they
         // fade into what lies behind them and their flipbook blend from m_card, not from the texels alone.
+        // soft and additive together: a soft light card (a light shaft's, Scene3D.cpp): added to what lies
+        // behind it, its texels' alpha times m_card's opacity times its corners' light (their fade).
         bool soft=false; };
     // How the next particle card is drawn (with a soft texture): opacity times its texels' alpha, faded
     // over `soft` metres where it nears what lies behind it, and blended `blend` of the way toward the
-    // flipbook's next frame, `step` across the atlas.
-    struct CardLook {float opacity=1,soft=0,blend=0,step=0;};
+    // flipbook's next frame, `step` across the atlas. grazing (a soft light card): faded out as it turns
+    // edge-on to the eye, so a flat card never reads as a plane.
+    struct CardLook {float opacity=1,soft=0,blend=0,step=0,grazing=0;};
     struct NormalLighting {std::array<Point3,2> directions{};std::array<float,2> weights{};Point3 surfaceNormal{};};
     static void attachNormal(Texture& texture,int resource,bool greenUp=true,float reliefScale=.012f);
     // A lamp fitting's glowing texture with its emission in the lamp's tone

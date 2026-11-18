@@ -463,6 +463,24 @@ void main(){
  vec4 color=impostorQuad?impostorColor(uv,uvDx,uvDy,materialDistance>lodDistance*2.0):textureGrad(colorMap,sampleUV,uvDx,uvDy);
  // The impostor's visible surface lies in front of or behind its card.
  if(impostorQuad)worldPos+=normalize(view.eyeYaw.xyz-worldPos)*impostorDepth*light1.x;
+ // A soft light card (surface code 6: a light shaft's, Scene3D.cpp drawLightShafts): its light added to
+ // what lies behind it, its strength the texel's alpha times its opacity (light0.x) times its corners'
+ // fade (lighting.y); faded where it nears what was drawn behind it (light0.y metres of the room's planar
+ // depth, when the frame has it), so it melts into the floor it lands on and the walls it brushes, and
+ // (light1.z) as it turns edge-on to the eye, so a card never shows as a flat plane.
+ if(surface.z>=5.5&&surface.z<6.5){
+  vec4 ray=textureGrad(colorMap,uv,uvDx,uvDy);
+  vec3 toCard=worldPos-view.eyeYaw.xyz;float ahead=toCard.x*view.eyeYaw.w+toCard.y*view.basis.x;
+  float cardDepth=max(ahead*view.basis.y+toCard.z*view.basis.z,0.0);
+  float a=ray.a*light0.x*lighting.y;
+  if(light0.z>0.5&&light0.y>0.0){float behind=texelFetch(sceneDepth,ivec2(gl_FragCoord.xy),0).a;if(behind>0.0)a*=smoothstep(0.0,1.0,clamp((behind-cardDepth)/light0.y,0.0,1.0));}
+  if(light1.z>0.5){vec3 n=cross(dx,dy);float nl=length(n);float facing=nl>1e-12?abs(dot(n/nl,normalize(-toCard))):1.0;a*=smoothstep(0.08,0.5,facing);}
+  if(a<0.002)discard;
+  // In linear light the cards' shares add up as light does (the colour made linear, not each share).
+  vec3 added=(view.effects.w>0.5?toLinear(ray.rgb):ray.rgb)*a*lighting.x;
+  outColor=vec4(added,1);
+  return;
+ }
  // A particle card (Particles.cpp, surface code 5): its atlas read smooth (never snapped to texels),
  // on toward its flipbook's next frame (light1: blend, step), its own opacity (light0.x), faded where
  // it nears what was drawn behind it (over light0.y metres of the room's planar depth, when the frame
