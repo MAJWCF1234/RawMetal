@@ -462,6 +462,13 @@ RECORDS = [
          'Growth (the Campaign Builder\'s Growth brush) is FIXTUREs too, solid 0: ivy (ivy_wall_a, ivy_wall_b, growth_vine_sheet) and moss (growth_moss_wall) stand flat on a wall\'s face, a centimetre off it, turned out from it (yaw 0 faces south); '
          'drapes of ivy (growth_ivy_curtain, growth_ivy_single) hang down a wall from the ceiling\'s edge or over a ledge\'s lip, their base their length below it; grass tufts and growth_moss_floor lie on a floor or a ledge\'s top. '
          'Creepers, grass, ferns, bushes and trees are plants: they bend in the wind outdoors, a creeper drifts indoors, and each parts round whoever walks through it and flinches when shot.'),
+        ('CLOTH|map|kind|x|y|z[|x2|y2|z2]', 'A curtain, a strap or a cable that hangs and moves: a cloth of beads joined by soft ropes (absolute heights). '
+         '<code>curtain</code> hangs from a rail from x,y,z to x2,y2,z2 (along its top edge) down its drop; <code>strap</code> hangs from x,y,z down its length (x2,y2,z2, if given, is the way its face turns across); '
+         '<code>cable</code> hangs from x,y,z to x2,y2,z2, sagging by its spare length (with <code>loose=1</code> its far end lies free toward x2,y2,z2). '
+         'It sways when walked through, parts round people and props, drapes over what is under it, swings when shot and, out under the sky, ripples in the wind; then it settles and sleeps. '
+         'With FORMAT|2 its named fields set it up (all optional): <code>drop=</code> how far a curtain hangs (1.6 m), <code>length=</code> a strap\'s (1 m) or a cable\'s (1.15 times the span between its ends), '
+         '<code>width=</code> a strap\'s (5 cm), <code>radius=</code> a cable\'s thickness (1.2 cm), <code>mass=</code> its weight in all (kg), <code>stiffness=</code> how firmly its links hold (30 Hz), <code>loose=1</code> a cable\'s far end free. '
+         'The Campaign Builder\'s Hang cloth tool (Decor) writes it: pick a curtain, a strap or a cable, and drag where it hangs from.'),
         ('CLUTTER|map|kind|x|y|z|yaw', 'A loose object that can be knocked about: kinds 0-6. z -999 drops it to the floor.'),
         ('CLUTTER|map|7|x|y|z|yaw|model|width|depth|height|pitch|roll|breakState', 'A loose model you can pick up and throw (see the Props room). breakState may be empty.'),
         ('PICKUP|map|kind|x|y', 'Health (0), shotgun ammo (1) or handgun ammo (2).'),
@@ -525,7 +532,7 @@ NAMED_FIELDS = [
     ('name', 'Name', 'letters, digits, _ or -', 'any record', 'Names the record so scripts (and later physics joints) can point at it. Unique on its map: a second record with the same name is refused.'),
     ('p.KEY', 'Custom property', 'a number or text', 'any named record', 'Your own value on the thing, read and written by scripts as <code>@name.KEY</code>. Scripts see a whole number (text reads 0; true reads 1). '
      'It starts at the value written here once a game; after that it is whatever scripts made it, and saves keep it.'),
-    ('mass', 'Mass (kg)', '0.01 to 1000', 'CLUTTER, loose chairs', 'How heavy the prop is: how far a blow throws it, how hard it hits, whether you can lift it (25 kg and over you cannot).'),
+    ('mass', 'Mass (kg)', '0.01 to 1000', 'CLUTTER, loose chairs, CLOTH', 'How heavy the prop is: how far a blow throws it, how hard it hits, whether you can lift it (25 kg and over you cannot). A CLOTH: its weight in all.'),
     ('health', 'Health', '0 to 100000', 'CLUTTER', 'The damage it takes before it breaks, instead of its model\'s own.'),
     ('breakable', 'Breakable', '1 or 0', 'CLUTTER', '0: it never breaks, however hard it is hit or shot. 1 on a model that does not break gives it 20 health.'),
     ('density', 'Density (kg/m3)', '10 to 20000', 'CLUTTER', 'How it sits in WATER: under 1000 it floats, riding at that share of its height; over, it sinks.'),
@@ -573,13 +580,13 @@ NAMED_FIELDS = [
     ('seed', 'Seed', 'a whole number', 'BREACH', 'Another seed gives another ragged outline, chips and rubble.'),
     ('toward', 'Rubble side', '1 or -1', 'BREACH', 'Which side of the wall most of the rubble falls: -1 throws it to the other side.'),
     ('axis', 'Pin or rail', 'x y z or a,b,c', 'JOINT', 'The way a hinge turns about or a slider runs along (a hinge: x if left out; a slider: z).'),
-    ('length', 'Length (m)', '0 to 30', 'JOINT', 'A rope, chain, spring, rod or winch: its length; a pulley: both ropes together. Left out: as laid out.'),
+    ('length', 'Length (m)', '0 to 30', 'JOINT, CLOTH', 'A rope, chain, spring, rod or winch: its length; a pulley: both ropes together. Left out: as laid out. A strap or a cable (CLOTH): its length.'),
     ('min', 'Least', 'degrees (hinge) or metres', 'JOINT', 'How far a hinge turns one way (negative), a slider runs back, or a winch reels in.'),
     ('max', 'Most', 'degrees (hinge) or metres', 'JOINT', 'How far a hinge turns the other way, a slider runs on, or a winch pays out.'),
     ('cone', 'Swing (degrees)', '0 to 179', 'JOINT ball', 'How far a ball joint swings from where it was laid out.'),
     ('cone2', 'Swing across (degrees)', '0 to 179', 'JOINT ball', 'The swing the other way, for an oval cone (a shoulder). The cone if left out.'),
     ('twist', 'Twist (degrees)', '0 to 179', 'JOINT ball', 'How far a ball joint twists either way.'),
-    ('stiffness', 'Springiness (Hz)', '0 to 60', 'JOINT', 'A spring: how stiff (3 if left out). A hinge or slider with it springs back to where it was laid out.'),
+    ('stiffness', 'Springiness (Hz)', '0 to 60 (CLOTH 1 to 120)', 'JOINT, CLOTH', 'A spring: how stiff (3 if left out). A hinge or slider with it springs back to where it was laid out. A CLOTH: how firmly its links hold (30).'),
     ('damping', 'Damping', '0 to 10', 'JOINT', 'How soon a spring stops bouncing: 0 bounces on, 1 settles at once (0.5).'),
     ('motor', 'Motor', 'speed servo off', 'JOINT', 'speed: turns (or runs, or reels) at a speed; servo: goes to the target and holds there.'),
     ('speed', 'Motor speed', 'degrees or metres a second', 'JOINT', 'How fast the motor goes. 0 with a force: a brake.'),
@@ -591,7 +598,10 @@ NAMED_FIELDS = [
     ('over', 'Wheel', 'a,b,c', 'JOINT pulley', 'Where propA\'s rope goes over (absolute).'),
     ('over2', 'Second wheel', 'a,b,c', 'JOINT pulley', 'Where propB\'s rope goes over (absolute).'),
     ('ratio', 'Ratio', '0.1 to 10', 'JOINT pulley', 'How much rope one side pays out for the other\'s: 2 lifts twice the load half as far.'),
-    ('radius', 'Thickness (m)', '0 to 0.1', 'JOINT', 'How thick the rope or chain is drawn.'),
+    ('radius', 'Thickness (m)', '0 to 0.1', 'JOINT, CLOTH', 'How thick the rope or chain is drawn; a cable (CLOTH): how thick it is.'),
+    ('drop', 'Hangs down (m)', '0.1 to 8', 'CLOTH curtain', 'How far a curtain hangs from its rail (1.6 if left out).'),
+    ('width', 'Width (m)', '0.01 to 0.5', 'CLOTH strap', 'How wide a strap is (0.05 if left out).'),
+    ('loose', 'Far end free', '1 or 0', 'CLOTH cable', '1: a cable hangs from its first end alone, its far end lying free.'),
     ('tread', 'Step tops material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "What the steps are walked on: the top 4 cm of each step. The Builder's Paint tool sets it on a click on a step top."),
     ('riser', 'Step fronts material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "The step fronts and the body under the tops. Blank: the step tops' material."),
     ('stringer', 'Side rails material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side rails (with the rails field on).'),

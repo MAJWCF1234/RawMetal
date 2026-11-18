@@ -360,6 +360,38 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
   a crate on a rope to shoot down, a seesaw, a sprung gate, a rope bridge, and a lift on a slider hung over a pulley against
   a counterweight. The tube `joints-room` plays each (fixtures `joints-*.lab`; `joints-shot-*.lab` take the 1600 x 900 pictures).
 
+### Curtains, straps and cables (src/game/Cloth.h, Cloth.cpp; tubes `cloth`, `cloth-room`)
+
+A map's `CLOTH` records (map-format.md) hang as beads in Vectra, each cloth in a `vectra::Space` of its own kept while the
+level is played (as a corpse keeps its own), so warm starting, the joints' impulses and sleep carry from step to step.
+- **Beads and joints.** A curtain is columns every 20 cm along its rail and rows every 20 cm down it (3-14 by 3-12); a strap
+  or a cable one row every 8 cm along it (4-20, 5-32). Each bead is a small sphere (a curtain's 3 cm, a strap's half its
+  width, a cable's its radius) sharing one group, so it never meets itself. Neighbours are joined by ropes (`Joint::Rope`:
+  at most as far apart as they hang, slack nearer, so it folds and drapes), soft at `stiffness` (`cloth.hertz` 120 Hz: at
+  30 a 1.2 m strap stretched 9 cm under its own weight, at 120 it stretches 6 mm); a strap's and a cable's every other bead
+  by a weak spring (`cloth.bend` 1.5 Hz: it bends rather than kinks; a curtain hangs in folds without). Two joint passes a
+  substep. A curtain's rail, a strap's top and a cable's ends are kinematic beads where the map put them. Air drag
+  `cloth.drag` 1.2. People are slick to it (friction 0.12): it parts round them rather than being carried along.
+- **What it meets.** The floor under each bead and the walls round it, as a corpse's points (a bead in a wall meets it toward
+  where it was last clear; one a bead's width from a wall meets it at no gap). The props near it as kinematic bodies of their
+  own Vectra shapes at their velocities; the player and the creatures as capsules (the player's hull height, her velocity as
+  she moves). So it parts and sways round whoever walks through it and drapes over what is under it; it does not push back.
+- **Shots.** A round through it (`Game::shootCloth`, from `resolveShot` beside the joints' ropes) knocks the beads it passes,
+  most the nearest (`cloth.shot` 4 m/s), and wakes it.
+- **Wind.** Out under the sky (a zone sky or terrain) the breeze the plants bend in (Foliage.cpp: turning and gusting,
+  harder in a storm, `cloth.wind`) pushes each bead by its own flickering share; indoors there is none and it settles.
+- **Sleep and cost.** It sleeps when it settles (0.4 s still); asleep with nothing moving near it and no wind it is not
+  stepped at all. Fixed steps of 1/120 s, at most four a frame. A wall is looked for round a bead only once it has gone 5 cm.
+  Four 1.4 x 1.8 m curtains (80 beads each) cost 4.4-4.9 ms a frame swaying (0.58 ms a curtain a step, nearly all the
+  joints' solve) and 0.02 ms asleep (tube `cloth`).
+- **Checks** (tube `cloth`): a 1.4 x 1.8 m curtain hangs plumb with its foot 2 mm off its drop and sleeps in 0.42 s; walked
+  through at 1.5 m/s it parts and sways (beads up to 2.5 m/s) and is asleep again 6.9 s later within 2 cm of where it hung;
+  a 2.6 m cable over 2 m sags to 0.41 m bare and drapes over a 0.6 m crate with its middle 1.4 cm over the top; a 1.2 m
+  strap hangs to 6 mm of its length, swings 11 cm when shot and sleeps 3.9 s later; the record goes out and back in.
+- **Drawn** (Scene3D, after the joints' ropes): a curtain as a sheet of the ward curtain fabric lit on both faces, a strap as a
+  leather ribbon, a cable as a rubber tube with a steel clamp at each held end.
+- Not saved: a loaded game hangs it afresh from where the map fixes it, and it settles in a second.
+
 ### Corpses on Vectra (opt-in)
 
 `Carcass::stepVectra` (RM_RAGDOLL=vectra, or the knob `carcass.vectra 1`; RM_RAGDOLL=legacy forces the position-based step)

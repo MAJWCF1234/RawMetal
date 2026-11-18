@@ -2665,6 +2665,34 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(spec.propB<0||spec.kind==PropJointKind::Pulley){const float h=radius*2.4f;box(pts[0]-Point3{h,h,h},pts[0]+Point3{h,h,h},m_paleSteel,.95f);}
    if(spec.kind==PropJointKind::Pulley)for(int k:{1,2}){const float h=.05f;box(pts[size_t(k)]-Point3{h,.02f,h},pts[size_t(k)]+Point3{h,.02f,h},m_paleSteel,1.f);}
    movingGeometry=false;}}
+ // Curtains, straps and cables (Cloth.cpp) as they hang now: a curtain's beads as a sheet of the ward curtain fabric, lit
+ // on both faces; a strap as a leather ribbon turned across as the map hung it; a cable as a rubber tube through its beads.
+ if(game.clothCount()>0){std::vector<Point3> pts;
+  auto unitOf=[](Point3 v){const float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
+  auto crossOf=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+  for(int index=0;index<game.clothCount();++index){int cols=0,rows=0;float bead=0;if(!game.clothBeads(index,pts,cols,rows,bead)||pts.size()<2)continue;
+   const auto& spec=game.clothRun(index)->spec;Point3 lo=pts[0],hi=pts[0];
+   for(const auto& p:pts){lo={std::min(lo.x,p.x),std::min(lo.y,p.y),std::min(lo.z,p.z)};hi={std::max(hi.x,p.x),std::max(hi.y,p.y),std::max(hi.z,p.z)};}
+   {const auto span=hi-lo;if(!sphereVisible((lo+hi)*.5f,std::sqrt(span.x*span.x+span.y*span.y+span.z*span.z)*.5f+.3f))continue;}
+   movingGeometry=true;objectLighting=false;objectNormalLighting=nullptr;
+   auto quad=[&](MeshVertex a,MeshVertex b,MeshVertex c,MeshVertex d,const Texture& t){tri(a,b,c,t,1.f);tri(a,c,d,t,1.f);tri(a,c,b,t,1.f);tri(a,d,c,t,1.f);};   // both faces
+   if(spec.kind==ClothKind::Curtain){const Texture* fabric=finishMaterial(39);const Texture& t=fabric?*fabric:m_idFabricTexture;
+    const Point3 rail=spec.to-spec.at;const float width=std::sqrt(rail.x*rail.x+rail.y*rail.y+rail.z*rail.z),drop=spec.drop>0?spec.drop:1.6f;
+    auto at=[&](int col,int row){const float u=float(col)/float(cols-1)*width/1.2f,v=float(row)/float(rows-1)*drop/.8f;return MeshVertex{pts[size_t(row*cols+col)],u,v,1};};
+    for(int row=0;row+1<rows;++row)for(int col=0;col+1<cols;++col)quad(at(col,row),at(col+1,row),at(col+1,row+1),at(col,row+1),t);}
+   else if(spec.kind==ClothKind::Strap){const Point3 a0=spec.to-spec.at;Point3 across=unitOf({a0.x,a0.y,0});if(across.x==0&&across.y==0)across={1,0,0};const float half=(spec.width>0?spec.width:.05f)*.5f;
+    std::vector<Point3> side(pts.size());float along=0;
+    for(size_t k=0;k<pts.size();++k){const Point3 tng=unitOf(pts[std::min(k+1,pts.size()-1)]-pts[k?k-1:0]);side[k]=unitOf(across-tng*(across.x*tng.x+across.y*tng.y+across.z*tng.z))*half;}
+    for(size_t k=0;k+1<pts.size();++k){const auto d=pts[k+1]-pts[k];const float step=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z),v0=along/.3f,v1=(along+step)/.3f;along+=step;
+     quad({pts[k]-side[k],0,v0,1},{pts[k]+side[k],1,v0,1},{pts[k+1]+side[k+1],1,v1,1},{pts[k+1]-side[k+1],0,v1,1},m_leatherTexture);}}
+   else{const float radius=spec.radius>0?spec.radius:.012f;std::vector<Point3> across(pts.size()),up(pts.size());
+    for(size_t k=0;k<pts.size();++k){const auto t=unitOf(pts[std::min(k+1,pts.size()-1)]-pts[k?k-1:0]);auto u=k?across[k-1]-t*(across[k-1].x*t.x+across[k-1].y*t.y+across[k-1].z*t.z):crossOf(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1});
+     u=unitOf(u);if(u.x==0&&u.y==0&&u.z==0)u=unitOf(crossOf(t,std::fabs(t.z)>.9f?Point3{0,1,0}:Point3{0,0,1}));across[k]=u;up[k]=crossOf(t,u);}
+    constexpr int sides=6;auto ring=[&](size_t k,int s){const float q=float(s%sides)*kTwoPi/sides;const auto o=across[k]*std::cos(q)+up[k]*std::sin(q);return MeshVertex{pts[k]+o*radius,float(s)/sides,float(k)*.08f,1};};
+    for(size_t k=0;k+1<pts.size();++k)for(int s=0;s<sides;++s){const auto p=ring(k,s),q=ring(k,s+1),r=ring(k+1,s+1),u=ring(k+1,s);tri(p,q,r,m_rubberTexture,1.f);tri(p,r,u,m_rubberTexture,1.f);}
+    // Where it is fixed: a small steel clamp at each held end.
+    const float h=radius*2.2f;box(pts.front()-Point3{h,h,h},pts.front()+Point3{h,h,h},m_paleSteel,.95f);if(!spec.loose)box(pts.back()-Point3{h,h,h},pts.back()+Point3{h,h,h},m_paleSteel,.95f);}
+   movingGeometry=false;}}
 
  // Services belong to the map; custom worlds never inherit campaign pipework.
  // Pipes and their mounting brackets do not animate. Keep the complete

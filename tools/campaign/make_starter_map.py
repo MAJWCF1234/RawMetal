@@ -1520,6 +1520,29 @@ def physics_room(s, slot, catalogue):
         s.rec(m, 'LIGHT', i, x, y, 4.6, 0, 0, 1.1, 10, 4300)
     joints_corner(s, m, slot, body)
     phase3_corner(s, m, slot, body, catalogue)
+    cloth_corner(s, m, slot)
+
+
+def cloth_corner(s, m, slot):
+    """The cloth corner of SHOWCASE: PHYSICS, east of the joints (x 18-23, y 10-14): CLOTH records (game/Cloth.cpp).
+    A curtain hung from a steel frame across the way, to walk through (it parts and sways, then settles); a leather strap
+    hanging from the same frame's bar, to shoot (it swings); and a loose cable from a socket on the east wall, falling over
+    a crate on the floor and lying on across it."""
+    i = m['index']
+    s.format2 = True
+    # The frame: two posts and a bar 2.6 m up across the way.
+    for x in (18.0, 21.2):
+        s.struct(m, x - .04, 10.96, x + .04, 11.04, 0, 2.66, 12)
+    s.struct(m, 17.96, 10.97, 21.24, 11.03, 2.6, 2.66, 12)
+    s.rec(m, 'CLOTH', i, 'curtain', 18.15, 11.0, 2.6, 19.85, 11.0, 2.6, 'drop=2.35')
+    s.rec(m, 'CLOTH', i, 'strap', 20.6, 11.0, 2.6, 20.6, 12.0, 2.6, 'length=1.4', 'width=0.06')
+    # A cable from a socket on the east wall, its far end loose: it falls over a crate and lies on across the floor.
+    s.rec(m, 'CLOTH', i, 'cable', 22.94, 12.8, 1.5, 20.6, 12.8, 0.0, 'length=2.6', 'radius=0.014', 'loose=1')
+    s.rec(m, 'CLUTTER', i, 7, 21.95, 12.8, 0, 0, slot['wooden_crate'], .55, .55, .55, 0, 0, '', 'mass=14')
+    s.rec(m, 'LIGHT', i, 20.0, 12.0, 4.6, 0, 0, 1.1, 8, 4300)
+    # (Inside the joints' zone: no zone of its own.)
+    s.index.append({'map': i, 'section': 'SHOWCASE', 'x': 19.5, 'y': 12, 'title': 'CLOTH',
+                    'name': 'a curtain to walk through, a strap to shoot, a loose cable over a crate'})
 
 
 def phase3_corner(s, m, slot, body, catalog):
