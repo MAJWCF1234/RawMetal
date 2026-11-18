@@ -158,6 +158,7 @@ struct Manifold {
  // Prepared each step: the middle of the points (an impact's), and the rolling axes' turns and masses.
  V3 midA{},midB{},midWA{},midWB{};float midMass=0;V3 rollWA[3]{},rollWB[3]{};float rollMass[3]{0,0,0};
  bool cold=false;                     // no impulses to start from (new this step): solved more on its first substep
+ float scaleA=1,scaleB=1;             // the mass scaling of each body in this contact (Settings::shockNormal)
  bool world()const{return b<0;}
  // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster.
  static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA))<<40)^(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<20)^(std::uint64_t(partA)<<8)^std::uint64_t(partB);}
@@ -300,6 +301,10 @@ struct Settings {
  float restitutionThreshold=1.f;                           // below this approach speed nothing bounces
  float middleThreshold=1.f;                               // an approach faster than this is first met at the manifold's middle
  float sleepLinear=.06f,sleepAngular=.12f,sleepTime=.2f;  // islands under these for this long sleep
+ // Mass scaling on resting contacts: a body resting on a lighter one by a contact whose normal is within this of vertical
+ // (its cosine) meets it as if the one under were as heavy as itself, so a heavy drum on a light crate stays on it instead
+ // of pressing it into the floor over a step's few iterations through the crate's small mass. 0: off.
+ float shockNormal=.7f;
  // Contacts with nothing to warm start from (a stack just woken, or set down whole) are iterated this many
  // more times on the step's first substep, so the weight reaches the floor before anything moves under it.
  int coldIterations=8;

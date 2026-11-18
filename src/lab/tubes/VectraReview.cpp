@@ -87,5 +87,29 @@ const bool gripTube=add({.name="vectra-grip",.summary="the floor's own material 
  out.check(s[0].asleep&&s[3].asleep,"and comes to rest on both");
  return out.ok;}});
 
+// ---- 4. A heavy body on a light one ----
+struct Stack {float sink=0,lift=0,bounce=0,hop=0,drift=0,floorSink=0;bool asleep=false;};
+Stack drumOnCrate(float shock,float drop){
+ World w;w.space.settings.shockNormal=shock;
+ const int crate=w.add(PartKind::Box,{0,0,.2f},{.2f,.2f,.2f},1,{},{.62f,.45f,.3f,.002f});
+ const int drum=w.add(PartKind::Cylinder,{0,0,.4f+.44f+drop},{.29f,.29f,.44f},100,{},{.45f,.38f,.32f,.001f});
+ Stack r;const float dt=1.f/120;bool landed=drop<=0;
+ for(int i=0;i<int(3/dt);++i){w.space.step(dt);const Body& c=w.space.bodies[size_t(crate)];const Body& d=w.space.bodies[size_t(drum)];
+  const float gap=(d.x.z-.44f)-(c.x.z+.2f);
+  if(!landed&&gap<.002f)landed=true;
+  if(landed){r.sink=std::max(r.sink,-gap);if(i*dt>.5f)r.lift=std::max(r.lift,gap);r.bounce=std::max(r.bounce,d.v.z);r.hop=std::max(r.hop,gap);}
+  if(std::getenv("RM_STACK_TRACE")&&drop>0&&i<60){static std::ofstream tr("vectra-stack-trace.txt");tr<<(shock>0?"shock ":"plain ")<<i<<" gap "<<f3(gap*1000,2)<<" drum vz "<<f3(d.v.z,3)<<" crate z "<<f3(c.x.z,4)<<" vz "<<f3(c.v.z,3)<<"\n";}
+  r.floorSink=std::max(r.floorSink,w.into(crate,0));r.drift=std::max(r.drift,std::hypot(d.x.x,d.x.y));}
+ r.asleep=w.space.bodies[size_t(drum)].sleeping;return r;}
+const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg crate stays put (the shock pass: Settings::shockNormal), set down or dropped on it",.standalone=[]{
+ Out out("vectra-stack.txt");Stack s[2][2];
+ for(int shock=0;shock<2;++shock)for(int drop=0;drop<2;++drop){s[shock][drop]=drumOnCrate(shock?.7f:0.f,drop?.1f:0.f);const auto& r=s[shock][drop];
+  out.file<<(shock?"shock pass":"no shock pass")<<(drop?", dropped 10 cm":", set down")<<": sinks into the crate "<<f3(r.sink*1000,2)<<" mm, lifts off it after "<<f3(r.lift*1000,2)<<" mm, rises at most "<<f3(r.bounce,3)<<" m/s, hops "<<f3(r.hop*1000,1)<<" mm off it, crate into the floor "<<f3(r.floorSink*1000,2)<<" mm, drifts "<<f3(r.drift*1000,2)<<" mm"<<(r.asleep?", asleep":", awake")<<"\n";}
+ for(int drop=0;drop<2;++drop){const auto& r=s[1][drop];const std::string how=drop?" (dropped 10 cm)":" (set down)";
+  out.check(r.sink<.004f&&r.floorSink<.004f,"the drum does not squash the crate: under 4 mm into it or the floor"+how);
+  // (Dropped, it may hop as its restitution says, a few millimetres: never spring off or walk away.)
+  out.check(r.lift<.002f&&r.hop<(drop?.01f:.002f)&&r.drift<(drop?.01f:.005f)&&r.asleep,"and stays put on it: no spring off (a hop under "+std::string(drop?"1 cm":"2 mm")+"), no drift, asleep"+how);}
+ return out.ok;}});
+
 }
 }

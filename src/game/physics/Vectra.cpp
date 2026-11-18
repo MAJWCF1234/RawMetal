@@ -299,10 +299,22 @@ void Space::collide(float dt){
 }
 void Space::prepare(float h){
  (void)h;
+ // The bodies a joint holds: their contacts keep their true masses (a bridge's planks under a crate share its weight with
+ // their pins by them; scaled, the joints and the contacts disagreed and the bridge never came to rest).
+ std::vector<char> jointed;if(settings.shockNormal>0&&!constraints.empty()){jointed.assign(bodies.size(),0);for(auto*c:constraints){if(auto*j=c->joint();j&&j->broken)continue;for(int k:{c->bodyA(),c->bodyB()})if(k>=0&&k<int(bodies.size()))jointed[size_t(k)]=1;}}
  // Warm start: the cache is sorted by key.
  for(auto&m:manifolds){
   const Body& A=bodies[size_t(m.a)];const Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;
-  const float mA=A.movable()?A.invMass:0,mB=B&&B->movable()?B->invMass:0;const M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B&&B->movable()?B->invInertia:M3::zero();
+  float mA=A.movable()?A.invMass:0,mB=B&&B->movable()?B->invMass:0;M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B&&B->movable()?B->invInertia:M3::zero();
+  // Mass scaling (Settings::shockNormal): a body resting on a lighter one by a contact near vertical meets it as if the
+  // one under were as heavy as itself. Shared by their true masses, a 100 kg drum's weight barely reached the floor through
+  // a 1 kg crate in a step's few iterations: the crate gave, the drum sank 5 mm into it and the crate as far into the
+  // floor (22 mm and 13 mm when the drum was dropped 10 cm on it). The scale is the contact's own, used wherever its
+  // impulses are (prepare, warm start, solve, restitution), so what it stores stays its own to warm start from.
+  m.scaleA=m.scaleB=1;
+  if(B&&settings.shockNormal>0&&std::fabs(m.normal.z)>=settings.shockNormal&&A.movable()&&B->movable()&&A.softHertz<=0&&B->softHertz<=0&&m.surface.hertz<=0){
+   const bool aUnder=m.normal.z>0;const float under=aUnder?A.invMass:B->invMass,over=aUnder?B->invMass:A.invMass;
+   if(under>over&&under>0&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
   // Against the world: the surface's own material, where the caller gave one (a puddle is slick, carpet grips).
   if(!B&&m.surface.gripped())m.material=Material::mix(A.material,m.surface.material());
   basis(m.normal,m.t1,m.t2);
@@ -330,8 +342,8 @@ void Space::prepare(float h){
 void Space::warmStart(){
  for(auto&m:manifolds){Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
   for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 P=m.normal*c.normalImpulse+m.t1*c.tangentImpulse[0]+m.t2*c.tangentImpulse[1];
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-(c.wnA*c.normalImpulse+c.wtA[0]*c.tangentImpulse[0]+c.wtA[1]*c.tangentImpulse[1]);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+(c.wnB*c.normalImpulse+c.wtB[0]*c.tangentImpulse[0]+c.wtB[1]*c.tangentImpulse[1]);}}
+   if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-(c.wnA*c.normalImpulse+c.wtA[0]*c.tangentImpulse[0]+c.wtA[1]*c.tangentImpulse[1]);}
+   if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+(c.wnB*c.normalImpulse+c.wtB[0]*c.tangentImpulse[0]+c.wtB[1]*c.tangentImpulse[1]);}}
   // (Rolling impulses are stored along the contact's own axes.)
   if(ma)A.w=A.w-(m.rollWA[0]*m.rollingImpulse[0]+m.rollWA[1]*m.rollingImpulse[1]+m.rollWA[2]*m.rollingImpulse[2]);
   if(mb)B->w=B->w+(m.rollWB[0]*m.rollingImpulse[0]+m.rollWB[1]*m.rollingImpulse[1]+m.rollWB[2]*m.rollingImpulse[2]);}
@@ -357,7 +369,7 @@ void Space::solve(float h,bool useBias,bool coldOnly){
      const V3 d=(dpB-dpA)+(B?dqB.rotate(c.rB)-dqA.rotate(c.rA):V3{}-dqA.rotate(c.rA))-((B?c.rB:V3{})-c.rA);gap=std::min(gap,dot(d,m.normal)+c.separation);}
     gap=std::max(0.f,gap)*inv;}
    if(vn<-settings.middleThreshold&&vn+gap<0){const float lambda=-(vn+gap)*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
-    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+m.midWB*lambda;}
+    if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+m.midWB*lambda;}
     for(int j=0;j<m.count;++j){auto&c=m.points[size_t(j)];c.normalImpulse+=lambda/float(m.count);c.maxNormalImpulse=std::max(c.maxNormalImpulse,lambda/float(m.count));}}}
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
    // The gap now, from how far each body has moved and turned since the step began.
@@ -371,16 +383,16 @@ void Space::solve(float h,bool useBias,bool coldOnly){
    float impulse=-c.normalMass*massScale*(vn+bias)-impulseScale*c.normalImpulse;
    const float next=std::max(c.normalImpulse+impulse,0.f);impulse=next-c.normalImpulse;c.normalImpulse=next;c.maxNormalImpulse=std::max(c.maxNormalImpulse,impulse);total+=next;
    const V3 P=m.normal*impulse;
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-c.wnA*impulse;}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+c.wnB*impulse;}}
+   if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-c.wnA*impulse;}
+   if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+c.wnB*impulse;}}
   // Friction: a cone on each point's two tangent impulses, by this step's normal impulse.
   const float mu=m.material.dynamicFriction;
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));
    const float o1=c.tangentImpulse[0],o2=c.tangentImpulse[1];float n1=o1-c.tangentMass[0]*dot(dv,m.t1),n2=o2-c.tangentMass[1]*dot(dv,m.t2);
    const float limit=mu*c.normalImpulse,mag=std::sqrt(n1*n1+n2*n2);if(mag>limit&&mag>0){n1*=limit/mag;n2*=limit/mag;}
    c.tangentImpulse[0]=n1;c.tangentImpulse[1]=n2;const float d1=n1-o1,d2=n2-o2;const V3 P=m.t1*d1+m.t2*d2;
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-(c.wtA[0]*d1+c.wtA[1]*d2);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+(c.wtB[0]*d1+c.wtB[1]*d2);}}
+   if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-(c.wtA[0]*d1+c.wtA[1]*d2);}
+   if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+(c.wtB[0]*d1+c.wtB[1]*d2);}}
   // Rolling and twisting resistance: an angular friction on the relative spin, held to rolling * load.
   // (Run with no load too: a warm-started impulse is then taken back out, not left to spin a body in the air.)
   if(m.material.rolling>0||m.rollingImpulse[0]!=0||m.rollingImpulse[1]!=0||m.rollingImpulse[2]!=0){
@@ -410,10 +422,10 @@ void Space::restitution(){
   if(!struck)continue;
   if(weight<=0)continue;approach/=weight;
   const V3 rA=armA*(1/weight),rB=armB*(1/weight);const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
-  const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);if(k<=0)continue;
+  const float k=(ma?(A.invMass+dot(cA,A.invInertia*cA))*m.scaleA:0.f)+(mb?(B->invMass+dot(cB,B->invInertia*cB))*m.scaleB:0.f);if(k<=0)continue;
   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
   const float impulse=std::max(0.f,-(vn+m.material.restitution*approach)/k);if(impulse<=0)continue;
-  const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(rA,P);}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(rB,P);}
+  const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-A.invInertia*cross(rA,P)*m.scaleA;}if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+B->invInertia*cross(rB,P)*m.scaleB;}
   for(int k2=0;k2<m.count;++k2){auto&c=m.points[size_t(k2)];c.normalImpulse+=impulse*(c.maxNormalImpulse/weight);c.maxNormalImpulse=std::max(c.maxNormalImpulse,c.normalImpulse);}}
 }
 void Space::storeImpulses(){
