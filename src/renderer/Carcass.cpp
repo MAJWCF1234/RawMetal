@@ -769,6 +769,30 @@ bool Carcass::test(){
  report<<(pass?"PASS":"FAIL")<<'\n';return pass;
 }
 
+// ---- A body's pose for the save (physics layout 4) ----
+Carcass::Pose Carcass::pose()const{
+ Pose p;p.age=m_age;p.asleep=m_asleep;p.shoved=m_shoved;p.cut.reserve(m_joints.size());for(const auto&j:m_joints)p.cut.push_back(j.cut?1:0);
+ p.sections.reserve(m_sections.size());
+ for(const auto&s:m_sections)p.sections.push_back({s.centre.x,s.centre.y,s.centre.z,s.q[0],s.q[1],s.q[2],s.q[3],s.com.x,s.com.y,s.com.z,s.vel.x,s.vel.y,s.vel.z,s.spin.x,s.spin.y,s.spin.z});
+ return p;}
+bool Carcass::restorePose(const Pose& p){
+ if(!built()||p.cut.size()!=m_joints.size()||p.sections.size()!=m_sections.size()||!std::isfinite(p.age)||p.age<0)return false;
+ for(const auto&a:p.sections){for(float v:a)if(!std::isfinite(v)||std::fabs(v)>1e6f)return false;const float n=a[3]*a[3]+a[4]*a[4]+a[5]*a[5]+a[6]*a[6];if(n<.81f||n>1.21f)return false;}
+ for(size_t i=0;i<m_joints.size();++i)if(m_joints[i].cut&&!p.cut[i])return false;   // a cut is never undone
+ // The joints it lost, as a cut leaves them (the pin out of both sections), and the pieces and the caps again.
+ bool cut=false;
+ for(size_t i=0;i<m_joints.size();++i){auto&j=m_joints[i];if(j.cut||!p.cut[i])continue;j.cut=true;cut=true;auto&pin=m_particles[size_t(j.particle)];pin.region=-2;
+  for(int s:{j.a,j.b}){auto&section=m_sections[size_t(s)];for(size_t k=0;k<section.members.size();++k)if(section.members[k]==j.particle){section.members.erase(section.members.begin()+std::ptrdiff_t(k));section.weights.erase(section.weights.begin()+std::ptrdiff_t(k));break;}}}
+ if(cut){fit();regroup();}
+ if(!m_bodies)bodies();
+ for(size_t k=0;k<m_sections.size();++k){auto&s=m_sections[k];const auto&a=p.sections[k];
+  s.centre={a[0],a[1],a[2]};s.q[0]=a[3];s.q[1]=a[4];s.q[2]=a[5];s.q[3]=a[6];s.com={a[7],a[8],a[9]};s.vel={a[10],a[11],a[12]};s.spin={a[13],a[14],a[15]};axesOf(s.q,s.axes);}
+ for(auto&pt:m_particles){if(pt.region<0)continue;const auto&s=m_sections[size_t(pt.region)];pt.x=carry(s,pt.rest);pt.previous=pt.hull?pt.x:pt.x-(s.vel+cross3(s.spin,pt.x-s.com))*Tick;pt.probe={1e9f,1e9f,1e9f};}
+ for(auto&j:m_joints){if(j.cut)continue;auto&pt=m_particles[size_t(j.particle)];pt.x=(carry(m_sections[size_t(j.a)],j.rest)+carry(m_sections[size_t(j.b)],j.rest))*.5f;pt.previous=pt.x;}
+ for(auto&s:m_sections)if(s.limited&&s.parent>=0&&!s.members.empty()&&!m_sections[size_t(s.parent)].members.empty())relative(s,s.last);
+ m_age=p.age;m_asleep=p.asleep;m_shoved=p.shoved;m_woke=m_age;m_quiet=0;m_ease.clear();m_glide=false;m_lastFeed=false;m_settling=0;m_vectra.reset();
+ measure();m_dirty=true;return true;}
+
 // ---- The body on Vectra (the default; RM_RAGDOLL=legacy, or carcass.vectra 0, for the position-based step) ----
 // Each section is a Vectra body that lasts as long as the body does (its points' mass and inertia), each joint a Vectra
 // ball at its pivot with the rig's limits on the swing-twist split the rig measures (Joint::swingLimited: a bend between
@@ -826,7 +850,7 @@ void Carcass::stepVectra(const World& world){
   // The skin each section meets the world by: its vertices farthest along 96 ways spread over the sphere.
   {vs.skin.assign(size_t(R),{});const int V=int(m_rest.size());constexpr int Ways=96;std::vector<Point3> ways;ways.reserve(Ways);
    for(int i=0;i<Ways;++i){const float z=1-2*(float(i)+.5f)/float(Ways),r=std::sqrt(std::max(0.f,1-z*z)),a=float(i)*2.39996323f;ways.push_back({r*std::cos(a),r*std::sin(a),z});}
-   std::vector<std::vector<int>> mine(size_t(R));for(int v=0;v<V;++v){const int h=m_binds[size_t(v)].home;if(h>=0&&h<R&&m_binds[size_t(v)].blend<=0)mine[size_t(h)].push_back(v);}
+   std::vector<std::vector<int>> mine(static_cast<size_t>(R));for(int v=0;v<V;++v){const int h=m_binds[size_t(v)].home;if(h>=0&&h<R)mine[size_t(h)].push_back(v);}
    for(int k=0;k<R;++k){std::vector<int> picked;for(const auto&way:ways){int best=-1;float most=-1e30f;for(int v:mine[size_t(k)]){const float d=dot3(m_rest[size_t(v)],way);if(d>most){most=d;best=v;}}
      if(best>=0&&std::find(picked.begin(),picked.end(),best)==picked.end())picked.push_back(best);}
     std::sort(picked.begin(),picked.end());for(int v:picked){VectraState::SkinPoint sp;sp.rest=m_rest[size_t(v)];sp.safe=sp.rest;vs.skin[size_t(k)].push_back(sp);}}}}
@@ -864,7 +888,10 @@ void Carcass::stepVectra(const World& world){
  space.bodies.resize(size_t(sections));vs.solidShapes.clear();
  if(!(switchedOff()&16))for(const auto&o:m_solids){const float reach=m_radius+span(o.half)+.3f;const Point3 d=o.centre-m_centre;if(dot3(d,d)>reach*reach||o.half.x<=0)continue;
   vs.solidShapes.emplace_back();Shape& sh=vs.solidShapes.back();sh.add(PartKind::Box,{},o.half);sh.finish();Body body;body.shape=&sh;body.x=o.centre;body.q=Quat::axisAngle({0,0,1},o.yaw);
-  body.kinematic=true;body.invMass=0;body.v=o.velocity*o.shove;body.material={.8f,.7f,0,.01f};body.id=1000+int(space.bodies.size());body.user=-1;space.bodies.push_back(body);}
+  body.kinematic=true;body.invMass=0;body.v=o.velocity*o.shove;
+  // One going through it (a thrown crate) is a spring, not a wall: it shoves the body by its share, never presses one part into another.
+  if(dot3(o.velocity,o.velocity)>.15f*.15f)body.softHertz=tune("carcass.vshoveHertz",12.f);
+  body.material={.8f,.7f,0,.01f};body.id=1000+int(space.bodies.size());body.user=-1;space.bodies.push_back(body);}
  // ---- What meets what. Joined sections do not meet; the others meet by their skins (pairContacts).
  const auto& paired=vs.paired;
  space.filter=[&](const Space& sp,int a,int b){const int ua=sp.bodies[size_t(a)].user,ub=sp.bodies[size_t(b)].user;if(ua<0||ub<0)return true;if(switchedOff()&4)return false;return !paired[size_t(ua)*size_t(R)+size_t(ub)];};
@@ -920,7 +947,9 @@ void Carcass::stepVectra(const World& world){
  for(auto&j:m_joints){if(j.cut)continue;auto&p=m_particles[size_t(j.particle)];p.x=(carry(m_sections[size_t(j.a)],j.rest)+carry(m_sections[size_t(j.b)],j.rest))*.5f;p.previous=p.x;}
  for(auto&s:m_sections)if(s.limited&&s.parent>=0&&live(s)&&live(m_sections[size_t(s.parent)]))relative(s,s.last);
  if(std::getenv("RM_VECTRA_DEBUG")){static std::ofstream log("vectra-debug.txt");log<<"age "<<m_age<<" gaps(mm):";for(const auto&j:m_joints){if(j.cut)continue;log<<' '<<span(carry(m_sections[size_t(j.a)],j.rest)-carry(m_sections[size_t(j.b)],j.rest))*1000;}
-  log<<" manifolds "<<space.manifolds.size()<<'\n';log.flush();}
+  log<<" manifolds "<<space.manifolds.size()<<'\n';for(const auto&J:vs.joints){if(!J.swingLimited)continue;const V3 f=J.swingTwist(space)*57.2958f;const float over=std::max({f.x-J.swingUpper.x*57.2958f,J.swingLower.x*57.2958f-f.x,f.y-J.swingUpper.y*57.2958f,J.swingLower.y*57.2958f-f.y,f.z-J.twistUpper*57.2958f,J.twistLower*57.2958f-f.z,0.f});
+   if(over>.5f){log<<"  joint "<<J.key<<" over "<<over<<" bend "<<f.x<<" side "<<f.y<<" twist "<<f.z<<" sleepingA "<<space.bodies[size_t(J.a)].sleeping<<" B "<<space.bodies[size_t(J.b)].sleeping<<" proj "<<J.positionCorrection<<" iters "<<space.settings.projectIterations;
+    vectra::Joint copy=J;Space probe=space;copy.project(probe);const V3 g=copy.swingTwist(probe)*57.2958f;log<<" after "<<g.x<<' '<<g.y<<' '<<g.z<<'\n';}}log.flush();}
  measure();m_age+=Tick;m_dirty=true;m_motion=motion;
  // Asleep when Vectra's island is (every section slow for its sleep time), or past the time a body may take.
  bool asleep=sections>0;for(int k=0;k<sections;++k)asleep&=space.bodies[size_t(k)].sleeping;

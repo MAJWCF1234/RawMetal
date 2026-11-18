@@ -388,21 +388,36 @@ std::vector<SaveSection> Game::builtInSaveSections(){
     for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});ChainPose c;if(version>=2&&hooks.captureChain&&hooks.captureChain(props[i],c))poses.push_back({int(i),c});}
     if(!bodies.empty())captured.push_back({level,std::move(bodies)});if(!poses.empty())chains.push_back({level,std::move(poses)});}
    bool joints=false;for(int level=0;level<g.chunkCount();++level)joints|=!g.m_chunks[size_t(level)].world.jointStates().empty();
-   if(captured.empty()&&chains.empty()&&!joints)return;
+   if(captured.empty()&&chains.empty()&&!joints&&!(version>=4&&!g.m_corpsePoses.empty()))return;
    {int count=int(captured.size());a(count);for(auto& [level,bodies]:captured){int l=level,n=int(bodies.size());a(l,n);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}
    if(version>=2){int count=int(chains.size());a(count);for(auto& [level,poses]:chains){int l=level,n=int(poses.size());a(l,n);for(auto& [index,c]:poses){int i=index;a(i);chain(c);}}}}
   // Layout 3: the joints between props (World.h PropJointState), after the chains and only when a map has
   // joints, per chunk that has any, in the map's JOINT order: snapped, its motor on, a winch's reeled length
   // (-1 as authored), the motor's target and speed. A save from a map whose joints have since changed in
   // number keeps the map's.
+  // Layout 4: the dead bodies' poses (SaveSections.h CorpsePose), after the joints (a joint chunk count of 0 when no
+  // map has joints): their count, then each body's map, slot, signature, a creature's or not, its clock, asleep,
+  // shoved, its joints' cuts (count, then each a flag) and its sections (count, then 16 numbers each). Written only
+  // when there are any; a section of layout 1-3 loads with every body made again by its death, as before.
+  auto corpse=[&](CorpsePose& c){a(c.level,c.slot,c.signature,c.creature,c.age,c.asleep,c.shoved);int joints=int(c.cut.size());a(joints);
+   if constexpr(std::decay_t<decltype(a)>::reading){if(c.level<0||c.level>=t_sectionChunks||joints<0||joints>256||!(c.age>=0&&c.age<1e7f))throw std::runtime_error("invalid body");c.cut.resize(size_t(joints));}
+   for(auto&k:c.cut){bool cutThere=k!=0;a(cutThere);k=cutThere?1:0;}
+   int sections=int(c.sections.size());a(sections);
+   if constexpr(std::decay_t<decltype(a)>::reading){if(sections<1||sections>64)throw std::runtime_error("invalid body section count");c.sections.resize(size_t(sections));}
+   for(auto&part:c.sections)for(auto&v:part)a(v);
+   if constexpr(std::decay_t<decltype(a)>::reading)for(const auto&part:c.sections){const float n=part[3]*part[3]+part[4]*part[4]+part[5]*part[5]+part[6]*part[6];if(!(n>.81f&&n<1.21f))throw std::runtime_error("invalid body section turn");}};
   if constexpr(std::decay_t<decltype(a)>::reading){if(version<3||!a.left())return;int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid joint chunk count");int last=-1;
    for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks||count<1||count>4096)throw std::runtime_error("invalid joint chunk");last=level;
     std::vector<PropJointState> read(static_cast<size_t>(count));for(auto& j:read){a(j.broken,j.motorOn,j.length,j.target,j.speed);
      if(!std::isfinite(j.length)||j.length<-1||j.length>100||!std::isfinite(j.target)||std::fabs(j.target)>1000||!std::isfinite(j.speed)||std::fabs(j.speed)>1000)throw std::runtime_error("map "+std::to_string(level)+": invalid joint");}
-    auto& states=g.m_chunks[size_t(level)].world.m_jointStates;if(states.size()==read.size())states=std::move(read);}}
+    auto& states=g.m_chunks[size_t(level)].world.m_jointStates;if(states.size()==read.size())states=std::move(read);}
+   if(version<4||!a.left())return;int bodies=0;a(bodies);if(bodies<0||bodies>4096)throw std::runtime_error("invalid body count");
+   for(int i=0;i<bodies;++i){CorpsePose c;corpse(c);c.loaded=true;const auto key=std::make_tuple(c.creature,int(c.level),c.slot);if(!g.m_corpsePoses.emplace(key,std::move(c)).second)throw std::runtime_error("body saved twice");}}
   else{std::vector<int> levels;for(int level=0;level<g.chunkCount();++level)if(!g.m_chunks[size_t(level)].world.jointStates().empty())levels.push_back(level);
-   if(levels.empty())return;int chunks=int(levels.size());a(chunks);for(int level:levels){auto states=g.m_chunks[size_t(level)].world.jointStates();int l=level,count=int(states.size());a(l,count);
-    for(auto& j:states){bool broken=j.broken,on=j.motorOn;float length=std::clamp(j.length,-1.f,100.f),target=j.target,speed=j.speed;a(broken,on,length,target,speed);}}}},3);
+   std::vector<CorpsePose> bodies;if(version>=4)for(const auto& [key,c]:g.m_corpsePoses)if(c.level>=0&&c.level<g.chunkCount()&&!c.sections.empty())bodies.push_back(c);
+   if(levels.empty()&&bodies.empty())return;int chunks=int(levels.size());a(chunks);for(int level:levels){auto states=g.m_chunks[size_t(level)].world.jointStates();int l=level,count=int(states.size());a(l,count);
+    for(auto& j:states){bool broken=j.broken,on=j.motorOn;float length=std::clamp(j.length,-1.f,100.f),target=j.target,speed=j.speed;a(broken,on,length,target,speed);}}
+   if(!bodies.empty()){int n=int(bodies.size());a(n);for(auto&c:bodies)corpse(c);}}},4);
  return list;
 }
 // ---- The stores the "entities" and "variables" sections keep ----

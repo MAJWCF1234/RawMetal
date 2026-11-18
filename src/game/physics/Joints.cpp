@@ -40,7 +40,7 @@ V3 splitOf(Quat r){if(r.w<0)r={-r.w,-r.x,-r.y,-r.z};const float l=std::sqrt(r.w*
 struct Split {V3 f{};V3 axis[3]{};};
 Split splitRows(const Pose& p){Split out;const Quat r=p.qA.conj()*p.qB;out.f=splitOf(r);constexpr float d=2e-3f;V3 col[3];
  for(int k=0;k<3;++k){const V3 e{k==0?d*.5f:0.f,k==1?d*.5f:0.f,k==2?d*.5f:0.f};const V3 g=splitOf(Quat{1,e.x,e.y,e.z}.normalized()*r),h=splitOf(Quat{1,-e.x,-e.y,-e.z}.normalized()*r);
-  V3 df=(g-h)*(1/d);if(std::fabs(g.z-h.z)>kPi)df.z=std::remainder(g.z-h.z,2*kPi)*(1/d);col[k]=df;}
+  V3 df=(g-h)*(.5f/d);if(std::fabs(g.z-h.z)>kPi)df.z=std::remainder(g.z-h.z,2*kPi)*(.5f/d);col[k]=df;}
  for(int i=0;i<3;++i)out.axis[i]=p.qA.rotate(V3{comp(col[0],i),comp(col[1],i),comp(col[2],i)});
  return out;}
 Quat turned(const Quat& q,V3 by){const float a=len(by);return a>1e-9f?(Quat::axisAngle(by*(1/a),a)*q).normalized():q;}
@@ -209,11 +209,23 @@ void Joint::finish(Space& s,float h){
 void Joint::project(Space& s){if(!positionCorrection||broken||kind!=JointKind::Ball)return;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);const bool ma=A.movable(),mb=b>=0&&B.movable();if(!ma&&!mb)return;
  const float mA=ma?A.invMass:0,mB=mb?B.invMass:0;const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B.invInertia:M3::zero();
  if(swingLimited){constexpr float Slack=.002f;
-  for(int i=0;i<3;++i){if(i==2&&!twistLimited)continue;const Split sp=splitRows(poseOf(*this,A,B,b<0));const float value=comp(sp.f,i);
-   const float lo=i==0?swingLower.x:i==1?swingLower.y:twistLower,hi=i==0?swingUpper.x:i==1?swingUpper.y:twistUpper;
-   const float over=value<lo-Slack?value-(lo-Slack):value>hi+Slack?value-(hi+Slack):0.f;if(over==0)continue;
-   const V3 axis=sp.axis[i];const float k=dot(axis,(iA+iB)*axis);if(k<=1e-12f)continue;const V3 L=axis*(-over/k);
-   if(ma)A.q=turned(A.q,iA*L*-1.f);if(mb)B.q=turned(B.q,iB*L);}}
+  // Each body turned about the joint's pivot, not its own middle, so the anchors stay together as the limit is put back
+  // (turned about their middles, the anchors' own correction would turn them half back). Its share by its inertia about
+  // the pivot.
+  auto aboutPivot=[](const Body& X,bool movable,V3 r){if(!movable||X.invMass<=0)return M3::zero();M3 P=X.invInertia.inverse();const float m=1/X.invMass,rr=dot(r,r);
+   for(int i=0;i<3;++i)for(int j=0;j<3;++j)P.m[i][j]+=m*((i==j?rr:0.f)-comp(r,i)*comp(r,j));return P.inverse();};
+  auto turnAbout=[](Body& X,V3 by,V3 pivot){const float an=len(by);if(an<1e-9f)return;const Quat t=Quat::axisAngle(by*(1/an),an);X.q=(t*X.q).normalized();X.x=pivot+t.rotate(X.x-pivot);};
+  // The parts past their limits put back together (their rows couple at a wide swing: one by one they would undo each other).
+  for(int pass=0;pass<2;++pass){const Pose p=poseOf(*this,A,B,b<0);const Split sp=splitRows(p);
+   const float lo[3]{swingLower.x,swingLower.y,twistLower},hi[3]{swingUpper.x,swingUpper.y,twistUpper};float over[3]{0,0,0};bool any=false;
+   for(int i=0;i<3;++i){if(i==2&&!twistLimited)continue;const float v=comp(sp.f,i);over[i]=v<lo[i]-Slack?v-(lo[i]-Slack):v>hi[i]+Slack?v-(hi[i]+Slack):0.f;any|=over[i]!=0;}
+   if(!any)break;
+   const V3 pivot=(p.pA+p.pB)*.5f;const M3 pA=aboutPivot(A,ma,pivot-A.x),pB=b>=0?aboutPivot(B,mb,pivot-B.x):M3::zero();
+   const M3 W=pA+pB;M3 K;float trace=0;for(int r=0;r<3;++r)for(int c=0;c<3;++c){K.m[r][c]=over[r]!=0&&over[c]!=0?dot(sp.axis[r],W*sp.axis[c]):(r==c?1.f:0.f);if(r==c)trace+=K.m[r][c];}
+   for(int r=0;r<3;++r)K.m[r][r]+=1e-6f*trace;
+   const V3 lam=K.inverse()*V3{-over[0],-over[1],-over[2]};
+   const V3 L=sp.axis[0]*(over[0]!=0?lam.x:0.f)+sp.axis[1]*(over[1]!=0?lam.y:0.f)+sp.axis[2]*(over[2]!=0?lam.z:0.f);
+   if(ma)turnAbout(A,pA*L*-1.f,pivot);if(mb)turnAbout(B,pB*L,pivot);}}
  const Pose p=poseOf(*this,A,B,b<0);const V3 C=p.pB-p.pA;if(lenSq(C)<1e-8f)return;
  const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const M3 K=M3::diagonal({mA+mB,mA+mB,mA+mB})+sa*iA*sa.transposed()+sb*iB*sb.transposed();const V3 P=K.inverse()*neg(C);
  if(ma){A.x=A.x-P*mA;A.q=turned(A.q,iA*cross(p.rA,P)*-1.f);}

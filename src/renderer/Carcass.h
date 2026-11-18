@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <array>
 #include "Mesh.h"
 #include "../world/World.h"
 namespace retro {
@@ -71,6 +72,13 @@ public:
  int sectionOf(int triangle)const{return triangle>=0&&size_t(triangle)<m_owner.size()?m_owner[size_t(triangle)]:-1;}
  int partOf(int section)const{return section>=0&&size_t(section)<m_sections.size()?m_sections[size_t(section)].part:-1;}
  static bool test();
+ // A body as the physics save keeps it (Saves.cpp, physics layout 4; SaveSections.h CorpsePose): its clock, asleep or
+ // not, shoved or not, each joint cut or not, and each section's middle (3), turn (w x y z), centre of mass (3),
+ // velocity (3) and spin (3). restorePose puts it back on a body built the same way (the same death), bit for bit;
+ // false, and nothing changed, when it does not fit this body.
+ struct Pose {float age=0;bool asleep=false,shoved=false;std::vector<std::uint8_t> cut;std::vector<std::array<float,16>> sections;};
+ Pose pose()const;
+ bool restorePose(const Pose& pose);
  // Corpses on Vectra (the default) or on the position-based step (RM_RAGDOLL=legacy, or the knob carcass.vectra 0).
  static bool vectraBodies();
 private:

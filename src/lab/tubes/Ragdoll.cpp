@@ -200,7 +200,7 @@ const bool fall=add({
     for(const auto& f:tri)for(const auto& v:f.v){const float dx=v.p.x-p.pos.x,dy=v.p.y-p.pos.y,lx=dx*cy+dy*sy,ly=-dx*sy+dy*cy;if(std::fabs(lx)<sz[0]*.5f-.015f&&std::fabs(ly)<sz[1]*.5f-.015f&&v.p.z>p.z+.015f&&v.p.z<p.z+h-.015f)++inProps;}}
    if(c->asleep())w.insideProps=std::max(w.insideProps,inProps);}
   float core=0,all=0;shapeError(w,tri,core,all);w.shapeCore=std::max(w.shapeCore,core);w.shapeAll=std::max(w.shapeAll,all);
-  if(std::getenv("RM_RAGDOLL_DEBUG")){static std::ofstream log("ragdoll-debug.txt");log<<"frame "<<s.frame<<" age "<<c->age()<<" core "<<core<<" all "<<all<<" asleep "<<c->asleep()<<" motion "<<c->motion()<<" groups:";
+  if(std::getenv("RM_RAGDOLL_DEBUG")){static std::ofstream log("ragdoll-debug.txt");log<<"frame "<<s.frame<<" age "<<c->age()<<" overlap "<<c->overlap()<<" core "<<core<<" all "<<all<<" asleep "<<c->asleep()<<" motion "<<c->motion()<<" groups:";
    {std::vector<float> each;float a,b;shapeError(w,tri,a,b,&each);for(size_t g=0;g<each.size();++g)log<<' '<<(w.human?humanoid::name(int(g)):"s")<<'='<<fixed(each[g]*100,1);log<<'\n';}
    #ifdef RAWMETAL_CARCASS_RIG
    {static std::map<const Scene*,Watch> bySection;auto& v=bySection[&s];if(!v.ready){std::vector<int> g;for(size_t t=0;t<tri.size();++t)g.push_back(std::max(0,c->sectionOf(int(t))));prepare(v,w.rest,g);}

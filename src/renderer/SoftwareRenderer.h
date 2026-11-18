@@ -275,7 +275,8 @@ private:
     Texture m_blood;
     // What a creature leaves: its body where it fell (Carcass), the wounds on it, and the blood its
     // stumps throw. Kept by level and slot, rebuilt from the creature's own death clock when asked.
-    struct Remains {std::uint64_t signature=0;float seen=0,rayClock=0;int serial=-1,woundsSeen=0;Vec2 at{};Point3 pool{};bool pooled=false;
+    // `published`: the clock of the pose last put in the game's book (Game::corpsePoses) for the save.
+    struct Remains {std::uint64_t signature=0;float seen=0,rayClock=0,published=-1;int serial=-1,woundsSeen=0;Vec2 at{};Point3 pool{};bool pooled=false,publishedAsleep=false;
      // A wound: the face it is on and where on it, which side shows, and the faces round it that carry its mark.
      struct Wound {int face=0;float side=1,size=.06f,b1=.33f,b2=.33f;std::vector<int> patch;};std::vector<Wound> wounds;Carcass carcass;};
     std::unordered_map<std::uint64_t,Remains> m_remains;float m_remainsClock=0;
@@ -283,7 +284,11 @@ private:
     // over and comes to rest, and the face of the posed mesh each of its faces is. Kept by actor emit
     // slot; `base` is the session time he died at, for a fall that is still being watched.
     // `rayClock`: the newest round already put into him (the killing round lands on the part it hit).
-    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0;bool live=false;std::vector<int> faces;Carcass carcass;};
+    // `published`: the clock of the pose last put in the game's book (Game::corpsePoses) for the save.
+    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0,published=-1;bool live=false,publishedAsleep=false;std::vector<int> faces;Carcass carcass;};
+    // A body's pose into the game's book (what a save keeps), when it has moved since; and back out of it after a load.
+    static void publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep);
+    static bool restoreSaved(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,Carcass& carcass);
     std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
     Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);
     // What a body on `level` near `centre` can lie on or be shoved by that the world does not hold: the

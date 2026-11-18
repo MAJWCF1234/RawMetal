@@ -532,6 +532,13 @@ void SoftwareRenderer::corpseSolids(const Game& game,int level,Point3 centre,flo
  {const auto&list=game.chunkEnemies(level);for(size_t i=0;i<list.size();++i){const auto&e=list[i];if(!e.alive)continue;body(1ull<<32|i,{e.pos.x,e.pos.y,e.z},std::max(.15f,e.hull()*.8f),std::max(.3f,e.bodyTop()-e.z),.8f);}}
  {const auto&men=game.npcActors();for(size_t i=0;i<men.size();++i){const auto&n=men[i];if(int(i)==selfActor||n.level!=level||n.pose.clip==4)continue;body(2ull<<32|i,{n.pose.position.x,n.pose.position.y,n.pose.z},.22f,n.track().scale,.6f);}}
 }
+void SoftwareRenderer::publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep){
+ if(!carcass.built()||(carcass.age()==published&&carcass.asleep()==publishedAsleep))return;published=carcass.age();publishedAsleep=carcass.asleep();
+ const auto p=carcass.pose();CorpsePose c;c.level=level;c.slot=slot;c.signature=signature;c.creature=creature;c.age=p.age;c.asleep=p.asleep;c.shoved=p.shoved;c.cut=p.cut;c.sections=p.sections;
+ game.corpsePoses()[{creature,level,slot}]=std::move(c);}
+bool SoftwareRenderer::restoreSaved(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,Carcass& carcass){
+ auto&book=game.corpsePoses();const auto it=book.find({creature,level,slot});if(it==book.end()||!it->second.loaded||it->second.signature!=signature)return false;
+ const auto&k=it->second;Carcass::Pose p;p.age=k.age;p.asleep=k.asleep;p.shoved=k.shoved;p.cut=k.cut;p.sections=k.sections;return carcass.restorePose(p);}
 SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot){
  static const bool enabled=[]{const char* v=std::getenv("RM_RAGDOLL");return !v||v[0]!='0';}();
  if(!enabled||!humanActorVisual(track.visual)||pose.clip!=4||track.platform||track.suspensionTop>pose.z)return nullptr;
@@ -584,6 +591,9 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
   // A fall being watched takes the round that killed him (fired the moment he died) on the part it hit,
   // and every round after; one first seen after it ended takes only rounds from now on.
   corpse.rayClock=live?corpse.base-.25f:now;corpse.lastSeen=now;
+  // After a load: the pose the save kept for this body (the same death), not its fall made again; only rounds fired
+  // from now on reach it.
+  if(restoreSaved(game,false,level,slot,signature,corpse.carcass))corpse.rayClock=now;
  }
  // A fall still being watched runs on its clock; one first seen after it ended has already ended.
  auto&carcass=corpse.carcass;
@@ -604,6 +614,7 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
  // First seen after the fall: laid down at once. Once at rest it runs with the frame (a shove wakes it).
  if(target>=1e3f){if(!carcass.asleep()&&!carcass.shoved()){for(int guard=0;guard<4&&!carcass.asleep();++guard)carcass.advance(w,carcass.age()+5.f);}else carcass.advance(w,carcass.age()+frame);}
  else carcass.advance(w,target);
+ publishPose(game,false,level,slot,signature,carcass,corpse.published,corpse.publishedAsleep);
  // Bodies no longer drawn are let go after a while: the same one is made the same way again.
  if(m_corpses.size()>64)std::erase_if(m_corpses,[&](const auto&entry){return entry.second.seen<now-30.f;});
  return &corpse;
@@ -3560,8 +3571,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     poseCreatureMesh(e,goreNow,true,m_creaturePose);if(m_creaturePose.empty())continue;
     resolveWounds(m_creaturePose);
     carcass=Carcass{};carcass.build(m_creaturePose,w,e.deathPush,e.scale,unsigned(key*2654435761ull)+unsigned(e.deathSerial)*977u);
-    slot->serial=e.deathSerial;slot->at=e.pos;slot->rayClock=deathMoment-.25f;slot->pooled=false;
-    if(e.deathBlast){carcass.blast(e.blastOrigin,1.f,events);emitGore(events,deathMoment,e,false);events.clear();}
+    slot->serial=e.deathSerial;slot->at=e.pos;slot->rayClock=deathMoment-.25f;slot->pooled=false;slot->published=-1;
+    // After a load: the pose the save kept (its blast and the rounds in it already in it).
+    if(restoreSaved(game,true,level,key,slot->signature^(std::uint64_t(std::uint32_t(e.deathSerial))<<8),carcass)){slot->rayClock=goreNow;slot->pooled=carcass.age()>=.9f;if(slot->pooled){const Point3 c=carcass.centre();slot->pool={c.x,c.y,w.supportBelow(c.x,c.y,c.z+.2f)};}}
+    else if(e.deathBlast){carcass.blast(e.blastOrigin,1.f,events);emitGore(events,deathMoment,e,false);events.clear();}
    }
    // Rounds fired since it was last looked at: the one that killed it, and any put into it after.
    float newest=slot->rayClock;const Vec2 here=game.chunkOffset(level);
@@ -3577,7 +3590,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
    slot->rayClock=newest;
    {std::vector<Carcass::Solid> solids;corpseSolids(game,level,carcass.centre(),carcass.radius(),-1,solids);carcass.solids(std::move(solids));}
-   carcass.advance(w,e.deathTime);
+   carcass.advance(w,e.deathTime);publishPose(game,true,level,key,slot->signature^(std::uint64_t(std::uint32_t(e.deathSerial))<<8),carcass,slot->published,slot->publishedAsleep);
    if(!slot->pooled&&carcass.age()>=.9f){Point3 c=carcass.centre();slot->pool={c.x,c.y,w.supportBelow(c.x,c.y,c.z+.2f)};slot->pooled=true;}
    if(!sphereVisible(carcass.centre(),carcass.radius()+.25f))continue;
    receiver=carcass.centre();top=receiver.z+.3f;faces=&carcass.triangles();
