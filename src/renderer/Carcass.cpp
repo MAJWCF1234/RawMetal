@@ -794,7 +794,9 @@ bool Carcass::restorePose(const Pose& p){
 // lies: nothing is moved on the way to sleep.
 bool Carcass::vectraBodies(){
  static const int env=[]{const char* v=std::getenv("RM_RAGDOLL");if(!v)return -1;const std::string s(v);return s=="legacy"?0:s=="vectra"?1:-1;}();
- if(env>=0)return env==1;return tune("carcass.vectra",0)>.5f;}
+ // Vectra is the default (it passes 9 of the 14 ragdoll-fall fixtures to the old system's 6; the one it does worse on,
+ // stairs, is the coarse-skin volume measure). RM_RAGDOLL=legacy or carcass.vectra 0 brings the old bodies back.
+ if(env>=0)return env==1;return tune("carcass.vectra",1)>.5f;}
 namespace {
 using vectra::Quat;
 Quat quatOfAxes(Point3 x,Point3 y,Point3 z){
