@@ -4,10 +4,14 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.5.4
+## v1.5.4 - Round things roll (2026-11-18)
 
-- Vectra has capsule and convex hull parts. Pipes, bottles, extinguishers and gas cylinders roll smoothly as true rounds; rocks, cones, lamps, rubble and the broken pieces of bottles, monitors and chairs collide by their own shapes (hulls built from their meshes) and come to rest on their real faces; rays and shots meet those shapes exactly.
-- Curtains, straps and cables (the CLOTH record): they hang, sway and part when walked through, drape over things, swing when shot, ripple in the wind outdoors and settle. The editor's Hang cloth tool on the Decor page places them, and the Starter Map's physics room has a curtain, a strap and a loose cable.
+Things keep their true shapes now, and some of them hang.
+
+- **Round things roll.** Pipes, bottles, extinguishers and gas cylinders are round all the way, not many-sided, so they roll smoothly across a floor and still stand on their bases. A rock lies on its own faces, and the broken pieces of a chair or a monitor settle on the edges they broke along. A round meets a rock where the rock is, not around it.
+- **Cloth.** Curtains, straps and cables hang and sway. A curtain parts when you walk through it and falls closed behind you. A cable drapes over what it lies across, a strap swings when it is shot, and outdoors they move with the wind. In the editor, Hang cloth lays them out; the Starter Map has a curtain, a strap and a cable to try.
+
+Verified with tools/release/ship.py, the feature lab's tubes for each of the above, and the editor's test modes.
 
 ---
 
