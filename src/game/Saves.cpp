@@ -321,7 +321,11 @@ std::vector<SaveSection> Game::builtInSaveSections(){
  // objectives and the one-shot events that have fired.
  add("script",true,[](Game& g,auto& a,int){
   archiveList(a,g.m_states,[&](StateValue&v){a(v.id,v.value);if(v.id==0)throw std::runtime_error("invalid state id");},8192);
-  if constexpr(std::decay_t<decltype(a)>::reading)for(size_t i=1;i<g.m_states.size();++i)if(g.m_states[i-1].id>=g.m_states[i].id)throw std::runtime_error("unsorted or duplicate saved state");
+  // As the legacy reader does: states may arrive in any order (a store written before it was kept
+  // sorted). Normalize once so indexed lookups work; only a repeated id is refused.
+  if constexpr(std::decay_t<decltype(a)>::reading){
+   std::sort(g.m_states.begin(),g.m_states.end(),[](const StateValue&l,const StateValue&r){return l.id<r.id;});
+   if(std::adjacent_find(g.m_states.begin(),g.m_states.end(),[](const StateValue&l,const StateValue&r){return l.id==r.id;})!=g.m_states.end())throw std::runtime_error("duplicate saved state");}
   archiveList(a,g.m_objectives,[&](StateValue&v){a(v.id,v.value);if(v.id==0||v.value<0||v.value>3)throw std::runtime_error("invalid objective");});
   archiveList(a,g.m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});});
  // Each chunk in turn: its world (lift and reactor, broken tiles and breakables, pane damage and
