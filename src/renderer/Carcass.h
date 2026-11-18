@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <array>
 #include "Mesh.h"
 #include "../world/World.h"
 namespace retro {
@@ -71,7 +72,14 @@ public:
  int sectionOf(int triangle)const{return triangle>=0&&size_t(triangle)<m_owner.size()?m_owner[size_t(triangle)]:-1;}
  int partOf(int section)const{return section>=0&&size_t(section)<m_sections.size()?m_sections[size_t(section)].part:-1;}
  static bool test();
- // Corpses on Vectra (RM_RAGDOLL=vectra, or the knob carcass.vectra 1) rather than the position-based step.
+ // A body as the physics save keeps it (Saves.cpp, physics layout 4; SaveSections.h CorpsePose): its clock, asleep or
+ // not, shoved or not, each joint cut or not, and each section's middle (3), turn (w x y z), centre of mass (3),
+ // velocity (3) and spin (3). restorePose puts it back on a body built the same way (the same death), bit for bit;
+ // false, and nothing changed, when it does not fit this body.
+ struct Pose {float age=0;bool asleep=false,shoved=false;std::vector<std::uint8_t> cut;std::vector<std::array<float,16>> sections;};
+ Pose pose()const;
+ bool restorePose(const Pose& pose);
+ // Corpses on Vectra (RM_RAGDOLL=vectra, or the knob carcass.vectra 1) or on the position-based step (the default; RM_RAGDOLL=legacy).
  static bool vectraBodies();
 private:
  // A hull point (`hull`) is not part of its section's mass: it only keeps the section's outermost skin
@@ -96,7 +104,8 @@ private:
  void fit();
  void step(const World& world);
  // The same step on Vectra (Carcass.cpp, stepVectra): sections as bodies, joints as Vectra joints with the rig's limits.
- struct VectraState;std::shared_ptr<VectraState> m_vectra;void stepVectra(const World& world);
+ // kickVectra: the points were pushed (a round, a blast, a cut), so the bodies take their velocities from them.
+ struct VectraState;std::shared_ptr<VectraState> m_vectra;void stepVectra(const World& world);void kickVectra();
  void bodies();
  void settle(const World& world);
  float depthIn(const Particle& p,int section)const;

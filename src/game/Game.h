@@ -29,6 +29,7 @@
 #include <iosfwd>
 #include <utility>
 #include <optional>
+#include <tuple>
 #include <cstdint>
 #include "Ragdoll.h"
 #include "Electricity.h"
@@ -482,6 +483,11 @@ public:
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
+    // Dead bodies' poses (SaveSections.h CorpsePose) by (creature, level, slot): the renderer keeps each body's current
+    // pose here as it moves, the physics save section writes and reads them, and a body made again after a load takes
+    // its pose back from here. (Kept by the game so a save holds them; written from the renderer's const view.)
+    using CorpsePoses=std::map<std::tuple<bool,int,std::uint64_t>,CorpsePose>;
+    CorpsePoses& corpsePoses()const{return m_corpsePoses;}
     const std::vector<HitBurst>& hitBursts()const{return m_hitBursts;}
     const std::vector<WaterSplash>& waterSplashes()const{return m_waterSplashes;}
     const std::vector<BarrelExplosion>& barrelExplosions()const{return m_barrelExplosions;}
@@ -1376,6 +1382,7 @@ private:
     // Each step, the level's joints as Vectra joints between the props' bodies (or a prop and the room), their
     // frames set from where the map laid the props out; what snapped is marked, sounded and its state= set.
     std::map<int,std::vector<std::pair<std::uint64_t,vectra::Space::JointCached>>> m_jointCache;   // warm starting, per level
+    mutable CorpsePoses m_corpsePoses;   // corpsePoses()
     std::vector<std::pair<int,int>> jointedProps(int level,const std::vector<Clutter>& list);           // each joint's props (list indices; -1 the room)
     void addPropJoints(int level,std::vector<Clutter>& list,const std::vector<int>& bodyOf,vectra::Space& space,std::deque<vectra::Joint>& out,std::vector<int>& which);
     void afterPropJoints(int level,std::vector<Clutter>& list,vectra::Space& space,std::deque<vectra::Joint>& joints,const std::vector<int>& which);

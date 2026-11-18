@@ -262,11 +262,62 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
 
 ### Corpses on Vectra (opt-in)
 
-`Carcass::stepVectra` (RM_RAGDOLL=vectra, or the knob `carcass.vectra 1`) steps a corpse's sections as Vectra bodies (their
-points' mass and inertia, their capsule as a box), its joints as Vectra balls with the rig's limits (an elliptical cone centred
-on the bend's range, the side either way, and the twist), the floor and walls against the sections' skin points, and the props
-round it as kinematic boxes. It is not the default: on the ragdoll-fall fixtures it still lets limits pass (by up to 55
-degrees), lets sections overlap by 2-4 cm and jumps going to sleep, where the position-based step passes six of fourteen.
+`Carcass::stepVectra` (RM_RAGDOLL=vectra, or the knob `carcass.vectra 1`; RM_RAGDOLL=legacy forces the position-based step)
+steps a corpse on Vectra:
+- **One space a body keeps** (`Carcass::VectraState`): each section is a body for as long as the corpse lasts (its points'
+  mass and inertia, 75 kg a man), so warm starting, sleep timers and the joints' impulses carry from step to step. A round,
+  a blast or a cut pushes the points as before (`kickVectra`), and the bodies take their velocities from them.
+- **Joints** are Vectra balls at each pivot, frames carried by each section's bind turn, so B's turn from A's is exactly the
+  turn the rig measures (`Carcass::jointStates`). The limits are `Joint::swingLimited`: the swing-twist split of that turn,
+  the bend between its two stops, the side lean and the twist either way, each a one-sided row along the split's own rate
+  (worked out by a central difference each pass, so a knee stops at its own angle at any bend, not at a cone's rim).
+  `Joint::frictionTorque` (`carcass.vfriction`, 1 = what the limb's own weight turns it by, held level) lets a limb land
+  and stay rather than flop on. `Joint::positionCorrection` puts back what is past a limit by more than 1.5 degrees
+  (`Settings::projectSlack`), turning both bodies about the pivot together, not while a prop goes through the body.
+- **Sections against each other**: joined ones never meet; the others meet by `Space::pairContacts`, the skin points of one
+  against the other's oval capsule (the measure the lab checks), one contact per point within reach.
+- **The world**: each section's points, its hull points and its outermost skin (its vertices farthest out over 96 ways)
+  meet the floor and the walls. A point more than 4 cm under what supports it (`carcass.vsunk`) is in it from its side and
+  meets it as a wall, never lifted onto its top.
+- **Props** near it are kinematic boxes going at their share of their speed; one moving through it is a 12 Hz spring
+  (`carcass.vshoveHertz`), so it shoves the body without pressing one part into another.
+- **Sleep** is Vectra's island sleep (5 cm/s and 0.15 rad/s for 0.4 s): it sleeps where it lies, nothing is moved on the way.
+
+Not the default yet. ragdoll-fall, 14 fixtures (lab, 2026-11-18):
+
+| Fixture | Position-based (default) | Vectra |
+| --- | --- | --- |
+| bed | fails: volume 4.9% | passes |
+| brute | passes | passes |
+| chimera | fails: jitter before sleep, a core 1.9 cm | passes |
+| crate | passes | passes |
+| drop | fails: volume 4.2% | passes |
+| headless | fails: volume 7.3% | fails: volume 8.4% |
+| shot-behind | passes | passes |
+| shot-front | passes | passes |
+| shot-side | fails: volume 4.7% | fails: volume 6.1% |
+| shotgun | fails: 6 corners in the floor; the save check | passes |
+| stairs | passes | fails: volume 8.5% |
+| table | passes | passes |
+| thrown | fails: volume 4.2% | fails: slides 0.51 m, overlap 0.5 cm, a limit 3.4 deg, volume 4.3% |
+| wall | fails: volume 14% | fails: volume 19% |
+
+- **Volume** (each section's open skin about its own middle): the men's meshes are coarse, and many triangles of one
+  section have corners on another (the worker's pelvis is 46 triangles, 41 of whose corners ride other sections). A bend
+  at the hips or the belly then changes those sections' measure whatever the physics does: joints hold to under a
+  millimetre and every rigid core to 0.01 cm. A man sat against a wall (90 degrees at the hips) loses 14 to 19% on either
+  system. It needs the skin or the measure looked at, not the solver.
+- **Stairs**: he tumbles down the steps after he is first down on the landing (his middle drops 0.38 m while it goes
+  0.38 m on). The slide check now starts again each time his middle comes down 10 cm lower (a step further down): going
+  down is falling, not sliding; on one level nothing changes. On the stairs he then slides 0.12 m. A point of a section
+  4 cm or more under a step's top meets the riser as a wall, each such point with its own normal, so nothing rests in a
+  step. What is left is the volume (8.5%, the coarse skin again: a forearm folded to its stop).
+- **Never propped**: near rest (nothing moving a centimetre a frame), a man on knees bent past 40 degrees with his hips
+  30 cm or more over what is under them has no joint friction, so he slumps as dead weight does; ragdoll-fall checks that
+  no body rests in a crouch (hips over 0.35 m on knees bent past 45 degrees).
+- **Thrown**: the crate in the game does not feel the body (corpses are not in the props' solver), so it shoves him all
+  the way through.
+- No jump into sleep on Vectra (under 1 mm a frame; the position-based step's is 4-15 mm).
 
 ## How the rest of the game meets it
 
