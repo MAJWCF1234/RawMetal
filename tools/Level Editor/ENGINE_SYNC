@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit ad191ae570dc9c8073336a13ae504d3cc4400a92
-# 2026-11-18 02:09, editor growth check: brush creepers along the wall in three dabs; one dab's count is a draw seeded from where it lands, which earlier checks' grid and zoom move
+commit 30ea1cdbf816ebfc837f479252b10212f7142f72
+# 2026-11-18 03:06, Merge branch 'worktree-agent-a30f87738c293d955'
