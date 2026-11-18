@@ -13,7 +13,7 @@ The ground has an inside now. Dig, and it opens.
 - **Move.** A new brush for the land, too: take hold of a hill and drag it, and it follows. Hold Shift to lift it.
 - **Underground.** Under the rock the sky does not reach. It is dark down there but for what you carry and what you hang, and a lantern set in a cave stands on the cave floor, not on the hill above it. Water finds the low places in a cavern as it does anywhere else.
 - **Quicker to wake.** The game gathers what it needs as it needs it, many things at once, and remembers them for next time, so it starts sooner than it has since the library grew.
-- **Steadier hands.** Vectra settles its stacks more truly: bounces lose what they should, and quick things find the thin edges they used to slip past.
+- **Steadier hands.** Vectra lets a falling thing reach the floor before it bounces, where it used to turn back a few centimetres short and spring off the air, and a crate sliding as it lands no longer comes up spinning. A thing spun hard enough to turn a quarter of the way round in one step still stops on a thin post. A cast that grazes past without closing in no longer reports a hit. A crate woken by a shove wakes what it holds in the same moment, and what is carried on a joint by a moving hand wakes and follows it instead of hanging back asleep.
 - **The Starter Map** has a gallery of the new parts on two gravel yards, and east of it a hill with a mine in it: a mouth in its west face, a timbered drift with rails and an ore cart, a cavern of crystals by lantern light, and a passage south to a pool that drips.
 
 Verified with the feature lab's tubes (parts, caves, mine), the editor's cave test, and pictures of each.
