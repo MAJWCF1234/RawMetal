@@ -601,11 +601,11 @@ def build():
     architecture(s)
     architecture_2(s)
     showcase(s, slot, catalogue)
-    s.reserved = {(4 + OX, 2 + OY), (5 + OX, 2 + OY), (6 + OX, 2 + OY)}  # SHOWCASE: SHAPES, PHYSICS and ATRIUM, built after the forest
+    s.reserved = {(5 + OX, 2 + OY), (6 + OX, 2 + OY)}  # SHOWCASE: PHYSICS and ATRIUM, built after the forest (every earlier number stays)
     building(s, slot, catalogue)
     physics_room(s, slot, catalogue)
     atrium(s, slot, catalogue)  # south of Predator, built last too
-    shapes_room(s)              # west of Physics, last of all
+    shapes_room(s)              # west of Physics, on the forest's map there (every number stays)
     return s
 
 
@@ -645,8 +645,18 @@ def shapes_room(s):
     a full-size arch. The south-east quarter is one building made of overlapping prims in four
     materials (a stone base, brick walls and buttresses, a concrete arch, bands and roof, a copper
     dome): where they overlap the engine draws only what shows, so the seams are clean."""
-    m = s.new_map('Showcase Shapes', 4, 2, ceiling=7.0, surface='concrete', ambient=.3)
+    # Built on the map the forest grew in its cell, as the Hillside is, never a new one: every map keeps its number,
+    # the Physics room and the Atrium after it too (a pane's cracks are drawn from its map's number: the Atrium's
+    # storefront breaks as it always has).
+    m = next(x for x in s.maps if (x['col'], x['row']) == (4 + OX, 2 + OY))
     i = m['index']
+    s.raised = [e for e in s.raised if e[0] is not m]
+    s.absolute = [e for e in s.absolute if e[0] is not m]
+    s.index = [e for e in s.index if e['map'] != i]
+    s.doors = {k: v for k, v in s.doors.items() if k[0] != i}
+    m.clear()
+    m.update(name='Showcase Shapes', records=[], ceiling=7.0, surface='concrete', ambient=.3, walls=set(), lights=True,
+             index=i, col=4 + OX, row=2 + OY, outdoor=False, layers=[])
     s.format2 = True                                                  # hand=, rails= on the PRIMs
     dead = next(x for x in s.maps if x['name'] == 'Showcase Dead and Blood')
     dead['walls'] = (dead['walls'] | {(x, 23) for x in range(24)}) - {(11, 23), (12, 23)}
