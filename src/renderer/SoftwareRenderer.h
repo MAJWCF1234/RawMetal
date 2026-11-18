@@ -461,7 +461,8 @@ private:
         Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853},
         Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862},
         Mesh{2865},
-        Mesh{2868},Mesh{2870}};
+        Mesh{2868},Mesh{2870},
+        Mesh{2910},Mesh{2911},Mesh{2912},Mesh{2913},Mesh{2914},Mesh{2916},Mesh{2917},Mesh{2918},Mesh{2919},Mesh{2920},Mesh{2921},Mesh{2922},Mesh{2923},Mesh{2924},Mesh{2926},Mesh{2927},Mesh{2928},Mesh{2930},Mesh{2931},Mesh{2932},Mesh{2933},Mesh{2935},Mesh{2936},Mesh{2937},Mesh{2938},Mesh{2939},Mesh{2940},Mesh{2941},Mesh{2942},Mesh{2944},Mesh{2945},Mesh{2946},Mesh{2947}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

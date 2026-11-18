@@ -1,0 +1,9 @@
+# Physgloves: miss (tube physgloves).
+world room
+camera 4 8.5 -999 0 0
+light 6.5 8.5 3.2 1.6 10
+light 9 10 3.0 1.1 8
+light 4 7 3.0 .8 8
+scene miss
+size 640 360
+frames 110

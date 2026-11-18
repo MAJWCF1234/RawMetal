@@ -60,6 +60,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    any=j.motor==1&&!st.broken&&st.motorOn&&st.speed!=0&&(!j.motorState||state(j.motorState))&&!(j.kind==PropJointKind::Winch&&(st.speed>0?st.length>=0&&st.length<=(j.limited?j.lower:.2f)+1e-3f:st.length>=(j.limited?j.upper:1e9f)-1e-3f));}}
  // The player stepping onto a jointed prop (a lift, a seesaw, a bridge) wakes it under his weight.
  if(!any&&level==m_level&&!m_noclip&&!m_inspectionCamera&&std::fabs(jointedPropTop(m_player.pos,m_player.z+.1f,.2f)-m_player.z)<.08f)any=true;
+ // A VR hand reaching into or near a prop steps the list (its body pushes what it meets: VrHands.cpp).
+ if(!any&&level==m_level&&vrHandsNear(list))any=true;
  rp.accumulator+=dt;if(!any){rp.accumulator=std::min(rp.accumulator,RigidStep);return;}
  int steps=0;while(rp.accumulator>=RigidStep-1e-6f&&steps<RigidMaxSteps){rp.accumulator-=RigidStep;++steps;}
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
@@ -199,6 +201,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    out.push_back(m);}
  };
  space.filter=[&](const Space& sp,int a,int b){const Body& A=sp.bodies[size_t(a)];const Body& B=sp.bodies[size_t(b)];if(A.user<0&&B.user<0)return false;
+  // A VR hand meets props it can move (under 12 kg, loose); it stops at the rest (VrHands.cpp).
+  if(A.user==VrHandBody||A.user==VrHandBody-1)return B.user>=0&&vrHandMeets(B);if(B.user==VrHandBody||B.user==VrHandBody-1)return A.user>=0&&vrHandMeets(A);
   // (The prop in the hand meets men by the carry's own sweep, pushBodiesFromCarried: it neither hurts nor knocks them.)
   if(A.user<=ActorBody||B.user<=ActorBody)return !(A.kinematic||B.kinematic);
   if(A.user==PlayerBody||B.user==PlayerBody){const Body& prop=A.user==PlayerBody?B:A;const Body& player=A.user==PlayerBody?A:B;(void)player;
@@ -309,7 +313,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(k!=root){const int step=k>root?1:-1;for(int j=root;j!=k;j+=step){const int joint=step>0?j:j-1;const float rate=c.bendSpeed[size_t(joint)]*float(step);
      const V3 axis=ch.turn[size_t(joint)].rotate(wd);const V3 J=ch.frame[size_t(joint)]+ch.turn[size_t(joint)].rotate(ax*((float(joint)-.5f)*third));wk=wk+axis*rate;vk=vk+cross(axis*rate,b.x-J);}}
    b.v=vk;b.w=wk;b.user=i;b.group=0x40000000u|std::uint32_t(i);b.id=k==root?i:i+(1<<17)*(k+(k<root?1:0));
-   if(inHand&&k==root){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w=heldSpin;b.v=m_vrInputActive&&m_vrHandValid[m_vrCarryHand]?m_vrHandVelocity[m_vrCarryHand]:V3{m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
+   if(inHand&&k==root){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w=heldSpin;b.v=carryVelocity();}
    if(inHand&&k!=root)b.sleeping=false;
    rec.body[size_t(k)]=int(space.bodies.size());if(k==root)bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
   for(int k=0;k<2;++k){Hinge h;h.a=rec.body[size_t(k)];h.b=rec.body[size_t(k+1)];h.anchorA=ax*(third*.5f);h.anchorB=ax*(-third*.5f);h.axisA=wd;
@@ -343,7 +347,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(chained(c)){buildChain(i,i==held);continue;}
    Body b;toBody(c,b);b.user=i;
    if(i==held){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w=heldSpin;
-    if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand])b.v=m_vrHandVelocity[m_vrCarryHand];else b.v={m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
+    b.v=carryVelocity();}
    if(c.material()==PropMaterial::Paper){b.linearDamping=3;b.angularDamping=3;}
    b.id=i;bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
   // The player: a body at his own velocity (no gravity, no turning, not written back; 20 kg of push, so what
@@ -361,6 +365,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // moment and what is in it goes along; one pinned against a wall gives under him instead of into the wall.
    p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;p.id=(1<<19)-1;   // never what keeps an island awake (his own speed still does)
    space.bodies.push_back(p);}
+  if(level==m_level)addVrHandBodies(space,list,RigidStep);   // the VR hands that hold nothing (VrHands.cpp)
   // Each man and creature within reach of what moves: a box of his hull from just over his feet, his own
   // speed, his weight, no gravity and no turning; contacts on it are hard (a crate does not go into him).
   for(size_t k=0;k<actors.size();++k){const auto&r=actors[k];bool near=false;for(const auto&rc:reaches)near|=r.at.x+r.radius>=rc.x0&&r.at.x-r.radius<=rc.x1&&r.at.y+r.radius>=rc.y0&&r.at.y-r.radius<=rc.y1;if(!near)continue;
@@ -421,7 +426,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
-  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
+  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(level==m_level&&m_vrInputActive){settleVrHands(space,held);m_vrHandStepped=true;}if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
   for(const auto&rec:chains){bool still=true;for(int k:rec.body)still&=wasAsleep[size_t(k)]&&space.bodies[size_t(k)].sleeping;if(!still)writeChain(rec);}
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];

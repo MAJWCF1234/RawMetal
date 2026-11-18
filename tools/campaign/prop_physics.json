@@ -469,5 +469,134 @@
   },
   "med_corpse_supine": {
     "mass": 70
+  },
+  "gib_crt_monitor_stand": {
+    "material": "Electronic",
+    "mass": 0.492
+  },
+  "gib_crt_monitor_screen_1": {
+    "material": "Electronic",
+    "mass": 1.489
+  },
+  "gib_crt_monitor_screen_2": {
+    "material": "Electronic",
+    "mass": 0.5
+  },
+  "gib_crt_monitor_screen_3": {
+    "material": "Electronic",
+    "mass": 1.229
+  },
+  "gib_crt_monitor_casing": {
+    "material": "Electronic",
+    "mass": 7.29
+  },
+  "gib_glass_bottle_neck": {
+    "material": "Glass",
+    "mass": 0.053
+  },
+  "gib_glass_bottle_shard_1": {
+    "material": "Glass",
+    "mass": 0.165
+  },
+  "gib_glass_bottle_shard_2": {
+    "material": "Glass",
+    "mass": 0.102
+  },
+  "gib_glass_bottle_shard_3": {
+    "material": "Glass",
+    "mass": 0.094
+  },
+  "gib_glass_bottle_shard_4": {
+    "material": "Glass",
+    "mass": 0.087
+  },
+  "gib_packing_crate_lid": {
+    "material": "Wood",
+    "mass": 1.925
+  },
+  "gib_packing_crate_floor": {
+    "material": "Wood",
+    "mass": 1.925
+  },
+  "gib_packing_crate_side_a": {
+    "material": "Wood",
+    "mass": 1.463
+  },
+  "gib_packing_crate_side_b": {
+    "material": "Wood",
+    "mass": 1.463
+  },
+  "gib_packing_crate_end_a": {
+    "material": "Wood",
+    "mass": 1.111
+  },
+  "gib_packing_crate_end_b": {
+    "material": "Wood",
+    "mass": 1.111
+  },
+  "gib_scrap_chair_back": {
+    "mass": 0.729
+  },
+  "gib_scrap_chair_seat": {
+    "mass": 1.329
+  },
+  "gib_scrap_chair_frame": {
+    "mass": 27.942
+  },
+  "gib_wooden_chair_leg_a": {
+    "material": "Wood",
+    "mass": 0.384
+  },
+  "gib_wooden_chair_leg_b": {
+    "material": "Wood",
+    "mass": 0.384
+  },
+  "gib_wooden_chair_leg_c": {
+    "material": "Wood",
+    "mass": 0.972
+  },
+  "gib_wooden_chair_leg_d": {
+    "material": "Wood",
+    "mass": 0.972
+  },
+  "gib_wooden_chair_seat": {
+    "material": "Wood",
+    "mass": 1.48
+  },
+  "gib_wooden_chair_back": {
+    "material": "Wood",
+    "mass": 0.808
+  },
+  "gib_wooden_crate_lid": {
+    "material": "Wood",
+    "mass": 1.937
+  },
+  "gib_wooden_crate_floor": {
+    "material": "Wood",
+    "mass": 1.937
+  },
+  "gib_wooden_crate_side_a": {
+    "material": "Wood",
+    "mass": 0.775
+  },
+  "gib_wooden_crate_side_b": {
+    "material": "Wood",
+    "mass": 0.775
+  },
+  "gib_wooden_crate_side_c": {
+    "material": "Wood",
+    "mass": 0.775
+  },
+  "gib_wooden_crate_side_d": {
+    "material": "Wood",
+    "mass": 0.775
+  },
+  "gib_wooden_crate_end_a": {
+    "material": "Wood",
+    "mass": 1.014
+  },
+  "gib_wooden_crate_end_b": {
+    "material": "Wood",
+    "mass": 1.014
   }
 }

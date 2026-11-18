@@ -331,7 +331,13 @@ void Game::updateInteraction(const InputState& input,float dt){
  if(input.vrTracked){
   auto previous=m_previousVrGrip;m_previousVrGrip=input.vrGrip;
   if(holdingClutter()){
-   if(!input.vrGrip[m_vrCarryHand])interactClutter();
+   // Two hands (TwoHand.cpp): the free hand closing on a large held prop takes it too; letting go with either
+   // leaves it in the other (if it can hold it alone), with both it is thrown at the two hands' speed.
+   const int other=1-m_vrCarryHand;
+   if(m_vrSecondHand<0&&input.vrGrip[size_t(other)]&&!previous[size_t(other)])grabSecondHand(other);
+   if(m_vrSecondHand>=0&&!input.vrGrip[size_t(m_vrSecondHand)]&&input.vrGrip[size_t(m_vrCarryHand)])m_vrSecondHand=-1;
+   if(!input.vrGrip[m_vrCarryHand]&&m_vrSecondHand>=0&&input.vrGrip[size_t(m_vrSecondHand)]){m_vrCarryHand=m_vrSecondHand;m_vrSecondHand=-1;if(m_clutter[size_t(m_heldClutter)].mass()>25)interactClutter();}
+   else if(!input.vrGrip[m_vrCarryHand]){interactClutter();m_vrSecondHand=-1;}
    m_previousUse=input.use;m_world.updateDoors(dt);return;
   }
   if(m_logTime==0)for(int hand=0;hand<2;++hand)if(input.vrGrip[hand]&&!previous[hand]&&interactClutter(hand)){m_previousUse=input.use;m_world.updateDoors(dt);return;}

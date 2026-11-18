@@ -5,6 +5,7 @@ Desktop carry controls:
 - Press E to pick up or put down a carryable prop.
 - Hold the middle mouse button and move the mouse to turn the held prop horizontally or vertically. The camera stays still during this gesture.
 - Scroll while carrying to move the prop farther away or closer. Reach is limited by the prop's size, a maximum distance of 2.5 m, and world collision.
+- Physgloves: look at a loose prop up to 7 m away (it glows a little) and press G, or hold the middle mouse button empty-handed (the view holds on the prop) and flick the mouse back: it pops toward you on an arc and lands in your hands. Look away and it falls past. Heavy props only lurch; a hung one swings out on its rope.
 - Left click throws the held prop. Releasing with E while spinning or flicking the look also flings it along that path (a hard upward flick sends it up). Soft put-downs keep almost no speed. Empty-handed mouse wheel still selects weapons. VR carrying continues to use the tracked hand velocity.
 
 Moving modeled props of at least 8 kg can push the player, guards and creatures — including while you are carrying them (walking forward, extending reach, or turning the prop in place). A body pinned against a wall stops the held prop instead of letting it pass through. Walking actors can still shove resting props aside, but their walk animation cannot reverse an incoming heavy object before contact. Existing wall and door collision limits body movement.

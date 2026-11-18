@@ -10,6 +10,9 @@ Controls:
 - Right trigger: fire the shotgun. Right A: reload. Left A (Touch: X): jump.
 - Left B (Touch: Y): pause. Right B: inventory. Vive application-menu buttons provide pause/reload; keyboard inventory remains available.
 - Reach near a physics object and squeeze either grip. Keep squeezing to hold it in that hand; release to drop or throw with tracked hand velocity. One physics object can be held at a time.
+- Two hands: with a large prop (a crate, a chair) in one hand, close the other hand on its far side to hold it in both. It follows both hands: raise one to tilt it, tip both wrists to roll it. Let go with one hand and the other keeps it; let go with both to throw it.
+- Empty hands push props as bodies in the physics (at most 2.5 m/s) and stop at the surface of what they cannot move; the drawn hand never goes inside a prop.
+- Physgloves: point an open hand at a loose prop up to 7 m away (it glows), close the hand to lock on, and flick the wrist back toward you. Keep the hand closed to catch it.
 - Grip beside a door or terminal to operate it. Within 65 cm, controls accept direct reach; farther away, point the gripping controller at the control (maximum 1.8 m hand reach). Wall visibility and head reach are checked. A nearby physics object takes priority. Either hand can operate a control, including a new grip with the other hand already closed. Wrist prompts show grip controls.
 - Squeeze near either shoulder, behind your head, to stow/equip the shotgun. A held object takes priority. This currently switches shotgun/empty hands, not a collection of firearms.
 - Squeeze the left grip along the foregrip (about 16–58 cm ahead of the right hand, within 12 cm of the barrel axis) to steady the shotgun. Aim and the weapon mesh follow the hand-to-hand line; the supporting hand does not punch. Release grip to return to one-handed aiming.

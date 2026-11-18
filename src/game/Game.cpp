@@ -539,7 +539,7 @@ void Game::update(const InputState& input, float dt) {
         // on the committed pose, so the path always ends where the player is.
         {perf::Scope profile(perf::LockerDoors);updateLockerDoors(dt);}const bool choreographed=lockerViewLocked();
         if(!choreographed&&!talking()){
-        if(input.vrTracked||!input.rotateProp||!holdingClutter()){
+        if((input.vrTracked||!input.rotateProp||!holdingClutter())&&!(m_physglove.locked&&!input.vrTracked)){   // (the Physgloves hold the look on their target while the middle button is down)
          const float invDt=1.f/std::max(dt,.001f),sens=m_settings.sensitivity,invert=m_settings.invertMouse?-1.f:1.f;
          m_lookYawRate=input.mouseDx*.0022f*sens*invDt;
          m_lookPitchRate=-input.mouseDy*.308f*sens*invert*invDt;

@@ -109,7 +109,9 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  // The bodies it passes through answer to the ray itself (Carcass): they block nothing.
  m_shotRays.push_back({origin,direction,hit.kind==ShotKind::None?60.f:hit.distance,m_elapsed,damageOverride>0?damageOverride:hitscanDamageAt(inputDefinition,hit.distance),inputDefinition.ragdollImpulse,m_level});if(m_shotRays.size()>24)m_shotRays.erase(m_shotRays.begin());
  HitscanDef definition=inputDefinition;float attenuation=1;
- auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};knockClutter(level,size_t(index),point,direction*(definition.propImpulse*propDamage/definition.dmgNear));damageClutter(level,size_t(index),propDamage,point,direction);};
+ auto prop=[&](int level,int index,Point3 point,float distance){float propDamage=hitscanDamageAt(definition,distance)*attenuation;auto shift=chunkOffset(m_level)-chunkOffset(level);point=point+Point3{shift.x,shift.y,0};auto&target=(level==m_level?m_clutter:m_chunks[level].clutter).at(size_t(index));const bool sealed=target.liquid.holds()&&!target.liquid.holed;damageClutter(level,size_t(index),propDamage,point,direction);
+  // A round through a bottle of liquid gives it little of its push (it holes it and goes on).
+  const float push=sealed&&target.liquid.holed?.12f:1.f;knockClutter(level,size_t(index),point,direction*(push*definition.propImpulse*propDamage/definition.dmgNear));};
  for(const auto&p:hit.passed)if(p.kind){if(p.kind==2)prop(p.level,p.index,p.point,p.distance);else{auto shift=chunkOffset(m_level)-chunkOffset(p.level);damagePane(p.level,p.index,hitscanDamageAt(definition,p.distance)*attenuation,p.point+Point3{shift.x,shift.y,0},direction);attenuation*=.8f;}}
  if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point,hit.distance);return;}
  definition.dmgNear*=attenuation;definition.dmgMid*=attenuation;definition.dmgFar*=attenuation;definition.actorDamage*=attenuation;if(damageOverride>0)damageOverride*=attenuation;
