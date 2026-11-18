@@ -16,6 +16,7 @@
 #include "Containers.h"
 #include "physics/PropBodies.h"
 #include "../core/Tune.h"
+#include "../world/PrimitiveKinds.h"
 #include <chrono>
 #include <deque>
 #include <cstdio>
@@ -95,6 +96,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<int> partOf;std::vector<Hit> hits;std::array<V3,8> feature{};
+ struct WetCell {V3 r;float area;};std::vector<WetCell> wetCells;   // a body's cells under water this step (its arm to each, wet face area)
  if(rp.flat.size()<list.size())rp.flat.resize(list.size());
  // How every door of a world stands (the flat-floor memo is good while it is unchanged).
  std::vector<std::pair<const World*,float>> doorStates;
@@ -103,6 +105,23 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  std::vector<std::pair<const World*,std::vector<int>>> ramps;
  auto rampsOf=[&](const World& w)->const std::vector<int>&{for(const auto&[k,v]:ramps)if(k==&w)return v;std::vector<int> found;
   for(int i=0;i<int(w.structures().size());++i){const auto&st=w.structures()[size_t(i)];if(st.shape==ShapeRamp&&!st.solid)found.push_back(i);}ramps.push_back({&w,found});return ramps.back().second;};
+ // Internal edges: a ramp's step proxies (solid boxes standing for its slope, each riser up to half a step over it) are
+ // not the ramp. A prop meets the true slope; the risers' faces and corners would be edges inside the slope's one face,
+ // and a crate slid onto the ramp's foot caught on the first and hopped (45 mm, 0.9 m/s up past the slope's own speed).
+ // The true slope under (x, y) when it is over a ramp of w: its height and normal.
+ auto rampAt=[&](const World& w,float x,float y,float& height,V3& normal)->bool{for(int r:rampsOf(w)){const auto&st=w.structures()[size_t(r)];if(x<st.x1||x>st.x2||y<st.y1||y>st.y2)continue;
+   const int f=st.facing%4;const float run=f==0||f==2?st.y2-st.y1:st.x2-st.x1;if(run<=1e-3f)continue;
+   const float t=f==0?(y-st.y1)/run:f==1?(x-st.x1)/run:f==2?(st.y2-y)/run:(st.x2-x)/run;const float k=(st.top-st.bottom)/run;
+   const Vec2 up=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0};height=st.bottom+(st.top-st.bottom)*std::clamp(t,0.f,1.f);normal=norm(V3{-k*up.x,-k*up.y,1});return true;}
+  return false;};
+ // A structure that is one of a ramp's step proxies (CollisionProxyMaterial, within a ramp's footprint and under its top).
+ auto rampProxy=[&](const World& w,const Structure& st){if(st.material!=CollisionProxyMaterial||st.shape==ShapeRamp)return false;
+  for(int r:rampsOf(w)){const auto&rp=w.structures()[size_t(r)];if(st.x1>=rp.x1-1e-3f&&st.x2<=rp.x2+1e-3f&&st.y1>=rp.y1-1e-3f&&st.y2<=rp.y2+1e-3f&&st.top<=rp.top+1e-3f)return true;}return false;};
+ // Solid at (x, y) from base up `height`, a ramp's proxies taken as its true slope (what they report up to half a step over
+ // it is the slope's, met by the ramp's own contacts).
+ auto solidAt=[&](const World& w,float x,float y,float base,float height)->bool{if(w.fits(x,y,base,height,true,true)&&!w.doorBlocks(x,y,base,height))return false;
+  float slope=0;V3 n;if(!rampAt(w,x,y,slope,n)||base<slope-.02f)return true;const float above=std::max(base,slope+PrimRampStep*.55f);
+  return !w.fits(x,y,above,height,true,true)||w.doorBlocks(x,y,above,height);};
  const float spacing=tune("props.sample_spacing",.12f);
  // The world's contacts hold a body within half a millimetre of its surfaces, not the solver's few millimetres
  // of slop: the World's own column tests (fits) are exact, and props were always kept out of walls by them.
@@ -185,7 +204,10 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // (speculative, for the walls as for the floor), so a fast thing stops at a wall rather than in it.
    {const V3 vp=b.v+cross(b.w,p-b.x);const V3 move=vp*RigidStep*1.5f;const float horiz=std::sqrt(move.x*move.x+move.y*move.y);
     if(horiz>.004f){const float tx=q.x+move.x,ty=q.y+move.y;const float fb=std::max(p.z+move.z-.005f,s+.004f);
-     if(!w.fits(tx,ty,fb,.01f,true,true)||w.doorBlocks(tx,ty,fb,.01f)){const V3 from{q.x,q.y,std::max(p.z,s+.006f)},to{tx,ty,std::max(p.z,s+.006f)};V3 n;const float t=w.shotFraction(from,to,n);
+     // Onto a ramp: its slope's face, met ahead as a speculative contact (the slope's plane carried out to the point), not
+     // its proxies' risers.
+     {float slope=0;V3 rn;if(!round&&rampAt(w,tx,ty,slope,rn)&&p.z<slope+.07f){const float planeZ=slope+(rn.x*(tx-q.x)+rn.y*(ty-q.y))/rn.z;if(p.z>=planeZ-.02f)hits.push_back({p,rn,std::max(0.f,(p.z-planeZ)*rn.z),3});}}   // (from its foot: beside it, its side is a wall)
+     if(solidAt(w,tx,ty,fb,.01f)){const V3 from{q.x,q.y,std::max(p.z,s+.006f)},to{tx,ty,std::max(p.z,s+.006f)};V3 n;const float t=w.shotFraction(from,to,n);
       if(t<1&&dot(n,to-from)<0)hits.push_back({p,n,std::max(0.f,dot(from-(from+(to-from)*t),n)),2});
       // The ray met no face (a fixture a ray passes through, a corner between its steps): the way it is going is
       // blocked, so a contact now against that way, at no gap, stops it at the face rather than in it.
@@ -201,7 +223,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    for(const auto&f:cw.fixtures()){if(!f.solid||f.core<=0)continue;const float hx=f.width*f.core*.5f,hy=f.depth*f.core*.5f,r=std::sqrt(hx*hx+hy*hy);
     if(f.position.x+r<lx0||f.position.x-r>lx1||f.position.y+r<ly0||f.position.y-r>ly1)continue;const float bottom=cw.floorHeight(f.position.x,f.position.y)+f.base,top=bottom+f.height;if(top<lz0||bottom>lz1)continue;
     const float c=std::cos(f.yaw),s=std::sin(f.yaw);const Vec2 ax{c,-s},ay{s,c};for(int i=0;i<4;++i){const Vec2 q=f.position+ax*(i&1?hx:-hx)+ay*(i&2?hy:-hy);corner(q.x,q.y,bottom,top);}}
-   for(const auto&st:cw.structures()){if(!st.solid||st.shape==ShapeRamp)continue;if(st.x2<lx0||st.x1>lx1||st.y2<ly0||st.y1>ly1||st.top<lz0||st.bottom>lz1)continue;
+   for(const auto&st:cw.structures()){if(!st.solid||st.shape==ShapeRamp||rampProxy(cw,st))continue;if(st.x2<lx0||st.x1>lx1||st.y2<ly0||st.y1>ly1||st.top<lz0||st.bottom>lz1)continue;
     corner(st.x1,st.y1,st.bottom,st.top);corner(st.x2,st.y1,st.bottom,st.top);corner(st.x1,st.y2,st.bottom,st.top);corner(st.x2,st.y2,st.bottom,st.top);}}
   if(hits.empty())return;
   // Group: the floor, the ceiling, the walls by the way they face (eight ways round).
@@ -218,8 +240,13 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    keepFour(group,n);
    if((g==0||g>=40)&&!flat){ // the floor's slope at the points kept (a ramp, terrain), by differences of the support
     V3 sum{};for(auto&h:group){Vec2 q{h.p.x,h.p.y};q=q+shift;const World& w=physicalWorld(q);const float s=h.p.z-h.sep,d=.04f;
-     auto at=[&](float x,float y){const float v=w.supportBelow(x,y,s+.06f,true);return std::fabs(v-s)<.06f?v:s;};
-     const float gx=(at(q.x+d,q.y)-at(q.x-d,q.y))/(2*d),gy=(at(q.x,q.y+d)-at(q.x,q.y-d))/(2*d);h.n=norm(V3{-gx,-gy,1});sum=sum+h.n;}
+     // (Over a ramp, its true slope, not its step proxies' tops.)
+     auto at=[&](float x,float y){float v=w.supportBelow(x,y,s+.06f,true);float slope=0;V3 rn;if(rampAt(w,x,y,slope,rn)&&std::fabs(v-slope)<PrimRampStep*.6f)v=slope;return std::fabs(v-s)<.06f?v:s;};
+     // Across a crease (a floor meeting a ramp's foot, a ramp's crest meeting its landing) the two sides' slopes differ, and
+     // their average is an edge's normal no face has: it threw a bottle back off a ramp's foot. The flatter side's, the
+     // face the point stands on, is kept (internal edges filtered as on a mesh); on a smooth slope both sides agree.
+     auto grade=[&](float minus,float here,float plus){const float back=(here-minus)/d,ahead=(plus-here)/d;return std::fabs(ahead-back)>.1f?(std::fabs(ahead)<std::fabs(back)?ahead:back):(plus-minus)/(2*d);};
+     const float here=at(q.x,q.y),gx=grade(at(q.x-d,q.y),here,at(q.x+d,q.y)),gy=grade(at(q.x,q.y-d),here,at(q.x,q.y+d));h.n=norm(V3{-gx,-gy,1});sum=sum+h.n;}
     n=norm(sum);for(auto&h:group)h.sep*=n.z;}
    Manifold m;m.a=bi;m.b=-1;m.partA=0;m.partB=g;m.normal=neg(n);m.material=Material::mix(b.material,Ground);m.material.restitution=b.material.restitution;m.count=0;
    // A floor gives its own material (Space::prepare mixes it with the prop's): under the points' middle.
@@ -236,7 +263,18 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // Light props only: one of 8 kg and up stops him (Movement) and is shoved by the old rule's slow push.
    return prop.kinematic||prop.invMass<1/8.f?false:len(prop.v)<2.5f;}return true;};
  space.sweep=[&](Space&,int,V3 from,V3 to,V3& normal)->float{Vec2 q{from.x,from.y};q=q+shift;const World& w=physicalWorld(q);const Vec2 k=q-(Vec2{from.x,from.y}+shift);
-  const V3 a{q.x,q.y,from.z},bb{to.x+shift.x+k.x,to.y+shift.y+k.y,to.z};return w.shotFraction(a,bb,normal);};
+  const V3 a{q.x,q.y,from.z},bb{to.x+shift.x+k.x,to.y+shift.y+k.y,to.z};
+  // A ramp's step proxies are not met: a riser or a step's top over the true slope is passed, and the slope's own plane
+  // met instead (a thrown bottle swept onto a ramp's foot bounced back off its first riser).
+  float begin=0;V3 from2=a;
+  for(int tries=0;tries<8;++tries){const float t=w.shotFraction(from2,bb,normal);if(t>=1)return 1.f;const V3 hit=from2+(bb-from2)*t;const float at=begin+(1-begin)*t;
+   const V3 dir=norm(bb-a);float slope=0;V3 rn;
+   if(!rampAt(w,hit.x+dir.x*.002f,hit.y+dir.y*.002f,slope,rn)||hit.z<slope-.01f)return at;
+   // The slope's plane along the rest of the way, from where it entered the ramp.
+   {const V3 d=bb-a;const float den=dot(d,rn);if(den<-1e-6f){const float h0=dot(a-V3{hit.x,hit.y,slope},rn),ts=-h0/den;
+     if(ts>=0&&ts<=1){const V3 p=a+d*ts;float s2=0;V3 n2;if(rampAt(w,p.x,p.y,s2,n2)&&std::fabs(p.z-s2)<.02f){normal=rn;return ts;}}}}
+   begin=std::min(1.f,at+.004f/std::max(len(bb-a),1e-6f));from2=hit+dir*.004f;if(begin>=1)return 1.f;}
+  return 1.f;};
  // ---- A prop's own reactions (as the old step had them) ----
  // A blow's sound (and hearing) goes by the contact's own approach; breaking goes by the approach of the prop's
  // middle (`breaking`, the speed the materials' break speeds were set on: a tumbling bottle's tip is faster).
@@ -419,12 +457,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(bottom<surface){
      // The share of its volume under the surface and that volume's middle: each part in 27 cells, each cell
      // under by how much of its own height is (so the share runs smoothly as it sinks or rocks).
-     float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();
+     float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();wetCells.clear();
      for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];const V3 half=part.kind==PartKind::Cylinder?V3{part.half.x*.886f,part.half.x*.886f,part.half.z}:part.kind==PartKind::Sphere?V3{part.half.x*.806f,part.half.x*.806f,part.half.x*.806f}:part.half;
       const float vol=half.x*half.y*half.z;const M3 r=turn*part.turn.matrix();
       const float tall=(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
       for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){const V3 l=part.centre+part.turn.rotate(V3{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f});const V3 at=b.toWorld(l);
-       const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);}}}
+       const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);wetCells.push_back({at-b.x,wet*std::pow(vol*8.f/27.f,2.f/3.f)});}}}
      const float f=all>0?under/all:0.f;
      if(f>0){middle=middle*(1/under);const float rho=buoyancy::density(c),k=buoyancy::drag(c)*tune("water.drag",1.f);const bool floater=rho<buoyancy::WaterDensity;
       const float mass=b.invMass>0?1/b.invMass:1;const float height=std::max(.01f,c.height());
@@ -434,12 +472,25 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
       const float horizontal=std::sqrt(b.v.x*b.v.x+b.v.y*b.v.y);const float hk=std::exp(-(1.1f+k*horizontal)*f*RigidStep);b.v.x*=hk;b.v.y*=hk;
       const float bob=floater?2*tune("water.bob_damping",.2f)*std::sqrt(buoyancy::Gravity*buoyancy::WaterDensity/(rho*height)):tune("water.sink_drag",2.6f);
       b.v.z*=std::exp(-(1.1f+bob+k*std::fabs(b.v.z))*f*RigidStep);b.w=b.w*std::exp(-2.6f*f*RigidStep);
+      // The water against its turning, cell by cell: each wet cell's own speed through the water from the turn, resisted by
+      // its square (half rho Cd A |u| u, water.turn_drag the Cd) at the cell, so the drag grows with the reach: a plank or a
+      // log spun in the water slows far sooner than a mug, and a drum tipping over is checked as it goes, not flung.
+      {b.updateInertia();V3 tau{};const float cd=tune("water.turn_drag",1.f)*.5f*buoyancy::WaterDensity;
+       for(const auto&cell:wetCells){const V3 u=cross(b.w,cell.r);tau=tau+cross(cell.r,u*(-cd*cell.area*len(u)));}
+       V3 dw=b.invInertia*tau*RigidStep;const float most=len(b.w),l=len(dw);if(l>most&&l>0)dw=dw*(most/l);b.w=b.w+dw;}
       const float bed=w.supportBelow(q.x,q.y,bottom+.025f,true);const bool afloat=floater&&surface-bed>height*rho/buoyancy::WaterDensity*.9f;
       if(afloat&&f<.999f){
        // Afloat: a prop's mass lies in its walls (a crate's planks, a box's card), so it rides on a face, not
-       // on a corner as a solid block of its density would: the water rights it toward its nearest face.
+       // on a corner as a solid block of its density would: the water rights it toward its nearest face it can float on.
+       // A face is one when its waterplane's lever over what is under (BM, a^2 / 6 h s for a box of half extent h across
+       // the face and a the lesser of the others, s its density over water's) beats the drop from the middle of what is
+       // under to its own (BG, h (1 - s)), that drop taken at water.hollow of a solid block's (its mass in its walls):
+       // a crate rides on any face; a plank, a log or a pipe only lying flat; a drum or a bottle on its side, so one
+       // dropped upright bobs, tips over and settles. (Nearest of all faces, as before, when none is.)
        // A swell rocks it a few degrees and heaves it, a slow drift carries it (each on its own phase).
-       V3 axis{};float best=-1;for(int a=0;a<3;++a){const V3 v=turn.column(a);const float d=std::fabs(v.z);if(d>best){best=d;axis=v.z<0?neg(v):v;}}
+       const auto dims=c.size();const float sr=std::clamp(rho/buoyancy::WaterDensity,.05f,.95f),hollow=tune("water.hollow",.5f);
+       auto floatsOn=[&](int a){const float h=std::max(.005f,dims[size_t(a)]*.5f),w=std::min(dims[size_t((a+1)%3)],dims[size_t((a+2)%3)])*.5f;return w*w/(6*h*sr)>hollow*h*(1-sr);};
+       V3 axis{};float best=-1;for(int pass=0;pass<2&&best<0;++pass)for(int a=0;a<3;++a){if(pass==0&&!floatsOn(a))continue;const V3 v=turn.column(a);const float d=std::fabs(v.z);if(d>best){best=d;axis=v.z<0?neg(v):v;}}
        b.w=b.w+cross(axis,V3{0,0,1})*(tune("water.right",80.f)*RigidStep);
        const float phase=float(index%97)*.61f,swell=tune("water.swell",1.f);
        b.w=b.w+V3{std::cos(c.yaw),std::sin(c.yaw),0}*(1.5f*swell*std::sin(1.6f*m_elapsed+phase*1.7f+1.f)*RigidStep)+V3{-std::sin(c.yaw),std::cos(c.yaw),0}*(1.5f*swell*std::sin(1.9f*m_elapsed+phase)*RigidStep);

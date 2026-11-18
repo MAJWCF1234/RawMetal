@@ -77,8 +77,8 @@ void Joint::prepare(Space& s,float h){prep.h=h;Body& A=bodyAt(s,a);Body& B=bodyA
  prep.turnMass=(prep.iA+prep.iB).inverse();
  // Warm starting across rebuilt spaces.
  if(key){auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
-  if(it!=s.jointCache.end()&&it->first==key){const auto& c=it->second;linearImpulse=c.linear;angularImpulse=c.angular;lowerImpulse=c.lower;upperImpulse=c.upper;motorImpulse=c.motor;springImpulse=c.spring;axialImpulse=c.axial;coneImpulse=c.cone;twistLowerImpulse=c.twistLower;twistUpperImpulse=c.twistUpper;for(int k=0;k<4;++k)swingImpulse[k]=c.swing[k];}}
- if(broken){linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=0;for(float&k:swingImpulse)k=0;}
+  if(it!=s.jointCache.end()&&it->first==key){const auto& c=it->second;linearImpulse=c.linear;angularImpulse=c.angular;lowerImpulse=c.lower;upperImpulse=c.upper;motorImpulse=c.motor;springImpulse=c.spring;axialImpulse=c.axial;coneImpulse=c.cone;twistLowerImpulse=c.twistLower;twistUpperImpulse=c.twistUpper;for(int k=0;k<4;++k)swingImpulse[k]=c.swing[k];frictionImpulse=c.friction;detentImpulse=c.detent;}}
+ if(broken){linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=frictionImpulse=detentImpulse=0;for(float&k:swingImpulse)k=0;}
  // A winch reels its rope at the motor's speed while the pull is under its force (last step's pull).
  if(kind==JointKind::Rope&&motor!=JointMotor::Off&&!broken){const float dt=h*float(std::max(1,s.settings.substeps));
   float rate=motor==JointMotor::Speed?-motorSpeed:std::clamp((motorTarget-length)*servoGain,-std::fabs(motorSpeed),std::fabs(motorSpeed));
@@ -89,8 +89,8 @@ void Joint::warmStart(Space& s){if(broken)return;Body& A=bodyAt(s,a);Body& B=bod
  const Pose p=poseOf(*this,A,B,b<0);
  V3 P=linearImpulse,L=angularImpulse;V3 rA=p.rA;   // the linear impulse at A's arm (the slider's at B's anchor)
  switch(kind){
-  case JointKind::Hinge:L=L+p.zA*(lowerImpulse-upperImpulse+motorImpulse+springImpulse);break;
-  case JointKind::Slider:{rA=p.pB-A.x;P=P+p.zA*(lowerImpulse-upperImpulse+motorImpulse+springImpulse);break;}
+  case JointKind::Hinge:L=L+p.zA*(lowerImpulse-upperImpulse+motorImpulse+springImpulse+frictionImpulse+detentImpulse);break;
+  case JointKind::Slider:{rA=p.pB-A.x;P=P+p.zA*(lowerImpulse-upperImpulse+motorImpulse+springImpulse+frictionImpulse+detentImpulse);break;}
   case JointKind::Ball:if(swingLimited){const Split sp=splitRows(p);L=L+sp.axis[0]*(swingImpulse[0]-swingImpulse[1])+sp.axis[1]*(swingImpulse[2]-swingImpulse[3]);
     if(twistLimited)L=L+sp.axis[2]*(twistLowerImpulse-twistUpperImpulse);break;}else{const V3 c=cross(p.zA,p.zB);const float l=len(c);if(l>1e-6f)L=L-c*(coneImpulse/l);const V3 n=norm(p.zA+p.zB,p.zA);L=L+n*(twistLowerImpulse-twistUpperImpulse);break;}
   case JointKind::Distance:case JointKind::Rope:case JointKind::Spring:{const V3 u=norm(p.pB-p.pA);P=P+u*(axialImpulse+springImpulse+lowerImpulse-upperImpulse);break;}
@@ -118,9 +118,17 @@ void Joint::solve(Space& s,float h,bool useBias){if(broken)return;Body& A=bodyAt
  auto axis=[&](float value,float rate,float mass,auto&& push,auto&& again){
   if(springHertz>0){const Soft sp=makeSoft(std::min(springHertz,.25f*inv),springDamping,h);const float C=value-springTarget;
    const float d=-mass*sp.massScale*(rate+sp.biasRate*C)-sp.impulseScale*springImpulse;springImpulse+=d;push(d);rate=again();}
+  // A detent: within its range of the nearest catch, a soft spring to it, holding with at most detentForce. Out of range,
+  // what it was warm started with is taken back out (it holds nothing there).
+  if(detentCount>0&&detentHertz>0){float C=1e30f;for(int k=0;k<std::min(detentCount,4);++k){const float d=kind==JointKind::Hinge?std::remainder(value-detents[size_t(k)],2*kPi):value-detents[size_t(k)];if(std::fabs(d)<std::fabs(C))C=d;}
+   if(std::fabs(C)<detentRange){const Soft sp=makeSoft(std::min(detentHertz,.25f*inv),1.f,h);float next=detentImpulse-mass*sp.massScale*(rate+sp.biasRate*C)-sp.impulseScale*detentImpulse;
+    if(detentForce>0)next=std::clamp(next,-detentForce*h,detentForce*h);const float d=next-detentImpulse;detentImpulse=next;push(d);rate=again();}
+   else if(detentImpulse!=0){push(-detentImpulse);detentImpulse=0;rate=again();}}
   if(motor!=JointMotor::Off){const float miss=kind==JointKind::Hinge?std::remainder(motorTarget-value,2*kPi):motorTarget-value;   // a hinge's angle goes round
    const float want=motor==JointMotor::Speed?motorSpeed:std::clamp(miss*servoGain,-std::fabs(motorSpeed),std::fabs(motorSpeed));
    const float cap=motorMaxForce*h,old=motorImpulse;motorImpulse=std::clamp(old-mass*(rate-want),-cap,cap);const float d=motorImpulse-old;push(d);rate=again();}
+  // Friction on the axis (a door's pin, a drawer's runners): the rate taken out, the impulse held to its force.
+  if(frictionTorque>0){const float cap=frictionTorque*h,old=frictionImpulse;frictionImpulse=std::clamp(old-mass*rate,-cap,cap);push(frictionImpulse-old);rate=again();}
   if(limited){{const float d=oneSided(value-lower,rate,mass,lowerImpulse,lock,inv,useBias);push(d);rate=again();}
    {const float d=oneSided(upper-value,-rate,mass,upperImpulse,lock,inv,useBias);push(-d);}}};
  const int iterations=std::max(1,s.settings.jointIterations);
@@ -193,14 +201,14 @@ void Joint::finish(Space& s,float h){
  // What it carried: the pull of its linear rows and the twist of its turning rows, over the substep.
  const float inv=1/std::max(h,1e-6f);
  float pull=len(linearImpulse)+std::fabs(axialImpulse)+std::fabs(springImpulse);float twistNow=len(angularImpulse);
- switch(kind){case JointKind::Hinge:case JointKind::Ball:twistNow+=std::fabs(lowerImpulse-upperImpulse+motorImpulse+springImpulse)+std::fabs(coneImpulse)+std::fabs(twistLowerImpulse-twistUpperImpulse)+std::fabs(swingImpulse[0]-swingImpulse[1])+std::fabs(swingImpulse[2]-swingImpulse[3]);break;
-  case JointKind::Slider:pull+=std::fabs(lowerImpulse-upperImpulse+motorImpulse);break;
+ switch(kind){case JointKind::Hinge:case JointKind::Ball:twistNow+=std::fabs(lowerImpulse-upperImpulse+motorImpulse+springImpulse+frictionImpulse+detentImpulse)+std::fabs(coneImpulse)+std::fabs(twistLowerImpulse-twistUpperImpulse)+std::fabs(swingImpulse[0]-swingImpulse[1])+std::fabs(swingImpulse[2]-swingImpulse[3]);break;
+  case JointKind::Slider:pull+=std::fabs(lowerImpulse-upperImpulse+motorImpulse+frictionImpulse+detentImpulse);break;
   case JointKind::Rope:case JointKind::Pulley:pull+=std::fabs(upperImpulse)+std::fabs(motorImpulse);break;
   case JointKind::Spring:pull+=std::fabs(lowerImpulse)+std::fabs(upperImpulse);break;default:break;}
  force=broken?0:pull*inv;torque=broken?0:twistNow*inv;
  if(!broken&&((breakForce>0&&force>breakForce)||(breakTorque>0&&torque>breakTorque))){broken=true;s.jointEvents.push_back({this,force,torque,worldA(s)});
-  linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=0;for(float&k:swingImpulse)k=0;}
- if(key){Space::JointCached c{linearImpulse,angularImpulse,lowerImpulse,upperImpulse,motorImpulse,springImpulse,axialImpulse,coneImpulse,twistLowerImpulse,twistUpperImpulse};for(int k=0;k<4;++k)c.swing[k]=swingImpulse[k];
+  linearImpulse=angularImpulse={};lowerImpulse=upperImpulse=motorImpulse=springImpulse=axialImpulse=coneImpulse=twistLowerImpulse=twistUpperImpulse=frictionImpulse=detentImpulse=0;for(float&k:swingImpulse)k=0;}
+ if(key){Space::JointCached c{linearImpulse,angularImpulse,lowerImpulse,upperImpulse,motorImpulse,springImpulse,axialImpulse,coneImpulse,twistLowerImpulse,twistUpperImpulse};for(int k=0;k<4;++k)c.swing[k]=swingImpulse[k];c.friction=frictionImpulse;c.detent=detentImpulse;
   auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   if(it!=s.jointCache.end()&&it->first==key)it->second=c;else s.jointCache.insert(it,{key,c});}
 }

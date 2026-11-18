@@ -232,6 +232,10 @@ struct PropJoint {
  StateId motorState=0;               // switch=: the motor runs only while this state is set (0: always)
  StateId snapState=0;                // state=: set to 1 when it snaps (or is shot through)
  float breakForce=0,ratio=1,radius=0;
+ // friction=: a hinge's (N m about its pin), a slider's (N along its rail) or a ball's (N m): a door nudged stops where it
+ // is left. detent=: where a hinge or slider catches (degrees or metres from its rest, up to four), within catch= of it
+ // (degrees or metres; < 0: 8 degrees, 2.5 cm), held with at most latch= (N m or N; 0: the detent's spring alone).
+ float friction=0;std::array<float,4> detents{};int detentCount=0;float catchRange=-1,latch=0;
  bool rope()const{return kind==PropJointKind::Rope||kind==PropJointKind::Chain||kind==PropJointKind::Spring||kind==PropJointKind::Distance||kind==PropJointKind::Pulley||kind==PropJointKind::Winch;}
 };
 const char* propJointWord(PropJointKind kind);

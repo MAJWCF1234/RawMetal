@@ -810,8 +810,15 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     else if(k=="over2"){j.over2=vec(v,"over2");over2Set=true;}
     else if(k=="ratio"){j.ratio=num(v,"ratio");if(j.ratio<.1f||j.ratio>10)throw std::runtime_error("joint ratio is 0.1 to 10");}
     else if(k=="state"||k=="switch"){const std::vector<std::string> one{v};(k=="state"?j.snapState:j.motorState)=scriptName(one,0,k=="state"?"joint state":"joint switch");}
-    else if(k=="radius"){j.radius=num(v,"radius");if(j.radius<0||j.radius>.1f)throw std::runtime_error("joint radius is 0 to 0.1 m");}}
+    else if(k=="radius"){j.radius=num(v,"radius");if(j.radius<0||j.radius>.1f)throw std::runtime_error("joint radius is 0 to 0.1 m");}
+    else if(k=="friction"){j.friction=num(v,"friction");if(j.friction<0||j.friction>5000)throw std::runtime_error("joint friction is 0 to 5000 (N m on a hinge or ball, N on a slider)");}
+    else if(k=="detent"){j.detentCount=0;size_t at=0;while(true){const size_t comma=v.find(',',at);const std::string one=v.substr(at,comma==std::string::npos?std::string::npos:comma-at);
+      if(j.detentCount>=4)throw std::runtime_error("joint detent takes at most four places: "+v);j.detents[size_t(j.detentCount++)]=num(one,"detent")*unit;if(comma==std::string::npos)break;at=comma+1;}}
+    else if(k=="catch"){j.catchRange=num(v,"catch")*unit;if(j.catchRange<=0||j.catchRange>(angular?kPi*.5f:.5f))throw std::runtime_error("joint catch is over 0, at most 90 degrees or 0.5 m");}
+    else if(k=="latch"){j.latch=num(v,"latch");if(j.latch<0)throw std::runtime_error("joint latch must not be negative");}}
    if(j.limited&&j.lower>j.upper)throw std::runtime_error("joint min is more than its max");
+   if(j.detentCount>0&&j.kind!=PropJointKind::Hinge&&j.kind!=PropJointKind::Slider)throw std::runtime_error("joint detent= is for a hinge or a slider");
+   if(j.friction>0&&j.kind!=PropJointKind::Hinge&&j.kind!=PropJointKind::Slider&&j.kind!=PropJointKind::Ball)throw std::runtime_error("joint friction= is for a hinge, a slider or a ball");
    if(j.kind==PropJointKind::Pulley&&(!overSet||!over2Set))throw std::runtime_error("a pulley needs over= and over2= (where each rope goes over)");
    if(j.kind==PropJointKind::Winch&&j.motor==0)j.motor=1;
    map->joints.push_back(j);

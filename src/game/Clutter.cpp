@@ -74,19 +74,27 @@ void Game::breakClutter(int level,size_t index,Point3 direction){
  // A prop with authored gibs (GibSets.h, cut in Blender by tools/library/make_gibs.py) comes apart into those:
  // each a prop of its own (a Vectra body, saved as any prop is), where it sat in the prop as it stood, turned as
  // it was, going on at the prop's speed and thrown out from its middle and along the blow.
- if(const auto* set=gibs::setOf(c.model)){const vectra::Quat q=vectra::propOrientation(c);const vectra::V3 centre=vectra::propCentre(c),dir{direction.x,direction.y,direction.z};
+ // The blow's way: a direction (a caller breaking a prop by its speed passes its velocity), at most a unit.
+ const vectra::V3 blowWay=[&]{const vectra::V3 d{direction.x,direction.y,direction.z};const float l=vectra::len(d);return l>1?d*(1/l):d;}();
+ const vectra::V3 spinning=vectra::propAngular(before);
+ if(const auto* set=gibs::setOf(c.model)){const vectra::Quat q=vectra::propOrientation(c);const vectra::V3 centre=vectra::propCentre(c),dir=blowWay;
   const vectra::V3 moving{before.velocity.x,before.velocity.y,before.vz};
+  // Each piece goes on at the prop's own velocity where it sat (its spin's share too: the blow that broke it is in both,
+  // the solver's or the round's), turning as the prop turned.
   for(int k=0;k<set->count;++k){const auto& p=gibs::pieces[size_t(set->first+k)];Clutter g;g.kind=c.kind;g.model=p.model;g.dims={p.size[0]*c.dims[0],p.size[1]*c.dims[1],p.size[2]*c.dims[2]};
    const vectra::V3 off=q.rotate({p.offset[0]*c.dims[0],p.offset[1]*c.dims[1],p.offset[2]*c.dims[2]}),at=centre+off;
    g.orient={q.w,q.x,q.y,q.z};q.toEuler(g.yaw,g.pitch,g.roll);g.orientEuler={g.yaw,g.pitch,g.roll};g.pos={at.x,at.y};g.z=at.z-g.extent()[2];
    const float h=float((k*2654435761u)%1000)/1000.f;const vectra::V3 out=vectra::norm(vectra::V3{off.x,off.y,0},vectra::V3{std::cos(h*6.283f),std::sin(h*6.283f),0});
-   const vectra::V3 v=moving+out*(1.1f+.6f*h)+dir*1.2f+vectra::V3{0,0,1.2f+.8f*h};g.velocity={v.x,v.y};g.vz=v.z;
-   vectra::setPropAngular(g,vectra::V3{(h-.5f)*8.f,(.5f-h)*6.f,(h-.3f)*5.f});g.sleeping=false;g.soundOwner=owner;m_pendingShards.push_back({level,g});}
+   const vectra::V3 v=moving+vectra::cross(spinning,off)+out*(1.1f+.6f*h)+dir*1.2f+vectra::V3{0,0,1.2f+.8f*h};g.velocity={v.x,v.y};g.vz=v.z;
+   vectra::setPropAngular(g,spinning+vectra::V3{(h-.5f)*8.f,(.5f-h)*6.f,(h-.3f)*5.f});g.sleeping=false;g.soundOwner=owner;m_pendingShards.push_back({level,g});}
   return;}
  {const auto m=c.material();const float big=std::max({c.dims[0],c.dims[1],c.dims[2]});
   if((m==PropMaterial::Wood||m==PropMaterial::Plastic||m==PropMaterial::Metal||m==PropMaterial::Electronic||m==PropMaterial::Cardboard)&&big>=.12f){
-   const Point3 centre{c.pos.x,c.pos.y,c.z+c.height()*.5f};const Point3 d=direction;
-   for(auto p:Clutter::shards(ShardOf::Model,centre,c.dims,c.yaw,big>=.5f?6:4,1.6f,1.8f,c.model)){p.velocity+=Vec2{d.x,d.y}*1.2f;m_pendingShards.push_back({level,p});}}}
+   const Point3 centre{c.pos.x,c.pos.y,c.z+c.height()*.5f};const vectra::V3 middle=vectra::propCentre(before);
+   // (Each slice goes on at the prop's velocity where it sat, its spin's share too, as gibs do: it does not pop in place.)
+   for(auto p:Clutter::shards(ShardOf::Model,centre,c.dims,c.yaw,big>=.5f?6:4,1.6f,1.8f,c.model)){
+    const vectra::V3 at{p.pos.x,p.pos.y,p.z+p.dims[2]*.5f},v=vectra::V3{before.velocity.x,before.velocity.y,before.vz}+vectra::cross(spinning,at-middle)+blowWay*1.2f;
+    p.velocity+=Vec2{v.x,v.y};p.vz+=v.z;m_pendingShards.push_back({level,p});}}}
 }
 void Game::landShards(){
  for(auto&[level,c]:m_pendingShards){if(level==m_level)m_clutter.push_back(c);else if(level>=0&&level<chunkCount())m_chunks[level].clutter.push_back(c);}

@@ -82,7 +82,14 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
     edge meets the fixture's face, as a wall (a tall crate shoved against a counter is not lifted onto it).
   - The contacts are grouped by facing into manifolds of four. The floor under each part of a compound is its
     own manifold, so a chair on its back rests on its back and its seat's edge at once.
-  - A ramp (`ShapeRamp`) collides in the World as 10 cm step proxies. Vectra uses its true slope instead.
+  - A ramp (`ShapeRamp`) collides in the World as 10 cm step proxies. Vectra uses its true slope instead, and filters
+    the proxies out as a mesh engine filters internal edges: a point's way ahead onto a ramp meets the slope's plane (a
+    speculative contact), not a riser; the proxies' corners are not tested against bodies; the swept test for fast
+    bodies passes a riser or a step's top over the slope and meets the slope's plane; and a floor's slope by differences
+    across a crease (a floor meeting a ramp's foot, a crest meeting its landing) takes the flatter side's, the face the
+    point stands on, not the average no face has. A crate slid onto a ramp's foot at 3.4 m/s had hopped 45 mm and a
+    bottle had bounced back off the first riser; both now go up it on the slope (tube `vectra-gaps`, seams). The joins
+    of a platform's boxes and of floor tiles were never seams: the World answers heights, not triangles.
   - The usual case is asked once per body: one flat floor under the whole footprint, and every column round
     and through it open. The answer is kept for a region 4 cm round the body (a resting or sliding prop asks
     again only when it leaves it, falls 2 cm, or a door moves), and on such a floor only the lowest points and
@@ -138,6 +145,18 @@ A sleeping prop out of reach of every awake prop and of the player is not built 
 bounds while it has not moved, and a part's hull is built only when a pair needs it: 400 resting props cost 0.065 ms a
 step, and 20 fast shards through them 0.48 ms (`vectra-scale`; 0.14 and 0.62 before). Continuous collision meets a
 fast body only with the bodies whose swept boxes reach its own (sorted along x once a step).
+
+**Active-only stepping.** After the collision pass the step keeps the list of bodies it moves (`Space::active`: awake
+and movable, by index). The substeps' integrations go through it alone, and only an awake body's inertia is turned to
+the world each step (one a touch woke in the pass is turned then). The pair sweep starts from the active bodies only:
+every body's interval along x is sorted once, and each active body looks back by the widest interval and on while
+they start before it ends, so two sleepers are never even looked at as a pair. The warm-start cache sorts only this
+step's manifolds and merges them with what the sleepers kept (already in order). 600 props asleep with 30 awake among
+them (89 awake once they woke what they struck) went from 0.585-0.650 ms a step to 0.540-0.558 on the bare core, and in
+the game (591 built, 50 awake) from 0.733 to 0.644-0.652; 600 sleepers nothing touches now add 0.06 ms to 30 awake
+bodies' 0.10 (0.1 us a sleeper; tube `vectra-gaps`, active). Per-island solving on worker threads is not done: the
+islands are only known after the step, the game's awake set is small (its solve is 0.15 ms), and a thread's start
+would cost more than it saved.
 
 ## Continuous collision
 
@@ -247,9 +266,9 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
 
 | Kind | Holds | Free | Options |
 | --- | --- | --- | --- |
-| hinge | the anchors together, z of B on z of A | the turn about z | limits, spring, motor (speed or servo) |
-| ball | the anchors together | every turn | an elliptical cone (`coneX`, `coneY`), a twist limit |
-| slider | the turn, B's anchor on A's z line | travel along z | limits, spring, motor |
+| hinge | the anchors together, z of B on z of A | the turn about z | limits, spring, motor (speed or servo), friction, detents |
+| ball | the anchors together | every turn | an elliptical cone (`coneX`, `coneY`), a twist limit, friction |
+| slider | the turn, B's anchor on A's z line | travel along z | limits, spring, motor, friction, detents |
 | weld | everything | nothing | |
 | distance | the anchors `length` apart | | |
 | rope | the anchors at most `length` apart (slack when nearer) | | a winch: its motor reels the length in at `motorSpeed` while the pull is under `motorMaxForce` |
@@ -258,8 +277,20 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
 
 - **Motors.** Speed holds a speed with at most `motorMaxForce` (a speed of 0 with a force is a brake). Servo drives to
   `motorTarget` at up to `motorSpeed` (a hinge's angle goes round). A motor at work keeps its bodies awake.
+- **Friction.** `frictionTorque`: on a ball, the whole turn (N m); on a hinge, about its axis (N m, a door's pin); on a
+  slider, along its rail (N, a drawer's runners). A row that takes the rate out with at most that much, warm started
+  (`frictionImpulse`), after the motor and before the limits: a cabinet door nudged at 1.2 rad/s with 1.5 N m stops
+  14 degrees on and stays; with none it glides to its stop.
+- **Detents.** A hinge or slider catches at up to four places (`detents`, `detentCount`; radians or metres from its rest):
+  within `detentRange` of the nearest a critically damped spring of `detentHertz` (6) pulls it there, holding with at most
+  `detentForce` (0: the spring alone). Out of range it holds nothing (`detentImpulse` is taken back out). A drawer pushed
+  shut that friction stops 1.5 cm short clicks shut; latched at 60 N, a 20 N pull leaves it, 150 N opens it (tube
+  `vectra-gaps`). Doors latch where they were drawn shut, hatches stay shut, drawers catch (the Connect tool's defaults).
 - **Breaking.** `force` and `torque` are what the joint carried over the last step (its impulses over the substep). Past
-  `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after.
+  `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after. A board nailed across a
+  doorway, a sign on a wall, a shelf's welded breakables are a `weld` (or a `ball`, one nail) with `breaks=` (the
+  Connect tool's Nailed writes a weld at 600 N): a 2 kg box at 1 m/s pulls it with 11 N and it holds; a 30 kg crate
+  at 6 m/s tears it off (tube `vectra-gaps`, breaking).
 - **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
   the cache per level), so a joint built afresh each step starts from what it carried.
 - **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints. A held
@@ -368,8 +399,15 @@ Not the default yet. ragdoll-fall, 14 fixtures (lab, 2026-11-18):
 - **Hand.** The held prop spins with the hand (its turn since the last frame), so a crate swung round carries
   what stands on it by friction and flings it off when jerked.
 - **Water.** Each part is 27 cells, each under the surface by its own share. The lift acts at the middle of
-  what is under, drawn toward the body's middle (a prop's mass is in its walls), so a floater rights itself
-  onto a face. Drag, swell and drift are as before. A body coming through the surface splashes.
+  what is under, drawn toward the body's middle (`water.lever`: a prop's mass is in its walls), and the water
+  rights a floater onto its nearest face it can float on: one whose waterplane's lever over the draft (BM) beats
+  the drop from the middle of what is under to its own (BG, taken at `water.hollow` of a solid block's). A crate
+  rides on any face; a plank, a log or a pipe only lying flat; a drum or a bottle on its side. Linear drag is
+  linear plus quadratic in the speed, as before; the turn is resisted by each wet cell's own speed through the
+  water, by its square (half rho Cd A |u| u at the cell, `water.turn_drag` the Cd), so a long thing spun or
+  tipping is checked by its reach. A sealed drum dropped in upright bobs, tips onto its side and settles; a plank
+  dropped in on its end lies flat (before, the nearest face held them upright and on end: tube `vectra-gaps`,
+  water). Swell and drift are as before. A body coming through the surface splashes.
 - **Glass.** A pane takes the energy the contact's effective mass brings into it (the look-ahead above for
   a fast throw).
 - **Sounds, AI hearing and breaking** come from each contact's approach speed. Breaking uses the speed of the
@@ -438,6 +476,8 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `props.pad_hertz` | 4 | padded props' contact stiffness |
 | `water.right` | 80 | how strongly a floater rights itself |
 | `water.lever` | 0.35 | how far the lift is drawn toward the body's middle |
+| `water.hollow` | 0.5 | how much of a solid block's drop to the middle of what is under counts against a face (which faces a floater rides on) |
+| `water.turn_drag` | 1 | the drag coefficient on a wet cell's speed from the turn (quadratic) |
 
 ## Phase 3
 
@@ -482,10 +522,16 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
   bottle's body, a screen). Each piece is a library model (OBJ, a json sidecar with its shape, mass share, offset
   and size as fractions of the prop) registered as any library model; `make_gibs.py --table` writes GibSets.h and
   the pieces' masses (by bounding volume) and materials into prop_physics.json.
-- `Game::breakClutter` puts each piece where it sat in the prop, turned as the prop was, at the prop's speed plus
-  a throw out from its middle and along the blow. Each is an ordinary model prop: a Vectra body (a box, or a
-  cylinder for a bottle neck), saved with the props, carried and pulled like any. Glass pieces shatter further by
-  the usual break speed. A prop with no set is sliced into eighths as before.
+- `Game::breakClutter` puts each piece where it sat in the prop, turned as the prop was, at the prop's velocity at
+  that place (its linear velocity plus its spin crossed with the piece's offset: the blow that broke it is already
+  in both, the solver's or the round's knock), spinning as the prop spun, plus a throw out from its middle and
+  1.2 m/s along the blow (the direction a caller passes, held to a unit: a prop broken by its speed passes its
+  velocity). A 50 N s blow on a 9 kg crate's top edge sends its planks on at 6.9 m/s along it, the top ones 8.6 and
+  the bottom 5.4; a crate spun at 8 rad/s comes apart with its sides going opposite ways (tube `vectra-gaps`,
+  breaking). Each is an ordinary model prop: a Vectra body (a box, or a cylinder for a bottle neck), saved with the
+  props, carried and pulled like any. Glass pieces shatter further by the usual break speed. A prop with no set is
+  sliced into eighths as before, and the slices too go on at the velocity their places had (they popped out in
+  place, the blow's way their only motion).
 - Sets: wooden_chair (four legs, seat, back), scrap_chair (frame, seat, back), wooden_crate (lid, floor, four
   side planks, two ends), packing_crate (lid, floor, two sides, two ends), glass_bottle (neck, four shards),
   crt_monitor (stand, casing, a screen cracked in three).
