@@ -39,7 +39,7 @@ std::vector<unsigned char> loose(int id){
  else if(ext==".webp")bytes=decodeLossyTexture(bytes);
  else if(ext==".ntx")bytes=reconstructNeuralTexture(bytes,loose(int(neuralTextureModelResource(bytes))));
  else if(ext==".bin"){AnimationPredictionLayout grid;if(animationPredictionLayout(bytes,grid))bytes=animationQuantize(bytes);}
- std::lock_guard<std::mutex> hold(m.lock);++m.stats.loads;m.stats.last=std::to_string(id)+" "+relative;if(std::getenv("RM_LAB_ASSET_LOG"))std::fprintf(stderr,"asset %d %s %zu\n",id,relative.c_str(),bytes.size());m.stats.bytes+=bytes.size();m.stats.ms+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+ std::lock_guard<std::mutex> hold(m.lock);++m.stats.loads;m.stats.last=std::to_string(id)+" "+relative;if(std::getenv("RM_LAB_ASSET_LOG"))std::fprintf(stderr,"asset %d %s %zu %.2f ms\n",id,relative.c_str(),bytes.size(),std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count());m.stats.bytes+=bytes.size();m.stats.ms+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
  return bytes;
 }
 }
