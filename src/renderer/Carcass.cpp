@@ -784,7 +784,7 @@ bool Carcass::restorePose(const Pose& p){
  m_age=p.age;m_asleep=p.asleep;m_shoved=p.shoved;m_woke=m_age;m_quiet=0;m_ease.clear();m_glide=false;m_lastFeed=false;m_settling=0;m_vectra.reset();
  measure();m_dirty=true;return true;}
 
-// ---- The body on Vectra (the default; RM_RAGDOLL=legacy, or carcass.vectra 0, for the position-based step) ----
+// ---- The body on Vectra (RM_RAGDOLL=vectra or carcass.vectra 1; not yet the default: see docs/Systems/physics.md; RM_RAGDOLL=legacy forces the position-based step) ----
 // Each section is a Vectra body that lasts as long as the body does (its points' mass and inertia), each joint a Vectra
 // ball at its pivot with the rig's limits on the swing-twist split the rig measures (Joint::swingLimited: a bend between
 // its two stops, a side lean and a twist either way), held by position as well (Joint::positionCorrection), so a knee
@@ -794,7 +794,7 @@ bool Carcass::restorePose(const Pose& p){
 // lies: nothing is moved on the way to sleep.
 bool Carcass::vectraBodies(){
  static const int env=[]{const char* v=std::getenv("RM_RAGDOLL");if(!v)return -1;const std::string s(v);return s=="legacy"?0:s=="vectra"?1:-1;}();
- if(env>=0)return env==1;return tune("carcass.vectra",1)>.5f;}
+ if(env>=0)return env==1;return tune("carcass.vectra",0)>.5f;}
 namespace {
 using vectra::Quat;
 Quat quatOfAxes(Point3 x,Point3 y,Point3 z){

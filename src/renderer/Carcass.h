@@ -79,7 +79,7 @@ public:
  struct Pose {float age=0;bool asleep=false,shoved=false;std::vector<std::uint8_t> cut;std::vector<std::array<float,16>> sections;};
  Pose pose()const;
  bool restorePose(const Pose& pose);
- // Corpses on Vectra (the default) or on the position-based step (RM_RAGDOLL=legacy, or the knob carcass.vectra 0).
+ // Corpses on Vectra (RM_RAGDOLL=vectra, or the knob carcass.vectra 1) or on the position-based step (the default; RM_RAGDOLL=legacy).
  static bool vectraBodies();
 private:
  // A hull point (`hull`) is not part of its section's mass: it only keeps the section's outermost skin
