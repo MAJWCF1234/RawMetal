@@ -11,6 +11,7 @@
 #include "LightProbes.h"
 #include <future>
 namespace retro::signart{struct Design;}
+namespace retro::cull{struct CullIndex;}
 namespace retro::humanoid{struct Labels;}
 #include "Carcass.h"
 #include "Foliage.h"
@@ -146,6 +147,16 @@ public:
     // 0 = final attachment (ordinary gameplay).
     void setCleanupInspectionStage(int stage){m_cleanupInspectionStage=stage;}
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
+    // Faces buried where solids overlap (ShapeCulling.h) are left out when the map's geometry is
+    // built; off draws every face, as builds before it did (the lab compares the two).
+    void setFaceCulling(bool on){m_faceCulling=on;}
+    bool faceCulling()const{return m_faceCulling;}
+    // A world's last architecture pass: its solids, the time to index them and to clip faces,
+    // faces cut or buried, and the triangles it drew (structures and map tiles).
+    struct CullStats {double indexMs=0,clipMs=0,passMs=0;int pieces=0,facesCut=0,facesBuried=0;long long triangles=0;};
+    CullStats cullStats(const void* world)const{auto it=m_cullStats.find(world);return it==m_cullStats.end()?CullStats{}:it->second;}
+    // Every world drawn so far (a map and its neighbours), added up.
+    CullStats cullStatsTotal()const{CullStats t;for(const auto& [w,s]:m_cullStats){t.indexMs+=s.indexMs;t.clipMs+=s.clipMs;t.passMs+=s.passMs;t.pieces+=s.pieces;t.facesCut+=s.facesCut;t.facesBuried+=s.facesBuried;t.triangles+=s.triangles;}return t;}
     // The next frame rebuilds every bake: a new scene may sit at the address the
     // last one had, with the same epoch, and must not inherit its buffers.
     void forgetScene(){m_lightingGame=nullptr;}
@@ -194,6 +205,9 @@ private:
     // The CPU rasteriser's wetness for the next triangle (Wetness.h, the map's mask at its corners; 0 dry).
     float m_triangleWet=0;
     std::uint64_t m_staticGeometryBuilds=0,m_propGeometryBuilds=0,m_breakableGeometryBuilds=0;
+    bool m_faceCulling=true;std::unordered_map<const void*,CullStats> m_cullStats;std::uint64_t m_trianglesSubmitted=0;
+    // Per world drawn (a map and its neighbours each have theirs): the key it was built for, and it.
+    std::unordered_map<const void*,std::pair<std::uint64_t,std::shared_ptr<cull::CullIndex>>> m_cullIndexes;
     float m_emissionScale=1.f;
     double m_sceneMs=0,m_submitMs=0,m_presentMs=0;
     bool m_poseReady=false;

@@ -1,0 +1,10 @@
+# Close on a seam of the Showcase Shapes building: the concrete arch through the brick wall, the
+# concrete band stopping in the arch's pier, the stone base under it all. Tube: culling.
+world custom "custom maps/Starter Map.rmc"
+map-name Starter Map / Showcase Shapes
+camera 15.1 13.6 .4 62 4
+scenery-only
+size 1600 900
+frames 12
+step 0
+culling-shot seam

@@ -4,6 +4,7 @@
 //
 //   world campaign | ashfall | room | door-room | custom "path.txt" | text
 //   map 70                        the campaign / custom map index (default 0)
+//   map-name "Showcase Atrium"    a custom map by its name instead (survives maps added before it)
 //   camera X Y Z YAW PITCH        map-local metres, Z -999 = the floor there,
 //                                 YAW degrees (0 = +x, 90 = +y), PITCH engine units (1/140 rad)
 //   open-doors                    every door open (campaign worlds)
@@ -26,7 +27,7 @@
 #include <vector>
 namespace retro::lab {
 struct Fixture {
- std::string name,path,world="campaign",customPath,campaignText,save;
+ std::string name,path,world="campaign",customPath,campaignText,save,mapName;
  int map=0;bool hasCamera=false,openDoors=false,sceneryOnly=false,software=false;
  Vec2 cameraPos{};float cameraZ=-999,cameraYaw=0,cameraPitch=0; // yaw in radians once parsed
  int width=480,height=270,frames=0;float step=0;

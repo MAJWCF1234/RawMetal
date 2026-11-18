@@ -28,6 +28,7 @@ Fixture loadFixture(const std::string& path){
   const auto w=words(line);if(w.empty())continue;const auto& d=w[0];
   if(d=="world"){if(w.size()<2)fail("world what?");f.world=w[1];if(f.world=="custom"){if(w.size()<3)fail("world custom \"path\"");f.customPath=w[2];}}
   else if(d=="map")f.map=int(num(w,1,0));
+  else if(d=="map-name"){if(w.size()<2)fail("map-name NAME");f.mapName=w[1];for(size_t i=2;i<w.size();++i)f.mapName+=" "+w[i];}
   else if(d=="camera"){if(w.size()<6)fail("camera X Y Z YAW PITCH");f.hasCamera=true;f.cameraPos={num(w,1,0),num(w,2,0)};f.cameraZ=num(w,3,-999);f.cameraYaw=num(w,4,0)*0.01745329f;f.cameraPitch=num(w,5,0);}
   else if(d=="open-doors")f.openDoors=true;
   else if(d=="scenery-only")f.sceneryOnly=true;

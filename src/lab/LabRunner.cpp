@@ -116,7 +116,10 @@ static void buildScene(Scene& s,const Fixture& fx,const std::vector<const Featur
   const WorldId id=fx.world=="ashfall"?WorldId::Ashfall:WorldId::Campaign;
   s.game=std::make_unique<Game>(Game::mapInspection(fx.hasCamera?fx.cameraPos:Vec2{12,12},fx.cameraYaw,fx.cameraPitch,fx.map,fx.openDoors,fx.cameraZ,fx.sceneryOnly,id));
  }else if(fx.world=="custom"){
-  s.game=std::make_unique<Game>(loadCustomCampaignFile(fs::path(fx.customPath).is_absolute()?fs::path(fx.customPath):fs::path(labRoot())/fx.customPath));
+  auto campaign=loadCustomCampaignFile(fs::path(fx.customPath).is_absolute()?fs::path(fx.customPath):fs::path(labRoot())/fx.customPath);
+  if(!fx.mapName.empty()){int found=-1;for(size_t i=0;campaign&&i<campaign->maps.size();++i)if(campaign->maps[i]&&campaign->maps[i]->name==fx.mapName)found=int(i);
+   if(found<0)throw std::runtime_error("lab: no map named \""+fx.mapName+"\" in "+fx.customPath);const_cast<Fixture&>(fx).map=found;}
+  s.game=std::make_unique<Game>(campaign);
   if(s.game->level()!=fx.map)LabAccess::loadLevel(*s.game,fx.map);
  }else throw std::runtime_error("lab: unknown world "+fx.world);
  Game& g=*s.game;
