@@ -75,8 +75,10 @@
         std::getline(in >> std::ws, out);
         SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
         RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+        // The client area only: never a pixel of whatever else is on the screen.
         RECT r{};
-        GetWindowRect(window, &r);
+        GetClientRect(window, &r);
+        MapWindowPoints(window, nullptr, reinterpret_cast<POINT *>(&r), 2);
         const int w = r.right - r.left, h = r.bottom - r.top;
         HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
         HBITMAP bitmap = CreateCompatibleBitmap(screen, w, h);

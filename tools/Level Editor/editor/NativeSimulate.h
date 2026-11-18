@@ -477,20 +477,23 @@ inline int runTest(Editor &e) {
       GetWindowRect(state.button, &b);
       GetWindowRect(GetDlgItem(e.window, PlayStart), &from);
       bool clear = b.right <= from.left && b.right - b.left == 136;
+      std::string blocking;
       for (HWND other : e.buttons) {
         RECT o{}, overlap{};
         GetWindowRect(other, &o);
         // The test window is never shown, so ask the style rather than IsWindowVisible.
         if (other != state.button && (GetWindowLongPtrW(other, GWL_STYLE) & WS_VISIBLE) &&
             IntersectRect(&overlap, &o, &b))
-          clear = false;
+          clear = false, blocking += " under button " + std::to_string(GetDlgCtrlID(other));
       }
+      if (b.right > from.left || b.right - b.left != 136)
+        blocking += " (its right " + std::to_string(b.right) + ", Play's left " + std::to_string(from.left) + ", width " + std::to_string(b.right - b.left) + ")";
       RECT client{};
       GetClientRect(e.window, &client);
       POINT top{b.left, b.top};
       ScreenToClient(e.window, &top);
       check(clear && top.y >= 49 && top.y + 40 <= 98 && top.x > client.right / 2,
-            "Simulate button in the top bar beside Play at " + std::to_string(size.x));
+            "Simulate button in the top bar beside Play at " + std::to_string(size.x) + blocking);
     }
 
     e.startEngine();

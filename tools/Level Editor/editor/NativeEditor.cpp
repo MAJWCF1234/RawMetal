@@ -1644,6 +1644,9 @@ struct Editor {
     waitAutosave();
     std::error_code ec;
     fs::remove(autosavePath(), ec);
+    // A copy brought back from another file (a crash save, NativeStability.inc) goes too.
+    if (!recoveredFile.empty())
+      fs::remove(recoveredFile, ec), fs::remove(recoveredFile.wstring() + L".source", ec);
     doc.loadText(restoredFrom);
     restoredFrom.clear();
     history.clear(), future.clear();
@@ -1827,13 +1830,14 @@ struct Editor {
       // A footing is its own thing (footingAt); on the land a block stands where it is grounded.
       if (footingOf(doc.lines[i]))
         continue;
+      if (x < std::min(x1, x2) - .05f || x > std::max(x1, x2) + .05f || y < std::min(y1, y2) - .05f || y > std::max(y1, y2) + .05f)
+        continue; // off its footprint: no need to ground it
       if (z >= -999 && onTerrain()) {
         // As the engine grounds a box (World::settleExclusionFacilityOnTerrain).
         const float lx = std::min(x1, x2), hx = std::max(x1, x2), ly = std::min(y1, y2), hy = std::max(y1, y2);
         b += groundHigh(lx, ly, hx, hy, false), t += groundHigh(lx, ly, hx, hy, true);
       }
-      if (x >= std::min(x1, x2) - .05f && x <= std::max(x1, x2) + .05f && y >= std::min(y1, y2) - .05f &&
-          y <= std::max(y1, y2) + .05f && (z < -999 || (z >= std::min(b, t) - .1f && z <= std::max(b, t) + .1f)))
+      if (z < -999 || (z >= std::min(b, t) - .1f && z <= std::max(b, t) + .1f))
         return index = i, field = 9, true;
     }
     return false;
@@ -2352,6 +2356,7 @@ struct Editor {
       writePack();
       return;
     }
+    repairSelection(); // a tool that took lines out must not leave the pick on the wrong line (NativeStability.inc)
     // Repair managed rooms at commit, never on a drag preview, Undo or load.
     // Keep the current native selection when earlier generated records move.
     if (edit && adjustDressing && !objectDrag && !brushing && !scrubbing) {
@@ -2367,6 +2372,7 @@ struct Editor {
     }
     if (edit)
       dirty = true, ++changeCount;
+    pickedText = record >= 0 && size_t(record) < doc.lines.size() ? doc.lines[size_t(record)] : std::string();
     showTitle();
     // With no engine attached (tests, scripts) an edit only waits for the next
     // check, which publishes; writing every keystroke to disk is just slow.
@@ -3053,6 +3059,7 @@ struct Editor {
     return result;
   }
   void selectRecord(int index, bool preserveSelection = false) {
+    pickedText = index >= 0 && size_t(index) < doc.lines.size() ? doc.lines[size_t(index)] : std::string();
     edperf::Scope perfScope("ui_selectRecord");
     if (ghosting)
       return;
@@ -4901,17 +4908,34 @@ struct Editor {
         bx += 92;
       }
       bx += 18;
+      // Under about 1500 px the bar is tight: the view buttons drop their key names, Sound
+      // is a note, Light and Play shorten, so nothing sits under Simulate (it overlapped
+      // Light and Play at 1280 wide).
+      const bool compact = w < 1500;
+      if (compactTop != compact) {
+        compactTop = compact;
+        static const std::pair<int, const wchar_t *> views[] = {{PlanOnly, L"2D paint  F2"}, {Dual, L"2D + 3D  F3"}, {ViewOnly, L"3D edit  F4"}};
+        static const std::pair<int, const wchar_t *> shortViews[] = {{PlanOnly, L"2D paint"}, {Dual, L"2D + 3D"}, {ViewOnly, L"3D edit"}};
+        for (auto [id, text] : compact ? shortViews : views)
+          if (HWND b = GetDlgItem(window, id)) {
+            wchar_t now[64]{};
+            GetWindowTextW(b, now, 64);
+            if (compact || std::wcslen(now) < 10) SetWindowTextW(b, text);
+          }
+        lookLast.clear(); // the Light and Play labels are written again, short or long
+        writeLook();
+      }
       for (int id : {PlanOnly, Dual, ViewOnly}) {
-        placeControl(GetDlgItem(window, id), bx, 52, 122, 40, TRUE);
-        bx += 126;
+        placeControl(GetDlgItem(window, id), bx, 52, compact ? 96 : 122, 40, TRUE);
+        bx += compact ? 100 : 126;
       }
       if (HWND sound = GetDlgItem(window, SoundToggle)) {
-        SetWindowTextW(sound, sfx::muted ? L"♪ Sound: off" : L"♪ Sound: on");
-        placeControl(sound, bx + 14, 52, 124, 40, TRUE);
+        SetWindowTextW(sound, compact ? (sfx::muted ? L"♪ off" : L"♪") : sfx::muted ? L"♪ Sound: off" : L"♪ Sound: on");
+        placeControl(sound, bx + 14, 52, compact ? 44 : 124, 40, TRUE);
       }
       // The picture's light and play over Claire's shoulder (NativeLightView.inc).
-      placeControl(GetDlgItem(window, LightViewButton), bx + 144, 52, 164, 40, TRUE);
-      placeControl(GetDlgItem(window, ThirdPersonToggle), bx + 314, 52, 164, 40, TRUE);
+      placeControl(GetDlgItem(window, LightViewButton), compact ? bx + 64 : bx + 144, 52, compact ? 94 : 164, 40, TRUE);
+      placeControl(GetDlgItem(window, ThirdPersonToggle), compact ? bx + 164 : bx + 314, 52, compact ? 94 : 164, 40, TRUE);
       placeControl(GetDlgItem(window, Walk), w - 14 - 176, 49, 176, 44, TRUE);
       // The whole history on one slider, between the name and the file buttons.
       if (historySlider) {
@@ -6672,7 +6696,7 @@ struct Editor {
   // The bundled example is never overwritten; saving it asks for a new name.
   bool isExample() const { return path.filename() == L"Starter Map.rmc"; }
   fs::path autosavePath() const {
-    if(backgroundTest||remakeTest||menuTest||demoMode)return session/L"test-autosave.rmc";
+    if((backgroundTest&&!crashDrill)||remakeTest||menuTest||demoMode)return session/L"test-autosave.rmc";
     return root / L"custom maps" / L"Autosave" /
            ((path.empty() || isExample() ? std::wstring(L"New map") : path.stem().wstring()) + L".rmc");
   }
@@ -10147,6 +10171,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.backgroundTest = e.soakTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--flooring-test")
       e.backgroundTest = e.flooringTest = true;
+    // The crash log and recovery, for real: --crash-test stops the Builder with unsaved work,
+    // --recovery-test is the next start (NativeStability.inc).
+    if (argc > 1 && (std::wstring(argv[1]) == L"--crash-test" || std::wstring(argv[1]) == L"--recovery-test"))
+      e.backgroundTest = e.crashDrill = true, e.drillStage = std::wstring(argv[1]) == L"--crash-test" ? 1 : 2;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10742,6 +10770,12 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.finishTest) {
       int code = 0;
       try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.drillStage) {
+      const int code = e.crashDrillRun();
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

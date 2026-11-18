@@ -9,7 +9,8 @@
   static inline std::array<std::string, 24> recentActions{};
   static inline std::atomic<unsigned> recentCount{0};
   static inline Editor *crashEditor = nullptr;
-  static inline wchar_t crashLogPath[MAX_PATH]{}, crashSavePath[MAX_PATH]{};
+  static inline wchar_t crashLogPath[MAX_PATH]{}, crashSavePath[MAX_PATH]{}, crashSourcePath[MAX_PATH]{};
+  static inline char crashSource[MAX_PATH * 3]{}; // the map's own file, UTF-8, for the .source beside the save
   static void noteAction(std::string what) {
     if (what.size() > 160) what.resize(160);
     const unsigned n = recentCount.fetch_add(1);
@@ -30,7 +31,10 @@
     CloseHandle(h);
   }
   static void emergencySaveImpl() {
-    if (crashEditor && crashEditor->dirty && crashSavePath[0]) writeRaw(crashSavePath, crashEditor->doc.text());
+    if (crashEditor && crashEditor->dirty && crashSavePath[0]) {
+      writeRaw(crashSavePath, crashEditor->doc.text());
+      if (crashSourcePath[0]) writeRaw(crashSourcePath, crashSource);
+    }
   }
   static void emergencySave() {
     __try { emergencySaveImpl(); } __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -81,6 +85,8 @@
     auto file = autosavePath();
     file.replace_extension(L".crash.rmc");
     wcsncpy_s(crashSavePath, file.c_str(), _TRUNCATE);
+    wcsncpy_s(crashSourcePath, (file.wstring() + L".source").c_str(), _TRUNCATE);
+    strncpy_s(crashSource, utf8(path.wstring()).c_str(), _TRUNCATE);
   }
   // A recovery copy names the map it came from (path.rmc.source), so it can come back to it.
   static fs::path recoverySource(const fs::path &recovery) {
@@ -139,6 +145,51 @@
   }
   fs::path recoveredFile;
   bool crashNotice = false;
+  // --crash-test / --recovery-test: the Builder stopped with unsaved work, then started again.
+  bool crashDrill = false;
+  int drillStage = 0;
+  int crashDrillRun() {
+    auto folder = root / L"custom maps" / L"Autosave";
+    auto mapFile = root / L".build" / L"crash-drill.rmc";
+    std::ofstream report(root / L"native-editor-recovery-test.txt", std::ios::app);
+    std::error_code ec;
+    if (drillStage == 1) {
+      fs::remove(folder / L"last-crash.txt", ec), fs::remove(folder / L"crash-seen.txt", ec);
+      NativeDocument blank;
+      blank.newCampaign("Crash drill");
+      blank.addRoom("Hall");
+      blank.save(mapFile);
+      adoptDocument(std::move(blank), mapFile, false);
+      autoDressingEnabled = false;
+      tool = 1;
+      gesture(4.5f, 4.5f, 9.5f, 9.5f); // unsaved work: a room
+      SetWindowTextW(window, L"crash drill");
+      doc.add({"# crash drill marker"});
+      dirty = true, ++changeCount;
+      armCrashLog();
+      noteAction("crash drill: about to stop");
+      SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+      volatile int *nothing = nullptr;
+      *nothing = 1; // the fault
+      return 2;
+    }
+    bool ok = true;
+    auto check = [&](bool good, const std::string &what) { ok = ok && good; report << (good ? "PASS: " : "FAIL: ") << what << '\n'; };
+    const bool back = startupRecovery();
+    check(back && doc.text().find("# crash drill marker") != std::string::npos, "the next start brings back the work the crash left unsaved");
+    check(fs::weakly_canonical(path, ec) == fs::weakly_canonical(mapFile, ec), "it comes back on its own map's path, so Save goes there (" + utf8(path.wstring()) + ")");
+    check(crashNotice && fs::exists(folder / L"crash-seen.txt", ec), "the start says the Builder stopped, and keeps what happened (custom maps/Autosave/crash-seen.txt)");
+    std::ifstream log(folder / L"crash-seen.txt");
+    std::string text((std::istreambuf_iterator<char>(log)), {});
+    check(text.find("0xC0000005") != std::string::npos && text.find("crash drill: about to stop") != std::string::npos && text.find("gesture Room") != std::string::npos,
+          "the crash log names the fault and the last things done (the Room drag, the drill)");
+    // Start fresh returns to the map as saved; the copy is gone.
+    startFresh();
+    check(doc.text().find("# crash drill marker") == std::string::npos && !fs::exists(recoveredFile, ec), "Start fresh goes back to the saved map and drops the copy");
+    fs::remove(recoveredFile.wstring() + L".source", ec);
+    report << (ok ? "PASS" : "FAIL") << ": recovery after a crash\n";
+    return ok ? 0 : 1;
+  }
   // Opening a map that has newer unsaved work: the work comes back (Start fresh returns to the file).
   void recoverOnOpen() {
     std::error_code ec;
@@ -161,6 +212,32 @@
     }
   }
 
+  // ---- The pick follows its record: the line it was, wherever it went; gone, nothing is picked.
+  // (The soak found Wall, Room, Erase and Floor leaving the pick past the end of the map, or
+  // on another record, after they took lines out: the inspector then wrote to the wrong line.)
+  std::string pickedText;
+  bool compactTop = false; // the top bar's short labels under about 1500 px (layout)
+  void repairSelection() {
+    std::erase_if(selectedRecords, [&](int i) { return i < 0 || size_t(i) >= doc.lines.size(); });
+    if (record < 0) return;
+    if (size_t(record) < doc.lines.size() && (pickedText.empty() || doc.lines[size_t(record)] == pickedText)) return;
+    if (!pickedText.empty()) {
+      auto found = std::find(doc.lines.begin(), doc.lines.end(), pickedText);
+      if (found != doc.lines.end()) {
+        const int now = int(found - doc.lines.begin());
+        for (auto &s : selectedRecords) if (s == record) s = now;
+        record = now;
+        return;
+      }
+      // Edited where it stands (the inspector, a drag): the same kind of record on the same map.
+      if (size_t(record) < doc.lines.size()) {
+        auto was = NativeDocument::fields(pickedText), is = NativeDocument::fields(doc.lines[size_t(record)]);
+        if (was.size() > 1 && is.size() > 1 && was[0] == is[0] && was[1] == is[1]) return;
+      }
+    }
+    std::erase(selectedRecords, record);
+    record = -1;
+  }
   // ---- The soak: random valid edits, checked after every one.
   struct SoakResult {
     int steps = 0, failures = 0, validated = 0;
@@ -211,7 +288,10 @@
       while (running) {
         Sleep(500);
         if (running && GetTickCount64() - stepStarted > 120000) {
-          std::ofstream(folder / L"soak-hang.txt") << "HANG in step " << out.steps << ": " << current << "\n" << recentText();
+          std::ofstream hang(folder / (L"soak-hang-" + std::to_wstring(seed) + L".txt"));
+          hang << "HANG in step " << out.steps << ": " << current << "\n" << recentText();
+          for (auto &p : out.problems) hang << "PROBLEM: " << p << "\n";
+          hang.close();
           TerminateProcess(GetCurrentProcess(), 3);
         }
       }
