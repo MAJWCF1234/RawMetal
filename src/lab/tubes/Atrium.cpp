@@ -58,7 +58,7 @@ const bool tube=add({
   if(r.slot<0&&r.strand>=0)r.slot=plants.slotOf(g.level(),r.strand);
   if(r.slot>=0&&s.frame>=WalkFrom&&s.frame<WalkTo+30){const Point3 tip=plants.tip(r.slot);r.pushTip=std::max(r.pushTip,std::hypot(tip.x,tip.y));}
   if(s.frame==Wide){view(s,"atrium from the balcony",{6.4f,4.5f},3.6f,50,-24);view(s,"the hall to the breach",{3.0f,14.2f},0,-28,2);view(s,"atrium from the hall",{15.8f,2.2f},0,128,-6);view(s,"the storefront",{6.6f,10.6f},0,62,-4);}
-  if(s.frame==Close)view(s,"creepers over the breach, the court's light behind",{14.2f,7.4f},0,-6,4);view(s,"creepers in the hall",{11.4f,10.2f},0,-52,16);
+  if(s.frame==Close)view(s,"creepers over the breach, the court's light behind",{12.4f,9.6f},0,-25,4);view(s,"creepers in the hall",{11.4f,10.2f},0,-52,16);
   if(s.frame==PaneShot&&r.pane>=0){const auto c=centre(g.world(),r.pane);view(s,"the shattered pane",{c.x-1.2f,13.1f},0,74,-10);}},
  .metrics=[](Scene& s,Report& rep){auto& r=runs()[&s];const int level=atriumLevel();
   rep.check("the Starter Map has its atrium",level>=0&&s.g().level()==level,"level "+std::to_string(level)+", playing "+std::to_string(s.g().level()));if(level<0)return;
@@ -82,6 +82,15 @@ const bool tube=add({
   {auto g=fresh();auto& p=LabAccess::player(*g);p.pos={15.6f,6.75f};p.angle=0;for(int i=0;i<150;++i){InputState in;in.forward=true;g->update(in,1.f/60);}
    rep.metric("breach_walk_x",p.pos.x,"m");rep.check("the player walks through the breach into the light court",p.pos.x>19.5f,"reached x "+fixed(p.pos.x));
    Point3 n;const float lit=g->world().lightRayHit({20.2f,6.8f,2.9f},{15.5f,6.8f,.05f},n);rep.check("the court's lamp reaches the hall floor through the breach",lit>=.999f,fixed(lit,3));}
+  // ---- light shafts (STRUCT material 53, god-ray cards) ----
+  {int shafts=0,solid=0;for(const auto& st:w.structures())if(st.material==LightShaftMaterial){++shafts;solid+=st.solid;}
+   rep.metric("light_shafts",shafts);
+   auto g=fresh();Point3 n;const World& gw=g->world();
+   const float lit=gw.lightRayHit({17.6f,6.9f,2.6f},{13.4f,6.9f,.3f},n);
+   const auto round=LabAccess::trace(*g,{12.6f,6.9f,1.2f},{1,0,0},4.f);
+   const bool see=gw.rayClear({12.6f,6.9f},1.5f,{17.2f,6.9f},1.5f,true,true,false,true);
+   rep.check("five light shafts, none solid; light, a round and sight pass through the breach's shaft",shafts==5&&solid==0&&lit>=.999f&&round.kind!=ShotKind::Solid&&see,
+    std::to_string(shafts)+" shafts, "+std::to_string(solid)+" solid, light "+fixed(lit,3)+", round "+std::to_string(int(round.kind))+", sight "+(see?"yes":"no"));}
   // ---- the growth ----
   {auto& plants=LabAccess::plants(*s.renderer);int pieces=0,hung=0,rooted=0;for(size_t i=0;i<w.fixtures().size();++i){const auto& f=w.fixtures()[i];if(!growth(f.model))continue;++pieces;
     if(hangs(f.model)){const int slot=plants.slotOf(s.g().level(),int(i));hung+=plants.hanging(slot);rooted+=slot>=0&&std::abs(plants.root(slot).z-(f.base+f.height))<.02f;}}

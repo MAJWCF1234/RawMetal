@@ -102,6 +102,12 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
 - Creepers are hanging plants (`SoftwareRenderer::hangingPlant`, `PlantBones::add(..., hanging)`): rooted at their top, they drift in an indoor draft and part round whoever walks through them. The lab tube `growth` (src/lab/tubes/Growth.cpp) checks it.
 - The brush's density, size and seed are its own settings, not map data; a typed seed repeats a stroke exactly.
 
+## Light shafts
+`STRUCT` material 53 (`LightShaftMaterial`) is a god ray: sunlight falling on the slant through its box, in at the top on the side away from its `facing` (field 12) and down to the floor on the facing side.
+- It is drawn as a bundle of soft additive cards, warm gold, faint at both ends and at the edges, so it shows without any haze; it casts no shadow.
+- It is never solid (the parser makes it so), and like glass it lets light, sight and rounds through (`seeThroughMaterial`).
+- The Builder's Block tool places one: pick material 53 and drag its box; R turns its facing once the record has one (the inspector lists `facing`). The lab tube `atrium` checks the Starter Map's five.
+
 ## The Starter Map atrium
 `Showcase Atrium` (map 44, south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 

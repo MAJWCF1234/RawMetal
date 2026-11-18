@@ -342,7 +342,10 @@ inline constexpr int CollisionProxyMaterial=30;
 // through it, as they pass glass.
 inline constexpr int ChainLinkMaterial=52;
 // Structures that light, sight and rounds pass through: glass (17) and chain-link mesh.
-inline bool seeThroughMaterial(int material){return material==17||material==ChainLinkMaterial;}
+// A light shaft (STRUCT material 53): a god ray, drawn as soft glowing cards slanting through its box; it
+// stops nothing and casts no shadow (the Block tool places it: pick material 53 and drag its box).
+inline constexpr int LightShaftMaterial=53;
+inline bool seeThroughMaterial(int material){return material==17||material==ChainLinkMaterial||material==LightShaftMaterial;}
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.

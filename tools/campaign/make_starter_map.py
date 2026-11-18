@@ -82,7 +82,8 @@ MATERIALS = {0: 'default wall', 1: 'water (hidden)', 2: 'steel', 3: 'wall finish
              31: 'brick', 32: 'mine timber', 33: 'ancient stone', 34: 'growth', 35: 'crystal',
              36: 'teal dado', 37: 'green dado', 38: 'maroon dado', 39: 'curtain', 40: 'formwork', 41: 'board-form',
              42: 'cast concrete', 43: 'weathered', 44: 'stained', 45: 'ribbed', 46: 'tread plate', 47: 'rusted steel',
-             48: 'metal roofing', 49: 'asphalt', 50: 'floor tile', 51: 'plank floor'}
+             48: 'metal roofing', 49: 'asphalt', 50: 'floor tile', 51: 'plank floor',
+             52: 'chain-link mesh', 53: 'light shaft (god rays; facing: the way it falls)'}
 SURFACES = ['concrete', 'pressure works', 'brick', 'clinic tile', 'lab panel', 'rock', 'corrugated', 'office plaster',
             'mine timber', 'ancient stone', 'clinic teal', 'clinic green', 'clinic maroon']
 START_X = 2.2                     # museum rows start east of the section corridor
@@ -1133,9 +1134,7 @@ def atrium(s, slot, catalogue):
     breach's, grass comes up through the floor where the light falls: the Campaign Builder's Growth
     brush's pieces, placed the way it places them (on a wall's face, turned out; hanging from a top)."""
     import random
-    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.24)
-    # Its own air: a warm green-gold haze the lamps' shafts show in (MAP hazeR|G|B|density).
-    m['haze'] = (.6, .64, .36, .009)
+    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.26)
     i = m['index']
     m['lights'] = False
     s.format2 = True                                                  # GLAZING and BREACH take named fields
@@ -1164,15 +1163,21 @@ def atrium(s, slot, catalogue):
     for x, y in ((10, 10), (14, 10)):                                 # two columns holding the roof
         s.struct(m, x - .3, y - .3, x + .3, y + .3, 0, 6, 42)
     # ---- Light: warm and dim in the hall, the court bright as day, the shop cold and low ----
-    # The hall dim and warm; the court behind the breach and the shop behind the glass bright as low sun, so the
-    # light pours in through the hole and the panes in shafts through the haze.
-    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.2, 13, 3000), (12, 12.5, 5.85, 1.1, 13, 3000), (12, 4.5, 5.85, 1.0, 12, 3100),
-                             (4.2, 3, 3.15, .8, 7, 3000), (21.2, 3.2, 5.85, 5.0, 16, 4200), (21.2, 11.4, 5.85, 4.5, 16, 4200),
-                             (21.8, 6.9, 3.4, 6.0, 17, 3800), (8.5, 22.0, 4.6, 4.2, 14, 3900), (15.5, 22.0, 4.6, 3.8, 14, 3900)):
+    # The hall in shade, neutral and a little warm; the court behind the breach and the shop behind the glass bright as
+    # low sun, so the light pours in through the hole and the upper panes.
+    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.0, 13, 3400), (12, 12.5, 5.85, .95, 13, 3400), (12, 4.5, 5.85, .9, 12, 3400),
+                             (4.2, 3, 3.15, .7, 7, 3300), (21.2, 3.2, 5.85, 5.0, 16, 4000), (21.2, 11.4, 5.85, 4.5, 16, 4000),
+                             (21.8, 6.9, 3.4, 6.0, 17, 3700), (8.5, 22.0, 4.6, 4.2, 14, 3800), (15.5, 22.0, 4.6, 3.8, 14, 3800)):
         s.rec(m, 'LIGHT', i, x, y, z, 0, 0, k, r, t)
     # Dust hanging in the court's light where it comes through the hole.
     s.rec(m, 'EMITTER', i, 18.4, 6.8, .1, 1.4, 1.8, 3.2, .0833, .013, .004, 48, 4, .9)
     s.rec(m, 'EMITTER', i, 10.0, 14.6, .1, 3.4, 1.2, 3.0, .0833, .013, .004, 40, 4, .7)   # and in front of the glass
+    s.rec(m, 'EMITTER', i, 15.4, 6.9, .1, 2.0, 1.2, 2.8, .0833, .013, .004, 44, 4, .9)    # and in the breach's shaft
+    # Light shafts (STRUCT material 53): sunlight falling on the slant from the court through the hole, across the
+    # hall floor (facing 3, down toward -x), and from the shop through the storefront's upper panes (facing 2, -y).
+    for x1, y1, x2, y2, top, facing in ((13.0, 5.5, 18.0, 8.3, 3.0, 3), (14.6, 6.3, 18.0, 7.5, 2.8, 3),
+                                        (4.5, 12.6, 6.6, 16.0, 3.0, 2), (13.6, 12.4, 15.8, 16.0, 3.0, 2), (11.4, 13.4, 13.4, 16.0, 3.0, 2)):
+        s.rec(m, 'STRUCT', i, x1, y1, x2, y2, 0, top, 0, 53, 0, 0, facing)
     # ---- What was left: a bench, a wheelchair, shelving in the shop, rubble ----
     def model(name, x, y, base=0, k=1.0, yaw=0.0, solid=1):
         w, d, h = catalogue[name]
@@ -1222,8 +1227,6 @@ def atrium(s, slot, catalogue):
     on_face('ivy_wall_b', 1.0, 18, 11.8, -1, 0, 0)
     on_face('ivy_wall_a', .9, 18, 2.8, -1, 0, 4.2)
     drape(1.7, 18, 6.9, -1, 0, 3.1)                                   # over the breach's lip
-    drape(1.1, 18, 5.3, -1, 0, 3.1, True)
-    drape(.8, 18, 8.4, -1, 0, 3.1, True)
     # The storefront's head: ivy over it and strands hanging in front of the glass and the doorway.
     on_face('ivy_wall_a', 1.1, 16, 6.2, 0, -1, 3.25)
     on_face('ivy_wall_b', 1.2, 16, 10.0, 0, -1, 3.2)
@@ -1257,11 +1260,9 @@ def atrium(s, slot, catalogue):
     drape(.7, 5, 6.6, 0, 1, 3.6, True)
     drape(1.5, 7, 2.8, 1, 0, 3.6)
     drape(2.2, 7, 4.4, 1, 0, 3.6, True)
-    for length, at, along, nx, ny, single in ((2.4, 1, 9.6, 0, 1, False), (1.6, 1, 15.4, 0, 1, False), (1.8, 1, 14.6, 1, 0, False),
-                                              (2.0, 18, 2.6, -1, 0, False), (2.6, 18, 12.6, -1, 0, False), (2.2, 16, 2.2, 0, -1, False),
-                                              (1.4, 16, 17.0, 0, -1, True), (2.8, 23, 4.2, -1, 0, False), (2.2, 23, 11.0, -1, 0, False),
-                                              (1.6, 19, 8.6, 1, 0, True), (2.0, 23, 9.5, 0, -1, False), (1.6, 23, 16.0, 0, -1, False),
-                                              (1.1, 1, 12.4, 0, 1, True), (2.9, 1, 6.6, 1, 0, True)):
+    for length, at, along, nx, ny, single in ((2.4, 1, 9.6, 0, 1, False), (1.6, 1, 15.4, 0, 1, False), (2.2, 16, 2.2, 0, -1, False),
+                                              (2.6, 18, 12.6, -1, 0, False), (2.8, 23, 4.2, -1, 0, False), (2.2, 23, 11.0, -1, 0, False),
+                                              (2.0, 23, 9.5, 0, -1, False), (1.6, 23, 16.0, 0, -1, False)):
         drape(length, at, along, nx, ny, ceiling, single)
     # Grass up through the floor: thickest where the light falls through the hole, along the walls,
     # in a crack across the hall, all over the court and the shop, and on the balcony.
@@ -1296,8 +1297,8 @@ def atrium(s, slot, catalogue):
         s.index.append({'map': i, 'section': 'SHOWCASE', 'x': x, 'y': y, 'title': title, 'name': w})
     s.zone(m, 4, 13.6, 16, 16, 'GLAZING / storefront: c d t f w m e x panes')
     s.zone(m, 15, 4, 18, 9.5, 'BREACH / ragged, rebar, rubble; light through it')
-    # The court's air is thicker (a ZONE haze): its light reads as a dusty glare through the hole.
-    s.rec(m, 'ZONE', i, 19, 1, 23, 16, 'LIGHT COURT / warm lamps, dust (EMITTER 4)', '', '', '', .86, .74, .44, .014)
+    s.zone(m, 19, 1, 23, 16, 'LIGHT COURT / warm lamps, dust (EMITTER 4)')
+    s.zone(m, 13, 5.5, 18, 8.3, 'STRUCT 53 / light shaft: god-ray cards')
     s.zone(m, 1, 1, 7, 5, 'GROWTH / grass and creepers on a ledge', bottom=3.3, top=6)
     s.zone(m, 1, 17, 23, 23, 'SHOP / behind the storefront')
     return m

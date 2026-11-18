@@ -1558,6 +1558,36 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     for(int k=0;k<4;++k){const Point3 p0=a+o[k],p1=a+o[(k+1)%4],q1=e+o[(k+1)%4],q0=e+o[k];planar(p0,p1,q1);planar(p0,q1,q0);planar(p0,q1,p1);planar(p0,q0,q1);}}
   }
  };
+ // A light shaft (STRUCT material 53, the classic god-ray cards): sunlight falling through its box on the
+ // slant, in from the top on the side away from `facing` and down to the floor on the facing side. Drawn as
+ // a bundle of soft additive cards that add their light to what is behind them (no haze needed), faint at both ends and at
+ // their edges, warm gold; it casts no shadow and nothing collides with it.
+ auto drawLightShaft=[&](const Structure& s){
+  if(hidden({s.x1,s.y1,s.bottom},{s.x2,s.y2,s.top}))return;
+  static const Texture ray=[](){const int n=32,m=64;Texture t{n,m,std::vector<std::uint32_t>(size_t(n*m))};t.additive=true;t.clampEdges=true;
+   auto pack=[](float r,float g,float b,float a){auto q=[](float v){return unsigned(std::clamp(v,0.f,1.f)*255.f+.5f);};return (q(a)<<24)|(q(r)<<16)|(q(g)<<8)|q(b);};
+   for(int y=0;y<m;++y)for(int x=0;x<n;++x){const float u=(float(x)+.5f)/float(n),v=(float(y)+.5f)/float(m);
+    // Along the ray: rising out of nothing at the opening, strongest a third of the way, gone at the floor.
+    const float along=std::pow(std::sin(kPi*v),1.4f)*(1.f-.35f*v),across=std::pow(std::sin(kPi*u),2.f);
+    const float streak=.75f+.25f*std::sin(u*31.f+std::sin(v*7.f)*2.f);
+    // Added to what is behind it (an additive card): warm gold, its strength the alpha.
+    t.pixels[size_t(y*n+x)]=pack(1.f,.82f,.5f,.5f*along*across*streak);}
+   return t;}();
+  const int f=s.facing&3;const Vec2 forward=f==0?Vec2{0,1}:f==1?Vec2{1,0}:f==2?Vec2{0,-1}:Vec2{-1,0},side{forward.y,-forward.x};
+  const float cx=(s.x1+s.x2)*.5f,cy=(s.y1+s.y2)*.5f,hw=(f%2?s.y2-s.y1:s.x2-s.x1)*.5f,hd=(f%2?s.x2-s.x1:s.y2-s.y1)*.5f;
+  auto P=[&](float u,float v,float z){return Point3{cx+side.x*u+forward.x*v,cy+side.y*u+forward.y*v,z};};
+  // The ray's thickness along v, the same at the top and the floor; its middle runs corner to corner.
+  const float t=std::min(hd*.45f,.7f);
+  auto card=[&](float u0,float u1,float v0top,float v0floor,float scale){
+   const Point3 a=P(u0,v0top,s.top),b=P(u1,v0top,s.top),c=P(u1,v0floor,s.bottom),d=P(u0,v0floor,s.bottom);
+   objectLighting=false;
+   tri({a,0,0},{b,1,0},{c,1,1},ray,scale);tri({a,0,0},{c,1,1},{d,0,1},ray,scale);
+   tri({a,0,0},{c,1,1},{b,1,0},ray,scale);tri({a,0,0},{d,0,1},{c,1,1},ray,scale);};
+  // Cards across the ray's thickness (each its own slant) and two along it, so it reads from any side.
+  for(int k=0;k<4;++k){const float o=-t*.5f+t*float(k)/3.f;card(-hw,hw,-hd+t*.5f+o,hd-t*.5f+o,1.f);}
+  for(float u:{-hw*.35f,hw*.35f}){const Point3 a=P(u,-hd,s.top),b=P(u,-hd+t,s.top),c=P(u,hd,s.bottom),d=P(u,hd-t,s.bottom);
+   tri({a,0,0},{b,1,0},{c,1,1},ray,1.f);tri({a,0,0},{c,1,1},{d,0,1},ray,1.f);tri({a,0,0},{c,1,1},{b,1,0},ray,1.f);tri({a,0,0},{d,0,1},{c,1,1},ray,1.f);}
+ };
  for(auto&s:w.structures()){
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
@@ -1565,6 +1595,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
   if(s.material==CollisionProxyMaterial)continue;
+  if(s.material==LightShaftMaterial){drawLightShaft(s);continue;}
   if(s.shape!=ShapeBox){drawShape(s,structureTexture(s));continue;}
   if(!sphereVisible({(s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f,(s.bottom+s.top)*.5f},std::max({s.x2-s.x1,s.y2-s.y1,s.top-s.bottom})))continue;
   if(s.layerSurface){

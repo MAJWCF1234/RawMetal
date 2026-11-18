@@ -449,6 +449,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // |shape|facing: a drawn shape (World.h StructureShape, 0 box .. 7 roundel) and the quarter turn it faces.
    if(given(11)){int shape=integer(f,11,"structure shape");if(shape<0||shape>ShapeRoundel)throw std::runtime_error("invalid structure shape");map->structures.back().shape=std::uint8_t(shape);}
    if(given(12)){int facing=integer(f,12,"structure facing");if(facing<0||facing>3)throw std::runtime_error("invalid structure facing");map->structures.back().facing=std::uint8_t(facing);}
+   // A light shaft is only light: nothing walks into it.
+   if(map->structures.back().material==LightShaftMaterial)map->structures.back().solid=false;
   }else if(tag=="PRIM"){
    if(f.size()<11)throw std::runtime_error("malformed PRIM record");auto map=mapAt(maps,f);
    const Primitive primitive{f[2],number(f,3,"primitive x"),number(f,4,"primitive y"),number(f,5,"primitive z"),number(f,6,"primitive width"),number(f,7,"primitive depth"),
