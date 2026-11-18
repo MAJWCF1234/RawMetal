@@ -139,8 +139,16 @@ CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they 
 - It is never solid (the parser makes it so), and like glass it lets light, sight and rounds through (`seeThroughMaterial`).
 - The Builder's Block tool places one: pick material 53 and drag its box; R turns its facing once the record has one (the inspector lists `facing`). The lab tube `atrium` checks the Starter Map's five.
 
+## Shapes (PRIM)
+`PRIM|map|kind|x|y|z|w|d|h|facing|material[|solid]` lays a ready-made building part. The kinds, their plain names, palette groups, player-scaled defaults and plan outlines are one table, `src/world/PrimitiveKinds.h`, read by the engine (`Primitives.cpp`), the Campaign Builder's Shape tool and the guide generator.
+- Ten new kinds: `wedge` (gable roof), `cone` (spire), `pyramid` (hip roof), `spiral` (spiral stair), `culvert` (a round pipe sunk into the floor), `buttress`, `chamfer` (bevelled block), `octagon` (eight-sided pillar), `arcwall` (curved wall) and `catwalk`. They draw true to their shape (STRUCT shapes 12-20) over collision boxes; the spiral stair, culvert and catwalk are walked, the steep ones are not (`--each-test=primitives`).
+- Options as named fields: `hand=left|right` (spiral), `rails=both|left|right|none` (catwalk), `thick=` metres (arcwall, culvert).
+- A PRIM is kept as a record (`AuthoredMapData::primitives`, the boxes it laid): the exporter writes it back as the PRIM it was, its named fields with it. One whose boxes were changed after it was laid is written as its boxes.
+- Where solids overlap, the renderer leaves out faces buried inside another and draws flush faces once (the later record's): `src/renderer/ShapeCulling.h`, done when the map's geometry is built; collision is untouched. The lab tube `culling` checks it.
+
 ## The Starter Map atrium
-`Showcase Atrium` (map 149, the last room built; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
+`Showcase Atrium` (map 148; south of Predator, tools/campaign/make_starter_map.py `atrium`) and `Showcase Shapes` (map 149, the last room built: every shape, the ten new ones at full size, a building of overlapping prims) are found by name in lab fixtures (`map-name`).
+`Showcase Atrium` (south of Predator; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:

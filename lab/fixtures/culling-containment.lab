@@ -1,0 +1,10 @@
+# Containment B (campaign chunk 99), whose columns and struts are PRIMs laid by the chapter's C++:
+# culling on and off, with its cost. Tube: culling.
+world campaign
+map 99
+camera 12 12 -999 0 0
+scenery-only
+size 1280 720
+frames 12
+step 0
+culling-shot containment

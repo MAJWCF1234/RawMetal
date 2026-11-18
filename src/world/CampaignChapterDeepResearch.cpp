@@ -171,7 +171,7 @@ void drRock(Map& m,int model,float x,float y,float z,float s,float yaw){
 // fifth taller or flatter: seen, never walked into, so it stands in front of a core built by the caller.
 void drRockFit(Map& m,int model,float x,float y,float z,float s,float tall,float yaw){
  const auto& v=model::size[model];drFix(m,model,x,y,z,v[0]*s,v[1]*s,v[2]*s*tall,yaw,false);}
-void drPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=false){expandPrimitive({kind,x,y,z,w,d,h,facing,mat,solid},m.structures);}
+void drPrim(Map& m,const char* kind,float x,float y,float z,float w,float d,float h,int facing,int mat,bool solid=false){addPrimitive(m,{kind,x,y,z,w,d,h,facing,mat,solid});}
 void drCrystalTo(Map& m,float x,float y,float z,float h,float yaw);
 // A crystal from its foot at (x,y,z): the modelled cluster that stands about h high, upright or (lean 0
 // +y, 1 +x, 2 -y, 3 -x) turned to lean that way. (w and reach are kept for the callers; the model has its own.)

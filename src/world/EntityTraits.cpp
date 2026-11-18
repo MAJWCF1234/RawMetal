@@ -117,7 +117,9 @@ const std::vector<std::string_view>& knownNamedKeys(){
   "tread","riser","stringer","deck","edge","railing","trim","trimwidth",
   // Footings (Footing.h), read by the STRUCT parser.
   "footing","snap","raise","base","cap","capwidth","steps","terrace",
-  "drape"};
+  "drape",
+  // PRIM options, read by the PRIM parser (CustomCampaign.cpp).
+  "hand","rails","thick"};
  return keys;
 }
 std::string recordFieldKey(std::string_view tag,std::string_view parent,int ordinal){

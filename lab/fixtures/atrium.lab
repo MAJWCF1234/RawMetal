@@ -2,7 +2,7 @@
 # the hall and the storefront, the creepers over the breach against the light court, a walk through the
 # breach, a volley into one clear pane and the shattered pane. Tubes: atrium.
 world custom "custom maps/Starter Map.rmc"
-map 149
+map-name Starter Map / Showcase Atrium
 camera 15.6 4.0 -999 90 0
 scenery-only
 size 1600 900

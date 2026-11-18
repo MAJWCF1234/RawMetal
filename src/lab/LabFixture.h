@@ -4,6 +4,7 @@
 //
 //   world campaign | ashfall | room | door-room | custom "path.txt" | text
 //   map 70                        the campaign / custom map index (default 0)
+//   map-name "Showcase Atrium"    a custom map by its name instead (survives maps added before it)
 //   camera X Y Z YAW PITCH        map-local metres, Z -999 = the floor there,
 //                                 YAW degrees (0 = +x, 90 = +y), PITCH engine units (1/140 rad)
 //   open-doors                    every door open (campaign worlds)

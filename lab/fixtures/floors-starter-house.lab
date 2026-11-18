@@ -1,6 +1,6 @@
 # floors-starter-house (tools/dev/floors_fixtures.py): the Starter Map Hillside. Tube: floors.
 world custom "custom maps/Starter Map.rmc"
-map 124
+map-name Starter Map / Hillside
 camera 9.2 12.4 -999 -146 -14.7
 size 1280 720
 frames 30

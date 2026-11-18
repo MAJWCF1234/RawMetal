@@ -456,7 +456,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     number(f,2,"structure x1"),number(f,3,"structure y1"),number(f,4,"structure x2"),number(f,5,"structure y2"),
      number(f,6,"structure bottom"),number(f,7,"structure top"),boolean(f,8,"structure rail"),integer(f,9,"structure material"),f.size()>10&&!f[10].empty()?boolean(f,10,"structure solid"):true});
    // |shape|facing: a drawn shape (World.h StructureShape, 0 box .. 7 roundel) and the quarter turn it faces.
-   if(given(11)){int shape=integer(f,11,"structure shape");if(shape<0||shape>ShapeRoundel)throw std::runtime_error("invalid structure shape");map->structures.back().shape=std::uint8_t(shape);}
+   if(given(11)){int shape=integer(f,11,"structure shape");if(!authoredShape(shape))throw std::runtime_error("invalid structure shape");map->structures.back().shape=std::uint8_t(shape);}
    if(given(12)){int facing=integer(f,12,"structure facing");if(facing<0||facing>3)throw std::runtime_error("invalid structure facing");map->structures.back().facing=std::uint8_t(facing);}
    // A light shaft is only light: nothing walks into it.
    if(map->structures.back().material==LightShaftMaterial)map->structures.back().solid=false;
@@ -486,9 +486,16 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     map->footings.push_back(std::move(footing));}
   }else if(tag=="PRIM"){
    if(f.size()<11)throw std::runtime_error("malformed PRIM record");auto map=mapAt(maps,f);
-   const Primitive primitive{f[2],number(f,3,"primitive x"),number(f,4,"primitive y"),number(f,5,"primitive z"),number(f,6,"primitive width"),number(f,7,"primitive depth"),
+   Primitive primitive{f[2],number(f,3,"primitive x"),number(f,4,"primitive y"),number(f,5,"primitive z"),number(f,6,"primitive width"),number(f,7,"primitive depth"),
     number(f,8,"primitive height"),integer(f,9,"primitive facing"),integer(f,10,"primitive material"),f.size()>11&&!f[11].empty()?boolean(f,11,"primitive solid"):true};
-   try{expandPrimitive(primitive,map->structures);}catch(const std::runtime_error& e){throw std::runtime_error("map "+f[1]+" PRIM: "+e.what());}
+   // FORMAT|2 options: hand=left|right (a spiral stair), rails=both|left|right|none (a catwalk), thick= metres (a curved wall, a culvert).
+   try{
+    if(const auto* hand=findNamedField(namedFields,"hand")){if(hand->value!="left"&&hand->value!="right")throw std::runtime_error("hand="+hand->value+" is not left or right");primitive.hand=hand->value=="left"?-1:1;}
+    if(const auto* rails=findNamedField(namedFields,"rails")){const auto& v=rails->value;if(v!="both"&&v!="left"&&v!="right"&&v!="none")throw std::runtime_error("rails="+v+" is not both, left, right or none");primitive.rails=v=="both"?3:v=="left"?1:v=="right"?2:0;}
+    if(const auto* thick=findNamedField(namedFields,"thick")){float t=0;const auto& v=thick->value;const auto r=std::from_chars(v.data(),v.data()+v.size(),t);
+     if(v.empty()||r.ec!=std::errc{}||r.ptr!=v.data()+v.size()||!(t>=.05f&&t<=1.5f))throw std::runtime_error("thick="+v+" is out of range (0.05 to 1.5)");primitive.thick=t;}
+    addPrimitive(*map,primitive,f.size()>11&&!f[11].empty());}
+   catch(const std::runtime_error& e){throw std::runtime_error("map "+f[1]+" PRIM: "+e.what());}
   }else if(tag=="FIXTURE"){
    if(f.size()<11)throw std::runtime_error("malformed FIXTURE record");auto map=mapAt(maps,f);map->fixtures.push_back({
     integer(f,2,"fixture model"),{number(f,3,"fixture x"),number(f,4,"fixture y")},number(f,5,"fixture base"),

@@ -1,6 +1,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "BoxSurfaces.h"
+#include "ShapeCulling.h"
+#include <chrono>
 #include "SoftMesh.h"
 #include "../game/physics/PropBodies.h"
 #include "Materials.h"
@@ -305,6 +307,7 @@ float yaw=p.angle,pitch=p.pitch/140.f;
  return {-x*sy+y*cy,z*cp-forward*sp,forward*cp+z*sp};
 }
 void SoftwareRenderer::triangle3D(MeshVertex a,MeshVertex b,MeshVertex c,const Texture& texture,float light,const NormalLighting* normalLighting){
+ ++m_trianglesSubmitted;
  // With no fixture power an opaque surface has exactly unit diffuse response
  // and zero specular light. Water still needs its tangent frame for Fresnel.
  // Per-pixel lamps keep the tangent frame (and normal map) even with no baked light.
@@ -1019,6 +1022,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   else triangle3D(a,b,c,t,light);
  };
  bool clipArchitecture=false;int surfaceOwner=-1;std::vector<SurfaceBox> surfaceBoxes;
+ // Faces buried in other solids (ShapeCulling.h): the map's solids as convex pieces, set while the
+ // architecture is drawn; null draws every face.
+ const cull::CullIndex* cullIndex=nullptr;std::vector<cull::Polygon> cullParts,cellParts;double cullClipSeconds=0;int cullCut=0,cullBuried=0;
+ auto passStarted=std::chrono::steady_clock::now();std::uint64_t trianglesBefore=m_trianglesSubmitted;bool architectureDrawn=false;
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)if(w.tile(x,y)=='#')
   surfaceBoxes.push_back({{float(x),float(y),w.floorHeight(x+.5f,y+.5f)},{float(x+1),float(y+1),w.wallHeight(x,y)},y*World::Width+x});
  for(size_t i=0;i<w.structures().size();++i){const auto&s=w.structures()[i];
@@ -1074,12 +1081,80 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    m_triangleAir={airs[size_t(i)],airs[size_t(i+1)],airs[size_t(i+columns+2)]};triangle3D(A,B,C,t,light,normalState);
    m_triangleAir={airs[size_t(i)],airs[size_t(i+columns+2)],airs[size_t(i+columns+1)]};triangle3D(A,C,D,t,light,normalState);}
  };
+ // The visible parts of a face cut where it reaches into another solid (parts in its own s, t):
+ // lit on the same grid, with the same corrections and texture coordinates, as emitQuad lights
+ // the whole face, so a cut face matches its uncut neighbours.
+ auto emitQuadPiece=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale,Vec2 uvOffset,bool skipBoxes){
+  if(!m_staticGeometryBuild&&std::max({a.z,b.z,c.z,d.z})<dormantFloor)return;
+  if(outside(cameraPoint(a,game))&outside(cameraPoint(b,game))&outside(cameraPoint(c,game))&outside(cameraPoint(d,game)))return;
+  auto size=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  int columns=1,rows=1;
+  if(light<1.5f&&(t.mips.empty()||!t.normalLevels.empty())){columns=std::clamp(int(std::ceil(size(b-a))),1,16);rows=std::clamp(int(std::ceil(size(d-a))),1,16);}
+  const bool floorFace=std::fabs(a.z-b.z)<.001f&&std::fabs(a.z-d.z)<.001f;
+  const bool wallFace=std::fabs(a.x-d.x)<.001f&&std::fabs(a.y-d.y)<.001f&&d.z>a.z+.4f;
+  if(floorFace&&light<1.5f){auto center=(a+c)*.5f;bool nearWall=false;
+   for(auto offset:{Vec2{-.55f,0},Vec2{.55f,0},Vec2{0,-.55f},Vec2{0,.55f}})nearWall|=w.tile(int(std::floor(center.x+offset.x)),int(std::floor(center.y+offset.y)))=='#';
+   if(nearWall){columns=std::max(columns,3);rows=std::max(rows,3);}
+   if(center.z>eye.z+.35f&&(!t.normalLevels.empty()||t.glossStrength>0)){columns=std::max(columns,4);rows=std::max(rows,4);
+    for(const auto&fixture:w.lights()){if(fixture.mount!=WorldLightMount::Ceiling)continue;float dx=fixture.position.x-center.x,dy=fixture.position.y-center.y;
+     if(dx*dx+dy*dy<=fixture.range*fixture.range*.36f){columns=std::max(columns,6);rows=std::max(rows,6);break;}}}}
+  const auto normal=cross3(b-a,c-a);
+  auto lit=[&](Point3 p,float& air){air=NoBounceAir;if(light>=1.5f)return 1.f;float l=illumination(p,normal)+probeSheen(p,normal,t);air=illuminationAir;
+   if(floorFace){bool nearWall=false;for(auto offset:{Vec2{-.24f,0},Vec2{.24f,0},Vec2{0,-.24f},Vec2{0,.24f}})nearWall|=w.tile(int(std::floor(p.x+offset.x)),int(std::floor(p.y+offset.y)))=='#';if(nearWall)l*=.75f;}
+   else if(wallFace)l*=.72f+.28f*std::clamp((p.z-a.z)/.4f,0.f,1.f);return l;};
+  auto cut=[](cull::Polygon& poly,bool alongT,float bound,bool keepAbove){cull::Polygon out;
+   for(size_t i=0;i<poly.size();++i){const auto& A=poly[i];const auto& B=poly[(i+1)%poly.size()];const float pa=alongT?A.b:A.a,pb=alongT?B.b:B.a;
+    const bool ain=keepAbove?pa>=bound:pa<=bound,bin=keepAbove?pb>=bound:pb<=bound;if(ain)out.push_back(A);
+    if(ain!=bin){const float k=(bound-pa)/(pb-pa);out.push_back({A.p+(B.p-A.p)*k,A.a+(B.a-A.a)*k,A.b+(B.b-A.b)*k});}}
+   poly.swap(out);};
+  std::vector<MeshVertex> vs;std::vector<float> airs;
+  for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){
+   const float s0=float(x)/columns,s1=float(x+1)/columns,t0=float(y)/rows,t1=float(y+1)/rows;
+   NormalLighting lights;const NormalLighting* normalState=nullptr;bool lightsReady=false;
+   // Each cell cut on its own: a cell the solids do not reach stays the two triangles it was.
+   const cull::Polygon cell{{a+(b-a)*s0+(d-a)*t0,s0,t0},{a+(b-a)*s1+(d-a)*t0,s1,t0},{a+(b-a)*s1+(d-a)*t1,s1,t1},{a+(b-a)*s0+(d-a)*t1,s0,t1}};
+   const auto started=std::chrono::steady_clock::now();
+   if(!cullIndex->clip(cell,surfaceOwner,skipBoxes,cellParts))cellParts={cell};
+   cullClipSeconds+=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+   for(const auto& piece:cellParts){
+    if(piece.size()<3||cull::polygonArea(piece)<1e-8f)continue;
+    if(!lightsReady&&(!t.normalLevels.empty()||t.glossStrength>0)){auto center=a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows);lights=normalLightingAt(center);lights.surfaceNormal=surfaceNormal(center,normal);normalState=&lights;lightsReady=true;}
+    vs.clear();airs.clear();
+    for(const auto& v:piece){const Point3 p=a+(b-a)*v.a+(d-a)*v.b;float air;const float l=lit(p,air);vs.push_back({cameraPoint(p,game),v.a*uvScale.x+uvOffset.x,(1-v.b)*uvScale.y+uvOffset.y,l});airs.push_back(air);}
+    for(size_t i=1;i+1<vs.size();++i){if(outside(vs[0].p)&outside(vs[i].p)&outside(vs[i+1].p))continue;m_triangleAir={airs[0],airs[i],airs[i+1]};triangle3D(vs[0],vs[i],vs[i+1],t,light,normalState);}}}
+ };
+ // Whose faces the culling cuts: the map's tiles and the solids it indexed (not glass, rails, or
+ // a breach's broken pieces, which keep the faces they always had).
+ auto cullOwner=[&]{return cullIndex&&surfaceOwner>=0&&(surfaceOwner<World::Width*World::Height||cullIndex->hasOwner(surfaceOwner));};
+ auto clipFace=[&](const cull::Polygon& face,bool skipBoxes){
+  const auto started=std::chrono::steady_clock::now();const bool cut=cullIndex->clip(face,surfaceOwner,skipBoxes,cullParts);
+  cullClipSeconds+=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();if(cut)++(cullParts.empty()?cullBuried:cullCut);return cut;};
+ auto cullQuad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale,Vec2 uvOffset){
+  if(cullOwner()){
+   // A face square to the axes has had the boxes cut from it already (exposedBoxFace).
+   const auto u=b-a,v=d-a;auto single=[](Point3 e){int n=0;for(float c:{e.x,e.y,e.z})n+=std::fabs(c)>.000001f;return n==1;};
+   const bool square=single(u)&&single(v)&&single(cross3(u,v));
+   if(clipFace({{a,0,0},{b,1,0},{c,1,1},{d,0,1}},square)){if(!cullParts.empty())emitQuadPiece(a,b,c,d,t,light,uvScale,uvOffset,square);return;}}
+  emitQuad(a,b,c,d,t,light,uvScale,uvOffset);
+ };
  auto quad=[&](Point3 a,Point3 b,Point3 c,Point3 d,const Texture&t,float light,Vec2 uvScale=Vec2{1,1},Vec2 uvOffset=Vec2{}){
   if(!clipArchitecture){emitQuad(a,b,c,d,t,light,uvScale,uvOffset);return;}
   auto u=b-a,v=d-a;
   for(auto p:exposedBoxFace(a,b,d,surfaceOwner,surfaceBoxes))
-   emitQuad(a+u*p.u0+v*p.v0,a+u*p.u1+v*p.v0,a+u*p.u1+v*p.v1,a+u*p.u0+v*p.v1,t,light,
+   cullQuad(a+u*p.u0+v*p.v0,a+u*p.u1+v*p.v0,a+u*p.u1+v*p.v1,a+u*p.u0+v*p.v1,t,light,
     {uvScale.x*(p.u1-p.u0),uvScale.y*(p.v1-p.v0)},{uvOffset.x+uvScale.x*p.u0,uvOffset.y+uvScale.y*(1-p.v1)});
+ };
+ // A triangle of the architecture (a shape's slope or cap): cut like a face, drawn as before.
+ auto fan=[&](const cull::Polygon& poly,const Texture&t,float light){
+  for(size_t i=1;i+1<poly.size();++i)tri({poly[0].p,poly[0].a,poly[0].b},{poly[i].p,poly[i].a,poly[i].b},{poly[i+1].p,poly[i+1].a,poly[i+1].b},t,light);};
+ auto archTri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
+  if(clipArchitecture&&cullOwner()&&clipFace({{a.p,a.u,a.v},{b.p,b.u,b.v},{c.p,c.u,c.v}},false)){for(const auto& part:cullParts)fan(part,t,light);return;}
+  tri(a,b,c,t,light);
+ };
+ // A face of a new PRIM shape (texture coordinates in a, b): cut, then lit on a metre grid.
+ auto shapeFace=[&](const cull::Polygon& face,const Texture&t){
+  std::vector<cull::Polygon> cells;cull::gridSplit(face,1.f,cells);const bool cut=clipArchitecture&&cullOwner();
+  for(const auto& cell:cells){if(cut&&clipFace(cell,false)){for(const auto& part:cullParts)fan(part,t,1.f);}else fan(cell,t,1.f);}
  };
  Texture lamp{1,1,{0xffd1f1dau}},amber{1,1,{0xffdf9849u}},blue{1,1,{0xff53aec4u}};
  const Texture& iron=m_ironTexture;Texture red{1,1,{0xffb84728u}};
@@ -1142,8 +1217,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // determinant. The former centre/diagonal UVs were collinear, disabling
    // normal/gloss lighting and stretching each cap triangle into a stripe.
    Vec2 uvP{.5f+.5f*current.x,.5f+.5f*current.y},uvQ{.5f+.5f*next.x,.5f+.5f*next.y};
-   tri({a,.5f,.5f},{a+q,uvQ.x,uvQ.y},{a+p,uvP.x,uvP.y},texture,.8f);
-   tri({b,.5f,.5f},{b+p,uvP.x,uvP.y},{b+q,uvQ.x,uvQ.y},texture,.8f);
+   archTri({a,.5f,.5f},{a+q,uvQ.x,uvQ.y},{a+p,uvP.x,uvP.y},texture,.8f);
+   archTri({b,.5f,.5f},{b+p,uvP.x,uvP.y},{b+q,uvQ.x,uvQ.y},texture,.8f);
   }
  };
  struct ExteriorLight {std::array<Point3,6> normals;std::array<float,6> brightness{};std::array<NormalLighting,6> gloss{};bool hasGloss;std::array<float,6> air{};};
@@ -1300,6 +1375,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   hash(std::uint64_t(game.worldId()));hash(game.staticRevision(w.level()));hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
   // Revision: tile crates/barrels + authored props bake into the static VBO.
   hash(5);
+  // Buried faces left out or drawn (setFaceCulling): a switch rebuilds the bake.
+  hash(m_faceCulling?11:12);
   // Reusing a renderer across maps at the same address must not retain the
   // previous map's finishes, even when its tiles and lamps are identical.
   for(int surface:{w.wallSurface(),w.floorSurface(),w.ceilingSurface()})hash(std::uint64_t(surface+1));
@@ -1426,6 +1503,22 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    MeshVertex a{{lx-1,ly,z-1},-1,-1},b{{lx+1,ly,z-1},1,-1},c{{lx+1,ly,z+1},1,1},d{{lx-1,ly,z+1},-1,1};
    tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;m_gpu->setLodTag(nullptr);
   }
+ }
+ // The map's solids as convex pieces (ShapeCulling.h), indexed once per change of the map: tiles
+ // of wall, then every structure drawn as a solid box or shape, in record order.
+ passStarted=std::chrono::steady_clock::now();trianglesBefore=m_trianglesSubmitted;architectureDrawn=true;
+ if(m_faceCulling){
+  std::uint64_t key=1469598103934665603ull;auto mix=[&](std::uint64_t v){key=(key^v)*1099511628211ull;};auto mixf=[&](float v){mix(std::bit_cast<std::uint32_t>(v));};
+  mix(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  for(const auto& b:surfaceBoxes){for(float v:{b.low.x,b.low.y,b.low.z,b.high.x,b.high.y,b.high.z})mixf(v);mix(std::uint64_t(b.owner));}
+  for(const auto& st:w.structures()){for(float v:{st.x1,st.y1,st.x2,st.y2,st.bottom,st.top,st.skew})mixf(v);mix(std::uint64_t(st.shape)|std::uint64_t(st.facing)<<8|std::uint64_t(st.material+1)<<16|std::uint64_t(st.drape)<<40);}
+  auto& cached=m_cullIndexes[&w];
+  if(!cached.second||key!=cached.first){
+   const auto started=std::chrono::steady_clock::now();
+   const auto index=cull::buildIndex(surfaceBoxes,w.structures(),World::Width*World::Height,[&](size_t i){return !w.isBreakableStructure(int(i));});
+   cached={key,index};
+   m_cullStats[&w].indexMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();m_cullStats[&w].pieces=int(index->pieces.size());}
+  cullIndex=cached.second.get();
  }
  clipArchitecture=true;
  for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){surfaceOwner=y*World::Width+x;float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
@@ -1559,11 +1652,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto P=[&](float u,float v,float z){return Point3{cx+side.x*u+forward.x*v,cy+side.y*u+forward.y*v,z};};
   Vec2 repeat=finishRepeat(texture);if(repeat.x<=0)repeat={2,2};
   auto length=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
-  auto rect=[&](Point3 a,Point3 b,Point3 c,Point3 d){emitQuad(a,b,c,d,texture,1.f,{length(b-a)/repeat.x,length(d-a)/repeat.y});};
-  auto planar=[&](Point3 a,Point3 b,Point3 c){const Point3 n=cross3(b-a,c-a);
-   auto uv=[&](Point3 p)->MeshVertex{if(std::fabs(n.z)>=std::max(std::fabs(n.x),std::fabs(n.y)))return {p,p.x/repeat.x,p.y/repeat.y};
+  // The solid shapes' faces are cut where they reach into other solids; a breach's broken
+  // pieces keep every face.
+  const bool solidShape=s.shape<ShapeLip||cull::newShape(s.shape);
+  auto rect=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(solidShape)quad(a,b,c,d,texture,1.f,{length(b-a)/repeat.x,length(d-a)/repeat.y});else emitQuad(a,b,c,d,texture,1.f,{length(b-a)/repeat.x,length(d-a)/repeat.y});};
+  auto planarUV=[&](Point3 n,Point3 p)->MeshVertex{if(std::fabs(n.z)>=std::max(std::fabs(n.x),std::fabs(n.y)))return {p,p.x/repeat.x,p.y/repeat.y};
     return std::fabs(n.x)>std::fabs(n.y)?MeshVertex{p,p.y/repeat.x,-p.z/repeat.y}:MeshVertex{p,p.x/repeat.x,-p.z/repeat.y};};
-   tri(uv(a),uv(b),uv(c),texture,1.f);};
+  auto planar=[&](Point3 a,Point3 b,Point3 c){const Point3 n=cross3(b-a,c-a);
+   if(solidShape)archTri(planarUV(n,a),planarUV(n,b),planarUV(n,c),texture,1.f);else tri(planarUV(n,a),planarUV(n,b),planarUV(n,c),texture,1.f);};
   auto quadPlanar=[&](Point3 a,Point3 b,Point3 c,Point3 d){planar(a,b,c);planar(a,c,d);};
   auto axisBox=[&](float u0,float u1,float v0,float v1,float bottom,float top){const auto a=P(u0,v0,bottom),b=P(u1,v1,top);
    box({std::min(a.x,b.x),std::min(a.y,b.y),bottom},{std::max(a.x,b.x),std::max(a.y,b.y),top},texture,1.05f);};
@@ -1602,7 +1698,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     return {P(hw*std::cos(e)*std::cos(a),hd*std::cos(e)*std::sin(a),z0+h*std::sin(e)),a*around/repeat.x,-h*std::sin(e)/repeat.y};};
    for(int j=0;j<rings;++j)for(int k=0;k<sectors;++k){
     const auto a=at(j,k),b=at(j,k+1),c=at(j+1,k+1),d=at(j+1,k);
-    tri(a,b,c,texture,1.f);if(j+1<rings)tri(a,c,d,texture,1.f);}
+    archTri(a,b,c,texture,1.f);if(j+1<rings)archTri(a,c,d,texture,1.f);}
   }else if(s.shape==ShapeStrut){
    const float t=strutSection(hw*2,h);
    rect(P(-hw,-hd,z0+t),P(hw,-hd,z0+t),P(hw,hd,z1),P(-hw,hd,z1));
@@ -1626,6 +1722,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     rect(P(u0,hd,up0),P(u1,hd,up1),P(u1,-hd,up1),P(u0,-hd,up0));
     rect(P(u0,-hd,dn0),P(u1,-hd,dn1),P(u1,hd,dn1),P(u0,hd,dn0));
    }
+  }else if(cull::newShape(s.shape)){
+   // The new PRIM shapes (ShapeCulling.h): their faces, mapped round or projected flat.
+   std::vector<cull::ShapePiece> pieces;cull::shapePieces(s,pieces,true);
+   for(const auto& piece:pieces)for(const auto& f:piece.faces){if(f.v.size()<3)continue;cull::Polygon face;
+    if(f.mapped)for(const auto& v:f.v)face.push_back({v.p,v.u/repeat.x,v.v/repeat.y});
+    else{Point3 n{};for(size_t i=0;i<f.v.size();++i){const auto A=f.v[i].p,B=f.v[(i+1)%f.v.size()].p;n.x+=(A.y-B.y)*(A.z+B.z);n.y+=(A.z-B.z)*(A.x+B.x);n.z+=(A.x-B.x)*(A.y+B.y);}
+     for(const auto& v:f.v){const auto m=planarUV(n,v.p);face.push_back({v.p,m.u,m.v});}}
+    shapeFace(face,texture);}
   }else if(s.shape==ShapeLip||s.shape==ShapeFoot){
    // A breach's broken lip (its lower edge sloping) or foot (its upper edge sloping), skew from u -hw to u +hw.
    const bool lip=s.shape==ShapeLip;
@@ -1724,7 +1828,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
  }
- clipArchitecture=false;surfaceOwner=-1;
+ clipArchitecture=false;surfaceOwner=-1;cullIndex=nullptr;
+ if(architectureDrawn){auto& stats=m_cullStats[&w];stats.clipMs=cullClipSeconds*1000;stats.facesCut=cullCut;stats.facesBuried=cullBuried;stats.triangles=(long long)(m_trianglesSubmitted-trianglesBefore);
+ stats.passMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-passStarted).count();stats.pieces=m_faceCulling&&m_cullIndexes.count(&w)?int(m_cullIndexes[&w].second->pieces.size()):0;}
  const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
  if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model)){
   float base=w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base;

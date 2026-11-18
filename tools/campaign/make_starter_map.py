@@ -26,7 +26,9 @@ with a clear corridor down the west side joining the rows:
               DEAD AND BLOOD (bodies that settle, a creature of each fluid), MACHINE,
               PREDATOR (a hunter and its prey), SOUND (AMBIENT, REVERB, music cues), and south
               of Predator the ATRIUM: a storefront of mixed panes (GLAZING), a ragged hole
-              (BREACH) with light through it, and the Growth brush's ivy, moss, creepers and grass
+              (BREACH) with light through it, and the Growth brush's ivy, moss, creepers and grass;
+              west of Physics the SHAPES: every PRIM kind in miniature, the ten newest at full
+              size, and a building of overlapping prims in four materials, its seams culled clean
 
 Writes "custom maps/Starter Map.rmc" by default. The file is also the worked
 example for custom maps/GUIDE.html (tools/campaign/make_custom_map_guide.py).
@@ -597,11 +599,124 @@ def build():
     architecture(s)
     architecture_2(s)
     showcase(s, slot, catalogue)
-    s.reserved = {(5 + OX, 2 + OY), (6 + OX, 2 + OY)}  # SHOWCASE: PHYSICS and ATRIUM, built after the forest (every earlier number stays)
+    s.reserved = {(4 + OX, 2 + OY), (5 + OX, 2 + OY), (6 + OX, 2 + OY)}  # SHOWCASE: SHAPES, PHYSICS and ATRIUM, built after the forest
     building(s, slot, catalogue)
     physics_room(s, slot, catalogue)
     atrium(s, slot, catalogue)  # south of Predator, built last too
+    shapes_room(s)              # west of Physics, last of all
     return s
+
+
+def prim_kinds():
+    """The PRIM kinds as the engine knows them (src/world/PrimitiveKinds.h, the one table the
+    engine, the Campaign Builder and the guide read): name, plain name, palette group, default
+    w, d, h, what it builds. The table's order is the Builder's palette order."""
+    text = open(os.path.join(ROOT, 'src', 'world', 'PrimitiveKinds.h'), encoding='utf-8').read()
+    groups = {'WallsAndOpenings': 'Walls & openings', 'Supports': 'Supports', 'RoofsAndSlabs': 'Roofs & slabs',
+              'StairsAndSteps': 'Stairs & steps', 'Details': 'Details', 'NewShapes': 'New shapes'}
+    consts = {'GuardHeight': 1.1}
+    out = []
+    for m in re.finditer(r'\{"(\w+)","([^"]+)",(\w+),([\w.]+?)f?,([\w.]+?)f?,([\w.]+?)f?,Outline::\w+,"([^"]*)"\}', text):
+        num = lambda v: consts[v] if v in consts else float(v)
+        out.append({'kind': m.group(1), 'label': m.group(2), 'group': groups[m.group(3)],
+                    'w': num(m.group(4)), 'd': num(m.group(5)), 'h': num(m.group(6)), 'blurb': m.group(7)})
+    return out
+
+
+def prim_size(k, w=0, d=0, h=0):
+    """A kind's size as the engine resolves it (PrimitiveKinds.h resolve): 0 takes the default;
+    stairs, big steps and ramps run as deep as their rise needs."""
+    w, h = w or k['w'], h or k['h']
+    d = d or k['d']
+    if d <= 0:
+        d = {'stairs': math.ceil(h / .17 - 1e-4) * .28, 'megastep': math.ceil(h / .45 - 1e-4) * .9,
+             'ramp': max(1.0, h * 4)}.get(k['kind'], 1.0)
+    return w, d, h
+
+
+def shapes_room(s):
+    """SHOWCASE: SHAPES, west of Physics, in from the Dead and Blood's south wall: the shapes the
+    Campaign Builder's Shape tool lays (PRIM). The north half stands the ten newest at full size:
+    a roof wedge, a pyramid roof, a spire, a buttressed wall, eight-sided pillars and bevelled
+    blocks, a spiral stair to climb, a culvert to walk through, a curved wall and a catwalk. The
+    south-west quarter is the whole palette in miniature, every kind in the Builder's order behind
+    a full-size arch. The south-east quarter is one building made of overlapping prims in four
+    materials (a stone base, brick walls and buttresses, a concrete arch, bands and roof, a copper
+    dome): where they overlap the engine draws only what shows, so the seams are clean."""
+    m = s.new_map('Showcase Shapes', 4, 2, ceiling=7.0, surface='concrete', ambient=.3)
+    i = m['index']
+    s.format2 = True                                                  # hand=, rails= on the PRIMs
+    dead = next(x for x in s.maps if x['name'] == 'Showcase Dead and Blood')
+    dead['walls'] = (dead['walls'] | {(x, 23) for x in range(24)}) - {(11, 23), (12, 23)}
+    m['walls'] |= {(x, 0) for x in range(24) if x not in (11, 12)} | {(0, y) for y in range(24)} | {(23, y) for y in range(24)} | {(x, 23) for x in range(24)}
+    for other in s.maps:
+        if (other['col'], other['row']) in ((m['col'] + 1, m['row']), (m['col'] - 1, m['row']), (m['col'], m['row'] + 1)):
+            s.closed.add(frozenset(((m['col'], m['row']), (other['col'], other['row']))))
+    s.zone(m, 9, 0, 15, 3, '', 'SHOWCASE: SHAPES')
+    kinds = {k['kind']: k for k in prim_kinds()}
+
+    def prim(kind, x, y, z, w, d, h, facing, material, zone=None, named=''):
+        s.rec(m, 'PRIM', i, kind, x, y, z, w, d, h, facing, material)
+        if named: m['records'][-1] += '|' + named
+        if zone:
+            k = kinds[kind]
+            fw, fd, _ = prim_size(k, w, d, h)
+            if facing % 2: fw, fd = fd, fw
+            s.zone(m, x - fw / 2 - .3, y - fd / 2 - .3, x + fw / 2 + .3, y + fd / 2 + .3, ('PRIM %s / %s' % (kind, zone))[:40])
+            s.index.append({'map': i, 'section': 'SHOWCASE', 'x': x, 'y': y, 'title': 'PRIM %s' % kind, 'name': k['label']})
+
+    # ---- North: the ten newest at their default sizes, sized for the 1.6 m player ----
+    prim('wedge', 3.0, 5.0, 0, 0, 0, 0, 0, 48, 'roof wedge, ridge along facing')
+    prim('pyramid', 7.8, 5.0, 0, 0, 0, 0, 0, 33, 'pyramid roof')
+    prim('cone', 11.9, 5.0, 0, 0, 0, 0, 0, 19, 'spire')
+    s.struct(m, 14.4, 3.2, 17.6, 3.6, 0, 3.0, 31)                     # a brick wall the buttresses prop
+    prim('buttress', 14.9, 4.35, 0, 0, 0, 0, 0, 33, 'buttress, propping the wall')
+    prim('buttress', 17.1, 4.35, 0, 0, 0, 0, 0, 33)
+    prim('octagon', 19.8, 4.0, 0, 0, 0, 0, 0, 42, 'eight-sided pillar')
+    prim('octagon', 21.6, 4.0, 0, 0, 0, 2.4, 0, 46)
+    prim('chamfer', 19.8, 6.6, 0, 0, 0, 0, 0, 33, 'bevelled blocks')
+    prim('chamfer', 21.4, 6.6, 0, 1.4, .8, .6, 0, 42)
+    prim('spiral', 3.2, 10.6, 0, 0, 0, 0, 0, 47, 'spiral stair: climb it')
+    s.struct(m, 1.0, 9.5, 2.15, 10.9, 2.9, 3.0, 7)                    # a grating landing off its 3 m top tread
+    prim('pillar', 1.35, 10.55, 0, .14, .14, 2.9, 0, 2)
+    prim('culvert', 7.6, 10.4, 0, 0, 0, 0, 0, 42, 'culvert: walk through')
+    prim('arcwall', 12.2, 10.0, 0, 0, 0, 0, 2, 31, 'curved wall, bowing north')
+    prim('catwalk', 17.6, 9.6, 1.02, 0, 0, 0, 1, 2, 'catwalk on posts')
+    for x in (15.9, 19.3):                                             # posts under its stringers
+        for y in (9.05, 10.15):
+            prim('pillar', x, y, 0, .12, .12, .77, 0, 2)
+    prim('stairs', 20.44, 9.6, 0, 1.1, 0, 1.02, 3, 46)                 # up to its east end
+    # ---- South-west: the whole palette in miniature, in the Builder's order ----
+    prim('arch', 6.0, 13.4, 0, 0, 0, 0, 0, 42, 'the gate: an arch at full size')
+    order = [k for k in prim_kinds() if k['kind'] != 'arch']
+    for n, k in enumerate(order):
+        col, row = n % 7, n // 7
+        x, y = 1.6 + col * 1.55, 14.85 + row * 1.25
+        w, d, h = prim_size(k)
+        scale = min(1.0, 1.05 / max(w, d), 1.2 / h)
+        sw, sd, sh = round(w * scale, 3), round(d * scale, 3), round(h * scale, 3)
+        z = .3 if k['kind'] in ('window', 'canopy', 'band', 'spout', 'girder', 'waffle', 'corbel') else 0
+        prim(k['kind'], x, y, z, sw, sd, sh, 0, [42, 31, 33, 46, 19, 47][n % 6])
+        s.zone(m, x - .7, y - .6, x + .7, y + .6, ('%s: %s' % (k['group'], k['label']))[:40])
+    s.index.append({'map': i, 'section': 'SHOWCASE', 'x': 6, 'y': 19, 'title': 'EVERY SHAPE', 'name': 'the palette in miniature'})
+    # ---- South-east: one building of overlapping prims in four materials ----
+    bx, by = 17.6, 18.2
+    prim('box', bx, by, 0, 7.0, 6.0, .6, 0, 33, 'a building of prims: seams culled')   # ancient stone base
+    for x1, x2, y1, y2 in ((14.6, 16.65, 15.6, 16.0), (18.55, 20.6, 15.6, 16.0),       # brick walls; the south
+                           (14.6, 20.6, 20.4, 20.8), (14.6, 15.0, 15.6, 20.8), (20.2, 20.6, 15.6, 20.8)):  # pair stop inside the arch's piers
+        prim('box', (x1 + x2) / 2, (y1 + y2) / 2, .5, x2 - x1, y2 - y1, 3.3, 0, 31)
+    prim('arch', bx, 15.8, .5, 2.6, .8, 3.4, 0, 42)                   # concrete arch, proud of the brick both sides
+    prim('stairs', bx, 14.64, 0, 1.6, 0, .6, 0, 33)                    # stone steps up to it
+    for y in (17.0, 19.4):                                             # brick buttresses, east and west, on the floor
+        prim('buttress', 14.2, y, 0, .5, 1.2, 3.1, 3, 31)
+        prim('buttress', 21.0, y, 0, .5, 1.2, 3.1, 1, 31)
+    for (x, y, w, f) in ((15.6, 15.8, 2.0, 0), (19.6, 15.8, 2.0, 0), (bx, 20.6, 6.0, 2), (14.8, 18.2, 5.2, 3), (20.4, 18.2, 5.2, 1)):
+        prim('band', x, y, 2.5, w, .4, .2, f, 42)                      # a concrete band flush with the brick (stopping in the arch's piers): drawn once, no z-fighting
+    prim('box', bx, by, 3.75, 6.6, 5.8, .3, 0, 42)                     # concrete roof slab over the walls' tops
+    prim('dome', bx, by, 3.95, 4.6, 4.0, 2.2, 0, 19)                   # copper dome sunk into the slab
+    for x, y in ((3, 6), (12, 6), (19, 6), (5, 13), (18, 13), (5, 20), (17.6, 22.6), (11, 19)):
+        s.rec(m, 'LIGHT', i, x, y, 6.6, 0, 0, 1.2, 11, 4300)
+    s.sign(m, 12.0, 1.06, 3.4, 3.2, .8, 'SHAPES', 'every PRIM kind; seams culled', SHOW, 0)
 
 
 def prim_exhibit(s, m, grey=0xa0a8b0):
