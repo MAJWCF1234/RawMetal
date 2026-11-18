@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit d2e823b4de2b7c81b5fb5b187a51be6d3a338bde
-# 2026-11-18 09:28, renderer: culling stats start afresh with each scene, so an old scene's worlds are not counted into the new one's totals
+commit 2890520e8c97fbfbd20a95aa0eef52816ccdbb9b
+# 2026-11-18 15:16, props: a free VR hand's reach builds the sleeping props it is about to touch; the hand-push check swats at the prop's height from clear space; v1.5.2 notes hold the fixes once meant for 1.5.3
