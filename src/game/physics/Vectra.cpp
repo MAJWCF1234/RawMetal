@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstring>
 #include <chrono>
+#include <deque>
 #include <iterator>
 namespace retro::vectra {
 M3 M3::inverse()const{
@@ -244,8 +245,11 @@ void Space::collide(float dt){
  std::vector<float> reach(size_t(n),0.f);
  for(int i=0;i<n;++i){auto&b=bodies[size_t(i)];V3 lo{1e30f,1e30f,1e30f},hi{-1e30f,-1e30f,-1e30f};
   if(!b.shape){b.boundsLo=lo;b.boundsHi=hi;continue;}   // no shape: nothing to meet (its bounds empty, never paired)
-  for(int p=0;p<b.shape->count;++p){V3 l,h;partBounds(b,p,l,h);lo={std::min(lo.x,l.x),std::min(lo.y,l.y),std::min(lo.z,l.z)};hi={std::max(hi.x,h.x),std::max(hi.y,h.y),std::max(hi.z,h.z)};}
-  b.boundsLo=lo;b.boundsHi=hi;reach[size_t(i)]=settings.speculative+(b.sleeping?0.f:std::min(1.f,(len(b.v)+len(b.w)*b.shape->bound)*dt));}
+  // A sleeper that has not moved since its bounds were worked out keeps them (a room of resting props costs nothing here).
+  const bool kept=b.sleeping&&b.boundsKept&&b.boundsX.x==b.x.x&&b.boundsX.y==b.x.y&&b.boundsX.z==b.x.z&&b.boundsQ.w==b.q.w&&b.boundsQ.x==b.q.x&&b.boundsQ.y==b.q.y&&b.boundsQ.z==b.q.z;
+  if(!kept){for(int p=0;p<b.shape->count;++p){V3 l,h;partBounds(b,p,l,h);lo={std::min(lo.x,l.x),std::min(lo.y,l.y),std::min(lo.z,l.z)};hi={std::max(hi.x,h.x),std::max(hi.y,h.y),std::max(hi.z,h.z)};}
+   b.boundsLo=lo;b.boundsHi=hi;b.boundsX=b.x;b.boundsQ=b.q;b.boundsKept=true;}
+  reach[size_t(i)]=settings.speculative+(b.sleeping?0.f:std::min(1.f,(len(b.v)+len(b.w)*b.shape->bound)*dt));}
  // The world under and round each moving body.
  std::vector<char> grounded(size_t(n),0);
  auto ground=[&](int i){const auto&b=bodies[size_t(i)];if(!worldContacts||!b.shape||grounded[size_t(i)]||b.sleeping||b.invMass<=0)return;grounded[size_t(i)]=1;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);};
@@ -267,8 +271,10 @@ void Space::collide(float dt){
  std::vector<std::pair<int,int>> pairs;sweepPairs(pairs);
  // Each polyhedral part's hull, built once a step when a pair first needs it (a crate in a heap meets six).
  std::vector<int> first(size_t(n)+1,0);for(int i=0;i<n;++i)first[size_t(i)+1]=first[size_t(i)]+(bodies[size_t(i)].shape?bodies[size_t(i)].shape->count:0);
- std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
- auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
+ // (Kept only for the parts a pair needs, in a deque so each stays where it is: a room of 400 resting props built and
+ // cleared 400 hulls, a quarter of a megabyte, every step.)
+ std::vector<int> slot(static_cast<size_t>(first.back()),-1);std::deque<Hull> hulls;
+ auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(slot[k]<0){slot[k]=int(hulls.size());hulls.push_back(hullOf(bodies[size_t(body)],part));}return hulls[size_t(slot[k])];};
  int woken=0;std::vector<char> roused(size_t(n),0);   // woken by a touch this step: what it touches that sleeps wakes with it (a sleeper is a wall)
  auto meet=[&](const std::vector<std::pair<int,int>>& list){
  for(auto [i,j]:list){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);

@@ -114,6 +114,8 @@ struct Body {
  V3 dp{};Quat dq{};      // motion since the step began (TGS-soft: contact separation updates from it)
  int island=-1;
  V3 boundsLo{},boundsHi{};
+ // Where its bounds were last worked out (a sleeping body that has not moved since keeps them: Space::collide).
+ V3 boundsX{};Quat boundsQ{};bool boundsKept=false;
  V3 pointVelocity(V3 p)const{return v+cross(w,p-x);}
  V3 toWorld(V3 local)const{return x+q.rotate(local-shape->com);} // a body-frame point (box origin) to world
  void setMass(float mass){invMass=kinematic||mass<=0?0:1/mass;inertiaLocal=kinematic||mass<=0?M3::zero():shape->inertia*mass;invInertiaLocal=kinematic||mass<=0?M3::zero():inertiaLocal.inverse();}

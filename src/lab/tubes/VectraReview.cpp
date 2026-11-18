@@ -111,6 +111,29 @@ const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg
   out.check(r.lift<.002f&&r.hop<(drop?.01f:.002f)&&r.drift<(drop?.01f:.005f)&&r.asleep,"and stays put on it: no spring off (a hop under "+std::string(drop?"1 cm":"2 mm")+"), no drift, asleep"+how);}
  return out.ok;}});
 
+// ---- 5. At scale ----
+// The scene from scratch each time, five times, and the quickest of each (the machine's other work only slows a run).
+struct Scale {double rest=1e9,busy=1e9,world=0,pair=0,solve=0,other=0,worst=0;int asleep=0,woke=0,pairs=0;};
+Scale scaleRun(){World w;Scale r;
+ for(int i=0;i<20;++i)for(int j=0;j<20;++j)w.add(PartKind::Box,{float(i)*.5f,float(j)*.5f,.15f},{.15f,.15f,.15f},5);
+ const float dt=1.f/120;for(int i=0;i<60;++i)w.space.step(dt);
+ for(const auto& b:w.space.bodies)r.asleep+=b.sleeping;
+ using Clock=std::chrono::steady_clock;auto ms=[](Clock::time_point t){return std::chrono::duration<double,std::milli>(Clock::now()-t).count();};
+ {const auto t=Clock::now();for(int i=0;i<240;++i)w.space.step(dt);r.rest=ms(t)/240;}
+ for(int k=0;k<20;++k){const int s=w.add(PartKind::Box,{-1.f,.25f+float(k)*.45f,.45f},{.03f,.02f,.004f},.05f);auto& b=w.space.bodies[size_t(s)];b.v={22.f,float(k%3)-1.f,1.5f};b.w={0,30,7};}
+ double busy=0;
+ for(int i=0;i<90;++i){const auto t=Clock::now();w.space.step(dt);const double m=ms(t);busy+=m;r.worst=std::max(r.worst,m);r.world+=w.space.worldMs/90;r.pair+=w.space.pairMs/90;r.solve+=w.space.solveMs/90;r.pairs+=w.space.pairsTested;}
+ r.busy=busy/90;r.other=r.busy-r.world-r.pair-r.solve;r.pairs/=90;
+ for(int i=0;i<400;++i)r.woke+=!w.space.bodies[size_t(i)].sleeping;return r;}
+const bool scaleTube=add({.name="vectra-scale",.summary="the cost of a step with 400 resting props and 20 fast shards through them",.standalone=[]{
+ Out out("vectra-scale.txt");Scale best;
+ for(int k=0;k<5;++k){const Scale r=scaleRun();if(k==0){best=r;continue;}best.rest=std::min(best.rest,r.rest);if(r.busy<best.busy){const double rest=best.rest;best=r;best.rest=rest;}}
+ out.file<<"400 props, "<<best.asleep<<" asleep after half a second (the quickest of five runs)\n";
+ out.file<<"at rest: "<<f3(best.rest,4)<<" ms a step\n";
+ out.file<<"20 shards through them (90 steps): "<<f3(best.busy,4)<<" ms a step (worst "<<f3(best.worst,3)<<"): world "<<f3(best.world,4)<<", pairs "<<f3(best.pair,4)<<", solve "<<f3(best.solve,4)<<", the rest (continuous collision, islands) "<<f3(best.other,4)<<"; "<<best.pairs<<" part pairs a step; "<<best.woke<<" props woken\n";
+ out.check(best.asleep==400,"the 400 props settle and sleep");
+ return out.ok;}});
+
 // ---- 6. Scrape and roll ----
 struct Rub {float scrape=0,roll=0,endScrape=1,endRoll=1,travel=0;bool asleep=false;std::vector<float> trace;Point3 pose{};float dims=0;};
 Rub rub(int model,bool onSide,Vec2 v){
