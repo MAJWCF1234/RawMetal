@@ -104,7 +104,9 @@
         f.write(reinterpret_cast<const char *>(&head), sizeof head);
         f.write(reinterpret_cast<const char *>(&info.bmiHeader), sizeof info.bmiHeader);
         f.write(bits.data(), std::streamsize(bits.size()));
-        shotLog << "  wrote " << out << " " << w << "x" << h << '\n';
+        shotLog << "  wrote " << out << " " << w << "x" << h << " (picked " << record << ", footing list " << SendMessageW(footingModeList, CB_GETCURSEL, 0, 0) << ", picked footing " << footingPicked()
+                << ", planned " << (record >= 0 && footingAtLine(size_t(record)) ? footingAtLine(size_t(record))->spec.mode : -1) << " of " << footings().size()
+                << ", filling " << footingFilling << ")\n";
       } else if (verb == "quit") {
         shotLine = shotScript.size();
       }

@@ -220,7 +220,14 @@
   void repairSelection() {
     std::erase_if(selectedRecords, [&](int i) { return i < 0 || size_t(i) >= doc.lines.size(); });
     if (record < 0) return;
-    if (size_t(record) < doc.lines.size() && (pickedText.empty() || doc.lines[size_t(record)] == pickedText)) return;
+    // A tool may point the pick at a line it just made (a copy, a new record): that stands.
+    // What does not is a pick past the end, or on a line that is no record at all.
+    auto isRecord = [&](size_t at) {
+      if (at >= doc.lines.size()) return false;
+      auto f = NativeDocument::fields(doc.lines[at]);
+      return f.size() > 1 && !f[0].empty() && f[0][0] != '#' && f[0] != "ROW";
+    };
+    if (isRecord(size_t(record))) return;
     if (!pickedText.empty()) {
       auto found = std::find(doc.lines.begin(), doc.lines.end(), pickedText);
       if (found != doc.lines.end()) {
@@ -228,11 +235,6 @@
         for (auto &s : selectedRecords) if (s == record) s = now;
         record = now;
         return;
-      }
-      // Edited where it stands (the inspector, a drag): the same kind of record on the same map.
-      if (size_t(record) < doc.lines.size()) {
-        auto was = NativeDocument::fields(pickedText), is = NativeDocument::fields(doc.lines[size_t(record)]);
-        if (was.size() > 1 && is.size() > 1 && was[0] == is[0] && was[1] == is[1]) return;
       }
     }
     std::erase(selectedRecords, record);

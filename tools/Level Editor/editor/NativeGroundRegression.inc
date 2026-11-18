@@ -160,6 +160,8 @@
     selectRecord(int(footingLine));
     layout();
     require(footingPicked() && shownControl(footingModeList), "a picked footing shows no Footing rows");
+    require(int(SendMessageW(footingModeList, CB_GETCURSEL, 0, 0)) == footingAtLine(footingLine)->spec.mode,
+            "the footing list does not show the picked footing's way (" + std::to_string(SendMessageW(footingModeList, CB_GETCURSEL, 0, 0)) + " for " + namedValue(doc.lines[footingLine], "footing") + ")");
     shot(L"ground-footing-rows.bmp");
     auto planned = [&] { return *footingAtLine(size_t(record)); };
     const size_t history0 = history.size();
