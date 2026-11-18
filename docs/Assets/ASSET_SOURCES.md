@@ -18,18 +18,7 @@ The player handgun's effects (resources 2260-2264, `src/assets/audio/pistol-*.wa
 
 A torn electrical lead's arc (`Sound::LeadArc`, resource 2347, the RMS1 `src/assets/library/audio/lead_arc.sfx` embedded from its `lead_arc.wav` master beside it) comes from the ROT Horror Audio Bundle v1.9: `ROT - Horror Audio Bundle v1.9/ROT - Horror Audio Bundle/Audio/Sound Effects/Misc/electric_shock_mx_1.ogg` (the same clip is at the library root's `Audio/Sound Effects/Misc/`). It was raised 5 dB and trimmed to 2.7 s, kept 44.1 kHz stereo PCM16; the spark bursts drawn at a torn end keep time with its crackles (`leadArc` in `src/world/World.h`). Like the rest of `src/assets/library/`, the master and the `.sfx` stay out of git.
 
-The Campaign Builder's building sounds are the Creating Constructs clips, cut by `tools/Level Editor/editor/PrepareSounds.py` (same offsets, lengths and mastering as `N:/Finished/Monolith maker/tools/prepare_audio.py`: highpass 55 Hz, lowpass, loudnorm, 7 ms fades, 0.251 peak) into 16 kHz mono PCM16 under `tools/Level Editor/.build/sounds/`, which is build output and stays out of git. Sources, all under `O:/retro official/Complex/`:
-- `placeStone`: `SFX/Movement/Footsteps/Asphalt/FS-Asphalt_1.wav`, 0-0.45 s, -23 LUFS.
-- `placeWood`: `SFX/Movement/Footsteps/Wood/FS-Wood_1.wav`, 0-0.45 s, -23 LUFS.
-- `placeMetal`: `SFX/Movement/Footsteps/Stairs/Metal/MetalStairs_FS1.wav`, 0-0.45 s, -24 LUFS.
-- `breakStone`: `SFX/Cutscenes/StatueHeadFall_Ending_2.wav`, 0-0.65 s, -24 LUFS.
-- `breakWood`: `SFX/LadderStepOn.wav`, 0-0.65 s, -24 LUFS.
-- `breakMetal`: `SFX/Cutscenes/MetalClash.wav`, 0-0.8 s, -26 LUFS.
-- `click`: `SFX/UI/UI_Click.wav`, 0-0.22 s, -26 LUFS.
-- `hover`: `SFX/UI/UI_Hover.wav`, 0-0.14 s, -30 LUFS.
-- `back`: `SFX/UI/UI_Back.wav`, 0-0.26 s, -26 LUFS.
-- `slider`: `SFX/UI/UI_Slider.wav`, 0-0.12 s, -30 LUFS.
-- `musicKey`: `Music/BassPluckLoop.wav`, 0-0.85 s, -26 LUFS.
+The Campaign Builder's interface sounds use no purchased audio. `tools/Level Editor/editor/PrepareSounds.py` synthesizes all fifteen with numpy (felt and wooden taps, small marimba and kalimba notes, a soft bell, a low soft tone for a refusal) into 22.05 kHz mono PCM16 under `tools/Level Editor/.build/sounds/`, which is build output; `BuildEditor.cmd` makes them when they are missing, and `--check` proves each is under a second, quiet, soft at its onset and free of low rumble. Until 2026-11-17 they were cut from `O:/retro official/Complex/`; its `Music/BassPluckLoop.wav` (the old `musicKey`, a 31 Hz bass drop) played on every finished room and every save and read as a horror sting.
 
 Surface-lift/reactor sources include Rust & Blood v1.1d, ROT v1.9, and Echoes v2.1 assets. Runtime WAV effects are 44.1 kHz PCM16; MP3 music is decoded at runtime.
 
@@ -44,6 +33,15 @@ Runtime clutter includes trash, MRE, power supply, PCB and floppy-disc meshes/te
 ## Environment
 Source library: `O:/retro official`.
 Imported assets include generator, barrel, crate, concrete/brick/metal surfaces, hazard stripes, chemical/machinery/confined-space signage, terminal panels and warning graphics. Originals were not modified.
+
+## Skies (make_skies.py, 2026-11-17)
+`tools/library/make_skies.py` brings five purchased panoramas in as neural x2 sky packets (2048 x 512, the Brutal format) under the gitignored `src/assets/library/skies/`, with the PNG master each was cut to beside it, and makes five more itself with numpy into the tracked `src/assets/ai/skies/`. Resources 2900-2909; the list, labels and each sky's haze are `EXTRA_SKIES` in `tools/library/register_skyboxes.py`. Sources, all under `O:/retro official/`, originals unchanged:
+- `psx_clear_day` (Clear day): `Textures/PSX_Daysky_HDRI/DAYSKY.hdr`, 2048 x 1024 Radiance, exposure 1.15, sRGB.
+- `psx_starry_night` (Starry night): `Textures/PSX_Nightsky_HDRI/PSX_NIGHTSKY.hdr`, Reinhard at 1.6, sRGB.
+- `dusk_afterglow` (Dusk afterglow): `Environments/Bus_stop/Skybox/Skybox.png`, as is.
+- `cloudy_night` (Cloudy night): `Environments/DINER/Skybox/Skybox.png`, lifted 1.7 with gamma 0.9 (it is exposed for a lit diner).
+- `treeline_night` (Treeline night): `Environments/6twelve/Skybox/pano.png`, 1024 x 512, enlarged to 2048 x 1024.
+Made here: `grey_overcast`, `cold_dawn`, `storm_front`, `ember_eclipse` (a black sun in red ash) and `resonance_aurora` (violet curtains over a starfield).
 
 ## Facility
 Purchased sources include Modular Retro FPS Kit v1.5 and PSX Bunkers v1.8.8. RawMetal uses supplied columns, vents, ceiling lamps, generators, shelving, wall cabinets and computer/control-terminal assets. Model UVs and per-face material assignments are retained.

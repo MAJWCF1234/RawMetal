@@ -27,8 +27,11 @@ struct NativeDocument {
   // (NativeReferences.h, the drag cancel). Size and storage address are
   // checked too, so an unmarked insert or erase still rebuilds. With
   // `verify` on (the test modes), every answer is checked against a full scan.
-  std::uint64_t version = 1;
-  void touch() { ++version; }
+  // Unique across documents: a cache keyed by version (the land, the footings, the index)
+  // must not take a newly opened map for the one it was built from (they both counted from 1).
+  static std::uint64_t nextVersion() { static std::uint64_t counter = 0; return ++counter; }
+  std::uint64_t version = nextVersion();
+  void touch() { version = nextVersion(); }
   static inline bool verify = false;
   // --perf-baseline: answer every query by the old full scan (timing only).
   static inline bool scanOnly = false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <map>
 #include <atomic>
 #include <filesystem>
 #include <memory>
@@ -31,6 +32,7 @@
 #include "Ragdoll.h"
 #include "Electricity.h"
 #include "SoftBodies.h"
+#include "physics/Vectra.h"
 
 namespace retro {
 // Bumped once per chunk built while a save loads on a worker thread, so the
@@ -258,6 +260,16 @@ struct Clutter {
  float bodyImpactCooldown=0;
  // Carried along in a moving container this step (Containers.h): the solver leaves it be (not saved).
  bool riding=false;
+ // Vectra's orientation (physics/PropBodies.h): a unit quaternion (w, x, y, z), and the Euler
+ // angles it last wrote. yaw/pitch/roll stay what everything else reads and writes; when they differ
+ // from these (an outside write: seeding, a carry, a save), the body is turned to them. Angular velocity
+ // lives in spin (world z), pitchSpeed and rollSpeed (about the yaw-turned y and x axes): exact both ways.
+ // island: the sleep island it rests in (-1 awake). Not in the save stream (the physics save section).
+ std::array<float,4> orient{1,0,0,0};std::array<float,3> orientEuler{1e9f,1e9f,1e9f};int island=-1;
+ // A mattress or a pad (physics/PropBodies.h, chained): three segments along its length on springy hinges.
+ // bend: each joint's bend (rad, the outer segment's turn about the width axis); bendSpeed its rate; boneRoot
+ // which segment the prop's own frame is (1, the middle; the end in the hand while it is carried).
+ std::array<float,2> bend{0,0},bendSpeed{0,0};int boneRoot=1;
  // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
@@ -1323,6 +1335,23 @@ private:
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
+    // Vectra's step for a list's model props (RigidClutter.cpp; the old one: vectra::legacyProps()).
+    void simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held);
+    // A man or a creature knocked back by a prop (RigidClutter.cpp): he stumbles along `velocity`, slowing,
+    // through his own hull sweeps; a creature's blow is spoilt while it lasts.
+    struct BodyKnock {int level=0;bool enemy=false;size_t index=0;Vec2 velocity{};float time=0;};
+    std::vector<BodyKnock> m_bodyKnocks;
+    void updateBodyKnocks(float dt);
+    // A list's rigid-body state between frames: the fixed step's leftover time and the contacts' warm start.
+    struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;
+     // A region of the world found to be one flat floor with every column round it open (RigidClutter.cpp),
+     // kept per prop: asked again only when the prop leaves it or a door moves.
+     int heldIndex=-1;vectra::Quat heldTurn{}; // the prop in the hand and how it was turned last step (its spin)
+     std::vector<std::pair<std::uint64_t,Vec2>> actorLast;   // where each man and creature near props was last frame (their bodies' speed)
+     struct Flat {const void* world=nullptr;float x0=0,y0=0,x1=0,y1=0,lo=0,hi=0,floor=0,doors=0;bool flat=false,valid=false;};std::vector<Flat> flat;};
+    std::map<int,RigidPropState> m_rigidProps;
+    // What the last rigid step did (the lab's perf and debug views).
+    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);
     // The player on a soft prop (a floor mattress, a bedroll): its pressed top under p, or `height`.
     float softGround(Vec2 p,float feet,float height,float radius)const;

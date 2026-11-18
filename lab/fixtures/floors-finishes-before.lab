@@ -1,0 +1,7 @@
+# floors-finishes-before (tools/dev/floors_fixtures.py). Tube: floors.
+world custom "lab/fixtures/floors-plain.rmc"
+map 0
+camera 12.5 9.5 2.4 130.6 -29.3
+size 1280 720
+frames 30
+floors-shot finishes-before

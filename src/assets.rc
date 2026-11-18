@@ -1400,3 +1400,15 @@
 2869 RCDATA "assets/library/growth_ivy_curtain_ivy.png"
 2870 RCDATA "assets/library/growth_ivy_single.obj"
 2871 RCDATA "assets/library/growth_ivy_single_ivy.png"
+// BEGIN GENERATED EXTRA SKIES
+2900 RCDATA "assets/library/skies/psx_clear_day-x2.ntx"
+2901 RCDATA "assets/ai/skies/grey_overcast-x2.ntx"
+2902 RCDATA "assets/ai/skies/cold_dawn-x2.ntx"
+2903 RCDATA "assets/library/skies/dusk_afterglow-x2.ntx"
+2904 RCDATA "assets/ai/skies/storm_front-x2.ntx"
+2905 RCDATA "assets/library/skies/psx_starry_night-x2.ntx"
+2906 RCDATA "assets/library/skies/cloudy_night-x2.ntx"
+2907 RCDATA "assets/library/skies/treeline_night-x2.ntx"
+2908 RCDATA "assets/ai/skies/ember_eclipse-x2.ntx"
+2909 RCDATA "assets/ai/skies/resonance_aurora-x2.ntx"
+// END GENERATED EXTRA SKIES

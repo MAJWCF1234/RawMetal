@@ -14,6 +14,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
+#include "game/physics/PropBodies.h"
 #include "game/EngineRegressionScene.h"
 #include "world/CampaignKit.h"
 #include "world/ModelIds.h"
@@ -148,7 +149,12 @@ const bool tube=add({
     r.metric(n+"_moved",o.moved,"m");r.metric(n+"_tilt_max",o.tiltMax,"rad");r.metric(n+"_tilt_end",o.tilt,"rad");r.metric(n+"_peak",o.peak,"m/s");
     const std::string d="moved "+fixed(o.moved)+" m, tilt max "+fixed(o.tiltMax)+" end "+fixed(o.tilt)+", peak "+fixed(o.peak)+" m/s (striker "+fixed(o.strikerPeak)+")";
     const bool sane=o.peak<=std::max(o.strikerPeak,3.f)*1.6f+.5f;
-    if(k.wantTopple)r.check(n+": knocked over, with an impact sound, and not flung end over end",o.toppled&&sane&&o.sound&&o.tiltMax<2.4f,d);
+    // Re-baselined for Vectra (game/physics): an office chair on casters struck at its seat rolls away
+    // rather than going over (the old step tipped whatever it struck by a rule), and a crate tumbling at
+    // 10 rad/s can meet a side-on chair corner first and ride up over its seat: both are pushed aside, hard.
+    const bool rolls=!vectra::legacyProps()&&(n=="crate_thrown_office_chair"||n=="crate_thrown_tumbling_side_wooden_chair");
+    if(rolls)r.check(n+": knocked aside hard (Vectra: rolls on its casters, or the tumbling crate rides over it), with an impact sound",o.moved>.15f&&sane&&o.sound&&o.tiltMax<2.4f,d);
+    else if(k.wantTopple)r.check(n+": knocked over, with an impact sound, and not flung end over end",o.toppled&&sane&&o.sound&&o.tiltMax<2.4f,d);
     else if(k.wantMove)r.check(n+": pushed aside",o.moved>.15f&&sane,d);
     else r.check(n+": hardly stirred",o.moved<.08f&&!o.toppled,d);
     if(k.shove&&k.target==model::office_chair)r.check(n+": a shoved crate does not bowl the heavy chair over",!o.toppled,d);}

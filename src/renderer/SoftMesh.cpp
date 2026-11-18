@@ -33,6 +33,12 @@ const std::vector<MeshTriangle>& refined(int model,const Mesh& mesh){
   if(padding)split(t,0,out);else out.push_back(t);}
  return cache.emplace(model,std::move(out)).first->second;
 }
+const std::vector<MeshTriangle>& refinedAll(int model,const Mesh& mesh){
+ static std::mutex lock;static std::map<int,std::vector<MeshTriangle>> cache;
+ std::lock_guard<std::mutex> hold(lock);auto it=cache.find(model);if(it!=cache.end())return it->second;
+ std::vector<MeshTriangle> out;out.reserve(mesh.triangles.size()*8);for(const auto& t:mesh.triangles)split(t,0,out);
+ return cache.emplace(model,std::move(out)).first->second;
+}
 float bend(int model,const SoftPad& pad,const Mesh& mesh,const Point3& p){
  const float w=weight(model,mesh,p);if(w<=0)return 0;const Point3 c=(mesh.minimum+mesh.maximum)*.5f;
  const float depth=pad.depthMesh(p.x-c.x,p.z-c.z);if(depth==0)return 0;

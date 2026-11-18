@@ -1,3 +1,4 @@
+#include "SkyboxCatalog.h"
 #include "CustomCampaign.h"
 #include "Primitives.h"
 #include "../audio/SoundBank.h"
@@ -223,6 +224,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   else if(tag=="CREATURE")map->creatureSpawns.back().traits=traits;else if(tag=="ACTOR")map->actorTracks.back().traits=traits;
   if(overrides&&(tag=="FIXTURE"||tag=="CLUTTER"||tag=="CREATURE"||tag=="ACTOR"))map->entityTraits=true;
  };
+ // A finish named on a STAIR or LAYER: a structure material (World.h finishMaterialAllowed); absent, -1.
+ auto finishField=[](const NamedFields& fields,const char* key){
+  const auto* field=findNamedField(fields,key);if(!field)return -1;
+  int value=-1;const auto& v=field->value;const auto end=v.data()+v.size();const auto r=std::from_chars(v.data(),end,value);
+  if(v.empty()||r.ec!=std::errc{}||r.ptr!=end||!finishMaterialAllowed(value))throw std::runtime_error(std::string(key)+"="+v+" is not a finish; use a structure material 0-51 (not 1, 4, 6, 9, 17 or 30)");
+  return value;};
  auto parseRecord=[&](std::vector<std::string> f,const NamedFields& namedFields){
   const std::string tag=f[0];
   // A field the exporter appends to an older record (empty or absent keeps the default).
@@ -411,6 +418,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(!art.emplace(name,std::move(picture)).second)throw std::runtime_error("SIGN_ART "+name+" is defined twice");
   }else if(tag=="LAYER"){
    if(f.size()<6)throw std::runtime_error("malformed LAYER record");auto& layer=layerAt(maps,f);layer.name=decode(f[3]);layer.elevation=number(f,4,"layer elevation");layer.thickness=number(f,5,"layer thickness");
+   // deck= edge= railing=: structure materials for a balcony's walking face, its fascia and its rails.
+   layer.deck=finishField(namedFields,"deck");layer.edge=finishField(namedFields,"edge");layer.railing=finishField(namedFields,"railing");
   }else if(tag=="ROW"){
    if(f.size()<5)throw std::runtime_error("malformed ROW record");auto& layer=layerAt(maps,f);int row=integer(f,3,"row index");if(row<0||row>=24)throw std::runtime_error("invalid row index");layer.rows[size_t(row)]=f[4];
   }else if(tag=="DOOR"){
@@ -451,6 +460,30 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(given(12)){int facing=integer(f,12,"structure facing");if(facing<0||facing>3)throw std::runtime_error("invalid structure facing");map->structures.back().facing=std::uint8_t(facing);}
    // A light shaft is only light: nothing walks into it.
    if(map->structures.back().material==LightShaftMaterial)map->structures.back().solid=false;
+   // trim= trimwidth=: a flooring's edge band, a structure material along its sides (World::splitFinishes).
+   {auto& s=map->structures.back();s.trim=finishField(namedFields,"trim");
+    if(const auto* field=findNamedField(namedFields,"trimwidth")){float w=0;const auto& v=field->value;const auto r=std::from_chars(v.data(),v.data()+v.size(),w);
+     if(v.empty()||r.ec!=std::errc{}||r.ptr!=v.data()+v.size()||!(w>=.01f&&w<=1.f))throw std::runtime_error("trimwidth="+v+" is not a width; use 0.01 to 1 (metres)");
+     if(s.trim<0)throw std::runtime_error("trimwidth= needs trim= (the band's material)");s.trimWidth=w;}
+    else if(s.trim>=0)s.trimWidth=.1f;
+    if(s.trim>=0&&(s.shape!=ShapeBox||s.rail))throw std::runtime_error("trim= is for a plain box (a flooring), not a shape or a rail");}
+   // drape=1: a flooring that follows the land (a path, a patio on a slope), drawn over the ground.
+   if(const auto* drape=findNamedField(namedFields,"drape")){auto& s=map->structures.back();
+    if(drape->value!="0"&&drape->value!="1")throw std::runtime_error("drape="+drape->value+" is not 1 or 0");
+    s.drape=drape->value=="1";if(s.drape&&(s.shape!=ShapeBox||s.rail))throw std::runtime_error("drape= is for a plain box (a flooring)");}
+   // footing= snap= raise= base= cap= capwidth= steps= terrace=: a room or floor on the land, or raised (Footing.h).
+   if(const auto* mode=findNamedField(namedFields,"footing")){
+    auto& s=map->structures.back();AuthoredMapData::FootingData footing;footing.structure=map->structures.size()-1;
+    footing.spec.mode=footingModeOf(mode->value);if(footing.spec.mode<0)throw std::runtime_error("footing="+mode->value+" is not a footing; use pad, foundation, stilts or stepped");
+    if(s.shape!=ShapeBox||s.rail||s.x2-s.x1<.2f||s.y2-s.y1<.2f)throw std::runtime_error("footing= is for a plain box at least 0.2 m across");
+    footing.spec.x1=s.x1;footing.spec.y1=s.y1;footing.spec.x2=s.x2;footing.spec.y2=s.y2;footing.spec.bottom=s.bottom;footing.spec.top=s.top;
+    auto real=[&](const char* key,float low,float high,float fallback){const auto* field=findNamedField(namedFields,key);if(!field)return fallback;float v=0;const auto& text=field->value;const auto r=std::from_chars(text.data(),text.data()+text.size(),v);
+     if(text.empty()||r.ec!=std::errc{}||r.ptr!=text.data()+text.size()||!(v>=low&&v<=high))throw std::runtime_error(std::string(key)+"="+text+" is out of range ("+std::to_string(low).substr(0,4)+" to "+std::to_string(high).substr(0,4)+")");return v;};
+    if(const auto* snap=findNamedField(namedFields,"snap")){footing.spec.snap=footingSnapOf(snap->value);if(footing.spec.snap<0)throw std::runtime_error("snap="+snap->value+" is not a snap; use low, mean, high or fixed");}
+    footing.spec.raise=real("raise",0,FootingMaxRaise,0);footing.spec.terrace=real("terrace",1,12,3);footing.capWidth=real("capwidth",.02f,.5f,.1f);
+    footing.base=finishField(namedFields,"base");footing.cap=finishField(namedFields,"cap");
+    if(const auto* steps=findNamedField(namedFields,"steps")){if(steps->value!="0"&&steps->value!="1")throw std::runtime_error("steps="+steps->value+" is not 1 or 0");footing.steps=steps->value=="1";}
+    map->footings.push_back(std::move(footing));}
   }else if(tag=="PRIM"){
    if(f.size()<11)throw std::runtime_error("malformed PRIM record");auto map=mapAt(maps,f);
    const Primitive primitive{f[2],number(f,3,"primitive x"),number(f,4,"primitive y"),number(f,5,"primitive z"),number(f,6,"primitive width"),number(f,7,"primitive depth"),
@@ -687,6 +720,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<11||f.size()>14)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending"),f.size()>11&&!f[11].empty()?boolean(f,11,"stair open underside"):false,f.size()>12&&!f[12].empty()?number(f,12,"stair tread thickness"):.12f,f.size()>13&&!f[13].empty()?boolean(f,13,"stair side rails"):false});
+   // tread= riser= stringer=: structure materials for the walking face, the step body and the side guards.
+   {auto& st=map->stairs.back();st.tread=finishField(namedFields,"tread");st.riser=finishField(namedFields,"riser");st.stringer=finishField(namedFields,"stringer");}
   }else if(tag=="CREATURE"){
    if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>=CreatureKindCount)throw std::runtime_error("invalid creature kind");
    CreatureSpawn spawn{CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")};
@@ -876,6 +911,16 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  for(const auto& target:guardTargets)if(maps[size_t(target.first)]->actorTracks[size_t(target.second)].ai.mode!=ActorAiMode::Guard)throw std::runtime_error("guard configuration, weapon or patrol requires Guard actor AI mode");
  if(!sawCampaign||campaign->name.empty())throw std::runtime_error("missing CAMPAIGN record");
  if(maps.empty()||maps.size()>WorldChunkCapacity)throw std::runtime_error("custom campaign has no maps or exceeds engine capacity");
+ // Footings (Footing.h) measure the land before any of them cuts it, then put their pads in.
+ if(terrain){std::vector<TerrainFlat> pads;
+  for(auto& map:maps)if(map&&!map->footings.empty()){
+   const bool land=map->definition.environment==Environment::Outdoor&&terrainSkybox(map->skybox);const auto origin=map->definition.origin;
+   for(auto& footing:map->footings){footing.land=land;
+    footing.parts=planFooting(footing.spec,land,[&](float x,float y){return authoredTerrainSurface(*terrain,origin.x,origin.y,x,y);});
+    if(land){auto made=footingPads(footing.spec,footing.parts,origin.x,origin.y);pads.insert(pads.end(),made.begin(),made.end());}}}
+  if(terrain->flats.size()+pads.size()>4096)throw std::runtime_error("too many footings on the land");
+  terrain->flats.insert(terrain->flats.end(),pads.begin(),pads.end());}
+ for(auto& map:maps)if(map)for(auto& footing:map->footings)if(footing.parts.empty())footing.parts=planFooting(footing.spec,false,[](float,float){return 0.f;});
  for(size_t i=0;i<maps.size();++i){
   if(!maps[i]||!declared[i])throw std::runtime_error("custom campaign maps require contiguous MAP records");
   if(maps[i]->layers.empty())throw std::runtime_error("custom campaign map has no layers");

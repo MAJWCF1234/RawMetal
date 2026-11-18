@@ -1,0 +1,8 @@
+# Vectra feel picture: shove (tube vectra-feel)
+world room
+camera 11.7 3.3 -999 90 -9
+light 11 8.4 2.7 2.4 8
+light 8 6 2.6 .9 8
+feel shove
+size 960 540
+frames 150

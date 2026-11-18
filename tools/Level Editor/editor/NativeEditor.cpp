@@ -5,6 +5,7 @@
 #include "../src/world/ModelIds.h"
 #include "../src/world/SkyboxCatalog.h"
 #include "../src/world/TerrainField.h" // the ground the engine builds, sampled the same here (NativeOutdoorMethods.inc)
+#include "../src/world/Footing.h" // footings planned as the engine plans them (NativeGroundMethods.inc)
 #include "NativeCommands.h"
 #include "NativeDocument.h"
 #include "NativeObjects.h"
@@ -40,6 +41,8 @@
 #include <mmsystem.h>
 #include <cstring>
 #include <fstream>
+#include <atomic>
+#include <intrin.h>
 #ifdef RAWMETAL_UNIFIED
 #include "../src/platform/EditorPreview.h"
 #endif
@@ -410,13 +413,16 @@ inline void drawListRow(const DRAWITEMSTRUCT *d, HFONT font) {
   SelectObject(d->hDC, old);
 }
 } // namespace ui
-// Soft building sounds: the Creating Constructs clips, cut by PrepareSounds.py
-// into .build/sounds. Each play nudges pitch and level so nothing repeats.
+// Soft building sounds, synthesized by PrepareSounds.py into .build/sounds:
+// felt and wooden taps, small marimba and kalimba notes, a low soft tone for a
+// refusal. No game cue and no horror sting. Each play nudges pitch and level so
+// nothing repeats.
 #pragma comment(lib, "winmm.lib")
 namespace sfx {
-enum Clip { PlaceStone, PlaceWood, PlaceMetal, BreakStone, BreakWood, BreakMetal, Click, Hover, Back, Slider, MusicKey, Count };
+enum Clip { PlaceStone, PlaceWood, PlaceMetal, BreakStone, BreakWood, BreakMetal, Click, Hover, Back, Slider, Redo, Save,
+            Celebrate, Play, Error, Count };
 inline const char *const names[] = {"placeStone", "placeWood", "placeMetal", "breakStone", "breakWood", "breakMetal",
-                                    "click", "hover", "back", "slider", "musicKey"};
+                                    "click", "hover", "back", "slider", "redo", "save", "celebrate", "play", "error"};
 struct Pcm {
   std::vector<int16_t> samples;
   int rate = 16000;
@@ -746,6 +752,12 @@ enum {
   NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider,
   // Prefabs (NativePrefabMethods.inc).
   MakePrefab=780,PlacePrefab,
+  // Stair and balcony finishes (NativeFinishMethods.inc).
+  FinishPartList=873,
+  // Footings: a room or floor on the land, or raised (NativeGroundMethods.inc).
+  FootingModeList=2610,FootingSnapList,FootingRaiseBox,FootingHeightBox,FootingStepsToggle,FootingAdvancedToggle,
+  // The Flooring tool (NativeFlooringMethods.inc).
+  FlooringLookList=2620,FlooringSlopeList,FlooringTrimToggle,
   // The Window wall and Glass tools (NativeGlazingTool.inc).
   GlazingHeightList=790,GlazingBaysList,GlazingRowsList,GlazingPaneList,GlazingLookList,GlazingDoorList,
   // The Breach tool (NativeBreachTool.inc).
@@ -809,6 +821,7 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Film camera", L"✇", L"Click to place a named camera, or drag from where it stands toward what it sees. R turns it. Render films them all with the engine.", 4, "# EDITOR_FILM", 'l'},
     {L"Terrain", L"⛰", L"Paint the land: raise, lower, smooth, flatten, lay a ramp or paint the ground. Size and strength on the right; Ctrl+Z takes a stroke back.", 4, "", 'T'},
     {L"Nature", L"♣", L"Paint trees, bushes, grass, rocks and plants. Pick what on the right; Erase (or Alt) clears them. Walls, buildings and water stay clear.", 4, "", 'N'},
+    {L"Flooring", L"▤", L"Pick a floor look on the right, then drag it out over a floor or the ground. A click floors a whole room.", 0, "STRUCT", 'r'},
     {L"Window wall", L"▦", L"Drag along a wall, or across an opening: a framed storefront of glass panes. Bays, rows, heights, panes, frame and a doorway on the right. Click a bay of one to give its panes the kind picked (Shift: the bottom pane only).", 0, "GLAZING", 'r'},
     {L"Breach", L"◠", L"Drag along a wall to break a hole through it: ragged, arched or square, with a chipped edge, rebar and rubble. You walk, see and shoot through it, and light comes through.", 0, "BREACH", 'r'},
     {L"Growth", L"❦", L"Paint ivy and moss on walls, creepers hanging from ceilings and ledges, and grass through the floor. What, brush size, density, size and seed on the right; Erase (or Alt) clears it. Ctrl+Z takes a stroke back.", 1, "", 'G'},
@@ -816,7 +829,8 @@ static constexpr ToolInfo toolInfo[] = {
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
-                     TerrainTool = 44, NatureTool = 45, WaterTool = 11, GlassTool = 35, GlazingTool = 46, BreachTool = 47, GrowthTool = 48;
+                     TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -1019,7 +1033,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1068,6 +1082,11 @@ struct Editor {
 #include "NativeDressingMethods.inc"
 #include "NativeLayersMethods.inc"
 #include "NativeFloorPaintMethods.inc"
+#include "NativeFinishMethods.inc"
+#include "NativeGroundMethods.inc"
+#include "NativeFlooringMethods.inc"
+#include "NativeStability.inc"
+#include "NativeShots.inc"
 #include "NativeSelectionMethods.inc"
 #include "NativeGizmoMethods.inc"
 #include "NativeLayerDockMethods.inc"
@@ -1097,6 +1116,9 @@ struct Editor {
 #include "NativeGrowthTool.inc"
 #include "NativeGrowthRegression.inc"
 #include "NativeEditorPictures.inc"
+#include "NativeFinishRegression.inc"
+#include "NativeFlooringRegression.inc"
+#include "NativeGroundRegression.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -1457,7 +1479,7 @@ struct Editor {
     };
     for (auto &o : regionStamp.objects)
       out << o.sourceFixture << ' ' << o.sourceClutter << '\t' << joined(o.names) << '\t' << joined(o.fields) << '\n';
-    sfx::play(sfx::MusicKey, .7f, .02f);
+    sfx::play(sfx::Save, .7f, .02f);
     message(L"Saved as stamp " + std::to_wstring(n) + L". Find it under Stamps in the parts browser.");
   }
   bool loadStamp(int n) {
@@ -1579,7 +1601,7 @@ struct Editor {
   void celebrate() {
     int now = countCompleteRooms();
     if (now > completeRooms && !quiet()) {
-      sfx::play(sfx::MusicKey, .9f, .03f);
+      sfx::play(sfx::Celebrate, .8f, .02f);
       auto cells = lastRoom();
       if (!cells.empty()) {
         float cx = 0, cy = 0;
@@ -1644,6 +1666,9 @@ struct Editor {
     waitAutosave();
     std::error_code ec;
     fs::remove(autosavePath(), ec);
+    // A copy brought back from another file (a crash save, NativeStability.inc) goes too.
+    if (!recoveredFile.empty())
+      fs::remove(recoveredFile, ec), fs::remove(recoveredFile.wstring() + L".source", ec);
     doc.loadText(restoredFrom);
     restoredFrom.clear();
     history.clear(), future.clear();
@@ -1824,14 +1849,26 @@ struct Editor {
     for (auto i : doc.records("STRUCT", map)) {
       auto f = NativeDocument::fields(doc.lines[i]);
       float x1 = num(f, 2, 0), y1 = num(f, 3, 0), x2 = num(f, 4, 0), y2 = num(f, 5, 0), b = num(f, 6, 0), t = num(f, 7, 1);
-      if (x >= std::min(x1, x2) - .05f && x <= std::max(x1, x2) + .05f && y >= std::min(y1, y2) - .05f &&
-          y <= std::max(y1, y2) + .05f && (z < -999 || (z >= std::min(b, t) - .1f && z <= std::max(b, t) + .1f)))
+      // A footing is its own thing (footingAt); on the land a block stands where it is grounded.
+      if (footingOf(doc.lines[i]))
+        continue;
+      if (x < std::min(x1, x2) - .05f || x > std::max(x1, x2) + .05f || y < std::min(y1, y2) - .05f || y > std::max(y1, y2) + .05f)
+        continue; // off its footprint: no need to ground it
+      if (z >= -999 && onTerrain()) {
+        // As the engine grounds a box (World::settleExclusionFacilityOnTerrain).
+        const float lx = std::min(x1, x2), hx = std::max(x1, x2), ly = std::min(y1, y2), hy = std::max(y1, y2);
+        b += groundHigh(lx, ly, hx, hy, false), t += groundHigh(lx, ly, hx, hy, true);
+      }
+      if (z < -999 || (z >= std::min(b, t) - .1f && z <= std::max(b, t) + .1f))
         return index = i, field = 9, true;
     }
     return false;
   }
   // Paints (or with pickUp, picks the paint up from) what is at one spot.
   void paintSpot(float x, float y, float z, int surface, bool pickUp) {
+    // A stair or a balcony deck takes the paint on the part under the pointer (NativeFinishMethods.inc).
+    if (surface == 0 && (paintTrimAt(x, y, z, pickUp) || paintFinishAt(x, y, z, pickUp)))
+      return;
     if(!pickUp&&floorPaintTarget(x,y,z,surface)){
       if(brush==2){auto cells=roomAt(cellOf(x),cellOf(y));if(cells.empty())cells.push_back(cellOf(y)*24+cellOf(x));paintRoomFloor(cells,paintMaterial());}
       else paintNativeFloor(float(cellOf(x)),float(cellOf(y)),float(cellOf(x)+1),float(cellOf(y)+1),paintMaterial());
@@ -1840,7 +1877,8 @@ struct Editor {
     size_t index = 0, field = 0;
     if (thingAt(x, y, z, index, field)) {
       auto f = NativeDocument::fields(doc.lines[index]);
-      if(!pickUp&&f[0]=="STRUCT"&&f.size()>9&&std::abs(number(f[6],-99)-layerElevation())<.03f&&number(f[7],99)<=layerElevation()+.05f){
+      // A laid flooring (NativeFlooringMethods.inc) is painted whole, below, not cut into room cells.
+      if(!pickUp&&f[0]=="STRUCT"&&f.size()>9&&!isFlooring(doc.lines[index])&&std::abs(number(f[6],-99)-layerElevation())<.03f&&number(f[7],99)<=layerElevation()+.05f){
         auto cells=roomAt(cellOf(x),cellOf(y));
         if(!cells.empty()){paintRoomFloor(cells,paintMaterial());message(L"Room floor painted; neighboring rooms and floors are preserved.");return;}
       }
@@ -1958,9 +1996,12 @@ struct Editor {
       float x = ox + dx * t, y = oy + dy * t, z = oz + dz * t;
       if (x < 0 || y < 0 || x >= 24 || y >= 24)
         continue;
-      size_t index = 0, field = 0;
-      int surface = thingAt(x, y, z, index, field) ? 0
-                    : z <= floorZ + .01f            ? 3
+      size_t index = 0, field = 0, stairIndex = 0;
+      int part = 0, deckLayer = 0;
+      // On the land the floor is the ground (a footing's floor inside one), not the layer's plane.
+      const float floorHere = layer == 0 && onTerrain() ? groundAt(x, y) : floorZ;
+      int surface = thingAt(x, y, z, index, field) || footingAt(x, y, z, stairIndex, part) || stairAt(x, y, z, stairIndex, part) || deckAt(x, y, z, deckLayer, part) ? 0
+                    : z <= floorHere + .01f            ? 3
                     : z >= ceiling - .01f  ? 4
                     : doc.tile(map, layer, int(x), int(y)) == '#' ? 2
                                                                   : -1;
@@ -2337,6 +2378,7 @@ struct Editor {
       writePack();
       return;
     }
+    repairSelection(); // a tool that took lines out must not leave the pick on the wrong line (NativeStability.inc)
     // Repair managed rooms at commit, never on a drag preview, Undo or load.
     // Keep the current native selection when earlier generated records move.
     if (edit && adjustDressing && !objectDrag && !brushing && !scrubbing) {
@@ -2352,6 +2394,7 @@ struct Editor {
     }
     if (edit)
       dirty = true, ++changeCount;
+    pickedText = record >= 0 && size_t(record) < doc.lines.size() ? doc.lines[size_t(record)] : std::string();
     showTitle();
     // With no engine attached (tests, scripts) an edit only waits for the next
     // check, which publishes; writing every keystroke to disk is just slow.
@@ -3038,6 +3081,7 @@ struct Editor {
     return result;
   }
   void selectRecord(int index, bool preserveSelection = false) {
+    pickedText = index >= 0 && size_t(index) < doc.lines.size() ? doc.lines[size_t(index)] : std::string();
     edperf::Scope perfScope("ui_selectRecord");
     if (ghosting)
       return;
@@ -3423,6 +3467,8 @@ struct Editor {
     structureMaterial =
         int(SendMessageW(materialList, CB_GETITEMDATA, selected, 0));
     if(tool==2){floorPaintMaterial=structureMaterial;floorMaterialExplicit=true;message(L"Floor material: "+materialName(floorPaintMaterial));return;}
+    if (applyFinishChoice(structureMaterial))
+      return;
     if (record < 0) {
       message(L"New blocks use this finish. Select a block or part to change "
               L"one that is already placed.");
@@ -4011,7 +4057,9 @@ struct Editor {
     celebrate();
   }
   void gestureNow(float ax, float ay, float bx, float by) {
-    if(effectiveFloorView(floorLayer(layer)).locked){message(L"Unlock the active floor before editing it.");return;}
+    noteAction("gesture " + utf8(toolInfo[std::clamp(tool, 0, ToolCount - 1)].name) + " map " + std::to_string(map) + " floor " + std::to_string(layer) + " from " +
+               std::to_string(ax) + "," + std::to_string(ay) + " to " + std::to_string(bx) + "," + std::to_string(by)); // the crash log's last actions
+    if(effectiveFloorView(floorLayer(layer)).locked){message(L"Unlock the active floor before editing it.");if(!quiet())sfx::play(sfx::Error,.6f,.02f);return;}
     const auto &info = toolInfo[std::clamp(tool, 0, ToolCount - 1)];
     if (info.shape == 'P') {
       paintGesture(ax, ay, bx, by);
@@ -4079,6 +4127,8 @@ struct Editor {
           for (int x = tx0; x <= tx1; ++x)
             doc.paint(map, layer, x, y, info.shape == 'R' && (x == tx0 || x == tx1 || y == ty0 || y == ty1) ? '#' : ch);
       if((tool==2||tool==4)&&brush!=2){if(tool==4||(layer>0&&upperFloorVoid))clearNativeFloor(float(tx0),float(ty0),float(tx1+1),float(ty1+1));else if(layer>0||floorMaterialExplicit)paintNativeFloor(float(tx0),float(ty0),float(tx1+1),float(ty1+1),floorPaintMaterial);}
+      if (info.shape == 'R')
+        footRoom(tx0, ty0, tx1, ty1); // on the land, or raised: a footing under it (NativeGroundMethods.inc)
       if (info.shape == 'R' && autoDetail && autoDressingEnabled && tx1 - tx0 >= 2 && ty1 - ty0 >= 2)
         detailRoom(tx0, ty0, tx1, ty1);
       else
@@ -4097,6 +4147,10 @@ struct Editor {
       [[fallthrough]];
     case 'r':
     case 'l': {
+      if (tool == FlooringTool) {
+        layFlooring(ax, ay, bx, by); // its own soft snap (NativeFlooringMethods.inc)
+        return;
+      }
       if (info.shape == 'p')
         ax = bx = snapped(bx), ay = by = snapped(by);
       else
@@ -4904,17 +4958,34 @@ struct Editor {
         bx += 92;
       }
       bx += 18;
+      // Under about 1500 px the bar is tight: the view buttons drop their key names, Sound
+      // is a note, Light and Play shorten, so nothing sits under Simulate (it overlapped
+      // Light and Play at 1280 wide).
+      const bool compact = w < 1500;
+      if (compactTop != compact) {
+        compactTop = compact;
+        static const std::pair<int, const wchar_t *> views[] = {{PlanOnly, L"2D paint  F2"}, {Dual, L"2D + 3D  F3"}, {ViewOnly, L"3D edit  F4"}};
+        static const std::pair<int, const wchar_t *> shortViews[] = {{PlanOnly, L"2D paint"}, {Dual, L"2D + 3D"}, {ViewOnly, L"3D edit"}};
+        for (auto [id, text] : compact ? shortViews : views)
+          if (HWND b = GetDlgItem(window, id)) {
+            wchar_t now[64]{};
+            GetWindowTextW(b, now, 64);
+            if (compact || std::wcslen(now) < 10) SetWindowTextW(b, text);
+          }
+        lookLast.clear(); // the Light and Play labels are written again, short or long
+        writeLook();
+      }
       for (int id : {PlanOnly, Dual, ViewOnly}) {
-        placeControl(GetDlgItem(window, id), bx, 52, 122, 40, TRUE);
-        bx += 126;
+        placeControl(GetDlgItem(window, id), bx, 52, compact ? 96 : 122, 40, TRUE);
+        bx += compact ? 100 : 126;
       }
       if (HWND sound = GetDlgItem(window, SoundToggle)) {
-        SetWindowTextW(sound, sfx::muted ? L"♪ Sound: off" : L"♪ Sound: on");
-        placeControl(sound, bx + 14, 52, 124, 40, TRUE);
+        SetWindowTextW(sound, compact ? (sfx::muted ? L"♪ off" : L"♪") : sfx::muted ? L"♪ Sound: off" : L"♪ Sound: on");
+        placeControl(sound, bx + 14, 52, compact ? 44 : 124, 40, TRUE);
       }
       // The picture's light and play over Claire's shoulder (NativeLightView.inc).
-      placeControl(GetDlgItem(window, LightViewButton), bx + 144, 52, 164, 40, TRUE);
-      placeControl(GetDlgItem(window, ThirdPersonToggle), bx + 314, 52, 164, 40, TRUE);
+      placeControl(GetDlgItem(window, LightViewButton), compact ? bx + 64 : bx + 144, 52, compact ? 94 : 164, 40, TRUE);
+      placeControl(GetDlgItem(window, ThirdPersonToggle), compact ? bx + 164 : bx + 314, 52, compact ? 94 : 164, 40, TRUE);
       placeControl(GetDlgItem(window, Walk), w - 14 - 176, 49, 176, 44, TRUE);
       // The whole history on one slider, between the name and the file buttons.
       if (historySlider) {
@@ -4964,14 +5035,16 @@ struct Editor {
     placeControl(GetDlgItem(window,InspectorTab),rx,y,152,30,TRUE);placeControl(GetDlgItem(window,LayerTab),rx+160,y,152,30,TRUE);y+=38;
     for(HWND c:{layerStack,layerPreview,layerName,layerElevationInput,layerThicknessInput,layerOpacity,layerGroupList})if(c)ShowWindow(c,SW_HIDE);
     for(int id:{LayerMenu,LayerVisible,LayerLock,LayerCommit,LayerReferences})ShowWindow(GetDlgItem(window,id),SW_HIDE);
-    for (HWND list : {upperFloorTiles, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
+    for (HWND list : {upperFloorTiles, finishPartList, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
                       surfaceList, hazardList, soundList, preyList, hunterList, doorToolList, doorKindList, doorAxisList,
                       doorSwingList, doorHingeList, doorLockList, doorStrengthList, doorOpenSlider, pickupList, creatureList, tileList, primList, brushList,
                       clutterList, actionList, linkList, kindList, recordList, emitterPresetList, emitterKindList, emitterRestyleList,
                       emitterHeadingSlider, emitterStrengthSlider, GetDlgItem(window, FilmWrite), GetDlgItem(window, FilmRender),
                       GetDlgItem(window, FilmMaker), terrainModeList, terrainSizeList, terrainStrengthList, terrainHeightBox,
                       natureSetList, natureDensityList, natureScaleList, natureModeList, GetDlgItem(window, NatureAlignToggle),
-                      waterModeList, waterMurkSlider, waterWetSlider})
+                      waterModeList, waterMurkSlider, waterWetSlider, footingModeList, footingSnapList, footingRaiseBox, footingHeightBox,
+                      GetDlgItem(window, FootingStepsToggle), GetDlgItem(window, FootingAdvancedToggle), flooringLookList, flooringSlopeList,
+                      GetDlgItem(window, FlooringTrimToggle)})
       if (list)
         ShowWindow(list, SW_HIDE);
     for (HWND list : glazingControls())
@@ -5076,6 +5149,18 @@ struct Editor {
     if(tool==2)for(LRESULT i=0;i<SendMessageW(materialList,CB_GETCOUNT,0,0);++i)if(SendMessageW(materialList,CB_GETITEMDATA,i,0)==floorPaintMaterial){SendMessageW(materialList,CB_SETCURSEL,i,0);break;}
     if (tool == 9 || tool == 20 || tool==2)
       row(materialList, L"Finish");
+    else if (finishKind() >= 0) {
+      // A picked stair or footing, or the balcony tool's floor: which part, then its finish.
+      fillFinishParts(finishKind());
+      row(finishPartList, L"Part");
+      row(materialList, L"Finish");
+      showFinishChoice();
+    }
+    // A footing picked, or the Room (on the land, the Floor) tool: how it stands (NativeGroundMethods.inc).
+    if (footingPanelShown())
+      footingRows(row);
+    if (tool == FlooringTool)
+      flooringRows(row); // a floor look and its edge trim (NativeFlooringMethods.inc)
     if (tool == 8 || tool == 9 || tool == 14 || tool == 15)
       row(heightList, L"Height");
     if (tool == 13)
@@ -5639,8 +5724,14 @@ struct Editor {
     auto second=doc.records("MAP",1).at(0);auto fields=NativeDocument::fields(doc.lines[second]);
     fields.at(11)="some_custom_sky";doc.replace(second,fields);refresh();
     auto list=GetDlgItem(window,MapSkyList);
-    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=50,"Map skybox picker must list the three original and 47 purchased skies");
+    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=int(retro::SkyboxCatalog.size()),"Map skybox picker must list every catalog sky");
     auto choose=[&](int index){SendMessageW(list,CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(MapSkyList,CBN_SELCHANGE),reinterpret_cast<LPARAM>(list));};
+    // The make_skies.py skies (day, overcast, dawn, dusk, storm, night, the eerie ones) are picked by name.
+    for(const auto* label:{L"Clear day",L"Grey overcast",L"Cold dawn",L"Dusk afterglow",L"Storm front",L"Starry night",L"Cloudy night",L"Treeline night",L"Ember eclipse",L"Resonance aurora"}){
+      const int at=int(SendMessageW(list,CB_FINDSTRINGEXACT,WPARAM(-1),reinterpret_cast<LPARAM>(label)));require(at>=0,"Map skybox picker must list the make_skies.py skies by name");
+      const auto steps0=history.size();choose(at);const auto* sky=retro::findSkybox(field(0));
+      require(sky&&std::wstring(label)==wide(std::string(sky->label))&&history.size()==steps0+1,"Picking a new sky by name must write its id to the MAP record");
+      SendMessageW(window,WM_COMMAND,Undo,0);}
     const auto initial=field(0);const auto steps=history.size();
     choose(3);const auto first=field(0);choose(4);const auto next=field(0);
     require(first!=initial&&first!=next&&first.starts_with("skybox_")&&next.starts_with("skybox_")&&dirty&&history.size()==steps+2,"Each sky selection must change the MAP record and create one undo step");
@@ -6113,6 +6204,9 @@ struct Editor {
     verifyGlazingRegressions(false); // NativeGlazingRegression.inc: the Window wall and Glass tools
     verifyBreachRegressions(false);  // NativeBreachRegression.inc: the Breach tool
     verifyGrowthRegressions(false);  // NativeGrowthRegression.inc: the Growth brush
+    verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
+    verifyGround(false); // NativeGroundRegression.inc: rooms on the land, footings, raise, patios
+    verifyFlooring(); // NativeFlooringRegression.inc: the Flooring tool
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -6676,7 +6770,7 @@ struct Editor {
   // The bundled example is never overwritten; saving it asks for a new name.
   bool isExample() const { return path.filename() == L"Starter Map.rmc"; }
   fs::path autosavePath() const {
-    if(backgroundTest||remakeTest||menuTest||demoMode)return session/L"test-autosave.rmc";
+    if((backgroundTest&&!crashDrill)||remakeTest||menuTest||demoMode)return session/L"test-autosave.rmc";
     return root / L"custom maps" / L"Autosave" /
            ((path.empty() || isExample() ? std::wstring(L"New map") : path.stem().wstring()) + L".rmc");
   }
@@ -6697,12 +6791,14 @@ struct Editor {
     // Remove only this project's recovery after the atomic save succeeds.
     // A failed Save As must retain it, and another project's recovery is unrelated.
     fs::remove(recovery, ec);
+    fs::remove(recovery.wstring() + L".source", ec);
+    fs::remove(fs::path(recovery).replace_extension(L".crash.rmc"), ec);
     dirty = false;
     autosavedAt = changeCount;
     showTitle();
     message(L"Saved " + file.filename().wstring() + L".");
     if (!quiet())
-      sfx::play(sfx::MusicKey, .8f, .02f);
+      sfx::play(sfx::Save, .8f, .02f);
   }
   void saveNow() {
     if (!path.empty() && !isExample())
@@ -6742,7 +6838,8 @@ struct Editor {
   void autosaveTo(const fs::path &file) {
     waitAutosave();
     autosaveFor = changeCount, autosaveOk = false, autosaveError.clear();
-    autosaveWorker = std::thread([this, file, text = doc.text()] {
+    refreshCrashSavePath();
+    autosaveWorker = std::thread([this, file, text = doc.text(), source = path] {
       try {
         std::error_code ec;
         fs::create_directories(file.parent_path(), ec);
@@ -6759,6 +6856,8 @@ struct Editor {
         autosaveOk = replaceEditorFile(temporary, file);
         if (!autosaveOk)
           throw std::runtime_error("Could not finish the recovery save. The previous recovery copy is safe.");
+        // Which map it is the unsaved work of, so the next start can bring it back there (NativeStability.inc).
+        std::ofstream(file.wstring() + L".source", std::ios::binary) << utf8(source.wstring());
       } catch (const std::exception &error) {
         autosaveError = error.what();
       }
@@ -6799,6 +6898,8 @@ struct Editor {
       layout();
     }
     playing = true;
+    if (!quiet())
+      sfx::play(sfx::Play, .7f, .02f);
     writeControl();
     focusEngine();
     message(spot == 1 ? L"Playing from the start. Escape comes back." : L"Playing. Escape comes back.");
@@ -7540,6 +7641,7 @@ struct Editor {
       next.open(file);
       int clocks = repairRetiredEditorPeople(next);
       adoptDocument(std::move(next), fs::path(file), clocks > 0);
+      recoverOnOpen(); // newer unsaved work on this map comes back (NativeStability.inc)
       if (clocks)
         message(L"People from the old editor were missing their clock or guard post. Both are back; save to keep them.");
     }
@@ -7551,6 +7653,8 @@ struct Editor {
       retro::validateEditorCampaignText(doc.text());
     } catch (const std::exception &error) {
       message(L"Engine validation: " + wide(error.what()));
+      if (!quiet())
+        sfx::play(sfx::Error, .7f, .02f);
       return false;
     }
     message(L"Check passed.");
@@ -9156,6 +9260,8 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if(d->CtlID==LayerPreview){e->drawLayerPreview(dc,d->rcItem);return TRUE;}
       if (d->CtlType == ODT_COMBOBOX || d->CtlType == ODT_LISTBOX) {
         ui::drawListRow(d, e->font);
+        if (d->CtlID == MaterialList || d->CtlID == FlooringLookList)
+          e->drawMaterialSwatch(d); // a swatch beside each material (NativeFinishMethods.inc)
         return TRUE;
       }
       int id = int(d->CtlID);
@@ -9286,6 +9392,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     case WM_TIMER: {
       edperf::flush();
+      if (w == 7777) {
+        e->shotTick(); // --shots (NativeShots.inc)
+        return 0;
+      }
       if (w == 2) {
         e->autosave();
         return 0;
@@ -9492,6 +9602,8 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     case WM_COMMAND: {
       int id = LOWORD(w), notification = HIWORD(w);
+      if (notification == 0 || notification == CBN_SELCHANGE || notification == LBN_SELCHANGE)
+        Editor::noteAction("command " + std::to_string(id) + " (" + std::to_string(notification) + "), tool " + std::to_string(e->tool));
       if (id >= SwatchBase && id < SwatchBase + int(std::size(Editor::gels)) && e->lightPicked()) {
         const auto &gel = Editor::gels[id - SwatchBase];
         e->remember();
@@ -9589,6 +9701,13 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if (id == MaterialList && notification == CBN_SELCHANGE) {
         e->useMaterial();
+        return 0;
+      }
+      if (e->footingCommand(id, notification) || e->flooringCommand(id, notification))
+        return 0;
+      if (id == FinishPartList && notification == CBN_SELCHANGE) {
+        e->finishPart = std::clamp(int(SendMessageW(e->finishPartList, CB_GETCURSEL, 0, 0)), 0, 2);
+        e->showFinishChoice();
         return 0;
       }
       if (id == HeightList && notification == CBN_SELCHANGE) {
@@ -9833,7 +9952,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         break;
       case Redo:
         if (!e->future.empty() && !e->quiet())
-          sfx::play(sfx::Click, .8f);
+          sfx::play(sfx::Redo, .8f);
         if (!e->future.empty()) {
           e->history.push_back(e->doc.text());
           e->doc.loadText(e->future.back());
@@ -10016,7 +10135,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The test modes check every document query against a full scan of the lines.
     if (argc > 1)
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
-                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test", L"--glazing-test", L"--breach-test", L"--growth-test"})
+                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
+                        L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
+                        L"--glazing-test", L"--breach-test", L"--growth-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10141,6 +10262,21 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
     if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
       e.backgroundTest = e.picturesTest = true;
+    // Stair and balcony finishes alone (NativeFinishRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--finish-test")
+      e.backgroundTest = e.finishTest = true;
+    // Buildings on terrain alone (NativeGroundRegression.inc; GROUND_PROBE=1 reports instead of judging).
+    if (argc > 1 && std::wstring(argv[1]) == L"--ground-test")
+      e.backgroundTest = e.groundTest = true;
+    // Random valid edits through the real tools, checked after each (NativeStability.inc): --soak-test [steps] [seed].
+    if (argc > 1 && std::wstring(argv[1]) == L"--soak-test")
+      e.backgroundTest = e.soakTest = true;
+    if (argc > 1 && std::wstring(argv[1]) == L"--flooring-test")
+      e.backgroundTest = e.flooringTest = true;
+    // The crash log and recovery, for real: --crash-test stops the Builder with unsaved work,
+    // --recovery-test is the next start (NativeStability.inc).
+    if (argc > 1 && (std::wstring(argv[1]) == L"--crash-test" || std::wstring(argv[1]) == L"--recovery-test"))
+      e.backgroundTest = e.crashDrill = true, e.drillStage = std::wstring(argv[1]) == L"--crash-test" ? 1 : 2;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10160,6 +10296,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (argc > 1 && std::wstring(argv[1]) == L"--simulate-test") // Simulate (F6), NativeSimulate.h
       e.backgroundTest = simulate::testRun = true;
     int demoScene = argc > 2 && std::wstring(argv[1]) == L"--demo" ? _wtoi(argv[2]) : 0;
+    // --shots SCRIPT: pictures of the live Builder (NativeShots.inc); no recovery, no autosave.
+    fs::path shotScriptFile = argc > 2 && std::wstring(argv[1]) == L"--shots" ? fs::path(argv[2]) : fs::path();
     if (argc > 1 && std::wstring(argv[1]) == L"--make-thumbs") {
       e.thumbs.folder = e.thumbFolder();
       e.makeThumbnails(true);
@@ -10261,10 +10399,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     }
     LocalFree(argv);
     // Unsaved work from a session that ended badly comes back on request.
-    e.demoMode = demoScene != 0;
+    e.demoMode = demoScene != 0 || !shotScriptFile.empty();
     if(!e.backgroundTest&&!e.demoMode){std::ifstream setting(e.root/L".build"/L"autodressing.setting");
       std::string value;if(setting>>value)e.autoDressingEnabled=value!="off";}
-    if (!e.backgroundTest && !e.remakeTest && !e.demoMode) {
+    if (!e.backgroundTest && !e.remakeTest && !e.demoMode && e.path.empty()) {
+      // No map asked for: the newest unsaved work of any map comes back, on its own map (NativeStability.inc).
+      e.startupRecovery();
+    } else if (!e.backgroundTest && !e.remakeTest && !e.demoMode) {
       std::error_code ec;
       auto rescued = e.autosavePath();
       if (fs::exists(rescued, ec) &&
@@ -10423,6 +10564,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       if (id == e.structureMaterial)
         SendMessageW(e.materialList, CB_SETCURSEL, item, 0);
     }
+    e.finishPartList = e.controlWindow(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, FinishPartList);
+    e.fillFinishParts(true);
+    e.createFootingControls();
+    e.createFlooringControls();
     e.roleList = e.controlWindow(L"COMBOBOX", L"",
                                  CBS_DROPDOWNLIST | WS_VSCROLL, RoleList);
     for (auto role : Editor::people)
@@ -10700,8 +10845,11 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     trace("thumbnails listed");
     if (!e.restoredFrom.empty()) {
       e.restoredAt = e.changeCount;
-      e.message(L"Brought back your unsaved work from last time. Start fresh?");
+      e.message(e.crashNotice ? L"The Builder stopped unexpectedly last time; your unsaved work is back. What happened is in custom maps\\Autosave\\crash-seen.txt. Start fresh?"
+                              : L"Brought back your unsaved work from last time. Start fresh?");
     }
+    if (!e.backgroundTest && !e.remakeTest && !e.demoMode)
+      e.armCrashLog(); // a crash writes custom maps/Autosave/last-crash.txt and saves the map (NativeStability.inc)
     if (!e.backgroundTest && !e.editingTest && !e.layoutTest)
       e.welcomeIfBlank();
     if (e.editingTest) {
@@ -10716,9 +10864,31 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       DestroyWindow(e.window);
       return code;
     }
+    if (e.groundTest) {
+      int code = 0;
+      std::ofstream report(e.root / L"native-editor-ground-test.txt");
+      try {
+        e.verifyGround(true);
+        for (auto &line : e.groundPassed) report << "PASS: " << line << '\n';
+      } catch (const std::exception &error) {
+        for (auto &line : e.groundPassed) report << "PASS: " << line << '\n';
+        report << "FAIL: " << error.what() << '\n';
+        code = 1;
+      }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
     if (e.picturesTest) {
       int code = 0;
       try { e.atriumPictures(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-atrium-pictures.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.finishTest) {
+      int code = 0;
+      try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;
@@ -10727,6 +10897,55 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       int code = 0;
       const wchar_t *file = e.breachTest ? L"native-editor-breach-test.txt" : L"native-editor-growth-test.txt";
       try { e.breachTest ? e.verifyBreachRegressions(true) : e.verifyGrowthRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / file, std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.drillStage) {
+      const int code = e.crashDrillRun();
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.flooringTest) {
+      int code = 0;
+      std::ofstream report(e.root / L"native-editor-flooring-test.txt");
+      try {
+        e.verifyFlooring();
+        for (auto &line : e.flooringPassed) report << "PASS: " << line << '\n';
+      } catch (const std::exception &error) {
+        for (auto &line : e.flooringPassed) report << "PASS: " << line << '\n';
+        report << "FAIL: " << error.what() << '\n';
+        code = 1;
+      }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.soakTest) {
+      int steps = 600;
+      unsigned seed = 1;
+      {
+        int n = 0;
+        auto a = CommandLineToArgvW(GetCommandLineW(), &n);
+        if (a && n > 2) steps = std::max(1, _wtoi(a[2]));
+        if (a && n > 3) seed = unsigned(_wtoi(a[3]));
+        if (a) LocalFree(a);
+      }
+      auto folder = e.root / L".build" / L"soak";
+      fs::create_directories(folder);
+      std::ofstream report(e.root / (L"native-editor-soak-test-" + std::to_wstring(seed) + L".txt"));
+      int code = 0;
+      try {
+        auto r = e.soak(steps, seed, folder);
+        report << (r.failures ? "FAIL: " : "PASS: ") << r.steps << " random edits (seed " << seed << "), " << r.failures << " problems, the engine checked the map " << r.validated << " times\n";
+        for (auto &[name, n] : r.done) report << "  " << name << ": " << n << "\n";
+        for (auto &p : r.problems) report << "PROBLEM: " << p << "\n";
+        code = r.failures ? 1 : 0;
+      } catch (const std::exception &error) {
+        report << "FAIL: " << error.what() << "\n";
+        code = 1;
+      }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;
@@ -10785,13 +11004,18 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     }
     trace("controls ready");
     if (!e.backgroundTest && (!e.menuTest || e.menuShown)) {
-      ShowWindow(e.window, SW_SHOWMAXIMIZED);
+      if (!shotScriptFile.empty()) // --shots: off the screen, never activated (NativeShots.inc)
+        SetWindowPos(e.window, HWND_BOTTOM, -6000, 0, 1600, 940, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+      else
+        ShowWindow(e.window, SW_SHOWMAXIMIZED);
       UpdateWindow(e.window);
     }
     trace("window shown");
     e.testStarted = GetTickCount64();
     e.startEngine();
     trace("engine started");
+    if (!shotScriptFile.empty())
+      e.startShots(shotScriptFile);
     SetTimer(e.window, 1, 50, nullptr);
     e.statusTimer = true;
     SetTimer(e.window, 2, 15000, nullptr);

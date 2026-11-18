@@ -1976,7 +1976,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
-         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"doors",retro::Game::testDoors},
+         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"map-format",retro::Game::testMapFormat},{"doors",retro::Game::testDoors},
          {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
@@ -2302,7 +2302,7 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
     // Windows, so the window is never a frozen, "not responding" sheet.
     window.showLoading(0,L"LOADING");
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
-    std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\RawMetal\settings.ini":L"";
+    std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
     std::unique_ptr<retro::Game> gameStorage;std::unique_ptr<retro::SoftwareRenderer> rendererStorage;
     std::atomic<int> loadStage{0};std::atomic<bool> loadDone{false};std::exception_ptr loadFailure;
     std::thread loader([&]{
@@ -2313,8 +2313,10 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
       bool directStart=commandArguments().find(L"--surface-lift")!=nullptr||exclusionZone;
       if(exclusionZone){auto path=std::filesystem::path("custom maps")/"RawMetal-Ashfall-Exclusion-Zone.txt";game=retro::Game(std::filesystem::exists(path)?retro::loadCustomCampaignFile(path):retro::loadEmbeddedExclusionZoneCampaign());}
       else if(commandArguments().find(L"--surface-lift"))game=retro::Game::mapInspection({3.5f,2.f},retro::kPi*.5f,0,3,false,0);
+      // Builds 1.0.4-1.5.0 wrote saves and settings beside %LOCALAPPDATA%\RawMetal (a lost backslash): bring them in.
+      if(settingsLength>0&&settingsLength<32768)retro::Game::adoptMisplacedSaves(std::wstring(settingsFolder));
       if(!settingsPath.empty())game.loadSettings(settingsPath);
-      if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\RawMetal\saves");
+      if(settingsLength>0&&settingsLength<32768)game.setSaveDirectory(std::wstring(settingsFolder)+L"\\RawMetal\\saves");
       // Loads build the saved game on a worker so the window keeps answering Windows.
       game.setAsyncLoads(true);
       if(!directPlay.empty()){std::string error;game.playCampaignFile(directPlay,error);}

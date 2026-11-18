@@ -387,7 +387,7 @@ RECORDS = [
         ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed|hazeR|hazeG|hazeB|hazeDensity|wetness]',
          'One per map, numbered 0, 1, 2... with no gaps. origin places the 24 x 24 m map in the world: maps touch at multiples of 24. '
          'spawn is in map metres. environment 0 indoor, 1 outdoor. ceiling is the absolute ceiling height (indoors). ambient 0-1 is the base light (0.3 is a good start). '
-         'skybox: industrial_night indoors; zone_overcast (or brutal_wasteland) outdoors, which also switches on the campaign TERRAIN. '
+         'skybox: industrial_night indoors; outdoors zone_overcast, brutal_wasteland or any sky in the Outdoors section\'s list, which also switches on the campaign TERRAIN. '
          'openN/S/W/E 1 lets you walk across that edge into the neighbouring map. lift 0. '
          'Optional tail: residency -1, floorMaterial 0 concrete / 1 carpet, music 0 (the original track; 1-10 the area scores; 11 Silence, no score at all), spawnYaw radians, spawnPitch, startUnarmed 0/1. '
          'haze R G B (0-1) and density (0-0.1) give the map its own air: 0.01 is enough for lamps to hang cones of light in it. '
@@ -548,11 +548,27 @@ NAMED_FIELDS = [
     ('cut', 'Cut the wall', '1 or 0', 'GLAZING', '0 stands it in an opening without cutting anything.'),
     ('wall', 'Infill material', 'a STRUCT material', 'GLAZING, BREACH', 'What the wall built back below the sill and above the head (or round the hole) is made of (3, the wall finish).'),
     ('shape', 'Hole shape', 'ragged arch rect', 'BREACH', 'Ragged is knocked through: tall in the middle, falling away to the sides, with notches and teeth.'),
-    ('edge', 'Broken edge', 'concrete brick clean', 'BREACH', 'What shows in the broken edge: a concrete core with rebar, brick, or a clean cut.'),
     ('rebar', 'Rebar', '1 or 0', 'BREACH', 'Bars hanging from the lip and standing out of the jambs (concrete only).'),
     ('rubble', 'Rubble pieces', '0 to 60', 'BREACH', 'Pieces of wall on the floor either side.'),
     ('seed', 'Seed', 'a whole number', 'BREACH', 'Another seed gives another ragged outline, chips and rubble.'),
     ('toward', 'Rubble side', '1 or -1', 'BREACH', 'Which side of the wall most of the rubble falls: -1 throws it to the other side.'),
+    ('tread', 'Step tops material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "What the steps are walked on: the top 4 cm of each step. The Builder's Paint tool sets it on a click on a step top."),
+    ('riser', 'Step fronts material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "The step fronts and the body under the tops. Blank: the step tops' material."),
+    ('stringer', 'Side rails material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side rails (with the rails field on).'),
+    ('deck', 'Balcony floor material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', "What the balconies (= tiles) on this storey are walked on. The Builder's Paint tool sets it on a click on a balcony."),
+    ('edge', 'Balcony edge material (LAYER) / broken edge (BREACH)', 'LAYER: a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30); BREACH: concrete brick clean', 'LAYER, BREACH', "LAYER: the balconies' edges and undersides, under a 4 cm walking face (blank: the balcony floor's). BREACH: what shows in the broken edge, a concrete core with rebar, brick, or a clean cut."),
+    ('railing', 'Railing material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', 'The railings along the open balcony edges.'),
+    ('trim', 'Edge trim material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT', "A flooring's edge: a band of this material along its sides, the rest the material field. The Builder's Flooring tool lays it; its Paint tool paints it on a click near the edge."),
+    ('trimwidth', 'Edge trim width (m)', '0.01 to 1', 'STRUCT with trim', 'How wide the edge band is. 0.1 if left out.'),
+    ('drape', 'Follows the ground', '1 or 0', 'STRUCT on the land', '1: a flooring laid over the ground that follows its slope, a path or a patio on a hill. You walk on the ground itself; nothing to bump into.'),
+    ('footing', 'On a slope', 'pad foundation stilts stepped', 'STRUCT', "Stands a room or a floor on the land (or raised off a floor): the box is its footprint, its top the floor in the material field. pad: the ground under it is made level; foundation: a base reaches down to the ground on the low side; stilts: posts hold it and you can walk under it; stepped: terraces up the slope with steps between. Things inside it stand on its floor; its walls stand on it; a door on a raised edge gets steps down to the ground. The Builder's Room tool gives every room on a slope one."),
+    ('snap', 'Floor sits on', 'low mean high fixed', 'STRUCT with footing', 'Which ground under the footprint the floor is measured from (mean if left out). fixed: the bottom field is the height itself. Move the footprint and it measures the ground again.'),
+    ('raise', 'Raise (m)', '0 to 6', 'STRUCT with footing', "Lifts the floor that far above its ground (indoors, above the floor below) on a base of the base material. The Builder raises it by pulling the floor's edge up in the 3D view."),
+    ('base', 'Foundation material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT with footing', 'The base, the posts and the door steps. 42 (cast concrete) if left out.'),
+    ('cap', 'Floor edge material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT with footing', "A band round the floor's top edge (a stone lip on a brick base)."),
+    ('capwidth', 'Floor edge width (m)', '0.02 to 0.5', 'STRUCT with cap', 'How wide that band is. 0.1 if left out.'),
+    ('steps', 'Steps at doors', '1 or 0', 'STRUCT with footing', '0: no steps from a door on a raised edge down to the ground outside (they come by themselves where the drop is over 0.25 m).'),
+    ('terrace', 'Terrace length (m)', '1 to 12', 'STRUCT with footing=stepped', 'How long each terrace is along the footprint. 3 if left out.'),
 ]
 
 
@@ -577,6 +593,18 @@ def shots():
         ppm = os.path.join(ROOT, '.build', 'shot', name + '.ppm')
         Image.open(ppm).convert('RGB').save(os.path.join(IMAGES, name + '.jpg'), quality=86, optimize=True)
         os.remove(ppm)
+
+
+def sky_list():
+    """The catalog skies (src/world/SkyboxCatalog.h) named for a MAP skybox field."""
+    import re
+    text = open(os.path.join(ROOT, 'src', 'world', 'SkyboxCatalog.h'), encoding='utf-8').read()
+    rows = re.findall(r'\{"(\w+)", "([^"]+)", (\d+), (true|false)(, [^}]*)?\}', text)
+    own = ['<code>%s</code> (%s)' % (i, html.escape(l)) for i, l, r, t, haze in rows if haze]
+    brutal = [i for i, l, r, t, haze in rows if not haze and i.startswith('skybox_')]
+    return ('Each of these brings its own light and air: the sun or the moon where the panorama has it, in its colour, a fill of its own colour and strength, and how far the eye opens (a night stays dark). The MAP ambient turns its fill around 0.3 (0.3 keeps the sky as made; 0.15 halves it), and MAP haze fields replace its air: ' + ', '.join(own) + '. '
+            'The %d Brutal panoramas are <code>skybox_emx_1</code> to <code>skybox_emx_35</code> and <code>skybox_plain_emx_1</code> to '
+            '<code>skybox_plain_emx_14</code>. The Campaign Builder\'s Map sky list shows every one by name.' % len(brutal))
 
 
 def main():
@@ -682,6 +710,7 @@ def main():
              'Every door of the Starter Map\'s facility is built this way.</li>'
              '<li><b>Which sky.</b> <code>zone_overcast</code> lays a low steam over ground below about 4 m, so low terrain reads milky white; '
              '<code>brutal_wasteland</code> has no steam and darker air, and the Starter Map\'s forest uses it with a blue-grey MAP haze.</li>'
+             '<li><b>More skies.</b> ' + sky_list() + '</li>'
              '<li><b>Buildings outdoors</b> are FIXTURE models (houses, sheds, the outdoor set) on a TERRAIN_FLAT pad, or STRUCT boxes. Add a SHELTER inside if the campaign has a STORM.</li></ul>')
 
     o.append('<h2 id="scripting">7. Scripting: making things happen</h2>')

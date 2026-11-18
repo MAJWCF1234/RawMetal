@@ -602,6 +602,20 @@ bool Game::auditMapScene(Game& game,int level){
     if(inRect(g,c.pos,0)&&std::fabs(fbase(g)+g.height-c.z)<.08f){on=true;char text[96];std::snprintf(text,sizeof text,"STACKED prop model %d at %.2f,%.2f z %.2f on ",c.model,c.pos.x,c.pos.y,c.z);fail(text+fname(j));}}
    for(const auto& o:game.m_clutter){if(on||&o==&c||o.model<0||o.broken||stackable(o.model)||o.dims[0]*o.dims[1]<.3f||o.height()<.45f)continue;
     if(o.footprintContains(c.pos)&&std::fabs(o.z+o.supportHeight()-c.z)<.08f){on=true;char text[128];std::snprintf(text,sizeof text,"STACKED prop model %d at %.2f,%.2f z %.2f on prop model %d at %.2f,%.2f",c.model,c.pos.x,c.pos.y,c.z,o.model,o.pos.x,o.pos.y);fail(text);}}}
+  // BENCH ON FURNITURE: a computer the engine gives its own desk, standing where a table, a counter
+  // or a built island already is: a table on the table (Containment A's monitoring island, v1.4.15).
+  // Anything in the bench's own volume, or whose top the bench would stand on, counts. A hard failure,
+  // unlike the warnings around it: it is drawn, and it is always a mistake.
+  for(const auto& t:w.terminals()){if(t.paper()||t.control||!w.terminalBench(t))continue;const float base=w.floorHeight(t.position.x,t.position.y)+t.z;
+   std::string what;
+   for(float u:{-.4f,-.03f,.34f})for(float v:{-.3f,0.f,.3f}){if(!what.empty())break;const Vec2 p{t.position.x+u,t.position.y+v};
+    for(size_t j=0;j<fixtures.size()&&what.empty();++j){const auto& g=fixtures[j];if(!counted(g)||frame(g.model)||g.height<.3f)continue;const float gb=fbase(g);
+     if(inRect(g,p,0)&&gb<base+.8f&&gb+g.height>base-.1f)what=fname(j);}
+    for(size_t si=0;si<w.structures().size()&&what.empty();++si){const auto& s=w.structures()[si];if(!s.solid||s.rail||s.material==CollisionProxyMaterial)continue;
+     if(p.x>=s.x1&&p.x<=s.x2&&p.y>=s.y1&&p.y<=s.y2&&s.top-s.bottom>=.3f&&s.bottom<base+.8f&&s.top>base-.1f){char text[96];std::snprintf(text,sizeof text,"structure[%zu] %.2f,%.2f..%.2f,%.2f z %.2f..%.2f",si,s.x1,s.y1,s.x2,s.y2,s.bottom,s.top);what=text;}}
+    for(const auto& c:game.m_clutter){if(!what.empty())break;if(c.model<0||c.broken||c.height()<.45f||c.dims[0]*c.dims[1]<.3f)continue;
+     if(c.footprintContains(p)&&c.z<base+.8f&&c.z+c.height()>base-.1f){char text[96];std::snprintf(text,sizeof text,"prop model %d at %.2f,%.2f z %.2f",c.model,c.pos.x,c.pos.y,c.z);what=text;}}}
+   if(!what.empty()){char text[160];std::snprintf(text,sizeof text,"BENCH ON FURNITURE terminal '%s' at %.2f,%.2f z %.2f draws its own desk in ",t.title,t.position.x,t.position.y,base);report<<text<<what<<'\n';++problems;}}
   // FLOATING STRUCTURE: a visible bar, shelf or strip in mid-air touching nothing: no wall, floor,
   // roof, other structure, fixture or pipe within 3 cm.
   {const auto& st=w.structures();

@@ -112,7 +112,12 @@ const std::vector<std::string_view>& knownNamedKeys(){
   "tint","scale","texture","emissive","impact","faction","ai","hp","weapon","role","display",
   // Read by the records they belong to: BREAKABLE glass (CustomCampaign.cpp) and GLAZING (Openings.cpp).
   "glaze","cracked","cols","spacing","rows","sill","head","frame","depth","look","door","door_head","pane","panes","infill","cut","wall",
-  "shape","edge","rebar","rubble","seed","toward"};
+  "shape","rebar","rubble","seed","toward",
+  // Finishes, read by the STAIR and LAYER parsers (CustomCampaign.cpp finishField).
+  "tread","riser","stringer","deck","edge","railing","trim","trimwidth",
+  // Footings (Footing.h), read by the STRUCT parser.
+  "footing","snap","raise","base","cap","capwidth","steps","terrace",
+  "drape"};
  return keys;
 }
 std::string recordFieldKey(std::string_view tag,std::string_view parent,int ordinal){

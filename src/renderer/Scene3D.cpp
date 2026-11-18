@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include "BoxSurfaces.h"
 #include "SoftMesh.h"
+#include "../game/physics/PropBodies.h"
 #include "Materials.h"
 #include "Wetness.h"
 #include "../game/CreatureAnimation.h"
@@ -653,6 +654,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // A light's pose is immutable during a draw. Reuse its exact emitter and
  // shadow samples instead of evaluating wall-lamp trigonometry per receiver.
  const auto sun=w.sun();
+ const float outdoorFill=w.outdoors()?w.outdoorAmbient():0.f; // the sky's flat fill (World::outdoorAmbient)
  // Dynamic geometry and the vertex-lit fallback take an unshadowed sun term;
  // static caches get the shadowed per-pixel sun in the scene shader.
  auto sunTerm=[&](Point3 normal){return sun.intensity>0?sun.intensity*.4f*std::max(0.f,normal.x*sun.direction.x+normal.y*sun.direction.y+normal.z*sun.direction.z):0.f;};
@@ -794,7 +796,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   illuminationAir=SoftwareRenderer::NoBounceAir;
   if(movingGeometry){
    const float dark=ambientDarkness();
-   float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f)*skyOpen(point,normal):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
+   float brightness=((w.outdoors()?outdoorFill*skyOpen(point,normal):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
    Point3 room{};bool roomReady=false;
    // With probes the room's return comes from them, each lamp's flat share under it at half weight.
    if(probes)brightness+=probeFill(point,normal);
@@ -848,7 +850,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
     accessibility=1.f-.68f*occlusion*.25f;
    }
-   ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f)*(pixelLamps?1.f:skyOpen(point,normal)):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
+   ambient=brightness=((w.outdoors()?outdoorFill*(pixelLamps?1.f:skyOpen(point,normal)):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
    Point3 room{};bool roomReady=false;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
@@ -1425,6 +1427,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // Authored maps, including an official level opened in the builder, carry
     // their own floor. The 0 and -9 slabs are only the old built-in chapters.
     float wallBase=w.outdoors()||w.authored()||(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
+    // On the land a wall face reaches down to the lowest ground along it: a face on a slope
+    // left a wedge of daylight under its low end when it stood on the ground at its middle.
+    if(w.hasTerrain())wallBase=std::min({wallBase,w.floorHeight(ax+(bx-ax)*.02f,ay+(by-ay)*.02f),w.floorHeight(bx-(bx-ax)*.02f,by-(by-ay)*.02f)});
     if(wallFinish&&wallFinish->wall->band>0&&wallFinish->wall->above){
      // A painted wall: the dado band once from the floor, the paint above it.
      const auto& band=*wallFinish->wall;const float top=std::min(Z,wallBase+band.band),h=(top-wallBase)/band.band;
@@ -1454,6 +1459,33 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto structureTexture=[&](const Structure& s)->const Texture&{
   if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material))return *finish;
   return s.material==ChainLinkMaterial?m_chainLink:s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor;};
+ // Draped floorings (STRUCT drape=1): a path or patio that follows the land, the
+ // ground's own triangles cut to its rectangle and laid 4 cm over it in its material.
+ if(w.hasTerrain()){
+  std::vector<const Structure*> drapes;for(const auto&s:w.structures())if(s.drape&&s.x2>s.x1&&s.y2>s.y1)drapes.push_back(&s);
+  if(!drapes.empty())for(const auto&face:w.terrain()){
+   const float fx1=std::min({face.a.x,face.b.x,face.c.x}),fx2=std::max({face.a.x,face.b.x,face.c.x}),fy1=std::min({face.a.y,face.b.y,face.c.y}),fy2=std::max({face.a.y,face.b.y,face.c.y});
+   const Point3 n=cross3(Point3{face.b.x-face.a.x,face.b.y-face.a.y,face.b.z-face.a.z},Point3{face.c.x-face.a.x,face.c.y-face.a.y,face.c.z-face.a.z});
+   if(n.z<=.2f*std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z))continue; // cliffs of the land stay land
+   for(const auto* s:drapes){
+    if(fx2<=s->x1||fx1>=s->x2||fy2<=s->y1||fy1>=s->y2)continue;
+    // Sutherland-Hodgman against the four sides; z follows the triangle's plane.
+    std::vector<Point3> poly{{face.a.x,face.a.y,face.a.z},{face.b.x,face.b.y,face.b.z},{face.c.x,face.c.y,face.c.z}};
+    auto clip=[&](int axis,float bound,bool keepAbove){std::vector<Point3> out;
+     for(size_t i=0;i<poly.size();++i){const Point3 p=poly[i],q=poly[(i+1)%poly.size()];
+      const float pv=axis?p.y:p.x,qv=axis?q.y:q.x;const bool pin=keepAbove?pv>=bound:pv<=bound,qin=keepAbove?qv>=bound:qv<=bound;
+      if(pin)out.push_back(p);
+      if(pin!=qin){const float t=(bound-pv)/(qv-pv);out.push_back({p.x+(q.x-p.x)*t,p.y+(q.y-p.y)*t,p.z+(q.z-p.z)*t});}}
+     poly.swap(out);};
+    clip(0,s->x1,true);if(poly.size()>=3)clip(0,s->x2,false);if(poly.size()>=3)clip(1,s->y1,true);if(poly.size()>=3)clip(1,s->y2,false);
+    if(poly.size()<3)continue;
+    const Texture& texture=structureTexture(*s);Vec2 repeat=finishRepeat(texture);if(repeat.x<=0)repeat={2,2};
+    const auto o=w.definition().origin;
+    auto vertex=[&](Point3 p){return MeshVertex{{p.x,p.y,p.z+.04f},(p.x+o.x)/repeat.x,(p.y+o.y)/repeat.y};};
+    for(size_t i=1;i+1<poly.size();++i)tri(vertex(poly[0]),vertex(poly[i]),vertex(poly[i+1]),texture,1.f);
+   }
+  }
+ }
  // Ramps, columns, arches and vaults: true geometry in the structure's bounds,
  // u across and v along its facing. Faces wind outward; UVs are in metres.
  auto drawShape=[&](const Structure& s,const Texture& texture){
@@ -1591,6 +1623,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(auto&s:w.structures()){
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+  if(s.drape&&w.hasTerrain())continue; // drawn over the land above
   if(w.isBreakableStructure(int(&s-w.structures().data())))continue;
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.
@@ -1648,9 +1681,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
       box({x-.012f,y-.012f,s.bottom+.16f},{x+.012f,y+.012f,s.top-.07f},m_metal,.85f);}
     }else box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f},m_floor,.8f);
    }
-   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
-   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},m_panelMetal,.9f);
-   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},m_panelMetal,.9f);}
+   // A named railing or stringer finish (LAYER railing=, STAIR stringer=) dresses the cap and posts.
+   const Texture& railTex=s.finishedRail?structureTexture(s):m_panelMetal;
+   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},railTex,.95f);
+   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},railTex,.9f);
+   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},railTex,.9f);}
  }
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
@@ -2234,7 +2269,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(int k=1;k+1<n;++k){tri(top[0],top[size_t(k)],top[size_t(k+1)],shardTexture,1.05f);tri(bottom[0],bottom[size_t(k+1)],bottom[size_t(k)],shardTexture,1.05f);}
    objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;return;}
   if(c.model>=0){auto&mesh=m_facilityMeshes[c.model];auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const SoftPad* pad=softPadOf(c);const Point3 softL=pad?softLight({c.pos.x,c.pos.y,c.z+c.height()}):Point3{0,0,1};
-   for(auto face:pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}auto r=c.rotate(p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y));v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],lookedTexture(c.model,face.part,c.traits.get()),light);}
+   // A mattress bent on its bones (Clutter::bend): its mesh cut fine everywhere and each vertex carried by its segment.
+   const bool boned=c.bend[0]!=0||c.bend[1]!=0;
+   for(auto face:boned?softmesh::refinedAll(c.model,mesh):pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}
+    Point3 local{p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y)};if(boned)local=vectra::chainSkin(c,local);auto r=c.rotate(local.x,local.y,local.z);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],lookedTexture(c.model,face.part,c.traits.get()),light);}
   }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
    // An eighth of the thing that broke, cut from its own mesh: its faces clipped to that eighth of
    // its box (clean cut edges, its own UVs), drawn with its own sheet about the eighth's centre (Clutter::shards).

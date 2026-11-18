@@ -1,0 +1,10 @@
+# floors-land-pad (tools/dev/floors_fixtures.py). Tube: floors.
+world custom "lab/fixtures/floors.rmc"
+map 2
+camera 18.606 1 6 132.654 -53.8
+size 1280 720
+frames 30
+floors-shot land-pad
+floors-room 11 4 17 8
+floors-level 1
+floors-sealed 1

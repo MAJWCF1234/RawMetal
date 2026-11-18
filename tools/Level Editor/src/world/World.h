@@ -12,6 +12,9 @@
 #include "GlassFracture.h"
 #include "ScriptDefinition.h"
 #include "TerrainField.h"
+#include "Footing.h"
+#include "EntityTraits.h"
+#include <map>
 
 namespace retro {
 struct Door {
@@ -88,7 +91,9 @@ struct Fixture {int model;Vec2 position;float base,width,depth,height,yaw;bool s
  bool anchored=false;
  // FIXTURE fields 15 and 16: the ground's rise per metre east and south under it. The
  // model is sheared to lie along that slope (plants and rocks hug a hillside; trunks stay upright).
- float slopeX=0,slopeY=0;};
+ float slopeX=0,slopeY=0;
+ // Map format 2 overrides (EntityTraits.h): tint, size, texture, glow, anchoring.
+ EntityTraitsRef traits;};
 // Bare: a light with no housing (a fire, a lamp head that already has its model).
 enum class WorldLightMount { Ceiling, Wall, Bare };
 struct WorldLight {
@@ -267,12 +272,12 @@ inline float leadArc(float age,float* since=nullptr){constexpr float bursts[][2]
 // it is gone and the hunter state counts one more escape. Every spawn sharing
 // the name is the same animal: when one wakes, any other still about leaves.
 // prey: an actor on its own map (track index) it comes out for and takes first.
-struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;StateId hunter=0;int prey=-1;};
+struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;StateId hunter=0;int prey=-1;EntityTraitsRef traits;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
 struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;int fixture=-1;unsigned part=0;};
 struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<float,2> passedAt{1,1};std::array<Point3,2> passedNormal{};};
 inline constexpr int ClutterModelKind=7;
-struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;};
+struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;EntityTraitsRef traits;};
 // One authored liquid basin controls the bed, physics surface and drawn mesh.
 // murk: 0 the plant's clear coolant, up to 1 for standing water in the dark (a
 // pool in a cold store reads as still and black, not as a lit swimming bath).
@@ -324,10 +329,17 @@ struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 // non-solid; PRIM records give them collision-proxy boxes (Primitives.h).
 // `facing` is the quarter turn they rise or open toward: 0 +y, 1 +x, 2 -y, 3 -x.
 enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel};
-struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;};
+// topFinish: a named walking face (STAIR tread=, LAYER deck=) split off the top 4 cm once the map
+// is built and grounded (World::splitFinishes). trim, trimWidth: a flooring's edge band (STRUCT
+// trim=, trimwidth=), split off its sides the same way, so on terrain every piece keeps one height.
+struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;bool finishedRail=false;int topFinish=-1,trim=-1;float trimWidth=0;bool fixedHeight=false;
+ // drape: a flooring laid on the land that follows it (STRUCT drape=1): drawn over the ground, walked on as the ground.
+ bool drape=false;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;
+// A finish a STAIR or balcony may name (tread=, deck=...): a structure material the renderer draws as a plain box.
+inline bool finishMaterialAllowed(int m){return m>=0&&m<=51&&m!=1&&m!=4&&m!=6&&m!=9&&m!=17&&m!=CollisionProxyMaterial;}
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.
@@ -341,6 +353,8 @@ struct MapLayer {
     std::string_view name;
     float elevation,thickness;
     MapRows rows;
+    // Balcony finishes (LAYER deck=, edge=, railing=; structure materials, -1 the default look).
+    int deck=-1,edge=-1,railing=-1;
 };
 struct Staircase {
     float x1,y1,x2,y2,bottom,top;
@@ -349,6 +363,8 @@ struct Staircase {
     bool openUnderside=false;
     float treadThickness=.12f;
     bool sideRails=false;
+    // Finishes (STAIR tread=, riser=, stringer=; structure materials, -1 the default look).
+    int tread=-1,riser=-1,stringer=-1;
 };
 
 // Shared geometry records for built-in and runtime-authored maps. Loading these
@@ -358,6 +374,7 @@ struct AuthoredLayerData {
     std::string name;
     float elevation=0,thickness=0;
     std::array<std::string,24> rows{};
+    int deck=-1,edge=-1,railing=-1; // LAYER deck=, edge=, railing= (MapLayer)
 };
 struct AuthoredTerminalData {
     Vec2 position{};
@@ -475,6 +492,10 @@ struct AuthoredMapData {
     std::vector<Hazard> hazards;
     std::vector<Compactor> compactors;
     std::vector<Structure> structures;
+    // STRUCT footing= (Footing.h): the structure it dresses, how, and its planned pieces
+    // (the ground under them measured once the campaign's land is known).
+    struct FootingData {size_t structure=0;FootingSpec spec;int base=-1,cap=-1;float capWidth=.1f;bool steps=true;std::vector<FootingPart> parts;bool land=false;};
+    std::vector<FootingData> footings;
     std::vector<Staircase> stairs;
     std::vector<AuthoredTerminalData> terminals;
     std::vector<AuthoredSign> signs;
@@ -498,7 +519,26 @@ struct AuthoredMapData {
     std::vector<DarkZone> darkZones;
     std::vector<Shelter> shelters;
     int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
+    // ---- Map format 2 (EntityTraits.h, docs/Systems/map-format.md) ----
+    // Every record's named fields as written, by recordFieldKey, so the exporter
+    // writes them back (keys this build does not know among them).
+    std::map<std::string,NamedFields> recordFields;
+    // name= on any record: the record kind and its index among that kind's records here.
+    struct EntityName {std::string name,tag;int index=-1;};
+    std::vector<EntityName> entityNames;
+    const EntityName* entity(std::string_view entityName)const{for(const auto& e:entityNames)if(e.name==entityName)return &e;return nullptr;}
+    // Custom properties (p.key) and a named prop's `frozen`: script states seeded once a game.
+    // seeded false: a property only a script names (no p.key on the record); it starts at 0.
+    struct PropertySeed {StateId id=0;int value=0;std::string entity,key;bool seeded=true;};
+    std::vector<PropertySeed> propertySeeds;
+    // @entity.key spellings the parser resolved, so an export writes the name, not "#id".
+    std::vector<std::pair<StateId,std::string>> stateSpellings;
+    // Some record carries overrides the played map applies (playedMap).
+    bool entityTraits=false;
 };
+// The map as it plays: `map` itself, or a copy with its records' overrides
+// applied (sizes, anchoring, a body's side, AI, health, weapon). World loads this.
+std::shared_ptr<const AuthoredMapData> playedMap(std::shared_ptr<const AuthoredMapData> map);
 // Seat test lead `l` by name: its anchor in socket `socket` of fixture `panel` (or left as it
 // is with no panel), its offset on terminal `terminal` of its prop (or left with none). The
 // first lead on a panel adds the panel's pilot lamp, lit until any lead on it tears. Returns
@@ -511,6 +551,8 @@ struct CustomCampaign {
     int startMap=0;
     StormCycle storm;
     std::vector<std::shared_ptr<const AuthoredMapData>> maps;
+    // The FORMAT record's version (1 when the file has none).
+    int format=1;
 };
 
 class World {
@@ -676,9 +718,16 @@ public:
      if(campaign()&&level()==1)return .65f;
      return .3f;
     }
-    // Low overcast sun for the Ashfall exterior; indoor worlds have none.
-    SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};
-     if(zoneSky()){d={-.62f,.48f,.42f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.6f;s.r=1.f;s.g=.86f;s.b=.66f;return s;}float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
+    // Low overcast sun for the Ashfall exterior; indoor worlds have none. A catalog sky with its
+    // own light (SkyboxCatalog.h: moon, dusk, eclipse...) sets the sun's place, strength and colour.
+    SunLight sun()const;
+    // The flat outdoor fill (the renderer's sky ambient): the sky's own, scaled by the MAP ambient
+    // around 0.3 (0.3 keeps the sky as made); the old daylight fill under a sky without light.
+    float outdoorAmbient()const;
+    // The colour of that fill: the sky's ambient colour, white without one.
+    Point3 skyAmbientTone()const;
+    // How far auto exposure may open under the sky (1 by day; a night sky's own, lower).
+    float skyExposure()const;
     std::vector<Span> spansAt(int x,int y)const;
     // Reuse result storage for repeated cell queries.
     void spansAt(int x,int y,std::vector<Span>& result)const;
@@ -796,6 +845,8 @@ public:
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
+    // True when the engine draws this terminal its own desk (a bench under the CRT).
+    bool terminalBench(const Terminal& terminal)const;
 
 private:
     CargoLift m_cargoLift{};
@@ -891,6 +942,13 @@ private:
     ReactorStage m_reactorStage=ReactorStage::NoDisk;
     void refreshReactorTerminals();
     void buildLayers(std::span<const Staircase> stairs);
+    bool splitFinishes(); // the faces and trims Structure marks, after grounding
+    void buildFootings(); // STRUCT footing=: slabs, plinths, posts, terrace and door steps (Footing.h)
+    // Where a footing's floor is walked: floorHeight inside it, and what stands in it stands on.
+    struct FootingArea {float x1,y1,x2,y2,surface;};
+    std::vector<FootingArea> m_footingAreas;
+    const FootingArea* footingAreaAt(float x,float y)const{for(const auto& a:m_footingAreas)if(x>=a.x1-.0005f&&x<=a.x2+.0005f&&y>=a.y1-.0005f&&y<=a.y2+.0005f)return &a;return nullptr;}
+    void indexStructureCells();
 };
 
 }

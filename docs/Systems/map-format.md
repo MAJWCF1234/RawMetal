@@ -42,6 +42,20 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - The store is saved in the `entities` section (save format 28, docs/Systems/save-format.md) and emptied by a new game. A format 27 save still loads; it has no store, so the authored values stand.
   - No script state is written for a property.
 
+## Floors: finishes, flooring and footings
+| Keys | On | What |
+|---|---|---|
+| `tread riser stringer` | STAIR | Step tops (a 4 cm walking face), step fronts and bodies, side rails. Structure materials (`finishMaterialAllowed`, World.h). |
+| `deck edge railing` | LAYER | The storey's balconies (`=` tiles): walking face, edge and underside, railings. |
+| `trim trimwidth` | STRUCT | A flooring's edge band (0.1 m if no width). |
+| `drape` | STRUCT on the land | `1`: the flooring follows the ground (a path): drawn over the land's own triangles cut to its box, not solid. |
+| `footing snap raise base cap capwidth steps terrace` | STRUCT | A room or floor on the land, or raised: src/world/Footing.h. |
+
+- Faces and bands are split off once a map is built and grounded (`World::splitFinishes`), so on terrain a step top, a deck face and a trim band keep the one height grounding gave the whole. New pieces are appended; record indices do not move.
+- **Footings** (`Footing.h`, shared by the engine and the Builder). The box is the footprint. `snap` (low, mean, high; fixed: the bottom field is the height) measures the land under it before any footing cut it; `planFooting` gives its level pieces (a stepped footing is terraces along its long side). The parser adds each footing's pad to the campaign's `TerrainShape` (`footingPads`: level for pad and stepped, cut-only for foundation and stilts); `terrainColumnDensity` puts the ground of a pad's columns at its exact height to the 32nd of a metre, so Surface Nets and collision walk it there. `World::buildFootings` lays the slab (the record's material, the `cap` ring split off as a trim), a plinth of `base` down to the land or the floor below, posts for stilts, steps between terraces, and steps from any door on a raised edge to the ground outside (`steps=0` leaves them off).
+- Inside a footing, `World::floorHeight` is its floor: walls stand on it and rise from it, and grounding (`settleExclusionFacilityOnTerrain`) stands what is inside (floor paint, stairs, storeys, furniture) on it. Footing pieces keep their heights (`Structure::fixedHeight`).
+- On the land a wall face reaches down to the lowest ground along it (Scene3D), so a face on a slope leaves no daylight under its low end.
+
 ## Prefabs
 - `PREFAB|name` ... `PREFAB_END` holds records in metres from the prefab's origin, with `@` in their map field. A prefab must be defined above its first `PREFAB_PLACE`.
 - `PREFAB_PLACE|map|prefab|x|y|z|yaw[|prefix]` sets the prefab down:
@@ -109,7 +123,7 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
 - The Builder's Block tool places one: pick material 53 and drag its box; R turns its facing once the record has one (the inspector lists `facing`). The lab tube `atrium` checks the Starter Map's five.
 
 ## The Starter Map atrium
-`Showcase Atrium` (map 44, south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
+`Showcase Atrium` (map 149, the last room built; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
@@ -121,5 +135,7 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
   - a script reading and writing properties and freeing the box;
   - a save and load.
 - The lab tube `map-format` (src/lab/tubes/MapFormat.cpp, fixtures `lab/fixtures/map-format*.lab` and `.rmc`) draws the room. The tinted crate must read red, the frozen box must hang, and the script must free it.
+- The map-format test also covers floors: a trimmed flooring, a room raised on a brick base with a stone edge and steps at its door, each footing on a 4 m slope (one level floor, no land through it, the pad cut and filled, terraces, stilts you can stand under), a draped path, and step tops on a hill sitting exactly on their steps. The lab tube `floors` (src/lab/tubes/Floors.cpp, fixtures from tools/dev/floors_fixtures.py) draws the hall, every footing, the old way of building on a slope, paths and the Starter Map's Hillside.
+- The Builder's `--finish-test` and `--ground-test` (NativeFinishRegression.inc, NativeGroundRegression.inc) drive the Part lists, the Paint tool, the footing rows, the Raise handle, the Flooring tool and the Floor tool on the land; `--soak-test` drives random edits through every tool.
 - The Builder's `--editing-test` runs `verifyFormatTwo` (tools/Level Editor/editor/NativeFormatRegression.inc) and writes `native-editor-format-test.txt`.
 - It runs the Window wall, Breach and Growth tools' regressions too; `--glazing-test`, `--breach-test` and `--growth-test` run each alone (place, edit, Undo/Redo, delete, save and reopen, the engine reading every step).
