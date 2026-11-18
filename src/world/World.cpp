@@ -379,7 +379,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  for(const auto& source:m_mapData->layers){
   MapRows rows{};for(size_t row=0;row<rows.size();++row)rows[row]=source.rows[row];
-  m_layers.push_back({source.name,source.elevation,source.thickness,rows});
+  m_layers.push_back({source.name,source.elevation,source.thickness,rows,source.deck,source.edge,source.railing});
  }
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
@@ -1316,6 +1316,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(int y=0;y<Height;++y)for(int x=0;x<Width;){
    if(!deck(x,y)){++x;continue;}int start=x;while(x<Width&&deck(x,y))++x;
    std::vector<Structure> deckPieces{{float(start),float(y),float(x),float(y+1),underside,z}};
+   if(layer.deck>=0||layer.edge>=0)deckPieces.front().material=layer.edge>=0?layer.edge:layer.deck;
    for(size_t i=0;i<authoredStructures&&!deckPieces.empty();++i){const auto& f=m_structures[i];
     // A floor slab or landing built down into the deck replaces it there. A
     // plate resting on the deck (a column base, a mat, a floor line) does not:
@@ -1325,6 +1326,12 @@ void World::buildLayers(std::span<const Staircase> stairs){
      if(a>=c||b>=d){next.push_back(part);continue;}auto add=[&](float x0,float y0,float x1,float y1){if(x1-x0>.0001f&&y1-y0>.0001f){auto piece=part;piece.x1=x0;piece.y1=y0;piece.x2=x1;piece.y2=y1;next.push_back(piece);}};
      add(part.x1,part.y1,a,part.y2);add(c,part.y1,part.x2,part.y2);add(a,part.y1,c,b);add(a,d,c,part.y2);}
     deckPieces.swap(next);}
+   // A named deck finish (LAYER deck=) is the walking face: a 4 cm top over
+   // the edge finish (edge=, the fascia and underside). Without either, as before.
+   if(layer.edge>=0&&layer.deck!=layer.edge&&z-underside>.06f){
+    const size_t pieces=deckPieces.size();
+    for(size_t i=0;i<pieces;++i){auto top=deckPieces[i];top.bottom=z-.04f;top.material=layer.deck>=0?layer.deck:0;deckPieces[i].top=z-.04f;deckPieces.push_back(top);}
+   }
    m_structures.insert(m_structures.end(),deckPieces.begin(),deckPieces.end());
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
@@ -1332,16 +1339,16 @@ void World::buildLayers(std::span<const Staircase> stairs){
    if(!hasLift()&&!custom()&&!m_mapData&&m_level<6&&(x+y)%5==0&&tile(x,y)!='#')
     m_structures.push_back({x+.06f,y+.06f,x+.14f,y+.14f,floorHeight(x+.1f,y+.1f),underside});
    if(!joinedDeck(x-1,y)&&!wallBeside(x-1,y)&&!stairConnection(x-.001f,y+.5f)){
-     edgeRail({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
+     edgeRail({float(x),float(y),x+.055f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:layer.railing>=0?layer.railing:0,true,ShapeBox,0,0,layer.railing>=0&&!collarWall});
    }
    if(!joinedDeck(x+1,y)&&!wallBeside(x+1,y)&&!stairConnection(x+1.001f,y+.5f)){
-     edgeRail({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
+     edgeRail({x+.945f,float(y),x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:layer.railing>=0?layer.railing:0,true,ShapeBox,0,0,layer.railing>=0&&!collarWall});
    }
    if(!joinedDeck(x,y-1)&&!wallBeside(x,y-1)&&!stairConnection(x+.5f,y-.001f)){
-     edgeRail({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:0});
+     edgeRail({float(x),float(y),x+1.f,y+.055f,z,z+railHeight,!collarWall,collarWall?3:layer.railing>=0?layer.railing:0,true,ShapeBox,0,0,layer.railing>=0&&!collarWall});
    }
    if(!joinedDeck(x,y+1)&&!wallBeside(x,y+1)&&!stairConnection(x+.5f,y+1.001f)){
-     edgeRail({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:0});
+     edgeRail({float(x),y+.945f,x+1.f,y+1.f,z,z+railHeight,!collarWall,collarWall?3:layer.railing>=0?layer.railing:0,true,ShapeBox,0,0,layer.railing>=0&&!collarWall});
    }
   }
  }
@@ -1353,6 +1360,13 @@ void World::buildLayers(std::span<const Staircase> stairs){
    stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1,
    stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi,
    stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.openUnderside?top-stair.treadThickness:stair.bottom,top,false,stair.openUnderside?2:hasLift()?4:0});
+  // Named finishes (STAIR tread=, riser=): the tread is the walking face, a
+  // 4 cm top over the riser finish (the step's front and body). Without them, as before.
+  if(stair.tread>=0||stair.riser>=0){auto& body=m_structures.back();
+   const int tread=stair.tread>=0?stair.tread:body.material==4?0:body.material,riser=stair.riser>=0?stair.riser:tread;
+   body.material=riser;
+   if(tread!=riser&&body.top-body.bottom>.06f){auto face=body;face.bottom=body.top-.04f;face.material=tread;body.top=face.bottom;m_structures.push_back(face);}
+  }
   if(stair.sideRails){
    // Side guards have the same tread-local elevation in rendering, optical
    // occlusion and hull collision. They leave the under-stair space open.
@@ -1360,8 +1374,10 @@ void World::buildLayers(std::span<const Staircase> stairs){
    float x2=stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi;
    float y1=stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1;
    float y2=stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2;
-   if(stair.alongY){m_structures.push_back({x1,y1,x1+.07f,y2,top,top+1.05f,true,2});m_structures.push_back({x2-.07f,y1,x2,y2,top,top+1.05f,true,2});}
-   else{m_structures.push_back({x1,y1,x2,y1+.07f,top,top+1.05f,true,2});m_structures.push_back({x1,y2-.07f,x2,y2,top,top+1.05f,true,2});}
+   // stringer= finishes the side guards; without it, as before.
+   const int side=stair.stringer>=0?stair.stringer:2;const bool finished=stair.stringer>=0;
+   if(stair.alongY){m_structures.push_back({x1,y1,x1+.07f,y2,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});m_structures.push_back({x2-.07f,y1,x2,y2,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});}
+   else{m_structures.push_back({x1,y1,x2,y1+.07f,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});m_structures.push_back({x1,y2-.07f,x2,y2,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});}
   }
  }
   // End guardrails at real walls/columns. Keep original structure indices:

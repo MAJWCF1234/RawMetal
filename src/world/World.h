@@ -328,10 +328,12 @@ struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 // non-solid; PRIM records give them collision-proxy boxes (Primitives.h).
 // `facing` is the quarter turn they rise or open toward: 0 +y, 1 +x, 2 -y, 3 -x.
 enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel};
-struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;};
+struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;bool finishedRail=false;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;
+// A finish a STAIR or balcony may name (tread=, deck=...): a structure material the renderer draws as a plain box.
+inline bool finishMaterialAllowed(int m){return m>=0&&m<=51&&m!=1&&m!=4&&m!=6&&m!=9&&m!=17&&m!=CollisionProxyMaterial;}
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.
@@ -345,6 +347,8 @@ struct MapLayer {
     std::string_view name;
     float elevation,thickness;
     MapRows rows;
+    // Balcony finishes (LAYER deck=, edge=, railing=; structure materials, -1 the default look).
+    int deck=-1,edge=-1,railing=-1;
 };
 struct Staircase {
     float x1,y1,x2,y2,bottom,top;
@@ -353,6 +357,8 @@ struct Staircase {
     bool openUnderside=false;
     float treadThickness=.12f;
     bool sideRails=false;
+    // Finishes (STAIR tread=, riser=, stringer=; structure materials, -1 the default look).
+    int tread=-1,riser=-1,stringer=-1;
 };
 
 // Shared geometry records for built-in and runtime-authored maps. Loading these
@@ -362,6 +368,7 @@ struct AuthoredLayerData {
     std::string name;
     float elevation=0,thickness=0;
     std::array<std::string,24> rows{};
+    int deck=-1,edge=-1,railing=-1; // LAYER deck=, edge=, railing= (MapLayer)
 };
 struct AuthoredTerminalData {
     Vec2 position{};

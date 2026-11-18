@@ -509,6 +509,12 @@ NAMED_FIELDS = [
     ('weapon', 'Weapon', 'rifle handgun none', 'ACTOR', 'What a man carries; none disarms him.'),
     ('role', 'Squad role', 'assault engineer sharpshooter heavy medic rusher', 'ACTOR', 'A guard\'s role in his squad.'),
     ('display', 'Display name', '1 to 40 characters', 'CREATURE, ACTOR', 'The name the game shows for it (the console, what you aim at).'),
+    ('tread', 'Tread material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'What the steps are walked on: the top 4 cm of each step. The Builder\'s Paint tool sets it on a click on a stair.'),
+    ('riser', 'Riser material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The step fronts and bodies under the tread. Blank: the tread\'s.'),
+    ('stringer', 'Stringer material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side guards (with the rails field on).'),
+    ('deck', 'Deck material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', 'What the balcony decks (= tiles) on this floor are walked on. The Builder\'s Paint tool sets it on a click on a balcony.'),
+    ('edge', 'Deck edge material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', 'The decks\' fascia and underside, under a 4 cm walking face. Blank: the deck\'s.'),
+    ('railing', 'Railing material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', 'The rails along the open deck edges.'),
 ]
 
 

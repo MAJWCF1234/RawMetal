@@ -1591,9 +1591,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
       box({x-.012f,y-.012f,s.bottom+.16f},{x+.012f,y+.012f,s.top-.07f},m_metal,.85f);}
     }else box({s.x1+.012f,s.y1+.012f,s.bottom+.012f},{s.x2-.012f,s.y2-.012f,s.top-.08f},m_floor,.8f);
    }
-   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},m_panelMetal,.95f);
-   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},m_panelMetal,.9f);
-   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},m_panelMetal,.9f);}
+   // A named railing or stringer finish (LAYER railing=, STAIR stringer=) dresses the cap and posts.
+   const Texture& railTex=s.finishedRail?structureTexture(s):m_panelMetal;
+   box({s.x1,s.y1,s.top-.07f},{s.x2,s.y2,s.top},railTex,.95f);
+   box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},railTex,.9f);
+   box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},railTex,.9f);}
  }
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.

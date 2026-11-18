@@ -126,6 +126,31 @@ bool Game::testMapFormat(){
    bool red=false,held=false;for(const auto& c:older.m_clutter){red|=c.traits&&c.traits->name=="red_crate"&&c.traits->tinted;held|=c.traits&&c.traits->name=="held_box";}
    check(ok&&old.rfind("RAWMETAL_SAVE 27 ",0)==0&&rex3&&rex3->faction==AiFaction::Facility&&red&&held&&older.entityPropertyInt(0,"vault","code")==1234,
     "a format 27 save of the room loads: the overrides come from the map again ("+(ok?std::string("loaded"):Game::lastLoadFailure())+")");}
+
+  // ---- Stair and balcony finishes: STAIR tread= riser= stringer=, LAYER deck= edge= railing= ----
+  {auto finished=[&](bool named){
+    std::string body="LAYER|0|1|Gallery|3|0.3"+std::string(named?"|deck=24|edge=12|railing=19":"")+"\n";
+    for(int y=0;y<24;++y)body+="ROW|0|1|"+std::to_string(y)+"|"+(y>=10&&y<=12?std::string(14,'.')+std::string(6,'=')+std::string(4,'.'):std::string(24,'.'))+"\n";
+    body+="STAIR|0|6|10|12|12|0|3|12|0|1|0|0.12|1"+std::string(named?"|tread=46|riser=15|stringer=18":"")+"\n";
+    return loadCustomCampaignText(room("FORMAT|2\n",body),named?"finished.rmc":"plain.rmc");};
+   auto plain=finished(false),dressed=finished(true);
+   Game a(plain),b(dressed);const auto& p=a.world().structures();const auto& q=b.world().structures();
+   auto count=[](const std::vector<Structure>& list,auto&& keep){size_t n=0;for(const auto& s:list)n+=keep(s);return n;};
+   const size_t plainSteps=count(p,[](const Structure& s){return !s.rail&&s.x1>=6&&s.x2<=12.001f&&s.y1>=10&&s.y2<=12&&s.material==0;});
+   check(plainSteps==12&&count(p,[](const Structure& s){return s.finishedRail;})==0,"a stair and a balcony without finishes build as before (12 plain steps, no finished rails; "+std::to_string(plainSteps)+")");
+   const size_t treads=count(q,[](const Structure& s){return !s.rail&&s.material==46&&s.top-s.bottom<.05f&&s.x1>=6&&s.x2<=12.001f;});
+   const size_t risers=count(q,[](const Structure& s){return !s.rail&&s.material==15&&s.x1>=6&&s.x2<=12.001f;});
+   const size_t stringers=count(q,[](const Structure& s){return s.rail&&s.material==18&&s.finishedRail;});
+   check(treads==12&&risers==12&&stringers==24,"the stair has 12 treads of 46 over 12 risers of 15 and 24 stringer pieces of 18 ("+std::to_string(treads)+", "+std::to_string(risers)+", "+std::to_string(stringers)+")");
+   const size_t decks=count(q,[](const Structure& s){return !s.rail&&s.material==24&&std::fabs(s.top-3)<.001f&&std::fabs(s.bottom-2.96f)<.001f;});
+   const size_t edges=count(q,[](const Structure& s){return !s.rail&&s.material==12&&std::fabs(s.top-2.96f)<.001f&&std::fabs(s.bottom-2.7f)<.001f;});
+   const size_t rails=count(q,[](const Structure& s){return s.rail&&s.material==19&&s.finishedRail;});
+   check(decks>0&&decks==edges&&rails>0,"the balcony deck is 24 over a 12 edge with railing 19 ("+std::to_string(decks)+", "+std::to_string(edges)+", "+std::to_string(rails)+")");
+   // Walking support is the same: the tread split leaves the step tops where they were.
+   check(std::fabs(a.world().floorHeight(9.5f,11)-b.world().floorHeight(9.5f,11))<1e-4f&&std::fabs(a.world().floorHeight(17,11)-b.world().floorHeight(17,11))<1e-4f,"stairs and deck stand at the same heights with finishes");
+   const auto exported=exportRmc("F",{{dressed->maps[0],-1}}).text;
+   check(exported.find("|tread=46|riser=15|stringer=18")!=std::string::npos&&exported.find("|deck=24|edge=12|railing=19")!=std::string::npos,"the exporter writes the finishes back");
+   {const auto why=refused(room("FORMAT|2\n","STAIR|0|6|10|12|12|0|3|12|0|1|tread=6\n"),"tread=6");check(why.empty(),"a finish that cannot be drawn as a box is refused, naming the key ("+why+")");}}
  }catch(const std::exception& e){check(false,std::string("threw: ")+e.what());}
  report<<(failed?"FAILED ":"PASSED ")<<failed<<" failures\n";
  return failed==0;

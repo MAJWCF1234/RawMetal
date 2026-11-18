@@ -743,7 +743,9 @@ enum {
   TerrainModeList=740,TerrainSizeList,TerrainStrengthList,TerrainHeightBox,NatureSetList,NatureDensityList,NatureScaleList,NatureModeList,
   NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider,
   // Prefabs (NativePrefabMethods.inc).
-  MakePrefab=780,PlacePrefab
+  MakePrefab=780,PlacePrefab,
+  // Stair and balcony finishes (NativeFinishMethods.inc).
+  FinishPartList=873
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -1008,7 +1010,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1057,6 +1059,7 @@ struct Editor {
 #include "NativeDressingMethods.inc"
 #include "NativeLayersMethods.inc"
 #include "NativeFloorPaintMethods.inc"
+#include "NativeFinishMethods.inc"
 #include "NativeSelectionMethods.inc"
 #include "NativeGizmoMethods.inc"
 #include "NativeLayerDockMethods.inc"
@@ -1079,6 +1082,7 @@ struct Editor {
 #include "NativeOutdoorRegression.inc"
 #include "NativePrefabMethods.inc"
 #include "NativeFormatRegression.inc"
+#include "NativeFinishRegression.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -1814,6 +1818,9 @@ struct Editor {
   }
   // Paints (or with pickUp, picks the paint up from) what is at one spot.
   void paintSpot(float x, float y, float z, int surface, bool pickUp) {
+    // A stair or a balcony deck takes the paint on the part under the pointer (NativeFinishMethods.inc).
+    if (surface == 0 && paintFinishAt(x, y, z, pickUp))
+      return;
     if(!pickUp&&floorPaintTarget(x,y,z,surface)){
       if(brush==2){auto cells=roomAt(cellOf(x),cellOf(y));if(cells.empty())cells.push_back(cellOf(y)*24+cellOf(x));paintRoomFloor(cells,paintMaterial());}
       else paintNativeFloor(float(cellOf(x)),float(cellOf(y)),float(cellOf(x)+1),float(cellOf(y)+1),paintMaterial());
@@ -1940,8 +1947,9 @@ struct Editor {
       float x = ox + dx * t, y = oy + dy * t, z = oz + dz * t;
       if (x < 0 || y < 0 || x >= 24 || y >= 24)
         continue;
-      size_t index = 0, field = 0;
-      int surface = thingAt(x, y, z, index, field) ? 0
+      size_t index = 0, field = 0, stairIndex = 0;
+      int part = 0, deckLayer = 0;
+      int surface = thingAt(x, y, z, index, field) || stairAt(x, y, z, stairIndex, part) || deckAt(x, y, z, deckLayer, part) ? 0
                     : z <= floorZ + .01f            ? 3
                     : z >= ceiling - .01f  ? 4
                     : doc.tile(map, layer, int(x), int(y)) == '#' ? 2
@@ -3405,6 +3413,8 @@ struct Editor {
     structureMaterial =
         int(SendMessageW(materialList, CB_GETITEMDATA, selected, 0));
     if(tool==2){floorPaintMaterial=structureMaterial;floorMaterialExplicit=true;message(L"Floor material: "+materialName(floorPaintMaterial));return;}
+    if (applyFinishChoice(structureMaterial))
+      return;
     if (record < 0) {
       message(L"New blocks use this finish. Select a block or part to change "
               L"one that is already placed.");
@@ -4918,7 +4928,7 @@ struct Editor {
     placeControl(GetDlgItem(window,InspectorTab),rx,y,152,30,TRUE);placeControl(GetDlgItem(window,LayerTab),rx+160,y,152,30,TRUE);y+=38;
     for(HWND c:{layerStack,layerPreview,layerName,layerElevationInput,layerThicknessInput,layerOpacity,layerGroupList})if(c)ShowWindow(c,SW_HIDE);
     for(int id:{LayerMenu,LayerVisible,LayerLock,LayerCommit,LayerReferences})ShowWindow(GetDlgItem(window,id),SW_HIDE);
-    for (HWND list : {upperFloorTiles, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
+    for (HWND list : {upperFloorTiles, finishPartList, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
                       surfaceList, hazardList, soundList, preyList, hunterList, doorToolList, doorKindList, doorAxisList,
                       doorSwingList, doorHingeList, doorLockList, doorStrengthList, doorOpenSlider, pickupList, creatureList, tileList, primList, brushList,
                       clutterList, actionList, linkList, kindList, recordList, emitterPresetList, emitterKindList, emitterRestyleList,
@@ -5021,6 +5031,13 @@ struct Editor {
     if(tool==2)for(LRESULT i=0;i<SendMessageW(materialList,CB_GETCOUNT,0,0);++i)if(SendMessageW(materialList,CB_GETITEMDATA,i,0)==floorPaintMaterial){SendMessageW(materialList,CB_SETCURSEL,i,0);break;}
     if (tool == 9 || tool == 20 || tool==2)
       row(materialList, L"Finish");
+    else if (finishSelection() || balconyTool()) {
+      // A picked stair, or the balcony tool's floor: which part, then its finish.
+      fillFinishParts(finishSelection());
+      row(finishPartList, L"Part");
+      row(materialList, L"Finish");
+      showFinishChoice();
+    }
     if (tool == 8 || tool == 9 || tool == 14 || tool == 15)
       row(heightList, L"Height");
     if (tool == 13)
@@ -6049,6 +6066,7 @@ struct Editor {
     verifyDressingRegressions();
     verifyOutdoorRegressions(false); // NativeOutdoorRegression.inc, without the engine pictures
     verifyFormatTwo(); // NativeFormatRegression.inc: named fields, the inspector, prefabs
+    verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -9527,6 +9545,11 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->useMaterial();
         return 0;
       }
+      if (id == FinishPartList && notification == CBN_SELCHANGE) {
+        e->finishPart = std::clamp(int(SendMessageW(e->finishPartList, CB_GETCURSEL, 0, 0)), 0, 2);
+        e->showFinishChoice();
+        return 0;
+      }
       if (id == HeightList && notification == CBN_SELCHANGE) {
         auto selected = SendMessageW(e->heightList, CB_GETCURSEL, 0, 0);
         if (selected >= 0 && selected <= 3)
@@ -10054,6 +10077,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // Map format 2 alone (NativeFormatRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--format-test")
       e.backgroundTest = e.formatTest = true;
+    // Stair and balcony finishes alone (NativeFinishRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--finish-test")
+      e.backgroundTest = e.finishTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10336,6 +10362,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       if (id == e.structureMaterial)
         SendMessageW(e.materialList, CB_SETCURSEL, item, 0);
     }
+    e.finishPartList = e.controlWindow(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL, FinishPartList);
+    e.fillFinishParts(true);
     e.roleList = e.controlWindow(L"COMBOBOX", L"",
                                  CBS_DROPDOWNLIST | WS_VSCROLL, RoleList);
     for (auto role : Editor::people)
@@ -10618,6 +10646,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.verifyEditing();
       DestroyWindow(e.window);
       return 0;
+    }
+    if (e.finishTest) {
+      int code = 0;
+      try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
     }
     if (e.formatTest) {
       int code = 0;

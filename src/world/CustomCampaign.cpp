@@ -223,6 +223,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   else if(tag=="CREATURE")map->creatureSpawns.back().traits=traits;else if(tag=="ACTOR")map->actorTracks.back().traits=traits;
   if(overrides&&(tag=="FIXTURE"||tag=="CLUTTER"||tag=="CREATURE"||tag=="ACTOR"))map->entityTraits=true;
  };
+ // A finish named on a STAIR or LAYER: a structure material (World.h finishMaterialAllowed); absent, -1.
+ auto finishField=[](const NamedFields& fields,const char* key){
+  const auto* field=findNamedField(fields,key);if(!field)return -1;
+  int value=-1;const auto& v=field->value;const auto end=v.data()+v.size();const auto r=std::from_chars(v.data(),end,value);
+  if(v.empty()||r.ec!=std::errc{}||r.ptr!=end||!finishMaterialAllowed(value))throw std::runtime_error(std::string(key)+"="+v+" is not a finish; use a structure material 0-51 (not 1, 4, 6, 9, 17 or 30)");
+  return value;};
  auto parseRecord=[&](std::vector<std::string> f,const NamedFields& namedFields){
   const std::string tag=f[0];
   // A field the exporter appends to an older record (empty or absent keeps the default).
@@ -411,6 +417,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(!art.emplace(name,std::move(picture)).second)throw std::runtime_error("SIGN_ART "+name+" is defined twice");
   }else if(tag=="LAYER"){
    if(f.size()<6)throw std::runtime_error("malformed LAYER record");auto& layer=layerAt(maps,f);layer.name=decode(f[3]);layer.elevation=number(f,4,"layer elevation");layer.thickness=number(f,5,"layer thickness");
+   // deck= edge= railing=: structure materials for a balcony's walking face, its fascia and its rails.
+   layer.deck=finishField(namedFields,"deck");layer.edge=finishField(namedFields,"edge");layer.railing=finishField(namedFields,"railing");
   }else if(tag=="ROW"){
    if(f.size()<5)throw std::runtime_error("malformed ROW record");auto& layer=layerAt(maps,f);int row=integer(f,3,"row index");if(row<0||row>=24)throw std::runtime_error("invalid row index");layer.rows[size_t(row)]=f[4];
   }else if(tag=="DOOR"){
@@ -685,6 +693,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<11||f.size()>14)throw std::runtime_error("malformed STAIR record");auto map=mapAt(maps,f);map->stairs.push_back({
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending"),f.size()>11&&!f[11].empty()?boolean(f,11,"stair open underside"):false,f.size()>12&&!f[12].empty()?number(f,12,"stair tread thickness"):.12f,f.size()>13&&!f[13].empty()?boolean(f,13,"stair side rails"):false});
+   // tread= riser= stringer=: structure materials for the walking face, the step body and the side guards.
+   {auto& st=map->stairs.back();st.tread=finishField(namedFields,"tread");st.riser=finishField(namedFields,"riser");st.stringer=finishField(namedFields,"stringer");}
   }else if(tag=="CREATURE"){
    if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>=CreatureKindCount)throw std::runtime_error("invalid creature kind");
    CreatureSpawn spawn{CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")};
