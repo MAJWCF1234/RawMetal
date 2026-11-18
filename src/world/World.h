@@ -507,7 +507,20 @@ struct Breach {
     int shape=2,edge=0;float sill=0,head=2.3f;bool rebar=true;int rubble=10;std::uint32_t seed=1;int direction=1;
     bool infill=true;int wall=3;
 };
+// A number unique in the process to one map definition object, for caches keyed on which definition a
+// world was built from: a later map allocated at a freed one's address gets a new one, so a cache never
+// takes the old map's results (a light probe bake, a particle's air) for it. A copy is a new definition and
+// takes a new number; it plays no part in comparing two definitions' content.
+struct MapSerial {
+    std::uint64_t value=next();
+    MapSerial()=default;
+    MapSerial(const MapSerial&):value(next()){}
+    MapSerial& operator=(const MapSerial&){value=next();return *this;}
+    bool operator==(const MapSerial&)const{return true;}
+    static std::uint64_t next();
+};
 struct AuthoredMapData {
+    MapSerial serial;
     std::string name;
     std::string skybox="industrial_night";
     std::shared_ptr<const TerrainShape> terrain;
@@ -634,10 +647,11 @@ public:
     // its collision (ai::collisionSnapshot): the authored map it was loaded from
     // (the same across a chunk re-made on streaming, even where terrain settles
     // a private copy of it), or none for a built-in chunk, with world and slot.
-    // An address names its map only while that map lives; a memo kept longer
-    // than the World that keyed it must hold or check its owner too.
-    struct DefinitionIdentity {const AuthoredMapData* map=nullptr;WorldId world=WorldId::Campaign;int level=0;bool operator==(const DefinitionIdentity&)const=default;};
-    DefinitionIdentity definitionIdentity()const{return {m_definitionSource,m_worldId,m_level};}
+    // An address names its map only while that map lives, and a later map can
+    // take a freed one's address: a memo kept longer than the World that keyed
+    // it keys on `serial` (the map's MapSerial, never reused), not on `map`.
+    struct DefinitionIdentity {const AuthoredMapData* map=nullptr;WorldId world=WorldId::Campaign;int level=0;std::uint64_t serial=0;bool operator==(const DefinitionIdentity&)const=default;};
+    DefinitionIdentity definitionIdentity()const{return {m_definitionSource,m_worldId,m_level,m_definitionSource?m_definitionSource->serial.value:0};}
     const ChunkDefinition& definition()const{return m_mapData?m_mapData->definition:chunkDefinition(m_worldId,m_level);}
     std::span<const int> visibleResidencyGroups()const{return m_mapData?std::span<const int>(m_mapData->visibleResidencyGroups):std::span<const int>{};}
     bool outdoors()const{return definition().environment==Environment::Outdoor;}

@@ -29,6 +29,11 @@ bool Game::testWorldIsolation(){
  if(!check(invalidWorldRejected(),"Custom world construction requires explicit authored data"))return false;
  auto authored=std::make_shared<AuthoredMapData>();AuthoredLayerData floor;for(auto& row:floor.rows)row=std::string(World::Width,'.');authored->layers.push_back(floor);
  {World external(0,authored);World native(10);if(!check(external.custom()&&!external.campaign()&&native.campaign()&&!native.custom(),"Shared authored geometry preserves custom and native identities"))return false;}
+ // A definition's serial names it for caches kept past its life (light probes, the air, the walk memo):
+ // worlds on one definition share it; a copy, or a later map made where a freed one stood, never does.
+ {auto first=std::make_shared<AuthoredMapData>(*authored);const auto* where=first.get();const auto serial=World(0,first).definitionIdentity().serial;const bool shared=World(0,first).definitionIdentity().serial==serial;
+  first.reset();auto second=std::make_shared<AuthoredMapData>(*authored);const auto again=World(0,second).definitionIdentity();
+  if(!check(serial!=0&&shared&&again.serial!=serial&&authored->serial.value!=serial,(std::string("A map definition keeps one serial across its worlds and a later one never reuses it (")+(second.get()==where?"made at the freed map's address":"made elsewhere")+")").c_str()))return false;}
  {
   World flat(0,authored);flat.buildLightOcclusion();
   if(!check(flat.m_lightSolids.size()==2&&flat.lightRayClear({2,2},3.2f,{20,20},3.2f)&&!flat.lightRayClear({2,2},3.6f,{20,20},3.6f),"Constant ceiling merges to one optical solid without changing its shadow"))return false;

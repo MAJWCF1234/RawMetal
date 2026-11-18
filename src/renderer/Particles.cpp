@@ -241,7 +241,7 @@ namespace {
 std::uint64_t worldSignature(const Game& game,const World& w){std::uint64_t h=1469598103934665603ull;auto add=[&](std::uint64_t v){h^=v;h*=1099511628211ull;};
  add(w.structures().size());add(w.fixtures().size());add(w.layers().size());add(std::uint64_t(w.level()));add(game.staticRevision(w.level()));
  add(w.particleEmitters().size());add(w.hazards().size());
- add(std::uint64_t(reinterpret_cast<std::uintptr_t>(w.definitionIdentity().map)));
+ add(w.definitionIdentity().serial);   // the map by its serial, never its address (a later map can take a freed one's)
  return h;}
 // How far the air round `p` reaches before something solid, along the axes and the level diagonals;
 // -1 inside a solid. Kept by 25 cm cell (taken at its middle, less the cell's own reach). Probed only as

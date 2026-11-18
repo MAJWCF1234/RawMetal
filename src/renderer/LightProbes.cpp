@@ -268,7 +268,7 @@ const ProbeBake* SoftwareRenderer::chunkProbes(const Game& game,int level,const 
  ProbeBakeInput input;input.lampPower.assign(w.lights().size(),1.f);
  std::uint64_t key=1469598103934665603ull;auto mix=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
  mix(lightKey);mix(game.staticRevision(level));mix(std::uint64_t(game.worldId()));mix(std::uint64_t(level));
- mix(std::uint64_t(reinterpret_cast<std::uintptr_t>(w.definitionIdentity().map)));mix(w.fixtures().size());mix(g_probeSalt);
+ mix(w.definitionIdentity().serial);mix(w.fixtures().size());mix(g_probeSalt);   // the map by its serial: a later map at a freed one's address is not it
  // Switchable lamps (a breaker, a timer, a failing tube) stay out of the bake: their power changes
  // in play, so each keeps its own flat room bounce at this frame's power (scene.frag, Scene3D).
  for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].switchable())input.lampPower[i]=0.f;
