@@ -120,7 +120,8 @@ Restitution runs once per manifold at the end.
 Islands are bodies linked by contacts and joints. An island sleeps when every body in it has stayed under
 6 cm/s and 0.12 rad/s for 0.2 s. A sleeping body takes part only as an immovable obstacle. Something moving that comes
 within reach of a sleeping body wakes it: a blow from a moving body is never stopped by a sleeper. A body woken that
-way meets what still sleeps beside it in the same step, so it is never driven into a neighbour unopposed.
+way wakes what it touches in the same step, and meets it, so it is neither driven into a neighbour unopposed nor stopped
+by one still asleep.
 A sleeping prop out of reach of every awake prop and of the player is not built at all.
 
 ## Continuous collision

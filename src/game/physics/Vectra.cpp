@@ -269,7 +269,7 @@ void Space::collide(float dt){
  std::vector<int> first(size_t(n)+1,0);for(int i=0;i<n;++i)first[size_t(i)+1]=first[size_t(i)]+(bodies[size_t(i)].shape?bodies[size_t(i)].shape->count:0);
  std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
  auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
- int woken=0;
+ int woken=0;std::vector<char> roused(size_t(n),0);   // woken by a touch this step: what it touches that sleeps wakes with it (a sleeper is a wall)
  auto meet=[&](const std::vector<std::pair<int,int>>& list){
  for(auto [i,j]:list){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
   if(pairContacts&&pairContacts(*this,i,j,margin,manifolds)){++pairsTested;continue;}
@@ -281,12 +281,12 @@ void Space::collide(float dt){
    if(!(polyhedra?collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m):collideParts(a,pa,b,pb,margin,m)))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
    {const float sa=a.softHertz,sb=b.softHertz;m.surface.hertz=sa>0&&sb>0?std::min(sa,sb):std::max(sa,sb);}
    manifolds.push_back(m);
-   // A moving body touching a sleeping one wakes it (and the sleeper's island follows next step).
+   // A moving body touching a sleeping one wakes it, and what that touches wakes with it (the rounds below).
    float deepest=1e30f;for(int k=0;k<m.count;++k)deepest=std::min(deepest,m.points[size_t(k)].separation);
    if(deepest<margin){   // within reach this step: a sleeper treated as fixed would stop a blow dead
     auto rousing=[&](const Body& mover,const Body& other){const float speed=len(mover.v-other.v)+len(mover.w)*mover.shape->bound;return speed>2*settings.sleepLinear||(mover.kinematic&&speed>1e-3f);};
-    if(a.sleeping&&!b.sleeping&&rousing(b,a)){wake(i);++woken;}
-    if(b.sleeping&&!a.sleeping&&rousing(a,b)){wake(j);++woken;}}}}};
+    if(a.sleeping&&!b.sleeping&&(rousing(b,a)||roused[size_t(j)])){wake(i);roused[size_t(i)]=1;++woken;}
+    if(b.sleeping&&!a.sleeping&&(rousing(a,b)||roused[size_t(i)])){wake(j);roused[size_t(j)]=1;++woken;}}}}};
  meet(pairs);
  // Woken by a touch: its pairs with what still sleeps beside it were passed over as two sleepers'; met now, or
  // what woke it could drive it into them unopposed for a step.
