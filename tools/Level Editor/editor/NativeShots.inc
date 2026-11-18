@@ -15,7 +15,11 @@
     for (std::string line; std::getline(in, line);)
       if (!line.empty() && line[0] != '#') shotScript.push_back(line);
     shotLog.open(root / L"native-editor-shots.txt");
-    SetWindowPos(window, HWND_TOPMOST, 0, 0, 1600, 940, SWP_SHOWWINDOW);
+    // Off the screen and never on top: the pictures are the Builder's own pixels (PrintWindow),
+    // never the screen's, and nothing covers whatever the person at the machine is doing.
+    ShowWindow(window, SW_SHOWNOACTIVATE);
+    ShowWindow(window, SW_RESTORE);
+    SetWindowPos(window, HWND_BOTTOM, -6000, 0, 1600, 940, SWP_NOACTIVATE);
     SetTimer(window, 7777, 150, nullptr);
   }
   void writeFilm(const std::string &line) {
@@ -73,24 +77,25 @@
       } else if (verb == "shot") {
         std::string out;
         std::getline(in >> std::ws, out);
-        SetWindowPos(window, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        if (IsIconic(window) || IsZoomed(window)) ShowWindow(window, SW_RESTORE);
+        SetWindowPos(window, HWND_BOTTOM, -6000, 0, 1600, 940, SWP_NOACTIVATE);
         RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
-        // The client area only: never a pixel of whatever else is on the screen.
+        // The window's own client area, as DWM composes it (the engine's 3D child included).
         RECT r{};
         GetClientRect(window, &r);
-        MapWindowPoints(window, nullptr, reinterpret_cast<POINT *>(&r), 2);
         const int w = r.right - r.left, h = r.bottom - r.top;
-        HDC screen = GetDC(nullptr), dc = CreateCompatibleDC(screen);
+        if (w <= 0 || h <= 0) { shotLog << "  no client area yet; again\n"; --shotLine; shotWaitUntil = GetTickCount64() + 2000; return; }
+        HDC screen = GetDC(window), dc = CreateCompatibleDC(screen);
         HBITMAP bitmap = CreateCompatibleBitmap(screen, w, h);
         auto old = SelectObject(dc, bitmap);
-        BitBlt(dc, 0, 0, w, h, screen, r.left, r.top, SRCCOPY | CAPTUREBLT);
+        PrintWindow(window, dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
         SelectObject(dc, old);
         BITMAPINFO info{};
         info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER), info.bmiHeader.biWidth = w, info.bmiHeader.biHeight = -h;
         info.bmiHeader.biPlanes = 1, info.bmiHeader.biBitCount = 32;
         std::vector<char> bits(size_t(w) * size_t(h) * 4);
         GetDIBits(dc, bitmap, 0, UINT(h), bits.data(), &info, DIB_RGB_COLORS);
-        DeleteObject(bitmap), DeleteDC(dc), ReleaseDC(nullptr, screen);
+        DeleteObject(bitmap), DeleteDC(dc), ReleaseDC(window, screen);
         fs::path file = fs::path(wide(out));
         fs::create_directories(file.parent_path());
         std::ofstream f(file, std::ios::binary);

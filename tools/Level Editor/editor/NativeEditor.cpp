@@ -10877,7 +10877,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     }
     trace("controls ready");
     if (!e.backgroundTest && (!e.menuTest || e.menuShown)) {
-      ShowWindow(e.window, SW_SHOWMAXIMIZED);
+      if (!shotScriptFile.empty()) // --shots: off the screen, never activated (NativeShots.inc)
+        SetWindowPos(e.window, HWND_BOTTOM, -6000, 0, 1600, 940, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+      else
+        ShowWindow(e.window, SW_SHOWMAXIMIZED);
       UpdateWindow(e.window);
     }
     trace("window shown");
