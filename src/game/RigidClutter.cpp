@@ -128,13 +128,16 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      if(p.z-slope<margin&&!round)hits.push_back({p,n,(p.z-slope)*n.z,3});break;}
     if(onRamp)continue;}
    float s=w.supportBelow(q.x,q.y,p.z+.06f,true);s-=softSinkAt(w.level(),q,s);
-   if(p.z-s<margin&&!round)hits.push_back({p,{0,0,1},p.z-s,0,partOf[si]});
+   // Only its underside stands on things: a point up its side that has gone a little into a fixture's top edge
+   // (a tall crate shoved against a counter) meets the fixture's side, as a wall, and does not lift it onto it.
+   const bool under=p.z<b.x.z+.01f;
+   if(p.z-s<margin&&!round&&under)hits.push_back({p,{0,0,1},p.z-s,0,partOf[si]});
    // Every point is asked about walls too, from just over what it stands on: a thin thing on the floor
    // (a keyboard, a bottle on its side) is all floor points, and would otherwise roll through a wall.
-   const float base=std::max(p.z-.005f,s+.004f);
+   const float base=under?std::max(p.z-.005f,s+.004f):p.z-.005f;
    if(!w.fits(q.x,q.y,base,.01f,true,true)||w.doorBlocks(q.x,q.y,base,.01f)){
     // Inside a wall, a fixture or a door: its face from a ray out of the body's middle.
-    const V3 from{b.x.x+shift.x+k.x,b.x.y+shift.y+k.y,std::max(b.x.z,s+.01f)},to{q.x,q.y,std::max(p.z,s+.006f)};V3 n;const float t=w.shotFraction(from,to,n);
+    const V3 from{b.x.x+shift.x+k.x,b.x.y+shift.y+k.y,under?std::max(b.x.z,s+.01f):b.x.z},to{q.x,q.y,under?std::max(p.z,s+.006f):p.z};V3 n;const float t=w.shotFraction(from,to,n);
     if(t<1&&dot(n,to-from)<0){const V3 at=from+(to-from)*t;hits.push_back({p,n,std::min(0.f,dot(to-at,n)),2});continue;}
     // The ray found no face (it began inside): the nearest open column round the point.
     bool found=false;for(float r:{.03f,.07f,.12f,.2f}){for(int a=0;a<8&&!found;++a){const float ang=kPi*.25f*float(a);const float x=q.x+std::cos(ang)*r,y=q.y+std::sin(ang)*r;
