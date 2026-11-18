@@ -417,7 +417,18 @@ RECORDS = [
         ('PIPE|map|x1|y1|x2|y2|z|radius|endZ|material', 'A pipe from (x1,y1) at height z to (x2,y2) at endZ. Same x,y and different heights make a riser. material 0-6.'),
         ('WATER|map|x1|y1|x2|y2|bed|surface[|murk]', 'A volume of water from bed up to surface height. Build a basin around it with STRUCT. murk 0 is clear coolant; up to 1 makes it still, dark standing water (a flooded store, a pool nobody drains).'),
         ('WET|map|x|y|radius|amount[|puddle]  or  WET|map|x1|y1|x2|y2|amount|puddle', 'Makes the floor wet here: a round patch or a box, amount 0 (dry) to 1 (soaked); puddle 1 lets puddles gather in its low spots. Floors are dry unless something wets them: WATER edges, drips, spray and steam EMITTERs, steam hazards, floor drains and the open sky in rain wet them on their own; WET adds a spill, a leak or a flooded corner the map knows about. The MAP wetness field scales all of it (bigger, wetter patches, and seeps along the walls of a damp map).'),
-        ('BREAKABLE|map|x1|y1|x2|y2|bottom|top|material|health|holds|brokenState|triggerState', 'A box that shatters when shot (glass is material 17). brokenState is set when it breaks.')]),
+        ('BREAKABLE|map|x1|y1|x2|y2|bottom|top|material|health|holds|brokenState|triggerState', 'A box that shatters when shot (glass is material 17). brokenState is set when it breaks. '
+         'A glass pane is a thin box (2-3 cm through) standing in the middle of a wall or an opening: it breaks a piece at a time where it is hit, and a save keeps its holes. '
+         'holds 1 is laminated glass that webs and sags but stays up. With FORMAT|2, <code>glaze=</code> clear, dirty, tinted, frosted or wired changes how it looks, and <code>cracked=</code> 1-8 starts it with that many star cracks.'),
+        ('GLAZING|map|x1|y1|x2|y2|bottom|top', 'A window wall or a storefront: the box of wall it opens (along its longer side; across, the wall\'s thickness), from the floor at bottom to top, the height of the wall it fills. '
+         'It cuts the wall there (# tiles and wall STRUCT boxes) from the sill to the head, builds the wall back below the sill and above the head where it cut tiles, and stands a frame in the middle of the wall: '
+         'a mullion between bays, a transom between rows, and a pane in every gap. Every glass pane is a BREAKABLE pane of its own, so a round breaks only the pane it hits; the frame is solid. '
+         'Delete the record and the wall is whole again. With FORMAT|2 its named fields set it up (all optional): <code>cols=</code> bays (or <code>spacing=</code> metres between mullions, 1.2), <code>rows=</code> 1-8, '
+         '<code>sill=</code> 0.45 and <code>head=</code> 2.6 above bottom, <code>frame=</code> 0.06 and <code>depth=</code> 0.12 (the members\' face and depth), <code>look=</code> aluminium, metal, steel, dark-steel, wood or a STRUCT material, '
+         '<code>door=</code> a bay (from 0) left open to the floor as a doorway, with a transom pane over <code>door_head=</code> 2.1, <code>pane=</code> the kind of every pane and <code>panes=</code> one letter a pane, '
+         'bay by bay along the wall and bottom to top in each: c clear, d dirty, t tinted, f frosted, w wired (holds), m chain-link mesh (stops a body, never breaks; light and rounds go through), e empty, x pre-cracked. '
+         '<code>infill=0</code> leaves the cut tiles open above and below, <code>cut=0</code> stands it in an opening without cutting, <code>wall=</code> the STRUCT material of the infill (3, the wall finish), <code>health=</code> each pane\'s health. '
+         'The Campaign Builder\'s Window wall tool writes it: drag along a wall or into an opening.')]),
     ('Things in the map', [
         ('FIXTURE|map|model|x|y|base|width|depth|height|yaw|solid[|core|visible|anchored|slopeX|slopeY]', 'A model from the model list, centred at x,y, its base this high, stretched to width x depth x height (use the listed size to keep it in proportion). solid 1 blocks you. A chair (office, wooden or boardroom) standing on the floor is loose in play: it slides and goes over when something heavy hits it. anchored 1 keeps it fixed where it was put (give core and visible too, 1 and 1 as usual). '
          'slopeX and slopeY (give both, with core, visible and anchored before them) lay the model along a hillside: the ground\'s rise per metre east and south under it, -2 to 2. Every point of the model rises with the slope beneath it, so grass, bushes and rocks hug the ground while trunks stay upright; the Campaign Builder\'s Nature brush writes them when Align to slope is on. At yaw 0 the imported models (63 and up) face south (+y) and yaw 3.142 turns them to face north; the engine\'s own models (0-62) face the other way. Check in game.'),
@@ -509,6 +520,23 @@ NAMED_FIELDS = [
     ('weapon', 'Weapon', 'rifle handgun none', 'ACTOR', 'What a man carries; none disarms him.'),
     ('role', 'Squad role', 'assault engineer sharpshooter heavy medic rusher', 'ACTOR', 'A guard\'s role in his squad.'),
     ('display', 'Display name', '1 to 40 characters', 'CREATURE, ACTOR', 'The name the game shows for it (the console, what you aim at).'),
+    ('glaze', 'Glass look', 'clear dirty tinted frosted wired', 'BREAKABLE (glass)', 'How the pane looks: dirty is filmed with grime, tinted bronze, frosted milky, wired has a wire mesh cast in it.'),
+    ('cracked', 'Starts cracked', '0 to 8', 'BREAKABLE (glass)', 'Star cracks the pane already has when the map loads; it is weaker there.'),
+    ('cols', 'Bays', '0 to 48 (0: by spacing)', 'GLAZING', 'How many bays the window wall is split into.'),
+    ('spacing', 'Mullion spacing (m)', '0.3 to 8', 'GLAZING', 'Metres between mullions when cols is 0.'),
+    ('rows', 'Rows', '1 to 8', 'GLAZING', 'Rows of panes from sill to head, with a transom between them.'),
+    ('sill', 'Sill height (m)', '0 up to the head', 'GLAZING', 'Where the glass starts, above the floor.'),
+    ('head', 'Head height (m)', 'up to top - bottom', 'GLAZING', 'Where the glass stops, above the floor.'),
+    ('frame', 'Frame width (m)', '0.02 to 0.3', 'GLAZING', 'The face of every mullion, transom, sill and head.'),
+    ('depth', 'Frame depth (m)', '0.02 to 1', 'GLAZING', 'How deep the frame stands in the wall.'),
+    ('look', 'Frame look', 'aluminium metal steel dark-steel wood, or a material', 'GLAZING', 'What the frame is made of.'),
+    ('door', 'Doorway bay', '-1 or a bay from 0', 'GLAZING', 'That bay is a doorway, open to the floor, with a pane over it.'),
+    ('door_head', 'Doorway height (m)', '1.5 up to the head', 'GLAZING', 'The top of the doorway.'),
+    ('pane', 'Pane kind', 'c d t f w m e x', 'GLAZING', 'Every pane\'s kind: clear, dirty, tinted, frosted, wired, mesh, empty, pre-cracked.'),
+    ('panes', 'Pane kinds', 'a letter a pane', 'GLAZING', 'Each pane\'s own kind, bay by bay along the wall and bottom to top; panes past the end take pane.'),
+    ('infill', 'Fill the wall back', '1 or 0', 'GLAZING', 'Builds the cut wall tiles back below the sill and above the head.'),
+    ('cut', 'Cut the wall', '1 or 0', 'GLAZING', '0 stands it in an opening without cutting anything.'),
+    ('wall', 'Infill material', 'a STRUCT material', 'GLAZING', 'What the wall built back below the sill and above the head is made of (3, the wall finish).'),
 ]
 
 

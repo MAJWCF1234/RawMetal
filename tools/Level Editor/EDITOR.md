@@ -18,6 +18,55 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Glass and window walls
+
+**Window wall** (Build page) makes a storefront. Drag along a wall, or across an
+opening in one. It writes one `GLAZING` record on the wall's box: the run of `#`
+tiles, the wall `STRUCT`, or the gap between two walls. It never changes a tile.
+The engine (`src/world/Openings.cpp`) does the work when it plays the map:
+- it cuts the wall from sill to head;
+- it builds the wall back below the sill and above the head;
+- it stands a frame in the middle of the wall's thickness, with a breakable pane in
+  every gap.
+
+Delete the record and the wall is whole again. The boxes on the right:
+- **Glass**: Storefront (0.45 - 2.6 m), Window (0.9 - 2.1), Floor to ceiling,
+  Clerestory (1.8 - 2.7).
+- **Bays**: Auto (a bay every 1.2 m) or 1-8.
+- **Rows**: 1-3, with a transom between them.
+- **Panes**: Clear, Dirty, Tinted, Frosted, Wired (holds), Chain-link mesh,
+  Pre-cracked, Empty frame, or a mix of clear, dirty, mesh and cracked.
+- **Frame**: Aluminium, Painted metal, Steel or Wood.
+- **Doorway**: none, in the middle, at the start or at the end. It is a bay open
+  to the floor, with a pane over it.
+
+The choices are the record's named fields (`cols`, `rows`, `sill`, `head`,
+`pane`, `panes`, `look`, `door`; the guide lists them all). Picking the record
+shows them in the inspector, labelled, to edit one by one.
+
+**Glass** is a pane that snaps:
+- Dragged along a solid wall, it cuts a 0.9 - 2.1 m window there (a one-bay
+  `GLAZING`).
+- Dragged across an opening, it stands a 24 mm pane from the floor to 2.4 m,
+  centred in the wall's line, and closes the wall over it with a wall-finish
+  `STRUCT`.
+- On open floor, it is a thin 2.2 m screen.
+
+Every glass pane is the v1.5.0 glass: it breaks a piece at a time where it is hit,
+on its own, and a save keeps its holes. Mesh is chain-link: it stops a body, and
+light, sight and rounds pass through it. Wired glass webs and holds.
+
+`--glazing-test` (and `--editing-test`) drives both tools through the plan's mouse
+and the tool boxes:
+- an edit in the inspector, undo and redo;
+- a delete that leaves the wall as it was;
+- save and reopen;
+- the engine validating each step.
+
+It writes `native-editor-glazing-test.txt`, with pictures in
+`.build/interaction/glazing-drag.bmp` and `glazing-inspector.bmp`. The lab tube
+`storefront` plays one in the game.
+
 ### Outdoors: the land, its plants and water
 
 The builder samples the campaign's ground exactly as the engine builds it

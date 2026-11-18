@@ -711,7 +711,14 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="BREAKABLE"){
    if(f.size()!=13&&f.size()!=15)throw std::runtime_error("malformed BREAKABLE record");auto map=mapAt(maps,f);
    Breakable v{number(f,2,"breakable x1"),number(f,3,"breakable y1"),number(f,4,"breakable x2"),number(f,5,"breakable y2"),number(f,6,"breakable bottom"),number(f,7,"breakable top"),integer(f,8,"breakable material"),number(f,9,"breakable health"),boolean(f,10,"breakable holds"),stateField(f[11]),stateField(f[12])};
-   if(f.size()==15){v.fixture=integer(f,13,"breakable fixture");v.part=unsigned(integer(f,14,"breakable part"));}map->breakables.push_back(v);
+   if(f.size()==15){v.fixture=integer(f,13,"breakable fixture");v.part=unsigned(integer(f,14,"breakable part"));}
+   // Map format 2: glaze= how the glass looks (clear dirty tinted frosted wired), cracked= star cracks it starts with (0-8).
+   if(const auto* g=findNamedField(namedFields,"glaze")){if(!parseGlazeWord(decode(g->value),v.glaze))throw std::runtime_error("named field glaze="+g->value+": use clear, dirty, tinted, frosted or wired");}
+   if(const auto* c=findNamedField(namedFields,"cracked")){int n=-1;try{n=std::stoi(c->value);}catch(...){}if(n<0||n>8||std::to_string(n)!=c->value)throw std::runtime_error("named field cracked="+c->value+": 0 to 8");v.cracks=std::uint8_t(n);}
+   map->breakables.push_back(v);
+  }else if(tag=="GLAZING"){
+   // GLAZING|map|x1|y1|x2|y2|bottom|top, then named fields: a window wall or storefront (World.h Glazing, Openings.cpp).
+   auto map=mapAt(maps,f);map->glazings.push_back(parseGlazing(f,namedFields));
   }else if(tag=="PIPE"){
    if(f.size()<9)throw std::runtime_error("malformed PIPE record");auto map=mapAt(maps,f);map->pipes.push_back({
     {number(f,2,"pipe x1"),number(f,3,"pipe y1")},{number(f,4,"pipe x2"),number(f,5,"pipe y2")},number(f,6,"pipe z"),number(f,7,"pipe radius"),number(f,8,"pipe end z"),f.size()>9?integer(f,9,"pipe material"):0});

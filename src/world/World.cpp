@@ -386,6 +386,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_breakableFirst=int(m_structures.size());m_brokenBreakables.clear();m_breakableDamage.assign(breakables().size(),0);m_breakableAge.assign(breakables().size(),0);m_paneGlass.assign(breakables().size(),{});
  m_leadRopes.assign(leads().size(),{});for(size_t i=0;i<m_leadRopes.size();++i)m_leadRopes[i].torn=leads()[i].loose;
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
+ // A pre-cracked pane (BREAKABLE cracked=, GLAZING pane x) starts with its star cracks, the same ones every load;
+ // they are hits like any other, so a save keeps them with the rest.
+ for(int i=0;i<int(breakables().size());++i)if(const int n=breakables()[size_t(i)].cracks;n>0&&breakables()[size_t(i)].material==17){
+  const auto f=paneFrame(i);const auto seed=glass::paneSeed(level(),i);
+  for(int k=0;k<n;++k)addPaneHit(i,{f.width*(.15f+.7f*glass::hashUnit(seed,700,std::uint32_t(k))),f.height*(.2f+.65f*glass::hashUnit(seed,701,std::uint32_t(k))),0.f,.3f+.25f*glass::hashUnit(seed,702,std::uint32_t(k))});}
 
  buildLayers(m_mapData->stairs);
   // Sources mounted inside a cargo cab travel with it. The cab draws its own
@@ -1068,7 +1073,7 @@ void World::buildLightOcclusion()const{
  }
  for(const auto&s:m_structures){
   // Glass and painted floor markings do not cast an opaque box shadow.
-  if(s.material==17||((s.material==16||s.material==14||s.material==13)&&s.top-s.bottom<.04f))continue;
+  if(seeThroughMaterial(s.material)||((s.material==16||s.material==14||s.material==13)&&s.top-s.bottom<.04f))continue;
   // A ramp, column, arch or vault shadows through its collision proxies, not its bounds.
   if(s.shape!=ShapeBox)continue;
   if(!s.rail){box(s.x1,s.y1,s.x2,s.y2,s.bottom,s.top);continue;}

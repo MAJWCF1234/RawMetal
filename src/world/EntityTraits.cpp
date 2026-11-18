@@ -109,7 +109,9 @@ bool parseActorAiWord(std::string_view word,ActorAiMode& out){
 
 const std::vector<std::string_view>& knownNamedKeys(){
  static const std::vector<std::string_view> keys{"name","mass","health","breakable","density","floats","friction","restitution","frozen","volume","soft","anchored","solid","material",
-  "tint","scale","texture","emissive","impact","faction","ai","hp","weapon","role","display"};
+  "tint","scale","texture","emissive","impact","faction","ai","hp","weapon","role","display",
+  // Read by the records they belong to: BREAKABLE glass (CustomCampaign.cpp) and GLAZING (Openings.cpp).
+  "glaze","cracked","cols","spacing","rows","sill","head","frame","depth","look","door","door_head","pane","panes","infill","cut","wall"};
  return keys;
 }
 std::string recordFieldKey(std::string_view tag,std::string_view parent,int ordinal){
@@ -169,8 +171,10 @@ int entityPropertyValue(std::string_view text){
 // copies of the things they change. Authored data stays as written (the exporter
 // and the Builder write it back), so a size factor is never applied twice.
 std::shared_ptr<const AuthoredMapData> playedMap(std::shared_ptr<const AuthoredMapData> map){
- if(!map||!map->entityTraits)return map;
+ if(!map||(!map->entityTraits&&map->glazings.empty()))return map;
  auto out=std::make_shared<AuthoredMapData>(*map);
+ // Window walls cut and fill the played copy's walls (Openings.cpp); the authored map keeps the records.
+ applyOpenings(*out);
  for(auto& f:out->fixtures)if(f.traits){const auto& t=*f.traits;
   if(t.scale!=1){f.width*=t.scale;f.depth*=t.scale;f.height*=t.scale;}
   if(t.anchored>=0)f.anchored=t.anchored>0;if(t.solid>=0)f.solid=t.solid>0;}

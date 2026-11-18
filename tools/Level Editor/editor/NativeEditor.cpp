@@ -743,7 +743,9 @@ enum {
   TerrainModeList=740,TerrainSizeList,TerrainStrengthList,TerrainHeightBox,NatureSetList,NatureDensityList,NatureScaleList,NatureModeList,
   NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider,
   // Prefabs (NativePrefabMethods.inc).
-  MakePrefab=780,PlacePrefab
+  MakePrefab=780,PlacePrefab,
+  // The Window wall and Glass tools (NativeGlazingTool.inc).
+  GlazingHeightList=790,GlazingBaysList,GlazingRowsList,GlazingPaneList,GlazingLookList,GlazingDoorList
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -801,11 +803,12 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Film camera", L"✇", L"Click to place a named camera, or drag from where it stands toward what it sees. R turns it. Render films them all with the engine.", 4, "# EDITOR_FILM", 'l'},
     {L"Terrain", L"⛰", L"Paint the land: raise, lower, smooth, flatten, lay a ramp or paint the ground. Size and strength on the right; Ctrl+Z takes a stroke back.", 4, "", 'T'},
     {L"Nature", L"♣", L"Paint trees, bushes, grass, rocks and plants. Pick what on the right; Erase (or Alt) clears them. Walls, buildings and water stay clear.", 4, "", 'N'},
+    {L"Window wall", L"▦", L"Drag along a wall, or across an opening: a framed storefront of glass panes. Bays, rows, heights, panes, frame and a doorway on the right.", 0, "GLAZING", 'r'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
-                     TerrainTool = 44, NatureTool = 45, WaterTool = 11;
+                     TerrainTool = 44, NatureTool = 45, WaterTool = 11, GlassTool = 35, GlazingTool = 46;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -1008,7 +1011,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, glazingTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1079,6 +1082,8 @@ struct Editor {
 #include "NativeOutdoorRegression.inc"
 #include "NativePrefabMethods.inc"
 #include "NativeFormatRegression.inc"
+#include "NativeGlazingTool.inc"
+#include "NativeGlazingRegression.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -3768,6 +3773,13 @@ struct Editor {
   // Builds one record of this kind from a gesture. Box kinds take the dragged
   // corners, line kinds the two ends, point kinds the release point.
   int authorKind(const std::string &kindName, float ax, float ay, float bx, float by) {
+    // Glass dragged along a solid wall is a window cut into it (NativeGlazingTool.inc).
+    if (kindName == "BREAKABLE" && glassIntoWall(ax, ay, bx, by)) {
+      glassWindow = true;
+      int made = authorKind("GLAZING", ax, ay, bx, by);
+      glassWindow = false;
+      return made;
+    }
     bool model = kindName == "CLUTTER" && listIndex(clutterList) == 7;
     int si = schemaOf(kindName, model ? "7" : nullptr);
     if (si < 0)
@@ -3873,14 +3885,21 @@ struct Editor {
     } else if (k == "COMPACTOR") {
       set("bed", n(floorZ)), set("raised", n(floorZ + 2.6f)), set("period", "5");
     } else if (k == "BREAKABLE") {
-      set("bottom", n(floorZ)), set("top", n(floorZ + 2.2f)), set("material", "17"), set("health", "20");
+      set("material", "17"), set("health", "20");
       set("holds", "0"), set("brokenState", uniqueName("BREAKABLE", 11, "glass_broken_")), set("triggerState", "");
+      glassPaneFields(f, ax, ay, bx, by, floorZ); // thin, in the middle of the wall's line (NativeGlazingTool.inc)
+    } else if (k == "GLAZING") {
+      auto run = wallRunAt(ax, ay, bx, by);
+      glazingBox(f, run, floorZ, creationCeiling());
+      glazingFields(f, run, floorZ, creationCeiling(), glassWindow);
     } else if (k == "DARK") {
     }
     while (f.size() > size_t(std::max(2, s.required)) && f.back().empty())
       f.pop_back();
     normalize(f);
     addAuthored(f);
+    if (k == "BREAKABLE" && !glassHeader.empty())
+      addAuthored(glassHeader), glassHeader.clear();
     // A new trigger already says something, so stepping in shows it works.
     if (k == "SCRIPT_EVENT" && autoDetail)
       addAuthored({"SCRIPT_ACTION", std::to_string(map), f[2], "MESSAGE", "SOMETHING STIRS.", "4"});
@@ -4928,6 +4947,9 @@ struct Editor {
                       waterModeList, waterMurkSlider, waterWetSlider})
       if (list)
         ShowWindow(list, SW_HIDE);
+    for (HWND list : glazingControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
       ShowWindow(GetDlgItem(window, id), SW_HIDE);
     if(!layersDock){
@@ -5065,6 +5087,8 @@ struct Editor {
     }
     if (tool == WaterTool)
       row(waterModeList, L"Water");
+    if (tool == GlazingTool)
+      glazingRows(row);
     if (tool == FilmTool) {
       int i = 0;
       for (int id : {FilmWrite, FilmRender}) {
@@ -6049,6 +6073,7 @@ struct Editor {
     verifyDressingRegressions();
     verifyOutdoorRegressions(false); // NativeOutdoorRegression.inc, without the engine pictures
     verifyFormatTwo(); // NativeFormatRegression.inc: named fields, the inspector, prefabs
+    verifyGlazingRegressions(false); // NativeGlazingRegression.inc: the Window wall and Glass tools
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -9595,6 +9620,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->outdoorControlChanged(id, notification);
         return 0;
       }
+      if (id >= GlazingHeightList && id <= GlazingDoorList) {
+        e->glazingControlChanged(id, notification);
+        return 0;
+      }
       if (id == LinkList && notification == LBN_SELCHANGE) {
         auto n = SendMessageW(e->linkList, LB_GETCURSEL, 0, 0);
         if (n >= 0)
@@ -9940,7 +9969,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The test modes check every document query against a full scan of the lines.
     if (argc > 1)
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
-                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test"})
+                        L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test", L"--glazing-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10054,6 +10083,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // Map format 2 alone (NativeFormatRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--format-test")
       e.backgroundTest = e.formatTest = true;
+    // The Window wall and Glass tools alone (NativeGlazingRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--glazing-test")
+      e.backgroundTest = e.glazingTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10429,6 +10461,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.natureDensityList = choices(NatureDensityList, {L"Sparse", L"Normal", L"Dense"}, 1);
     e.natureScaleList = choices(NatureScaleList, {L"All one size", L"Some variety", L"Wide variety"}, 1);
     e.button(L"Align to slope: on", NatureAlignToggle);
+    e.makeGlazingControls(choices);
     e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
     for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
@@ -10618,6 +10651,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.verifyEditing();
       DestroyWindow(e.window);
       return 0;
+    }
+    if (e.glazingTest) {
+      int code = 0;
+      try { e.verifyGlazingRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-glazing-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
     }
     if (e.formatTest) {
       int code = 0;

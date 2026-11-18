@@ -64,6 +64,23 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - Adding the first named field puts in `FORMAT|2`.
 - **Make prefab** turns the picked things into a block and one placement. **Place prefab** adds another placement with its own name prefix. Each is one Ctrl+Z.
 
+## Openings: window walls
+`GLAZING|map|x1|y1|x2|y2|bottom|top` is a new record, with its options as named fields (`cols spacing rows sill head frame depth look door door_head pane panes infill cut wall health`; the guide's section 8 and 9 list them).
+- `AuthoredMapData::glazings` keeps the record as written. The exporter writes it back the same way.
+- `playedMap` calls `applyOpenings` (src/world/Openings.cpp) on the copy the world plays. It:
+  - cuts the wall's `#` tiles and wall `STRUCT` boxes from sill to head;
+  - builds the cut tiles back below the sill and above the head;
+  - adds the frame as `STRUCT` boxes;
+  - adds every glass pane as a `BREAKABLE` after the map's own.
+- Mesh panes are `STRUCT` material 52 (`ChainLinkMaterial`). Like glass, `seeThroughMaterial` lets light, sight and rounds through it; unlike glass, it never breaks.
+- `BREAKABLE` takes `glaze=` (clear dirty tinted frosted wired) and `cracked=` (0-8 star cracks it starts with). Pre-cracks are ordinary pane hits, so the `world` section of the save keeps them with the rest.
+- The lab tube `storefront` (src/lab/tubes/Storefront.cpp) checks:
+  - the cut;
+  - each pane breaking alone;
+  - the mesh;
+  - the doorway;
+  - a save and load.
+
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
   - version 1 left alone, and every refusal;

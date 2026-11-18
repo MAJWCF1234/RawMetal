@@ -1,0 +1,11 @@
+# A storefront (GLAZING) cut into a wall of tiles across the plain room at y 10: four bays in painted
+# metal, two rows, a doorway bay with a transom pane, and a pane of each kind (clear, dirty, mesh,
+# frosted, wired, tinted, pre-cracked). A back room behind it under its own lamp. Shots "whole" and,
+# after a shotgun volley into the clear pane, "one pane down".
+# Tubes: storefront.
+world room
+camera 8.0 16.5 -999 -90 2
+light 8.0 13.5 3.4 1.4 10
+light 8.0 6.0 3.0 1.6 9
+size 1280 720
+frames 110
