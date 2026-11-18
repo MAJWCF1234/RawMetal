@@ -285,9 +285,10 @@ private:
     // slot; `base` is the session time he died at, for a fall that is still being watched.
     // `rayClock`: the newest round already put into him (the killing round lands on the part it hit).
     // `published`: the clock of the pose last put in the game's book (Game::corpsePoses) for the save.
-    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0,published=-1;bool live=false,publishedAsleep=false;std::vector<int> faces;Carcass carcass;};
+    // `laid`: where he was laid into the world when his body was made (x, y, z, yaw), kept with his pose for the save.
+    struct Corpse {std::uint64_t signature=0;float seen=0,base=0,rayClock=-1e30f,lastSeen=0,published=-1;bool live=false,publishedAsleep=false;std::array<float,4> laid{};std::vector<int> faces;Carcass carcass;};
     // A body's pose into the game's book (what a save keeps), when it has moved since; and back out of it after a load.
-    static void publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep);
+    static void publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep,const std::array<float,4>& laid={});
     static bool restoreSaved(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,Carcass& carcass);
     std::unordered_map<std::uint64_t,Corpse> m_corpses;float m_corpseClock=0;
     Corpse* humanCorpse(const Game& game,const World& w,int level,const ActorTrack& track,const ActorPose& pose,int actor,std::uint64_t slot);

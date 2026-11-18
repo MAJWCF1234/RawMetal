@@ -532,9 +532,9 @@ void SoftwareRenderer::corpseSolids(const Game& game,int level,Point3 centre,flo
  {const auto&list=game.chunkEnemies(level);for(size_t i=0;i<list.size();++i){const auto&e=list[i];if(!e.alive)continue;body(1ull<<32|i,{e.pos.x,e.pos.y,e.z},std::max(.15f,e.hull()*.8f),std::max(.3f,e.bodyTop()-e.z),.8f);}}
  {const auto&men=game.npcActors();for(size_t i=0;i<men.size();++i){const auto&n=men[i];if(int(i)==selfActor||n.level!=level||n.pose.clip==4)continue;body(2ull<<32|i,{n.pose.position.x,n.pose.position.y,n.pose.z},.22f,n.track().scale,.6f);}}
 }
-void SoftwareRenderer::publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep){
+void SoftwareRenderer::publishPose(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,const Carcass& carcass,float& published,bool& publishedAsleep,const std::array<float,4>& laid){
  if(!carcass.built()||(carcass.age()==published&&carcass.asleep()==publishedAsleep))return;published=carcass.age();publishedAsleep=carcass.asleep();
- const auto p=carcass.pose();CorpsePose c;c.level=level;c.slot=slot;c.signature=signature;c.creature=creature;c.age=p.age;c.asleep=p.asleep;c.shoved=p.shoved;c.cut=p.cut;c.sections=p.sections;
+ const auto p=carcass.pose();CorpsePose c;c.level=level;c.slot=slot;c.signature=signature;c.creature=creature;c.age=p.age;c.asleep=p.asleep;c.shoved=p.shoved;c.cut=p.cut;c.sections=p.sections;c.laid=laid;
  game.corpsePoses()[{creature,level,slot}]=std::move(c);}
 bool SoftwareRenderer::restoreSaved(const Game& game,bool creature,int level,std::uint64_t slot,std::uint64_t signature,Carcass& carcass){
  auto&book=game.corpsePoses();const auto it=book.find({creature,level,slot});if(it==book.end()||!it->second.loaded||it->second.signature!=signature)return false;
@@ -560,12 +560,20 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
  Mesh& mesh=cleanup?*cleanupMeshes()[size_t(role)]:civilianMesh(body);
  auto mix=[](std::uint64_t h,float v){return (h^(std::uint64_t(std::bit_cast<std::uint32_t>(v))+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2)));};
  std::uint64_t signature=mix(mix(mix(mix(mix(mix(std::uint64_t(level)*1315423911ull+std::uint64_t(track.visual),track.scale),pose.position.x),pose.position.y),pose.z),pose.yaw),from)^(headless?0x5bd1e995ull:0);
+ // The death that made him, to the millimetre: a save's body is his when this matches (a load can leave his pose a
+ // float's last bits from where it was).
+ auto mixq=[](std::uint64_t h,float v,float per){return h^(std::uint64_t(std::llround(double(v)*per))+0x9e3779b97f4a7c15ull+(h<<6)+(h>>2));};
+ const std::uint64_t identity=mixq(mixq(mixq(mixq(mixq(mixq(std::uint64_t(level)*1315423911ull+std::uint64_t(track.visual),track.scale,1000),pose.position.x,500),pose.position.y,500),pose.z,500),pose.yaw,500),from,1000)^(headless?0x5bd1e995ull:0);
  auto&corpse=m_corpses[slot];corpse.seen=now;
  if(corpse.signature!=signature||!corpse.carcass.built()){
   corpse=Corpse{};corpse.signature=signature;corpse.seen=now;
+  // After a load, laid exactly where the save had him laid, so his body is made the same to the bit.
+  const CorpsePose* saved=nullptr;{const auto&book=game.corpsePoses();const auto it=book.find({false,level,slot});if(it!=book.end()&&it->second.loaded&&it->second.signature==identity)saved=&it->second;}
+  const float laidX=saved?saved->laid[0]:pose.position.x,laidY=saved?saved->laid[1]:pose.position.y,laidZ=saved?saved->laid[2]:pose.z,laidYaw=saved?saved->laid[3]:pose.yaw;
+  corpse.laid={laidX,laidY,laidZ,laidYaw};
   mesh.poseCreature(4,from);
-  const float scale=track.scale/std::max(.01f,mesh.maximum.y-mesh.minimum.y),c=std::cos(pose.yaw),s=std::sin(pose.yaw);
-  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  const float scale=track.scale/std::max(.01f,mesh.maximum.y-mesh.minimum.y),c=std::cos(laidYaw),s=std::sin(laidYaw);
+  auto transform=[&](Point3 p){return Point3{laidX+(p.x*c+p.z*s)*scale,laidY+(-p.x*s+p.z*c)*scale,laidZ+p.y*scale};};
   // A head a bite took is not part of him.
   const float neckY=mesh.minimum.y+(mesh.maximum.y-mesh.minimum.y)*.855f;const auto&rest=mesh.bindTriangles();
   std::vector<MeshTriangle> posed;posed.reserve(mesh.triangles.size());corpse.faces.reserve(mesh.triangles.size());
@@ -575,7 +583,7 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
   if(posed.empty()){m_corpses.erase(slot);return nullptr;}
   // Clear of the floor under him before he is let go: a clip's last frame can have a hand or a heel
   // through it, and a body that starts in the floor is pushed out of it, not laid on it.
-  float rise=0;for(size_t i=0;i<posed.size();i+=3)for(const auto&v:posed[i].v){const float floor=w.supportBelow(v.p.x,v.p.y,std::max(v.p.z,pose.z)+.05f);if(floor>-50.f)rise=std::max(rise,floor+.03f-v.p.z);}
+  float rise=0;for(size_t i=0;i<posed.size();i+=3)for(const auto&v:posed[i].v){const float floor=w.supportBelow(v.p.x,v.p.y,std::max(v.p.z,laidZ)+.05f);if(floor>-50.f)rise=std::max(rise,floor+.03f-v.p.z);}
   rise=std::min(rise,.25f);if(!live&&actor<0)rise=std::max(rise,.03f);
   for(auto&face:posed)for(auto&v:face.v)v.p.z+=rise;
   // His parts, found once per body model from its rest pose: the joints turn as a man's do.
@@ -593,7 +601,7 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
   corpse.rayClock=live?corpse.base-.25f:now;corpse.lastSeen=now;
   // After a load: the pose the save kept for this body (the same death), not its fall made again; only rounds fired
   // from now on reach it.
-  if(restoreSaved(game,false,level,slot,signature,corpse.carcass))corpse.rayClock=now;
+  if(saved&&restoreSaved(game,false,level,slot,identity,corpse.carcass))corpse.rayClock=now;
  }
  // A fall still being watched runs on its clock; one first seen after it ended has already ended.
  auto&carcass=corpse.carcass;
@@ -614,7 +622,7 @@ SoftwareRenderer::Corpse* SoftwareRenderer::humanCorpse(const Game& game,const W
  // First seen after the fall: laid down at once. Once at rest it runs with the frame (a shove wakes it).
  if(target>=1e3f){if(!carcass.asleep()&&!carcass.shoved()){for(int guard=0;guard<4&&!carcass.asleep();++guard)carcass.advance(w,carcass.age()+5.f);}else carcass.advance(w,carcass.age()+frame);}
  else carcass.advance(w,target);
- publishPose(game,false,level,slot,signature,carcass,corpse.published,corpse.publishedAsleep);
+ publishPose(game,false,level,slot,identity,carcass,corpse.published,corpse.publishedAsleep,corpse.laid);
  // Bodies no longer drawn are let go after a while: the same one is made the same way again.
  if(m_corpses.size()>64)std::erase_if(m_corpses,[&](const auto&entry){return entry.second.seen<now-30.f;});
  return &corpse;

@@ -301,7 +301,7 @@ struct Settings {
  // jointIterations times in each pass (a chain, or a heavy load hung on a light link, converges sooner).
  float jointHertz=60,jointDamping=2;int jointIterations=4;
  // Joints with `positionCorrection` set are put back by position this many times after each step.
- int projectIterations=3;
+ int projectIterations=3;float projectSlack=.002f;   // and only what is past a limit by more than projectSlack (rad)
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
 struct ContactEvent {int a=-1,b=-1,partA=0,partB=0;V3 point{},normal{};float approach=0,impulse=0,effectiveMass=0;Surface surface{};};

@@ -164,12 +164,13 @@ PhysicsSaveHooks& physicsSaveHooks();
 // shoved, shot or knocked about lies after a load exactly as it lay: by map (level) and the renderer's slot for it, the
 // signature of the death that made it (a body that would be made differently after the load ignores it), a man's or a
 // creature's; its clock, asleep or not, shoved or not, each joint cut or not, and each section's middle (3), turn
-// (w x y z), centre of mass (3), velocity (3) and spin (3). `loaded`: read from a save (not written); the renderer puts
+// (w x y z), centre of mass (3), velocity (3) and spin (3); where the body was laid into the world when it was made (x, y,
+// z, yaw: a man's), so it is made from exactly that again. `loaded`: read from a save (not written); the renderer puts
 // only those back, so a body made again in play is still made by its death.
 struct CorpsePose {
  std::int32_t level=0;std::uint64_t slot=0,signature=0;bool creature=false;
  float age=0;bool asleep=false,shoved=false;std::vector<std::uint8_t> cut;std::vector<std::array<float,16>> sections;
- bool loaded=false;
- bool samePose(const CorpsePose& o)const{return level==o.level&&slot==o.slot&&signature==o.signature&&creature==o.creature&&age==o.age&&asleep==o.asleep&&shoved==o.shoved&&cut==o.cut&&sections==o.sections;}
+ std::array<float,4> laid{};bool loaded=false;
+ bool samePose(const CorpsePose& o)const{return level==o.level&&slot==o.slot&&signature==o.signature&&creature==o.creature&&age==o.age&&asleep==o.asleep&&shoved==o.shoved&&cut==o.cut&&sections==o.sections&&laid==o.laid;}
 };
 }

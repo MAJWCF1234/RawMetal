@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <fstream>
 #include <map>
+#include <sstream>
 #include <unordered_map>
 namespace retro::lab {
 namespace {
@@ -159,6 +160,8 @@ const bool fall=add({
   else{auto& list=LabAccess::enemies(g);if(list.empty())return;auto& e=list[0];const Vec2 f{std::cos(e.heading),std::sin(e.heading)};const Vec2 dir{f.x*std::cos(from)-f.y*std::sin(from),f.x*std::sin(from)+f.y*std::cos(from)};
    LabAccess::damageEnemy(g,e,1e4f);e.deathPush=push?Point3{-dir.x*1.6f,-dir.y*1.6f,.3f}:Point3{};}},
  .capture=[](Scene& s,const Frame&){
+  // shoot-frames F...: the frame as drawn kept at each of those frames (pictures for judging, at the fixture's size).
+  if(const auto list=s.fixture->value("shoot-frames");!list.empty()){std::istringstream in(list);int f=0;while(in>>f)if(f==s.frame){char label[32];std::snprintf(label,sizeof label,"at %.2f s",double(s.frame-killFrame(s))/60.0);s.shoot(label);}}
   Game& g=s.g();auto& w=watches()[&s];Carcass* c=bodyOf(s);if(!c)return;const World& world=g.chunkWorld(g.level());
   if(!w.ready){
    const bool human=s.fixture->value("creature").empty();w.human=human;std::vector<Point3> rest;std::vector<int> group;
@@ -281,11 +284,21 @@ const bool fall=add({
     if(np&&nc){pelvis=pelvis*(1.f/float(np));chest=chest*(1.f/float(nc));const Point3 d=chest-pelvis;const float deg=std::atan2(std::fabs(d.z),std::hypot(d.x,d.y))*57.2958f;
      r.metric("torso_deg",deg,"deg");r.metric("hips_over_support_m",hips,"m");
      r.check("at rest he lies: trunk within 40 deg of level, or hips down on what is under them (sitting)",deg<=40.f||hips<=.12f,fixed(deg,0)+" deg, hips "+fixed(hips,2)+" m over what is under them");}}
+   // Saved and loaded, he lies exactly as he lay, whatever moved him after he died (the physics section's bodies, layout 4),
+   // and saves again byte for byte.
+   // (Saved here; loaded after the check below, which makes the death again in this game.)
+   const auto lay=tri;const auto key=std::make_tuple(false,g.level(),std::uint64_t(0xA000000000000000ull));const bool booked=g.corpsePoses().count(key)>0;const auto bytes=LabAccess::encodeSave(g);
    // The same death made again lies the same.
-   const auto first=tri;LabAccess::corpses(*s.renderer).clear();auto* again=LabAccess::humanCorpse(*s.renderer,g,0);bool same=again&&again->carcass.triangles().size()==first.size();
-   if(same){const auto& t=again->carcass.triangles();for(size_t i=0;i<t.size()&&same;++i)for(int k=0;k<3;++k)same&=t[i].v[k].p.x==first[i].v[k].p.x&&t[i].v[k].p.y==first[i].v[k].p.y&&t[i].v[k].p.z==first[i].v[k].p.z;}
-   // (Not when rounds or a prop came at him after: a body made again knows only how he died.)
-   if(s.fixture->number("shoot",0)==0&&s.fixture->value("throw").empty())r.check("the same death made again lies exactly the same",same);else r.metric("remade_same",same);}},
+   {const auto first=lay;LabAccess::corpses(*s.renderer).clear();auto* again=LabAccess::humanCorpse(*s.renderer,g,0);bool same=again&&again->carcass.triangles().size()==first.size();
+    if(same){const auto& t=again->carcass.triangles();for(size_t i=0;i<t.size()&&same;++i)for(int k=0;k<3;++k)same&=t[i].v[k].p.x==first[i].v[k].p.x&&t[i].v[k].p.y==first[i].v[k].p.y&&t[i].v[k].p.z==first[i].v[k].p.z;}
+    // (Not when rounds or a prop came at him after: a body made again knows only how he died.)
+    if(s.fixture->number("shoot",0)==0&&s.fixture->value("throw").empty())r.check("the same death made again lies exactly the same",same);else r.metric("remade_same",same);}
+   {const bool loaded=LabAccess::decodeSave(g,bytes);const bool bookLoaded=loaded&&g.corpsePoses().count(key)&&g.corpsePoses().at(key).loaded;
+    LabAccess::corpses(*s.renderer).clear();auto* back=loaded?LabAccess::humanCorpse(*s.renderer,g,0):nullptr;r.metric("save_booked",booked);r.metric("save_book_loaded",bookLoaded);
+    bool exact=back&&back->carcass.triangles().size()==lay.size();
+    if(exact){const auto& t=back->carcass.triangles();for(size_t i=0;i<t.size()&&exact;++i)for(int k=0;k<3;++k)exact&=t[i].v[k].p.x==lay[i].v[k].p.x&&t[i].v[k].p.y==lay[i].v[k].p.y&&t[i].v[k].p.z==lay[i].v[k].p.z;}
+    const bool resaved=loaded&&LabAccess::encodeSave(g)==bytes;
+    r.check("saved and loaded, he lies exactly as he lay, and saves again the same",exact&&resaved,!loaded?"the save did not load":!exact?"he lies otherwise":!resaved?"saved again it differs":"");}}},
  .reporter=[](Scene& s,Overlay& o){
   Carcass* c=bodyOf(s);if(!c)return;
   #ifdef RAWMETAL_CARCASS_RIG

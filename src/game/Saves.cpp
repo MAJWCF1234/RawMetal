@@ -397,7 +397,8 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   // number keeps the map's.
   // Layout 4: the dead bodies' poses (SaveSections.h CorpsePose), after the joints (a joint chunk count of 0 when no
   // map has joints): their count, then each body's map, slot, signature, a creature's or not, its clock, asleep,
-  // shoved, its joints' cuts (count, then each a flag) and its sections (count, then 16 numbers each). Written only
+  // shoved, its joints' cuts (count, then each a flag), its sections (count, then 16 numbers each) and where it was laid
+  // (x, y, z, yaw). Written only
   // when there are any; a section of layout 1-3 loads with every body made again by its death, as before.
   auto corpse=[&](CorpsePose& c){a(c.level,c.slot,c.signature,c.creature,c.age,c.asleep,c.shoved);int joints=int(c.cut.size());a(joints);
    if constexpr(std::decay_t<decltype(a)>::reading){if(c.level<0||c.level>=t_sectionChunks||joints<0||joints>256||!(c.age>=0&&c.age<1e7f))throw std::runtime_error("invalid body");c.cut.resize(size_t(joints));}
@@ -405,6 +406,7 @@ std::vector<SaveSection> Game::builtInSaveSections(){
    int sections=int(c.sections.size());a(sections);
    if constexpr(std::decay_t<decltype(a)>::reading){if(sections<1||sections>64)throw std::runtime_error("invalid body section count");c.sections.resize(size_t(sections));}
    for(auto&part:c.sections)for(auto&v:part)a(v);
+   for(auto&v:c.laid)a(v);
    if constexpr(std::decay_t<decltype(a)>::reading)for(const auto&part:c.sections){const float n=part[3]*part[3]+part[4]*part[4]+part[5]*part[5]+part[6]*part[6];if(!(n>.81f&&n<1.21f))throw std::runtime_error("invalid body section turn");}};
   if constexpr(std::decay_t<decltype(a)>::reading){if(version<3||!a.left())return;int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid joint chunk count");int last=-1;
    for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks||count<1||count>4096)throw std::runtime_error("invalid joint chunk");last=level;

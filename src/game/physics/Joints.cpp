@@ -208,7 +208,7 @@ void Joint::finish(Space& s,float h){
 // together, each body moving by its share (its inverse mass and inertia). Velocities are left to the rows.
 void Joint::project(Space& s){if(!positionCorrection||broken||kind!=JointKind::Ball)return;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);const bool ma=A.movable(),mb=b>=0&&B.movable();if(!ma&&!mb)return;
  const float mA=ma?A.invMass:0,mB=mb?B.invMass:0;const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B.invInertia:M3::zero();
- if(swingLimited){constexpr float Slack=.002f;
+ if(swingLimited){const float Slack=s.settings.projectSlack;
   // Each body turned about the joint's pivot, not its own middle, so the anchors stay together as the limit is put back
   // (turned about their middles, the anchors' own correction would turn them half back). Its share by its inertia about
   // the pivot.
