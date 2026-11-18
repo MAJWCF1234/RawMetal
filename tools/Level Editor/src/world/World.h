@@ -274,7 +274,10 @@ inline float leadArc(float age,float* since=nullptr){constexpr float bursts[][2]
 // prey: an actor on its own map (track index) it comes out for and takes first.
 struct CreatureSpawn {CreatureKind kind;Vec2 position;float z=-999;float scale=1,health=0;StateId wakeState=0;StateId hunter=0;int prey=-1;EntityTraitsRef traits;};
 struct PickupSpawn {Vec2 position;PickupKind kind;float z=-999;};
-struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;int fixture=-1;unsigned part=0;};
+// glaze: how a glass pane looks; cracks: star cracks it already carries when the map loads (a
+// pre-cracked pane, World::loadAuthoredMap). BREAKABLE named fields glaze= and cracked=.
+enum class Glaze:std::uint8_t {Clear,Dirty,Tinted,Frosted,Wired,Count};
+struct Breakable {float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;int material=17;float health=0;bool holds=false;StateId state=0,trigger=0;int fixture=-1;unsigned part=0;Glaze glaze=Glaze::Clear;std::uint8_t cracks=0;};
 struct ShotTrace {int blocking=-1;std::array<int,2> passed{-1,-1};std::array<float,2> passedAt{1,1};std::array<Point3,2> passedNormal{};};
 inline constexpr int ClutterModelKind=7;
 struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;float width=0,depth=0,height=0,pitch=0,roll=0;StateId breakState=0;EntityTraitsRef traits;};
@@ -328,18 +331,30 @@ struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 // Shapes other than a box are drawn as their true geometry inside x1..top,
 // non-solid; PRIM records give them collision-proxy boxes (Primitives.h).
 // `facing` is the quarter turn they rise or open toward: 0 +y, 1 +x, 2 -y, 3 -x.
-enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel};
+// Past ShapeRoundel the shapes are the engine's own (a STRUCT record cannot name them): a breach's broken
+// lip and foot (a box whose lower, or upper, edge slopes by `skew` from u -half to u +half), a broken
+// chunk (the box's corners pulled in at random), and a rod on the slant across its box (rebar).
+enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel,ShapeLip,ShapeFoot,ShapeShard,ShapeRod};
 // topFinish: a named walking face (STAIR tread=, LAYER deck=) split off the top 4 cm once the map
 // is built and grounded (World::splitFinishes). trim, trimWidth: a flooring's edge band (STRUCT
 // trim=, trimwidth=), split off its sides the same way, so on terrain every piece keeps one height.
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;bool finishedRail=false;int topFinish=-1,trim=-1;float trimWidth=0;bool fixedHeight=false;
  // drape: a flooring laid on the land that follows it (STRUCT drape=1): drawn over the ground, walked on as the ground.
- bool drape=false;};
+ bool drape=false;
+ float skew=0;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;
 // A finish a STAIR or balcony may name (tread=, deck=...): a structure material the renderer draws as a plain box.
 inline bool finishMaterialAllowed(int m){return m>=0&&m<=51&&m!=1&&m!=4&&m!=6&&m!=9&&m!=17&&m!=CollisionProxyMaterial;}
+// Chain-link mesh (STRUCT material 52): it stops a body, but light, sight, sound and rounds pass
+// through it, as they pass glass.
+inline constexpr int ChainLinkMaterial=52;
+// Structures that light, sight and rounds pass through: glass (17) and chain-link mesh.
+// A light shaft (STRUCT material 53): a god ray, drawn as soft glowing cards slanting through its box; it
+// stops nothing and casts no shadow (the Block tool places it: pick material 53 and drag its box).
+inline constexpr int LightShaftMaterial=53;
+inline bool seeThroughMaterial(int material){return material==17||material==ChainLinkMaterial||material==LightShaftMaterial;}
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.
@@ -466,6 +481,32 @@ struct AmbientEmitter {
     enum Mode {Loop,Random,OnState};
     Sound sound=Sound::Count;Vec2 position{};float z=-999,gain=1,radius=10;int mode=Loop;float every=8,spread=8;StateId state=0;int value=1;
 };
+// A window wall (GLAZING|map|x1|y1|x2|y2|bottom|top, then named fields; Openings.cpp): the box of
+// wall it opens, running along its longer side; `bottom` is its floor and `top` how high the wall
+// it fills goes. It cuts that wall (wall tiles and wall boxes) from the sill to the head, builds the
+// wall back below the sill and above the head where it cut tiles (infill), and stands a frame in
+// the middle of the wall's thickness: a mullion between bays, a transom between rows, a door bay
+// open to the floor if one is asked for, and a pane in every gap. Pane kinds, one letter each:
+// c clear, d dirty, t tinted, f frosted, w wired (holds), m chain-link mesh, e empty, x pre-cracked;
+// in order bay by bay along the wall, each bay bottom to top.
+struct Glazing {
+    float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;
+    int columns=0;float spacing=1.2f;int rows=1;
+    float sill=.45f,head=2.6f,frame=.06f,depth=.12f;
+    int look=20;                 // the frame's STRUCT material: 20 aluminium, 12 painted metal, 51 wood
+    int door=-1;float doorHead=2.1f;
+    char pane='c';std::string panes;
+    bool infill=true,cut=true;int wall=3;float health=0;
+};
+// A hole broken through a wall (BREACH|map|x1|y1|x2|y2|bottom|top, then named fields; Openings.cpp):
+// the box of wall it goes through, along its longer side, from the floor at `bottom`; `top` is how high
+// the wall it fills back goes. shape 0 a square hole, 1 an arch, 2 ragged; edge 0 concrete core with
+// rebar, 1 brick, 2 clean; the hole from sill to head above the floor; rubble pieces on the floor.
+struct Breach {
+    float x1=0,y1=0,x2=0,y2=0,bottom=0,top=0;
+    int shape=2,edge=0;float sill=0,head=2.3f;bool rebar=true;int rubble=10;std::uint32_t seed=1;int direction=1;
+    bool infill=true;int wall=3;
+};
 struct AuthoredMapData {
     std::string name;
     std::string skybox="industrial_night";
@@ -535,10 +576,24 @@ struct AuthoredMapData {
     std::vector<std::pair<StateId,std::string>> stateSpellings;
     // Some record carries overrides the played map applies (playedMap).
     bool entityTraits=false;
+    // Window walls (GLAZING records, Openings.cpp): each opens its wall and fills it with a framed
+    // grid of breakable panes when the map is played; the authored data keeps the record itself.
+    std::vector<Glazing> glazings;
+    // Holes broken through walls (BREACH records, Openings.cpp), applied the same way.
+    std::vector<Breach> breaches;
 };
 // The map as it plays: `map` itself, or a copy with its records' overrides
 // applied (sizes, anchoring, a body's side, AI, health, weapon). World loads this.
 std::shared_ptr<const AuthoredMapData> playedMap(std::shared_ptr<const AuthoredMapData> map);
+// Openings (Openings.cpp). A GLAZING record from its positional fields (GLAZING|map|x1|y1|x2|y2|
+// bottom|top) and named fields; throws on a bad value. applyOpenings cuts and fills the played
+// copy's walls for its glazings (playedMap calls it).
+Glazing parseGlazing(const std::vector<std::string>& f,const NamedFields& named);
+Breach parseBreach(const std::vector<std::string>& f,const NamedFields& named);
+void applyOpenings(AuthoredMapData& map);
+// BREAKABLE's glaze= words: clear dirty tinted frosted wired.
+bool parseGlazeWord(std::string_view word,Glaze& out);
+const char* glazeWord(Glaze glaze);
 // Seat test lead `l` by name: its anchor in socket `socket` of fixture `panel` (or left as it
 // is with no panel), its offset on terminal `terminal` of its prop (or left with none). The
 // first lead on a panel adds the panel's pilot lamp, lit until any lead on it tears. Returns

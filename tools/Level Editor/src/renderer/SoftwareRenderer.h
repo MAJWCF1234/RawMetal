@@ -291,6 +291,7 @@ private:
     // near the eye are stepped each GPU frame and handed to scene.vert with the wind.
     PlantBones m_plants;std::unordered_map<int,bool> m_plantModels;
     bool plantModel(int model);
+    static bool hangingPlant(int model);
     void updatePlants(const Game& game);
     // A man's body model cut into the parts he bends at (Humanoid.h), once per model; civilians by their arm joints.
     static const humanoid::Labels& humanParts(const Mesh& mesh,int civilianBody);
@@ -400,6 +401,8 @@ private:
  std::array<std::array<Point3,2>,kCleanupBodies> m_cleanupPalms{};
  std::array<std::vector<std::array<std::uint8_t,4>>,kCleanupBodies> m_cleanupWeights;
     Texture m_glassTexture;
+    // Chain-link mesh (STRUCT material 52, ChainLinkMaterial): an alpha cutout, the wire only.
+    Texture m_chainLink;
     // The lab's view of the marks drawn on breaking glass (cracks, stars, rims, edge bands), each piece in its
     // pane's plane, recorded only while m_recordGlassDecals is set (each level's list remade when it is rebuilt).
     struct GlassDecal {int level=0,pane=0;std::vector<Vec2> piece;};
@@ -451,7 +454,10 @@ private:
         Mesh{2356},Mesh{2358},Mesh{2360},Mesh{2362},Mesh{2364},Mesh{2366},Mesh{2368},
         Mesh{2414},Mesh{2418},Mesh{2422},Mesh{2426},
         Mesh{2429},Mesh{2431},Mesh{2433},
-        Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853}};
+        Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853},
+        Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862},
+        Mesh{2865},
+        Mesh{2868},Mesh{2870}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;

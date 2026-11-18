@@ -233,6 +233,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    t.pixels[size_t(y*n+x)]=(unsigned(a*255.f)<<24)|(r<<16)|(g<<8)|b;}
   t.transparent=true;t.glossStrength=.9f;return t;}();
  prepareDecal(m_glassTexture,false);
+ // The purchased chain-link fence (Shacks, Shanties, Sheds and Gantries pack): wire over nothing, cut out by its alpha.
+ m_chainLink=loadTexture(2855);m_chainLink.glossStrength=.35f;
  // A cut shows meat with bone at its middle.
  {auto&red=m_stump[0];red=loadTexture(247);
   for(int y=0;y<red.height;++y)for(int x=0;x<red.width;++x){auto&pixel=red.pixels[size_t(y*red.width+x)];float dx=(x+.5f)/red.width-.5f,dy=(y+.5f)/red.height-.5f,d=std::sqrt(dx*dx+dy*dy);
