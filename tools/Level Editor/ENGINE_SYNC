@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 30ea1cdbf816ebfc837f479252b10212f7142f72
-# 2026-11-18 03:06, Merge branch 'worktree-agent-a30f87738c293d955'
+commit d2e823b4de2b7c81b5fb5b187a51be6d3a338bde
+# 2026-11-18 09:28, renderer: culling stats start afresh with each scene, so an old scene's worlds are not counted into the new one's totals
