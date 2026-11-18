@@ -136,6 +136,25 @@ const bool registered=add({.name="joints",.summary="Vectra's joints on the bare 
     for(int i=0;i<r.steps(2);++i){Joint fresh=keep;w.space.constraints={kept?&keep:&fresh};w.space.step(r.dt);}end[kept]=w.space.bodies[size_t(p)].x.x;}
    out<<"rebuilt by key "<<f3(end[0],5)<<" m, kept "<<f3(end[1],5)<<" m\n";check(std::fabs(end[0]-end[1])<1e-4f,"warm starting: a joint rebuilt each step finds its impulses by key"+at);}
  }
+ // ---- Landing and waking (60 Hz) ----
+ out<<"---- landing and waking ----\n";const float dt=1.f/60;
+ // A 0.4 m crate 6 cm over the floor going down at 3 m/s (within its speculative reach): where its bottom is when
+ // it first stops going down. And one 5 mm over a frictionless floor, going down at 3 m/s and along at 6 (it lands
+ // flat within the step, and nothing but its bounce could turn it): its spin after that step, against the same landing without a bounce.
+ struct Landing {float bottom=1e9f;V3 w{};};
+ auto land=[&](V3 v,float restitution,float over,int at,float friction=.6f){World w;const int p=w.box({0,0,.2f+over},{.2f,.2f,.2f},20);Body& b=w.space.bodies[size_t(p)];b.v=v;b.material.restitution=restitution;b.material.staticFriction=friction;b.material.dynamicFriction=friction*.8f;
+  Landing L;for(int i=0;i<60;++i){w.space.step(dt);const Body& c=w.space.bodies[size_t(p)];if(i==at||(at<0&&c.v.z>=0)){L.bottom=c.x.z-.2f;L.w=c.w;break;}}return L;};
+ {const Landing drop=land({0,0,-3},.2f,.06f,-1),thrown=land({6,0,-3},.2f,.005f,0,0),dead=land({6,0,-3},0,.005f,0,0);const float bounceSpin=len(thrown.w-dead.w);
+  out<<"a crate falling at 3 m/s from 6 cm: turned back with its bottom "<<f3(drop.bottom*1000,2)<<" mm off the floor; landing flat and sliding at 6 m/s on a frictionless floor: its bounce turned it by "<<f3(bounceSpin,3)<<" rad/s (spinning "<<f3(len(thrown.w),3)<<", "<<f3(len(dead.w),3)<<" without a bounce)\n";
+  check(std::fabs(drop.bottom)<.004f,"landing: a crate falling at 3 m/s onto the floor is stopped at the floor, not in the air short of it");
+  check(bounceSpin<.05f,"landing: a crate thrown down and along onto a frictionless floor gets no spin from its bounce");}
+ // A held (kinematic) block carried at 1 m/s with a sleeping box hung under it on a ball joint: the box wakes and follows.
+ {World w;const int k=w.box({0,0,2},{.1f,.1f,.1f},1);Body& kb=w.space.bodies[size_t(k)];kb.kinematic=true;kb.setMass(0);kb.gravity={};kb.updateInertia();
+  const int p=w.box({0,0,1.6f},{.1f,.1f,.1f},5);auto& j=w.add(JointKind::Ball,p,k);j.attach(w.space,{0,0,1.8f});
+  w.space.bodies[size_t(p)].sleeping=true;w.space.bodies[size_t(k)].v={1,0,0};float gap=0;
+  for(int i=0;i<60;++i){Body& K=w.space.bodies[size_t(k)];K.x=K.x+K.v*dt;w.space.step(dt);gap=std::max(gap,len(j.worldA(w.space)-j.worldB(w.space)));}
+  const Body& b=w.space.bodies[size_t(p)];out<<"a sleeping box hung from a held block carried 1 m: "<<(b.sleeping?"still asleep":"awake")<<", went "<<f3(b.x.x,3)<<" m, the pin opened "<<f3(gap*1000,2)<<" mm at most\n";
+  check(!b.sleeping&&b.x.x>.8f&&gap<.03f,"waking: a held body carried on a joint wakes its sleeping partner, which follows");}
  return ok;}});
 }
 }
