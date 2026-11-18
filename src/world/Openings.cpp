@@ -187,8 +187,9 @@ void applyBreach(AuthoredMapData& m,const Breach& b){
   // facing 0 draws u along +x (u = -half at x1); facing 1 draws u along -y (u = -half at y2).
   shown.facing=alongX?0:1;
   const float first=alongX?sa:sc,second=alongX?sc:sa;
-  if(over){shown.bottom=line(top,first);shown.skew=line(top,second)-shown.bottom;}
-  else{shown.top=line(foot,first);shown.skew=line(foot,second)-shown.top;}
+  // (the sloping edge never crosses the piece's other face, so its bounds stay a box)
+  if(over){const float e0=std::min(line(top,first),s.top-.002f),e1=std::min(line(top,second),s.top-.002f);shown.bottom=e0;shown.skew=e1-e0;}
+  else{const float e0=std::max(line(foot,first),s.bottom+.002f),e1=std::max(line(foot,second),s.bottom+.002f);shown.top=e0;shown.skew=e1-e0;}
   s.material=CollisionProxyMaterial;   // the strip piece still stops a body, a round and the light
   m.structures.push_back(shown);}
  (void)before;

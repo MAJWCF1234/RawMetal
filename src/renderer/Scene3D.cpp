@@ -2046,7 +2046,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   return t;}(),"shard glass");
  chipSheetGlass=&shardTexture;
  // A crack line at each healing opacity (sixteenths) of bullet-resistant glass.
- static const auto crackLines=[](){std::array<Texture,17> out;for(int a=0;a<=16;++a){auto&t=out[size_t(a)];t={4,4,std::vector<std::uint32_t>(16,(unsigned(0x58*a/16)<<24)|0xe2e8e8u)};t.transparent=true;t.clampEdges=true;}return out;}();
+ static const auto crackLines=[](){std::array<Texture,17> out;for(int a=0;a<=16;++a){auto&t=out[size_t(a)];t={4,4,std::vector<std::uint32_t>(16,(unsigned(0x34*a/16)<<24)|0xe2e8e8u)};t.transparent=true;t.clampEdges=true;}return out;}();
  // The pane's own plane (GlassFracture.h), as the game breaks it.
  using PaneFrame=glass::Frame;
  auto paneFrame=[](const Breakable&b){return glass::frame(b.x1,b.y1,b.x2,b.y2,b.bottom,b.top);};

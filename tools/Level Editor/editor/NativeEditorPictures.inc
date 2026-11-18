@@ -168,9 +168,9 @@
       SendMessageW(window, WM_COMMAND, ToolBase + GrowthTool, 0);
       box(growthKindList, GrowthKindList, GrowMix);
       box(growthSizeList, GrowthSizeList, 3);
-      const auto ppm2 = engine(L"atrium-growth-3d", 5.6f, 2.4f, 5.2f, 48.f, -14.f);
-      mouse(WM_MOUSEMOVE, 14.f, 12.f);
-      hoverX = 14.f, hoverY = 12.f, hoverInside = true;
+      const auto ppm2 = engine(L"atrium-growth-3d", 8.4f, 12.2f, 1.7f, 72.f, 6.f);
+      mouse(WM_MOUSEMOVE, 9.5f, 14.8f);
+      hoverX = 9.5f, hoverY = 14.8f, hoverInside = true;
       shot(L"atrium-growth-brush", ppm2);
       report << "atrium-breach-tool.bmp, atrium-growth-brush.bmp: the Breach tool and the Growth brush with their boxes\n";
     }

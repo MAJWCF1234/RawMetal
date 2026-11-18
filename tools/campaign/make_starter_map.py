@@ -1133,9 +1133,9 @@ def atrium(s, slot, catalogue):
     breach's, grass comes up through the floor where the light falls: the Campaign Builder's Growth
     brush's pieces, placed the way it places them (on a wall's face, turned out; hanging from a top)."""
     import random
-    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.34)
+    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.24)
     # Its own air: a warm green-gold haze the lamps' shafts show in (MAP hazeR|G|B|density).
-    m['haze'] = (.74, .64, .36, .011)
+    m['haze'] = (.6, .64, .36, .009)
     i = m['index']
     m['lights'] = False
     s.format2 = True                                                  # GLAZING and BREACH take named fields
@@ -1166,7 +1166,7 @@ def atrium(s, slot, catalogue):
     # ---- Light: warm and dim in the hall, the court bright as day, the shop cold and low ----
     # The hall dim and warm; the court behind the breach and the shop behind the glass bright as low sun, so the
     # light pours in through the hole and the panes in shafts through the haze.
-    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.5, 13, 3200), (12, 12.5, 5.85, 1.4, 13, 3200), (12, 4.5, 5.85, 1.3, 12, 3300),
+    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.2, 13, 3000), (12, 12.5, 5.85, 1.1, 13, 3000), (12, 4.5, 5.85, 1.0, 12, 3100),
                              (4.2, 3, 3.15, .8, 7, 3000), (21.2, 3.2, 5.85, 5.0, 16, 4200), (21.2, 11.4, 5.85, 4.5, 16, 4200),
                              (21.8, 6.9, 3.4, 6.0, 17, 3800), (8.5, 22.0, 4.6, 4.2, 14, 3900), (15.5, 22.0, 4.6, 3.8, 14, 3900)):
         s.rec(m, 'LIGHT', i, x, y, z, 0, 0, k, r, t)
