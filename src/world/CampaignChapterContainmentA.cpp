@@ -498,7 +498,8 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  workstation(m,19.f,7.9f,f,-1,1);workstation(m,21.2f,7.9f,f,-1,2);
  caFix(m,model::med_records_cabinet,22.4f,6.66f,f,caS,true);
  caFix(m,model::med_notice_board,15.6f,6.44f,f+1.25f,caS,false);
- terminal(m,{14.5f,7.7f},"QUARANTINE / WARD STATE","Q1: 4 BEDS / 4 OCCUPIED / 1 DECEASED 03:15. Q2: 9 OCCUPIED / SEALED 03:40 BY CLEANUP ORDER.",
+ // Its own bench stands clear of the counter (x 14-14.2) instead of running 18 cm into it.
+ terminal(m,{14.72f,7.7f},"QUARANTINE / WARD STATE","Q1: 4 BEDS / 4 OCCUPIED / 1 DECEASED 03:15. Q2: 9 OCCUPIED / SEALED 03:40 BY CLEANUP ORDER.",
   "LAB 4 (ENERGY DIAG.) MOVED TO ISOLATION 3, 02:55, ON THE TIER 3 READING. SHE ASKED FOR A PEN.",0);
  m.terminals.back().yaw=caE;
  m.lights.push_back(caTube(19.f,7.7f,roof,.45f,5.f,3800,0));

@@ -410,13 +410,16 @@ inline void drawListRow(const DRAWITEMSTRUCT *d, HFONT font) {
   SelectObject(d->hDC, old);
 }
 } // namespace ui
-// Soft building sounds: the Creating Constructs clips, cut by PrepareSounds.py
-// into .build/sounds. Each play nudges pitch and level so nothing repeats.
+// Soft building sounds, synthesized by PrepareSounds.py into .build/sounds:
+// felt and wooden taps, small marimba and kalimba notes, a low soft tone for a
+// refusal. No game cue and no horror sting. Each play nudges pitch and level so
+// nothing repeats.
 #pragma comment(lib, "winmm.lib")
 namespace sfx {
-enum Clip { PlaceStone, PlaceWood, PlaceMetal, BreakStone, BreakWood, BreakMetal, Click, Hover, Back, Slider, MusicKey, Count };
+enum Clip { PlaceStone, PlaceWood, PlaceMetal, BreakStone, BreakWood, BreakMetal, Click, Hover, Back, Slider, Redo, Save,
+            Celebrate, Play, Error, Count };
 inline const char *const names[] = {"placeStone", "placeWood", "placeMetal", "breakStone", "breakWood", "breakMetal",
-                                    "click", "hover", "back", "slider", "musicKey"};
+                                    "click", "hover", "back", "slider", "redo", "save", "celebrate", "play", "error"};
 struct Pcm {
   std::vector<int16_t> samples;
   int rate = 16000;
@@ -1439,7 +1442,7 @@ struct Editor {
     };
     for (auto &o : regionStamp.objects)
       out << o.sourceFixture << ' ' << o.sourceClutter << '\t' << joined(o.names) << '\t' << joined(o.fields) << '\n';
-    sfx::play(sfx::MusicKey, .7f, .02f);
+    sfx::play(sfx::Save, .7f, .02f);
     message(L"Saved as stamp " + std::to_wstring(n) + L". Find it under Stamps in the parts browser.");
   }
   bool loadStamp(int n) {
@@ -1561,7 +1564,7 @@ struct Editor {
   void celebrate() {
     int now = countCompleteRooms();
     if (now > completeRooms && !quiet()) {
-      sfx::play(sfx::MusicKey, .9f, .03f);
+      sfx::play(sfx::Celebrate, .8f, .02f);
       auto cells = lastRoom();
       if (!cells.empty()) {
         float cx = 0, cy = 0;
@@ -3976,7 +3979,7 @@ struct Editor {
     celebrate();
   }
   void gestureNow(float ax, float ay, float bx, float by) {
-    if(effectiveFloorView(floorLayer(layer)).locked){message(L"Unlock the active floor before editing it.");return;}
+    if(effectiveFloorView(floorLayer(layer)).locked){message(L"Unlock the active floor before editing it.");if(!quiet())sfx::play(sfx::Error,.6f,.02f);return;}
     const auto &info = toolInfo[std::clamp(tool, 0, ToolCount - 1)];
     if (info.shape == 'P') {
       paintGesture(ax, ay, bx, by);
@@ -5578,8 +5581,14 @@ struct Editor {
     auto second=doc.records("MAP",1).at(0);auto fields=NativeDocument::fields(doc.lines[second]);
     fields.at(11)="some_custom_sky";doc.replace(second,fields);refresh();
     auto list=GetDlgItem(window,MapSkyList);
-    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=50,"Map skybox picker must list the three original and 47 purchased skies");
+    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=int(retro::SkyboxCatalog.size()),"Map skybox picker must list every catalog sky");
     auto choose=[&](int index){SendMessageW(list,CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(MapSkyList,CBN_SELCHANGE),reinterpret_cast<LPARAM>(list));};
+    // The make_skies.py skies (day, overcast, dawn, dusk, storm, night, the eerie ones) are picked by name.
+    for(const auto* label:{L"Clear day",L"Grey overcast",L"Cold dawn",L"Dusk afterglow",L"Storm front",L"Starry night",L"Cloudy night",L"Treeline night",L"Ember eclipse",L"Resonance aurora"}){
+      const int at=int(SendMessageW(list,CB_FINDSTRINGEXACT,WPARAM(-1),reinterpret_cast<LPARAM>(label)));require(at>=0,"Map skybox picker must list the make_skies.py skies by name");
+      const auto steps0=history.size();choose(at);const auto* sky=retro::findSkybox(field(0));
+      require(sky&&std::wstring(label)==wide(std::string(sky->label))&&history.size()==steps0+1,"Picking a new sky by name must write its id to the MAP record");
+      SendMessageW(window,WM_COMMAND,Undo,0);}
     const auto initial=field(0);const auto steps=history.size();
     choose(3);const auto first=field(0);choose(4);const auto next=field(0);
     require(first!=initial&&first!=next&&first.starts_with("skybox_")&&next.starts_with("skybox_")&&dirty&&history.size()==steps+2,"Each sky selection must change the MAP record and create one undo step");
@@ -6638,7 +6647,7 @@ struct Editor {
     showTitle();
     message(L"Saved " + file.filename().wstring() + L".");
     if (!quiet())
-      sfx::play(sfx::MusicKey, .8f, .02f);
+      sfx::play(sfx::Save, .8f, .02f);
   }
   void saveNow() {
     if (!path.empty() && !isExample())
@@ -6735,6 +6744,8 @@ struct Editor {
       layout();
     }
     playing = true;
+    if (!quiet())
+      sfx::play(sfx::Play, .7f, .02f);
     writeControl();
     focusEngine();
     message(spot == 1 ? L"Playing from the start. Escape comes back." : L"Playing. Escape comes back.");
@@ -7487,6 +7498,8 @@ struct Editor {
       retro::validateEditorCampaignText(doc.text());
     } catch (const std::exception &error) {
       message(L"Engine validation: " + wide(error.what()));
+      if (!quiet())
+        sfx::play(sfx::Error, .7f, .02f);
       return false;
     }
     message(L"Check passed.");
@@ -9757,7 +9770,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         break;
       case Redo:
         if (!e->future.empty() && !e->quiet())
-          sfx::play(sfx::Click, .8f);
+          sfx::play(sfx::Redo, .8f);
         if (!e->future.empty()) {
           e->history.push_back(e->doc.text());
           e->doc.loadText(e->future.back());

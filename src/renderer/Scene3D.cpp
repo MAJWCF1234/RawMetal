@@ -653,6 +653,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // A light's pose is immutable during a draw. Reuse its exact emitter and
  // shadow samples instead of evaluating wall-lamp trigonometry per receiver.
  const auto sun=w.sun();
+ const float outdoorFill=w.outdoors()?w.outdoorAmbient():0.f; // the sky's flat fill (World::outdoorAmbient)
  // Dynamic geometry and the vertex-lit fallback take an unshadowed sun term;
  // static caches get the shadowed per-pixel sun in the scene shader.
  auto sunTerm=[&](Point3 normal){return sun.intensity>0?sun.intensity*.4f*std::max(0.f,normal.x*sun.direction.x+normal.y*sun.direction.y+normal.z*sun.direction.z):0.f;};
@@ -794,7 +795,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   illuminationAir=SoftwareRenderer::NoBounceAir;
   if(movingGeometry){
    const float dark=ambientDarkness();
-   float brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f)*skyOpen(point,normal):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
+   float brightness=((w.outdoors()?outdoorFill*skyOpen(point,normal):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*(1.f-dark);
    Point3 room{};bool roomReady=false;
    // With probes the room's return comes from them, each lamp's flat share under it at half weight.
    if(probes)brightness+=probeFill(point,normal);
@@ -848,7 +849,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     }
     accessibility=1.f-.68f*occlusion*.25f;
    }
-   ambient=brightness=((w.outdoors()?(sun.intensity>0?.26f:.48f)*(pixelLamps?1.f:skyOpen(point,normal)):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
+   ambient=brightness=((w.outdoors()?outdoorFill*(pixelLamps?1.f:skyOpen(point,normal)):w.definition().ambient*.13f)+.04f*std::max(normal.z,0.f))*accessibility;
    Point3 room{};bool roomReady=false;
    if(!pixelLamps)for(auto source:lightCells[lightCell(point)]){const auto&fixture=w.lights()[source];if(fixture.cargoLift)continue;auto light=lightFrames[source].emitter;
     if(std::fabs(light.x-point.x)>fixture.range||std::fabs(light.y-point.y)>fixture.range)continue;
