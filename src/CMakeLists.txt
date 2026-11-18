@@ -83,6 +83,8 @@ add_executable(RawMetal WIN32
     game/RigidClutter.cpp
     game/physics/Vectra.cpp
     game/physics/PropBodies.cpp
+    game/physics/Queries.cpp
+    game/physics/PropQueries.cpp
     game/Script.cpp
     game/Settings.cpp
     game/Saves.cpp
