@@ -1,0 +1,21 @@
+{
+  "gate": {
+    "psnr": 32.0,
+    "ssim": 0.9,
+    "block_p1": 0.5,
+    "ratio": 0.8,
+    "saving": 2048,
+    "x4_min_side": 32,
+    "smooth": 0.5,
+    "detail": 0.9
+  },
+  "model": "src\\assets\\ai\\texture-n2.ntm",
+  "model_sha256": "8d2492ee0341f9db1fa7166d8f8ac2d90e398430aef76a7a396fb56d05941e1f",
+  "marked": 511,
+  "neural": 135,
+  "raw": 306,
+  "kept_ntx1": 70,
+  "bytes_saved": 4338222,
+  "x4": 5,
+  "lossy_storage": 83
+}

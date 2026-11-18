@@ -1,0 +1,512 @@
+id,master,width,height,alpha,raw_bytes,ntx1_bytes,status,factor,storage,packet_bytes,psnr,ssim,block_p1,mae,saved
+102,assets/materials/grating.png,256,256,0,87144,20122,kept-ntx1,2,lossless,20126,33.653,0.8806,0.7089,4.06,0
+103,assets/metal.png,256,256,0,65750,20236,kept-ntx1,2,lossless,20240,33.15,0.8557,0.486,3.654,0
+106,assets/arms/arms_gloves_01.png,512,512,0,149938,42024,neural,2,vp8 q80,3326,38.416,0.961,0.8006,1.892,38698
+112,assets/remington.png,1516,540,0,761982,160222,kept-ntx1,2,lossless,160226,34.741,0.879,0.4077,2.742,0
+117,assets/scissors.png,1024,1024,0,1065658,329768,neural,2,vp8 q85,41698,34.793,0.9201,0.7486,3.385,288070
+122,assets/environment/barrel.png,510,475,0,254538,55440,neural,2,vp8 q94,13734,36.606,0.9025,0.7742,2.619,41706
+124,assets/environment/crate.png,619,730,0,526864,122680,kept-ntx1,2,lossless,123176,36.555,0.8945,0.7104,2.766,0
+131,assets/environment/sign-rust.png,512,512,0,326352,75508,neural,2,vp8 q97,20356,37.006,0.9041,0.8184,2.752,55152
+132,assets/environment/panel-metal.png,512,512,0,267808,56730,neural,2,lossless,56726,42.738,0.9554,0.9254,1.449,4
+141,assets/pressureworks/pump.png,512,603,0,295776,67776,neural,2,vp8 q94,12966,35.144,0.9073,0.6213,2.839,54810
+174,assets/facility/wall_8.png,128,128,0,19628,4014,kept-ntx1,2,lossless,4018,38.962,0.894,0.8124,2.237,0
+175,assets/facility/wall_5.png,128,128,0,19796,4366,kept-ntx1,2,lossless,4370,38.456,0.9081,0.8225,2.332,0
+177,assets/facility/ceiling_1.png,128,128,0,19496,4774,kept-ntx1,2,lossless,4778,33.849,0.811,0.7379,4.173,0
+181,assets/facility/generator_1.png,384,347,0,127150,27848,kept-ntx1,2,lossless,27930,33.979,0.8725,0.431,3.065,0
+182,assets/facility/metal_4.png,192,192,0,14998,2624,kept-ntx1,2,lossless,2628,42.349,0.9418,0.9017,1.502,0
+183,assets/facility/metal_3.png,192,192,0,18200,3536,kept-ntx1,2,lossless,3540,38.731,0.8849,0.8168,2.31,0
+184,assets/facility/metal_6.png,192,192,0,36890,8622,kept-ntx1,2,lossless,8626,36.588,0.8626,0.7809,2.972,0
+185,assets/facility/wall_box_2.png,198,269,0,57026,12666,kept-ntx1,2,lossless,12670,33.141,0.8675,0.3358,3.343,0
+192,assets/facility/pc_1.png,348,307,0,89090,19052,kept-ntx1,2,lossless,19056,35.416,0.9256,0.583,2.205,0
+241,assets/reactor/electronics.png,512,512,0,317700,69202,kept-ntx1,2,lossless,69206,34.973,0.8658,0.6368,3.128,0
+243,assets/reactor/stalker.png,512,512,0,163744,47666,neural,2,vp8 q85,8622,33.19,0.9018,0.6624,3.002,39044
+247,assets/library/gore_stump.png,256,256,0,110718,,raw,2,lossless,26408,26.963,0.8027,0.6295,8.064,0
+250,assets/materials/water.png,256,256,0,60110,12528,kept-ntx1,2,lossless,12612,44.289,0.9642,0.9444,1.189,0
+261,assets/facility/service/transformer_box_hr_2.png,311,426,0,186340,42578,kept-ntx1,2,lossless,42652,32.289,0.8391,0.2408,3.997,0
+266,assets/facility/cargo/pallet.png,256,256,0,80678,16444,kept-ntx1,2,lossless,16448,35.693,0.8444,0.6331,3.233,0
+268,assets/facility/cargo/service-van.png,538,284,0,217732,51684,kept-ntx1,2,lossless,51700,35.061,0.8759,0.7237,3.334,0
+269,assets/facility/cargo/van-metal.png,192,192,0,36996,8658,kept-ntx1,2,lossless,8662,40.57,0.926,0.8776,1.842,0
+273,assets/mutant/MonsterPSX_Diffuse.png,256,256,0,26604,17874,neural,2,vp8 q80,2874,32.045,0.9093,0.6675,4.071,15000
+276,assets/facility/cargo/wooden-crate.png,256,256,0,60872,17284,kept-ntx1,2,lossless,17288,35.636,0.8373,0.6343,3.108,0
+280,assets/actors/worker-gloves.png,891,890,0,63814,46816,kept-ntx1,2,lossless,46820,35.256,0.985,0.6932,0.696,0
+281,assets/actors/worker-shoes.png,849,849,0,33602,25336,kept-ntx1,2,lossless,25340,36.393,0.9914,0.7074,0.515,0
+289,assets/facility/cargo/packing-crate.png,700,800,0,611886,140290,kept-ntx1,2,lossless,145812,34.942,0.8655,0.6436,3.349,0
+293,assets/facility/cargo/control-console-keypad.png,192,82,0,15334,3682,kept-ntx1,2,lossless,3686,33.743,0.8545,0.4945,3.577,0
+305,assets/actors/cleanup/assault-body.png,256,256,0,42438,12748,neural,2,vp8 q85,2634,32.756,0.9093,0.6322,3.265,10114
+310,assets/actors/cleanup/engineer-body.png,256,256,0,46052,13894,neural,2,vp8 q85,2548,33.46,0.9038,0.541,3.123,11346
+311,assets/actors/cleanup/engineer-head.png,256,256,0,51322,16022,neural,2,vp8 q80,2454,32.277,0.9099,0.5829,3.691,13568
+315,assets/actors/cleanup/sharpshooter-body.png,256,256,0,40324,11916,neural,2,vp8 q85,1922,35.204,0.9108,0.5603,2.505,9994
+316,assets/actors/cleanup/sharpshooter-head.png,256,256,0,26892,8084,kept-ntx1,2,lossless,8088,38.819,0.9807,0.763,0.967,0
+320,assets/actors/cleanup/heavy-body.png,256,256,0,43700,13086,neural,2,vp8 q85,2038,35.649,0.9135,0.6218,2.526,11048
+321,assets/actors/cleanup/heavy-head.png,256,256,0,43904,12384,neural,2,vp8 q80,2094,32.603,0.9253,0.6254,3.514,10290
+325,assets/actors/cleanup/medic-body.png,256,256,0,44346,13430,neural,2,vp8 q90,3164,33.251,0.9173,0.585,2.858,10266
+326,assets/actors/cleanup/medic-head.png,256,256,0,31816,9798,kept-ntx1,2,lossless,9802,37.25,0.9732,0.7455,1.23,0
+330,assets/actors/cleanup/rusher-body.png,256,256,0,44932,13422,neural,2,vp8 q90,3604,32.345,0.918,0.5927,3.204,9818
+331,assets/actors/cleanup/rusher-head.png,256,256,0,40854,12480,neural,2,vp8 q85,2086,32.988,0.9211,0.5353,2.855,10394
+353,assets/materials/rubber.png,256,256,0,67242,16848,kept-ntx1,2,lossless,16852,40.804,0.9355,0.862,1.765,0
+388,assets/office/drop-ceiling.png,256,256,0,61762,14768,neural,2,vp8 q94,3416,36.42,0.9019,0.7509,2.922,11352
+390,assets/office/office-carpet.png,256,256,0,61830,15856,kept-ntx1,2,lossless,15860,37.527,0.9144,0.8565,2.655,0
+407,assets/facility/industrial/metal_hr_1.png,256,256,0,70630,15966,kept-ntx1,2,lossless,15970,38.154,0.8794,0.7969,2.451,0
+408,assets/facility/industrial/metal_hr_2.png,256,256,0,77940,16308,kept-ntx1,2,lossless,16312,40.221,0.9258,0.8706,1.833,0
+409,assets/facility/industrial/metal_hr_1_dark_smooth.png,256,256,0,59768,13060,kept-ntx1,2,lossless,13064,45.57,0.9758,0.957,1.01,0
+413,assets/facility/industrial/pipe_mp_1.png,209,209,0,52256,12124,kept-ntx1,2,lossless,12128,38.408,0.9008,0.8164,2.366,0
+414,assets/facility/industrial/valve_1.png,97,97,0,11408,2870,kept-ntx1,2,lossless,2874,37.807,0.9214,0.7887,2.246,0
+436,assets/facility/freight/shipping_containers_mx_1.png,1750,1664,0,3218994,604334,neural,2,vp8 q94,176974,35.37,0.913,0.7811,3.01,427360
+437,assets/facility/freight/metal_barrel_mp_1.png,384,384,0,167164,42014,kept-ntx1,2,lossless,42018,34.555,0.8737,0.6585,3.141,0
+438,assets/facility/freight/vending_machine_1.png,930,783,0,345232,81404,kept-ntx1,2,lossless,81408,44.122,0.9836,0.7819,0.692,0
+442,assets/facility/freight/gas_cylinder_mx_1.png,512,512,0,361274,78802,kept-ntx1,2,lossless,78806,35.727,0.8502,0.7386,3.101,0
+449,assets/facility/freight/metro_Door.png,256,256,0,35006,7776,kept-ntx1,2,lossless,7780,32.55,0.9176,0.591,1.992,0
+455,assets/facility/freight/metro_metal_02.png,256,256,0,50186,11462,kept-ntx1,2,lossless,11466,44.409,0.9699,0.9401,1.125,0
+457,assets/facility/freight/metro_metal_04.png,256,232,0,32628,7082,kept-ntx1,2,lossless,7086,34.294,0.9896,0.8231,1.214,0
+461,assets/facility/freight/metro_trash_can.png,256,256,0,37280,10948,kept-ntx1,2,lossless,10952,34.672,0.9155,0.6356,2.131,0
+463,assets/facility/freight/metro_Chair.png,256,256,0,35078,11678,kept-ntx1,2,lossless,11682,34.132,0.9761,0.7452,1.372,0
+468,assets/library/barrier_mt_barrier_road.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+470,assets/library/billboard_mt_sign_billboard.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+472,assets/library/brick_pile_mt_brick_pile.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+473,assets/library/brick_pile_mt_pallet.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+476,assets/library/bus_shelter_glass.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+480,assets/library/bus_wreck_glass.png,256,256,1,200,,raw,2,lossless,252,56.436,1.0,1.0,0.148,0
+481,assets/library/bus_wreck_seating_01.png,256,256,0,23278,9524,neural,2,vp8 q80,1400,33.233,0.9373,0.6596,2.692,8124
+483,assets/library/cable_reel_mt_cable_reel.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+485,assets/library/car_a_car_mat.png,128,128,0,11476,,raw,2,lossless,4558,25.837,0.8193,0.2967,6.615,0
+487,assets/library/car_b_car2_mat.png,128,128,0,8860,,raw,2,lossless,3542,26.417,0.8811,0.4265,4.742,0
+489,assets/library/car_c_car3_mat.png,128,128,0,8424,,raw,2,lossless,3824,25.672,0.8281,0.2962,6.147,0
+495,assets/library/cottage_bareconcrete.png,256,256,0,55178,13452,neural,2,vp8 q97,3254,40.329,0.9319,0.8647,1.901,10198
+497,assets/library/dead_tree_a_pine_bark_2_dead.png,256,256,0,55334,17202,kept-ntx1,2,lossless,17206,32.639,0.8831,0.7282,4.439,0
+503,assets/library/fence_wood_mt_fence_wood.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+505,assets/library/fern_a_fern_1.png,256,256,1,92050,,raw,2,lossless,36948,25.8,0.7394,0.4021,9.5,0
+515,assets/library/gas_sign_6twelve_sign.png,256,256,0,46846,,raw,2,lossless,12522,27.127,0.9141,0.4776,4.297,0
+529,assets/library/gas_store_refrigerador_02.png,193,512,0,113694,,raw,2,lossless,34840,28.183,0.9168,0.6368,6.315,0
+531,assets/library/grass_a_grass_2.png,256,346,1,90978,,raw,2,lossless,48154,22.909,0.6794,0.3813,12.441,0
+533,assets/library/grass_b_grass_3.png,435,447,1,223858,,raw,2,lossless,117112,27.484,0.6643,0.3359,7.812,0
+535,assets/library/grass_c_grass_4.png,512,512,1,129602,,raw,2,lossless,66310,27.503,0.785,0.4821,7.59,0
+537,assets/library/ind_annex_building_11.png,256,256,0,22382,,raw,2,lossless,24526,28.045,0.7961,0.2929,6.638,0
+539,assets/library/ind_barrel_barrel_1.png,128,128,0,7828,,raw,2,lossless,7170,28.45,0.8958,0.6452,6.03,0
+541,assets/library/ind_barrier_wall_fence_metal.png,256,128,0,13924,,raw,2,lossless,13686,29.921,0.8362,0.5816,6.128,0
+543,assets/library/ind_block_building_2.png,256,256,0,32832,,raw,2,lossless,29326,26.059,0.7768,0.2237,9.193,0
+545,assets/library/ind_cargo_full_cargo_2_full.png,256,256,0,29298,,raw,2,lossless,27530,27.997,0.8565,0.5194,6.511,0
+547,assets/library/ind_cargo_open_cargo_1_open.png,256,256,0,19246,,raw,2,lossless,22890,30.034,0.8589,0.5115,4.911,0
+549,assets/library/ind_cooling_cooling_tower.png,128,256,0,21656,,raw,2,lossless,16556,25.076,0.8116,0.5142,10.66,0
+551,assets/library/ind_crate_box_wood.png,128,128,0,6494,,raw,2,lossless,5918,28.052,0.8422,0.5863,6.821,0
+553,assets/library/ind_fence_fence_metal.png,256,128,0,13924,,raw,2,lossless,13686,29.921,0.8362,0.5816,6.128,0
+555,assets/library/ind_generator_generator.png,128,128,0,4096,,raw,2,lossless,5504,32.893,0.871,0.5946,3.533,0
+557,assets/library/ind_hall_building_3.png,256,256,0,35672,,raw,2,lossless,29024,25.5,0.7711,0.2633,9.845,0
+559,assets/library/ind_hut_building_13.png,256,256,0,14026,,raw,2,lossless,14684,32.196,0.9263,0.5724,3.172,0
+561,assets/library/ind_long_building_8.png,256,256,0,18516,,raw,2,lossless,18528,30.27,0.9032,0.4886,4.311,0
+563,assets/library/ind_pallets_palet.png,128,128,0,3644,,neural,2,vp8 q97,1300,32.491,0.9044,0.6116,3.788,2344
+565,assets/library/ind_pipe_arch_pipes.png,256,256,0,25390,,raw,2,lossless,25540,31.139,0.834,0.5505,4.853,0
+567,assets/library/ind_reservoir_liquid_reservoir_1.png,256,256,0,17566,,raw,2,lossless,19248,28.919,0.8707,0.5181,4.544,0
+569,assets/library/ind_roadblock_roadblock.png,256,256,0,20102,,raw,2,lossless,19974,29.557,0.8445,0.5112,4.986,0
+571,assets/library/ind_sandbags_bags_1.png,128,128,0,5970,,raw,2,lossless,6088,27.732,0.8756,0.5156,7.069,0
+573,assets/library/ind_shed_building_5.png,256,256,0,35672,,raw,2,lossless,29024,25.5,0.7711,0.2633,9.845,0
+575,assets/library/ind_silo_liquid_reservoir_2.png,256,256,0,22816,,raw,2,lossless,24272,30.532,0.8924,0.6347,4.545,0
+577,assets/library/ind_stack_building_5.png,256,256,0,35672,,raw,2,lossless,29024,25.5,0.7711,0.2633,9.845,0
+579,assets/library/ind_tower_building_1.png,256,256,0,28186,,raw,2,lossless,26376,27.038,0.8672,0.5101,7.477,0
+581,assets/library/ind_wall_wall.png,256,256,0,23464,,raw,2,lossless,23436,31.18,0.8685,0.6171,4.795,0
+583,assets/library/ind_wall_corner_wall.png,256,256,0,23464,,raw,2,lossless,23436,31.18,0.8685,0.6171,4.795,0
+585,assets/library/ind_warehouse_building_9.png,256,256,0,25532,,raw,2,lossless,24448,26.905,0.8184,0.3435,7.433,0
+587,assets/library/ind_works_building_6.png,256,256,0,35672,,raw,2,lossless,29024,25.5,0.7711,0.2633,9.845,0
+592,assets/library/log_log_ends_1.png,512,256,0,160056,37842,kept-ntx1,2,lossless,37846,36.975,0.9038,0.7387,2.634,0
+604,assets/library/mushrooms_mushrooms_n_1.png,256,192,0,64044,15438,kept-ntx1,2,lossless,15442,32.766,0.8575,0.4071,3.944,0
+607,assets/library/oak_a_branch_1.png,256,256,1,56988,,raw,2,lossless,29006,30.068,0.6455,0.3511,5.575,0
+609,assets/library/oak_b_pine_bark_2.png,256,256,0,58372,18292,kept-ntx1,2,lossless,18296,35.396,0.8928,0.7706,3.23,0
+610,assets/library/oak_b_branch_2.png,256,256,1,57018,,raw,2,lossless,28550,27.163,0.6553,0.3607,7.765,0
+613,assets/library/oak_c_branch_3.png,256,256,1,57912,,raw,2,lossless,28552,27.187,0.6587,0.3693,7.823,0
+615,assets/library/pine_a_pine_bark_2.png,256,256,0,58372,,raw,2,lossless,18296,35.396,0.8928,0.7706,3.23,0
+616,assets/library/pine_a_pine_branch_3.png,256,384,1,106536,,raw,2,lossless,47752,26.248,0.5693,0.2566,8.542,0
+618,assets/library/pine_b_pine_bark_1.png,256,256,0,89602,20978,kept-ntx1,2,lossless,20982,32.206,0.8583,0.6844,4.654,0
+619,assets/library/pine_b_pine_branch_1.png,256,384,1,107322,,raw,2,lossless,46998,24.914,0.5235,0.2113,10.065,0
+621,assets/library/pole_light_mt_pole_light_rural.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+627,assets/library/rock_small_stone_1.png,512,512,0,344160,,raw,2,lossless,80028,32.123,0.7777,0.5856,4.801,0
+631,assets/library/stump_tree_bark_5.png,256,256,0,92208,,raw,2,lossless,22924,31.124,0.8404,0.6477,5.17,0
+634,assets/library/tire_bus.png,512,512,0,138142,,raw,2,lossless,42990,31.277,0.9532,0.6262,3.179,0
+636,assets/library/transformer_mt_transformer_box.png,4,4,0,30,,raw,2,lossless,66,168.131,1.0,1.0,0.0,0
+639,assets/library/ground_shortgrass.png,128,128,0,33122,,raw,2,lossless,7272,18.96,0.417,0.21,22.516,0
+640,assets/library/ground_leafygrass.png,128,128,0,33402,,raw,2,lossless,7866,25.133,0.5828,0.3513,10.817,0
+641,assets/library/ground_clover.png,128,128,0,29498,,raw,2,lossless,7884,25.539,0.861,0.658,9.501,0
+642,assets/library/ground_wild.png,128,128,0,32984,,raw,2,lossless,7848,22.293,0.6596,0.4563,15.509,0
+646,assets/library/ground_mud.png,128,128,0,14092,4102,kept-ntx1,2,lossless,4106,36.721,0.8807,0.7559,2.806,0
+648,assets/library/tall_grass_l_tall_grass_01.png,256,256,1,77212,,raw,2,lossless,22896,25.588,0.7165,0.4107,9.946,0
+650,assets/library/tall_grass_m_tall_grass_01.png,256,256,1,77212,,raw,2,lossless,22896,25.588,0.7165,0.4107,9.946,0
+654,assets/library/goldenrod_old_field_goldenrod.png,256,256,1,42184,,raw,2,lossless,14254,26.616,0.8201,0.4973,7.462,0
+656,assets/library/aster_savory_leaf_aster_256x256.png,256,256,1,63354,,raw,2,lossless,19982,24.769,0.7042,0.4654,10.547,0
+660,assets/library/sumac_rhus_typhina_128.png,128,128,1,16206,,raw,2,lossless,5020,26.973,0.7222,0.3942,8.486,0
+664,assets/library/clover_patch_white_clover_256x256.png,256,256,1,68742,,raw,2,lossless,19916,26.704,0.8864,0.7527,8.019,0
+668,assets/library/bush_a_bush1.png,128,128,1,5994,,raw,2,lossless,2800,23.282,0.5075,0.2783,11.293,0
+670,assets/library/bush_b_bush2.png,128,128,1,10950,,raw,2,lossless,4256,21.211,0.5171,0.2495,14.454,0
+672,assets/library/bush_c_bush3.png,128,128,1,8594,,raw,2,lossless,3676,23.4,0.5434,0.3224,11.233,0
+674,assets/library/bush_d_bush5.png,128,128,1,8254,,raw,2,lossless,3374,23.779,0.5175,0.3303,11.245,0
+676,assets/library/grass_patch_grass.png,128,128,1,2396,,raw,2,lossless,1690,26.428,0.7169,0.596,7.089,0
+678,assets/library/grass_bush_grass_bush.png,128,128,1,1680,,raw,2,lossless,900,29.217,0.7572,0.5262,4.742,0
+680,assets/library/leafy_a_tree01.png,256,256,1,71094,,raw,2,lossless,23884,24.513,0.6279,0.3385,10.472,0
+681,assets/library/leafy_a_tree01_x.png,256,256,1,71094,,raw,2,lossless,23884,24.513,0.6279,0.3385,10.472,0
+683,assets/library/leafy_b_tree03.png,256,256,1,68088,,raw,2,lossless,23128,25.845,0.7489,0.4125,8.271,0
+684,assets/library/leafy_b_tree03_x.png,256,256,1,68088,,raw,2,lossless,23128,25.845,0.7489,0.4125,8.271,0
+688,assets/library/aspen_b_aspen.png,256,256,1,58298,,raw,2,lossless,18588,31.717,0.7813,0.5017,4.411,0
+692,assets/library/rock_mossy_rock_01_mossy.png,256,256,0,92914,,raw,2,lossless,23028,28.077,0.7842,0.3797,6.466,0
+754,assets/library/cave_crystal_bed_blue_blue_gemstone_pile.png,64,64,0,6032,,raw,2,lossless,2308,25.816,0.9792,0.9389,9.374,0
+804,assets/library/cave_web_corner_cobweb_1.png,195,115,1,14476,,raw,2,lossless,11664,21.175,1.0,1.0,15.92,0
+808,assets/library/lab_anomaly_relic_ancient_artifact_mx_1.png,220,198,0,37430,,raw,2,lossless,16230,28.378,0.8169,0.4666,6.495,0
+812,assets/library/lab_cell_gate_metal_6.png,192,192,0,32538,8668,kept-ntx1,2,lossless,8672,36.627,0.863,0.7773,2.962,0
+813,assets/library/lab_cell_gate_metal_4.png,192,192,0,14998,2624,kept-ntx1,2,lossless,2628,42.349,0.9418,0.9017,1.502,0
+818,assets/library/lab_control_board_electronics_etx_part_2.png,256,256,0,43588,,raw,2,lossless,24250,27.954,0.793,0.4576,6.992,0
+819,assets/library/lab_control_board_electronics_etx_part_1.png,256,256,0,45142,,raw,2,lossless,25036,28.684,0.8438,0.5026,6.333,0
+825,assets/library/lab_door_reader_m_enviroment.png,256,256,1,3276,,raw,2,lossless,2516,32.086,0.8115,0.3127,3.02,0
+826,assets/library/lab_door_reader_m_computer.png,256,256,1,2408,,raw,2,lossless,2516,26.419,0.8325,0.142,5.599,0
+828,assets/library/lab_exec_desk_desk_1.png,128,128,0,10830,5276,kept-ntx1,2,lossless,5280,33.639,0.8675,0.5917,3.597,0
+830,assets/library/lab_field_meter_electronics_etx_part_1.png,256,256,0,45240,,raw,2,lossless,23532,29.787,0.8525,0.538,5.609,0
+836,assets/library/lab_instrument_terminal_electronics_etx_part_1.png,256,256,0,45134,,raw,2,lossless,21088,32.367,0.8789,0.5836,4.128,0
+838,assets/library/lab_knife_switch_electronics_etx_part_1.png,256,256,0,45072,,raw,2,lossless,23104,30.227,0.8572,0.5408,5.314,0
+842,assets/library/lab_microscope_microscope_textures.png,256,256,0,32238,,raw,2,lossless,24930,24.204,0.7169,0.3849,10.9,0
+844,assets/library/lab_notice_board_information_board_textures.png,256,256,0,30446,,raw,2,lossless,21150,27.663,0.7859,0.4127,6.638,0
+846,assets/library/lab_pa_horn_plastic_mx_3.png,256,256,0,35166,13766,kept-ntx1,2,lossless,13770,47.076,0.9846,0.9686,0.796,0
+847,assets/library/lab_pa_horn_metal_hr_1_dark_smooth.png,256,256,0,57644,12568,kept-ntx1,2,lossless,12572,45.617,0.9759,0.9575,1.006,0
+855,assets/library/lab_pressure_gauge_electronics_etx_part_1.png,256,256,0,44938,,raw,2,lossless,22242,31.061,0.8651,0.5544,4.843,0
+856,assets/library/lab_pressure_gauge_electronics_etx_part_2.png,256,256,0,43640,,raw,2,lossless,22120,30.216,0.8241,0.4883,5.374,0
+857,assets/library/lab_pressure_gauge_glass_etx_1.png,128,128,1,19506,,neural,4,lossless,1296,38.919,1.0,1.0,2.186,18210
+861,assets/library/lab_scope_monitor_electronics_etx_part_1.png,256,256,0,45192,,raw,2,lossless,21676,31.71,0.8721,0.578,4.46,0
+867,assets/library/lab_specimen_crate_metal_crate_3.png,192,192,0,29546,8612,neural,2,vp8 q90,1232,34.254,0.9086,0.7019,3.305,7380
+869,assets/library/lab_status_display_elevator_screen_1.png,192,50,0,7054,,raw,2,lossless,2588,28.812,0.9322,0.7355,6.023,0
+871,assets/library/lab_test_chamber_machinery_1.png,217,256,0,40248,13162,neural,2,vp8 q85,1672,34.068,0.9002,0.6354,3.382,11490
+875,assets/library/med_autopsy_table_autopsy_table_textures.png,256,256,0,37962,,raw,2,lossless,23184,31.355,0.7873,0.5533,5.045,0
+877,assets/library/med_bed_frame_wrecked_bed_textures.png,256,256,0,35832,,raw,2,lossless,26304,21.085,0.6174,0.2481,16.721,0
+879,assets/library/med_blood_bag_blood_pack_textures.png,256,256,0,30824,,raw,2,lossless,20574,26.818,0.8341,0.4043,6.838,0
+881,assets/library/med_cell_bars_metal_mp_6.png,256,256,0,75988,16164,kept-ntx1,2,lossless,16168,39.326,0.9097,0.8197,2.123,0
+885,assets/library/med_crash_cart_medical_cart_textures.png,256,256,0,34902,,raw,2,lossless,24188,28.384,0.7572,0.4947,7.045,0
+887,assets/library/med_crutches_crutches_textures.png,256,256,0,26080,16864,kept-ntx1,2,lossless,16868,32.365,0.8665,0.548,4.07,0
+893,assets/library/med_fluoro_light_flu_box.png,128,128,0,11886,3464,neural,2,vp8 q80,580,35.731,0.9598,0.8341,3.024,2884
+894,assets/library/med_fluoro_light_flu_light.png,128,128,0,6864,2166,neural,4,lossless,908,43.605,0.9934,0.9576,0.728,1258
+896,assets/library/med_holding_cage_metal_hr_2.png,256,256,0,79172,15966,kept-ntx1,2,lossless,15970,39.931,0.9202,0.8606,1.88,0
+899,assets/library/med_mattress_stained_bed_textures.png,256,256,0,35832,,raw,2,lossless,26304,21.085,0.6174,0.2481,16.721,0
+901,assets/library/med_microscope_microscope_textures.png,256,256,0,32238,,raw,2,lossless,24930,24.204,0.7169,0.3849,10.9,0
+903,assets/library/med_notice_board_information_board_textures.png,256,256,0,30446,,raw,2,lossless,21150,27.663,0.7859,0.4127,6.638,0
+905,assets/library/med_nurse_desk_desk_textures.png,256,256,0,28048,,raw,2,lossless,18972,30.934,0.805,0.4922,4.674,0
+907,assets/library/med_pill_bottle_medicine_bottle_textures.png,256,256,0,14674,,raw,2,lossless,15102,28.226,0.8166,0.4078,5.004,0
+909,assets/library/med_records_cabinet_filing_cabinet_textures.png,256,256,0,43912,,raw,2,lossless,15434,30.037,0.8069,0.4646,4.922,0
+911,assets/library/med_scrub_sink_sink_textures.png,256,256,0,29116,,raw,2,lossless,24816,22.496,0.7405,0.3602,12.595,0
+913,assets/library/med_specimen_jar_pickles_jars_mp_1.png,196,204,0,46414,13528,neural,2,vp8 q94,3904,32.475,0.9343,0.7869,4.194,9624
+915,assets/library/med_supply_cabinet_cabinet_textures1.png,256,256,0,32208,,raw,2,lossless,23804,23.323,0.6301,0.3346,11.138,0
+917,assets/library/med_vitals_monitor_cardiac_monitor_on_textures.png,256,256,0,23746,,raw,2,lossless,23928,22.459,0.6204,0.2546,11.75,0
+919,assets/library/med_wall_clock_clock_textures.png,256,256,0,21324,,raw,2,lossless,17652,28.764,0.7658,0.3304,6.75,0
+921,assets/library/med_ward_bed_bed_textures.png,256,256,0,35832,,raw,2,lossless,26304,21.085,0.6174,0.2481,16.721,0
+923,assets/library/med_ward_bed_tossed_bed_textures.png,256,256,0,35832,,raw,2,lossless,26304,21.085,0.6174,0.2481,16.721,0
+925,assets/library/med_ward_toilet_toilet_textures.png,256,256,0,29950,,raw,2,lossless,24784,22.637,0.6744,0.3433,12.071,0
+927,assets/library/med_washroom_mirror_mirror_grime.png,256,256,0,10574,5802,kept-ntx1,2,lossless,5806,44.936,0.9925,0.8981,0.476,0
+931,assets/library/med_wheelchair_wheelchair_textures.png,256,256,0,34270,,raw,2,lossless,24830,28.489,0.7856,0.4817,6.573,0
+933,assets/library/med_xray_viewer_chest_x_ray_torax_textures.png,256,256,0,26312,,raw,2,lossless,21284,26.681,0.7789,0.4507,8.045,0
+935,assets/library/med_xray_viewer_skull_x_ray_skull_textures.png,256,256,0,26874,,raw,2,lossless,21066,27.198,0.7834,0.4945,7.565,0
+940,assets/library/mine_blast_plunger_detonator_x.png,128,128,0,20382,,raw,2,lossless,5110,28.017,0.8041,0.3977,6.558,0
+944,assets/library/mine_cage_gate_metalbare.png,300,73,0,15970,4934,neural,2,vp8 q97,1758,38.277,0.9104,0.8246,2.385,3176
+949,assets/library/mine_depot_forklift_fl_tire_bmp_fl_tire_png.png,84,16,0,1102,,raw,2,lossless,366,30.863,0.9187,0.8824,5.221,0
+950,assets/library/mine_depot_forklift_fl_back_bmp_fl_back_png.png,64,57,0,3076,,raw,2,lossless,1658,24.189,0.907,0.7625,9.739,0
+951,assets/library/mine_depot_forklift_fl_front_bmp_fl_front_png.png,48,48,0,2138,,raw,2,lossless,788,34.669,0.9034,0.4169,2.648,0
+952,assets/library/mine_depot_forklift_fl_grey_bmp_fl_grey_png.png,36,34,0,862,,raw,2,lossless,280,27.264,0.6146,0.4971,8.819,0
+953,assets/library/mine_depot_forklift_fl_lift_bmp_fl_lift_png.png,32,244,0,6042,,raw,2,lossless,3254,22.904,0.9055,0.5619,11.819,0
+954,assets/library/mine_depot_forklift_fl_top_bmp_fl_top_png.png,132,183,0,15258,,raw,2,lossless,8900,25.161,0.8579,0.4205,8.395,0
+955,assets/library/mine_depot_forklift_fl_side_bmp_fl_side_png.png,196,160,0,17344,,raw,2,lossless,10176,25.213,0.8688,0.5018,7.64,0
+956,assets/library/mine_depot_forklift_fl_gate_bmp_fl_gate_png.png,128,128,0,12996,,raw,2,lossless,5082,24.85,0.8847,0.5829,8.805,0
+958,assets/library/mine_dewatering_pump_machinery_mx_1.png,157,256,0,55992,12646,kept-ntx1,2,lossless,12650,33.693,0.861,0.2825,3.524,0
+960,assets/library/mine_dynamite_bundle_tnt.png,128,128,0,13954,3454,neural,2,vp8 q94,668,32.841,0.9173,0.7123,2.712,2786
+962,assets/library/mine_first_aid_box_medical_box.png,128,128,0,24614,,raw,2,lossless,6026,29.173,0.8115,0.5727,5.907,0
+967,assets/library/mine_mesh_doorway_fence.png,256,256,1,19172,,raw,2,lossless,8440,22.745,1.0,1.0,14.44,0
+970,assets/library/mine_mesh_fence_fence.png,256,256,1,19172,,raw,2,lossless,8440,22.745,1.0,1.0,14.44,0
+976,assets/library/mine_pick_beak.png,128,128,0,13226,,raw,2,lossless,4158,28.508,0.9274,0.6359,4.841,0
+993,assets/library/mine_shield_ring_metal_hr_6_1.png,209,209,0,66980,,raw,2,lossless,14492,33.898,0.7809,0.6513,3.854,0
+997,assets/library/mine_shovel_shovel.png,128,128,0,9200,2632,neural,2,vp8 q90,646,33.501,0.9055,0.6547,2.707,1986
+1003,assets/library/mine_tool_chest_rolling_tool_cart.png,256,256,0,47628,,raw,2,lossless,15320,30.613,0.9248,0.6482,3.944,0
+1011,assets/library/mine_water_main_pipes.png,128,128,0,28216,,raw,2,lossless,6946,24.016,0.7812,0.3685,11.196,0
+1017,assets/library/pwr_breaker_lever_electronics_etx_part_1.png,256,256,0,72870,17652,neural,2,vp8 q97,4910,35.515,0.9053,0.622,2.936,12742
+1022,assets/library/pwr_breaker_panel_open_electrical_panel.png,64,157,0,5260,,neural,2,lossless,2074,44.232,0.9671,0.9419,1.165,3186
+1023,assets/library/pwr_breaker_panel_open_electrical_panel_door_b.png,64,157,0,8062,,neural,2,vp8 q97,554,32.412,0.9049,0.6098,2.986,7508
+1029,assets/library/pwr_catwalk_section_metal_mp_6.png,256,256,0,66432,,neural,2,lossless,14368,41.698,0.9434,0.8831,1.6,52064
+1032,assets/library/pwr_circulation_pump_material.png,128,128,0,5120,,raw,2,lossless,7456,24.538,0.681,0.2056,10.056,0
+1034,assets/library/pwr_control_cabinet_mt_control_box.png,256,256,0,64984,18210,neural,2,vp8 q94,4224,32.162,0.9213,0.5329,3.356,13986
+1036,assets/library/pwr_coolant_main_pipe_hr_3.png,256,256,0,91764,,raw,2,lossless,20370,34.689,0.8282,0.5619,3.532,0
+1042,assets/library/pwr_duct_fan_unit_ventilation_1.png,128,128,0,7360,,raw,2,lossless,6984,26.492,0.8416,0.4601,8.01,0
+1044,assets/library/pwr_fire_cabinet_fire_extenguisher_case.png,64,84,1,7492,,raw,2,lossless,2274,26.517,0.9274,0.5933,7.175,0
+1046,assets/library/pwr_gate_valve_material.png,128,128,0,4680,,raw,2,lossless,5730,26.92,0.7886,0.5007,7.952,0
+1048,assets/library/pwr_generator_unit_material.png,128,128,0,5866,,raw,2,lossless,6902,23.203,0.5957,0.1171,13.337,0
+1050,assets/library/pwr_handrail_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+1052,assets/library/pwr_lift_station_panel_electric.png,64,129,0,6006,,neural,2,vp8 q85,318,32.369,0.9365,0.6157,2.737,5688
+1055,assets/library/pwr_lift_station_metal_painted_gray.png,128,128,0,14240,3600,kept-ntx1,2,lossless,3604,41.256,0.9364,0.8552,1.587,0
+1059,assets/library/pwr_pipe_elbow_material.png,128,128,0,4680,,raw,2,lossless,5730,26.92,0.7886,0.5007,7.952,0
+1061,assets/library/pwr_pipe_straight_material.png,128,128,0,4680,,raw,2,lossless,5730,26.92,0.7886,0.5007,7.952,0
+1063,assets/library/pwr_safety_bollard_yellow_post.png,128,128,0,17914,4450,neural,2,vp8 q80,518,32.375,0.9119,0.5478,3.753,3932
+1065,assets/library/pwr_sheet_steel_stack_sheetmetal.png,256,256,1,10998,,raw,2,lossless,11970,29.956,0.7094,0.551,6.295,0
+1067,assets/library/pwr_step_transformer_material.png,128,128,0,3450,,raw,2,lossless,4318,23.351,0.8334,0.3705,7.646,0
+1071,assets/library/pwr_tall_switch_cabinet_material.png,128,128,0,3490,,raw,2,lossless,4920,32.19,0.8702,0.5886,3.747,0
+1073,assets/library/pwr_tool_chest_material.png,256,256,0,44948,,raw,2,lossless,14504,31.452,0.9131,0.6042,3.646,0
+1075,assets/library/pwr_turbine_housing_material.png,256,256,0,11312,,raw,2,lossless,18650,29.233,0.9085,0.6665,5.083,0
+1079,assets/library/pwr_wall_ladder_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+1081,assets/library/scrap_aerial_metal_01.png,128,128,0,15424,4622,neural,2,vp8 q97,1710,35.294,0.9046,0.7214,3.275,2912
+1087,assets/library/scrap_bedroll_sleeping_bag.png,128,128,0,22282,,raw,2,lossless,6342,26.268,0.8745,0.4791,6.604,0
+1097,assets/library/scrap_catwalk_grate_material.png,64,64,1,1594,,raw,2,lossless,1954,11.963,0.1353,-0.0412,57.396,0
+1101,assets/library/scrap_couch_couch.png,128,128,0,20454,,raw,2,lossless,5686,25.005,0.7067,0.2872,10.356,0
+1103,assets/library/scrap_drum_material.png,128,128,0,3500,,raw,2,lossless,6650,22.385,0.8516,0.2286,12.303,0
+1105,assets/library/scrap_foundry_shed_color_a08.png,128,128,0,5114,,raw,2,lossless,6604,27.704,0.9158,0.7275,8.115,0
+1110,assets/library/scrap_leanto_material.png,128,128,0,5114,,raw,2,lossless,6604,27.704,0.9158,0.7275,8.115,0
+1112,assets/library/scrap_mattress_old_mattress_mx_1.png,128,74,0,11310,3112,kept-ntx1,2,lossless,3116,37.109,0.9139,0.7319,2.527,0
+1118,assets/library/scrap_plank_pile_mt_plank_pile.png,128,128,0,16584,,neural,2,vp8 q94,1590,32.187,0.9178,0.6834,4.14,14994
+1122,assets/library/scrap_server_cabinet_machinery_2.png,113,128,0,7086,2120,neural,2,vp8 q90,592,37.07,0.9035,0.7114,2.415,1528
+1123,assets/library/scrap_server_cabinet_scifi_texture_1.png,128,128,0,19254,4690,kept-ntx1,2,lossless,4694,35.355,0.878,0.6888,3.201,0
+1125,assets/library/scrap_shack_material.png,128,128,0,5114,,raw,2,lossless,6604,27.704,0.9158,0.7275,8.115,0
+1127,assets/library/scrap_shade_lamp_metal_hr_2.png,128,128,0,17550,3782,kept-ntx1,2,lossless,3786,43.698,0.9681,0.9414,1.197,0
+1128,assets/library/scrap_shade_lamp_lamp_1_on.png,64,64,0,2956,,neural,2,lossless,908,33.041,0.9718,0.8743,2.789,2048
+1130,assets/library/scrap_shrine_candle_mt_candle.png,128,128,0,14660,4604,neural,2,vp8 q85,820,32.521,0.9494,0.7232,3.567,3784
+1132,assets/library/scrap_shrine_terminal_electronics_etx_part_1.png,128,128,0,18442,4940,neural,2,vp8 q90,964,34.399,0.9013,0.637,3.424,3976
+1136,assets/library/scrap_shrine_tv_mt_television_retro_screen.png,128,128,0,8650,2852,kept-ntx1,2,lossless,2856,39.834,0.995,0.9653,1.142,0
+1138,assets/library/scrap_still_metal_hr_6_1.png,209,209,0,66980,,raw,2,lossless,14492,33.898,0.7809,0.6513,3.854,0
+1140,assets/library/scrap_stovepipe_metal_hr_1.png,128,128,0,15992,3730,kept-ntx1,2,lossless,3734,42.11,0.9465,0.9085,1.534,0
+1145,assets/library/scrap_train_car_floor.png,256,256,0,44542,,raw,2,lossless,10372,28.027,0.6229,0.4304,7.233,0
+1146,assets/library/scrap_train_car_metal_04.png,256,232,0,32628,7082,kept-ntx1,2,lossless,7086,34.294,0.9896,0.8231,1.214,0
+1148,assets/library/scrap_train_car_metal_02.png,256,256,0,50186,11462,kept-ntx1,2,lossless,11466,44.409,0.9699,0.9401,1.125,0
+1149,assets/library/scrap_train_car_trains.png,256,18,0,6314,,raw,2,lossless,1950,25.524,0.8901,0.6956,9.42,0
+1151,assets/library/scrap_trash_heap_trash.png,128,128,0,42196,,raw,2,lossless,10516,17.477,0.7519,0.4217,26.669,0
+1154,assets/library/scrap_van_husk_van_3.png,256,135,0,47502,11294,kept-ntx1,2,lossless,11298,36.48,0.9088,0.6823,2.733,0
+1155,assets/library/scrap_van_husk_metal_2_1.png,192,192,0,36996,8658,kept-ntx1,2,lossless,8662,40.57,0.926,0.8776,1.842,0
+2113,assets/library/textures/surface_rock_floor.png,256,256,0,103180,,raw,2,lossless,27916,23.052,0.6499,0.4023,14.049,0
+2121,assets/library/textures/surface_stone_floor.png,256,256,0,74890,21194,neural,2,vp8 q85,4598,32.649,0.9175,0.7404,4.55,16596
+2123,assets/library/textures/surface_growth.png,256,256,0,96960,,raw,2,lossless,25160,29.177,0.9225,0.7662,6.223,0
+2124,assets/library/textures/surface_crystal.png,256,256,0,72176,25448,kept-ntx1,2,lossless,25452,33.433,0.9919,0.9558,3.509,0
+2130,assets/library/creatures/chimera.png,512,512,0,358140,,raw,2,lossless,107162,27.76,0.9124,0.6379,6.305,0
+2133,assets/library/psx_locker_m_locker_01.png,256,256,0,13588,,raw,2,lossless,20442,26.54,0.8109,0.4333,6.903,0
+2135,assets/library/psx_locker_door_l_m_locker_01.png,1024,1024,1,22618,,raw,2,lossless,134820,35.267,0.9595,0.7582,2.22,0
+2137,assets/library/psx_locker_door_r_m_locker_01.png,1024,1024,1,22618,,raw,2,lossless,134820,35.267,0.9595,0.7582,2.22,0
+2151,assets/library/textures/surface_paint_band_teal.png,256,256,0,54340,14728,kept-ntx1,2,lossless,14732,38.906,0.9206,0.7802,2.167,0
+2152,assets/library/textures/surface_paint_band_green.png,256,256,0,51556,14428,neural,2,vp8 q97,3268,38.216,0.9011,0.7653,2.378,11160
+2153,assets/library/textures/surface_paint_band_maroon.png,256,256,0,52558,14476,neural,2,vp8 q97,3104,38.018,0.9096,0.7855,2.431,11372
+2155,assets/library/textures/surface_formwork.png,256,256,0,80972,,raw,2,lossless,18904,30.026,0.7875,0.5707,6.149,0
+2156,assets/library/textures/surface_boardform.png,256,256,0,72064,,raw,2,lossless,16082,27.593,0.7196,0.4121,6.678,0
+2157,assets/library/textures/surface_cast_concrete.png,256,256,0,102088,,raw,2,lossless,20926,24.093,0.493,0.285,12.26,0
+2158,assets/library/textures/surface_weathered_concrete.png,256,256,0,83286,,raw,2,lossless,18124,30.38,0.6863,0.4921,6.05,0
+2159,assets/library/textures/surface_stained_concrete.png,256,256,0,99288,,raw,2,lossless,20674,25.499,0.4895,0.2599,10.285,0
+2160,assets/library/textures/surface_ribbed_concrete.png,256,256,0,73190,,raw,2,lossless,16838,26.519,0.7052,0.4389,9.102,0
+2161,assets/library/textures/surface_tread_plate.png,256,256,0,103426,,raw,2,lossless,23710,26.336,0.5595,0.3348,9.031,0
+2162,assets/library/textures/surface_rusted_steel.png,256,256,0,114402,,raw,2,lossless,25142,26.916,0.5902,0.3595,8.45,0
+2163,assets/library/textures/surface_metal_roofing.png,256,256,0,75016,,raw,2,lossless,18094,27.445,0.7402,0.3717,7.977,0
+2164,assets/library/textures/surface_asphalt.png,256,256,0,44094,,raw,2,lossless,10496,26.596,0.6098,0.4275,9.058,0
+2165,assets/library/textures/surface_floor_tile.png,256,256,0,92496,,raw,2,lossless,18826,24.537,0.5485,0.303,11.812,0
+2166,assets/library/textures/surface_plank_floor.png,256,256,0,107090,,raw,2,lossless,22004,27.058,0.6608,0.3155,8.851,0
+2205,assets/library/clinic_ceiling_lamp_1_metal_mp_1.png,256,256,0,66370,16290,neural,2,vp8 q97,3688,38.601,0.9029,0.8308,2.335,12602
+2206,assets/library/clinic_ceiling_lamp_1_metal_mp_4.png,256,256,0,60576,13414,kept-ntx1,2,lossless,13418,40.854,0.9252,0.8687,1.777,0
+2207,assets/library/clinic_ceiling_lamp_1_ceiling_lamp_1_on.png,170,170,0,36820,,raw,2,lossless,8910,30.418,0.9474,0.6889,5.426,0
+2211,assets/library/clinic_ceiling_lamp_2_metal_mp_4.png,256,256,0,60576,,neural,2,lossless,13418,40.854,0.9252,0.8687,1.777,47158
+2212,assets/library/clinic_ceiling_lamp_2_ceiling_lamp_1_on.png,170,170,0,36820,,raw,2,lossless,8910,30.418,0.9474,0.6889,5.426,0
+2213,assets/library/clinic_ceiling_lamp_2_metal_mp_4_x.png,256,256,0,60576,,neural,2,lossless,13418,40.854,0.9252,0.8687,1.777,47158
+2215,assets/library/med_extinguisher_extinguisher_textures.png,128,128,0,28972,,raw,2,lossless,7456,26.468,0.8338,0.5643,7.547,0
+2227,assets/library/office_armchair_green_couches.png,64,256,0,20820,,raw,2,lossless,5074,33.135,0.8734,0.5842,3.448,0
+2229,assets/library/office_file_cabinet_open_file_cabinet_large.png,185,163,1,10270,,raw,2,lossless,9974,27.091,0.8212,0.4461,5.678,0
+2245,assets/library/art_painting_4_painting_4.png,128,100,0,11988,,raw,2,lossless,2892,35.143,0.8981,0.5582,2.687,0
+2247,assets/library/art_painting_5_painting_5.png,128,99,0,12132,,raw,2,lossless,3140,33.472,0.8924,0.3435,3.716,0
+2249,assets/library/art_painting_6_painting_6.png,124,128,0,17404,,raw,2,lossless,4452,34.293,0.8821,0.5476,3.067,0
+2252,assets/library/office_display_cabinet_wood_1_x.png,128,128,0,20422,,raw,2,lossless,5584,29.287,0.7013,0.3646,6.818,0
+2254,assets/library/office_display_cabinet_metal_6.png,128,128,0,17712,,raw,2,lossless,5546,31.558,0.8375,0.6941,5.26,0
+2266,assets/library/med_corpse_supine_psx_unlit_256.png,256,256,0,83742,,raw,2,lossless,27186,25.537,0.8991,0.5843,7.882,0
+2268,assets/library/med_vitals_monitor_dead_cardiac_monitor_off_textures.png,256,256,0,25254,,raw,2,lossless,22392,22.713,0.6273,0.2579,11.19,0
+2302,assets/library/player/SOCKS.png,1024,1024,0,287486,,raw,2,lossless,179374,23.594,0.9316,0.4878,5.779,0
+2303,assets/library/player/BELTS.png,432,48,1,2338,,raw,2,lossless,4520,30.244,0.9594,0.8303,5.404,0
+2304,assets/library/player/PANTS.png,1824,1024,0,167110,,neural,2,vp8 q80,56442,34.369,0.9156,0.7749,3.476,110668
+2305,assets/library/player/BOOTS.png,676,512,0,25638,,neural,2,vp8 q80,10066,33.654,0.9151,0.7539,3.551,15572
+2306,assets/library/player/VEST.png,808,512,0,6934,,raw,2,lossless,19528,43.386,0.9859,0.9187,0.812,0
+2307,assets/library/player/SKIRT.png,512,512,0,59816,,raw,2,lossless,41246,29.729,0.9319,0.8249,4.22,0
+2308,assets/library/player/JACKET.png,1024,1024,0,72766,,neural,2,vp8 q85,38998,36.292,0.9182,0.8052,3.014,33768
+2309,assets/library/player/MASK.png,1024,1024,0,58638,,neural,2,vp8 q90,19712,41.321,0.9514,0.8664,1.614,38926
+2310,assets/library/player/EYES.png,768,512,0,64538,,raw,2,lossless,135384,31.254,0.9446,0.6978,4.428,0
+2311,assets/library/player/HAIR.png,1024,1540,0,205934,,neural,2,vp8 q80,59034,33.213,0.9172,0.7745,4.183,146900
+2315,assets/library/anl_cell_charged_metal.png,128,128,0,9120,,raw,2,lossless,4194,32.857,0.8301,0.6904,4.521,0
+2316,assets/library/anl_cell_charged_hazard.png,128,128,0,5260,,raw,2,lossless,4146,22.005,0.9604,0.8593,14.759,0
+2317,assets/library/anl_cell_charged_seam_glow.png,128,128,0,116,,raw,2,lossless,164,55.746,0.9988,0.997,0.168,0
+2318,assets/library/anl_cell_charged_rib.png,128,128,0,5552,,neural,2,vp8 q80,350,36.701,0.9396,0.8066,2.569,5202
+2319,assets/library/anl_cell_charged_lid.png,128,128,0,11710,,raw,2,lossless,4556,30.089,0.9054,0.6968,5.296,0
+2320,assets/library/anl_cell_charged_mass_glow.png,128,128,0,11046,,raw,2,lossless,4594,21.355,0.8152,0.4768,10.825,0
+2321,assets/library/anl_cell_charged_glass.png,128,128,1,8772,,neural,2,lossless,2616,45.285,1.0,1.0,0.7,6156
+2323,assets/library/anl_cell_spent_metal.png,128,128,0,9120,,raw,2,lossless,4194,32.857,0.8301,0.6904,4.521,0
+2324,assets/library/anl_cell_spent_hazard.png,128,128,0,5260,,raw,2,lossless,4146,22.005,0.9604,0.8593,14.759,0
+2325,assets/library/anl_cell_spent_seam_dead.png,128,128,0,130,,raw,2,lossless,150,59.203,0.9994,0.9981,0.078,0
+2326,assets/library/anl_cell_spent_rib.png,128,128,0,5552,,neural,2,vp8 q80,350,36.701,0.9396,0.8066,2.569,5202
+2327,assets/library/anl_cell_spent_lid.png,128,128,0,11710,,raw,2,lossless,4556,30.089,0.9054,0.6968,5.296,0
+2328,assets/library/anl_cell_spent_soot.png,128,128,0,4978,,neural,2,lossless,1848,49.208,0.9915,0.9494,0.435,3130
+2329,assets/library/anl_cell_spent_glass.png,128,128,1,8772,,neural,2,lossless,2616,45.285,1.0,1.0,0.7,6156
+2331,assets/library/anl_cell_cap_seam_dead.png,128,128,0,130,,raw,2,lossless,150,59.203,0.9994,0.9981,0.078,0
+2332,assets/library/anl_cell_cap_metal.png,128,128,0,9120,,raw,2,lossless,4194,32.857,0.8301,0.6904,4.521,0
+2333,assets/library/anl_cell_cap_lid.png,128,128,0,11710,,raw,2,lossless,4556,30.089,0.9054,0.6968,5.296,0
+2334,assets/library/anl_cell_cap_rib.png,128,128,0,5552,,neural,2,vp8 q80,350,36.701,0.9396,0.8066,2.569,5202
+2335,assets/library/anl_cell_cap_shard_glass.png,128,128,1,8768,,neural,2,lossless,2820,44.798,0.9695,0.9633,1.069,5948
+2337,assets/library/anl_cell_core_metal.png,128,128,0,9120,,raw,2,lossless,4194,32.857,0.8301,0.6904,4.521,0
+2338,assets/library/anl_cell_core_hazard.png,128,128,0,5260,,raw,2,lossless,4146,22.005,0.9604,0.8593,14.759,0
+2339,assets/library/anl_cell_core_seam_dead.png,128,128,0,130,,raw,2,lossless,150,59.203,0.9994,0.9981,0.078,0
+2340,assets/library/anl_cell_core_rib.png,128,128,0,5552,,neural,2,vp8 q80,350,36.701,0.9396,0.8066,2.569,5202
+2341,assets/library/anl_cell_core_soot.png,128,128,0,4978,,neural,2,lossless,1848,49.208,0.9915,0.9494,0.435,3130
+2342,assets/library/anl_cell_core_shard_glass.png,128,128,1,8768,,neural,2,lossless,2820,44.798,0.9695,0.9633,1.069,5948
+2344,assets/library/anl_switch_cabinet_1_transformer_box_hr_2.png,186,256,0,78746,,raw,2,lossless,19572,26.224,0.7576,0.1155,7.713,0
+2346,assets/library/anl_switch_cabinet_2_transformer_box_hr_1.png,227,255,0,97068,,raw,2,lossless,24500,26.847,0.7592,0.2531,7.321,0
+2348,assets/library/anl_cell_charged_pos.png,128,128,0,5210,,neural,2,lossless,3136,45.752,0.9947,0.9784,0.636,2074
+2349,assets/library/anl_cell_charged_neg.png,128,128,0,4892,,neural,2,lossless,2066,47.334,0.9931,0.9705,0.576,2826
+2351,assets/library/ivy_wall_a_ivy.png,256,155,1,52922,,raw,2,lossless,24162,21.745,0.7675,0.4791,15.659,0
+2353,assets/library/ivy_wall_b_ivy.png,256,155,1,52922,,raw,2,lossless,24162,21.745,0.7675,0.4791,15.659,0
+2355,assets/library/ivy_strand_ivy.png,256,155,1,52922,,raw,2,lossless,24162,21.745,0.7675,0.4791,15.659,0
+2357,assets/library/urb_cone_cones.png,256,256,1,18270,,raw,2,lossless,5546,30.613,0.882,0.4525,3.834,0
+2359,assets/library/urb_cone_square_cones.png,256,256,1,18270,,raw,2,lossless,5546,30.613,0.882,0.4525,3.834,0
+2361,assets/library/urb_jersey_barrier_concrete_barriers.png,256,256,1,20578,,raw,2,lossless,9926,28.229,0.9152,0.6519,6.081,0
+2363,assets/library/urb_jersey_broken_concrete_barriers.png,256,256,1,20578,,raw,2,lossless,9926,28.229,0.9152,0.6519,6.081,0
+2365,assets/library/urb_bollard_bollards.png,218,256,1,33172,,raw,2,lossless,12494,30.223,0.9224,0.6406,4.518,0
+2367,assets/library/radiator_panel_mt_radiator_panel.png,256,256,0,48292,,raw,2,lossless,13864,31.867,0.9576,0.8164,4.028,0
+2369,assets/library/sign_road_ends_mt_sign_public_road_ends.png,256,256,0,84682,,raw,2,lossless,24408,31.759,0.9361,0.7555,3.875,0
+2415,assets/library/res_crystal_l_root.png,128,128,0,11404,,raw,2,lossless,4370,30.083,0.7766,0.5964,6.162,0
+2416,assets/library/res_crystal_l_body_glow.png,128,128,0,8252,,neural,2,vp8 q80,338,37.345,0.9648,0.7447,2.153,7914
+2417,assets/library/res_crystal_l_dead.png,128,128,0,2862,,neural,2,vp8 q80,356,39.929,0.9561,0.8504,1.954,2506
+2419,assets/library/res_crystal_m_root.png,128,128,0,11404,,raw,2,lossless,4370,30.083,0.7766,0.5964,6.162,0
+2420,assets/library/res_crystal_m_body_glow.png,128,128,0,8252,,neural,2,vp8 q80,338,37.345,0.9648,0.7447,2.153,7914
+2421,assets/library/res_crystal_m_dead.png,128,128,0,2862,,neural,2,vp8 q80,356,39.929,0.9561,0.8504,1.954,2506
+2423,assets/library/res_crystal_s_root.png,128,128,0,11404,,raw,2,lossless,4370,30.083,0.7766,0.5964,6.162,0
+2424,assets/library/res_crystal_s_body_glow.png,128,128,0,8252,,neural,2,vp8 q80,338,37.345,0.9648,0.7447,2.153,7914
+2425,assets/library/res_crystal_s_dead.png,128,128,0,2862,,neural,2,vp8 q80,356,39.929,0.9561,0.8504,1.954,2506
+2427,assets/library/res_crystal_wall_root.png,128,128,0,11404,,raw,2,lossless,4370,30.083,0.7766,0.5964,6.162,0
+2428,assets/library/res_crystal_wall_body_glow.png,128,128,0,8252,,neural,2,vp8 q80,338,37.345,0.9648,0.7447,2.153,7914
+2430,assets/library/res_rock_crag_rock_face.png,256,256,0,45446,,raw,2,lossless,18634,23.03,0.6605,0.3856,13.616,0
+2432,assets/library/res_rock_spire_rock_face.png,256,256,0,45446,,raw,2,lossless,18634,23.03,0.6605,0.3856,13.616,0
+2434,assets/library/res_rock_low_rock_face.png,256,256,0,45446,,raw,2,lossless,18634,23.03,0.6605,0.3856,13.616,0
+2435,assets/library/blood/blood-pool.png,768,128,1,26078,,neural,4,vp8 q80,14178,39.587,0.9733,0.8661,1.923,11900
+2436,assets/library/blood/blood-splat.png,768,96,1,22224,,neural,2,vp8 q80,13772,39.053,0.9643,0.879,2.198,8452
+2437,assets/library/blood/blood-burst.png,768,96,1,33338,,neural,2,vp8 q80,22910,41.004,0.9465,0.88,1.766,10428
+2438,assets/library/blood/blood-streak.png,768,128,1,19988,,neural,4,vp8 q80,13718,38.769,0.9278,0.8507,2.172,6270
+2439,assets/library/blood/blood-drip.png,256,128,1,11924,,neural,2,vp8 q80,7828,35.685,0.9814,0.9324,3.258,4096
+2440,assets/library/blood/blood-drops.png,384,64,1,6806,,neural,2,vp8 q80,3958,37.671,0.9762,0.9532,2.565,2848
+2442,assets/library/creatures/cursed.png,512,512,0,179468,,neural,2,vp8 q80,7394,34.45,0.9108,0.6593,3.124,172074
+2848,assets/library/market_basket_market.png,200,200,0,40204,,raw,2,lossless,15892,25.991,0.7824,0.3966,8.655,0
+2850,assets/library/market_crate_market.png,200,200,0,40204,,raw,2,lossless,15892,25.991,0.7824,0.3966,8.655,0
+2852,assets/library/market_pumpkin_market_misc.png,256,256,1,15262,,raw,2,lossless,8606,27.918,0.8859,0.5066,6.566,0
+2854,assets/library/glass_bottle_glass_bottle_mx_1.png,128,128,0,14464,,neural,2,vp8 q90,668,32.969,0.9094,0.5205,3.504,13796
+2855,assets/library/chainlink_fence.png,256,256,1,12180,,raw,2,lossless,20782,13.766,0.8128,0.7174,43.504,0
+2857,assets/library/growth_vine_sheet_vine.png,128,128,1,36578,,raw,2,lossless,16050,24.471,0.8897,0.6779,11.361,0
+2859,assets/library/growth_moss_wall_moss.png,128,128,0,20036,,raw,2,lossless,4376,32.162,0.7862,0.6246,3.322,0
+2861,assets/library/growth_moss_floor_moss.png,128,128,0,20036,,raw,2,lossless,4376,32.162,0.7862,0.6246,3.322,0
+2863,assets/library/growth_hanging_vine_stem.png,128,128,1,28788,,raw,2,lossless,12476,24.77,0.91,0.6931,10.29,0
+2864,assets/library/growth_hanging_vine_tip.png,128,128,1,20514,,raw,2,lossless,9258,27.737,0.9498,0.8137,7.782,0
+2866,assets/library/growth_ivy_creeper_ivy.png,1024,623,1,584224,,raw,2,lossless,235064,22.988,0.8489,0.4941,12.174,0
+2867,assets/library/growth_ivy_creeper_ivy_x.png,1024,623,1,584224,,raw,2,lossless,235064,22.988,0.8489,0.4941,12.174,0
+2869,assets/library/growth_ivy_curtain_ivy.png,1024,623,1,584224,,raw,2,lossless,235064,22.988,0.8489,0.4941,12.174,0
+2871,assets/library/growth_ivy_single_ivy.png,1024,623,1,584224,,raw,2,lossless,235064,22.988,0.8489,0.4941,12.174,0
+2915,assets/library/gib_crt_monitor_inner.png,32,32,0,540,,raw,2,lossless,186,43.294,0.9533,0.9438,1.416,0
+2925,assets/library/gib_packing_crate_inner.png,32,32,0,1052,,raw,2,lossless,436,33.248,0.9587,0.9398,4.265,0
+2929,assets/library/gib_scrap_chair_inner.png,32,32,0,818,,raw,2,lossless,278,33.594,0.7151,0.6652,4.441,0
+2934,assets/library/gib_wooden_chair_inner.png,32,32,0,1018,,raw,2,lossless,426,34.163,0.9596,0.9438,3.814,0
+2943,assets/library/gib_wooden_crate_inner.png,32,32,0,1020,,raw,2,lossless,428,33.558,0.9586,0.9404,4.108,0
+2949,assets/library/bld_wall_a_wall_rg_1.png,256,192,0,53958,,raw,2,lossless,12610,36.274,0.8962,0.7023,2.544,0
+2950,assets/library/bld_wall_a_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2952,assets/library/bld_wall_b_wall_hr_2.png,256,192,0,69762,,raw,2,lossless,16700,29.644,0.7921,0.5037,5.932,0
+2953,assets/library/bld_wall_b_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2955,assets/library/bld_wall_c_wall_hs_1.png,256,192,0,74054,,raw,2,lossless,17214,29.075,0.6921,0.3574,6.697,0
+2956,assets/library/bld_wall_c_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2958,assets/library/bld_wall_d_wall_rx_1.png,256,192,0,59188,,raw,2,lossless,13150,34.774,0.8446,0.6887,3.621,0
+2959,assets/library/bld_wall_d_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2961,assets/library/bld_wall_house_wall_3.png,256,194,0,44166,,neural,2,vp8 q97,1936,41.904,0.9534,0.8946,1.559,42230
+2962,assets/library/bld_wall_house_wall_3_rear.png,256,194,0,44166,,neural,2,vp8 q97,1936,41.904,0.9534,0.8946,1.559,42230
+2963,assets/library/bld_wall_house_door_frame_wood_1.png,256,256,0,69536,,raw,2,lossless,14876,36.263,0.8373,0.657,3.017,0
+2965,assets/library/bld_wall_breach_wall_hr_1.png,256,192,0,70590,,raw,2,lossless,16828,31.413,0.7861,0.5501,5.145,0
+2966,assets/library/bld_wall_breach_concrete_hr_1.png,256,256,0,77898,,raw,2,lossless,16358,36.714,0.8606,0.7398,2.879,0
+2967,assets/library/bld_wall_breach_metal_hr_2.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+2968,assets/library/bld_wall_breach_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2970,assets/library/bld_wall_tunnel_mouth_wall_mp_1.png,256,194,0,57502,,neural,2,lossless,12658,39.41,0.9162,0.8322,2.088,44844
+2971,assets/library/bld_wall_tunnel_mouth_wall_mp_1_rear.png,256,194,0,57502,,neural,2,lossless,12658,39.41,0.9162,0.8322,2.088,44844
+2972,assets/library/bld_wall_tunnel_mouth_metal_mp_6.png,256,256,0,66432,,neural,2,lossless,14368,41.698,0.9434,0.8831,1.6,52064
+2974,assets/library/bld_wall_window_wall_mp_1.png,256,194,0,57502,,neural,2,lossless,12658,39.41,0.9162,0.8322,2.088,44844
+2975,assets/library/bld_wall_window_wall_mp_1_rear.png,256,194,0,57502,,neural,2,lossless,12658,39.41,0.9162,0.8322,2.088,44844
+2976,assets/library/bld_wall_window_door_frame_wood_1.png,256,256,0,69536,,raw,2,lossless,14876,36.263,0.8373,0.657,3.017,0
+2977,assets/library/bld_wall_window_window_2.png,180,256,0,41488,,neural,2,vp8 q85,1238,33.97,0.9097,0.5935,3.18,40250
+2979,assets/library/bld_wall_doorway_wall_hr_2.png,256,192,0,69762,,raw,2,lossless,16700,29.644,0.7921,0.5037,5.932,0
+2980,assets/library/bld_wall_doorway_concrete_hr_1.png,256,256,0,77898,,raw,2,lossless,16358,36.714,0.8606,0.7398,2.879,0
+2981,assets/library/bld_wall_doorway_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2982,assets/library/bld_wall_doorway_door_hr_1.png,132,256,0,39894,,neural,2,vp8 q97,2870,34.955,0.9021,0.6765,3.196,37024
+2984,assets/library/bld_pillar_a_wall_rg_1.png,256,192,0,53958,,raw,2,lossless,12610,36.274,0.8962,0.7023,2.544,0
+2985,assets/library/bld_pillar_a_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2987,assets/library/bld_pillar_broken_wall_hr_2.png,256,192,0,69762,,raw,2,lossless,16700,29.644,0.7921,0.5037,5.932,0
+2988,assets/library/bld_pillar_broken_rebar_hr_1.png,256,17,0,6172,,neural,2,lossless,1602,37.977,0.9126,0.8078,2.425,4570
+2990,assets/library/bld_pillar_tall_wall_hs_1.png,256,192,0,74054,,raw,2,lossless,17214,29.075,0.6921,0.3574,6.697,0
+2991,assets/library/bld_pillar_tall_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2993,assets/library/bld_pillar_wide_wall_rg_2.png,256,192,0,58796,,raw,2,lossless,14132,35.025,0.8648,0.6329,3.175,0
+2994,assets/library/bld_pillar_wide_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+2996,assets/library/bld_beam_concrete_concrete_1.png,256,256,0,66230,,neural,2,lossless,14138,42.076,0.9464,0.8746,1.504,52092
+2998,assets/library/bld_beam_steel_post_metal_hr_2.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3000,assets/library/bld_beam_pipes_wall_rg_2.png,256,192,0,58796,,raw,2,lossless,14132,35.025,0.8648,0.6329,3.175,0
+3001,assets/library/bld_beam_pipes_concrete_hr_3.png,256,256,0,81548,,raw,2,lossless,17834,35.741,0.8387,0.6914,3.126,0
+3002,assets/library/bld_beam_pipes_metal_hr_2.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3004,assets/library/bld_beam_lintel_wall_hr_2.png,256,192,0,69762,,raw,2,lossless,16700,29.644,0.7921,0.5037,5.932,0
+3006,assets/library/bld_stairs_short_concrete_4.png,256,256,0,68238,,neural,2,lossless,15040,41.258,0.9326,0.8795,1.691,53198
+3008,assets/library/bld_stairs_concrete_concrete_4.png,256,256,0,68238,,neural,2,lossless,15040,41.258,0.9326,0.8795,1.691,53198
+3010,assets/library/bld_stairs_wood_floor_1.png,256,256,0,66160,,raw,2,lossless,13942,36.266,0.8382,0.574,2.815,0
+3012,assets/library/bld_stairs_landing_concrete_4.png,256,256,0,68238,,neural,2,lossless,15040,41.258,0.9326,0.8795,1.691,53198
+3014,assets/library/bld_catwalk_metal_mp_6.png,256,256,0,66432,,neural,2,lossless,14368,41.698,0.9434,0.8831,1.6,52064
+3015,assets/library/bld_catwalk_floor_3_metal_1.png,256,256,0,82696,,raw,2,lossless,16730,36.072,0.8231,0.6665,3.009,0
+3016,assets/library/bld_catwalk_metal_mp_6_x.png,256,256,0,66432,,neural,2,lossless,14368,41.698,0.9434,0.8831,1.6,52064
+3018,assets/library/bld_railing_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+3020,assets/library/bld_scaffold_deck_planks_hr_3.png,175,175,0,42794,,raw,2,lossless,9280,29.977,0.7633,0.4836,6.238,0
+3021,assets/library/bld_scaffold_deck_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+3023,assets/library/bld_ramp_wall_rg_1_1.png,256,192,0,58782,,neural,2,lossless,12152,39.216,0.9123,0.7812,2.003,46630
+3024,assets/library/bld_ramp_concrete_hr_4.png,256,256,0,84422,,raw,2,lossless,17314,37.999,0.8849,0.7874,2.472,0
+3026,assets/library/bld_pipe_run_metal_hr_5.png,256,256,0,71800,,neural,2,lossless,14070,40.62,0.9178,0.8609,1.784,57730
+3027,assets/library/bld_pipe_run_pipe_hr_3.png,256,256,0,91764,,raw,2,lossless,20370,34.689,0.8282,0.5619,3.532,0
+3029,assets/library/bld_pipe_riser_metal_hr_5.png,256,256,0,71800,,neural,2,lossless,14070,40.62,0.9178,0.8609,1.784,57730
+3030,assets/library/bld_pipe_riser_concrete_hr_4.png,256,256,0,84422,,raw,2,lossless,17314,37.999,0.8849,0.7874,2.472,0
+3031,assets/library/bld_pipe_riser_pipe_hr_3.png,256,256,0,91764,,raw,2,lossless,20370,34.689,0.8282,0.5619,3.532,0
+3033,assets/library/bld_pipe_riser_tall_metal_hr_5.png,256,256,0,71800,,neural,2,lossless,14070,40.62,0.9178,0.8609,1.784,57730
+3034,assets/library/bld_pipe_riser_tall_concrete_hr_4.png,256,256,0,84422,,raw,2,lossless,17314,37.999,0.8849,0.7874,2.472,0
+3035,assets/library/bld_pipe_riser_tall_pipe_hr_3.png,256,256,0,91764,,raw,2,lossless,20370,34.689,0.8282,0.5619,3.532,0
+3037,assets/library/bld_pipe_bracket_metal_4.png,256,256,0,60576,,neural,2,lossless,13418,40.854,0.9252,0.8687,1.777,47158
+3038,assets/library/bld_pipe_bracket_metal_6.png,192,192,0,36890,,raw,2,lossless,8626,36.588,0.8626,0.7809,2.972,0
+3040,assets/library/bld_culvert_concrete_hr_1.png,256,256,0,77898,,raw,2,lossless,16358,36.714,0.8606,0.7398,2.879,0
+3042,assets/library/bld_culvert_grate_metal_hr_2.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3044,assets/library/bld_service_tunnel_wall_mp_1.png,256,194,0,57502,,neural,2,lossless,12658,39.41,0.9162,0.8322,2.088,44844
+3045,assets/library/bld_service_tunnel_floor_3_metal_1.png,256,256,0,82696,,raw,2,lossless,16730,36.072,0.8231,0.6665,3.009,0
+3047,assets/library/bld_window_bars_metal_6.png,192,192,0,36890,,raw,2,lossless,8626,36.588,0.8626,0.7809,2.972,0
+3049,assets/library/bld_door_wood_door_2.png,122,255,0,21338,,neural,2,vp8 q97,788,42.913,0.9629,0.9037,1.366,20550
+3050,assets/library/bld_door_wood_door_handle_1.png,84,124,0,10840,,neural,2,vp8 q94,542,38.728,0.9332,0.7311,2.054,10298
+3051,assets/library/bld_door_wood_door_handle_1_x.png,84,124,0,10840,,neural,2,vp8 q94,542,38.728,0.9332,0.7311,2.054,10298
+3053,assets/library/bld_door_metal_door_mp_1.png,122,255,0,26972,,neural,2,lossless,6432,45.231,0.9782,0.8785,0.881,20540
+3054,assets/library/bld_door_metal_door_handle_1.png,84,124,0,10840,,neural,2,vp8 q94,542,38.728,0.9332,0.7311,2.054,10298
+3055,assets/library/bld_door_metal_door_handle_1_x.png,84,124,0,10840,,neural,2,vp8 q94,542,38.728,0.9332,0.7311,2.054,10298
+3057,assets/library/bld_door_heavy_door_hr_12.png,132,256,0,34880,,neural,2,lossless,7938,39.334,0.9219,0.7755,1.923,26942
+3059,assets/library/bld_gate_gate_hr_1.png,256,80,0,21960,,raw,2,lossless,6030,28.237,0.746,0.2466,6.953,0
+3060,assets/library/bld_gate_gate_hr_1_x.png,256,80,0,21960,,raw,2,lossless,6030,28.237,0.746,0.2466,6.953,0
+3062,assets/library/bld_tank_rig_metal_hr_6_1.png,209,209,0,66980,,raw,2,lossless,14492,33.898,0.7809,0.6513,3.854,0
+3064,assets/library/bld_pipe_stack_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+3066,assets/library/bld_pipe_stack_elbow_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+3068,assets/library/bld_cage_metal_hr_2.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3069,assets/library/bld_cage_metal_floor_mx_1.png,256,256,0,87818,,raw,2,lossless,18962,35.285,0.8119,0.6878,3.306,0
+3070,assets/library/bld_cage_metal_hr_2_x.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3071,assets/library/bld_cage_metal_hr_2_x_x.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3073,assets/library/bld_switch_box_transformer_box_hr_2.png,186,256,0,58800,,raw,2,lossless,14454,33.396,0.861,0.2484,3.358,0
+3075,assets/library/bld_cable_run_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+3077,assets/library/bld_ladder_steel_beams_hr_1.png,256,41,0,13964,,raw,2,lossless,3088,29.699,0.7275,0.4797,5.829,0
+3079,assets/library/bld_metal_fence_metal_fence_hr_1.png,256,154,0,42912,,neural,2,vp8 q94,1700,38.729,0.9182,0.7411,2.251,41212
+3081,assets/library/bld_barricade_barricade_hr_1.png,255,121,0,32720,,raw,2,lossless,7972,29.349,0.7725,0.2986,5.077,0
+3083,assets/library/bld_brick_rubble_bricks_mx_1.png,178,204,0,48506,,raw,2,lossless,11636,34.446,0.8702,0.6704,3.372,0
+3085,assets/library/bld_gravel_pile_gravel_hr_1.png,256,256,0,87822,,raw,2,lossless,20526,30.016,0.6991,0.5096,6.205,0
+3087,assets/library/bld_brick_stack_bricks_mx_1.png,178,204,0,48506,,raw,2,lossless,11636,34.446,0.8702,0.6704,3.372,0
+3089,assets/library/bld_air_unit_industrial_air_conditioner_1.png,120,169,0,4184,,raw,2,lossless,4850,28.287,0.8609,0.494,5.08,0
+3091,assets/library/bld_vent_unit_industrial_air_conditioner_vertical_1.png,214,128,0,5326,,raw,2,lossless,8398,19.954,0.667,0.1538,16.857,0
+3093,assets/library/bld_lamp_cage_metal_hr_1_dark_smooth.png,256,256,0,58766,,neural,2,lossless,12822,45.83,0.9771,0.9603,0.976,45944
+3094,assets/library/bld_lamp_cage_lamp_1_on.png,64,64,0,2956,,neural,2,lossless,908,33.041,0.9718,0.8743,2.789,2048
+3095,assets/library/bld_lamp_cage_metal_hr_1_smooth.png,256,256,0,53810,,neural,2,lossless,10372,43.704,0.9594,0.9284,1.269,43438
+3097,assets/library/bld_lamp_hood_metal_hr_2.png,256,256,0,79172,,neural,2,lossless,15970,39.931,0.9202,0.8606,1.88,63202
+3098,assets/library/bld_lamp_hood_lamp_1_on.png,64,64,0,2956,,neural,2,lossless,908,33.041,0.9718,0.8743,2.789,2048
+3100,assets/library/bld_ceiling_lamp_lamp_1_on_yellow.png,64,64,0,110,,raw,2,lossless,136,37.712,0.9877,0.9188,0.81,0
+3101,assets/library/bld_ceiling_lamp_lamp_3_off.png,256,128,0,22080,,neural,2,vp8 q94,1318,35.207,0.9008,0.7032,3.084,20762
+3102,assets/library/bld_ceiling_lamp_metal_mp_4.png,256,256,0,60576,,neural,2,lossless,13418,40.854,0.9252,0.8687,1.777,47158
+3103,assets/library/bld_ceiling_lamp_plastic_mp_2.png,256,256,0,36426,,neural,2,lossless,11854,49.578,0.9941,0.9857,0.544,24572
+3105,assets/library/mine_lantern_farol.png,256,256,0,80410,,raw,2,lossless,23056,25.345,0.8717,0.5302,7.629,0
+3107,assets/library/mine_barrel_barrel.png,256,256,0,66340,,raw,2,lossless,15888,28.253,0.888,0.4735,4.947,0
+3109,assets/library/mine_barrel_wide_barrel_01.png,256,256,0,72266,,raw,2,lossless,18158,26.203,0.8873,0.5348,5.951,0
+3115,assets/library/mine_petrol_can_petrol_can.png,256,256,0,96072,,raw,2,lossless,22988,27.69,0.8352,0.5525,6.264,0
+3117,assets/library/mine_locker_locker.png,256,256,0,68564,,neural,2,lossless,18158,32.035,0.9023,0.5972,2.758,50406
+3119,assets/library/mine_shelving_metalbare.png,256,62,0,11918,,neural,2,vp8 q97,1204,37.951,0.9063,0.8358,2.461,10714
+3121,assets/library/mine_tray_tray.png,256,256,0,63870,,raw,2,lossless,16118,28.238,0.8522,0.5915,5.372,0
+3123,assets/library/mine_gravel_heap_gravel.png,256,256,0,88758,,raw,2,lossless,20474,21.214,0.829,0.5162,13.593,0
+3125,assets/library/cave_rock_boulder_b_rocks.png,256,256,0,82916,,raw,2,lossless,21282,25.874,0.8355,0.5396,8.641,0
+3127,assets/library/cave_rock_lump_rocks.png,256,256,0,82916,,raw,2,lossless,21282,25.874,0.8355,0.5396,8.641,0
+3137,assets/library/cave_rock_2m_a_m_rp_rocks_0_2k.png,256,256,0,69842,,neural,2,vp8 q94,5904,34.307,0.9084,0.7553,3.497,63938
+3139,assets/library/cave_rock_2m_b_m_rp_rocks_0_2k.png,256,256,0,69842,,neural,2,vp8 q94,5904,34.307,0.9084,0.7553,3.497,63938
+3141,assets/library/cave_rock_4m_a_m_rp_rocks_0_4k.png,256,256,0,69720,,neural,2,vp8 q97,6816,34.525,0.9042,0.7373,3.485,62904
+3143,assets/library/cave_rock_4m_b_m_rp_rocks_0_2k.png,256,256,0,69842,,neural,2,vp8 q94,5904,34.307,0.9084,0.7553,3.497,63938
+3145,assets/library/cave_gem_pile_blue_blue_gemstone_pile.png,256,256,0,50614,,neural,2,vp8 q80,3546,32.372,0.976,0.8888,4.561,47068
+3147,assets/library/cave_gem_pile_red_red_gemstone_pile_2.png,256,256,0,18394,,neural,4,lossless,3416,48.96,0.9977,0.9854,0.483,14978
