@@ -1,6 +1,7 @@
 #include "PropBodies.h"
 #include "../Containers.h"
 #include "../SoftBodies.h"
+#include "../SaveSections.h"
 #include "../../core/Tune.h"
 #include "../../world/ModelIds.h"
 #include <cstdlib>
@@ -102,6 +103,9 @@ const Shape& propShape(int model,std::array<float,3> dims){
  const std::array<int,4> key{model,int(std::lround(dims[0]*1e4f)),int(std::lround(dims[1]*1e4f)),int(std::lround(dims[2]*1e4f))};
  std::lock_guard<std::mutex> hold(lock);auto& slot=cache[key];if(!slot)slot=std::make_unique<Shape>(build(model,dims));return *slot;}
 Material propMaterialOf(const Clutter& c){Material m=propMaterial(c.material());
+ // A map's own friction (Coulomb, 0..1) and restitution for this prop (EntityTraits.h), over its material's.
+ if(c.traits&&c.traits->friction>=0){m.staticFriction=c.traits->friction;m.dynamicFriction=c.traits->friction*.8f;}
+ if(c.traits&&c.traits->restitution>=0)m.restitution=c.traits->restitution;
  // On casters or wheels: it rolls away under a shove rather than dragging its feet (and so is not bowled over;
  // casters turning across the way still drag, so not ice).
  using namespace model;if(c.model==office_chair||c.model==lab_boardroom_chair||c.model==med_wheelchair||c.model==med_crash_cart){m.staticFriction=.3f;m.dynamicFriction=.25f;m.rolling=.004f;}
@@ -116,7 +120,10 @@ void setPropAngular(Clutter& c,V3 w){const float cy=std::cos(c.yaw),sy=std::sin(
 void toBody(const Clutter& c,Body& b){
  const Shape& s=propShape(c);b.shape=&s;b.q=propOrientation(c);b.x=propCentre(c)+b.q.rotate(s.com);
  b.v={c.velocity.x,c.velocity.y,c.vz};b.w=propAngular(c);b.material=propMaterialOf(c);b.softHertz=propSoftHertz(c);
- b.sleeping=c.sleeping;b.sleepTime=std::max(0.f,c.restTime);b.setMass(c.mass());b.updateInertia();}
+ b.sleeping=c.sleeping;b.sleepTime=std::max(0.f,c.restTime);
+ // Pinned (anchored, or a named prop frozen by its map): held where it was put; others meet it, it does not move.
+ if(c.pinned){b.kinematic=true;b.v={};b.w={};b.sleeping=false;}
+ b.setMass(c.mass());b.updateInertia();}
 void fromBody(const Body& b,Clutter& c){
  const Quat q=b.q.normalized();c.orient={q.w,q.x,q.y,q.z};q.toEuler(c.yaw,c.pitch,c.roll);c.orientEuler={c.yaw,c.pitch,c.roll};
  const V3 centre=b.x-q.rotate(b.shape->com);c.pos={centre.x,centre.y};c.z=centre.z-c.extent()[2];
@@ -124,6 +131,11 @@ void fromBody(const Body& b,Clutter& c){
 
 std::array<float,3> propExtent(const Clutter& c){if(c.model<0||legacyProps())return c.extent();Body b;toBody(c,b);const V3 m=propCentre(c);std::array<float,3> e{0,0,0};
  for(int p=0;p<b.shape->count;++p){V3 lo,hi;partBounds(b,p,lo,hi);e[0]=std::max({e[0],hi.x-m.x,m.x-lo.x});e[1]=std::max({e[1],hi.y-m.y,m.y-lo.y});e[2]=std::max({e[2],hi.z-m.z,m.z-lo.z});}return e;}
+// The "physics" save section's hooks (SaveSections.h, docs/Systems/save-format.md): installed once at start-up.
+// Under legacy no prop has solver state, so nothing is captured; a saved section is still restored.
+namespace {const bool hooked=[]{physicsSaveHooks()={
+  [](const Clutter& c,PropBody& b){if(legacyProps())return false;return captureProp(c,b.orientation,b.angularVelocity,b.island);},
+  [](Clutter& c,const PropBody& b){restoreProp(c,b.orientation,b.angularVelocity,b.island);}};return true;}();}
 bool captureProp(const Clutter& c,std::array<float,4>& q,std::array<float,3>& w,std::int32_t& island){
  if(c.model<0||c.broken)return false;const Quat o=propOrientation(c);q={o.x,o.y,o.z,o.w};const V3 a=propAngular(c);w={a.x,a.y,a.z};island=c.sleeping?std::max(0,c.island):-1;return true;}
 void restoreProp(Clutter& c,const std::array<float,4>& q,const std::array<float,3>& w,std::int32_t island){

@@ -55,6 +55,7 @@ void Game::seedScripts(){
  for(int chunk=0;chunk<chunkCount();++chunk)for(auto event:m_chunks[chunk].world.scriptEvents()){
   event.level=chunk;m_scriptEvents.push_back(std::move(event));
  }
+ seedEntityProperties();
 }
 void Game::spawnScriptEnemy(const ScriptAction& action){
  // id names the recurring hunter it is (CreatureSpawn::hunter) and value-1 the actor it comes for.
@@ -68,12 +69,17 @@ void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announc
  if(creatureTraits(e.kind).dormant&&!e.wakeState)e.wakeState=machineAsleepState(); // it sleeps among the plant until something wakes it
  e.z=spawn.z==-999?m_world.floorHeight(e.pos.x,e.pos.y):spawn.z;e.lastKnownZ=e.homeZ=e.z;e.heading=kPi;e.scale=spawn.scale>0?spawn.scale:1;
  e.awareness=std::max(0.f,awareness);e.state=e.awareness>0?Enemy::State::Investigate:Enemy::State::Idle;
+ // Map format 2 (CREATURE faction= ai= display= tint=): the summon traits on an authored creature.
+ if(spawn.traits){const auto& t=*spawn.traits;e.traits=spawn.traits;if(t.faction>=0)e.faction=AiFaction(t.faction);
+  if(t.order>=0){e.ordered=true;e.order=std::uint8_t(t.order);e.anchor=e.pos;e.anchorZ=e.z;
+   const Vec2 ahead{std::clamp(e.pos.x+4*std::cos(e.heading),1.f,float(World::Width)-1),std::clamp(e.pos.y+4*std::sin(e.heading),1.f,float(World::Height)-1)};
+   e.patrolTo=ahead;e.patrolToZ=e.z;if(t.order==int(SummonOrder::Hunt)||t.order==int(SummonOrder::Follow))e.wakeState=0;}}
  e.voiceTimer=announce?.25f:.8f+float(m_enemies.size())*.9f;e.idleTimer=e.voiceTimer;m_enemies.push_back(e);
  if(announce){if(e.kind==Enemy::Kind::Brute)sound(Sound::Land,.8f,.7f);else enemySound(m_enemies.back(),0,.55f,.9f);}
 }
 void Game::executeScriptAction(const ScriptAction& action){
  switch(action.type){
-  case ScriptAction::Type::SetState:setState(action.id,action.value);break;
+  case ScriptAction::Type::SetState:if(isEntityProperty(action.id))setEntityPropertyInt(action.id,action.value);else setState(action.id,action.value);break;
   case ScriptAction::Type::SetObjective:setObjective(action.id,static_cast<ObjectiveStatus>(std::clamp(action.value,0,3)));break;
   case ScriptAction::Type::GiveItem:
    // The pistol comes loaded and in hand: a full magazine per count.
@@ -91,7 +97,7 @@ void Game::executeScriptAction(const ScriptAction& action){
   // Deferred: the script pass is still iterating this world's events.
   // (Only a custom world hands off: the prologue is a campaign chunk now.)
   case ScriptAction::Type::EnterMainCampaign:if(m_worldId==WorldId::Custom)m_pendingMainCampaign=true;break;
-  case ScriptAction::Type::AddState:setState(action.id,std::clamp(state(action.id)+action.value,-100000,100000));break;
+  case ScriptAction::Type::AddState:if(isEntityProperty(action.id))setEntityPropertyInt(action.id,entityPropertyInt(action.id)+action.value);else setState(action.id,std::clamp(state(action.id)+action.value,-100000,100000));break;
   case ScriptAction::Type::ShowMessage:{
    std::string text;
    for(size_t i=0;i<action.text.size();){
@@ -135,7 +141,7 @@ void Game::updateReceivingBreach(){
 int Game::scriptValue(const ScriptEvent& event,const ScriptCondition& c)const{
  using S=ScriptCondition::Source;
  switch(c.source){
-  case S::State:return state(c.id);
+  case S::State:return isEntityProperty(c.id)?entityPropertyInt(c.id):state(c.id);
   case S::Kills:return event.level==m_level?m_kills:m_chunks[event.level].kills;
   case S::Remaining:return hostilesRemaining(event.level);
   case S::Health:return int(std::ceil(m_player.health));

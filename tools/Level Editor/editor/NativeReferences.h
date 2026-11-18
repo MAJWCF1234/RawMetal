@@ -26,7 +26,7 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
       if(f.size()>3&&f[1]==object[1]&&f[0]=="SEQUENCE_SIGHT"){
         int target=std::stoi(f[3]);if(target==gone)continue;
         if(target>gone)f[3]=std::to_string(target-1);
-        kept.push_back(NativeDocument::join(f)+(!line.empty()&&line.back()=='\r'?"\r":""));continue;
+        kept.push_back(NativeDocument::join(f)+NativeDocument::namedText(NativeDocument::named(line))+(!line.empty()&&line.back()=='\r'?"\r":""));continue;
       }
       // A creature's quarry (CREATURE field 10) is a person on its map: it follows the renumbering, and loses a quarry that is gone.
       if(f.size()>10&&f[1]==object[1]&&f[0]=="CREATURE"&&!f[10].empty()){
@@ -34,7 +34,7 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
         if(target==gone||target>gone){
           if(target==gone)f[10].clear();else f[10]=std::to_string(target-1);
           while(f.size()>6&&f.back().empty())f.pop_back();
-          kept.push_back(NativeDocument::join(f)+(!line.empty()&&line.back()=='\r'?"\r":""));continue;
+          kept.push_back(NativeDocument::join(f)+NativeDocument::namedText(NativeDocument::named(line))+(!line.empty()&&line.back()=='\r'?"\r":""));continue;
         }
       }
       size_t at =f.size() > 7 && f[0] == "ACTOR" ? 7 : f.size() > 2 && f[0].starts_with("ACTOR_") ? 2 : 0;
@@ -44,7 +44,7 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
       if (i > gone) f[at] = std::to_string(i - 1);
       if(f[0]=="ACTOR_KEY"&&f.size()>10){int target=std::stoi(f[10]);
         if(target==gone)f[10]="-1";else if(target>gone)f[10]=std::to_string(target-1);}
-      kept.push_back(NativeDocument::join(f) + (!line.empty() && line.back() == '\r' ? "\r" : ""));
+      kept.push_back(NativeDocument::join(f) + NativeDocument::namedText(NativeDocument::named(line)) + (!line.empty() && line.back() == '\r' ? "\r" : ""));
     }
     doc.lines = std::move(kept);
     doc.touch();

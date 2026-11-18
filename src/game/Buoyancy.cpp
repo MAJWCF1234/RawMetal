@@ -12,8 +12,10 @@ float least(PropMaterial m){
 float volume(const Clutter& c){const auto s=c.size();return std::max(1e-5f,s[0]*s[1]*s[2]);}
 float nearestFace(float a){const float q=kPi*.5f;return std::round(a/q)*q;}
 }
-bool floats(const Clutter& c){return c.model>=0?propMaterialTraits(c.material()).floats:c.kind!=3&&c.kind!=4;}
+bool floats(const Clutter& c){if(c.traits&&c.traits->floats>=0)return c.traits->floats>0;if(c.traits&&c.traits->density>0)return c.traits->density<WaterDensity;return c.model>=0?propMaterialTraits(c.material()).floats:c.kind!=3&&c.kind!=4;}
 float density(const Clutter& c){
+ // Map format 2: density= is taken as given; floats= alone keeps the material's range on its side of water.
+ if(c.traits&&c.traits->density>0)return c.traits->density;
  const float bulk=c.mass()/volume(c);
  if(c.model<0)return floats(c)?450.f:2400.f;
  const float low=least(c.material());

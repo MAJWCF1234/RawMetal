@@ -54,8 +54,6 @@ RULES = [
      ['systems', 'gameplay-fixes', 'saves', 'props', 'clutter'], [], False, False),  # shared header: the save version and the prop struct live here
     (r'^src/game/',
      ['systems', 'gameplay-fixes', 'engine-regression'], [], False, False),
-    (r'^src/renderer/SoftwareRenderer\.(cpp|h)$',
-     [], [], False, False),  # every release retags the menu; other renderer files still map
     (r'^src/renderer/(Carcass|Particles|Humanoid|ClaireOutside)',
      ['human-ragdoll', 'particles', 'creature-animation', 'hazmat'],
      [EXTRA_GORE, EXTRA_CARCASS, EXTRA_RENDER], False, False),
@@ -179,6 +177,26 @@ def changed_files(base=None):
     return sorted(files), base
 
 
+# What ship.py's set_version rewrites every release. A file whose diff is only these lines
+# changed nothing a test can see; any other change in it maps through RULES as usual.
+VERSION_LINES = {
+    'src/renderer/SoftwareRenderer.cpp': re.compile(r'V\d+\.\d+\.\d+  CHAPTER'),
+    'src/app.rc': re.compile(r'(FILEVERSION|PRODUCTVERSION) \d+,\d+,\d+,\d+|"\d+\.\d+\.\d+\\0"'),
+}
+
+
+def version_tag_only(path, base):
+    pattern = VERSION_LINES.get(path)
+    if not pattern or not base:
+        return False
+    out = _run(['git', 'diff', '-U0', base, '--', path])
+    if out.returncode != 0:
+        return False
+    changed = [line[1:] for line in out.stdout.splitlines()
+               if line[:1] in '+-' and not line.startswith(('+++', '---'))]
+    return bool(changed) and all(pattern.search(line) for line in changed if line.strip())
+
+
 def select(base=None, suite_names=None):
     """Return a dict describing what to run for the current diff.
 
@@ -198,6 +216,9 @@ def select(base=None, suite_names=None):
     tests, extras, reasons = set(), set(), {}
     audio = builder_open = False
     for path in files:
+        if version_tag_only(path, base):
+            reasons[path] = 'version tag only'
+            continue
         matched = False
         for pattern, rule_tests, rule_extras, rule_audio, rule_builder in RULES:
             if not re.search(pattern, path):

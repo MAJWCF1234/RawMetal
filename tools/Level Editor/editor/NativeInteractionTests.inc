@@ -82,7 +82,7 @@
     require(floorGroup(groupId).mask[6]!=(0xffffffu)&&floorLayer(1).mask==child.mask,"Group mask destructively replaced child masks");
     handleLayerCommand(LayerMaskClear,0);handleLayerCommand(LayerOpaque,0);
     auto planPixel=[&]{RECT r{};GetClientRect(plan,&r);HDC dc=CreateCompatibleDC(nullptr);BITMAPINFO info{};info.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);info.bmiHeader.biWidth=r.right;info.bmiHeader.biHeight=-r.bottom;info.bmiHeader.biPlanes=1;info.bmiHeader.biBitCount=32;void* bits=nullptr;auto bitmap=CreateDIBSection(dc,&info,DIB_RGB_COLORS,&bits,nullptr,0);auto old=SelectObject(dc,bitmap);SendMessageW(plan,WM_PRINTCLIENT,reinterpret_cast<WPARAM>(dc),PRF_CLIENT);auto v=planView();auto pixel=GetPixel(dc,int(v.ox+12.5f*v.cell),int(v.oy+12.5f*v.cell));SelectObject(dc,old);DeleteObject(bitmap);DeleteDC(dc);return pixel;};
-    auto opaquePixel=planPixel();handleLayerCommand(LayerHalf,0);auto halfPixel=planPixel();require(opaquePixel!=halfPixel&&halfPixel!=CLR_INVALID,"Opacity does not change the actual 2D floor preview");handleLayerCommand(LayerOpaque,0);
+    auto opaquePixel=planPixel();handleLayerCommand(LayerHalf,0);auto halfPixel=planPixel();require(opaquePixel!=halfPixel&&halfPixel!=CLR_INVALID,("Opacity does not change the actual 2D floor preview ("+std::to_string(opaquePixel)+" "+std::to_string(halfPixel)+")").c_str());handleLayerCommand(LayerOpaque,0);
     handleLayerCommand(LayerLock,0);
     require(effectiveFloorView(floorLayer(1)).locked,"Group lock does not lock floor content");handleLayerCommand(LayerLock,0);
     selectedLayerGroup=-1;refreshLayerDock();selectFloorFootprint();auto oldBounds=tileBounds();

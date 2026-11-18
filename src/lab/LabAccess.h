@@ -99,6 +99,7 @@ struct LabAccess {
  static const Game::RigidStats& rigidStats(const Game& g){return g.m_rigidStats;}
  static void knock(Game& g,size_t index,Point3 at,Point3 impulse){g.knockClutter(g.m_level,index,at,impulse);}
  static Vec2& carryHandVelocity(Game& g){return g.m_carryHandVelocity;}
+ static int entityProperty(Game& g,int level,std::string_view entity,std::string_view key){return g.entityPropertyInt(level,entity,key);}
  static void detonateBarrel(Game& g,int x,int y){g.detonateBarrel(g.m_level,x,y);}
  static void damagePane(Game& g,int index,float amount,Point3 at,Point3 direction){g.damagePane(g.m_level,index,amount,at,direction);}
  static bool damagePane(Game& g,int index,float amount,Point3 at,Point3 direction,PaneBlow blow){return g.damagePane(g.m_level,index,amount,at,direction,blow);}

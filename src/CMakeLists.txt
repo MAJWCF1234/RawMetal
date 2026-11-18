@@ -180,6 +180,8 @@ add_executable(RawMetal WIN32
     game/Crates.cpp
     game/ServiceMapTest.cpp
     game/Clutter.cpp
+    game/EntityProperties.cpp
+    game/MapFormatTest.cpp
     game/GlassPanes.cpp
     game/Containers.cpp
     game/SoftBodies.cpp
@@ -224,6 +226,7 @@ add_executable(RawMetal WIN32
     world/CampaignChapterFinaleB.cpp
     world/CampaignChapterFinaleC.cpp
     world/CustomCampaign.cpp
+    world/EntityTraits.cpp
     world/CampaignExport.cpp
     world/Primitives.cpp
     renderer/SoftwareRenderer.cpp

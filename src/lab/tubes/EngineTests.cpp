@@ -17,6 +17,7 @@ const bool registered=[]{
  engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
+ engine("map-format","--each-test=map-format: named fields, names, overrides, prefabs, properties, FORMAT 2",&Game::testMapFormat);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
  engine("human-ragdoll","--each-test=human-ragdoll: every Chapter 2 body at rest, a killed guard, a reload",&SoftwareRenderer::testHumanRagdoll);
  engine("carcass","--carcass-test: creature carcasses fall, fold and come apart",&Carcass::test);
@@ -28,6 +29,12 @@ const bool registered=[]{
  engine("npc-voices","--each-test=npc-voices: who speaks, when, once",&Game::testNpcVoices);
  engine("dialogue","--each-test=dialogue",&Game::testDialogue);
  engine("saves","--each-test=saves",&Game::testSaves);
+ // The format 28 section container: formats 1-27 refitted with backups, real saves (copied to a temp folder), damaged and unknown sections, the stores and hooks.
+ engine("save-format","save sections: the load paths and backups, damaged and unknown sections, stores, physics hook, the misplaced save folder",+[]{std::ofstream r("save-format.txt");return Game::testSaveFormat(r,Game::SaveTestCore);});
+ engine("save-refit-room","custom-room saves of formats 12-27 refit to 28 with backups and re-save byte-exact",+[]{std::ofstream r("save-refit-room.txt");return Game::testSaveFormat(r,Game::SaveTestRoomFormats);});
+ engine("save-refit-early","campaign saves of formats 1-6 refit to 28 with backups and re-save byte-exact",+[]{std::ofstream r("save-refit-early.txt");return Game::testSaveFormat(r,Game::SaveTestCampaignEarly);});
+ engine("save-refit-late","campaign saves of formats 7-11, 19 and 27 refit to 28 with backups and re-save byte-exact",+[]{std::ofstream r("save-refit-late.txt");return Game::testSaveFormat(r,Game::SaveTestCampaignLate);});
+ engine("save-real","real saves from past releases (%LOCALAPPDATA% save folders, lab/fixtures/saves, RM_REAL_SAVES=dir;dir), copied to a temp folder: load, refit, re-save byte-exact",+[]{std::ofstream r("save-real.txt");return Game::testSaveFormat(r,Game::SaveTestRealSaves);});
  engine("saves-in-play","saves written in play on maps 0-109 (deaths, debris, fights, checkpoints, seams) all load; RM_SAVE_MAPS=a-b narrows",+[]{std::ofstream r("saves-in-play.txt");return Game::testSavesInPlay(r);});
  // Saves other builds wrote (RM_LOAD_SAVES=DIR: every *.rms in it): each loads, or is refused with its reason.
  engine("load-saves","every *.rms in RM_LOAD_SAVES loads in this build (old releases' saves upgrade)",+[]{
