@@ -1,0 +1,7 @@
+# Physgloves in the Starter Map's phase-3 corner (SHOWCASE: PHYSICS): the mug on the high shelf pulled and caught; the corner's contents (tube physgloves).
+world custom "custom maps/Starter Map.rmc"
+map-name "Showcase Physics"
+camera 2.6 19.4 -999 90 0
+scene starter
+size 1600 900
+frames 110

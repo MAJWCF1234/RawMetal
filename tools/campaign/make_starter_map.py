@@ -302,6 +302,8 @@ def models():
     fronts = json.load(open(os.path.join(ROOT, 'tools', 'dev', 'model_fronts.json')))
     result = []
     for slot, name in sorted(names):
+        if name.startswith('gib_'):
+            continue   # authored gibs (tools/library/make_gibs.py) are pieces of props, not models to show
         w, d, h = sizes[slot] if slot < len(sizes) and sizes[slot] != (0, 0, 0) else LEGACY_SIZE.get(slot, (1, 1, 1))
         # Unlisted engine models (0-62) face -z: yaw 0 shows their front, as the shipped maps place them.
         front = fronts.get(name, {}).get('front', '+z') if isinstance(fronts.get(name), dict) else '+z' if slot >= 63 else '-z'
@@ -1378,6 +1380,61 @@ def physics_room(s, slot, catalogue):
     for x, y in ((5, 5), (15, 4), (5, 18), (15, 18)):
         s.rec(m, 'LIGHT', i, x, y, 4.6, 0, 0, 1.1, 10, 4300)
     joints_corner(s, m, slot, body)
+    phase3_corner(s, m, slot, body, catalogue)
+
+
+def phase3_corner(s, m, slot, body, catalog):
+    """The phase-3 corner of SHOWCASE: PHYSICS, along the south wall west of TUMBLE (x 1-9.6, y 19-23):
+    Physgloves targets (things on a high shelf, a crate hung on a rope, mugs in an open crate); a table of
+    breakables that come apart in their authored gibs (tools/library/make_gibs.py); bottles of water, oil and a
+    green chemical to slosh, pour, shoot and break (Liquids.h: p.liquid, p.fill); a crate to carry in two VR hands."""
+    i = m['index']
+    s.format2 = True
+
+    physics = json.load(open(os.path.join(ROOT, 'tools', 'campaign', 'prop_physics.json')))
+
+    def s_size(name):
+        return physics.get(name, {}).get('size', catalog[name])
+
+    n_clutter = lambda: sum(1 for r in m['records'] if r.startswith('CLUTTER|'))
+    # Physgloves: a high shelf against the south wall (its top 1.9 m up) with light things on it to pull down.
+    s.struct(m, 1.3, 22.45, 3.5, 22.95, 1.86, 1.9, 40)
+    for x in (1.4, 3.4):
+        s.struct(m, x - .04, 22.6, x + .04, 22.68, 0, 1.86, 40)
+    body('mug', 1.7, 22.7, 1.9)
+    body('glass_bottle', 2.15, 22.7, 1.9)
+    body('binder', 2.6, 22.7, 1.9, HALF)
+    body('mug', 3.1, 22.65, 1.9, .4)
+    # A crate hung on a rope from the ceiling: pull it and it swings out to you on its rope.
+    crate = n_clutter()
+    s.rec(m, 'CLUTTER', i, 7, 4.6, 21.9, 2.3, .2, slot['wooden_crate'], .42, .42, .42, 0, 0, '', 'mass=5')
+    s.rec(m, 'JOINT', i, 'rope', crate, -1, 4.6, 21.9, 2.72, 4.6, 21.9, 5.0, 'radius=0.012')
+    # An open crate of mugs on the floor: pull them out of it.
+    body('market_crate', 1.9, 20.3, 0)
+    for x, y in ((1.8, 20.25), (2.0, 20.35)):
+        body('mug', x, y, -999)
+    # A table of breakables (each breaks into its authored gibs): a monitor and a bottle on it, chairs and crates by it.
+    top = body('wooden_table', 6.4, 21.9, 0, 0)
+    body('crt_monitor', 6.1, 21.95, top, PI, .9)
+    body('glass_bottle', 6.95, 21.8, top)
+    body('wooden_chair', 6.0, 20.9, 0, PI)
+    body('wooden_chair', 7.1, 20.95, 0, PI + .3)
+    body('scrap_chair', 5.0, 20.6, 0, 2.6)
+    body('packing_crate', 7.9, 22.4, 0, .1, .6)
+    # Bottles of water, oil and a green chemical on a low bench: slosh them, pour them, shoot them (a round holes one
+    # and it leaks), break them (it spills).
+    s.struct(m, 8.4, 21.4, 9.5, 22.0, 0, .7, 40)
+    for k, (kind, fill) in enumerate((('water', .75), ('oil', .7), ('chemical', .8))):
+        w, d, h = s_size('glass_bottle')
+        s.rec(m, 'CLUTTER', i, 7, round(8.65 + .38 * k, 3), 21.7, .7, 0, slot['glass_bottle'], w, d, h, 0, 0, '',
+              'p.liquid=%s' % kind, 'p.fill=%g' % fill)
+    # A crate to carry in two VR hands (one alone takes it, the other closing on its far side makes it two-handed).
+    body('wooden_crate', 8.9, 19.8, 0, .25, .75)
+    s.sign(m, 5.4, 22.96, 2.9, 3.2, .7, 'PHYSICS: PHASE 3', 'Physgloves (G), gibs, liquids, two hands', SHOW, PI)
+    s.rec(m, 'LIGHT', i, 5.2, 21.2, 4.6, 0, 0, 1.1, 9, 4300)
+    s.zone(m, 1, 19, 9.6, 23, 'PHYSICS / phase 3: Physgloves, gibs, liquids, two hands')
+    s.index.append({'map': i, 'section': 'SHOWCASE', 'x': 5, 'y': 21, 'title': 'PHASE 3',
+                    'name': 'Physgloves targets, a hung crate, breakables with authored gibs, bottles of water, oil and chemical, a crate for two hands'})
 
 
 def joints_corner(s, m, slot, body):
