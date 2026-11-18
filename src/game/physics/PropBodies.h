@@ -1,6 +1,6 @@
 #pragma once
-// Props as rigid bodies (Rigid.h): each model's collision shape and material, the switch between the
-// rigid core and the old prop physics, and the mapping between a Clutter and a Body.
+// Props as rigid bodies (Vectra.h): each model's collision shape and material, the switch between the
+// Vectra and the legacy prop physics, and the mapping between a Clutter and a Body.
 //
 // Shapes come from the catalog (the prop's own dims, prop_physics.json's mass and container volume) with
 // a table of overrides by model: an oriented box by default; a cylinder for barrels, drums, bottles,
@@ -8,11 +8,12 @@
 // compound boxes for chairs (legs or base, seat, back on the side the model's front table says), tables,
 // a wheelchair, a lamp's L; an open container (model::container) is its floor and four walls up to its
 // rim, so what lies in it rests on the inner floor and pours out when it tips.
-#include "Rigid.h"
+#include "Vectra.h"
 #include "../Game.h"
-namespace retro::rigid {
-// The old physics (simulateClutter's yaw-mostly box) instead of the rigid core: RM_PROPS=legacy (or old),
-// or the knob props.legacy 1. forceLegacyProps overrides both (the lab's A/B tubes): 1 old, 0 new, -1 off.
+namespace retro::vectra {
+// Legacy (simulateClutter's yaw-mostly box) instead of Vectra. Legacy is the default (the scorecard in
+// docs/Systems/physics.md); RM_PROPS=vectra or the knob props.legacy 0 runs Vectra, RM_PROPS=legacy forces
+// legacy. forceLegacyProps overrides both (the lab's A/B tubes): 1 legacy, 0 Vectra, -1 off.
 bool legacyProps();
 void forceLegacyProps(int mode);
 // The rigid material of a prop material. Index PropMaterial::Count is rubber (lab bodies only).

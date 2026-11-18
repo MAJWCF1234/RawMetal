@@ -1,5 +1,5 @@
 #pragma once
-// The rigid-body core (phase 1 of the prop physics: docs in Rigid.cpp's head).
+// The rigid-body core (phase 1 of the prop physics: docs in Vectra.cpp's head).
 //
 //  - A Body is a rigid body: its centre of mass, orientation (a unit quaternion), linear and angular
 //    velocity, mass and inertia tensor (from its Shape and mass), and a Material (static and dynamic
@@ -27,7 +27,7 @@
 #include <cstdint>
 #include <functional>
 #include <vector>
-namespace retro::rigid {
+namespace retro::vectra {
 using V3=Point3;
 inline V3 v3(float x,float y,float z){return {x,y,z};}
 inline float dot(V3 a,V3 b){return a.x*b.x+a.y*b.y+a.z*b.z;}
@@ -181,7 +181,7 @@ struct Settings {
  float contactHertz=60,contactDampingRatio=10,pushout=3;  // soft contact: stiffness, damping, max push-out speed (m/s)
  float linearSlop=.004f,speculative=.04f;                  // allowed penetration, speculative reach
  float restitutionThreshold=1.f;                           // below this approach speed nothing bounces
- float sleepLinear=.06f,sleepAngular=.12f,sleepTime=.35f; // islands under these for this long sleep
+ float sleepLinear=.06f,sleepAngular=.12f,sleepTime=.2f;  // islands under these for this long sleep
  float maxLinear=40,maxAngular=60;
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
@@ -206,6 +206,7 @@ struct Space {
  std::vector<ContactEvent> events;  // this step's impacts (approach over .3 m/s or an impulse)
  // Stats.
  int pairsTested=0,worldManifolds=0,iterationsRun=0;
+ double worldMs=0,pairMs=0,solveMs=0;   // where the last step's time went (collide's world and pair halves, the substeps)
  // One fixed step of dt.
  void step(float dt);
  // Islands: groups of touching, moving bodies (filled by step).

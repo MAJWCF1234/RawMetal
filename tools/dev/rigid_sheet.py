@@ -3,8 +3,8 @@
   python tools/dev/lab.py run --feature=rigid,rigid-legacy --out=.build/lab-out-rigid
   python tools/dev/rigid_sheet.py [.build/lab-out-rigid]
 
-Writes OUT/rigid-ab-<scene>.png for each scene (rows: the shots a-start .. d-end; left the old physics,
-right the rigid core) and OUT/rigid-ab-sheet.png with every scene.
+Writes OUT/rigid-ab-<scene>.png for each scene (rows: the shots a-start .. d-end; left legacy,
+right Vectra) and OUT/rigid-ab-sheet.png with every scene.
 """
 import os, sys
 from PIL import Image, ImageDraw
@@ -30,8 +30,8 @@ def main():
             for i, p in enumerate(pair):
                 if p: row.paste(p, (i * (w + 6), 0))
             d = ImageDraw.Draw(row)
-            d.text((6, 4), 'OLD  %s  %s' % (scene, shot), fill=(255, 220, 120))
-            d.text((w + 12, 4), 'NEW (rigid core)  %s  %s' % (scene, shot), fill=(140, 255, 160))
+            d.text((6, 4), 'LEGACY  %s  %s' % (scene, shot), fill=(255, 220, 120))
+            d.text((w + 12, 4), 'VECTRA  %s  %s' % (scene, shot), fill=(140, 255, 160))
             rows.append(row)
         if not rows:
             print('no frames for', scene); continue

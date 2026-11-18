@@ -31,7 +31,7 @@
 #include "Ragdoll.h"
 #include "Electricity.h"
 #include "SoftBodies.h"
-#include "physics/Rigid.h"
+#include "physics/Vectra.h"
 
 namespace retro {
 // Bumped once per chunk built while a save loads on a worker thread, so the
@@ -252,7 +252,7 @@ struct Clutter {
  float bodyImpactCooldown=0;
  // Carried along in a moving container this step (Containers.h): the solver leaves it be (not saved).
  bool riding=false;
- // The rigid core's orientation (physics/PropBodies.h): a unit quaternion (w, x, y, z), and the Euler
+ // Vectra's orientation (physics/PropBodies.h): a unit quaternion (w, x, y, z), and the Euler
  // angles it last wrote. yaw/pitch/roll stay what everything else reads and writes; when they differ
  // from these (an outside write: seeding, a carry, a save), the body is turned to them. Angular velocity
  // lives in spin (world z), pitchSpeed and rollSpeed (about the yaw-turned y and x axes): exact both ways.
@@ -1242,13 +1242,13 @@ private:
     void updateBreakables(float dt=0);
     void blastProps(Point3 origin,bool tiles);
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
-    // The rigid core's step for a list's model props (RigidClutter.cpp; the old one: rigid::legacyProps()).
+    // Vectra's step for a list's model props (RigidClutter.cpp; the old one: vectra::legacyProps()).
     void simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held);
     // A list's rigid-body state between frames: the fixed step's leftover time and the contacts' warm start.
-    struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,rigid::Space::Cached>> cache;};
+    struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;};
     std::map<int,RigidPropState> m_rigidProps;
     // What the last rigid step did (the lab's perf and debug views).
-    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0;std::vector<rigid::ContactEvent> events;std::vector<rigid::Manifold> manifoldsSeen;} m_rigidStats;
+    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);
     // The player on a soft prop (a floor mattress, a bedroll): its pressed top under p, or `height`.
     float softGround(Vec2 p,float feet,float height,float radius)const;

@@ -13,9 +13,9 @@ Vec2 halfIn(const Clutter& box,const Clutter& item){const auto s=item.size();con
 Vec2 toLocal(const Clutter& box,Vec2 p){const Vec2 d=p-box.pos;const float co=std::cos(box.yaw),si=std::sin(box.yaw);return {d.x*co+d.y*si,-d.x*si+d.y*co};}
 Vec2 toWorld(const Clutter& box,Vec2 l){const float co=std::cos(box.yaw),si=std::sin(box.yaw);return box.pos+Vec2{l.x*co-l.y*si,l.x*si+l.y*co};}
 }
-// How high an item's underside is: its box's lowest corner, or on the rigid core its shape's own lowest
+// How high an item's underside is: its box's lowest corner, or on Vectra its shape's own lowest
 // point (a pumpkin or a bottle turned on its side has its box's corner well under its round).
-float underside(const Clutter& c){if(c.model<0||rigid::legacyProps())return c.z;rigid::Body b;rigid::toBody(c,b);float z=1e9f;for(int p=0;p<b.shape->count;++p)z=std::min(z,rigid::support(b,p,{0,0,-1}).z);return z;}
+float underside(const Clutter& c){if(c.model<0||vectra::legacyProps())return c.z;vectra::Body b;vectra::toBody(c,b);float z=1e9f;for(int p=0;p<b.shape->count;++p)z=std::min(z,vectra::support(b,p,{0,0,-1}).z);return z;}
 bool isContainer(const Clutter& c){return c.model>=0&&c.model<int(std::size(model::container))&&model::container[c.model][1]>0;}
 Inner inner(const Clutter& c){
  const auto& k=model::container[c.model];const auto s=c.size();const auto& own=model::propSize[c.model];

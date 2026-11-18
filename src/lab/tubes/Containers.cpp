@@ -49,22 +49,22 @@ std::vector<Point3> localOf(const Game& g,int box,int model){std::vector<Point3>
 float drift(const std::vector<Point3>& a,const std::vector<Point3>& b){float w=0;for(size_t i=0;i<a.size()&&i<b.size();++i){const Point3 d=a[i]-b[i];w=std::max(w,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}return w;}
 void run(Game& g,float seconds,InputState in={},float hz=60){for(int i=0;i<int(seconds*hz);++i)g.update(in,1.f/hz);}
 std::shared_ptr<CustomCampaign> filledRoom(Vec2 at,float sunk=0,Vec2 start={3,3}){auto m=regression::room();m->definition.playerStart=start;fill(*m,at,sunk);return regression::campaign(m);}
-// Tipped over: the crate given a spin and a lift. On the rigid core what lies in it has its own weight
+// Tipped over: the crate given a spin and a lift. On Vectra what lies in it has its own weight
 // (3 kg of bottles in a 2.5 kg crate), and a crate spun about its middle meets the floor with its low edge
 // and rocks back, as a real one does: there it is tipped over, crate and contents turned together a
 // hundred degrees about its bottom edge onto its side, and let go to pour.
 void tip(Game& g,int crate){auto& list=LabAccess::clutter(g);auto& c=list[size_t(crate)];
  std::vector<int> inside;for(int i=0;i<int(list.size());++i)if(i!=crate&&containers::holds(c,list[size_t(i)]))inside.push_back(i);
- if(rigid::legacyProps()){c.rollSpeed=-7;c.velocity={0,.6f};c.vz=1.2f;c.sleeping=false;c.restTime=0;c.tipTime=1.5f;return;}
- const rigid::Quat q0=rigid::propOrientation(c);const rigid::V3 axis=q0.rotate({1,0,0});const auto s=c.size();
- const rigid::V3 pivot=rigid::propCentre(c)+q0.rotate({0,-s[1]*.5f,-s[2]*.5f});const rigid::Quat turn=rigid::Quat::axisAngle(axis,1.75f);
+ if(vectra::legacyProps()){c.rollSpeed=-7;c.velocity={0,.6f};c.vz=1.2f;c.sleeping=false;c.restTime=0;c.tipTime=1.5f;return;}
+ const vectra::Quat q0=vectra::propOrientation(c);const vectra::V3 axis=q0.rotate({1,0,0});const auto s=c.size();
+ const vectra::V3 pivot=vectra::propCentre(c)+q0.rotate({0,-s[1]*.5f,-s[2]*.5f});const vectra::Quat turn=vectra::Quat::axisAngle(axis,1.75f);
  inside.push_back(crate);
- for(int i:inside){auto& v=list[size_t(i)];const rigid::V3 centre=pivot+turn.rotate(rigid::propCentre(v)-pivot);const rigid::Quat q=(turn*rigid::propOrientation(v)).normalized();
+ for(int i:inside){auto& v=list[size_t(i)];const vectra::V3 centre=pivot+turn.rotate(vectra::propCentre(v)-pivot);const vectra::Quat q=(turn*vectra::propOrientation(v)).normalized();
   v.orient={q.w,q.x,q.y,q.z};q.toEuler(v.yaw,v.pitch,v.roll);v.orientEuler={v.yaw,v.pitch,v.roll};v.pos={centre.x,centre.y};v.z=centre.z-v.extent()[2];
   v.velocity={};v.vz=0;v.spin=v.pitchSpeed=v.rollSpeed=0;v.sleeping=false;v.restTime=0;}}
-// How high its underside is: its box's lowest corner on the old physics; on the rigid core its shape's own
+// How high its underside is: its box's lowest corner on legacy; on Vectra its shape's own
 // lowest point (a bottle is a cylinder: lying turned on its side, its box's corner is 2 cm under its round).
-float underside(const Clutter& v){if(rigid::legacyProps()||v.model<0)return v.z;rigid::Body b;rigid::toBody(v,b);float z=1e9f;for(int p=0;p<b.shape->count;++p)z=std::min(z,rigid::support(b,p,{0,0,-1}).z);return z;}
+float underside(const Clutter& v){if(vectra::legacyProps()||v.model<0)return v.z;vectra::Body b;vectra::toBody(v,b);float z=1e9f;for(int p=0;p<b.shape->count;++p)z=std::min(z,vectra::support(b,p,{0,0,-1}).z);return z;}
 bool allAsleep(const Game& g){for(const auto& v:g.clutter())if(v.model>=0&&!v.broken&&!v.sleeping)return false;return true;}
 
 const bool tube=add({
@@ -97,7 +97,7 @@ const bool tube=add({
    const int itemModel=boxModel==model::market_basket?model::market_pumpkin:model::glass_bottle;auto item=make(itemModel,{8.8f,8},.5f);
    // An underhand lob that clears the near rim: up at 2.2 m/s, across to come down on the middle.
    const float floor=containers::inner(box).floor+.02f,vz=2.2f,t=(vz+std::sqrt(vz*vz+4*7*(.5f-floor)))/14.f;item.velocity={1.2f/t,0};item.vz=vz;item.projectile=true;item.spin=2;item.sleeping=false;
-   {Game bare(regression::campaign(regression::room()));LabAccess::player(bare).pos={3,3};auto away=box;away.pos={20,20};LabAccess::clutter(bare)={away,item};run(bare,rigid::legacyProps()?3.f:6.f); /* the rigid core: it lands on its side and rolls on a few metres first */const auto& u=bare.clutter()[1];
+   {Game bare(regression::campaign(regression::room()));LabAccess::player(bare).pos={3,3};auto away=box;away.pos={20,20};LabAccess::clutter(bare)={away,item};run(bare,vectra::legacyProps()?3.f:6.f); /* Vectra: it lands on its side and rolls on a few metres first */const auto& u=bare.clutter()[1];
     r.check("the same throw on the open floor settles and sleeps (no endless rocking)",u.sleeping,"z "+fixed(u.z)+" turn "+fixed(std::fabs(u.spin)+std::fabs(u.pitchSpeed)+std::fabs(u.rollSpeed))+" pitch "+fixed(u.pitch)+" roll "+fixed(u.roll)+" at "+fixed(u.pos.x));}
    LabAccess::clutter(g)={box,item};run(g,3);const auto& v=g.clutter()[1];const bool in=containers::holds(g.clutter()[0],v);
    r.metric(std::string(boxModel==model::market_basket?"lob_basket":"lob_crate")+"_rest_z",v.z,"m");

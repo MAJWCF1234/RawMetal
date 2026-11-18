@@ -1,4 +1,4 @@
-// The rigid-body core (Rigid.h). Two halves:
+// The rigid-body core (Vectra.h). Two halves:
 //  - the narrow phase: a box and a cylinder are convex polyhedra (the cylinder a 12-sided prism scaled to
 //    its true area), tested by the separating axis test (faces of each, crosses of edge directions), and
 //    a face contact clips the incident face against the reference face's sides for up to four points,
@@ -9,11 +9,12 @@
 //    The separation of every contact is updated from the bodies' motion in each substep, so a stack
 //    holds with four substeps and few iterations, and speculative contacts (positive separation) catch
 //    what closes within the step.
-#include "Rigid.h"
+#include "Vectra.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-namespace retro::rigid {
+#include <chrono>
+namespace retro::vectra {
 M3 M3::inverse()const{
  const float a=m[0][0],b=m[0][1],c=m[0][2],d=m[1][0],e=m[1][1],f=m[1][2],g=m[2][0],h=m[2][1],i=m[2][2];
  const float A=e*i-f*h,B=-(d*i-f*g),C=d*h-e*g;const float det=a*A+b*B+c*C;
@@ -239,7 +240,9 @@ void Space::collide(float dt){
  // The world under and round each moving body.
  std::vector<char> grounded(size_t(n),0);
  auto ground=[&](int i){const auto&b=bodies[size_t(i)];if(!worldContacts||grounded[size_t(i)]||b.sleeping||b.invMass<=0)return;grounded[size_t(i)]=1;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);};
+ const auto t0=std::chrono::steady_clock::now();
  for(int i=0;i<n;++i)ground(i);
+ const auto t1=std::chrono::steady_clock::now();worldMs=std::chrono::duration<double,std::milli>(t1-t0).count();
  // Pairs: sweep and prune along x.
  std::vector<int> order;order.reserve(size_t(n));for(int i=0;i<n;++i)order.push_back(i);
  std::sort(order.begin(),order.end(),[&](int a,int b){const float la=bodies[size_t(a)].boundsLo.x-reach[size_t(a)],lb=bodies[size_t(b)].boundsLo.x-reach[size_t(b)];return la!=lb?la<lb:a<b;});
@@ -265,6 +268,7 @@ void Space::collide(float dt){
     auto rousing=[&](const Body& mover,const Body& other){const float speed=len(mover.v-other.v)+len(mover.w)*mover.shape->bound;return speed>2*settings.sleepLinear||(mover.kinematic&&speed>1e-3f);};
     if(a.sleeping&&!b.sleeping&&rousing(b,a))wake(i);
     if(b.sleeping&&!a.sleeping&&rousing(a,b))wake(j);}}}
+ pairMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t1).count();
  // Woken by a touch: the world under it this step too.
  for(int i=0;i<n;++i)ground(i);
 }
@@ -430,6 +434,7 @@ void Space::step(float dt){
  const int sub=std::max(1,settings.substeps);const float h=dt/float(sub);
  for(auto&b:bodies){if(b.shape&&b.invMass>0)b.updateInertia();b.dp={};b.dq={};}
  collide(dt);
+ const auto s0=std::chrono::steady_clock::now();
  prepare(h);for(auto*c:constraints)c->prepare(*this,h);
  std::vector<V3> start;start.reserve(bodies.size());for(const auto&b:bodies)start.push_back(b.x);
  std::vector<float> total(manifolds.size()*4,0.f);
@@ -437,7 +442,7 @@ void Space::step(float dt){
   integrateVelocities(h);warmStart();solve(h,true);integratePositions(h);
   for(int r=0;r<settings.relaxIterations;++r)solve(h,false);
   for(size_t m=0;m<manifolds.size();++m)for(int k=0;k<manifolds[m].count;++k)total[m*4+size_t(k)]+=manifolds[m].points[size_t(k)].normalImpulse;}
- restitution();storeImpulses();
+ restitution();storeImpulses();solveMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-s0).count();
  for(auto&b:bodies){b.force={};b.torque={};}
  // What struck what: the approach speed and the impulse it took (sounds, breaking, glass).
  for(size_t mi=0;mi<manifolds.size();++mi){const auto&m=manifolds[mi];float approach=0,impulse=0,mass=0;V3 at{};

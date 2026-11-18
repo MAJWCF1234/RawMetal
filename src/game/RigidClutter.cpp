@@ -1,4 +1,4 @@
-// Model props on the rigid core (physics/Rigid.h). simulateClutter still runs everything that happens to
+// Model props on Vectra (physics/Vectra.h). simulateClutter still runs everything that happens to
 // a prop from outside (the player's push, a walking body's kick, a swinging door, a hand), and the old
 // point physics for junk and shards; this steps the model props themselves:
 //  - at a fixed 120 Hz (two soft substeps each), whatever the frame rate, from the leftover time;
@@ -25,11 +25,11 @@ constexpr float PaneTap=2,PaneRearm=.3f;
 float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:150.f):b.material==22?40.f:300.f;}
 float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
 // The ground's material against a prop: a hard floor that takes no bounce of its own.
-const rigid::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
-struct Hit {rigid::V3 p{},n{};float sep=0;int kind=0;};
+const vectra::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
+struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0;};
 // Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad.
-int keepFour(std::vector<Hit>& h,rigid::V3 n){
- using namespace rigid;if(h.size()<=4)return int(h.size());int pick[4]{0,-1,-1,-1};
+int keepFour(std::vector<Hit>& h,vectra::V3 n){
+ using namespace vectra;if(h.size()<=4)return int(h.size());int pick[4]{0,-1,-1,-1};
  for(int i=1;i<int(h.size());++i)if(h[size_t(i)].sep<h[size_t(pick[0])].sep)pick[0]=i;
  float best=-1;for(int i=0;i<int(h.size());++i){const float d=lenSq(h[size_t(i)].p-h[size_t(pick[0])].p);if(d>best){best=d;pick[1]=i;}}
  auto area=[&](V3 a,V3 b,V3 c){return std::fabs(dot(cross(b-a,c-a),n));};
@@ -40,7 +40,7 @@ int keepFour(std::vector<Hit>& h,rigid::V3 n){
  std::vector<Hit> out;for(int i:pick)if(i>=0)out.push_back(h[size_t(i)]);h.swap(out);return int(h.size());}
 }
 void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held){
- using namespace rigid;
+ using namespace vectra;
  auto& rp=m_rigidProps[level];
  const Vec2 shift=chunkOffset(level)-chunkOffset(m_level);
  // A point in this list's coordinates, in the world that holds it (p becomes that world's own coordinates).
@@ -197,7 +197,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!hullFits(next+chunkOffset(target)-chunkOffset(m_level),enemy.z,enemy.hull(),enemy.radius(),false,false))break;reached=next;}enemy.pos=reached;return enemy.pos-before;},
     [&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}});}}
  };
- m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();
+ m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=0;
  std::vector<int> bodyOf(list.size(),-1);std::vector<char> wasAsleep;std::vector<V3> before;
  for(int step=0;step<steps;++step){
   space.bodies.clear();std::fill(bodyOf.begin(),bodyOf.end(),-1);
@@ -278,7 +278,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
-  space.step(RigidStep);
+  space.step(RigidStep);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0)continue;auto&c=list[size_t(b.user)];
    if(wasAsleep[bi]&&b.sleeping)continue;fromBody(b,c);c.island=b.sleeping?space.islandOf.empty()?-1:std::max(0,space.islandOf[bi]):-1;

@@ -14,7 +14,7 @@ namespace retro::containers {
 // own x and y, and the tilt past which it spills.
 struct Inner {float floor=0,rim=0,halfX=0,halfY=0,spill=0;};
 bool isContainer(const Clutter& c);
-// How high its underside is (its box's lowest corner; on the rigid core its shape's own lowest point).
+// How high its underside is (its box's lowest corner; on Vectra its shape's own lowest point).
 float underside(const Clutter& c);
 Inner inner(const Clutter& c);
 // Tilted less than its spill angle (a tray spills at a lean, a bin almost never).
@@ -30,7 +30,7 @@ float supportAt(const Clutter& v,Vec2 p,float feet);
 struct Rider {int box,item;Point3 local;float yaw;};
 struct Snapshot {std::vector<Rider> riders;std::vector<std::pair<int,Clutter>> boxes;};
 // Start of a step: who is in what (innermost container wins), and each container's pose.
-// onlyHeld (the rigid core, physics/PropBodies.h): a container is its floor and walls there, so what lies
+// onlyHeld (Vectra, physics/PropBodies.h): a container is its floor and walls there, so what lies
 // in it rests, slides, rides and pours out by contact; only the container in the hand, or one the player is
 // shoving (blockedTime), carries its contents rigidly (a shove at a sprint would jerk it out from under them).
 Snapshot capture(std::vector<Clutter>& list,int held,bool onlyHeld=false);
