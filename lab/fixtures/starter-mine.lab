@@ -1,0 +1,7 @@
+# The Starter Map's underground (the Mine, east of the Parts Gallery): walk in through the cave mouth. Tubes: mine.
+world custom "custom maps/Starter Map.rmc"
+map-name Mine Mouth
+camera 2 14 -999 0 0
+scenery-only
+size 1280 720
+frames 600

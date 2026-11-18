@@ -154,8 +154,9 @@ Chain chainOf(const Clutter& c){Chain ch;ch.along=alongOf(c);ch.length=c.size()[
  for(int k=r-1;k>=0;--k){const float j=(float(k)-.5f)*third;const Quat q=ch.turn[size_t(k+1)]*Quat::axisAngle(wd,-c.bend[size_t(k)]);
   const V3 J=ch.frame[size_t(k+1)]+ch.turn[size_t(k+1)].rotate(ax*j);ch.turn[size_t(k)]=q;ch.frame[size_t(k)]=J-q.rotate(ax*j);}
  return ch;}
-const Shape& segmentShape(const Clutter& c){static std::mutex lock;static std::map<std::array<int,3>,std::unique_ptr<Shape>> cache;const auto s=c.size();const int along=alongOf(c);
- const std::array<int,3> key{int(std::lround(s[0]*1e4f)),int(std::lround(s[1]*1e4f)),int(std::lround(s[2]*1e4f))};std::lock_guard<std::mutex> hold(lock);auto& slot=cache[key];
+// (Keyed by along too: two near-square pads round to one size.)
+const Shape& segmentShape(const Clutter& c){static std::mutex lock;static std::map<std::array<int,4>,std::unique_ptr<Shape>> cache;const auto s=c.size();const int along=alongOf(c);
+ const std::array<int,4> key{int(std::lround(s[0]*1e4f)),int(std::lround(s[1]*1e4f)),int(std::lround(s[2]*1e4f)),along};std::lock_guard<std::mutex> hold(lock);auto& slot=cache[key];
  if(!slot){slot=std::make_unique<Shape>();const V3 h{along==0?s[0]/6:s[0]*.5f,along==1?s[1]/6:s[1]*.5f,s[2]*.5f};slot->add(PartKind::Box,{},h);slot->finish();}return *slot;}
 Point3 chainSkin(const Clutter& c,Point3 p){if(c.bend[0]==0&&c.bend[1]==0)return p;const int along=alongOf(c);const float L=c.size()[size_t(along)],third=L/3,blend=std::min(.06f,third*.25f);
  const V3 ax=axisOf(along),wd=widthOf(along);const int r=std::clamp(c.boneRoot,0,2);

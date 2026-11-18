@@ -1,0 +1,8 @@
+# The Starter Map's Parts Gallery (maps 131 and 141 on the forest's cells there): the 76 parts imported
+# for 1.5.3 from the purchased packs, on two levelled gravel yards. Tubes: parts.
+world custom "custom maps/Starter Map.rmc"
+map-name Parts Gallery
+camera 12 1.2 -999 90 -8
+scenery-only
+size 1280 720
+frames 12

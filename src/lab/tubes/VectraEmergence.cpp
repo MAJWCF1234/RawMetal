@@ -30,7 +30,7 @@ float tiltOf(const Clutter& c){const auto up=c.rotate(0,0,1);return std::acos(st
 Clutter body(int model,Vec2 at,float z,std::array<float,3> dims,float yaw=0,float pitch=0,float roll=0){Clutter c;c.kind=7;c.model=model;c.dims=dims;c.pos=at;c.yaw=yaw;c.pitch=pitch;c.roll=roll;c.z=z;c.sleeping=false;return c;}
 std::array<float,3> size(int model,float k=1){auto s=Game::propTraits(model).size;for(auto& d:s)d*=k;return s;}
 // A scene: props (and the room's extras) on a plain room, stepped `seconds` at 60 Hz on one core; `kick` runs once after 0.3 s.
-struct Run {std::vector<Clutter> start,end;float peakZ[64]{};};
+struct Run {std::vector<Clutter> start,end;float peakZ[64]{},peakTilt[64]{};};
 int g_scene=0;   // RM_EMERGE_TRACE=<scene number>: vectra-emergence-trace-<n>-<core>.txt, every prop each frame
 std::function<void(Game&,int)> g_push;   // a push held over frames (scene 4), or none
 Run run(bool legacy,float seconds,std::function<void(AuthoredMapData&)> room,std::function<std::vector<Clutter>()> props,std::function<void(Game&)> kick){
@@ -38,7 +38,7 @@ Run run(bool legacy,float seconds,std::function<void(AuthoredMapData&)> room,std
  auto& list=LabAccess::clutter(g);list=props();Run r;
  std::unique_ptr<std::ofstream> trace;{const char* e=std::getenv("RM_EMERGE_TRACE");if(e&&std::atoi(e)==g_scene)trace=std::make_unique<std::ofstream>("vectra-emergence-trace-"+std::to_string(g_scene)+(legacy?"-legacy":"-vectra")+".txt",std::ios::app);}
  for(int i=0;i<int(seconds*60);++i){if(i==18&&kick)kick(g);if(g_push)g_push(g,i);g.update({},1.f/60);if(i==17)r.start=LabAccess::clutter(g);
-  const auto& l=LabAccess::clutter(g);for(size_t k=0;k<l.size()&&k<64;++k)r.peakZ[k]=std::max(r.peakZ[k],l[k].z);
+  const auto& l=LabAccess::clutter(g);for(size_t k=0;k<l.size()&&k<64;++k){r.peakZ[k]=std::max(r.peakZ[k],l[k].z);r.peakTilt[k]=std::max(r.peakTilt[k],tiltOf(l[k]));}
   if(trace){*trace<<"frame "<<i<<'\n';for(size_t k=0;k<l.size();++k){const auto& c=l[k];*trace<<"  #"<<k<<" pos "<<f2(c.pos.x,3)<<","<<f2(c.pos.y,3)<<","<<f2(c.z,3)<<" v "<<f2(c.velocity.x,2)<<","<<f2(c.velocity.y,2)<<","<<f2(c.vz,2)<<" ypr "<<f2(c.yaw,2)<<","<<f2(c.pitch,2)<<","<<f2(c.roll,2)<<" tilt "<<f2(tiltOf(c),2)<<(c.sleeping?" asleep":"")<<'\n';}}}
  r.end=LabAccess::clutter(g);vectra::forceLegacyProps(-1);return r;}
 const bool registered=add({.name="vectra-emergence",.summary="behaviour from the solver alone: seesaw, dominoes, off-centre hits, centre of mass, a ramp from a prop, collapse, water, uneven ground",.standalone=[]{
@@ -68,13 +68,15 @@ const bool registered=add({.name="vectra-emergence",.summary="behaviour from the
  // 4. Centre of mass: a 30 kg wardrobe (0.8 x 0.6 x 1.5) and a 30 kg wide crate (1 x 1 x 0.4), each pushed a second
  // with 320 N (more than the floor's grip: 0.6 x 30 kg x 14) on its side. (A cabinet much taller than it is
  // deep tips however low it is pushed: the floor's friction stopping its feet turns it over, as it would a real one.)
- {float t[3][2]{};const std::array<float,3> tall{.8f,.6f,1.5f},wide{1.f,1.f,.4f};   // a wardrobe 0.8 deep, pushed along its depth
+ // (Went over: its greatest tilt, not where it lies at the end; struck high it tumbles on along the floor and may
+ // still be rolling, or land back on its feet, when the run ends.)
+ {float t[3][2]{},over=0;const std::array<float,3> tall{.8f,.6f,1.5f},wide{1.f,1.f,.4f};   // a wardrobe 0.8 deep, pushed along its depth
   for(int k=0;k<3;++k){const auto dims=k<2?tall:wide;const float at=k==1?.1f:dims[2]-.05f;
    auto props=[dims]{auto c=body(model::packing_crate,{10,8},0,dims);auto tr=std::make_shared<EntityTraits>();tr->mass=30;c.traits=tr;return std::vector<Clutter>{c};};
    g_push=[dims,at](Game& g,int f){if(f<18||f>=78)return;const auto& c=LabAccess::clutter(g)[0];LabAccess::knock(g,0,{c.pos.x-dims[0]*.5f,c.pos.y,c.z+at},{320.f/60,0,0});};
-   for(int p=0;p<2;++p){const auto rr=run(p==0,3,nullptr,props,nullptr);t[k][p]=tiltOf(rr.end[0]);}g_push=nullptr;}
-  r<<"4 CENTRE OF MASS: tilt at the end  tall struck high legacy "<<f2(t[0][0])<<" Vectra "<<f2(t[0][1])<<"; tall struck low legacy "<<f2(t[1][0])<<" Vectra "<<f2(t[1][1])<<"; wide struck high legacy "<<f2(t[2][0])<<" Vectra "<<f2(t[2][1])<<"\n";
-  check(t[0][1]>1.2f&&t[1][1]<.2f&&t[2][1]<.2f,"4 centre of mass: a tall cabinet pushed high goes over, pushed low slides; a wide crate pushed high stays upright");}
+   for(int p=0;p<2;++p){const auto rr=run(p==0,3,nullptr,props,nullptr);t[k][p]=tiltOf(rr.end[0]);if(k==0&&p==1)over=rr.peakTilt[0];}g_push=nullptr;}
+  r<<"4 CENTRE OF MASS: tilt at the end  tall struck high legacy "<<f2(t[0][0])<<" Vectra "<<f2(t[0][1])<<"; tall struck low legacy "<<f2(t[1][0])<<" Vectra "<<f2(t[1][1])<<"; wide struck high legacy "<<f2(t[2][0])<<" Vectra "<<f2(t[2][1])<<"; the tall one struck high went over to "<<f2(over)<<" at most\n";
+  check(over>1.2f&&t[1][1]<.2f&&t[2][1]<.2f,"4 centre of mass: a tall cabinet pushed high goes over, pushed low slides; a wide crate pushed high stays upright");}
  // 5. A ramp from a prop.
  {g_scene=5;const float a=std::asin(.6f/1.6f);auto props=[a]{const auto box=size(model::wooden_crate);Clutter board=body(model::packing_crate,{10-.3f-.75f*std::cos(a),8},0,{1.6f,.5f,.04f},0,-a);
     board.z=.3f-board.extent()[2]+.02f;Clutter can=body(model::trash_can,{10-.3f-.18f,8},.6f+.05f,size(model::trash_can,.6f),kPi*.5f,kPi*.5f);return std::vector<Clutter>{body(model::wooden_crate,{10,8},0,box),board,can};};

@@ -120,13 +120,16 @@ bool rayConvex(const Convex& k,V3 origin,V3 dir,float maxD,float& t,V3& normal,b
 constexpr float CastTolerance=2e-4f;
 bool castConvex(Convex A,const Convex& B,V3 dir,float maxD,QueryHit& hit){
  const V3 start=A.c;float t=0;V3 n=dir;
- for(int it=0;it<64;++it){
+ for(int it=0;it<castIterations;++it){
   A.c=start+dir*t;V3 pa,pb,nn;bool overlap;float d=distanceOf(A,B,pa,pb,nn,overlap);
   if(overlap){if(it==0){hit.distance=0;hit.point=A.c;hit.normal=neg(dir);hit.startedInside=true;return true;}d=0;nn=n;}
   if(d<=CastTolerance){hit.distance=t;hit.normal=neg(nn);hit.point=pb;hit.startedInside=false;return true;}
   n=nn;const float closing=dot(dir,n);if(closing<=1e-6f)return false;
   t+=d/closing;if(t>maxD)return false;}
- A.c=start+dir*t;hit.distance=t;hit.normal=neg(n);hit.point=A.c;hit.startedInside=false;return true;}
+ // Out of iterations without closing in (a grazing cast): a hit only if it is within reach where it got to.
+ A.c=start+dir*t;V3 pa,pb,nn;bool overlap;const float d=distanceOf(A,B,pa,pb,nn,overlap);
+ if(!overlap&&d>CastTolerance)return false;
+ hit.distance=t;hit.normal=neg(overlap?n:nn);hit.point=pb;hit.startedInside=false;return true;}
 Convex pointShape(V3 c,float r){Convex k;k.kind=Convex::Point;k.c=c;k.r=r;return k;}
 Convex boxShape(V3 c,V3 h,Quat q){Convex k;k.kind=Convex::Box;k.c=c;k.h=h;k.q=q;return k;}
 // Whether a cast of a shape of reach `radius` along the ray can come within reach of a sphere (centre c, radius r).
@@ -248,7 +251,9 @@ bool worldProbes(Space& s,int i,const Motion& m,std::vector<V3>& probes,std::vec
  for(const V3& r:probes){
   const V3 start=xs[0]+qs[0].rotate(r),end=xs[size_t(K)]+qs[size_t(K)].rotate(r),way=end-start;const float travel=len(way);
   if(travel<TunnelDepth*.5f)continue;                                      // it hardly moved: its contacts hold it
-  if(dot(qs[0].rotate(r),way)<-.5f*len(r)*travel)continue;                // a trailing point: a leading one meets things first
+  // A trailing point (a leading one meets things first): behind the body's way, when its going outruns its turn's
+  // sweep there. (Its own chord is no guide: turned past 60 degrees a step, every point's chord points back.)
+  {const V3 lin=xs[size_t(K)]-xs[0];const float l=len(lin);if(m.angle*len(r)<l&&dot(qs[0].rotate(r),lin)<-.5f*len(r)*l)continue;}
   for(int k=0;k<K;++k){if(float(k)/float(K)>first+.05f)break;
    const V3 a=xs[size_t(k)]+qs[size_t(k)].rotate(r),c=xs[size_t(k+1)]+qs[size_t(k+1)].rotate(r);V3 n;const float f=s.sweep(s,i,a,c,n);
    if(f>=1)continue;if(f<=0)break;                                         // it starts in something: the contacts' business
@@ -327,9 +332,10 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
   if(best.kind==0){
    // Nothing at its edges: its centre's way still (as before the probes): back to where the centre meets a
    // surface, resting its own reach off it, its way into it taken out.
-   if(!s.sweep||len(m.x1-m.x0)<=thresholds[size_t(i)])continue;V3 nn;const float t=s.sweep(s,i,m.x0,m.x1,nn);if(t>=1)continue;
+   if(!s.sweep||len(m.x1-m.x0)<=thresholds[size_t(i)])continue;V3 nn;const float t=s.sweep(s,i,m.x0,m.x1,nn);if(t>=1||t<=0)continue;   // (starting in something: the contacts' business)
    float extent=0;for(int p=0;p<b.shape->count;++p)extent=std::max(extent,dot(b.x-support(b,p,neg(nn)),nn));
-   b.x=m.x0+(m.x1-m.x0)*t+nn*extent;const float vn=dot(b.v,nn);if(vn<0)b.v=b.v-nn*(vn*(1+b.material.restitution));continue;}
+   b.x=m.x0+(m.x1-m.x0)*t+nn*extent;const float vn=dot(b.v,nn);if(vn<0)b.v=b.v-nn*(vn*(1+b.material.restitution));
+   m.x1=b.x;m.q1=b.q;m.begin();done[size_t(i)]=1;continue;}   // its way now ends where it was put (later bodies meet that)
   const float e=best.kind==1?b.material.restitution:Material::mix(b.material,s.bodies[size_t(best.other)].material).restitution;
   ContactEvent ev;ev.a=i;ev.b=best.kind==1?-1:best.other;
   if(best.kind==1){
@@ -345,6 +351,8 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
    Body& o=s.bodies[size_t(best.other)];const V3 nn=best.normal;
    m.at(best.t,b.x,b.q);b.updateInertia();b.x=b.x-nn*.0005f;
    if(fast[size_t(best.other)]&&!done[size_t(best.other)]){Motion& mo=motion[size_t(best.other)];mo.at(best.t,o.x,o.q);o.updateInertia();o.x=o.x+nn*.0005f;mo.x1=o.x;mo.q1=o.q;mo.begin();done[size_t(best.other)]=1;}
+   // (A body already done (best.other < i, or swept earlier) has had its way cut to end at its own hit: met here along
+   // that shortened way, from where it began to where it was put, not along the path it truly took before its hit.)
    const V3 armA=best.point-b.x,armB=best.point-o.x;const float vn=dot(o.pointVelocity(best.point)-b.pointVelocity(best.point),nn);
    const float k=effective(b,armA,nn)+(o.invMass>0?effective(o,armB,nn):0.f);float impulse=0;
    if(vn<0&&k>0){impulse=-(1+e)*vn/k;const V3 P=nn*impulse;b.v=b.v-P*b.invMass;b.w=b.w-b.invInertia*cross(armA,P);

@@ -296,6 +296,19 @@ class Starter:
         return len(out)
 
 
+# The parts imported for 1.5.3 (docs/Assets/library-parts-1.5.3.md): every bld_* building part, and
+# these mine and cave pieces. They stand in the Parts Gallery, not the museum rows, so no row grows
+# a map and no later map is renumbered.
+GALLERY_EXTRA = ('mine_lantern', 'mine_barrel', 'mine_barrel_wide', 'mine_crate', 'mine_crate_long', 'mine_petrol_can',
+                 'mine_locker', 'mine_shelving', 'mine_tray', 'mine_gravel_heap', 'cave_rock_boulder_b', 'cave_rock_lump',
+                 'cave_rock_pillar', 'cave_rock_tall', 'cave_rock_wall', 'cave_rock_chunk', 'cave_rock_2m_a',
+                 'cave_rock_2m_b', 'cave_rock_4m_a', 'cave_rock_4m_b', 'cave_gem_pile_blue', 'cave_gem_pile_red')
+
+
+def in_gallery(name):
+    return name.startswith('bld_') or name in GALLERY_EXTRA
+
+
 def models():
     t = open(os.path.join(ROOT, 'src', 'world', 'ModelIds.h')).read()
     names = [(int(i), n) for n, i in re.findall(r'inline constexpr int (\w+)=(\d+);', t)]
@@ -582,6 +595,7 @@ def build():
     groups = {t: [] for t, _ in SECTIONS}
     for sl, name, w, d, h, yaw in allm:
         if name.startswith('growth_'): continue      # the Growth brush's pieces stand in the Showcase Atrium instead
+        if in_gallery(name): continue                # the 1.5.3 parts stand in the Parts Gallery (no museum row grows)
         groups[next(t for t, test in SECTIONS if test(name, sl))].append((sl, name, w, d, h, yaw))
     palette = [0xc8a050, 0x60a0d0, 0xd06060, 0x60c0a0, 0xd0b040, 0xa08060, 0x8080c0, 0xc07040, 0x70b050]
     for gi, (title, _) in enumerate(SECTIONS):
@@ -1906,6 +1920,142 @@ def hillside(s, slot, catalogue, m):
     return m
 
 
+GALLERY_ORDER = (('walls', ('bld_wall',)), ('pillars and beams', ('bld_pillar', 'bld_beam')),
+                 ('stairs and ramps', ('bld_stairs', 'bld_ramp')), ('doors and windows', ('bld_door', 'bld_gate', 'bld_window')),
+                 ('decks and rails', ('bld_catwalk', 'bld_railing', 'bld_scaffold', 'bld_ladder', 'bld_metal_fence', 'bld_barricade')),
+                 ('pipes and tunnels', ('bld_pipe', 'bld_culvert', 'bld_service', 'bld_cable')),
+                 ('tanks and machines', ('bld_tank', 'bld_cage', 'bld_switch', 'bld_air', 'bld_vent')),
+                 ('lamps', ('bld_lamp', 'bld_ceiling', 'mine_lantern')), ('rubble', ('bld_brick', 'bld_gravel', 'mine_gravel')),
+                 ('mine stores', ('mine_',)), ('cave rock', ('cave_rock',)), ('cave gems', ('cave_gem',)))
+
+
+def parts_gallery(s, slot, catalogue, yards):
+    """PARTS GALLERY: the parts imported for 1.5.3 set out on two levelled gravel yards, north and
+    south, each part at its own size (the biggest brought down to 2.9 m across, 3.4 m tall), shelf
+    by shelf: walls, pillars and beams, stairs, doors and windows, decks and rails, pipes and
+    tunnels, tanks and machines, lamps, rubble, the mine's stores, cave rock and gems. Every part
+    has a zone with its slot and name; the Campaign Builder lists them under Building, Mine and
+    Caves."""
+    for m in yards:
+        ox, oy = 24 * m['col'], 24 * m['row']
+        s.world += ['# Parts Gallery (map %d): a level gravel yard for the 1.5.3 parts.' % m['index']]
+        s.world.append('TERRAIN_FLAT|%d|%d|%d|%d|0|2' % (ox + 2, oy + 1, ox + 22, oy + 23))
+        s.world.append('GROUND|%d|%d|%d|%d|6|1' % (ox + 1, oy + 1, ox + 23, oy + 23))
+    s.zone(yards[0], 0, 0, 24, 1.5, '', 'PARTS GALLERY')
+    names = [n for n in catalogue if in_gallery(n)]
+    yaw_of = {n: y0 for _, n, *_, y0 in models()}
+
+    def group(n):
+        return next((k for k, (_, heads) in enumerate(GALLERY_ORDER) if n.startswith(heads)), len(GALLERY_ORDER))
+    names.sort(key=lambda n: (group(n), n))
+    yard, x, y, row_d = 0, 1.6, 3.2, 0.0
+    for n in names:
+        w, d, h = catalogue[n]
+        k = min(1.0, 2.9 / max(w, d), 3.4 / h)
+        sw, sd, sh = w * k, d * k, h * k
+        yaw = yaw_of.get(n, PI)
+        fw, fd = (sd, sw) if yaw in (HALF, -HALF) else (sw, sd)
+        if x + fw > 22.6:                                                    # the next shelf
+            x, y, row_d = 1.6, y + row_d + 1.1, 0.0
+        if y + fd > 22.4:                                                    # the next yard
+            yard, x, y, row_d = yard + 1, 1.6, 1.6, 0.0
+            if yard == len(yards): raise SystemExit('the Parts Gallery overflows its yards')
+        m = yards[yard]
+        cx, cy = x + fw / 2, y + fd / 2
+        solid = int(sh > .3 and not n.startswith(('bld_lamp', 'bld_ceiling', 'bld_brick_rubble')))
+        s.rec(m, 'FIXTURE', m['index'], slot[n], cx, cy, 0, sw, sd, sh, yaw, solid)
+        s.zone(m, x - .2, y - .2, x + fw + .2, y + fd + .2, ('#%d %s' % (slot[n], n))[:40])
+        x, row_d = x + fw + .7, max(row_d, fd)
+    s.post_sign(yards[0], 12, 2.2, 'PARTS GALLERY', 'Building, Mine and Caves tabs', 0xc8a050, 2.0)
+    for m in yards:
+        s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': 12, 'y': 12, 'title': 'PARTS GALLERY',
+                        'name': '%d parts from the packs' % len(names)})
+
+
+def underground(s, slot, catalogue, mouth, works, south, pool):
+    """THE MINE: a hill east of the Parts Gallery with a cave mouth in its west face (CAVE records,
+    src/world/CaveField.h). The mouth slopes down into a timbered drift with rails and an ore cart,
+    lit by lanterns, to a cavern of crystals, then a passage south to a second cavern with a pool in
+    a basin. Everything down there stands on the cave floor (cave=1); under the rock it is dark but
+    for the lamps. Four forest cells: the mouth's (cleared), the works', the passage's and the pool's;
+    the trees on the hill over them stay where they grew."""
+    ox, oy = 24 * mouth['col'], 24 * mouth['row']
+    s.world += ['# The Mine (maps %d, %d, %d, %d): a hill, a cave mouth, a drift, two caverns and a pool, carved with CAVE records.'
+                % (mouth['index'], works['index'], south['index'], pool['index'])]
+    # The hill over the workings: a plateau at 4 m, its blends kept inside the four cells.
+    s.world.append('TERRAIN_FLAT|%d|%d|%d|%d|4|5' % (ox + 10, oy + 8, ox + 42, oy + 38))
+    def cave(op, a, b, r, rough='', strength=''):
+        tail = [str(rough)] if rough != '' or strength != '' else []
+        if strength != '': tail.append(str(strength))
+        s.world.append('|'.join(['CAVE', op] + [f(v) for v in (*a, *b, r)] + tail))
+    y = oy + 14
+    cave('carve', (ox + 4, y, 1.6), (ox + 14, y, -2.6), 2.0)                        # the mouth, down from the hillside
+    cave('carve', (ox + 14, y, -2.6), (ox + 28, y, -2.6), 1.8, .25)                 # the drift, east
+    for x in range(16, 29, 3):
+        cave('flatten', (ox + x, y, -3.7), (ox + x, y, -3.7), 2.2)                  # its floor level for the rails
+    cave('carve', (ox + 34, y, -1.6), (ox + 34, y, -1.6), 3.6)                      # the crystal cavern
+    cave('carve', (ox + 30, y - 1, -2.4), (ox + 30.5, y, -2.4), 2.0)                # where the drift opens into it
+    cave('flatten', (ox + 34, y, -3.7), (ox + 34, y, -3.7), 4.0)
+    cave('move', (ox + 37.5, y + 2, -2.2), (ox + 38.5, y + 2.5, -2.2), 2.0)          # its east wall pushed out
+    cave('carve', (ox + 34, y + 2, -2.6), (ox + 34, y + 18, -2.6), 1.7, .4)         # the passage south
+    cave('carve', (ox + 34, y + 22, -1.8), (ox + 34, y + 22, -1.8), 3.4)            # the pool cavern
+    cave('carve', (ox + 35, y + 23, -4.6), (ox + 35, y + 23, -4.6), 1.6, .1)        # its basin
+    cave('smooth', (ox + 34, y + 22, -2.6), (ox + 34, y + 22, -2.6), 3.0, .35, .5)
+    mouth['name'], works['name'] = 'Mine Mouth', 'Mine Works'
+
+    def fix(m, name, x, y, k=1.0, yaw=0.0, solid=1, size=None):
+        w, d, h = size or catalogue[name]
+        s.rec(m, 'FIXTURE', m['index'], slot[name], x, y, 0, w * k, d * k, h * k, yaw, solid)
+        m['records'][-1] += '|cave=1'
+
+    def lamp(m, x, y, z=1.1, kelvin=2200, rng=7.0):
+        fix(m, 'mine_lantern', x, y, solid=0)
+        s.rec(m, 'LIGHT', m['index'], x, y, z, 0, 0, 1.3, rng, kelvin)
+        m['records'][-1] += '|cave=1'
+    s.format2 = True
+    # ---- The mouth's map: the hill's foot, the mouth, the first timber sets and rails.
+    i = mouth['index']
+    s.zone(mouth, 0, 9, 24, 19, 'THE MINE / a cave mouth (CAVE records)', 'THE MINE')
+    s.post_sign(mouth, 4.5, 10.6, 'THE MINE', 'CAVE records: walk in', 0xc8a050, 1.6)
+    for x in (16, 19, 22):
+        fix(mouth, 'mine_timber_set', x, 14, yaw=HALF, solid=0, size=(2.7, .27, 2.7))
+    fix(mouth, 'mine_rail_straight', 18.5, 14.6, yaw=HALF, solid=0)
+    lamp(mouth, 15.2, 12.9)
+    fix(mouth, 'mine_crate', 20.5, 15.2, .7, .3)
+    s.index.append({'map': i, 'section': 'OUTDOORS', 'x': 8, 'y': 14, 'title': 'THE MINE', 'name': 'cave mouth, CAVE records'})
+    # ---- The works: the drift's end, the ore cart on its rails, the crystal cavern.
+    i = works['index']
+    s.zone(works, 0, 9, 24, 19, 'MINE WORKS / drift, cart, crystals', '', -9, 1)
+    for x in (1.0, 4.0):
+        fix(works, 'mine_timber_set', x, 14, yaw=HALF, solid=0, size=(2.7, .27, 2.7))
+    fix(works, 'mine_rail_straight', 2.6, 14.6, yaw=HALF, solid=0)
+    fix(works, 'mine_ore_cart', 3.2, 14.6, .9, 0)
+    lamp(works, 5.6, 12.8)
+    fix(works, 'mine_barrel', 6.4, 14.9, .8)
+    fix(works, 'mine_shelving', 8.2, 11.8, .8, .6)
+    fix(works, 'cave_gem_pile_blue', 12.4, 16.0, .8, .5, 0)
+    fix(works, 'res_crystal_m', 12.6, 12.0, 1.0, .4)
+    fix(works, 'res_crystal_s', 11.6, 11.4, 1.0, 1.9)
+    fix(works, 'res_crystal_s', 8.0, 16.4, .9, -.7)
+    fix(works, 'cave_crystal_bed_blue', 10.8, 16.6, 1.0, 2.2, 0)
+    fix(works, 'cave_stalagmite', 12.8, 15.8, size=(1.0, 1.1, 2.0))
+    fix(works, 'cave_rock_lump', 7.2, 15.0, .8, 1.1)
+    lamp(works, 10.0, 12.2, kelvin=2600, rng=9.0)
+    s.rec(works, 'AMBIENT', i, 'water_drip', 10, 14, -2.5, .7, 10, '', '', '', '', '')
+    s.index.append({'map': i, 'section': 'OUTDOORS', 'x': 10, 'y': 14, 'title': 'MINE WORKS', 'name': 'cart on rails, crystals'})
+    # ---- The pool cavern, at the end of the passage south.
+    i = pool['index']
+    s.zone(pool, 5, 0, 15, 16, 'THE POOL / a cave pool (WATER)', '', -9, 1)
+    s.rec(pool, 'WATER', i, 9.6, 11.6, 12.4, 14.4, -5.6, -4.0, .35)
+    lamp(pool, 7.6, 11.2, kelvin=2400)
+    fix(pool, 'res_crystal_s', 12.2, 10.2, 1.0, .9)
+    fix(pool, 'cave_gem_pile_red', 8.2, 10.6, .7, 0, 0)
+    fix(pool, 'cave_rock_boulder_b', 7.6, 13.8, .8, 1.4)
+    fix(pool, 'mine_petrol_can', 8.4, 12.6, 1.0, .6)
+    s.rec(pool, 'AMBIENT', i, 'water_drip', 10.5, 12.5, -3.5, .8, 9, '', '', '', '', '')
+    s.index.append({'map': i, 'section': 'OUTDOORS', 'x': 10, 'y': 12, 'title': 'THE POOL', 'name': 'a pool in a cave'})
+
+
 TREES = [('pine_a', 8, 1.15, 1.75), ('pine_b', 8, 1.15, 1.75), ('aspen_a', 2, 1.0, 1.45), ('oak_a', 1, .9, 1.2),
          ('dead_tree_a', 1, .9, 1.3), ('dead_tree_b', 1, .9, 1.3)]
 UNDER = [('fern_a', 6), ('fern_big', 5), ('bush_a', 2), ('bush_b', 2), ('bush_c', 2), ('grass_a', 1), ('tall_grass_l', 1),
@@ -2165,6 +2315,21 @@ def building(s, slot, catalogue):
         s.raised = [e for e in s.raised if e[0] is not hill]
         s.absolute = [e for e in s.absolute if e[0] is not hill]
         hillside(s, slot, catalogue, hill)
+    # The Parts Gallery: south-west of the Hillside, on the forest's map there (every number stays).
+    yards = [cells.get((OX + 2, 1 + len(SECTIONS) + 2 + OY + k)) for k in (0, 1)]
+    if all(y is not None and y in forest for y in yards):
+        for yard, name in zip(yards, ('Parts Gallery', 'Parts Gallery 2')):
+            yard['name'], yard['records'] = name, []
+            s.raised = [e for e in s.raised if e[0] is not yard]
+            s.absolute = [e for e in s.absolute if e[0] is not yard]
+        parts_gallery(s, slot, catalogue, yards)
+    # The Mine: under a hill east of the gallery, on the forest's maps there (every number stays).
+    mine = [cells.get((OX + 3 + dc, 1 + len(SECTIONS) + 2 + OY + dr)) for dc, dr in ((0, 0), (1, 0), (0, 1), (1, 1))]
+    if all(c is not None and c in forest for c in mine):
+        mine[0]['records'] = []                                        # the mouth's map: its forest cleared
+        s.raised = [e for e in s.raised if e[0] is not mine[0]]
+        s.absolute = [e for e in s.absolute if e[0] is not mine[0]]
+        underground(s, slot, catalogue, mine[0], mine[1], mine[2], mine[3])
 
 
 def main():

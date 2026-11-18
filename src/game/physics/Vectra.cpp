@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstring>
 #include <chrono>
+#include <iterator>
 namespace retro::vectra {
 M3 M3::inverse()const{
  const float a=m[0][0],b=m[0][1],c=m[0][2],d=m[1][0],e=m[1][1],f=m[1][2],g=m[2][0],h=m[2][1],i=m[2][2];
@@ -126,7 +127,8 @@ int faceContact(const Body& A,const Body& B,const Hull& ref,int rf,const Hull& i
  const auto&F=ref.t->f[rf];
  for(int k=0;k<F.n&&count>0;++k){const V3 a=ref.v[F.idx[k]],b=ref.v[F.idx[(k+1)%F.n]];const V3 side=norm(cross(b-a,n));const float offset=dot(side,a);int out=0;
   for(int i=0;i<count;++i){const V3 p=poly[i],q=poly[(i+1)%count];const float dp=dot(side,p)-offset,dq=dot(side,q)-offset;
-   if(dp<=0&&out<64)next[out++]=p;if((dp<0)!=(dq<0)&&out<64){const float t=dp/(dp-dq);next[out++]=p+(q-p)*t;}}
+   if(dp<=0&&out<64)next[out++]=p;if(((dp<0&&dq>0)||(dp>0&&dq<0))&&out<64){   // strictly across: a vertex on the side is kept once, as itself
+   const float t=dp/(dp-dq);next[out++]=p+(q-p)*t;}}
   count=out;for(int i=0;i<count;++i)poly[i]=next[i];}
  V3 pts[64];float seps[64];int kept=0;
  for(int i=0;i<count;++i){const float s=dot(n,poly[i])-ref.d[rf];if(s>margin)continue;pts[kept]=poly[i]-n*(s*.5f);seps[kept]=s;ids[kept]=std::uint32_t(rf<<16|inf<<8|i);++kept;}
@@ -241,18 +243,19 @@ void Space::collide(float dt){
  auto active=[&](const Body& b){return !b.sleeping&&(b.invMass>0||(b.kinematic&&(lenSq(b.v)>1e-8f||lenSq(b.w)>1e-8f)));};
  std::vector<float> reach(size_t(n),0.f);
  for(int i=0;i<n;++i){auto&b=bodies[size_t(i)];V3 lo{1e30f,1e30f,1e30f},hi{-1e30f,-1e30f,-1e30f};
+  if(!b.shape){b.boundsLo=lo;b.boundsHi=hi;continue;}   // no shape: nothing to meet (its bounds empty, never paired)
   for(int p=0;p<b.shape->count;++p){V3 l,h;partBounds(b,p,l,h);lo={std::min(lo.x,l.x),std::min(lo.y,l.y),std::min(lo.z,l.z)};hi={std::max(hi.x,h.x),std::max(hi.y,h.y),std::max(hi.z,h.z)};}
   b.boundsLo=lo;b.boundsHi=hi;reach[size_t(i)]=settings.speculative+(b.sleeping?0.f:std::min(1.f,(len(b.v)+len(b.w)*b.shape->bound)*dt));}
  // The world under and round each moving body.
  std::vector<char> grounded(size_t(n),0);
- auto ground=[&](int i){const auto&b=bodies[size_t(i)];if(!worldContacts||grounded[size_t(i)]||b.sleeping||b.invMass<=0)return;grounded[size_t(i)]=1;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);};
+ auto ground=[&](int i){const auto&b=bodies[size_t(i)];if(!worldContacts||!b.shape||grounded[size_t(i)]||b.sleeping||b.invMass<=0)return;grounded[size_t(i)]=1;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);};
  const auto t0=std::chrono::steady_clock::now();
  for(int i=0;i<n;++i)ground(i);
  const auto t1=std::chrono::steady_clock::now();worldMs=std::chrono::duration<double,std::milli>(t1-t0).count();
  // Pairs: sweep and prune along x.
  std::vector<int> order;order.reserve(size_t(n));for(int i=0;i<n;++i)order.push_back(i);
  std::sort(order.begin(),order.end(),[&](int a,int b){const float la=bodies[size_t(a)].boundsLo.x-reach[size_t(a)],lb=bodies[size_t(b)].boundsLo.x-reach[size_t(b)];return la!=lb?la<lb:a<b;});
- std::vector<std::pair<int,int>> pairs;
+ auto sweepPairs=[&](std::vector<std::pair<int,int>>& pairs){
  for(size_t s=0;s<order.size();++s){const int i=order[s];const auto&a=bodies[size_t(i)];const float hiX=a.boundsHi.x+reach[size_t(i)];
   for(size_t t=s+1;t<order.size();++t){const int j=order[t];const auto&b=bodies[size_t(j)];if(b.boundsLo.x-reach[size_t(j)]>hiX)break;
    if(!active(a)&&!active(b))continue;if(a.invMass<=0&&b.invMass<=0)continue;
@@ -260,12 +263,15 @@ void Space::collide(float dt){
    const float r=std::max(reach[size_t(i)],reach[size_t(j)]);
    if(a.boundsLo.y>b.boundsHi.y+r||b.boundsLo.y>a.boundsHi.y+r||a.boundsLo.z>b.boundsHi.z+r||b.boundsLo.z>a.boundsHi.z+r)continue;
    if(filter&&!filter(*this,i,j))continue;pairs.push_back({std::min(i,j),std::max(i,j)});}}
- std::sort(pairs.begin(),pairs.end());
+ std::sort(pairs.begin(),pairs.end());};
+ std::vector<std::pair<int,int>> pairs;sweepPairs(pairs);
  // Each polyhedral part's hull, built once a step when a pair first needs it (a crate in a heap meets six).
- std::vector<int> first(size_t(n)+1,0);for(int i=0;i<n;++i)first[size_t(i)+1]=first[size_t(i)]+bodies[size_t(i)].shape->count;
+ std::vector<int> first(size_t(n)+1,0);for(int i=0;i<n;++i)first[size_t(i)+1]=first[size_t(i)]+(bodies[size_t(i)].shape?bodies[size_t(i)].shape->count:0);
  std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
  auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
- for(auto [i,j]:pairs){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
+ int woken=0;std::vector<char> roused(size_t(n),0);   // woken by a touch this step: what it touches that sleeps wakes with it (a sleeper is a wall)
+ auto meet=[&](const std::vector<std::pair<int,int>>& list){
+ for(auto [i,j]:list){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
   if(pairContacts&&pairContacts(*this,i,j,margin,manifolds)){++pairsTested;continue;}
   for(int pa=0;pa<a.shape->count;++pa)for(int pb=0;pb<b.shape->count;++pb){
    if(a.shape->count>1||b.shape->count>1){V3 l1,h1,l2,h2;partBounds(a,pa,l1,h1);partBounds(b,pb,l2,h2);
@@ -275,12 +281,18 @@ void Space::collide(float dt){
    if(!(polyhedra?collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m):collideParts(a,pa,b,pb,margin,m)))continue;m.a=i;m.b=j;m.material=Material::mix(a.material,b.material);
    {const float sa=a.softHertz,sb=b.softHertz;m.surface.hertz=sa>0&&sb>0?std::min(sa,sb):std::max(sa,sb);}
    manifolds.push_back(m);
-   // A moving body touching a sleeping one wakes it (and the sleeper's island follows next step).
+   // A moving body touching a sleeping one wakes it, and what that touches wakes with it (the rounds below).
    float deepest=1e30f;for(int k=0;k<m.count;++k)deepest=std::min(deepest,m.points[size_t(k)].separation);
    if(deepest<margin){   // within reach this step: a sleeper treated as fixed would stop a blow dead
     auto rousing=[&](const Body& mover,const Body& other){const float speed=len(mover.v-other.v)+len(mover.w)*mover.shape->bound;return speed>2*settings.sleepLinear||(mover.kinematic&&speed>1e-3f);};
-    if(a.sleeping&&!b.sleeping&&rousing(b,a))wake(i);
-    if(b.sleeping&&!a.sleeping&&rousing(a,b))wake(j);}}}
+    if(a.sleeping&&!b.sleeping&&(rousing(b,a)||roused[size_t(j)])){wake(i);roused[size_t(i)]=1;++woken;}
+    if(b.sleeping&&!a.sleeping&&(rousing(a,b)||roused[size_t(i)])){wake(j);roused[size_t(j)]=1;++woken;}}}}};
+ meet(pairs);
+ // Woken by a touch: its pairs with what still sleeps beside it were passed over as two sleepers'; met now, or
+ // what woke it could drive it into them unopposed for a step.
+ while(woken){woken=0;std::vector<std::pair<int,int>> more,fresh;sweepPairs(more);
+  std::set_difference(more.begin(),more.end(),pairs.begin(),pairs.end(),std::back_inserter(fresh));if(fresh.empty())break;
+  meet(fresh);std::vector<std::pair<int,int>> all;std::merge(pairs.begin(),pairs.end(),fresh.begin(),fresh.end(),std::back_inserter(all));pairs.swap(all);}
  pairMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t1).count();
  // Woken by a touch: the world under it this step too.
  for(int i=0;i<n;++i)ground(i);
@@ -336,7 +348,13 @@ void Space::solve(float h,bool useBias,bool coldOnly){
   // rest: a basket landing flat on four corners came up spinning at 7 rad/s.
   if(m.count>1&&m.midMass>0){
    const V3 dv=velocityOf(B,m.midB,m.surface.velocity)-(A.v+cross(A.w,m.midA));const float vn=dot(dv,m.normal);
-   if(vn<-settings.middleThreshold){const float lambda=-vn*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
+   // Still apart (a speculative manifold): only what would close past the nearest point's gap within the substep
+   // is the impact's, as the points' own bias leaves it (all of the approach would stop it in the air, then bounce it).
+   float gap=0;
+   if(vn<-settings.middleThreshold){gap=1e30f;for(int j=0;j<m.count;++j){const auto&c=m.points[size_t(j)];
+     const V3 d=(dpB-dpA)+(B?dqB.rotate(c.rB)-dqA.rotate(c.rA):V3{}-dqA.rotate(c.rA))-((B?c.rB:V3{})-c.rA);gap=std::min(gap,dot(d,m.normal)+c.separation);}
+    gap=std::max(0.f,gap)*inv;}
+   if(vn<-settings.middleThreshold&&vn+gap<0){const float lambda=-(vn+gap)*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
     if(ma){A.v=A.v-P*A.invMass;A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+m.midWB*lambda;}
     for(int j=0;j<m.count;++j){auto&c=m.points[size_t(j)];c.normalImpulse+=lambda/float(m.count);c.maxNormalImpulse=std::max(c.maxNormalImpulse,lambda/float(m.count));}}}
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
@@ -378,10 +396,18 @@ void Space::restitution(){
  // points bounces straight, where a point-by-point pass would twist it (each corner's fix turns the body
  // under the next) and hand it more than its restitution.
  for(auto&m:manifolds){if(m.material.restitution<=0||m.count==0)continue;Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
-  float weight=0,approach=0;V3 at{};
-  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];if(c.relativeVelocity>-settings.restitutionThreshold||c.maxNormalImpulse<=0)continue;weight+=c.maxNormalImpulse;at=at+c.p*c.maxNormalImpulse;approach+=c.relativeVelocity*c.maxNormalImpulse;}
-  if(weight<=0)continue;at=at*(1/weight);approach/=weight;
-  const V3 rA=at-A.x,rB=B?at-B->x:at;const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
+  // The arms carried with each body through the step (c.p is where the points were when it began; the bodies
+  // have moved since, and an arm from there to where a sliding body is now would spin it on the bounce).
+  float weight=0,approach=0;V3 armA{},armB{};bool struck=false;
+  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];if(c.relativeVelocity>-settings.restitutionThreshold||c.maxNormalImpulse<=0)continue;
+   const V3 pA=A.dq.rotate(c.rA),pB=B?B->dq.rotate(c.rB):c.rB;
+   {const V3 d=((B?B->dp:V3{})-A.dp)+(B?pB-pA:V3{}-pA)-((B?c.rB:V3{})-c.rA);struck|=dot(d,m.normal)+c.separation<=settings.linearSlop;}
+   weight+=c.maxNormalImpulse;armA=armA+pA*c.maxNormalImpulse;armB=armB+pB*c.maxNormalImpulse;approach+=c.relativeVelocity*c.maxNormalImpulse;}
+  // Every point still apart when the step ends (a speculative contact that only slowed the approach): nothing has
+  // struck yet, and it bounces when it lands, not in the air short of it.
+  if(!struck)continue;
+  if(weight<=0)continue;approach/=weight;
+  const V3 rA=armA*(1/weight),rB=armB*(1/weight);const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
   const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);if(k<=0)continue;
   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
   const float impulse=std::max(0.f,-(vn+m.material.restitution*approach)/k);if(impulse<=0)continue;
@@ -448,7 +474,12 @@ void Space::step(float dt){
  // A joint does not hold a moving body to a sleeping one: what is joined to something awake wakes (through
  // the whole chain).
  for(bool woke=true;woke;){woke=false;for(auto*c:constraints){const int a=c->bodyA(),b=c->bodyB();if(a<0||b<0)continue;if(auto*j=c->joint();j&&j->broken)continue;
-   auto&A=bodies[size_t(a)];auto&B=bodies[size_t(b)];if(A.invMass<=0||B.invMass<=0)continue;
+   auto&A=bodies[size_t(a)];auto&B=bodies[size_t(b)];
+   // A held (kinematic) body on the move wakes what it is joined to, as one touching it does (islands): its joint
+   // solves nothing while the other sleeps, and it would pull away.
+   auto moving=[](const Body& k){return k.kinematic&&(lenSq(k.v)>1e-6f||lenSq(k.w)>1e-6f);};
+   if(moving(A)&&B.sleeping&&B.invMass>0){wake(b);woke=true;continue;}if(moving(B)&&A.sleeping&&A.invMass>0){wake(a);woke=true;continue;}
+   if(A.invMass<=0||B.invMass<=0)continue;
    if(A.sleeping!=B.sleeping){wake(A.sleeping?a:b);woke=true;}}}
  // A motor at work keeps what it drives awake.
  for(auto*c:constraints)if(auto*j=c->joint();j&&j->driving(*this))for(int i:{j->a,j->b})if(i>=0&&bodies[size_t(i)].invMass>0){wake(i);bodies[size_t(i)].sleepTime=0;}

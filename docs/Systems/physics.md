@@ -119,7 +119,9 @@ Restitution runs once per manifold at the end.
 
 Islands are bodies linked by contacts and joints. An island sleeps when every body in it has stayed under
 6 cm/s and 0.12 rad/s for 0.2 s. A sleeping body takes part only as an immovable obstacle. Something moving that comes
-within reach of a sleeping body wakes it: a blow from a moving body is never stopped by a sleeper.
+within reach of a sleeping body wakes it: a blow from a moving body is never stopped by a sleeper. A body woken that
+way wakes what it touches in the same step, and meets it, so it is neither driven into a neighbour unopposed nor stopped
+by one still asleep.
 A sleeping prop out of reach of every awake prop and of the player is not built at all.
 
 ## Continuous collision
@@ -237,7 +239,8 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
   `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after.
 - **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
   the cache per level), so a joint built afresh each step starts from what it carried.
-- **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints.
+- **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints. A held
+  (kinematic) body on the move wakes what is joined to it.
 - **Mass ratios.** A 1 kg lamp on a 50 kg cabinet, and a 50 kg weight under two 1 kg links, hold within 2 cm at 60 and
   144 steps a second; five 20 kg crates dropped on a bridge of 2 kg planks open its pins up to 6 cm as they land and under
   1.5 cm once they lie on it (tube `joints`).

@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.3 - Below the hill (2026-11-18)
+
+The ground has an inside now. Dig, and it opens.
+
+- **Parts.** Seventy-six more pieces from the packs: walls plain and broken, pillars whole and snapped, beams, stairs of concrete and of wood, heavy doors and barred windows, railings, catwalks and scaffold decks, pipe runs and culverts, a tank rig, a cage, lamps that hang and lamps that hood, brick rubble, and from the mine its lantern, barrels, crates, locker and shelving, with boulders and rock walls and two heaps of gems. The editor keeps the building pieces under their own tab, Building, each with its picture.
+- **Caves.** The land is no longer only a surface. The editor's Cave tool digs into it: brush a tunnel at the depth you choose, click for a cavern, drag a cave mouth in from the hillside and watch the slope open. Fill it back, pull a wall out with your hand, smooth it, level a floor. The rock is rough and whole, there are no holes in it, and you walk where you dug.
+- **Move.** A new brush for the land, too: take hold of a hill and drag it, and it follows. Hold Shift to lift it.
+- **Underground.** Under the rock the sky does not reach. It is dark down there but for what you carry and what you hang, and a lantern set in a cave stands on the cave floor, not on the hill above it. Water finds the low places in a cavern as it does anywhere else.
+- **Quicker to wake.** The game gathers what it needs as it needs it, many things at once, and remembers them for next time, so it starts sooner than it has since the library grew.
+- **Steadier hands.** Vectra lets a falling thing reach the floor before it bounces, where it used to turn back a few centimetres short and spring off the air, and a crate sliding as it lands no longer comes up spinning. A thing spun hard enough to turn a quarter of the way round in one step still stops on a thin post. A cast that grazes past without closing in no longer reports a hit. A crate woken by a shove wakes what it holds in the same moment, and what is carried on a joint by a moving hand wakes and follows it instead of hanging back asleep.
+- **The Starter Map** has a gallery of the new parts on two gravel yards, and east of it a hill with a mine in it: a mouth in its west face, a timbered drift with rails and an ore cart, a cavern of crystals by lantern light, and a passage south to a pool that drips.
+
+Verified with the feature lab's tubes (parts, caves, mine), the editor's cave test, and pictures of each.
+
+---
+
 ## v1.5.2 - Held together (2026-11-18)
 
 Things hang now, and swing, and come apart along their seams. The dead fall like the dead.

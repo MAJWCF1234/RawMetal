@@ -32,6 +32,8 @@ bool rayCast(const Body& b,V3 origin,V3 direction,float maxDistance,QueryHit& hi
 // The same against one part.
 bool rayCastPart(const Body& b,int part,V3 origin,V3 direction,float maxDistance,QueryHit& hit);
 // A sphere of `radius` swept from `origin` along unit `direction`.
+// The most steps a shape cast's conservative advancement takes (a check's knob: fewer leaves a grazing cast unfinished).
+inline int castIterations=64;
 bool sphereCast(const Body& b,V3 origin,float radius,V3 direction,float maxDistance,QueryHit& hit);
 // An oriented box (half extents `half`, turned by `turn`) swept from centre `origin` along unit `direction`.
 bool boxCast(const Body& b,V3 origin,V3 half,Quat turn,V3 direction,float maxDistance,QueryHit& hit);
