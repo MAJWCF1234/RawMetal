@@ -54,6 +54,12 @@
         s.ground.push_back({number(f[1], 0), number(f[2], 0), number(f[3], 0), number(f[4], 0), int(number(f[5], 8)), number(f[6], 1)});
     }
     planFootings(&s); // footings measure the land as it is, then cut their pads in (NativeGroundMethods.inc)
+    // The underground (CAVE records, NativeCaveTool.inc), carved into the finished land as the engine carves it.
+    for (auto i : doc.records("CAVE"))
+      if (auto cave = caveStrokeOf(NativeDocument::fields(doc.lines[i])))
+        s.caves.push_back(*cave);
+    if (!s.caves.empty())
+      retro::buildTerrainCaves(s);
     terrainShapeCache = std::move(s);
     return &*terrainShapeCache;
   }
@@ -166,11 +172,11 @@
   }
 
   // ---- Terrain tool: raise, lower, smooth, flatten, ramp and paint ground.
-  enum TerrainMode { TerrainRaise, TerrainLower, TerrainSmooth, TerrainFlatten, TerrainRamp, TerrainPaint };
+  enum TerrainMode { TerrainRaise, TerrainLower, TerrainSmooth, TerrainFlatten, TerrainRamp, TerrainPaint, TerrainMove };
   HWND terrainModeList = nullptr, terrainSizeList = nullptr, terrainStrengthList = nullptr, terrainHeightBox = nullptr;
   static constexpr float terrainSizes[] = {1.f, 2.f, 3.f, 5.f, 8.f, 12.f};
   static constexpr float terrainStrengths[] = {.1f, .25f, .5f, 1.f};
-  int terrainMode() const { return std::clamp(listIndex(terrainModeList), 0, 5); }
+  int terrainMode() const { return std::clamp(listIndex(terrainModeList), 0, int(TerrainMove)); }
   float brushRadius() const { if (tool == GrowthTool) return growthRadius(); return terrainSizes[std::clamp(listIndex(terrainSizeList, 2), 0, int(std::size(terrainSizes)) - 1)]; }
   float brushStrength() const { return terrainStrengths[std::clamp(listIndex(terrainStrengthList, 1), 0, int(std::size(terrainStrengths)) - 1)]; }
   // The stroke in hand: the sculpt grids it touches (24 x 24 metres each, aligned to this map),
@@ -264,7 +270,7 @@
     }
     const float r = brushRadius(), strength = brushStrength();
     const int mode = terrainMode();
-    if (!first && mode != TerrainRamp && std::hypot(x - stroke.lastX, y - stroke.lastY) < std::max(.5f, r * .35f))
+    if (!first && mode != TerrainRamp && mode != TerrainMove && std::hypot(x - stroke.lastX, y - stroke.lastY) < std::max(.5f, r * .35f))
       return;
     stroke.lastX = x, stroke.lastY = y;
     auto [ox, oy] = mapOrigin();
@@ -285,6 +291,44 @@
     }
     if (mode == TerrainPaint) {
       paintGroundDab(wx, wy, r);
+    } else if (mode == TerrainMove) {
+      // The land under the press follows the pointer, falling off over the brush: laid again from the
+      // ground as it was each time the pointer moves, so it is smooth and never piles up. Shift lifts it
+      // instead (drag up the plan to raise, down to lower).
+      stroke.grids = stroke.original;
+      const float ax = ox + stroke.startX, ay = oy + stroke.startY, mx = wx - ax, my = wy - ay;
+      const bool lift = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+      const float reach = r + std::hypot(mx, my) + 1;
+      const int x0 = int(std::floor(std::min(ax, wx) - reach)), x1 = int(std::ceil(std::max(ax, wx) + reach));
+      const int y0 = int(std::floor(std::min(ay, wy) - reach)), y1 = int(std::ceil(std::max(ay, wy) + reach));
+      std::map<std::pair<int, int>, float> before;
+      for (int cy = y0 - 1; cy <= y1 + 1; ++cy)
+        for (int cx = x0 - 1; cx <= x1 + 1; ++cx)
+          before[{cx, cy}] = strokeHeight(cx, cy);
+      auto was = [&](float px, float py) {
+        px -= .5f, py -= .5f;
+        const int ix = int(std::floor(px)), iy = int(std::floor(py));
+        const float tx = px - ix, ty = py - iy;
+        auto at = [&](int i, int j) { auto f = before.find({std::clamp(i, x0 - 1, x1 + 1), std::clamp(j, y0 - 1, y1 + 1)}); return f == before.end() ? 0.f : f->second; };
+        return (at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx) * (1 - ty) + (at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx) * ty;
+      };
+      for (int cy = y0; cy <= y1; ++cy)
+        for (int cx = x0; cx <= x1; ++cx) {
+          const float px = cx + .5f, py = cy + .5f;
+          float target;
+          if (lift) {
+            float w = std::clamp(1 - std::hypot(px - ax, py - ay) / r, 0.f, 1.f);
+            target = before[{cx, cy}] + w * w * (3 - 2 * w) * std::clamp(-my * .5f, -6.f, 6.f);
+          } else {
+            float w = std::clamp(1 - std::hypot(px - wx, py - wy) / r, 0.f, 1.f);
+            w = w * w * (3 - 2 * w);
+            target = was(px - mx * w, py - my * w);
+          }
+          float &off = strokeOffset(cx, cy);
+          const float h = baseHeight(cx, cy) + off, top = float(retro::TerrainFieldHighestTop) - .5f, low = float(retro::TerrainFieldLowestTop) + .5f;
+          off = std::clamp(off + std::clamp(target, low, top) - h, -retro::TerrainSculptMaxOffset, retro::TerrainSculptMaxOffset);
+        }
+      writeSculptGrids();
     } else if (mode == TerrainRamp) {
       // A ramp is laid from the stroke's start every time it moves: the grids go back first,
       // and its far end is read from the ground as it was.
@@ -417,14 +461,16 @@
       history.pop_back(); // nothing changed: no empty Undo
     if (tool == 'T') {
       const wchar_t *done[] = {L"Raised the ground.", L"Lowered the ground.", L"Smoothed the ground.", L"Flattened the ground.",
-                               L"Laid a ramp.", L"Painted the ground."};
+                               L"Laid a ramp.", L"Painted the ground.", L"Moved the ground."};
       std::wstring note = done[terrainMode()];
       if (terrainMode() == TerrainFlatten)
         note += L" Level " + wide(shortNumber(stroke.startHeight)) + L" m.";
       if (terrainMode() == TerrainRamp)
         note += L" From " + wide(shortNumber(stroke.startHeight)) + L" m to " + wide(shortNumber(stroke.endHeight)) + L" m.";
       message(note + L" Ctrl+Z takes the stroke back.");
-    } else if (tool == 'G')
+    } else if (tool == 'C')
+      message(caveStrokeNote());
+    else if (tool == 'G')
       message(stroke.erased ? L"Cleared " + std::to_wstring(stroke.erased) + L" growth." : L"Grew " + std::to_wstring(stroke.planted) + L" pieces. Ctrl+Z takes the stroke back.");
     else if (tool == 'N')
       message(stroke.erased ? L"Cleared " + std::to_wstring(stroke.erased) + L" plants." : L"Planted " + std::to_wstring(stroke.planted) + L".");

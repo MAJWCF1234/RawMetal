@@ -93,7 +93,7 @@ inline std::wstring nice(std::string name) {
     name = (crystal ? "resonance_crystal_" : "bedrock_") + size;
   }
   for (auto prefix : {"lab_", "med_", "pwr_", "ind_", "cave_", "mine_", "scrap_", "psx_", "anl_", "office_",
-                      "prop_", "item_", "art_", "clinic_", "urb_"})
+                      "prop_", "item_", "art_", "clinic_", "urb_", "bld_"})
     if (name.rfind(prefix, 0) == 0 && name.size() > strlen(prefix) + 2) {
       name = name.substr(strlen(prefix));
       break;
@@ -112,14 +112,17 @@ inline std::wstring nice(std::string name) {
 }
 // The browser's tabs. Favourites first, Shapes as a first-class page.
 inline const wchar_t *const partTabs[] = {L"★ Saved", L"Furniture", L"Machines", L"Lab",  L"Lights",
-                                          L"Signs",        L"Props",     L"Shapes",   L"Nature", L"Caves",
-                                          L"Mine",         L"Scrap",     L"Big",    L"Stamps"};
-enum PartTab { Saved, Furniture, Machines, Lab, Lights, Signs, Props, Shapes, Nature, Caves, Mine, Scrap, Big, Stamps, TabCount };
+                                          L"Signs",        L"Props",     L"Shapes",   L"Building", L"Nature",
+                                          L"Caves",        L"Mine",      L"Scrap",    L"Big",      L"Stamps"};
+enum PartTab { Saved, Furniture, Machines, Lab, Lights, Signs, Props, Shapes, Building, Nature, Caves, Mine, Scrap, Big, Stamps, TabCount };
 inline int tabOf(const std::string &n) {
   if (has(n, {"lamp", "light", "lantern", "candle", "brazier"}))
     return Lights;
   if (has(n, {"sign", "billboard", "notice", "metro_map", "status_display", "pa_horn", "painting", "clock"}))
     return Signs;
+  // Building parts from the modular kits (bld_*): walls, pillars, beams, stairs, doors, pipes, railings.
+  if (n.rfind("bld_", 0) == 0)
+    return Building;
   // Resonance crystals and the bedrock they grow from belong underground.
   if (n.rfind("cave_", 0) == 0 || n.rfind("res_", 0) == 0)
     return Caves;

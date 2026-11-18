@@ -1,0 +1,6 @@
+# The caves tube (src/lab/tubes/Caves.cpp): CAVE records carved into the land of lab/fixtures/caves.rmc.
+world custom "lab/fixtures/caves.rmc"
+map 0
+camera 0.8 12 -999 0 0
+size 1280 720
+frames 420

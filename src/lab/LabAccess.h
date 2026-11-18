@@ -160,6 +160,8 @@ struct LabAccess {
  static const SoftwareRenderer::Texture* tileSheet(const SoftwareRenderer& r,char tile){return tile=='B'?&r.m_barrelTexture:&r.m_crateTexture;}
  static const SoftwareRenderer::Texture* breakableSheet(const SoftwareRenderer& r,int material){return material==22?&r.m_dropCeiling:material==17?&r.m_glassTexture:&r.m_crateTexture;}
  static const SoftwareRenderer::Texture* modelSheet(const SoftwareRenderer& r,int model){return &r.facilityTexture(model,0);}
+ static const Mesh& facilityMesh(const SoftwareRenderer& r,int model){return r.m_facilityMeshes[size_t(model)];}
+ static const SoftwareRenderer::Texture* modelPart(const SoftwareRenderer& r,int model,int part){return &r.facilityTexture(model,part);}
  static int bloodDecalCount(const SoftwareRenderer& r,SoftwareRenderer::Fluid f,SoftwareRenderer::BloodJob j){return int(r.m_bloodDecals[size_t(f)][size_t(j)].size());}
  static SoftwareRenderer::Fluid fluidOf(int species){const auto& v=SoftwareRenderer::creatureVisuals;return v[size_t(std::clamp(species,0,int(v.size())-1))].fluid;}
  #ifdef RAWMETAL_LAB_HAS_PARTICLES

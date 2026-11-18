@@ -766,7 +766,9 @@ enum {
   // The Growth brush (NativeGrowthTool.inc).
   GrowthKindList=810,GrowthModeList,GrowthSizeList,GrowthDensityList,GrowthScaleList,GrowthSeedBox,
   // The Connect tool (NativeConnectTool.inc).
-  ConnectKindList=2630
+  ConnectKindList=2630,
+  // The Cave tool (NativeCaveTool.inc).
+  CaveModeList=2640,CaveSizeList,CaveDepthList
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -829,12 +831,13 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Breach", L"◠", L"Drag along a wall to break a hole through it: ragged, arched or square, with a chipped edge, rebar and rubble. You walk, see and shoot through it, and light comes through.", 0, "BREACH", 'r'},
     {L"Growth", L"❦", L"Paint ivy and moss on walls, creepers hanging from ceilings and ledges, and grass through the floor. What, brush size, density, size and seed on the right; Erase (or Alt) clears it. Ctrl+Z takes a stroke back.", 1, "", 'G'},
     {L"Connect", L"⛓", L"Join a loose thing to another thing, a wall or the ceiling: a rope, chain, hinge, spring, weld, motor or pulley (pick on the right). Drag from the thing to what it joins, or click one then the other. Hanging lamp: click under a ceiling.", 1, "JOINT", 'l'},
+    {L"Cave", L"◗", L"Dig the underground: brush tunnels and click caverns into the land at the depth picked, drag a cave mouth in from the hillside, fill back, pull a wall, smooth it, level a floor. Ctrl+Z takes a stroke back.", 4, "CAVE", 'T'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
                      TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
-                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50;
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50, CaveTool = 51;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -1043,7 +1046,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool connectTest = false;
+  bool connectTest = false, caveTest = false;
   bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
@@ -1129,6 +1132,8 @@ struct Editor {
 #include "NativeConnectTool.inc"
 #include "NativeConnectRegression.inc"
 #include "NativeGrowthTool.inc"
+#include "NativeCaveTool.inc"
+#include "NativeCaveRegression.inc"
 #include "NativeGrowthRegression.inc"
 #include "NativeEditorPictures.inc"
 #include "NativeFinishRegression.inc"
@@ -4260,7 +4265,10 @@ struct Editor {
     char brushShape = toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape;
     // The land and its plants (NativeOutdoorMethods.inc): a dab under the pointer.
     if (brushShape == 'T') {
-      terrainDab(x, y);
+      if (tool == CaveTool)
+        caveDab(x, y); // NativeCaveTool.inc
+      else
+        terrainDab(x, y);
       return;
     }
     if (brushShape == 'N') {
@@ -5107,6 +5115,9 @@ struct Editor {
     for (HWND list : growthControls())
       if (list)
         ShowWindow(list, SW_HIDE);
+    for (HWND list : caveControls())
+      if (list)
+        ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
       ShowWindow(GetDlgItem(window, id), SW_HIDE);
     if(!layersDock){
@@ -5232,7 +5243,7 @@ struct Editor {
     if (tool == TerrainTool) {
       row(terrainModeList, L"Brush");
       row(terrainSizeList, L"Size");
-      if (terrainMode() != TerrainPaint && terrainMode() != TerrainRamp)
+      if (terrainMode() != TerrainPaint && terrainMode() != TerrainRamp && terrainMode() != TerrainMove)
         row(terrainStrengthList, L"Strength");
       if (terrainMode() == TerrainFlatten)
         row(terrainHeightBox, L"Level (m)", 26);
@@ -5264,6 +5275,8 @@ struct Editor {
       connectRows(row);
     if (tool == GrowthTool)
       growthRows(row);
+    if (tool == CaveTool)
+      caveRows(row);
     if (tool == FilmTool) {
       int i = 0;
       for (int id : {FilmWrite, FilmRender}) {
@@ -6262,6 +6275,7 @@ struct Editor {
     verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
     verifyGround(false); // NativeGroundRegression.inc: rooms on the land, footings, raise, patios
     verifyFlooring(); // NativeFlooringRegression.inc: the Flooring tool
+    verifyCaveRegressions(); // NativeCaveRegression.inc: the Cave tool and the Move brush
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -9860,6 +9874,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->growthControlChanged(id, notification);
         return 0;
       }
+      if (id >= CaveModeList && id <= CaveDepthList) {
+        e->caveControlChanged(id, notification);
+        return 0;
+      }
       if (id == LinkList && notification == LBN_SELCHANGE) {
         auto n = SendMessageW(e->linkList, LB_GETCURSEL, 0, 0);
         if (n >= 0)
@@ -10207,7 +10225,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
-                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test"})
+                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10330,6 +10348,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The Connect tool alone, with its pictures (--editing-test runs it too, without them).
     if (argc > 1 && std::wstring(argv[1]) == L"--connect-test")
       e.backgroundTest = e.connectTest = true;
+    if (argc > 1 && std::wstring(argv[1]) == L"--cave-test")
+      e.backgroundTest = e.caveTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--growth-test")
       e.backgroundTest = e.growthTest = true;
     // The Shape tool alone, with its pictures (NativeShapeRegression.inc; --editing-test runs it too).
@@ -10724,7 +10744,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     for (auto [slider, id] : {std::pair{&e.emitterHeadingSlider, int(EmitterHeadingSlider)}, std::pair{&e.emitterStrengthSlider, int(EmitterStrengthSlider)}})
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
     // The Terrain and Nature tools and water outdoors (NativeOutdoorMethods.inc).
-    e.terrainModeList = choices(TerrainModeList, {L"Raise", L"Lower", L"Smooth", L"Flatten to a level", L"Ramp (drag from one level to another)", L"Paint the ground"});
+    e.terrainModeList = choices(TerrainModeList, {L"Raise", L"Lower", L"Smooth", L"Flatten to a level", L"Ramp (drag from one level to another)", L"Paint the ground",
+                                                  L"Move (drag the land; Shift lifts it)"});
     e.terrainSizeList = choices(TerrainSizeList, {L"1 m across", L"2 m", L"3 m", L"5 m", L"8 m", L"12 m"}, 2);
     e.terrainStrengthList = choices(TerrainStrengthList, {L"Gentle (0.1 m a dab)", L"Medium (0.25 m)", L"Strong (0.5 m)", L"Full (1 m)"}, 1);
     e.terrainHeightBox = e.controlWindow(L"EDIT", L"", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, TerrainHeightBox);
@@ -10741,6 +10762,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.makeBreachControls(choices);
     e.makeConnectControls(choices);
     e.makeGrowthControls(choices);
+    e.makeCaveControls(choices);
     e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
     for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
@@ -10969,6 +10991,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.finishTest) {
       int code = 0;
       try { e.verifyFinishes(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-finish-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.caveTest) {
+      int code = 0;
+      try { e.verifyCaveRegressions(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-cave-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

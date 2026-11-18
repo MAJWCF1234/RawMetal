@@ -484,7 +484,8 @@ private:
         Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862},
         Mesh{2865},
         Mesh{2868},Mesh{2870},
-        Mesh{2910},Mesh{2911},Mesh{2912},Mesh{2913},Mesh{2914},Mesh{2916},Mesh{2917},Mesh{2918},Mesh{2919},Mesh{2920},Mesh{2921},Mesh{2922},Mesh{2923},Mesh{2924},Mesh{2926},Mesh{2927},Mesh{2928},Mesh{2930},Mesh{2931},Mesh{2932},Mesh{2933},Mesh{2935},Mesh{2936},Mesh{2937},Mesh{2938},Mesh{2939},Mesh{2940},Mesh{2941},Mesh{2942},Mesh{2944},Mesh{2945},Mesh{2946},Mesh{2947}};
+        Mesh{2910},Mesh{2911},Mesh{2912},Mesh{2913},Mesh{2914},Mesh{2916},Mesh{2917},Mesh{2918},Mesh{2919},Mesh{2920},Mesh{2921},Mesh{2922},Mesh{2923},Mesh{2924},Mesh{2926},Mesh{2927},Mesh{2928},Mesh{2930},Mesh{2931},Mesh{2932},Mesh{2933},Mesh{2935},Mesh{2936},Mesh{2937},Mesh{2938},Mesh{2939},Mesh{2940},Mesh{2941},Mesh{2942},Mesh{2944},Mesh{2945},Mesh{2946},Mesh{2947},
+        Mesh{2948},Mesh{2951},Mesh{2954},Mesh{2957},Mesh{2960},Mesh{2964},Mesh{2969},Mesh{2973},Mesh{2978},Mesh{2983},Mesh{2986},Mesh{2989},Mesh{2992},Mesh{2995},Mesh{2997},Mesh{2999},Mesh{3003},Mesh{3005},Mesh{3007},Mesh{3009},Mesh{3011},Mesh{3013},Mesh{3017},Mesh{3019},Mesh{3022},Mesh{3025},Mesh{3028},Mesh{3032},Mesh{3036},Mesh{3039},Mesh{3041},Mesh{3043},Mesh{3046},Mesh{3048},Mesh{3052},Mesh{3056},Mesh{3058},Mesh{3061},Mesh{3063},Mesh{3065},Mesh{3067},Mesh{3072},Mesh{3074},Mesh{3076},Mesh{3078},Mesh{3080},Mesh{3082},Mesh{3084},Mesh{3086},Mesh{3088},Mesh{3090},Mesh{3092},Mesh{3096},Mesh{3099},Mesh{3104},Mesh{3106},Mesh{3108},Mesh{3110},Mesh{3112},Mesh{3114},Mesh{3116},Mesh{3118},Mesh{3120},Mesh{3122},Mesh{3124},Mesh{3126},Mesh{3128},Mesh{3130},Mesh{3132},Mesh{3134},Mesh{3136},Mesh{3138},Mesh{3140},Mesh{3142},Mesh{3144},Mesh{3146}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
