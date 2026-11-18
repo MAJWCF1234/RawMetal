@@ -233,6 +233,13 @@ private:
     // (cached per texture and tone, so each stays one GPU material).
     std::unordered_map<std::uint64_t,Texture> m_lampFaces;
     const Texture& lampFace(const Texture& base,Point3 tone);
+    // Map format 2 looks (EntityTraits: tint=, emissive=): `base` multiplied by the tint (mips
+    // too) and, with a glow, lit by its own colour. Cached by base and look, like lampFace.
+    std::unordered_map<std::uint64_t,Texture> m_lookFaces;
+    const Texture& lookFace(const Texture& base,const EntityTraits& look);
+    // The sheet a part of `model` is drawn with under `look`: texture= swaps in another
+    // model's sheet, then the tint and glow apply. No look: facilityTexture itself.
+    const Texture& lookedTexture(int model,int part,const EntityTraits* look);
     static void deriveSurfaceNormal(Texture& texture,float strength);
     // Give a texture its material class: a micro-normal from its luminance if it has no normal map,
     // its surface map, and its albedo brought to the class's physical range (Materials.h).

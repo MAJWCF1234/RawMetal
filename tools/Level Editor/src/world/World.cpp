@@ -272,6 +272,7 @@ void World::settleExclusionFacilityOnTerrain(){
  m_collisionCells={};m_collisionAll={};
 }
 void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
+ map=playedMap(std::move(map)); // map format 2 overrides (EntityTraits.cpp)
  m_lightSolids.clear();m_lightNodes.clear();
  m_collisionCells={};m_collisionAll={};
  if(!map)throw std::runtime_error("Missing authored map data");
@@ -362,7 +363,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  // authored (desk sets placed them as fixed fixtures). The fixture stays, hidden and not solid, so
  // fixture indices other records hold do not move.
  for(auto&f:m_fixtures)if((f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair)&&f.visible&&!f.anchored&&f.base<.05f){
-  m_clutterSpawns.push_back({ClutterModelKind,f.position,-999,-f.yaw,f.model,f.width,f.depth,f.height});f.visible=false;f.solid=false;}
+  m_clutterSpawns.push_back({ClutterModelKind,f.position,-999,-f.yaw,f.model,f.width,f.depth,f.height});m_clutterSpawns.back().traits=f.traits;f.visible=false;f.solid=false;}
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
  m_scriptEvents=m_mapData->scriptEvents;
  m_pushCrates=m_mapData->pushCrates;m_cratePlates=m_mapData->cratePlates;
