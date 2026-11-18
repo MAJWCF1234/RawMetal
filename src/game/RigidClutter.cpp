@@ -95,13 +95,14 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    auto& memo=rp.flat[size_t(b.user)];
    if(memo.valid&&memo.world==&cw2&&memo.doors==doors&&x0>=memo.x0&&x1<=memo.x1&&y0>=memo.y0&&y1<=memo.y1&&std::fabs(lo-memo.lo)<.02f&&hi+margin<=memo.hi){flat=memo.flat;flatFloor=memo.floor;flatWorld=&cw2;}
    else{const float grow=.04f,X0=x0-grow,X1=x1+grow,Y0=y0-grow,Y1=y1+grow,top=hi+margin+.06f;
-    const int nx=std::max(1,int(std::ceil((X1-X0)/.1f))),ny=std::max(1,int(std::ceil((Y1-Y0)/.1f)));
+    const int nx=std::max(1,int(std::ceil((X1-X0)/.04f))),ny=std::max(1,int(std::ceil((Y1-Y0)/.04f)));   // every 4 cm round it, and every 10 cm across it: a fixture's corner poking into the region is found
     auto column=[&](float x,float y,bool first)->bool{Vec2 q{x,y};q=q+shift;const World& w=physicalWorld(q);if(first)flatWorld=&w;else if(&w!=flatWorld)return false;
      const float fs=w.supportBelow(q.x,q.y,lo+.06f,true);if(first)flatFloor=fs;else if(std::fabs(fs-flatFloor)>1e-4f)return false;
      return w.fits(q.x,q.y,flatFloor+.004f,std::max(.01f,top-flatFloor-.004f),true,true)&&!w.doorBlocks(q.x,q.y,flatFloor+.004f,std::max(.01f,top-flatFloor-.004f));};
     flat=column((X0+X1)*.5f,(Y0+Y1)*.5f,true);
     for(int i=0;i<=nx&&flat;++i){const float x=X0+(X1-X0)*float(i)/float(nx);flat=column(x,Y0,false)&&column(x,Y1,false);}
     for(int j=1;j<ny&&flat;++j){const float y=Y0+(Y1-Y0)*float(j)/float(ny);flat=column(X0,y,false)&&column(X1,y,false);}
+    {const int ix=std::max(1,int(std::ceil((X1-X0)/.1f))),iy=std::max(1,int(std::ceil((Y1-Y0)/.1f)));for(int i=1;i<ix&&flat;++i)for(int j=1;j<iy&&flat;++j)flat=column(X0+(X1-X0)*float(i)/float(ix),Y0+(Y1-Y0)*float(j)/float(iy),false);}
     memo={&cw2,X0,Y0,X1,Y1,lo,top,flatFloor,doors,flat,flatWorld==&cw2};}}
   // On one flat floor with nothing over it, only the lowest points can touch anything (every column round is
   // open): those alone. Otherwise every part's surface points too, for the walls and what is overhead.

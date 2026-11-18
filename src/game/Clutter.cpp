@@ -397,7 +397,7 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
  // between them, and a shove's one-step depenetration jumped it clean through (v1.4.5, the dock hall).
  // A swinging leaf sweeping a prop aside starts out overlapping it: on that way out only the walls
  // count until the place it lands (doors=false between).
- auto propFits=[&](const Clutter& v,Vec2 p,float z,float h,bool doors=true){return v.everyOutlinePoint([&](Vec2 offset){auto q=p+offset+shift;const auto&w=physicalWorld(q);return w.fits(q.x,q.y,z,h,true,true)&&!(doors&&w.doorBlocks(q.x,q.y,z,h));});};
+ auto propFits=[&](const Clutter& v,Vec2 p,float z,float h,bool doors=true){return v.everyOutlinePoint([&](Vec2 offset){auto q=p+offset+shift;const auto&w=physicalWorld(q);return w.fits(q.x,q.y,z,h,true,true)&&!(doors&&w.doorBlocks(q.x,q.y,z,h));},rigidCore&&v.model>=0?.03f:.1f);};   // (Vectra: every 3 cm, so a heavy prop yielding to a shove is not set into a fixture's corner)
  auto sweepFits=[&](const Clutter& v,Vec2 from,Vec2 to,float z,float h,bool doorsOnTheWay=true){const float d=length(to-from);const int n=std::max(1,int(std::ceil(d/.08f)));for(int k=1;k<=n;++k)if(!propFits(v,from+(to-from)*(float(k)/float(n)),z,h,doorsOnTheWay||k==n))return false;return true;};
  std::vector<std::array<float,3>> shapes;std::vector<Vec2> bases;shapes.reserve(list.size());bases.reserve(list.size());for(const auto&v:list){shapes.push_back(v.extent());bases.push_back({std::cos(v.yaw),std::sin(v.yaw)});}
  // One broad phase per resident list. Query neighbouring cells as movers cross a bucket.
