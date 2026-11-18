@@ -636,6 +636,8 @@ void Game::update(const InputState& input, float dt) {
         updateWater(dt,false);
         // Guard perception consumes this frame's movement, throws and shots.
         updateFriendlyActors(dt,true);
+        // The knocked stagger (RigidClutter.cpp): over whatever their minds just chose.
+        poseBodyKnocks(dt);
         {perf::Scope profile(perf::Takedown);updateTakedown(dt);}
         updateEngineerDrones(dt);
         updateGuardCombat(dt);

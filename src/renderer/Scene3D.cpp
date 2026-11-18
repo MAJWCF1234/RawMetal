@@ -2998,7 +2998,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   float scale=track.scale/std::max(.01f,human?mesh.maximum.y-mesh.minimum.y:std::max({mesh.maximum.x-mesh.minimum.x,mesh.maximum.y-mesh.minimum.y,mesh.maximum.z-mesh.minimum.z}));
   float c=std::cos(pose.yaw),s=std::sin(pose.yaw);
-  auto transform=[&](Point3 p){return Point3{pose.position.x+(p.x*c+p.z*s)*scale,pose.position.y+(-p.x*s+p.z*c)*scale,pose.z+p.y*scale};};
+  // A man a prop knocked back leans with the shove from his feet while he reels, and straightens as he
+  // finds them (Game::npcStumbleLean): everything on him (gun, hands, kit) leans with him.
+  const Vec2 lean=human&&actor>=0&&!corpse?game.npcStumbleLean(size_t(actor)):Vec2{};const float leanDrop=.5f*(lean.x*lean.x+lean.y*lean.y);
+  auto transform=[&](Point3 p){const float up=p.y*scale;return Point3{pose.position.x+(p.x*c+p.z*s)*scale+lean.x*up,pose.position.y+(-p.x*s+p.z*c)*scale+lean.y*up,pose.z+up*(1-leanDrop)};};
   if(directSupport){const auto&hand=mesh.creatureLayerPose().arms[1];auto wrist=transform(hand[2]);terminal=heldFieldTerminalFrame(wrist,transform(hand[2]+hand[3])-wrist,pose.yaw,track.scale);}
   auto medicalKit=medicalCaseFrame({pose.position.x,pose.position.y,pose.z},pose.yaw,track.scale/1.6f);
   if(directTreatment){
