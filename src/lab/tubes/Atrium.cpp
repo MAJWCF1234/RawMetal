@@ -9,6 +9,8 @@
 //  - the chain-link panes take rounds and never shatter, and stop a body;
 //  - the player walks through the breach into the court, and the creepers over its lip swing as he does;
 //  - every creeper is a hanging plant rooted at its top;
+//  - the five light shafts stop nothing, and their light comes in only through the breach's hole and the
+//    storefront's panes and lands inside the hall;
 //  - a save of the broken pane loads back exactly.
 // Pictures (1600 x 900): the atrium from the balcony and from the hall, the creepers over the breach
 // against the court's light, the shattered pane.
@@ -91,6 +93,18 @@ const bool tube=add({
    const bool see=gw.rayClear({12.6f,6.9f},1.5f,{17.2f,6.9f},1.5f,true,true,false,true);
    rep.check("five light shafts, none solid; light, a round and sight pass through the breach's shaft",shafts==5&&solid==0&&lit>=.999f&&round.kind!=ShotKind::Solid&&see,
     std::to_string(shafts)+" shafts, "+std::to_string(solid)+" solid, light "+fixed(lit,3)+", round "+std::to_string(int(round.kind))+", sight "+(see?"yes":"no"));}
+  // Their light shaped by the hall (lightShaftShape): it comes in only through the openings (the breach's hole
+  // at x 18, y 4.8-8.8, under its 3 m head; the storefront's panes, between the sill and the head), never
+  // through the wall round them, and every ray lands inside its own box, on the floor or on something on it.
+  {int lit=0,stray=0,beyond=0,landed=0;
+   for(size_t i=0;i<w.structures().size();++i){const auto& st=w.structures()[i];if(st.material!=LightShaftMaterial)continue;const auto& shape=lightShaftShape(w,i);
+    for(size_t k=0;k<shape.fade.size();++k){if(shape.fade[k]<=0)continue;++lit;const Point3 f=shape.from[k],t=shape.to[k];
+     // (A point on the opening's own outline, the sill's top or the head's underside, is in it: 2 cm either way.)
+     stray+=st.facing==3?!(f.y>4.78f&&f.y<8.82f&&f.z<3.02f):!(f.z>.48f&&f.z<3.02f);
+     beyond+=t.x<st.x1-.01f||t.x>st.x2+.01f||t.y<st.y1-.01f||t.y>st.y2+.01f||t.z<st.bottom-.01f;landed+=shape.lands[k];}}
+   rep.metric("light_shaft_points",lit);
+   rep.check("the shafts' light comes in only through the breach's hole and the storefront's panes and lands inside the hall",lit>400&&stray==0&&beyond==0&&landed*10>=lit*9,
+    std::to_string(lit)+" lit points, "+std::to_string(stray)+" through a wall, "+std::to_string(beyond)+" landing outside their box, "+std::to_string(landed)+" on a floor or a top");}
   // ---- the growth ----
   {auto& plants=LabAccess::plants(*s.renderer);int pieces=0,hung=0,rooted=0;for(size_t i=0;i<w.fixtures().size();++i){const auto& f=w.fixtures()[i];if(!growth(f.model))continue;++pieces;
     if(hangs(f.model)){const int slot=plants.slotOf(s.g().level(),int(i));hung+=plants.hanging(slot);rooted+=slot>=0&&std::abs(plants.root(slot).z-(f.base+f.height))<.02f;}}
