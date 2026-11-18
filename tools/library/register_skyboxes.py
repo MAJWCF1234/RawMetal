@@ -39,21 +39,24 @@ BEGIN = "// BEGIN GENERATED BRUTAL SKYBOXES"
 END = "// END GENERATED BRUTAL SKYBOXES"
 # The skies tools/library/make_skies.py makes (2026-11-17): five from the purchased packs
 # (packets under the gitignored assets/library/skies/), five made there (assets/ai/skies/).
-# haze is the sky's own air, used when the MAP leaves its haze fields empty.
+# haze is the sky's own air, used when the MAP leaves its haze fields empty. light is its own
+# outdoor light: sun (or moon) azimuth and elevation in degrees, intensity and colour, then the
+# ambient strength and colour (World::sun, World::outdoorAmbient, World::skyAmbientTone), then the
+# ceiling on the eye's auto exposure (World::skyExposure): a night is not metered back up to day.
 EXTRA_FIRST_RESOURCE = 2900
 EXTRA_BEGIN = "// BEGIN GENERATED EXTRA SKIES"
 EXTRA_END = "// END GENERATED EXTRA SKIES"
 EXTRA_SKIES = [
-    {"id": "psx_clear_day", "label": "Clear day", "ntx": "assets/library/skies/psx_clear_day-x2.ntx", "haze": (.66, .74, .84, .005)},
-    {"id": "grey_overcast", "label": "Grey overcast", "ntx": "assets/ai/skies/grey_overcast-x2.ntx", "haze": (.62, .64, .66, .011)},
-    {"id": "cold_dawn", "label": "Cold dawn", "ntx": "assets/ai/skies/cold_dawn-x2.ntx", "haze": (.62, .50, .50, .008)},
-    {"id": "dusk_afterglow", "label": "Dusk afterglow", "ntx": "assets/library/skies/dusk_afterglow-x2.ntx", "haze": (.24, .24, .32, .009)},
-    {"id": "storm_front", "label": "Storm front", "ntx": "assets/ai/skies/storm_front-x2.ntx", "haze": (.27, .29, .32, .016)},
-    {"id": "psx_starry_night", "label": "Starry night", "ntx": "assets/library/skies/psx_starry_night-x2.ntx", "haze": (.06, .09, .16, .008)},
-    {"id": "cloudy_night", "label": "Cloudy night", "ntx": "assets/library/skies/cloudy_night-x2.ntx", "haze": (.08, .09, .12, .011)},
-    {"id": "treeline_night", "label": "Treeline night", "ntx": "assets/library/skies/treeline_night-x2.ntx", "haze": (.10, .15, .24, .009)},
-    {"id": "ember_eclipse", "label": "Ember eclipse", "ntx": "assets/ai/skies/ember_eclipse-x2.ntx", "haze": (.30, .14, .09, .013)},
-    {"id": "resonance_aurora", "label": "Resonance aurora", "ntx": "assets/ai/skies/resonance_aurora-x2.ntx", "haze": (.10, .07, .15, .010)},
+    {"id": "psx_clear_day", "label": "Clear day", "ntx": "assets/library/skies/psx_clear_day-x2.ntx", "haze": (.66, .74, .84, .005), "light": (120, 50, 2.3, 1, 0.96, 0.88, 0.3, 0.92, 0.97, 1.08, 1)},
+    {"id": "grey_overcast", "label": "Grey overcast", "ntx": "assets/ai/skies/grey_overcast-x2.ntx", "haze": (.62, .64, .66, .011), "light": (60, 62, 0.55, 0.95, 0.97, 1, 0.46, 0.97, 0.99, 1.02, 1)},
+    {"id": "cold_dawn", "label": "Cold dawn", "ntx": "assets/ai/skies/cold_dawn-x2.ntx", "haze": (.62, .50, .50, .008), "light": (95, 4, 1.25, 1, 0.62, 0.42, 0.2, 0.86, 0.82, 1, 0.85)},
+    {"id": "dusk_afterglow", "label": "Dusk afterglow", "ntx": "assets/library/skies/dusk_afterglow-x2.ntx", "haze": (.24, .24, .32, .009), "light": (90, 3, 0.7, 1, 0.55, 0.36, 0.15, 0.74, 0.78, 1.08, 0.7)},
+    {"id": "storm_front", "label": "Storm front", "ntx": "assets/ai/skies/storm_front-x2.ntx", "haze": (.27, .29, .32, .016), "light": (110, 35, 0.3, 0.74, 0.8, 0.9, 0.19, 0.84, 0.9, 1, 0.75)},
+    {"id": "psx_starry_night", "label": "Starry night", "ntx": "assets/library/skies/psx_starry_night-x2.ntx", "haze": (.06, .09, .16, .008), "light": (58, 41, 0.42, 0.55, 0.68, 1, 0.075, 0.55, 0.68, 1.06, 0.5)},
+    {"id": "cloudy_night", "label": "Cloudy night", "ntx": "assets/library/skies/cloudy_night-x2.ntx", "haze": (.08, .09, .12, .011), "light": (90, 50, 0.14, 0.6, 0.66, 0.85, 0.085, 0.6, 0.68, 0.96, 0.45)},
+    {"id": "treeline_night", "label": "Treeline night", "ntx": "assets/library/skies/treeline_night-x2.ntx", "haze": (.10, .15, .24, .009), "light": (90, 40, 0.28, 0.55, 0.68, 1, 0.075, 0.55, 0.7, 1.06, 0.5)},
+    {"id": "ember_eclipse", "label": "Ember eclipse", "ntx": "assets/ai/skies/ember_eclipse-x2.ntx", "haze": (.30, .14, .09, .013), "light": (70, 24, 0.5, 1, 0.32, 0.12, 0.09, 1.1, 0.55, 0.45, 0.6)},
+    {"id": "resonance_aurora", "label": "Resonance aurora", "ntx": "assets/ai/skies/resonance_aurora-x2.ntx", "haze": (.10, .07, .15, .010), "light": (90, 30, 0.28, 0.7, 0.45, 1, 0.075, 0.76, 0.6, 1.12, 0.5)},
 ]
 
 
@@ -132,6 +135,11 @@ def encode_neural_packet(png: Path) -> bytes:
     )
 
 
+def cpp_float(v: float) -> str:
+    text = f"{v:g}"
+    return text + ("f" if "." in text or "e" in text else ".f")
+
+
 def catalog_text() -> str:
     rows = [
         '    {"industrial_night", "Industrial night", 0, false},',
@@ -144,7 +152,7 @@ def catalog_text() -> str:
     ]
     rows += [
         f'    {{"{sky["id"]}", "{sky["label"]}", {EXTRA_FIRST_RESOURCE + i}, true, '
-        + ", ".join(f"{v:g}f" for v in sky["haze"]) + "},"
+        + ", ".join(cpp_float(v) for v in (*sky["haze"], *sky["light"])) + "},"
         for i, sky in enumerate(EXTRA_SKIES)
     ]
     return (
@@ -155,7 +163,13 @@ def catalog_text() -> str:
         "struct SkyboxDef {\n    std::string_view id, label;\n"
         "    int resource;\n    bool terrain;\n"
         "    // The sky's own air when the MAP leaves its haze empty; density < 0 keeps the default.\n"
-        "    float hazeR = 0, hazeG = 0, hazeB = 0, hazeDensity = -1;\n};\n"
+        "    float hazeR = 0, hazeG = 0, hazeB = 0, hazeDensity = -1;\n"
+        "    // Its own outdoor light; sunIntensity < 0 keeps the default daylight. Azimuth and\n"
+        "    // elevation are degrees, as the panorama is drawn (0 = +x, 90 = +y).\n"
+        "    float sunAzimuth = 0, sunElevation = 0, sunIntensity = -1, sunR = 1, sunG = 1, sunB = 1;\n"
+        "    float ambient = -1, ambientR = 1, ambientG = 1, ambientB = 1;\n"
+        "    // How far the eye may open under it (1 = as by day): a night stays dark.\n"
+        "    float exposure = 1;\n};\n"
         f"inline constexpr std::array<SkyboxDef, {len(rows)}> SkyboxCatalog{{{{\n"
         + "\n".join(rows)
         + "\n}};\n"

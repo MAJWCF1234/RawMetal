@@ -11,6 +11,12 @@ struct SkyboxDef {
     bool terrain;
     // The sky's own air when the MAP leaves its haze empty; density < 0 keeps the default.
     float hazeR = 0, hazeG = 0, hazeB = 0, hazeDensity = -1;
+    // Its own outdoor light; sunIntensity < 0 keeps the default daylight. Azimuth and
+    // elevation are degrees, as the panorama is drawn (0 = +x, 90 = +y).
+    float sunAzimuth = 0, sunElevation = 0, sunIntensity = -1, sunR = 1, sunG = 1, sunB = 1;
+    float ambient = -1, ambientR = 1, ambientG = 1, ambientB = 1;
+    // How far the eye may open under it (1 = as by day): a night stays dark.
+    float exposure = 1;
 };
 inline constexpr std::array<SkyboxDef, 60> SkyboxCatalog{{
     {"industrial_night", "Industrial night", 0, false},
@@ -63,16 +69,16 @@ inline constexpr std::array<SkyboxDef, 60> SkyboxCatalog{{
     {"skybox_plain_emx_12", "Brutal plain 12", 2844, true},
     {"skybox_plain_emx_13", "Brutal plain 13", 2845, true},
     {"skybox_plain_emx_14", "Brutal plain 14", 2846, true},
-    {"psx_clear_day", "Clear day", 2900, true, 0.66f, 0.74f, 0.84f, 0.005f},
-    {"grey_overcast", "Grey overcast", 2901, true, 0.62f, 0.64f, 0.66f, 0.011f},
-    {"cold_dawn", "Cold dawn", 2902, true, 0.62f, 0.5f, 0.5f, 0.008f},
-    {"dusk_afterglow", "Dusk afterglow", 2903, true, 0.24f, 0.24f, 0.32f, 0.009f},
-    {"storm_front", "Storm front", 2904, true, 0.27f, 0.29f, 0.32f, 0.016f},
-    {"psx_starry_night", "Starry night", 2905, true, 0.06f, 0.09f, 0.16f, 0.008f},
-    {"cloudy_night", "Cloudy night", 2906, true, 0.08f, 0.09f, 0.12f, 0.011f},
-    {"treeline_night", "Treeline night", 2907, true, 0.1f, 0.15f, 0.24f, 0.009f},
-    {"ember_eclipse", "Ember eclipse", 2908, true, 0.3f, 0.14f, 0.09f, 0.013f},
-    {"resonance_aurora", "Resonance aurora", 2909, true, 0.1f, 0.07f, 0.15f, 0.01f},
+    {"psx_clear_day", "Clear day", 2900, true, 0.66f, 0.74f, 0.84f, 0.005f, 120.f, 50.f, 2.3f, 1.f, 0.96f, 0.88f, 0.3f, 0.92f, 0.97f, 1.08f, 1.f},
+    {"grey_overcast", "Grey overcast", 2901, true, 0.62f, 0.64f, 0.66f, 0.011f, 60.f, 62.f, 0.55f, 0.95f, 0.97f, 1.f, 0.46f, 0.97f, 0.99f, 1.02f, 1.f},
+    {"cold_dawn", "Cold dawn", 2902, true, 0.62f, 0.5f, 0.5f, 0.008f, 95.f, 4.f, 1.25f, 1.f, 0.62f, 0.42f, 0.2f, 0.86f, 0.82f, 1.f, 0.85f},
+    {"dusk_afterglow", "Dusk afterglow", 2903, true, 0.24f, 0.24f, 0.32f, 0.009f, 90.f, 3.f, 0.7f, 1.f, 0.55f, 0.36f, 0.15f, 0.74f, 0.78f, 1.08f, 0.7f},
+    {"storm_front", "Storm front", 2904, true, 0.27f, 0.29f, 0.32f, 0.016f, 110.f, 35.f, 0.3f, 0.74f, 0.8f, 0.9f, 0.19f, 0.84f, 0.9f, 1.f, 0.75f},
+    {"psx_starry_night", "Starry night", 2905, true, 0.06f, 0.09f, 0.16f, 0.008f, 58.f, 41.f, 0.42f, 0.55f, 0.68f, 1.f, 0.075f, 0.55f, 0.68f, 1.06f, 0.5f},
+    {"cloudy_night", "Cloudy night", 2906, true, 0.08f, 0.09f, 0.12f, 0.011f, 90.f, 50.f, 0.14f, 0.6f, 0.66f, 0.85f, 0.085f, 0.6f, 0.68f, 0.96f, 0.45f},
+    {"treeline_night", "Treeline night", 2907, true, 0.1f, 0.15f, 0.24f, 0.009f, 90.f, 40.f, 0.28f, 0.55f, 0.68f, 1.f, 0.075f, 0.55f, 0.7f, 1.06f, 0.5f},
+    {"ember_eclipse", "Ember eclipse", 2908, true, 0.3f, 0.14f, 0.09f, 0.013f, 70.f, 24.f, 0.5f, 1.f, 0.32f, 0.12f, 0.09f, 1.1f, 0.55f, 0.45f, 0.6f},
+    {"resonance_aurora", "Resonance aurora", 2909, true, 0.1f, 0.07f, 0.15f, 0.01f, 90.f, 30.f, 0.28f, 0.7f, 0.45f, 1.f, 0.075f, 0.76f, 0.6f, 1.12f, 0.5f},
 }};
 inline constexpr const SkyboxDef* findSkybox(std::string_view id) {
     for (const auto& sky : SkyboxCatalog)

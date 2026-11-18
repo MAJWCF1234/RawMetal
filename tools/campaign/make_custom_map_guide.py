@@ -495,7 +495,7 @@ def sky_list():
     rows = re.findall(r'\{"(\w+)", "([^"]+)", (\d+), (true|false)(, [^}]*)?\}', text)
     own = ['<code>%s</code> (%s)' % (i, html.escape(l)) for i, l, r, t, haze in rows if haze]
     brutal = [i for i, l, r, t, haze in rows if not haze and i.startswith('skybox_')]
-    return ('Each of these lays its own air over the land when the MAP leaves its haze fields empty: ' + ', '.join(own) + '. '
+    return ('Each of these brings its own light and air: the sun or the moon where the panorama has it, in its colour, a fill of its own colour and strength, and how far the eye opens (a night stays dark). The MAP ambient turns its fill around 0.3 (0.3 keeps the sky as made; 0.15 halves it), and MAP haze fields replace its air: ' + ', '.join(own) + '. '
             'The %d Brutal panoramas are <code>skybox_emx_1</code> to <code>skybox_emx_35</code> and <code>skybox_plain_emx_1</code> to '
             '<code>skybox_plain_emx_14</code>. The Campaign Builder\'s Map sky list shows every one by name.' % len(brutal))
 

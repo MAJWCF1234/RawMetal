@@ -676,9 +676,16 @@ public:
      if(campaign()&&level()==1)return .65f;
      return .3f;
     }
-    // Low overcast sun for the Ashfall exterior; indoor worlds have none.
-    SunLight sun()const{if(!outdoors())return {};SunLight s;Point3 d{.50f,.30f,.55f};
-     if(zoneSky()){d={-.62f,.48f,.42f};float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.6f;s.r=1.f;s.g=.86f;s.b=.66f;return s;}float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);s.direction={d.x/l,d.y/l,d.z/l};s.intensity=2.1f;s.r=1.f;s.g=.92f;s.b=.80f;return s;}
+    // Low overcast sun for the Ashfall exterior; indoor worlds have none. A catalog sky with its
+    // own light (SkyboxCatalog.h: moon, dusk, eclipse...) sets the sun's place, strength and colour.
+    SunLight sun()const;
+    // The flat outdoor fill (the renderer's sky ambient): the sky's own, scaled by the MAP ambient
+    // around 0.3 (0.3 keeps the sky as made); the old daylight fill under a sky without light.
+    float outdoorAmbient()const;
+    // The colour of that fill: the sky's ambient colour, white without one.
+    Point3 skyAmbientTone()const;
+    // How far auto exposure may open under the sky (1 by day; a night sky's own, lower).
+    float skyExposure()const;
     std::vector<Span> spansAt(int x,int y)const;
     // Reuse result storage for repeated cell queries.
     void spansAt(int x,int y,std::vector<Span>& result)const;

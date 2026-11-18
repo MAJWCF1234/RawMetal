@@ -8,7 +8,7 @@ layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fo
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
 // lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot, tone.
 // scatter.w is 1 when the shadow stage carries the lamp shafts this frame.
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[];} lampGrid;
 layout(set=1,binding=5) uniform sampler3D probeAtlas;
 layout(set=1,binding=6) uniform sampler2DArray reflectionAtlas;
 // Soft particles: the room's planar depth (the scene target's alpha) once the room is drawn.
@@ -768,7 +768,8 @@ void main(){
  // bilinear/trilinear filtering. Decoding the already-filtered sample twice
  // would crush both midtones and minified material detail.
  // Per-pixel scenes: ambient is a cool dim fill, lamps carry their own colour.
- vec3 ambientTone=lampGrid.flags.x!=0&&directLight>=0.0&&lampGrid.sun.w<=0.0?vec3(0.78,0.88,1.12):vec3(1.0);
+ // Outdoors the fill takes the sky's colour (World::skyAmbientTone: moonlit blue, ember red, violet).
+ vec3 ambientTone=lampGrid.flags.x!=0&&directLight>=0.0&&lampGrid.sun.w<=0.0?vec3(0.78,0.88,1.12):lampGrid.skyAmbient.w>0.0?lampGrid.skyAmbient.rgb:vec3(1.0);
  vec3 albedo=color.rgb*diffuseShare;
  vec3 result=albedo*lighting.x*(vertexLight*ambientTone+lampOut+bounceOut)*0.96/(1+surface.x*0.018);
  result+=albedo*lighting.x*sunLight*0.96;

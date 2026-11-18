@@ -1532,6 +1532,7 @@ void SoftwareRenderer::render(const Game& game){
     }
    }
    m_gpu->setSun(sunData);}
+  {const auto tone=world.skyAmbientTone();if(m_gpu)m_gpu->setSkyAmbient(tone.x,tone.y,tone.z,world.outdoors(),world.skyExposure());}
   m_gpu->setLens(game.settings().depthOfField,game.settings().lensEffects);
   m_gpu->setFogLights(fogLights,fogPowers,fogTones);m_gpu->setCrispTexels(g_crispTexels);m_gpu->setTemporalAA(g_temporalAA);m_gpu->setTiltShift(g_tiltShift);m_gpu->setPostProcessing(g_postProcessing,g_postOcclusionView);
   // The air the eye is in: its zone's, its map's or the environment's, eased between them.
