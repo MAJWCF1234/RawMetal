@@ -82,7 +82,14 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
     edge meets the fixture's face, as a wall (a tall crate shoved against a counter is not lifted onto it).
   - The contacts are grouped by facing into manifolds of four. The floor under each part of a compound is its
     own manifold, so a chair on its back rests on its back and its seat's edge at once.
-  - A ramp (`ShapeRamp`) collides in the World as 10 cm step proxies. Vectra uses its true slope instead.
+  - A ramp (`ShapeRamp`) collides in the World as 10 cm step proxies. Vectra uses its true slope instead, and filters
+    the proxies out as a mesh engine filters internal edges: a point's way ahead onto a ramp meets the slope's plane (a
+    speculative contact), not a riser; the proxies' corners are not tested against bodies; the swept test for fast
+    bodies passes a riser or a step's top over the slope and meets the slope's plane; and a floor's slope by differences
+    across a crease (a floor meeting a ramp's foot, a crest meeting its landing) takes the flatter side's, the face the
+    point stands on, not the average no face has. A crate slid onto a ramp's foot at 3.4 m/s had hopped 45 mm and a
+    bottle had bounced back off the first riser; both now go up it on the slope (tube `vectra-gaps`, seams). The joins
+    of a platform's boxes and of floor tiles were never seams: the World answers heights, not triangles.
   - The usual case is asked once per body: one flat floor under the whole footprint, and every column round
     and through it open. The answer is kept for a region 4 cm round the body (a resting or sliding prop asks
     again only when it leaves it, falls 2 cm, or a door moves), and on such a floor only the lowest points and

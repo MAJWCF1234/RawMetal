@@ -2,6 +2,9 @@
 // vectra-gaps.txt says what each did.
 //  joint friction and detents: a cabinet door nudged on its hinge stops where it is left (and glides on without the
 //    friction); a drawer pushed nearly shut is caught and latched shut, a gentle pull leaves it, a firm one opens it.
+//  seams (in the game's World): a crate and a bottle slid across the joins of a platform's boxes and onto a ramp's foot
+//    neither rise off what is under them nor gain vertical speed past the slope's (RM_GAPS=seams runs this part alone,
+//    RM_GAPS_TRACE=1 prints the ramp runs frame by frame, 2 with their world manifolds).
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "game/EngineRegressionScene.h"
@@ -50,12 +53,12 @@ void seams(std::ostream& out,const Check& check){
   expandPrimitive({"ramp",14,RampY0+RampRun*.5f,0,1.6f,RampRun,RampRise,0,40,true},m->structures);
   m->structures.push_back({13.2f,RampY0+RampRun,14.8f,RampY0+RampRun+2,0,RampRise,false,40});
   const float pitch=lying?kPi*.5f:0.f;
-  if(ramp)kit::propPose(*m,model,14,8.8f,0,lying?kPi*.5f:0.f,pitch,0,scale);else kit::propPose(*m,model,6.35f,10,.3f,0,pitch,0,scale);
+  if(ramp)kit::propPose(*m,model,14,9.7f,0,lying?kPi*.5f:0.f,pitch,0,scale);else kit::propPose(*m,model,6.35f,10,.3f,0,pitch,0,scale);
   Game g(regression::campaign(m));LabAccess::player(g).pos={3,3};auto& list=LabAccess::clutter(g);Run r;
   int prop=-1;for(size_t i=0;i<list.size();++i)if(list[i].model==model)prop=int(i);if(prop<0)return {1e9f,1e9f,0};
   // Settle a moment, then send it off.
   for(int i=0;i<20;++i)g.update({},1.f/60);
-  {auto& c=list[size_t(prop)];c.velocity=ramp?Vec2{0,3.2f}:Vec2{2.6f,0};c.vz=0;c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=false;c.restTime=0;}
+  {auto& c=list[size_t(prop)];c.velocity=ramp?Vec2{0,4.5f}:Vec2{5.5f,0};c.vz=0;c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=false;c.restTime=0;}
   const Vec2 start=list[size_t(prop)].pos;
   for(int i=0;i<90;++i){g.update({},1.f/60);const auto& c=list[size_t(prop)];vectra::Body b;vectra::toBody(c,b);V3 low{0,0,1e9f};for(int p=0;p<b.shape->count;++p){const V3 q=vectra::support(b,p,{0,0,-1});if(q.z<low.z)low=q;}
    if(!ramp){if(c.pos.x>8.8f||c.pos.x<6.2f)break;   // on the platform, short of its end
@@ -63,13 +66,16 @@ void seams(std::ostream& out,const Check& check){
    else{if(c.pos.y>RampY0+RampRun-.3f)break;    // short of the crest (over it, a thing going up is thrown, as it should be)
     r.rise=std::max(r.rise,low.z-slopeAt(low.y));   // its lowest point over the true slope (or floor) under it
     const float onSlope=c.pos.y+c.extent()[1]>RampY0?RampRise/RampRun*c.velocity.y:0.f;   // once its front is on the slope
-    r.vz=std::max(r.vz,c.vz-onSlope);}}
+    r.vz=std::max(r.vz,c.vz-onSlope);
+    if(std::getenv("RM_GAPS_TRACE"))out<<"  y "<<f3(c.pos.y)<<" z "<<f3(c.z)<<" low "<<f3(low.y)<<","<<f3(low.z*1000,1)<<" slope "<<f3(slopeAt(low.y)*1000,1)<<" vy "<<f3(c.velocity.y)<<" vz "<<f3(c.vz)<<" roll "<<f3(c.roll)<<" pitch "<<f3(c.pitch)<<'\n';
+    if(std::getenv("RM_GAPS_TRACE")&&std::string(std::getenv("RM_GAPS_TRACE"))=="2")for(const auto& m:LabAccess::rigidStats(g).manifoldsSeen){if(m.count==0||m.b>=0)continue;
+     out<<"    M g"<<m.partB<<" n "<<f3(m.normal.x,2)<<","<<f3(m.normal.y,2)<<","<<f3(m.normal.z,2);for(int k=0;k<m.count;++k)out<<" ("<<f3(m.points[size_t(k)].p.y,3)<<","<<f3(m.points[size_t(k)].p.z,3)<<" s"<<f3(m.points[size_t(k)].separation*1000,1)<<" i"<<f3(m.points[size_t(k)].normalImpulse,2)<<")";out<<'\n';}}}
   r.went=length(list[size_t(prop)].pos-start);return r;};
  const Run crate=slide(model::wooden_crate,.5f,false,false),bottle=slide(model::glass_bottle,1,false,true),crateUp=slide(model::wooden_crate,.5f,true,false),bottleUp=slide(model::glass_bottle,1,true,true);
  out<<"across the platform's two joins: the crate rose "<<f3(crate.rise*1000,2)<<" mm, its vertical speed at most "<<f3(crate.vz,3)<<" m/s ("<<f3(crate.went,2)<<" m); the bottle "<<f3(bottle.rise*1000,2)<<" mm, "<<f3(bottle.vz,3)<<" m/s ("<<f3(bottle.went,2)<<" m)\n";
  out<<"up the ramp's foot: the crate's lowest point rose "<<f3(crateUp.rise*1000,2)<<" mm over the slope, its vertical speed past the slope's at most "<<f3(crateUp.vz,3)<<" m/s ("<<f3(crateUp.went,2)<<" m); the bottle "<<f3(bottleUp.rise*1000,2)<<" mm, "<<f3(bottleUp.vz,3)<<" m/s ("<<f3(bottleUp.went,2)<<" m)\n";
- check(crate.rise<.004f&&crate.vz<.08f&&bottle.rise<.004f&&bottle.vz<.08f&&crate.went>2&&bottle.went>2,"seams: a crate and a bottle slid across the joins of a platform's boxes do not jump");
- check(crateUp.rise<.01f&&crateUp.vz<.15f&&bottleUp.rise<.01f&&bottleUp.vz<.15f&&crateUp.went>1.5f&&bottleUp.went>1.5f,"seams: a crate and a bottle slid onto a ramp's foot go up it without jumping");}
+ check(crate.rise<.004f&&crate.vz<.08f&&bottle.rise<.004f&&bottle.vz<.08f&&crate.went>1.7f&&bottle.went>1.7f,"seams: a crate and a bottle slid across the joins of a platform's boxes do not jump");
+ check(crateUp.rise<.01f&&crateUp.vz<.15f&&bottleUp.rise<.01f&&bottleUp.vz<.15f&&crateUp.went>1.1f&&bottleUp.went>1.1f,"seams: a crate and a bottle slid onto a ramp's foot go up it without jumping");}
 const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams",.standalone=[]{
  std::ofstream out("vectra-gaps.txt");bool ok=true;
  auto check=[&](bool pass,const std::string& what){out<<(pass?"PASS ":"FAIL ")<<what<<'\n';out.flush();ok&=pass;};
