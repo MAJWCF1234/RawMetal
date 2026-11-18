@@ -2,8 +2,9 @@
 """More skies for MAP.skybox: five from the purchased packs, five made here.
 
 Every sky ships the way the Brutal panoramas do (register_skyboxes.py): an
-equirectangular panorama brought to 2048x512 and stored as a neural x2 packet
-(NTX1, texture-x2 model, resource 348) the engine reconstructs at load.
+equirectangular panorama brought to 2048x512 and stored as a neural packet
+(register_skyboxes.sky_packet: NTX2 under the quality gate, else NTX1 x2) the
+engine reconstructs at load.
 
   Purchased (O:/retro official). The packets and the PNG masters go to
   src/assets/library/skies/, which is gitignored: the repository is public.
@@ -266,16 +267,11 @@ MAKERS = {
 
 
 def packet(rgb: np.ndarray) -> bytes:
-    """The Brutal packet format: header, then the half-size panorama as lossless WebP."""
+    """The Brutal packet format (register_skyboxes.sky_packet) for a panorama."""
     image = Image.fromarray((np.clip(rgb, 0, 1) * 255 + .5).astype(np.uint8))
     if image.size != EMBED:
         image = image.resize(EMBED, Image.Resampling.LANCZOS)
-    w, h = image.size
-    f = reg.NEURAL_FACTOR
-    low = image.resize(((w + f - 1) // f, (h + f - 1) // f), Image.Resampling.BICUBIC)
-    stream = io.BytesIO()
-    low.save(stream, format="WEBP", lossless=True, quality=100, method=6, exact=True)
-    return struct.pack("<4s7I", b"NTX1", w, h, low.size[0], low.size[1], reg.NEURAL_MODEL_RESOURCE, f, 0) + stream.getvalue()
+    return reg.sky_packet(image)
 
 
 def library_root() -> Path:
@@ -307,7 +303,7 @@ def main():
         if args.only and name not in args.only:
             continue
         if args.check:
-            if not path.exists() or path.read_bytes()[:4] != b"NTX1":
+            if not path.exists() or path.read_bytes()[:4] not in (b"NTX1", b"NTX2"):
                 problems.append(f"{name}: no packet at {path}")
             continue
         rgb = MAKERS[name]()

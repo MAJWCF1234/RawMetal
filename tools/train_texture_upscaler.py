@@ -220,7 +220,7 @@ def texture_sources():
     seen = set()
     for number, relative in re.findall(r'^(\d+)\s+RCDATA\s+"([^"]+)"', (ROOT/"src/assets.rc").read_text(encoding="cp1252"), re.M):
         if relative.endswith(".ntx"):
-            relative = re.sub(r"-(x|n)\d\.ntx$", ".png", relative)
+            relative = re.sub(r"-(x\d|n)\.ntx$", ".png", relative)
         if not relative.endswith((".png", ".jpg")) or relative in seen:
             continue
         seen.add(relative)
