@@ -76,6 +76,36 @@ validate it, and renders the builder's 3D picture before and after
 (`native-editor-outdoor-test.txt`; pictures `.build/interaction/outdoor-*.bmp`
 and `outdoor-*.ppm`). `--editing-test` runs the same checks without pictures.
 
+### Building on hills, raised floors, flooring and finishes (2026-11-17)
+
+- **Rooms on a slope.** Drag a room onto a hill and it stands on a footing by itself:
+  level ground under it where the hill is gentle, a foundation down to the ground where
+  it is steep, the land blended back round it and steps from a raised door to the
+  ground. Pick the room's footing (Select, click its floor) to choose **Pad**,
+  **Foundation**, **Stilts** or **Steps** (terraces up the slope). **Exact heights...**
+  shows where the floor sits (the lowest, average or highest ground, or a typed height)
+  and the Raise. Move the footing and it measures the ground where it went.
+- **Raise.** Pull the picked floor's top edge up in the 3D view: it snaps softly to a
+  step, two steps, half a storey and a storey, and a base fills under it. Indoors the
+  Room tool's **Raise the floor** row does the same for a new room.
+- **Floors on the land.** The Floor tool lays a floor on open ground level, cell by cell
+  (a patio), at the level of the floor it touches.
+- **Flooring** (Build page). Pick a floor look (planks, tiles, concrete, carpet, stone,
+  brick, grating...) and drag it out; a click floors a whole room. On a slope it
+  **follows the ground** (a path) or is **made level**. **Edge trim** puts a band of a
+  matching material round it.
+- **Painting.** Click a stair's step tops, step fronts or side rails, a balcony's floor,
+  edge or railing, a footing's floor, foundation or edge, or a flooring's edge trim with
+  the Paint tool, or pick the thing and use its **Part** and **Finish** lists. The
+  material list shows a swatch of each material.
+- **Recovery.** Unsaved work is copied every 15 seconds. The next start brings back the
+  newest copy of any map, on that map; opening a map with newer unsaved work brings that
+  back (**Start fresh** returns to the saved file). If the Builder stops, it saves the map
+  beside its recovery copy and writes what happened and the last things done to
+  `custom maps/Autosave/last-crash.txt`.
+- Tests: `--finish-test`, `--ground-test`, `--soak-test [steps] [seed]`; `--editing-test`
+  runs the first two. `--shots SCRIPT` takes pictures of the live Builder.
+
 ### Emitter tool: the air's own stuff
 
 **Emitter** (Decor page, where Smoke was) places `EMITTER` records, the steam,

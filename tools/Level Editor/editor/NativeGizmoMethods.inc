@@ -12,6 +12,7 @@
       out.push_back({wallPickX,wallPickY,bottom,wallPickX,wallPickY,top,0});return out;
     }
     if(selectedRecords.size()>1)return out;
+    if(footingGuides(out))return out; // a footing's outline and Raise handle (NativeGroundMethods.inc)
     auto corners=nativeCorners(schemas[size_t(schema)].fields,f);if(corners.empty())return out;
     // Outdoors the outline stands where the thing stands: on the ground under it.
     auto box=worldBox(f);float bottom=box?box->bottom:layerElevation(),top=box?box->top:bottom+.1f;
@@ -59,6 +60,7 @@
   }
   void applyHeightDelta(float delta) {
     delta=snap>0?std::round(delta/snap)*snap:delta;
+    if(footingHeightDelta(delta))return; // a footing's handle is its Raise (NativeGroundMethods.inc)
     if(std::abs(delta)<.000001f){if(objectMoved)doc.loadText(dragDocument);objectMoved=false;updateInspector();return;}
     auto f=objectFields;int schema=schemaFor(f);if(schema<0)return;
     // Every pointer update is relative to the press snapshot. A previous

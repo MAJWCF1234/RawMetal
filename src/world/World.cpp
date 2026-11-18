@@ -221,12 +221,16 @@ void World::buildPopulation(){
 World::World(int level,std::shared_ptr<const AuthoredMapData> map):m_level(level),m_worldId(WorldId::Custom){loadAuthoredMap(std::move(map));}
 void World::settleExclusionFacilityOnTerrain(){
  if(!m_exclusionTerrain||!m_mapData)return;
- auto ground=[&](float x,float y){return terrainSurfaceBelow(x,y,float(TerrainMaxZ+1));};
+ // Inside a footing, things stand on its floor (Footing.h); elsewhere on the land.
+ auto ground=[&](float x,float y){if(const auto* a=footingAreaAt(x,y))return a->surface;return terrainSurfaceBelow(x,y,float(TerrainMaxZ+1));};
  // Structures use absolute heights, while props/fixtures/terminals already add
  // their local floor in rendering AND collision. Lifting those offsets again
  // placed the controls in mid-air. Ground screens on their own footprint;
  // a sloping approach must not bury most of its intended concealment height.
- for(auto&s:m_structures){float low=1000,high=-1000;
+ for(auto&s:m_structures){if(s.fixedHeight)continue;
+  // A draped flooring lies on the ground itself: nothing to collide with, drawn over the land.
+  if(s.drape){s.solid=false;continue;}
+  float low=1000,high=-1000;
   int nx=std::max(1,int(std::ceil((s.x2-s.x1)*2))),ny=std::max(1,int(std::ceil((s.y2-s.y1)*2)));
   for(int y=0;y<=ny;++y)for(int x=0;x<=nx;++x){float z=ground(s.x1+(s.x2-s.x1)*float(x)/nx,s.y1+(s.y2-s.y1)*float(y)/ny);low=std::min(low,z);high=std::max(high,z);}
   s.bottom+=low;s.top+=high;
@@ -241,7 +245,7 @@ void World::settleExclusionFacilityOnTerrain(){
  // The collision panes were grounded with the other structures. Keep the
  // authored breakable boxes used by shots, effects and rendering identical.
  for(int i=0;i<int(data->breakables.size());++i){const auto&s=m_structures[breakableStructure(i)];data->breakables[i].bottom=s.bottom;data->breakables[i].top=s.top;}
- data->definition.spawnHeight=terrainSurfaceBelow(data->definition.playerStart.x,data->definition.playerStart.y,float(TerrainMaxZ+1));
+ data->definition.spawnHeight=ground(data->definition.playerStart.x,data->definition.playerStart.y);
  for(auto&sign:data->signs)sign.z+=ground(sign.position.x,sign.position.y);
  for(auto&lead:data->leads){lead.anchor.z+=ground(lead.anchor.x,lead.anchor.y);lead.end.z+=ground(lead.end.x,lead.end.y);}
  for(auto&suit:data->hungSuits)suit.hook.z+=ground(suit.hook.x,suit.hook.y);
@@ -254,9 +258,9 @@ void World::settleExclusionFacilityOnTerrain(){
   sequence.bottom+=low;sequence.top+=high;
  }
  for(auto&track:data->actorTracks){
-  for(auto&key:track.keys)key.z=terrainSurfaceBelow(key.position.x,key.position.y,float(TerrainMaxZ+1));
-  for(auto&point:track.ai.patrol)point.z=terrainSurfaceBelow(point.position.x,point.position.y,float(TerrainMaxZ+1));
-  for(auto&key:track.idleKeys)key.z=terrainSurfaceBelow(key.position.x,key.position.y,float(TerrainMaxZ+1));
+  for(auto&key:track.keys)key.z=ground(key.position.x,key.position.y);
+  for(auto&point:track.ai.patrol)point.z=ground(point.position.x,point.position.y);
+  for(auto&key:track.idleKeys)key.z=ground(key.position.x,key.position.y);
  }
  m_mapData=std::move(data);
  // Rebuild terminal views from the settled map so title strings stay owned.
@@ -387,6 +391,11 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  m_leadRopes.assign(leads().size(),{});for(size_t i=0;i<m_leadRopes.size();++i)m_leadRopes[i].torn=leads()[i].loose;
  for(const auto&b:breakables())m_structures.push_back({b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,false,b.material});
 
+ // Footings (Footing.h): their floors are where things in them stand; grounding leaves them be.
+ m_footingAreas.clear();
+ for(const auto& footing:m_mapData->footings){if(footing.structure>=m_structures.size())continue;m_structures[footing.structure].fixedHeight=true;
+  const float ground=m_layers.empty()?0.f:m_layers.front().elevation;
+  if(footing.land||std::fabs(footing.spec.bottom-ground)<.06f)for(const auto& part:footing.parts)m_footingAreas.push_back({part.x1,part.y1,part.x2,part.y2,part.surface});}
  buildLayers(m_mapData->stairs);
   // Sources mounted inside a cargo cab travel with it. The cab draws its own
   // ceiling panel/emergency housing, so do not suspend a second fitting in it.
@@ -400,6 +409,8 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  if(outdoors()&&terrainSkybox(m_mapData->skybox)){
   m_exclusionTerrain=true;m_internalWallHeight=2.8f;buildTerrain();settleExclusionFacilityOnTerrain();
  }
+ const bool footed=!m_mapData->footings.empty();if(footed)buildFootings();
+ if(splitFinishes()||footed)indexStructureCells();
 }
 
 World::World(int level,WorldId id):m_worldId(id) {
@@ -585,10 +596,15 @@ void World::buildTerrain(){
   if(m_exclusionTerrain&&m_mapData&&m_mapData->terrain){
    // Authored campaign terrain: soil on top, rock beneath and on the high,
    // steep ground where the surface breaks away from its neighbours.
-   const auto& shape=*m_mapData->terrain;int top=authoredTerrainTop(shape,wx,wy);solid=z<=top;
+   const auto& shape=*m_mapData->terrain;int top=authoredTerrainTop(shape,wx,wy);
    int relief=std::max({std::abs(authoredTerrainTop(shape,wx+1,wy)-top),std::abs(authoredTerrainTop(shape,wx,wy+1)-top)});
    // Painted (zone) terrain keeps its cover on high ground; only sharp relief is rock.
    material=z<top-1||relief>=2||(shape.ground.empty()&&top>=shape.base+shape.amplitude*.7f)?TerrainRock:TerrainSoil;
+   // A footing's pad (TerrainField.h) puts the ground at its exact height; elsewhere the voxel tops.
+   if(!shape.flats.empty()&&terrainPadAt(shape,wx,wy)){
+    const int density=terrainColumnDensity(shape,wx,wy,z);
+    m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=std::int8_t(density);m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=TerrainSoil;continue;}
+   solid=z<=top;
   }else{
    solid=m_exclusionTerrain?authoredExclusionVoxel(wx,wy,z):authoredAshfallVoxel(wx,wy,z);
    material=m_exclusionTerrain?authoredExclusionMaterial(wx,wy,z):authoredAshfallMaterial(wx,wy,z);
@@ -790,6 +806,7 @@ ImpactMaterial World::impactMaterial(Point3 point,Point3 normal)const{
  return finish(wallSurface(),M::Concrete);
 }
 float World::floorHeight(float x,float y)const{
+ if(!m_footingAreas.empty())if(const auto* a=footingAreaAt(x,y))return a->surface; // a footing's floor (Footing.h)
  if(outdoors())return hasTerrain()?terrainSurfaceBelow(x,y,float(TerrainMaxZ+1)):(m_layers.empty()?0.f:m_layers.front().elevation);
  for(const auto& water:m_waterVolumes)if(x>=water.x1&&x<water.x2&&y>=water.y1&&y<water.y2){
   float shore=std::min({x-water.x1,water.x2-x,y-water.y1,water.y2-y});
@@ -1328,10 +1345,8 @@ void World::buildLayers(std::span<const Staircase> stairs){
     deckPieces.swap(next);}
    // A named deck finish (LAYER deck=) is the walking face: a 4 cm top over
    // the edge finish (edge=, the fascia and underside). Without either, as before.
-   if(layer.edge>=0&&layer.deck!=layer.edge&&z-underside>.06f){
-    const size_t pieces=deckPieces.size();
-    for(size_t i=0;i<pieces;++i){auto top=deckPieces[i];top.bottom=z-.04f;top.material=layer.deck>=0?layer.deck:0;deckPieces[i].top=z-.04f;deckPieces.push_back(top);}
-   }
+   // Split once the map stands on its ground (splitFinishes), so on terrain the face keeps the deck's height.
+   if(layer.edge>=0&&layer.deck!=layer.edge&&z-underside>.06f)for(auto& piece:deckPieces)piece.topFinish=layer.deck>=0?layer.deck:0;
    m_structures.insert(m_structures.end(),deckPieces.begin(),deckPieces.end());
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
@@ -1365,7 +1380,7 @@ void World::buildLayers(std::span<const Staircase> stairs){
   if(stair.tread>=0||stair.riser>=0){auto& body=m_structures.back();
    const int tread=stair.tread>=0?stair.tread:body.material==4?0:body.material,riser=stair.riser>=0?stair.riser:tread;
    body.material=riser;
-   if(tread!=riser&&body.top-body.bottom>.06f){auto face=body;face.bottom=body.top-.04f;face.material=tread;body.top=face.bottom;m_structures.push_back(face);}
+   if(tread!=riser&&body.top-body.bottom>.06f)body.topFinish=tread; // split by splitFinishes
   }
   if(stair.sideRails){
    // Side guards have the same tread-local elevation in rendering, optical
@@ -1406,6 +1421,99 @@ void World::buildLayers(std::span<const Staircase> stairs){
   for(int y=int(std::floor(s.y1-.001f));y<=int(std::floor(s.y2+.001f));++y)for(int x=int(std::floor(s.x1-.001f));x<=int(std::floor(s.x2+.001f));++x)
    if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[y*Width+x].push_back(static_cast<uint16_t>(index));
  }
+}
+void World::indexStructureCells(){
+ m_structureCells.assign(size_t(Width*Height),{});
+ if(m_structures.size()>65535)throw std::runtime_error("Map exceeds the collision structure capacity");
+ for(size_t index=0;index<m_structures.size();++index){const auto&s=m_structures[index];
+  for(int y=int(std::floor(s.y1-.001f));y<=int(std::floor(s.y2+.001f));++y)for(int x=int(std::floor(s.x1-.001f));x<=int(std::floor(s.x2+.001f));++x)
+   if(x>=0&&x<Width&&y>=0&&y<Height)m_structureCells[size_t(y*Width+x)].push_back(static_cast<uint16_t>(index));}
+ m_collisionCells={};m_collisionAll={};m_lightSolids.clear();m_lightNodes.clear();
+}
+// Named finishes are split off their structure only once it stands where it will
+// stay (after grounding on terrain): every piece of a stair tread, a deck or a
+// trimmed flooring then shares the one height grounding gave the whole. New pieces
+// are appended, so record indices (breakables, rails) keep pointing where they did.
+// STRUCT footing= (Footing.h): the slab under each level piece in the record's material
+// (its cap ring split off by splitFinishes), a plinth of `base` down to the land (or the
+// floor below), posts for stilts, steps between terraces and from a raised door down to
+// the ground outside. Everything here keeps the heights it is given (fixedHeight).
+void World::buildFootings(){
+ auto landAt=[&](float x,float y){return terrainSurfaceBelow(x,y,float(TerrainMaxZ+1));};
+ for(const auto& f:m_mapData->footings){
+  if(f.structure>=m_structures.size()||f.parts.empty())continue;
+  const Structure record=m_structures[f.structure];
+  const int base=f.base>=0?f.base:42; // cast concrete
+  const bool land=f.land&&hasTerrain();
+  auto add=[&](float x1,float y1,float x2,float y2,float bottom,float top,int material){
+   if(x2-x1>.001f&&y2-y1>.001f&&top-bottom>.005f){Structure s{x1,y1,x2,y2,bottom,top,false,material};s.fixedHeight=true;m_structures.push_back(s);}};
+  // The lowest land under a piece (half-metre lattice, edges in a hair).
+  auto lowest=[&](float x1,float y1,float x2,float y2){float low=1e9f;const int nx=std::max(1,int(std::ceil((x2-x1)*2))),ny=std::max(1,int(std::ceil((y2-y1)*2)));
+   for(int j=0;j<=ny;++j)for(int k=0;k<=nx;++k)low=std::min(low,landAt(x1+.01f+(x2-x1-.02f)*float(k)/float(nx),y1+.01f+(y2-y1-.02f)*float(j)/float(ny)));return low;};
+  for(size_t i=0;i<f.parts.size();++i){const auto& p=f.parts[i];
+   Structure slab=record;slab.x1=p.x1;slab.y1=p.y1;slab.x2=p.x2;slab.y2=p.y2;slab.bottom=p.slab;slab.top=p.surface;slab.fixedHeight=true;
+   if(f.cap>=0){slab.trim=f.cap;slab.trimWidth=f.capWidth;}
+   if(i==0)m_structures[f.structure]=slab;else m_structures.push_back(slab);
+   if(f.spec.mode==FootingStilts&&land){
+    // Posts at the corners and every 2.4 m or less between, down into the land.
+    auto spots=[](float a,float b){std::vector<float> out;const int n=std::max(1,int(std::ceil((b-a-.2f)/2.4f)));for(int k=0;k<=n;++k)out.push_back(a+.1f+(b-a-.2f)*float(k)/float(n));return out;};
+    for(float y:spots(p.y1,p.y2))for(float x:spots(p.x1,p.x2)){const float foot=landAt(x,y)-.2f;add(x-.1f,y-.1f,x+.1f,y+.1f,foot,p.slab,base);}
+   }else{
+    const float foot=land?std::min(p.level,lowest(p.x1,p.y1,p.x2,p.y2))-.05f:p.level;
+    if(p.slab-foot>.012f)add(p.x1,p.y1,p.x2,p.y2,foot,p.slab,base);
+   }
+  }
+  // Steps between terraces: on the lower one, against the higher one's edge.
+  for(size_t i=0;i+1<f.parts.size();++i){const auto& a=f.parts[i];const auto& b=f.parts[i+1];const float rise=b.surface-a.surface;
+   if(std::fabs(rise)<.02f)continue;
+   const bool alongX=std::fabs(b.x1-a.x2)<1e-3f&&b.x2>a.x2+1e-3f;
+   const auto& low=rise>0?a:b;const int risers=int(std::ceil(std::fabs(rise)/.18f));
+   const float edge=alongX?a.x2:a.y2,toward=rise>0?-1.f:1.f; // from the boundary into the lower terrace
+   const float depth=std::min(.3f,((alongX?low.x2-low.x1:low.y2-low.y1)-.2f)/float(std::max(1,risers-1)));
+   for(int k=1;k<risers;++k){const float top=low.surface+std::fabs(rise)*float(risers-k)/float(risers);
+    const float n0=edge+toward*float(k-1)*depth,n1=edge+toward*float(k)*depth,lo=std::min(n0,n1),hi=std::max(n0,n1);
+    if(alongX)add(lo,low.y1,hi,low.y2,low.slab,top,record.material);else add(low.x1,lo,low.x2,hi,low.slab,top,record.material);}
+  }
+  // A raised door: steps from its sill down to the ground outside.
+  if(f.steps)for(const auto& door:m_doors){const Vec2 mid=door.centre();
+   for(const auto& p:f.parts){
+    const bool near=mid.x>=p.x1-.75f&&mid.x<=p.x2+.75f&&mid.y>=p.y1-.75f&&mid.y<=p.y2+.75f;
+    if(!near)continue;
+    const float dx1=std::fabs(mid.x-p.x1),dx2=std::fabs(mid.x-p.x2),dy1=std::fabs(mid.y-p.y1),dy2=std::fabs(mid.y-p.y2);
+    // Its outward side: the footprint edge it stands on, across the door's own run.
+    float ox=0,oy=0,edge=0;
+    if(door.alongY&&std::min(dx1,dx2)<=.75f){ox=dx1<dx2?-1.f:1.f;edge=dx1<dx2?p.x1:p.x2;}
+    else if(!door.alongY&&std::min(dy1,dy2)<=.75f){oy=dy1<dy2?-1.f:1.f;edge=dy1<dy2?p.y1:p.y2;}
+    else continue;
+    const float half=door.width()*.5f+.15f;
+    const float outside=land?landAt(ox!=0?edge+ox*1.2f:mid.x,oy!=0?edge+oy*1.2f:mid.y):f.spec.bottom;
+    const float drop=p.surface-outside;if(drop<=.25f)break;
+    const int risers=int(std::ceil(drop/.18f));const float sign=ox+oy;
+    for(int k=1;k<risers;++k){const float top=p.surface-drop*float(k)/float(risers),n0=edge+sign*float(k-1)*.3f,n1=edge+sign*float(k)*.3f,lo=std::min(n0,n1),hi=std::max(n0,n1);
+     const float x1=ox!=0?lo:mid.x-half,x2=ox!=0?hi:mid.x+half,y1=oy!=0?lo:mid.y-half,y2=oy!=0?hi:mid.y+half;
+     const float foot=land?lowest(x1,y1,x2,y2)-.15f:outside;add(x1,y1,x2,y2,std::min(foot,top-.05f),top,base);}
+    break;}
+  }
+ }
+}
+bool World::splitFinishes(){
+ bool split=false;const size_t count=m_structures.size();
+ for(size_t i=0;i<count;++i){
+  if(m_structures[i].trim>=0&&m_structures[i].trimWidth>0&&!m_structures[i].rail&&m_structures[i].shape==ShapeBox){
+   auto s=m_structures[i];const float w=std::min(s.trimWidth,std::min(s.x2-s.x1,s.y2-s.y1)*.5f);
+   Structure band=s;band.material=s.trim;band.trim=-1;band.trimWidth=0;band.topFinish=-1;
+   auto add=[&](float x1,float y1,float x2,float y2){if(x2-x1>.001f&&y2-y1>.001f){auto b=band;b.x1=x1;b.y1=y1;b.x2=x2;b.y2=y2;m_structures.push_back(b);}};
+   add(s.x1,s.y1,s.x2,s.y1+w);add(s.x1,s.y2-w,s.x2,s.y2);add(s.x1,s.y1+w,s.x1+w,s.y2-w);add(s.x2-w,s.y1+w,s.x2,s.y2-w);
+   auto& inner=m_structures[i];inner.trim=-1;inner.trimWidth=0;
+   if(s.x2-s.x1-2*w>.001f&&s.y2-s.y1-2*w>.001f){inner.x1+=w;inner.y1+=w;inner.x2-=w;inner.y2-=w;}
+   else{inner.x2=inner.x1;inner.solid=false;} // all trim: the bands are the whole of it
+   split=true;
+  }
+  auto& s=m_structures[i];
+  if(s.topFinish>=0){const int finish=s.topFinish;s.topFinish=-1;
+   if(s.top-s.bottom>.06f&&s.x2>s.x1){auto face=s;face.bottom=s.top-.04f;face.material=finish;s.top=face.bottom;m_structures.push_back(face);split=true;}}
+ }
+ return split;
 }
 float World::wallHeight(int x,int y)const{return outdoors()?floorHeight(x+.5f,y+.5f)+(m_internalWallHeight>0?m_internalWallHeight:definition().ceiling):m_internalWallHeight>0&&x>0&&x<Width-1&&y>0&&y<Height-1?m_internalWallHeight:ceilingHeight(x+.5f,y+.5f);}
 float World::supportBelow(float x,float y,float feet,bool cavities)const{

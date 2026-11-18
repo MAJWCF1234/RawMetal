@@ -32,7 +32,8 @@
     };
     // ---- The inspector: pick the stair, choose a part, choose a finish.
     selectRecord(int(doc.records("STAIR", 0).back()));
-    require(finishSelection() && IsWindowVisible(finishPartList) && IsWindowVisible(materialList), "a picked stair shows no Part and Finish lists");
+    layout();
+    require(finishSelection() && shownControl(finishPartList) && shownControl(materialList), "a picked stair shows no Part and Finish lists");
     captureEditorWindow(root / L".build" / L"interaction" / L"finish-inspector.bmp");
     require(send(finishPartList, FinishPartList, 0) && send(materialList, MaterialList, 46), "the Finish list has no material 46");
     require(doc.format() == 2 && stairLine().ends_with("|tread=46"), "choosing a tread finish did not write tread=46 and FORMAT|2: " + stairLine());
@@ -60,8 +61,8 @@
     layer = 1;
     SendMessageW(window, WM_COMMAND, ToolBase + balcony, 0);
     layer = 1;
-    relayout();
-    require(balconyTool() && IsWindowVisible(finishPartList), "the balcony tool shows no Part list");
+    layout();
+    require(balconyTool() && shownControl(finishPartList), "the balcony tool shows no Part list");
     send(finishPartList, FinishPartList, 0);
     send(materialList, MaterialList, 24);
     send(finishPartList, FinishPartList, 1);

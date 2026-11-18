@@ -1425,6 +1425,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // Authored maps, including an official level opened in the builder, carry
     // their own floor. The 0 and -9 slabs are only the old built-in chapters.
     float wallBase=w.outdoors()||w.authored()||(w.campaign()&&w.level()>=6)?w.floorHeight(cx,cy):(w.campaign()&&w.level()>=3)?-9.f:0.f;
+    // On the land a wall face reaches down to the lowest ground along it: a face on a slope
+    // left a wedge of daylight under its low end when it stood on the ground at its middle.
+    if(w.hasTerrain())wallBase=std::min({wallBase,w.floorHeight(ax+(bx-ax)*.02f,ay+(by-ay)*.02f),w.floorHeight(bx-(bx-ax)*.02f,by-(by-ay)*.02f)});
     if(wallFinish&&wallFinish->wall->band>0&&wallFinish->wall->above){
      // A painted wall: the dado band once from the floor, the paint above it.
      const auto& band=*wallFinish->wall;const float top=std::min(Z,wallBase+band.band),h=(top-wallBase)/band.band;
@@ -1454,6 +1457,33 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto structureTexture=[&](const Structure& s)->const Texture&{
   if(const Texture* finish=s.material==3&&wallFinish?wallFinish->wall:finishMaterial(s.material))return *finish;
   return s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor;};
+ // Draped floorings (STRUCT drape=1): a path or patio that follows the land, the
+ // ground's own triangles cut to its rectangle and laid 4 cm over it in its material.
+ if(w.hasTerrain()){
+  std::vector<const Structure*> drapes;for(const auto&s:w.structures())if(s.drape&&s.x2>s.x1&&s.y2>s.y1)drapes.push_back(&s);
+  if(!drapes.empty())for(const auto&face:w.terrain()){
+   const float fx1=std::min({face.a.x,face.b.x,face.c.x}),fx2=std::max({face.a.x,face.b.x,face.c.x}),fy1=std::min({face.a.y,face.b.y,face.c.y}),fy2=std::max({face.a.y,face.b.y,face.c.y});
+   const Point3 n=cross3(Point3{face.b.x-face.a.x,face.b.y-face.a.y,face.b.z-face.a.z},Point3{face.c.x-face.a.x,face.c.y-face.a.y,face.c.z-face.a.z});
+   if(n.z<=.2f*std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z))continue; // cliffs of the land stay land
+   for(const auto* s:drapes){
+    if(fx2<=s->x1||fx1>=s->x2||fy2<=s->y1||fy1>=s->y2)continue;
+    // Sutherland-Hodgman against the four sides; z follows the triangle's plane.
+    std::vector<Point3> poly{{face.a.x,face.a.y,face.a.z},{face.b.x,face.b.y,face.b.z},{face.c.x,face.c.y,face.c.z}};
+    auto clip=[&](int axis,float bound,bool keepAbove){std::vector<Point3> out;
+     for(size_t i=0;i<poly.size();++i){const Point3 p=poly[i],q=poly[(i+1)%poly.size()];
+      const float pv=axis?p.y:p.x,qv=axis?q.y:q.x;const bool pin=keepAbove?pv>=bound:pv<=bound,qin=keepAbove?qv>=bound:qv<=bound;
+      if(pin)out.push_back(p);
+      if(pin!=qin){const float t=(bound-pv)/(qv-pv);out.push_back({p.x+(q.x-p.x)*t,p.y+(q.y-p.y)*t,p.z+(q.z-p.z)*t});}}
+     poly.swap(out);};
+    clip(0,s->x1,true);if(poly.size()>=3)clip(0,s->x2,false);if(poly.size()>=3)clip(1,s->y1,true);if(poly.size()>=3)clip(1,s->y2,false);
+    if(poly.size()<3)continue;
+    const Texture& texture=structureTexture(*s);Vec2 repeat=finishRepeat(texture);if(repeat.x<=0)repeat={2,2};
+    const auto o=w.definition().origin;
+    auto vertex=[&](Point3 p){return MeshVertex{{p.x,p.y,p.z+.04f},(p.x+o.x)/repeat.x,(p.y+o.y)/repeat.y};};
+    for(size_t i=1;i+1<poly.size();++i)tri(vertex(poly[0]),vertex(poly[i]),vertex(poly[i+1]),texture,1.f);
+   }
+  }
+ }
  // Ramps, columns, arches and vaults: true geometry in the structure's bounds,
  // u across and v along its facing. Faces wind outward; UVs are in metres.
  auto drawShape=[&](const Structure& s,const Texture& texture){
@@ -1535,6 +1565,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  for(auto&s:w.structures()){
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
+  if(s.drape&&w.hasTerrain())continue; // drawn over the land above
   if(w.isBreakableStructure(int(&s-w.structures().data())))continue;
   if(!m_staticGeometryBuild&&s.top<dormantFloor)continue;
   if(s.material==6)continue; // Collision only: supplied cabinet mesh is drawn below.

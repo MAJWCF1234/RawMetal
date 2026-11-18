@@ -15,7 +15,12 @@
 #include <vector>
 
 namespace retro {
-struct TerrainFlat {float x1=0,y1=0,x2=0,y2=0,height=2,blend=4;};
+struct TerrainFlat {float x1=0,y1=0,x2=0,y2=0,height=2,blend=4;int pad=0;};
+// A footing's pad (Footing.h; never written as a record): the ground over world columns
+// x1..x2, y1..y2 (whole metres, both ends included) is walked at exactly `height`, not at a
+// voxel top. Level cuts and fills to it; Cut only lowers ground above it. Its skirt blends
+// back into the hills over `blend` metres like a TERRAIN_FLAT's.
+enum TerrainPad:int {TerrainPadNone,TerrainPadLevel,TerrainPadCut};
 // Ground cover painted over authored terrain: one texture kind per rectangle
 // (world metres), with a noisy border `edge` metres wide.
 enum GroundKind:int {GroundShortGrass,GroundLeafyGrass,GroundClover,GroundWild,GroundDry,GroundLitter,GroundGravel,GroundMud,GroundKinds,GroundMeadow=GroundKinds};
@@ -75,7 +80,10 @@ inline float authoredTerrainBaseHeight(const TerrainShape& shape,float wx,float 
  for(const auto& flat:shape.flats){
   float dx=std::max({flat.x1-wx,0.f,wx-flat.x2}),dy=std::max({flat.y1-wy,0.f,wy-flat.y2});
   float d=std::sqrt(dx*dx+dy*dy),t=flat.blend>0?std::clamp(1-d/flat.blend,0.f,1.f):(d<=0?1.f:0.f);
-  t=t*t*(3-2*t);h=h+(flat.height-h)*t;
+  t=t*t*(3-2*t);
+  // A pad's voxels sit half a metre under the height walked on them (a voxel top k is walked at k + .5).
+  const float target=flat.pad?flat.height-.5f:flat.height,blended=h+(target-h)*t;
+  h=flat.pad==TerrainPadCut?std::min(h,blended):blended;
  }
  return h;
 }
@@ -87,17 +95,43 @@ inline float authoredTerrainHeight(const TerrainShape& shape,float wx,float wy){
 inline int authoredTerrainTop(const TerrainShape& shape,int wx,int wy){
  return std::clamp(int(std::lround(authoredTerrainHeight(shape,wx+.5f,wy+.5f))),TerrainFieldLowestTop,TerrainFieldHighestTop);
 }
+// The pad covering world column (wx, wy), the last one written winning, or null.
+inline const TerrainFlat* terrainPadAt(const TerrainShape& shape,int wx,int wy){
+ for(auto it=shape.flats.rbegin();it!=shape.flats.rend();++it)
+  if(it->pad&&wx>=it->x1-.001f&&wx<=it->x2+.001f&&wy>=it->y1-.001f&&wy<=it->y2+.001f)return &*it;
+ return nullptr;
+}
+// The ground's density at voxel z of world column (wx, wy), in 32nds (the engine's
+// sample, std::int8_t): +32 solid, -32 air. A voxel column is solid up to its top; a
+// pad's column crosses zero exactly at the pad's height, so Surface Nets puts the
+// ground there (and terrainSurfaceBelow walks it there) to the 32nd of a metre.
+inline int terrainColumnDensity(const TerrainShape& shape,int wx,int wy,int z){
+ const int top=authoredTerrainTop(shape,wx,wy);
+ if(const TerrainFlat* pad=terrainPadAt(shape,wx,wy);pad&&(pad->pad==TerrainPadLevel||pad->height<float(top)+.5f)){
+  const float h=std::clamp(pad->height,float(TerrainFieldLowestTop)-.5f,float(TerrainFieldHighestTop)+.5f);
+  return int(std::lround(std::clamp(h-float(z),-1.f,1.f)*32.f));}
+ return z<=top?32:-32;
+}
 // Where the walked surface lies over a point, as the engine's Surface Nets
 // density gives it: the voxel tops at the four surrounding sample corners,
 // blended bilinearly in x and y and linearly in z (World::terrainSurfaceBelow
 // over the whole column). (lx, ly) are map metres; (ox, oy) the map origin.
 inline float authoredTerrainSurface(const TerrainShape& shape,float ox,float oy,float lx,float ly){
  int x0=int(std::floor(lx)),y0=int(std::floor(ly));float tx=lx-x0,ty=ly-y0;
- int corner[4]={authoredTerrainTop(shape,int(ox)+x0,int(oy)+y0),authoredTerrainTop(shape,int(ox)+x0+1,int(oy)+y0),
-                authoredTerrainTop(shape,int(ox)+x0,int(oy)+y0+1),authoredTerrainTop(shape,int(ox)+x0+1,int(oy)+y0+1)};
+ const int cx[4]={int(ox)+x0,int(ox)+x0+1,int(ox)+x0,int(ox)+x0+1},cy[4]={int(oy)+y0,int(oy)+y0,int(oy)+y0+1,int(oy)+y0+1};
+ int corner[4];bool padded=false;
+ for(int i=0;i<4;++i){corner[i]=authoredTerrainTop(shape,cx[i],cy[i]);padded|=terrainPadAt(shape,cx[i],cy[i])!=nullptr;}
  float weight[4]={(1-tx)*(1-ty),tx*(1-ty),(1-tx)*ty,tx*ty};
- auto density=[&](int z){float d=0;for(int i=0;i<4;++i)d+=weight[i]*(z<=corner[i]?1.f:-1.f);return d;};
  int high=*std::max_element(corner,corner+4),low=*std::min_element(corner,corner+4);
+ if(!padded){
+  auto density=[&](int z){float d=0;for(int i=0;i<4;++i)d+=weight[i]*(z<=corner[i]?1.f:-1.f);return d;};
+  for(int z=high;z>=low;--z){float below=density(z),above=density(z+1);
+   if(below>0&&above<=0)return float(z)+below/(below-above);}
+  return float(low)+.5f;
+ }
+ // Pads: the engine's own densities, blended the same way.
+ for(int i=0;i<4;++i)if(const TerrainFlat* pad=terrainPadAt(shape,cx[i],cy[i])){high=std::max(high,int(std::ceil(pad->height))+1);low=std::min(low,int(std::floor(pad->height))-1);}
+ auto density=[&](int z){float d=0;for(int i=0;i<4;++i)d+=weight[i]*float(terrainColumnDensity(shape,cx[i],cy[i],z))/32.f;return d;};
  for(int z=high;z>=low;--z){float below=density(z),above=density(z+1);
   if(below>0&&above<=0)return float(z)+below/(below-above);}
  return float(low)+.5f;
@@ -127,6 +161,9 @@ inline bool sameTerrainOver(const TerrainShape* a,const TerrainShape* b,float ox
  if(reaching(*a)!=reaching(*b))return false;
  for(int y=int(oy)-3;y<int(oy)+27;++y)for(int x=int(ox)-3;x<int(ox)+27;++x)
   if(authoredTerrainTop(*a,x,y)!=authoredTerrainTop(*b,x,y)||std::abs(authoredTerrainHeight(*a,x+.5f,y+.5f)-authoredTerrainHeight(*b,x+.5f,y+.5f))>1e-4f)return false;
+ // Footing pads set exact heights the voxel tops do not show.
+ auto pads=[&](const TerrainShape& s){std::vector<float> out;for(const auto& g:s.flats)if(g.pad&&g.x2>=ox-3&&g.x1<=ox+27&&g.y2>=oy-3&&g.y1<=oy+27)out.insert(out.end(),{g.x1,g.y1,g.x2,g.y2,g.height,g.blend,float(g.pad)});return out;};
+ if(pads(*a)!=pads(*b))return false;
  return true;
 }
 // TERRAIN_SCULPT offsets as text: whole decimetres, comma separated, a run of

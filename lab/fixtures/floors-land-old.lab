@@ -1,0 +1,8 @@
+# floors-land-old (tools/dev/floors_fixtures.py). Tube: floors.
+world custom "lab/fixtures/floors.rmc"
+map 1
+camera 4.649 1.152 5 30.137 -44
+size 1280 720
+frames 30
+floors-shot land-old
+floors-room 10 4 16 8

@@ -5,7 +5,10 @@
   // and the Part list write them for a picked stair or the balcony tool's
   // floor; the Paint tool writes them for the part it is clicked on.
   HWND finishPartList = nullptr;
-  int finishPart = 0, finishPartsMode = -1; // 0 tread / deck, 1 riser / edge, 2 stringer / railing
+  int finishPart = 0, finishPartsMode = -1; // 0 tread / deck / floor, 1 riser / edge / plinth, 2 stringer / railing / cap
+  // What the Part list dresses: 0 a picked stair, 1 the balcony tool's floor, 2 a picked footing (NativeGroundMethods.inc).
+  int finishKind() const { return finishSelection() ? 0 : footingPicked() ? 2 : flooringPicked() ? 3 : balconyTool() ? 1 : -1; }
+  static const char *footingKey(int part) { static const char *k[] = {"", "base", "cap"}; return k[std::clamp(part, 0, 2)]; }
   static const char* finishKey(bool stair, int part) {
     static const char* s[] = {"tread", "riser", "stringer"};
     static const char* l[] = {"deck", "edge", "railing"};
@@ -115,6 +118,33 @@
   // The Finish list changed while a stair is picked or the balcony tool is out.
   bool applyFinishChoice(int material) {
     const bool stair = finishSelection();
+    if (finishKind() == 3) {
+      if (!finishAllowed(material)) { message(L"That cannot be a floor; pick another."); return true; }
+      remember();
+      if (finishPart == 0) {
+        auto f = NativeDocument::fields(doc.lines[size_t(record)]);
+        f[9] = std::to_string(material);
+        doc.replace(size_t(record), f);
+      } else setFinish(size_t(record), "trim", material);
+      publish();
+      fillFields(false);
+      message(std::wstring(finishPart == 0 ? L"The floor" : L"The edge trim") + L" is " + materialName(material) + L" now.");
+      return true;
+    }
+    if (finishKind() == 2) {
+      if (!finishAllowed(material)) { message(L"That finish cannot dress a floor; pick another."); return true; }
+      remember();
+      if (finishPart == 0) {
+        auto f = NativeDocument::fields(doc.lines[size_t(record)]);
+        f[9] = std::to_string(material);
+        doc.replace(size_t(record), f);
+      } else setFinish(size_t(record), footingKey(finishPart), material);
+      publish();
+      fillFields(false);
+      static const wchar_t *parts[] = {L"floor", L"foundation and steps", L"edge trim"};
+      message(L"The " + std::wstring(parts[std::clamp(finishPart, 0, 2)]) + L" is " + materialName(material) + L" now.");
+      return true;
+    }
     if (!stair && !balconyTool()) return false;
     if (!finishAllowed(material)) {
       message(L"That finish cannot go on " + std::wstring(stair ? L"stairs" : L"a balcony") + L"; pick another.");
@@ -131,8 +161,8 @@
     publish();
     if (stair) fillFields(false);
     InvalidateRect(plan, nullptr, FALSE);
-    static const wchar_t* stairParts[] = {L"treads", L"risers", L"stringers"};
-    static const wchar_t* deckParts[] = {L"balcony decks on this floor", L"balcony edges on this floor", L"balcony rails on this floor"};
+    static const wchar_t* stairParts[] = {L"step tops", L"step fronts", L"side rails"};
+    static const wchar_t* deckParts[] = {L"balcony floors on this storey", L"balcony edges on this storey", L"balcony railings on this storey"};
     message(L"The " + std::wstring((stair ? stairParts : deckParts)[std::clamp(finishPart, 0, 2)]) + L" are " + materialName(material) + L" now.");
     return true;
   }
@@ -141,6 +171,14 @@
     if (!materialList) return;
     int id = -1;
     if (finishSelection()) id = finishOf(size_t(record), finishKey(true, finishPart));
+    else if (flooringPicked()) {
+      auto f = NativeDocument::fields(doc.lines[size_t(record)]);
+      id = finishPart == 0 ? int(number(f[9], 0)) : finishOf(size_t(record), "trim");
+    } else if (footingPicked()) {
+      auto f = NativeDocument::fields(doc.lines[size_t(record)]);
+      id = finishPart == 0 ? int(number(f[9], 0)) : finishOf(size_t(record), footingKey(finishPart));
+      if (id < 0 && finishPart == 1) id = 42; // the engine's plinth: cast concrete
+    }
     else if (balconyTool()) {
       auto at = layerRecord(layer);
       if (at >= 0) id = finishOf(size_t(at), finishKey(false, finishPart));
@@ -149,24 +187,77 @@
     for (LRESULT i = 0; i < SendMessageW(materialList, CB_GETCOUNT, 0, 0); ++i)
       if (SendMessageW(materialList, CB_GETITEMDATA, i, 0) == id) { SendMessageW(materialList, CB_SETCURSEL, i, 0); break; }
   }
-  void fillFinishParts(bool stair) {
+  void fillFinishParts(bool stair) { fillFinishParts(stair ? 0 : 1); }
+  void fillFinishParts(int kind) {
     if (!finishPartList) return;
-    if (finishPartsMode == int(stair) && SendMessageW(finishPartList, CB_GETCOUNT, 0, 0) == 3) {
-      SendMessageW(finishPartList, CB_SETCURSEL, std::clamp(finishPart, 0, 2), 0);
+    const int mode = kind == 0 ? 1 : kind == 2 ? 2 : kind == 3 ? 3 : 0; // the old modes: 1 stair, 0 balcony
+    const int parts = kind == 3 ? 2 : 3;
+    if (kind == 3) finishPart = std::min(finishPart, 1);
+    if (finishPartsMode == mode && SendMessageW(finishPartList, CB_GETCOUNT, 0, 0) == parts) {
+      SendMessageW(finishPartList, CB_SETCURSEL, std::clamp(finishPart, 0, parts - 1), 0);
       return;
     }
-    finishPartsMode = int(stair);
-    static const wchar_t* s[] = {L"Treads", L"Risers", L"Stringers (side rails)"};
-    static const wchar_t* l[] = {L"Deck", L"Deck edge", L"Railing"};
+    finishPartsMode = mode;
+    static const wchar_t* s[] = {L"Step tops", L"Step fronts", L"Side rails"};
+    static const wchar_t* l[] = {L"Balcony floor", L"Balcony edge", L"Railing"};
+    static const wchar_t* g[] = {L"Floor", L"Foundation and steps", L"Edge trim"};
     SendMessageW(finishPartList, CB_RESETCONTENT, 0, 0);
-    for (auto* text : stair ? s : l) SendMessageW(finishPartList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
+    static const wchar_t* fl[] = {L"Floor", L"Edge trim", nullptr};
+    for (auto* text : kind == 0 ? s : kind == 2 ? g : kind == 3 ? fl : l) if (text) SendMessageW(finishPartList, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(text));
     SendMessageW(finishPartList, CB_SETCURSEL, std::clamp(finishPart, 0, 2), 0);
   }
   // The Paint tool on a stair or a balcony: the part under the pointer takes
   // the paint (pickUp: takes it up). Returns false when there is none there.
+  // The material picker's rows carry a swatch: the engine's own picture of the material.
+  void drawMaterialSwatch(const DRAWITEMSTRUCT *d) {
+    if (int(d->itemID) < 0) return;
+    const int id = int(d->itemData);
+    HBITMAP picture = thumbs.get("mat-" + std::to_string(id));
+    RECT r = d->rcItem;
+    const int side = std::max(10, int(r.bottom - r.top) - 4);
+    RECT box{r.right - side - 6, r.top + 2, r.right - 6, r.top + 2 + side};
+    if (picture) {
+      HDC from = CreateCompatibleDC(d->hDC);
+      auto old = SelectObject(from, picture);
+      BITMAP info{};
+      GetObject(picture, sizeof info, &info);
+      SetStretchBltMode(d->hDC, HALFTONE);
+      StretchBlt(d->hDC, box.left, box.top, side, side, from, info.bmWidth / 4, info.bmHeight / 4, info.bmWidth / 2, info.bmHeight / 2, SRCCOPY);
+      SelectObject(from, old);
+      DeleteDC(from);
+    }
+    auto pen = CreatePen(PS_SOLID, 1, RGB(0x8A, 0x80, 0x6C));
+    auto oldPen = SelectObject(d->hDC, pen);
+    auto oldBrush = SelectObject(d->hDC, GetStockObject(NULL_BRUSH));
+    Rectangle(d->hDC, box.left, box.top, box.right, box.bottom);
+    SelectObject(d->hDC, oldBrush), SelectObject(d->hDC, oldPen);
+    DeleteObject(pen);
+  }
   bool paintFinishAt(float x, float y, float z, bool pickUp) {
     size_t at = 0;
     int part = 0, deckLayer = 0;
+    // A footing: its floor, its plinth (posts, steps) or its cap edge (NativeGroundMethods.inc).
+    size_t onTop = 0, onTopField = 0; // a floor laid on the footing is painted itself (paintSpot)
+    if (z >= -999 && !thingAt(x, y, z, onTop, onTopField) && footingAt(x, y, z, at, part)) {
+      auto f = NativeDocument::fields(doc.lines[at]);
+      if (pickUp) {
+        int id = part == 0 ? int(number(f[9], 0)) : finishOf(at, footingKey(part));
+        if (id < 0) id = part == 1 ? 42 : int(number(f[9], 0));
+        choosePaint({"mat-" + std::to_string(id), materialName(id), id, 0});
+        sfx::play(sfx::Click, .7f);
+        message(L"Picked up " + paintChoice.name + L". Click to paint with it.");
+        return true;
+      }
+      if (paintIsFinish() || !finishAllowed(paintMaterial())) {
+        message(L"A footing takes a material, not a room finish or this paint. Pick another.");
+        return true;
+      }
+      if (part == 0) f[9] = std::to_string(paintMaterial()), doc.replace(at, f);
+      else setFinish(at, footingKey(part), paintMaterial());
+      static const wchar_t *parts[] = {L"Floor", L"Foundation", L"Edge trim"};
+      message(std::wstring(parts[part]) + L" painted " + materialName(paintMaterial()) + L".");
+      return true;
+    }
     bool stair = stairAt(x, y, z, at, part);
     if (!stair) {
       if (!deckAt(x, y, z, deckLayer, part)) return false;
@@ -188,8 +279,8 @@
       return true;
     }
     setFinish(at, key, paintMaterial());
-    static const wchar_t* stairParts[] = {L"Treads", L"Risers", L"Stringers"};
-    static const wchar_t* deckParts[] = {L"Balcony deck", L"Balcony edge", L"Balcony rails"};
+    static const wchar_t* stairParts[] = {L"Step tops", L"Step fronts", L"Side rails"};
+    static const wchar_t* deckParts[] = {L"Balcony floor", L"Balcony edge", L"Railing"};
     message(std::wstring((stair ? stairParts : deckParts)[part]) + L" painted " + materialName(paintMaterial()) +
             (stair ? L"." : L" (every balcony on that floor)."));
     return true;

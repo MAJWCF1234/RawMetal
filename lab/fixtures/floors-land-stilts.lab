@@ -1,0 +1,7 @@
+# floors-land-stilts (tools/dev/floors_fixtures.py). Tube: floors.
+world custom "lab/fixtures/floors.rmc"
+map 4
+camera 9.392 1 6 94.487 -44
+size 1280 720
+frames 30
+floors-shot land-stilts
