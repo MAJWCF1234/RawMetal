@@ -56,6 +56,8 @@
       require(SendMessageW(primList, CB_GETCOUNT, 0, 0) == retro::prim::kindCount, "the shape list is not the whole palette");
       pick(9);
       partTab = parts::Shapes;
+      if (modelSearch) // a search an earlier check left would narrow the page
+        SetWindowTextW(modelSearch, L"");
       refreshParts();
       require(partsGrid.showSections && partsGrid.items.size() == size_t(retro::prim::kindCount), "the Shapes page does not show every shape in its groups");
       if (partsGrid.hwnd)
