@@ -2,10 +2,13 @@
 """Register paid Brutal Skyboxes as neural packets for the engine.
 
 Original 4096x1024 PNGs stay under src/assets/Skyboxes/Brutal/ as the donor
-masters. The engine embeds assets/ai/brutal/<stem>-x2.ntx packets that
+masters. The engine embeds assets/ai/brutal/<stem>-n.ntx packets that
 reconstruct 2048x512 panoramas (legacy wasteland resolution) through the
-shared texture-x2 model (resource 348). Run from any directory. --check
-verifies donors, packets and generated registration without writing.
+shared NTM2 model (texture-n2.ntm, resource 1999): the smallest x4 or x2
+packet that passes tools/encode_neural_textures.py's quality gate, or the
+legacy NTX1 x2 packet (texture-x2, resource 348) if none does. Run from any
+directory. --check verifies donors, packets and generated registration
+without writing.
 """
 from __future__ import annotations
 
@@ -18,8 +21,12 @@ import re
 import shutil
 import struct
 
+import sys
+
 import numpy as np
 from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 DEFAULT_SOURCE = Path(
     r"O:\retro official\Brutal Skyboxes v1.4.1\Brutal Skyboxes"
@@ -31,6 +38,7 @@ DONOR_SIZE = (4096, 1024)
 EMBED_SIZE = (2048, 512)
 NEURAL_FACTOR = 2
 NEURAL_MODEL_RESOURCE = 348
+NEURAL2_MODEL_RESOURCE = 1999
 STEMS = tuple(
     [f"skybox_emx_{i}" for i in range(1, 36) if i not in (7, 22)]
     + [f"skybox_plain_emx_{i}" for i in range(1, 15)]
@@ -47,16 +55,16 @@ EXTRA_FIRST_RESOURCE = 2900
 EXTRA_BEGIN = "// BEGIN GENERATED EXTRA SKIES"
 EXTRA_END = "// END GENERATED EXTRA SKIES"
 EXTRA_SKIES = [
-    {"id": "psx_clear_day", "label": "Clear day", "ntx": "assets/library/skies/psx_clear_day-x2.ntx", "haze": (.66, .74, .84, .005), "light": (120, 50, 2.3, 1, 0.96, 0.88, 0.3, 0.92, 0.97, 1.08, 1)},
-    {"id": "grey_overcast", "label": "Grey overcast", "ntx": "assets/ai/skies/grey_overcast-x2.ntx", "haze": (.62, .64, .66, .011), "light": (60, 62, 0.55, 0.95, 0.97, 1, 0.46, 0.97, 0.99, 1.02, 1)},
-    {"id": "cold_dawn", "label": "Cold dawn", "ntx": "assets/ai/skies/cold_dawn-x2.ntx", "haze": (.62, .50, .50, .008), "light": (95, 4, 1.25, 1, 0.62, 0.42, 0.2, 0.86, 0.82, 1, 0.85)},
-    {"id": "dusk_afterglow", "label": "Dusk afterglow", "ntx": "assets/library/skies/dusk_afterglow-x2.ntx", "haze": (.24, .24, .32, .009), "light": (90, 3, 0.7, 1, 0.55, 0.36, 0.15, 0.74, 0.78, 1.08, 0.7)},
-    {"id": "storm_front", "label": "Storm front", "ntx": "assets/ai/skies/storm_front-x2.ntx", "haze": (.27, .29, .32, .016), "light": (110, 35, 0.3, 0.74, 0.8, 0.9, 0.19, 0.84, 0.9, 1, 0.75)},
-    {"id": "psx_starry_night", "label": "Starry night", "ntx": "assets/library/skies/psx_starry_night-x2.ntx", "haze": (.06, .09, .16, .008), "light": (58, 41, 0.42, 0.55, 0.68, 1, 0.075, 0.55, 0.68, 1.06, 0.5)},
-    {"id": "cloudy_night", "label": "Cloudy night", "ntx": "assets/library/skies/cloudy_night-x2.ntx", "haze": (.08, .09, .12, .011), "light": (90, 50, 0.14, 0.6, 0.66, 0.85, 0.085, 0.6, 0.68, 0.96, 0.45)},
-    {"id": "treeline_night", "label": "Treeline night", "ntx": "assets/library/skies/treeline_night-x2.ntx", "haze": (.10, .15, .24, .009), "light": (90, 40, 0.28, 0.55, 0.68, 1, 0.075, 0.55, 0.7, 1.06, 0.5)},
-    {"id": "ember_eclipse", "label": "Ember eclipse", "ntx": "assets/ai/skies/ember_eclipse-x2.ntx", "haze": (.30, .14, .09, .013), "light": (70, 24, 0.5, 1, 0.32, 0.12, 0.09, 1.1, 0.55, 0.45, 0.6)},
-    {"id": "resonance_aurora", "label": "Resonance aurora", "ntx": "assets/ai/skies/resonance_aurora-x2.ntx", "haze": (.10, .07, .15, .010), "light": (90, 30, 0.28, 0.7, 0.45, 1, 0.075, 0.76, 0.6, 1.12, 0.5)},
+    {"id": "psx_clear_day", "label": "Clear day", "ntx": "assets/library/skies/psx_clear_day-n.ntx", "haze": (.66, .74, .84, .005), "light": (120, 50, 2.3, 1, 0.96, 0.88, 0.3, 0.92, 0.97, 1.08, 1)},
+    {"id": "grey_overcast", "label": "Grey overcast", "ntx": "assets/ai/skies/grey_overcast-n.ntx", "haze": (.62, .64, .66, .011), "light": (60, 62, 0.55, 0.95, 0.97, 1, 0.46, 0.97, 0.99, 1.02, 1)},
+    {"id": "cold_dawn", "label": "Cold dawn", "ntx": "assets/ai/skies/cold_dawn-n.ntx", "haze": (.62, .50, .50, .008), "light": (95, 4, 1.25, 1, 0.62, 0.42, 0.2, 0.86, 0.82, 1, 0.85)},
+    {"id": "dusk_afterglow", "label": "Dusk afterglow", "ntx": "assets/library/skies/dusk_afterglow-n.ntx", "haze": (.24, .24, .32, .009), "light": (90, 3, 0.7, 1, 0.55, 0.36, 0.15, 0.74, 0.78, 1.08, 0.7)},
+    {"id": "storm_front", "label": "Storm front", "ntx": "assets/ai/skies/storm_front-n.ntx", "haze": (.27, .29, .32, .016), "light": (110, 35, 0.3, 0.74, 0.8, 0.9, 0.19, 0.84, 0.9, 1, 0.75)},
+    {"id": "psx_starry_night", "label": "Starry night", "ntx": "assets/library/skies/psx_starry_night-n.ntx", "haze": (.06, .09, .16, .008), "light": (58, 41, 0.42, 0.55, 0.68, 1, 0.075, 0.55, 0.68, 1.06, 0.5)},
+    {"id": "cloudy_night", "label": "Cloudy night", "ntx": "assets/library/skies/cloudy_night-n.ntx", "haze": (.08, .09, .12, .011), "light": (90, 50, 0.14, 0.6, 0.66, 0.85, 0.085, 0.6, 0.68, 0.96, 0.45)},
+    {"id": "treeline_night", "label": "Treeline night", "ntx": "assets/library/skies/treeline_night-n.ntx", "haze": (.10, .15, .24, .009), "light": (90, 40, 0.28, 0.55, 0.68, 1, 0.075, 0.55, 0.7, 1.06, 0.5)},
+    {"id": "ember_eclipse", "label": "Ember eclipse", "ntx": "assets/ai/skies/ember_eclipse-n.ntx", "haze": (.30, .14, .09, .013), "light": (70, 24, 0.5, 1, 0.32, 0.12, 0.09, 1.1, 0.55, 0.45, 0.6)},
+    {"id": "resonance_aurora", "label": "Resonance aurora", "ntx": "assets/ai/skies/resonance_aurora-n.ntx", "haze": (.10, .07, .15, .010), "light": (90, 30, 0.28, 0.7, 0.45, 1, 0.075, 0.76, 0.6, 1.12, 0.5)},
 ]
 
 
@@ -84,7 +92,7 @@ def label(stem: str) -> str:
 def ntx_name(stem: str) -> str:
     # Under assets/ai/brutal/ so paid packets never overwrite the legacy
     # wasteland sky (assets/ai/skybox_plain_emx_14-x2.ntx, resource 252).
-    return f"{stem}-x{NEURAL_FACTOR}.ntx"
+    return f"{stem}-n.ntx"
 
 
 def ntx_relative(stem: str) -> str:
@@ -93,9 +101,34 @@ def ntx_relative(stem: str) -> str:
 
 def ntx_header(path: Path) -> tuple[int, int, int, int, int, int]:
     data = path.read_bytes()
-    if len(data) < 32 or data[:4] != b"NTX1":
+    if len(data) < 32 or data[:4] not in (b"NTX1", b"NTX2"):
         raise ValueError(f"Invalid neural sky packet: {path}")
     return struct.unpack_from("<6I", data, 4)
+
+
+def sky_packet(image: Image.Image) -> bytes:
+    """An embedded-size RGB panorama as the smallest NTX2 packet that passes
+    the neural quality gate, else the legacy lossless NTX1 x2 packet."""
+    from encode_neural_textures import neural_packet
+    packet, _ = neural_packet(image)
+    if packet is not None:
+        return packet
+    width, height = image.size
+    low_w = (width + NEURAL_FACTOR - 1) // NEURAL_FACTOR
+    low_h = (height + NEURAL_FACTOR - 1) // NEURAL_FACTOR
+    padded = Image.fromarray(np.pad(np.asarray(image), ((0, low_h * NEURAL_FACTOR - height), (0, low_w * NEURAL_FACTOR - width), (0, 0)), mode="edge"))
+    low = padded.resize((low_w, low_h), Image.Resampling.BICUBIC)
+    stream = io.BytesIO()
+    low.save(stream, format="WEBP", lossless=True, quality=100, method=6, exact=True)
+    return struct.pack("<4s7I", b"NTX1", width, height, low_w, low_h, NEURAL_MODEL_RESOURCE, NEURAL_FACTOR, 0) + stream.getvalue()
+
+
+def valid_sky_header(path: Path) -> bool:
+    width, height, low_w, low_h, model, factor = ntx_header(path)
+    legacy = path.read_bytes()[:4] == b"NTX1"
+    return ((width, height) == EMBED_SIZE and factor in ((NEURAL_FACTOR,) if legacy else (2, 4))
+            and model == (NEURAL_MODEL_RESOURCE if legacy else NEURAL2_MODEL_RESOURCE)
+            and low_w == EMBED_SIZE[0] // factor and low_h == EMBED_SIZE[1] // factor)
 
 
 def encode_neural_packet(png: Path) -> bytes:
@@ -105,34 +138,7 @@ def encode_neural_packet(png: Path) -> bytes:
     image = image.convert("RGB")
     if image.size != DONOR_SIZE:
         raise ValueError(f"Expected donor {DONOR_SIZE}, got {image.size}: {png}")
-    image = image.resize(EMBED_SIZE, Image.Resampling.LANCZOS)
-    width, height = image.size
-    low_w = (width + NEURAL_FACTOR - 1) // NEURAL_FACTOR
-    low_h = (height + NEURAL_FACTOR - 1) // NEURAL_FACTOR
-    padded = Image.fromarray(
-        np.pad(
-            np.asarray(image),
-            ((0, low_h * NEURAL_FACTOR - height), (0, low_w * NEURAL_FACTOR - width), (0, 0)),
-            mode="edge",
-        )
-    )
-    low = padded.resize((low_w, low_h), Image.Resampling.BICUBIC)
-    stream = io.BytesIO()
-    low.save(stream, format="WEBP", lossless=True, quality=100, method=6, exact=True)
-    return (
-        struct.pack(
-            "<4s7I",
-            b"NTX1",
-            width,
-            height,
-            low_w,
-            low_h,
-            NEURAL_MODEL_RESOURCE,
-            NEURAL_FACTOR,
-            0,
-        )
-        + stream.getvalue()
-    )
+    return sky_packet(image.resize(EMBED_SIZE, Image.Resampling.LANCZOS))
 
 
 def cpp_float(v: float) -> str:
@@ -231,11 +237,13 @@ def provenance_text(source: Path, records: list[dict]) -> str:
         f"`{source}`.",
         "",
         "Donor masters stay as original lossless 4096 x 1024 PNGs in this folder.",
-        "The engine embeds neural `assets/ai/brutal/<stem>-x2.ntx` packets that",
-        "reconstruct 2048 x 512 panoramas through `texture-x2.ntm` (resource 348),",
-        "the same AI path and resolution as the legacy wasteland sky.",
+        "The engine embeds neural `assets/ai/brutal/<stem>-n.ntx` packets that",
+        "reconstruct 2048 x 512 panoramas through `texture-n2.ntm` (resource 1999),",
+        "x4 or x2, lossy or lossless low-res, whichever is smallest and passes the",
+        "quality gate in tools/encode_neural_textures.py; the same resolution as the",
+        "legacy wasteland sky.",
         "No donor PNG is modified.",
-        "Legacy resource 252 keeps `assets/ai/skybox_plain_emx_14-x2.ntx` unchanged.",
+        "Legacy resource 252 is encoded from its own master by tools/encode_neural_textures.py.",
         "No license text was present in the supplied extracted skybox directory; purchase",
         "and distribution rights remain governed by the original asset package terms.",
         "",
@@ -323,14 +331,7 @@ def register(root: Path, source: Path, check: bool) -> dict:
         packet = encode_neural_packet(imported)
         packet_path = neural / ntx_name(record["stem"])
         write_bytes(packet_path, packet, check)
-        width, height, low_w, low_h, model, factor = ntx_header(packet_path)
-        if (
-            (width, height) != EMBED_SIZE
-            or model != NEURAL_MODEL_RESOURCE
-            or factor != NEURAL_FACTOR
-            or low_w != EMBED_SIZE[0] // NEURAL_FACTOR
-            or low_h != EMBED_SIZE[1] // NEURAL_FACTOR
-        ):
+        if not valid_sky_header(packet_path):
             raise ValueError(f"Neural sky header mismatch: {packet_path}")
         record["ntx_bytes"] = packet_path.stat().st_size
         ntx_total += record["ntx_bytes"]
@@ -348,8 +349,7 @@ def register(root: Path, source: Path, check: bool) -> dict:
         "ntx_bytes": ntx_total,
         "resources": [FIRST_RESOURCE, FIRST_RESOURCE + len(records) - 1],
         "verified_sha256": len(records),
-        "neural_factor": NEURAL_FACTOR,
-        "neural_model": NEURAL_MODEL_RESOURCE,
+        "neural_model": NEURAL2_MODEL_RESOURCE,
     }
 
 

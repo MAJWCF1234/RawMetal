@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 2890520e8c97fbfbd20a95aa0eef52816ccdbb9b
-# 2026-11-18 15:16, props: a free VR hand's reach builds the sleeping props it is about to touch; the hand-push check swats at the prop's height from clear space; v1.5.2 notes hold the fixes once meant for 1.5.3
+commit 1ff62fbc8f809e6d9fa8b1f45c108e3a72f44353
+# 2026-11-18 16:32, release: v1.5.3, doors that stay

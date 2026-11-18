@@ -4,6 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.3 - Doors that stay (2026-11-18)
+
+A fix for the small things that should have held, and a lighter game to carry them.
+
+- **Doors and drawers.** A door nudged gently stops where it is left, and a drawer pushed shut catches and stays shut. In the editor, Connect hangs doors, hatches and seesaws with the right stiffness already set, and adds a Drawer and a Nailed board that snaps under a heavy shove.
+- **Ramps.** A crate sliding onto a ramp follows the slope instead of hopping at its foot, and a rolling bottle no longer bounces back off the first step.
+- **Water.** A sealed drum dropped upright tips onto its side and bobs. A crate rides at the depth its weight says, and a plank dropped on its end lies down flat.
+- **Breaking.** When a crate is smashed, its planks fly along the blow that broke it, and a spinning thing breaks spinning. Nothing pops out of a break standing still.
+- **Sleepers cost nothing.** Hundreds of things lying still now cost next to nothing while a few others move.
+- **Smaller.** The game carries more of its textures, and its skies, as small sketches it redraws the first time they are needed, with a better learned hand that can work from a quarter of the size. Every one was held up against its original and kept only where the two read the same; the rest are kept whole. The game is lighter for it, with room left for what comes next.
+
+Verified with tools/release/ship.py, the feature lab's tubes for each of the above, and the editor's test modes.
+
+---
+
 ## v1.5.2 - Held together, below the hill (2026-11-18)
 
 Things hang now, and swing, and come apart along their seams; the dead fall like the dead; and the ground has an inside. Dig, and it opens.
