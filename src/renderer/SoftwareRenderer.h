@@ -447,7 +447,8 @@ private:
         Mesh{2356},Mesh{2358},Mesh{2360},Mesh{2362},Mesh{2364},Mesh{2366},Mesh{2368},
         Mesh{2414},Mesh{2418},Mesh{2422},Mesh{2426},
         Mesh{2429},Mesh{2431},Mesh{2433},
-        Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853}};
+        Mesh{2847},Mesh{2849},Mesh{2851},Mesh{2853},
+        Mesh{2856},Mesh{2858},Mesh{2860},Mesh{2862}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
