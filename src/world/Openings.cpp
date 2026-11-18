@@ -157,33 +157,74 @@ void applyBreach(AuthoredMapData& m,const Breach& b){
    const float foot=b.sill>0?(.1f*lump):e>.5f?0.f:(.5f-e)*1.1f*lump;
    strips.push_back({a,c,zs+foot,std::max(zs+foot+.25f,zh-drop)});}}
  for(const auto& st:strips)holes.push_back(box(st.a,st.c,-half,half,st.z1,st.z2));
+ const size_t before=m.structures.size();
  cutWall(m,b.x1,b.y1,b.x2,b.y2,b.bottom,b.top,holes,b.infill,b.wall);
  if(b.shape==0&&b.edge==2)return;
- // ---- The broken edge: chips of core on the lip and the jambs, proud of the hole on one face ----
+ // ---- The broken outline ----
+ // The hole is cut as strips (collision, sight, light and rounds keep them, as invisible proxies), but it
+ // is drawn as a broken line: the pieces of wall over and under each strip are drawn with their lower or
+ // upper edge sloping from one corner of the outline to the next, so the lip runs on in a jagged line at
+ // every angle the strips' heights give it, never in steps. Corners are shared between strips, with a
+ // little of their own wander, so a notch reads as a tooth and a lump as a broken stub.
+ const int ns=int(strips.size());
+ std::vector<float> at(size_t(ns)+1),top(size_t(ns)+1),foot(size_t(ns)+1);
+ for(int k=0;k<=ns;++k){const auto& l=strips[size_t(std::max(0,k-1))];const auto& r=strips[size_t(std::min(ns-1,k))];at[size_t(k)]=k<ns?r.a:l.c;
+  const float jag=(rnd(50,std::uint32_t(k))-.5f)*.05f;
+  top[size_t(k)]=k==0||k==ns?(k==0?r.z2:l.z2):std::max(std::min(l.z2,r.z2)-.01f,(l.z2+r.z2)*.5f+jag);
+  foot[size_t(k)]=k==0||k==ns?(k==0?r.z1:l.z1):std::min(std::max(l.z1,r.z1)+.01f,(l.z1+r.z1)*.5f+jag*.5f);}
+ auto line=[&](const std::vector<float>& z,float a){if(a<=at[0])return z[0];
+  for(int k=0;k<ns;++k)if(a<=at[size_t(k)+1]){const float t=(a-at[size_t(k)])/std::max(1e-5f,at[size_t(k)+1]-at[size_t(k)]);return z[size_t(k)]+(z[size_t(k)+1]-z[size_t(k)])*t;}
+  return z[size_t(ns)];};
+ const size_t built=m.structures.size();
+ for(size_t i=0;i<built;++i){auto& s=m.structures[i];if(!s.solid||s.rail||s.shape!=ShapeBox||s.material==CollisionProxyMaterial)continue;
+  const float sa=alongX?s.x1:s.y1,sc=alongX?s.x2:s.y2,s0=alongX?s.y1:s.x1,s1=alongX?s.y2:s.x2;
+  if(sc<=a0+1e-4f||sa>=a1-1e-4f||s0>centre+half||s1<centre-half||s.top-s.bottom<.004f)continue;
+  // A piece over a strip (its foot on the strip's top) or under one (its top at the strip's foot).
+  const Strip* over=nullptr;const Strip* under=nullptr;
+  for(const auto& st:strips)if(sa>=st.a-1e-4f&&sc<=st.c+1e-4f){if(std::fabs(s.bottom-st.z2)<2e-3f)over=&st;else if(std::fabs(s.top-st.z1)<2e-3f)under=&st;}
+  if(!over&&!under)continue;
+  Structure shown=s;shown.solid=false;shown.shape=over?ShapeLip:ShapeFoot;
+  // facing 0 draws u along +x (u = -half at x1); facing 1 draws u along -y (u = -half at y2).
+  shown.facing=alongX?0:1;
+  const float first=alongX?sa:sc,second=alongX?sc:sa;
+  if(over){shown.bottom=line(top,first);shown.skew=line(top,second)-shown.bottom;}
+  else{shown.top=line(foot,first);shown.skew=line(foot,second)-shown.top;}
+  s.material=CollisionProxyMaterial;   // the strip piece still stops a body, a round and the light
+  m.structures.push_back(shown);}
+ (void)before;
+ // ---- The broken edge: chunks of core at every angle along the lip and the jambs, proud of the hole ----
  const int core=b.edge==1?31:15;
- auto solidBox=[&](const Box& x,int material,bool solid){Structure s{x.x1,x.y1,x.x2,x.y2,x.z1,x.z2,false,material,solid};if(x.x2-x.x1>.003f&&x.y2-x.y1>.003f&&x.z2-x.z1>.003f)m.structures.push_back(s);};
- if(b.shape!=0)for(size_t i=0;i<strips.size();++i){const auto& st=strips[i];
-  // Under the lip: a chip hanging from one face or the other, a jagged tooth.
-  const float face=rnd(10,std::uint32_t(i))<.5f?-1.f:1.f,deep=thick*(.2f+.45f*rnd(11,std::uint32_t(i))),hang=.025f+.11f*rnd(12,std::uint32_t(i))*rnd(13,std::uint32_t(i));
-  const float lo=face<0?-half+.002f:half-deep,hi=face<0?-half+deep:half-.002f;
-  solidBox(box(st.a,st.c,lo,hi,st.z2-hang,st.z2),core,false);
-  if(st.z1>zs+.01f||rnd(14,std::uint32_t(i))<.3f){const float lift=.02f+.06f*rnd(15,std::uint32_t(i));solidBox(box(st.a,st.c,-half*.6f,half*.6f,st.z1,st.z1+lift),core,false);}}
- // The jambs: chips standing out of each side.
- for(int side=0;side<2;++side)for(int k=0;k<6;++k){const float z=zs+(zh-zs)*(float(k)+rnd(20,std::uint32_t(side*8+k)))/7.f,h=.06f+.16f*rnd(21,std::uint32_t(side*8+k)),out=.02f+.07f*rnd(22,std::uint32_t(side*8+k));
-  const float face=rnd(23,std::uint32_t(side*8+k))<.5f?-1.f:1.f,deep=thick*(.25f+.4f*rnd(24,std::uint32_t(side*8+k)));
-  const float a=side?a1-out:a0,c=side?a1:a0+out,lo=face<0?-half+.002f:half-deep,hi=face<0?-half+deep:half-.002f;
-  // Only where the hole is at that height (the arch's and the ragged hole's sides close in).
+ auto chunk=[&](float a,float c,float lo,float hi,float z1,float z2,int material){if(c-a<.004f||hi-lo<.004f||z2-z1<.004f)return;
+  const Box x=box(a,c,lo,hi,z1,z2);Structure s{x.x1,x.y1,x.x2,x.y2,x.z1,x.z2,false,material,false};s.shape=ShapeShard;m.structures.push_back(s);};
+ if(b.shape!=0)for(int k=1;k<ns;k+=1+int(rnd(60,std::uint32_t(k))*2.f)){
+  // On the lip: a broken lump hanging from it on one face or the other, or a tooth across it.
+  const float a=at[size_t(k)],z=top[size_t(k)],w=.05f+.12f*rnd(61,std::uint32_t(k)),hang=.03f+.1f*rnd(62,std::uint32_t(k));
+  const float face=rnd(63,std::uint32_t(k))<.5f?-1.f:1.f,deep=thick*(.3f+.6f*rnd(64,std::uint32_t(k)));
+  const float lo=face<0?-half+.003f:half-deep,hi=face<0?-half+deep:half-.003f;
+  chunk(a-w*.5f,a+w*.5f,lo,hi,z-hang,z+.04f,core);
+  // At the foot, where the base was left standing: stubs of it.
+  const float f=foot[size_t(k)];if(f>zs+.02f||rnd(65,std::uint32_t(k))<.25f)chunk(a-w*.4f,a+w*.4f,-half*.7f,half*.7f,f-.02f,f+.03f+.05f*rnd(66,std::uint32_t(k)),core);}
+ // The jambs: chunks standing out of each side, where the hole is at that height.
+ for(int side=0;side<2;++side)for(int k=0;k<7;++k){const std::uint32_t id=std::uint32_t(side*8+k);
+  const float z=zs+(zh-zs)*(float(k)+rnd(20,id))/8.f,h=.05f+.14f*rnd(21,id),out=.02f+.06f*rnd(22,id);
+  const float face=rnd(23,id)<.5f?-1.f:1.f,deep=thick*(.3f+.55f*rnd(24,id));
+  const float a=side?a1-out:a0,c=side?a1:a0+out,lo=face<0?-half+.003f:half-deep,hi=face<0?-half+deep:half-.003f;
   bool open=false;for(const auto& st:strips)open|=(side?st.c>=a1-.13f:st.a<=a0+.13f)&&z>st.z1&&z+h<st.z2;
-  if(open)solidBox(box(a,c,lo,hi,z,std::min(z+h,zh)),core,false);}
- // ---- Rebar where the wall tore: bars hanging from the lip and standing out of the jambs ----
- if(b.rebar&&b.edge!=1){const float bar=.012f;int n=std::max(2,int(width/.22f));
-  for(int k=0;k<n;++k){const float t=(float(k)+.3f+.4f*rnd(30,std::uint32_t(k)))/float(n),a=a0+width*t;float top=zh;for(const auto& st:strips)if(a>=st.a&&a<st.c)top=st.z2;
-   const float len=.1f+.35f*rnd(31,std::uint32_t(k)),across=(rnd(32,std::uint32_t(k))-.5f)*thick*.5f,lean=(rnd(33,std::uint32_t(k))-.5f)*.12f;
-   solidBox(box(a,a+bar,across,across+bar,top-len,top+.02f),8,false);
-   if(rnd(34,std::uint32_t(k))<.5f)solidBox(box(std::min(a,a+lean),std::max(a,a+lean)+bar,across,across+bar,top-len-bar,top-len),8,false);}
-  for(int side=0;side<2;++side)for(int k=0;k<3;++k){const float z=zs+.4f+(zh-zs-.6f)*(float(k)+rnd(35,std::uint32_t(side*4+k)))/3.f,len=.08f+.22f*rnd(36,std::uint32_t(side*4+k)),across=(rnd(37,std::uint32_t(side*4+k))-.5f)*thick*.5f;
+  if(open)chunk(a,c,lo,hi,z,std::min(z+h,zh),core);}
+ // ---- Rebar where the wall tore: bent bar ends standing out of the lip and the jambs at angles ----
+ // (a rod drawn on the slant inside its box; facing picks which way it leans)
+ auto rod=[&](float a,float c,float lo,float hi,float z1,float z2,int facing){const Box x=box(std::min(a,c),std::max(a,c),lo,hi,z1,z2);
+  if(x.x2-x.x1<.004f||x.y2-x.y1<.004f||z2-z1<.01f)return;Structure s{x.x1,x.y1,x.x2,x.y2,x.z1,x.z2,false,8,false};s.shape=ShapeRod;s.facing=std::uint8_t(facing);m.structures.push_back(s);};
+ if(b.rebar&&b.edge!=1){const float bar=.012f;const int n=std::max(2,int(width/.22f));
+  // The rod leans along the wall: facing 1/3 for a wall along x, 0/2 for one along y.
+  auto lean=[&](float sign){return alongX?(sign>0?1:3):(sign>0?0:2);};
+  for(int k=0;k<n;++k){const float t=(float(k)+.3f+.4f*rnd(30,std::uint32_t(k)))/float(n),a=a0+width*t,z=line(top,a);
+   const float len=.1f+.35f*rnd(31,std::uint32_t(k)),across=(rnd(32,std::uint32_t(k))-.5f)*thick*.5f,sway=(.03f+.12f*rnd(33,std::uint32_t(k)))*(rnd(34,std::uint32_t(k))<.5f?-1.f:1.f);
+   rod(a,a+sway,across,across+bar,z-len,z+.03f,lean(sway));}
+  for(int side=0;side<2;++side)for(int k=0;k<3;++k){const std::uint32_t id=std::uint32_t(side*4+k);
+   const float z=zs+.4f+(zh-zs-.6f)*(float(k)+rnd(35,id))/3.f,len=.08f+.22f*rnd(36,id),across=(rnd(37,id)-.5f)*thick*.5f,droop=.02f+.08f*rnd(38,id);
    bool open=false;for(const auto& st:strips)open|=(side?st.c>=a1-.13f:st.a<=a0+.13f)&&z>st.z1&&z<st.z2;
-   if(open)solidBox(side?box(a1-len,a1+.02f,across,across+bar,z,z+bar):box(a0-.02f,a0+len,across,across+bar,z,z+bar),8,false);}}
+   if(open)rod(side?a1-len:a0+len,side?a1+.02f:a0-.02f,across,across+bar,z-droop,z+bar,side?lean(1.f):lean(-1.f));}}
  // ---- Rubble on the floor either side, most on the side the blow went to ----
  for(int k=0;k<b.rubble;++k){const float u=rnd(40,std::uint32_t(k)),v=rnd(41,std::uint32_t(k)),w=rnd(42,std::uint32_t(k));
   const float a=a0-.3f+(width+.6f)*u,side=(v<.65f?1.f:-1.f)*(b.direction<0?-1.f:1.f),out=half+.05f+1.1f*w*w;

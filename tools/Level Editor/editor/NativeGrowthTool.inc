@@ -15,7 +15,7 @@
   int growthKind() const { return std::clamp(listIndex(growthKindList), 0, int(GrowMix)); }
   static bool growthModel(int slot) {
     using namespace retro::model;
-    for (int m : {ivy_wall_a, ivy_wall_b, ivy_strand, growth_ivy_creeper, creeper, growth_vine_sheet, growth_moss_wall, growth_moss_floor, growth_hanging_vine, grass_a, grass_b, grass_c,
+    for (int m : {ivy_wall_a, ivy_wall_b, ivy_strand, growth_ivy_creeper, growth_ivy_curtain, growth_ivy_single, creeper, growth_vine_sheet, growth_moss_wall, growth_moss_floor, growth_hanging_vine, grass_a, grass_b, grass_c,
                   grass_l, tall_grass_m, clover_patch})
       if (slot == m)
         return true;
@@ -222,22 +222,35 @@
       }
     };
     // ---- Hanging: creepers from the ceiling, and over the edges of ledges ----
+    // A drape of ivy down a face from its lip: mostly curtains of strands of uneven length, now and then a
+    // single strand; its length 0.5 m up to 3 m (never to the floor), turned out from the face.
+    auto drape = [&](float px0, float py0, float nx, float ny, float lip, float room) {
+      const int slot = unit(random) < .25f ? growth_ivy_single : growth_ivy_curtain;
+      const auto &size = retro::model::size[size_t(slot)];
+      const float length = std::min(room, .5f + 2.5f * unit(random) * unit(random) + .5f * (k() - .8f));
+      const float s = std::clamp(length / size[2], .24f, 1.45f), h = size[2] * s, out = size[1] * s * .5f + .015f;
+      if (h > room + .01f)
+        return false;
+      const float px = px0 + nx * out, py = py0 + ny * out;
+      if (growthCrowded(px, py, lip - h * .5f, slot == growth_ivy_single ? .25f : .6f))
+        return false;
+      growthPiece(slot, s, px, py, lip + .02f - h, std::atan2(nx, ny));
+      return true;
+    };
+    // ---- Hanging: from the ceiling's edge down the walls, and over the open edges of ledges; never from mid-air ----
     auto creepers = [&](float spacing) {
       const bool roofed = ceiling - floor <= 8.f && !onTerrain();
-      const int wanted = std::clamp(int(3.14159f * r * r / (spacing * spacing) + unit(random)), 1, 40);
-      for (int n = 0, tries = 0; roofed && n < wanted && tries < wanted * 3; ++tries) {
-        const float a = unit(random) * 6.2831853f, d = r * std::sqrt(unit(random)), px = x + std::cos(a) * d, py = y + std::sin(a) * d;
-        if (natureBlocked(px, py, .15f))
-          continue;
-        const int slot = pick({growth_ivy_creeper, growth_ivy_creeper, growth_ivy_creeper, growth_hanging_vine});
-        const float s = std::min(k() * (.7f + .5f * unit(random)), (ceiling - floor - .4f) / retro::model::size[size_t(slot)][2]);
-        const float h = retro::model::size[size_t(slot)][2] * s;
-        if (s < .2f || growthCrowded(px, py, ceiling - h * .5f, .35f))
-          continue;
-        growthPiece(slot, s, px, py, ceiling - h, unit(random) * 6.2831853f);
-        ++n;
+      // Where the ceiling meets a wall in reach: curtains down the wall's face from the top.
+      for (const auto &face : roofed ? growthFaces(x, y, r) : std::vector<GrowthFace>{}) {
+        if (face.z1 < ceiling - .05f)
+          continue; // a wall short of the ceiling is a ledge (below)
+        for (float t = face.a0 + .3f + spacing * .5f * unit(random); t < face.a1 - .3f; t += spacing * (.6f + .7f * unit(random))) {
+          const float px0 = face.alongX ? t : face.at, py0 = face.alongX ? face.at : t;
+          if (std::hypot(px0 - x, py0 - y) <= r)
+            drape(px0, py0, face.nx, face.ny, ceiling, std::min(3.f, ceiling - floor - 1.f));
+        }
       }
-      // Over every open edge of a ledge in reach: strands lying down its face, their tops at its lip.
+      // Over every open edge of a ledge in reach, the tops at its lip.
       for (const auto &l : growthLedges(x, y, r))
         for (int side = 0; side < 4; ++side) {
           const bool alongX = side < 2;
@@ -246,20 +259,10 @@
           const float probeX = alongX ? (a0 + a1) * .5f : at + nx * .3f, probeY = alongX ? at + ny * .3f : (a0 + a1) * .5f;
           if (natureBlocked(probeX, probeY, 0.f))
             continue; // that side is against a wall
-          for (float t = a0 + .2f + spacing * .4f * unit(random); t < a1 - .2f; t += spacing * (.45f + .5f * unit(random))) {
+          for (float t = a0 + .2f + spacing * .4f * unit(random); t < a1 - .2f; t += spacing * (.5f + .6f * unit(random))) {
             const float px0 = alongX ? t : at, py0 = alongX ? at : t;
-            if (std::hypot(px0 - x, py0 - y) > r)
-              continue;
-            const int slot = ivy_strand;
-            const float s = std::min(k(), (l.top - floor - .3f) / retro::model::size[size_t(slot)][2]);
-            if (s < .25f)
-              continue;
-            const auto &size = retro::model::size[size_t(slot)];
-            const float h = size[2] * s, out = size[1] * s * .5f + .015f;
-            const float px = px0 + nx * out, py = py0 + ny * out;
-            if (growthCrowded(px, py, l.top - h * .5f, .3f))
-              continue;
-            growthPiece(slot, s, px, py, l.top + .04f - h, std::atan2(nx, ny));
+            if (std::hypot(px0 - x, py0 - y) <= r)
+              drape(px0, py0, nx, ny, l.top, std::min(3.f, l.top - floor - .3f));
           }
         }
     };
@@ -301,7 +304,7 @@
     if (id == GrowthKindList) {
       const wchar_t *how[] = {L"Ivy: patches that hug the wall, climbing from the floor and hanging from the top.",
                               L"Wall moss: low on the wall, where the damp is.",
-                              L"Creepers: hanging from the ceiling, and over the edges of ledges. They sway, and part as you walk through.",
+                              L"Creepers: curtains of ivy down the walls from the ceiling, and over the edges of ledges. They sway, and part as you walk through.",
                               L"Grass: tufts through the floor, and on the tops of ledges.",
                               L"Floor moss: flat patches on the floor and on ledges.",
                               L"Overgrown: all of it at once, ivy and moss on the walls, creepers, grass and moss."};

@@ -35,14 +35,17 @@ void author(AuthoredMapData& m){
  // A ledge (a low wall, 1.2 m) with strands over its north lip.
  m.structures.push_back({15,6,19,6.5f,0,1.2f,false,3});
  for(float x:{15.6f,16.6f,17.6f}){const auto& s=size[ivy_strand];const float k=.5f;piece(m,ivy_strand,k,x,6.f-(s[1]*k*.5f+.015f),1.24f-s[2]*k,kPi);}
- // A curtain of creepers across the player's way north (x 7-9, y 7), hanging from the ceiling to 1.3 m.
- for(int i=0;i<3;++i){const auto& s=size[growth_ivy_creeper];const float k=(Ceiling-1.3f)/s[2];piece(m,growth_ivy_creeper,k,7.2f+.8f*float(i),7,Ceiling-s[2]*k,.7f*float(i));}
+ // A beam across the player's way north (x 6-10, y 6.85-7.15, its underside at 2.9 m) with ivy draping from
+ // its south lip to 1.3 m above the floor: a curtain of strands and a single strand either side of it.
+ m.structures.push_back({6,6.85f,10,7.15f,2.9f,Ceiling,false,3});
+ auto drape=[&](int model,float x){const auto& s=size[model];const float k=(2.92f-1.3f)/s[2];piece(m,model,k,x,6.85f-(s[1]*k*.5f+.015f),2.92f-s[2]*k,kPi);};
+ drape(growth_ivy_curtain,8.f);drape(growth_ivy_single,6.6f);drape(growth_ivy_single,9.4f);
  // Grass where the player walks.
  for(int i=0;i<6;++i)piece(m,grass_l,.8f,6.5f+.6f*float(i),8.6f,0,1.3f*float(i));
  // A lamp over the creepers.
  WorldLight lamp;lamp.position={8,6};lamp.z=Ceiling-.1f;lamp.intensity=1.2f;lamp.range=9;m.lights.push_back(lamp);}
 std::shared_ptr<CustomCampaign> room(){auto m=regression::room();author(*m);return regression::campaign(m);}
-bool hangs(int model){return model==model::growth_hanging_vine||model==model::ivy_strand||model==model::growth_ivy_creeper;}
+bool hangs(int model){return model==model::growth_hanging_vine||model==model::ivy_strand||model==model::growth_ivy_creeper||model==model::growth_ivy_curtain||model==model::growth_ivy_single;}
 struct Run {int slot=-1,fixture=-1;float height=1,pushTip=0,leftAt=-1,backAt=-1,shotAt=-1,shotTip=0,shotBack=-1;double drift=-1,push=-1;bool inside=false;};
 std::map<const Scene*,Run>& runs(){static std::map<const Scene*,Run> r;return r;}
 constexpr int WalkFrom=30,ShootAt=400;
@@ -57,21 +60,21 @@ const bool tube=add({
  .friends={"plants"},.fixtures={"growth"},
  .author=[](Scene&,AuthoredMapData& m){author(m);},
  .setup=[](Scene& s){auto& r=runs()[&s];r=Run{};const World& w=s.g().world();
-  for(size_t i=0;i<w.fixtures().size();++i)if(w.fixtures()[i].model==model::growth_ivy_creeper&&std::abs(w.fixtures()[i].position.x-8.f)<.1f){r.fixture=int(i);r.height=w.fixtures()[i].height;}},
+  for(size_t i=0;i<w.fixtures().size();++i)if(w.fixtures()[i].model==model::growth_ivy_curtain&&std::abs(w.fixtures()[i].position.x-8.f)<.1f){r.fixture=int(i);r.height=w.fixtures()[i].height;}},
  .step=[](Scene& s,float){auto& r=runs()[&s];Game& g=s.g();
   // The player walks north from y 4 through the creeper curtain and the grass, then turns and shoots a creeper.
   if(s.frame>=WalkFrom&&s.frame<ShootAt){const float t=std::min(1.f,float(s.frame-WalkFrom)/150.f);LabAccess::setCamera(g,{8.f,4.f+t*5.f},0,kPi*.5f,0);}
-  if(s.frame==ShootAt){LabAccess::setCamera(g,{6.f,4.6f},0,std::atan2(7.f-4.6f,8.f-6.f),0);ShotHit hit{};LabAccess::fireAt(g,{8.f,7.f,2.2f},&hit);r.shotAt=s.time;}},
+  if(s.frame==ShootAt){LabAccess::setCamera(g,{6.f,4.6f},0,std::atan2(6.72f-4.6f,8.f-6.f),0);ShotHit hit{};LabAccess::fireAt(g,{8.f,6.72f,2.2f},&hit);r.shotAt=s.time;}},
  .capture=[](Scene& s,const Frame&){auto& r=runs()[&s];if(r.fixture<0)return;auto& plants=LabAccess::plants(*s.renderer);Game& g=s.g();
   if(r.slot<0)r.slot=plants.slotOf(g.level(),r.fixture);if(r.slot<0)return;
   const Point3 tip=plants.tip(r.slot);const float bend=std::hypot(tip.x,tip.y);const Player& p=g.player();
-  const bool inside=s.frame>=WalkFrom&&std::abs(p.pos.y-7.f)<.45f;if(inside)r.pushTip=std::max(r.pushTip,bend);
+  const bool inside=s.frame>=WalkFrom&&std::abs(p.pos.y-6.7f)<.5f;if(inside)r.pushTip=std::max(r.pushTip,bend);
   if(r.inside&&!inside&&r.leftAt<0)r.leftAt=s.time;r.inside=inside;
   if(r.leftAt>=0&&r.backAt<0&&s.frame<ShootAt&&bend<.01f&&!plants.awake(r.slot))r.backAt=s.time;
   if(r.shotAt>=0){if(s.time-r.shotAt<.5f)r.shotTip=std::max(r.shotTip,bend);if(r.shotBack<0&&s.time-r.shotAt>.05f&&bend<.01f&&!plants.awake(r.slot))r.shotBack=s.time;}
   // From the start: the creepers up close, held still and drifting (no wind indoors).
   if(s.frame==WalkFrom-5)r.drift=moving(s,"creepers held still","creepers drifting");
-  if(s.frame==WalkFrom+95)r.push=moving(s,"walked through (held)","walked through");
+  if(s.frame==WalkFrom+70)r.push=moving(s,"walked through (held)","walked through");
   if(s.frame==ShootAt+3)s.shoot("shot");},
  .metrics=[](Scene& s,Report& rep){auto& r=runs()[&s];
   {Game g(room());const World& w=g.world();int ivy=0,hung=0,grass=0,solid=0;

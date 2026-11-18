@@ -575,6 +575,7 @@ def build():
 
     groups = {t: [] for t, _ in SECTIONS}
     for sl, name, w, d, h, yaw in allm:
+        if name.startswith('growth_'): continue      # the Growth brush's pieces stand in the Showcase Atrium instead
         groups[next(t for t, test in SECTIONS if test(name, sl))].append((sl, name, w, d, h, yaw))
     palette = [0xc8a050, 0x60a0d0, 0xd06060, 0x60c0a0, 0xd0b040, 0xa08060, 0x8080c0, 0xc07040, 0x70b050]
     for gi, (title, _) in enumerate(SECTIONS):
@@ -1132,7 +1133,9 @@ def atrium(s, slot, catalogue):
     breach's, grass comes up through the floor where the light falls: the Campaign Builder's Growth
     brush's pieces, placed the way it places them (on a wall's face, turned out; hanging from a top)."""
     import random
-    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.4)
+    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.34)
+    # Its own air: a warm green-gold haze the lamps' shafts show in (MAP hazeR|G|B|density).
+    m['haze'] = (.74, .64, .36, .011)
     i = m['index']
     m['lights'] = False
     s.format2 = True                                                  # GLAZING and BREACH take named fields
@@ -1161,12 +1164,15 @@ def atrium(s, slot, catalogue):
     for x, y in ((10, 10), (14, 10)):                                 # two columns holding the roof
         s.struct(m, x - .3, y - .3, x + .3, y + .3, 0, 6, 42)
     # ---- Light: warm and dim in the hall, the court bright as day, the shop cold and low ----
-    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.8, 14, 3600), (12, 12.5, 5.85, 1.7, 14, 3600), (12, 4.5, 5.85, 1.5, 13, 3800),
-                             (4.2, 3, 3.15, .7, 7, 3200), (20.6, 3.5, 5.85, 2.8, 14, 5600), (20.6, 11, 5.85, 2.4, 14, 5600),
-                             (20.2, 6.8, 2.9, 1.8, 10, 5200), (7, 19.5, 5.85, .8, 11, 4300), (16, 19.5, 5.85, .7, 11, 4300)):
+    # The hall dim and warm; the court behind the breach and the shop behind the glass bright as low sun, so the
+    # light pours in through the hole and the panes in shafts through the haze.
+    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.5, 13, 3200), (12, 12.5, 5.85, 1.4, 13, 3200), (12, 4.5, 5.85, 1.3, 12, 3300),
+                             (4.2, 3, 3.15, .8, 7, 3000), (21.2, 3.2, 5.85, 5.0, 16, 4200), (21.2, 11.4, 5.85, 4.5, 16, 4200),
+                             (21.8, 6.9, 3.4, 6.0, 17, 3800), (8.5, 22.0, 4.6, 4.2, 14, 3900), (15.5, 22.0, 4.6, 3.8, 14, 3900)):
         s.rec(m, 'LIGHT', i, x, y, z, 0, 0, k, r, t)
     # Dust hanging in the court's light where it comes through the hole.
     s.rec(m, 'EMITTER', i, 18.4, 6.8, .1, 1.4, 1.8, 3.2, .0833, .013, .004, 48, 4, .9)
+    s.rec(m, 'EMITTER', i, 10.0, 14.6, .1, 3.4, 1.2, 3.0, .0833, .013, .004, 40, 4, .7)   # and in front of the glass
     # ---- What was left: a bench, a wheelchair, shelving in the shop, rubble ----
     def model(name, x, y, base=0, k=1.0, yaw=0.0, solid=1):
         w, d, h = catalogue[name]
@@ -1193,6 +1199,11 @@ def atrium(s, slot, catalogue):
     def hang(name, k, at, along, nx, ny, top):
         """Hanging down a face from `top` (a ledge's lip, a wall's top)."""
         on_face(name, k, at, along, nx, ny, top - catalogue[name][2] * k)
+    def drape(length, at, along, nx, ny, top, single=False):
+        """Ivy draping `length` metres down a face from its lip at `top`, as the Growth brush drapes it: a
+        curtain of strands of uneven length (the longest `length`), or a single strand."""
+        name = 'growth_ivy_single' if single else 'growth_ivy_curtain'
+        hang(name, length / catalogue[name][2], at, along, nx, ny, top + .02)
     ceiling = 6.0
     # Ivy: on the north wall over and under the balcony, draping from the top.
     on_face('ivy_wall_a', 1.15, 1, 3.0, 0, 1, 3.62)
@@ -1210,16 +1221,17 @@ def atrium(s, slot, catalogue):
     on_face('ivy_wall_a', 1.15, 18, 6.8, -1, 0, 3.05)
     on_face('ivy_wall_b', 1.0, 18, 11.8, -1, 0, 0)
     on_face('ivy_wall_a', .9, 18, 2.8, -1, 0, 4.2)
-    for y, k in ((5.5, .85), (6.5, 1.0), (7.4, .75), (8.2, .9)):
-        hang('growth_ivy_creeper', k, 18, y, -1, 0, 3.12)
+    drape(1.7, 18, 6.9, -1, 0, 3.1)                                   # over the breach's lip
+    drape(1.1, 18, 5.3, -1, 0, 3.1, True)
+    drape(.8, 18, 8.4, -1, 0, 3.1, True)
     # The storefront's head: ivy over it and strands hanging in front of the glass and the doorway.
     on_face('ivy_wall_a', 1.1, 16, 6.2, 0, -1, 3.25)
     on_face('ivy_wall_b', 1.2, 16, 10.0, 0, -1, 3.2)
     on_face('ivy_wall_a', 1.0, 16, 14.2, 0, -1, 3.4)
     on_face('ivy_wall_b', 1.0, 16, 2.4, 0, -1, 0)
     on_face('creeper', .85, 16, 17.0, 0, -1, 0)
-    for x, k in ((4.9, .8), (7.3, .95), (8.95, .85), (11.1, .7), (12.9, .9), (15.0, .8)):
-        hang('growth_ivy_creeper', k, 16, x, 0, -1, 3.12)
+    for x, length, single in ((5.6, 1.3, False), (8.95, 1.5, True), (12.4, 1.0, False), (15.1, .7, True), (10.6, .55, True)):
+        drape(length, 16, x, 0, -1, 3.1, single)                     # in front of the glass and the doorway
     # The columns: vines up two faces, moss at the foot.
     for cx, cy in ((10, 10), (14, 10)):
         on_face('growth_vine_sheet', .44, cy - .3, cx, 0, -1, .1)
@@ -1237,18 +1249,20 @@ def atrium(s, slot, catalogue):
     # The shop: ivy on its back wall, strands inside the storefront's head.
     on_face('ivy_wall_a', 1.15, 23, 5.4, 0, -1, 0)
     on_face('ivy_wall_b', 1.1, 23, 17.4, 0, -1, .9)
-    for x, k in ((6.0, .9), (13.6, .8)):
-        hang('growth_ivy_creeper', k, 17, x, 0, 1, 3.12)
-    # Creepers over the balcony's lip, and from the ceiling where the light comes in and in the shop.
-    for x, k in ((3.6, .8), (4.5, .95), (5.6, .75), (6.6, .9)):
-        hang('growth_ivy_creeper', k, 5, x, 0, 1, 3.64)
-    for y, k in ((1.8, .85), (2.9, .7), (4.1, .9)):
-        hang('growth_ivy_creeper', k, 7, y, 1, 0, 3.64)
-    for x, y, k in ((14.6, 5.4, 1.5), (15.9, 7.6, 1.75), (13.2, 8.4, 1.3), (16.6, 4.2, 1.2), (11.2, 5.8, 1.4), (8.4, 6.6, 1.25),
-                    (20.4, 7.4, 1.6), (21.2, 12.6, 1.4), (9.5, 19.4, 1.5), (16.2, 20.6, 1.6), (4.6, 20.2, 1.3)):
-        name = 'growth_hanging_vine' if (x, y) in ((21.2, 12.6), (16.2, 20.6)) else 'growth_ivy_creeper'
-        h = catalogue[name][2] * k
-        piece(name, k, x, y, ceiling - h, rng.uniform(-PI, PI))
+    drape(1.2, 17, 6.0, 0, 1, 3.1)
+    drape(.9, 17, 13.6, 0, 1, 3.1, True)
+    # Ivy over the balcony's lip, and curtains of it down the walls from the ceiling: always from an edge.
+    drape(1.9, 5, 5.0, 0, 1, 3.6)
+    drape(1.2, 5, 3.7, 0, 1, 3.6, True)
+    drape(.7, 5, 6.6, 0, 1, 3.6, True)
+    drape(1.5, 7, 2.8, 1, 0, 3.6)
+    drape(2.2, 7, 4.4, 1, 0, 3.6, True)
+    for length, at, along, nx, ny, single in ((2.4, 1, 9.6, 0, 1, False), (1.6, 1, 15.4, 0, 1, False), (1.8, 1, 14.6, 1, 0, False),
+                                              (2.0, 18, 2.6, -1, 0, False), (2.6, 18, 12.6, -1, 0, False), (2.2, 16, 2.2, 0, -1, False),
+                                              (1.4, 16, 17.0, 0, -1, True), (2.8, 23, 4.2, -1, 0, False), (2.2, 23, 11.0, -1, 0, False),
+                                              (1.6, 19, 8.6, 1, 0, True), (2.0, 23, 9.5, 0, -1, False), (1.6, 23, 16.0, 0, -1, False),
+                                              (1.1, 1, 12.4, 0, 1, True), (2.9, 1, 6.6, 1, 0, True)):
+        drape(length, at, along, nx, ny, ceiling, single)
     # Grass up through the floor: thickest where the light falls through the hole, along the walls,
     # in a crack across the hall, all over the court and the shop, and on the balcony.
     blocked = [(1.2, 5, 3.2, 11), (9.6, 9.6, 10.4, 10.4), (13.6, 9.6, 14.4, 10.4), (12.0, 7.2, 13.2, 8.0), (4.8, 12.6, 6.0, 13.8),
@@ -1282,7 +1296,8 @@ def atrium(s, slot, catalogue):
         s.index.append({'map': i, 'section': 'SHOWCASE', 'x': x, 'y': y, 'title': title, 'name': w})
     s.zone(m, 4, 13.6, 16, 16, 'GLAZING / storefront: c d t f w m e x panes')
     s.zone(m, 15, 4, 18, 9.5, 'BREACH / ragged, rebar, rubble; light through it')
-    s.zone(m, 19, 1, 23, 16, 'LIGHT COURT / 5600 K lamps, dust (EMITTER 4)')
+    # The court's air is thicker (a ZONE haze): its light reads as a dusty glare through the hole.
+    s.rec(m, 'ZONE', i, 19, 1, 23, 16, 'LIGHT COURT / warm lamps, dust (EMITTER 4)', '', '', '', .86, .74, .44, .014)
     s.zone(m, 1, 1, 7, 5, 'GROWTH / grass and creepers on a ledge', bottom=3.3, top=6)
     s.zone(m, 1, 17, 23, 23, 'SHOP / behind the storefront')
     return m

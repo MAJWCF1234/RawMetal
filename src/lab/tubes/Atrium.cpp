@@ -27,7 +27,7 @@ namespace {
 std::string fixed(double v,int d=2){char b[32];std::snprintf(b,sizeof b,"%.*f",d,v);return b;}
 std::shared_ptr<const CustomCampaign> starter(){static auto c=loadCustomCampaignFile(std::filesystem::path(labRoot())/"custom maps/Starter Map.rmc");return c;}
 int atriumLevel(){const auto c=starter();if(!c)return -1;for(size_t i=0;i<c->maps.size();++i)if(c->maps[i]->name.find("Showcase Atrium")!=std::string::npos)return int(i);return -1;}
-bool hangs(int model){return model==model::growth_hanging_vine||model==model::ivy_strand||model==model::growth_ivy_creeper;}
+bool hangs(int model){return model==model::growth_hanging_vine||model==model::ivy_strand||model==model::growth_ivy_creeper||model==model::growth_ivy_curtain||model==model::growth_ivy_single;}
 bool growth(int model){using namespace model;return hangs(model)||model==creeper||model==ivy_wall_a||model==ivy_wall_b||model==growth_vine_sheet||model==growth_moss_wall||model==growth_moss_floor||model==grass_l||model==grass_a||model==grass_b||model==grass_c||model==tall_grass_m;}
 Point3 centre(const World& w,int i){const auto& b=w.breakables()[size_t(i)];return {(b.x1+b.x2)*.5f,(b.y1+b.y2)*.5f,(b.bottom+b.top)*.5f};}
 int marked(const World& w,int except){int n=0;for(int i=0;i<int(w.breakables().size());++i)if(i!=except&&(!w.breakableIntact(i)||(w.paneGlass(i)&&w.breakables()[size_t(i)].cracks==0&&!w.paneGlass(i)->hits.empty())))++n;return n;}
@@ -45,7 +45,7 @@ const bool tube=add({
  .friends={"storefront","breach","growth"},.fixtures={"atrium"},
  .setup=[](Scene& s){auto& r=runs()[&s];r=Run{};const World& w=s.g().world();
   // The creeper over the breach's lip the walk goes through: the strand nearest (17.9, 6.6).
-  float best=1e9f;for(size_t i=0;i<w.fixtures().size();++i){const auto& f=w.fixtures()[i];if(f.model!=model::growth_ivy_creeper)continue;const float d=std::hypot(f.position.x-17.5f,f.position.y-6.6f);
+  float best=1e9f;for(size_t i=0;i<w.fixtures().size();++i){const auto& f=w.fixtures()[i];if(f.model!=model::growth_ivy_curtain)continue;const float d=std::hypot(f.position.x-17.9f,f.position.y-6.9f);
    if(d<best){best=d;r.strand=int(i);r.height=f.height;}}
   r.pane=target(w);},
  .step=[](Scene& s,float){auto& r=runs()[&s];Game& g=s.g();

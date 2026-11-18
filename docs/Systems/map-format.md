@@ -88,7 +88,8 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
 `BREACH|map|x1|y1|x2|y2|bottom|top` is a hole broken through a wall, its options as named fields (`shape edge sill head rebar rubble seed toward infill wall`).
 - `AuthoredMapData::breaches` keeps the record; the exporter writes it back the same way.
 - `applyOpenings` cuts it after the glazings, with the same cut (`cutWall`): the hole's outline as boxes (one for `rect`, slices of a half circle for `arch`, ragged strips for `ragged`), the wall's tiles and wall boxes cut to it, the rest of the cut tiles built back round it.
-- The broken edge is non-solid `STRUCT` chips (concrete 15 or brick 31), rebar (material 8), and rubble `FIXTURE`s, all from `seed`, so a map plays the same every time.
+- The cut is strips 4-10 cm wide; their wall pieces stay as invisible collision proxies, and are drawn as engine-only shapes (`ShapeLip`, `ShapeFoot`) whose edge slopes from one outline corner to the next, so the hole reads as one broken line, not steps.
+- The broken edge is non-solid chunks of core (`ShapeShard`: a box with each corner pulled in at random, concrete 15 or brick 31), rebar ends on the slant (`ShapeRod`, material 8), and rubble `FIXTURE`s, all from `seed`, so a map plays the same every time.
 - The hole is a real gap: the player, the creatures' walk test (`aiWalkSegment`) and their node graph, rounds and the light-occlusion ray (`World::lightRayHit`, which the probes and shadows use) all go through it.
 - The lab tube `breach` (src/lab/tubes/Breach.cpp) checks the cut, the edge, a walk through, the creatures' walk and route, rounds and the lamp's light through it, and a save.
 - The Builder's Breach tool writes it from a drag along a wall (# tiles or a wall `STRUCT`) and refuses one on open floor.
@@ -96,7 +97,7 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
 ## Growth
 The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothing in the format is new:
 - ivy (`ivy_wall_a`, `ivy_wall_b`, `growth_vine_sheet`) and wall moss (`growth_moss_wall`) flat on a wall's face, a centimetre off it, `yaw` turning their face out;
-- creepers (`growth_ivy_creeper`, `growth_hanging_vine`, `ivy_strand`) hanging from a ceiling or over a ledge's lip, their base their length below it;
+- drapes of ivy (`growth_ivy_curtain`: seven strands of uneven length side by side; `growth_ivy_single`: one strand) hanging 0.5-3 m down a wall from the ceiling's edge or over a ledge's lip, flat on the face, their base their length below the lip (never from mid-air);
 - grass (the Nature brush's tufts) and `growth_moss_floor` on a floor or a ledge's top.
 - Creepers are hanging plants (`SoftwareRenderer::hangingPlant`, `PlantBones::add(..., hanging)`): rooted at their top, they drift in an indoor draft and part round whoever walks through them. The lab tube `growth` (src/lab/tubes/Growth.cpp) checks it.
 - The brush's density, size and seed are its own settings, not map data; a typed seed repeats a stroke exactly.

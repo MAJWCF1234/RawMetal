@@ -108,23 +108,26 @@
     report << "PASS: Wall moss: " << moss.size() << " patches low on the wall's other face, turned out from it\n" << std::flush;
     // ---- Creepers from the ceiling, and over the planter's edge ----
     box(growthKindList, GrowthKindList, GrowCreepers);
-    click(6.f, 6.f);
-    auto hung = pieces([](const Piece &p) { return p.model == growth_hanging_vine || p.model == ivy_strand || p.model == growth_ivy_creeper; });
+    click(6.f, 10.8f); // by the wall: curtains down it from the ceiling
+    click(6.f, 5.6f);  // by the planter: curtains over its lip
+    auto hung = pieces([](const Piece &p) { return p.model == growth_hanging_vine || p.model == ivy_strand || p.model == growth_ivy_creeper || p.model == growth_ivy_curtain || p.model == growth_ivy_single; });
     int fromCeiling = 0, overLedge = 0;
     for (const auto &p : hung) {
-      fromCeiling += std::abs(p.base + p.h - ceiling) < .02f;
-      overLedge += std::abs(p.base + p.h - 1.24f) < .02f && p.model == ivy_strand;
+      fromCeiling += std::abs(p.base + p.h - ceiling - .02f) < .02f && std::abs(p.y + p.d * .5f + .015f - 12.f) < .03f;
+      overLedge += std::abs(p.base + p.h - 1.22f) < .02f;
+      require(p.model == growth_ivy_curtain || p.model == growth_ivy_single, "a creeper is not a drape of ivy: model " + std::to_string(p.model));
+      require(p.h >= .45f && p.h <= 3.05f, "a creeper is " + shortNumber(p.h) + " m long");
       require(p.base > floor + .05f, "a creeper reaches the floor");
     }
-    require(fromCeiling >= 2 && overLedge >= 1, "creepers: " + std::to_string(fromCeiling) + " from the ceiling, " + std::to_string(overLedge) + " over the planter's lip");
-    report << "PASS: Creepers: " << fromCeiling << " hang from the ceiling (tops at " << shortNumber(ceiling) << " m) and " << overLedge
-           << " over the planter's lip; none reaches the floor\n" << std::flush;
+    require(fromCeiling >= 2 && overLedge >= 1, "creepers: " + std::to_string(fromCeiling) + " down the wall from the ceiling, " + std::to_string(overLedge) + " over the planter's lip");
+    report << "PASS: Creepers: " << fromCeiling << " drape down the wall from the ceiling (tops at " << shortNumber(ceiling) << " m) and " << overLedge
+           << " over the planter's lip, 0.5-3 m long; none reaches the floor or hangs from mid-air\n" << std::flush;
     // ---- Grass: on the floor, never in the wall, and on the planter's top ----
     box(growthKindList, GrowthKindList, GrowGrass);
     box(growthDensityList, GrowthDensityList, 2);
     click(18.f, 12.f);
     click(6.f, 4.3f);
-    auto grass = pieces([](const Piece &p) { return p.model != growth_hanging_vine && p.model != ivy_strand && p.model != growth_ivy_creeper && p.model != growth_moss_wall && p.model != ivy_wall_a && p.model != ivy_wall_b && p.model != growth_vine_sheet && p.model != creeper; });
+    auto grass = pieces([](const Piece &p) { return p.model != growth_hanging_vine && p.model != ivy_strand && p.model != growth_ivy_creeper && p.model != growth_ivy_curtain && p.model != growth_ivy_single && p.model != growth_moss_wall && p.model != ivy_wall_a && p.model != ivy_wall_b && p.model != growth_vine_sheet && p.model != creeper; });
     int onFloor = 0, onLedge = 0;
     for (const auto &p : grass) {
       require(!(p.y > 12.f && p.y < 13.f), "grass grew in the wall");

@@ -1396,3 +1396,7 @@
 2865 RCDATA "assets/library/growth_ivy_creeper.obj"
 2866 RCDATA "assets/library/growth_ivy_creeper_ivy.png"
 2867 RCDATA "assets/library/growth_ivy_creeper_ivy_x.png"
+2868 RCDATA "assets/library/growth_ivy_curtain.obj"
+2869 RCDATA "assets/library/growth_ivy_curtain_ivy.png"
+2870 RCDATA "assets/library/growth_ivy_single.obj"
+2871 RCDATA "assets/library/growth_ivy_single_ivy.png"
