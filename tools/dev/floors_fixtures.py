@@ -30,6 +30,17 @@ def rows(m, layer, tiles):
     return [rec('ROW', m, layer, y, ''.join(tiles.get((x, y), '.') for x in range(24))) for y in range(24)]
 
 
+def sloping(t, ox, oy, w, d, want):
+    """The footprint whose ground falls closest to `want` metres (a walkable slope)."""
+    best, spot, got = 1e9, (8, 8), 0
+    for y in range(3, 24 - d - 5):
+        for x in range(5, 24 - w - 4):
+            g = [t.ground(ox + x + i + .5, oy + y + j + .5) for i in range(w) for j in range(d)]
+            if abs(max(g) - min(g) - want) < best:
+                best, spot, got = abs(max(g) - min(g) - want), (x, y), max(g) - min(g)
+    return spot, got
+
+
 def steepest(t, ox, oy, w, d):
     best, spot = -1, (8, 8)
     for y in range(3, 24 - d - 5):
@@ -88,8 +99,7 @@ def main():
         ox, oy = 24 * i, 0
         w, d = (12, 4) if mode == 'stepped' else (8, 6)
         (x0, y0), spread = steepest(t, ox, oy, w, d)
-        m = [rec('MAP', i, 'Land ' + name, ox, oy, x0 - 2, y0 + d / 2, 0, 1, 2.8, .2, 'brutal_wasteland', 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0,
-                 .3, .35, .39, .02), rec('LAYER', i, 0, 'Ground', 0, 0)]
+        m = [rec('MAP', i, 'Land ' + name, ox, oy, x0 - 2, y0 + d / 2, 0, 1, 2.8, .2, 'brutal_wasteland', 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0), rec('LAYER', i, 0, 'Ground', 0, 0)]
         walls = {}
         if mode not in ('stilts', 'stepped'):
             walls = {(x, y): '#' for x in range(x0, x0 + w) for y in range(y0, y0 + d) if x in (x0, x0 + w - 1) or y in (y0, y0 + d - 1)}
@@ -122,26 +132,35 @@ def main():
         gy = t.height(ox + cx, oy + cy + 3) - t.height(ox + cx, oy + cy - 3)
         n = math.hypot(gx, gy) or 1
         ux, uy = -gx / n, -gy / n
-        ex = min(23, max(1, cx + ux * 9 - uy * 3.5))
-        ey = min(23, max(1, cy + uy * 9 + ux * 3.5))
+        ex = min(23, max(1, cx + ux * 10 - uy * 5))
+        ey = min(23, max(1, cy + uy * 10 + ux * 5))
         yaw = math.degrees(math.atan2(cy - ey, cx - ex))
         ground = max(t.ground(ox + ex, oy + ey), t.ground(ox + cx, oy + cy))
-        labs['floors-land-' + name] = dict(map=i, camera=(ex, ey, ground + 3.5, yaw, -18), shot='land-' + name,
+        if mode == 'stilts':
+            # Low, under the deck's high side looking across its posts.
+            ex, ey = min(23, max(1, cx + ux * 6)), min(23, max(1, cy + uy * 6))
+            yaw = math.degrees(math.atan2(cy - ey, cx - ex))
+            labs['floors-land-' + name] = dict(map=i, camera=(ex, ey, -999, yaw, 4), shot='land-' + name, room=None)
+            continue
+        labs['floors-land-' + name] = dict(map=i, camera=(ex, ey, ground + 4.5, yaw, -22), shot='land-' + name,
                                           room=(x0 + 1, y0 + 1, x0 + w - 1, y0 + d - 1) if mode in ('pad', 'foundation', None) else None,
                                           level=mode in ('pad', 'foundation'), sealed=mode in ('pad', 'foundation'))
     # ---- Map 6: paths and patios on the land: a path that follows the slope (drape) with a
     # stone edge, and a patio made level (a pad) with a brick edge.
     i = 6; ox, oy = 24 * i, 0
-    (x0, y0), spread = steepest(t, ox, oy, 3, 12)
-    m = [rec('MAP', i, 'Land paths', ox, oy, 2, 2, 0, 1, 2.8, .2, 'brutal_wasteland', 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, .3, .35, .39, .02),
+    (x0, y0), spread = sloping(t, ox, oy, 3, 12, 2)
+    m = [rec('MAP', i, 'Land paths', ox, oy, 2, 2, 0, 1, 2.8, .2, 'brutal_wasteland', 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0),
          rec('LAYER', i, 0, 'Ground', 0, 0)] + rows(i, 0, {})
     m.append(rec('STRUCT', i, x0, y0, x0 + 2, y0 + 12, 0, .04, 0, 31) + '|drape=1|trim=33|trimwidth=0.2')
     px = x0 + 4 if x0 + 10 < 24 else x0 - 7
     m.append(rec('STRUCT', i, px, y0 + 3, px + 5, y0 + 8, 0, .15, 0, 50) + '|footing=pad|cap=31|capwidth=0.2')
     out += ['', '# ==== Map 6: paths and patios (ground spread %.1f m) ====' % spread] + m
     cx, cy = x0 + 1, y0 + 6
-    ex, ey = min(23, max(1, cx + 6)), min(23, max(1, y0 + 14))
-    labs['floors-land-paths'] = dict(map=i, camera=(ex, ey, max(t.ground(ox + ex, oy + ey), t.ground(ox + cx, oy + cy)) + 4, math.degrees(math.atan2(cy - ey, cx - ex)), -22),
+    # From the path's foot, up it, the patio beside.
+    lo_end = y0 + 12 if t.ground(ox + x0 + 1, oy + y0 + 12) < t.ground(ox + x0 + 1, oy + y0) else y0
+    ex, ey = x0 + 1 + (2.5 if px > x0 else -2.5), min(23, max(1, lo_end + (3 if lo_end > y0 else -3)))
+    cy = y0 + 6
+    labs['floors-land-paths'] = dict(map=i, camera=(ex, ey, t.ground(ox + ex, oy + ey) + 2.2, math.degrees(math.atan2(cy - ey, x0 + 1 - ex)), -14),
                                      shot='land-paths', room=None)
     out.append('--- CUSTOM_CAMPAIGN_DATA_END ---')
     with open(os.path.join(OUT, 'floors.rmc'), 'w', encoding='ascii', newline='\r\n') as fh:

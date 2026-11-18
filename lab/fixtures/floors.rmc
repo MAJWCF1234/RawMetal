@@ -76,7 +76,7 @@ STRUCT|0|13|7|17|11|0|0.02|0|23
 STRUCT|0|18|7|22|11|0|0.05|0|46
 
 # ==== Map 1: the land, old (ground spread 3.0 m) ====
-MAP|1|Land old|24|0|7|6|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0|0.3|0.35|0.39|0.02
+MAP|1|Land old|24|0|7|6|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0
 LAYER|1|0|Ground|0|0
 ROW|1|0|0|........................
 ROW|1|0|1|........................
@@ -129,7 +129,7 @@ STRUCT|1|15|7|16|8|0|0.02|0|50
 DOOR|1|12|14|3.5|0|0|0|1|0|-1||||1|||||||0
 
 # ==== Map 2: the land, pad (ground spread 2.0 m) ====
-MAP|2|Land pad|48|0|8|6|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0|0.3|0.35|0.39|0.02
+MAP|2|Land pad|48|0|8|6|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0
 LAYER|2|0|Ground|0|0
 ROW|2|0|0|........................
 ROW|2|0|1|........................
@@ -159,7 +159,7 @@ STRUCT|2|10|3|18|9|0|0.1|0|50|footing=pad|snap=mean
 DOOR|2|13|15|3.5|0|0|0|1|0|-1||||1|||||||0
 
 # ==== Map 3: the land, foundation (ground spread 4.0 m) ====
-MAP|3|Land foundation|72|0|3|9|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0|0.3|0.35|0.39|0.02
+MAP|3|Land foundation|72|0|3|9|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0
 LAYER|3|0|Ground|0|0
 ROW|3|0|0|........................
 ROW|3|0|1|........................
@@ -189,7 +189,7 @@ STRUCT|3|5|6|13|12|0|0.1|0|51|footing=foundation|snap=high|raise=0.3|base=31|cap
 DOOR|3|8|10|11.5|0|0|0|1|0|-1||||1|||||||0
 
 # ==== Map 4: the land, stilts (ground spread 3.0 m) ====
-MAP|4|Land stilts|96|0|3|6|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0|0.3|0.35|0.39|0.02
+MAP|4|Land stilts|96|0|3|6|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0
 LAYER|4|0|Ground|0|0
 ROW|4|0|0|........................
 ROW|4|0|1|........................
@@ -218,7 +218,7 @@ ROW|4|0|23|........................
 STRUCT|4|5|3|13|9|0|0.12|0|51|footing=stilts|snap=high|raise=0.4|base=32
 
 # ==== Map 5: the land, stepped (ground spread 4.0 m) ====
-MAP|5|Land stepped|120|0|3|5|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0|0.3|0.35|0.39|0.02
+MAP|5|Land stepped|120|0|3|5|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0
 LAYER|5|0|Ground|0|0
 ROW|5|0|0|........................
 ROW|5|0|1|........................
@@ -246,8 +246,8 @@ ROW|5|0|22|........................
 ROW|5|0|23|........................
 STRUCT|5|5|3|17|7|0|0.1|0|42|footing=stepped|snap=mean|terrace=3|base=42
 
-# ==== Map 6: paths and patios (ground spread 5.0 m) ====
-MAP|6|Land paths|144|0|2|2|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0|0.3|0.35|0.39|0.02
+# ==== Map 6: paths and patios (ground spread 2.0 m) ====
+MAP|6|Land paths|144|0|2|2|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0
 LAYER|6|0|Ground|0|0
 ROW|6|0|0|........................
 ROW|6|0|1|........................
@@ -273,6 +273,6 @@ ROW|6|0|20|........................
 ROW|6|0|21|........................
 ROW|6|0|22|........................
 ROW|6|0|23|........................
-STRUCT|6|9|3|11|15|0|0.04|0|31|drape=1|trim=33|trimwidth=0.2
-STRUCT|6|13|6|18|11|0|0.15|0|50|footing=pad|cap=31|capwidth=0.2
+STRUCT|6|5|3|7|15|0|0.04|0|31|drape=1|trim=33|trimwidth=0.2
+STRUCT|6|9|6|14|11|0|0.15|0|50|footing=pad|cap=31|capwidth=0.2
 --- CUSTOM_CAMPAIGN_DATA_END ---

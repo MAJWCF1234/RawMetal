@@ -1,7 +1,7 @@
 # floors-land-stepped (tools/dev/floors_fixtures.py). Tube: floors.
 world custom "lab/fixtures/floors.rmc"
 map 5
-camera 10.388 14.637 7 -86.364 -44
+camera 9.26 16.044 8 -81.049 -53.8
 size 1280 720
 frames 30
 floors-shot land-stepped
