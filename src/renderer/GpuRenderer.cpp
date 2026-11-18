@@ -498,10 +498,12 @@ struct GpuRenderer::Impl {
 
  int presentScaleCached=0;
  const void* lastPixels=nullptr;uint64_t lastGeneration=0,lastMaterial=0;uint32_t lastSort=0;
+ // Materials made so far plus places kept (prepare with reserveSlot); kept places hold until a clear.
+ uint32_t sortCount=0;bool keptSlots=true;
  void clearMaterials(){
   vkDeviceWaitIdle(device);
   for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
-  materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;
+  materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;sortCount=0;keptSlots=false;
   for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}staticCaches.clear();std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));shadowAtlasFresh=true;
   // Replayed actor batches carry material keys; stale keys would throw at draw.
   actorEmitCaches.clear();actorEmitHits=0;
@@ -1067,23 +1069,30 @@ struct GpuRenderer::Impl {
  }
  uint64_t material(const SoftwareRenderer::Texture&t){
   const int scale=materialScale();const uint64_t key=materialKey(t,scale);if(materials.find(key)!=materials.end())return key;
-  return createMaterial(t,key,materialPayload(t,scale));
+  return createMaterial(t,key,materialPayload(t,scale),sortSlot(t));
  }
+ uint32_t sortSlot(const SoftwareRenderer::Texture&t){return t.sortSlot&&keptSlots?t.sortSlot:++sortCount;}
  // Many at once: payloads on every core a batch at a time (bounded memory), each made in
  // the order given, so the materials, their sort keys and uploads are as one by one.
  void prepareMaterials(const std::vector<const SoftwareRenderer::Texture*>& textures){
-  const int scale=materialScale();std::vector<const SoftwareRenderer::Texture*> todo;std::vector<uint64_t> keys;std::unordered_set<uint64_t> seen;
-  for(const auto*t:textures){const auto key=materialKey(*t,scale);if(materials.count(key)||!seen.insert(key).second)continue;todo.push_back(t);keys.push_back(key);}
+  std::vector<GpuRenderer::PrepareItem> items;items.reserve(textures.size());for(const auto*t:textures)items.push_back({t,nullptr});prepareMaterials(items);
+ }
+ void prepareMaterials(const std::vector<GpuRenderer::PrepareItem>& items){
+  const int scale=materialScale();std::vector<const SoftwareRenderer::Texture*> todo;std::vector<uint64_t> keys;std::vector<uint32_t> slots;std::unordered_set<uint64_t> seen;
+  for(const auto&item:items){
+   if(!item.texture){if(item.reserveSlot)*item.reserveSlot=++sortCount;continue;}
+   const auto key=materialKey(*item.texture,scale);if(materials.count(key)||!seen.insert(key).second)continue;
+   todo.push_back(item.texture);keys.push_back(key);slots.push_back(sortSlot(*item.texture));}
   const unsigned threads=std::clamp(std::thread::hardware_concurrency(),1u,16u);const size_t batch=size_t(threads)*2;
   for(size_t from=0;from<todo.size();from+=batch){const size_t to=std::min(todo.size(),from+batch);
    std::vector<MaterialPayload> payloads(to-from);std::atomic<size_t> next{from};std::exception_ptr failure;std::mutex failureLock;std::vector<std::thread> workers;
    for(unsigned i=0;i<std::min<size_t>(threads,to-from);++i)workers.emplace_back([&]{for(size_t k;(k=next++)<to;)try{payloads[k-from]=materialPayload(*todo[k],scale);}catch(...){std::lock_guard hold(failureLock);if(!failure)failure=std::current_exception();}});
    for(auto&worker:workers)worker.join();if(failure)std::rethrow_exception(failure);
-   for(size_t k=from;k<to;++k)createMaterial(*todo[k],keys[k],std::move(payloads[k-from]));}
+   for(size_t k=from;k<to;++k)createMaterial(*todo[k],keys[k],std::move(payloads[k-from]),slots[k]);}
  }
- uint64_t createMaterial(const SoftwareRenderer::Texture&t,uint64_t key,MaterialPayload p){
+ uint64_t createMaterial(const SoftwareRenderer::Texture&t,uint64_t key,MaterialPayload p,uint32_t slot){
   auto&mat=materials[key];mat.additive=t.additive;mat.transparent=t.transparent;mat.liquid=t.transparent&&t.liquid;mat.soft=(t.transparent||t.additive)&&t.soft;
-  mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|uint32_t(materials.size()&0xffffffu);
+  mat.sortKey=(mat.transparent?2u:mat.additive?1u:0u)<<24|(slot&0xffffffu);
   mat.colorLevels=uint32_t(p.color.size());
   upload(mat.color,p.w,p.h,t.additive?VK_FORMAT_B8G8R8A8_UNORM:VK_FORMAT_B8G8R8A8_SRGB,std::move(p.color),4);
   if(!p.normal.empty())upload(mat.normal,p.w,p.h,VK_FORMAT_R16G16B16A16_SNORM,std::move(p.normal),8);
@@ -1451,6 +1460,7 @@ void GpuRenderer::updateDynamic(const SoftwareRenderer::Texture&texture){
 }
 void GpuRenderer::prepare(const SoftwareRenderer::Texture&texture){m->material(texture);}
 void GpuRenderer::prepare(const std::vector<const SoftwareRenderer::Texture*>& textures){m->prepareMaterials(textures);}
+void GpuRenderer::prepare(const std::vector<PrepareItem>& items){m->prepareMaterials(items);}
 void GpuRenderer::flushUploads(){m->flushUploads();}
 std::array<std::uint64_t,4> GpuRenderer::uploadStatistics()const{return m->uploadStats;}
 // The second VR eye draws the first eye's geometry again: every triangle is

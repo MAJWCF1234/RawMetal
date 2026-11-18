@@ -43,6 +43,8 @@ std::vector<Box> surfaces(const Fixture& f){std::vector<Box> out;
 const bool materials=add({
  .name="materials",.summary="physically based materials: furnace, class ranges, Fresnel bound and specular variation (anti-plastic) on fixed views",
  .fixtures={"mat-*"},
+ // The audit covers every texture: the library is otherwise decoded only as maps use it.
+ .setup=[](Scene& s){if(s.renderer)s.renderer->loadWholeLibrary();},
  .capture=[](Scene& s,const Frame& f){
   if(!s.last())return;auto& r=*s.renderer;const int w=f.width,h=f.height;
   const int layer=SoftwareRenderer::detailLayer();

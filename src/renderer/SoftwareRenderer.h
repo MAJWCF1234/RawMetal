@@ -228,6 +228,9 @@ private:
     struct Texture { int width=0, height=0; std::vector<std::uint32_t> pixels; bool clampEdges=false; std::vector<std::vector<std::uint32_t>> mips; bool additive=false; std::vector<std::vector<Point3>> normalLevels; std::vector<std::uint8_t> relief; float parallaxScale=0; float glossStrength=0; std::vector<std::uint32_t> emission; bool transparent=false; TextureGeneration generation;
         // A dado band: drawn once over its first `band` metres above the floor, `above` over the rest of the face.
         float band=0; const Texture* above=nullptr; bool liquid=false;
+        // sortSlot: the place in the GPU's material order kept for a texture decoded later than
+        // start-up (a library texture), so batches draw in the order they did when all were eager.
+        std::uint32_t sortSlot=0;
         // polish (0..1): how sharply the surface mirrors the room (reflection probes and SSR), apart
         // from its lamp highlight (glossStrength). Metal (0..1): reflects strongly face-on, tinted by
         // its own colour (post.frag). crystal: a resonance crystal's glowing body, shaded as lit
@@ -549,7 +552,11 @@ private:
     static Texture loadTexture(int id);
     // The library's textures (resource 466: "material resource" per line), each decoded and
     // finished the first time a model, the ground or a warm asks for it by name.
-    struct LibraryTexture {int resource=0;std::once_flag once;Texture texture;std::atomic<bool> ready{false};};
+    struct LibraryTexture {int resource=0;std::once_flag once;Texture texture;std::atomic<bool> ready{false};std::uint32_t sortSlot=0;};
+    // Every facility material name as start-up once put them in one map, in that map's order:
+    // the GPU's materials are made (or their slots kept) in this order.
+    std::unordered_map<std::string,char> m_facilityOrder;
+    void emplaceFacility(const std::string& name,Texture texture){m_facilityOrder.emplace(name,0);m_facilityTextures.emplace(name,std::move(texture));}
     std::unordered_map<std::string,std::unique_ptr<LibraryTexture>> m_libraryTextures;
     const Texture* findFacilityTexture(const std::string& name)const;
     static Texture libraryTexture(const std::string& material,int resource);
@@ -558,7 +565,8 @@ private:
     // Loading ahead (warmChunks): the library models, and their textures, that each map in
     // reach places; the map in play before its first frame, a streamed neighbour behind it.
     void warmChunks(const Game& game);
-    void warmModel(int model)const;
+    void warmModel(int model,std::vector<const Texture*>* textures=nullptr)const;
+    std::mutex m_warmLock;std::vector<const Texture*> m_gpuPending;
     std::vector<std::uint64_t> m_warmKeys;
     std::vector<std::future<void>> m_warmJobs;
 public:
