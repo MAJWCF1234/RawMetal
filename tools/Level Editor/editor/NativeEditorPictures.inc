@@ -1,6 +1,6 @@
   // Pictures of the Window wall, Breach and Growth tools at work on the Starter Map's atrium
   // (--atrium-pictures; .build/interaction/atrium-*.bmp). The builder window is printed off screen at
-  // 1600 x 960 with the tool's boxes on the right; headless, its 3D pane has no engine behind it, so the
+  // 2300 x 1000 with the tool's boxes on the right; headless, its 3D pane has no engine behind it, so the
   // pane is filled with the engine's own picture of the same document (the --editor-pack path the live
   // pane uses), with the gesture in hand applied as the live pane's drag preview applies it.
   void atriumPictures() {
@@ -61,7 +61,7 @@
     auto shot = [&](const std::wstring &name, const fs::path &ppm) {
       RECT was{};
       GetWindowRect(window, &was);
-      SetWindowPos(window, nullptr, -6000, 0, 1600, 960, SWP_NOZORDER | SWP_NOACTIVATE);
+      SetWindowPos(window, nullptr, -6000, 0, 2300, 1000, SWP_NOZORDER | SWP_NOACTIVATE);
       ShowWindow(window, SW_SHOWNOACTIVATE);
       layout();
       RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
@@ -139,6 +139,8 @@
       mouse(WM_LBUTTONDOWN, 17.6f, 10.1f);
       for (int i = 1; i <= 5; ++i)
         mouse(WM_MOUSEMOVE, 17.6f, 10.1f + 4.8f * float(i) / 5.f);
+      hoverX = 17.6f, hoverY = 14.9f, hoverInside = true;
+      InvalidateRect(plan, nullptr, FALSE);
       shot(L"atrium-window-wall-drag", ppm);
       mouse(WM_LBUTTONUP, 17.6f, 14.9f);
       if (doc.text() != keep)
@@ -151,7 +153,7 @@
       SendMessageW(window, WM_COMMAND, ToolBase + 0, 0);
       selectRecord(int(doc.records("GLAZING", map)[0]));
       fillFields(false);
-      const auto ppm = engine(L"atrium-storefront-3d", 10.f, 9.8f, 1.6f, 90.f, -2.f);
+      const auto ppm = engine(L"atrium-storefront-3d", 6.6f, 10.6f, 1.6f, 62.f, -3.f);
       shot(L"atrium-storefront-inspector", ppm);
       report << "atrium-storefront-inspector.bmp: the shipped storefront picked, its cols, rows, sill, head, door, look and panes in the inspector\n";
     }
@@ -161,12 +163,14 @@
       box(breachShapeList, BreachShapeList, 0);
       const auto ppm = engine(L"atrium-breach-3d", 13.6f, 6.9f, 1.6f, 0.f, 2.f);
       mouse(WM_MOUSEMOVE, 18.3f, 6.8f);
+      hoverX = 18.3f, hoverY = 6.8f, hoverInside = true;
       shot(L"atrium-breach-tool", ppm);
       SendMessageW(window, WM_COMMAND, ToolBase + GrowthTool, 0);
       box(growthKindList, GrowthKindList, GrowMix);
       box(growthSizeList, GrowthSizeList, 3);
       const auto ppm2 = engine(L"atrium-growth-3d", 5.6f, 2.4f, 5.2f, 48.f, -14.f);
       mouse(WM_MOUSEMOVE, 14.f, 12.f);
+      hoverX = 14.f, hoverY = 12.f, hoverInside = true;
       shot(L"atrium-growth-brush", ppm2);
       report << "atrium-breach-tool.bmp, atrium-growth-brush.bmp: the Breach tool and the Growth brush with their boxes\n";
     }
