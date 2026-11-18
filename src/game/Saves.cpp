@@ -291,9 +291,9 @@ int Game::decodeSections(const std::string& payload,std::uint32_t hash){
 // lists comes after it (physics after props).
 std::vector<SaveSection> Game::builtInSaveSections(){
  std::vector<SaveSection> list;
- auto add=[&](const char* name,bool core,auto body){
-  list.push_back({.name=name,.version=1,.core=core,
-   .write=[body](Game& g,SaveOut& out){body(g,out,1);},
+ auto add=[&](const char* name,bool core,auto body,std::uint16_t version=1){
+  list.push_back({.name=name,.version=version,.core=core,
+   .write=[body,version](Game& g,SaveOut& out){body(g,out,version);},
    .read=[body](Game& g,SaveIn& in,int version){body(g,in,version);}});};
  // The world the save belongs to, where in it, and how many chunks the chunk sections carry.
  add("game",true,[](Game& g,auto& a,int){
@@ -349,7 +349,9 @@ std::vector<SaveSection> Game::builtInSaveSections(){
  // The rigid-body solver's state for props (PropBody: orientation, angular velocity, sleep
  // island), per chunk, by each prop's place in the chunk's props. Written only once the solver
  // sets physicsSaveHooks(); read before the reconciliation, which keeps the props' fields.
- add("physics",false,[](Game& g,auto& a,int){const auto& hooks=physicsSaveHooks();
+ // Layout 2 adds the chained props' segments after them (ChainPose: a mattress's bend, so a draped one
+ // loads draped); a layout 1 section (v1.5.1) has none, and its mattresses load lying straight.
+ add("physics",false,[](Game& g,auto& a,int version){const auto& hooks=physicsSaveHooks();
   auto norm=[](const PropBody& b){return std::sqrt(b.orientation[0]*b.orientation[0]+b.orientation[1]*b.orientation[1]+b.orientation[2]*b.orientation[2]+b.orientation[3]*b.orientation[3]);};
   // Written: a unit quaternion (a degenerate one is the identity), spin clamped to 1000 rad/s.
   // Read: refused unless near unit and in range, then made exactly unit.
@@ -360,15 +362,29 @@ std::vector<SaveSection> Game::builtInSaveSections(){
    if constexpr(std::decay_t<decltype(a)>::reading){const float length=norm(b);
     if(!(length>.9f&&length<1.1f)||std::any_of(b.angularVelocity.begin(),b.angularVelocity.end(),[](float w){return std::fabs(w)>1000.f;})||b.island<-1)throw std::runtime_error("invalid prop body");
     if(std::fabs(length-1)>2e-6f)for(auto&q:b.orientation)q/=length;}};
-  if constexpr(std::decay_t<decltype(a)>::reading){int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid chunk count");int last=-1;
-   for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks)throw std::runtime_error("invalid chunk");last=level;auto&props=g.m_chunks[size_t(level)].clutter;
-    if(count<1||size_t(count)>props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop count");int lastProp=-1;
-    for(int k=0;k<count;++k){int index=0;a(index);if(index<=lastProp||size_t(index)>=props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid prop index");lastProp=index;PropBody b;body(b);if(hooks.restore)hooks.restore(props[size_t(index)],b);}}}
-  else{if(!hooks.capture)return;std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;
-   for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;const auto&props=g.m_chunks[size_t(level)].clutter;
-    for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});}if(!bodies.empty())captured.push_back({level,std::move(bodies)});}
-   if(captured.empty())return;int chunks=int(captured.size());a(chunks);
-   for(auto& [level,bodies]:captured){int l=level,count=int(bodies.size());a(l,count);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}});
+  // A chained prop's segments: written as captured; read refused unless every number is finite, the
+  // root a segment, the bends within a half turn, the rates as the spins, the turns near unit.
+  auto chain=[&](ChainPose& c){a(c.root);for(auto&v:c.bend)a(v);for(auto&v:c.rate)a(v);for(auto&m:c.middle)for(auto&v:m)a(v);for(auto&q:c.turn)for(auto&v:q)a(v);
+   if constexpr(std::decay_t<decltype(a)>::reading){bool ok=c.root>=0&&c.root<=2;
+    for(float v:c.bend)ok&=std::isfinite(v)&&std::fabs(v)<=3.1416f;for(float v:c.rate)ok&=std::isfinite(v)&&std::fabs(v)<=1000.f;
+    for(const auto&m:c.middle)for(float v:m)ok&=std::isfinite(v)&&std::fabs(v)<1e6f;
+    for(const auto&q:c.turn){const float n=q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3];ok&=std::isfinite(n)&&n>.81f&&n<1.21f;}
+    if(!ok)throw std::runtime_error("invalid chained prop");}};
+  // Per chunk, by each prop's place in its props: `what` reads or writes one entry and puts it on the prop.
+  auto entries=[&](auto read,const char* kind){int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error(std::string("invalid ")+kind+" chunk count");int last=-1;
+   for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks)throw std::runtime_error(std::string("invalid ")+kind+" chunk");last=level;auto&props=g.m_chunks[size_t(level)].clutter;
+    if(count<1||size_t(count)>props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid "+kind+" count");int lastProp=-1;
+    for(int k=0;k<count;++k){int index=0;a(index);if(index<=lastProp||size_t(index)>=props.size())throw std::runtime_error("map "+std::to_string(level)+": invalid "+kind+" index");lastProp=index;read(props[size_t(index)]);}}};
+  if constexpr(std::decay_t<decltype(a)>::reading){
+   entries([&](Clutter& prop){PropBody b;body(b);if(hooks.restore)hooks.restore(prop,b);},"prop");
+   if(version>=2)entries([&](Clutter& prop){ChainPose c;chain(c);if(hooks.restoreChain)hooks.restoreChain(prop,c);},"chained prop");}
+  else{if(!hooks.capture)return;std::vector<std::pair<int,std::vector<std::pair<int,PropBody>>>> captured;std::vector<std::pair<int,std::vector<std::pair<int,ChainPose>>>> chains;
+   for(int level=0;level<g.chunkCount();++level){std::vector<std::pair<int,PropBody>> bodies;std::vector<std::pair<int,ChainPose>> poses;const auto&props=g.m_chunks[size_t(level)].clutter;
+    for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});ChainPose c;if(version>=2&&hooks.captureChain&&hooks.captureChain(props[i],c))poses.push_back({int(i),c});}
+    if(!bodies.empty())captured.push_back({level,std::move(bodies)});if(!poses.empty())chains.push_back({level,std::move(poses)});}
+   if(captured.empty()&&chains.empty())return;
+   {int count=int(captured.size());a(count);for(auto& [level,bodies]:captured){int l=level,n=int(bodies.size());a(l,n);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}
+   if(version>=2){int count=int(chains.size());a(count);for(auto& [level,poses]:chains){int l=level,n=int(poses.size());a(l,n);for(auto& [index,c]:poses){int i=index;a(i);chain(c);}}}}},2);
  return list;
 }
 // ---- The stores the "entities" and "variables" sections keep ----

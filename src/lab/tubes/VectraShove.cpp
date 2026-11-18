@@ -109,7 +109,18 @@ const bool pad=add({.name="mattress",.summary="the chained mattress: sags carrie
   LabAccess::clutter(g)={mattress({10.25f,8},.5f)};for(int i=0;i<240;++i)g.update({},1.f/60);const auto& c=g.clutter()[0];
   float lowest=1e9f,highest=-1e9f;for(int k=0;k<3;++k){lowest=std::min(lowest,middle(c,k).z);highest=std::max(highest,middle(c,k).z);}
   r<<"2 DRAPED OVER A STEP: bends "<<f2(c.bend[0])<<", "<<f2(c.bend[1])<<" rad, its segments' middles from z "<<f2(lowest)<<" to "<<f2(highest)<<", asleep "<<(c.sleeping?"yes":"no")<<"\n";
-  check(bendOf(c)>.4f&&lowest<.3f&&c.sleeping,"dropped half over a step, it drapes over the edge (its overhang down toward the floor) and comes to rest");}
+  check(bendOf(c)>.4f&&lowest<.3f&&c.sleeping,"dropped half over a step, it drapes over the edge (its overhang down toward the floor) and comes to rest");
+  // 5. Saved draped and loaded (the physics section's chained props): every segment where it lay, and it
+  // lies still rather than straightening and draping again; a format 27 save (no segments kept) still loads.
+  {const Clutter lay=c;const auto bytes=LabAccess::encodeSave(g);auto again=[&]{auto m2=regression::room();step(*m2);return std::make_unique<Game>(regression::campaign(m2));};
+   auto back=again();const bool loaded=LabAccess::decodeSave(*back,bytes)&&!back->clutter().empty();float off=1e9f,stir=1e9f;bool same=false,resaved=false;
+   if(loaded){const Clutter b=back->clutter()[0];off=0;for(int k=0;k<3;++k)off=std::max(off,vectra::len(middle(b,k)-middle(lay,k)));same=b.bend==lay.bend&&b.boneRoot==lay.boneRoot;
+    resaved=LabAccess::encodeSave(*back)==bytes;stir=0;for(int i=0;i<120;++i){back->update({},1.f/60);for(int k=0;k<3;++k)stir=std::max(stir,vectra::len(middle(back->clutter()[0],k)-middle(b,k)));}}
+   auto older=again();const bool oldLoads=LabAccess::decodeSave(*older,LabAccess::legacySaveText(g,27))&&!older->clutter().empty();
+   r<<"5 SAVED DRAPED: loaded "<<(loaded?"yes":"no")<<", bends "<<(loaded?f2(back->clutter()[0].bend[0],3)+", "+f2(back->clutter()[0].bend[1],3):std::string("-"))<<" (saved "<<f2(lay.bend[0],3)<<", "<<f2(lay.bend[1],3)
+    <<"), segments off by "<<f2(off*1000,3)<<" mm, re-saved the same "<<(resaved?"yes":"no")<<", then moved "<<f2(stir*1000,2)<<" mm in 2 s; a format 27 save "<<(oldLoads?"loads (lying straight: bends "+f2(older->clutter()[0].bend[0],2)+", "+f2(older->clutter()[0].bend[1],2)+")":std::string("does not load"))<<"\n";
+   check(loaded&&same&&off<1e-4f&&resaved&&stir<.002f,"saved draped over the step and loaded, every segment lies where it was and it stays draped (it neither straightens nor drapes again)");
+   check(oldLoads,"a save from before the segments were kept (format 27) still loads the mattress");}}
  // 3. Struck at one end (a round's blow), and 4. left lying.
  {Game g(regression::campaign(regression::room()));LabAccess::player(g).pos={2,2};LabAccess::clutter(g)={mattress({10,8},0)};for(int i=0;i<60;++i)g.update({},1.f/60);
   const auto rest=g.clutter()[0];float still=0;for(int i=0;i<120;++i){g.update({},1.f/60);still=std::max({still,bendOf(g.clutter()[0]),length(g.clutter()[0].pos-rest.pos)});}

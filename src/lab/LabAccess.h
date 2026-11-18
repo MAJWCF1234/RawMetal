@@ -55,6 +55,7 @@ struct LabAccess {
  static void behead(Game& g,size_t actor){g.setState(g.friendlyKey(actor,"headless"),1);g.setState(g.friendlyKey(actor,"headless_at"),int(g.m_elapsed*1000.f));}
  static bool decodeSave(Game& g,const std::string& data){return g.decodeSave(data);}
  static std::string encodeSave(const Game& g){return g.encodeSave();}
+ static std::string legacySaveText(Game& g,int version){return g.legacySaveText(version);}
  static bool damageEnemy(Game& g,Enemy& e,float amount){return g.applyEnemyDamage(e,amount,false,false);}
  static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);g.equipWeapon(id);}
  // A console line, as typed (Summon.cpp and the rest), and what it printed.

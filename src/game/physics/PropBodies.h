@@ -64,4 +64,10 @@ const Shape& segmentShape(const Clutter& c);
 Point3 chainSkin(const Clutter& c,Point3 local);
 bool captureProp(const Clutter& c,std::array<float,4>& orientationXyzw,std::array<float,3>& angularVelocity,std::int32_t& island);
 void restoreProp(Clutter& c,const std::array<float,4>& orientationXyzw,const std::array<float,3>& angularVelocity,std::int32_t island);
+// A chained prop through a save (the physics section's layout 2, SaveSections.h ChainPose): capture its
+// root segment, bends and their rates, and each segment's middle (world) and turn (x, y, z, w); false for
+// a prop that is not chained. restore puts the root, bends and rates back on the loaded prop, whose own
+// pose (the root segment's) the props and physics sections have already restored.
+bool captureChain(const Clutter& c,std::int32_t& root,std::array<float,2>& bend,std::array<float,2>& rate,std::array<std::array<float,3>,3>& middle,std::array<std::array<float,4>,3>& turn);
+void restoreChain(Clutter& c,std::int32_t root,const std::array<float,2>& bend,const std::array<float,2>& rate);
 }

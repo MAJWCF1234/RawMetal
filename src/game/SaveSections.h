@@ -139,9 +139,24 @@ struct PropBody {
 // solver state and returns true; `restore` puts it back onto the loaded prop (it runs before the
 // authored-map reconciliation, which keeps the prop's fields). Both null: the section is not
 // written and a saved one is read, checked and dropped. The rigid-body solver sets these.
+// A chained prop's segments (a mattress, a pad: physics/PropBodies.h), as the "physics" section keeps them
+// from its layout 2, so a draped mattress loads bent exactly as it lay: which segment is the prop's own
+// frame, each hinge's bend (rad) and rate (rad/s), and each segment's pose (its middle, world, list
+// coordinates; its turn, a unit quaternion x, y, z, w). The hinges restore from the bends; the poses
+// are the segments as they lay, checked against them on load.
+struct ChainPose {
+ std::int32_t root=1;
+ std::array<float,2> bend{},rate{};
+ std::array<std::array<float,3>,3> middle{};
+ std::array<std::array<float,4>,3> turn{{{0,0,0,1},{0,0,0,1},{0,0,0,1}}};
+ bool operator==(const ChainPose&)const=default;
+};
+// captureChain/restoreChain: the same for a chained prop's segments (null: none kept).
 struct PhysicsSaveHooks {
  bool(*capture)(const Clutter& prop,PropBody& body)=nullptr;
  void(*restore)(Clutter& prop,const PropBody& body)=nullptr;
+ bool(*captureChain)(const Clutter& prop,ChainPose& pose)=nullptr;
+ void(*restoreChain)(Clutter& prop,const ChainPose& pose)=nullptr;
 };
 PhysicsSaveHooks& physicsSaveHooks();
 }
