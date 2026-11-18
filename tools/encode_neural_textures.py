@@ -19,7 +19,8 @@ smallest packet that passes the quality gate wins:
   the worst 1% of 8x8 blocks at SSIM >= 0.50 (local damage: text, grain),
   at least 20% and 2 KB smaller than the lossless WebP of the master, and x4
   only where the stored image keeps at least 32 texels a side; each choice
-  keeps 90% of the detail (luma gradient energy) the x2 lossless one does. A smooth image
+  keeps 90% of the detail (luma gradient energy) the x2 lossless one does,
+  or loses under 0.4 luma levels per texel more than it. A smooth image
   (over half its 8x8 blocks flat to 2 levels: skies, glows) keeps lossless
   texels, since VP8's blocks would show as bands across its gradients.
 
@@ -57,7 +58,7 @@ PLAN = ROOT/'tools'/'neural_texture_plan.json'
 RC = ROOT/'src'/'assets.rc'
 MODEL = ROOT/'src'/'assets'/'ai'/'texture-n2.ntm'
 MODEL_ID = 1999
-GATE = dict(psnr=32.0, ssim=0.90, block_p1=0.50, ratio=0.80, saving=2048, x4_min_side=32, smooth=0.5, detail=0.9)
+GATE = dict(psnr=32.0, ssim=0.90, block_p1=0.50, ratio=0.80, saving=2048, x4_min_side=32, smooth=0.5, detail=0.9, detail_loss=0.4)
 QUALITIES = (None, 97, 94, 90, 85, 80)  # None = lossless VP8L
 LIBRARY = 'assets/library/'
 
@@ -161,14 +162,24 @@ def measure(original, recon, mask):
                 mae=float((np.abs(error).mean(-1)*weight).sum()/total), detail=detail(original, recon))
 
 
+def gradient_energy(a, seen=None):
+    """Mean luma gradient magnitude (levels per texel) over visible texels."""
+    y = a[..., :3].astype(np.float64) @ np.array([.2126, .7152, .0722])
+    g = np.abs(np.diff(y, axis=0))[:, :-1] + np.abs(np.diff(y, axis=1))[:-1, :]
+    return float(g[seen].mean()) if seen is not None and seen.any() else float(g.mean())
+
+
 def detail(original, recon):
     """Luma gradient energy kept, reconstruction over master, on visible texels."""
-    def energy(a):
-        y = a[..., :3].astype(np.float64) @ np.array([.2126, .7152, .0722])
-        return np.abs(np.diff(y, axis=0))[:, :-1] + np.abs(np.diff(y, axis=1))[:-1, :]
     seen = original[:-1, :-1, 3] >= 128
-    base = energy(original)[seen].mean() if seen.any() else 0.0
-    return float(energy(recon)[seen].mean()/base) if base > 1e-9 else 1.0
+    base = gradient_energy(original, seen)
+    return gradient_energy(recon, seen)/base if base > 1e-9 else 1.0
+
+
+def keeps_detail(m, reference, base):
+    """Within 90% of the detail x2 lossless keeps, or losing under 0.4 luma
+    levels of gradient per texel more than it (a flat sky's dither is not detail)."""
+    return m['detail'] >= GATE['detail']*reference or (reference-m['detail'])*base <= GATE['detail_loss']
 
 
 def looks_right(m):
@@ -216,6 +227,7 @@ def encode(model, source, factors, steps):
     baseline = len(raw)
     weight = torch.from_numpy(original[..., 3].astype(np.float32)/255)[None, None]
     smooth = flat_fraction(original) > GATE['smooth']
+    energy = gradient_energy(original, original[:-1, :-1, 3] >= 128)
     target = tensor(Image.fromarray(original[..., :3]))
     candidates = []
     reference = None  # detail the x2 lossless reconstruction keeps
@@ -240,16 +252,17 @@ def encode(model, source, factors, steps):
             nonlocal reference
             if reference is None:
                 reference = m['detail']
-            ok = passes(m, len(data), baseline) and m['detail'] >= GATE['detail']*reference
+            ok = passes(m, len(data), baseline) and keeps_detail(m, reference, energy)
             candidates.append(dict(factor=factor, quality=quality or 0, bytes=len(data), data=data, recon=recon, ok=ok, **m))
             return candidates[-1]
         # Lossless is this factor's best quality: if it fails, every lossy
         # choice fails too. Otherwise climb from the smallest (lowest VP8
         # quality) and stop at the first that passes. Every choice must keep
-        # 90% of the detail (luma gradient energy) x2 lossless keeps: VP8
-        # and x4 smear ridges and grain that SSIM and PSNR forgive.
+        # 90% of the detail (luma gradient energy) x2 lossless keeps, or lose
+        # under 0.4 levels per texel more: VP8 and x4 smear ridges and grain
+        # that SSIM and PSNR forgive.
         first = attempt(None)
-        if not looks_right(first) or first['detail'] < GATE['detail']*reference or smooth:
+        if not looks_right(first) or not keeps_detail(first, reference, energy) or smooth:
             continue  # smooth images keep lossless texels: VP8 blocks show as bands in a gradient
         for quality in QUALITIES[:0:-1]:
             if attempt(quality)['ok']:
