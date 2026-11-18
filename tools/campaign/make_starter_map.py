@@ -592,7 +592,9 @@ def build():
     architecture(s)
     architecture_2(s)
     showcase(s, slot, catalogue)
+    s.reserved = {(5 + OX, 2 + OY)}  # SHOWCASE: PHYSICS, built after the forest (it keeps every earlier number)
     building(s, slot, catalogue)
+    physics_room(s, slot, catalogue)
     return s
 
 
@@ -1044,6 +1046,7 @@ def showcase(s, slot, catalogue):
     exhibit(m, (1, 9.5, 7, 13.5), 'MACHINE POWER / wakes it (sc_machine_power)', 'MACHINE POWER', 'switch', 4, 11.2)
     exhibit(m, (17, 9.5, 23, 13.5), 'ELECTRODES switch / sc_electrodes_cut', 'ELECTRODES SWITCH', 'switch', 20, 11.2)
     s.rec(m, 'PICKUP', i, 1, 12, 13.5)
+    m['walls'] |= {(x, 23) for x in range(24) if x not in (11, 12)}      # the way down to PHYSICS
 
     # ---- PREDATOR: a Chimera hunter and its prey behind glass, released by a switch -----------------
     m = room('Showcase Predator', 6, 'SHOWCASE: PREDATOR', ceiling=4.5)
@@ -1118,6 +1121,74 @@ def showcase(s, slot, catalogue):
     s.sign(s.maps[0], 10.5, 22.95, 2.85, 2.4, .4, 'SHOWCASE THIS WAY', 'through the gap, then east', SHOW)
     props = next(x for x in s.maps if x['name'] == 'Props')
     s.sign(props, 23.97, 9.4, 2.3, 1.8, .45, 'SHOWCASE >', 'doors, particles, light, sound', SHOW, -HALF)
+
+
+def physics_room(s, slot, catalogue):
+    """SHOWCASE: PHYSICS, south of Machine (its south wall's gap at x 11-12), walled off from the forest
+    round it: the rigid-body props (game/physics/Rigid.h). Stacks to shoot down, a ramp and stairs for
+    barrels, pumpkins for balls, a line of dominoes, chairs and a table to knock over. Built last, so
+    every earlier map keeps its number."""
+    def plate(m, x, y, z, w, h, title, sub, facing):
+        s.sign(m, x, y, z, w, h, title, sub, SHOW, {'S': 0, 'N': PI, 'W': -HALF, 'E': HALF}[facing])
+
+    def exhibit(m, box, zone, title, name, x, y):
+        x1, y1, x2, y2 = box
+        s.zone(m, x1, y1, x2, y2, zone)
+        s.index.append({'map': m['index'], 'section': 'SHOWCASE', 'x': x, 'y': y, 'title': title, 'name': name})
+
+    m = s.new_map('Showcase Physics', 5, 2, ceiling=5.0)
+    i = m['index']
+    s.zone(m, 9, 0, 15, 3, '', 'SHOWCASE: PHYSICS')
+    m['walls'] |= {(x, y) for x in (0, 23) for y in range(24)} | {(x, 23) for x in range(24)} | {(x, 0) for x in range(24) if x not in (11, 12)}
+    physics = json.load(open(os.path.join(ROOT, 'tools', 'campaign', 'prop_physics.json')))
+
+    def body(name, x, y, z, yaw=0.0, k=1.0, pitch=0.0, roll=0.0):
+        w, d, h = physics.get(name, {}).get('size', catalogue[name])
+        s.rec(m, 'CLUTTER', i, 7, round(x, 3), round(y, 3), round(z, 3), round(yaw, 3), slot[name],
+              round(w * k, 3), round(d * k, 3), round(h * k, 3), round(pitch, 3), round(roll, 3), '')
+        return h * k
+
+    plate(m, 6, 1.02, 3.6, 5.0, .9, 'PHYSICS: RIGID BODIES', 'stacks, a ramp, barrels, balls, dominoes', 'S')
+    # North-west: a tower of ten crates, a 4-3-2-1 pyramid and a stack of unlike things. Shoot the bottom.
+    for k in range(10):
+        body('wooden_crate', 2.5, 5, .24 * k, 0, .4)
+    for row in range(4):
+        for k in range(4 - row):
+            body('packing_crate', 4.6 + .31 * k + .155 * row, 5, .2 * row, 0, .5)
+    z = body('packing_crate', 8.5, 5, 0)
+    z += body('prop_cardboard_box', 8.5, 5, z, 0, .6)
+    z += body('crt_monitor', 8.5, 5, z, 0, .7)
+    body('mug', 8.55, 5, z)
+    exhibit(m, (1, 3, 10, 7.5), 'PHYSICS / stacks: tower, pyramid, mixed', 'STACKS', 'they stand, sleep, and fall true', 5, 5)
+    # North-east: a ramp (17 degrees) down from a landing, barrels and drums lying on their sides to roll down
+    # it and off the landing's east edge down a stair; pumpkins for balls.
+    s.rec(m, 'PRIM', i, 'ramp', 14, 5, 0, 1.8, 4, 1.2, 2, 40)               # rises toward -y: the foot at y 7
+    s.struct(m, 12.8, 1.2, 18.2, 3, 0, 1.2, 40)                                # the landing
+    s.rec(m, 'PRIM', i, 'stairs', 19.3, 2.1, 0, 1.6, 0, 1.2, 3, 40)          # down to the east (2.24 m of treads)
+    body('ind_barrel', 13.6, 2.1, 1.2, HALF, 1.0, HALF)                        # on its side, axis along y... rolls along x
+    body('ind_barrel', 14.2, 2.4, 1.2, 0, 1.0, HALF)                           # axis along x: down the ramp
+    body('drum', 16.4, 2.1, 1.2, 0, .8, HALF)
+    for k, (x, y) in enumerate(((15.2, 1.8), (15.6, 2.5), (17.4, 1.7))):
+        body('market_pumpkin', x, y, 1.2, k, .6)
+    body('wooden_crate', 17.3, 2.5, 1.2, .3, .5)
+    exhibit(m, (12, 1, 21, 8), 'PHYSICS / ramp and stairs: barrels roll', 'RAMP AND STAIRS', 'kick a barrel off the landing', 15, 4)
+    # South-west: a line of dominoes (binders stood on end); push the first.
+    for k in range(16):
+        body('binder', 2.0 + .3 * k, 17.0, 0, 0, 1.5)
+    exhibit(m, (1, 15.5, 8, 18.5), 'PHYSICS / dominoes: push the first', 'DOMINOES', 'sixteen binders on end', 4.5, 17)
+    # South-east: chairs and a table to knock over, crates to throw at them, a can and bottles to roll.
+    body('office_chair', 12, 18, 0, 0)
+    body('wooden_chair', 13.4, 18, 0, .4)
+    body('wooden_chair', 14.4, 19.6, 0, PI)
+    body('wooden_table', 16.5, 18.6, 0, HALF)
+    for k in range(3):
+        body('wooden_crate', 11 + .9 * k, 15.2, 0, .2 * k, .6)
+    body('trash_can', 18.6, 16.2, 0, 0, 1.0, 0, HALF)                         # a can on its side
+    for k in range(4):
+        body('glass_bottle', 19.2 + .25 * k, 17.6, 0, 0, 1.0, HALF)
+    exhibit(m, (10, 14.5, 21, 22), 'PHYSICS / chairs, a table, a can to roll', 'TUMBLE', 'throw the crates at them', 15, 18)
+    for x, y in ((5, 5), (15, 4), (5, 18), (15, 18)):
+        s.rec(m, 'LIGHT', i, x, y, 4.6, 0, 0, 1.1, 10, 4300)
 
 
 KEEP_SHUT = {'Lights', 'Hazards', 'Life', 'Levels', 'Scripts', 'Architecture', 'Architecture 2',
@@ -1394,7 +1465,7 @@ def building(s, slot, catalogue):
     hill_cell = (OX + 3, 1 + len(SECTIONS) + 1 + OY)
     for r in range(min(rows) - 1, max(rows) + 2):
         for c in range(min(cols) - 1, max(cols) + 2):
-            if (c, r) in cells: continue
+            if (c, r) in cells or (c, r) in getattr(s, 'reserved', ()): continue
             entrance = (c, r) == (welcome['col'], welcome['row'] - 1)
             m = s.outdoor_map('Entrance' if entrance else 'Forest', c, r, shift=False)
             cells[(c, r)] = m

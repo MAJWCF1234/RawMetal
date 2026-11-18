@@ -80,6 +80,9 @@ add_executable(RawMetal WIN32
     app.rc
     "${RAWMETAL_PACKED_RC}"
     game/Game.cpp
+    game/RigidClutter.cpp
+    game/physics/Vectra.cpp
+    game/physics/PropBodies.cpp
     game/Script.cpp
     game/Settings.cpp
     game/Saves.cpp

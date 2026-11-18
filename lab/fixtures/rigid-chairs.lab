@@ -1,0 +1,7 @@
+# Thrown crates into an office chair, a wooden chair and a table (tubes rigid, rigid-legacy).
+world room
+camera 11.4 6.9 -999 112 -12
+light 10 12 3.2 1.4 10
+rigid chairs
+size 480 270
+frames 300

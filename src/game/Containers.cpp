@@ -1,5 +1,6 @@
 #include "Containers.h"
 #include "../world/ModelIds.h"
+#include "physics/PropBodies.h"
 #include <cmath>
 namespace retro::containers {
 namespace {
@@ -12,6 +13,9 @@ Vec2 halfIn(const Clutter& box,const Clutter& item){const auto s=item.size();con
 Vec2 toLocal(const Clutter& box,Vec2 p){const Vec2 d=p-box.pos;const float co=std::cos(box.yaw),si=std::sin(box.yaw);return {d.x*co+d.y*si,-d.x*si+d.y*co};}
 Vec2 toWorld(const Clutter& box,Vec2 l){const float co=std::cos(box.yaw),si=std::sin(box.yaw);return box.pos+Vec2{l.x*co-l.y*si,l.x*si+l.y*co};}
 }
+// How high an item's underside is: its box's lowest corner, or on Vectra its shape's own lowest
+// point (a pumpkin or a bottle turned on its side has its box's corner well under its round).
+float underside(const Clutter& c){if(c.model<0||vectra::legacyProps())return c.z;vectra::Body b;vectra::toBody(c,b);float z=1e9f;for(int p=0;p<b.shape->count;++p)z=std::min(z,vectra::support(b,p,{0,0,-1}).z);return z;}
 bool isContainer(const Clutter& c){if(c.traits&&c.traits->volume>=0)return c.model>=0&&c.traits->volume>0;return c.model>=0&&c.model<int(std::size(model::container))&&model::container[c.model][1]>0;}
 Inner inner(const Clutter& c){
  const auto s=c.size();Inner in;
@@ -31,16 +35,22 @@ bool holds(const Clutter& box,const Clutter& item,bool ignoreBroken){
  if(&box==&item||!isContainer(box)||(box.broken&&!ignoreBroken)||item.model<0||item.broken||!upright(box))return false;
  const auto in=inner(box);if(!overInner(box,item.pos))return false;
  const auto s=item.size();if(std::min(s[0],s[1])*.5f>std::min(in.halfX,in.halfY)+.01f||std::max(s[0],s[1])*.5f>std::max(in.halfX,in.halfY)+.01f)return false;
- return item.z>=box.z+in.floor-.04f&&item.z<=box.z+in.rim+.02f;
+ const float under=underside(item);return under>=box.z+in.floor-.04f&&under<=box.z+in.rim+.02f;
 }
 float supportAt(const Clutter& v,Vec2 p,float feet){
  // Over the opening: the inner floor. Over the walls: the rim (not a basket's handle or a box's flaps above it).
  if(isContainer(v)&&!v.broken&&upright(v)){const auto in=inner(v);const float s=v.z+(overInner(v,p)?in.floor:std::min(in.rim,v.supportHeight()));return s<=feet+.025f?s:-100.f;}
  const float top=v.z+v.supportHeight();return top<=feet+.025f?top:-100.f;
 }
-Snapshot capture(std::vector<Clutter>& list,int held){
+Snapshot capture(std::vector<Clutter>& list,int held,bool onlyHeld){
  Snapshot s;std::vector<int> boxes;std::vector<char> rode(list.size());
- for(int i=0;i<int(list.size());++i){rode[size_t(i)]=list[size_t(i)].riding;list[size_t(i)].riding=false;if(isContainer(list[size_t(i)])&&!list[size_t(i)].broken&&upright(list[size_t(i)]))boxes.push_back(i);}
+ // (onlyHeld, Vectra: the container in the hand, and one the player is shoving (blockedTime), carry their contents
+ // rigidly: neither the hand nor his shove is a body with mass, and a sprint's shove sets the container going
+ // faster than friction could take what stands in it. One thrown, let fall or knocked takes what is in it along
+ // by its floor and walls, and their weight is on it when it lands.)
+ auto carrying=[&](int i){return i==held||list[size_t(i)].blockedTime>0;};
+ std::vector<char> carries(list.size(),0);if(onlyHeld)for(int i=0;i<int(list.size());++i)if(isContainer(list[size_t(i)]))carries[size_t(i)]=carrying(i);
+ for(int i=0;i<int(list.size());++i){rode[size_t(i)]=list[size_t(i)].riding;list[size_t(i)].riding=false;if(isContainer(list[size_t(i)])&&!list[size_t(i)].broken&&upright(list[size_t(i)])&&(!onlyHeld||carries[size_t(i)]))boxes.push_back(i);}
  if(boxes.empty())return s;
  std::vector<int> seen;
  for(int j=0;j<int(list.size());++j){if(j==held)continue;const auto& item=list[size_t(j)];if(item.model<0||item.broken)continue;

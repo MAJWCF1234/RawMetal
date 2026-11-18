@@ -774,7 +774,7 @@ bool Game::shieldBlow(float amount,Vec2 source){
  const Point3 away{-toSource.x,-toSource.y,0},at{c.pos.x,c.pos.y,c.z+c.height()*.5f};
  sound(c.impactSound(),.9f,.85f);m_verticalSpringVelocity-=.35f;m_damageFlash=std::max(m_damageFlash,.15f);
  const size_t held=size_t(m_heldClutter);damageClutter(m_level,held,amount,at,away);   // a breakable prop bursts in the hands
- if(holdingClutter()&&propTraits(c.model).health<=0&&c.damage>=ShieldKnockAway){
+ if(holdingClutter()&&(c.traits&&c.traits->health>=0?c.traits->health:propTraits(c.model).health)<=0&&c.damage>=ShieldKnockAway*std::clamp(c.mass()/9.f,.5f,3.f)){   // a heavier shield takes more before it goes
   // A prop that will not break is torn out of the hands once it has taken enough.
   c.damage=0;c.velocity=Vec2{away.x,away.y}*(3.f/std::sqrt(std::max(1.f,c.mass())));c.vz=1.f;c.projectile=false;c.sleeping=false;c.restTime=0;m_heldClutter=-1;
  }

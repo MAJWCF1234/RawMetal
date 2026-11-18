@@ -7,9 +7,12 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
+#include "game/physics/PropBodies.h"
 #include <cmath>
 #include <cstdio>
 #include <map>
+#include <cstdlib>
+#include <fstream>
 namespace retro::lab {
 namespace {
 std::string fixed(double v,int d=2){char b[32];std::snprintf(b,sizeof b,"%.*f",d,v);return b;}
@@ -19,7 +22,18 @@ struct Rig {std::vector<Trial> trials;size_t current=0;int frame=0;bool staged=f
 std::map<const Scene*,std::unique_ptr<Rig>> rigs;
 Rig& rig(Scene& s){auto& r=rigs[&s];if(!r)r=std::make_unique<Rig>();return *r;}
 // Densely, every 3 cm round the prop's outline and across it: is any of it in a solid?
+bool inSolidBox(const World& w,const Clutter& c,std::string* why=nullptr);
+// On Vectra (game/physics) a prop is its own shape, not its box (a chair stands over a pipe between its
+// legs; a box tipped against a wall has its bounding box's corner in the wall, not itself): its surface every
+// 3 cm, each point drawn 4 mm in toward its part's middle, asked of the World.
 bool inSolid(const World& w,const Clutter& c,std::string* why=nullptr){
+ if(vectra::legacyProps()||c.model<0)return inSolidBox(w,c,why);
+ vectra::Body b;vectra::toBody(c,b);std::vector<vectra::V3> pts;
+ for(int p=0;p<b.shape->count;++p){const size_t first=pts.size();vectra::surfaceSamples(b,p,.03f,pts);vectra::V3 lo,hi;vectra::partBounds(b,p,lo,hi);const vectra::V3 mid=(lo+hi)*.5f;
+  for(size_t k=first;k<pts.size();++k){const vectra::V3 d=mid-pts[k];const float l=vectra::len(d);if(l>.004f)pts[k]=pts[k]+d*(.004f/l);}}
+ for(const auto& q:pts)if(!w.fits(q.x,q.y,q.z-.005f,.01f,false,true)){if(why)*why="at "+fixed(q.x)+","+fixed(q.y)+" z "+fixed(q.z,3)+" (its own shape) sleeping "+std::to_string(c.sleeping);return true;}
+ return false;}
+bool inSolidBox(const World& w,const Clutter& c,std::string* why){
  auto local=c;local.yaw=0;const auto e=local.extent();const float co=std::cos(c.yaw),si=std::sin(c.yaw),h=c.height();
  const int nx=std::max(2,int(std::ceil(2*e[0]/.03f))),ny=std::max(2,int(std::ceil(2*e[1]/.03f)));
  for(int i=0;i<=nx;++i)for(int j=0;j<=ny;++j){const float x=-e[0]*.98f+1.96f*e[0]*float(i)/float(nx),y=-e[1]*.98f+1.96f*e[1]*float(j)/float(ny);
@@ -46,6 +60,11 @@ const bool tube=add({
   s.input.forward=true;s.input.sprint=true;},
  .capture=[](Scene& s,const Frame&){Game& g=s.g();Rig& r=rig(s);if(r.current>=r.trials.size())return;auto& t=r.trials[r.current];const auto& c=LabAccess::clutter(g)[t.index];const World& w=g.world();
   if(inSolid(w,c,t.why.empty()?&t.why:nullptr)){t.inside=true;++t.insideFrames;}
+  // RM_PROPWALLS_TRACE=<prop index>: prop-walls-trace.txt, its pose, what of it is in a solid and the world contacts near it, each frame.
+  if(const char* e=std::getenv("RM_PROPWALLS_TRACE");e&&std::atoi(e)==int(t.index)){static std::ofstream tr("prop-walls-trace.txt");std::string why;const bool in=inSolid(w,c,&why);
+   tr<<"frame "<<r.frame<<" pos "<<fixed(c.pos.x,3)<<","<<fixed(c.pos.y,3)<<","<<fixed(c.z,3)<<" ypr "<<fixed(c.yaw,3)<<","<<fixed(c.pitch,3)<<","<<fixed(c.roll,3)<<" v "<<fixed(c.velocity.x,2)<<","<<fixed(c.velocity.y,2)<<(c.sleeping?" asleep":"")<<" blocked "<<fixed(c.blockedTime,2)<<(in?" IN "+why:"")<<'\n';
+   for(const auto& m:LabAccess::rigidStats(g).manifoldsSeen){if(m.count==0)continue;const auto& q=m.points[0].p;if(m.b>=0||std::fabs(q.x-c.pos.x)>1.f||std::fabs(q.y-c.pos.y)>1.f)continue;
+    tr<<"   M a"<<m.a<<" b"<<m.b<<" g"<<m.partB<<" n "<<fixed(m.normal.x,2)<<","<<fixed(m.normal.y,2)<<","<<fixed(m.normal.z,2);for(int k=0;k<m.count;++k)tr<<" ("<<fixed(m.points[size_t(k)].p.x,2)<<","<<fixed(m.points[size_t(k)].p.y,2)<<","<<fixed(m.points[size_t(k)].p.z,3)<<" s"<<fixed(m.points[size_t(k)].separation*1000,1)<<")";tr<<'\n';}}
   t.moved=std::max(t.moved,length(c.pos-t.start));
   // Through a wall: the prop's middle, frame to frame, never passes through a solid (sampled every 2 cm).
   {const float mid=c.z+c.height()*.5f;if(t.tracked&&!t.crossed){const float d=length(c.pos-t.lastPos);const int n=int(std::ceil(d/.02f));
@@ -63,7 +82,7 @@ const bool tube=add({
   rep.metric("props_shoved",double(r.trials.size()));rep.metric("props_moved",moved);rep.metric("large_in_solid",inside);rep.metric("small_in_solid",insideSmall);rep.metric("beyond_wall",crossed);rep.metric("furthest_m",furthest,"m");
   rep.check("the map has props to shove, and the shoves move them",r.trials.size()>=3&&moved>=int(r.trials.size())/2,std::to_string(moved)+" of "+std::to_string(r.trials.size())+" moved");
   rep.metric("large_worst_frames_inside",worstFrames);rep.metric("large_ending_inside",endsInside);
-  rep.check("no large shoved prop (30 cm across, 10 cm tall) ends inside a solid, or stays in one more than 3 frames (a thin solid's corner between two outline points)",endsInside==0&&worstFrames<=3,r.log.empty()?"0":r.log.substr(0,900));
+  rep.check("no large shoved prop (30 cm across, 10 cm tall) ends inside a solid, or stays in one more than 3 frames (a thin solid's corner between two outline points)",endsInside==0&&worstFrames<=3,r.log.empty()?"0":r.log.substr(0,4000));
   rep.check("no shoved prop passes through a wall (its middle, frame to frame)",crossed==0,std::to_string(crossed));
   std::string list;for(const auto& t:r.trials){const auto& c=LabAccess::clutter(s.g())[t.index];list+="#"+std::to_string(t.index)+" m"+std::to_string(c.model)+" "+fixed(c.dims[0])+"x"+fixed(c.dims[1])+"x"+fixed(c.dims[2])+" "+fixed(c.mass(),0)+"kg wall "+fixed(t.wall)+" moved "+fixed(t.moved)+"; ";}
   rep.check("diagnostic: the props",true,list.substr(0,1500));},

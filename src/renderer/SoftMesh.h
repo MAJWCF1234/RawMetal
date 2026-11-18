@@ -9,6 +9,8 @@ namespace retro::softmesh {
 // The model's triangles with the faces at its padding's top split to about 9 cm (the mesh's own metres);
 // built once per model.
 const std::vector<MeshTriangle>& refined(int model,const Mesh& mesh);
+// Every face cut to about 9 cm (a mattress bent on its bones bends smoothly all round).
+const std::vector<MeshTriangle>& refinedAll(int model,const Mesh& mesh);
 // The depth, in the mesh's own height units, to lower vertex `p` (mesh coordinates) of `model` by:
 // the pad's depth there, full at the padding's top and easing to nothing a little below it.
 float bend(int model,const SoftPad& pad,const Mesh& mesh,const Point3& p);
