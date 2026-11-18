@@ -228,4 +228,95 @@ void edgeProbes(const Body& b,int part,float spacing,std::vector<V3>& out){
   put({0,0,-hz});put({0,0,hz});return;}
  const float r=p.half.x;for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k)if(i||j||k)put(norm(V3{float(i),float(j),float(k)})*r);}
 
+// ---- Continuous collision (Space::continuous) -------------------------------------------------------
+namespace {
+constexpr float ProbeSpacing=.025f;  // edge probes this far apart: a 3 cm post cannot slip between two
+constexpr float TunnelDepth=.02f;    // a body ending this deep in what it struck is past what its contacts push out
+constexpr float SubTurn=.15f;        // a turn swept in pieces of at most this angle (a 0.6 m reach strays 1.7 mm from its arc)
+// What a fast body met first this step.
+struct Event {float t=1;int kind=0;int other=-1;V3 point{},normal{};};   // kind 1: the world at a probe (point: in the body's frame), 2: a body
+// A probe's way through the step in pieces (the body's poses at each piece's ends): the first piece that
+// strikes the world, if from there it went through, or ends deep in it.
+struct ProbeHit {float t,window;V3 r,n;};
+bool worldProbes(Space& s,int i,const Motion& m,std::vector<V3>& probes,std::vector<ProbeHit>& hits,Event& best){
+ Body& b=s.bodies[size_t(i)];probes.clear();hits.clear();for(int p=0;p<b.shape->count;++p)edgeProbes(b,p,ProbeSpacing,probes);
+ const int K=std::clamp(int(std::ceil(m.angle/SubTurn)),1,8);std::array<V3,9> xs{};std::array<Quat,9> qs{};
+ for(int k=0;k<=K;++k)m.at(float(k)/float(K),xs[size_t(k)],qs[size_t(k)]);
+ float first=best.t;
+ for(const V3& r:probes){
+  const V3 start=xs[0]+qs[0].rotate(r),end=xs[size_t(K)]+qs[size_t(K)].rotate(r),way=end-start;const float travel=len(way);
+  if(travel<TunnelDepth*.5f)continue;                                      // it hardly moved: its contacts hold it
+  if(dot(qs[0].rotate(r),way)<-.5f*len(r)*travel)continue;                // a trailing point: a leading one meets things first
+  for(int k=0;k<K;++k){if(float(k)/float(K)>first+.05f)break;
+   const V3 a=xs[size_t(k)]+qs[size_t(k)].rotate(r),c=xs[size_t(k+1)]+qs[size_t(k+1)].rotate(r);V3 n;const float f=s.sweep(s,i,a,c,n);
+   if(f>=1)continue;if(f<=0)break;                                         // it starts in something: the contacts' business
+   const float t=(float(k)+f)/float(K);
+   // From where it ends back to just off where it struck: something between, it went through; nothing, it
+   // ends in what it struck, and only deep is it ours.
+   const V3 struck=a+(c-a)*f;V3 n2;const float back=s.sweep(s,i,end,struck+n*.002f,n2);
+   const bool through=back>0&&back<.999f,deep=back<=0&&dot(struck-end,n)>TunnelDepth;
+   if(through||deep){hits.push_back({t,.01f/travel,r,n});first=std::min(first,t);}
+   break;}}
+ if(first>=best.t)return false;
+ // Every point that met the same face within a centimetre of its way of the first: the blow lands at their
+ // middle (a plank's face striking a post along its height is struck at its middle, not at one corner).
+ V3 normal{};for(const auto& h:hits)if(h.t==first){normal=h.n;break;}
+ V3 sum{};int count=0;for(const auto& h:hits)if(h.t<=first+h.window&&dot(h.n,normal)>.7f){sum=sum+h.r;++count;}
+ best={first,1,-1,sum*(1.f/float(std::max(1,count))),normal};return true;}
+float effective(const Body& b,V3 arm,V3 n){if(b.invMass<=0)return 0;const V3 rn=cross(arm,n);return b.invMass+dot(rn,b.invInertia*rn);}
+}
+void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
+ (void)dt;const int n=int(s.bodies.size());if(!n)return;
+ std::vector<Motion> motion(static_cast<size_t>(n));std::vector<char> fast(size_t(n),0),done(size_t(n),0);std::vector<float> thresholds(size_t(n),0.f);
+ for(int i=0;i<n;++i){auto& b=s.bodies[size_t(i)];auto& m=motion[size_t(i)];m.x1=b.x;m.q1=b.q;m.x0=size_t(i)<start.size()?start[size_t(i)]:b.x;
+  // Where it began the step: its turn since (dq) undone.
+  m.q0=b.movable()?(b.dq.conj()*b.q).normalized():b.q;m.begin();b.ccd=false;if(!b.movable()||!b.shape)continue;
+  // Fast for its size: it could cross something thinner than itself within this step, by going or by turning
+  // (a plank's end sweeps far while its middle hardly moves).
+  float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto& part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box?std::min({part.half.x,part.half.y,part.half.z}):std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
+  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
+ const float target=2*s.settings.linearSlop;std::vector<V3> probes;std::vector<ProbeHit> hits;
+ for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
+  Event best;
+  if(s.sweep)worldProbes(s,i,m,probes,hits,best);
+  // Other bodies: the time two moving, turning shapes first meet.
+  const float rb=b.shape->bound;
+  const V3 sweptLo=V3{std::min(m.x0.x,m.x1.x),std::min(m.x0.y,m.x1.y),std::min(m.x0.z,m.x1.z)}-V3{rb,rb,rb},sweptHi=V3{std::max(m.x0.x,m.x1.x),std::max(m.x0.y,m.x1.y),std::max(m.x0.z,m.x1.z)}+V3{rb,rb,rb};
+  for(int j=0;j<n;++j){if(j==i)continue;const Body& o=s.bodies[size_t(j)];if(!o.shape||(b.group&&b.group==o.group))continue;
+   const Motion& mo=motion[size_t(j)];const float r=o.shape->bound;
+   if(std::min(mo.x0.x,mo.x1.x)-r>sweptHi.x||std::max(mo.x0.x,mo.x1.x)+r<sweptLo.x||std::min(mo.x0.y,mo.x1.y)-r>sweptHi.y||std::max(mo.x0.y,mo.x1.y)+r<sweptLo.y||std::min(mo.x0.z,mo.x1.z)-r>sweptHi.z||std::max(mo.x0.z,mo.x1.z)+r<sweptLo.z)continue;
+   if(s.filter&&!s.filter(s,std::min(i,j),std::max(i,j)))continue;
+   // (Touching when the step began: the contacts' business. Stopped by its speculative contacts: met at the step's
+   // very end, closing no more, and so left as it is.)
+   float t;V3 point,normal;if(!timeOfImpact(b,m,o,mo,target,t,point,normal)||t>=best.t)continue;
+   best={t,2,j,point,normal};}
+  if(best.kind==0){
+   // Nothing at its edges: its centre's way still (as before the probes): back to where the centre meets a
+   // surface, resting its own reach off it, its way into it taken out.
+   if(!s.sweep||len(m.x1-m.x0)<=thresholds[size_t(i)])continue;V3 nn;const float t=s.sweep(s,i,m.x0,m.x1,nn);if(t>=1)continue;
+   float extent=0;for(int p=0;p<b.shape->count;++p)extent=std::max(extent,dot(b.x-support(b,p,neg(nn)),nn));
+   b.x=m.x0+(m.x1-m.x0)*t+nn*extent;const float vn=dot(b.v,nn);if(vn<0)b.v=b.v-nn*(vn*(1+b.material.restitution));continue;}
+  const float e=best.kind==1?b.material.restitution:Material::mix(b.material,s.bodies[size_t(best.other)].material).restitution;
+  ContactEvent ev;ev.a=i;ev.b=best.kind==1?-1:best.other;
+  if(best.kind==1){
+   // Back to where the probe met the world, a millimetre off it; its way into it taken out at that point (a corner
+   // striking a post turns the body, not only stops it).
+   m.at(best.t,b.x,b.q);b.updateInertia();const V3 nn=best.normal;b.x=b.x+nn*.001f;
+   const V3 arm=b.q.rotate(best.point),at=b.x+arm;const float vn=dot(b.pointVelocity(at),nn),k=effective(b,arm,nn);float impulse=0;
+   if(vn<0&&k>0){impulse=-(1+e)*vn/k;b.v=b.v+nn*(impulse*b.invMass);b.w=b.w+b.invInertia*cross(arm,nn*impulse);}
+   ev.point=at;ev.normal=neg(nn);ev.approach=std::max(0.f,-vn);ev.impulse=impulse;ev.effectiveMass=k>0?1/k:0;}
+  else{
+   // Both back to where they meet (the other too when it was itself fast; a slow one moved too little to
+   // matter), a hair apart, and the blow between them there.
+   Body& o=s.bodies[size_t(best.other)];const V3 nn=best.normal;
+   m.at(best.t,b.x,b.q);b.updateInertia();b.x=b.x-nn*.0005f;
+   if(fast[size_t(best.other)]&&!done[size_t(best.other)]){Motion& mo=motion[size_t(best.other)];mo.at(best.t,o.x,o.q);o.updateInertia();o.x=o.x+nn*.0005f;mo.x1=o.x;mo.q1=o.q;mo.begin();done[size_t(best.other)]=1;}
+   const V3 armA=best.point-b.x,armB=best.point-o.x;const float vn=dot(o.pointVelocity(best.point)-b.pointVelocity(best.point),nn);
+   const float k=effective(b,armA,nn)+(o.invMass>0?effective(o,armB,nn):0.f);float impulse=0;
+   if(vn<0&&k>0){impulse=-(1+e)*vn/k;const V3 P=nn*impulse;b.v=b.v-P*b.invMass;b.w=b.w-b.invInertia*cross(armA,P);
+    if(o.invMass>0){o.sleeping=false;o.sleepTime=0;o.v=o.v+P*o.invMass;o.w=o.w+o.invInertia*cross(armB,P);}}
+   ev.point=best.point;ev.normal=nn;ev.approach=std::max(0.f,-vn);ev.impulse=impulse;ev.effectiveMass=k>0?1/k:0;}
+  m.x1=b.x;m.q1=b.q;m.begin();done[size_t(i)]=1;
+  if(ev.approach>.3f)s.events.push_back(ev);}
+}
 }
