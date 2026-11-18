@@ -303,6 +303,8 @@ void Space::prepare(float h){
  for(auto&m:manifolds){
   const Body& A=bodies[size_t(m.a)];const Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;
   const float mA=A.movable()?A.invMass:0,mB=B&&B->movable()?B->invMass:0;const M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B&&B->movable()?B->invInertia:M3::zero();
+  // Against the world: the surface's own material, where the caller gave one (a puddle is slick, carpet grips).
+  if(!B&&m.surface.gripped())m.material=Material::mix(A.material,m.surface.material());
   basis(m.normal,m.t1,m.t2);
   const auto key=keyOf(m);auto it=std::lower_bound(cache.begin(),cache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   const Cached* old=it!=cache.end()&&it->first==key?&it->second:nullptr;m.cold=old==nullptr;

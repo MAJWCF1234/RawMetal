@@ -138,7 +138,14 @@ struct ContactPoint {
  std::uint32_t feature=0;             // what the point came from (narrow phase), for matching
 };
 // The world thing a static contact touched, for the caller (a pane, a soft pad...): free for its use.
-struct Surface {int kind=0,index=-1;V3 velocity{};float hertz=0;};
+struct Surface {int kind=0,index=-1;V3 velocity{};float hertz=0;
+ // The world surface's own material (the floor under a body: concrete, a puddle, carpet, gravel), mixed with the body's
+ // in Space::prepare for a world manifold. staticFriction < 0: none given, and the manifold keeps the material its
+ // caller set.
+ float staticFriction=-1,dynamicFriction=-1,restitution=0,rolling=0;
+ void grip(const Material& m){staticFriction=m.staticFriction;dynamicFriction=m.dynamicFriction;restitution=m.restitution;rolling=m.rolling;}
+ bool gripped()const{return staticFriction>=0;}
+ Material material()const{return {staticFriction,dynamicFriction,restitution,rolling};}};
 struct Manifold {
  int a=-1,b=-1;                       // body indices; b<0: the static world
  int partA=0,partB=0;
