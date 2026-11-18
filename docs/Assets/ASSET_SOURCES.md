@@ -34,6 +34,15 @@ Runtime clutter includes trash, MRE, power supply, PCB and floppy-disc meshes/te
 Source library: `O:/retro official`.
 Imported assets include generator, barrel, crate, concrete/brick/metal surfaces, hazard stripes, chemical/machinery/confined-space signage, terminal panels and warning graphics. Originals were not modified.
 
+## Skies (make_skies.py, 2026-11-17)
+`tools/library/make_skies.py` brings five purchased panoramas in as neural x2 sky packets (2048 x 512, the Brutal format) under the gitignored `src/assets/library/skies/`, with the PNG master each was cut to beside it, and makes five more itself with numpy into the tracked `src/assets/ai/skies/`. Resources 2900-2909; the list, labels and each sky's haze are `EXTRA_SKIES` in `tools/library/register_skyboxes.py`. Sources, all under `O:/retro official/`, originals unchanged:
+- `psx_clear_day` (Clear day): `Textures/PSX_Daysky_HDRI/DAYSKY.hdr`, 2048 x 1024 Radiance, exposure 1.15, sRGB.
+- `psx_starry_night` (Starry night): `Textures/PSX_Nightsky_HDRI/PSX_NIGHTSKY.hdr`, Reinhard at 1.6, sRGB.
+- `dusk_afterglow` (Dusk afterglow): `Environments/Bus_stop/Skybox/Skybox.png`, as is.
+- `cloudy_night` (Cloudy night): `Environments/DINER/Skybox/Skybox.png`, lifted 1.7 with gamma 0.9 (it is exposed for a lit diner).
+- `treeline_night` (Treeline night): `Environments/6twelve/Skybox/pano.png`, 1024 x 512, enlarged to 2048 x 1024.
+Made here: `grey_overcast`, `cold_dawn`, `storm_front`, `ember_eclipse` (a black sun in red ash) and `resonance_aurora` (violet curtains over a starfield).
+
 ## Facility
 Purchased sources include Modular Retro FPS Kit v1.5 and PSX Bunkers v1.8.8. RawMetal uses supplied columns, vents, ceiling lamps, generators, shelving, wall cabinets and computer/control-terminal assets. Model UVs and per-face material assignments are retained.
 

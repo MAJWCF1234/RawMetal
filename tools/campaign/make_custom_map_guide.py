@@ -385,7 +385,7 @@ RECORDS = [
         ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed|hazeR|hazeG|hazeB|hazeDensity|wetness]',
          'One per map, numbered 0, 1, 2... with no gaps. origin places the 24 x 24 m map in the world: maps touch at multiples of 24. '
          'spawn is in map metres. environment 0 indoor, 1 outdoor. ceiling is the absolute ceiling height (indoors). ambient 0-1 is the base light (0.3 is a good start). '
-         'skybox: industrial_night indoors; zone_overcast (or brutal_wasteland) outdoors, which also switches on the campaign TERRAIN. '
+         'skybox: industrial_night indoors; outdoors zone_overcast, brutal_wasteland or any sky in the Outdoors section\'s list, which also switches on the campaign TERRAIN. '
          'openN/S/W/E 1 lets you walk across that edge into the neighbouring map. lift 0. '
          'Optional tail: residency -1, floorMaterial 0 concrete / 1 carpet, music 0 (the original track; 1-10 the area scores; 11 Silence, no score at all), spawnYaw radians, spawnPitch, startUnarmed 0/1. '
          'haze R G B (0-1) and density (0-0.1) give the map its own air: 0.01 is enough for lamps to hang cones of light in it. '
@@ -486,6 +486,18 @@ def shots():
         ppm = os.path.join(ROOT, '.build', 'shot', name + '.ppm')
         Image.open(ppm).convert('RGB').save(os.path.join(IMAGES, name + '.jpg'), quality=86, optimize=True)
         os.remove(ppm)
+
+
+def sky_list():
+    """The catalog skies (src/world/SkyboxCatalog.h) named for a MAP skybox field."""
+    import re
+    text = open(os.path.join(ROOT, 'src', 'world', 'SkyboxCatalog.h'), encoding='utf-8').read()
+    rows = re.findall(r'\{"(\w+)", "([^"]+)", (\d+), (true|false)(, [^}]*)?\}', text)
+    own = ['<code>%s</code> (%s)' % (i, html.escape(l)) for i, l, r, t, haze in rows if haze]
+    brutal = [i for i, l, r, t, haze in rows if not haze and i.startswith('skybox_')]
+    return ('Each of these lays its own air over the land when the MAP leaves its haze fields empty: ' + ', '.join(own) + '. '
+            'The %d Brutal panoramas are <code>skybox_emx_1</code> to <code>skybox_emx_35</code> and <code>skybox_plain_emx_1</code> to '
+            '<code>skybox_plain_emx_14</code>. The Campaign Builder\'s Map sky list shows every one by name.' % len(brutal))
 
 
 def main():
@@ -591,6 +603,7 @@ def main():
              'Every door of the Starter Map\'s facility is built this way.</li>'
              '<li><b>Which sky.</b> <code>zone_overcast</code> lays a low steam over ground below about 4 m, so low terrain reads milky white; '
              '<code>brutal_wasteland</code> has no steam and darker air, and the Starter Map\'s forest uses it with a blue-grey MAP haze.</li>'
+             '<li><b>More skies.</b> ' + sky_list() + '</li>'
              '<li><b>Buildings outdoors</b> are FIXTURE models (houses, sheds, the outdoor set) on a TERRAIN_FLAT pad, or STRUCT boxes. Add a SHELTER inside if the campaign has a STORM.</li></ul>')
 
     o.append('<h2 id="scripting">7. Scripting: making things happen</h2>')

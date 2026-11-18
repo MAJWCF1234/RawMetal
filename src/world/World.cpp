@@ -565,6 +565,8 @@ Haze World::haze(Vec2 p,float z)const{
  if(definition().haze[3]>=0)return definition().haze;
  if(zoneSky())return {.55f,.64f,.74f,.0035f};
  if(outdoors()&&std::string_view(skyboxId())=="brutal_wasteland")return coast()?Haze{.62f,.74f,.85f,.006f}:Haze{.39f,.39f,.40f,.012f};
+ // A catalog sky with its own air (make_skies.py's: night, storm, dawn...) hazes the land to match it.
+ if(outdoors())if(const auto* sky=findSkybox(skyboxId());sky&&sky->hazeDensity>=0)return {sky->hazeR,sky->hazeG,sky->hazeB,sky->hazeDensity};
  return outdoors()?Haze{.43f,.52f,.62f,.010f}:Haze{.11f,.15f,.18f,.008f};
 }
 void World::setSkybox(std::string id){

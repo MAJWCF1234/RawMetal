@@ -5501,8 +5501,14 @@ struct Editor {
     auto second=doc.records("MAP",1).at(0);auto fields=NativeDocument::fields(doc.lines[second]);
     fields.at(11)="some_custom_sky";doc.replace(second,fields);refresh();
     auto list=GetDlgItem(window,MapSkyList);
-    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=50,"Map skybox picker must list the three original and 47 purchased skies");
+    require(list&&SendMessageW(list,CB_GETCOUNT,0,0)>=int(retro::SkyboxCatalog.size()),"Map skybox picker must list every catalog sky");
     auto choose=[&](int index){SendMessageW(list,CB_SETCURSEL,index,0);SendMessageW(window,WM_COMMAND,MAKEWPARAM(MapSkyList,CBN_SELCHANGE),reinterpret_cast<LPARAM>(list));};
+    // The make_skies.py skies (day, overcast, dawn, dusk, storm, night, the eerie ones) are picked by name.
+    for(const auto* label:{L"Clear day",L"Grey overcast",L"Cold dawn",L"Dusk afterglow",L"Storm front",L"Starry night",L"Cloudy night",L"Treeline night",L"Ember eclipse",L"Resonance aurora"}){
+      const int at=int(SendMessageW(list,CB_FINDSTRINGEXACT,WPARAM(-1),reinterpret_cast<LPARAM>(label)));require(at>=0,"Map skybox picker must list the make_skies.py skies by name");
+      const auto steps0=history.size();choose(at);const auto* sky=retro::findSkybox(field(0));
+      require(sky&&std::wstring(label)==wide(std::string(sky->label))&&history.size()==steps0+1,"Picking a new sky by name must write its id to the MAP record");
+      SendMessageW(window,WM_COMMAND,Undo,0);}
     const auto initial=field(0);const auto steps=history.size();
     choose(3);const auto first=field(0);choose(4);const auto next=field(0);
     require(first!=initial&&first!=next&&first.starts_with("skybox_")&&next.starts_with("skybox_")&&dirty&&history.size()==steps+2,"Each sky selection must change the MAP record and create one undo step");

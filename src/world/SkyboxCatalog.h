@@ -9,8 +9,10 @@ struct SkyboxDef {
     std::string_view id, label;
     int resource;
     bool terrain;
+    // The sky's own air when the MAP leaves its haze empty; density < 0 keeps the default.
+    float hazeR = 0, hazeG = 0, hazeB = 0, hazeDensity = -1;
 };
-inline constexpr std::array<SkyboxDef, 50> SkyboxCatalog{{
+inline constexpr std::array<SkyboxDef, 60> SkyboxCatalog{{
     {"industrial_night", "Industrial night", 0, false},
     {"zone_overcast", "Zone overcast", 0, true},
     {"brutal_wasteland", "Brutal wasteland", 252, true},
@@ -61,6 +63,16 @@ inline constexpr std::array<SkyboxDef, 50> SkyboxCatalog{{
     {"skybox_plain_emx_12", "Brutal plain 12", 2844, true},
     {"skybox_plain_emx_13", "Brutal plain 13", 2845, true},
     {"skybox_plain_emx_14", "Brutal plain 14", 2846, true},
+    {"psx_clear_day", "Clear day", 2900, true, 0.66f, 0.74f, 0.84f, 0.005f},
+    {"grey_overcast", "Grey overcast", 2901, true, 0.62f, 0.64f, 0.66f, 0.011f},
+    {"cold_dawn", "Cold dawn", 2902, true, 0.62f, 0.5f, 0.5f, 0.008f},
+    {"dusk_afterglow", "Dusk afterglow", 2903, true, 0.24f, 0.24f, 0.32f, 0.009f},
+    {"storm_front", "Storm front", 2904, true, 0.27f, 0.29f, 0.32f, 0.016f},
+    {"psx_starry_night", "Starry night", 2905, true, 0.06f, 0.09f, 0.16f, 0.008f},
+    {"cloudy_night", "Cloudy night", 2906, true, 0.08f, 0.09f, 0.12f, 0.011f},
+    {"treeline_night", "Treeline night", 2907, true, 0.1f, 0.15f, 0.24f, 0.009f},
+    {"ember_eclipse", "Ember eclipse", 2908, true, 0.3f, 0.14f, 0.09f, 0.013f},
+    {"resonance_aurora", "Resonance aurora", 2909, true, 0.1f, 0.07f, 0.15f, 0.01f},
 }};
 inline constexpr const SkyboxDef* findSkybox(std::string_view id) {
     for (const auto& sky : SkyboxCatalog)
