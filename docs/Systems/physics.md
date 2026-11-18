@@ -3,7 +3,7 @@
 Vectra is RawMetal's rigid-body engine. It moves the game's model props (Clutter with a model): crates,
 barrels, bottles, chairs, tables, carts, containers and the rest. Junk and shards keep the older point physics.
 The prop physics that came before Vectra, a yaw-mostly box with tipping by rule, is still there as **legacy**.
-For now legacy is the default and Vectra sits behind the switch (below).
+**Vectra is the default**; legacy stays selectable as a fallback (below).
 
 - Core: `src/game/physics/Vectra.h`, `Vectra.cpp` (namespace `retro::vectra`). It has no game code in it.
 - Props as bodies: `src/game/physics/PropBodies.h`, `.cpp`. The shape and material catalogue, the switch, the
@@ -14,6 +14,8 @@ For now legacy is the default and Vectra sits behind the switch (below).
   `rigid` and `rigid-legacy` film the same scenes on each. `vectra-emergence` checks behaviour that comes from
   the solver alone. `rigid-trace` and `rigid-probe` are for debugging.
   `tools/dev/rigid_sheet.py` lays the films side by side.
+  `src/lab/tubes/VectraShove.cpp`: `vectra-shove` (props against people and things by weight, legacy and Vectra),
+  `mattress` (the chained mattress) and `vectra-feel` (the pictures, fixtures `feel-*`).
 
 ## Bodies
 
@@ -48,6 +50,7 @@ catalogue (the prop's dims, and the mass and container volume in prop_physics.js
 | sphere | pumpkin |
 | compound | office and boardroom chairs (a thin star base, column, seat, back); wooden, scrap and platform chairs (four legs, seat, back); tables and benches (top, four legs); wheelchair; desk lamp (an L); a supine body (torso, head, legs) |
 | open container | anything with `container` in prop_physics.json: a floor slab up to the inner floor, and four walls up to the rim |
+| chained | a soft prop (mattress, bedroll, pad) 0.8 m or longer and under 0.35 m thick: three segment boxes along its length (below) |
 
 Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
 
@@ -67,10 +70,15 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
   - A point inside a wall, fixture or door gets its face from a ray out of the body's middle.
   - A point that will be inside one by the end of the step gets a speculative contact at the face its own
     motion meets.
-  - The contacts are grouped by facing into manifolds of four.
+  - Only a part's underside stands on what is under it. A point up its side that has gone into a fixture's top
+    edge meets the fixture's face, as a wall (a tall crate shoved against a counter is not lifted onto it).
+  - The contacts are grouped by facing into manifolds of four. The floor under each part of a compound is its
+    own manifold, so a chair on its back rests on its back and its seat's edge at once.
   - A ramp (`ShapeRamp`) collides in the World as 10 cm step proxies. Vectra uses its true slope instead.
   - The usual case is asked once per body: one flat floor under the whole footprint, and every column round
-    and through it open.
+    and through it open. The answer is kept for a region 4 cm round the body (a resting or sliding prop asks
+    again only when it leaves it, falls 2 cm, or a door moves), and on such a floor only the lowest points and
+    a box's corners are asked about.
 
 ## Solver
 
@@ -83,18 +91,26 @@ six a frame) runs one collision pass, then **four substeps**. Each substep:
 5. relaxes without the bias.
 
 Restitution runs once per manifold at the end.
-- **Contacts** are springs of 60 Hz, critically over-damped (twice that against the world). Push-out is capped
-  at 3 m/s, and up to 4 mm of overlap is allowed (0.5 mm against the world).
+- **Contacts** are springs of 120 Hz (the substeps' limit) with a damping ratio of 2, against the world and
+  between bodies. Push-out is capped at 1 m/s, and up to 1 mm of overlap is allowed (0.5 mm against the world).
+  A woken ten-crate tower settles in 0.27 s with its top 0.6 mm off where it stood.
+- **New contacts** (nothing to warm start from: a stack just woken or set down whole) are iterated eight more
+  times on the step's first substep, so the weight reaches the floor before anything moves. What a sleeping
+  body's contacts held is kept while it sleeps, so a stack woken by a shot starts from its own impulses.
+  Warm starting matches contacts by the props' own indices, not their places in the step's body list.
+- Each impulse's turn on a body (its inverse inertia times r x axis) is worked out once a step, and each part's
+  hull is built once a step however many pairs it is in.
 - **Speculative contacts** close a gap within the step and no more.
-- **Impacts.** A manifold first takes an impact at its middle, so a box landing flat does not spin.
+- **Impacts.** A manifold first takes an impact at its middle, so a box landing flat does not spin. What it
+  reports (glass, breaking) carries the body's mass at that middle, not one corner's share.
 - **Friction** is Coulomb, inside a cone. A contact uses static friction if the surfaces were sliding slower
   than 8 cm/s when the step began, dynamic friction otherwise.
 - **Rolling and twisting resistance** is a length times the load. A bottle stops sooner than a drum.
 
 ## Sleeping
 
-Islands are bodies linked by contacts. An island sleeps when every body in it has stayed under 6 cm/s and
-0.12 rad/s for 0.35 s. A sleeping body takes part only as an immovable obstacle. Something moving that comes
+Islands are bodies linked by contacts and joints. An island sleeps when every body in it has stayed under
+6 cm/s and 0.12 rad/s for 0.2 s. A sleeping body takes part only as an immovable obstacle. Something moving that comes
 within reach of a sleeping body wakes it: a blow from a moving body is never stopped by a sleeper.
 A sleeping prop out of reach of every awake prop and of the player is not built at all.
 
@@ -130,6 +146,19 @@ use .3/.25.
 Padded props, mattresses and bedrolls (`model::soft`), are 4 Hz springs, so a load sinks in. A padded fixture
 gives where `softSinkAt` says it does.
 
+## Joints and the chained mattress
+
+`vectra::Hinge` is the first joint (`Space::constraints`): two anchors held together, the turn about every axis
+but the hinge held (soft, 60 Hz), and about the hinge a spring (`hertz`, `damping`) toward no bend, stopped past
+`limit`. A chained prop (PropBodies.h `chained`) is built as three segment bodies, each a third of its length,
+joined by two hinges about its width (`pad.hertz` 2.5, `pad.damping` .25, `pad.limit` 1.5 rad). Its own frame
+is the middle segment's, or while it is carried the end nearest the player (`Clutter::boneRoot`); the two
+joints' bends and their rates are `Clutter::bend` and `bendSpeed`. So it sags held by one end, drapes over a
+step or a bed's edge, flops when dropped, and a blow off its middle (a shot) swings the end struck about its
+joint. The renderer cuts its mesh to 9 cm and carries each vertex by its segment, blended over 6 cm at the
+joints (`chainSkin`). The bends are not in saves yet: a loaded mattress lies straight and drapes again within a
+second. The ward beds' padding (SoftBodies, a fixture) keeps its own soft grid.
+
 ## How the rest of the game meets it
 
 - **Hand.** The held prop is kinematic at the hand's velocity. Throws and the desktop flick still set velocity
@@ -140,8 +169,12 @@ gives where `softSinkAt` says it does.
   pace. A heavy prop (8 kg and up) blocks him, then is pushed at a walking pace, put in low so it slides
   rather than tips; after half a second it yields as it always did.
 - **Containers.** What lies in one rests on its inner floor, and is held by its walls, by contact. A
-  container in the hand or being shoved carries what is in it rigidly; so does one still moving after a shove.
-  Tipped or broken, it pours out by itself.
+  container in the hand, or one the player is shoving, carries what is in it rigidly (neither the hand nor his
+  shove is a body with mass, and a sprint's shove would jerk it out from under them). One thrown, let fall or
+  knocked takes its contents by its floor and walls, with their weight on it when it lands. Tipped or broken, it
+  pours out by itself.
+- **Hand.** The held prop spins with the hand (its turn since the last frame), so a crate swung round carries
+  what stands on it by friction and flings it off when jerked.
 - **Water.** Each part is 27 cells, each under the surface by its own share. The lift acts at the middle of
   what is under, drawn toward the body's middle (a prop's mass is in its walls), so a floater rights itself
   onto a face. Drag, swell and drift are as before. A body coming through the surface splashes.
@@ -151,6 +184,21 @@ gives where `softSinkAt` says it does.
   prop's middle, which is what the break speeds were tuned on.
 - **Bodies.** The old body contacts still run: people and creatures struck, carried along, stood on.
   Heavy-impact tipping is real torque now.
+  - **Shoved by momentum.** A prop that comes at a man, a guard or a creature gives him the speed its momentum
+    shares between them (its mass over both, times its closing speed), carried through a quarter second: a mug
+    barely nudges him, a thrown 9 kg crate shoves him back 15 cm, a rolling 35 kg drum a pace. Past half a metre
+    a second a creature staggers: its blow is spoilt and it waits before the next. It moves through the same
+    hull sweeps the creatures and men already walk by, so nothing is pushed into a wall.
+  - **Hurt by the blow's energy.** Damage is a fifth of the energy past 2 J (half m v squared at the closing
+    speed, from 1.5 m/s): a thrown mug stings (2 to 3), a thrown crate hurts badly (about 20).
+  - **Breaking by the blow.** A prop breaks past its material's break speed, or when the blow it takes (the
+    contact's impulse over its own mass, over 1 + restitution, from 1 m/s) is past it: a crate dropped on a mug
+    crushes it, the mug dropped as far alone stays whole. The impact sound's cooldown never spares a prop the
+    blow that breaks it.
+  - **Glass** takes the energy at the manifold's middle: a 20 kg box dropped 1.2 m goes through a glass floor,
+    a 1 kg box does not.
+  - **The shield.** A carried prop that does not break is torn out of the hands once it has taken
+    `ShieldKnockAway` times its mass over 9 kg (half to three times): a 20 kg crate takes 9 blows, a 4 kg one 2.
 - **Cables, saves and the renderer** read yaw, pitch and roll as before.
 
 ## Saves
@@ -162,16 +210,22 @@ and roll; the result matches the saved turn to 0.001 mrad (`rigid-ab`).
 
 ## The legacy switch
 
-**Legacy is the default** until Vectra beats it on every row of the scorecard (cost with 100 awake props,
-stack settling, real maps, the emergence tubes). Turn Vectra on with `RM_PROPS=vectra` in the environment, or
-the knob `props.legacy 0` (`RM_TUNE` / `lab/tune.txt`). `RM_PROPS=legacy` forces legacy, which is
-simulateClutter's own step and the old container riding. `vectra::forceLegacyProps` sets either for the lab's
+**Vectra is the default.** Legacy stays as a fallback: `RM_PROPS=legacy` in the environment, or the knob
+`props.legacy 1` (`RM_TUNE` / `lab/tune.txt`), runs simulateClutter's own step and the old container riding.
+`RM_PROPS=vectra` forces Vectra. `vectra::forceLegacyProps` sets either for the lab's
 A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's own knobs:
 
 | Knob | Default | What it sets |
 | --- | --- | --- |
 | `props.substeps` | 4 | substeps a step |
-| `props.contact_hertz` | 60 | contact stiffness |
+| `props.contact_hertz` | 120 | contact stiffness |
+| `props.contact_damping` | 2 | damping ratio between bodies |
+| `props.world_damping` | 2 | damping ratio against the world |
+| `props.pushout` | 1 | the most a contact pushes out at (m/s) |
+| `props.slop` | 0.001 | allowed overlap (m) |
+| `props.cold` | 8 | extra iterations for contacts with nothing to warm start from |
+| `props.sleep_time`, `props.sleep_linear`, `props.sleep_angular` | 0.2, 0.06, 0.12 | sleeping |
+| `pad.hertz`, `pad.damping`, `pad.limit` | 2.5, 0.25, 1.5 | the mattress hinges |
 | `props.sample_spacing` | 0.12 | spacing of the world contact samples |
 | `props.player_hertz` | 5 | the player body's contact stiffness |
 | `props.player_mass` | 20 | the player body's mass (kg) |
