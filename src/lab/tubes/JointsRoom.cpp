@@ -87,6 +87,8 @@ const bool registered=add({
     Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims={.45f,.45f,.45f};auto tr=std::make_shared<EntityTraits>();tr->mass=50;c.traits=tr;c.pos={17.45f,3.5f};c.z=1.3f;c.sleeping=false;list.push_back(c);
     Clutter d=c;d.dims={.4f,.4f,.4f};auto t2=std::make_shared<EntityTraits>();t2->mass=9;d.traits=t2;d.pos={3.6f,12.5f};d.z=1.2f;list.push_back(d);
     Clutter e=c;e.pos={8,12.6f};e.z=1.5f;auto t3=std::make_shared<EntityTraits>();t3->mass=30;e.traits=t3;list.push_back(e);}
+   // Every jointed prop kept awake through the measure (each joint solved every step).
+   if(f>=20&&f<150){const auto& wj=g.world();for(const auto& st:wj.jointStates())for(int i:{st.hintA,st.hintB})if(i>=0&&i<int(list.size())){list[size_t(i)].sleeping=false;list[size_t(i)].restTime=0;}}
    if(f>30&&f<150){const auto& st=LabAccess::rigidStats(g);w.v["ms"]+=st.ms;w.v["n"]+=1;w.v["peak"]=std::max(w.v["peak"],st.ms);w.v["bodies"]=std::max(w.v["bodies"],double(st.bodies));w.v["awake"]=std::max(w.v["awake"],double(st.awake));}}
  },
  .metrics=[](Scene& s,Report& r){auto& w=watches()[&s];Game& g=s.g();const std::string scene=s.fixture->value("scene");
