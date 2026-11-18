@@ -30,6 +30,7 @@ Things hang now, and swing, and come apart along their seams; the dead fall like
 - **Weight that stays.** A heavy drum set on a light crate rests on it. It no longer sinks into the crate, nor presses the crate into the floor, nor springs back off it.
 - **Quieter rooms cost less.** A room of four hundred resting things costs half what it did each step, and a burst of shards flying through them a fifth less.
 - **Scrapes and rolls.** A crate dragged across the floor scrapes as it goes and falls silent when it stops. A barrel rolling on its side rumbles. Wood, metal and glass each sound their own.
+- **Smaller.** The game carries more of its textures, and its skies, as small sketches it redraws the first time they are needed, with a better learned hand that can work from a quarter of the size. Every one was held up against its original and kept only where the two read the same; the rest are kept whole. The game is lighter for it, with room left for what comes next.
 - **The Starter Map** has a gallery of the new parts on two gravel yards, and east of it a hill with a mine in it: a mouth in its west face, a timbered drift with rails and an ore cart, a cavern of crystals by lantern light, and a passage south to a pool that drips.
 
 Verified with tools/release/ship.py, the feature lab's tubes for every system above, the editor's test modes, and pictures of each.

@@ -1,0 +1,34 @@
+{
+  "seed": 1337,
+  "steps": 8000,
+  "pack_folder": "O:\\retro official",
+  "pack_textures": 429,
+  "heads": {
+    "2": {
+      "channels": 12,
+      "blocks": 1
+    },
+    "4": {
+      "channels": 16,
+      "blocks": 2
+    }
+  },
+  "parameters": 15436,
+  "model_bytes": 30964,
+  "training_textures": 733,
+  "held_out_textures": 30,
+  "held_out_policy": "sha256(file name)[0] % 10 == 0, plus panel-metal/water/wall-painted; never trained",
+  "lossy_inputs": "40% of patches use VP8 (sharp YUV) low-res: q85 at x2, q90 at x4",
+  "x2": {
+    "held_out_psnr": 32.285628195329295,
+    "bilinear_psnr": 31.00709851394806,
+    "held_out_psnr_lossy_input": 30.592164261895793,
+    "bilinear_psnr_lossy_input": 29.988426261845465
+  },
+  "x4": {
+    "held_out_psnr": 29.205986259812715,
+    "bilinear_psnr": 28.5438721768228,
+    "held_out_psnr_lossy_input": 28.52003256317839,
+    "bilinear_psnr_lossy_input": 28.0922274414436
+  }
+}
