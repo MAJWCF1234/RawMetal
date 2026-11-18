@@ -82,7 +82,9 @@
     }
     std::erase_if(out, [&](const GrowthFace &f) {
       const float dx = f.alongX ? std::clamp(x, f.a0, f.a1) - x : f.at - x, dy = f.alongX ? f.at - y : std::clamp(y, f.a0, f.a1) - y;
-      return std::hypot(dx, dy) > reach;
+      // Only a face the brush is in front of (or on top of the wall it bounds): you paint the side you stand on.
+      const float front = f.alongX ? (y - f.at) * f.ny : (x - f.at) * f.nx;
+      return std::hypot(dx, dy) > reach || front < -.55f;
     });
     return out;
   }
@@ -212,7 +214,7 @@
           const float z = slot == creeper ? face.z0 : face.z0 + (ivy ? (u < .5f ? room * u * u * 2.f : room * (1.f - (1.f - u) * (1.f - u) * 2.f)) : std::min(room, 1.4f) * u * u);
           const float out = size[1] * s * .5f + .01f;
           const float px = face.alongX ? along : face.at + face.nx * out, py = face.alongX ? face.at + face.ny * out : along;
-          if (growthCrowded(px, py, z + h * .5f, std::max(.35f, std::min(w, h) * .55f)))
+          if (growthCrowded(px, py, z + h * .5f, std::max(.35f, std::min(w, h) * (ivy ? .85f : .55f))))
             continue;
           growthPiece(slot, s, px, py, z, std::atan2(face.nx, face.ny));
           ++n;

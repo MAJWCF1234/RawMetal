@@ -140,9 +140,9 @@
       for (int i = 1; i <= 5; ++i)
         mouse(WM_MOUSEMOVE, 17.6f, 10.1f + 4.8f * float(i) / 5.f);
       shot(L"atrium-window-wall-drag", ppm);
-      mouse(WM_MOUSEMOVE, 17.6f, 10.1f);
-      SendMessageW(window, WM_KEYDOWN, VK_ESCAPE, 0);
-      mouse(WM_LBUTTONUP, 17.6f, 10.1f);
+      mouse(WM_LBUTTONUP, 17.6f, 14.9f);
+      if (doc.text() != keep)
+        SendMessageW(window, WM_COMMAND, Undo, 0);
       require(doc.text() == keep, "the picture's drag changed the map");
       report << "atrium-window-wall-drag.bmp: the Window wall tool mid-drag along the court's wall, its boxes on the right, the 3D pane the engine's picture of the storefront it makes\n";
     }

@@ -106,7 +106,9 @@ model, so the inspector, copy and prefabs handle it. Creepers are hanging plants
 in play they drift, part as you walk through and flinch when shot. A stroke is one
 Ctrl+Z. `--growth-test` (and `--editing-test`) drives it, with pictures in
 `.build/interaction/growth-ivy.bmp` and `growth-tool.bmp`; the lab tubes `growth`
-and `atrium` play it.
+and `atrium` play it. `--atrium-pictures` opens the Starter Map's atrium and pictures the
+Window wall tool mid-drag, the picked storefront's fields, the Breach tool and the Growth brush, the
+3D pane filled with the engine's picture of the same document (`.build/interaction/atrium-*.bmp`).
 
 ### Outdoors: the land, its plants and water
 

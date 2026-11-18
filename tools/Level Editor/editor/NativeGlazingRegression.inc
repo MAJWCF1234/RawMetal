@@ -61,6 +61,9 @@
     box(glazingLookList, GlazingLookList, 1);
     box(glazingDoorList, GlazingDoorList, 1);
     const size_t linesBefore = doc.lines.size();
+    size_t recordsBefore = 0;
+    for (const auto &line : doc.lines)
+      recordsBefore += !line.empty() && line[0] != '#';
     drag(3.2f, 12.5f, 10.8f, 12.5f);
     auto glazings = doc.records("GLAZING", map);
     require(glazings.size() == 1, "dragging along the wall made " + std::to_string(glazings.size()) + " GLAZING records");
@@ -72,17 +75,23 @@
             "the tool boxes' choices are not the record's named fields: " + doc.lines[g]);
     require(doc.format() == 2, "a storefront did not put FORMAT|2 in");
     require(rowsBefore() == tiles, "placing the storefront changed the wall's tiles (the engine cuts its own opening)");
-    require(doc.lines.size() == linesBefore + 2, "a storefront should be one record (and FORMAT|2), not " + std::to_string(doc.lines.size() - linesBefore));
+    // One record and FORMAT|2 (the Builder's own "# EDITOR_LAYER" marker over the record is no record).
+    { size_t records = 0; for (const auto &line : doc.lines) records += !line.empty() && line[0] != '#';
+      require(records == recordsBefore + 2, "a storefront should be one record (and FORMAT|2), not " + std::to_string(records - recordsBefore)); }
     require(validateDocument(), "the engine refused the storefront");
     report << "PASS: Window wall: a drag along a wall of tiles writes one GLAZING on the wall's box with the tool's bays, rows, panes, frame and doorway; the tiles are untouched; the engine reads it\n" << std::flush;
     if (pictures) {
       // Mid-drag, the plan's rubber band over the wall; then the storefront picked, its fields in the inspector.
+      const auto unpictured = doc.text();
+      const size_t steps = history.size();
       mouse(WM_LBUTTONDOWN, 3.2f, 6.5f);
       mouse(WM_MOUSEMOVE, 7.f, 6.5f);
       captureEditorWindow(root / L".build" / L"interaction" / L"glazing-drag.bmp");
-      mouse(WM_MOUSEMOVE, 3.2f, 6.5f);
-      SendMessageW(window, WM_KEYDOWN, VK_ESCAPE, 0);
-      mouse(WM_LBUTTONUP, 3.2f, 6.5f);
+      mouse(WM_LBUTTONUP, 7.f, 6.5f);
+      // The picture's drag made a screen on open floor: take it back.
+      if (doc.text() != unpictured)
+        SendMessageW(window, WM_COMMAND, Undo, 0);
+      require(doc.text() == unpictured && history.size() == steps, "the picture's drag left the map changed");
     }
     // ---- Edit it in the inspector: three bays ----
     pick(0);
