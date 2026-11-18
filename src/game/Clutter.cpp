@@ -442,7 +442,9 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
      const Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};const Vec2 way=stuck?side:n;const float reach=stuck?(n.x!=0?ny:nx):std::min(nx,ny);
      const float pace=std::min(std::min(6.f,length(m_velocity)+1.f),(reach+.001f)/std::max(dt,1e-3f));c.velocity+=way*std::max(0.f,pace-dot(c.velocity,way));
      c.soundOwner=-1;c.sleeping=false;c.restTime=0;goto rigidPush;}
-    if(fit(next))shove(c,next);else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){shove(c,next);n=side;}}c.soundOwner=-1;float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));c.sleeping=false;c.restTime=0;}}
+    bool gave=true;if(fit(next))shove(c,next);else{Vec2 side=n.x!=0?Vec2{0,delta.y<0?-1.f:1.f}:Vec2{delta.x<0?-1.f:1.f,0};next=c.pos+side*((n.x!=0?ny:nx)+.001f);if(fit(next)){shove(c,next);n=side;}else gave=false;}
+    // (Vectra: a prop with nowhere to go is not driven on into what stops it; legacy's step kept it out by its own test.)
+    c.soundOwner=-1;if(gave||!rigidCore){float speed=dot(m_velocity,n)*std::min(1.f,4/c.mass())+.2f;c.velocity+=n*std::max(0.f,speed-dot(c.velocity,n));}c.sleeping=false;c.restTime=0;}}
    rigidPush:;
   }else if(length(m_velocity)>.5f&&length(c.pos-(m_player.pos-shift))<.24f+c.footprint()*.5f&&c.z<m_player.z+1&&c.z+c.height()>m_player.z){c.velocity=m_velocity*.7f;c.pitchSpeed=5;c.rollSpeed=2;c.sleeping=false;c.restTime=0;}
   if(c.model>=0){auto probe=c.pos+shift;const auto&under=physicalWorld(probe);if(probe.x<0||probe.x>=24||probe.y<0||probe.y>=24||!chunkResident(under.level())){c.sleeping=true;c.restTime=-1;continue;}if(c.restTime<0){c.sleeping=false;c.restTime=0;}}

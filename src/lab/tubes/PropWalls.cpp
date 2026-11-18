@@ -63,7 +63,7 @@ const bool tube=add({
   // RM_PROPWALLS_TRACE=<prop index>: prop-walls-trace.txt, its pose, what of it is in a solid and the world contacts near it, each frame.
   if(const char* e=std::getenv("RM_PROPWALLS_TRACE");e&&std::atoi(e)==int(t.index)){static std::ofstream tr("prop-walls-trace.txt");std::string why;const bool in=inSolid(w,c,&why);
    tr<<"frame "<<r.frame<<" pos "<<fixed(c.pos.x,3)<<","<<fixed(c.pos.y,3)<<","<<fixed(c.z,3)<<" ypr "<<fixed(c.yaw,3)<<","<<fixed(c.pitch,3)<<","<<fixed(c.roll,3)<<" v "<<fixed(c.velocity.x,2)<<","<<fixed(c.velocity.y,2)<<(c.sleeping?" asleep":"")<<" blocked "<<fixed(c.blockedTime,2)<<(in?" IN "+why:"")<<'\n';
-   for(const auto& m:LabAccess::rigidStats(g).manifoldsSeen){if(m.count==0)continue;const auto& q=m.points[0].p;if(std::fabs(q.x-c.pos.x)>.6f||std::fabs(q.y-c.pos.y)>.6f)continue;
+   for(const auto& m:LabAccess::rigidStats(g).manifoldsSeen){if(m.count==0)continue;const auto& q=m.points[0].p;if(m.b>=0||std::fabs(q.x-c.pos.x)>1.f||std::fabs(q.y-c.pos.y)>1.f)continue;
     tr<<"   M a"<<m.a<<" b"<<m.b<<" g"<<m.partB<<" n "<<fixed(m.normal.x,2)<<","<<fixed(m.normal.y,2)<<","<<fixed(m.normal.z,2);for(int k=0;k<m.count;++k)tr<<" ("<<fixed(m.points[size_t(k)].p.x,2)<<","<<fixed(m.points[size_t(k)].p.y,2)<<","<<fixed(m.points[size_t(k)].p.z,3)<<" s"<<fixed(m.points[size_t(k)].separation*1000,1)<<")";tr<<'\n';}}
   t.moved=std::max(t.moved,length(c.pos-t.start));
   // Through a wall: the prop's middle, frame to frame, never passes through a solid (sampled every 2 cm).

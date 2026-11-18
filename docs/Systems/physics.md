@@ -70,6 +70,10 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
   - A point inside a wall, fixture or door gets its face from a ray out of the body's middle.
   - A point that will be inside one by the end of the step gets a speculative contact at the face its own
     motion meets.
+  - The corners of the fixtures and structures round a body are tested against its own shape too, so a
+    counter's corner cannot go into a crate's face between two of its points. A point more than 6 cm under
+    what the World says supports it is inside that thing from its side, and meets it as a wall. A point whose
+    way ahead is blocked where no ray finds a face still gets a contact against its way.
   - Only a part's underside stands on what is under it. A point up its side that has gone into a fixture's top
     edge meets the fixture's face, as a wall (a tall crate shoved against a counter is not lifted onto it).
   - The contacts are grouped by facing into manifolds of four. The floor under each part of a compound is its
@@ -184,11 +188,17 @@ second. The ward beds' padding (SoftBodies, a fixture) keeps its own soft grid.
   prop's middle, which is what the break speeds were tuned on.
 - **Bodies.** The old body contacts still run: people and creatures struck, carried along, stood on.
   Heavy-impact tipping is real torque now.
-  - **Shoved by momentum.** A prop that comes at a man, a guard or a creature gives him the speed its momentum
-    shares between them (its mass over both, times its closing speed), carried through a quarter second: a mug
-    barely nudges him, a thrown 9 kg crate shoves him back 15 cm, a rolling 35 kg drum a pace. Past half a metre
-    a second a creature staggers: its blow is spoilt and it waits before the next. It moves through the same
-    hull sweeps the creatures and men already walk by, so nothing is pushed into a wall.
+  - **Bodies in the solver.** Each man and creature within reach of a moving prop is a body in the solver: a
+    box of his hull from just over his feet, his weight, his own speed, no gravity, no turning, hard contacts. A
+    prop meets him by contact and never passes into him; one leaning on him or pushed slowly into him moves him
+    as far as it moved that body. (The prop in the hand is left to the carry's own sweep.)
+  - **Knocked back by momentum.** A prop that comes at him gives him the speed its momentum shares between them
+    (1.2 times its mass times its closing speed, over both masses). Under 0.15 m/s it is a nudge (a mug: a
+    centimetre). Over it he stumbles back 1.6 m per m/s of it, at most 1.5 m, slowing at 4 m/s^2, through the hull
+    sweeps he walks by, so nothing is pushed into a wall: a thrown 9 kg crate knocks a guard about 0.6 m back
+    and a creature 1 m. Past 0.5 m/s a creature's blow is spoilt and it waits before the next; past 1.3 m/s (a
+    35 kg drum at a run) a man is knocked down, out cold where he falls (the restraint knockout), and a creature
+    waits longer. (Game::m_bodyKnocks, updateBodyKnocks.)
   - **Hurt by the blow's energy.** Damage is a fifth of the energy past 2 J (half m v squared at the closing
     speed, from 1.5 m/s): a thrown mug stings (2 to 3), a thrown crate hurts badly (about 20).
   - **Breaking by the blow.** A prop breaks past its material's break speed, or when the blow it takes (the

@@ -97,6 +97,7 @@ struct LabAccess {
  // Things that break, and what they leave (tubes/Debris.cpp).
  static std::vector<Clutter>& clutter(Game& g){return g.m_clutter;}
  static const Game::RigidStats& rigidStats(const Game& g){return g.m_rigidStats;}
+ static std::vector<Game::BodyKnock>& bodyKnocks(Game& g){return g.m_bodyKnocks;}
  static void knock(Game& g,size_t index,Point3 at,Point3 impulse){g.knockClutter(g.m_level,index,at,impulse);}
  static Vec2& carryHandVelocity(Game& g){return g.m_carryHandVelocity;}
  static int entityProperty(Game& g,int level,std::string_view entity,std::string_view key){return g.entityPropertyInt(level,entity,key);}

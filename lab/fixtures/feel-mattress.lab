@@ -1,6 +1,6 @@
 # Vectra feel picture: mattress (tube vectra-feel)
 world room
-camera 8.6 6.6 -999 50 -18
+camera 9.0 6.4 -999 40 -16
 light 10.2 8 2.4 1.8 9
 light 8 6 2.6 .9 8
 feel mattress

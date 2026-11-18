@@ -168,6 +168,7 @@ bool nearestOnPart(const Body& b,int part,V3 point,V3& surface,V3& normal,float&
  else{const float r=p.half.x;n=norm(l,{0,0,1});q=n*r;inside=lenSq(l)<r*r;}
  surface=centre+turn.rotate(q);normal=turn.rotate(n);distance=inside?-len(q-l):len(l-q);return inside;}
 }
+bool nearestPoint(const Body& b,int part,V3 point,V3& surface,V3& normal,float& distance){return nearestOnPart(b,part,point,surface,normal,distance);}
 void partBounds(const Body& b,int part,V3& lo,V3& hi){
  const auto&p=b.shape->parts[size_t(part)];V3 centre;Quat turn;partFrame(b,part,centre,turn);
  if(p.kind==PartKind::Sphere){const V3 r{p.half.x,p.half.x,p.half.x};lo=centre-r;hi=centre+r;return;}

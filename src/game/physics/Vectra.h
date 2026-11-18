@@ -169,6 +169,9 @@ int supportFeature(const Body& body,int part,V3 d,std::array<V3,8>& out);
 // Sample points on the part's surface (world), every `spacing` metres along its edges and across its faces,
 // for asking a world of columns where it is solid.
 void surfaceSamples(const Body& body,int part,float spacing,std::vector<V3>& out);
+// The part's nearest surface point to `point` (world), its outward normal there, and the signed distance
+// (negative inside): for the corners of the world's boxes against a body.
+bool nearestPoint(const Body& body,int part,V3 point,V3& surface,V3& normal,float& distance);
 
 // ---- Phase 2 hook: joints -------------------------------------------------------------------------
 struct Space;

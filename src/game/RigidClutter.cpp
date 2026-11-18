@@ -18,9 +18,11 @@
 #include "../core/Tune.h"
 #include <chrono>
 #include <deque>
+#include <cstdio>
+#include <cstdlib>
 namespace retro {
 namespace {
-constexpr float RigidStep=1.f/120;constexpr int RigidMaxSteps=6;constexpr int PlayerBody=-2;
+constexpr float RigidStep=1.f/120;constexpr int RigidMaxSteps=6;constexpr int PlayerBody=-2,ActorBody=-100;   // ActorBody-k: the k-th man or creature this step
 // Panes, as Clutter.cpp's strike has them.
 constexpr float PaneTap=2,PaneRearm=.3f;
 float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:150.f):b.material==22?40.f:300.f;}
@@ -43,6 +45,7 @@ int keepFour(std::vector<Hit>& h,vectra::V3 n){
 void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held){
  using namespace vectra;
  auto& rp=m_rigidProps[level];
+ if(level==m_level)updateBodyKnocks(dt);   // the men and creatures props knocked, stumbling on (once a frame)
  if(level==m_level){m_rigidStats.steps=0;m_rigidStats.ms=m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;}
  const Vec2 shift=chunkOffset(level)-chunkOffset(m_level);
  // A point in this list's coordinates, in the world that holds it (p becomes that world's own coordinates).
@@ -131,7 +134,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    float s=w.supportBelow(q.x,q.y,p.z+.06f,true);s-=softSinkAt(w.level(),q,s);
    // Only its underside stands on things: a point up its side that has gone a little into a fixture's top edge
    // (a tall crate shoved against a counter) meets the fixture's side, as a wall, and does not lift it onto it.
-   const bool under=p.z<b.x.z+.01f;
+   // (A point well under what the World says supports it (6 cm) is inside that thing from its side: a wall.)
+   const bool under=p.z<b.x.z+.01f&&p.z-s>-.06f;
    if(p.z-s<margin&&!round&&under)hits.push_back({p,{0,0,1},p.z-s,0,partOf[si]});
    // Every point is asked about walls too, from just over what it stands on: a thin thing on the floor
    // (a keyboard, a bottle on its side) is all floor points, and would otherwise roll through a wall.
@@ -150,8 +154,23 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    {const V3 vp=b.v+cross(b.w,p-b.x);const V3 move=vp*RigidStep*1.5f;const float horiz=std::sqrt(move.x*move.x+move.y*move.y);
     if(horiz>.004f){const float tx=q.x+move.x,ty=q.y+move.y;const float fb=std::max(p.z+move.z-.005f,s+.004f);
      if(!w.fits(tx,ty,fb,.01f,true,true)||w.doorBlocks(tx,ty,fb,.01f)){const V3 from{q.x,q.y,std::max(p.z,s+.006f)},to{tx,ty,std::max(p.z,s+.006f)};V3 n;const float t=w.shotFraction(from,to,n);
-      if(t<1&&dot(n,to-from)<0)hits.push_back({p,n,std::max(0.f,dot(from-(from+(to-from)*t),n)),2});}}}
+      if(t<1&&dot(n,to-from)<0)hits.push_back({p,n,std::max(0.f,dot(from-(from+(to-from)*t),n)),2});
+      // The ray met no face (a fixture a ray passes through, a corner between its steps): the way it is going is
+      // blocked, so a contact now against that way, at no gap, stops it at the face rather than in it.
+      else{const float l=horiz;hits.push_back({p,V3{-move.x/l,-move.y/l,0},0.f,2});}}}}
   }
+  // The corners of the boxes round it (fixtures, structures) against its own shape: the world is asked only at
+  // points over the body, so a counter's corner pushed into a crate's face between two of them went unseen.
+  if(!flat){const Vec2 kk=cq-(Vec2{b.x.x,b.x.y}+shift);   // world-local = list + shift + kk
+   const float lx0=b.boundsLo.x+shift.x+kk.x-margin,lx1=b.boundsHi.x+shift.x+kk.x+margin,ly0=b.boundsLo.y+shift.y+kk.y-margin,ly1=b.boundsHi.y+shift.y+kk.y+margin,lz0=b.boundsLo.z,lz1=b.boundsHi.z;
+   auto corner=[&](float wx,float wy,float bottom,float top){if(wx<lx0||wx>lx1||wy<ly0||wy>ly1)return;const float z0=std::max(bottom,lz0),z1=std::min(top,lz1);if(z1<z0)return;
+    for(float wz:{z0+.01f,(z0+z1)*.5f,z1-.01f}){const V3 p{wx-shift.x-kk.x,wy-shift.y-kk.y,wz};
+     for(int part=0;part<b.shape->count;++part){V3 surface,normal;float d;nearestPoint(b,part,p,surface,normal,d);if(d<margin)hits.push_back({p,neg(normal),d,2,part});}}};
+   for(const auto&f:cw.fixtures()){if(!f.solid||f.core<=0)continue;const float hx=f.width*f.core*.5f,hy=f.depth*f.core*.5f,r=std::sqrt(hx*hx+hy*hy);
+    if(f.position.x+r<lx0||f.position.x-r>lx1||f.position.y+r<ly0||f.position.y-r>ly1)continue;const float bottom=cw.floorHeight(f.position.x,f.position.y)+f.base,top=bottom+f.height;if(top<lz0||bottom>lz1)continue;
+    const float c=std::cos(f.yaw),s=std::sin(f.yaw);const Vec2 ax{c,-s},ay{s,c};for(int i=0;i<4;++i){const Vec2 q=f.position+ax*(i&1?hx:-hx)+ay*(i&2?hy:-hy);corner(q.x,q.y,bottom,top);}}
+   for(const auto&st:cw.structures()){if(!st.solid||st.shape==ShapeRamp)continue;if(st.x2<lx0||st.x1>lx1||st.y2<ly0||st.y1>ly1||st.top<lz0||st.bottom>lz1)continue;
+    corner(st.x1,st.y1,st.bottom,st.top);corner(st.x2,st.y1,st.bottom,st.top);corner(st.x1,st.y2,st.bottom,st.top);corner(st.x2,st.y2,st.bottom,st.top);}}
   if(hits.empty())return;
   // Group: the floor, the ceiling, the walls by the way they face (eight ways round).
   // (The floor under each part of a compound is its own manifold: a chair on its back rests on its back and its
@@ -174,7 +193,9 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    for(const auto&h:group){auto&c=m.points[size_t(m.count++)];c=ContactPoint{};c.p=h.p;c.separation=h.sep-worldSlop;c.localA=b.q.unrotate(h.p-b.x);c.localB=h.p;}
    out.push_back(m);}
  };
- space.filter=[&](const Space& sp,int a,int b){const Body& A=sp.bodies[size_t(a)];const Body& B=sp.bodies[size_t(b)];
+ space.filter=[&](const Space& sp,int a,int b){const Body& A=sp.bodies[size_t(a)];const Body& B=sp.bodies[size_t(b)];if(A.user<0&&B.user<0)return false;
+  // (The prop in the hand meets men by the carry's own sweep, pushBodiesFromCarried: it neither hurts nor knocks them.)
+  if(A.user<=ActorBody||B.user<=ActorBody)return !(A.kinematic||B.kinematic);
   if(A.user==PlayerBody||B.user==PlayerBody){const Body& prop=A.user==PlayerBody?B:A;const Body& player=A.user==PlayerBody?A:B;(void)player;
    // Light props only: one of 8 kg and up stops him (Movement) and is shoved by the old rule's slow push.
    return prop.kinematic||prop.invMass<1/8.f?false:len(prop.v)<2.5f;}return true;};
@@ -225,17 +246,39 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&closing>.001f&&sweepFits(c.pos,next))c.pos=next;
    if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}};
   contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);},[&](float dv,Vec2){m_verticalSpringVelocity-=std::min(1.f,dv*.4f);});
-  for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
+  // (Men and creatures are bodies in the solver (actor bodies, below): a prop meets them by contact.)
+  if(false)for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
    contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;reached=next;}npc.pose.position=reached;return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);},[](float,Vec2){});}
-  for(int target=0;target<chunkCount();++target)if(chunkResident(target)){auto offset=chunkOffset(target)-chunkOffset(level);auto&enemies=target==m_level?m_enemies:m_chunks[target].enemies;for(auto&enemy:enemies)if(enemy.alive){
+  if(false)for(int target=0;target<chunkCount();++target)if(chunkResident(target)){auto offset=chunkOffset(target)-chunkOffset(level);auto&enemies=target==m_level?m_enemies:m_chunks[target].enemies;for(auto&enemy:enemies)if(enemy.alive){
    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!hullFits(next+chunkOffset(target)-chunkOffset(m_level),enemy.z,enemy.hull(),enemy.radius(),false,false))break;reached=next;}enemy.pos=reached;return enemy.pos-before;},
     [&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}},
     // Staggered by a hard shove (half a metre a second taken from the prop): its blow is spoilt and it recovers.
     [&](float dv,Vec2){if(dv<.5f)return;enemy.windup=0;enemy.strike=0;enemy.attackCooldown=std::max(enemy.attackCooldown,.35f+dv*.5f);enemy.painFlash=std::max(enemy.painFlash,std::min(1.f,dv*.6f));});}}
  };
- m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;
+ if(level==m_level){m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();}m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;
  using Clock=std::chrono::steady_clock;auto since=[](Clock::time_point t){return std::chrono::duration<double,std::milli>(Clock::now()-t).count();};
  std::vector<int> bodyOf(list.size(),-1);std::vector<char> wasAsleep;std::vector<V3> before;
+ // ---- Men and creatures: bodies in the solver, so a prop meets them by contact (it never passes into them)
+ // and the impulse it gives them knocks them back by its momentum ----
+ struct ActorRef {bool enemy=false;int level=0;size_t index=0;float mass=70,radius=.2f,feet=0,height=1.7f;Vec2 at{},velocity{};std::uint64_t key=0;Vec2 shove{},pushed{};float hurtSpeed=0;int hurtProp=-1;int body=-1;V3 start{};};
+ std::vector<ActorRef> actors;std::deque<Shape> actorShapes;
+ {std::vector<std::pair<std::uint64_t,Vec2>> seen;
+  auto add=[&](ActorRef a){a.key=(a.enemy?1ull<<62:0ull)|(std::uint64_t(std::uint32_t(a.level))<<32)|std::uint64_t(a.index);Vec2 last=a.at;
+   for(const auto&[k,p]:rp.actorLast)if(k==a.key){last=p;break;}a.velocity=dt>1e-4f?(a.at-last)*(1/dt):Vec2{};if(length(a.velocity)>6)a.velocity=normalized(a.velocity)*6.f;seen.push_back({a.key,a.at});actors.push_back(a);};
+  for(size_t a=0;a<m_friendlyActors.size();++a){const auto&npc=m_friendlyActors[a];if(!chunkResident(npc.level))continue;const auto&track=npc.track();
+   if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState))||(track.deadState&&state(track.deadState)))continue;
+   ActorRef r;r.level=npc.level;r.index=a;r.at=npc.pose.position+chunkOffset(npc.level)-chunkOffset(level);r.feet=npc.pose.z;r.height=friendlyHullHeight(a,track);add(r);}
+  for(int target=0;target<chunkCount();++target)if(chunkResident(target)){const auto&enemies=target==m_level?m_enemies:m_chunks[target].enemies;
+   for(size_t e=0;e<enemies.size();++e){const auto&en=enemies[e];if(!en.alive)continue;ActorRef r;r.enemy=true;r.level=target;r.index=e;r.at=en.pos+chunkOffset(target)-chunkOffset(level);
+    r.feet=en.bodyBottom();r.height=en.bodyTop()-en.bodyBottom();r.radius=en.radius();r.mass=70.f*en.scale*en.scale*en.scale;add(r);}}
+  rp.actorLast.swap(seen);}
+ // A creature's or a man's: hurt, staggered, knocked back.
+ auto actorHurt=[&](const ActorRef& r,const Clutter& c,float damage){const Vec2 p=c.pos+shift;
+  if(r.enemy){auto&enemy=(r.level==m_level?m_enemies:m_chunks[r.level].enemies)[r.index];const Vec2 offset=chunkOffset(r.level)-chunkOffset(level);
+   enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;
+   if(applyEnemyDamage(enemy,damage,false,false,r.level)){auto audible=enemy;audible.pos+=chunkOffset(r.level)-chunkOffset(m_level);enemySound(audible,2);}}
+  else{AiTargetRef attacker;if(c.soundOwner>=0&&size_t(c.soundOwner)<m_friendlyActors.size())attacker={ShotKind::Npc,m_friendlyActors[size_t(c.soundOwner)].level,c.soundOwner};else if(c.projectile)attacker={ShotKind::Player,m_level,0};
+   damageFriendly(r.index,damage,p+chunkOffset(m_level)-chunkOffset(m_friendlyActors[r.index].level),attacker);}};
  // The prop in the hand spins as the hand turned it since last frame (a carried crate swung round carries
  // what stands on it by friction, and flings it off when jerked).
  V3 heldSpin{};
@@ -307,6 +350,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // moment and what is in it goes along; one pinned against a wall gives under him instead of into the wall.
    p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;p.id=(1<<19)-1;   // never what keeps an island awake (his own speed still does)
    space.bodies.push_back(p);}
+  // Each man and creature within reach of what moves: a box of his hull from just over his feet, his own
+  // speed, his weight, no gravity and no turning; contacts on it are hard (a crate does not go into him).
+  for(size_t k=0;k<actors.size();++k){const auto&r=actors[k];bool near=false;for(const auto&rc:reaches)near|=r.at.x+r.radius>=rc.x0&&r.at.x-r.radius<=rc.x1&&r.at.y+r.radius>=rc.y0&&r.at.y-r.radius<=rc.y1;if(!near)continue;
+   const float lift=.04f,h=std::max(.3f,r.height-lift);actorShapes.emplace_back();Shape& hull=actorShapes.back();hull.add(PartKind::Box,{},{r.radius,r.radius,h*.5f});hull.finish();
+   Body a;a.shape=&hull;a.x={r.at.x,r.at.y,r.feet+lift+h*.5f};a.v={r.velocity.x,r.velocity.y,0};a.gravity={};a.user=ActorBody-int(k);a.invMass=1/r.mass;a.invInertiaLocal=M3::zero();a.inertiaLocal=M3::zero();a.invInertia=M3::zero();
+   a.material={.6f,.5f,0,0};a.linearDamping=0;a.angularDamping=0;a.sleepTime=1e9f;a.id=(1<<19)-2-int(k);actors[k].body=int(space.bodies.size());actors[k].start=a.x;space.bodies.push_back(a);}
   chainBody.resize(space.bodies.size(),0);for(const auto&ch:chains)for(int k=0;k<3;++k)chainBody[size_t(ch.body[size_t(k)])]=1;
   for(auto&h:hinges)space.constraints.push_back(&h);
   m_rigidStats.buildMs+=since(mark);mark=Clock::now();
@@ -366,6 +415,16 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];
    if(wasAsleep[bi]&&b.sleeping)continue;fromBody(b,c);c.island=b.sleeping?space.islandOf.empty()?-1:std::max(0,space.islandOf[bi]):-1;
    if(len(b.v)<.5f)c.projectile=false;}
+  // A prop leaning on him or pushed slowly into him moves him as far as it moved his body in the solver.
+  for(auto&r:actors){if(r.body<0||size_t(r.body)>=space.bodies.size())continue;const V3 d=space.bodies[size_t(r.body)].x-r.start;r.pushed+=Vec2{d.x,d.y}-r.velocity*RigidStep;r.body=-1;}
+  for(const auto&ev:space.events){if(ev.b<0)continue;const int ua=space.bodies[size_t(ev.a)].user,ub=space.bodies[size_t(ev.b)].user;const bool aActor=ua<=ActorBody,bActor=ub<=ActorBody;
+   if(aActor==bActor||(aActor?ub:ua)<0)continue;const int propBody=aActor?ev.b:ev.a,prop=aActor?ub:ua;auto&r=actors[size_t(ActorBody-(aActor?ua:ub))];const V3 into=aActor?neg(ev.normal):ev.normal;   // from the prop into him
+   // Knocked by what came at him (the prop's own way toward him before the blow), not by his walking into a prop.
+   // The speed his body takes from the blow: the prop's momentum at its closing speed shared over both masses
+   // (a fifth of it given back), the most of the frame's blows.
+   const float coming=dot(before[size_t(propBody)],into);if(coming>.5f){const Vec2 dir{into.x,into.y};const float l=length(dir);const float m=list[size_t(prop)].mass();
+    const float dv=1.2f*m*ev.approach/(m+r.mass);if(l>.3f&&dv>length(r.shove))r.shove=dir*(1/l)*dv;}
+   if(ev.approach>r.hurtSpeed&&coming>.5f){r.hurtSpeed=ev.approach;r.hurtProp=prop;}}
   for(const auto&ev:space.events){m_rigidStats.events.push_back(ev);if(space.bodies[size_t(ev.a)].user<0||(ev.b>=0&&space.bodies[size_t(ev.b)].user<0))continue;
    const int a=space.bodies[size_t(ev.a)].user,bUser=ev.b>=0?space.bodies[size_t(ev.b)].user:-1;
    auto&ca=list[size_t(a)];
@@ -401,10 +460,38 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.sleeping||b.user<0||(chainBody[bi]&&bodyOf[size_t(b.user)]!=int(bi)))continue;bodyContacts(b.user);}
   for(int i=0;i<int(list.size());++i)if(list[size_t(i)].broken){auto&c=list[size_t(i)];c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=true;c.restTime=0;}
  }
+ // The blows on men and creatures: hurt by the energy past a tap (as a body was always hurt by a prop), knocked
+ // back by the speed the prop's momentum gave him: a mug nudges a man a centimetre; a thrown crate sends him
+ // stumbling a metre back, its blow spoilt; a drum rolled into him at a run knocks a man down.
+ for(auto&r:actors){
+  if(r.hurtProp>=0&&r.hurtSpeed>=1.5f){auto&c=list[size_t(r.hurtProp)];if(c.bodyImpactCooldown<=0){const float damage=std::clamp((.5f*c.mass()*r.hurtSpeed*r.hurtSpeed-2.f)*.2f,0.f,80.f);
+    if(damage>0){actorHurt(r,c,damage);c.bodyImpactCooldown=.25f;c.projectile=false;}}}
+  if(lengthSq(r.pushed)>1e-8f&&length(r.shove)<.15f){BodyKnock k;k.level=r.level;k.enemy=r.enemy;k.index=r.index;k.velocity=r.pushed*(1/std::max(dt,1e-3f));k.time=dt;m_bodyKnocks.push_back(k);}   // moved this frame (updateBodyKnocks sweeps it)
+  const float dv=length(r.shove);if(dv<.02f)continue;const Vec2 dir=r.shove*(1/dv);
+  BodyKnock k;k.level=r.level;k.enemy=r.enemy;k.index=r.index;
+  if(dv<.15f){k.velocity=dir*(dv*.22f/.1f);k.time=.1f;}   // a nudge: his own footing takes it within a step
+  else{const float reach=std::min(1.5f,1.6f*dv);k.velocity=dir*std::sqrt(2*4.f*reach);k.time=1;}
+  bool merged=false;for(auto&o:m_bodyKnocks)if(o.enemy==k.enemy&&o.level==k.level&&o.index==k.index){if(lengthSq(k.velocity)>lengthSq(o.velocity))o.velocity=k.velocity;o.time=std::max(o.time,k.time);merged=true;}   /* a prop still rolling into him keeps him going, no further */if(!merged)m_bodyKnocks.push_back(k);
+  if(r.enemy){auto&enemy=(r.level==m_level?m_enemies:m_chunks[r.level].enemies)[r.index];if(dv>=.5f){enemy.windup=0;enemy.strike=0;enemy.attackCooldown=std::max(enemy.attackCooldown,.35f+dv*(dv>=1.3f?1.5f:.6f));enemy.painFlash=std::max(enemy.painFlash,std::min(1.f,dv*.6f));}}
+  else if(dv>=1.3f&&!npcHeld(r.index)){auto&npc=m_friendlyActors[r.index];setState(friendlyKey(r.index,"restraint"),1);npc.pose.clip=4;npc.pose.phase=1;saveRestrainedPose(r.index);}   // knocked down: out cold where he falls
+}
  rp.cache.swap(space.cache);
  int awake=0;for(const auto&b:space.bodies)awake+=b.movable()&&b.user>=0;
  m_rigidStats.bodies=int(space.bodies.size());m_rigidStats.awake=awake;m_rigidStats.manifolds=int(space.manifolds.size());m_rigidStats.worldManifolds=space.worldManifolds;m_rigidStats.steps=steps;
- m_rigidStats.manifoldsSeen=std::move(space.manifolds);
+ if(level==m_level)m_rigidStats.manifoldsSeen=std::move(space.manifolds);
  m_rigidStats.ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+}
+void Game::updateBodyKnocks(float dt){
+ for(auto& k:m_bodyKnocks){if(k.time<=0)continue;const float speed=length(k.velocity);if(speed<.05f){k.time=0;continue;}
+  const Vec2 delta=k.velocity*dt;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));
+  if(k.enemy){if(!chunkResident(k.level)){k.time=0;continue;}auto&enemies=k.level==m_level?m_enemies:m_chunks[k.level].enemies;if(k.index>=enemies.size()||!enemies[k.index].alive){k.time=0;continue;}auto&enemy=enemies[k.index];
+   const Vec2 before=enemy.pos;Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/float(steps));if(!hullFits(next+chunkOffset(k.level)-chunkOffset(m_level),enemy.z,enemy.hull(),enemy.radius(),false,false))break;reached=next;}
+   if(length(reached-before)<length(delta)*.5f)k.velocity=Vec2{};enemy.pos=reached;enemy.windup=0;}
+  else{if(k.index>=m_friendlyActors.size()){k.time=0;continue;}auto&npc=m_friendlyActors[k.index];const float height=friendlyHullHeight(k.index,npc.track());
+   const Vec2 before=npc.pose.position;Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/float(steps));if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;reached=next;}
+   if(length(reached-before)<length(delta)*.5f)k.velocity=Vec2{};npc.pose.position=reached;}
+  // He stumbles to a stop (4 m/s^2: his feet find the floor again).
+  const float slowed=std::max(0.f,speed-4.f*dt);k.velocity=speed>0?k.velocity*(slowed/speed):Vec2{};k.time-=dt;}
+ std::erase_if(m_bodyKnocks,[](const BodyKnock& k){return k.time<=0||lengthSq(k.velocity)<.0025f;});
 }
 }

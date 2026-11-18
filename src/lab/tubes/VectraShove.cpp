@@ -37,7 +37,9 @@ Hit throwAt(bool legacy,bool creature,const Thing& t){
  auto where=[&]{return creature?LabAccess::enemies(g)[0].pos:LabAccess::friendlies(g)[0].pose.position;};
  for(int i=0;i<10;++i)g.update({},1.f/60);const Vec2 start=where();const float hp=creature?LabAccess::enemies(g)[0].hp:0;
  auto c=t.c;c.pos={at.x-(t.vz==0?1.f:1.6f),at.y};c.velocity=t.v;c.vz=t.vz;c.projectile=true;c.sleeping=false;LabAccess::clutter(g)={c};
- float shove=0;for(int i=0;i<90;++i){g.update({},1.f/60);shove=std::max(shove,where().x-start.x);if(creature){auto& e=LabAccess::enemies(g)[0];e.awareness=0;}}
+ float shove=0;for(int i=0;i<90;++i){g.update({},1.f/60);shove=std::max(shove,where().x-start.x);if(creature){auto& e=LabAccess::enemies(g)[0];e.awareness=0;}
+  if(std::getenv("RM_SHOVE_TRACE")&&!legacy){static std::ofstream tr("vectra-shove-trace.txt");for(const auto& e:LabAccess::rigidStats(g).events)if(e.b>=0)tr<<t.name<<(creature?" creature":" guard")<<" frame "<<i<<" event "<<e.a<<"-"<<e.b<<" n "<<f2(e.normal.x)<<","<<f2(e.normal.y)<<","<<f2(e.normal.z)<<" approach "<<f2(e.approach)<<" impulse "<<f2(e.impulse)<<std::endl;
+   for(const auto& k:LabAccess::bodyKnocks(g))tr<<t.name<<" frame "<<i<<" knock v "<<f2(k.velocity.x)<<","<<f2(k.velocity.y)<<" t "<<f2(k.time)<<" at "<<f2(where().x,3)<<std::endl;}}
  Hit h;h.shove=shove;h.hurt=creature?hp-LabAccess::enemies(g)[0].hp:float(g.state(stateId("reg_guard_damage")));vectra::forceLegacyProps(-1);return h;}
 
 const bool shove=add({.name="vectra-shove",.summary="props against people and things by weight: thrown and rolled into a guard and a creature, dropped on glass and on a mug, held up as a shield; legacy and Vectra",.standalone=[]{
@@ -117,13 +119,13 @@ const bool feel=add({.name="vectra-feel",.summary="pictures: a crate shoving a g
  .fixtures={"feel-shove","feel-throw","feel-mattress"},
  .author=[](Scene& s,AuthoredMapData& m){const std::string k=s.fixture->value("feel","shove");m.definition.playerStart={2,2};
   if(k=="shove")m.actorTracks.push_back(regression::guard({11,8},{11,8},AiFaction::Player));
-  if(k=="throw"){m.actorTracks.push_back(regression::guard({10.2f,9},{10.2f,9},AiFaction::Player));m.actorTracks.push_back(regression::guard({11.8f,9},{11.8f,9},AiFaction::Player));}
+  if(k=="throw"){m.actorTracks.push_back(regression::guard({11,7.6f},{11,7.6f},AiFaction::Player));m.actorTracks.push_back(regression::guard({11,9.6f},{11,9.6f},AiFaction::Player));}
   if(k=="mattress")m.structures.push_back({10,4,16,12,0,.4f,false,40});},
- .setup=[](Scene& s){LabAccess::player(s.g()).pos={2,2};LabAccess::setGod(s.g(),true);},
+ .setup=[](Scene& s){LabAccess::setGod(s.g(),true);for(auto& npc:LabAccess::friendlies(s.g()))npc.frozen=true;},   // they stand where put; a knock still moves them
  .step=[](Scene& s,float){const std::string k=s.fixture->value("feel","shove");auto& l=LabAccess::clutter(s.g());
   if(s.frame==20){
    if(k=="shove"){auto c=prop(model::wooden_crate,{9.2f,8},.5f,.8f);c.velocity={5.5f,0};c.vz=.6f;c.projectile=true;l={c};}
-   if(k=="throw"){auto a=prop(model::mug,{10.2f,7.4f},.9f);a.velocity={0,9};a.vz=.6f;a.projectile=true;auto b=prop(model::wooden_crate,{11.8f,7.2f},.5f,.8f);b.velocity={0,5.5f};b.vz=.6f;b.projectile=true;l={a,b};}
+   if(k=="throw"){auto a=prop(model::mug,{9.6f,9.6f},1.f);a.velocity={9,0};a.vz=.6f;a.projectile=true;auto b=prop(model::wooden_crate,{9.4f,7.6f},.5f,.8f);b.velocity={5.5f,0};b.vz=.6f;b.projectile=true;l={a,b};}
    if(k=="mattress"){auto c=prop(model::med_mattress_stained,{10.25f,8},.6f);l={c};}}},
  .capture=[](Scene& s,const Frame&){if(s.frame==19)s.shoot("a-before");if(s.frame==34)s.shoot("b-contact");if(s.frame==60)s.shoot("c-after");if(s.last())s.shoot("d-end");},
  .metrics=[](Scene& s,Report& r){r.check("ran",true);}});

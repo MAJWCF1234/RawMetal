@@ -1337,11 +1337,17 @@ private:
     void simulateClutter(std::vector<Clutter>& list,int level,float dt,int held);
     // Vectra's step for a list's model props (RigidClutter.cpp; the old one: vectra::legacyProps()).
     void simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int held);
+    // A man or a creature knocked back by a prop (RigidClutter.cpp): he stumbles along `velocity`, slowing,
+    // through his own hull sweeps; a creature's blow is spoilt while it lasts.
+    struct BodyKnock {int level=0;bool enemy=false;size_t index=0;Vec2 velocity{};float time=0;};
+    std::vector<BodyKnock> m_bodyKnocks;
+    void updateBodyKnocks(float dt);
     // A list's rigid-body state between frames: the fixed step's leftover time and the contacts' warm start.
     struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;
      // A region of the world found to be one flat floor with every column round it open (RigidClutter.cpp),
      // kept per prop: asked again only when the prop leaves it or a door moves.
      int heldIndex=-1;vectra::Quat heldTurn{}; // the prop in the hand and how it was turned last step (its spin)
+     std::vector<std::pair<std::uint64_t,Vec2>> actorLast;   // where each man and creature near props was last frame (their bodies' speed)
      struct Flat {const void* world=nullptr;float x0=0,y0=0,x1=0,y1=0,lo=0,hi=0,floor=0,doors=0;bool flat=false,valid=false;};std::vector<Flat> flat;};
     std::map<int,RigidPropState> m_rigidProps;
     // What the last rigid step did (the lab's perf and debug views).
