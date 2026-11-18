@@ -88,6 +88,8 @@ public:
  // conversion to display pixels (the windowed path presents instead: zeros).
  std::array<double,3> finishTimes()const;
  void prepare(const SoftwareRenderer::Texture& texture);
+ // Many at once, their pixels worked on every core (start-up, a map warmed).
+ void prepare(const std::vector<const SoftwareRenderer::Texture*>& textures);
  // prepare/submit collect immutable atlases; finish flushes them before draw.
  void flushUploads();
  // Images, transfer submissions, staging allocations, uploaded bytes.

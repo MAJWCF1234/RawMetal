@@ -208,22 +208,25 @@ bool SoftwareRenderer::enableHardware(void* window){
  static HMODULE loader=LoadLibraryW(L"vulkan-1.dll");
  if(!loader){m_gpuName="Software (Vulkan loader unavailable)";std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
  try{m_gpu=std::make_unique<GpuRenderer>(static_cast<HWND>(window));
-  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_murkWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_nineTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_concreteFloor,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})m_gpu->prepare(*texture);
-  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_cursedTexture,&m_cursedGlow,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel,&m_panelSteel})m_gpu->prepare(*texture);for(const auto&texture:m_bloodVariants)m_gpu->prepare(texture);
-  for(const auto&texture:m_hazmatTextures)m_gpu->prepare(texture);
+  // Every atlas the engine holds, in this order, worked on all cores and uploaded in turn.
+  std::vector<const Texture*> queued;auto queue=[&](const Texture& texture){queued.push_back(&texture);};
+  for(const auto*texture:{&m_ashfallSky,&m_coastSky,&m_coastWater,&m_murkWater,&m_muzzleFlash,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_pressureWall,&m_pressureFloor,&m_pressureMetal,&m_transferSign,&m_pumpSign,&m_controlSign,&m_surfaceSign,  &m_liftSign,&m_liftDispatch,&m_wall,&m_floor,&m_metal,&m_serviceFloor,&m_serviceCeiling,&m_officeCarpet,&m_arms,&m_weaponTexture,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_wingTexture,&m_medkitTexture,&m_shellsTexture,&m_nineTexture,&m_barrelTexture,&m_crateTexture,&m_concrete,&m_concreteFloor,&m_bulkhead,    &m_hazard,&m_chemicalSign,  &m_signRust,&m_panelMetal,&m_routePaint,&m_redPaint,&m_terminalTexture,&m_cautionSign})queue(*texture);
+  for(const auto*texture:{&m_blood,&m_wardenTexture,&m_mutantTexture,&m_snatcherTexture,&m_chimeraTexture,&m_cursedTexture,&m_cursedGlow,&m_consoleTexture,&m_feedSign,&m_returnSign,  &m_terrainDirt,&m_terrainRock,&m_coastSand,&m_coastRock,&m_framePaint,&m_yellowSteel,&m_redSteel,&m_paleSteel,&m_panelSteel})queue(*texture);for(const auto&texture:m_bloodVariants)queue(texture);
+  for(const auto&texture:m_hazmatTextures)queue(texture);
   // Worker/Witness materials are large too. Deferring their mip construction
   // until the first visible limb caused quarter-second gameplay stalls.
-  for(const auto&texture:m_workerTextures)m_gpu->prepare(texture);
-  for(const auto&texture:m_claireTextures)m_gpu->prepare(texture);
-  for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})m_gpu->prepare(*texture);
-  for(const auto&texture:m_staffTextures)m_gpu->prepare(texture);
-  if(!m_logo.pixels.empty())m_gpu->prepare(m_logo);
-  m_gpu->prepare(m_droneTexture);m_gpu->prepare(m_handgunTexture);
-  for(const auto&texture:m_paperProps)m_gpu->prepare(texture);
-  for(const auto&role:m_cleanupTextures)for(const auto&texture:role)m_gpu->prepare(texture);
-  for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
-  for(const auto&texture:m_surfaceTextures)m_gpu->prepare(texture);
-  for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
+  for(const auto&texture:m_workerTextures)queue(texture);
+  for(const auto&texture:m_claireTextures)queue(texture);
+  for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})queue(*texture);
+  for(const auto&texture:m_staffTextures)queue(texture);
+  if(!m_logo.pixels.empty())queue(m_logo);
+  queue(m_droneTexture);queue(m_handgunTexture);
+  for(const auto&texture:m_paperProps)queue(texture);
+  for(const auto&role:m_cleanupTextures)for(const auto&texture:role)queue(texture);
+  for(const auto&texture:m_clutterTextures)queue(texture);for(const auto&entry:m_facilityTextures)queue(entry.second);
+  for(const auto&texture:m_surfaceTextures)queue(texture);
+  std::vector<Texture> paints;paints.reserve(6);for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){paints.push_back(Texture{1,1,{color}});queue(paints.back());}
+  m_gpu->prepare(queued);
   startupMark("gpu prepare");m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
  catch(const std::exception&e){m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
 }
