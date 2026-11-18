@@ -72,6 +72,10 @@ void Game::addPropJoints(int level,std::vector<Clutter>& list,const std::vector<
   if(spec.kind==PropJointKind::Ball){const float d=kPi/180;if(spec.cone>=0){j.coneX=spec.cone*d;j.coneY=(spec.cone2>=0?spec.cone2:spec.cone)*d;}if(spec.twist>=0){j.twistLimited=true;j.twistLower=-spec.twist*d;j.twistUpper=spec.twist*d;}}
   if(spec.kind==PropJointKind::Spring){j.springHertz=spec.hertz>0?spec.hertz:3;j.springDamping=spec.damping;}
   else if(spec.hertz>0&&(spec.kind==PropJointKind::Hinge||spec.kind==PropJointKind::Slider)){j.springHertz=spec.hertz;j.springDamping=spec.damping;j.springTarget=0;}
+  // A door's pin, a drawer's runners: friction on the axis, and where it catches (PropJoint friction, detent, catch, latch).
+  if(spec.friction>0&&(spec.kind==PropJointKind::Hinge||spec.kind==PropJointKind::Slider||spec.kind==PropJointKind::Ball))j.frictionTorque=spec.friction;
+  if(spec.detentCount>0&&(spec.kind==PropJointKind::Hinge||spec.kind==PropJointKind::Slider)){j.detents=spec.detents;j.detentCount=spec.detentCount;
+   j.detentRange=spec.catchRange>0?spec.catchRange:spec.kind==PropJointKind::Hinge?8*kPi/180:.025f;j.detentForce=spec.latch;j.detentHertz=tune("joints.detent_hertz",6.f);}
   if(spec.motor&&s.motorOn&&(!spec.motorState||state(spec.motorState))){j.motor=spec.motor==1?JointMotor::Speed:JointMotor::Servo;j.motorSpeed=s.speed;j.motorTarget=s.target;j.motorMaxForce=spec.force>0?spec.force:1000;}
   out.push_back(j);which.push_back(int(i));space.constraints.push_back(&out.back());jointed[size_t(ba)]=1;if(bb>=0)jointed[size_t(bb)]=1;
   // A kinematic body (the prop in the hand) holds no joint: what hangs from it follows, and it is never pulled.

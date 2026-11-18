@@ -312,13 +312,21 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
   const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;if(!b.movable()||held[size_t(i)])continue;
   b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
  const float target=2*s.settings.linearSlop;std::vector<V3> probes;std::vector<ProbeHit> hits;
+ // Every body's swept box along x, sorted once: a fast body meets only those whose boxes reach its own (400 resting props
+ // and 20 shards: 20 searches, not 8,000 box tests). A body met and put back keeps its way inside its first box.
+ std::vector<std::pair<float,int>> byX;float widest=0;std::vector<int> near;
+ if(std::find(fast.begin(),fast.end(),char(1))!=fast.end())for(int j=0;j<n;++j){const Body& o=s.bodies[size_t(j)];if(!o.shape)continue;const Motion& mo=motion[size_t(j)];const float r=o.shape->bound;
+  const float lo=std::min(mo.x0.x,mo.x1.x)-r,hi=std::max(mo.x0.x,mo.x1.x)+r;byX.push_back({lo,j});widest=std::max(widest,hi-lo);}
+ std::sort(byX.begin(),byX.end());
  for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
   Event best;
   if(s.sweep)worldProbes(s,i,m,probes,hits,best);
   // Other bodies: the time two moving, turning shapes first meet.
   const float rb=b.shape->bound;
   const V3 sweptLo=V3{std::min(m.x0.x,m.x1.x),std::min(m.x0.y,m.x1.y),std::min(m.x0.z,m.x1.z)}-V3{rb,rb,rb},sweptHi=V3{std::max(m.x0.x,m.x1.x),std::max(m.x0.y,m.x1.y),std::max(m.x0.z,m.x1.z)}+V3{rb,rb,rb};
-  for(int j=0;j<n;++j){if(j==i)continue;const Body& o=s.bodies[size_t(j)];if(!o.shape||(b.group&&b.group==o.group))continue;
+  near.clear();for(auto it=std::lower_bound(byX.begin(),byX.end(),std::make_pair(sweptLo.x-widest-.01f,-1));it!=byX.end()&&it->first<=sweptHi.x+.01f;++it)near.push_back(it->second);
+  std::sort(near.begin(),near.end());   // (in index order, as before: the same first hit on a tie)
+  for(int j:near){if(j==i)continue;const Body& o=s.bodies[size_t(j)];if(!o.shape||(b.group&&b.group==o.group))continue;
    const Motion& mo=motion[size_t(j)];const float r=o.shape->bound;
    if(std::min(mo.x0.x,mo.x1.x)-r>sweptHi.x||std::max(mo.x0.x,mo.x1.x)+r<sweptLo.x||std::min(mo.x0.y,mo.x1.y)-r>sweptHi.y||std::max(mo.x0.y,mo.x1.y)+r<sweptLo.y||std::min(mo.x0.z,mo.x1.z)-r>sweptHi.z||std::max(mo.x0.z,mo.x1.z)+r<sweptLo.z)continue;
    if(apart(i,j))continue;

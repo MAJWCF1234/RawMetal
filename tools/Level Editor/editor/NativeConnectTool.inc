@@ -7,7 +7,7 @@
   HWND connectKindList = nullptr;
   bool connectPending = false;
   float connectFromX = 0, connectFromY = 0;
-  enum ConnectKind { ConnectRope, ConnectChain, ConnectHinge, ConnectSpring, ConnectWeld, ConnectMotor, ConnectPulley, ConnectLamp, ConnectKindCount };
+  enum ConnectKind { ConnectRope, ConnectChain, ConnectHinge, ConnectSpring, ConnectWeld, ConnectMotor, ConnectPulley, ConnectDrawer, ConnectNailed, ConnectLamp, ConnectKindCount };
   int connectKind() const { return std::clamp(listIndex(connectKindList), 0, int(ConnectKindCount) - 1); }
   // A loose model prop (CLUTTER kind 7) under (x, y): its record line, or -1.
   int connectPropAt(float x, float y, int except = -1) const {
@@ -98,6 +98,29 @@
     } else if (kind == ConnectWeld) {
       const float wx = B ? (A.x + B->x) * .5f : A.x, wy = B ? (A.y + B->y) * .5f : A.y;
       f = {"JOINT", m, "weld", propA, propB, n(wx), n(wy), n((A.bottom + top(A)) * .5f)};
+    } else if (kind == ConnectNailed) {
+      // Nailed: a board across a doorway, a sign or a shelf on a wall, a crate to another: held fast (a weld) until a
+      // heavy blow or shove tears it off (breaks= 600 N: it bears a man leaning on it, not a thrown crate or a shoulder).
+      const float wx = B ? (A.x + B->x) * .5f : A.x, wy = B ? (A.y + B->y) * .5f : A.y;
+      f = {"JOINT", m, "weld", propA, propB, n(wx), n(wy), n((A.bottom + top(A)) * .5f)};
+      named.push_back({"breaks", "600"});
+    } else if (kind == ConnectDrawer) {
+      // A drawer (or a sliding panel): it runs along the side of its box nearest the drag, out the way the drag goes, shut
+      // where it stands. The axis is the way it slides shut, so its travel out is 0 to three quarters of its length.
+      // Runners' friction holds it where it is left, and a detent at shut catches it the last few centimetres.
+      const float c = std::cos(A.yaw), s = std::sin(A.yaw), vx = bx - A.x, vy = by - A.y, px = vx * c + vy * s, py = -vx * s + vy * c;
+      if (std::hypot(vx, vy) < .05f) {
+        message(L"Drag from a drawer the way it pulls out.");
+        return false;
+      }
+      const bool alongX = std::abs(px) >= std::abs(py);
+      const float sign = alongX ? (px >= 0 ? 1.f : -1.f) : (py >= 0 ? 1.f : -1.f);
+      const float ex = (alongX ? c : -s) * -sign, ey = (alongX ? s : c) * -sign;
+      const float travel = (alongX ? A.w : A.d) * .75f;
+      f = {"JOINT", m, "slider", propA, propB, n(A.x), n(A.y), n((A.bottom + top(A)) * .5f)};
+      named.push_back({"axis", n(ex + 0.f) + "," + n(ey + 0.f) + ",0"});
+      named.push_back({"min", "0"}), named.push_back({"max", n(travel)});
+      named.push_back({"friction", "4"}), named.push_back({"detent", "0"}), named.push_back({"latch", "12"});
     } else {
       // A hinge (or a motor, a hinge that turns by itself). A thing taller than it is wide (a gate, a door
       // panel) turns about an upright pin at its edge nearest the drag's end; a flat one (a hatch, a plank)
@@ -117,14 +140,16 @@
         const float edge = alongX ? (px >= 0 ? A.w * .5f : -A.w * .5f) : (py >= 0 ? A.d * .5f : -A.d * .5f);
         auto [wx, wy] = alongX ? world(edge, 0) : world(0, edge);
         hx = wx, hy = wy, hz = (A.bottom + top(A)) * .5f, axis = "z";
+        // A door: friction on its pin (nudged, it stops where it is left) and a latch where it was drawn shut.
         named.push_back({"min", "-100"}), named.push_back({"max", "100"});
+        named.push_back({"friction", "2"}), named.push_back({"detent", "0"}), named.push_back({"latch", "8"});
       } else if (inside) {
         // A seesaw: the pin under it at the drag's end, across its length.
         hx = bx, hy = by, hz = A.bottom;
         const bool alongX = A.w >= A.d;
         const float ax2 = alongX ? -s : c, ay2 = alongX ? c : s;
         axis = n(ax2 + 0.f) + "," + n(ay2 + 0.f) + ",0";
-        named.push_back({"min", "-20"}), named.push_back({"max", "20"});
+        named.push_back({"min", "-20"}), named.push_back({"max", "20"}), named.push_back({"friction", ".5"});
       } else {
         // A hatch: the pin along its nearest edge, at its foot.
         const bool sideX = std::abs(px) / std::max(.01f, A.w) >= std::abs(py) / std::max(.01f, A.d);
@@ -132,7 +157,9 @@
         hx = wx, hy = wy, hz = A.bottom;
         const float ex = sideX ? -s : c, ey = sideX ? c : s;
         axis = n(ex + 0.f) + "," + n(ey + 0.f) + ",0";
+        // A hatch: friction on its hinge, and it stays shut where it was drawn shut until lifted.
         named.push_back({"min", "-110"}), named.push_back({"max", "110"});
+        named.push_back({"friction", "2"}), named.push_back({"detent", "0"}), named.push_back({"latch", "15"});
       }
       f = {"JOINT", m, "hinge", propA, propB, n(hx), n(hy), n(hz)};
       named.insert(named.begin(), {"axis", axis});
@@ -152,6 +179,8 @@
                             L"Weld: held fast to the other thing (or the wall) until it is hit hard enough.",
                             L"Motor: a hinge that turns by itself, like a fan or a turntable.",
                             L"Pulley: drag from one thing to another; as one goes down the other comes up.",
+                            L"Drawer: drag from a drawer the way it pulls out. It slides on its runners, stays where it is left and catches shut.",
+                            L"Nailed: drag from a board to the wall (or to another thing). It holds until a heavy blow or shove tears it off.",
                             L"Hanging lamp: click under a ceiling and a lamp hangs there on a chain. Shoot it and it swings."};
     message(how[connectKind()]);
     relayout();
@@ -159,5 +188,5 @@
   template <class Row> void connectRows(Row &&row) { row(connectKindList, L"Join with"); }
   std::vector<HWND> connectControls() const { return {connectKindList}; }
   template <class Choices> void makeConnectControls(Choices &&choices) {
-    connectKindList = choices(ConnectKindList, {L"Rope", L"Chain", L"Hinge", L"Spring", L"Weld", L"Motor", L"Pulley", L"Hanging lamp"}, 0);
+    connectKindList = choices(ConnectKindList, {L"Rope", L"Chain", L"Hinge", L"Spring", L"Weld", L"Motor", L"Pulley", L"Drawer", L"Nailed", L"Hanging lamp"}, 0);
   }

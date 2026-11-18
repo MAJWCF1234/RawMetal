@@ -13,7 +13,7 @@
 #include <chrono>
 namespace retro {
 namespace {
-enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5, Authored=6 };
+enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5, Authored=6, Scrape=7, Roll=8 };
 // Loops that crossfade their tail into their head (no click on wrap).
 // Area score: the loop for each MusicCue after Default (Freight keeps its
 // original track and resource; the rest follow the zone sounds in order, and
@@ -390,7 +390,7 @@ void AudioEngine::update(const Game& game,bool focused){
  std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});
  // Wing loops are keyed by a wasp's place in its chunk's list; one that crosses a
  // seam leaves that list, so loops not refreshed this update are dropped below.
- std::vector<std::int64_t> wings;
+ std::vector<std::int64_t> wings,rubs;
  for(int level=0;level<game.chunkCount();++level){if(!game.chunkResident(level))continue;const auto&world=game.chunkWorld(level);const auto&enemies=game.chunkEnemies(level);auto shift=game.chunkOffset(level)-game.chunkOffset(game.level());
   for(size_t i=0;i<enemies.size();++i){auto&e=enemies[i];auto id=ambientEmitter(AmbientKind::Wings,level,i);
    if(e.alive&&e.kind==Enemy::Kind::Wasp){loop(id,Sound::Wings,e.pos+shift,.3f,e.z+.8f);wings.push_back(id);}else std::erase_if(m_voices,[&](auto&v){return v.emitter==id;});
@@ -412,8 +412,24 @@ void AudioEngine::update(const Game& game,bool focused){
    for(const auto& hazard:world.hazards()){Vec2 centre=Vec2{(hazard.x1+hazard.x2)*.5f,(hazard.y1+hazard.y2)*.5f}+shift;
     if(hazard.kind==Hazard::Kind::Fire)loop(ambientEmitter(AmbientKind::Fire,level,fires++),Sound::FireCrackle,centre,.55f,hazard.bottom+.4f);
     else if(hazard.kind==Hazard::Kind::Anomaly)loop(ambientEmitter(AmbientKind::Anomaly,level,anomalies++),Sound::AnomalyHum,centre,.4f,hazard.bottom+1.f);}}
+  // Props sliding and rolling (RigidClutter.cpp: Clutter::scrapeLevel and rollLevel, from their contacts' slide and roll
+  // speeds): the bank's dragged-metal sound, looped while it moves, pitched and weighted by what the prop is made of, and
+  // lower and softer for a roll's rumble than for a scrape. Gone the moment the prop is still.
+  {const auto& props=game.chunkClutter(level);
+   for(size_t i=0;i<props.size();++i){const auto&c=props[i];
+    for(int kind=0;kind<2;++kind){const auto id=ambientEmitter(kind?AmbientKind::Roll:AmbientKind::Scrape,level,i);const float level01=c.broken||c.model<0?0.f:kind?c.rollLevel:c.scrapeLevel;
+     if(level01<.02f)continue;
+     float gain=.5f,pitch=1;switch(c.material()){case PropMaterial::Metal:break;case PropMaterial::Wood:gain=.42f;pitch=.72f;break;
+      case PropMaterial::Glass:case PropMaterial::Ceramic:gain=.3f;pitch=1.35f;break;case PropMaterial::Plastic:case PropMaterial::Electronic:gain=.35f;pitch=.95f;break;
+      default:gain=.2f;pitch=.55f;break;}
+     if(kind){gain*=.8f;pitch*=.5f;}
+     loop(id,Sound::OneMetalDrag,c.pos+shift,gain*level01,c.z+.05f,10.f);rubs.push_back(id);
+     for(auto&v:m_voices)if(v.emitter==id)v.pitch=std::clamp(pitch*(.8f+.4f*level01),.05f,4.f);}}}
  }
  std::erase_if(m_voices,[&](const auto&v){return v.loop&&v.sound==Sound::Wings&&v.emitter>0&&std::find(wings.begin(),wings.end(),v.emitter)==wings.end();});
+ // A prop's scrape or roll that was not offered this update has stopped.
+ std::sort(rubs.begin(),rubs.end());
+ std::erase_if(m_voices,[&](const auto&v){const auto kind=std::uint64_t(v.emitter)>>48;return v.emitter>0&&(kind==std::uint64_t(AmbientKind::Scrape)||kind==std::uint64_t(AmbientKind::Roll))&&!std::binary_search(rubs.begin(),rubs.end(),v.emitter);});
  // Zone beds follow the ground under the player: wind always, louder on the
  // high cordon; birds in woods and meadows; crickets in the open; all silent
  // outside the zone.

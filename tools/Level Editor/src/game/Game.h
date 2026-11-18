@@ -261,6 +261,8 @@ struct Clutter {
  float paneRearm=0;
  // Seconds a blow from another prop leaves it free to pivot on its base edge (not saved).
  float tipTime=0;
+ // How loud its scrape and roll loops run (0..1), eased toward its contacts' slide and roll speeds each step (not saved).
+ float scrapeLevel=0,rollLevel=0;
  // Separate from sound throttling: a resting body contact must not deal repeated damage.
  float bodyImpactCooldown=0;
  // Carried along in a moving container this step (Containers.h): the solver leaves it be (not saved).

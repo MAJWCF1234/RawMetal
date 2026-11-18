@@ -127,8 +127,15 @@ CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they 
 - Named fields (all optional): `axis` (x, y, z or a,b,c; a hinge x, a slider z), `length`, `min` and `max` (degrees for a
   hinge, metres for a slider or a winch), `cone`, `cone2`, `twist` (a ball's, degrees), `stiffness` (Hz) and `damping`,
   `motor` (speed servo off) with `speed`, `force`, `target`, `switch` (a state the motor runs on), `breaks` (N), `state` (set
-  when it snaps), `over` and `over2` (a pulley's wheels), `ratio`, `radius` (how thick it is drawn).
-- The Builder's Connect tool writes it. Deleting a CLUTTER record in the Builder takes the joints on it with it and renumbers
+  when it snaps), `over` and `over2` (a pulley's wheels), `ratio`, `radius` (how thick it is drawn), `friction` (a hinge's
+  or ball's N m, a slider's N: held still until pushed harder, so a nudged door stops where it is left), `detent` (where a
+  hinge or slider catches: up to four, degrees or metres from its rest, `a,b`), `catch` (how near a detent it is pulled
+  there: 8 degrees or 2.5 cm by default) and `latch` (the most a detent holds with, N m or N; 0 the detent's spring alone).
+  `detent` is for a hinge or slider only, `friction` for a hinge, slider or ball. A nailed board is a `weld` (or a `ball`,
+  one nail) with `breaks`.
+- The Builder's Connect tool writes it, with defaults by kind: a door (an upright hinge) `friction=2 detent=0 latch=8`, a
+  hatch `friction=2 detent=0 latch=15`, a seesaw `friction=.5`; Drawer a slider along the side the drag pulls it out by,
+  `min=0`, `max` three quarters of its length, `friction=4 detent=0 latch=12`; Nailed a weld with `breaks=600`. Deleting a CLUTTER record in the Builder takes the joints on it with it and renumbers
   the rest; a LIGHT riding it stays, riding nothing.
 - A map without JOINT records is unchanged. The tube `joints-room` plays the Starter Map's.
 

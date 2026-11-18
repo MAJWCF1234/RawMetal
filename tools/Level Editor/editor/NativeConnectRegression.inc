@@ -78,7 +78,7 @@
       "the plank's hinge is not under it, across its length: " + doc.lines[joints().back()]);}
     // A gate on an upright pin at its end nearest the drag's end.
     drag(14, 12, 14.7f, 12.4f);
-    {auto f = last();require(f[2] == "hinge" && f[3] == "3" && named("axis") == "z" && std::fabs(std::stof(f[5]) - 14.5f) < .01f,
+    {auto f = last();require(f[2] == "hinge" && f[3] == "3" && named("axis") == "z" && named("friction") == "2" && named("detent") == "0" && std::fabs(std::stof(f[5]) - 14.5f) < .01f,
       "the gate's pin is not upright at its east end: " + doc.lines[joints().back()]);}
     require(validateDocument(), "the engine refused the hinges");
     report << "PASS: a hinge dragged across a plank balances it (a seesaw); one dragged off a standing panel stands its pin at that end (a gate)\n" << std::flush;
@@ -89,6 +89,17 @@
     require(last()[2] == "pulley" && last()[3] == "0" && last()[4] == "1" && named("over") != "-" && named("over2") != "-", "the pulley is not between the crates over two wheels: " + doc.lines[joints().back()]);
     require(validateDocument(), "the engine refused the pulley");
     report << "PASS: a pulley joins two crates over a wheel above each; from a crate to nothing it is refused\n" << std::flush;
+    // A drawer: crate B dragged east, the way it pulls out: a slider shut where it stands, its axis west (the way it slides
+    // shut), runners' friction and a catch at shut. Nailed: the gate panel to the wall, a weld that tears off.
+    choose(ConnectDrawer);
+    drag(10, 6, 11.5f, 6);
+    require(last()[2] == "slider" && last()[3] == "1" && last()[4] == "-1" && named("axis") == "-1,0,0" && named("min") == "0" && named("friction") == "4" && named("detent") == "0",
+      "the drawer does not slide shut westward with friction and a catch: " + doc.lines[joints().back()]);
+    choose(ConnectNailed);
+    drag(14, 12, 14, 13.5f);
+    require(last()[2] == "weld" && last()[3] == "3" && last()[4] == "-1" && named("breaks") == "600", "the nailed panel is not a weld to the wall that breaks: " + doc.lines[joints().back()]);
+    require(validateDocument(), "the engine refused the drawer or the nailed panel");
+    report << "PASS: Drawer slides a crate on runners that catch it shut; Nailed welds a panel to the wall until it is torn off\n" << std::flush;
     // A lamp hung by a click.
     choose(ConnectLamp);
     const size_t lights = doc.records("LIGHT", map).size(), props = doc.records("CLUTTER", map).size();
@@ -113,7 +124,7 @@
     SendMessageW(window, WM_COMMAND, Remove, 0);
     {auto js = joints();bool chainB = false, ropeA = false;
      for (auto i : js) {auto f = NativeDocument::fields(doc.lines[i]);chainB |= f[2] == "chain" && f[3] == "0";ropeA |= f[2] == "rope" || f[2] == "pulley";}
-     require(js.size() == 4 && chainB && !ropeA, "deleting crate A did not take its rope and pulley and renumber the rest");}
+     require(js.size() == 6 && chainB && !ropeA, "deleting crate A did not take its rope and pulley and renumber the rest");}
     require(validateDocument(), "the engine refused the map after the crate was deleted");
     SendMessageW(window, WM_COMMAND, Undo, 0);
     require(doc.text() == made, "undo did not bring the crate and its joints back");
