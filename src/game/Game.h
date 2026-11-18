@@ -266,6 +266,10 @@ struct Clutter {
  // lives in spin (world z), pitchSpeed and rollSpeed (about the yaw-turned y and x axes): exact both ways.
  // island: the sleep island it rests in (-1 awake). Not in the save stream (the physics save section).
  std::array<float,4> orient{1,0,0,0};std::array<float,3> orientEuler{1e9f,1e9f,1e9f};int island=-1;
+ // A mattress or a pad (physics/PropBodies.h, chained): three segments along its length on springy hinges.
+ // bend: each joint's bend (rad, the outer segment's turn about the width axis); bendSpeed its rate; boneRoot
+ // which segment the prop's own frame is (1, the middle; the end in the hand while it is carried).
+ std::array<float,2> bend{0,0},bendSpeed{0,0};int boneRoot=1;
  // A shard (kind 6): what it was cut from, which eighth of it (bit 0 +x, bit 1 +y, bit 2 up, in
  // the thing's own frame), the facility model it came from (ShardOf::Model) and that thing's size
  // (x, y, up). Its own size is `dims` when set (half the source each way), else the old splinter's.
@@ -1337,6 +1341,7 @@ private:
     struct RigidPropState {float accumulator=0;std::vector<std::pair<std::uint64_t,vectra::Space::Cached>> cache;
      // A region of the world found to be one flat floor with every column round it open (RigidClutter.cpp),
      // kept per prop: asked again only when the prop leaves it or a door moves.
+     int heldIndex=-1;vectra::Quat heldTurn{}; // the prop in the hand and how it was turned last step (its spin)
      struct Flat {const void* world=nullptr;float x0=0,y0=0,x1=0,y1=0,lo=0,hi=0,floor=0,doors=0;bool flat=false,valid=false;};std::vector<Flat> flat;};
     std::map<int,RigidPropState> m_rigidProps;
     // What the last rigid step did (the lab's perf and debug views).

@@ -136,11 +136,44 @@ std::array<float,3> propExtent(const Clutter& c){if(c.model<0||legacyProps())ret
 namespace {const bool hooked=[]{physicsSaveHooks()={
   [](const Clutter& c,PropBody& b){if(legacyProps())return false;return captureProp(c,b.orientation,b.angularVelocity,b.island);},
   [](Clutter& c,const PropBody& b){restoreProp(c,b.orientation,b.angularVelocity,b.island);}};return true;}();}
+bool chained(const Clutter& c){if(c.model<0||!soft::isSoft(c))return false;const auto s=c.size();return std::max(s[0],s[1])>=.8f&&s[2]<.35f;}
+namespace {
+int alongOf(const Clutter& c){const auto s=c.size();return s[0]>=s[1]?0:1;}
+V3 axisOf(int along){return along==0?V3{1,0,0}:V3{0,1,0};}
+V3 widthOf(int along){return along==0?V3{0,1,0}:V3{-1,0,0};}   // the hinge axis: a positive bend lifts the outer end... about this
+}
+Chain chainOf(const Clutter& c){Chain ch;ch.along=alongOf(c);ch.length=c.size()[size_t(ch.along)];const V3 ax=axisOf(ch.along),wd=widthOf(ch.along);
+ const int r=std::clamp(c.boneRoot,0,2);ch.turn[size_t(r)]=propOrientation(c);ch.frame[size_t(r)]=propCentre(c);const float third=ch.length/3;
+ // Outward from the root: a segment's frame is its neighbour's turned about their joint by the bend between them.
+ for(int k=r+1;k<3;++k){const float j=(float(k)-1.5f)*third;const Quat q=ch.turn[size_t(k-1)]*Quat::axisAngle(wd,c.bend[size_t(k-1)]);
+  const V3 J=ch.frame[size_t(k-1)]+ch.turn[size_t(k-1)].rotate(ax*j);ch.turn[size_t(k)]=q;ch.frame[size_t(k)]=J-q.rotate(ax*j);}
+ for(int k=r-1;k>=0;--k){const float j=(float(k)-.5f)*third;const Quat q=ch.turn[size_t(k+1)]*Quat::axisAngle(wd,-c.bend[size_t(k)]);
+  const V3 J=ch.frame[size_t(k+1)]+ch.turn[size_t(k+1)].rotate(ax*j);ch.turn[size_t(k)]=q;ch.frame[size_t(k)]=J-q.rotate(ax*j);}
+ return ch;}
+const Shape& segmentShape(const Clutter& c){static std::mutex lock;static std::map<std::array<int,3>,std::unique_ptr<Shape>> cache;const auto s=c.size();const int along=alongOf(c);
+ const std::array<int,3> key{int(std::lround(s[0]*1e4f)),int(std::lround(s[1]*1e4f)),int(std::lround(s[2]*1e4f))};std::lock_guard<std::mutex> hold(lock);auto& slot=cache[key];
+ if(!slot){slot=std::make_unique<Shape>();const V3 h{along==0?s[0]/6:s[0]*.5f,along==1?s[1]/6:s[1]*.5f,s[2]*.5f};slot->add(PartKind::Box,{},h);slot->finish();}return *slot;}
+Point3 chainSkin(const Clutter& c,Point3 p){if(c.bend[0]==0&&c.bend[1]==0)return p;const int along=alongOf(c);const float L=c.size()[size_t(along)],third=L/3,blend=std::min(.06f,third*.25f);
+ const V3 ax=axisOf(along),wd=widthOf(along);const int r=std::clamp(c.boneRoot,0,2);
+ // Each segment's turn and shift in the prop's (root's) frame.
+ std::array<Quat,3> q{};std::array<V3,3> o{};
+ for(int k=r+1;k<3;++k){const float j=(float(k)-1.5f)*third;q[size_t(k)]=q[size_t(k-1)]*Quat::axisAngle(wd,c.bend[size_t(k-1)]);const V3 J=o[size_t(k-1)]+q[size_t(k-1)].rotate(ax*j);o[size_t(k)]=J-q[size_t(k)].rotate(ax*j);}
+ for(int k=r-1;k>=0;--k){const float j=(float(k)-.5f)*third;q[size_t(k)]=q[size_t(k+1)]*Quat::axisAngle(wd,-c.bend[size_t(k)]);const V3 J=o[size_t(k+1)]+q[size_t(k+1)].rotate(ax*j);o[size_t(k)]=J-q[size_t(k)].rotate(ax*j);}
+ const V3 v{p.x,p.y,p.z};const float sAlong=dot(v,ax);auto put=[&](int k){return o[size_t(k)]+q[size_t(k)].rotate(v);};
+ V3 out;const float j0=-third*.5f,j1=third*.5f;
+ if(sAlong<j0-blend)out=put(0);else if(sAlong<j0+blend){const float t=(sAlong-(j0-blend))/(2*blend);out=put(0)*(1-t)+put(1)*t;}
+ else if(sAlong<j1-blend)out=put(1);else if(sAlong<j1+blend){const float t=(sAlong-(j1-blend))/(2*blend);out=put(1)*(1-t)+put(2)*t;}else out=put(2);
+ return {out.x,out.y,out.z};}
 bool captureProp(const Clutter& c,std::array<float,4>& q,std::array<float,3>& w,std::int32_t& island){
  if(c.model<0||c.broken)return false;const Quat o=propOrientation(c);q={o.x,o.y,o.z,o.w};const V3 a=propAngular(c);w={a.x,a.y,a.z};island=c.sleeping?std::max(0,c.island):-1;return true;}
 void restoreProp(Clutter& c,const std::array<float,4>& q,const std::array<float,3>& w,std::int32_t island){
- if(c.model<0)return;Quat o=Quat{q[3],q[0],q[1],q[2]}.normalized();
- // The middle of the box stays where the save put it; the turn is the saved one exactly.
- const V3 centre=propCentre(c);c.orient={o.w,o.x,o.y,o.z};o.toEuler(c.yaw,c.pitch,c.roll);c.orientEuler={c.yaw,c.pitch,c.roll};
- c.z=centre.z-c.extent()[2];setPropAngular(c,{w[0],w[1],w[2]});c.island=island;}
+ if(c.model<0)return;const Quat o=Quat{q[3],q[0],q[1],q[2]};
+ // The turn is the saved quaternion exactly, kept beside the saved yaw, pitch and roll it was written with (so
+ // propOrientation returns it and a re-save writes the same bytes). A saved turn the Euler angles do not
+ // match (a section from another build) turns the prop to it.
+ const Quat e=Quat::fromEuler(c.yaw,c.pitch,c.roll);const float d=std::fabs(e.w*o.w+e.x*o.x+e.y*o.y+e.z*o.z);
+ if(d<.99999f){const V3 centre=propCentre(c);const Quat n=o.normalized();n.toEuler(c.yaw,c.pitch,c.roll);c.z=centre.z-c.extent()[2];}
+ c.orient={o.w,o.x,o.y,o.z};c.orientEuler={c.yaw,c.pitch,c.roll};
+ // The spin likewise: the saved speeds stand unless they say another spin.
+ const V3 saved{w[0],w[1],w[2]};if(len(propAngular(c)-saved)>1e-4f)setPropAngular(c,saved);c.island=island;}
 }

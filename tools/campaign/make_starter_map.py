@@ -591,6 +591,7 @@ def build():
     architecture(s)
     architecture_2(s)
     showcase(s, slot, catalogue)
+    s.reserved = {(5 + OX, 2 + OY)}  # SHOWCASE: PHYSICS, built after the forest (it keeps every earlier number)
     building(s, slot, catalogue)
     physics_room(s, slot, catalogue)
     return s
@@ -1415,7 +1416,7 @@ def building(s, slot, catalogue):
     forest = []
     for r in range(min(rows) - 1, max(rows) + 2):
         for c in range(min(cols) - 1, max(cols) + 2):
-            if (c, r) in cells: continue
+            if (c, r) in cells or (c, r) in getattr(s, 'reserved', ()): continue
             entrance = (c, r) == (welcome['col'], welcome['row'] - 1)
             m = s.outdoor_map('Entrance' if entrance else 'Forest', c, r, shift=False)
             cells[(c, r)] = m

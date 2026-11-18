@@ -17,6 +17,7 @@
 #include "physics/PropBodies.h"
 #include "../core/Tune.h"
 #include <chrono>
+#include <deque>
 namespace retro {
 namespace {
 constexpr float RigidStep=1.f/120;constexpr int RigidMaxSteps=6;constexpr int PlayerBody=-2;
@@ -56,7 +57,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<Hit> hits;std::array<V3,8> feature{};
  if(rp.flat.size()<list.size())rp.flat.resize(list.size());
@@ -175,8 +176,11 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  // ---- A prop's own reactions (as the old step had them) ----
  // A blow's sound (and hearing) goes by the contact's own approach; breaking goes by the approach of the prop's
  // middle (`breaking`, the speed the materials' break speeds were set on: a tumbling bottle's tip is faster).
- auto impact=[&](int index,float speed,float breaking=-1){auto&c=list[size_t(index)];if(speed<.65f||c.impactCooldown>0||c.broken)return;if(breaking<0)breaking=speed;
-  const auto&t=propMaterialTraits(c.material());SoundEvent event{c.impactSound(),c.pos+shift,std::clamp(speed*.12f,.12f,.85f)*t.impactGain,t.impactPitch,true,17,c.z+c.height()*.5f};
+ auto impact=[&](int index,float speed,float breaking=-1){auto&c=list[size_t(index)];if(speed<.65f||c.broken)return;if(breaking<0)breaking=speed;
+  const auto&t=propMaterialTraits(c.material());
+  // (The cooldown keeps one blow's sound from repeating; it never spares a prop the blow that breaks it: a crate's
+  // corner touching a mug a step before its weight lands on it.)
+  if(c.impactCooldown>0){if(t.breakSpeed>0&&breaking>t.breakSpeed)breakClutter(level,size_t(index),{c.velocity.x,c.velocity.y,c.vz});return;}SoundEvent event{c.impactSound(),c.pos+shift,std::clamp(speed*.12f,.12f,.85f)*t.impactGain,t.impactPitch,true,17,c.z+c.height()*.5f};
   event.owner=c.soundOwner;event.aiRadius=std::clamp(2.f+std::sqrt(c.mass())*speed,2.f,12.f);
   if(t.breakSpeed>0&&breaking>t.breakSpeed)breakClutter(level,size_t(index),{c.velocity.x,c.velocity.y,c.vz});m_sounds.push_back(event);c.impactCooldown=.075f;};
  // A pane struck with `energy` (J): cracked, or broken (the share of its speed the prop keeps going on).
@@ -195,7 +199,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   auto nearby=[&](Vec2 actor,float feet,float height,float radius){return std::fabs(actor.x-c.pos.x)<e[0]+radius&&std::fabs(actor.y-c.pos.y)<e[1]+radius&&c.z+std::min(0.f,c.vz*RigidStep)<feet+height&&c.z+propHeight-softGive(c)>feet;};
   auto sweepFits=[&](Vec2 from,Vec2 to){const float d=length(to-from);const int n=std::max(1,int(std::ceil(d/.08f)));for(int k=1;k<=n;++k){const Vec2 p=from+(to-from)*(float(k)/float(n));
    if(!c.everyOutlinePoint([&](Vec2 o){auto q=p+o+shift;const auto&w=physicalWorld(q);return w.fits(q.x,q.y,c.z+.02f,std::max(.01f,propHeight-.04f),true,true)&&!w.doorBlocks(q.x,q.y,c.z+.02f,std::max(.01f,propHeight-.04f));}))return false;}return true;};
-  auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt){if(!nearby(actor,feet,height,radius))return;Vec2 n{};float penetration;
+  auto contact=[&](Vec2 actor,float feet,float height,float radius,float actorMass,Vec2 actorVelocity,auto&& move,auto&& hurt,auto&& reel){if(!nearby(actor,feet,height,radius))return;Vec2 n{};float penetration;
    if(!overlap(actor-c.pos,radius,n,penetration))return;
    // Closing only as far as the prop itself comes at the body (a body walking into a prop being pushed away
    // from it is not struck by it).
@@ -203,21 +207,66 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(falling&&!c.everyOutlinePoint([&](Vec2 offset){auto p=c.pos+offset+shift;const auto&w=physicalWorld(p);return w.supportBelow(p.x,p.y,c.z+.025f,true)<feet+height;}))return;
    if(speed>=1.5f&&c.bodyImpactCooldown<=0){float damage=std::clamp((.5f*c.mass()*speed*speed-2.f)*.2f,0.f,80.f);if(damage>0){hurt(damage,n);c.bodyImpactCooldown=.25f;c.projectile=false;impact(index,speed);}}
    if(c.broken)return;if(falling){c.z=feet+height;c.vz=std::max(0.f,-c.vz*.12f);return;}
-   float moved=0;if(mass>=8&&closing>.001f){float bodySpeed=1.15f*closing*mass/(mass+actorMass);auto delta=n*(penetration+.001f+bodySpeed*.08f);moved=std::max(0.f,dot(move(delta),n));}
+   // The blow's momentum shoves the body: the speed it takes from the prop (the prop's momentum over both masses),
+   // carried through a quarter second of follow-through. A mug barely nudges a man; a 9 kg crate thrown at him
+   // shoves him back a hand's width and staggers him; a rolling 35 kg drum shoves him a pace. A heavy prop also
+   // takes its way out of him from the body (it is the one that does not give).
+   float moved=0;if(closing>.001f){const float bodySpeed=1.15f*closing*mass/(mass+actorMass);auto delta=n*((mass>=8?penetration+.001f:0.f)+bodySpeed*.22f);
+    if(dot(delta,n)>.002f)moved=std::max(0.f,dot(move(delta),n));if(bodySpeed>.15f)reel(bodySpeed,n);}
    // Out of the body only when the prop came into it: one the body walks into is the body's to stop (Movement),
    // or the player's own body in the solver pushes it; set out of his hull each step, a barrel would ride at a sprint.
    float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&closing>.001f&&sweepFits(c.pos,next))c.pos=next;
    if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}};
-  contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);});
+  contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);},[&](float dv,Vec2){m_verticalSpringVelocity-=std::min(1.f,dv*.4f);});
   for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);
-   contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;reached=next;}npc.pose.position=reached;return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);});}
+   contact(point,npc.pose.z,height,.2f,70.f,Vec2{},[&](Vec2 delta){auto before=npc.pose.position;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;reached=next;}npc.pose.position=reached;return npc.pose.position-before;},[&](float damage,Vec2){auto p=c.pos+shift;damageFriendly(a,damage,p+chunkOffset(m_level)-chunkOffset(npc.level),attacker);},[](float,Vec2){});}
   for(int target=0;target<chunkCount();++target)if(chunkResident(target)){auto offset=chunkOffset(target)-chunkOffset(level);auto&enemies=target==m_level?m_enemies:m_chunks[target].enemies;for(auto&enemy:enemies)if(enemy.alive){
    contact(enemy.pos+offset,enemy.bodyBottom(),enemy.bodyTop()-enemy.bodyBottom(),enemy.radius(),70.f*enemy.scale*enemy.scale*enemy.scale,Vec2{},[&](Vec2 delta){auto before=enemy.pos;const int steps=std::max(1,int(std::ceil(length(delta)/.04f)));Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/steps);if(!hullFits(next+chunkOffset(target)-chunkOffset(m_level),enemy.z,enemy.hull(),enemy.radius(),false,false))break;reached=next;}enemy.pos=reached;return enemy.pos-before;},
-    [&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}});}}
+    [&](float damage,Vec2){enemy.awareness=6;enemy.recognition=1;enemy.lastKnown=c.pos-offset;enemy.lastKnownZ=c.z;enemy.state=Enemy::State::Investigate;if(applyEnemyDamage(enemy,damage,false,false,target)){auto audible=enemy;audible.pos+=chunkOffset(target)-chunkOffset(m_level);enemySound(audible,2);}},
+    // Staggered by a hard shove (half a metre a second taken from the prop): its blow is spoilt and it recovers.
+    [&](float dv,Vec2){if(dv<.5f)return;enemy.windup=0;enemy.strike=0;enemy.attackCooldown=std::max(enemy.attackCooldown,.35f+dv*.5f);enemy.painFlash=std::max(enemy.painFlash,std::min(1.f,dv*.6f));});}}
  };
  m_rigidStats.events.clear();m_rigidStats.manifoldsSeen.clear();m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;
  using Clock=std::chrono::steady_clock;auto since=[](Clock::time_point t){return std::chrono::duration<double,std::milli>(Clock::now()-t).count();};
  std::vector<int> bodyOf(list.size(),-1);std::vector<char> wasAsleep;std::vector<V3> before;
+ // The prop in the hand spins as the hand turned it since last frame (a carried crate swung round carries
+ // what stands on it by friction, and flings it off when jerked).
+ V3 heldSpin{};
+ if(held>=0&&held<int(list.size())){const Quat now=propOrientation(list[size_t(held)]);
+  if(rp.heldIndex==held&&dt>1e-4f){Quat d=now*rp.heldTurn.conj();if(d.w<0)d={-d.w,-d.x,-d.y,-d.z};const float sn=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
+   if(sn>1e-6f)heldSpin=V3{d.x/sn,d.y/sn,d.z/sn}*std::min(2*std::atan2(sn,d.w)/dt,20.f);}
+  rp.heldIndex=held;rp.heldTurn=now;}else rp.heldIndex=-1;
+ // ---- Chained props (mattresses, pads: PropBodies.h): three segments on springy hinges ----
+ struct ChainRec {int prop=-1;std::array<int,3> body{};bool held=false;};std::vector<ChainRec> chains;std::deque<Hinge> hinges;std::vector<char> chainBody;
+ auto setFrame=[](Clutter& c,Quat q,V3 centre){q=q.normalized();c.orient={q.w,q.x,q.y,q.z};q.toEuler(c.yaw,c.pitch,c.roll);c.orientEuler={c.yaw,c.pitch,c.roll};c.pos={centre.x,centre.y};c.z=centre.z-c.extent()[2];};
+ auto buildChain=[&](int i,bool inHand){auto&c=list[size_t(i)];
+  // The frame is the middle segment's, or while it is carried the end nearest the player (he holds it by that end).
+  int root=1;if(inHand){root=c.boneRoot;if(root==1){const Chain ch=chainOf(c);const float along=c.size()[size_t(ch.along)]/3;const V3 ax=ch.along==0?V3{1,0,0}:V3{0,1,0};
+    const V3 e0=ch.frame[0]+ch.turn[0].rotate(ax*-along),e2=ch.frame[2]+ch.turn[2].rotate(ax*along);const V3 eye{m_player.pos.x-shift.x,m_player.pos.y-shift.y,e0.z};root=lenSq(e0-eye)<=lenSq(V3{e2.x,e2.y,e0.z}-eye)?0:2;}}
+  if(root!=c.boneRoot){const Chain ch=chainOf(c);c.boneRoot=root;setFrame(c,ch.turn[size_t(root)],ch.frame[size_t(root)]);}
+  const Chain ch=chainOf(c);const V3 ax=ch.along==0?V3{1,0,0}:V3{0,1,0},wd=ch.along==0?V3{0,1,0}:V3{-1,0,0};const float third=ch.length/3;
+  const V3 v{c.velocity.x,c.velocity.y,c.vz},w=propAngular(c),centre=ch.frame[size_t(root)];ChainRec rec;rec.prop=i;rec.held=inHand;
+  for(int k=0;k<3;++k){Body b;b.shape=&segmentShape(c);b.q=ch.turn[size_t(k)];b.x=ch.frame[size_t(k)]+b.q.rotate(ax*(float(k-1)*third));
+   b.material=propMaterialOf(c);b.softHertz=propSoftHertz(c);b.sleeping=c.sleeping;b.sleepTime=std::max(0.f,c.restTime);b.setMass(c.mass()/3);b.updateInertia();
+   // Its velocity: the prop's, and its own turn about the joints between it and the root.
+   V3 wk=w,vk=v+cross(w,b.x-centre);
+   if(k!=root){const int step=k>root?1:-1;for(int j=root;j!=k;j+=step){const int joint=step>0?j:j-1;const float rate=c.bendSpeed[size_t(joint)]*float(step);
+     const V3 axis=ch.turn[size_t(joint)].rotate(wd);const V3 J=ch.frame[size_t(joint)]+ch.turn[size_t(joint)].rotate(ax*((float(joint)-.5f)*third));wk=wk+axis*rate;vk=vk+cross(axis*rate,b.x-J);}}
+   b.v=vk;b.w=wk;b.user=i;b.group=0x40000000u|std::uint32_t(i);b.id=k==root?i:i+(1<<17)*(k+(k<root?1:0));
+   if(inHand&&k==root){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w=heldSpin;b.v=m_vrInputActive&&m_vrHandValid[m_vrCarryHand]?m_vrHandVelocity[m_vrCarryHand]:V3{m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
+   if(inHand&&k!=root)b.sleeping=false;
+   rec.body[size_t(k)]=int(space.bodies.size());if(k==root)bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
+  for(int k=0;k<2;++k){Hinge h;h.a=rec.body[size_t(k)];h.b=rec.body[size_t(k+1)];h.anchorA=ax*(third*.5f);h.anchorB=ax*(-third*.5f);h.axisA=wd;
+   h.hertz=tune("pad.hertz",2.5f);h.damping=tune("pad.damping",.25f);h.limit=tune("pad.limit",1.5f);hinges.push_back(h);}
+  chains.push_back(rec);};
+ auto writeChain=[&](const ChainRec& rec){auto&c=list[size_t(rec.prop)];const auto&B=space.bodies;bool asleep=true;float rest=1e9f;
+  for(int k:rec.body){asleep&=B[size_t(k)].sleeping||B[size_t(k)].kinematic;rest=std::min(rest,B[size_t(k)].sleepTime);}
+  const Chain ch=chainOf(c);const V3 ax=ch.along==0?V3{1,0,0}:V3{0,1,0},wd=ch.along==0?V3{0,1,0}:V3{-1,0,0};const float third=ch.length/3;
+  for(int j=0;j<2;++j){const auto&a=B[size_t(rec.body[size_t(j)])];const auto&b=B[size_t(rec.body[size_t(j+1)])];const auto&h=hinges[size_t(&rec-chains.data())*2+size_t(j)];
+   c.bend[size_t(j)]=h.angle(space);c.bendSpeed[size_t(j)]=dot(b.w-a.w,a.q.rotate(wd));}
+  const auto&r=B[size_t(rec.body[size_t(c.boneRoot)])];
+  if(!rec.held){const V3 centre=r.x-r.q.rotate(ax*(float(c.boneRoot-1)*third));setFrame(c,r.q,centre);const V3 v=r.v+cross(r.w,centre-r.x);c.velocity={v.x,v.y};c.vz=v.z;setPropAngular(c,r.w);}
+  c.sleeping=asleep&&!rec.held;c.restTime=rest;if(len(r.v)<.5f)c.projectile=false;};
  for(int step=0;step<steps;++step){
   auto mark=Clock::now();
   space.bodies.clear();std::fill(bodyOf.begin(),bodyOf.end(),-1);
@@ -228,8 +277,11 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    reaches.push_back({c.pos.x-e[0]-r,c.pos.y-e[1]-r,c.pos.x+e[0]+r,c.pos.y+e[1]+r});}
   if(level==m_level)reaches.push_back({m_player.pos.x-1.5f,m_player.pos.y-1.5f,m_player.pos.x+1.5f,m_player.pos.y+1.5f});
   auto reachable=[&](const Clutter& c){const auto e=c.extent();for(const auto&r:reaches)if(c.pos.x+e[0]>=r.x0&&c.pos.x-e[0]<=r.x1&&c.pos.y+e[1]>=r.y0&&c.pos.y-e[1]<=r.y1)return true;return false;};
-  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held&&!reachable(c))continue;Body b;toBody(c,b);b.user=i;
-   if(i==held){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w={};
+  chains.clear();hinges.clear();space.constraints.clear();chainBody.assign(0,0);
+  for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held&&!reachable(c))continue;
+   if(chained(c)){buildChain(i,i==held);continue;}
+   Body b;toBody(c,b);b.user=i;
+   if(i==held){b.kinematic=true;b.setMass(0);b.sleeping=false;b.w=heldSpin;
     if(m_vrInputActive&&m_vrHandValid[m_vrCarryHand])b.v=m_vrHandVelocity[m_vrCarryHand];else b.v={m_carryHandVelocity.x,m_carryHandVelocity.y,m_carryHandVz};}
    if(c.material()==PropMaterial::Paper){b.linearDamping=3;b.angularDamping=3;}
    b.id=i;bodyOf[size_t(i)]=int(space.bodies.size());space.bodies.push_back(b);}
@@ -248,6 +300,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // moment and what is in it goes along; one pinned against a wall gives under him instead of into the wall.
    p.softHertz=tune("props.player_hertz",5.f);p.sleepTime=1e9f;p.id=(1<<19)-1;   // never what keeps an island awake (his own speed still does)
    space.bodies.push_back(p);}
+  chainBody.resize(space.bodies.size(),0);for(const auto&ch:chains)for(int k=0;k<3;++k)chainBody[size_t(ch.body[size_t(k)])]=1;
+  for(auto&h:hinges)space.constraints.push_back(&h);
   m_rigidStats.buildMs+=since(mark);mark=Clock::now();
   wasAsleep.assign(space.bodies.size(),0);before.assign(space.bodies.size(),{});
   for(size_t bi=0;bi<space.bodies.size();++bi){wasAsleep[bi]=space.bodies[bi].sleeping;before[bi]=space.bodies[bi].v;}
@@ -301,7 +355,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   // ---- The step ----
   m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
-  for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0)continue;auto&c=list[size_t(b.user)];
+  for(const auto&rec:chains){bool still=true;for(int k:rec.body)still&=wasAsleep[size_t(k)]&&space.bodies[size_t(k)].sleeping;if(!still)writeChain(rec);}
+  for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];
    if(wasAsleep[bi]&&b.sleeping)continue;fromBody(b,c);c.island=b.sleeping?space.islandOf.empty()?-1:std::max(0,space.islandOf[bi]):-1;
    if(len(b.v)<.5f)c.projectile=false;}
   for(const auto&ev:space.events){m_rigidStats.events.push_back(ev);if(space.bodies[size_t(ev.a)].user<0||(ev.b>=0&&space.bodies[size_t(ev.b)].user<0))continue;
@@ -311,8 +366,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(bUser>=0){auto&cb=list[size_t(bUser)];const int owner=len(before[size_t(ev.a)])>=len(before[size_t(ev.b)])?ca.soundOwner:cb.soundOwner;ca.soundOwner=cb.soundOwner=owner;}
    const bool aKinematic=space.bodies[size_t(ev.a)].kinematic,bKinematic=ev.b>=0&&space.bodies[size_t(ev.b)].kinematic;
    const float middles=std::max(0.f,dot(before[size_t(ev.a)]-(ev.b>=0?before[size_t(ev.b)]:V3{}),ev.normal));
-   if(!aKinematic)impact(a,ev.approach,middles);
-   if(bUser>=0&&!bKinematic){auto&cb=list[size_t(bUser)];const float bs=propMaterialTraits(cb.material()).breakSpeed;if(bs>0&&middles>bs)breakClutter(level,size_t(bUser),{ev.normal.x,ev.normal.y,ev.normal.z});else if(aKinematic)impact(bUser,ev.approach);}
+   // A prop breaks by the speed it was struck at, or by the blow it took (the impulse over its own mass): a crate
+   // dropped on a bottle crushes it however slowly the bottle was going. (The blow over (1 + restitution) is the
+   // speed a drop on the floor would give the same blow.)
+   auto blow=[&](const Clutter& v){return ev.approach<1?0.f:ev.impulse/std::max(.05f,v.mass())/(1+propMaterialOf(v).restitution);};   // (a crate set down gently crushes nothing)
+   if(!aKinematic)impact(a,ev.approach,std::max(middles,blow(ca)));
+   if(bUser>=0&&!bKinematic){auto&cb=list[size_t(bUser)];const float bs=propMaterialTraits(cb.material()).breakSpeed;if(bs>0&&std::max(middles,blow(cb))>bs)breakClutter(level,size_t(bUser),{ev.normal.x,ev.normal.y,ev.normal.z});else if(aKinematic)impact(bUser,ev.approach);}
    if(aKinematic)continue;
    // Against the world: was it a pane? It takes the energy the contact brought (its effective mass).
    if(ev.b<0&&!ca.broken){Vec2 q{ev.point.x,ev.point.y};q=q+shift;const World& pw=physicalWorld(q);const auto&panes=pw.breakables();
@@ -332,7 +391,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    if(B.user==PlayerBody&&A.user>=0)list[size_t(A.user)].blockedTime=std::max(list[size_t(A.user)].blockedTime,.25f);}
   m_rigidStats.postMs+=since(mark);
   // Bodies struck by what moves.
-  for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.sleeping||b.user<0)continue;bodyContacts(b.user);}
+  for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.sleeping||b.user<0||(chainBody[bi]&&bodyOf[size_t(b.user)]!=int(bi)))continue;bodyContacts(b.user);}
   for(int i=0;i<int(list.size());++i)if(list[size_t(i)].broken){auto&c=list[size_t(i)];c.velocity={};c.vz=c.spin=c.pitchSpeed=c.rollSpeed=0;c.sleeping=true;c.restTime=0;}
  }
  rp.cache.swap(space.cache);

@@ -49,6 +49,19 @@ inline V3 propCentre(const Clutter& c){return {c.pos.x,c.pos.y,c.z+c.extent()[2]
 // quaternion then comes from yaw/pitch/roll, the angular velocity from the three speeds).
 // At merge: physicsSaveHooks()={[](const Clutter& c,PropBody& b){return captureProp(c,b.orientation,b.angularVelocity,b.island);},
 //                              [](Clutter& c,const PropBody& b){restoreProp(c,b.orientation,b.angularVelocity,b.island);}};
+// ---- Chained props: mattresses and pads (Clutter::bend) ----
+// A soft prop long for its thickness is three segments along its longer side, each a body, joined by springy
+// hinges (Hinge) about its width: it sags held by one end, flops when dropped, drapes over an edge and
+// wobbles when struck. Segment k (0..2) lies at (k-1) thirds of its length from the middle.
+bool chained(const Clutter& c);
+struct Chain {int along=0;float length=0;std::array<Quat,3> turn{};std::array<V3,3> frame{};};   // each segment's whole-prop frame: its turn, the prop's middle as it would be
+// The three segments' frames from the prop's frame (that of segment boneRoot) and its bends.
+Chain chainOf(const Clutter& c);
+// The segment's own box (a third of the prop along its length).
+const Shape& segmentShape(const Clutter& c);
+// A point in the prop's frame (box metres from its middle) carried by the bends: where the segment it lies
+// in has turned it, blended over the joints (skinning for the renderer). Unbent props pass through.
+Point3 chainSkin(const Clutter& c,Point3 local);
 bool captureProp(const Clutter& c,std::array<float,4>& orientationXyzw,std::array<float,3>& angularVelocity,std::int32_t& island);
 void restoreProp(Clutter& c,const std::array<float,4>& orientationXyzw,const std::array<float,3>& angularVelocity,std::int32_t island);
 }

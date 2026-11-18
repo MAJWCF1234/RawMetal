@@ -181,13 +181,31 @@ struct Constraint {
  virtual void storeImpulses(){}                           // after the step: keep for warm starting
 };
 
+// A springy hinge between two bodies (phase 2's first joint; the mattress chain's links): the two anchors held
+// together, the turn about every axis but the hinge held, and about the hinge a spring of `hertz` (damping
+// ratio `damping`) toward no bend, stopped hard past +-`limit`. The bend about the hinge is `angle()`.
+struct Hinge:Constraint {
+ int a=-1,b=-1;
+ V3 anchorA{},anchorB{};   // the joint in each body's frame (from its centre of mass, unturned)
+ V3 axisA{0,1,0};          // the hinge axis in A's frame
+ Quat rest{};              // B's turn relative to A unbent (A's inverse turn times B's)
+ float hertz=4,damping=.3f,limit=1.2f,lockHertz=60;
+ // Solver state.
+ V3 rA{},rB{},linear{},angular{};float hinge=0;M3 linearMass{},angularMass{};float hingeMass=0;
+ int bodyA()const override{return a;}int bodyB()const override{return b;}
+ float angle(const Space& s)const;
+ void prepare(Space&,float h)override;void warmStart(Space&)override;void solve(Space&,float h,bool useBias)override;
+private:
+ float h_=1.f/480;
+};
+
 // ---- The space ------------------------------------------------------------------------------------
 struct Settings {
  int substeps=4,relaxIterations=1;
  // Four substeps a step and 120 Hz contacts, critically damped, with a millimetre of slop: a ten-crate tower
  // woken settles in 0.27 s and its top drifts under half a millimetre. (60 Hz over-damped ten times let each
  // contact sink 4 mm under its load and the tower lean 2 mm before it slept, at 0.53 s.)
- float contactHertz=120,contactDampingRatio=1,pushout=3;   // soft contact: stiffness, damping, max push-out speed (m/s)
+ float contactHertz=120,contactDampingRatio=2,pushout=1;   // soft contact: stiffness, damping, max push-out speed (m/s)
  float linearSlop=.001f,speculative=.04f;                  // allowed penetration, speculative reach
  float restitutionThreshold=1.f;                           // below this approach speed nothing bounces
  float middleThreshold=1.f;                               // an approach faster than this is first met at the manifold's middle
