@@ -1132,7 +1132,7 @@ def atrium(s, slot, catalogue):
     breach's, grass comes up through the floor where the light falls: the Campaign Builder's Growth
     brush's pieces, placed the way it places them (on a wall's face, turned out; hanging from a top)."""
     import random
-    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.24)
+    m = s.new_map('Showcase Atrium', 6, 2, ceiling=6.0, surface='concrete', ambient=.4)
     i = m['index']
     m['lights'] = False
     s.format2 = True                                                  # GLAZING and BREACH take named fields
@@ -1161,9 +1161,9 @@ def atrium(s, slot, catalogue):
     for x, y in ((10, 10), (14, 10)):                                 # two columns holding the roof
         s.struct(m, x - .3, y - .3, x + .3, y + .3, 0, 6, 42)
     # ---- Light: warm and dim in the hall, the court bright as day, the shop cold and low ----
-    for x, y, z, k, r, t in ((6, 8, 5.85, .55, 12, 3300), (12, 13, 5.85, .5, 12, 3300), (4.2, 3, 3.15, .35, 6, 3000),
-                             (20.6, 3.5, 5.85, 2.6, 14, 5600), (20.6, 11, 5.85, 2.2, 14, 5600), (20.2, 6.8, 2.9, 1.6, 9, 5200),
-                             (7, 19.5, 5.85, .35, 10, 4300), (16, 19.5, 5.85, .3, 10, 4300)):
+    for x, y, z, k, r, t in ((5.5, 9, 5.85, 1.8, 14, 3600), (12, 12.5, 5.85, 1.7, 14, 3600), (12, 4.5, 5.85, 1.5, 13, 3800),
+                             (4.2, 3, 3.15, .7, 7, 3200), (20.6, 3.5, 5.85, 2.8, 14, 5600), (20.6, 11, 5.85, 2.4, 14, 5600),
+                             (20.2, 6.8, 2.9, 1.8, 10, 5200), (7, 19.5, 5.85, .8, 11, 4300), (16, 19.5, 5.85, .7, 11, 4300)):
         s.rec(m, 'LIGHT', i, x, y, z, 0, 0, k, r, t)
     # Dust hanging in the court's light where it comes through the hole.
     s.rec(m, 'EMITTER', i, 18.4, 6.8, .1, 1.4, 1.8, 3.2, .0833, .013, .004, 48, 4, .9)
@@ -1181,7 +1181,9 @@ def atrium(s, slot, catalogue):
     # ---- Growth (the Growth brush's pieces) ----
     def piece(name, k, x, y, z, yaw):
         w, d, h = catalogue[name]
-        s.rec(m, 'FIXTURE', i, slot[name], round(x, 3), round(y, 3), round(z, 3), round(w * k, 3), round(max(d * k, .005), 3), round(max(h * k, .005), 3), round(yaw, 4), 0)
+        # The pack's moss is a bright block green: the brush tints it down to old damp moss.
+        tint = ('tint=0.55,0.62,0.42',) if name in ('growth_moss_floor', 'growth_moss_wall') else ()
+        s.rec(m, 'FIXTURE', i, slot[name], round(x, 3), round(y, 3), round(z, 3), round(w * k, 3), round(max(d * k, .005), 3), round(max(h * k, .005), 3), round(yaw, 4), 0, *tint)
     def on_face(name, k, at, along, nx, ny, z):
         """Flat on a wall's face at `at` (x for an east/west face, y for a north/south one), turned out along (nx, ny)."""
         w, d, h = catalogue[name]
@@ -1276,9 +1278,6 @@ def atrium(s, slot, catalogue):
     patch(10.0, 19.8, 3.4, 26, box=(1.2, 17.2, 22.8, 22.8))           # the shop
     patch(17.8, 21.0, 2.0, 10, box=(1.2, 17.2, 22.8, 22.8))
     patch(4.0, 3.0, 2.4, 16, z=3.6, box=(1.3, 1.3, 6.7, 4.7))        # the balcony
-    for x, y in ((7.4, 9.0), (12.2, 14.2), (16.6, 12.6), (3.8, 14.6), (20.0, 2.4), (9.0, 21.0), (15.2, 18.4), (11.4, 3.2)):
-        piece('growth_moss_floor', rng.uniform(.9, 1.5), x, y, 0, rng.uniform(-PI, PI))
-    piece('growth_moss_floor', 1.2, 2.6, 2.4, 3.6, .4)
     for name, title, x, y, w in (('GLAZING', 'STOREFRONT', 10, 15.4, 'GLAZING: five bays, mixed panes, a doorway'),
                                  ('BREACH', 'BREACH', 16.8, 6.8, 'BREACH: a ragged hole, light through it'),
                                  ('FIXTURE', 'GROWTH', 4.0, 8.0, 'ivy, moss, creepers, grass (Growth brush)')):

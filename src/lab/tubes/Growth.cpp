@@ -45,7 +45,7 @@ std::shared_ptr<CustomCampaign> room(){auto m=regression::room();author(*m);retu
 bool hangs(int model){return model==model::growth_hanging_vine||model==model::ivy_strand||model==model::growth_ivy_creeper;}
 struct Run {int slot=-1,fixture=-1;float height=1,pushTip=0,leftAt=-1,backAt=-1,shotAt=-1,shotTip=0,shotBack=-1;double drift=-1,push=-1;bool inside=false;};
 std::map<const Scene*,Run>& runs(){static std::map<const Scene*,Run> r;return r;}
-constexpr int WalkFrom=30,ShootAt=330;
+constexpr int WalkFrom=30,ShootAt=400;
 // The share of pixels that move between the plants held still and as they are, from the camera.
 double moving(Scene& s,const char* still,const char* live){auto& plants=LabAccess::plants(*s.renderer);plants.still=true;s.renderer->render(s.g());s.shoot(still);
  const std::vector<std::uint32_t> a(s.renderer->pixels(),s.renderer->pixels()+size_t(s.renderer->width())*s.renderer->height());

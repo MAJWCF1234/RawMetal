@@ -106,8 +106,12 @@
   void growthPiece(int slot, float k, float px, float py, float z, float yaw) {
     const auto &size = retro::model::size[size_t(slot)];
     const float w = std::max(.02f, size[0] * k), d = std::max(.005f, size[1] * k), h = std::max(.005f, size[2] * k);
-    addAuthored({"FIXTURE", std::to_string(map), std::to_string(slot), shortNumber(px), shortNumber(py), shortNumber(z - bottomLayerElevation()),
-                 shortNumber(w), shortNumber(d), shortNumber(h), shortNumber(yaw), "0"});
+    std::vector<std::string> f{"FIXTURE", std::to_string(map), std::to_string(slot), shortNumber(px), shortNumber(py), shortNumber(z - bottomLayerElevation()),
+                               shortNumber(w), shortNumber(d), shortNumber(h), shortNumber(yaw), "0"};
+    // The texture pack's moss is a bright block green: tinted down to old, damp moss (a FORMAT|2 tint).
+    if (slot == retro::model::growth_moss_floor || slot == retro::model::growth_moss_wall)
+      doc.ensureFormat2(), f.push_back("tint=0.55,0.62,0.42");
+    addAuthored(f);
     growthPlaced.push_back({px, py, z + h * .5f});
     ++stroke.planted;
   }

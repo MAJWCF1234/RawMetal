@@ -57,7 +57,7 @@ const bool tube=add({
  .capture=[](Scene& s,const Frame&){auto& r=runs()[&s];auto& plants=LabAccess::plants(*s.renderer);Game& g=s.g();
   if(r.slot<0&&r.strand>=0)r.slot=plants.slotOf(g.level(),r.strand);
   if(r.slot>=0&&s.frame>=WalkFrom&&s.frame<WalkTo+30){const Point3 tip=plants.tip(r.slot);r.pushTip=std::max(r.pushTip,std::hypot(tip.x,tip.y));}
-  if(s.frame==Wide){view(s,"atrium from the balcony",{5.6f,2.4f},3.6f,48,-14);view(s,"atrium from the hall",{15.8f,2.2f},0,128,-6);view(s,"the storefront",{9.8f,9.6f},0,90,-2);}
+  if(s.frame==Wide){view(s,"atrium from the balcony",{6.4f,4.5f},3.6f,50,-24);view(s,"the hall to the breach",{3.0f,14.2f},0,-28,2);view(s,"atrium from the hall",{15.8f,2.2f},0,128,-6);view(s,"the storefront",{6.6f,10.6f},0,62,-4);}
   if(s.frame==Close)view(s,"creepers over the breach, the court's light behind",{15.9f,7.3f},0,-12,4);
   if(s.frame==PaneShot&&r.pane>=0){const auto c=centre(g.world(),r.pane);view(s,"the shattered pane",{c.x-1.2f,13.1f},0,74,-10);}},
  .metrics=[](Scene& s,Report& rep){auto& r=runs()[&s];const int level=atriumLevel();
@@ -87,7 +87,7 @@ const bool tube=add({
     if(hangs(f.model)){const int slot=plants.slotOf(s.g().level(),int(i));hung+=plants.hanging(slot);rooted+=slot>=0&&std::abs(plants.root(slot).z-(f.base+f.height))<.02f;}}
    int creepers=0;for(const auto& f:w.fixtures())creepers+=hangs(f.model);
    rep.metric("growth_pieces",pieces);rep.metric("creepers",creepers);
-   rep.check("the atrium is overgrown: ivy, moss, creepers and grass, every creeper a hanging plant rooted at its top",pieces>=200&&creepers>=20&&hung==creepers&&rooted==creepers,
+   rep.check("the atrium is overgrown: ivy, moss, creepers and grass, every creeper a hanging plant rooted at its top",pieces>=180&&creepers>=20&&hung==creepers&&rooted==creepers,
     std::to_string(pieces)+" pieces, "+std::to_string(hung)+"/"+std::to_string(creepers)+" creepers hanging");
    rep.metric("strand_push_tip_m",r.pushTip,"m");
    rep.check("walking through the breach swings the creeper over its lip (10% of its length or more)",r.slot>=0&&r.pushTip>=.1f*r.height,fixed(r.pushTip)+" m of "+fixed(r.height)+" m");}

@@ -99,8 +99,8 @@ void PlantBones::update(const Game& game,const std::vector<Pusher>& extra,float 
   m_blasts=newest;}
  // The springs, at a fixed tick: the lower bone toward what is wanted, the upper whipping after it.
  m_carry=std::min(m_carry+dt,Tick*6);const float zeta=tune("plants.damping",.25f);
- for(;m_carry>=Tick;m_carry-=Tick)for(int slot:m_awake){auto&s=m_state[size_t(slot)];const auto&i=m_info[size_t(slot)];const float w=i.omega,w2=w*2.2f;
-  for(int k=0;k<2;++k){const float a=-w*w*(s.x[k]-s.target[k])-2*zeta*w*s.v[k];s.v[k]+=a*Tick;s.x[k]+=s.v[k]*Tick;
+ for(;m_carry>=Tick;m_carry-=Tick)for(int slot:m_awake){auto&s=m_state[size_t(slot)];const auto&i=m_info[size_t(slot)];const float w=i.omega,w2=w*2.2f,z=i.hanging?zeta*1.6f:zeta; // a creeper's leaves drag on the air: it settles sooner
+  for(int k=0;k<2;++k){const float a=-w*w*(s.x[k]-s.target[k])-2*z*w*s.v[k];s.v[k]+=a*Tick;s.x[k]+=s.v[k]*Tick;
    const float a2=-w2*w2*s.x2[k]-2*.14f*w2*s.v2[k]-.45f*a;s.v2[k]+=a2*Tick;s.x2[k]+=s.v2[k]*Tick;}
   auto clampTo=[](float* x,float* v,float most){const float l=std::hypot(x[0],x[1]);if(l>most){x[0]*=most/l;x[1]*=most/l;v[0]*=.5f;v[1]*=.5f;}};
   clampTo(s.x,s.v,.6f*i.height);clampTo(s.x2,s.v2,.25f*i.height);}

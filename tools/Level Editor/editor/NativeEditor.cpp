@@ -1019,7 +1019,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, glazingTest = false, breachTest = false, growthTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1096,6 +1096,7 @@ struct Editor {
 #include "NativeBreachRegression.inc"
 #include "NativeGrowthTool.inc"
 #include "NativeGrowthRegression.inc"
+#include "NativeEditorPictures.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -10137,6 +10138,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.backgroundTest = e.breachTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--growth-test")
       e.backgroundTest = e.growthTest = true;
+    // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
+    if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
+      e.backgroundTest = e.picturesTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--remake-test")
       e.backgroundTest = e.remakeTest = true;
     if (e.perfTest)
@@ -10708,6 +10712,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.glazingTest) {
       int code = 0;
       try { e.verifyGlazingRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-glazing-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.picturesTest) {
+      int code = 0;
+      try { e.atriumPictures(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-atrium-pictures.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;
