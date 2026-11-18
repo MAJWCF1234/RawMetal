@@ -354,7 +354,7 @@ void Space::solve(float h,bool useBias,bool coldOnly){
    if(vn<-settings.middleThreshold){gap=1e30f;for(int j=0;j<m.count;++j){const auto&c=m.points[size_t(j)];
      const V3 d=(dpB-dpA)+(B?dqB.rotate(c.rB)-dqA.rotate(c.rA):V3{}-dqA.rotate(c.rA))-((B?c.rB:V3{})-c.rA);gap=std::min(gap,dot(d,m.normal)+c.separation);}
     gap=std::max(0.f,gap)*inv;}
-   if(vn+gap<-settings.middleThreshold){const float lambda=-(vn+gap)*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
+   if(vn<-settings.middleThreshold&&vn+gap<0){const float lambda=-(vn+gap)*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
     if(ma){A.v=A.v-P*A.invMass;A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+m.midWB*lambda;}
     for(int j=0;j<m.count;++j){auto&c=m.points[size_t(j)];c.normalImpulse+=lambda/float(m.count);c.maxNormalImpulse=std::max(c.maxNormalImpulse,lambda/float(m.count));}}}
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
@@ -398,9 +398,14 @@ void Space::restitution(){
  for(auto&m:manifolds){if(m.material.restitution<=0||m.count==0)continue;Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
   // The arms carried with each body through the step (c.p is where the points were when it began; the bodies
   // have moved since, and an arm from there to where a sliding body is now would spin it on the bounce).
-  float weight=0,approach=0;V3 armA{},armB{};
-  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];if(c.relativeVelocity>-settings.restitutionThreshold||c.maxNormalImpulse<=0)continue;weight+=c.maxNormalImpulse;
-   armA=armA+A.dq.rotate(c.rA)*c.maxNormalImpulse;armB=armB+(B?B->dq.rotate(c.rB):c.rB)*c.maxNormalImpulse;approach+=c.relativeVelocity*c.maxNormalImpulse;}
+  float weight=0,approach=0;V3 armA{},armB{};bool struck=false;
+  for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];if(c.relativeVelocity>-settings.restitutionThreshold||c.maxNormalImpulse<=0)continue;
+   const V3 pA=A.dq.rotate(c.rA),pB=B?B->dq.rotate(c.rB):c.rB;
+   {const V3 d=((B?B->dp:V3{})-A.dp)+(B?pB-pA:V3{}-pA)-((B?c.rB:V3{})-c.rA);struck|=dot(d,m.normal)+c.separation<=settings.linearSlop;}
+   weight+=c.maxNormalImpulse;armA=armA+pA*c.maxNormalImpulse;armB=armB+pB*c.maxNormalImpulse;approach+=c.relativeVelocity*c.maxNormalImpulse;}
+  // Every point still apart when the step ends (a speculative contact that only slowed the approach): nothing has
+  // struck yet, and it bounces when it lands, not in the air short of it.
+  if(!struck)continue;
   if(weight<=0)continue;approach/=weight;
   const V3 rA=armA*(1/weight),rB=armB*(1/weight);const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
   const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);if(k<=0)continue;
