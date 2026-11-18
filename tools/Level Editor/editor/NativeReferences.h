@@ -62,6 +62,7 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
     return;
   }
   std::vector<std::pair<size_t, std::vector<std::string>>> updates;
+  std::vector<size_t> drops{index};
   if (object[0] == "FIXTURE" || object[0] == "CLUTTER") {
     auto matching = doc.records(object[0], std::stoi(object[1]));
     int ordinal = int(std::find(matching.begin(), matching.end(), index) -
@@ -71,6 +72,24 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
       if (f.size() < 2 || f[1] != object[1])
         continue;
       int field = -1;
+      // A joint goes with either prop it holds; one on a later prop follows the renumbering. A lamp riding the
+      // prop stays where it is, riding nothing; one riding a later prop follows.
+      if (object[0] == "CLUTTER" && f[0] == "JOINT" && f.size() > 4) {
+        const int a = std::stoi(f[3]), b = std::stoi(f[4]);
+        if (a == ordinal || b == ordinal) { drops.push_back(i); continue; }
+        if (a > ordinal || b > ordinal) {
+          if (a > ordinal) f[3] = std::to_string(a - 1);
+          if (b > ordinal) f[4] = std::to_string(b - 1);
+          updates.emplace_back(i, std::move(f));
+        }
+        continue;
+      }
+      if (object[0] == "CLUTTER" && f[0] == "LIGHT" && f.size() > 26 && !f[26].empty()) {
+        const int p = std::stoi(f[26]);
+        if (p == ordinal) { f[26] = "-1"; updates.emplace_back(i, std::move(f)); }
+        else if (p > ordinal) { f[26] = std::to_string(p - 1); updates.emplace_back(i, std::move(f)); }
+        continue;
+      }
       if (f[0] == "LEAD")
         field = object[0] == "FIXTURE" ? 18 : 13;
       if (object[0] == "FIXTURE" && f[0] == "BREAKABLE" && f.size() == 15)
@@ -90,7 +109,9 @@ inline void eraseNativeObject(NativeDocument &doc, size_t index) {
   }
   for (const auto &[line, fields] : updates)
     doc.replace(line, fields, true); // Ordinal maintenance is not a user edit.
-  doc.eraseRecord(index);
+  std::sort(drops.rbegin(), drops.rend());
+  for (auto line : drops)
+    doc.eraseRecord(line);
   doc.touch();
 }
 
