@@ -827,6 +827,7 @@ void Carcass::stepVectra(const World& world){
  if(!vs.built){vs.built=true;vs.sections=R;vs.bodyOf.assign(size_t(R),-1);
   space.settings.substeps=std::max(1,int(tune("carcass.vsubsteps",8)));space.settings.jointIterations=std::max(1,int(tune("carcass.viterations",6)));space.settings.projectIterations=std::max(0,int(tune("carcass.vproject",2)));space.settings.projectSlack=tune("carcass.vprojectSlack",1.5f)*.01745f;
   space.settings.sleepTime=tune("carcass.vsleepTime",.4f);space.settings.sleepLinear=tune("carcass.vsleepLinear",.05f);space.settings.sleepAngular=tune("carcass.vsleepAngular",.15f);
+  space.settings.shockNormal=0;   // (no mass scaling between his sections: they meet by their skins, Space::pairContacts)
   for(int k=0;k<R;++k){auto&s=m_sections[size_t(k)];if(!live(s))continue;fromPoints(s);
    // Its box for the props it meets: the capsule's frame, as far as its skin reaches each way (the points and the hull).
    const Point3 axis=s.capB-s.capA;const float len=span(axis);const Point3 U=len>1e-6f?axis*(1/len):Point3{0,0,1};

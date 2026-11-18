@@ -13,6 +13,11 @@ The ground has an inside now. Dig, and it opens.
 - **Move.** A new brush for the land, too: take hold of a hill and drag it, and it follows. Hold Shift to lift it.
 - **Underground.** Under the rock the sky does not reach. It is dark down there but for what you carry and what you hang, and a lantern set in a cave stands on the cave floor, not on the hill above it. Water finds the low places in a cavern as it does anywhere else.
 - **Steadier hands.** Vectra lets a falling thing reach the floor before it bounces, where it used to turn back a few centimetres short and spring off the air, and a crate sliding as it lands no longer comes up spinning. A thing spun hard enough to turn a quarter of the way round in one step still stops on a thin post. A cast that grazes past without closing in no longer reports a hit. A crate woken by a shove wakes what it holds in the same moment, and what is carried on a joint by a moving hand wakes and follows it instead of hanging back asleep.
+- **Held, not forced.** A thing pulled toward a pose turns no harder than it is pulled. A long plank pressed into a doorframe leans against the jamb and stays there, still, instead of shaking against it.
+- **Floors of their own.** The ground answers a sliding thing with its own grip now, not only the thing's. A crate shoved across a puddle runs nearly twice as far as on dry concrete; carpet holds it sooner; gravel and grass drag at what rolls.
+- **Weight that stays.** A heavy drum set on a light crate rests on it. It no longer sinks into the crate, nor presses the crate into the floor, nor springs back off it.
+- **Quieter rooms cost less.** A room of four hundred resting things costs half what it did each step, and a burst of shards flying through them a fifth less.
+- **Scrapes and rolls.** A crate dragged across the floor scrapes as it goes and falls silent when it stops. A barrel rolling on its side rumbles. Wood, metal and glass each sound their own.
 - **The Starter Map** has a gallery of the new parts on two gravel yards, and east of it a hill with a mine in it: a mouth in its west face, a timbered drift with rails and an ore cart, a cavern of crystals by lantern light, and a passage south to a pool that drips.
 
 Verified with the feature lab's tubes (parts, caves, mine), the editor's cave test, and pictures of each.

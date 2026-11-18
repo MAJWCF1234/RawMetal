@@ -29,6 +29,31 @@ float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:1
 float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
 // The ground's material against a prop: a hard floor that takes no bounce of its own.
 const vectra::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
+// The floor's own material where a prop stands on it (the World's surface materials), mixed with the prop's in
+// Space::prepare: painted ground on terrain (grass and mud give, gravel grips and drags what rolls), carpet, a metal
+// deck, the map's floor finish, and over any of them water: a wet patch, most of all a puddle, is slick.
+vectra::Material floorGrip(const World& w,float x,float y,float floor){
+ vectra::Material m=Ground;
+ const int finish=w.floorSurface();
+ if(w.definition().floorMaterial==FloorMaterial::OfficeCarpet)m={.8f,.65f,0,.012f};
+ else if(w.metalFloor(int(x),int(y))||finish==SurfaceCorrugated||finish==SurfacePressure)m={.45f,.35f,0,.002f};
+ else if(finish==SurfaceClinicTile||finish==SurfaceLabPanel)m={.5f,.4f,0,.003f};
+ else if(finish==SurfaceMineTimber)m={.62f,.5f,0,.004f};
+ else if(finish==SurfaceRock||finish==SurfaceStone)m={.7f,.6f,0,.006f};
+ if(w.hasTerrain()&&w.structureSupportBelow(x,y,.02f,floor+.05f)<floor-.03f){   // (not on a structure standing on it)
+  const auto o=w.definition().origin;
+  switch(w.groundKind(x+o.x,y+o.y)){
+   case GroundShortGrass:case GroundLeafyGrass:case GroundClover:case GroundWild:m={.55f,.45f,0,.03f};break;
+   case GroundDry:case GroundLitter:m={.65f,.55f,0,.012f};break;
+   case GroundGravel:m={.7f,.6f,0,.02f};break;
+   case GroundMud:m={.4f,.3f,0,.03f};break;
+   default:break;}}
+ float wet=0;for(const auto&p:w.wetPatches()){if(x<p.x1||x>p.x2||y<p.y1||y>p.y2)continue;
+  if(p.round){const float cx=(p.x1+p.x2)*.5f,cy=(p.y1+p.y2)*.5f,rx=std::max(.01f,(p.x2-p.x1)*.5f),ry=std::max(.01f,(p.y2-p.y1)*.5f);if((x-cx)*(x-cx)/(rx*rx)+(y-cy)*(y-cy)/(ry*ry)>1)continue;}
+  wet=std::max(wet,std::clamp(p.amount,0.f,1.f)*(p.puddle?1.f:.6f));}
+ if(wet>0){const vectra::Material water{.22f,.15f,0,.002f};auto mixTo=[&](float a,float b){return a+(b-a)*wet;};
+  m={mixTo(m.staticFriction,water.staticFriction),mixTo(m.dynamicFriction,water.dynamicFriction),m.restitution,mixTo(m.rolling,water.rolling)};}
+ return m;}
 struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0,part=0;};
 // Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad.
 int keepFour(std::vector<Hit>& h,vectra::V3 n){
@@ -67,7 +92,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<int> partOf;std::vector<Hit> hits;std::array<V3,8> feature{};
  if(rp.flat.size()<list.size())rp.flat.resize(list.size());
@@ -197,6 +222,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      const float gx=(at(q.x+d,q.y)-at(q.x-d,q.y))/(2*d),gy=(at(q.x,q.y+d)-at(q.x,q.y-d))/(2*d);h.n=norm(V3{-gx,-gy,1});sum=sum+h.n;}
     n=norm(sum);for(auto&h:group)h.sep*=n.z;}
    Manifold m;m.a=bi;m.b=-1;m.partA=0;m.partB=g;m.normal=neg(n);m.material=Material::mix(b.material,Ground);m.material.restitution=b.material.restitution;m.count=0;
+   // A floor gives its own material (Space::prepare mixes it with the prop's): under the points' middle.
+   if(g==0||g>=40||g==30){V3 mid{};for(const auto&h:group)mid=mid+h.p;mid=mid*(1.f/float(group.size()));Vec2 q{mid.x,mid.y};q=q+shift;const World& w=physicalWorld(q);float sep=0;for(const auto&h:group)sep+=h.sep;m.surface.grip(floorGrip(w,q.x,q.y,mid.z-sep/float(group.size())));}
    for(const auto&h:group){auto&c=m.points[size_t(m.count++)];c=ContactPoint{};c.p=h.p;c.separation=h.sep-worldSlop;c.localA=b.q.unrotate(h.p-b.x);c.localB=h.p;}
    out.push_back(m);}
  };
@@ -432,6 +459,17 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];
    if(wasAsleep[bi]&&b.sleeping)continue;fromBody(b,c);c.island=b.sleeping?space.islandOf.empty()?-1:std::max(0,space.islandOf[bi]):-1;
    if(len(b.v)<.5f)c.projectile=false;}
+  // Scrape and roll: each prop's loops (AudioEngine) ease toward the fastest slide and roll of the contacts it bears on
+  // (Manifold::slideSpeed, rollSpeed), and fall silent the moment it is held, asleep or off everything.
+  {std::vector<float> slide(list.size(),0.f),turn(list.size(),0.f);
+   for(const auto&m:space.manifolds){float load=0;for(int k=0;k<m.count;++k)load+=m.points[size_t(k)].normalImpulse;if(load<=0)continue;
+    for(int side=0;side<2;++side){const int bi=side?m.b:m.a;if(bi<0)continue;const Body& B=space.bodies[size_t(bi)];if(B.kinematic||B.user<0)continue;
+     slide[size_t(B.user)]=std::max(slide[size_t(B.user)],m.slideSpeed);turn[size_t(B.user)]=std::max(turn[size_t(B.user)],m.rollSpeed);}}
+   const float ease=std::min(1.f,RigidStep*14.f);
+   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.user<0)continue;auto&c=list[size_t(b.user)];
+    if(b.kinematic||b.sleeping||c.broken){c.scrapeLevel=c.rollLevel=0;continue;}
+    const float s=std::clamp((slide[size_t(b.user)]-.06f)/1.2f,0.f,1.f),r=std::clamp((turn[size_t(b.user)]-.06f)/1.5f,0.f,1.f);
+    c.scrapeLevel+=(s-c.scrapeLevel)*ease;c.rollLevel+=(r-c.rollLevel)*ease;if(c.scrapeLevel<.005f)c.scrapeLevel=0;if(c.rollLevel<.005f)c.rollLevel=0;}}
   // A prop leaning on him or pushed slowly into him moves him as far as it moved his body in the solver.
   for(auto&r:actors){if(r.body<0||size_t(r.body)>=space.bodies.size())continue;const V3 d=space.bodies[size_t(r.body)].x-r.start;r.pushed+=Vec2{d.x,d.y}-r.velocity*RigidStep;r.body=-1;}
   for(const auto&ev:space.events){if(ev.b<0)continue;const int ua=space.bodies[size_t(ev.a)].user,ub=space.bodies[size_t(ev.b)].user;const bool aActor=ua<=ActorBody,bActor=ub<=ActorBody;

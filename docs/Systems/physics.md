@@ -114,6 +114,18 @@ Restitution runs once per manifold at the end.
 - **Friction** is Coulomb, inside a cone. A contact uses static friction if the surfaces were sliding slower
   than 8 cm/s when the step began, dynamic friction otherwise.
 - **Rolling and twisting resistance** is a length times the load. A bottle stops sooner than a drum.
+- **Mass scaling.** A body resting on a lighter one, by a contact within 45 degrees of vertical
+  (`Settings::shockNormal`, knob `props.shock`), meets it as if the one under were as heavy as itself, in that
+  contact only (its prepare, warm start, solve and restitution alike). A 100 kg drum on a 1 kg crate sinks 1 mm into
+  it instead of 5 (22 mm dropped 10 cm on it), and the crate 0.5 mm into the floor. A body a joint holds keeps its
+  true mass (a bridge's planks), and a ragdoll's sections are never scaled (`vectra-stack`).
+- **Driving.** `Space::drive` pulls a body to a pose with a critically damped spring, applied as velocity so contacts
+  still hold. The change in velocity is held to `maxForce` and the change in spin to `maxTorque` (by default `maxForce`
+  times the body's reach), through its inertia: a 2 m plank driven into a doorframe's jamb rests against it at
+  0.003 rad/s, where the spin set outright kept it shaking at 0.11 (`vectra-drive`). Nothing in the game drives a
+  body yet (the held prop is kinematic, Physgloves throw).
+- **The slide and roll** of each manifold when the step began (`Manifold::slideSpeed`, `rollSpeed`, m/s) are what the
+  scrape and roll sounds go by.
 
 ## Sleeping
 
@@ -122,7 +134,10 @@ Islands are bodies linked by contacts and joints. An island sleeps when every bo
 within reach of a sleeping body wakes it: a blow from a moving body is never stopped by a sleeper. A body woken that
 way wakes what it touches in the same step, and meets it, so it is neither driven into a neighbour unopposed nor stopped
 by one still asleep.
-A sleeping prop out of reach of every awake prop and of the player is not built at all.
+A sleeping prop out of reach of every awake prop and of the player is not built at all. One that is built keeps its
+bounds while it has not moved, and a part's hull is built only when a pair needs it: 400 resting props cost 0.065 ms a
+step, and 20 fast shards through them 0.48 ms (`vectra-scale`; 0.14 and 0.62 before). Continuous collision meets a
+fast body only with the bodies whose swept boxes reach its own (sorted along x once a step).
 
 ## Continuous collision
 
@@ -204,6 +219,14 @@ What uses them:
 | organic | .7 | .55 | .15 | .006 |
 | rubber (lab bodies) | .95 | .85 | .82 | .002 |
 | floors (the World) | .6 | .5 | 0 | .004 |
+
+A floor gives its own material (`Surface::grip`), which `Space::prepare` mixes with the prop's for that manifold.
+The game sets it from the map where the floor manifold's points are (RigidClutter.cpp `floorGrip`): concrete as
+above; a metal deck (and the corrugated and pressure finishes) .45/.35, rolling .002; clinic tile and lab panel
+.5/.4; mine timber .62/.5; rock and stone .7/.6; office carpet .8/.65, rolling .012; on painted terrain grass
+.55/.45 and mud .4/.3 (both rolling .03), dry ground .65/.55, gravel .7/.6 (rolling .02). Water over any of them
+(a WET patch by its amount, a puddle fully) draws it toward .22/.15: a crate shoved at 3 m/s slides 0.67 m on
+concrete, 1.22 m in a puddle and 0.59 m on carpet (`vectra-grip`). Walls keep the plain floor material.
 
 Two materials meeting take the geometric mean of their frictions, the larger restitution and the larger
 rolling resistance. Chairs on casters and carts on wheels (office and boardroom chairs, wheelchair, crash cart)
@@ -351,6 +374,11 @@ Not the default yet. ragdoll-fall, 14 fixtures (lab, 2026-11-18):
   a fast throw).
 - **Sounds, AI hearing and breaking** come from each contact's approach speed. Breaking uses the speed of the
   prop's middle, which is what the break speeds were tuned on.
+- **Scrapes and rolls.** Each prop eases `Clutter::scrapeLevel` and `rollLevel` (0 to 1, not saved) toward the
+  fastest slide and roll of the contacts it bears on (from 6 cm/s, full at 1.26 m/s sliding and 1.56 m/s rolling),
+  and drops them to 0 when it is held, asleep or broken. The AudioEngine loops the bank's dragged-metal sound for
+  each while it is over 0.02, weighted and pitched by the prop's material (metal as recorded, wood lower, glass and
+  ceramic higher and quieter, soft things low and faint), a roll an octave lower and softer (`vectra-scrape`).
 - **Bodies.** The old body contacts still run: people and creatures struck, carried along, stood on.
   Heavy-impact tipping is real torque now.
   - **Bodies in the solver.** Each man and creature within reach of a moving prop is a body in the solver: a
@@ -400,6 +428,7 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `props.pushout` | 1 | the most a contact pushes out at (m/s) |
 | `props.slop` | 0.001 | allowed overlap (m) |
 | `props.cold` | 8 | extra iterations for contacts with nothing to warm start from |
+| `props.shock` | 0.7 | mass scaling on resting contacts within this cosine of vertical (0 off) |
 | `props.sleep_time`, `props.sleep_linear`, `props.sleep_angular` | 0.2, 0.06, 0.12 | sleeping |
 | `pad.hertz`, `pad.damping`, `pad.limit` | 2.5, 0.25, 1.5 | the mattress hinges |
 | `joints.tear` | 0.5 | how far a jointed prop is pulled from its joint before the joint gives (m) |

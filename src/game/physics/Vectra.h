@@ -20,7 +20,7 @@
 //
 // Phase 2 (joints) plugs into Constraint below: a joint is a set of rows between two bodies (or a body
 // and the world) solved in the same substep loop as the contacts, before them, and islands link through
-// it. Phase 3 (gravity gloves) drives a body with Space::drive (a soft spring to a target pose that
+// it. Phase 3 drives a body with Space::drive (a soft spring to a target pose that
 // respects contacts) rather than teleporting it.
 #include "../../core/Math.h"
 #include <array>
@@ -114,6 +114,8 @@ struct Body {
  V3 dp{};Quat dq{};      // motion since the step began (TGS-soft: contact separation updates from it)
  int island=-1;
  V3 boundsLo{},boundsHi{};
+ // Where its bounds were last worked out (a sleeping body that has not moved since keeps them: Space::collide).
+ V3 boundsX{};Quat boundsQ{};bool boundsKept=false;
  V3 pointVelocity(V3 p)const{return v+cross(w,p-x);}
  V3 toWorld(V3 local)const{return x+q.rotate(local-shape->com);} // a body-frame point (box origin) to world
  void setMass(float mass){invMass=kinematic||mass<=0?0:1/mass;inertiaLocal=kinematic||mass<=0?M3::zero():shape->inertia*mass;invInertiaLocal=kinematic||mass<=0?M3::zero():inertiaLocal.inverse();}
@@ -138,7 +140,14 @@ struct ContactPoint {
  std::uint32_t feature=0;             // what the point came from (narrow phase), for matching
 };
 // The world thing a static contact touched, for the caller (a pane, a soft pad...): free for its use.
-struct Surface {int kind=0,index=-1;V3 velocity{};float hertz=0;};
+struct Surface {int kind=0,index=-1;V3 velocity{};float hertz=0;
+ // The world surface's own material (the floor under a body: concrete, a puddle, carpet, gravel), mixed with the body's
+ // in Space::prepare for a world manifold. staticFriction < 0: none given, and the manifold keeps the material its
+ // caller set.
+ float staticFriction=-1,dynamicFriction=-1,restitution=0,rolling=0;
+ void grip(const Material& m){staticFriction=m.staticFriction;dynamicFriction=m.dynamicFriction;restitution=m.restitution;rolling=m.rolling;}
+ bool gripped()const{return staticFriction>=0;}
+ Material material()const{return {staticFriction,dynamicFriction,restitution,rolling};}};
 struct Manifold {
  int a=-1,b=-1;                       // body indices; b<0: the static world
  int partA=0,partB=0;
@@ -151,6 +160,10 @@ struct Manifold {
  // Prepared each step: the middle of the points (an impact's), and the rolling axes' turns and masses.
  V3 midA{},midB{},midWA{},midWB{};float midMass=0;V3 rollWA[3]{},rollWB[3]{};float rollMass[3]{0,0,0};
  bool cold=false;                     // no impulses to start from (new this step): solved more on its first substep
+ // How fast its surfaces slide across each other (m/s, the fastest point's) and roll over each other (m/s, the relative
+ // turn across the normal times the arm to the points) when the step began: the scrape and roll loops' speeds.
+ float slideSpeed=0,rollSpeed=0;
+ float scaleA=1,scaleB=1;             // the mass scaling of each body in this contact (Settings::shockNormal)
  bool world()const{return b<0;}
  // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster.
  static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA))<<40)^(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<20)^(std::uint64_t(partA)<<8)^std::uint64_t(partB);}
@@ -293,6 +306,10 @@ struct Settings {
  float restitutionThreshold=1.f;                           // below this approach speed nothing bounces
  float middleThreshold=1.f;                               // an approach faster than this is first met at the manifold's middle
  float sleepLinear=.06f,sleepAngular=.12f,sleepTime=.2f;  // islands under these for this long sleep
+ // Mass scaling on resting contacts: a body resting on a lighter one by a contact whose normal is within this of vertical
+ // (its cosine) meets it as if the one under were as heavy as itself, so a heavy drum on a light crate stays on it instead
+ // of pressing it into the floor over a step's few iterations through the crate's small mass. 0: off.
+ float shockNormal=.7f;
  // Contacts with nothing to warm start from (a stack just woken, or set down whole) are iterated this many
  // more times on the step's first substep, so the weight reaches the floor before anything moves under it.
  int coldIterations=8;
@@ -342,8 +359,10 @@ struct Space {
  void wake(int body);
  int idOf(int body)const{return body<0?-1:bodies[size_t(body)].id>=0?bodies[size_t(body)].id:body;}
  std::uint64_t keyOf(const Manifold& m)const{return Manifold::key(idOf(m.a),idOf(m.b),m.partA,m.partB);}
- // A soft spring pulling a body to a pose (phase 3: gravity gloves): applied as velocity, contacts still hold.
- void drive(int body,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce);
+ // A soft spring pulling a body to a pose: applied as velocity, contacts still hold. The change in velocity is held to
+ // maxForce (N) and the change in spin to maxTorque (N m; < 0: maxForce times the body's reach, Shape::bound), through
+ // its inertia, so a long plank held against a doorframe is levered no harder than it is pulled and yields to it.
+ void drive(int body,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce,float maxTorque=-1);
 private:
  void collide(float margin);
  void prepare(float h);

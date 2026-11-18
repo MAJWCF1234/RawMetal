@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstring>
 #include <chrono>
+#include <deque>
 #include <iterator>
 namespace retro::vectra {
 M3 M3::inverse()const{
@@ -244,8 +245,11 @@ void Space::collide(float dt){
  std::vector<float> reach(size_t(n),0.f);
  for(int i=0;i<n;++i){auto&b=bodies[size_t(i)];V3 lo{1e30f,1e30f,1e30f},hi{-1e30f,-1e30f,-1e30f};
   if(!b.shape){b.boundsLo=lo;b.boundsHi=hi;continue;}   // no shape: nothing to meet (its bounds empty, never paired)
-  for(int p=0;p<b.shape->count;++p){V3 l,h;partBounds(b,p,l,h);lo={std::min(lo.x,l.x),std::min(lo.y,l.y),std::min(lo.z,l.z)};hi={std::max(hi.x,h.x),std::max(hi.y,h.y),std::max(hi.z,h.z)};}
-  b.boundsLo=lo;b.boundsHi=hi;reach[size_t(i)]=settings.speculative+(b.sleeping?0.f:std::min(1.f,(len(b.v)+len(b.w)*b.shape->bound)*dt));}
+  // A sleeper that has not moved since its bounds were worked out keeps them (a room of resting props costs nothing here).
+  const bool kept=b.sleeping&&b.boundsKept&&b.boundsX.x==b.x.x&&b.boundsX.y==b.x.y&&b.boundsX.z==b.x.z&&b.boundsQ.w==b.q.w&&b.boundsQ.x==b.q.x&&b.boundsQ.y==b.q.y&&b.boundsQ.z==b.q.z;
+  if(!kept){for(int p=0;p<b.shape->count;++p){V3 l,h;partBounds(b,p,l,h);lo={std::min(lo.x,l.x),std::min(lo.y,l.y),std::min(lo.z,l.z)};hi={std::max(hi.x,h.x),std::max(hi.y,h.y),std::max(hi.z,h.z)};}
+   b.boundsLo=lo;b.boundsHi=hi;b.boundsX=b.x;b.boundsQ=b.q;b.boundsKept=true;}
+  reach[size_t(i)]=settings.speculative+(b.sleeping?0.f:std::min(1.f,(len(b.v)+len(b.w)*b.shape->bound)*dt));}
  // The world under and round each moving body.
  std::vector<char> grounded(size_t(n),0);
  auto ground=[&](int i){const auto&b=bodies[size_t(i)];if(!worldContacts||!b.shape||grounded[size_t(i)]||b.sleeping||b.invMass<=0)return;grounded[size_t(i)]=1;const size_t before=manifolds.size();worldContacts(*this,i,reach[size_t(i)],manifolds);worldManifolds+=int(manifolds.size()-before);};
@@ -267,8 +271,10 @@ void Space::collide(float dt){
  std::vector<std::pair<int,int>> pairs;sweepPairs(pairs);
  // Each polyhedral part's hull, built once a step when a pair first needs it (a crate in a heap meets six).
  std::vector<int> first(size_t(n)+1,0);for(int i=0;i<n;++i)first[size_t(i)+1]=first[size_t(i)]+(bodies[size_t(i)].shape?bodies[size_t(i)].shape->count:0);
- std::vector<Hull> hulls(static_cast<size_t>(first.back()));std::vector<char> built(hulls.size(),0);
- auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(!built[k]){hulls[k]=hullOf(bodies[size_t(body)],part);built[k]=1;}return hulls[k];};
+ // (Kept only for the parts a pair needs, in a deque so each stays where it is: a room of 400 resting props built and
+ // cleared 400 hulls, a quarter of a megabyte, every step.)
+ std::vector<int> slot(static_cast<size_t>(first.back()),-1);std::deque<Hull> hulls;
+ auto hull=[&](int body,int part)->const Hull&{const size_t k=size_t(first[size_t(body)]+part);if(slot[k]<0){slot[k]=int(hulls.size());hulls.push_back(hullOf(bodies[size_t(body)],part));}return hulls[size_t(slot[k])];};
  int woken=0;std::vector<char> roused(size_t(n),0);   // woken by a touch this step: what it touches that sleeps wakes with it (a sleeper is a wall)
  auto meet=[&](const std::vector<std::pair<int,int>>& list){
  for(auto [i,j]:list){auto&a=bodies[size_t(i)];auto&b=bodies[size_t(j)];const float margin=std::max(reach[size_t(i)],reach[size_t(j)]);
@@ -299,10 +305,24 @@ void Space::collide(float dt){
 }
 void Space::prepare(float h){
  (void)h;
+ // The bodies a joint holds: their contacts keep their true masses (a bridge's planks under a crate share its weight with
+ // their pins by them; scaled, the joints and the contacts disagreed and the bridge never came to rest).
+ std::vector<char> jointed;if(settings.shockNormal>0&&!constraints.empty()){jointed.assign(bodies.size(),0);for(auto*c:constraints){if(auto*j=c->joint();j&&j->broken)continue;for(int k:{c->bodyA(),c->bodyB()})if(k>=0&&k<int(bodies.size()))jointed[size_t(k)]=1;}}
  // Warm start: the cache is sorted by key.
  for(auto&m:manifolds){
   const Body& A=bodies[size_t(m.a)];const Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;
-  const float mA=A.movable()?A.invMass:0,mB=B&&B->movable()?B->invMass:0;const M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B&&B->movable()?B->invInertia:M3::zero();
+  float mA=A.movable()?A.invMass:0,mB=B&&B->movable()?B->invMass:0;M3 iA=A.movable()?A.invInertia:M3::zero(),iB=B&&B->movable()?B->invInertia:M3::zero();
+  // Mass scaling (Settings::shockNormal): a body resting on a lighter one by a contact near vertical meets it as if the
+  // one under were as heavy as itself. Shared by their true masses, a 100 kg drum's weight barely reached the floor through
+  // a 1 kg crate in a step's few iterations: the crate gave, the drum sank 5 mm into it and the crate as far into the
+  // floor (22 mm and 13 mm when the drum was dropped 10 cm on it). The scale is the contact's own, used wherever its
+  // impulses are (prepare, warm start, solve, restitution), so what it stores stays its own to warm start from.
+  m.scaleA=m.scaleB=1;
+  if(B&&settings.shockNormal>0&&std::fabs(m.normal.z)>=settings.shockNormal&&A.movable()&&B->movable()&&A.softHertz<=0&&B->softHertz<=0&&m.surface.hertz<=0){
+   const bool aUnder=m.normal.z>0;const float under=aUnder?A.invMass:B->invMass,over=aUnder?B->invMass:A.invMass;
+   if(under>over&&under>0&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
+  // Against the world: the surface's own material, where the caller gave one (a puddle is slick, carpet grips).
+  if(!B&&m.surface.gripped())m.material=Material::mix(A.material,m.surface.material());
   basis(m.normal,m.t1,m.t2);
   const auto key=keyOf(m);auto it=std::lower_bound(cache.begin(),cache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   const Cached* old=it!=cache.end()&&it->first==key?&it->second:nullptr;m.cold=old==nullptr;
@@ -323,13 +343,17 @@ void Space::prepare(float h){
   // Static or dynamic friction by how fast the surfaces slide when the step begins.
   float slide=0;for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));slide=std::max(slide,len(dv-m.normal*dot(dv,m.normal)));}
   m.material.dynamicFriction=slide<.08f?m.material.staticFriction:m.material.dynamicFriction;
+  // What the scrape and roll loops go by: the slide, and the turn of one over the other across the normal times the arm
+  // from the turning body's middle to the points (a rolling drum: its spin times its radius, with no slide).
+  {const V3 rel=(B?B->w:V3{})-A.w;const V3 across=rel-m.normal*dot(rel,m.normal);float arm=0;for(int k=0;k<m.count;++k)arm+=std::fabs(dot(m.points[size_t(k)].rA,m.normal));
+   m.slideSpeed=slide;m.rollSpeed=m.count>0?len(across)*arm/float(m.count):0.f;}
  }
 }
 void Space::warmStart(){
  for(auto&m:manifolds){Body& A=bodies[size_t(m.a)];Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;const bool ma=A.movable(),mb=B&&B->movable();
   for(int k=0;k<m.count;++k){const auto&c=m.points[size_t(k)];const V3 P=m.normal*c.normalImpulse+m.t1*c.tangentImpulse[0]+m.t2*c.tangentImpulse[1];
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-(c.wnA*c.normalImpulse+c.wtA[0]*c.tangentImpulse[0]+c.wtA[1]*c.tangentImpulse[1]);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+(c.wnB*c.normalImpulse+c.wtB[0]*c.tangentImpulse[0]+c.wtB[1]*c.tangentImpulse[1]);}}
+   if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-(c.wnA*c.normalImpulse+c.wtA[0]*c.tangentImpulse[0]+c.wtA[1]*c.tangentImpulse[1]);}
+   if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+(c.wnB*c.normalImpulse+c.wtB[0]*c.tangentImpulse[0]+c.wtB[1]*c.tangentImpulse[1]);}}
   // (Rolling impulses are stored along the contact's own axes.)
   if(ma)A.w=A.w-(m.rollWA[0]*m.rollingImpulse[0]+m.rollWA[1]*m.rollingImpulse[1]+m.rollWA[2]*m.rollingImpulse[2]);
   if(mb)B->w=B->w+(m.rollWB[0]*m.rollingImpulse[0]+m.rollWB[1]*m.rollingImpulse[1]+m.rollWB[2]*m.rollingImpulse[2]);}
@@ -355,7 +379,7 @@ void Space::solve(float h,bool useBias,bool coldOnly){
      const V3 d=(dpB-dpA)+(B?dqB.rotate(c.rB)-dqA.rotate(c.rA):V3{}-dqA.rotate(c.rA))-((B?c.rB:V3{})-c.rA);gap=std::min(gap,dot(d,m.normal)+c.separation);}
     gap=std::max(0.f,gap)*inv;}
    if(vn<-settings.middleThreshold&&vn+gap<0){const float lambda=-(vn+gap)*m.midMass;const V3 P=m.normal*lambda;   // impacts only: resting contacts are the points' own
-    if(ma){A.v=A.v-P*A.invMass;A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+m.midWB*lambda;}
+    if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-m.midWA*lambda;}if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+m.midWB*lambda;}
     for(int j=0;j<m.count;++j){auto&c=m.points[size_t(j)];c.normalImpulse+=lambda/float(m.count);c.maxNormalImpulse=std::max(c.maxNormalImpulse,lambda/float(m.count));}}}
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];
    // The gap now, from how far each body has moved and turned since the step began.
@@ -369,16 +393,16 @@ void Space::solve(float h,bool useBias,bool coldOnly){
    float impulse=-c.normalMass*massScale*(vn+bias)-impulseScale*c.normalImpulse;
    const float next=std::max(c.normalImpulse+impulse,0.f);impulse=next-c.normalImpulse;c.normalImpulse=next;c.maxNormalImpulse=std::max(c.maxNormalImpulse,impulse);total+=next;
    const V3 P=m.normal*impulse;
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-c.wnA*impulse;}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+c.wnB*impulse;}}
+   if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-c.wnA*impulse;}
+   if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+c.wnB*impulse;}}
   // Friction: a cone on each point's two tangent impulses, by this step's normal impulse.
   const float mu=m.material.dynamicFriction;
   for(int k=0;k<m.count;++k){auto&c=m.points[size_t(k)];const V3 dv=velocityOf(B,c.rB,m.surface.velocity)-(A.v+cross(A.w,c.rA));
    const float o1=c.tangentImpulse[0],o2=c.tangentImpulse[1];float n1=o1-c.tangentMass[0]*dot(dv,m.t1),n2=o2-c.tangentMass[1]*dot(dv,m.t2);
    const float limit=mu*c.normalImpulse,mag=std::sqrt(n1*n1+n2*n2);if(mag>limit&&mag>0){n1*=limit/mag;n2*=limit/mag;}
    c.tangentImpulse[0]=n1;c.tangentImpulse[1]=n2;const float d1=n1-o1,d2=n2-o2;const V3 P=m.t1*d1+m.t2*d2;
-   if(ma){A.v=A.v-P*A.invMass;A.w=A.w-(c.wtA[0]*d1+c.wtA[1]*d2);}
-   if(mb){B->v=B->v+P*B->invMass;B->w=B->w+(c.wtB[0]*d1+c.wtB[1]*d2);}}
+   if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-(c.wtA[0]*d1+c.wtA[1]*d2);}
+   if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+(c.wtB[0]*d1+c.wtB[1]*d2);}}
   // Rolling and twisting resistance: an angular friction on the relative spin, held to rolling * load.
   // (Run with no load too: a warm-started impulse is then taken back out, not left to spin a body in the air.)
   if(m.material.rolling>0||m.rollingImpulse[0]!=0||m.rollingImpulse[1]!=0||m.rollingImpulse[2]!=0){
@@ -408,10 +432,10 @@ void Space::restitution(){
   if(!struck)continue;
   if(weight<=0)continue;approach/=weight;
   const V3 rA=armA*(1/weight),rB=armB*(1/weight);const V3 cA=cross(rA,m.normal),cB=cross(rB,m.normal);
-  const float k=(ma?A.invMass+dot(cA,A.invInertia*cA):0.f)+(mb?B->invMass+dot(cB,B->invInertia*cB):0.f);if(k<=0)continue;
+  const float k=(ma?(A.invMass+dot(cA,A.invInertia*cA))*m.scaleA:0.f)+(mb?(B->invMass+dot(cB,B->invInertia*cB))*m.scaleB:0.f);if(k<=0)continue;
   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
   const float impulse=std::max(0.f,-(vn+m.material.restitution*approach)/k);if(impulse<=0)continue;
-  const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*A.invMass;A.w=A.w-A.invInertia*cross(rA,P);}if(mb){B->v=B->v+P*B->invMass;B->w=B->w+B->invInertia*cross(rB,P);}
+  const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-A.invInertia*cross(rA,P)*m.scaleA;}if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+B->invInertia*cross(rB,P)*m.scaleB;}
   for(int k2=0;k2<m.count;++k2){auto&c=m.points[size_t(k2)];c.normalImpulse+=impulse*(c.maxNormalImpulse/weight);c.maxNormalImpulse=std::max(c.maxNormalImpulse,c.normalImpulse);}}
 }
 void Space::storeImpulses(){
@@ -462,13 +486,20 @@ void Space::islands(float dt){
   const int r=find(i);islandOf[size_t(i)]=r;least[size_t(r)]=std::min(least[size_t(r)],b.sleepTime);}
  for(int i=0;i<n;++i){auto&b=bodies[size_t(i)];if(!b.movable())continue;if(least[size_t(find(i))]>=settings.sleepTime){b.sleeping=true;b.v={};b.w={};}}
 }
-void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce){
+void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce,float maxTorque){
  auto&b=bodies[size_t(i)];if(b.invMass<=0||dt<=0)return;b.sleeping=false;b.sleepTime=0;
  const float wl=2*kPi*linearHertz,wa=2*kPi*angularHertz;
  // A critically damped spring, stepped implicitly: the velocity it asks for, held to maxForce.
  const V3 want=(targetX-b.x)*(wl/(1+wl*dt));V3 dv=want-b.v;const float cap=maxForce*b.invMass*dt,l=len(dv);if(l>cap&&l>0)dv=dv*(cap/l);b.v=b.v+dv;
  Quat d=targetQ*b.q.conj();if(d.w<0)d={-d.w,-d.x,-d.y,-d.z};const float s=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
- const V3 axis=s>1e-6f?V3{d.x/s,d.y/s,d.z/s}:V3{};const float angle=2*std::atan2(s,d.w);b.w=axis*(angle*wa/(1+wa*dt));}
+ const V3 axis=s>1e-6f?V3{d.x/s,d.y/s,d.z/s}:V3{};const float angle=2*std::atan2(s,d.w);
+ // The spin it asks for, held to maxTorque through the body's inertia (the angular impulse I dw over the step). Set
+ // outright, a long plank pressed into a doorframe was levered by whatever the spring wanted, past what any contact
+ // could answer in one step: it jittered against the frame or went through it.
+ const V3 wantW=axis*(angle*wa/(1+wa*dt));const V3 dw=wantW-b.w;
+ if(maxTorque<0)maxTorque=maxForce*(b.shape?std::max(b.shape->bound,.05f):.5f);
+ b.updateInertia();const M3 I=b.q.matrix()*b.inertiaLocal*b.q.matrix().transposed();V3 L=I*dw;const float lc=maxTorque*dt,ll=len(L);
+ if(ll>lc&&ll>0)L=L*(lc/ll);b.w=b.w+b.invInertia*L;}
 void Space::step(float dt){
  events.clear();jointEvents.clear();if(dt<=0||bodies.empty()){manifolds.clear();return;}
  // A joint does not hold a moving body to a sleeping one: what is joined to something awake wakes (through
