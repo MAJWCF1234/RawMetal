@@ -237,6 +237,7 @@
 347 RCDATA "assets/cleanup-voices.bank"
 
 348 RCDATA "assets/ai/texture-x2.ntm"
+1999 RCDATA "assets/ai/texture-n2.ntm"
 349 RCDATA "assets/materials/iron-plate.png"
 350 RCDATA "assets/materials/iron-plate-normal.png"
 351 RCDATA "assets/materials/dark-metal-q.webp"
