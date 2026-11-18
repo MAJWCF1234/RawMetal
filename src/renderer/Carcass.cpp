@@ -1,5 +1,9 @@
 #include "Carcass.h"
 #include "../core/Tune.h"
+#include "../game/physics/Vectra.h"
+#include <deque>
+#include <memory>
+#include <string>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -568,7 +572,7 @@ void Carcass::advance(const World& world,float toAge){
    if(woken)break;}
   if(!woken){m_age=std::max(m_age,toAge);return;}
   m_asleep=false;m_shoved=true;m_quiet=0;m_woke=m_age;m_dirty=true;}
- int budget=300;while(m_age+Tick*.5f<toAge&&budget-->0&&!m_asleep)step(world);
+ int budget=300;const bool onVectra=vectraBodies();while(m_age+Tick*.5f<toAge&&budget-->0&&!m_asleep){if(onVectra)stepVectra(world);else step(world);}
  if(m_age<toAge&&(m_asleep||budget<=0))m_age=toAge;
 }
 
@@ -745,5 +749,114 @@ bool Carcass::test(){
  blown.advance(world,1);const float spread=blown.radius();blown.advance(world,8);
  report<<"blown rests: asleep "<<blown.asleep()<<" lowest "<<lowest(blown)<<" spread "<<spread<<" top "<<highest(blown)<<'\n';pass&=lowest(blown)>-.005f&&sound(blown)&&spread>1.f&&highest(blown)<.9f;
  report<<(pass?"PASS":"FAIL")<<'\n';return pass;
+}
+
+// ---- The body on Vectra (RM_RAGDOLL=vectra, or carcass.vectra 1) ----
+// Each section a Vectra body (its points' mass and inertia, its capsule as a box for the others to meet), each
+// joint a Vectra joint at its pivot: a ball with an oval cone (the bend's range centred, the side either way)
+// and a twist limit, from the rig's limits about the section's own twist, bend and side axes. The floor and the
+// walls meet the section's skin points (their probed floor, as the old step has them); the props near it are
+// kinematic boxes that shove it at their own share. Vectra's islands put it to sleep; settling (settle) frees
+// anything left in the floor or a wall as it does.
+bool Carcass::vectraBodies(){static const bool env=[]{const char* v=std::getenv("RM_RAGDOLL");return v&&std::string(v)=="vectra";}();return env||tune("carcass.vectra",0)>.5f;}
+struct Carcass::VectraState {vectra::Space space;std::deque<vectra::Shape> shapes;std::vector<vectra::Joint> joints;};
+void Carcass::stepVectra(const World& world){
+ using namespace vectra;
+ const auto started=std::chrono::steady_clock::now();
+ if(!m_bodies)bodies();knobs();
+ if(!m_vectra)m_vectra=std::make_shared<VectraState>();auto& vs=*m_vectra;
+ const int R=int(m_sections.size());auto live=[&](const Section&s){return s.mass>0&&!s.members.empty();};
+ auto quat=[](const float q[4]){return Quat{q[0],q[1],q[2],q[3]};};
+ auto at=[&](const Section&s,Point3 rest){const Point3 d=rest-s.comRest;return s.com+s.axes[0]*d.x+s.axes[1]*d.y+s.axes[2]*d.z;};
+ // The velocities each section has, from its points (a strike or a blast pushes the points).
+ for(auto&s:m_sections){if(!live(s))continue;axesOf(s.q,s.axes);s.com=carry(s,s.comRest);Point3 v{};for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region>=0)v=v+(p.x-p.previous);}v=v*(1/(s.mass*Tick));
+  Point3 L{};for(int i:s.members){const auto&p=m_particles[size_t(i)];if(p.region<0)continue;L=L+cross3(p.x-s.com,(p.x-p.previous)*(1/Tick)-v);}
+  s.vel=v;s.spin=turnBy(s.axes,s.invInertia,L);const float sp=span(s.vel);if(sp>18.f)s.vel=s.vel*(18.f/sp);const float w=span(s.spin);if(w>30.f)s.spin=s.spin*(30.f/w);}
+ // A man weighs 75 kg (a body of another size by its volume), shared by the sections' points.
+ float points=0;for(const auto&s:m_sections)if(live(s))points+=s.mass;const float kg=75.f*std::pow(std::max(.3f,m_size/1.9f),3.f)/std::max(1.f,points);
+ Space& space=vs.space;std::vector<std::pair<std::uint64_t,Space::Cached>> cache;cache.swap(space.cache);std::vector<std::pair<std::uint64_t,Space::JointCached>> jcache;jcache.swap(space.jointCache);
+ space=Space{};space.cache.swap(cache);space.jointCache.swap(jcache);space.settings.substeps=int(tune("carcass.vsubsteps",8));space.settings.sleepTime=.4f;space.settings.sleepLinear=.05f;space.settings.sleepAngular=.15f;
+ vs.shapes.clear();std::vector<int> bodyOf(size_t(R),-1);
+ const Material flesh{tune("carcass.vstatic",1.f),tune("carcass.vkinetic",.85f),0,tune("carcass.vroll",.03f)};
+ for(int k=0;k<R;++k){auto&s=m_sections[size_t(k)];if(!live(s))continue;
+  vs.shapes.emplace_back();Shape& sh=vs.shapes.back();const Point3 axis=s.capB-s.capA;const float len=span(axis);const Point3 U=len>1e-6f?axis*(1/len):Point3{0,0,1};
+  Point3 a=unit(s.capU-U*dot3(s.capU,U),{1,0,0}),b=cross3(U,a);const float r=std::min(s.ru,s.rv);
+  // The part's frame: x across (capU), y across (the other way), z along the capsule.
+  M3 m;m.m[0][0]=a.x;m.m[1][0]=a.y;m.m[2][0]=a.z;m.m[0][1]=b.x;m.m[1][1]=b.y;m.m[2][1]=b.z;m.m[0][2]=U.x;m.m[1][2]=U.y;m.m[2][2]=U.z;
+  const float tr=m.m[0][0]+m.m[1][1]+m.m[2][2];Quat q;
+  if(tr>0){const float t=std::sqrt(tr+1)*2;q={.25f*t,(m.m[2][1]-m.m[1][2])/t,(m.m[0][2]-m.m[2][0])/t,(m.m[1][0]-m.m[0][1])/t};}
+  else if(m.m[0][0]>m.m[1][1]&&m.m[0][0]>m.m[2][2]){const float t=std::sqrt(1+m.m[0][0]-m.m[1][1]-m.m[2][2])*2;q={(m.m[2][1]-m.m[1][2])/t,.25f*t,(m.m[0][1]+m.m[1][0])/t,(m.m[0][2]+m.m[2][0])/t};}
+  else if(m.m[1][1]>m.m[2][2]){const float t=std::sqrt(1+m.m[1][1]-m.m[0][0]-m.m[2][2])*2;q={(m.m[0][2]-m.m[2][0])/t,(m.m[0][1]+m.m[1][0])/t,.25f*t,(m.m[1][2]+m.m[2][1])/t};}
+  else{const float t=std::sqrt(1+m.m[2][2]-m.m[0][0]-m.m[1][1])*2;q={(m.m[1][0]-m.m[0][1])/t,(m.m[0][2]+m.m[2][0])/t,(m.m[1][2]+m.m[2][1])/t,.25f*t};}
+  sh.add(PartKind::Box,(s.capA+s.capB)*.5f,{std::max(.02f,s.ru*.9f),std::max(.02f,s.rv*.9f),len*.5f+r*.6f},q.normalized());sh.finish();sh.com=s.comRest;
+  Body body;body.shape=&sh;body.x=s.com;body.q=quat(s.q);body.v=s.vel;body.w=s.spin;body.material=flesh;body.invMass=1/(s.mass*kg);
+  M3 inv;for(int u=0;u<3;++u)for(int v=0;v<3;++v)inv.m[u][v]=s.invInertia[u*3+v]/kg;body.invInertiaLocal=inv;body.inertiaLocal=inv.inverse();body.updateInertia();
+  body.linearDamping=tune("carcass.vdamp",.1f);body.angularDamping=tune("carcass.vspin",1.f);body.id=k;body.user=k;body.group=0;bodyOf[size_t(k)]=int(space.bodies.size());space.bodies.push_back(body);}
+ // The props near it: kinematic boxes, going at their share of their own speed.
+ const int sections=int(space.bodies.size());
+ if(!(switchedOff()&16))for(const auto&o:m_solids){const float reach=m_radius+span(o.half)+.3f;const Point3 d=o.centre-m_centre;if(dot3(d,d)>reach*reach||o.half.x<=0)continue;
+  vs.shapes.emplace_back();Shape& sh=vs.shapes.back();sh.add(PartKind::Box,{},o.half);sh.finish();Body body;body.shape=&sh;body.x=o.centre;body.q=Quat::axisAngle({0,0,1},o.yaw);
+  body.kinematic=true;body.invMass=0;body.v=o.velocity*o.shove;body.material={.8f,.7f,0,.01f};body.id=1000+int(space.bodies.size());space.bodies.push_back(body);}
+ // The joints, at each pivot.
+ vs.joints.clear();vs.joints.reserve(m_joints.size());std::vector<char> paired(size_t(R)*size_t(R),0);
+ for(int j=0;j<int(m_joints.size());++j){const auto&jt=m_joints[size_t(j)];if(jt.cut||bodyOf[size_t(jt.a)]<0||bodyOf[size_t(jt.b)]<0)continue;
+  paired[size_t(jt.a)*size_t(R)+size_t(jt.b)]=paired[size_t(jt.b)*size_t(R)+size_t(jt.a)]=1;
+  // Which side is the child (its limits are about its own axes).
+  int child=-1;for(int c:{jt.a,jt.b})if(m_sections[size_t(c)].joint==j&&m_sections[size_t(c)].parent==(c==jt.a?jt.b:jt.a))child=c;
+  vectra::Joint J;J.kind=JointKind::Ball;J.key=std::uint64_t(j+1);
+  if(child>=0&&m_sections[size_t(child)].limited&&!(switchedOff()&1)){const auto&s=m_sections[size_t(child)];const auto&p=m_sections[size_t(s.parent)];
+   J.a=bodyOf[size_t(s.parent)];J.b=bodyOf[size_t(child)];
+   // The limits' frame in bind space: x the bend axis, y the side, z the twist; the cone centred on the bend's range.
+   M3 m;m.m[0][0]=s.bendAxis.x;m.m[1][0]=s.bendAxis.y;m.m[2][0]=s.bendAxis.z;m.m[0][1]=s.sideAxis.x;m.m[1][1]=s.sideAxis.y;m.m[2][1]=s.sideAxis.z;m.m[0][2]=s.twistAxis.x;m.m[1][2]=s.twistAxis.y;m.m[2][2]=s.twistAxis.z;
+   float rq[4];{const float tr=m.m[0][0]+m.m[1][1]+m.m[2][2];
+    if(tr>0){const float t=std::sqrt(tr+1)*2;rq[0]=.25f*t;rq[1]=(m.m[2][1]-m.m[1][2])/t;rq[2]=(m.m[0][2]-m.m[2][0])/t;rq[3]=(m.m[1][0]-m.m[0][1])/t;}
+    else if(m.m[0][0]>m.m[1][1]&&m.m[0][0]>m.m[2][2]){const float t=std::sqrt(1+m.m[0][0]-m.m[1][1]-m.m[2][2])*2;rq[0]=(m.m[2][1]-m.m[1][2])/t;rq[1]=.25f*t;rq[2]=(m.m[0][1]+m.m[1][0])/t;rq[3]=(m.m[0][2]+m.m[2][0])/t;}
+    else if(m.m[1][1]>m.m[2][2]){const float t=std::sqrt(1+m.m[1][1]-m.m[0][0]-m.m[2][2])*2;rq[0]=(m.m[0][2]-m.m[2][0])/t;rq[1]=(m.m[0][1]+m.m[1][0])/t;rq[2]=.25f*t;rq[3]=(m.m[1][2]+m.m[2][1])/t;}
+    else{const float t=std::sqrt(1+m.m[2][2]-m.m[0][0]-m.m[1][1])*2;rq[0]=(m.m[1][0]-m.m[0][1])/t;rq[1]=(m.m[0][2]+m.m[2][0])/t;rq[2]=(m.m[1][2]+m.m[2][1])/t;rq[3]=.25f*t;}qnorm(rq);}
+   const float mid=(s.limit.bendLo+s.limit.bendHi)*.5f,half=(s.limit.bendHi-s.limit.bendLo)*.5f;float centre[4];qexp(Point3{mid,0,0},centre);
+   float fa[4],fb[4],fa2[4];qmul(p.bind,rq,fa);qmul(fa,centre,fa2);qmul(s.bind,rq,fb);
+   J.frameA=quat(fa2);J.frameB=quat(fb);J.coneY=std::max(.02f,half);J.coneX=std::max(.02f,s.limit.side);J.twistLimited=true;J.twistLower=-s.limit.twist;J.twistUpper=s.limit.twist;
+   J.anchorA=Point3{0,0,0}+(jt.rest-p.comRest);J.anchorB=jt.rest-s.comRest;
+   // Anchors are in each body's frame from its centre of mass: the rest frame turned by nothing (bodies carry rest->world).
+  }else{J.a=bodyOf[size_t(jt.a)];J.b=bodyOf[size_t(jt.b)];J.anchorA=jt.rest-m_sections[size_t(jt.a)].comRest;J.anchorB=jt.rest-m_sections[size_t(jt.b)].comRest;}
+  vs.joints.push_back(J);}
+ for(auto&J:vs.joints)space.constraints.push_back(&J);
+ // Sections joined to each other, and the off-limits pairs, do not meet.
+ space.filter=[&](const Space& sp,int a,int b){const int ua=sp.bodies[size_t(a)].user,ub=sp.bodies[size_t(b)].user;if(ua<0||ub<0||ua>=R||ub>=R)return true;
+  if(switchedOff()&4)return false;if(paired[size_t(ua)*size_t(R)+size_t(ub)])return false;
+  // Two sections both joined to a third (the shoulders round the chest) may lie against each other but are kept by their skins.
+  return true;};
+ for(int k=0;k<sections;++k)space.bodies[size_t(k)].user=k;for(int k=sections;k<int(space.bodies.size());++k)space.bodies[size_t(k)].user=-1;
+ // The world: each section's skin points against what is under them, and against walls.
+ space.worldContacts=[&](Space& sp,int bi,float margin,std::vector<Manifold>& out){const Body& body=sp.bodies[size_t(bi)];if(body.user<0)return;auto&s=m_sections[size_t(body.user)];
+  struct Hit {Point3 p;float sep;int particle;};std::vector<Hit> floor,wall;std::vector<Point3> wallN;
+  for(int i:s.members){auto&pt=m_particles[size_t(i)];if(pt.region<0)continue;const V3 w=body.toWorld(pt.rest);const Point3 p{w.x,w.y,w.z};
+   float dx=p.x-pt.probe.x,dy=p.y-pt.probe.y;if(dx*dx+dy*dy>ProbeStep*ProbeStep||std::fabs(p.z-pt.probe.z)>.1f){pt.floor=world.supportBelow(p.x,p.y,p.z+.08f);pt.probe=p;}
+   const float sep=p.z-pt.floor-Skin;if(sep<margin&&sep>-.25f)floor.push_back({p,sep,i});
+   if(!world.fits(p.x,p.y,p.z+.03f,.001f,false)&&sep>.02f&&!pt.hull){Point3 n=p-pt.safe;n.z=0;const float l=span(n);if(l>1e-4f&&l<.3f){wall.push_back({p,-l,i});wallN.push_back(n*(1/l));}}
+   else if(world.fits(p.x,p.y,p.z+.03f,.001f,false))pt.safe=p;}
+  auto emit=[&](std::vector<Hit>& hits,V3 normal){if(hits.empty())return;std::sort(hits.begin(),hits.end(),[](const Hit&a,const Hit&b){return a.sep<b.sep;});
+   Manifold m;m.a=bi;m.b=-1;m.normal=normal;m.material=Material::mix(flesh,{.7f,.6f,0,.004f});
+   // The deepest point, then the ones farthest from those already taken.
+   std::vector<int> pick{0};while(int(pick.size())<4&&pick.size()<hits.size()){int best=-1;float widest=-1;for(int h=0;h<int(hits.size());++h){float closest=1e9f;for(int k:pick)closest=std::min(closest,span(hits[size_t(h)].p-hits[size_t(k)].p));if(closest>widest){widest=closest;best=h;}}if(widest<.02f)break;pick.push_back(best);}
+   for(int k:pick){const auto&h=hits[size_t(k)];auto&c=m.points[size_t(m.count++)];c=ContactPoint{};c.p={h.p.x,h.p.y,h.p.z};c.separation=h.sep;c.localA=body.q.unrotate(c.p-body.x);c.localB=c.p;c.feature=std::uint32_t(h.particle);}
+   out.push_back(m);};
+  emit(floor,{0,0,-1});
+  if(!wall.empty()){Point3 n{};for(auto w:wallN)n=n+w;n=unit(n);emit(wall,{n.x,n.y,0});}};
+ space.step(Tick);
+ // Back to the sections and their points.
+ float motion=0;
+ for(int k=0;k<R;++k){auto&s=m_sections[size_t(k)];if(!live(s)||bodyOf[size_t(k)]<0)continue;const Body& b=space.bodies[size_t(bodyOf[size_t(k)])];
+  s.com=b.x;s.q[0]=b.q.w;s.q[1]=b.q.x;s.q[2]=b.q.y;s.q[3]=b.q.z;qnorm(s.q);axesOf(s.q,s.axes);s.vel=b.v;s.spin=b.w;
+  s.centre=s.com-(s.axes[0]*(s.comRest-s.restCentre).x+s.axes[1]*(s.comRest-s.restCentre).y+s.axes[2]*(s.comRest-s.restCentre).z);
+  for(int i:s.members){auto&p=m_particles[size_t(i)];if(p.region<0)continue;p.x=at(s,p.rest);p.previous=p.x-(s.vel+cross3(s.spin,p.x-s.com))*Tick;p.grounded=p.x.z<p.floor+Skin+.004f;motion=std::max(motion,span(p.x-p.previous));}}
+ for(auto&p:m_particles)if(p.hull&&p.region>=0){const auto&s=m_sections[size_t(p.region)];p.x=at(s,p.rest);p.previous=p.x;}
+ for(auto&j:m_joints){if(j.cut)continue;auto&p=m_particles[size_t(j.particle)];p.x=(carry(m_sections[size_t(j.a)],j.rest)+carry(m_sections[size_t(j.b)],j.rest))*.5f;p.previous=p.x;}
+ for(auto&s:m_sections)if(s.limited&&s.parent>=0&&live(s)&&live(m_sections[size_t(s.parent)]))relative(s,s.last);
+ measure();m_age+=Tick;m_dirty=true;m_motion=motion;
+ const float big=std::max(1.f,m_size/1.9f);m_quiet=motion<.0024f*big?m_quiet+Tick:0;
+ bool asleep=sections>0;for(int k=0;k<sections;++k)asleep&=space.bodies[size_t(k)].sleeping;
+ if(asleep||m_quiet>QuietFor||m_age-m_woke>7.f){settle(world);m_asleep=true;measure();}
+ ++Steps;StepMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
 }
 }
