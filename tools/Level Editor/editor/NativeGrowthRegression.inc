@@ -57,6 +57,9 @@
     };
     auto all = [](const Piece &) { return true; };
     using namespace retro::model;
+    // The brush seeds from where a dab lands, so a plan left zoomed or panned by an earlier check would
+    // turn the same click into a slightly different point and other growth. Start from the fitted plan.
+    fitPlan();
     SendMessageW(window, WM_COMMAND, ToolBase + GrowthTool, 0);
     require(tool == GrowthTool, "the Growth tool did not take");
     require(IsWindowVisible(growthKindList) || !IsWindowVisible(window), "the Growth tool shows no boxes");
@@ -108,7 +111,9 @@
     report << "PASS: Wall moss: " << moss.size() << " patches low on the wall's other face, turned out from it\n" << std::flush;
     // ---- Creepers from the ceiling, and over the planter's edge ----
     box(growthKindList, GrowthKindList, GrowCreepers);
-    click(6.f, 10.8f); // by the wall: curtains down it from the ceiling
+    // By the wall: curtains down it from the ceiling. Three dabs along it, as a person brushes a wall: one
+    // dab's count is a random draw seeded from where it lands (grid and zoom left by earlier checks move that).
+    click(5.f, 10.8f), click(6.5f, 10.8f), click(8.f, 10.8f);
     click(6.f, 5.6f);  // by the planter: curtains over its lip
     auto hung = pieces([](const Piece &p) { return p.model == growth_hanging_vine || p.model == ivy_strand || p.model == growth_ivy_creeper || p.model == growth_ivy_curtain || p.model == growth_ivy_single; });
     int fromCeiling = 0, overLedge = 0;
