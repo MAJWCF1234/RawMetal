@@ -3,6 +3,8 @@
 #include "Queries.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 namespace retro::vectra {
 namespace {
 // ---- Support-mapped convex shapes ----------------------------------------------------------------
@@ -264,17 +266,46 @@ bool worldProbes(Space& s,int i,const Motion& m,std::vector<V3>& probes,std::vec
  V3 sum{};int count=0;for(const auto& h:hits)if(h.t<=first+h.window&&dot(h.n,normal)>.7f){sum=sum+h.r;++count;}
  best={first,1,-1,sum*(1.f/float(std::max(1,count))),normal};return true;}
 float effective(const Body& b,V3 arm,V3 n){if(b.invMass<=0)return 0;const V3 rn=cross(arm,n);return b.invMass+dot(rn,b.invInertia*rn);}
+// How far any point of b went through the step as a's frame sees it (a standing still): its centre's way there,
+// and its turn there times its reach.
+float relativeSweep(const Motion& a,const Motion& b,float reachB){
+ const V3 p0=a.q0.unrotate(b.x0-a.x0),p1=a.q1.unrotate(b.x1-a.x1);
+ Quat d=(a.q1.conj()*b.q1)*(a.q0.conj()*b.q0).conj();if(d.w<0)d={-d.w,-d.x,-d.y,-d.z};
+ const float s=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);return len(p1-p0)+2*std::atan2(s,d.w)*reachB;}
 }
 void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
  (void)dt;const int n=int(s.bodies.size());if(!n)return;
+ // RM_CCD=off: none of it (a check's switch, to tell what continuous collision changes).
+ static const bool off=[]{const char* v=std::getenv("RM_CCD");return v&&(std::strcmp(v,"off")==0||std::strcmp(v,"0")==0);}();
+ if(off){for(auto& b:s.bodies)b.ccd=false;return;}
+ // A body a joint holds (a bridge's plank, a corpse's section, a lamp on its chain) is its joints' and its contacts'
+ // business, never swept: put back alone to where it met something, against the world or a body, it would open its
+ // joints by as far as it went (a crate landing on a bridge pulled its planks 7 cm off their pins).
+ // Pairs the step itself keeps from meeting, or meets its own way, are not the pair pass's either: a time of impact
+ // between them would bounce apart what holds them together. Ruled out by the Space's filter or joined by a joint
+ // that holds, met by the caller's own contacts (Space::pairContacts: a corpse's skin against its other sections),
+ // or soft (a padded prop, a prop going through a corpse: a spring by design, never a wall).
+ std::vector<char> held(size_t(n),0);std::vector<std::pair<int,int>> joined;
+ for(auto* c:s.constraints){if(auto* j=c->joint();j&&j->broken)continue;const int a=c->bodyA(),b=c->bodyB();
+  for(int k:{a,b})if(k>=0&&k<n)held[size_t(k)]=1;
+  if(a>=0&&b>=0&&a!=b)joined.push_back({std::min(a,b),std::max(a,b)});}
+ std::sort(joined.begin(),joined.end());
+ std::vector<Manifold> scratch;
+ auto apart=[&](int a,int b){if(a>b)std::swap(a,b);
+  if(s.filter&&!s.filter(s,a,b))return true;
+  if(std::binary_search(joined.begin(),joined.end(),std::make_pair(a,b)))return true;
+  if(s.bodies[size_t(a)].softHertz>0||s.bodies[size_t(b)].softHertz>0)return true;
+  if(s.pairContacts){scratch.clear();if(s.pairContacts(s,a,b,0.f,scratch))return true;}
+  return false;};
  std::vector<Motion> motion(static_cast<size_t>(n));std::vector<char> fast(size_t(n),0),done(size_t(n),0);std::vector<float> thresholds(size_t(n),0.f);
  for(int i=0;i<n;++i){auto& b=s.bodies[size_t(i)];auto& m=motion[size_t(i)];m.x1=b.x;m.q1=b.q;m.x0=size_t(i)<start.size()?start[size_t(i)]:b.x;
   // Where it began the step: its turn since (dq) undone.
-  m.q0=b.movable()?(b.dq.conj()*b.q).normalized():b.q;m.begin();b.ccd=false;if(!b.movable()||!b.shape)continue;
+  m.q0=b.movable()?(b.dq.conj()*b.q).normalized():b.q;m.begin();b.ccd=false;if(!b.shape)continue;
   // Fast for its size: it could cross something thinner than itself within this step, by going or by turning
   // (a plank's end sweeps far while its middle hardly moves).
   float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto& part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box?std::min({part.half.x,part.half.y,part.half.z}):std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
-  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
+  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;if(!b.movable()||held[size_t(i)])continue;
+  b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
  const float target=2*s.settings.linearSlop;std::vector<V3> probes;std::vector<ProbeHit> hits;
  for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
   Event best;
@@ -285,7 +316,10 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
   for(int j=0;j<n;++j){if(j==i)continue;const Body& o=s.bodies[size_t(j)];if(!o.shape||(b.group&&b.group==o.group))continue;
    const Motion& mo=motion[size_t(j)];const float r=o.shape->bound;
    if(std::min(mo.x0.x,mo.x1.x)-r>sweptHi.x||std::max(mo.x0.x,mo.x1.x)+r<sweptLo.x||std::min(mo.x0.y,mo.x1.y)-r>sweptHi.y||std::max(mo.x0.y,mo.x1.y)+r<sweptLo.y||std::min(mo.x0.z,mo.x1.z)-r>sweptHi.z||std::max(mo.x0.z,mo.x1.z)+r<sweptLo.z)continue;
-   if(s.filter&&!s.filter(s,std::min(i,j),std::max(i,j)))continue;
+   if(apart(i,j))continue;
+   // A pair going together (a crate and the bottles in it, a stack shoved whole) meets by its contacts: only one that
+   // went through the other's frame further than the thinner of them could keep it out of is swept.
+   if(relativeSweep(m,mo,o.shape->bound)<=std::min(thresholds[size_t(i)],thresholds[size_t(j)]))continue;
    // (Touching when the step began: the contacts' business. Stopped by its speculative contacts: met at the step's
    // very end, closing no more, and so left as it is.)
    float t;V3 point,normal;if(!timeOfImpact(b,m,o,mo,target,t,point,normal)||t>=best.t)continue;

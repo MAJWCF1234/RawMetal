@@ -147,7 +147,7 @@ CustomCampaign.cpp, written back by CampaignExport.cpp; physics.md has how they 
 - Where solids overlap, the renderer leaves out faces buried inside another and draws flush faces once (the later record's): `src/renderer/ShapeCulling.h`, done when the map's geometry is built; collision is untouched. The lab tube `culling` checks it.
 
 ## The Starter Map atrium
-`Showcase Atrium` (map 148; south of Predator, tools/campaign/make_starter_map.py `atrium`) and `Showcase Shapes` (map 149, the last room built: every shape, the ten new ones at full size, a building of overlapping prims) are found by name in lab fixtures (`map-name`).
+`Showcase Atrium` (map 149; south of Predator, tools/campaign/make_starter_map.py `atrium`) and `Showcase Shapes` (map 60, built last on the forest's map in its cell, as the Hillside is, so no other map's number moves: every shape, the ten new ones at full size, a building of overlapping prims) are found by name in lab fixtures (`map-name`). A pane's cracks are drawn from its map's number and its own (GlassFracture.h `paneSeed`), so renumbering a map with glass changes how it breaks.
 `Showcase Atrium` (south of Predator; south of Predator, tools/campaign/make_starter_map.py `atrium`) shows all three: a storefront of mixed panes with a doorway bay, a ragged breach with the light court's light through it, and the Growth brush's pieces. The Starter Map starts with `FORMAT|2` for them. The lab tube `atrium` checks it as shipped.
 
 ## Tests

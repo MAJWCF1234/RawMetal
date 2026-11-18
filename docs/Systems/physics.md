@@ -128,7 +128,10 @@ A sleeping prop out of reach of every awake prop and of the player is not built 
   They stay the first line; the sweeps below catch what passes them.
 - A body is **fast** when, in a step, its centre goes or its reach turns (angle times its bounding radius)
   more than half its smallest size (2 cm at least). A plank spinning in place is fast though its middle is
-  still. `Space::continuous` runs `continuousCollision` (`Queries.cpp`) on each fast body, in index order:
+  still. A body a joint holds (a bridge's plank, a corpse's section, a lamp on its chain) is never fast: put
+  back alone to where it met something it would open its joints by as far as it went, so it is left to its
+  joints and contacts. `RM_CCD=off` turns the whole pass off (to tell what it changes in a check).
+  `Space::continuous` runs `continuousCollision` (`Queries.cpp`) on each fast body, in index order:
   - **Against the world.** Points along its edges (corners, every 2.5 cm along each edge, a cylinder's rims
     and side lines) are ray cast by `Space::sweep` through the step, in pieces of at most 0.15 rad of its turn.
     Trailing points and points that hardly move are skipped. A point that strikes a surface counts when it
@@ -137,10 +140,13 @@ A sleeping prop out of reach of every awake prop and of the player is not built 
     takes a blow at the middle of the points that struck that face together (so a plank's face hitting a post
     along its height is not flipped over by one corner). If no edge point strikes anything, the old sweep of
     its middle still runs.
-  - **Against other bodies.** Each body whose swept sphere comes near it (and that the Space's filter and
-    groups allow) is tested for a time of impact: conservative advancement on the GJK distance, with the gap's
-    closing speed bounded by their approach along the normal plus each one's turn times its reach. Pairs
-    already touching when the step began are left to the contacts. At the time of impact the body (and the
+  - **Against other bodies.** Each body whose swept sphere comes near it is tested for a time of impact:
+    conservative advancement on the GJK distance, with the gap's closing speed bounded by their approach along
+    the normal plus each one's turn times its reach. Left out, as the step itself leaves them: pairs the Space's
+    filter or groups rule out, pairs a holding joint joins, pairs the caller meets itself (`Space::pairContacts`:
+    a corpse's skin), pairs with a soft body (a padded prop, a prop going through a corpse), and pairs going
+    together (a crate and the bottles in it: the other moved, in this one's frame, no further than the thinner of
+    the two is thick). Pairs already touching when the step began are left to the contacts. At the time of impact the body (and the
     other, if it was fast too) goes back to that moment and the two take a blow at the point (restitution as
     the contacts mix it).
   - Each answer is reported as a `ContactEvent`, so sounds, breaking and glass hear it as a contact.
