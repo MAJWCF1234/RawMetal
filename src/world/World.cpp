@@ -196,6 +196,7 @@ float terminalHeight(const World& world,const Terminal& terminal,float x,float y
 }
 }
 
+bool World::terminalBench(const Terminal& terminal)const{return benchTerminal(*this,terminal);}
 void World::buildPopulation(){
  using C=CreatureKind;using P=PickupKind;
  if(!campaign()){

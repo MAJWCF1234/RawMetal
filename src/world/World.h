@@ -796,6 +796,8 @@ public:
     int nearbyDoor(Vec2 position,Vec2 forward,float feet=0)const;
     const std::vector<Door>& doors()const{return m_doors;}
     const std::vector<Terminal>& terminals()const{return m_terminals;}
+    // True when the engine draws this terminal its own desk (a bench under the CRT).
+    bool terminalBench(const Terminal& terminal)const;
 
 private:
     CargoLift m_cargoLift{};
