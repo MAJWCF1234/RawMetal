@@ -6,6 +6,8 @@
   // .build/interaction/connect-*.bmp: the plan's ghost line mid-drag, and the 3D pane the engine's picture of the
   // joint the drag makes, as the live pane's drag preview shows it).
   void verifyConnectRegressions(bool pictures) {
+    // A plan left zoomed or panned by an earlier check moves where a drag lands; start from the fitted plan.
+    fitPlan();
     auto require = [](bool okay, const std::string &message) {
       if (!okay)
         throw std::runtime_error("Connect regression: " + message);
