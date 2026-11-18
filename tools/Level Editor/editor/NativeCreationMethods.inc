@@ -27,6 +27,7 @@
     float floor=layerElevation(), bottom=named("bottom",named("base",named("z",named("bed",floor))));
     if(bottom<-900)bottom=floor;
     float height=named("height",named("h",f[0]=="CREATURE"||f[0].starts_with("ACTOR_")?1.8f:.35f));
+    if(f[0]=="PRIM"&&f.size()>8)height=retro::prim::resolve(f[2],n(6),n(7),n(8)).h; // 0: the kind's usual height
     float top=named("top",named("surface",bottom+height));
     if(f[0]=="PIPE"){float end=named("endZ",bottom);top=std::max(bottom,end)+.02f;bottom=std::min(bottom,end);}
     if(f[0]=="LEAD"){float a=named("az",floor),b=named("bz",floor);bottom=std::min(a,b);top=std::max(a,b)+.02f;}

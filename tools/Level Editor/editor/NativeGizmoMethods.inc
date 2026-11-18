@@ -13,6 +13,7 @@
     }
     if(selectedRecords.size()>1)return out;
     if(footingGuides(out))return out; // a footing's outline and Raise handle (NativeGroundMethods.inc)
+    if(primGuides(out))return out; // a shape's real outline, its handles and facing arrow (NativeShapeTool.inc)
     auto corners=nativeCorners(schemas[size_t(schema)].fields,f);if(corners.empty())return out;
     // Outdoors the outline stands where the thing stands: on the ground under it.
     auto box=worldBox(f);float bottom=box?box->bottom:layerElevation(),top=box?box->top:bottom+.1f;
