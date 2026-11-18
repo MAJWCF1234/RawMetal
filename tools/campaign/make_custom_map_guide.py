@@ -407,6 +407,7 @@ RECORDS = [
         ('TERRAIN_SCULPT|x|y|cols|rows|offsets', 'Raised and lowered ground, as the Campaign Builder\'s Terrain brushes write it: a grid of cols x rows one-metre cells from world metre x, y (whole numbers; the Builder writes one 24 x 24 grid per map, at its origin). '
          'offsets lists each cell\'s height change row by row in decimetres (whole numbers, -300 to 300), comma separated; N*v repeats v N times (<code>24*0,5,8,22*0</code>). '
          'The change holds at each cell\'s centre and blends between centres; it is added after the TERRAIN noise and the TERRAIN_FLAT pads, and the voxel ground still rounds to whole metres. At most 4096 cells a record.'),
+        ('CAVE|op|x1|y1|z1|x2|y2|z2|radius|rough|strength', 'The underground, as the Campaign Builder Cave tool writes it: tunnels and caverns carved into the TERRAIN (world metres; heights absolute, -12 to 20). op <b>carve</b> digs a rough-walled tunnel radius metres round the line from x1,y1,z1 to x2,y2,z2 (both ends the same: a cavern), its floor flat 0.6 radius under the line; <b>fill</b> puts rock back in the same shape; <b>move</b> pulls the rock and air round x1,y1,z1 to x2,y2,z2, falling off over radius; <b>smooth</b> evens the walls round x1,y1,z1; <b>flatten</b> levels a floor at z1 round x1,y1. rough 0-1 (0.35 if left out) roughens the walls; strength 0-1 (1) is how far a move, smooth or flatten goes. Strokes apply in the order written; where one breaks the surface the hillside opens in a cave mouth. The rock is drawn with the stone of the mine pack, the player walks it, and under its roof the light of the sky does not reach. Give a FIXTURE, CLUTTER, CREATURE, PICKUP or LIGHT <code>cave=1</code> to stand it on the cave floor under it. At most 4096; radius 0.5-8 m, a stroke at most 64 m.'),
         ('GROUND|x1|y1|x2|y2|kind|edge', 'Paints the ground: 0 short grass, 1 leafy grass, 2 clover, 3 wild, 4 dry dirt, 5 forest litter, 6 gravel, 7 mud, 8 meadow. edge 0-8 metres of soft border.'),
         ('HORIZON|depth|spacing|rise|model,model,...', 'Woods past every closed outdoor edge: a band depth metres deep, one model every spacing metres, the land rising rise metres away from you.'),
         ('STORM|calmMs|warningMs|stormMs|damage|ash', 'An ash storm cycle for the whole campaign: calm, a warning, then a storm doing damage per second to anyone outside a SHELTER. ash 0-1 is the haze between storms.'),
@@ -609,6 +610,8 @@ NAMED_FIELDS = [
     ('hand', 'Winds', 'left or right', 'PRIM spiral', 'Which way a spiral stair winds as you climb it: right (if left out) turns anticlockwise on the plan, left the other way.'),
     ('rails', 'Guard rails', 'both left right none', 'PRIM catwalk', "Which sides of a catwalk have a 1.1 m guard rail, as you walk toward its facing: both if left out."),
     ('thick', 'Thickness (m)', '0.05 to 1.5', 'PRIM arcwall, culvert', "A curved wall's thickness (0.3 if left out) or a culvert's concrete shell (0.2)."),
+    # Underground (CaveField.h), read by World::settleExclusionFacilityOnTerrain.
+    ('cave', 'In a cave', '1 or 0', 'FIXTURE CLUTTER CREATURE PICKUP LIGHT on the land', 'Measured from the floor of the carved cave under it (CAVE records), not from the land on top: a lantern in the mine, not on the hill over it.'),
 ]
 
 

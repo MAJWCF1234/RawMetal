@@ -8,6 +8,7 @@
 //
 // Header-only and free of the World so the Campaign Builder samples the very
 // same ground the engine builds (tools/Level Editor/editor).
+#include "CaveField.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -42,6 +43,10 @@ struct TerrainShape {
     // over `depth` metres and wooded every `spacing` metres with these models
     // (drawn only as Painterly Horizon LOD impostors).
     float horizonDepth=0,horizonSpacing=6,horizonRise=0;std::vector<int> horizonModels;
+    // CAVE records (CaveField.h), in the order written, and the field they leave in the
+    // land (buildTerrainCaves, once the flats, pads and sculpts are all in).
+    std::vector<CaveStroke> caves;
+    std::shared_ptr<const CaveVolume> caveVolume;
 };
 // The voxel tops terrain may take (World::TerrainMinZ + 1 to TerrainMaxZ - 2).
 inline constexpr int TerrainFieldLowestTop=-11,TerrainFieldHighestTop=18;
@@ -112,6 +117,35 @@ inline int terrainColumnDensity(const TerrainShape& shape,int wx,int wy,int z){
   return int(std::lround(std::clamp(h-float(z),-1.f,1.f)*32.f));}
  return z<=top?32:-32;
 }
+// The land's density at a world sample with the underground carved into it.
+inline int terrainDensityWithCaves(const TerrainShape& shape,int wx,int wy,int z){
+ if(const auto& v=shape.caveVolume;v&&v->contains(wx,wy,z))return v->density[v->at(wx,wy,z)];
+ return terrainColumnDensity(shape,wx,wy,z);
+}
+// Whether a CAVE stroke changed this sample (it is drawn as cave rock).
+inline bool terrainCaveTouched(const TerrainShape& shape,int wx,int wy,int z){
+ const auto& v=shape.caveVolume;return v&&v->contains(wx,wy,z)&&v->touched[v->at(wx,wy,z)];
+}
+// The floor of the first carved space under the land's top over world column (wx, wy), to the
+// samples' linear crossing; the land's top where nothing under it is carved.
+inline float terrainCaveFloor(const TerrainShape& shape,int wx,int wy){
+ const int top=authoredTerrainTop(shape,wx,wy);
+ if(!shape.caveVolume)return float(top)+.5f;
+ bool rock=false;
+ for(int z=std::min(top,CaveHighestZ);z>CaveFieldBottom;--z){
+  if(terrainDensityWithCaves(shape,wx,wy,z)>0){rock=true;continue;}
+  if(!rock)continue;
+  for(int k=z-1;k>=CaveFieldBottom;--k){const int below=terrainDensityWithCaves(shape,wx,wy,k);
+   if(below>0){const int above=terrainDensityWithCaves(shape,wx,wy,k+1);return float(k)+float(below)/float(below-above);}}
+  return float(CaveFieldBottom);
+ }
+ return float(top)+.5f;
+}
+// Works the CAVE strokes into the finished land (after the flats, the footings' pads and the sculpts).
+inline void buildTerrainCaves(TerrainShape& shape){
+ shape.caveVolume=nullptr;
+ shape.caveVolume=buildCaveVolume(shape.caves,[&](int x,int y,int z){return terrainColumnDensity(shape,x,y,z);});
+}
 // Where the walked surface lies over a point, as the engine's Surface Nets
 // density gives it: the voxel tops at the four surrounding sample corners,
 // blended bilinearly in x and y and linearly in z (World::terrainSurfaceBelow
@@ -164,6 +198,9 @@ inline bool sameTerrainOver(const TerrainShape* a,const TerrainShape* b,float ox
  // Footing pads set exact heights the voxel tops do not show.
  auto pads=[&](const TerrainShape& s){std::vector<float> out;for(const auto& g:s.flats)if(g.pad&&g.x2>=ox-3&&g.x1<=ox+27&&g.y2>=oy-3&&g.y1<=oy+27)out.insert(out.end(),{g.x1,g.y1,g.x2,g.y2,g.height,g.blend,float(g.pad)});return out;};
  if(pads(*a)!=pads(*b))return false;
+ // The underground: the strokes that can reach the map, in order (a stroke changes only its own box).
+ auto caves=[&](const TerrainShape& s){std::vector<CaveStroke> out;for(const auto& c:s.caves)if(caveBoundsMeet(caveStrokeBounds(c),ox-4,oy-4,ox+28,oy+28))out.push_back(c);return out;};
+ if(caves(*a)!=caves(*b))return false;
  return true;
 }
 // TERRAIN_SCULPT offsets as text: whole decimetres, comma separated, a run of

@@ -252,12 +252,18 @@ void World::settleExclusionFacilityOnTerrain(){
   for(int y=0;y<=ny;++y)for(int x=0;x<=nx;++x){float z=ground(s.x1+(s.x2-s.x1)*float(x)/nx,s.y1+(s.y2-s.y1)*float(y)/ny);low=std::min(low,z);high=std::max(high,z);}
   s.bottom+=low;s.top+=high;
  }
- for(auto&c:m_clutterSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
+ // `cave=1` (map format 2) on a FIXTURE, CLUTTER, CREATURE, PICKUP or LIGHT: measured from the floor of
+ // the carved underground under it (caveFloor), not the land's top: a lantern in a cave, not on the hill.
+ auto caveRecord=[&](const char* tag,size_t ordinal){const auto it=m_mapData->recordFields.find(recordFieldKey(tag,"",int(ordinal)));
+  if(it==m_mapData->recordFields.end())return false;const auto* field=findNamedField(it->second,"cave");return field&&field->value=="1";};
+ auto groundOf=[&](const char* tag,size_t ordinal,float x,float y){return caveRecord(tag,ordinal)?caveFloor(x,y):ground(x,y);};
+ for(size_t i=0;i<m_fixtures.size()&&i<m_mapData->fixtures.size();++i)if(caveRecord("FIXTURE",i)){auto& f=m_fixtures[i];f.base+=caveFloor(f.position.x,f.position.y)-floorHeight(f.position.x,f.position.y);}
+ for(size_t i=0;i<m_clutterSpawns.size();++i){auto& c=m_clutterSpawns[i];if(c.z>-100)c.z+=groundOf("CLUTTER",i,c.position.x,c.position.y);}
  // Hazards and emitters are authored relative to the ground at their centre.
  for(auto&h:m_hazards){float z=ground((h.x1+h.x2)*.5f,(h.y1+h.y2)*.5f);h.bottom+=z;h.top+=z;}
  for(auto&e:m_particleEmitters)e.z+=ground(e.position.x,e.position.y);
- for(auto&c:m_creatureSpawns)if(c.z>-100)c.z+=ground(c.position.x,c.position.y);
- for(auto&p:m_pickupSpawns)if(p.z>-100)p.z+=ground(p.position.x,p.position.y);
+ for(size_t i=0;i<m_creatureSpawns.size();++i){auto& c=m_creatureSpawns[i];if(c.z>-100)c.z+=groundOf("CREATURE",i,c.position.x,c.position.y);}
+ for(size_t i=0;i<m_pickupSpawns.size();++i){auto& p=m_pickupSpawns[i];if(p.z>-100)p.z+=groundOf("PICKUP",i,p.position.x,p.position.y);}
  auto data=std::make_shared<AuthoredMapData>(*m_mapData);
  // The collision panes were grounded with the other structures. Keep the
  // authored breakable boxes used by shots, effects and rendering identical.
@@ -269,7 +275,7 @@ void World::settleExclusionFacilityOnTerrain(){
  // Like hazards, a shelter's height band is measured from the ground at its centre.
  for(auto&s:data->shelters){float z=ground((s.x1+s.x2)*.5f,(s.y1+s.y2)*.5f);s.bottom+=z;s.top+=z;}
  for(auto&hint:data->navHints)hint.z+=ground(hint.position.x,hint.position.y);
- for(auto&light:m_lights)light.z+=ground(light.position.x,light.position.y);
+ for(size_t i=0;i<m_lights.size();++i){auto& light=m_lights[i];light.z+=groundOf("LIGHT",i,light.position.x,light.position.y);}
  for(auto&sequence:data->timedSequences)if(sequence.x1>=0&&sequence.y1>=0&&sequence.x2<=Width&&sequence.y2<=Height){
   float low=1000,high=-1000;for(float y=sequence.y1;y<=sequence.y2;y+=.5f)for(float x=sequence.x1;x<=sequence.x2;x+=.5f){float z=ground(x,y);low=std::min(low,z);high=std::max(high,z);}
   sequence.bottom+=low;sequence.top+=high;
@@ -625,6 +631,11 @@ void World::buildTerrain(){
    int relief=std::max({std::abs(authoredTerrainTop(shape,wx+1,wy)-top),std::abs(authoredTerrainTop(shape,wx,wy+1)-top)});
    // Painted (zone) terrain keeps its cover on high ground; only sharp relief is rock.
    material=z<top-1||relief>=2||(shape.ground.empty()&&top>=shape.base+shape.amplitude*.7f)?TerrainRock:TerrainSoil;
+   // The underground (CAVE records, CaveField.h): the carved field, its changed samples cave rock.
+   if(shape.caveVolume&&shape.caveVolume->contains(wx,wy,z)){
+    const auto& v=*shape.caveVolume;const auto at=v.at(wx,wy,z);
+    m_terrainDensity[terrainSampleIndex(sx,sy,sz)]=v.density[at];
+    m_terrainMaterial[terrainSampleIndex(sx,sy,sz)]=v.touched[at]?TerrainCave:terrainPadAt(shape,wx,wy)?TerrainSoil:material;continue;}
    // A footing's pad (TerrainField.h) puts the ground at its exact height; elsewhere the voxel tops.
    if(!shape.flats.empty()&&terrainPadAt(shape,wx,wy)){
     const int density=terrainColumnDensity(shape,wx,wy,z);
@@ -800,6 +811,18 @@ template<class Density> float terrainCeiling(float feet,float limit,const Densit
 float World::terrainSurfaceBelow(float x,float y,float feet)const{
  if(m_terrainDensity.empty())return 0;
  return TerrainSurfaceCache::below(m_terrainRevision,x,y,feet,[&]{TerrainColumn density(m_terrainDensity,m_terrainTops,x,y);return terrainFloor(feet,density,density.airTop());});
+}
+bool World::hasCaves()const{return m_exclusionTerrain&&m_mapData&&m_mapData->terrain&&m_mapData->terrain->caveVolume;}
+float World::caveFloor(float x,float y)const{
+ const float top=terrainSurfaceBelow(x,y,float(TerrainMaxZ+1));
+ if(!hasCaves())return top;
+ // Down from the land's top through the rock to the first carved air, then down to its floor.
+ for(float z=top-.6f;z>float(TerrainMinZ);z-=.25f)if(terrainDensity(x,y,z)<=0)return terrainSurfaceBelow(x,y,z);
+ return top;
+}
+bool World::underRock(float x,float y,float z)const{
+ if(!hasCaves()||x<0||y<0||x>=Width||y>=Height)return false;
+ return terrainSurfaceAbove(x,y,z)<float(TerrainMaxZ)+.5f&&terrainSurfaceBelow(x,y,float(TerrainMaxZ+1))>z+.5f;
 }
 float World::terrainSurfaceAbove(float x,float y,float feet)const{
  if(m_terrainDensity.empty())return 128.f;

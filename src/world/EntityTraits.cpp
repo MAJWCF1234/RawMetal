@@ -119,7 +119,9 @@ const std::vector<std::string_view>& knownNamedKeys(){
   "footing","snap","raise","base","cap","capwidth","steps","terrace",
   "drape",
   // PRIM options, read by the PRIM parser (CustomCampaign.cpp).
-  "hand","rails","thick"};
+  "hand","rails","thick",
+  // Underground (CaveField.h): stands on the carved floor under it, read by World::settleExclusionFacilityOnTerrain.
+  "cave"};
  return keys;
 }
 std::string recordFieldKey(std::string_view tag,std::string_view parent,int ordinal){
@@ -145,6 +147,7 @@ EntityTraits parseEntityTraits(std::string_view tag,const NamedFields& fields){
   else if(k=="soft")t.soft=flag(f);
   else if(k=="anchored")t.anchored=flag(f);
   else if(k=="solid")t.solid=flag(f);
+  else if(k=="cave"){if(f.value!="0"&&f.value!="1")bad(f,"use 1 (on the cave floor under it) or 0");}
   else if(k=="material"){constexpr const char* names[]={"paper","cardboard","plastic","wood","metal","glass","ceramic","electronic","cloth","organic"};
    const auto v=lower(decodeValue(f.value));t.material=-1;for(int i=0;i<int(PropMaterial::Count);++i)if(v==names[i])t.material=i;
    if(t.material<0)bad(f,"use paper, cardboard, plastic, wood, metal, glass, ceramic, electronic, cloth or organic");}
