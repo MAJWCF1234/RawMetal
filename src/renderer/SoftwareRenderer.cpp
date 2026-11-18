@@ -131,6 +131,13 @@ const std::array<std::array<unsigned char,5>, 46> glyphs = {{
 }};
 int gi(char c){if(c>='0'&&c<='9')return c-'0'; if(c>='A'&&c<='Z')return 10+c-'A'; if(c==' ')return 36;const char* extra="/-.><%()";auto found=std::strchr(extra,c);return found?38+int(found-extra):37; }
 
+extern std::atomic<long long> g_meshLoadMicros;
+namespace {
+// RM_STARTUP_PROFILE: where the renderer's setup goes, phase by phase, on stderr.
+void startupMark(const char* label){static const bool on=std::getenv("RM_STARTUP_PROFILE")!=nullptr;if(!on)return;
+ static auto last=std::chrono::steady_clock::now();auto now=std::chrono::steady_clock::now();
+ std::fprintf(stderr,"startup: %-28s %8.1f ms (meshes so far %.1f ms)\n",label,std::chrono::duration<double,std::milli>(now-last).count(),g_meshLoadMicros.load()/1000.0);last=now;}
+}
 SoftwareRenderer::~SoftwareRenderer()=default;
 void SoftwareRenderer::setTexturePresentScale(int scale){
  if(scale!=1&&scale!=2&&scale!=4)return;
@@ -173,13 +180,13 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto&texture:m_clutterTextures)m_gpu->prepare(texture);for(const auto&entry:m_facilityTextures)m_gpu->prepare(entry.second);
   for(const auto&texture:m_surfaceTextures)m_gpu->prepare(texture);
   for(uint32_t color:{0xffd1f1dau,0xffdf9849u,0xff53aec4u,0xff343834u,0xffb84728u,0xff302c27u}){Texture paint{1,1,{color}};m_gpu->prepare(paint);}
-  m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
+  startupMark("gpu prepare");m_animationWorker=std::make_unique<FrameWorker>();m_gpuName="Vulkan / "+m_gpu->adapter();std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return true;}
  catch(const std::exception&e){m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';return false;}
 }
 std::uint64_t SoftwareRenderer::vrMirrorFrames()const{return m_gpu?m_gpu->mirrorFrames():0;}
 std::array<std::uint64_t,4> SoftwareRenderer::atlasUploadStatistics()const{return m_gpu?m_gpu->uploadStatistics():std::array<std::uint64_t,4>{};}
 bool SoftwareRenderer::hardwarePresentsWindow()const{return m_gpu&&(m_gpu->hasSurface()||m_gpu->vrActive());}
-SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
+SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(size_t(w*h)),m_depth(size_t(w),9999.f),m_zbuffer(size_t(w*h),9999.f){startupMark("members (meshes)");m_wall=loadTexture(101);m_floor=loadTexture(102);m_metal=loadTexture(103);m_arms=loadTexture(106);m_weaponTexture=loadTexture(112);m_enemyTexture=loadTexture(113);m_waspTexture=loadTexture(115);m_bruteTexture=loadTexture(117);m_wingTexture=loadTexture(118);
  const char* materialNames[]={"wall_6","wall_7","wall_8","wall_5","floor_1","ceiling_1","vent_1","lamp_1_on","door_1","generator_1","metal_4","metal_3","metal_6","wall_box_2","stairs_1"};
  for(int i=0;i<15;++i)m_facilityTextures.emplace(materialNames[i],loadTexture(172+i));
  m_serviceCeiling=m_facilityTextures.at("ceiling_1");
@@ -300,7 +307,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(int i=0;i<15;++i)m_facilityTextures.emplace(metroMaterials[i],loadTexture(449+i));
  m_facilityTextures.emplace("metro_Glass",m_glassTexture);
  m_facilityTextures.emplace("metro_Vending_machine",loadTexture(465));
- // Library imports (tools/library/register.py): "material resource" per line.
+startupMark("core textures"); // Library imports (tools/library/register.py): "material resource" per line.
  {auto text=loadResource(466);std::istringstream lines(std::string(text.begin(),text.end()));std::string material;int resource=0;
   while(lines>>material>>resource){auto texture=loadTexture(resource);
    // A pack's lit ceiling-lamp panel ("..ceiling_lamp_N_on"): its tubes are
@@ -322,7 +329,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    // its opacity (a light tint, denser at streaks and frosted rims), with a gloss sheen.
    if(material.ends_with("_glass")){texture.transparent=true;texture.glossStrength=.45f;}
    m_facilityTextures.emplace(material,std::move(texture));}}
- for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
+startupMark("library textures"); for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
  m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;
  // Lit screens: desk CRTs show a green terminal, CCTV sets a camera feed.
@@ -552,7 +559,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
  // glass...) with its physical range of roughness and its metalness, and a surface map derived from its
  // own albedo (grime and pits rougher, worn edges smoother, rust and paint chips their own material),
  // so a highlight breaks up across a surface the way it does on a real one instead of one even smear.
- m_concreteFloor=m_concrete;
+startupMark("engine textures"); m_concreteFloor=m_concrete;
  {std::vector<MaterialJob> jobs;auto apply=[&](Texture& t,Material m,const char* name){jobs.push_back({&t,int(m),name});};
   for(auto& [name,t]:m_facilityTextures){if(t.additive)continue;
    apply(t,t.liquid?Material::Water:t.crystal?Material::Crystal:t.transparent&&name.find("glass")!=std::string::npos?Material::Glass:classifyMaterial(name),name.c_str());}
@@ -582,7 +589,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
   for(auto& role:m_cleanupTextures)for(auto& t:role)apply(t,M::Clothing,"cleanup");
   for(auto* water:{&m_water,&m_murkWater,&m_coastWater})apply(*water,M::Water,"water");
   apply(m_glassTexture,M::Glass,"glass");
-  applyMaterials(jobs);}
+  applyMaterials(jobs);}startupMark("material jobs");
  m_logo=loadEmbeddedPng(2);m_logo.clampEdges=true;
 }
 SoftwareRenderer::Texture SoftwareRenderer::loadSurfaceFinish(int index){
