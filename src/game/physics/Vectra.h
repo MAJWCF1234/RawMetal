@@ -20,7 +20,7 @@
 //
 // Phase 2 (joints) plugs into Constraint below: a joint is a set of rows between two bodies (or a body
 // and the world) solved in the same substep loop as the contacts, before them, and islands link through
-// it. Phase 3 (gravity gloves) drives a body with Space::drive (a soft spring to a target pose that
+// it. Phase 3 drives a body with Space::drive (a soft spring to a target pose that
 // respects contacts) rather than teleporting it.
 #include "../../core/Math.h"
 #include <array>
@@ -342,8 +342,10 @@ struct Space {
  void wake(int body);
  int idOf(int body)const{return body<0?-1:bodies[size_t(body)].id>=0?bodies[size_t(body)].id:body;}
  std::uint64_t keyOf(const Manifold& m)const{return Manifold::key(idOf(m.a),idOf(m.b),m.partA,m.partB);}
- // A soft spring pulling a body to a pose (phase 3: gravity gloves): applied as velocity, contacts still hold.
- void drive(int body,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce);
+ // A soft spring pulling a body to a pose: applied as velocity, contacts still hold. The change in velocity is held to
+ // maxForce (N) and the change in spin to maxTorque (N m; < 0: maxForce times the body's reach, Shape::bound), through
+ // its inertia, so a long plank held against a doorframe is levered no harder than it is pulled and yields to it.
+ void drive(int body,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce,float maxTorque=-1);
 private:
  void collide(float margin);
  void prepare(float h);

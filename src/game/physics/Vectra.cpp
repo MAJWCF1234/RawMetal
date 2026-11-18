@@ -462,13 +462,20 @@ void Space::islands(float dt){
   const int r=find(i);islandOf[size_t(i)]=r;least[size_t(r)]=std::min(least[size_t(r)],b.sleepTime);}
  for(int i=0;i<n;++i){auto&b=bodies[size_t(i)];if(!b.movable())continue;if(least[size_t(find(i))]>=settings.sleepTime){b.sleeping=true;b.v={};b.w={};}}
 }
-void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce){
+void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularHertz,float dt,float maxForce,float maxTorque){
  auto&b=bodies[size_t(i)];if(b.invMass<=0||dt<=0)return;b.sleeping=false;b.sleepTime=0;
  const float wl=2*kPi*linearHertz,wa=2*kPi*angularHertz;
  // A critically damped spring, stepped implicitly: the velocity it asks for, held to maxForce.
  const V3 want=(targetX-b.x)*(wl/(1+wl*dt));V3 dv=want-b.v;const float cap=maxForce*b.invMass*dt,l=len(dv);if(l>cap&&l>0)dv=dv*(cap/l);b.v=b.v+dv;
  Quat d=targetQ*b.q.conj();if(d.w<0)d={-d.w,-d.x,-d.y,-d.z};const float s=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
- const V3 axis=s>1e-6f?V3{d.x/s,d.y/s,d.z/s}:V3{};const float angle=2*std::atan2(s,d.w);b.w=axis*(angle*wa/(1+wa*dt));}
+ const V3 axis=s>1e-6f?V3{d.x/s,d.y/s,d.z/s}:V3{};const float angle=2*std::atan2(s,d.w);
+ // The spin it asks for, held to maxTorque through the body's inertia (the angular impulse I dw over the step). Set
+ // outright, a long plank pressed into a doorframe was levered by whatever the spring wanted, past what any contact
+ // could answer in one step: it jittered against the frame or went through it.
+ const V3 wantW=axis*(angle*wa/(1+wa*dt));const V3 dw=wantW-b.w;
+ if(maxTorque<0)maxTorque=maxForce*(b.shape?std::max(b.shape->bound,.05f):.5f);
+ b.updateInertia();const M3 I=b.q.matrix()*b.inertiaLocal*b.q.matrix().transposed();V3 L=I*dw;const float lc=maxTorque*dt,ll=len(L);
+ if(ll>lc&&ll>0)L=L*(lc/ll);b.w=b.w+b.invInertia*L;}
 void Space::step(float dt){
  events.clear();jointEvents.clear();if(dt<=0||bodies.empty()){manifolds.clear();return;}
  // A joint does not hold a moving body to a sleeping one: what is joined to something awake wakes (through
