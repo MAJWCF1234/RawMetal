@@ -365,6 +365,8 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   for(int i=0;i<int(list.size());++i){if(!inPlay(i))continue;const auto&c=list[size_t(i)];if(c.sleeping&&i!=held)continue;const auto e=c.extent();const float r=1.5f+len(V3{c.velocity.x,c.velocity.y,c.vz})*RigidStep;
    reaches.push_back({c.pos.x-e[0]-r,c.pos.y-e[1]-r,c.pos.x+e[0]+r,c.pos.y+e[1]+r});}
   if(level==m_level)reaches.push_back({m_player.pos.x-1.5f,m_player.pos.y-1.5f,m_player.pos.x+1.5f,m_player.pos.y+1.5f});
+  // A free VR hand reaches what it is about to touch, wherever the body stands (a sleeping prop it swats is built).
+  if(level==m_level)for(int hand=0;hand<2;++hand)if(vrHandFree(hand)){const Point3 p=m_vrHandPosition[size_t(hand)];reaches.push_back({p.x-1.f,p.y-1.f,p.x+1.f,p.y+1.f});}
   auto reachable=[&](const Clutter& c){const auto e=c.extent();for(const auto&r:reaches)if(c.pos.x+e[0]>=r.x0&&c.pos.x-e[0]<=r.x1&&c.pos.y+e[1]>=r.y0&&c.pos.y-e[1]<=r.y1)return true;return false;};
   chains.clear();hinges.clear();space.constraints.clear();chainBody.assign(0,0);
   jointNeed.assign(list.size(),0);

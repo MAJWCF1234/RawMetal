@@ -4,29 +4,9 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.5.3 - Below the hill (2026-11-18)
+## v1.5.2 - Held together, below the hill (2026-11-18)
 
-The ground has an inside now. Dig, and it opens.
-
-- **Parts.** Seventy-six more pieces from the packs: walls plain and broken, pillars whole and snapped, beams, stairs of concrete and of wood, heavy doors and barred windows, railings, catwalks and scaffold decks, pipe runs and culverts, a tank rig, a cage, lamps that hang and lamps that hood, brick rubble, and from the mine its lantern, barrels, crates, locker and shelving, with boulders and rock walls and two heaps of gems. The editor keeps the building pieces under their own tab, Building, each with its picture.
-- **Caves.** The land is no longer only a surface. The editor's Cave tool digs into it: brush a tunnel at the depth you choose, click for a cavern, drag a cave mouth in from the hillside and watch the slope open. Fill it back, pull a wall out with your hand, smooth it, level a floor. The rock is rough and whole, there are no holes in it, and you walk where you dug.
-- **Move.** A new brush for the land, too: take hold of a hill and drag it, and it follows. Hold Shift to lift it.
-- **Underground.** Under the rock the sky does not reach. It is dark down there but for what you carry and what you hang, and a lantern set in a cave stands on the cave floor, not on the hill above it. Water finds the low places in a cavern as it does anywhere else.
-- **Steadier hands.** Vectra lets a falling thing reach the floor before it bounces, where it used to turn back a few centimetres short and spring off the air, and a crate sliding as it lands no longer comes up spinning. A thing spun hard enough to turn a quarter of the way round in one step still stops on a thin post. A cast that grazes past without closing in no longer reports a hit. A crate woken by a shove wakes what it holds in the same moment, and what is carried on a joint by a moving hand wakes and follows it instead of hanging back asleep.
-- **Held, not forced.** A thing pulled toward a pose turns no harder than it is pulled. A long plank pressed into a doorframe leans against the jamb and stays there, still, instead of shaking against it.
-- **Floors of their own.** The ground answers a sliding thing with its own grip now, not only the thing's. A crate shoved across a puddle runs nearly twice as far as on dry concrete; carpet holds it sooner; gravel and grass drag at what rolls.
-- **Weight that stays.** A heavy drum set on a light crate rests on it. It no longer sinks into the crate, nor presses the crate into the floor, nor springs back off it.
-- **Quieter rooms cost less.** A room of four hundred resting things costs half what it did each step, and a burst of shards flying through them a fifth less.
-- **Scrapes and rolls.** A crate dragged across the floor scrapes as it goes and falls silent when it stops. A barrel rolling on its side rumbles. Wood, metal and glass each sound their own.
-- **The Starter Map** has a gallery of the new parts on two gravel yards, and east of it a hill with a mine in it: a mouth in its west face, a timbered drift with rails and an ore cart, a cavern of crystals by lantern light, and a passage south to a pool that drips.
-
-Verified with the feature lab's tubes (parts, caves, mine), the editor's cave test, and pictures of each.
-
----
-
-## v1.5.2 - Held together (2026-11-18)
-
-Things hang now, and swing, and come apart along their seams. The dead fall like the dead.
+Things hang now, and swing, and come apart along their seams; the dead fall like the dead; and the ground has an inside. Dig, and it opens.
 
 - **Quicker to wake.** The game no longer unpacks the whole library before it opens its eyes. A model and its textures are taken out the first time a map asks for them, the room you stand in on every core at once, the rooms beside it quietly while you play, so it wakes in less than half the time it did, and the library can grow without the wait growing with it.
 - **Joints.** Vectra holds things together: hinges, ball joints, sliders, welds, ropes, springs, pulleys and motors, each with its limits, each able to snap when asked too much of. Lamps sway on their chains when struck. A crate hangs on a rope until you shoot the rope. There are seesaws, sprung gates, a rope bridge that sags under you, and a pulley lift with its counterweight. You can stand on what is held together.
@@ -40,6 +20,17 @@ Things hang now, and swing, and come apart along their seams. The dead fall like
 - **Speed.** Fast and spinning things no longer pass through thin posts, thin walls or each other.
 - **Building.** The editor offers every shape the engine knows, forty-five of them, as pictures in plain groups. Ten are new: a roof wedge, a spire, a pyramid roof, a spiral stair, a culvert, a buttress, a bevelled block, an eight-sided pillar, a curved wall and a catwalk. Drag a shape to size, or stretch, raise, lift and turn it with handles in the 3D view. Where shapes overlap, the faces buried inside are cut away, so a building of stone, brick, concrete and copper reads as one.
 - **The Starter Map** has a joints corner, a room of shapes, and a bench of bottles and breakables to try.
+- **Parts.** Seventy-six more pieces from the packs: walls plain and broken, pillars whole and snapped, beams, stairs of concrete and of wood, heavy doors and barred windows, railings, catwalks and scaffold decks, pipe runs and culverts, a tank rig, a cage, lamps that hang and lamps that hood, brick rubble, and from the mine its lantern, barrels, crates, locker and shelving, with boulders and rock walls and two heaps of gems. The editor keeps the building pieces under their own tab, Building, each with its picture.
+- **Caves.** The land is no longer only a surface. The editor's Cave tool digs into it: brush a tunnel at the depth you choose, click for a cavern, drag a cave mouth in from the hillside and watch the slope open. Fill it back, pull a wall out with your hand, smooth it, level a floor. The rock is rough and whole, there are no holes in it, and you walk where you dug.
+- **Move.** A new brush for the land, too: take hold of a hill and drag it, and it follows. Hold Shift to lift it.
+- **Underground.** Under the rock the sky does not reach. It is dark down there but for what you carry and what you hang, and a lantern set in a cave stands on the cave floor, not on the hill above it. Water finds the low places in a cavern as it does anywhere else.
+- **Steadier hands.** Vectra lets a falling thing reach the floor before it bounces, where it used to turn back a few centimetres short and spring off the air, and a crate sliding as it lands no longer comes up spinning. A thing spun hard enough to turn a quarter of the way round in one step still stops on a thin post. A cast that grazes past without closing in no longer reports a hit. A crate woken by a shove wakes what it holds in the same moment, and what is carried on a joint by a moving hand wakes and follows it instead of hanging back asleep.
+- **Held, not forced.** A thing pulled toward a pose turns no harder than it is pulled. A long plank pressed into a doorframe leans against the jamb and stays there, still, instead of shaking against it.
+- **Floors of their own.** The ground answers a sliding thing with its own grip now, not only the thing's. A crate shoved across a puddle runs nearly twice as far as on dry concrete; carpet holds it sooner; gravel and grass drag at what rolls.
+- **Weight that stays.** A heavy drum set on a light crate rests on it. It no longer sinks into the crate, nor presses the crate into the floor, nor springs back off it.
+- **Quieter rooms cost less.** A room of four hundred resting things costs half what it did each step, and a burst of shards flying through them a fifth less.
+- **Scrapes and rolls.** A crate dragged across the floor scrapes as it goes and falls silent when it stops. A barrel rolling on its side rumbles. Wood, metal and glass each sound their own.
+- **The Starter Map** has a gallery of the new parts on two gravel yards, and east of it a hill with a mine in it: a mouth in its west face, a timbered drift with rails and an ore cart, a cavern of crystals by lantern light, and a passage south to a pool that drips.
 
 Verified with tools/release/ship.py, the feature lab's tubes for every system above, the editor's test modes, and pictures of each.
 
