@@ -146,6 +146,18 @@ bounds while it has not moved, and a part's hull is built only when a pair needs
 step, and 20 fast shards through them 0.48 ms (`vectra-scale`; 0.14 and 0.62 before). Continuous collision meets a
 fast body only with the bodies whose swept boxes reach its own (sorted along x once a step).
 
+**Active-only stepping.** After the collision pass the step keeps the list of bodies it moves (`Space::active`: awake
+and movable, by index). The substeps' integrations go through it alone, and only an awake body's inertia is turned to
+the world each step (one a touch woke in the pass is turned then). The pair sweep starts from the active bodies only:
+every body's interval along x is sorted once, and each active body looks back by the widest interval and on while
+they start before it ends, so two sleepers are never even looked at as a pair. The warm-start cache sorts only this
+step's manifolds and merges them with what the sleepers kept (already in order). 600 props asleep with 30 awake among
+them (89 awake once they woke what they struck) went from 0.585-0.650 ms a step to 0.540-0.558 on the bare core, and in
+the game (591 built, 50 awake) from 0.733 to 0.644-0.652; 600 sleepers nothing touches now add 0.06 ms to 30 awake
+bodies' 0.10 (0.1 us a sleeper; tube `vectra-gaps`, active). Per-island solving on worker threads is not done: the
+islands are only known after the step, the game's awake set is small (its solve is 0.15 ms), and a thread's start
+would cost more than it saved.
+
 ## Continuous collision
 
 - Speculative contacts look as far ahead as the body moves in a step, for floors, walls and other props.

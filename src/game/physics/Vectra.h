@@ -362,6 +362,8 @@ struct Space {
  void step(float dt);
  // Islands: groups of touching, moving bodies (filled by step).
  std::vector<int> islandOf;
+ // The bodies this step's substeps move (awake and movable, by index; filled by step after collide).
+ std::vector<int> active;
  void wake(int body);
  int idOf(int body)const{return body<0?-1:bodies[size_t(body)].id>=0?bodies[size_t(body)].id:body;}
  std::uint64_t keyOf(const Manifold& m)const{return Manifold::key(idOf(m.a),idOf(m.b),m.partA,m.partB);}

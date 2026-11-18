@@ -9,6 +9,8 @@
 //    density's draft; a plank dropped in on its end ends lying flat (before: the drum stayed upright, the plank on end).
 //  breaking (in the game): a crate smashed by a fast blow throws its planks along it; a spinning crate's pieces go on at
 //    their places' velocities; a board nailed across a doorway holds a nudge and snaps under a heavy shove.
+//  active (the cost): 600 props asleep with 30 awake among them, on the bare core and in the game, in ms a step; and
+//    what 600 sleepers nothing touches add to 30 awake bodies' step.
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "game/Buoyancy.h"
@@ -147,11 +149,43 @@ void breaking(std::ostream& out,const Check& check){
   for(int i=0;i<90;++i){g.update({},1.f/60);const auto& st=g.world().jointStates();if(!st.empty()){pull[heavyRam]=std::max(pull[heavyRam],st[0].force);snapped[heavyRam]|=st[0].broken;}}}
  out<<"a board nailed across a doorway (breaks at 600 N): a 2 kg box at 1 m/s pulled it with "<<f3(pull[0],0)<<" N, it "<<(snapped[0]?"snapped":"held")<<"; a 30 kg crate at 6 m/s: "<<(snapped[1]?"it snapped":"it held, "+f3(pull[1],0)+" N")<<"\n";
  check(!snapped[0]&&snapped[1],"breaking: a nailed board holds against a nudge and snaps off under a heavy shove");}
-const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams, water, breaking",.standalone=[]{
+// ---- Active-only stepping: 600 props asleep and 30 awake ----
+// The bare core: 600 0.3 m boxes asleep on the floor in a grid (24 rows of 25), and 30 more dropped and slid among them
+// (awake all through), every one in the same Space as a caller that builds them all would have it: the mean and the
+// least of a step's milliseconds over 2 s at 120 steps a second. And the game: the same 600 asleep across a room and 30
+// crates thrown among them (Game::simulateRigidProps builds the sleepers in reach of what moves).
+struct Cost {double mean=0,least=1e9,world=0,pair=0,solve=0;int bodies=0,awake=0;};
+Cost coreCost(int sleepers=600,float apart=0){World w;const float dt=1.f/120;
+ for(int i=0;i<sleepers;++i){const int b=w.box({float(i%25)*.5f+apart,float(i/25)*.5f,.15f},{.15f,.15f,.15f},6);w.space.bodies[size_t(b)].sleeping=true;}
+ for(int i=0;i<30;++i){const int b=w.box({.25f+float(i%6)*2.f,.25f+float(i/6)*2.4f,.5f+.1f*float(i%3)},{.12f,.12f,.12f},3,Quat::axisAngle({0,0,1},.3f*float(i)));
+  auto& B=w.space.bodies[size_t(b)];B.v={1.5f*std::cos(float(i)),1.5f*std::sin(float(i)),0};B.sleepTime=-1e9f;}   // kept awake: they never settle
+ for(int i=0;i<30;++i)w.space.step(dt);   // settled into the first contacts
+ Cost c;double total=0;int n=0;
+ for(int i=0;i<240;++i){for(auto& b:w.space.bodies)if(b.sleepTime<-1e8f||(&b-w.space.bodies.data())>=sleepers){b.sleeping=false;b.sleepTime=-1e9f;}
+  const auto t0=std::chrono::steady_clock::now();w.space.step(dt);const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();total+=ms;++n;c.least=std::min(c.least,ms);c.world+=w.space.worldMs;c.pair+=w.space.pairMs;c.solve+=w.space.solveMs;}
+ c.world/=n;c.pair/=n;c.solve/=n;c.mean=total/n;c.bodies=int(w.space.bodies.size());for(const auto& b:w.space.bodies)c.awake+=b.movable();return c;}
+Cost gameCost(){auto m=regression::room();m->definition.playerStart={2,2};Game g(regression::campaign(m));LabAccess::player(g).pos={1.5f,1.5f};auto& list=LabAccess::clutter(g);
+ auto crate=[&](int model,float scale,Vec2 at,float z){Clutter c;c.kind=7;c.model=model;c.dims=Game::propTraits(model).size;for(auto& d:c.dims)d*=scale;c.pos=at;c.z=z;return c;};
+ for(int i=0;i<600;++i){auto c=crate(model::packing_crate,.35f,{1.6f+float(i%25)*.82f,4.5f+float(i/25)*.75f},0);c.sleeping=true;list.push_back(c);}
+ for(int i=0;i<30;++i){auto c=crate(model::wooden_crate,.4f,{2.f+float(i%6)*3.6f,5.f+float(i/6)*3.6f},.6f);c.velocity={1.2f*std::cos(float(i)),1.2f*std::sin(float(i))};c.sleeping=false;list.push_back(c);}
+ Cost c;double total=0;int n=0;
+ for(int i=0;i<120;++i){for(size_t k=600;k<list.size();++k){auto& v=list[k];if(v.model>=0&&!v.broken){v.sleeping=false;v.restTime=0;if(lengthSq(v.velocity)<.04f)v.velocity={1.2f*std::cos(float(i+k)),1.2f*std::sin(float(i+k))};}}
+  LabAccess::stepProps(g,1.f/60);const auto& st=LabAccess::rigidStats(g);if(i<20||!st.steps)continue;const double ms=st.ms/st.steps;total+=ms;++n;c.least=std::min(c.least,ms);c.bodies=std::max(c.bodies,st.bodies);c.awake=std::max(c.awake,st.awake);c.world+=st.worldMs/st.steps;c.pair+=st.pairMs/st.steps;c.solve+=st.solveMs/st.steps;}
+ if(n){c.world/=n;c.pair/=n;c.solve/=n;}c.mean=n?total/n:0;return c;}
+void active(std::ostream& out,const Check& check){
+ Cost core{},game{};core.mean=game.mean=1e9;for(int r=0;r<3;++r){const Cost a=coreCost(),b=gameCost();if(a.mean<core.mean)core=a;if(b.mean<game.mean)game=b;}
+ out<<"600 asleep and 30 awake, the bare core: "<<f3(core.mean,3)<<" ms a step (least "<<f3(core.least,3)<<"), "<<core.bodies<<" bodies, "<<core.awake<<" awake (world "<<f3(core.world,3)<<", pairs "<<f3(core.pair,3)<<", solve "<<f3(core.solve,3)<<")\n";
+ out<<"600 asleep and 30 awake, the game: "<<f3(game.mean,3)<<" ms a step (least "<<f3(game.least,3)<<"), "<<game.bodies<<" bodies built at most, "<<game.awake<<" awake (world "<<f3(game.world,3)<<", pairs "<<f3(game.pair,3)<<", solve "<<f3(game.solve,3)<<")\n";
+ // What the sleepers cost when nothing touches them: the 30 alone, and with the 600 asleep 20 m off.
+ double alone=1e9,beside=1e9;for(int r=0;r<3;++r){alone=std::min(alone,coreCost(0).mean);beside=std::min(beside,coreCost(600,20).mean);}
+ out<<"the 30 awake alone: "<<f3(alone,3)<<" ms a step; with 600 asleep untouched 20 m off: "<<f3(beside,3)<<" ms ("<<f3((beside-alone)*1000/600,3)<<" us a sleeper)\n";
+ check(core.mean>0&&game.mean>0&&beside<alone*1.6f+.05f,"active stepping: 600 sleepers nothing touches add little to 30 awake bodies' step");}
+const bool registered=add({.name="vectra-gaps",.summary="Vectra against Alyx's bar: hinge and slider friction and detents, seams, water, breaking, active-only stepping",.standalone=[]{
  std::ofstream out("vectra-gaps.txt");bool ok=true;
  auto check=[&](bool pass,const std::string& what){out<<(pass?"PASS ":"FAIL ")<<what<<'\n';out.flush();ok&=pass;};
  const char* only=std::getenv("RM_GAPS");auto want=[&](const char* part){return !only||std::string(only).find(part)!=std::string::npos;};
  if(want("seams")){out<<"---- seams ----\n";seams(out,check);}
+ if(want("active")){out<<"---- active-only stepping ----"<<std::endl;active(out,check);}
  if(want("breaking")){out<<"---- breaking ----"<<std::endl;breaking(out,check);}
  if(want("water")){out<<"---- water ----\n";water(out,check);}
  if(want("joints")){

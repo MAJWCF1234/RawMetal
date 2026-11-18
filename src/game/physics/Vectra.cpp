@@ -241,7 +241,7 @@ V3 velocityOf(const Body* b,V3 r,V3 surface){return b?b->v+cross(b->w,r):surface
 void Space::wake(int i){auto&b=bodies[size_t(i)];if(b.sleeping){b.sleeping=false;b.sleepTime=0;}}
 void Space::collide(float dt){
  manifolds.clear();pairsTested=0;worldManifolds=0;const int n=int(bodies.size());
- auto active=[&](const Body& b){return !b.sleeping&&(b.invMass>0||(b.kinematic&&(lenSq(b.v)>1e-8f||lenSq(b.w)>1e-8f)));};
+ auto live=[&](const Body& b){return !b.sleeping&&(b.invMass>0||(b.kinematic&&(lenSq(b.v)>1e-8f||lenSq(b.w)>1e-8f)));};
  std::vector<float> reach(size_t(n),0.f);
  for(int i=0;i<n;++i){auto&b=bodies[size_t(i)];V3 lo{1e30f,1e30f,1e30f},hi{-1e30f,-1e30f,-1e30f};
   if(!b.shape){b.boundsLo=lo;b.boundsHi=hi;continue;}   // no shape: nothing to meet (its bounds empty, never paired)
@@ -256,13 +256,18 @@ void Space::collide(float dt){
  const auto t0=std::chrono::steady_clock::now();
  for(int i=0;i<n;++i)ground(i);
  const auto t1=std::chrono::steady_clock::now();worldMs=std::chrono::duration<double,std::milli>(t1-t0).count();
- // Pairs: sweep and prune along x.
- std::vector<int> order;order.reserve(size_t(n));for(int i=0;i<n;++i)order.push_back(i);
- std::sort(order.begin(),order.end(),[&](int a,int b){const float la=bodies[size_t(a)].boundsLo.x-reach[size_t(a)],lb=bodies[size_t(b)].boundsLo.x-reach[size_t(b)];return la!=lb?la<lb:a<b;});
+ // Pairs: sweep and prune along x, from the active bodies only. Every body's interval (its box grown by its reach) is
+ // sorted once by its low end; each active body looks at those whose interval can reach its own (a binary search back by
+ // the widest interval, then on while they start before it ends), so a room of sleepers costs its sort and no more: two
+ // sleepers are never a pair, and scanning their neighbours along x was most of the pass (600 asleep, 30 awake).
+ std::vector<std::pair<float,int>> order;order.reserve(size_t(n));float widest=0;
+ for(int i=0;i<n;++i){const auto&b=bodies[size_t(i)];if(!b.shape)continue;const float lo=b.boundsLo.x-reach[size_t(i)],hi=b.boundsHi.x+reach[size_t(i)];order.push_back({lo,i});widest=std::max(widest,hi-lo);}
+ std::sort(order.begin(),order.end());
  auto sweepPairs=[&](std::vector<std::pair<int,int>>& pairs){
- for(size_t s=0;s<order.size();++s){const int i=order[s];const auto&a=bodies[size_t(i)];const float hiX=a.boundsHi.x+reach[size_t(i)];
-  for(size_t t=s+1;t<order.size();++t){const int j=order[t];const auto&b=bodies[size_t(j)];if(b.boundsLo.x-reach[size_t(j)]>hiX)break;
-   if(!active(a)&&!active(b))continue;if(a.invMass<=0&&b.invMass<=0)continue;
+ for(int i=0;i<n;++i){const auto&a=bodies[size_t(i)];if(!a.shape||!live(a))continue;const float loX=a.boundsLo.x-reach[size_t(i)],hiX=a.boundsHi.x+reach[size_t(i)];
+  for(auto it=std::lower_bound(order.begin(),order.end(),std::make_pair(loX-widest,-1));it!=order.end()&&it->first<=hiX;++it){const int j=it->second;if(j==i)continue;const auto&b=bodies[size_t(j)];
+   if(b.boundsHi.x+reach[size_t(j)]<loX)continue;if(live(b)&&j<i)continue;   // (an active pair: once, from its lower index)
+   if(a.invMass<=0&&b.invMass<=0)continue;
    if(a.group&&a.group==b.group)continue;
    const float r=std::max(reach[size_t(i)],reach[size_t(j)]);
    if(a.boundsLo.y>b.boundsHi.y+r||b.boundsLo.y>a.boundsHi.y+r||a.boundsLo.z>b.boundsHi.z+r||b.boundsLo.z>a.boundsHi.z+r)continue;
@@ -446,14 +451,17 @@ void Space::storeImpulses(){
  {std::vector<int> awake;for(int i=0;i<int(bodies.size());++i)if(!bodies[size_t(i)].sleeping)awake.push_back(idOf(i));std::sort(awake.begin(),awake.end());
   auto up=[&](int id){return id>=0&&std::binary_search(awake.begin(),awake.end(),id);};
   for(const auto&e:cache){const int idA=int(e.first>>40),idB=int((e.first>>20)&0xfffff)-1;if(!up(idA)&&!up(idB))next.push_back(e);}}
- std::stable_sort(next.begin(),next.end(),[](const auto& a,const auto& b){return a.first<b.first;});
+ // (This step's sorted, then merged with what was kept, already in order: the kept for 600 sleepers were sorted again
+ // every step. The merge puts a new entry before a kept one of the same key, as the stable sort did.)
+ {const auto mid=next.begin()+std::ptrdiff_t(manifolds.size());std::stable_sort(next.begin(),mid,[](const auto& a,const auto& b){return a.first<b.first;});
+  std::inplace_merge(next.begin(),mid,next.end(),[](const auto& a,const auto& b){return a.first<b.first;});}
  // Two manifolds with one key (two world clusters a body could not tell apart): keep the first.
  next.erase(std::unique(next.begin(),next.end(),[](const auto& a,const auto& b){return a.first==b.first;}),next.end());
  cache.swap(next);
  for(auto*c:constraints)c->storeImpulses();
 }
 void Space::integrateVelocities(float h){
- for(auto&b:bodies){if(!b.movable())continue;
+ for(int i:active){auto&b=bodies[size_t(i)];
   b.v=b.v+(b.gravity+b.force*b.invMass)*h;b.w=b.w+(b.invInertia*b.torque)*h;
   // The gyroscopic torque, implicitly (one Newton step in the body frame): a long thin body spun off
   // its axis keeps its angular momentum instead of gaining energy from the turning inertia tensor.
@@ -464,7 +472,7 @@ void Space::integrateVelocities(float h){
   const float sv=len(b.v),sw=len(b.w);if(sv>settings.maxLinear)b.v=b.v*(settings.maxLinear/sv);if(sw>settings.maxAngular)b.w=b.w*(settings.maxAngular/sw);}
 }
 void Space::integratePositions(float h){
- for(auto&b:bodies){if(!b.movable())continue;
+ for(int i:active){auto&b=bodies[size_t(i)];
   b.x=b.x+b.v*h;b.q=integrate(b.q,b.w,h);b.dp=b.dp+b.v*h;b.dq=integrate(b.dq,b.w,h);}
 }
 // Fast bodies swept through the step, turning as well as going, against the world and each other (Queries.h).
@@ -515,8 +523,14 @@ void Space::step(float dt){
  // A motor at work keeps what it drives awake.
  for(auto*c:constraints)if(auto*j=c->joint();j&&j->driving(*this))for(int i:{j->a,j->b})if(i>=0&&bodies[size_t(i)].invMass>0){wake(i);bodies[size_t(i)].sleepTime=0;}
  const int sub=std::max(1,settings.substeps);const float h=dt/float(sub);
- for(auto&b:bodies){if(b.shape&&b.invMass>0)b.updateInertia();b.dp={};b.dq={};}
+ // (Every body's motion this step zeroed, a sleeper's too: its contacts read it as still. Only an awake body's inertia is
+ // turned to the world: a sleeper's is not used while it sleeps.)
+ for(auto&b:bodies){if(b.shape&&b.invMass>0&&!b.sleeping)b.updateInertia();b.dp={};b.dq={};}
+ std::vector<char> slept(bodies.size(),0);for(size_t i=0;i<bodies.size();++i)slept[i]=bodies[i].sleeping;
  collide(dt);
+ // The bodies the substeps move: awake and movable (with those a touch woke in collide, their inertia turned now). The
+ // integrations go through this list alone, so 600 sleeping props cost them nothing.
+ active.clear();for(int i=0;i<int(bodies.size());++i){auto&b=bodies[size_t(i)];if(!b.movable())continue;if(slept[size_t(i)]&&b.shape)b.updateInertia();active.push_back(i);}
  const auto s0=std::chrono::steady_clock::now();
  prepare(h);for(auto*c:constraints)c->prepare(*this,h);
  std::vector<V3> start;start.reserve(bodies.size());for(const auto&b:bodies)start.push_back(b.x);
