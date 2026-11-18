@@ -239,9 +239,14 @@ struct Joint:Constraint {
  // Its rows, and the twist's, take their axes from the split's own rates (worked out numerically each pass), so a limit
  // holds exactly where it is measured at any bend: an elbow stops at its own angle, not at a cone's rim.
  bool swingLimited=false;V3 swingLower{},swingUpper{};
- // Ball: friction on the turn (N m): B's turn against A's is held still until more than this twists it, then turns
- // against it (a limp limb lands and stays where it lands, rather than flopping on). 0: none.
+ // Friction (0: none). Ball: on the whole turn (N m): B's turn against A's is held still until more than this twists it,
+ // then turns against it (a limp limb lands and stays where it lands, rather than flopping on). Hinge: about its axis
+ // (N m: a door's pin); slider: along its rail (N: a drawer's runners). A cabinet door nudged stops where it is left.
  float frictionTorque=0;
+ // Hinge and slider: detents, where it catches (a door's latch, a drawer shut, a hatch's stay): within detentRange (rad or
+ // m) of one of detents[0..detentCount) a spring of detentHertz (critically damped) pulls it there, with at most
+ // detentForce (N m or N; 0: the spring alone), so a firm pull takes it out and a nudge does not.
+ std::array<float,4> detents{};int detentCount=0;float detentRange=.12f,detentHertz=6,detentForce=0;
  // Position correction: after the step, the anchors and the limits put back by moving the bodies (as much as each one's
  // mass and inertia lets), Settings::projectIterations times. For chains of light bodies (a ragdoll's limbs) that must
  // never be seen past a limit or pulled open, whatever hits them.
@@ -258,6 +263,7 @@ struct Joint:Constraint {
  float force=0,torque=0;
  // Accumulated impulses (world vectors; scalars along their row's axis).
  V3 linearImpulse{},angularImpulse{};float lowerImpulse=0,upperImpulse=0,motorImpulse=0,springImpulse=0,axialImpulse=0,coneImpulse=0,twistLowerImpulse=0,twistUpperImpulse=0;
+ float frictionImpulse=0,detentImpulse=0;   // hinge and slider: their axis's friction and detent
  float swingImpulse[4]{0,0,0,0};   // the swing's limits: x lower, x upper, y lower, y upper
  // Set the anchors and frames from the bodies as they stand: the joint at `at`, its axis `axis` (world).
  void attach(const Space& s,V3 at,V3 axis={0,0,1});
@@ -347,7 +353,7 @@ struct Space {
  std::vector<ContactEvent> events;  // this step's impacts (approach over .3 m/s or an impulse)
  std::vector<JointEvent> jointEvents;   // the joints that snapped this step
  // Joints' impulses by Joint::key, kept between steps for a caller that builds its joints afresh each step.
- struct JointCached {V3 linear{},angular{};float lower=0,upper=0,motor=0,spring=0,axial=0,cone=0,twistLower=0,twistUpper=0,swing[4]{0,0,0,0};};
+ struct JointCached {V3 linear{},angular{};float lower=0,upper=0,motor=0,spring=0,axial=0,cone=0,twistLower=0,twistUpper=0,swing[4]{0,0,0,0},friction=0,detent=0;};
  std::vector<std::pair<std::uint64_t,JointCached>> jointCache;   // sorted by key
  // Stats.
  int pairsTested=0,worldManifolds=0,iterationsRun=0;

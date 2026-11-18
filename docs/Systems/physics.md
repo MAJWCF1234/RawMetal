@@ -247,9 +247,9 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
 
 | Kind | Holds | Free | Options |
 | --- | --- | --- | --- |
-| hinge | the anchors together, z of B on z of A | the turn about z | limits, spring, motor (speed or servo) |
-| ball | the anchors together | every turn | an elliptical cone (`coneX`, `coneY`), a twist limit |
-| slider | the turn, B's anchor on A's z line | travel along z | limits, spring, motor |
+| hinge | the anchors together, z of B on z of A | the turn about z | limits, spring, motor (speed or servo), friction, detents |
+| ball | the anchors together | every turn | an elliptical cone (`coneX`, `coneY`), a twist limit, friction |
+| slider | the turn, B's anchor on A's z line | travel along z | limits, spring, motor, friction, detents |
 | weld | everything | nothing | |
 | distance | the anchors `length` apart | | |
 | rope | the anchors at most `length` apart (slack when nearer) | | a winch: its motor reels the length in at `motorSpeed` while the pull is under `motorMaxForce` |
@@ -258,6 +258,15 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
 
 - **Motors.** Speed holds a speed with at most `motorMaxForce` (a speed of 0 with a force is a brake). Servo drives to
   `motorTarget` at up to `motorSpeed` (a hinge's angle goes round). A motor at work keeps its bodies awake.
+- **Friction.** `frictionTorque`: on a ball, the whole turn (N m); on a hinge, about its axis (N m, a door's pin); on a
+  slider, along its rail (N, a drawer's runners). A row that takes the rate out with at most that much, warm started
+  (`frictionImpulse`), after the motor and before the limits: a cabinet door nudged at 1.2 rad/s with 1.5 N m stops
+  14 degrees on and stays; with none it glides to its stop.
+- **Detents.** A hinge or slider catches at up to four places (`detents`, `detentCount`; radians or metres from its rest):
+  within `detentRange` of the nearest a critically damped spring of `detentHertz` (6) pulls it there, holding with at most
+  `detentForce` (0: the spring alone). Out of range it holds nothing (`detentImpulse` is taken back out). A drawer pushed
+  shut that friction stops 1.5 cm short clicks shut; latched at 60 N, a 20 N pull leaves it, 150 N opens it (tube
+  `vectra-gaps`). Doors latch where they were drawn shut, hatches stay shut, drawers catch (the Connect tool's defaults).
 - **Breaking.** `force` and `torque` are what the joint carried over the last step (its impulses over the substep). Past
   `breakForce` or `breakTorque` it snaps once (`Space::jointEvents`) and holds nothing after.
 - **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
