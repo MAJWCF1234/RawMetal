@@ -107,6 +107,13 @@ The section is written per chunk, by each prop's index in the chunk's props list
 
 When writing, a quaternion is normalised (a degenerate one becomes the identity) and spin is clamped to 1000 rad/s. When reading, anything not near unit or out of range is refused. Without the hooks, the section is not written, and a saved one is read, checked and dropped.
 
+**Layout 2 (after v1.5.1): chained props.** A mattress or a pad is three segments on hinges (`physics/PropBodies.h`, `chained`). After the props' bodies, the section keeps a second list, per chunk and by prop index, of `ChainPose`:
+- the segment that is the prop's own frame (0-2; the end in the hand while it is carried);
+- each hinge's bend (rad) and its rate (rad/s);
+- each segment's pose: its middle (world, x, y, z) and its turn (quaternion x, y, z, w).
+
+The hooks `captureChain` and `restoreChain` fill and restore it; the hinges restore from the bends, so every segment lies where it was saved and a draped mattress loads draped, still asleep, and re-saves byte-exact. A bend outside half a turn, a rate over 1000 rad/s, a root outside 0-2, a non-finite middle or a turn far from unit refuses the save. A layout 1 section (v1.5.1) has no such list: its mattresses load lying straight, as they always did. The lab tube `mattress` checks both.
+
 ## Refitting older saves (formats 1-27)
 A format 1-27 save loads in two stages:
 1. **The frozen positional reader.** It leaves a field the version lacked at the fresh game's value.
@@ -194,6 +201,7 @@ In every refit test, each save loads, is refitted with its backup, keeps its gam
 | 26 | v1.4.8 | No new fields. Chairs standing on a floor are now loose physics props, carried in each chunk's clutter list. An older build would draw them twice (its fixed chair and the saved loose one), so it refuses a 26. A version 25 or older save loads in v1.4.8 with every chair back where it was put. |
 | 27 | v1.5.0 | Each glass pane's hits (where, hole radius, crack strain; one number per hit), so its holes and fallen pieces come back exactly. Glass shards are `ShardOf::Glass`. The last positional format. |
 | 28 | | The section container. Sections: `game`, `player`, `inventory`, `hazmat`, `script`, `world`, `creatures`, `pickups`, `props`, then the optional `entities`, `variables` and `physics`. Formats 1-27 are refitted on load and rewritten, the original kept as `.v<N>.bak`. Saves and settings return to `%LOCALAPPDATA%\RawMetal`. |
+| 28 (physics layout 2) | | No new format: the `physics` section's layout 2 keeps the chained props' segments (a mattress's bend). A v1.5.1 save (layout 1) loads with its mattresses straight; a v1.5.1 build skips a layout 2 section as an unknown version, so it loads the save without the bends. |
 
 ## Map format, for the v1.4.8 change
 Custom maps (`.rmc`) are unchanged for existing content.

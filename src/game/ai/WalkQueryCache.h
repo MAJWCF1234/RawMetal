@@ -14,9 +14,10 @@ namespace retro::ai {
 // queries belongs here, never in one memo's private key.
 inline void collisionSnapshot(const World&world,std::vector<uint32_t>&out){
  out.clear();auto word=[&](uint32_t value){out.push_back(value);};auto scalar=[&](float value){word(std::bit_cast<uint32_t>(value));};
- // Which definition: the authored map it was loaded from, its world and slot.
- const auto identity=world.definitionIdentity();const auto address=uint64_t(reinterpret_cast<uintptr_t>(identity.map));
- word(uint32_t(address));word(uint32_t(address>>32));word(uint32_t(identity.world));word(uint32_t(identity.level));
+ // Which definition: the authored map it was loaded from (by its serial: a later map can take a freed
+ // one's address), its world and slot.
+ const auto identity=world.definitionIdentity();const auto serial=identity.serial;
+ word(uint32_t(serial));word(uint32_t(serial>>32));word(uint32_t(identity.world));word(uint32_t(identity.level));
  word(uint32_t(world.layers().size()));word(uint32_t(world.structures().size()));word(uint32_t(world.fixtures().size()));word(uint32_t(world.props().size()));word(world.hasTerrain());
  // Tile destruction opens paths; comparing actual tiles also handles restore.
  for(int y=0;y<24;++y)for(int x=0;x<24;x+=4){uint32_t tiles=0;for(int i=0;i<4;++i)tiles|=uint32_t(uint8_t(world.tile(x+i,y)))<<(i*8);word(tiles);}

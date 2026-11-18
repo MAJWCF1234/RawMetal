@@ -118,7 +118,8 @@ The Builder's Growth brush paints ordinary `FIXTURE` records (solid 0), so nothi
 
 ## Light shafts
 `STRUCT` material 53 (`LightShaftMaterial`) is a god ray: sunlight falling on the slant through its box, in at the top on the side away from its `facing` (field 12) and down to the floor on the facing side.
-- It is drawn as a bundle of soft additive cards, warm gold, faint at both ends and at the edges, so it shows without any haze; it casts no shadow.
+- It is drawn as soft additive cards, warm gold, so it shows without any haze; it casts no shadow. Its light is shaped by the world it falls in (`lightShaftShape`, Scene3D.cpp): over the box's far face a grid finds where the light comes through (the breach's hole, the glass, not the wall or the frame round them) and where each ray lands (the floor, or the first thing in its way). The cards run from the opening's outline to where the light is caught, so a shaft never reaches past a wall or into the room behind.
+- Drawn every frame after the room: hidden by what stands in front of it, faded where it nears a surface behind it (a soft-particle depth fade, so no hard line where it meets the floor or a wall) and as a card turns edge-on to the eye. Where it lands, a soft warm patch on the floor: the opening cast on it, the window bars' shadows in it. The lab knobs `shaft.layer`, `shaft.sheet`, `shaft.pool`, `shaft.soft` and `shaft.colour` tune it.
 - It is never solid (the parser makes it so), and like glass it lets light, sight and rounds through (`seeThroughMaterial`).
 - The Builder's Block tool places one: pick material 53 and drag its box; R turns its facing once the record has one (the inspector lists `facing`). The lab tube `atrium` checks the Starter Map's five.
 

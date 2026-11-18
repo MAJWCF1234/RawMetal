@@ -15,10 +15,12 @@
 #include <fstream>
 #include <cstdlib>
 #include <set>
+#include <atomic>
 #include <bit>
 #include <cstdio>
 
 namespace retro {
+std::uint64_t MapSerial::next(){static std::atomic<std::uint64_t> last{0};return ++last;}
 namespace {
 std::atomic<uint64_t> nextTerrainRevision{1};
 constexpr MapRows ashfallRegion(int region){

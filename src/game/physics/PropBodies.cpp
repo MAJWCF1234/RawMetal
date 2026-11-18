@@ -135,7 +135,9 @@ std::array<float,3> propExtent(const Clutter& c){if(c.model<0||legacyProps())ret
 // Under legacy no prop has solver state, so nothing is captured; a saved section is still restored.
 namespace {const bool hooked=[]{physicsSaveHooks()={
   [](const Clutter& c,PropBody& b){if(legacyProps())return false;return captureProp(c,b.orientation,b.angularVelocity,b.island);},
-  [](Clutter& c,const PropBody& b){restoreProp(c,b.orientation,b.angularVelocity,b.island);}};return true;}();}
+  [](Clutter& c,const PropBody& b){restoreProp(c,b.orientation,b.angularVelocity,b.island);},
+  [](const Clutter& c,ChainPose& p){if(legacyProps())return false;return captureChain(c,p.root,p.bend,p.rate,p.middle,p.turn);},
+  [](Clutter& c,const ChainPose& p){restoreChain(c,p.root,p.bend,p.rate);}};return true;}();}
 bool chained(const Clutter& c){if(c.model<0||!soft::isSoft(c))return false;const auto s=c.size();return std::max(s[0],s[1])>=.8f&&s[2]<.35f;}
 namespace {
 int alongOf(const Clutter& c){const auto s=c.size();return s[0]>=s[1]?0:1;}
@@ -176,4 +178,15 @@ void restoreProp(Clutter& c,const std::array<float,4>& q,const std::array<float,
  c.orient={o.w,o.x,o.y,o.z};c.orientEuler={c.yaw,c.pitch,c.roll};
  // The spin likewise: the saved speeds stand unless they say another spin.
  const V3 saved{w[0],w[1],w[2]};if(len(propAngular(c)-saved)>1e-4f)setPropAngular(c,saved);c.island=island;}
+bool captureChain(const Clutter& c,std::int32_t& root,std::array<float,2>& bend,std::array<float,2>& rate,std::array<std::array<float,3>,3>& middle,std::array<std::array<float,4>,3>& turn){
+ if(c.model<0||c.broken||!chained(c))return false;
+ const Chain ch=chainOf(c);const V3 ax=axisOf(ch.along);const float third=ch.length/3;
+ for(int k=0;k<3;++k){const V3 m=ch.frame[size_t(k)]+ch.turn[size_t(k)].rotate(ax*(float(k-1)*third));const Quat& q=ch.turn[size_t(k)];
+  middle[size_t(k)]={m.x,m.y,m.z};turn[size_t(k)]={q.x,q.y,q.z,q.w};}
+ root=std::clamp(c.boneRoot,0,2);bend=c.bend;rate=c.bendSpeed;return true;}
+void restoreChain(Clutter& c,std::int32_t root,const std::array<float,2>& bend,const std::array<float,2>& rate){
+ if(c.model<0||!chained(c))return;
+ // The prop's own frame (its pose, from the props and physics sections) is segment `root`'s: the others
+ // hang from it by the saved bends, so every segment lies where it was saved.
+ c.boneRoot=std::clamp(int(root),0,2);c.bend=bend;c.bendSpeed=rate;}
 }

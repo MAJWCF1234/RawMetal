@@ -470,8 +470,12 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
   const float dv=length(r.shove);if(dv<.02f)continue;const Vec2 dir=r.shove*(1/dv);
   BodyKnock k;k.level=r.level;k.enemy=r.enemy;k.index=r.index;
   if(dv<.15f){k.velocity=dir*(dv*.22f/.1f);k.time=.1f;}   // a nudge: his own footing takes it within a step
-  else{const float reach=std::min(1.5f,1.6f*dv);k.velocity=dir*std::sqrt(2*4.f*reach);k.time=1;}
-  bool merged=false;for(auto&o:m_bodyKnocks)if(o.enemy==k.enemy&&o.level==k.level&&o.index==k.index){if(lengthSq(k.velocity)>lengthSq(o.velocity))o.velocity=k.velocity;o.time=std::max(o.time,k.time);merged=true;}   /* a prop still rolling into him keeps him going, no further */if(!merged)m_bodyKnocks.push_back(k);
+  else{const float reach=std::min(1.5f,1.6f*dv);k.velocity=dir*std::sqrt(2*4.f*reach);k.time=1;
+   // A shove staggers him: reeling while he slides (to a stop at 4 m/s^2), then finding his feet.
+   k.slide=length(k.velocity)/4.f;k.push=dir;k.stumble=k.slide+.45f;k.flinch=r.enemy?1.f:0.f;}
+  bool merged=false;for(auto&o:m_bodyKnocks)if(o.enemy==k.enemy&&o.level==k.level&&o.index==k.index){if(lengthSq(k.velocity)>lengthSq(o.velocity))o.velocity=k.velocity;o.time=std::max(o.time,k.time);
+   if(k.stumble>o.stumble-o.age){o.stumble=k.stumble;o.slide=k.slide;o.age=0;o.push=k.push;o.flinch=std::max(o.flinch,k.flinch);}   // a harder blow mid-stumble staggers him afresh
+   merged=true;}   /* a prop still rolling into him keeps him going, no further */if(!merged)m_bodyKnocks.push_back(k);
   if(r.enemy){auto&enemy=(r.level==m_level?m_enemies:m_chunks[r.level].enemies)[r.index];if(dv>=.5f){enemy.windup=0;enemy.strike=0;enemy.attackCooldown=std::max(enemy.attackCooldown,.35f+dv*(dv>=1.3f?1.5f:.6f));enemy.painFlash=std::max(enemy.painFlash,std::min(1.f,dv*.6f));}}
   else if(dv>=1.3f&&!npcHeld(r.index)){auto&npc=m_friendlyActors[r.index];setState(friendlyKey(r.index,"restraint"),1);npc.pose.clip=4;npc.pose.phase=1;saveRestrainedPose(r.index);}   // knocked down: out cold where he falls
 }
@@ -489,9 +493,44 @@ void Game::updateBodyKnocks(float dt){
    if(length(reached-before)<length(delta)*.5f)k.velocity=Vec2{};enemy.pos=reached;enemy.windup=0;}
   else{if(k.index>=m_friendlyActors.size()){k.time=0;continue;}auto&npc=m_friendlyActors[k.index];const float height=friendlyHullHeight(k.index,npc.track());
    const Vec2 before=npc.pose.position;Vec2 reached=before;for(int i=1;i<=steps;++i){const auto next=before+delta*(float(i)/float(steps));if(!friendlyBodyFits(npc.level,next,npc.pose.z,height))break;reached=next;}
-   if(length(reached-before)<length(delta)*.5f)k.velocity=Vec2{};npc.pose.position=reached;}
+   if(length(reached-before)<length(delta)*.5f)k.velocity=Vec2{};npc.pose.position=reached;k.at=reached;k.placed=true;}
   // He stumbles to a stop (4 m/s^2: his feet find the floor again).
   const float slowed=std::max(0.f,speed-4.f*dt);k.velocity=speed>0?k.velocity*(slowed/speed):Vec2{};k.time-=dt;}
- std::erase_if(m_bodyKnocks,[](const BodyKnock& k){return k.time<=0||lengthSq(k.velocity)<.0025f;});
+ std::erase_if(m_bodyKnocks,[](const BodyKnock& k){return (k.time<=0||lengthSq(k.velocity)<.0025f)&&k.age>=k.stumble;});
+}
+// His lean: thrown with the shove from his feet within a tenth of a second (harder for a harder shove, 11 to
+// 17 degrees), held while he slides, then straightened as he finds his feet, with a little sway back past
+// upright at the last.
+Vec2 Game::npcStumbleLean(size_t actor)const{
+ for(const auto& k:m_bodyKnocks){if(k.enemy||k.index!=actor||k.stumble<=0||k.age>=k.stumble)continue;
+  const auto& npc=m_friendlyActors[actor];if(npc.level!=k.level||npc.pose.clip!=3)return {};
+  auto smooth=[](float a,float b,float x){x=std::clamp((x-a)/std::max(b-a,1e-4f),0.f,1.f);return x*x*(3-2*x);};
+  const float peak=std::clamp(.14f+.06f*k.slide*4.f,.2f,.3f),settle=smooth(k.slide,k.stumble,k.age);
+  const float amount=peak*smooth(0.f,.1f,k.age)*((1-settle)-.18f*std::sin(kPi*settle));
+  return k.push*amount;}
+ return {};
+}
+// Reeling while he slides (the hit clip's first half, quick at first), finding his feet after (the rest).
+float Game::stumblePhase(float age,float slide,float stumble){
+ const float reel=std::max(slide,.12f);
+ if(age<reel){const float t=age/reel;return .5f*(1-(1-t)*(1-t));}
+ return .5f+.5f*std::clamp((age-reel)/std::max(stumble-reel,.05f),0.f,1.f);
+}
+// After everyone has moved this frame (the guards' own minds included), the knocked play their stumble: a man
+// his hit clip where the shove left him, his gun down till he has his feet; a creature its flinch.
+void Game::poseBodyKnocks(float dt){
+ for(auto& k:m_bodyKnocks){
+  if(k.stumble>0&&k.age<k.stumble){
+   if(k.enemy){if(k.flinch>0&&chunkResident(k.level)){auto&enemies=k.level==m_level?m_enemies:m_chunks[k.level].enemies;
+     if(k.index<enemies.size()&&enemies[k.index].alive){auto&e=enemies[k.index];e.painFlash=std::max(e.painFlash,.84f*(1-k.age/k.stumble));}}}
+   else if(k.index<m_friendlyActors.size()){auto&npc=m_friendlyActors[k.index];const auto&track=npc.track();
+    if(npc.level==k.level&&humanActorVisual(track.visual)&&npc.pose.clip!=4&&!npcIncapacitated(k.index)&&!(track.deadState&&state(track.deadState))){
+     if(k.placed)npc.pose.position=k.at;
+     // On his feet again: back to standing (his mind takes him on from there; a frozen man stays as he is).
+     if(k.age+dt>=k.stumble){if(npc.pose.clip==3){npc.pose.clip=0;npc.pose.phase=0;}}
+     else{npc.pose.clip=3;npc.pose.phase=stumblePhase(k.age,k.slide,k.stumble);}
+     if(track.ai.mode==ActorAiMode::Guard){const StateId recovery=friendlyKey(k.index,"weapon_recovery");setState(recovery,std::max(state(recovery),int(std::ceil((k.stumble-k.age)*1000))));}}}}
+  k.age+=dt;}
+ std::erase_if(m_bodyKnocks,[](const BodyKnock& k){return (k.time<=0||lengthSq(k.velocity)<.0025f)&&k.age>=k.stumble;});
 }
 }

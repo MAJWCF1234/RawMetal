@@ -12,6 +12,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
+#include "game/CreatureAnimation.h"
 #include "game/EngineRegressionScene.h"
 #include "game/physics/PropBodies.h"
 #include "world/CampaignKit.h"
@@ -20,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <map>
 #include <memory>
 namespace retro::lab {
 namespace {
@@ -28,7 +30,9 @@ Clutter prop(int model,Vec2 at,float z,float scale=1){Clutter c;c.kind=7;c.model
 Clutter weighing(Clutter c,float kg,float health=-1){auto t=std::make_shared<EntityTraits>();t->mass=kg;t->health=health;c.traits=t;return c;}
 struct Thing {const char* name;Clutter c;Vec2 v;float vz;};
 // A prop sent at a target 1.6 m off along +x (a standing guard, or a creature), 1.5 s: the target's shove and its hurt.
-struct Hit {float shove=0,hurt=0;};
+// stumble: the frames it played its stumble (a man his hit clip, a creature its flinch) while it was knocked
+// back; standing: back out of it at the end.
+struct Hit {float shove=0,hurt=0;int stumble=0;bool standing=false;};
 Hit throwAt(bool legacy,bool creature,const Thing& t){
  vectra::forceLegacyProps(legacy?1:0);auto m=regression::room();m->definition.playerStart={2,2};const Vec2 at{11,8};
  if(!creature)m->actorTracks.push_back(regression::guard(at,at));
@@ -37,10 +41,11 @@ Hit throwAt(bool legacy,bool creature,const Thing& t){
  auto where=[&]{return creature?LabAccess::enemies(g)[0].pos:LabAccess::friendlies(g)[0].pose.position;};
  for(int i=0;i<10;++i)g.update({},1.f/60);const Vec2 start=where();const float hp=creature?LabAccess::enemies(g)[0].hp:0;
  auto c=t.c;c.pos={at.x-(t.vz==0?1.f:1.6f),at.y};c.velocity=t.v;c.vz=t.vz;c.projectile=true;c.sleeping=false;LabAccess::clutter(g)={c};
- float shove=0;for(int i=0;i<90;++i){g.update({},1.f/60);shove=std::max(shove,where().x-start.x);if(creature){auto& e=LabAccess::enemies(g)[0];e.awareness=0;}
+ float shove=0;int stumble=0;auto clip=[&]{return creature?creatureAnimationSample(LabAccess::enemies(g)[0],g.elapsed()).clip:LabAccess::friendlies(g)[0].pose.clip;};
+ for(int i=0;i<90;++i){g.update({},1.f/60);shove=std::max(shove,where().x-start.x);stumble+=clip()==3;if(creature){auto& e=LabAccess::enemies(g)[0];e.awareness=0;}
   if(std::getenv("RM_SHOVE_TRACE")&&!legacy){static std::ofstream tr("vectra-shove-trace.txt");for(const auto& e:LabAccess::rigidStats(g).events)if(e.b>=0)tr<<t.name<<(creature?" creature":" guard")<<" frame "<<i<<" event "<<e.a<<"-"<<e.b<<" n "<<f2(e.normal.x)<<","<<f2(e.normal.y)<<","<<f2(e.normal.z)<<" approach "<<f2(e.approach)<<" impulse "<<f2(e.impulse)<<std::endl;
    for(const auto& k:LabAccess::bodyKnocks(g))tr<<t.name<<" frame "<<i<<" knock v "<<f2(k.velocity.x)<<","<<f2(k.velocity.y)<<" t "<<f2(k.time)<<" at "<<f2(where().x,3)<<std::endl;}}
- Hit h;h.shove=shove;h.hurt=creature?hp-LabAccess::enemies(g)[0].hp:float(g.state(stateId("reg_guard_damage")));vectra::forceLegacyProps(-1);return h;}
+ Hit h;h.shove=shove;h.hurt=creature?hp-LabAccess::enemies(g)[0].hp:float(g.state(stateId("reg_guard_damage")));h.stumble=stumble;h.standing=clip()!=3;vectra::forceLegacyProps(-1);return h;}
 
 const bool shove=add({.name="vectra-shove",.summary="props against people and things by weight: thrown and rolled into a guard and a creature, dropped on glass and on a mug, held up as a shield; legacy and Vectra",.standalone=[]{
  std::ofstream r("vectra-shove.txt");bool ok=true;auto check=[&](bool pass,const std::string& what){r<<(pass?"PASS ":"FAIL ")<<what<<'\n';ok&=pass;r.flush();};
@@ -50,10 +55,13 @@ const bool shove=add({.name="vectra-shove",.summary="props against people and th
  Hit hit[2][2][3];
  for(int legacy=0;legacy<2;++legacy)for(int creature=0;creature<2;++creature)for(int k=0;k<3;++k)hit[legacy][creature][k]=throwAt(legacy==1,creature==1,things[k]);
  for(int creature=0;creature<2;++creature){r<<(creature?"A CREATURE (mutant)":"A STANDING GUARD")<<": shoved (m) and hurt\n";
-  for(int k=0;k<3;++k)r<<"  "<<things[k].name<<": legacy "<<f2(hit[1][creature][k].shove,3)<<" m, "<<f2(hit[1][creature][k].hurt,1)<<"; Vectra "<<f2(hit[0][creature][k].shove,3)<<" m, "<<f2(hit[0][creature][k].hurt,1)<<"\n";}
+  for(int k=0;k<3;++k)r<<"  "<<things[k].name<<": legacy "<<f2(hit[1][creature][k].shove,3)<<" m, "<<f2(hit[1][creature][k].hurt,1)<<"; Vectra "<<f2(hit[0][creature][k].shove,3)<<" m, "<<f2(hit[0][creature][k].hurt,1)<<", stumbling "<<hit[0][creature][k].stumble<<" frames"<<(hit[0][creature][k].standing?"":" (still at the end)")<<"\n";}
  for(int creature=0;creature<2;++creature){const auto& v=hit[0][creature];const std::string who=creature?"a creature":"a guard";
   check(v[0].shove<.03f&&v[1].shove>.06f&&v[2].shove>v[1].shove,"a mug barely nudges "+who+"; a thrown crate shoves it back; a rolling drum shoves it harder");
-  check(v[0].hurt>0&&v[1].hurt>v[0].hurt*3,"a thrown mug stings "+who+"; a thrown crate hurts it badly");}
+  check(v[0].hurt>0&&v[1].hurt>v[0].hurt*3,"a thrown mug stings "+who+"; a thrown crate hurts it badly");
+  // (A creature flinches at the mug's sting as it always has: its pain, not a stumble.)
+  if(creature)check(v[1].stumble>=20&&v[1].stumble>v[0].stumble*2&&v[1].standing,"knocked back by a thrown crate "+who+" stumbles (its flinch, "+std::to_string(v[1].stumble)+" frames against the mug's sting's "+std::to_string(v[0].stumble)+"), then stands again");
+  else check(v[0].stumble==0&&v[1].stumble>=20&&v[1].standing,"a mug's nudge does not stagger "+who+"; knocked back by a thrown crate he stumbles (his hit clip, "+std::to_string(v[1].stumble)+" frames), then stands again");}
  // Glass: a 20 kg and a 1 kg box dropped 1.2 m onto a glass floor.
  {float broke[2][2]{};
   for(int legacy=0;legacy<2;++legacy)for(int heavy=0;heavy<2;++heavy){vectra::forceLegacyProps(legacy);auto m=regression::room();m->definition.playerStart={2,2};kit::breakable(*m,7,7,10,10,1.f,1.03f,17,false);
@@ -101,7 +109,18 @@ const bool pad=add({.name="mattress",.summary="the chained mattress: sags carrie
   LabAccess::clutter(g)={mattress({10.25f,8},.5f)};for(int i=0;i<240;++i)g.update({},1.f/60);const auto& c=g.clutter()[0];
   float lowest=1e9f,highest=-1e9f;for(int k=0;k<3;++k){lowest=std::min(lowest,middle(c,k).z);highest=std::max(highest,middle(c,k).z);}
   r<<"2 DRAPED OVER A STEP: bends "<<f2(c.bend[0])<<", "<<f2(c.bend[1])<<" rad, its segments' middles from z "<<f2(lowest)<<" to "<<f2(highest)<<", asleep "<<(c.sleeping?"yes":"no")<<"\n";
-  check(bendOf(c)>.4f&&lowest<.3f&&c.sleeping,"dropped half over a step, it drapes over the edge (its overhang down toward the floor) and comes to rest");}
+  check(bendOf(c)>.4f&&lowest<.3f&&c.sleeping,"dropped half over a step, it drapes over the edge (its overhang down toward the floor) and comes to rest");
+  // 5. Saved draped and loaded (the physics section's chained props): every segment where it lay, and it
+  // lies still rather than straightening and draping again; a format 27 save (no segments kept) still loads.
+  {const Clutter lay=c;const auto bytes=LabAccess::encodeSave(g);auto again=[&]{auto m2=regression::room();step(*m2);return std::make_unique<Game>(regression::campaign(m2));};
+   auto back=again();const bool loaded=LabAccess::decodeSave(*back,bytes)&&!back->clutter().empty();float off=1e9f,stir=1e9f;bool same=false,resaved=false;
+   if(loaded){const Clutter b=back->clutter()[0];off=0;for(int k=0;k<3;++k)off=std::max(off,vectra::len(middle(b,k)-middle(lay,k)));same=b.bend==lay.bend&&b.boneRoot==lay.boneRoot;
+    resaved=LabAccess::encodeSave(*back)==bytes;stir=0;for(int i=0;i<120;++i){back->update({},1.f/60);for(int k=0;k<3;++k)stir=std::max(stir,vectra::len(middle(back->clutter()[0],k)-middle(b,k)));}}
+   auto older=again();const bool oldLoads=LabAccess::decodeSave(*older,LabAccess::legacySaveText(g,27))&&!older->clutter().empty();
+   r<<"5 SAVED DRAPED: loaded "<<(loaded?"yes":"no")<<", bends "<<(loaded?f2(back->clutter()[0].bend[0],3)+", "+f2(back->clutter()[0].bend[1],3):std::string("-"))<<" (saved "<<f2(lay.bend[0],3)<<", "<<f2(lay.bend[1],3)
+    <<"), segments off by "<<f2(off*1000,3)<<" mm, re-saved the same "<<(resaved?"yes":"no")<<", then moved "<<f2(stir*1000,2)<<" mm in 2 s; a format 27 save "<<(oldLoads?"loads (lying straight: bends "+f2(older->clutter()[0].bend[0],2)+", "+f2(older->clutter()[0].bend[1],2)+")":std::string("does not load"))<<"\n";
+   check(loaded&&same&&off<1e-4f&&resaved&&stir<.002f,"saved draped over the step and loaded, every segment lies where it was and it stays draped (it neither straightens nor drapes again)");
+   check(oldLoads,"a save from before the segments were kept (format 27) still loads the mattress");}}
  // 3. Struck at one end (a round's blow), and 4. left lying.
  {Game g(regression::campaign(regression::room()));LabAccess::player(g).pos={2,2};LabAccess::clutter(g)={mattress({10,8},0)};for(int i=0;i<60;++i)g.update({},1.f/60);
   const auto rest=g.clutter()[0];float still=0;for(int i=0;i<120;++i){g.update({},1.f/60);still=std::max({still,bendOf(g.clutter()[0]),length(g.clutter()[0].pos-rest.pos)});}
@@ -115,19 +134,28 @@ const bool pad=add({.name="mattress",.summary="the chained mattress: sags carrie
  return ok;}});
 
 // ---- The pictures ----
+struct FeelStumble {int frames=0;float furthest=0;bool standing=false;};
+std::map<const Scene*,FeelStumble>& feelStumbles(){static std::map<const Scene*,FeelStumble> m;return m;}
 const bool feel=add({.name="vectra-feel",.summary="pictures: a crate shoving a guard, a heavy and a light throw, a mattress draped over a step",
  .fixtures={"feel-shove","feel-throw","feel-mattress"},
  .author=[](Scene& s,AuthoredMapData& m){const std::string k=s.fixture->value("feel","shove");m.definition.playerStart={2,2};
   if(k=="shove")m.actorTracks.push_back(regression::guard({11,8},{11,8},AiFaction::Player));
   if(k=="throw"){m.actorTracks.push_back(regression::guard({11,7.6f},{11,7.6f},AiFaction::Player));m.actorTracks.push_back(regression::guard({11,9.6f},{11,9.6f},AiFaction::Player));}
   if(k=="mattress")m.structures.push_back({10,4,16,12,0,.4f,false,40});},
- .setup=[](Scene& s){LabAccess::setGod(s.g(),true);for(auto& npc:LabAccess::friendlies(s.g()))npc.frozen=true;},   // they stand where put; a knock still moves them
+ .setup=[](Scene& s){feelStumbles()[&s]={};LabAccess::setGod(s.g(),true);for(auto& npc:LabAccess::friendlies(s.g()))npc.frozen=true;},   // they stand where put; a knock still moves them
  .step=[](Scene& s,float){const std::string k=s.fixture->value("feel","shove");auto& l=LabAccess::clutter(s.g());
   if(s.frame==20){
    if(k=="shove"){auto c=prop(model::wooden_crate,{9.2f,8},.5f,.8f);c.velocity={5.5f,0};c.vz=.6f;c.projectile=true;l={c};}
    if(k=="throw"){auto a=prop(model::mug,{9.6f,9.6f},1.f);a.velocity={9,0};a.vz=.6f;a.projectile=true;auto b=prop(model::wooden_crate,{9.4f,7.6f},.5f,.8f);b.velocity={5.5f,0};b.vz=.6f;b.projectile=true;l={a,b};}
    if(k=="mattress"){auto c=prop(model::med_mattress_stained,{10.25f,8},.6f);l={c};}}},
- .capture=[](Scene& s,const Frame&){if(s.frame==19)s.shoot("a-before");if(s.frame==34)s.shoot("b-contact");if(s.frame==60)s.shoot("c-after");if(s.last())s.shoot("d-end");},
- .metrics=[](Scene& s,Report& r){r.check("ran",true);}});
+ .capture=[](Scene& s,const Frame&){auto& seen=feelStumbles()[&s];const auto& men=LabAccess::friendlies(s.g());
+  // The guard knocked back: the frames he plays his stumble (the hit clip) and how far into it he got.
+  if(!men.empty()&&men[0].pose.clip==3){++seen.frames;seen.furthest=std::max(seen.furthest,men[0].pose.phase);}
+  if(!men.empty()&&s.last())seen.standing=men[0].pose.clip!=3;
+  if(s.frame==19)s.shoot("a-before");if(s.frame==34)s.shoot("b-contact");if(s.frame==44)s.shoot("c-stumbling");if(s.frame==60)s.shoot("d-finding-his-feet");if(s.last())s.shoot("e-end");},
+ .metrics=[](Scene& s,Report& r){r.check("ran",true);
+  if(s.fixture->value("feel","shove")=="shove"){const auto& seen=feelStumbles()[&s];r.metric("stumble_frames",seen.frames);
+   r.check("the guard stumbles while the crate knocks him back (his hit clip, through), then stands",seen.frames>=20&&seen.furthest>.9f&&seen.standing,
+    std::to_string(seen.frames)+" frames, to phase "+f2(seen.furthest)+(seen.standing?", standing at the end":", still in it at the end"));}}});
 }
 }

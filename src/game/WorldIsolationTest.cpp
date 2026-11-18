@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "../world/CustomCampaign.h"
+#include "../world/ModelIds.h"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -10,16 +11,29 @@ bool Game::testWorldIsolation(){
  auto check=[&](bool ok,const char* label){out<<label<<": "<<(ok?"PASS":"FAIL")<<'\n';out.flush();return ok;};
  Game campaign;Game custom(WorldId::Ashfall);Game independent;
  // Keep authored encounter composition stable while moving ownership out of Game.
+ // The clutter counts are the authored loose props. Since v1.4.8 (save format 26) a chair FIXTURE standing
+ // on the floor is a loose prop as well (World.cpp; FIXTURE field 14 anchors one), counted apart here:
+ // the one chair in map 0, the four in map 1.
  constexpr int creatureCounts[]={8,9,6,3,0,0,2,4,2,3},pickupCounts[]={4,6,5,4,2,1,1,2,4,2};
- constexpr int clutterCounts[]={6,6,6,6,4,2,2,0,6,19};
+ constexpr int clutterCounts[]={6,6,6,6,4,2,2,0,6,19},looseChairCounts[]={1,4,0,0,0,0,0,0,0,0};
+ auto chair=[](const Clutter& c){return c.kind==7&&(c.model==model::office_chair||c.model==model::wooden_chair||c.model==model::lab_boardroom_chair);};
  for(int level=0;level<int(std::size(creatureCounts));++level){
   const auto& chunk=campaign.m_chunks[level];
-  if(!check(int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&int(chunk.clutter.size())==clutterCounts[level],"Campaign population preserved"))return false;
+  const int chairs=int(std::count_if(chunk.clutter.begin(),chunk.clutter.end(),chair)),props=int(chunk.clutter.size())-chairs;
+  const bool same=int(chunk.enemies.size())==creatureCounts[level]&&int(chunk.pickups.size())==pickupCounts[level]&&props==clutterCounts[level]&&chairs==looseChairCounts[level];
+  if(!same)out<<"  map "<<level<<": "<<chunk.enemies.size()<<" creatures, "<<chunk.pickups.size()<<" pickups, "<<props<<" props, "<<chairs<<" loose chairs; expected "
+   <<creatureCounts[level]<<", "<<pickupCounts[level]<<", "<<clutterCounts[level]<<", "<<looseChairCounts[level]<<'\n';
+  if(!check(same,"Campaign population preserved"))return false;
  }
  auto invalidWorldRejected=[](){try{World invalid(0,WorldId::Custom);return false;}catch(const std::invalid_argument&){return true;}};
  if(!check(invalidWorldRejected(),"Custom world construction requires explicit authored data"))return false;
  auto authored=std::make_shared<AuthoredMapData>();AuthoredLayerData floor;for(auto& row:floor.rows)row=std::string(World::Width,'.');authored->layers.push_back(floor);
  {World external(0,authored);World native(10);if(!check(external.custom()&&!external.campaign()&&native.campaign()&&!native.custom(),"Shared authored geometry preserves custom and native identities"))return false;}
+ // A definition's serial names it for caches kept past its life (light probes, the air, the walk memo):
+ // worlds on one definition share it; a copy, or a later map made where a freed one stood, never does.
+ {auto first=std::make_shared<AuthoredMapData>(*authored);const auto* where=first.get();const auto serial=World(0,first).definitionIdentity().serial;const bool shared=World(0,first).definitionIdentity().serial==serial;
+  first.reset();auto second=std::make_shared<AuthoredMapData>(*authored);const auto again=World(0,second).definitionIdentity();
+  if(!check(serial!=0&&shared&&again.serial!=serial&&authored->serial.value!=serial,(std::string("A map definition keeps one serial across its worlds and a later one never reuses it (")+(second.get()==where?"made at the freed map's address":"made elsewhere")+")").c_str()))return false;}
  {
   World flat(0,authored);flat.buildLightOcclusion();
   if(!check(flat.m_lightSolids.size()==2&&flat.lightRayClear({2,2},3.2f,{20,20},3.2f)&&!flat.lightRayClear({2,2},3.6f,{20,20},3.6f),"Constant ceiling merges to one optical solid without changing its shadow"))return false;
