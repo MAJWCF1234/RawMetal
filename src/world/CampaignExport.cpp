@@ -1,6 +1,7 @@
 #include "CampaignExport.h"
 #include "CampaignMaps.h"
 #include "CustomCampaign.h"
+#include "Primitives.h"
 #include "../audio/SoundBank.h"
 #include "../core/CampaignAdmin.h"
 #include <algorithm>
@@ -235,7 +236,20 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    r.f(door.requireControl?"1":"").f(door.swing!=1?num(door.swing):"").f(door.maxOpen!=1?num(door.maxOpen):"").f(door.open!=0?num(door.open):"").f(door.opening?"1":"");
    r.f(door.leaf?std::to_string(door.leaf):"").f(door.label.empty()?"":encode(door.label)).f(door.locked.empty()?"":encode(door.locked));
    r.f(door.alongY?"1":"").f(door.hingeRight?"1":"").f(door.strength>0?num(door.strength):"").f(door.lock?std::to_string(door.lock):"");line(r,13);}
-  for(const auto& s:m.structures){Rec r("STRUCT");r.i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).b(s.rail).i(s.material).f(s.solid?"":"0").f(s.shape?std::to_string(s.shape):"").f(s.facing?std::to_string(s.facing):"");line(r,10);}
+  {// A PRIM goes back as the PRIM it was (its named fields riding on it), where its first box
+   // stood among the STRUCTs, so the boxes come back in the same order. One whose boxes were
+   // changed after it was laid (or that no longer expands the same) is written as its boxes.
+   std::map<size_t,const AuthoredMapData::PrimitiveRecord*> primAt;
+   auto same=[](const Structure& a,const Structure& b){return a.x1==b.x1&&a.y1==b.y1&&a.x2==b.x2&&a.y2==b.y2&&a.bottom==b.bottom&&a.top==b.top&&a.rail==b.rail&&
+    a.material==b.material&&a.solid==b.solid&&a.shape==b.shape&&a.facing==b.facing&&a.skew==b.skew&&a.layerSurface==b.layerSurface&&a.topFinish==b.topFinish&&a.trim==b.trim&&!a.drape&&!b.drape;};
+   for(const auto& p:m.primitives){if(!p.count||p.first+p.count>m.structures.size())continue;
+    std::vector<Structure> again;try{Primitive q{p.kind,p.x,p.y,p.z,p.w,p.d,p.h,p.facing,p.material,p.solid};q.hand=p.hand;q.rails=p.rails;q.thick=p.thick;expandPrimitive(q,again);}catch(const std::exception&){continue;}
+    bool kept=again.size()==p.count;for(size_t k=0;kept&&k<p.count;++k)kept=same(again[k],m.structures[p.first+k]);
+    if(kept&&!primAt.count(p.first))primAt[p.first]=&p;}
+   for(size_t i=0;i<m.structures.size();++i){
+    if(const auto it=primAt.find(i);it!=primAt.end()){const auto& p=*it->second;Rec r("PRIM");r.i(mi).f(p.kind).n(p.x).n(p.y).n(p.z).n(p.w).n(p.d).n(p.h).i(p.facing).i(p.material);
+     if(!p.solid||p.solidWritten)r.b(p.solid);line(r);i+=p.count-1;continue;}
+    const auto& s=m.structures[i];Rec r("STRUCT");r.i(mi).n(s.x1).n(s.y1).n(s.x2).n(s.y2).n(s.bottom).n(s.top).b(s.rail).i(s.material).f(s.solid?"":"0").f(s.shape?std::to_string(s.shape):"").f(s.facing?std::to_string(s.facing):"");line(r,10);}}
   for(const auto& x:m.fixtures){Rec r("FIXTURE");r.i(mi).i(x.model).n(x.position.x).n(x.position.y).n(x.base).n(x.width).n(x.depth).n(x.height).n(x.yaw).b(x.solid);
    if(x.slopeX!=0||x.slopeY!=0)r.n(x.core).b(x.visible).b(x.anchored).n(x.slopeX).n(x.slopeY);
    else if(x.anchored)r.n(x.core).b(x.visible).b(true);else if(!x.visible)r.n(x.core).b(false);else if(x.core!=1)r.n(x.core);line(r);}
@@ -364,8 +378,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
     else r.f("RAW").i(int(a.type)).st(a.id).i(a.value).i(a.index).i(int(a.enemyKind)).n(a.position.x).n(a.position.y).n(a.z).n(a.amount).i(int(a.sound)).t(a.text);
     line(r);}
   }
-  // Named fields on records the exporter writes another way (a PRIM is written as its STRUCT boxes,
-  // a prefab as the records it placed) cannot follow them.
+  // Named fields on records the exporter writes another way (a prefab as the records it placed, a
+  // PRIM whose boxes were changed after it was laid as those boxes) cannot follow them.
   for(const auto& [key,value]:m.recordFields)if(!written.count(key)&&key.find("/*/")==std::string::npos){std::string text;for(const auto& f:value)text+=(text.empty()?"":"|")+f.key+"="+f.value;note("the named fields of "+key+" ("+text+") have no record to ride on and are left out");}
  }
  // The header: what the file is, and what it cannot carry.
