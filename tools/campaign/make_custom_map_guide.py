@@ -509,6 +509,23 @@ NAMED_FIELDS = [
     ('weapon', 'Weapon', 'rifle handgun none', 'ACTOR', 'What a man carries; none disarms him.'),
     ('role', 'Squad role', 'assault engineer sharpshooter heavy medic rusher', 'ACTOR', 'A guard\'s role in his squad.'),
     ('display', 'Display name', '1 to 40 characters', 'CREATURE, ACTOR', 'The name the game shows for it (the console, what you aim at).'),
+    ('tread', 'Step tops material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "What the steps are walked on: the top 4 cm of each step. The Builder's Paint tool sets it on a click on a step top."),
+    ('riser', 'Step fronts material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', "The step fronts and the body under the tops. Blank: the step tops' material."),
+    ('stringer', 'Side rails material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STAIR', 'The side rails (with the rails field on).'),
+    ('deck', 'Balcony floor material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', "What the balconies (= tiles) on this storey are walked on. The Builder's Paint tool sets it on a click on a balcony."),
+    ('edge', 'Balcony edge material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', "The balconies' edges and undersides, under a 4 cm walking face. Blank: the balcony floor's."),
+    ('railing', 'Railing material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'LAYER', 'The railings along the open balcony edges.'),
+    ('trim', 'Edge trim material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT', "A flooring's edge: a band of this material along its sides, the rest the material field. The Builder's Flooring tool lays it; its Paint tool paints it on a click near the edge."),
+    ('trimwidth', 'Edge trim width (m)', '0.01 to 1', 'STRUCT with trim', 'How wide the edge band is. 0.1 if left out.'),
+    ('drape', 'Follows the ground', '1 or 0', 'STRUCT on the land', '1: a flooring laid over the ground that follows its slope, a path or a patio on a hill. You walk on the ground itself; nothing to bump into.'),
+    ('footing', 'On a slope', 'pad foundation stilts stepped', 'STRUCT', "Stands a room or a floor on the land (or raised off a floor): the box is its footprint, its top the floor in the material field. pad: the ground under it is made level; foundation: a base reaches down to the ground on the low side; stilts: posts hold it and you can walk under it; stepped: terraces up the slope with steps between. Things inside it stand on its floor; its walls stand on it; a door on a raised edge gets steps down to the ground. The Builder's Room tool gives every room on a slope one."),
+    ('snap', 'Floor sits on', 'low mean high fixed', 'STRUCT with footing', 'Which ground under the footprint the floor is measured from (mean if left out). fixed: the bottom field is the height itself. Move the footprint and it measures the ground again.'),
+    ('raise', 'Raise (m)', '0 to 6', 'STRUCT with footing', "Lifts the floor that far above its ground (indoors, above the floor below) on a base of the base material. The Builder raises it by pulling the floor's edge up in the 3D view."),
+    ('base', 'Foundation material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT with footing', 'The base, the posts and the door steps. 42 (cast concrete) if left out.'),
+    ('cap', 'Floor edge material', 'a structure material 0 to 51 (not 1, 4, 6, 9, 17 or 30)', 'STRUCT with footing', "A band round the floor's top edge (a stone lip on a brick base)."),
+    ('capwidth', 'Floor edge width (m)', '0.02 to 0.5', 'STRUCT with cap', 'How wide that band is. 0.1 if left out.'),
+    ('steps', 'Steps at doors', '1 or 0', 'STRUCT with footing', '0: no steps from a door on a raised edge down to the ground outside (they come by themselves where the drop is over 0.25 m).'),
+    ('terrace', 'Terrace length (m)', '1 to 12', 'STRUCT with footing=stepped', 'How long each terrace is along the footprint. 3 if left out.'),
 ]
 
 

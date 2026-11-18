@@ -126,6 +126,99 @@ bool Game::testMapFormat(){
    bool red=false,held=false;for(const auto& c:older.m_clutter){red|=c.traits&&c.traits->name=="red_crate"&&c.traits->tinted;held|=c.traits&&c.traits->name=="held_box";}
    check(ok&&old.rfind("RAWMETAL_SAVE 27 ",0)==0&&rex3&&rex3->faction==AiFaction::Facility&&red&&held&&older.entityPropertyInt(0,"vault","code")==1234,
     "a format 27 save of the room loads: the overrides come from the map again ("+(ok?std::string("loaded"):Game::lastLoadFailure())+")");}
+
+  // ---- Stair and balcony finishes: STAIR tread= riser= stringer=, LAYER deck= edge= railing= ----
+  {auto finished=[&](bool named){
+    std::string body="LAYER|0|1|Gallery|3|0.3"+std::string(named?"|deck=24|edge=12|railing=19":"")+"\n";
+    for(int y=0;y<24;++y)body+="ROW|0|1|"+std::to_string(y)+"|"+(y>=10&&y<=12?std::string(14,'.')+std::string(6,'=')+std::string(4,'.'):std::string(24,'.'))+"\n";
+    body+="STAIR|0|6|10|12|12|0|3|12|0|1|0|0.12|1"+std::string(named?"|tread=46|riser=15|stringer=18":"")+"\n";
+    return loadCustomCampaignText(room("FORMAT|2\n",body),named?"finished.rmc":"plain.rmc");};
+   auto plain=finished(false),dressed=finished(true);
+   Game a(plain),b(dressed);const auto& p=a.world().structures();const auto& q=b.world().structures();
+   auto count=[](const std::vector<Structure>& list,auto&& keep){size_t n=0;for(const auto& s:list)n+=keep(s);return n;};
+   const size_t plainSteps=count(p,[](const Structure& s){return !s.rail&&s.x1>=6&&s.x2<=12.001f&&s.y1>=10&&s.y2<=12&&s.material==0;});
+   check(plainSteps==12&&count(p,[](const Structure& s){return s.finishedRail;})==0,"a stair and a balcony without finishes build as before (12 plain steps, no finished rails; "+std::to_string(plainSteps)+")");
+   const size_t treads=count(q,[](const Structure& s){return !s.rail&&s.material==46&&s.top-s.bottom<.05f&&s.x1>=6&&s.x2<=12.001f;});
+   const size_t risers=count(q,[](const Structure& s){return !s.rail&&s.material==15&&s.x1>=6&&s.x2<=12.001f;});
+   const size_t stringers=count(q,[](const Structure& s){return s.rail&&s.material==18&&s.finishedRail;});
+   check(treads==12&&risers==12&&stringers==24,"the stair has 12 treads of 46 over 12 risers of 15 and 24 stringer pieces of 18 ("+std::to_string(treads)+", "+std::to_string(risers)+", "+std::to_string(stringers)+")");
+   const size_t decks=count(q,[](const Structure& s){return !s.rail&&s.material==24&&std::fabs(s.top-3)<.001f&&std::fabs(s.bottom-2.96f)<.001f;});
+   const size_t edges=count(q,[](const Structure& s){return !s.rail&&s.material==12&&std::fabs(s.top-2.96f)<.001f&&std::fabs(s.bottom-2.7f)<.001f;});
+   const size_t rails=count(q,[](const Structure& s){return s.rail&&s.material==19&&s.finishedRail;});
+   check(decks>0&&decks==edges&&rails>0,"the balcony deck is 24 over a 12 edge with railing 19 ("+std::to_string(decks)+", "+std::to_string(edges)+", "+std::to_string(rails)+")");
+   // Walking support is the same: the tread split leaves the step tops where they were.
+   check(std::fabs(a.world().floorHeight(9.5f,11)-b.world().floorHeight(9.5f,11))<1e-4f&&std::fabs(a.world().floorHeight(17,11)-b.world().floorHeight(17,11))<1e-4f,"stairs and deck stand at the same heights with finishes");
+   const auto exported=exportRmc("F",{{dressed->maps[0],-1}}).text;
+   check(exported.find("|tread=46|riser=15|stringer=18")!=std::string::npos&&exported.find("|deck=24|edge=12|railing=19")!=std::string::npos,"the exporter writes the finishes back");
+   {const auto why=refused(room("FORMAT|2\n","STAIR|0|6|10|12|12|0|3|12|0|1|tread=6\n"),"tread=6");check(why.empty(),"a finish that cannot be drawn as a box is refused, naming the key ("+why+")");}}
+
+  // ---- Flooring: STRUCT trim= trimwidth= (an edge band split off its sides) ----
+  {auto c=loadCustomCampaignText(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51|trim=32|trimwidth=0.15\n"),"trim.rmc");Game g(c);const auto& s=g.world().structures();
+   size_t bands=0,inner=0;for(const auto& st:s){bands+=st.material==32&&std::fabs(st.top-.03f)<1e-4f;inner+=st.material==51&&std::fabs(st.x1-4.15f)<1e-4f&&std::fabs(st.y2-6.85f)<1e-4f;}
+   check(bands==4&&inner==1&&std::fabs(g.world().supportBelow(6,5.5f,2)-.03f)<1e-3f&&std::fabs(g.world().supportBelow(4.05f,5.5f,2)-.03f)<1e-3f,
+    "a trimmed flooring is a 51 field inside four 32 bands, walked at 0.03 everywhere ("+std::to_string(bands)+" bands)");
+   check(exportRmc("T",{{c->maps[0],-1}}).text.find("|trim=32|trimwidth=0.15")!=std::string::npos,"the exporter writes the trim back");
+   check(refused(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51|trimwidth=0.1\n"),"trimwidth").empty(),"trimwidth= without trim= is refused");}
+
+  // ---- Footings indoors: a room raised 0.6 m on a brick base with a stone edge; its door gets steps ----
+  {std::string body="STRUCT|0|8|8|14|13|0|0.1|0|50|footing=foundation|raise=0.6|base=31|cap=33|capwidth=0.12\n"
+    "DOOR|0|10|12|8.5|0|0|0|1|0|-1||||1|||||||0\n";
+   auto c=loadCustomCampaignText(room("FORMAT|2\n",body),"raised.rmc");Game g(c);const World& w=g.world();
+   size_t plinth=0,cap=0,steps=0;for(const auto& st:w.structures()){
+    plinth+=st.material==31&&st.x1<=8.001f&&st.x2>=13.999f&&std::fabs(st.bottom)<1e-3f&&std::fabs(st.top-.6f)<1e-3f;
+    cap+=st.material==33&&std::fabs(st.top-.7f)<1e-3f;
+    steps+=st.material==31&&st.y2<=8.001f&&st.top<.7f&&st.top>0;}
+   check(std::fabs(w.floorHeight(11,10.5f)-.7f)<1e-4f&&std::fabs(w.supportBelow(11,10.5f,3)-.7f)<1e-3f,"the raised room is walked at 0.7 (floorHeight "+std::to_string(w.floorHeight(11,10.5f))+")");
+   check(plinth==1&&cap==4,"a brick plinth fills under it and a stone edge rings its top ("+std::to_string(plinth)+", "+std::to_string(cap)+")");
+   check(steps>=3&&std::fabs(w.supportBelow(11,7.85f,3)-.7f+.7f/4)<.2f,"its door on the north edge gets steps down to the hall floor ("+std::to_string(steps)+")");
+   check(exportRmc("R",{{c->maps[0],-1}}).text.find("|footing=foundation|raise=0.6|base=31|cap=33|capwidth=0.12")!=std::string::npos,"the exporter writes the footing back");
+   check(refused(room("FORMAT|2\n","STRUCT|0|8|8|14|13|0|0.1|0|50|footing=tower\n"),"footing=tower").empty()&&refused(room("FORMAT|2\n","STRUCT|0|8|8|14|13|0|0.1|0|50|footing=pad|raise=9\n"),"raise=9").empty(),
+    "a footing that is not one, or raised past 6 m, is refused");}
+
+  // ---- Footings on the land: pad, foundation, stilts, steps; a draped path; finishes on a hill ----
+  {auto land=[](const std::string& body){std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nFORMAT|2\nCAMPAIGN|L|0\nTERRAIN|7|1|5|16|0.45\n"
+     "MAP|0|Hill|0|0|2|2|0|1|2.8|0.2|brutal_wasteland|0|0|0|0|0|-1|0|0|0|0|0\nLAYER|0|0|Ground|0|0\n";
+    for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";return t+body+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";};
+   // The steepest 8 x 6 spot of that land, measured as the parser will (no footings yet).
+   auto bare=loadCustomCampaignText(land(""),"bare.rmc");const auto& shape=*bare->maps[0]->terrain;
+   int fx=6,fy=6;float worst=-1;for(int y=2;y<=15;++y)for(int x=2;x<=13;++x){float lo=1e9f,hi=-1e9f;for(float yy=y;yy<=y+6;yy+=.5f)for(float xx=x;xx<=x+8;xx+=.5f){float z=authoredTerrainSurface(shape,0,0,xx,yy);lo=std::min(lo,z);hi=std::max(hi,z);}
+    if(hi-lo>worst){worst=hi-lo;fx=x;fy=y;}}
+   auto box=[&](const std::string& tail){return "STRUCT|0|"+std::to_string(fx)+"|"+std::to_string(fy)+"|"+std::to_string(fx+8)+"|"+std::to_string(fy+6)+"|0|0.1|0|50|"+tail+"\n";};
+   check(worst>1.5f,"the test land has a slope to build on ("+std::to_string(worst)+" m)");
+   for(const char* mode:{"pad","foundation","stilts","stepped"}){
+    auto c=loadCustomCampaignText(land(box(std::string("footing=")+mode)),std::string(mode)+".rmc");Game g(c);const World& w=g.world();const auto& sh=*c->maps[0]->terrain;
+    const auto& parts=c->maps[0]->footings.front().parts;float rise=0,spread=0;int through=0;
+    const bool stepped=std::string(mode)=="stepped",terracesAlongX=parts.size()>1&&parts[1].x1>parts[0].x1+.01f;
+    for(const auto& p:parts){float lo=1e9f,hi=-1e9f;
+     for(float y=p.y1+.1f;y<p.y2;y+=.25f)for(float x=p.x1+.1f;x<p.x2;x+=.25f){through+=authoredTerrainSurface(sh,0,0,x,y)>p.slab+.04f;
+      // A terrace's steps up to the next one stand on its far end: measure its floor short of them.
+      if(stepped&&(terracesAlongX?x>p.x2-.9f||x<p.x1+.9f:y>p.y2-.9f||y<p.y1+.9f))continue;
+      const float s=w.supportBelow(x,y,40);lo=std::min(lo,s);hi=std::max(hi,s);}
+     spread=std::max(spread,hi-lo);rise=std::max(rise,std::fabs(hi-p.surface));}
+    if(stepped){
+     // Walked end to end along its middle, no rise is taller than a step.
+     const auto& a=parts.front();const auto& b=parts.back();const bool alongX=b.x2-a.x1>b.y2-a.y1;float worstStep=0,last=-1000;
+     for(float u=.05f;u<(alongX?b.x2-a.x1:b.y2-a.y1)-.05f;u+=.05f){const float x=alongX?a.x1+u:(a.x1+a.x2)*.5f,y=alongX?(a.y1+a.y2)*.5f:a.y1+u;
+      const float s=w.supportBelow(x,y,40);if(last>-999)worstStep=std::max(worstStep,std::fabs(s-last));last=s;}
+     check(worstStep<.21f,"stepped: walked end to end, no rise is taller than a step ("+std::to_string(worstStep)+" m)");}
+    check(spread<.002f&&rise<.002f&&through==0,std::string(mode)+": every piece is one level floor where it was planned, no land through it (spread "+std::to_string(spread)+", "+std::to_string(through)+" through)");
+    if(std::string(mode)=="pad"){const auto& p=parts.front();float off=0;for(float y=p.y1+.1f;y<p.y2;y+=.5f)for(float x=p.x1+.1f;x<p.x2;x+=.5f)off=std::max(off,std::fabs(authoredTerrainSurface(sh,0,0,x,y)-p.level));
+     check(off<.04f,"pad: the land under it is cut and filled to its level ("+std::to_string(off)+" m off)");}
+    if(std::string(mode)=="stepped")check(parts.size()>=2,"stepped: an 8 m footing on the slope is terraces ("+std::to_string(parts.size())+")");
+    if(std::string(mode)=="stilts"){size_t posts=0;for(const auto& st:w.structures())posts+=st.x2-st.x1<.21f&&st.y2-st.y1<.21f&&st.top>st.bottom+.1f;
+     // Under the deck at its lowest ground there is room to stand.
+     const auto& p=parts.front();float lowest=1e9f,lx=0,ly=0;for(float y=p.y1+.5f;y<p.y2-.4f;y+=.5f)for(float x=p.x1+.5f;x<p.x2-.4f;x+=.5f){float z=authoredTerrainSurface(sh,0,0,x,y);if(z<lowest){lowest=z;lx=x;ly=y;}}
+     check(posts>=6&&std::fabs(w.supportBelow(lx,ly,lowest+.5f)-lowest)<.05f,"stilts: "+std::to_string(posts)+" posts hold the deck and the ground under it is walked ("+std::to_string(w.supportBelow(lx,ly,lowest+.5f))+" vs "+std::to_string(lowest)+")");}
+   }
+   // A path that follows the slope: drawn over the ground, walked as the ground.
+   {auto c=loadCustomCampaignText(land(box("drape=1|trim=33|trimwidth=0.2")),"path.rmc");Game g(c);const World& w=g.world();const auto& sh=*c->maps[0]->terrain;
+    bool flat=true;for(const auto& st:w.structures())if(st.drape)flat&=!st.solid;
+    const float x=fx+4.f,y=fy+3.f;check(flat&&std::fabs(w.supportBelow(x,y,40)-authoredTerrainSurface(sh,0,0,x,y))<.02f,"a draped path is not solid and is walked on the ground itself");}
+   // Finishes on a hill: a stair's step tops keep its own height (split after grounding).
+   {auto c=loadCustomCampaignText(land("STAIR|0|"+std::to_string(fx)+"|"+std::to_string(fy)+"|"+std::to_string(fx+6)+"|"+std::to_string(fy+2)+"|0|2|8|0|1|0|0.12|0|tread=51|riser=31\n"),"hillstair.rmc");Game g(c);
+    size_t faces=0,met=0;const auto& s=g.world().structures();for(const auto& face:s)if(face.material==51){++faces;for(const auto& body:s)met+=body.material==31&&std::fabs(body.x1-face.x1)<1e-4f&&std::fabs(body.y1-face.y1)<1e-4f&&std::fabs(body.top-face.bottom)<1e-4f;}
+    check(faces==8&&met==8,"on a hill every step top sits exactly on its step ("+std::to_string(met)+" of "+std::to_string(faces)+")");}
+  }
  }catch(const std::exception& e){check(false,std::string("threw: ")+e.what());}
  report<<(failed?"FAILED ":"PASSED ")<<failed<<" failures\n";
  return failed==0;

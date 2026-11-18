@@ -31,10 +31,11 @@ void writeLook() {
     channelPut(lookFile(), text);
   } catch (...) {
   }
+  // A narrow window's bar (compactTop, layout) has room for the short forms only.
   if (HWND b = GetDlgItem(window, LightViewButton))
-    SetWindowTextW(b, (L"☀ Light: " + std::wstring(lightViewNames[std::clamp(lightView, 0, 3)]) + L" ▾").c_str());
+    SetWindowTextW(b, ((compactTop ? L"☀ " : L"☀ Light: ") + std::wstring(lightViewNames[std::clamp(lightView, 0, 3)]) + L" ▾").c_str());
   if (HWND b = GetDlgItem(window, ThirdPersonToggle))
-    SetWindowTextW(b, thirdPersonPlay ? L"Play: over shoulder" : L"Play: first person");
+    SetWindowTextW(b, compactTop ? (thirdPersonPlay ? L"Play: 3rd" : L"Play: 1st") : thirdPersonPlay ? L"Play: over shoulder" : L"Play: first person");
 }
 void setLightView(int view) {
   lightView = std::clamp(view, 0, 3);

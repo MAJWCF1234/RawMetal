@@ -12,6 +12,7 @@
 #include "GlassFracture.h"
 #include "ScriptDefinition.h"
 #include "TerrainField.h"
+#include "Footing.h"
 #include "EntityTraits.h"
 #include <map>
 
@@ -328,10 +329,17 @@ struct Compactor {float x1,y1,x2,y2,bed,raised,period=9;StateId stopState=0;};
 // non-solid; PRIM records give them collision-proxy boxes (Primitives.h).
 // `facing` is the quarter turn they rise or open toward: 0 +y, 1 +x, 2 -y, 3 -x.
 enum StructureShape:std::uint8_t {ShapeBox,ShapeRamp,ShapeColumn,ShapeArch,ShapeVault,ShapeDome,ShapeStrut,ShapeRoundel};
-struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;};
+// topFinish: a named walking face (STAIR tread=, LAYER deck=) split off the top 4 cm once the map
+// is built and grounded (World::splitFinishes). trim, trimWidth: a flooring's edge band (STRUCT
+// trim=, trimwidth=), split off its sides the same way, so on terrain every piece keeps one height.
+struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;bool finishedRail=false;int topFinish=-1,trim=-1;float trimWidth=0;bool fixedHeight=false;
+ // drape: a flooring laid on the land that follows it (STRUCT drape=1): drawn over the ground, walked on as the ground.
+ bool drape=false;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;
+// A finish a STAIR or balcony may name (tread=, deck=...): a structure material the renderer draws as a plain box.
+inline bool finishMaterialAllowed(int m){return m>=0&&m<=51&&m!=1&&m!=4&&m!=6&&m!=9&&m!=17&&m!=CollisionProxyMaterial;}
 // Terrain source points are one-metre solid/air voxels, Minecraft-style.
 // Surface Nets removes the cube faces and emits the engine-native low-poly skin;
 // collision queries the same voxel density field.
@@ -345,6 +353,8 @@ struct MapLayer {
     std::string_view name;
     float elevation,thickness;
     MapRows rows;
+    // Balcony finishes (LAYER deck=, edge=, railing=; structure materials, -1 the default look).
+    int deck=-1,edge=-1,railing=-1;
 };
 struct Staircase {
     float x1,y1,x2,y2,bottom,top;
@@ -353,6 +363,8 @@ struct Staircase {
     bool openUnderside=false;
     float treadThickness=.12f;
     bool sideRails=false;
+    // Finishes (STAIR tread=, riser=, stringer=; structure materials, -1 the default look).
+    int tread=-1,riser=-1,stringer=-1;
 };
 
 // Shared geometry records for built-in and runtime-authored maps. Loading these
@@ -362,6 +374,7 @@ struct AuthoredLayerData {
     std::string name;
     float elevation=0,thickness=0;
     std::array<std::string,24> rows{};
+    int deck=-1,edge=-1,railing=-1; // LAYER deck=, edge=, railing= (MapLayer)
 };
 struct AuthoredTerminalData {
     Vec2 position{};
@@ -479,6 +492,10 @@ struct AuthoredMapData {
     std::vector<Hazard> hazards;
     std::vector<Compactor> compactors;
     std::vector<Structure> structures;
+    // STRUCT footing= (Footing.h): the structure it dresses, how, and its planned pieces
+    // (the ground under them measured once the campaign's land is known).
+    struct FootingData {size_t structure=0;FootingSpec spec;int base=-1,cap=-1;float capWidth=.1f;bool steps=true;std::vector<FootingPart> parts;bool land=false;};
+    std::vector<FootingData> footings;
     std::vector<Staircase> stairs;
     std::vector<AuthoredTerminalData> terminals;
     std::vector<AuthoredSign> signs;
@@ -925,6 +942,13 @@ private:
     ReactorStage m_reactorStage=ReactorStage::NoDisk;
     void refreshReactorTerminals();
     void buildLayers(std::span<const Staircase> stairs);
+    bool splitFinishes(); // the faces and trims Structure marks, after grounding
+    void buildFootings(); // STRUCT footing=: slabs, plinths, posts, terrace and door steps (Footing.h)
+    // Where a footing's floor is walked: floorHeight inside it, and what stands in it stands on.
+    struct FootingArea {float x1,y1,x2,y2,surface;};
+    std::vector<FootingArea> m_footingAreas;
+    const FootingArea* footingAreaAt(float x,float y)const{for(const auto& a:m_footingAreas)if(x>=a.x1-.0005f&&x<=a.x2+.0005f&&y>=a.y1-.0005f&&y<=a.y2+.0005f)return &a;return nullptr;}
+    void indexStructureCells();
 };
 
 }

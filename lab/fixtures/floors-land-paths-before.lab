@@ -1,0 +1,7 @@
+# floors-land-paths-before (tools/dev/floors_fixtures.py). Tube: floors.
+world custom "lab/fixtures/floors-plain.rmc"
+map 6
+camera 8.5 1 2.7 107.354 -34.2
+size 1280 720
+frames 30
+floors-shot land-paths-before

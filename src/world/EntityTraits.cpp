@@ -109,7 +109,12 @@ bool parseActorAiWord(std::string_view word,ActorAiMode& out){
 
 const std::vector<std::string_view>& knownNamedKeys(){
  static const std::vector<std::string_view> keys{"name","mass","health","breakable","density","floats","friction","restitution","frozen","volume","soft","anchored","solid","material",
-  "tint","scale","texture","emissive","impact","faction","ai","hp","weapon","role","display"};
+  "tint","scale","texture","emissive","impact","faction","ai","hp","weapon","role","display",
+  // Finishes, read by the STAIR and LAYER parsers (CustomCampaign.cpp finishField).
+  "tread","riser","stringer","deck","edge","railing","trim","trimwidth",
+  // Footings (Footing.h), read by the STRUCT parser.
+  "footing","snap","raise","base","cap","capwidth","steps","terrace",
+  "drape"};
  return keys;
 }
 std::string recordFieldKey(std::string_view tag,std::string_view parent,int ordinal){

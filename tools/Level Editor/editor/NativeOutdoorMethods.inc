@@ -53,6 +53,7 @@
       if (f.size() >= 7)
         s.ground.push_back({number(f[1], 0), number(f[2], 0), number(f[3], 0), number(f[4], 0), int(number(f[5], 8)), number(f[6], 1)});
     }
+    planFootings(&s); // footings measure the land as it is, then cut their pads in (NativeGroundMethods.inc)
     terrainShapeCache = std::move(s);
     return &*terrainShapeCache;
   }
@@ -77,6 +78,9 @@
   float groundAt(float x, float y) const {
     if (!onTerrain())
       return layerElevation();
+    // Inside a footing, the ground is its floor (the engine's World::floorHeight).
+    if (const auto *part = footingPartAt(map, x, y))
+      return part->surface;
     auto [ox, oy] = mapOrigin();
     return retro::authoredTerrainSurface(*campaignTerrain(), ox, oy, x, y);
   }
