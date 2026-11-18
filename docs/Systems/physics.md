@@ -2,8 +2,8 @@
 
 Vectra is RawMetal's rigid-body engine. It moves the game's model props (Clutter with a model): crates,
 barrels, bottles, chairs, tables, carts, containers and the rest. Junk and shards keep the older point physics.
-The prop physics that came before Vectra, a yaw-mostly box with tipping by rule, is still there as **legacy**,
-behind a switch (below).
+The prop physics that came before Vectra, a yaw-mostly box with tipping by rule, is still there as **legacy**.
+For now legacy is the default and Vectra sits behind the switch (below).
 
 - Core: `src/game/physics/Vectra.h`, `Vectra.cpp` (namespace `retro::vectra`). It has no game code in it.
 - Props as bodies: `src/game/physics/PropBodies.h`, `.cpp`. The shape and material catalogue, the switch, the
@@ -11,7 +11,8 @@ behind a switch (below).
 - Game step: `src/game/RigidClutter.cpp` (`Game::simulateRigidProps`). It covers world contacts, glass, water,
   sounds, body contacts, the held prop and the player's body.
 - Tubes: `src/lab/tubes/RigidProps.cpp`. `rigid-ab` compares Vectra and legacy and prints the numbers.
-  `rigid` and `rigid-legacy` film the same scenes on each. `rigid-trace` and `rigid-probe` are for debugging.
+  `rigid` and `rigid-legacy` film the same scenes on each. `vectra-emergence` checks behaviour that comes from
+  the solver alone. `rigid-trace` and `rigid-probe` are for debugging.
   `tools/dev/rigid_sheet.py` lays the films side by side.
 
 ## Bodies
@@ -161,9 +162,11 @@ and roll; the result matches the saved turn to 0.001 mrad (`rigid-ab`).
 
 ## The legacy switch
 
-`RM_PROPS=legacy` (or `old`) in the environment, or the knob `props.legacy 1` (`RM_TUNE` / `lab/tune.txt`),
-runs the old prop physics: simulateClutter's own step and the old container riding. `vectra::forceLegacyProps`
-sets it for the lab's A/B tubes. Vectra's own knobs:
+**Legacy is the default** until Vectra beats it on every row of the scorecard (cost with 100 awake props,
+stack settling, real maps, the emergence tubes). Turn Vectra on with `RM_PROPS=vectra` in the environment, or
+the knob `props.legacy 0` (`RM_TUNE` / `lab/tune.txt`). `RM_PROPS=legacy` forces legacy, which is
+simulateClutter's own step and the old container riding. `vectra::forceLegacyProps` sets either for the lab's
+A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's own knobs:
 
 | Knob | Default | What it sets |
 | --- | --- | --- |
