@@ -25,6 +25,8 @@
 #include <stdexcept>
 #include <chrono>
 #include <mutex>
+#include <thread>
+#include <future>
 #include <set>
 #include <map>
 #include <sstream>
@@ -138,7 +140,49 @@ void startupMark(const char* label){static const bool on=std::getenv("RM_STARTUP
  static auto last=std::chrono::steady_clock::now();auto now=std::chrono::steady_clock::now();
  std::fprintf(stderr,"startup: %-28s %8.1f ms (meshes so far %.1f ms)\n",label,std::chrono::duration<double,std::milli>(now-last).count(),g_meshLoadMicros.load()/1000.0);last=now;}
 }
-SoftwareRenderer::~SoftwareRenderer()=default;
+SoftwareRenderer::~SoftwareRenderer(){for(auto& job:m_warmJobs)if(job.valid())job.wait();}
+void SoftwareRenderer::warmModel(int model)const{
+ if(model<0||model>=int(m_facilityMeshes.size()))return;
+ const auto& mesh=m_facilityMeshes[size_t(model)];std::set<int> parts;
+ for(const auto& face:mesh.triangles)parts.insert(face.part);
+ for(int part:parts)facilityTexture(model,part);
+}
+void SoftwareRenderer::warmChunks(const Game& game){
+ const int chunks=game.chunkCount();if(int(m_warmKeys.size())<chunks)m_warmKeys.resize(size_t(chunks),0);
+ std::erase_if(m_warmJobs,[](std::future<void>& job){return !job.valid()||job.wait_for(std::chrono::seconds(0))==std::future_status::ready;});
+ for(int level=0;level<chunks;++level){
+  if(level!=game.level()&&!game.chunkResident(level))continue;
+  const World& w=game.chunkWorld(level);const auto& clutter=game.chunkClutter(level);
+  const std::uint64_t key=(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w))*1099511628211ull)^(std::uint64_t(w.fixtures().size())<<40)^(std::uint64_t(clutter.size())<<20)^std::uint64_t(level+1);
+  if(m_warmKeys[size_t(level)]==key)continue;
+  m_warmKeys[size_t(level)]=key;
+  std::vector<int> models;
+  auto want=[&](int model){if(model>=0&&model<int(m_facilityMeshes.size())&&!m_facilityMeshes.slot(size_t(model)).loaded())models.push_back(model);};
+  for(const auto& fixture:w.fixtures())want(fixture.model);
+  for(const auto& c:clutter)want(c.model);
+  std::sort(models.begin(),models.end());models.erase(std::unique(models.begin(),models.end()),models.end());
+  if(models.empty())continue;
+  if(level==game.level()){
+   // The map in play: decoded on every core before its first frame.
+   std::atomic<size_t> next{0};std::exception_ptr failure;std::mutex failureLock;
+   const unsigned count=std::clamp(std::thread::hardware_concurrency(),1u,16u);std::vector<std::thread> workers;
+   for(unsigned i=0;i<std::min<size_t>(count,models.size());++i)workers.emplace_back([&]{for(size_t k;(k=next++)<models.size();)try{warmModel(models[k]);}catch(...){std::lock_guard hold(failureLock);if(!failure)failure=std::current_exception();}});
+   for(auto& worker:workers)worker.join();
+   if(failure)std::rethrow_exception(failure);
+  }else{
+   // A neighbour streamed in: one background thread, so play keeps its cores.
+   m_warmJobs.push_back(std::async(std::launch::async,[this,models]{for(int model:models)try{warmModel(model);}catch(...){}}));
+  }
+ }
+}
+void SoftwareRenderer::loadWholeLibrary(){
+ for(size_t model=0;model<m_facilityMeshes.size();++model)warmModel(int(model));
+ for(const auto& [name,entry]:m_libraryTextures)findFacilityTexture(name);
+}
+std::array<size_t,4> SoftwareRenderer::libraryResidency()const{
+ size_t textures=0;for(const auto& [name,entry]:m_libraryTextures)textures+=entry->ready.load();
+ return {m_facilityMeshes.loaded(),m_facilityMeshes.size(),textures,m_libraryTextures.size()};
+}
 void SoftwareRenderer::setTexturePresentScale(int scale){
  if(scale!=1&&scale!=2&&scale!=4)return;
  g_texturePresentScale=scale;
@@ -307,28 +351,10 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(int i=0;i<15;++i)m_facilityTextures.emplace(metroMaterials[i],loadTexture(449+i));
  m_facilityTextures.emplace("metro_Glass",m_glassTexture);
  m_facilityTextures.emplace("metro_Vending_machine",loadTexture(465));
-startupMark("core textures"); // Library imports (tools/library/register.py): "material resource" per line.
+startupMark("core textures"); // Library imports (tools/library/register.py): "material resource" per line. Each is
+ // decoded and finished the first time a model asks for it (findFacilityTexture), not here.
  {auto text=loadResource(466);std::istringstream lines(std::string(text.begin(),text.end()));std::string material;int resource=0;
-  while(lines>>material>>resource){auto texture=loadTexture(resource);
-   // A pack's lit ceiling-lamp panel ("..ceiling_lamp_N_on"): its tubes are
-   // printed amber, so they go to a neutral white the lamp's own colour
-   // temperature tints, and glow from the bright texels like the lab diffuser.
-   if(material.find("ceiling_lamp_")!=std::string::npos&&material.ends_with("_on")){texture.emission.resize(texture.pixels.size());
-    for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
-     float k=std::clamp((y-.35f)/.5f,0.f,1.f);unsigned v=unsigned(std::min(255.f,y*255.f*(1+k*.35f)));
-     texture.pixels[i]=(p&0xff000000u)|(v<<16)|(v<<8)|std::min(255u,v+6);unsigned e=unsigned(v*k);texture.emission[i]=0xff000000u|(e<<16)|(e<<8)|e;}}
-   // "..._glow": the material lights itself from its own bright texels (a resonance
-   // cell's veins, seams and motes); its dark texels stay dark and take the room's light.
-   if(material.ends_with("_glow")){texture.emission.resize(texture.pixels.size());
-    for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
-     float k=std::clamp((y-.28f)/.4f,0.f,1.f);unsigned r=unsigned(((p>>16)&255)*k),g=unsigned(((p>>8)&255)*k),b=unsigned((p&255)*k);
-     texture.emission[i]=0xff000000u|(r<<16)|(g<<8)|b;}
-    // Resonance crystal: polished mineral that glints and mirrors the room, its glow in its cores.
-    if(material.starts_with("res_crystal_")){texture.crystal=true;texture.glossStrength=.78f;}}
-   // "..._glass": a protective pane drawn in the blended pass; the texture's alpha is
-   // its opacity (a light tint, denser at streaks and frosted rims), with a gloss sheen.
-   if(material.ends_with("_glass")){texture.transparent=true;texture.glossStrength=.45f;}
-   m_facilityTextures.emplace(material,std::move(texture));}}
+  while(lines>>material>>resource)if(!m_facilityTextures.count(material)&&!m_libraryTextures.count(material)){auto entry=std::make_unique<LibraryTexture>();entry->resource=resource;m_libraryTextures.emplace(material,std::move(entry));}}
 startupMark("library textures"); for(int area=0;area<3;++area){m_areaWalls[size_t(area)]=loadTexture(415+area*2);attachNormal(m_areaWalls[size_t(area)],416+area*2,true,0);
   m_areaFloors[size_t(area)]=loadTexture(421+area*2);attachNormal(m_areaFloors[size_t(area)],422+area*2,true,0);}
  m_areaWalls[1].glossStrength=.2f;m_areaWalls[2].glossStrength=.16f;
@@ -381,25 +407,10 @@ startupMark("library textures"); for(int area=0;area<3;++area){m_areaWalls[size_
  m_pressureWall.glossStrength=.20f;m_pressureFloor.glossStrength=.32f;
  m_pressureMetal.glossStrength=.44f;m_concrete.glossStrength=.08f;
  // Physical response is shared by every use of the imported material.
- for(auto&[name,texture]:m_facilityTextures){
-  bool wood=name=="wood_1"||name=="wooden_crate_8"||name=="wooden_crate_hx_2_1";
-  // This supplied crate atlas averages only 31/255 red. Calibrate its wood
-  // albedo before linear lighting; increasing room ambient hid every shadow.
-  if(name=="wooden_crate_8"||name=="wood_1"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
-
-  // The research-receiving specimen crate and holding cage ship with metal
-  // atlases averaging 25-64/255; lit like any other albedo they fall to a flat
-  // black silhouette in a lit room. Same calibration as the wood above.
-  // The wire-mesh fences and cell bars (mean 13-27/255) get the same lift.
-  float steelLift=name=="lab_specimen_crate_metal_crate_3"||name=="med_holding_cage_metal_hr_2"||name=="med_holding_cage_metal_floor_mx_1"||name=="wall_6"||name=="wall_7"||name=="vending_machine_1"?2.6f:name=="mine_mesh_fence_fence"||name=="mine_mesh_doorway_fence"?3.5f:name.starts_with("med_cell_bars")||name=="lab_cell_gate_metal_4"?2.6f:0.f;
-  if(steelLift>0.f){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*steelLift))<<shift);}prepareDecal(texture,false);}
-
-  bool wall=name.starts_with("wall_")&&name!="wall_box_2";
-  texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;
-  deriveSurfaceNormal(texture,name=="fl_tire.bmp_fl_tire.png"?.18f:wood?.65f:wall?.8f:.45f);
-  if(name=="fl_tire.bmp_fl_tire.png")texture.glossStrength=.02f;
-  if(name=="electronics_etx_part_1_screen")texture.glossStrength=.34f;
- }
+ // A name both in the library and set up above after it was read (the forklift's, the console
+ // screen's) kept the library's texture: the first emplace won.
+ for(const auto& [name,entry]:m_libraryTextures)m_facilityTextures.erase(name);
+ for(auto&[name,texture]:m_facilityTextures)finishFacilityTexture(name,texture);
 
  {auto&computer=m_facilityTextures.at("pc_1");
   if(computer.width!=348||computer.height!=307)throw std::runtime_error("Computer CRT atlas dimensions mismatch");
@@ -562,7 +573,7 @@ for(auto&pixel:m_coastWater.pixels)pixel=seaTint(pixel);for(auto&mip:m_coastWate
 startupMark("engine textures"); m_concreteFloor=m_concrete;
  {std::vector<MaterialJob> jobs;auto apply=[&](Texture& t,Material m,const char* name){jobs.push_back({&t,int(m),name});};
   for(auto& [name,t]:m_facilityTextures){if(t.additive)continue;
-   apply(t,t.liquid?Material::Water:t.crystal?Material::Crystal:t.transparent&&name.find("glass")!=std::string::npos?Material::Glass:classifyMaterial(name),name.c_str());}
+   apply(t,Material(facilityMaterial(name,t)),name.c_str());}
   // Surface sets and structure finishes, in surfaceFinishes order. Floor tile is worn vinyl-composition
   // or quarry tile (no floor here is a glazed mirror); glazed tile is a wall finish.
   using M=Material;
@@ -627,12 +638,68 @@ Vec2 SoftwareRenderer::finishRepeat(const Texture& texture)const{
  for(size_t i=0;i<m_surfaceTextures.size();++i)if(&texture==&m_surfaceTextures[i])return {surfaceFinishes[i].repeat,surfaceFinishes[i].repeat};
  return {};
 }
+// Every facility texture's shared finish (engine and library alike): calibrated albedo for the
+// dark supplied atlases, gloss, and the surface normal derived from the albedo.
+void SoftwareRenderer::finishFacilityTexture(const std::string& name,Texture& texture){
+  bool wood=name=="wood_1"||name=="wooden_crate_8"||name=="wooden_crate_hx_2_1";
+  // This supplied crate atlas averages only 31/255 red. Calibrate its wood
+  // albedo before linear lighting; increasing room ambient hid every shadow.
+  if(name=="wooden_crate_8"||name=="wood_1"){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*2.2f))<<shift);}prepareDecal(texture,false);}
+
+  // The research-receiving specimen crate and holding cage ship with metal
+  // atlases averaging 25-64/255; lit like any other albedo they fall to a flat
+  // black silhouette in a lit room. Same calibration as the wood above.
+  // The wire-mesh fences and cell bars (mean 13-27/255) get the same lift.
+  float steelLift=name=="lab_specimen_crate_metal_crate_3"||name=="med_holding_cage_metal_hr_2"||name=="med_holding_cage_metal_floor_mx_1"||name=="wall_6"||name=="wall_7"||name=="vending_machine_1"?2.6f:name=="mine_mesh_fence_fence"||name=="mine_mesh_doorway_fence"?3.5f:name.starts_with("med_cell_bars")||name=="lab_cell_gate_metal_4"?2.6f:0.f;
+  if(steelLift>0.f){for(auto&pixel:texture.pixels)for(int shift:{0,8,16}){auto channel=(pixel>>shift)&255u;pixel=(pixel&~(255u<<shift))|(std::min(255u,unsigned(channel*steelLift))<<shift);}prepareDecal(texture,false);}
+
+  bool wall=name.starts_with("wall_")&&name!="wall_box_2";
+  texture.glossStrength=wood?.06f:wall?.10f:name=="pc_1"?.20f:.32f;
+  deriveSurfaceNormal(texture,name=="fl_tire.bmp_fl_tire.png"?.18f:wood?.65f:wall?.8f:.45f);
+  if(name=="fl_tire.bmp_fl_tire.png")texture.glossStrength=.02f;
+  if(name=="electronics_etx_part_1_screen")texture.glossStrength=.34f;
+}
+int SoftwareRenderer::facilityMaterial(const std::string& name,const Texture& t){
+ return int(t.liquid?Material::Water:t.crystal?Material::Crystal:t.transparent&&name.find("glass")!=std::string::npos?Material::Glass:classifyMaterial(name));}
+// A library texture as the eager start-up made it: decoded, its lamp/glow/glass finish by
+// name, the shared finish, then its physical material.
+SoftwareRenderer::Texture SoftwareRenderer::libraryTexture(const std::string& material,int resource){
+ auto texture=loadTexture(resource);
+   // A pack's lit ceiling-lamp panel ("..ceiling_lamp_N_on"): its tubes are
+   // printed amber, so they go to a neutral white the lamp's own colour
+   // temperature tints, and glow from the bright texels like the lab diffuser.
+   if(material.find("ceiling_lamp_")!=std::string::npos&&material.ends_with("_on")){texture.emission.resize(texture.pixels.size());
+    for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
+     float k=std::clamp((y-.35f)/.5f,0.f,1.f);unsigned v=unsigned(std::min(255.f,y*255.f*(1+k*.35f)));
+     texture.pixels[i]=(p&0xff000000u)|(v<<16)|(v<<8)|std::min(255u,v+6);unsigned e=unsigned(v*k);texture.emission[i]=0xff000000u|(e<<16)|(e<<8)|e;}}
+   // "..._glow": the material lights itself from its own bright texels (a resonance
+   // cell's veins, seams and motes); its dark texels stay dark and take the room's light.
+   if(material.ends_with("_glow")){texture.emission.resize(texture.pixels.size());
+    for(size_t i=0;i<texture.pixels.size();++i){auto p=texture.pixels[i];float y=(((p>>16)&255)*.3f+((p>>8)&255)*.59f+(p&255)*.11f)/255.f;
+     float k=std::clamp((y-.28f)/.4f,0.f,1.f);unsigned r=unsigned(((p>>16)&255)*k),g=unsigned(((p>>8)&255)*k),b=unsigned((p&255)*k);
+     texture.emission[i]=0xff000000u|(r<<16)|(g<<8)|b;}
+    // Resonance crystal: polished mineral that glints and mirrors the room, its glow in its cores.
+    if(material.starts_with("res_crystal_")){texture.crystal=true;texture.glossStrength=.78f;}}
+   // "..._glass": a protective pane drawn in the blended pass; the texture's alpha is
+   // its opacity (a light tint, denser at streaks and frosted rims), with a gloss sheen.
+   if(material.ends_with("_glass")){texture.transparent=true;texture.glossStrength=.45f;}
+ finishFacilityTexture(material,texture);
+ if(!texture.additive)applyMaterial(texture,facilityMaterial(material,texture),material.c_str());
+ return texture;
+}
+const SoftwareRenderer::Texture* SoftwareRenderer::findFacilityTexture(const std::string& name)const{
+ if(auto found=m_facilityTextures.find(name);found!=m_facilityTextures.end())return &found->second;
+ auto lazy=m_libraryTextures.find(name);if(lazy==m_libraryTextures.end())return nullptr;
+ auto& entry=*lazy->second;
+ if(!entry.ready.load(std::memory_order_acquire))std::call_once(entry.once,[&]{entry.texture=libraryTexture(name,entry.resource);entry.ready.store(true,std::memory_order_release);});
+ return &entry.texture;
+}
 const SoftwareRenderer::Texture& SoftwareRenderer::facilityTexture(int mesh,int part)const{
  if(mesh<0||mesh>=int(m_facilityMeshes.size()))throw std::runtime_error("Invalid facility mesh index "+std::to_string(mesh));
  const auto& model=m_facilityMeshes[size_t(mesh)];
  if(part>=0&&part<int(model.materialNames.size())){
   const auto& name=model.materialNames[size_t(part)];
-  auto found=m_facilityTextures.find(name);if(found!=m_facilityTextures.end())return found->second;
+  if(const auto* found=findFacilityTexture(name))return *found;
  }
  // The three service-map FBX files each ship with one documented texture, but
  // their internal material labels are exporter metadata and are not guaranteed
@@ -1473,6 +1540,7 @@ void SoftwareRenderer::render(const Game& game){
  auto nearby=[&](int level){if(level==game.level())return true;if(!game.chunkResident(level))return false;if(game.worldId()!=WorldId::Custom)return true;
   auto here=game.chunkOffset(game.level())+m_view.pos,other=game.chunkOffset(level);
   float dx=std::max({other.x-here.x,0.f,here.x-other.x-24}),dy=std::max({other.y-here.y,0.f,here.y-other.y-24});return dx*dx+dy*dy<=48.f*48.f;};
+ warmChunks(game);
  auto scene=[&]{bool parallel=!m_vrRendering&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{

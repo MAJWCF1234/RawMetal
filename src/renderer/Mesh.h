@@ -3,6 +3,10 @@
 #include <string>
 #include <array>
 #include <initializer_list>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <utility>
 #include "../core/Math.h"
 #include "../ThirdParty/ufbx/ufbx.h"
 namespace retro {
@@ -20,6 +24,14 @@ public:
  // anchorResource: a baked civilian's .anchors sidecar (RightHand and
  // RightForeArm per sample). The Worker (277) finds its own 282.
  explicit Mesh(int resource,const char* nodeFilter="",int animationResource=0,int anchorResource=0);
+ // What a mesh is made from: its resources, as the constructor took them.
+ struct Source {int resource=0;std::string nodeFilter;int animation=0,anchor=0;};
+ const Source& source()const{return m_source;}
+ // While a Deferred lives on a thread, a Mesh made there only records its Source and
+ // decodes nothing: a LazyMesh takes it and decodes it the first time it is asked for.
+ // Braced lists run in order, so `{Mesh::Deferred{},Mesh{163},Mesh{164}}` defers both.
+ struct Deferred {Deferred(){deferring()=true;}~Deferred(){deferring()=false;}Deferred(const Deferred&)=delete;Deferred& operator=(const Deferred&)=delete;};
+ static bool& deferring(){thread_local bool on=false;return on;}
  ~Mesh();
  Mesh(const Mesh&)=delete;
  Mesh& operator=(const Mesh&)=delete;
@@ -75,6 +87,7 @@ public:
  std::string description;
  std::vector<std::string> materialNames;
 private:
+ Source m_source;
  std::vector<unsigned char> m_creatureFrames;
  std::vector<unsigned char> m_anchorFrames;
  std::array<Point3,2> m_poseAnchors{};
@@ -112,5 +125,36 @@ private:
  ufbx_scene* m_scene=nullptr;
  ufbx_scene* m_bindScene=nullptr;
  std::vector<ufbx_transform_override> m_fingerGrip;
+};
+// A model decoded the first time something draws, measures or warms it, not at start-up:
+// the library grows by the model and a map uses a few dozen of them. get() is safe from
+// any thread (the first caller decodes, the others wait for it); the Mesh it returns is
+// the one the eager constructor made, so what it draws is the same.
+class LazyMesh {
+public:
+ LazyMesh(Mesh&& deferred):m_source(deferred.source()){}
+ LazyMesh(const LazyMesh&)=delete;LazyMesh& operator=(const LazyMesh&)=delete;
+ Mesh& get()const{if(!m_ready.load(std::memory_order_acquire))std::call_once(m_once,[this]{m_mesh=std::make_unique<Mesh>(m_source.resource,m_source.nodeFilter.c_str(),m_source.animation,m_source.anchor);m_ready.store(true,std::memory_order_release);});return *m_mesh;}
+ bool loaded()const{return m_ready.load(std::memory_order_acquire);}
+ const Mesh::Source& source()const{return m_source;}
+private:
+ Mesh::Source m_source;mutable std::once_flag m_once;mutable std::unique_ptr<Mesh> m_mesh;mutable std::atomic<bool> m_ready{false};
+};
+// The library's models: written as an array of Mesh{id} (tools/library/register.py adds
+// to it), indexed as one, each decoded on first use. Starts with Mesh::Deferred{}.
+template<size_t N> class LazyMeshes {
+public:
+ template<class... M> LazyMeshes(const Mesh::Deferred&,M&&... meshes):m_meshes{LazyMesh(std::forward<M>(meshes))...}{static_assert(sizeof...(M)==N,"one Mesh per facility model");Mesh::deferring()=false;}
+ Mesh& operator[](size_t i)const{return m_meshes[i].get();}
+ Mesh& at(size_t i)const{return m_meshes.at(i).get();}
+ const LazyMesh& slot(size_t i)const{return m_meshes.at(i);}
+ static constexpr size_t size(){return N;}
+ size_t loaded()const{size_t n=0;for(const auto& m:m_meshes)n+=m.loaded();return n;}
+ // Walking every model decodes every model (a full report or check asks for that).
+ struct iterator {const LazyMesh* at;Mesh& operator*()const{return at->get();}iterator& operator++(){++at;return *this;}bool operator!=(const iterator& o)const{return at!=o.at;}};
+ iterator begin()const{return {m_meshes.data()};}
+ iterator end()const{return {m_meshes.data()+N};}
+private:
+ std::array<LazyMesh,N> m_meshes;
 };
 }
