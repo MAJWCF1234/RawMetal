@@ -1,6 +1,7 @@
 #include "../core/FrameProfile.h"
 #include "Game.h"
 #include "../core/Ray.h"
+#include "physics/PropQueries.h"
 namespace retro {
 namespace {
 float magnitude(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
@@ -38,7 +39,10 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
   {const auto&suits=hungSuits(m_level);for(size_t s=0;s<suits.size();++s){int joint=-1;float distance=suits[s].rayHit({origin.x,origin.y,origin.z},{ray.x,ray.y,ray.z},joint);
    if(joint>=0&&distance<hit.distance)hit={ShotKind::Ragdoll,m_level,int(s+1)*Ragdoll::Count+joint,distance,distance,origin+ray*distance,{}};}}
   for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&list=chunkClutter(level);auto shift=chunkOffset(level)-activeOrigin;
-   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0)continue;auto e=c.extent();Point3 center{c.pos.x+shift.x,c.pos.y+shift.y,c.z+e[2]},n;float distance=rayBoxFraction(origin,ray*range,center-Point3{e[0],e[1],e[2]},center+Point3{e[0],e[1],e[2]},&n)*range;if(distance>=hit.distance)continue;
+   // Each prop in its own shape as it is turned (a crate's corner, the gap under a chair's seat), not its box.
+   const Point3 local=origin-Point3{shift.x,shift.y,0};
+   for(size_t i=0;i<list.size();++i){const auto&c=list[i];if(c.broken||c.model<0)continue;vectra::QueryHit q;if(!vectra::rayCastProp(c,local,ray,std::min(range,hit.distance),q))continue;
+    const float distance=q.distance;const Point3 n=q.normal;if(distance>=hit.distance)continue;
     float block=propMaterialTraits(c.material()).blockMass;if(block>0&&c.mass()>=block)hit={ShotKind::Prop,level,int(i),distance,distance,origin+ray*distance,n};else passages.push_back({2,level,int(i),distance,origin+ray*distance,n});
    }
   }
