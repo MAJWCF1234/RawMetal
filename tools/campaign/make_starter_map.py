@@ -296,6 +296,19 @@ class Starter:
         return len(out)
 
 
+# The parts imported for 1.5.3 (docs/Assets/library-parts-1.5.3.md): every bld_* building part, and
+# these mine and cave pieces. They stand in the Parts Gallery, not the museum rows, so no row grows
+# a map and no later map is renumbered.
+GALLERY_EXTRA = ('mine_lantern', 'mine_barrel', 'mine_barrel_wide', 'mine_crate', 'mine_crate_long', 'mine_petrol_can',
+                 'mine_locker', 'mine_shelving', 'mine_tray', 'mine_gravel_heap', 'cave_rock_boulder_b', 'cave_rock_lump',
+                 'cave_rock_pillar', 'cave_rock_tall', 'cave_rock_wall', 'cave_rock_chunk', 'cave_rock_2m_a',
+                 'cave_rock_2m_b', 'cave_rock_4m_a', 'cave_rock_4m_b', 'cave_gem_pile_blue', 'cave_gem_pile_red')
+
+
+def in_gallery(name):
+    return name.startswith('bld_') or name in GALLERY_EXTRA
+
+
 def models():
     t = open(os.path.join(ROOT, 'src', 'world', 'ModelIds.h')).read()
     names = [(int(i), n) for n, i in re.findall(r'inline constexpr int (\w+)=(\d+);', t)]
@@ -582,6 +595,7 @@ def build():
     groups = {t: [] for t, _ in SECTIONS}
     for sl, name, w, d, h, yaw in allm:
         if name.startswith('growth_'): continue      # the Growth brush's pieces stand in the Showcase Atrium instead
+        if in_gallery(name): continue                # the 1.5.3 parts stand in the Parts Gallery (no museum row grows)
         groups[next(t for t, test in SECTIONS if test(name, sl))].append((sl, name, w, d, h, yaw))
     palette = [0xc8a050, 0x60a0d0, 0xd06060, 0x60c0a0, 0xd0b040, 0xa08060, 0x8080c0, 0xc07040, 0x70b050]
     for gi, (title, _) in enumerate(SECTIONS):
@@ -1906,6 +1920,58 @@ def hillside(s, slot, catalogue, m):
     return m
 
 
+GALLERY_ORDER = (('walls', ('bld_wall',)), ('pillars and beams', ('bld_pillar', 'bld_beam')),
+                 ('stairs and ramps', ('bld_stairs', 'bld_ramp')), ('doors and windows', ('bld_door', 'bld_gate', 'bld_window')),
+                 ('decks and rails', ('bld_catwalk', 'bld_railing', 'bld_scaffold', 'bld_ladder', 'bld_metal_fence', 'bld_barricade')),
+                 ('pipes and tunnels', ('bld_pipe', 'bld_culvert', 'bld_service', 'bld_cable')),
+                 ('tanks and machines', ('bld_tank', 'bld_cage', 'bld_switch', 'bld_air', 'bld_vent')),
+                 ('lamps', ('bld_lamp', 'bld_ceiling', 'mine_lantern')), ('rubble', ('bld_brick', 'bld_gravel', 'mine_gravel')),
+                 ('mine stores', ('mine_',)), ('cave rock', ('cave_rock',)), ('cave gems', ('cave_gem',)))
+
+
+def parts_gallery(s, slot, catalogue, yards):
+    """PARTS GALLERY: the parts imported for 1.5.3 set out on two levelled gravel yards, north and
+    south, each part at its own size (the biggest brought down to 2.9 m across, 3.4 m tall), shelf
+    by shelf: walls, pillars and beams, stairs, doors and windows, decks and rails, pipes and
+    tunnels, tanks and machines, lamps, rubble, the mine's stores, cave rock and gems. Every part
+    has a zone with its slot and name; the Campaign Builder lists them under Building, Mine and
+    Caves."""
+    for m in yards:
+        ox, oy = 24 * m['col'], 24 * m['row']
+        s.world += ['# Parts Gallery (map %d): a level gravel yard for the 1.5.3 parts.' % m['index']]
+        s.world.append('TERRAIN_FLAT|%d|%d|%d|%d|0|2' % (ox + 2, oy + 1, ox + 22, oy + 23))
+        s.world.append('GROUND|%d|%d|%d|%d|6|1' % (ox + 1, oy + 1, ox + 23, oy + 23))
+    s.zone(yards[0], 0, 0, 24, 1.5, '', 'PARTS GALLERY')
+    names = [n for n in catalogue if in_gallery(n)]
+    yaw_of = {n: y0 for _, n, *_, y0 in models()}
+
+    def group(n):
+        return next((k for k, (_, heads) in enumerate(GALLERY_ORDER) if n.startswith(heads)), len(GALLERY_ORDER))
+    names.sort(key=lambda n: (group(n), n))
+    yard, x, y, row_d = 0, 1.6, 3.2, 0.0
+    for n in names:
+        w, d, h = catalogue[n]
+        k = min(1.0, 2.9 / max(w, d), 3.4 / h)
+        sw, sd, sh = w * k, d * k, h * k
+        yaw = yaw_of.get(n, PI)
+        fw, fd = (sd, sw) if yaw in (HALF, -HALF) else (sw, sd)
+        if x + fw > 22.6:                                                    # the next shelf
+            x, y, row_d = 1.6, y + row_d + 1.1, 0.0
+        if y + fd > 22.4:                                                    # the next yard
+            yard, x, y, row_d = yard + 1, 1.6, 1.6, 0.0
+            if yard == len(yards): raise SystemExit('the Parts Gallery overflows its yards')
+        m = yards[yard]
+        cx, cy = x + fw / 2, y + fd / 2
+        solid = int(sh > .3 and not n.startswith(('bld_lamp', 'bld_ceiling', 'bld_brick_rubble')))
+        s.rec(m, 'FIXTURE', m['index'], slot[n], cx, cy, 0, sw, sd, sh, yaw, solid)
+        s.zone(m, x - .2, y - .2, x + fw + .2, y + fd + .2, ('#%d %s' % (slot[n], n))[:40])
+        x, row_d = x + fw + .7, max(row_d, fd)
+    s.post_sign(yards[0], 12, 2.2, 'PARTS GALLERY', 'Building, Mine and Caves tabs', 0xc8a050, 2.0)
+    for m in yards:
+        s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': 12, 'y': 12, 'title': 'PARTS GALLERY',
+                        'name': '%d parts from the packs' % len(names)})
+
+
 TREES = [('pine_a', 8, 1.15, 1.75), ('pine_b', 8, 1.15, 1.75), ('aspen_a', 2, 1.0, 1.45), ('oak_a', 1, .9, 1.2),
          ('dead_tree_a', 1, .9, 1.3), ('dead_tree_b', 1, .9, 1.3)]
 UNDER = [('fern_a', 6), ('fern_big', 5), ('bush_a', 2), ('bush_b', 2), ('bush_c', 2), ('grass_a', 1), ('tall_grass_l', 1),
@@ -2165,6 +2231,14 @@ def building(s, slot, catalogue):
         s.raised = [e for e in s.raised if e[0] is not hill]
         s.absolute = [e for e in s.absolute if e[0] is not hill]
         hillside(s, slot, catalogue, hill)
+    # The Parts Gallery: south-west of the Hillside, on the forest's map there (every number stays).
+    yards = [cells.get((OX + 2, 1 + len(SECTIONS) + 2 + OY + k)) for k in (0, 1)]
+    if all(y is not None and y in forest for y in yards):
+        for yard, name in zip(yards, ('Parts Gallery', 'Parts Gallery 2')):
+            yard['name'], yard['records'] = name, []
+            s.raised = [e for e in s.raised if e[0] is not yard]
+            s.absolute = [e for e in s.absolute if e[0] is not yard]
+        parts_gallery(s, slot, catalogue, yards)
 
 
 def main():
