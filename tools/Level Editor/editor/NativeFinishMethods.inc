@@ -210,7 +210,8 @@
   // the paint (pickUp: takes it up). Returns false when there is none there.
   // The material picker's rows carry a swatch: the engine's own picture of the material.
   void drawMaterialSwatch(const DRAWITEMSTRUCT *d) {
-    if (int(d->itemID) < 0) return;
+    // Not before the picture folder is known: asking then would file every picture as missing.
+    if (int(d->itemID) < 0 || thumbs.folder.empty()) return;
     const int id = int(d->itemData);
     HBITMAP picture = thumbs.get("mat-" + std::to_string(id));
     RECT r = d->rcItem;
