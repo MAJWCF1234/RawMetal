@@ -117,7 +117,7 @@ struct RemotePlayer{
  float angle=0,pitch=0;       // facing (radians, the map angle) and look pitch (radians, up positive)
  Vec2 velocity{};             // m/s, for the legs' clip and phase
  bool crouched=false,prone=false,grounded=true;
- int weapon=0;                // WeaponId: 0 fists, 1 shotgun, 2 handgun
+ int weapon=0;                // WeaponId: 0 fists, 1 shotgun, 2 handgun, 3 the MAC-11 (two bits on the wire)
  float shotAge=99;            // seconds since their last shot (muzzle flash, recoil)
  float reloadAge=99;          // seconds since a reload began (99 none)
  float health=100;

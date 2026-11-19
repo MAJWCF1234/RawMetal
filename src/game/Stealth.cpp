@@ -146,7 +146,7 @@ void Game::releaseNpc(bool unconscious){
   setState(friendlyKey(actor,"guard_memory"),npc.track().ai.searchMs);setState(friendlyKey(actor,"guard_confirmed"),1);setState(friendlyKey(actor,"guard_recognition"),npc.track().ai.recognitionMs);setState(friendlyKey(actor,"guard_mode"),int(GuardState::Investigate));
  }
  // The gun the player had out before taking hold of him comes back.
- if(playerFirearm(WeaponId(std::clamp(weapon,0,2)))&&ownsWeapon(WeaponId(weapon)))equipWeapon(WeaponId(weapon));
+ if(playerFirearm(WeaponId(std::clamp(weapon,0,3)))&&ownsWeapon(WeaponId(weapon)))equipWeapon(WeaponId(weapon));
  m_pickupNotice=unconscious?"GUARD UNCONSCIOUS":"GUARD RELEASED / THEY KNOW YOU ARE HERE";m_pickupNoticeTime=2;m_suppressFire=true;
 }
 void Game::updateStealth(const InputState&input,float dt){

@@ -51,6 +51,9 @@ void Game::executeConsole(std::string command){
  // The handgun with one magazine in it (another magazine if already carried), and 24 rounds of 9 mm.
  else if(verb=="give"&&arg=="handgun"&&extra.empty()){grantHandgun(playerWeaponDef(WeaponId::Handgun).cycle.tubeCapacity);m_consoleLog.push_back("HANDGUN ADDED. 3 OR THE WHEEL TO DRAW.");}
  else if(verb=="give"&&arg=="9mm"&&extra.empty()){m_player.pool(WeaponId::Handgun).total+=24;m_consoleLog.push_back("24 ROUNDS 9MM ADDED.");}
+ // The MAC-11 with one magazine in it (another if already carried), and a box of .380.
+ else if(verb=="give"&&(arg=="mac11"||arg=="mac-11"||arg=="mac")&&extra.empty()){grantMachinePistol(playerWeaponDef(WeaponId::MachinePistol).cycle.tubeCapacity);m_consoleLog.push_back("MAC-11 ADDED. 4 OR THE WHEEL TO DRAW.");}
+ else if(verb=="give"&&(arg=="380"||arg==".380")&&extra.empty()){m_player.pool(WeaponId::MachinePistol).total+=playerWeaponDef(WeaponId::MachinePistol).cycle.pickupAmount;m_consoleLog.push_back("32 ROUNDS .380 ADDED.");}
   else if(verb=="give"&&((arg=="12"&&(extra=="ga"||extra=="gauge")&&(stream>>std::ws).eof())||((arg=="12ga"||arg=="shells")&&extra.empty()))){m_player.pool(WeaponId::Shotgun).total+=16;m_consoleLog.push_back("16 SHELLS 12 GA ADDED.");}
  else if(verb=="dev"){setDeveloperMode(!developerMode());m_consoleLog.push_back(developerMode()?"DEVELOPER MODE ON: NO DAMAGE, NO CREATURES, EVERY DOOR OPEN.":"DEVELOPER MODE OFF.");}
  else if(verb=="god"){m_god=!m_god;if(m_god)m_player.health=std::max(m_player.health,100.f);m_consoleLog.push_back(m_god?"GOD MODE ON: NO DAMAGE. DEV ALSO OPENS THE GATES THAT WANT A ROOM CLEARED.":"GOD MODE OFF.");}

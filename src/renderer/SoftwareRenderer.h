@@ -397,6 +397,9 @@ private:
     // tools/player/build_claire_fp_shotgun.py: clips posed by name, the gun
     // carried by its baked reference points. m_fpShotgunPosed: this frame used it.
     Mesh m_fpShotgun{2313};bool m_fpShotgunPosed=false;float m_fpPush=0,m_fpDrop=0;
+    // The MAC-11 the same way on the pack's pistol rig (tools/player/build_claire_fp_mac11.py):
+    // gun_*, mag_* and knob_* points carry its frame, its magazine and its cocking knob.
+    Mesh m_fpMac{3359};bool m_fpMacPosed=false;
     float m_tpBack=0,m_tpTime=-1;
     // Third person, standing still: her body trails the look and steps round
     // with a 90-degree turn clip once it falls more than ~60 degrees behind.
@@ -408,6 +411,19 @@ private:
     std::array<Point3,6> m_handNormals{};std::array<float,6> m_handLight{};bool m_handLightReady=false;
     struct FpClip{const char*name;float phase;};FpClip fpShotgunClip(const Game&game)const;
     Point3 fpShotgunPoint(Point3 remington,bool pump)const;
+    // The MAC-11's clip for this moment (the reload's frames mapped from the game's
+    // progress, tactical or from empty), and a point of the MAC-11 (its model metres)
+    // carried by the frame (0), the magazine (1) or the knob (2) into view space.
+    FpClip fpMacClip(const Game& game)const;
+    Point3 fpMacPoint(Point3 mac,int part)const;
+public:
+    // What the first-person MAC-11 drew last frame (view space, metres): the
+    // magazine's centre and the gun's, the knob's travel back and the hands'
+    // distance from the grip and the magazine. --feature=mac11 reads it.
+    struct MacReport {bool drawn=false;Point3 magazine{},grip{},muzzle{};float knobBack=0,rightGrip=0,leftMagazine=0;const char* clip="";float phase=0;};
+    const MacReport& macReport()const{return m_macReport;}
+private:
+    MacReport m_macReport;
     Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131},m_cursedMesh{2441,"",2443};
     // The transformed: the Worker's body (277) on its own six baked clips.
     Mesh m_transformedMesh{277,"",2185};
@@ -488,6 +504,11 @@ private:
     Mesh m_engineerDrone{333,"",334};
     Texture m_droneTexture,m_handgunTexture;
     Mesh m_handgunMesh{337};
+    // The MAC-11 (its model: metres, the grip's top at the origin, +z the muzzle,
+    // +x its left; MacMagazine part 8, MacBolt the knob part 9), its .380 box and
+    // the brass both pistols throw (tools/player/import_mac11.py).
+    Mesh m_macMesh{3353},m_macAmmoMesh{3355},m_brassMesh{3357};
+    Texture m_macTexture,m_macAmmoTexture,m_brassTexture;
     std::array<std::array<Texture,2>,kCleanupBodies> m_cleanupTextures;
     std::array<std::array<std::array<Point3,3>,2>,kCleanupBodies> m_cleanupArms{};
  std::array<std::array<Point3,2>,kCleanupBodies> m_cleanupPalms{};

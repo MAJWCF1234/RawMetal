@@ -65,7 +65,14 @@ struct LabAccess {
  static int moveBlock(const Game& g,Vec2 next){const auto& p=g.m_player;float feet=p.z;const float ground=g.groundHeight(next);if(ground>feet+.215f)return 1;if(ground>feet)feet=ground;
   if(!g.hullFits(next,feet,p.hullHeight(),.2f,false,false))return 2;if(!g.hullFits(next,feet,p.hullHeight()))return 3;return 0;}
  static bool damageEnemy(Game& g,Enemy& e,float amount){return g.applyEnemyDamage(e,amount,false,false);}
- static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);g.equipWeapon(id);}
+ static void equip(Game& g,WeaponId id){if(id==WeaponId::Handgun)g.grantHandgun(15);if(id==WeaponId::MachinePistol)g.grantMachinePistol(64);g.equipWeapon(id);}
+ // The full-auto state and the spent cases (Casings.cpp).
+ static float& spread(Game& g){return g.m_spread;}
+ static float& shotCooldown(Game& g){return g.m_shotCooldown;}
+ static float& aimBlend(Game& g){return g.m_aimBlend;}
+ static void stepCasings(Game& g,float dt){g.updateCasings(dt);}
+ static std::vector<Pickup>& pickups(Game& g){return g.m_pickups;}
+ static void updatePickups(Game& g){g.updatePickups();}
  // A console line, as typed (Summon.cpp and the rest), and what it printed.
  static void console(Game& g,const std::string& line){g.executeConsole(line);}
  static const std::vector<std::string>& consoleLog(const Game& g){return g.m_consoleLog;}

@@ -57,6 +57,8 @@ bool refuse(const std::string& why){t_loadFailure=why.empty()?"unknown error":wh
 // chunks its "game" section said it carries.
 thread_local std::vector<std::string> t_skippedSections;
 thread_local int t_sectionChunks=0;
+// The pickups section's version while it is read or written (0 outside it: the positional archive).
+thread_local int t_pickupSection=0;
 // Appends one line, stamped, to RawMetal-load.txt beside the other RawMetal-*.txt reports.
 void appendLoadLog(const std::string& line){
  try{std::ofstream log("RawMetal-load.txt",std::ios::app);SYSTEMTIME t;GetLocalTime(&t);char stamp[32];std::snprintf(stamp,sizeof stamp,"%04d-%02d-%02d %02d:%02d:%02d",t.wYear,t.wMonth,t.wDay,t.wHour,t.wMinute,t.wSecond);
@@ -150,7 +152,7 @@ template<class A> int Game::archiveSave(A& a,int version){
  auto&p=m_player;auto&shells=p.pool(WeaponId::Shotgun);vec(p.pos);a(p.angle,p.pitch,p.health,shells.total);if(version>=2)a(shells.loaded);a(p.z,p.verticalVelocity,p.grounded,p.crouched,p.eye);vec(m_velocity);
  a(m_weaponKick,m_shotCooldown);if(version>=2)a(m_reloadTimer);a(m_shotAge,m_holster,m_punchAge,m_punchLeft,m_guarding,m_verticalSpring,m_verticalSpringVelocity,m_stepDistance,m_stepVariant,m_jumpBuffer,m_coyote);
  a(m_weaponMotion.yaw,m_weaponMotion.pitch,m_weaponMotion.bob,m_weaponMotion.back,m_weaponMotion.elbow,m_weaponMotion.bolt,m_weaponMotion.roll);vec(m_sway);vec(m_swayVelocity);a(m_elbowVelocity);
- for(int i=0;i<(version>=19?int(m_itemCells.size()):3);++i)a(m_itemCells[size_t(i)]);
+ for(int i=0;i<(version>=19?4:3);++i)a(m_itemCells[size_t(i)]);   // the .380 cell (4) came with the inventory section's version 2
  // Version 19: the handgun's pool, the firearm in hand, a switch under way and the reload's length.
  if(version>=19){auto&nine=p.pool(WeaponId::Handgun);a(nine.total,nine.loaded,m_equippedWeapon,m_switchTarget,m_switchRaise,m_reloadLength,m_emptyReload);
   if(!playerFirearm(m_equippedWeapon)||(m_switchTarget!=WeaponId::Fists&&!playerFirearm(m_switchTarget)))throw std::runtime_error("invalid saved weapon");}
@@ -208,7 +210,9 @@ template<class A> void Game::archiveChunk(A& a,int version,int index,unsigned pa
    if(version>=22){a(e.hunter,e.prey,e.arrive);if(e.prey<-1||e.prey>4096||!(e.arrive>=0&&e.arrive<=30))throw std::runtime_error("invalid creature fields");}
    if(int(e.kind)>(version>=23?int(Enemy::Kind::Machine):version>=16?int(Enemy::Kind::Transformed):version>=15?int(Enemy::Kind::Chimera):version>=13?int(Enemy::Kind::Mutant):version>=3?3:2)||int(e.state)>int(Enemy::State::Search)||int(e.stalkMode)>int(Enemy::StalkMode::Recover)||e.stalkTimer<0||e.stalkTimer>60||std::fabs(e.stalkSide)>1.01f||e.maxHp<=0||!(e.recognition>=0&&e.recognition<=1))throw std::runtime_error("invalid creature (kind "+std::to_string(int(e.kind))+", state "+std::to_string(int(e.state))+", stalk "+std::to_string(int(e.stalkMode))+" for "+std::to_string(e.stalkTimer)+" s, max hp "+std::to_string(e.maxHp)+", recognition "+std::to_string(e.recognition)+")");},4096);
  if(parts&ChunkPickups)
-  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
+  // The MAC-11's box and the gun itself came with the pickups section's version 2 (t_pickupSection); a positional
+  // archive or a version 1 section holds at most the 9 mm box.
+  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(t_pickupSection>=2?int(PickupKind::MachinePistol):version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
  if(parts&ChunkProps){
   // A save older than version 17 had no physics props: one written in that form leaves them out.
   std::vector<Clutter> olderClutter;
@@ -309,10 +313,14 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   a(g.m_weaponEquipped,g.m_equippedWeapon,g.m_switchTarget,g.m_switchRaise,g.m_reloadLength,g.m_emptyReload,g.m_heldClutter);
   if(!playerFirearm(g.m_equippedWeapon)||(g.m_switchTarget!=WeaponId::Fists&&!playerFirearm(g.m_switchTarget)))throw std::runtime_error("invalid saved weapon");});
  // What she carries: first aid, each firearm's rounds, where each item sits in the grid, quest items.
- add("inventory",true,[](Game& g,auto& a,int){
+ // Version 2: the MAC-11's .380 pool and its storage cell.
+ add("inventory",true,[](Game& g,auto& a,int version){
   a(g.m_medkits);for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=g.m_player.pool(id);a(rounds.total,rounds.loaded);}
-  for(auto&cell:g.m_itemCells)a(cell);
-  archiveList(a,g.m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});});
+  if(version>=2){auto&rounds=g.m_player.pool(WeaponId::MachinePistol);a(rounds.total,rounds.loaded);}
+  for(int i=0;i<(version>=2?5:4);++i)a(g.m_itemCells[size_t(i)]);
+  archiveList(a,g.m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});},2);
+ // An older inventory had no .380: the pool empty, its cell the first clear of the others.
+ list.back().upgrade=[](Game& g,int){g.m_player.pool(WeaponId::MachinePistol)={};placeMachinePistolCell(g);};
  // The hung hazmat suit's simulation.
  add("hazmat",true,[](Game& g,auto& a,int){auto&h=g.m_hazmat;a(h.initialized,h.sleeping,h.quiet,h.accumulator);
   for(auto&points:{&h.p,&h.previous})for(auto&p:*points){a(p.x,p.y,p.z);if(p.x<0||p.x>24||p.y<0||p.y>24||p.z<-12||p.z>20)throw std::runtime_error("Invalid hazmat pose");}
@@ -330,10 +338,12 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   archiveList(a,g.m_firedEvents,[&](StateId&id){a(id);if(id==0)throw std::runtime_error("invalid event id");});});
  // Each chunk in turn: its world (lift and reactor, broken tiles and breakables, pane damage and
  // glass hits, doors, torn leads), its creatures, its pickups, its props and their pieces.
- auto chunks=[&](const char* name,unsigned part){add(name,true,[part](Game& g,auto& a,int){
+ auto chunks=[&](const char* name,unsigned part,std::uint16_t version=1){add(name,true,[part](Game& g,auto& a,int sectionVersion){
   int count=std::decay_t<decltype(a)>::reading?0:g.chunkCount();a(count);if(count!=t_sectionChunks&&std::decay_t<decltype(a)>::reading)throw std::runtime_error("holds "+std::to_string(count)+" maps, the save "+std::to_string(t_sectionChunks));
-  for(int index=0;index<count;++index)try{g.archiveChunk(a,SaveVersion,index,part);}catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}});};
- chunks("world",ChunkWorld);chunks("creatures",ChunkCreatures);chunks("pickups",ChunkPickups);chunks("props",ChunkProps);
+  t_pickupSection=part==ChunkPickups?sectionVersion:0;struct Clear{~Clear(){t_pickupSection=0;}} clear;
+  for(int index=0;index<count;++index)try{g.archiveChunk(a,SaveVersion,index,part);}catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}},version);};
+ // The pickups' version 2: the MAC-11's .380 box and the MAC-11 itself (PickupKind 3 and 4).
+ chunks("world",ChunkWorld);chunks("creatures",ChunkCreatures);chunks("pickups",ChunkPickups,2);chunks("props",ChunkProps);
  // Runtime changes to entities' properties (the map's named entities and their `p.` properties).
  add("entities",false,[](Game& g,auto& a,int){auto&store=g.m_saveStore.entities;if constexpr(!std::decay_t<decltype(a)>::reading)if(store.empty())return; // an empty store is not written
   int count=int(store.size());a(count);
@@ -494,6 +504,11 @@ static void migrateCrateDebris(std::vector<Clutter>&items){std::vector<bool>used
 // each runs when the save predates the version it names. (The authored-map reconciliation in
 // prepareLoad runs after them for every save; it also wakes, from version 15, creatures that
 // were never disturbed, and gives a save before 8 the authored props by kind.)
+// The .380 stack's cell (item 4, 1x2) in a save that had none: the first clear of the four older items.
+void Game::placeMachinePistolCell(Game& g){
+ auto taken=[&](int c){for(int i=0;i<4;++i){int at=g.m_itemCells[size_t(i)],w=i==0?4:i==2?2:1;for(int r=c/6;r<c/6+2;++r)for(int x=c%6;x<c%6+1;++x)if(r>=at/6&&r<at/6+2&&x>=at%6&&x<at%6+w)return true;}return false;};
+ for(int c=0;c<24;++c)if(!taken(c)){g.m_itemCells[4]=c;return;}
+}
 void Game::refitLegacySave(int from){
  struct Step {int to;void(*apply)(Game&);};
  const Step steps[]={
@@ -507,6 +522,8 @@ void Game::refitLegacySave(int from){
    for(int c=0;c<24;++c)if(!taken(c)){g.m_itemCells[3]=c;break;}}},
   // 20: how far a creature had made the player out was not kept: one on a Chase has.
   {20,[](Game& g){for(auto&chunk:g.m_chunks)for(auto&e:chunk.enemies)e.recognition=e.state==Enemy::State::Chase&&e.awareness>0?1.f:0.f;}},
+  // 28: the positional archive never held the MAC-11: no .380, its cell the first clear of the others.
+  {28,[](Game& g){g.m_player.pool(WeaponId::MachinePistol)={};placeMachinePistolCell(g);}},
  };
  for(const auto& step:steps)if(from<step.to)step.apply(*this);
 }
@@ -613,8 +630,8 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   }
   auto&p=next.m_player;
   // Each firearm's pool against its own magazine; the handgun's only when it is owned or its 9 mm waits for it.
-  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return refuse("invalid ammunition pool");}
-  if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return refuse("invalid weapon or reload state");
+  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun,WeaponId::MachinePistol}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return refuse("invalid ammunition pool");}
+  if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||(p.pool(WeaponId::MachinePistol).loaded>0&&!next.hasMachinePistol())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return refuse("invalid weapon or reload state");
   // A body saved somewhere no body can be (past the map's edge, far above or below it, as a
   // noclip flight or a glitch leaves it) is set back on the map's own start rather than refusing
   // the whole save; the camera's eye and pitch come back into range the same way.

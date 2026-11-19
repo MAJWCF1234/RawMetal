@@ -20,7 +20,7 @@ std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t 
  if(!remaining.empty()&&!lines.empty()&&columns>=3){auto& last=lines.back();last.resize(std::min(last.size(),columns-3));last+="...";}
  return lines;
 }
-const char* weaponWord(int weapon){return weapon==1?"SHOTGUN":weapon==2?"9MM":"HANDS";}
+const char* weaponWord(int weapon){return weapon==1?"SHOTGUN":weapon==2?"9MM":weapon==3?"MAC-11":"HANDS";}
 std::string upper(std::string s){for(auto& c:s)c=char(std::toupper(static_cast<unsigned char>(c)));return s;}
 }
 

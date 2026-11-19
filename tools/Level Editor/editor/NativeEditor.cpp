@@ -6737,7 +6737,7 @@ struct Editor {
         if (k == "CREATURE")
           choose(creatureList, CreatureList, std::clamp(std::stoi(f[2]), 0, 8));
         if (k == "PICKUP")
-          choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 2));
+          choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 4));
         if (k == "SURFACE") {
           ++tally.gestures;
           chooseData(surfaceList, SurfaceList, std::stoi(f[2]));
@@ -11002,7 +11002,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
       SendMessageW(*slider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 100));
     }
-    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets"});
+    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets", L"MAC-11 bullets", L"MAC-11"});
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
     e.tileList = choices(TileList, {L"Crate", L"Barrel (explodes)", L"Tank"});

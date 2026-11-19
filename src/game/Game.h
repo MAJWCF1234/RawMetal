@@ -332,6 +332,11 @@ struct Clutter {
 // One firearm's rounds: total counts the loaded ones too, so the reserve is
 // total-loaded and loaded<=total always.
 struct AmmoPool {int total=0,loaded=0;bool operator==(const AmmoPool&)const=default;};
+// A spent case in the world (Casings.cpp): thrown from a gun's ejection port, it
+// tumbles, bounces off floors, walls and props with a clink, then lies a while.
+// In the active chunk's coordinates; kind 0 a shotgun shell, 1 9 mm brass, 2 .380
+// brass. Runtime only: not saved, cleared with the map.
+struct Casing {Point3 position{},velocity{},spin{};float yaw=0,pitch=0,roll=0,age=0,still=0;int kind=0,bounces=0;bool resting=false;};
 // A downed sidearm carrier's unlooted pistol on the floor, in its level's local coordinates.
 struct DroppedSidearm {Point3 position{};float yaw=0;int level=0;size_t actor=0;};
 struct Player {
@@ -349,7 +354,7 @@ struct Player {
     float pitch = 0.0f;
     float health = 100.0f;
     // Rounds per firearm, indexed by WeaponId (Fists holds none).
-    std::array<AmmoPool,3> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{}};
+    std::array<AmmoPool,4> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{},AmmoPool{}};
     AmmoPool& pool(WeaponId id){return pools[size_t(id)];}
     const AmmoPool& pool(WeaponId id)const{return pools[size_t(id)];}
     float z = 0.0f;
@@ -435,6 +440,14 @@ public:
     // world space; it tumbles, bounces, clinks and lies a while. Every gun and the VR pump call this; the renderer
     // draws casings(). kind: 0 a shotgun shell, 1 9 mm brass (the handgun), 2 .380 brass (the MAC-11).
     void ejectCasing(int kind,Point3 position,Point3 velocity);
+    const std::vector<Casing>& casings()const{return m_casings;}
+    static constexpr int MaxCasings=48;          // the oldest goes when a new one would pass this
+    static constexpr float CasingLife=14.f;      // seconds a case lies once it has come to rest
+    // Where the gun in hand throws its case from, in the active chunk's world
+    // space, and the way it goes (the right of the bore, up and a little back),
+    // with the player's own motion added. Desktop: from the view; VR: the aim.
+    Point3 ejectionPort(WeaponId gun)const;
+    Point3 ejectionVelocity(WeaponId gun);
     // A VR player's avatar as VrRuntime solves it, sent to the others in a match (main sets it each frame).
     void setNetAvatar(const AvatarPose& pose){m_netAvatar=pose;}
     // Bodies of the players in a match, in the active chunk's frame: Match lends them to traceShot while it
@@ -968,7 +981,23 @@ public:
     // The handgun is owned as a quest item: saved, carried and cleared with the others.
     static constexpr StateId HandgunItem=stateId("handgun");
     bool hasHandgun()const{return hasQuestItem(HandgunItem);}
-    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||id==WeaponId::Shotgun||(id==WeaponId::Handgun&&hasHandgun());}
+    // The MAC-11 too (a floor pickup, a script's GIVE, `give mac11`).
+    static constexpr StateId MachinePistolItem=stateId("machine_pistol");
+    bool hasMachinePistol()const{return hasQuestItem(MachinePistolItem);}
+    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||id==WeaponId::Shotgun||(id==WeaponId::Handgun&&hasHandgun())||(id==WeaponId::MachinePistol&&hasMachinePistol());}
+    // The MAC-11 with `rounds` more .380; a first one comes with them in its magazine.
+    void grantMachinePistol(int rounds);
+    // The hip holster's contents (AvatarPose::hip, WeaponId+1, 0 empty) with `inHand`
+    // drawn: one sidearm rides there, the one not in hand. With both owned and
+    // neither drawn it is the one drawn last (the MAC-11 when it was the last
+    // carried there); the long gun is on the back.
+    int hipHolster(WeaponId inHand)const;
+    // The full-auto gun's state: the spread's bloom (radians over its base) and
+    // how far the view has climbed in this burst (pitch units still to return).
+    float spreadBloom()const{return m_spread;}
+    float recoilDebt()const{return m_recoilDebt;}
+    // The cone a round from the gun in hand leaves within now (radians, half-angle).
+    float shotSpread()const;
     // The handgun with `rounds` more 9 mm; a first one comes with them in its magazine (console, map shots).
     void grantHandgun(int rounds);
     // Inspection only (map shots): every sidearm carrier on this level killed, so his pistol falls.
@@ -1335,7 +1364,8 @@ public:
     bool emptyReload()const{return m_reloadTimer>0&&m_emptyReload;}
     // The handgun's slide is held back: its magazine ran dry, until an empty
     // reload passes cycle.rackAt (the rack) or rounds are loaded.
-    bool slideLocked()const{return m_equippedWeapon==WeaponId::Handgun&&firearmPool().loaded<=0&&!(m_reloadTimer>0&&m_emptyReload&&reloadProgress()>=equippedWeaponDef().cycle.rackAt);}
+    // The MAC-11's bolt the same: its cocking knob stays back on an empty magazine.
+    bool slideLocked()const{return sidearm(m_equippedWeapon)&&firearmPool().loaded<=0&&!(m_reloadTimer>0&&m_emptyReload&&reloadProgress()>=equippedWeaponDef().cycle.rackAt);}
     int medkits()const{return m_medkits;}
     int selectedItem()const{return m_selectedItem;}
     int itemCell(int item)const{return m_itemCells[item];}
@@ -1979,6 +2009,15 @@ private:
     // A semi-automatic trigger must come back up before the next shot.
     bool m_triggerReset=true;
     int m_previousChoice=0;
+    // Full auto (the MAC-11): the spread's bloom, the view's climb still to give
+    // back, and the seed of the spread's own generator. Not saved.
+    float m_spread=0,m_recoilDebt=0;unsigned m_spreadSeed=0x2545f491u;float nextSpreadRandom();
+    // The sidearm drawn last: the one the hip holster keeps while neither is out.
+    WeaponId m_lastSidearm=WeaponId::Handgun;
+    std::vector<Casing> m_casings;unsigned m_casingSeed=0x9e3779b9u;float m_casingClink=-1;
+    static void placeMachinePistolCell(Game& g);
+    float casingRandom();
+    void updateCasings(float dt);
     // Pending switch: the firearm to swap to at the bottom (Fists: none), then the raise.
     WeaponId m_switchTarget=WeaponId::Fists;bool m_switchRaise=false;
     float m_reloadLength=0;bool m_emptyReload=false;
@@ -2031,8 +2070,8 @@ private:
     bool m_weaponEquipped=true,m_inventoryClick=false,m_inventoryUse=false;
     WeaponId m_equippedWeapon=WeaponId::Shotgun;
     int m_medkits=0,m_selectedItem=-1;
-    // Storage cells: 0 shotgun 4x2, 1 shells 1x2, 2 first aid 2x2, 3 9 mm 1x2 (version 19).
-    std::array<int,4> m_itemCells{12,0,2,1};
+    // Storage cells: 0 shotgun 4x2, 1 shells 1x2, 2 first aid 2x2, 3 9 mm 1x2 (version 19), 4 .380 1x2 (inventory section 2).
+    std::array<int,5> m_itemCells{12,0,2,1,4};
     void sound(Sound sound,float gain=1,float pitch=1);
     void enemySound(const Enemy& enemy,int action,float gain=1,float pitch=1);
     void updateWeaponMotion(const InputState& input,float dt);
