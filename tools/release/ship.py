@@ -68,7 +68,7 @@ def set_version(version):
             sys.exit(f'ship: could not set the version in {rc}')
         if text.encode('utf-8') != open(rc, 'rb').read():   # untouched when already set, so a rerun does not relink
             open(rc, 'wb').write(text.encode('utf-8'))
-    menu = os.path.join(ROOT, 'src', 'renderer', 'SoftwareRenderer.cpp')
+    menu = os.path.join(ROOT, 'src', 'renderer', 'FrontEnd.cpp')
     text = open(menu, 'rb').read().decode('utf-8')
     text, n = re.subn(r'V\d+\.\d+\.\d+  CHAPTER', f'V{version}  CHAPTER', text)
     if n != 1:
