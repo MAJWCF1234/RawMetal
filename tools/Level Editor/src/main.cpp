@@ -2273,7 +2273,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // A correct hold measures about .07-.08 m (the rig's hands are large for the
      // pistol); a hand slid off the grip or a finger off the trigger goes past .095.
      report<<"worst grip error "<<worst<<"\nworst finger contact "<<contact<<" m\n";return worst<.025f&&contact<.095f?0:10;}
-    if(commandArguments().find(L"--vr-test")){bool passed=retro::VrRuntime::testDetection()&&retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: headset detection and the PC/VR choice, tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
+    if(commandArguments().find(L"--vr-test")){std::ofstream report("vr-test.txt");const bool passed=retro::VrRuntime::testAll(report);return passed?0:60;}
     int doorArgc=0;LPWSTR* doorArgv=CommandLineToArgvW(GetCommandLineW(),&doorArgc);
     bool bare=doorArgv&&doorArgc<=1;if(doorArgv)LocalFree(doorArgv);
     // The big menu is the front door. It opens the editor. Play, inside the editor, is what starts the game.

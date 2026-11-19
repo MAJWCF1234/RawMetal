@@ -228,6 +228,8 @@ void Game::crossChunkBoundary(){
 }
 void Game::loadLevel(int level,bool carry) {
     float health=m_player.health;auto pools=m_player.pools;
+    // Spilt liquid belongs to the maps it was spilt in: a new map (or a new game) starts dry.
+    m_liquidDrops.clear();m_puddles.clear();
     clearLockerMotion(true);m_capture={};m_level=std::clamp(level,0,chunkCount()-1);m_world=makeWorld(m_level);m_levelNav={};m_levelNavReady=false;m_previousJump=false;m_previousUse=false;m_jumpBuffer=0;m_coyote=0;m_activeLog=-1;m_logTime=0;
     m_player = {};
     m_player.pos = m_world.definition().playerStart;

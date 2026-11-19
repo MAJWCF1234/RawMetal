@@ -35,6 +35,7 @@ public:
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();
  void clearStaticCaches();
+ void dropStaticCache(int slot);
  // Lamp shadow maps still queued: a changed lamp set redraws a bounded
  // number per frame, so a new view settles over several frames.
  bool shadowsPending()const;
@@ -138,6 +139,9 @@ public:
  bool vrActive()const;
  std::uint64_t mirrorFrames()const;
  void setVrEye(int eye,const std::array<float,16>& clip);
+ // VR dynamic resolution: each eye is drawn into the top-left share `scale` (0.6-1, each axis) of its image and
+ // SteamVR is told to stretch that part (VrRuntime::submit bounds). Set before the first eye of a frame.
+ void setVrRenderScale(float scale);
  std::pair<int,int> surfaceExtent()const;
  void present(const std::uint32_t* overlay,int overlayWidth,int overlayHeight,bool underwater,float sceneDim,float damageFlash,float shotKick,float alarm=0);
  const std::string& adapter()const;

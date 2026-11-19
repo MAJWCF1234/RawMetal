@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include "../game/Game.h"
+#include "../game/Avatar.h"
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
@@ -91,6 +92,7 @@ public:
     static bool testSurfaceSets(std::string* report=nullptr);
     static bool testHardware(bool glazingOnly=false);
     static bool testGameplayRendering();
+    static bool testSceneReuse(std::ostream& report); // --each-test=scene-reuse: a game built where the last one was draws only its own content
     // Sparks and arcs (ElectricFx.cpp): an arc lights the wall beside it and lets it go, frames repeat, budgets hold.
     static bool testElectricRendering(std::ostream& report);
     // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
@@ -167,7 +169,7 @@ public:
     // last one had, with the same epoch, and must not inherit its buffers.
     // The culling stats are kept per world drawn, by address: a new scene starts them afresh, so an old
     // scene's worlds (or one reused at the same address) are not counted into its totals.
-    void forgetScene(){m_lightingGame=nullptr;m_cullStats.clear();}
+    void forgetScene(){m_lightingGame=0;m_cullStats.clear();}
     // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
     std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
@@ -198,9 +200,26 @@ private:
     // This frame's camera (Game::view): the player, or a locker's path in or out.
     Player m_view;
     bool m_vrReuseScene=false; // second eye: replay the first eye's geometry
-    std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
-    std::vector<MeshTriangle> m_vrSupportGripMesh; // the left hand closed round the fore-end
+    // The VR avatar (game/Avatar.h, docs/Systems/avatar.md): her body from the first-person body pass (legs and
+    // torso, leaned and turned by the solve), her arms (the viewmodel's, resource 111) bent by two-bone IK onto
+    // the tracked hands with the tracked finger curls, the gun in her hand and the holstered guns on her back and
+    // hip. The pose and its solve are made once a frame (the first eye) and drawn from there.
     void drawTrackedHands(const Game& game);
+    AvatarPose m_vrPose;AvatarSolve m_vrSolve;bool m_vrPoseReady=false;
+    Point3 m_vrCardAnchor{};double m_vrCardClock=-1;float m_vrStatusTime=0;int m_vrStatusKey=-1;bool m_vrForeEndMeasured=false;
+ public:
+    // The arm rig posed on a solve (shared by the drawing and --vr-test): its shoulders' middle in rig space and
+    // the game metres per rig unit, for rigToWorld.
+    struct VrRig {Point3 mid{};float scale=1;};
+    static VrRig poseVrArms(Mesh& arms,const AvatarSolve& solve);
+    static Point3 rigToWorld(const VrRig& rig,const AvatarSolve& solve,Point3 q){const Point3 d=q-rig.mid;return solve.shoulders+(solve.torsoLeft*d.x+solve.torsoUp*d.y+solve.torsoForward*d.z)*rig.scale;}
+    // --vr-test: the avatar's arms on scripted poses reach the hands, turn to their frames, bend the elbows out
+    // and down, close the fingers as tracked; writes vr-avatar-arms.obj (the arms and body points) beside it.
+    static bool testVrAvatar(std::ostream& report);
+    // The lab's engine.vr-bench (no headset): one eye of the Quest (1596 x 1708) drawn headless by Vulkan at
+    // render scales 1, 0.9, 0.8 and 0.7, ms a frame (the scene built, drawn and read back), into the report.
+    static bool benchVrEye(std::ostream& report);
+ private:
     bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;
     // Static caches bake ambient only; Vulkan adds lamps per pixel.
@@ -281,7 +300,7 @@ private:
     Texture m_vrWristTexture;
     // Alyx-style VR displays: health on the back of the left hand, the load on
     // the gun, and area titles and subtitles floating ahead (additive glass).
-    Texture m_vrHealthTexture,m_vrAmmoTexture,m_vrTitleTexture,m_vrCaptionTexture;
+    Texture m_vrHealthTexture,m_vrAmmoTexture,m_vrTitleTexture,m_vrCaptionTexture,m_vrRateTexture;std::string m_vrRateShown;int m_vrRateFrames=0;
     int m_vrHealthShown=-1,m_vrAmmoShown=-1;float m_vrTitleShown=-1;std::string m_vrCaptionShown,m_vrObjective;float m_vrObjectiveTime=0;
     Texture m_muzzleFlash;
     Texture m_water,m_coastWater;
@@ -494,7 +513,8 @@ private:
         Mesh{2865},
         Mesh{2868},Mesh{2870},
         Mesh{2910},Mesh{2911},Mesh{2912},Mesh{2913},Mesh{2914},Mesh{2916},Mesh{2917},Mesh{2918},Mesh{2919},Mesh{2920},Mesh{2921},Mesh{2922},Mesh{2923},Mesh{2924},Mesh{2926},Mesh{2927},Mesh{2928},Mesh{2930},Mesh{2931},Mesh{2932},Mesh{2933},Mesh{2935},Mesh{2936},Mesh{2937},Mesh{2938},Mesh{2939},Mesh{2940},Mesh{2941},Mesh{2942},Mesh{2944},Mesh{2945},Mesh{2946},Mesh{2947},
-        Mesh{2948},Mesh{2951},Mesh{2954},Mesh{2957},Mesh{2960},Mesh{2964},Mesh{2969},Mesh{2973},Mesh{2978},Mesh{2983},Mesh{2986},Mesh{2989},Mesh{2992},Mesh{2995},Mesh{2997},Mesh{2999},Mesh{3003},Mesh{3005},Mesh{3007},Mesh{3009},Mesh{3011},Mesh{3013},Mesh{3017},Mesh{3019},Mesh{3022},Mesh{3025},Mesh{3028},Mesh{3032},Mesh{3036},Mesh{3039},Mesh{3041},Mesh{3043},Mesh{3046},Mesh{3048},Mesh{3052},Mesh{3056},Mesh{3058},Mesh{3061},Mesh{3063},Mesh{3065},Mesh{3067},Mesh{3072},Mesh{3074},Mesh{3076},Mesh{3078},Mesh{3080},Mesh{3082},Mesh{3084},Mesh{3086},Mesh{3088},Mesh{3090},Mesh{3092},Mesh{3096},Mesh{3099},Mesh{3104},Mesh{3106},Mesh{3108},Mesh{3110},Mesh{3112},Mesh{3114},Mesh{3116},Mesh{3118},Mesh{3120},Mesh{3122},Mesh{3124},Mesh{3126},Mesh{3128},Mesh{3130},Mesh{3132},Mesh{3134},Mesh{3136},Mesh{3138},Mesh{3140},Mesh{3142},Mesh{3144},Mesh{3146}};
+        Mesh{2948},Mesh{2951},Mesh{2954},Mesh{2957},Mesh{2960},Mesh{2964},Mesh{2969},Mesh{2973},Mesh{2978},Mesh{2983},Mesh{2986},Mesh{2989},Mesh{2992},Mesh{2995},Mesh{2997},Mesh{2999},Mesh{3003},Mesh{3005},Mesh{3007},Mesh{3009},Mesh{3011},Mesh{3013},Mesh{3017},Mesh{3019},Mesh{3022},Mesh{3025},Mesh{3028},Mesh{3032},Mesh{3036},Mesh{3039},Mesh{3041},Mesh{3043},Mesh{3046},Mesh{3048},Mesh{3052},Mesh{3056},Mesh{3058},Mesh{3061},Mesh{3063},Mesh{3065},Mesh{3067},Mesh{3072},Mesh{3074},Mesh{3076},Mesh{3078},Mesh{3080},Mesh{3082},Mesh{3084},Mesh{3086},Mesh{3088},Mesh{3090},Mesh{3092},Mesh{3096},Mesh{3099},Mesh{3104},Mesh{3106},Mesh{3108},Mesh{3110},Mesh{3112},Mesh{3114},Mesh{3116},Mesh{3118},Mesh{3120},Mesh{3122},Mesh{3124},Mesh{3126},Mesh{3128},Mesh{3130},Mesh{3132},Mesh{3134},Mesh{3136},Mesh{3138},Mesh{3140},Mesh{3142},Mesh{3144},Mesh{3146},
+        Mesh{3148},Mesh{3150},Mesh{3152},Mesh{3153},Mesh{3155},Mesh{3158},Mesh{3159},Mesh{3162},Mesh{3164},Mesh{3165},Mesh{3166},Mesh{3167},Mesh{3170},Mesh{3172},Mesh{3174},Mesh{3176},Mesh{3180},Mesh{3181},Mesh{3183},Mesh{3185},Mesh{3187},Mesh{3189},Mesh{3191},Mesh{3193},Mesh{3195},Mesh{3197},Mesh{3198},Mesh{3200},Mesh{3202},Mesh{3205},Mesh{3207},Mesh{3209},Mesh{3211},Mesh{3213},Mesh{3215},Mesh{3216},Mesh{3217},Mesh{3218},Mesh{3219},Mesh{3221},Mesh{3223},Mesh{3225},Mesh{3228},Mesh{3230},Mesh{3232},Mesh{3235},Mesh{3237},Mesh{3240},Mesh{3243},Mesh{3246},Mesh{3248},Mesh{3250},Mesh{3252},Mesh{3254},Mesh{3255},Mesh{3256},Mesh{3257},Mesh{3258},Mesh{3260},Mesh{3263},Mesh{3265},Mesh{3266},Mesh{3268},Mesh{3270},Mesh{3274},Mesh{3280},Mesh{3281},Mesh{3282},Mesh{3284},Mesh{3285},Mesh{3286},Mesh{3287},Mesh{3288},Mesh{3290},Mesh{3292},Mesh{3294},Mesh{3296},Mesh{3298},Mesh{3299},Mesh{3301},Mesh{3303},Mesh{3304},Mesh{3305},Mesh{3307},Mesh{3308},Mesh{3311},Mesh{3313},Mesh{3315},Mesh{3317},Mesh{3318},Mesh{3319},Mesh{3321},Mesh{3323},Mesh{3325},Mesh{3327},Mesh{3329},Mesh{3331},Mesh{3333},Mesh{3335},Mesh{3337},Mesh{3338},Mesh{3340},Mesh{3342},Mesh{3344}};
     std::unordered_map<std::string,Texture> m_authoredSigns;
     std::unordered_map<std::string,Texture> m_facilityTextures;
     const Texture& facilityTexture(int mesh,int part)const;
@@ -626,7 +646,7 @@ private:
     std::array<unsigned,Game::MaxChunks> m_chunkStaticSeen{}; // each map's Game::staticRevision when its bakes were made
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
-    const Game* m_lightingGame=nullptr;
+    std::uint64_t m_lightingGame=0; // the game the bakes are for (Game::renderSerial: never its address)
     // Each resident map's light probes, baked on a worker from a copy of the map and swapped in
     // when done (LightProbes.h). key: the lamps, the powers they were baked at, the crystals and
     // the geometry; a map is never left without probes while its next bake runs.

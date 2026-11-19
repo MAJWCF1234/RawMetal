@@ -394,7 +394,10 @@ inline bool authoredShape(int shape){return (shape>=ShapeBox&&shape<=ShapeRounde
 struct Structure {float x1,y1,x2,y2,bottom,top;bool rail=false;int material=0;bool solid=true;std::uint8_t shape=ShapeBox,facing=0,layerSurface=0;bool finishedRail=false;int topFinish=-1,trim=-1;float trimWidth=0;bool fixedHeight=false;
  // drape: a flooring laid on the land that follows it (STRUCT drape=1): drawn over the ground, walked on as the ground.
  bool drape=false;
- float skew=0;};
+ float skew=0;
+ // turn: degrees the material's texture is turned on every face (STRUCT and PRIM turn=, a stair's
+ // treadturn=, a deck's deckturn=); topTurn: the turn of the walking face split off as topFinish.
+ float turn=0,topTurn=0;};
 // A structure that only collides: the solid core of something drawn in finer
 // pieces (a steel column's flanges and web), never rendered.
 inline constexpr int CollisionProxyMaterial=30;
@@ -423,6 +426,7 @@ struct MapLayer {
     MapRows rows;
     // Balcony finishes (LAYER deck=, edge=, railing=; structure materials, -1 the default look).
     int deck=-1,edge=-1,railing=-1;
+    float deckTurn=0; // LAYER deckturn=: degrees the deck's walking face is turned
 };
 struct Staircase {
     float x1,y1,x2,y2,bottom,top;
@@ -433,6 +437,8 @@ struct Staircase {
     bool sideRails=false;
     // Finishes (STAIR tread=, riser=, stringer=; structure materials, -1 the default look).
     int tread=-1,riser=-1,stringer=-1;
+    // STAIR treadturn=: degrees the tread's material is turned (planks across or along the flight).
+    float treadTurn=0;
 };
 
 // Shared geometry records for built-in and runtime-authored maps. Loading these
@@ -443,6 +449,7 @@ struct AuthoredLayerData {
     float elevation=0,thickness=0;
     std::array<std::string,24> rows{};
     int deck=-1,edge=-1,railing=-1; // LAYER deck=, edge=, railing= (MapLayer)
+    float deckTurn=0; // LAYER deckturn=
 };
 struct AuthoredTerminalData {
     Vec2 position{};
@@ -628,6 +635,8 @@ struct AuthoredMapData {
     std::vector<DarkZone> darkZones;
     std::vector<Shelter> shelters;
     int wallSurface=SurfaceDefault,floorSurface=SurfaceDefault,ceilingSurface=SurfaceDefault;
+    // SURFACE wallturn= floorturn= ceilingturn=: degrees each surface set's texture is turned.
+    float wallTurn=0,floorTurn=0,ceilingTurn=0;
     // ---- Map format 2 (EntityTraits.h, docs/Systems/map-format.md) ----
     // Every record's named fields as written, by recordFieldKey, so the exporter
     // writes them back (keys this build does not know among them).
@@ -652,7 +661,7 @@ struct AuthoredMapData {
     // PRIM records (Primitives.h addPrimitive): each expands into structures[first, first+count)
     // when it is read, and the exporter writes it back as the PRIM it was, so its named fields
     // (name=, tint=, hand=...) ride on it. Options are its named fields: hand, rails, thick.
-    struct PrimitiveRecord {std::string kind;float x=0,y=0,z=0,w=0,d=0,h=0;int facing=0,material=40;bool solid=true,solidWritten=false;int hand=1,rails=3;float thick=0;size_t first=0,count=0;};
+    struct PrimitiveRecord {std::string kind;float x=0,y=0,z=0,w=0,d=0,h=0;int facing=0,material=40;bool solid=true,solidWritten=false;int hand=1,rails=3;float thick=0;size_t first=0,count=0;float turn=0;};
     std::vector<PrimitiveRecord> primitives;
 };
 // The map as it plays: `map` itself, or a copy with its records' overrides
@@ -735,6 +744,9 @@ public:
     int wallSurface()const{return m_mapData?m_mapData->wallSurface:SurfaceDefault;}
     int floorSurface()const{return m_mapData?m_mapData->floorSurface:SurfaceDefault;}
     int ceilingSurface()const{return m_mapData?m_mapData->ceilingSurface:SurfaceDefault;}
+    float wallTurn()const{return m_mapData?m_mapData->wallTurn:0.f;}
+    float floorTurn()const{return m_mapData?m_mapData->floorTurn:0.f;}
+    float ceilingTurn()const{return m_mapData?m_mapData->ceilingTurn:0.f;}
     const std::vector<DarkZone>& darkZones()const{static const std::vector<DarkZone> empty;return m_mapData?m_mapData->darkZones:empty;}
     bool horrorMode()const{return m_worldId==WorldId::Ashfall;}
     bool coast()const{return horrorMode()&&m_level>=12;}

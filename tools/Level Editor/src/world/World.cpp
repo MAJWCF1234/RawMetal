@@ -406,7 +406,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  }
  for(const auto& source:m_mapData->layers){
   MapRows rows{};for(size_t row=0;row<rows.size();++row)rows[row]=source.rows[row];
-  m_layers.push_back({source.name,source.elevation,source.thickness,rows,source.deck,source.edge,source.railing});
+  m_layers.push_back({source.name,source.elevation,source.thickness,rows,source.deck,source.edge,source.railing,source.deckTurn});
  }
  m_terminals.reserve(m_mapData->terminals.size());
  for(const auto& source:m_mapData->terminals)m_terminals.push_back({source.position,source.title.c_str(),source.line1.c_str(),source.line2.c_str(),source.z,source.control,source.reactorAction,source.activateState,source.toggleState,source.yaw,source.requireState,source.readable,source.taped,source.surface});
@@ -1394,7 +1394,8 @@ void World::buildLayers(std::span<const Staircase> stairs){
    // A named deck finish (LAYER deck=) is the walking face: a 4 cm top over
    // the edge finish (edge=, the fascia and underside). Without either, as before.
    // Split once the map stands on its ground (splitFinishes), so on terrain the face keeps the deck's height.
-   if(layer.edge>=0&&layer.deck!=layer.edge&&z-underside>.06f)for(auto& piece:deckPieces)piece.topFinish=layer.deck>=0?layer.deck:0;
+   if(layer.edge>=0&&layer.deck!=layer.edge&&z-underside>.06f)for(auto& piece:deckPieces){piece.topFinish=layer.deck>=0?layer.deck:0;piece.topTurn=layer.deckTurn;}
+   else for(auto& piece:deckPieces)piece.turn=layer.deckTurn;
    m_structures.insert(m_structures.end(),deckPieces.begin(),deckPieces.end());
   }
   for(int y=1;y<Height-1;++y)for(int x=1;x<Width-1;++x)if(deck(x,y)){
@@ -1423,12 +1424,13 @@ void World::buildLayers(std::span<const Staircase> stairs){
    stair.alongY?stair.y1+(stair.y2-stair.y1)*lo:stair.y1,
    stair.alongY?stair.x2:stair.x1+(stair.x2-stair.x1)*hi,
    stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2,stair.openUnderside?top-stair.treadThickness:stair.bottom,top,false,stair.openUnderside?2:hasLift()?4:0});
+  m_structures.back().turn=stair.treadTurn; // STAIR treadturn=
   // Named finishes (STAIR tread=, riser=): the tread is the walking face, a
   // 4 cm top over the riser finish (the step's front and body). Without them, as before.
   if(stair.tread>=0||stair.riser>=0){auto& body=m_structures.back();
    const int tread=stair.tread>=0?stair.tread:body.material==4?0:body.material,riser=stair.riser>=0?stair.riser:tread;
    body.material=riser;
-   if(tread!=riser&&body.top-body.bottom>.06f)body.topFinish=tread; // split by splitFinishes
+   if(tread!=riser&&body.top-body.bottom>.06f){body.topFinish=tread;body.topTurn=stair.treadTurn;body.turn=0;} // split by splitFinishes: the riser stays as laid
   }
   if(stair.sideRails){
    // Side guards have the same tread-local elevation in rendering, optical
@@ -1549,7 +1551,7 @@ bool World::splitFinishes(){
  for(size_t i=0;i<count;++i){
   if(m_structures[i].trim>=0&&m_structures[i].trimWidth>0&&!m_structures[i].rail&&m_structures[i].shape==ShapeBox){
    auto s=m_structures[i];const float w=std::min(s.trimWidth,std::min(s.x2-s.x1,s.y2-s.y1)*.5f);
-   Structure band=s;band.material=s.trim;band.trim=-1;band.trimWidth=0;band.topFinish=-1;
+   Structure band=s;band.material=s.trim;band.trim=-1;band.trimWidth=0;band.topFinish=-1;band.turn=0;
    auto add=[&](float x1,float y1,float x2,float y2){if(x2-x1>.001f&&y2-y1>.001f){auto b=band;b.x1=x1;b.y1=y1;b.x2=x2;b.y2=y2;m_structures.push_back(b);}};
    add(s.x1,s.y1,s.x2,s.y1+w);add(s.x1,s.y2-w,s.x2,s.y2);add(s.x1,s.y1+w,s.x1+w,s.y2-w);add(s.x2-w,s.y1+w,s.x2,s.y2-w);
    auto& inner=m_structures[i];inner.trim=-1;inner.trimWidth=0;
@@ -1559,7 +1561,7 @@ bool World::splitFinishes(){
   }
   auto& s=m_structures[i];
   if(s.topFinish>=0){const int finish=s.topFinish;s.topFinish=-1;
-   if(s.top-s.bottom>.06f&&s.x2>s.x1){auto face=s;face.bottom=s.top-.04f;face.material=finish;s.top=face.bottom;m_structures.push_back(face);split=true;}}
+   if(s.top-s.bottom>.06f&&s.x2>s.x1){auto face=s;face.bottom=s.top-.04f;face.material=finish;face.turn=s.topTurn;s.top=face.bottom;m_structures.push_back(face);split=true;}}
  }
  return split;
 }
