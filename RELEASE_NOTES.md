@@ -4,15 +4,18 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.5.5
+## v1.5.5 - Sure footing (2026-11-18)
 
-- Thrown props no longer skate across the floor like ice: a landing now loses sideways speed to friction, and floors have their own bounce (taken with the prop's), so a crate thrown at 6 m/s comes to rest about 0.9 m from where it lands instead of 1.5 m.
-- Jointed bodies (corpses, hinged doors, chained lamps, bridges) now get continuous collision as one island, so a thrown body or a slammed door no longer passes through a thin wall or post; a joint solver blow-up when a fast-turning limb hit a wall is fixed.
-- Hinges, welds, sliders, distance joints and ropes are now held together by position after hard hits, so a heavy door keeps its pin and a welded pair stays welded.
-- Continuous collision against the world now uses far fewer sweeps: a blast of twenty crates asks about a tenth as many, with nothing passing through walls.
-- Warm-start keys keep bodies, parts and world clusters in separate bits, so numbered world clusters no longer lose their warm start.
-- Drums, barrels, mugs, tyres and jars roll as true rounds against crates, tables and rocks and still stand flat on their ends; round parts float on round water cells.
-- Mass scaling for a heavy body resting on a light one now only applies when the light one is actually supported, so things colliding in mid-air use their true masses.
+A fix for floors that played like ice, and for the things that came apart when struck too hard.
+
+- **Floors have grip again.** A thrown crate no longer skates across the room. It lands, loses its speed to the floor, and stops about a pace from where it came down. Floors have their own bounce now too: concrete and metal give a little, carpet and mud hardly any, and a wooden crate barely leaves the ground.
+- **Nothing slips through.** A body thrown hard, a door slammed against a thin post, a lamp whipped on its chain: none of them pass through thin walls any more, and they stay in one piece doing it.
+- **Pins hold.** Hinges, welds, sliders and ropes keep their pins after a hard blow, so a heavy door stays on its hinge and a welded pair stays welded.
+- **Round things are round.** Drums, barrels, mugs and tyres roll smoothly against crates, tables and rocks, and still stand flat on their ends.
+- **A blast costs less.** Twenty crates thrown by one explosion take a tenth of the work they did, with nothing slipping through the walls.
+- **Heavy on light, only when it rests.** A heavy drum falling into a light crate in the air now meets it as the light thing it is.
+
+Verified with tools/release/ship.py and the feature lab's physics tubes for each of the above.
 
 ---
 
