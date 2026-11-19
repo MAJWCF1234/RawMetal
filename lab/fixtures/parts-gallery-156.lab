@@ -1,0 +1,10 @@
+# The Starter Map's Parts Gallery 3 (map 128; Parts Gallery 4 is map 129): the 104 models imported for
+# 1.5.6 from the purchased packs, on two levelled gravel yards. Software rendering, so the depth buffer
+# the close-up check reads is the frame's own. Tubes: parts156.
+world custom "custom maps/Starter Map.rmc"
+map-name Parts Gallery 3
+camera 12 23 -999 -90 -8
+scenery-only
+software
+size 1280 720
+frames 4
