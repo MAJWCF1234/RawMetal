@@ -4131,7 +4131,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   else m_tpBodyYaw=-1e9f;
   // VR (the avatar, game/Avatar.h): the legs and the hips' facing come from the solve; her torso is leaned and
   // turned toward the head below, and her arms are the IK arms (drawTrackedHands).
-  const bool vrBody=m_vrRendering&&m_vrPoseReady;
+  const bool vrBody=(m_vrRendering||m_vrScripted)&&m_vrPoseReady;
   if(vrBody){clip=m_vrSolve.legsClip;phase=m_vrSolve.legsPhase;bodyAngle=m_vrPose.bodyYaw;}
   // A change of clip blends over .2 s from the pose it left.
   const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
@@ -4550,7 +4550,7 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  const AvatarPose&pose=m_vrPose;const AvatarSolve&solve=m_vrSolve;
  // Her arms: the viewmodel's arms on the avatar's shoulders, wrists on the hands (VRChat's upper-body IK), the
  // fingers as tracked; nothing of hers floats free of her.
- Point3 gunShift{};
+ Point3 gunShift{},supportShift{};
  if(m_vrPoseReady){
   const VrRig rig=poseVrArms(m_armsMesh,solve);
   for(const auto&face:m_armsMesh.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=cameraPoint(rigToWorld(rig,solve,face.v[i].p),game);}
@@ -4558,6 +4558,9 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   // The gun rides her drawn hand: where the arm put the wrist, against where the tracked wrist is.
   const int g=pose.gunSide&1;gunShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))-pose.hands[size_t(g)].wrist;
   if(!std::isfinite(gunShift.x)||!std::isfinite(gunShift.y)||!std::isfinite(gunShift.z)||std::sqrt(gunShift.x*gunShift.x+gunShift.y*gunShift.y+gunShift.z*gunShift.z)>.6f)gunShift={};
+  // A magazine or shell rides the other hand the same way.
+  supportShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.L":"hand.R"))-pose.hands[size_t(1-g)].wrist;
+  if(!std::isfinite(supportShift.x)||!std::isfinite(supportShift.y)||!std::isfinite(supportShift.z)||std::sqrt(supportShift.x*supportShift.x+supportShift.y*supportShift.y+supportShift.z*supportShift.z)>.6f)supportShift={};
   // The holsters: the shotgun across her back, the pistol at the gun hand's hip, while they are not in her hand.
   auto holster=[&](const Mesh& mesh,const Texture& texture,Point3 at,Point3 back,Point3 up,bool pistol){
    back=unit(back);up=unit(up-back*(back.x*up.x+back.y*up.y+back.z*up.z));const Point3 right{back.y*up.z-back.z*up.y,back.z*up.x-back.x*up.z,back.x*up.y-back.y*up.x};   // right = back x up: the mirrored frame gunBasis has
@@ -4596,6 +4599,22 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
    triangle3D(p0,q0,q1,t,1.f);triangle3D(p0,q1,q0,t,1.f);triangle3D(p0,q1,p1,t,1.f);triangle3D(p0,p1,q1,t,1.f);}};
   ring(inner,soft,feather);ring(soft,outer,black);}
 
+ // The guns' working points from the meshes as they are drawn here (Game::VrGunGeometry), handed to the game once.
+ if(!m_vrGunMeasured){Game::setVrGunGeometry(WeaponId::Handgun,measureVrGun(m_handgunMesh,true));Game::setVrGunGeometry(WeaponId::Shotgun,measureVrGun(m_weaponMesh,false));m_vrGunMeasured=true;}
+ const auto view=game.vrGunView();
+ const auto pistolGeometry=Game::vrGunGeometry(WeaponId::Handgun);
+ // One part of a mesh in a frame (its points already moved into the frame's own coordinates by point()).
+ auto drawPart=[&](const Mesh& mesh,const Texture& texture,int part,auto point,Point3 at,const std::array<Point3,3>& basis){VrHand frame;frame.position=at;frame.basis=basis;
+  for(auto face:mesh.triangles){if(face.part!=part)continue;for(auto&v:face.v)v.p=point(v.p);draw(face,texture,frame);}};
+ // A magazine let fall: where it fell, or on the floor.
+ if(view.dropped){const Point3 middle=pistolGeometry.magwell+pistolGeometry.magAxis*(pistolGeometry.magLength*.5f);
+  drawPart(m_handgunMesh,m_handgunTexture,5,[&](Point3 p){return vrPistolPoint(p,true)-middle;},view.dropAt,{view.dropRight,view.dropUp,view.dropBack});}
+ // The support hand's fist as drawn, and a frame in it (up the fist toward the index, back from the knuckles: the
+ // frame a gun would have in that hand), for a magazine or shell it holds.
+ const VrHand&off=hands[0];const bool offFrame=off.tracked&&off.handFrame&&!off.snapped;const Point3 fist=local(off.gunOrigin)+supportShift;
+ Point3 shellMiddle{};{int n=0;for(const auto&face:m_weaponMesh.triangles)if(face.part==3)for(const auto&v:face.v){shellMiddle=shellMiddle+vrShotgunPoint(m_weaponMesh,v.p);++n;}if(n)shellMiddle=shellMiddle*(1.f/float(n));}
+ if(offFrame&&view.held==1&&view.seat<0)drawPart(m_handgunMesh,m_handgunTexture,5,[&](Point3 p){return vrPistolPoint(p,true)-pistolGeometry.magwell;},fist,off.gunBasis);
+ if(offFrame&&view.held==2&&view.seat<0)drawPart(m_weaponMesh,m_weaponTexture,3,[&](Point3 p){return vrShotgunPoint(m_weaponMesh,p)-shellMiddle+Point3{0,.015f,0};},fist,off.gunBasis);
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
   VrHand gun=hands[1];if(gun.handFrame){gun.position=gun.gunOrigin;gun.basis=gun.gunBasis;}
   gun.position=local(gun.position)+gunShift;
@@ -4622,15 +4641,22 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   if(!m_vrForeEndMeasured){Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};int n=0;
    for(const auto&face:m_weaponMesh.triangles)if(face.part==2)for(const auto&v:face.v){const auto p=(v.p-center)*scale;const Point3 q{-p.x,p.y,p.z-.13f};low={std::min(low.x,q.x),std::min(low.y,q.y),std::min(low.z,q.z)};high={std::max(high.x,q.x),std::max(high.y,q.y),std::max(high.z,q.z)};++n;}
    if(n)VrRuntime::setForeEnd((low+high)*.5f,(high.z-low.z)*.5f);m_vrForeEndMeasured=true;}
-  // The pistol (vrPistolPoint), its slide home or locked back on an empty magazine.
-  if(pistol){const float slide=game.slideLocked()?.026f:0.f;for(auto face:m_handgunMesh.triangles){for(auto&v:face.v){auto p=v.p;if(face.part==4)p.z-=slide;v.p=vrPistolPoint(p,hands[1].handFrame);}draw(face,m_handgunTexture,gun);}}
-  // The shotgun: its pump (part 2) slides back with the physical pump stroke; the spent shell (part 3) shows
-  // only as it is thrown out.
-  else{const float pump=pose.pump,shot=game.shotAge();
-   for(auto face:m_weaponMesh.triangles){if(face.part==3&&(shot<.09f||shot>.45f))continue;
-    for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack+(face.part==2?pump:0.f)};
-     if(face.part==3){const float t=shot-.09f;v.p=v.p+Point3{-t*1.8f,t*.85f-t*t*3.5f,t*.3f};}}
-    draw(face,m_weaponTexture,gun);}}
+  // The pistol (vrPistolPoint): its slide home, locked back on an empty magazine or pulled by the support hand; its
+  // magazine (part 5) in, out (drawn in the hand or on the floor) or part way up the well on its line.
+  if(pistol){const float slide=view.slide;
+   for(auto face:m_handgunMesh.triangles){if(face.part==5&&view.magOut)continue;for(auto&v:face.v){auto p=v.p;if(face.part==4)p.z-=slide;v.p=vrPistolPoint(p,hands[1].handFrame);}draw(face,m_handgunTexture,gun);}
+   if(view.held==1&&view.seat>=0&&view.magOut){const Point3 down=pistolGeometry.magAxis*-view.depth;drawPart(m_handgunMesh,m_handgunTexture,5,[&](Point3 p){return vrPistolPoint(p,true)+down;},gun.position,gun.basis);}}
+  // The shotgun: its pump (part 2) slides back with the physical pump stroke. Its shell (part 3) is never drawn on
+  // it: a spent case leaves through Game::ejectCasing from the pump; a fresh one is drawn in the support hand, or
+  // part way into the loading port on its line.
+  else{const float pump=pose.pump;
+   for(auto face:m_weaponMesh.triangles){if(face.part==3)continue;
+    for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack+(face.part==2?pump:0.f)};}
+    draw(face,m_weaponTexture,gun);}
+   if(view.held==2&&view.seat>=0&&hands[1].handFrame){const Point3 port=Game::vrGunGeometry(WeaponId::Shotgun).loadingPort;
+    const Point3 d=fist-gun.position;const Point3 inGun{d.x*gun.basis[0].x+d.y*gun.basis[0].y+d.z*gun.basis[0].z,d.x*gun.basis[1].x+d.y*gun.basis[1].y+d.z*gun.basis[1].z,d.x*gun.basis[2].x+d.y*gun.basis[2].y+d.z*gun.basis[2].z};
+    const Point3 middle=inGun+(port-inGun)*view.seat+Point3{0,0,-.03f*view.seat};
+    drawPart(m_weaponMesh,m_weaponTexture,3,[&](Point3 p){return vrShotgunPoint(m_weaponMesh,p)-shellMiddle+middle;},gun.position,gun.basis);}}
  }
 }
 // --vr-test: the avatar's arms on scripted poses (no headset), numerically, and an OBJ of them.

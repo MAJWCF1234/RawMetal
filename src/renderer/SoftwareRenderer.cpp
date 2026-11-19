@@ -1480,7 +1480,7 @@ void SoftwareRenderer::render(const Game& game){
     if(!m_gpu||(faces==m_gpu->shadowFacesDrawn()&&captures==m_gpu->reflectionCaptures()&&bakes==m_probeBakesTaken&&!m_gpu->shadowsPending()&&!m_gpu->reflectionsPending()))break;}}
   catch(...){m_settlingFrame=false;throw;}
   m_settlingFrame=false;return;}
- auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();
+ auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();if(m_vrScripted&&m_vrViewSet)m_view=m_vrView;
  m_bodyOutside=false;
  // A lens position the camera may take: in sight of her head and with room
  // round it (a .4 m box clear of walls, pillars, props and doors).
@@ -1539,13 +1539,13 @@ void SoftwareRenderer::render(const Game& game){
   auto here=game.chunkOffset(game.level())+m_view.pos,other=game.chunkOffset(level);
   float dx=std::max({other.x-here.x,0.f,here.x-other.x-24}),dy=std::max({other.y-here.y,0.f,here.y-other.y-24});return dx*dx+dy*dy<=48.f*48.f;};
  warmChunks(game);
- auto scene=[&]{bool parallel=!m_vrRendering&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
+ auto scene=[&]{bool parallel=!m_vrRendering&&!m_vrScripted&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){drawScene(game,false,level);m_renderedChunks.push_back(level);}
-   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if((m_vrRendering||m_vrScripted)&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye,m_view.angle,m_view.pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
@@ -1671,6 +1671,13 @@ bool SoftwareRenderer::saveSceneCapture(const char*path){
  std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}return true;
 }
 void SoftwareRenderer::saveVrEye(const char*path){std::vector<uint32_t> pixels;m_gpu->captureVrEye(pixels);auto [width,height]=m_gpu->surfaceExtent();std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}}
+void SoftwareRenderer::renderVrScripted(const Game&game,const Player* view){
+ auto*runtime=VrRuntime::active();if(!runtime){render(game);return;}
+ m_vrViewSet=view!=nullptr;if(view)m_vrView=*view;
+ m_vrScripted=true;m_vrPose=runtime->avatar(game);m_vrPoseReady=m_vrPose.active&&!game.titleScreen();if(m_vrPoseReady)m_vrSolve=solveAvatar(m_vrPose,game.elapsed());
+ try{render(game);}catch(...){m_vrScripted=false;m_vrPoseReady=false;m_vrViewSet=false;throw;}
+ m_vrScripted=false;m_vrPoseReady=false;m_vrViewSet=false;
+}
 void SoftwareRenderer::renderVrEye(const Game&game,int eye){
  if(!m_gpu||!m_gpu->vrActive())throw std::runtime_error("VR requires the Vulkan renderer");
  m_vrRendering=true;

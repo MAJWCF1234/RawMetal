@@ -538,7 +538,7 @@ void Game::updateFrame(const InputState& input, float dt) {
     if(input.mute&&!m_previousMute)m_audioMuted=!m_audioMuted;
     if(input.music&&!m_previousMusic)m_musicEnabled=!m_musicEnabled;
     m_previousMute=input.mute;m_previousMusic=input.music;
-    if (input.reload && !m_previousReload) reloadWeapon();
+    if (input.reload && !m_previousReload){if(input.vrTracked)vrReloadButton();else reloadWeapon();}   // VR reloads by hand (VrGuns.cpp)
     m_previousReload = input.reload;
     // Hidden in a locker, holding a guard or in a takedown the hands are busy:
     // the locker and the hold give the gun back themselves when they end.
@@ -632,19 +632,15 @@ void Game::updateFrame(const InputState& input, float dt) {
         // A switch moves a little quicker than the empty-gun lower.
         float slew=(m_switchTarget!=WeaponId::Fists||m_switchRaise?3.4f:2.6f)*dt;m_holster+=std::clamp(lower-m_holster,-slew,slew);
         if(m_switchRaise&&(lower>0||m_holster<cycle.raiseHolster||!m_weaponEquipped))m_switchRaise=false;
-        const bool pumpGun=m_equippedWeapon==WeaponId::Shotgun;
-        // VR pump: the support hand's distance along the barrel from the grip.
-        if(input.vrTracked){Point3 d=m_vrHandPosition[0]-m_vrAimPosition;m_vrPumpAlong=d.x*m_vrAimDirection.x+d.y*m_vrAimDirection.y+d.z*m_vrAimDirection.z;
-         if(m_vrChamberEmpty&&!m_vrSupportGrip)m_vrChamberEmpty=m_vrPumpBack=false; // let go: it cycles itself
-         if(m_vrChamberEmpty){if(m_vrPumpAlong<m_vrPumpRest-.07f)m_vrPumpBack=true;
-          else if(m_vrPumpBack&&m_vrPumpAlong>m_vrPumpRest-.025f){m_vrChamberEmpty=m_vrPumpBack=false;sound(Sound::Pump,.9f);}}}
+        // VR: the magazine, slide, shells and pump by hand, and the recoil springs (VrGuns.cpp).
+        if(input.vrTracked)updateVrGun(input,dt);
         if(!input.fire)m_triggerReset=true;
         // Firing with a shell in the tube ends a shell-by-shell reload there.
         if(input.fire&&!m_suppressFire&&shellReload()&&rounds.loaded>0&&reloadElapsed()>=ShellStart){m_reloadTimer=0;m_shotCooldown=0;}
-        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&m_vrChamberEmpty&&pumpGun)) {
+        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&!vrGunReady())) {
             // Semi-automatic: one round per press, the trigger released before the next.
             const bool raised=m_weaponEquipped&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists,press=!cycle.semiAuto||m_triggerReset;
-            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked&&m_vrSupportGrip&&pumpGun){m_vrChamberEmpty=true;m_vrPumpBack=false;m_vrPumpRest=m_vrPumpAlong;}}
+            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked)vrShotFired();}
             else if(cycle.semiAuto&&raised&&press&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=cycle.fireCooldown;}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
@@ -681,7 +677,7 @@ void Game::updateFrame(const InputState& input, float dt) {
 }
 void Game::updateWeaponMotion(const InputState& input,float dt){
  const auto&cycle=equippedWeaponDef().cycle;
- if(m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt)sound(cycle.pumpSound,.65f);
+ if(!m_vrAimValid&&m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt)sound(cycle.pumpSound,.65f);   // (VR pumps by hand: VrGuns.cpp)
  m_shotAge+=dt;
  float yawRate=input.mouseDx*.0022f*m_settings.sensitivity/std::max(dt,.001f);
  float pitchRate=input.mouseDy*.308f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);

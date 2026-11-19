@@ -6,7 +6,9 @@ In VR the player is Claire, all of her, as in VRChat. There are no floating hand
 - **Fingers.** Each finger closes as far as SteamVR's skeletal summary says the player's finger is closed.
 - **Legs.** The legs are automatic. They play the same locomotion clips as the desktop body (walk, run, strafe, back-pedal, kneel, crouch-walk, crawl, falling), chosen from the stick movement against the hips' facing. Ducking for real crouches her.
 - **Holsters.** The shotgun rides across her back and the handgun at the gun hand's hip. Grip the gun hand over a shoulder to draw the shotgun, or at the hip to draw the handgun. A drawn gun stays in the hand when you let go. Let go at its own holster, after moving the hand away from it, to put it back. A grip used on a holster does not also grab or use anything.
-- **Held guns.** A held gun sits in her hand, with the fingers closed on the grip and the index finger as far onto the trigger as the player's is. On the shotgun, the support hand lies on the fore-end (VrRuntime::supportPose) and its arm reaches it.
+- **Held guns.** A held gun sits in her hand, with the fingers closed on the grip and the index finger as far onto the trigger as the player's is. Its barrel runs `VrRuntime::GunPitch` (14 degrees) above the knuckles, which is the grip's rake (`VrRuntime::gunFrame`).
+- **Support hand.** On the shotgun, the support hand lies on the fore-end (`VrRuntime::supportPose`) and its arm reaches it. The palm is under the wood and the knuckles point away from the elbow, so the wrist is under the wood. The real hand's roll turns it by at most 35 degrees. On the pistol, the support hand wraps the gun hand (`VrRuntime::pistolSupportPose`).
+- **Belt pouch.** The pouch is on the support side of the belt (`AvatarSolve::pouchSlot`, `avatarPouchAt`). The VR hand reloads take magazines and shells from it (`src/game/VrGuns.cpp`).
 
 ## Code
 
@@ -38,7 +40,9 @@ SteamVR's tracking space is right-handed. Game space is its mirror image (`rotat
 - the solve's frames, reach clamp, purity, legs, lean and twist, holsters and finger curls;
 - the mirror chain;
 - the arms posed on four scripted poses: wrist distance, finger and palm direction, elbows out and down, palm curl sign, and tracked fingers closing;
-- the fore-end snap through a full roll and a ±50 degree swing.
+- the fore-end snap through a full roll and a ±50 degree swing;
+- the guns in scripted hands (`VrRuntime::script`, `testGuns`): sights, bore and trace, the holster pulse, two hands on the pistol;
+- the hand reloads, pump, recoil and haptic pulses (`Game::testVrGuns`).
 
 It also writes `vr-avatar-arms.obj`, the four posed arm sets, for a look in any OBJ viewer.
 

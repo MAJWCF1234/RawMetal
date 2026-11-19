@@ -97,6 +97,7 @@ add_executable(RawMetal WIN32
     renderer/RemotePlayers.cpp
     renderer/FrontEnd.cpp
     game/VrHands.cpp
+    game/VrGuns.cpp
     game/Liquids.cpp
     game/physics/Vectra.cpp
     game/physics/Joints.cpp
@@ -257,6 +258,7 @@ add_executable(RawMetal WIN32
     renderer/Wetness.cpp
     renderer/Mesh.cpp
     renderer/Scene3D.cpp
+    renderer/VrGunDraw.cpp
     renderer/SoftMesh.cpp
     renderer/ClaireOutside.cpp
     renderer/ThirdPersonTest.cpp

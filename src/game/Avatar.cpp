@@ -41,6 +41,7 @@ AvatarSolve solveAvatar(const AvatarPose& p,float time){
  if(p.inHand==3)s.curls[size_t(g)]={.35f,std::clamp(p.hands[size_t(g)].curls[1],.25f,.5f),.85f,.88f,.9f};
  else if(p.inHand==2)s.curls[size_t(g)]={.55f,std::clamp(p.hands[size_t(g)].curls[1],.3f,.55f),.85f,.95f,.85f};
  if(p.support&&p.inHand==2)s.curls[size_t(o)]={.45f,.75f,.85f,.9f,.9f};
+ if(p.support&&p.inHand==3)s.curls[size_t(o)]={.5f,.8f,.85f,.9f,.9f};   // round the gun hand's fingers
  // A reload: the other hand goes down to the shells (or the magazine) at its hip and up to the gun, three times
  // for the shotgun's shells, once for a magazine.
  if(p.reload>0&&p.inHand){const int cycles=p.inHand==2?3:1;const float t=std::fmod(p.reload*float(cycles),1.f),u=t<.35f?0.f:t<.75f?(t-.35f)/.4f:1.f,ease=u*u*(3-2*u);
@@ -62,6 +63,8 @@ AvatarSolve solveAvatar(const AvatarPose& p,float time){
  // The holsters: the long gun across the back between the shoulder blades, the pistol at the gun hand's hip.
  s.backSlot=s.neck-s.torsoForward*.15f-s.torsoUp*.24f;
  s.hipSlot=p.root+Up*(p.eye*.62f)+(g?s.bodyLeft*-1.f:s.bodyLeft)*.19f+s.bodyForward*.02f;
+ // The pouch: the belt on the other side, a little ahead of the hip (where the support hand drops to reload).
+ s.pouchSlot=p.root+Up*(p.eye*.62f)+(g?s.bodyLeft:s.bodyLeft*-1.f)*.17f+s.bodyForward*.06f;
  return s;
 }
 int avatarSlotAt(const AvatarPose& p,Point3 hand){
@@ -72,6 +75,7 @@ int avatarSlotAt(const AvatarPose& p,Point3 hand){
  if(len(hand-s.hipSlot)<.2f)return 2;
  return 0;
 }
+bool avatarPouchAt(const AvatarPose& p,Point3 wrist){return len(wrist-solveAvatar(p,0).pouchSlot)<.2f;}
 bool testAvatar(std::ostream& report){
  bool ok=true;auto check=[&](bool pass,const char* what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
  auto near=[](Point3 a,Point3 b,float e=1e-4f){return len(a-b)<e;};
@@ -112,10 +116,12 @@ bool testAvatar(std::ostream& report){
  {const Point3 overRight=p.head-ahead(.4f)*.25f-leftOf(.4f)*.15f+Up*.05f,overLeft=p.head-ahead(.4f)*.25f+leftOf(.4f)*.15f;
   check(avatarSlotAt(p,overRight)==1&&avatarSlotAt(p,overLeft)==1,"over either shoulder: the back");
   check(avatarSlotAt(p,s.hipSlot+Up*.05f)==2&&avatarSlotAt(p,p.hands[1].wrist)==0,"at the right hip: the hip; ahead: neither");
-  AvatarPose lefty=p;lefty.gunSide=0;const auto r=solveAvatar(lefty,0);check(dot(r.hipSlot-p.root,r.bodyLeft)>.15f&&avatarSlotAt(lefty,s.hipSlot)==0,"left-handed: the hip slot is on her left");}
+  AvatarPose lefty=p;lefty.gunSide=0;const auto r=solveAvatar(lefty,0);check(dot(r.hipSlot-p.root,r.bodyLeft)>.15f&&avatarSlotAt(lefty,s.hipSlot)==0,"left-handed: the hip slot is on her left");
+  check(avatarPouchAt(p,s.pouchSlot+Up*.04f)&&dot(s.pouchSlot-p.root,s.bodyLeft)>.15f&&!avatarPouchAt(p,s.hipSlot)&&avatarSlotAt(p,s.pouchSlot)==0&&avatarPouchAt(lefty,r.pouchSlot)&&dot(r.pouchSlot-p.root,r.bodyLeft)<-.15f,"the belt pouch is on the support hand's hip, apart from the holster (and swaps left-handed)");}
  // Fingers on what they hold.
  {AvatarPose q=p;q.inHand=3;check(solveAvatar(q,0).curls[1][2]>=.85f&&solveAvatar(q,0).curls[0][2]==p.hands[0].curls[2],"the pistol closes the gun hand only");
   q.inHand=2;q.support=true;const auto r=solveAvatar(q,0);check(r.curls[0][1]>=.75f,"the support hand wraps the fore-end");
+  {AvatarPose two=p;two.inHand=3;two.support=true;check(solveAvatar(two,0).curls[0][1]>=.75f,"two-handed on the pistol, the support hand closes round the gun hand");}
   q.reload=.5f;const auto u=solveAvatar(q,0);check(len(u.wrist[0]-r.wrist[0])>.05f,"a reload takes the support hand off the fore-end");}
  return ok;
 }

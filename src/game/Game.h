@@ -504,6 +504,56 @@ public:
     // world's across the pointing (a hand held level, no roll).
     void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={},Point3 up={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandUp[side]=up;m_vrHandValid[side]=valid;}
     bool vrSupportGrip()const{return m_vrSupportGrip;}
+    // --- VR guns by hand (VrGuns.cpp; docs/Systems/vr-playtest.md) ---------------------------------------------
+    // Each frame VrRuntime hands the game the drawn gun's frame (game space, chunk-relative: the grip in the fist and
+    // the gun's right, up and back, back pointing from the muzzle to the grip), each hand's fist, velocity and grip
+    // (by role: 0 the support hand, 1 the gun hand) and whether the support hand's wrist is at the belt pouch. From
+    // that the game runs the handgun's magazine and slide and the shotgun's shells and pump; the recoil the gun shows
+    // and the haptic pulses VrRuntime plays come back out. Desktop play never touches any of it.
+    struct VrGunInput {bool valid=false;Point3 grip{},right{},up{},back{};std::array<Point3,2> fist{},velocity{};std::array<bool,2> grips{};bool pouch=false;};
+    // A gun model's working points in the gun frame (x right, y up, z back: metres from the grip in the fist), as
+    // the VR hands draw it. The renderer measures them from the meshes (setVrGunGeometry); the defaults are those
+    // measurements, so the game and its tests agree with the drawing without a renderer.
+    //  muzzle: where the bore leaves the gun; rearSight/frontSight: the tops of the sights (the sight line);
+    //  port: the ejection port (where a case is thrown from); magwell: the seated magazine's base, magAxis the way
+    //  it slides up into the grip, magLength how far; slideRear: where a hand takes the slide to rack it;
+    //  loadingPort: under the receiver, where shells go into the tube.
+    struct VrGunGeometry {Point3 muzzle{},rearSight{},frontSight{},port{},magwell{},magAxis{0,1,0},slideRear{},loadingPort{};float magLength=.11f;};
+    static void setVrGunGeometry(WeaponId id,const VrGunGeometry& geometry);
+    static VrGunGeometry vrGunGeometry(WeaponId id);
+    // The shot's line from a gun frame (game space): from the muzzle toward the point 15 m out along the sight line
+    // (the gun's zero), so the bore, the sights and the trace agree.
+    static constexpr float VrZero=15.f;
+    static void vrShotLine(const VrGunGeometry& g,Point3 grip,Point3 right,Point3 up,Point3 back,Point3& origin,Point3& direction);
+    void setVrGunInput(const VrGunInput& in){m_vrGunIn=in;}
+    // Recoil on the gun in the hand (never the view): metres pushed back along the bore, radians of muzzle rise.
+    struct VrRecoil {float back=0,rise=0;};
+    VrRecoil vrRecoil()const{return {m_vrGun.kickBack,m_vrGun.kickRise};}
+    // Haptic pulses asked of the controllers (by role); VrRuntime takes and plays them each frame. cause names the
+    // event (shot, magazine out, magazine seated, slide, pump back, pump forward, shell, draw, holster, pouch).
+    struct VrHaptic {int hand=1;float seconds=.02f,frequency=160,amplitude=.5f;const char* cause="";};
+    void vrHaptic(int hand,float seconds,float frequency,float amplitude,const char* cause){m_vrHaptics.push_back({hand,seconds,frequency,amplitude,cause});}
+    std::vector<VrHaptic> takeVrHaptics(){std::vector<VrHaptic> out;out.swap(m_vrHaptics);return out;}
+    const std::vector<VrHaptic>& vrHaptics()const{return m_vrHaptics;}
+    // What the VR drawing shows: held 0 nothing in the support hand, 1 a magazine, 2 a shell; seat how far it is
+    // into its port (0 at the opening to 1 home; -1 not at it) and depth the magazine's base below its seated place
+    // (m); the pistol's magazine out and slide travel back (m); the magazine last dropped, falling or on the floor.
+    struct VrGunView {int held=0;float seat=-1,depth=0;bool magOut=false;float slide=0;bool dropped=false;Point3 dropAt{},dropRight{},dropUp{},dropBack{};};
+    VrGunView vrGunView()const;
+    // The VR reload button (B on the gun hand): drops the handgun's magazine, or with a loaded one in on a locked-back
+    // slide, releases the slide. The shotgun loads by hand only: the button does nothing to it.
+    void vrReloadButton();
+    // The trigger may fire: the handgun has a round chambered, the shotgun has been pumped.
+    bool vrGunReady()const;
+    // The support hand holds a magazine or shell, or has just put one in and has not opened since: no fore-end snap,
+    // no two-hand hold and no grab for it until it opens.
+    bool vrSupportBusy()const{return m_vrGun.held!=0||m_vrGun.spentGrip;}
+    // A support-hand fist here would take the handgun's slide (it needs racking: nothing chambered).
+    bool vrRackZone(Point3 fist)const;
+    bool vrRacking()const{return m_vrGun.racking;}
+    static bool testVrGuns(std::ostream& report);
+    // A lit room with no creatures and the gun raised (VrRuntime's scripted checks, the lab's VR captures).
+    static Game vrGunScene(WeaponId gun,AmmoPool rounds,bool leftHanded=false);
     // Developer mode (--dev, console DEV): no damage, no creatures, every door open.
     // Console noclip: fly through walls (Movement.cpp). Never saved.
     bool noclip()const{return m_noclip;}
@@ -517,7 +567,7 @@ public:
     float aimBlend()const{return m_aimBlend;}
     // VR pump: fired with the support hand on the fore-end, the shotgun waits for
     // a stroke (back 7 cm, forward again). How far back the pump is, for drawing.
-    float vrPumpOffset()const{return m_vrChamberEmpty&&m_vrSupportGrip?std::clamp(m_vrPumpRest-m_vrPumpAlong,0.f,.1f):0.f;}
+    float vrPumpOffset()const{return m_vrSupportGrip&&m_equippedWeapon==WeaponId::Shotgun?std::clamp(m_vrPumpRest-m_vrPumpAlong,0.f,.09f):0.f;}
     void restart();
     int level()const{return m_level;}
     // Campaign content count; runtime custom packs use their authored map count.
@@ -1901,6 +1951,24 @@ private:
     bool m_navAuthority=true;
     bool m_vrAimValid=false,m_vrSupportGrip=false,m_vrChamberEmpty=false,m_vrPumpBack=false;float m_vrPumpRest=0,m_vrPumpAlong=0;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
+    // VR guns by hand (VrGuns.cpp). gun: the weapon this state is for (a switch resets it). held: 1 a magazine, 2 a
+    // shell in the support hand; spentGrip: one just went in and the hand has not opened. The handgun: magOut,
+    // chambered, slideBack (locked open), racking (rackFrom the fist where it took the slide, rack its pull back).
+    // The shotgun: spent (a fired case waits in the chamber for the pump), cycleAt (a one-handed shot's self-cycle).
+    // kick*: the recoil springs. drop*: the magazine let fall.
+    struct VrGunState {WeaponId gun=WeaponId::Fists;int held=0;bool spentGrip=false,prevGrip=false,wasSupport=false;
+     bool magOut=false,chambered=false,slideBack=false,racking=false;Point3 rackFrom{};float rack=0,rackMax=0,seat=-1,depth=0;
+     bool spent=false;float cycleAt=-1;
+     float kickBack=0,kickBackV=0,kickRise=0,kickRiseV=0;
+     bool dropped=false,dropRest=false;Point3 dropAt{},dropVelocity{},dropRight{},dropUp{},dropBack{};float dropAge=0;} m_vrGun;
+    VrGunInput m_vrGunIn;
+    std::vector<VrHaptic> m_vrHaptics;
+    // Every case the VR guns threw through ejectCasing (kind, where, how fast), the last 16: what the tests read.
+    struct VrEject {int kind=0;Point3 at{},velocity{};};std::vector<VrEject> m_vrEjected;
+    void vrEject(int kind,Point3 at,Point3 velocity);
+    void updateVrGun(const InputState& input,float dt);
+    void vrShotFired();
+    void soundAt(Sound sound,Point3 at,float gain,float pitch=1);
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;
     std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{},m_vrHandUp{};
     std::array<bool,2> m_vrHandValid{},m_vrMeleeTracked{};
