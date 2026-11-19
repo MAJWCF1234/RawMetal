@@ -42,6 +42,8 @@ void Game::updateStreaming(float dt){
  std::vector<char> friendlyNeeded;friendlyChunksNeeded(friendlyNeeded);
  if(ai::streamingVerify())for(int level=0;level<chunkCount();++level)
   if(bool(friendlyNeeded[size_t(level)])!=friendlyChunkNeeded(level))perf::count(perf::StreamingMismatches);
+ // A co-op host keeps every map a player stands on, and the maps beside it, as it keeps its own (m_netKeep).
+ for(size_t level=0;level<m_netKeep.size()&&level<friendlyNeeded.size();++level)if(m_netKeep[level])friendlyNeeded[level]=1;
  if(m_world.definition().residencyGroup>=0){
   for(int index=0;index<int(m_world.doors().size());++index){const auto& door=m_world.doors()[index];
    if(!door.opening&&door.open>0&&door.rest<0&&door.spans(m_player.pos,-.25f)&&std::fabs(door.across(m_player.pos)-door.y)<.55f)m_world.openDoor(index);

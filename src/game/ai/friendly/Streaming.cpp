@@ -256,6 +256,7 @@ void Game::updateFriendlyActors(float dt,bool guards){
  if(guards){for(auto shot:m_guardShots){shot.source=shot.source-chunkOffset(m_level);shot.categories=ai::SoundWeapon;stimuli.push_back(shot);}m_guardShots.clear();}
  for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();auto&home=friendlyWorld(npc.homeLevel);
   if(dt>0&&(track.ai.mode==ActorAiMode::Guard)!=guards)continue;
+  if(!actorInFrame(npc.level))continue;   // a co-op host: one on another occupied map thinks in that map's frame
   // A co-op guest: guards and people think on the host; here they stand as its snapshots put them (Match).
   if(m_netCreaturesRemote&&autonomousActor(track))continue;
   // The console's freeze and `ai off`: he stands as he is (Summon.cpp).

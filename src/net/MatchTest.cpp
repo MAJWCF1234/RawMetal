@@ -2,6 +2,7 @@
 #include "Loopback.h"
 #include "Wire.h"
 #include "../game/Game.h"
+#include "../game/physics/PropBodies.h"
 #include "../world/CustomCampaign.h"
 #include "../world/CampaignExport.h"
 #include <chrono>
@@ -38,6 +39,23 @@ std::string coopText(){
  t+="TIMED_SEQUENCE|0|clock|done|0|0|24|24|-0.2|8|30000|30000|0|0|0|0|1|1\nACTOR|0|clock|4|1.6|0|0|0\n"
     "ACTOR_KEY|0|0|0|5.5|5.5|0|1.57|0|0\nACTOR_KEY|0|0|30000|5.5|5.5|0|1.57|0|1\nACTOR_AI|0|0|3|guard_on|1.4|2|6\nACTOR_GUARD|0|0|11|0.65|600|4000|alert\n"
     "ACTOR_PATROL|0|0|5.5|5.5|0|300\nACTOR_PATROL|0|0|18.5|5.5|0|300\nACTOR_HEALTH|0|0|90|g_damage|g_dead\nACTOR_WEAPON|0|0|2|650|1000|9|18\n";
+ return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+}
+// Several maps: West (0) and South (1) side by side on the grid with an open seam between (x 4-19 at y 24), the
+// Annex (2) apart from both (the test then puts it on West's own origin: maps that do not share one grid), the Yard
+// (3) far east with fifty crates. On West: a crate, a glass bottle of water and a small box; on the Annex a crate.
+std::string mapsText(){
+ std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nFORMAT|2\nCAMPAIGN|Net Maps|0\n";
+ const char* names[]={"West","South","Annex","Yard"};const int ox[]={0,0,48,96},oy[]={0,24,48,0};
+ std::string seam(24,'#');for(int x=4;x<20;++x)seam[size_t(x)]='.';
+ for(int m=0;m<4;++m){const std::string M=std::to_string(m);
+  t+="MAP|"+M+"|"+names[m]+"|"+std::to_string(ox[m])+"|"+std::to_string(oy[m])+"|3.5|16.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|"+M+"|0|Floor|0|0\n";
+  for(int row=0;row<24;++row){std::string r(24,'.');r.front()=r.back()='#';
+   if(row==0)r=m==1?seam:std::string(24,'#');if(row==23)r=m==0?seam:std::string(24,'#');
+   t+="ROW|"+M+"|0|"+std::to_string(row)+"|"+r+"\n";}}
+ t+="CLUTTER|0|7|12|8|-999|0|17|0.6|0.6|0.6|0|0|#0\nCLUTTER|0|7|15|15|-999|0|384|0.1|0.1|0.36|0|0|#0|p.liquid=water|p.fill=0.8\nCLUTTER|0|7|9|12|-999|0|17|0.3|0.3|0.3|0|0|#0\n";
+ t+="CLUTTER|2|7|12|8|-999|0|17|0.6|0.6|0.6|0|0|#0\n";
+ for(int k=0;k<50;++k)t+="CLUTTER|3|7|"+std::to_string(3.f+float(k%10)*1.8f)+"|"+std::to_string(5.f+float(k/10)*1.8f)+"|-999|0|17|0.4|0.4|0.4|0|0|#0\n";
  return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
 }
 std::string lobbyText(){
@@ -289,6 +307,128 @@ bool Match::selfTest(std::ostream& report){
    std::size_t creatures=0;{wire::Writer w;w.u8(12).u32(0).u8(0).u16(0);creatures=w.b.size()+20*8;}
    report<<"INFO co-op world traffic to one guest at rest (state store, clocks): "<<perSecond/1024<<" KB/s; creature snapshots (as before) ~"<<creatures<<" bytes for 8 at 15 Hz ("<<float(creatures)*15/1024<<" KB/s)\n";}
   sh->leave();frames(10);playing.clear();
+ }
+ // ===== Co-op on several maps at once, and props from the host =====
+ {
+  const std::string mapsFile="Net Maps.rmc";
+  {std::ofstream(hostMaps/mapsFile,std::ios::binary)<<mapsText();std::ofstream(guestMaps/mapsFile,std::ios::binary)<<mapsText();}
+  // West and South share an open seam (the Builder's open edges), as each machine loads them.
+  auto opened=[](std::shared_ptr<const CustomCampaign> c){auto copy=std::make_shared<CustomCampaign>(*c);
+   auto west=std::make_shared<AuthoredMapData>(*copy->maps[0]);west->openSouth=true;copy->maps[0]=west;
+   auto south=std::make_shared<AuthoredMapData>(*copy->maps[1]);south->openNorth=true;copy->maps[1]=south;
+   // The Annex on West's own origin: maps that do not share one grid (the loader keeps a file's apart; nothing else does).
+   auto annex=std::make_shared<AuthoredMapData>(*copy->maps[2]);annex->definition.origin={0,0};copy->maps[2]=annex;return std::shared_ptr<const CustomCampaign>(copy);};
+  auto mapsGuest=[&]{auto g=makeGuest(guestMaps,false);g->m_customCampaigns.push_back(opened(loadCustomCampaignFile(guestMaps/mapsFile)));return g;};
+  auto pos=[](const Clutter* c){return c?Point3{c->pos.x,c->pos.y,c->z}:Point3{-99,-99,-99};};
+  auto propOn=[](Game& g,int level,std::uint32_t id)->Clutter*{if(!g.chunkResident(level))return nullptr;auto& list=level==g.m_level?g.m_clutter:g.m_chunks[size_t(level)].clutter;for(auto& c:list)if(c.netId==id)return &c;return nullptr;};
+  auto indexOf=[](Game& g,int level,const Clutter* c){auto& list=level==g.m_level?g.m_clutter:g.m_chunks[size_t(level)].clutter;return size_t(c-list.data());};
+  auto turnGap=[](const Clutter* a,const Clutter* b){const auto qa=vectra::propOrientation(*a),qb=vectra::propOrientation(*b);return 1-std::fabs(qa.w*qb.w+qa.x*qb.x+qa.y*qb.y+qa.z*qb.z);};
+  auto start=[&](LoopbackHub& hub,std::unique_ptr<Game>& host,std::vector<std::unique_ptr<Game>>& guests,std::vector<std::unique_ptr<LoopbackSession>>& sessions,int count){
+   sessions.push_back(hub.connect("Hana"));host=std::make_unique<Game>(opened(loadCustomCampaignFile(hostMaps/mapsFile)));host->m_customMapDirectory=hostMaps.wstring();
+   host->setNetSession(sessions[0].get());host->m_god=true;playing={host.get()};frames(1);
+   HostOptions o;o.mode=Mode::Coop;o.map=mapsFile;o.mapHash=mapFileHash(hostMaps/mapsFile);o.maxPlayers=8;sessions[0]->host(o);frames(1);
+   for(int k=0;k<count;++k){sessions.push_back(hub.connect(std::string("Guest")+char('A'+k)));guests.push_back(mapsGuest());guests.back()->setNetSession(sessions.back().get());playing.push_back(guests.back().get());
+    frames(1);sessions.back()->joinCode(sessions[0]->lobby().joinCode);Game* g=guests.back().get();until(240,[&]{return g->m_match&&g->m_match->started();});}
+   frames(30);};
+  {
+   LoopbackHub hub;std::unique_ptr<Game> host;std::vector<std::unique_ptr<Game>> guests;std::vector<std::unique_ptr<LoopbackSession>> sessions;start(hub,host,guests,sessions,1);
+   Game& guest=*guests[0];const int gs=slotOfGame(guest);
+   check(gs>0&&guest.m_match&&guest.m_match->started()&&host->m_level==0&&guest.m_level==0,"several maps: the guest joins on the start map");
+   // --- Two maps at once: the host on West, the guest on the Annex (the same coordinates, not side by side) ---
+   host->m_player.pos={6.f,6.f};host->m_match->placePlayer(gs,2,{6.f,6.f,0.f});frames(20);
+   check(guest.m_level==2&&host->m_level==0&&host->m_match->m_slots[size_t(gs)].latest.level==2,"the host sends the guest to the Annex and stays on West");
+   check(!remote(*host,gs)&&!remote(guest,0),"neither draws the other: they stand at the same coordinates of maps that are not side by side");
+   check(host->players().size()==1&&host->m_netForeign.size()>2&&host->m_netForeign[2]&&host->m_netKeep[2],"the host's own minds see only the host; the Annex is kept and gets a frame of its own");
+   auto creatureOn=[&](int level,Vec2 at,float heading){Enemy e;e.kind=Enemy::Kind::Huntsman;e.pos=e.home=e.lastKnown=at;e.z=e.homeZ=0;e.heading=heading;e.hp=e.maxHp=5000;
+    auto& list=level==host->m_level?host->m_enemies:host->m_chunks[size_t(level)].enemies;list.push_back(e);return list.size()-1;};
+   const size_t annex=creatureOn(2,{6.f,13.f},-kPi*.5f),west=creatureOn(0,{6.f,13.f},-kPi*.5f);
+   const float guestBefore=guest.m_player.health;
+   bool hunted=false;for(int i=0;i<int(3.f/dt)&&!hunted;++i){frames(1);hunted=host->m_chunks[2].enemies[annex].target==gs&&host->m_enemies[west].target==0;}
+   check(hunted,"the Annex's creature takes the guest as its prey, West's the host: each hunts on its own map");
+   until(int(8.f/dt),[&]{return guest.m_player.health<guestBefore-1;});
+   check(guest.m_player.health<guestBefore-1,"the Annex's creature, run on the host, reaches and wounds the guest ("+std::to_string(int(guestBefore))+" -> "+std::to_string(int(guest.m_player.health))+")");
+   check(length(host->m_enemies[west].pos-Vec2{6.f,13.f})>1.f,"West's creature ran after the host meanwhile ("+std::to_string(length(host->m_enemies[west].pos-Vec2{6.f,13.f})).substr(0,4)+" m)");
+   {const auto& a=host->m_chunks[2].enemies[annex];bool seen=false;for(const auto& e:guest.m_enemies)seen|=e.alive&&length(e.pos-a.pos)<.6f;
+    check(seen&&guest.m_enemies.size()==host->m_chunks[2].enemies.size(),"the guest is sent its own map's creatures, where the host has them, and not West's");}
+   host->m_chunks[2].enemies.clear();host->m_enemies.clear();frames(5);
+   // --- A guest leaves a map alone: over the seam onto South, nobody pulled ---
+   host->m_match->placePlayer(gs,0,{12.f,22.f,0.f});frames(20);
+   check(guest.m_level==0,"the guest is back on West, by the open seam");
+   walk(guest,{0,1},2.5f,1.6f,nullptr,nullptr,0);frames(60);
+   check(guest.m_level==1&&host->m_match->m_slots[size_t(gs)].latest.level==1&&host->m_level==0,"the guest walks over the seam onto South alone; the host stays on West");
+   check(guest.m_player.pos.y>1.f&&guest.m_player.pos.y<9.f&&guest.hullFits(guest.m_player.pos,guest.m_player.z,guest.m_player.hullHeight()),"a second later the guest is where it walked to, in the open (not pulled back, not in a wall): "+std::to_string(guest.m_player.pos.x).substr(0,5)+", "+std::to_string(guest.m_player.pos.y).substr(0,5)+", z "+std::to_string(guest.m_player.z).substr(0,5));
+   check(host->m_netKeep.size()>1&&host->m_netKeep[1]&&host->chunkResident(1)&&!host->m_netForeign.empty()&&host->m_netForeign[1],"the host keeps South resident and runs it");
+   check(remote(*host,gs)&&remote(guest,0),"side by side on the grid, each still draws the other across the seam");
+   // --- The host changes map: with follow off the guest stays; with COOPFOLLOW a guest on the map it left comes along ---
+   host->m_match->placePlayer(0,2,{6.f,6.f,0.f});frames(30);
+   check(host->m_level==2&&guest.m_level==1,"the host goes to the Annex; the guest stays on South");
+   host->m_match->setFollowHost(true);host->m_match->placePlayer(gs,2,{8.f,6.f,0.f});frames(20);
+   host->m_match->placePlayer(0,0,{6.f,9.f,0.f});frames(30);
+   check(guest.m_level==0&&host->m_level==0&&gap(here(guest),here(*host))<3.f&&guest.hullFits(guest.m_player.pos,guest.m_player.z,guest.m_player.hullHeight()),"with COOPFOLLOW on, the guest on the map the host left comes along, beside it in the open (guest map "+std::to_string(guest.m_level)+", host map "+std::to_string(host->m_level)+", "+std::to_string(gap(here(guest),here(*host))).substr(0,4)+" m apart)");
+   host->m_match->setFollowHost(false);
+   // --- Props: the host's are the truth ---
+   host->m_match->placePlayer(gs,0,{9.f,9.f,0.f});host->m_player.pos={6.f,9.f};frames(30);
+   const std::uint32_t crateId=(1u<<16)|1u,bottleId=(1u<<16)|2u,boxId=(1u<<16)|3u;
+   check(propOn(*host,0,crateId)&&propOn(guest,0,crateId)&&propOn(guest,0,bottleId)&&host->m_netPropsHost&&guest.m_netPropsRemote,"both machines name West's props alike");
+   {Clutter* hc=propOn(*host,0,crateId);const Point3 home=pos(hc);host->knockClutter(0,indexOf(*host,0,hc),{hc->pos.x,hc->pos.y,hc->z+.55f},{14.f,0,3.f});frames(int(3.f/dt));
+    hc=propOn(*host,0,crateId);const Clutter* gc=propOn(guest,0,crateId);const float moved=gap(pos(hc),home),err=gap(pos(hc),pos(gc));
+    check(moved>.3f&&err<.03f&&turnGap(hc,gc)<1e-3f,"a crate the host knocks over moves on the guest: "+std::to_string(moved).substr(0,4)+" m, the guest's within "+std::to_string(err).substr(0,5)+" m and turned alike");}
+   {Clutter* gb=propOn(guest,0,boxId);guest.m_heldClutter=int(indexOf(guest,0,gb));float worst=0;
+    for(int i=0;i<60;++i){guest.m_player.angle+=.01f;frames(1);if(i>20)worst=std::max(worst,gap(pos(propOn(*host,0,boxId)),pos(propOn(guest,0,boxId))));}
+    const Clutter* hb=propOn(*host,0,boxId);
+    check(guest.holdingClutter()&&hb->netHolder==gs&&worst<.25f,"the guest picks up the box: its own hand moves it at once, the host's copy follows it (worst "+std::to_string(worst).substr(0,4)+" m behind)");
+    const Point3 held=pos(hb);guest.m_suppressFire=false;guest.puntHeld({std::cos(guest.m_player.angle),std::sin(guest.m_player.angle),.35f},1.f);frames(int(4.f/dt));
+    hb=propOn(*host,0,boxId);const Clutter* gb2=propOn(guest,0,boxId);const float flew=gap(pos(hb),held),err=gap(pos(hb),pos(gb2));
+    check(!guest.holdingClutter()&&hb->netHolder<0&&flew>.5f&&err<.05f,"thrown, it flies on the host ("+std::to_string(flew).substr(0,4)+" m) and lands in the same place on both (within "+std::to_string(err).substr(0,5)+" m)");}
+   {Clutter* hb=propOn(*host,0,bottleId);const bool wet=hb->liquid.holds();host->breakClutter(0,indexOf(*host,0,hb),{0,0,-1});frames(20);
+    const Clutter* gb=propOn(guest,0,bottleId);
+    check(gb&&gb->broken&&(!wet||!guest.liquidDrops().empty()||!guest.puddles().empty()),std::string("a bottle broken on the host breaks on the guest")+(wet?" and spills its water there":""));}
+   {Clutter* gc=propOn(guest,0,crateId);const Point3 before=pos(propOn(*host,0,crateId));guest.knockClutter(0,indexOf(guest,0,gc),{gc->pos.x,gc->pos.y,gc->z+.3f},{0,-30.f,6.f});frames(int(3.f/dt));
+    const float moved=gap(pos(propOn(*host,0,crateId)),before),err=gap(pos(propOn(*host,0,crateId)),pos(propOn(guest,0,crateId)));
+    check(moved>.2f&&err<.03f,"a guest's blow on a crate is dealt on the host ("+std::to_string(moved).substr(0,4)+" m) and the guest sees where it went (within "+std::to_string(err).substr(0,5)+" m)");}
+   // --- Fifty props awake: the traffic to one guest ---
+   {host->m_match->placePlayer(gs,3,{96.f+12.f,14.f,0.f});frames(30);
+    for(auto& c:host->m_chunks[3].clutter)if(c.netId&&c.netId!=Clutter::NetDebris)host->knockClutter(3,indexOf(*host,3,&c),{c.pos.x+.1f,c.pos.y,c.z+.35f},{12.f,7.f,30.f});
+    const std::size_t before=host->m_match->m_propBytes;int awake=0;
+    for(int i=0;i<int(1.f/dt);++i){frames(1);int now=0;for(const auto& c:host->m_chunks[3].clutter)now+=c.netId!=Clutter::NetDebris&&!c.sleeping;awake=std::max(awake,now);}
+    const float perSecond=float(host->m_match->m_propBytes-before);
+    report<<"INFO props: "<<awake<<" props awake on the guest's map: "<<perSecond/1024.f<<" KB/s to that guest (PropState at 15 Hz, ~13 bytes a prop)\n";
+    frames(int(4.f/dt));float worst=0;for(const auto& c:host->m_chunks[3].clutter){const Clutter* g=propOn(guest,3,c.netId);worst=std::max(worst,g?gap(pos(&c),pos(g)):99.f);}
+    check(awake>=40&&perSecond<16*1024&&worst<.03f,"fifty knocked crates come to rest on the guest where the host has them (worst "+std::to_string(worst).substr(0,5)+" m) at "+std::to_string(int(perSecond/1024))+" KB/s");}
+   for(auto& s:sessions)s->leave();frames(5);playing.clear();
+  }
+  // --- The host's frame with 1, 2 and 4 maps occupied (each with six creatures hunting) ---
+  {
+   LoopbackHub hub;std::unique_ptr<Game> host;std::vector<std::unique_ptr<Game>> guests;std::vector<std::unique_ptr<LoopbackSession>> sessions;start(hub,host,guests,sessions,3);
+   for(auto& g:guests)g->m_god=true;
+   auto pack=[&](int level,Vec2 near){auto& list=level==host->m_level?host->m_enemies:host->m_chunks[size_t(level)].enemies;list.clear();
+    for(int k=0;k<6;++k){Enemy e;e.kind=Enemy::Kind::Huntsman;e.pos=e.home=e.lastKnown=near+Vec2{-5.f+2.f*float(k),8.f};e.z=e.homeZ=0;e.heading=-kPi*.5f;e.hp=e.maxHp=5000;e.awareness=8;list.push_back(e);}};
+   auto timeHost=[&](int n){double ms=0,worst=0;for(int i=0;i<n;++i){for(auto& g:guests)g->update(InputState{},dt);const auto t0=std::chrono::steady_clock::now();host->update(InputState{},dt);
+     const double f=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();ms+=f;worst=std::max(worst,f);}return std::pair<double,double>{ms/n,worst};};
+   const int levels[3][3]={{0,0,0},{2,0,0},{1,2,3}};double one=0;
+   for(int c=0;c<3;++c){host->m_player.pos={12.f,4.f};
+    for(int k=0;k<3;++k){const int l=levels[c][k];host->m_match->placePlayer(slotOfGame(*guests[size_t(k)]),l,{host->chunkOffset(l).x+6.f+3.f*float(k),host->chunkOffset(l).y+4.f,0.f});}
+    frames(20);for(int l=0;l<4;++l)pack(l,{12.f,4.f});timeHost(30);const auto [mean,worst]=timeHost(120);if(c==0)one=mean;
+    const int maps=c==0?1:c==1?2:4;
+    report<<"INFO host frame with "<<maps<<" occupied map"<<(maps>1?"s":"")<<": "<<mean<<" ms mean, "<<worst<<" ms worst (6 hunting creatures a map, "<<(c==0?"all on West":c==1?"one guest on the Annex":"guests on South, the Annex and the Yard")<<")\n";
+    if(c==2)check(mean<std::max(2*one,one+4.0),"four occupied maps do not halve the host's frame rate ("+std::to_string(one).substr(0,5)+" ms with one, "+std::to_string(mean).substr(0,5)+" ms with four)");}
+   for(auto& s:sessions)s->leave();frames(5);playing.clear();
+  }
+  // --- Props over a lossy, slow hub ---
+  {
+   LoopbackHub hub;hub.unreliableLossPercent=20;hub.latencyTicks=6;std::unique_ptr<Game> host;std::vector<std::unique_ptr<Game>> guests;std::vector<std::unique_ptr<LoopbackSession>> sessions;start(hub,host,guests,sessions,1);
+   Game& guest=*guests[0];const int gs=slotOfGame(guest);host->m_match->placePlayer(gs,0,{9.f,9.f,0.f});host->m_player.pos={6.f,9.f};frames(40);
+   const std::uint32_t crateId=(1u<<16)|1u,boxId=(1u<<16)|3u;
+   {Clutter* hc=propOn(*host,0,crateId);host->knockClutter(0,indexOf(*host,0,hc),{hc->pos.x,hc->pos.y,hc->z+.55f},{14.f,0,3.f});frames(int(4.f/dt));}
+   const float knocked=gap(pos(propOn(*host,0,crateId)),pos(propOn(guest,0,crateId)));
+   {Clutter* gb=propOn(guest,0,boxId);guest.m_heldClutter=int(indexOf(guest,0,gb));for(int i=0;i<40;++i){guest.m_player.angle+=.01f;frames(1);}
+    guest.puntHeld({std::cos(guest.m_player.angle),std::sin(guest.m_player.angle),.35f},1.f);frames(int(5.f/dt));}
+   const float thrown=gap(pos(propOn(*host,0,boxId)),pos(propOn(guest,0,boxId)));
+   check(knocked<.03f&&thrown<.05f,"20% loss, 6-tick latency: a crate the host knocks and a box the guest throws end where the host has them ("+std::to_string(knocked).substr(0,5)+" / "+std::to_string(thrown).substr(0,5)+" m)");
+   for(auto& s:sessions)s->leave();frames(5);playing.clear();
+  }
+  {wire::Writer w;w.u8(15).u32(0).u8(0).u8(50);const std::size_t bytes=w.b.size()+50*13;
+   report<<"INFO PropState with 50 props: "<<bytes<<" bytes; at 15 Hz "<<float(bytes)*15/1024<<" KB/s per guest; PropCarry 15 bytes at 30 Hz up while carrying ("<<15*30/1024.f<<" KB/s); PropThrow 45, PropKnock 33, PropBreak 8, PropSpawn 23, PaneBreak 4 bytes\n";}
  }
  // ===== A lossy, slow hub =====
  {

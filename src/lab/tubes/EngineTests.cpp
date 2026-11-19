@@ -94,6 +94,7 @@ const bool registered=[]{
  engine("machine","--each-test=machine: the cursed equipment",&Game::testMachine);
  engine("summon","console summon: kinds, placement, allegiances, fights, aimed commands, transient through a save",+[]{std::ofstream r("summon-test.txt");return Game::testSummon(r);});
  engine("noclip","console noclip: through walls, up and down, sprint, not saved",+[]{std::ofstream r("noclip-test.txt");return Game::testNoclip(r);});
+ engine("streaming","--each-test=streaming: door streaming, seams both ways, Ashfall residency, visible halls",&Game::testStreaming);
  // What breaks and what it leaves (tubes/Debris.cpp works the pieces; these keep the old behaviour).
  engine("clutter","--each-test=clutter: junk and shards lift, fall, land and sound",&Game::testClutter);
  engine("props","--each-test=props: model props, breaking, held and thrown",&Game::testProps);

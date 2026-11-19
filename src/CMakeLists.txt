@@ -92,6 +92,7 @@ add_executable(RawMetal WIN32
     net/Match.cpp
     net/MatchPlay.cpp
     net/MatchCoop.cpp
+    net/MatchProps.cpp
     net/MatchTest.cpp
     game/MultiplayerMenu.cpp
     renderer/RemotePlayers.cpp
@@ -120,6 +121,7 @@ add_executable(RawMetal WIN32
     game/Console.cpp
     game/Summon.cpp
     game/Streaming.cpp
+    game/ForeignChunks.cpp
     game/Mechanisms.cpp
     game/Electricity.cpp
     game/ActorTimeline.cpp

@@ -298,6 +298,12 @@ struct Clutter {
  bool pinned=false;
  // Liquid in it (Liquids.h: a bottle's water, oil or chemical, its sloshing surface, a hole): saved in the "liquids" section.
  liquid::State liquid;
+ // A match's name for it (docs/Systems/multiplayer.md "Props"): (map+1)<<16 | its CLUTTER record+1 for an
+ // authored prop (seedClutter, the same on every machine), (map+1)<<16 | 0x8000+n for one the host spawned,
+ // NetDebris for a shard or gib (each machine's own, never sent). netHolder: on a host, the slot of the guest
+ // carrying it (the guest's hand poses it; the solver leaves it be), else -1. Neither is saved.
+ static constexpr std::uint32_t NetDebris=0xFFFFFFFFu;
+ std::uint32_t netId=0;int netHolder=-1;
  PropMaterial material()const;float mass()const;float supportHeight()const;
  float friction()const{return traits&&traits->friction>=0?traits->friction*8.f:model>=0?propMaterialTraits(material()).friction:7.f;}
  float restitution()const{return traits&&traits->restitution>=0?traits->restitution:propMaterialTraits(material()).restitution;}
@@ -473,7 +479,8 @@ public:
     // player's goes out through the Match (m_netHurts), the host takes it off that guest and sends it to them.
     bool hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable=true,bool shieldable=true);
     // A co-op guest's body as the host keeps it (the Match fills it each frame; empty everywhere else).
-    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false;float lit=1,litTimer=0,stride=0;};
+    // pushing: they lean into something (walking keys held while stopped): a prop is shoved their way.
+    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false,pushing=false;float lit=1,litTimer=0,stride=0;};
     // The light on a point (a body's chest): the lamps, the room's ambient and darkness, a torch.
     float lightAt(Vec2 at,float chest,bool torch)const;
     // Script effects a co-op host sends on (the Match drains it after the frame; cleared at each script pass):
@@ -1939,6 +1946,40 @@ private:
     std::vector<NetUse> m_netUses;
     int m_scriptPlayer=0;       // the player whose step or hand fires the script running now
     int m_shooter=0;            // the player whose shot is being resolved (a co-op host resolving a guest's)
+    // ----- Several maps at once (ForeignChunks.cpp; docs/Systems/multiplayer.md "Several maps") -----
+    // A co-op host runs every map a player stands on. Its own map is the active chunk as always; each other one
+    // is swapped in as the active chunk for a frame of its own (ChunkFrame) in which its creatures, people and
+    // scripts think against the players on it (players() holds the players in the active chunk's frame: its map
+    // and the maps stitched beside it on the grid). m_netForeign: the maps that get such a frame this update
+    // (the Match sets it); m_netKeep: maps kept resident for a player on them or beside them. Both empty alone.
+    std::vector<char> m_netForeign,m_netKeep;
+    bool m_foreignFrame=false;int m_foreignHome=-1;Player m_foreignLocal{};
+    struct ChunkFrame {
+     Game& g;int home=-1,level=-1,held=-1,carry=-1;bool swapped=false,homeResident=false;Vec2 delta{};
+     std::vector<SoundEvent> sounds;PlayerNoise noise{};
+     ChunkFrame(Game& game,int level);~ChunkFrame();
+     ChunkFrame(const ChunkFrame&)=delete;ChunkFrame& operator=(const ChunkFrame&)=delete;
+    };
+    void updateForeignChunks(float dt);
+    // Whether a map's players and things are in the active chunk's frame: it, or a resident map stitched beside
+    // it (touching on the grid; maps of a custom campaign may share an origin and are then not in each other's).
+    bool inPlayerFrame(int level)const;
+    bool stitchedTo(int a,int b)const;
+    // A person thinks in this update's frame: the host's own frame takes everyone not on a map that has its own.
+    bool actorInFrame(int level)const{if(m_foreignFrame)return level==m_level;return level<0||size_t(level)>=m_netForeign.size()||!m_netForeign[size_t(level)];}
+    // To another map keeping every map's state (the Match's teleports): the active chunk is stored and that one
+    // swapped in as crossing a seam does; the player is placed by the caller.
+    void enterChunk(int level);
+    // ----- Props in a match (MatchProps.cpp): the host's are the truth -----
+    // m_netPropsRemote (a guest): props are posed from the host; a hand, a punch or a kick on one is sent to the
+    // host (m_netPropIntents) instead of done here, and nothing breaks here but what the host breaks.
+    // m_netPropsHost: breaks are queued for the guests (m_netPropEvents). m_netPropApply: the Match is applying the
+    // host's word (or a guest's intent on the host). m_propSimulating: inside the solver's own step.
+    bool m_netPropsRemote=false,m_netPropsHost=false,m_netPropApply=false,m_propSimulating=false;
+    struct NetPropIntent {int type=0,level=0;std::uint32_t id=0;Point3 at{},v{};float amount=0;};   // type 0 knock (v impulse), 1 damage (v way)
+    std::vector<NetPropIntent> m_netPropIntents;
+    struct NetPropEvent {int level=0;std::uint32_t id=0;Point3 way{};};   // a prop the host broke
+    std::vector<NetPropEvent> m_netPropEvents;
     void updateNet();                              // the Session's frame: makes and drops the Match
     void updateFrame(const InputState& input,float dt);
     std::vector<Enemy> m_enemies;
