@@ -335,9 +335,12 @@ void Game::updateInteraction(const InputState& input,float dt){
    // leaves it in the other (if it can hold it alone), with both it is thrown at the two hands' speed.
    const int other=1-m_vrCarryHand;
    if(m_vrSecondHand<0&&input.vrGrip[size_t(other)]&&!previous[size_t(other)])grabSecondHand(other);
-   if(m_vrSecondHand>=0&&!input.vrGrip[size_t(m_vrSecondHand)]&&input.vrGrip[size_t(m_vrCarryHand)])m_vrSecondHand=-1;
-   if(!input.vrGrip[m_vrCarryHand]&&m_vrSecondHand>=0&&input.vrGrip[size_t(m_vrSecondHand)]){m_vrCarryHand=m_vrSecondHand;m_vrSecondHand=-1;if(m_clutter[size_t(m_heldClutter)].mass()>25)interactClutter();}
-   else if(!input.vrGrip[m_vrCarryHand]){interactClutter();m_vrSecondHand=-1;}
+   if(m_vrSecondHand>=0){switch(twoHandRelease(input.vrGrip[size_t(m_vrCarryHand)],input.vrGrip[size_t(m_vrSecondHand)],m_vrReleaseGrace,dt)){
+    case 1:m_vrSecondHand=-1;break;
+    case 2:m_vrCarryHand=m_vrSecondHand;m_vrSecondHand=-1;if(m_clutter[size_t(m_heldClutter)].mass()>25)interactClutter();break;
+    case 3:interactClutter();m_vrSecondHand=-1;break;
+    default:break;}}
+   else{m_vrReleaseGrace=0;if(!input.vrGrip[m_vrCarryHand])interactClutter();}
    m_previousUse=input.use;m_world.updateDoors(dt);return;
   }
   if(m_logTime==0)for(int hand=0;hand<2;++hand)if(input.vrGrip[hand]&&!previous[hand]&&interactClutter(hand)){m_previousUse=input.use;m_world.updateDoors(dt);return;}
@@ -368,7 +371,7 @@ void Game::updateInteraction(const InputState& input,float dt){
    if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
    else m_world.releaseControl();
   }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
-  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!openDialogue()&&!interactClutter()&&!commandFriendly())knockOnWall();
+  if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!openDialogue()&&!(!input.vrTracked&&interactClutter())&&!commandFriendly())knockOnWall();   // (VR: a prop is taken only by the hand that closes on it, above)
  }
  m_previousUse=input.use;m_world.updateDoors(dt);
 }

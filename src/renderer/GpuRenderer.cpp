@@ -409,7 +409,12 @@ struct GpuRenderer::Impl {
  // Stereo block: clip, enabled, fog powers, then darkness (ambient scale, muzzle
  // falloff), then the four fog lamps' linear tones (vec4 each). Transient lights
  // (gun flashes, sparks, arcs) live in the per-frame lamp storage buffer.
- bool vrMode=false;int vrEye=0;std::array<Image,2> vrOutputs{};std::array<float,44> vrProjection=[]{std::array<float,44> v{};v[24]=1.f;v[25]=.045f;for(int i=0;i<4;++i){auto t=WorldLight{}.tone();v[size_t(28+i*4)]=t.x;v[size_t(29+i*4)]=t.y;v[size_t(30+i*4)]=t.z;}return v;}();VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
+ bool vrMode=false;int vrEye=0;float vrScale=1;
+ // VR sun shadows: the near cascade every frame, the two far ones on alternate frames. A cascade skipped keeps
+ // the matrix it was last drawn with (sunDrawn), so its map and its lookup agree.
+ std::array<float,56> sunDrawn{};std::array<bool,3> sunSkip{},sunDrawnOnce{};std::uint64_t vrShadowFrame=0;
+ uint32_t sceneWidth()const{return vrMode?std::max(1u,uint32_t(float(width)*vrScale+.5f)):uint32_t(width);}
+ uint32_t sceneHeight()const{return vrMode?std::max(1u,uint32_t(float(height)*vrScale+.5f)):uint32_t(height);}std::array<Image,2> vrOutputs{};std::array<float,44> vrProjection=[]{std::array<float,44> v{};v[24]=1.f;v[25]=.045f;for(int i=0;i<4;++i){auto t=WorldLight{}.tone();v[size_t(28+i*4)]=t.x;v[size_t(29+i*4)]=t.y;v[size_t(30+i*4)]=t.z;}return v;}();VkDescriptorSetLayout projectionLayout=VK_NULL_HANDLE;VkDescriptorPool projectionPool=VK_NULL_HANDLE;std::array<VkDescriptorSet,2> projectionSets{};std::array<Buffer,2> projectionBuffers{};
  VkCommandPool pool=VK_NULL_HANDLE;
  // Two frames in flight: CPU prepares frame N while GPU renders frame N-1.
  // Each slot owns its command buffer, fence, dynamic vertex buffer, overlay
@@ -571,6 +576,8 @@ struct GpuRenderer::Impl {
   if(sunData[3]<=0||!pixelLighting)return;
   VkViewport viewport{0,0,float(SunSize),float(SunSize),0,1};VkRect2D scissor{{0,0},{SunSize,SunSize}};VkClearValue clear{};clear.depthStencil={1,0};
   for(int c=0;c<SunCascades;++c){
+   if(c<3&&sunSkip[size_t(c)])continue;
+   if(c<3){std::copy_n(sunData.begin()+8+c*16,16,sunDrawn.begin()+8+c*16);sunDrawnOnce[size_t(c)]=true;}
    const float* k=sunData.data()+8+c*16;float extentR=1.f/k[7],extentF=1.f/k[15];
    VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=shadowPass;begin.framebuffer=sunFrames[size_t(c)];begin.renderArea.extent={SunSize,SunSize};begin.clearValueCount=1;begin.pClearValues=&clear;
    vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
@@ -1136,7 +1143,7 @@ struct GpuRenderer::Impl {
   }
   VkAttachmentDescription color{};color.format=swapFormat;color.samples=VK_SAMPLE_COUNT_1_BIT;color.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;color.storeOp=VK_ATTACHMENT_STORE_OP_STORE;color.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;color.finalLayout=vrMode?VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;VkAttachmentReference ref{0,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};VkSubpassDescription sub{};sub.pipelineBindPoint=VK_PIPELINE_BIND_POINT_GRAPHICS;sub.colorAttachmentCount=1;sub.pColorAttachments=&ref;VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};rp.attachmentCount=1;rp.pAttachments=&color;rp.subpassCount=1;rp.pSubpasses=&sub;check(vkCreateRenderPass(device,&rp,nullptr,&compositePass),"Create presentation render pass");
   for(auto view:swapViews){VkFramebufferCreateInfo f{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};f.renderPass=compositePass;f.attachmentCount=1;f.pAttachments=&view;f.width=extent.width;f.height=extent.height;f.layers=1;VkFramebuffer frame;check(vkCreateFramebuffer(device,&f,nullptr,&frame),"Create presentation framebuffer");swapFrames.push_back(frame);}
-  VkDescriptorSetLayoutBinding bindings[3]{};for(uint32_t i=0;i<3;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}VkDescriptorSetLayoutCreateInfo sl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};sl.bindingCount=3;sl.pBindings=bindings;check(vkCreateDescriptorSetLayout(device,&sl,nullptr,&compositeSetLayout),"Create composite descriptor layout");VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT,0,12*sizeof(float)};VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pl.setLayoutCount=1;pl.pSetLayouts=&compositeSetLayout;pl.pushConstantRangeCount=1;pl.pPushConstantRanges=&push;check(vkCreatePipelineLayout(device,&pl,nullptr,&compositeLayout),"Create composite pipeline layout");
+  VkDescriptorSetLayoutBinding bindings[3]{};for(uint32_t i=0;i<3;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_FRAGMENT_BIT;}VkDescriptorSetLayoutCreateInfo sl{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};sl.bindingCount=3;sl.pBindings=bindings;check(vkCreateDescriptorSetLayout(device,&sl,nullptr,&compositeSetLayout),"Create composite descriptor layout");VkPushConstantRange push{VK_SHADER_STAGE_FRAGMENT_BIT,0,13*sizeof(float)};VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};pl.setLayoutCount=1;pl.pSetLayouts=&compositeSetLayout;pl.pushConstantRangeCount=1;pl.pPushConstantRanges=&push;check(vkCreatePipelineLayout(device,&pl,nullptr,&compositeLayout),"Create composite pipeline layout");
   VkDescriptorPoolSize ps{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,uint32_t(3*FrameCount)};VkDescriptorPoolCreateInfo dp{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};dp.maxSets=uint32_t(FrameCount);dp.poolSizeCount=1;dp.pPoolSizes=&ps;check(vkCreateDescriptorPool(device,&dp,nullptr,&compositeDescriptors),"Create composite pool");
   std::array<VkDescriptorSetLayout,FrameCount> layouts;layouts.fill(compositeSetLayout);
   VkDescriptorSetAllocateInfo da{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};da.descriptorPool=compositeDescriptors;da.descriptorSetCount=uint32_t(FrameCount);da.pSetLayouts=layouts.data();check(vkAllocateDescriptorSets(device,&da,compositeSets.data()),"Allocate composite descriptors");
@@ -1823,7 +1830,12 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  if(m->lampUploaded[m->frameIndex]!=m->lampGeneration&&!m->lampData.empty()){std::memcpy(m->lampBuffers[m->frameIndex].mapped,m->lampData.data(),std::min(m->lampData.size(),Impl::LampBufferBytes));m->lampUploaded[m->frameIndex]=m->lampGeneration;m->lampPowerUploaded[m->frameIndex]=m->lampPowerGeneration;}
  else if(m->lampPowerUploaded[m->frameIndex]!=m->lampPowerGeneration&&m->lampData.size()>=sizeof(Impl::LampHeader)+size_t(Impl::MaxLamps)*32){std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+sizeof(Impl::LampHeader),m->lampData.data()+sizeof(Impl::LampHeader),size_t(Impl::MaxLamps)*32);m->lampPowerUploaded[m->frameIndex]=m->lampPowerGeneration;}
  {const auto&v=m->viewState;float camera[8]={v[0],v[1],v[2],v[10],v[3],v[4],v[5],v[6]};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,eye),camera,sizeof(camera));
-  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),m->sunData.data(),sizeof(m->sunData));
+  // VR: decide (once a frame, at the first eye) which far sun cascades keep last frame's map, and look those up
+  // with the matrices they were drawn with.
+  if(m->vrMode&&m->vrEye==0){++m->vrShadowFrame;for(int c=1;c<3&&c<Impl::SunCascades;++c)m->sunSkip[size_t(c)]=m->sunDrawnOnce[size_t(c)]&&((m->vrShadowFrame+uint64_t(c))&1);}
+  if(!m->vrMode)m->sunSkip={};
+  {std::array<float,56> sun=m->sunData;for(int c=0;c<3&&c<Impl::SunCascades;++c)if(m->sunSkip[size_t(c)])std::copy_n(m->sunDrawn.begin()+8+c*16,16,sun.begin()+8+c*16);
+   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,sun),sun.data(),sizeof(sun));}
    static_assert(offsetof(Impl::LampHeader,flashTones)==offsetof(Impl::LampHeader,flashes)+64);std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flashes),m->weaponFlashes.data(),sizeof(m->weaponFlashes));
   // The shadow stage runs (and carries the shafts) exactly when compose does below.
   {auto torch=v[8]>.5f?WorldLight::tone(5600,0,{1,1,1}):Point3{};float scatter[4]={torch.x,torch.y,torch.z,m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer?1.f:0.f};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,scatter),scatter,sizeof(scatter));}
@@ -1871,10 +1883,11 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  // Particle cards in the frame: the room is drawn first in a pass of its own (see Impl::softDepth).
  static const bool splitAllowed=!std::getenv("RM_NO_SOFT_DEPTH");
  bool split=false;if(splitAllowed&&m->softDepthLive()&&m->softDepth.handle&&m->passOpaque)for(const auto&batch:m->batches)if(!batch.clear&&!batch.cache&&!batch.actor){auto*material=m->findMaterial(batch.material);if(material&&material->soft){split=true;break;}}
- VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=split?m->passOpaque:m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={uint32_t(m->width),uint32_t(m->height)};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
+ // VR draws the eye into the top-left share of the image at the render scale (setVrRenderScale).
+ VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=split?m->passOpaque:m->renderPass;pass.framebuffer=m->framebuffer;pass.renderArea.extent={m->sceneWidth(),m->sceneHeight()};pass.clearValueCount=depthIndex+2;pass.pClearValues=clear;
  auto cmd=m->commands[m->frameIndex];
  vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
- VkViewport viewport{0,0,float(m->width),float(m->height),0,1};VkRect2D scissor{{0,0},{uint32_t(m->width),uint32_t(m->height)}};
+ VkViewport viewport{0,0,float(m->sceneWidth()),float(m->sceneHeight()),0,1};VkRect2D scissor{{0,0},{m->sceneWidth(),m->sceneHeight()}};
  vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
  VkDeviceSize offset=0;VkBuffer currentBuffer=VK_NULL_HANDLE;
  if(bytes){currentBuffer=vb.handle;vkCmdBindVertexBuffers(cmd,0,1,&currentBuffer,&offset);}
@@ -2049,12 +2062,15 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
  VkClearValue clear{};clear.color={{0,0,0,1}};
  VkRenderPassBeginInfo pass{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};pass.renderPass=m->compositePass;pass.framebuffer=m->swapFrames[imageIndex];pass.renderArea.extent=m->swapExtent;pass.clearValueCount=1;pass.pClearValues=&clear;
  vkCmdBeginRenderPass(cmd,&pass,VK_SUBPASS_CONTENTS_INLINE);
- VkViewport viewport{0,0,float(m->swapExtent.width),float(m->swapExtent.height),0,1};VkRect2D scissor{{0,0},m->swapExtent};
+ // VR: the composite fills only the drawn share of the eye (render scale); SteamVR stretches it.
+ const VkExtent2D drawn=m->vrMode?VkExtent2D{std::min(m->swapExtent.width,m->sceneWidth()),std::min(m->swapExtent.height,m->sceneHeight())}:m->swapExtent;
+ VkViewport viewport{0,0,float(drawn.width),float(drawn.height),0,1};VkRect2D scissor{{0,0},drawn};
  vkCmdSetViewport(cmd,0,1,&viewport);vkCmdSetScissor(cmd,0,1,&scissor);
  vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->compositePipeline);
  vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->compositeLayout,0,1,&m->compositeSets[m->frameIndex],0,nullptr);
- float params[12]={underwater?1.f:0.f,sceneDim,damageFlash,shotKick,m->hdrScene?1.f:0.f,m->vrMode?1.f:0.f,alarm,m->postRan?1.f:0.f,
-  m->tiltShift&&!m->vrMode&&lensReady?m->lensDepthOfField:0.f,m->viewState[10],m->tiltShift&&!m->vrMode&&lensReady?m->lensEffects:0.f,float(m->width)/float(std::max(1,m->height))};
+ float params[13]={underwater?1.f:0.f,sceneDim,damageFlash,shotKick,m->hdrScene?1.f:0.f,m->vrMode?1.f:0.f,alarm,m->postRan?1.f:0.f,
+  m->tiltShift&&!m->vrMode&&lensReady?m->lensDepthOfField:0.f,m->viewState[10],m->tiltShift&&!m->vrMode&&lensReady?m->lensEffects:0.f,float(m->width)/float(std::max(1,m->height)),
+  m->vrMode?float(m->sceneWidth())/float(std::max(1,m->width)):1.f};
  vkCmdPushConstants(cmd,m->compositeLayout,VK_SHADER_STAGE_FRAGMENT_BIT,0,sizeof(params),params);
  vkCmdDraw(cmd,6,1,0,0);
  vkCmdEndRenderPass(cmd);
@@ -2070,7 +2086,7 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
    }else if(result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();else if(result!=VK_NOT_READY&&result!=VK_TIMEOUT)check(result,"Acquire spectator image");
   }
  }
- if(m->vrMode){m->barrier(m->overlay,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->barrier(m->vrOutputs[m->vrEye],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->submitCommandsAsync(mirrorAcquired?m->acquiredSems[m->frameIndex]:VK_NULL_HANDLE,mirrorAcquired?m->readySemaphores[mirrorIndex]:VK_NULL_HANDLE);/* No CPU wait: SteamVR's Vulkan submit only needs the eye's commands queued ahead of it on this queue; begin() waits on the slot's fence before reusing it. */if(m->vrEye==1)VrRuntime::active()->submitPanel(m->instance,m->physical,m->device,m->queue,m->family,m->overlay.handle,overlayWidth,overlayHeight);VrRuntime::active()->submit(m->vrEye,m->instance,m->physical,m->device,m->queue,m->family,m->vrOutputs[m->vrEye].handle,m->swapExtent.width,m->swapExtent.height);if(mirrorAcquired){VkPresentInfoKHR spectator{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};spectator.waitSemaphoreCount=1;spectator.pWaitSemaphores=&m->readySemaphores[mirrorIndex];spectator.swapchainCount=1;spectator.pSwapchains=&m->swapchain;spectator.pImageIndices=&mirrorIndex;auto result=vkQueuePresentKHR(m->queue,&spectator);if(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)++m->mirrorPresented;else if(result!=VK_ERROR_OUT_OF_DATE_KHR)check(result,"Present spectator");if(result==VK_SUBOPTIMAL_KHR||result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();}return;}
+ if(m->vrMode){m->barrier(m->overlay,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_SHADER_READ_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->barrier(m->vrOutputs[m->vrEye],VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);m->submitCommandsAsync(mirrorAcquired?m->acquiredSems[m->frameIndex]:VK_NULL_HANDLE,mirrorAcquired?m->readySemaphores[mirrorIndex]:VK_NULL_HANDLE);/* No CPU wait: SteamVR's Vulkan submit only needs the eye's commands queued ahead of it on this queue; begin() waits on the slot's fence before reusing it. */if(m->vrEye==1)VrRuntime::active()->submitPanel(m->instance,m->physical,m->device,m->queue,m->family,m->overlay.handle,overlayWidth,overlayHeight);VrRuntime::active()->submit(m->vrEye,m->instance,m->physical,m->device,m->queue,m->family,m->vrOutputs[m->vrEye].handle,m->swapExtent.width,m->swapExtent.height,float(m->sceneWidth())/float(std::max(1,m->width)));if(mirrorAcquired){VkPresentInfoKHR spectator{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};spectator.waitSemaphoreCount=1;spectator.pWaitSemaphores=&m->readySemaphores[mirrorIndex];spectator.swapchainCount=1;spectator.pSwapchains=&m->swapchain;spectator.pImageIndices=&mirrorIndex;auto result=vkQueuePresentKHR(m->queue,&spectator);if(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)++m->mirrorPresented;else if(result!=VK_ERROR_OUT_OF_DATE_KHR)check(result,"Present spectator");if(result==VK_SUBOPTIMAL_KHR||result==VK_ERROR_OUT_OF_DATE_KHR)m->initMirror();}return;}
  // Submit: wait on image-acquired semaphore, signal ready semaphore, NO CPU wait.
  m->stamp(cmd,8);m->submitCommandsAsync(m->acquiredSems[m->frameIndex],m->readySemaphores[imageIndex]);
  // Present immediately.
@@ -2088,4 +2104,4 @@ void GpuRenderer::present(const std::uint32_t* overlayPixels,int overlayWidth,in
 }
 }
 
-namespace retro {std::uint64_t GpuRenderer::mirrorFrames()const{return m->mirrorPresented;}bool GpuRenderer::vrActive()const{return m->vrMode;}void GpuRenderer::setVrEye(int eye,const std::array<float,16>& clip){m->vrEye=eye;std::copy(clip.begin(),clip.end(),m->vrProjection.begin());m->vrProjection[16]=1;}}
+namespace retro {std::uint64_t GpuRenderer::mirrorFrames()const{return m->mirrorPresented;}bool GpuRenderer::vrActive()const{return m->vrMode;}void GpuRenderer::setVrRenderScale(float scale){m->vrScale=std::clamp(std::isfinite(scale)?scale:1.f,.6f,1.f);}void GpuRenderer::setVrEye(int eye,const std::array<float,16>& clip){m->vrEye=eye;std::copy(clip.begin(),clip.end(),m->vrProjection.begin());m->vrProjection[16]=1;}}

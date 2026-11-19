@@ -49,7 +49,7 @@ void Game::emitLiquid(Point3 at,Point3 velocity,liquid::Kind kind,float volume,i
  for(int i=0;i<drops&&int(m_liquidDrops.size())<MaxDrops;++i){const float h=float((m_liquidDrops.size()*2654435761u+unsigned(i)*40503u)%1000)/1000.f,a=h*6.283f;
   // A stream's drops leave along it a little apart (so it reads as one run of liquid); a spill's fly every way.
   const float lead=stream?float(i)/float(drops):0.f;const Point3 jitter{std::cos(a)*spread*h,std::sin(a)*spread*h,(h-.5f)*spread};
-  m_liquidDrops.push_back({at+velocity*(lead/60.f),velocity+jitter,kind,each,stream});}}
+  m_liquidDrops.push_back({at+velocity*(lead/60.f),velocity+jitter,kind,each,stream,m_level});}}
 void Game::spillLiquid(int level,Clutter& c,Point3 velocity,float share){
  if(!c.liquid.holds()||c.liquid.level<=0||level!=m_level)return;const float volume=c.liquid.level*share*liquid::capacity(c.model,c.size());const V3 m=vectra::propCentre(c);
  for(int i=0;i<24;++i){const float a=float(i)*2.399963f,r=.6f+.25f*float(i%4);emitLiquid(p3(m),velocity+Point3{std::cos(a)*r,std::sin(a)*r,.8f+.15f*float(i%5)},c.liquid.kind,volume/24.f,1);}
@@ -87,14 +87,16 @@ void Game::updateLiquids(float dt){
   if(L.holed){const V3 h=v3(L.hole);run(h,.006f,vectra::norm(V3{h.x,h.y,0},{1,0,0}),index*2+2);}
   if(L.level<.002f)L.level=0;
   if(L.pouring>0){c.sleeping=false;c.restTime=0;}}
- // The drops: flying, then into water (a splash) or onto a floor (a puddle).
- for(size_t i=0;i<m_liquidDrops.size();){auto& d=m_liquidDrops[i];d.v.z-=Gravity*dt;const Point3 next=d.p+d.v*dt;bool gone=false;
-  const float floor=m_world.supportBelow(next.x,next.y,d.p.z+.02f,true),water=m_world.waterSurface(next.x,next.y);
-  if(water>-999.f&&next.z<=water&&water>floor){if(d.volume>2e-5f)raiseWaterSplash(m_level,{next.x,next.y,water},d.v,.25f,WaterSplashKind::Step);gone=true;}
+ // The drops: flying, then into water (a splash) or onto a floor (a puddle), each in the map it was spilt in (its
+ // places that map's own); a drop whose map is no longer kept loaded is gone.
+ for(size_t i=0;i<m_liquidDrops.size();){auto& d=m_liquidDrops[i];if(!chunkResident(d.level)){m_liquidDrops.erase(m_liquidDrops.begin()+long(i));continue;}
+  const World& world=chunkWorld(d.level);d.v.z-=Gravity*dt;const Point3 next=d.p+d.v*dt;bool gone=false;
+  const float floor=world.supportBelow(next.x,next.y,d.p.z+.02f,true),water=world.waterSurface(next.x,next.y);
+  if(water>-999.f&&next.z<=water&&water>floor){if(d.volume>2e-5f)raiseWaterSplash(d.level,{next.x,next.y,water},d.v,.25f,WaterSplashKind::Step);gone=true;}
   else if(next.z<=floor+.002f){
    // Pooled where it fell: into the nearest puddle of its kind within reach, or a new one.
-   Puddle* into=nullptr;float best=1e9f;for(auto& p:m_puddles){if(p.kind!=d.kind||std::fabs(p.at.z-floor)>.05f)continue;const float dd=length(Vec2{p.at.x-next.x,p.at.y-next.y});if(dd<p.radius+.12f&&dd<best){best=dd;into=&p;}}
-   if(!into&&int(m_puddles.size())<MaxPuddles){m_puddles.push_back({{next.x,next.y,floor},d.kind,0,0});into=&m_puddles.back();}
+   Puddle* into=nullptr;float best=1e9f;for(auto& p:m_puddles){if(p.level!=d.level||p.kind!=d.kind||std::fabs(p.at.z-floor)>.05f)continue;const float dd=length(Vec2{p.at.x-next.x,p.at.y-next.y});if(dd<p.radius+.12f&&dd<best){best=dd;into=&p;}}
+   if(!into&&int(m_puddles.size())<MaxPuddles){m_puddles.push_back({{next.x,next.y,floor},d.kind,0,0,d.level});into=&m_puddles.back();}
    if(into){const float total=into->volume+d.volume;const float k=d.volume/std::max(total,1e-9f);into->at.x+=(next.x-into->at.x)*k*.5f;into->at.y+=(next.y-into->at.y)*k*.5f;into->volume=total;
     const float thick=d.kind==liquid::Kind::Oil?.004f:.0025f;into->radius=std::min(1.2f,std::sqrt(total/(kPi*thick))+.03f);}
    gone=true;}

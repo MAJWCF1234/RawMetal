@@ -38,6 +38,9 @@ struct LabAccess {
  static void setCamera(Game& g,Vec2 pos,float z,float yaw,float pitch){g.m_inspectionCamera=true;g.m_player.pos=pos;g.m_player.angle=yaw;g.m_player.pitch=pitch;
   g.m_player.z=z>-998?z:(g.m_world.hasTerrain()?g.groundHeight(pos,float(World::TerrainMaxZ+1)):g.m_world.floorHeight(pos.x,pos.y));}
  static void playerCamera(Game& g){g.m_inspectionCamera=false;}
+ static std::vector<Game::Puddle>& puddles(Game& g){return g.m_puddles;}
+ static std::vector<Game::LiquidDrop>& liquidDrops(Game& g){return g.m_liquidDrops;}
+ static void crossChunk(Game& g){g.crossChunkBoundary();g.updateStreaming(0);}
  static World& world(Game& g){return g.m_world;}
  static std::vector<Enemy>& enemies(Game& g){return g.m_enemies;}
  static void stepProps(Game& g,float dt,const InputState& input={}){g.updateClutter(input,dt);}
@@ -150,6 +153,8 @@ struct LabAccess {
  static std::vector<MeshTriangle> creatureCorpseMesh(SoftwareRenderer& r,const Enemy& e){std::vector<MeshTriangle> out;r.poseCreatureMesh(e,0,true,out);return out;}
  static const humanoid::Labels& humanParts(SoftwareRenderer& r,int i){return SoftwareRenderer::humanParts(humanMesh(r,i),i<6?i:-1-(i-6));}
  static Point3 cameraPoint(const SoftwareRenderer& r,Point3 p){return r.cameraPoint(p,r.m_view);}
+ // The last frame's view depth at a pixel (9999 where nothing was drawn): tubes/Kits.cpp.
+ static float depthAt(const SoftwareRenderer& r,int x,int y){return r.m_zbuffer[size_t(y)*size_t(r.width())+size_t(x)];}
  // Plant physbones (tubes/Plants.cpp).
  static PlantBones& plants(SoftwareRenderer& r){return r.m_plants;}
  static bool plantModel(SoftwareRenderer& r,int model){return r.plantModel(model);}

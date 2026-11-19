@@ -119,6 +119,17 @@
   {"library":"ivy_*","factor":"auto"},
   {"library":"chainlink_fence","factor":"auto"},
   {"library":"rock_*","factor":"auto"},
+  {"library":"fur_*","factor":"auto"},
+  {"library":"home_*","factor":"auto"},
+  {"library":"store_*","factor":"auto"},
+  {"library":"mach_*","factor":"auto"},
+  {"library":"lab_*","factor":"auto"},
+  {"library":"med_*","factor":"auto"},
+  {"library":"lamp_*","factor":"auto"},
+  {"library":"dress_*","factor":"auto"},
+  {"library":"out_*","factor":"auto"},
+  {"library":"nat_*","factor":"auto"},
+  {"library":"hor_*","factor":"auto"},
   {"library":"*","factor":"auto"},
   {"library":"player/*","factor":"auto","lossy":false}
 ]

@@ -11,8 +11,12 @@ records the model in src/assets/library/catalog.json:
   {"NAME": {"slot": fixture model index, "width": .., "depth": .., "height": .., "triangles": ..}}
 
 Already-registered names are skipped, so it is safe to re-run.
+
+A texture whose pixels file is byte-identical to one assets.rc already embeds (packs share
+atlases: a sofa and an armchair, every lamp of a kit) is not embedded again; its material
+points at the resource that is there.
 """
-import json, os, re, sys
+import hashlib, json, os, re, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = os.path.join(ROOT, 'src')
@@ -30,9 +34,29 @@ def write(p, s, enc='utf-8'):
         f.write(s.encode(enc))
 
 
+def digest(path):
+    with open(path, 'rb') as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def embedded_textures(rc):
+    """sha256 of each library texture's master (PNG/JPEG) -> its resource id. A texture the
+    neural or lossy encoders replaced (STEM-n.ntx, STEM-q.webp) is known by its master beside it."""
+    out = {}
+    for rid, path in re.findall(r'^(\d+)\s+RCDATA\s+"assets/library/([^"]+)"', rc, re.M):
+        stem = re.sub(r'-[a-z]\.(ntx|webp)$', '', path)
+        for cand in (path, stem + '.png', stem + '.jpg'):
+            full = os.path.join(LIB, cand)
+            if cand.lower().endswith(('.png', '.jpg', '.jpeg')) and os.path.isfile(full):
+                out.setdefault(digest(full), int(rid))
+                break
+    return out
+
+
 def main(names):
     rc_path = os.path.join(SRC, 'assets.rc')
     rc = read(rc_path, 'cp1252')
+    shared = embedded_textures(rc)
     newline = '\r\n' if '\r\n' in rc else '\n'
     ids = [int(m) for m in re.findall(r'^(\d+)\s+RCDATA', rc, re.M)]
     next_id = max(ids + [MANIFEST_ID]) + 1
@@ -56,8 +80,13 @@ def main(names):
         mesh_id = next_id; next_id += 1
         rc += '%d RCDATA "assets/library/%s.obj"' % (mesh_id, name) + newline
         for mat, tex in m['materials'].items():
+            key = digest(os.path.join(LIB, tex))
+            if key in shared:
+                materials += '%s %d\n' % (mat, shared[key])
+                continue
             rc += '%d RCDATA "assets/library/%s"' % (next_id, tex) + newline
             materials += '%s %d\n' % (mat, next_id)
+            shared[key] = next_id
             next_id += 1
         meshes.append(mesh_id)
         catalog[name] = dict(slot=count, width=m['width'], depth=m['depth'], height=m['height'], triangles=m['triangles'])

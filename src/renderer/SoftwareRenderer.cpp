@@ -1306,6 +1306,11 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  const int ammoKey=(int(game.activeFirearm())<<24)|(game.reloading()?1<<23:0)|(std::min(load,127)<<16)|std::min(reserve,65535); // a magazine is at most 12, a save at most 9999
  if(ammoKey!=m_vrAmmoShown){m_vrAmmoShown=ammoKey;stamp(m_vrAmmoTexture,128,64,[&]{char text[16];std::snprintf(text,sizeof text,"%d",load);uiText(10,4,text,load?glass:warn,0,44);
   if(game.reloading())uiText(62,8,"LOADING",rgb(255,190,90),0,14,1,1);std::snprintf(text,sizeof text,"%d",reserve);uiText(74,30,text,rgb(90,140,160),0,20);});}
+ // The frame-rate readout (VR COMFORT): the compositor's measure of the game's frame rate and GPU time, the
+ // display's rate and the render scale, refreshed a few times a second.
+ if(game.settings().vrFrameRate&&++m_vrRateFrames>=20){m_vrRateFrames=0;const auto&t=VrRuntime::active()->timing();char text[96];
+  std::snprintf(text,sizeof text,"%.0f FPS / %.0f HZ  GPU %.1f MS  %d%%%s",t.frameMs>0?1000.f/t.frameMs:0.f,t.hz,t.gpuMs,int(t.scale*100+.5f),game.settings().vrRenderScale>0?"":" AUTO");
+  if(m_vrRateShown!=text){m_vrRateShown=text;const bool slow=t.frameMs>0&&1000.f/t.frameMs<t.hz*.95f;stamp(m_vrRateTexture,512,32,[&]{const int w=uiTextWidth(text,3,18);uiText(256-w/2,6,text,slow?warn:glass,3,18);});}}
  // Area titles fade in and out as on the desktop.
  const float titleAlpha=game.areaTitleAlpha();
  if(std::fabs(titleAlpha-m_vrTitleShown)>.01f){m_vrTitleShown=titleAlpha;stamp(m_vrTitleTexture,512,64,[&]{if(titleAlpha<=0)return;const char* title=game.areaTitle().c_str();const int size=34,track=10,width=uiTextWidth(title,1,size,track);uiText(256-width/2,10,title,rgb(250,248,242),1,size,titleAlpha,track);});}
@@ -1373,7 +1378,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.5.6  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.5.7  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
@@ -1382,17 +1387,18 @@ void SoftwareRenderer::drawSettings(const Game& game){
  const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0);
  fill(0,0,m_width,m_height,black,.45f);
  fill(x,y,MenuLayout::Width,MenuLayout::Height,rgb(6,5,5),.9f);frame(x,y,MenuLayout::Width,MenuLayout::Height,bone,.10f);fill(x,y,MenuLayout::Width,2,red,1);
- auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;
- const char* title=settingsPage?(game.menuFromTitle()?"SETTINGS":"PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
+ auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;const bool comfortPage=page==Game::MenuPage::Comfort;
+ const char* title=comfortPage?"VR COMFORT":settingsPage?(game.menuFromTitle()?"SETTINGS":"PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
  uiText(x+16,y+9,title,bone,0,20,1,2);
- const char* subtitle=settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
+ const char* subtitle=comfortPage?"TURNING / BODY / FRAME RATE":settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
  uiText(x+MenuLayout::Width-16-uiTextWidth(subtitle,0,10,1),y+16,subtitle,red,0,10,1,1);
  const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","PULL HIGHLIGHT","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   if(selected){gradient(x+10,top,MenuLayout::Width-20,19,red,.5f,0.f,true);fill(x+10,top,2,19,red,1);}
   else fill(x+10,top+18,MenuLayout::Width-20,1,bone,.05f);
-  const char* label=settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
+  static const char* comfortLabels[]={"BACK","TURN SPEED","COMFORT VIGNETTE","SEATED MODE","RECALIBRATE HEIGHT","LEFT-HANDED","RENDER SCALE","FRAME RATE READOUT"};
+  const char* label=comfortPage?comfortLabels[std::clamp(row,0,7)]:settingsPage&&row==5&&game.vrMenu()?"VR COMFORT...":settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
   uiText(x+20,top+2,label,selected?bone:dim,0,13,1,1);
   if(settingsPage&&((row>=1&&row<=4)||row==6||row==7)){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:row==4?settings.sensitivity:row==6?settings.depthOfField:settings.lensEffects;
    float normalized=std::clamp(row==4?(value-.2f)/2.8f:row>=6?value*.5f:value,0.f,1.f);int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
@@ -1401,10 +1407,20 @@ void SoftwareRenderer::drawSettings(const Game& game){
    char valueText[16];if(row==4)std::snprintf(valueText,sizeof(valueText),"%.1fX",value);else if(row>=6)std::snprintf(valueText,sizeof(valueText),"%d%%",int(value*100+.5f));else std::snprintf(valueText,sizeof(valueText),"%d",int(value*100+.5f));
    uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);
   }
-  if(settingsPage&&row==5)uiText(MenuLayout::SliderX,top+3,settings.invertMouse?"ON":"OFF",settings.invertMouse?red:bone,3,11);
+  if(settingsPage&&row==5&&!game.vrMenu())uiText(MenuLayout::SliderX,top+3,settings.invertMouse?"ON":"OFF",settings.invertMouse?red:bone,3,11);
+  if(comfortPage){
+   if(row==1||row==2){const float value=row==1?settings.vrTurnSpeed:settings.vrVignette,normalized=std::clamp(row==1?(value-.25f)/1.75f:value,0.f,1.f);const int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
+    fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);fill(knob-1,top+4,3,11,bone,1);
+    char valueText[16];if(row==1)std::snprintf(valueText,sizeof valueText,"%d/S",int(value*120+.5f));else if(value<=0)std::snprintf(valueText,sizeof valueText,"OFF");else std::snprintf(valueText,sizeof valueText,"%d%%",int(value*100+.5f));
+    uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);}
+   const bool on=row==3?settings.vrSeated:row==5?settings.vrLeftHanded:row==7?settings.vrFrameRate:false;
+   if(row==3||row==5||row==7)uiText(MenuLayout::SliderX,top+3,on?"ON":"OFF",on?red:bone,3,11);
+   if(row==6){char valueText[16];if(settings.vrRenderScale<=0)std::snprintf(valueText,sizeof valueText,"AUTO");else std::snprintf(valueText,sizeof valueText,"%d%%",int(settings.vrRenderScale*100+.5f));uiText(MenuLayout::SliderX,top+3,valueText,bone,3,11);}
+  }
   if(settingsPage&&row==8)uiText(MenuLayout::SliderX,top+3,settings.pullHighlight?"SUBTLE":"NONE",bone,3,11);
  }
- if(!settingsPage){uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);}
+ if(comfortPage)uiText(x+16,y+MenuLayout::Height-46,game.menuMessage().c_str(),red,0,11,1,1);
+ else if(!settingsPage){uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);}
  fill(x+10,y+MenuLayout::Height-28,MenuLayout::Width-20,1,bone,.10f);
  uiText(x+16,y+MenuLayout::Height-22,"CLICK / ARROWS / ENTER",dim,0,10,1,1);
  const char* back=settingsPage?(game.menuFromTitle()?"ESC  TITLE":"ESC  RESUME"):"ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
@@ -1695,9 +1711,11 @@ void SoftwareRenderer::renderVrEye(const Game&game,int eye){
  m_vrRendering=true;
  try{m_gpu->setVrEye(eye,VrRuntime::active()->eye(eye,game).clip);if(eye==0){
   if(!game.titleScreen())prepareVrDisplays(game);
-  // The right hand holding the pistol closes on its grip (pistolCurls).
-  const auto&hands=VrRuntime::active()->hands();const bool pistol=hands[1].tracked&&!game.unarmed()&&game.activeFirearm()==WeaponId::Handgun&&(!game.holdingClutter()||game.vrCarryHand()!=1);
-  for(int side=0;side<2;++side)m_vrHandMeshes[side]=hands[side].tracked?m_armsMesh.trackedHand(side==0,side==1&&pistol?pistolCurls(hands[side].curls):hands[side].curls):std::vector<MeshTriangle>{};}m_vrReuseScene=eye==1;render(game);m_vrReuseScene=false;}
+  // The avatar's pose (after eye() has sampled the hands as late as it can) and its solve, once for both eyes:
+  // the body pass and drawTrackedHands both draw from it.
+  m_vrPose=VrRuntime::active()->avatar(game);m_vrPoseReady=m_vrPose.active&&!game.titleScreen();
+  m_gpu->setVrRenderScale(VrRuntime::active()->timing().scale);   // both eyes at this frame's render scale
+  if(m_vrPoseReady)m_vrSolve=solveAvatar(m_vrPose,game.elapsed());}m_vrReuseScene=eye==1;render(game);m_vrReuseScene=false;}
  catch(...){m_vrRendering=false;m_vrReuseScene=false;throw;}
  m_vrRendering=false;
 }// --sign-render-test: a wall of designed signs (every plate style, symbols, lettering

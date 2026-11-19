@@ -128,7 +128,7 @@ float Game::clutterPathFraction(Point3 from,Point3 to,Point3&normal)const{
 }
 int Game::nearbyClutter(int grabHand)const{
  auto visible=[&](const Clutter&c){Point3 n;return clutterPathFraction({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},{c.pos.x,c.pos.y,c.z+c.height()*.5f},n)>=.999f;};
- if(m_vrInputActive){int best=-1;float reach=.6f*.6f;for(int i=0;i<int(m_clutter.size());++i)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){const auto&c=m_clutter[i];auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(!c.broken&&distance<reach&&visible(c)){best=i;reach=distance;}}return best;}
+ if(m_vrInputActive){int best=-1;float reach=.6f*.6f;for(int i=0;i<int(m_clutter.size());++i)for(int hand=0;hand<2;++hand)if(m_vrHandValid[hand]&&(grabHand<0||grabHand==hand)){const auto&c=m_clutter[i];auto d=Point3{c.pos.x,c.pos.y,c.z+c.height()*.5f}-m_vrHandPosition[hand];float distance=d.x*d.x+d.y*d.y+d.z*d.z;if(!c.broken&&!c.pinned&&distance<reach&&visible(c)){best=i;reach=distance;}}return best;}   // (a bolted-down prop is no more taken by a VR hand than by the desktop's)
  int best=-1;float distance=1.5f,verticalReach=std::max(1.2f,m_player.hullHeight()+.3f);Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  for(int i=0;i<int(m_clutter.size());++i){auto&c=m_clutter[i];auto delta=c.pos-m_player.pos;float d=length(delta);
   if(!c.broken&&!c.pinned&&d<distance&&dot(delta,forward)>d*.5f&&std::fabs(c.z-m_player.z)<verticalReach){
@@ -272,10 +272,11 @@ void Game::updateClutter(const InputState&input,float dt){
    if(!vectra::legacyProps())for(const auto&r:contents.back().second.riders)list[size_t(r.item)].riding=true;}
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
  if(!holdingClutter()){m_carryClutter=-1;m_vrSecondHand=-1;}
+ const bool heldBefore=holdingClutter()&&m_carryClutter==m_heldClutter;   // (a trigger already down as the hand closes is no punt)
  if(holdingClutter()&&m_vrSecondHand>=0&&m_vrInputActive)updateTwoHandCarry(input,m_clutter[size_t(m_heldClutter)]);   // two hands on it (VR)
  else if(holdingClutter()){
   auto&c=m_clutter[m_heldClutter];float pitch=m_player.pitch/140.f;
-  if(m_carryClutter!=m_heldClutter){m_carryClutter=m_heldClutter;m_carryDistance=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f;m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
+  if(m_carryClutter!=m_heldClutter){m_carryClutter=m_heldClutter;m_carryDistance=c.model>=0?std::max(.9f,.5f+c.footprint()*.5f):.9f;m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);m_vrHoldSet=false;}
   const Clutter previous=c;const float oldOffset=m_carryYawOffset;
   if(!m_vrInputActive){
    m_carryDistance=std::clamp(m_carryDistance+input.weaponScroll*.2f,std::max(.6f,.35f+c.footprint()*.5f),2.5f);
@@ -287,7 +288,18 @@ void Game::updateClutter(const InputState&input,float dt){
   float holdDistance=m_carryDistance;
   Vec2 target=m_player.pos+forward*(holdDistance*std::cos(pitch));
   float height=m_player.z+m_player.eye+holdDistance*std::sin(pitch)-c.height()*.5f;
-  if(m_vrInputActive){auto hand=m_vrHandPosition[m_vrCarryHand],direction=m_vrHandDirection[m_vrCarryHand];target={hand.x+direction.x*.12f,hand.y+direction.y*.12f};height=hand.z+direction.z*.12f-c.height()*.5f;pitch=std::asin(std::clamp(direction.z,-1.f,1.f));float yaw=std::atan2(direction.y,direction.x);forward={std::cos(yaw),std::sin(yaw)};}
+  // VR, one hand: the prop keeps the place and the turn it had in the hand as the hand closed on it, and turns exactly
+  // as the hand turns (vrHandTurn: built in game space, so the tracking mirror never reaches it). Where the hand took
+  // it from further than its own size off, it comes in to the hand along the same line.
+  if(m_vrInputActive){using vectra::V3;using vectra::Quat;const auto ht=vrHandTurn(m_vrCarryHand);const Quat hq{ht[0],ht[1],ht[2],ht[3]};
+   const Point3 hand=m_vrHandPosition[m_vrCarryHand];const V3 hp{hand.x,hand.y,hand.z};
+   if(!m_vrHoldSet){const Quat q=vectra::propOrientation(c);V3 local=hq.unrotate(vectra::propCentre(c)-hp);const auto s=c.size();
+    const float reach=.5f*std::sqrt(s[0]*s[0]+s[1]*s[1]+s[2]*s[2])+.05f,l=vectra::len(local);if(l>reach)local=local*(reach/l);
+    const Quat held=(hq.conj()*q).normalized();m_vrHoldTurn={held.w,held.x,held.y,held.z};m_vrHoldLocal={local.x,local.y,local.z};m_vrHoldSet=true;}
+   const Quat q=(hq*Quat{m_vrHoldTurn[0],m_vrHoldTurn[1],m_vrHoldTurn[2],m_vrHoldTurn[3]}).normalized();
+   c.orient={q.w,q.x,q.y,q.z};q.toEuler(c.yaw,c.pitch,c.roll);c.orientEuler={c.yaw,c.pitch,c.roll};
+   const V3 centre=hp+hq.rotate({m_vrHoldLocal.x,m_vrHoldLocal.y,m_vrHoldLocal.z});target={centre.x,centre.y};height=centre.z-c.extent()[2];
+   const Point3 direction=m_vrHandDirection[m_vrCarryHand];pitch=std::asin(std::clamp(direction.z,-1.f,1.f));const float yaw=std::atan2(direction.y,direction.x);forward={std::cos(yaw),std::sin(yaw)};}
   auto local=target;const auto&targetWorld=worldAt(local);
   height=std::max(height,targetWorld.supportBelow(local.x,local.y,height+c.height()*.5f+.025f)+.012f);
   bool clear=!m_vrInputActive||m_vrHandValid[m_vrCarryHand];
@@ -297,7 +309,7 @@ void Game::updateClutter(const InputState&input,float dt){
   if(c.model>=0&&!fit(1)){float lo=0,hi=1;for(int i=0;i<8;++i){float mid=(lo+hi)*.5f;if(fit(mid))lo=mid;else hi=mid;}target=m_player.pos+(target-m_player.pos)*lo;height=eye.z+(height-eye.z)*lo;clear&=lo>.1f;}
   local=target;const auto&finalWorld=worldAt(local);
   if(clear&&finalWorld.fits(local.x,local.y,height,c.height(),true,true)){
-   c.pos=target;c.z=height;if(m_vrInputActive)c.yaw=std::atan2(forward.y,forward.x);
+   c.pos=target;c.z=height;
    // Heavy carried props sweep living bodies along the hand path; a wall-pinned
    // body stops the prop at the last clear pose instead of tunneling through.
    if(c.model>=0&&c.mass()>=8){pushBodiesFromCarried(c,previous);if(!m_vrInputActive)m_carryYawOffset=wrapAngle(c.yaw-m_player.angle);}
@@ -310,9 +322,16 @@ void Game::updateClutter(const InputState&input,float dt){
    }
    c.velocity={};c.vz=c.pitchSpeed=c.rollSpeed=c.spin=0;
   }
-  else{c.yaw=previous.yaw;c.pitch=previous.pitch;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;c.projectile=false;}
-  if(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1)&&input.fire&&!m_previousFire&&!m_suppressFire){float speed=9.f*(c.model>=0?std::clamp(std::sqrt(2.5f/c.mass()),.35f,1.f):1.f);c.velocity=forward*(speed*std::cos(pitch));c.vz=2.f+speed*std::sin(pitch);c.spin=3;c.pitchSpeed=10;c.rollSpeed=4;c.sleeping=false;c.projectile=true;c.soundOwner=-1;m_heldClutter=-1;sound(Sound::PunchSwing,.55f);}
+  else{c.yaw=previous.yaw;c.pitch=previous.pitch;c.roll=previous.roll;c.orient=previous.orient;c.orientEuler=previous.orientEuler;m_carryYawOffset=oldOffset;m_heldClutter=-1;m_carryClutter=-1;m_vrHoldSet=false;c.projectile=false;}
+  // Desktop: fire tosses it along the look (with a little lift). VR punts below.
+  if(holdingClutter()&&!input.vrTracked&&input.fire&&!m_previousFire&&!m_suppressFire)puntHeld({forward.x*std::cos(pitch),forward.y*std::cos(pitch),std::sin(pitch)},2.f);
  }
+ // VR: a trigger pulled on a hand that holds the prop, or on the gun hand with no gun drawn, punts it along the
+ // holding hand's pointing (both hands': their mean). With a gun drawn its trigger fires (Game::update) and leaves it.
+ if(heldBefore&&holdingClutter()&&input.vrTracked&&m_vrInputActive&&!m_suppressFire){bool punt=false;
+  for(int hand=0;hand<2;++hand)if(input.vrTrigger[size_t(hand)]&&!m_previousVrTrigger[size_t(hand)])punt|=hand==m_vrCarryHand||hand==m_vrSecondHand||(hand==1&&!(m_weaponEquipped&&!unarmed()));
+  if(punt){Point3 d=m_vrHandDirection[size_t(m_vrCarryHand)];if(m_vrSecondHand>=0)d=d+m_vrHandDirection[size_t(m_vrSecondHand)];puntHeld(d,0);}}
+ m_previousVrTrigger=input.vrTrigger;
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
  stepCloth(dt);   // curtains, straps and cables (Cloth.cpp), against the props as they now are
  for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
@@ -758,7 +777,7 @@ bool Game::testClutter(){
  {auto vr=validationScene(Enemy::Kind::Huntsman);vr.m_clutter={{{4.2f,4.5f},{},.56f}};vr.m_clutter[0].kind=2;
   vr.setVrHand(0,{4.2f,4.5f,.7f},{1,0,0},true);vr.setVrHand(1,{}, {},false);
   if(!vr.interactClutter()||!vr.holdingClutter())return false;vr.updateClutter({},.01f);
-  if(!vr.holdingClutter()||std::fabs(vr.m_clutter[0].pos.x-4.32f)>.001f||std::fabs(vr.m_clutter[0].z+vr.m_clutter[0].height()*.5f-.7f)>.001f)return false;
+  if(!vr.holdingClutter()||std::fabs(vr.m_clutter[0].pos.x-4.2f)>.001f||std::fabs(vr.m_clutter[0].z+vr.m_clutter[0].height()*.5f-.7f)>.001f)return false;
   vr.setVrHand(0,{}, {},false);vr.updateClutter({},.01f);if(vr.holdingClutter())return false;
   auto pose=vr.m_player;int ammo=pose.pool(WeaponId::Shotgun).total;vr.m_enemies[0].pos={5.2f,4.5f};vr.setVrAim({3.8f,4.5f,.6f},{1,0,0},true);vr.shoot();
   if(vr.m_enemies[0].hp!=76||vr.m_player.pool(WeaponId::Shotgun).total!=ammo-1||vr.m_player.pos.x!=pose.pos.x||vr.m_player.z!=pose.z||vr.m_player.angle!=pose.angle||vr.m_player.pitch!=pose.pitch)return false;

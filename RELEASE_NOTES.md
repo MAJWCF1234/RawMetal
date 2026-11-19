@@ -4,6 +4,37 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.8
+
+- **All of her, in VR.** In the headset you are Claire, the way VRChat has it. Look down and her body is there. Her arms run from her shoulders to your hands and bend at the elbow as yours do, and her fingers close as yours close. Her legs walk with the stick and kneel when you duck. Her shoulders turn after your head, and she leans when you stoop. Nothing floats free of her.
+- **Guns on her body.** The shotgun rides on her back and the handgun at her hip. Reach over a shoulder or down to the hip and grip to draw one. Let go back at its holster and it goes away; let go anywhere else and it stays in her hand. On the shotgun, the other hand wraps the fore-end, the wood slides back with it when you pump, and a reload takes that hand to her hip and back to the gun.
+- **VR COMFORT.** A new page under Settings in VR has the turn speed (turning is smooth only), a comfort vignette that closes in while the sticks move you, seated play, height recalibration, left-handed play, the render scale and a frame-rate readout.
+- **Steadier frames.** In VR each eye can be drawn at a smaller share of its size and stretched by SteamVR. On AUTO the game picks the share from how long the last frame took. The far sun shadows are redrawn every other frame.
+- **Subtitles that follow.** Subtitles, area titles and a short health and ammunition line hang ahead of you and drift round after your look instead of being pinned to the face. Nothing is fixed to her hands or wrists any more.
+- **Steadier hands.** Two hands letting go of a crate a moment apart throw it with both. A gun hand or a hand on the fore-end no longer sets off the Physgloves when pumping. A VR hand can no longer wrench loose what is bolted down. A hand that jumps when tracking returns is drawn where it is, not dragged through what lies between.
+- **Held props turn with the hand.** In VR a prop held in one hand keeps the place and the turn it had as the hand closed on it, and turns exactly as the hand turns: no snap to the pointing, no lost roll. With two hands it also rolls as both hands roll, and the second hand takes hold closing on the prop's surface, not only reaching inside it.
+- **Grip to hold, trigger to punt.** Letting go of the grip lets go of the prop. A grip pressed away from any prop no longer takes one into the other hand. The trigger of the hand holding a prop, or of the gun hand with no gun drawn, punts it along the hand, as hard as fire throws it on the PC. With a gun drawn its trigger still fires.
+- **Spilt liquid stays where it was spilt.** Puddles, streams and drops belong to the map they were spilt in. Before, a spill was drawn at the same spot in every map, at its old floor's height, so it hung over crates and showed through walls. Now it is drawn only in its own map, is still there when you come back, and a new map or a new game starts dry.
+- **Untried in a headset.** None of this has been tried in a headset yet. docs/Systems/vr-playtest.md lists what to try.
+- **104 new parts for the Campaign Builder**, from the purchased packs: cubicles, beds, sofas and wardrobes, a diner kitchen and a bathroom, shelving, crates and boxes, machinery and lab pieces, lamps, doorways, lift doors, windows and tunnel junctions, a minivan, fences, a tent and campfire, rocks, and horror dressing (cobwebs, masks, a butcher's knife, a bare bed frame).
+- **New parts-browser tabs:** Kits, Kitchen, Storage, Outdoor and Horror. Street barriers, fences and cars from earlier packs moved to Outdoor.
+- **Kits:** 21 ready-made pieces to drop into a map: eight furnished rooms (office, ward, lab, bathroom, storage room, control room, server room, kitchen), four corridor pieces on a 3 m grid, a stairwell, a lift lobby, two doorways, a catwalk run, a loading dock, a yard fence, a ruin corner and a campsite.
+- Picking a kit shows its ghost on the plan with an arrow to its front. R turns it, a click sets it down, and one Ctrl+Z takes it back. A placed kit turns with R like anything else, and **Take apart** frees its pieces to move or change one by one.
+- **Starter Map:** a Kits Gallery with every kit set down, and two more Parts Gallery yards with every new part, all on forest maps that were already there, so no map moves.
+- The library importer can scale a pack and finds the textures some packs name differently. A texture shared by several models is now stored once.
+
+---
+
+## v1.5.7 - The headset again (2026-11-18)
+
+A fix for the choice that went missing.
+
+- **Play in VR is back.** Since v1.0.4 the game has looked for SteamVR in the wrong place in the registry, decided there was no headset, and never asked how you wanted to play. It looks in the right place now, finds SteamVR in a second Steam library too, and asks again: Play on PC, or Play in VR. If it ever cannot find the headset, RawMetal-vr.txt beside the game says exactly why.
+
+Verified with tools/release/ship.py and the game's VR test, which now checks the headset detection itself.
+
+---
+
 ## v1.5.6 - A quieter hand (2026-11-18)
 
 A small fix for something players said shone too brightly.

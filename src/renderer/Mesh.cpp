@@ -525,6 +525,11 @@ void Mesh::poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,fl
  // vertices once, avoiding the redundant skin pass at the end of IK.
  grip(right,left,elbowSwing,pitch,yaw,false,hold);pose(phase,recoil,hold?hold->curls:0);
 }
+void Mesh::poseTracked(Point3 right,Point3 left,const ArmHold& hold,const std::array<std::array<float,5>,2>& curls){
+ if(!m_bindScene)return;
+ ufbx_free_scene(m_scene);m_scene=m_bindScene;ufbx_retain_scene(m_scene);
+ grip(right,left,0,0,0,false,&hold);m_trackedCurls=curls;pose(0,0,3);
+}
 bool Mesh::poseAction(const char* action,float phase){
  if(!m_bindScene)return false;
  for(auto stack:m_bindScene->anim_stacks){std::string name=stack->name.data;
@@ -676,7 +681,11 @@ void Mesh::pose(float phase,float recoil,int curls){
      if(const char*e=std::getenv("RAWMETAL_SHOTGUN_CURL"))std::sscanf(e,"%f %f %f %f %f %f %f %f %f %f %f",&t[0],&t[1],&t[2],&t[3],&t[4],&t[5],&t[6],&t[7],&t[8],&t[9],&t[10]);return t;}();
     const int joint=name.find(".01.")!=std::string::npos?0:name.find(".02.")!=std::string::npos?1:2;
     curl=name.find("thumb.")==0?table[support?10:9]:support?table[size_t(6+joint)]:name.find("f_index")==0?table[size_t(joint)]:table[size_t(3+joint)];
-   }else{
+   }else if(curls==3){
+    // Tracked (VR): each finger as far closed as the player's own, every joint alike.
+    const int finger=name.find("thumb.")==0?0:name.find("f_index")==0?1:name.find("f_middle")==0?2:name.find("f_ring")==0?3:4;
+    curl=std::clamp(m_trackedCurls[support?1:0][size_t(finger)],0.f,1.f);
+}else{
     if(support&&name.find(".02.")!=std::string::npos)curl=.85f;
     if(support&&name.find(".03.")!=std::string::npos)curl=.90f;
     if(name.find("f_index")==0&&!support)curl=.20f;

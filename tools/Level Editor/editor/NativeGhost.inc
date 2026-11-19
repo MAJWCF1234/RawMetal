@@ -26,6 +26,7 @@
     const char s = toolInfo[size_t(tool)].shape;
     if (s != 'p' && s != 'r' && s != 'l' && s != 'g' && s != 'd') return false;
     if (tool == WaterTool && waterMode() != 0) return false; // a click fills the hollow: no box to show
+    if (tool == 8 && kitInHand >= 0) return false; // a held kit draws its own ghost (kitSpot, as placeKit sets it down)
     return true;
   }
   // Every choice a placement reads besides the pointer: a change of any makes a new ghost.
