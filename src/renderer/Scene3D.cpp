@@ -4264,7 +4264,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // What this frame of the body measured (ClaireOutside::Report; first person
   // fills only the body's own numbers): its lowest point, faces drawn, and the
   // way its head faces (the eyes, or the mask's front, from the head's middle).
-  if(!outside)m_outsideReport=ClaireOutside::Report{};
+  if(!outside){m_outsideReport=ClaireOutside::Report{};m_outsideReport.lower=clip;}
+  m_drawnBodyFaces.clear();
   m_outsideReport.character=body.character;m_outsideReport.lowest=1e9f;Point3 eyeSum{},headSum{};int eyeCount=0,headCount=0;
   for(size_t f=0;f<mesh.triangles.size();++f){auto face=mesh.triangles[f];
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
@@ -4292,6 +4293,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
    if(hiddenHere)continue;
+   if(m_collectBodyFaces)m_drawnBodyFaces.push_back({f,{face.v[0].p,face.v[1].p,face.v[2].p}});
    if(outside&&f<body.headFace.size()&&body.headFace[f])++m_outsideReport.headFaces;
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);

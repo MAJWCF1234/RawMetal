@@ -264,7 +264,7 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
  for(int i=0;i<10;++i){auto&texture=m_claireTextures[size_t(i)];texture=loadTexture(2302+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=i==3||i==4||i==7?.18f:.05f;}
  // The Limitator's two materials (body, head). Without them he is not offered: playerBody gives Claire.
- try{for(int i=0;i<2;++i){auto&texture=m_limitatorTextures[size_t(i)];texture=loadTexture(2293+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=.12f;}m_limitatorTexturesReady=true;}catch(const std::exception&){m_limitatorTexturesReady=false;}
+ try{for(int i=0;i<2;++i){auto&texture=m_limitatorTextures[size_t(i)];texture=loadTexture(2293+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=.05f;}m_limitatorTexturesReady=true;}catch(const std::exception&){m_limitatorTexturesReady=false;}
  // The transformed wear the same suit, drained of colour and darkened with
  // ash: half the saturation, two thirds the light, an olive cast.
  {auto scorch=[](std::uint32_t&pixel){float r=float((pixel>>16)&255),g=float((pixel>>8)&255),b=float(pixel&255),grey=r*.3f+g*.59f+b*.11f;

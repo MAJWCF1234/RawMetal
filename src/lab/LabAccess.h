@@ -182,6 +182,12 @@ struct LabAccess {
  static Settings& settings(Game& g){return g.m_settings;}
  // The body the local player was last drawn as (-1 before the first frame).
  static int localCharacter(const SoftwareRenderer& r){return r.m_localCharacter;}
+ // The body's faces drawn last frame (index, world corners), while collecting.
+ // The local body starts afresh (stance, transitions, blends, poser), as on a new game: a tube run
+ // again on the same renderer otherwise begins with the last run's stance change.
+ static void resetBody(SoftwareRenderer& r){r.m_bodyStance=-1;r.m_bodyTransitionClip=-1;r.m_bodyLastElapsed=-1;r.m_localCharacter=-1;r.m_tpBodyYaw=-1e9f;r.m_tpTurnClip=-1;r.m_tpYawTime=-1;r.m_outsideHitStart=-1e9f;r.m_outsideLandStart=-1e9f;r.m_outsideAir=0;r.m_outsideDamage=0;}
+ static void collectBodyFaces(SoftwareRenderer& r,bool on){r.m_collectBodyFaces=on;r.m_drawnBodyFaces.clear();}
+ static const std::vector<SoftwareRenderer::DrawnBodyFace>& drawnBodyFaces(const SoftwareRenderer& r){return r.m_drawnBodyFaces;}
  // ---- Snapshot: the scene in play as a lab fixture (console `labsnap NAME`) ----
  // Writes DIR/NAME.lab (world, camera) and DIR/NAME.sav (the game's own save:
  // every state, creature, door and body as play left them). DIR is RM_LAB_FIXTURES

@@ -148,9 +148,17 @@ gitignored library at `src/assets/library/player/`:
 - The viewmodel's and the VR avatar's arms are still Claire's arms, dressed in
   his sleeve and glove (each the part of his body texture his forearm or hand
   faces use).
+- His suit is near-black cloth: its gloss is Claire's cloth's (0.05). At more
+  it caught the lamp overhead and his leg read flat grey from above.
 - Lab: `python tools/dev/lab.py run --feature=limitator` (fixture
-  `limitator-turn`). `limitator.character 0` in `lab/tune.txt` runs the same
-  takes on Claire.
+  `limitator-turn`): his holds from outside, then first person 60 degrees
+  down standing, kneeling and prone. Looking down, no body face may cover the
+  crosshair within 15% of the frame's height of it (the faces drawn are
+  projected; the check names any by bone and material).
+  `limitator.character 0` in `lab/tune.txt` runs the same takes on Claire,
+  and `limitator.down` sets the look-down pitch (the game's units: radians
+  times 140, -146.6 by default). Kneeling at 60 degrees Claire's raised shin
+  reaches the edge of that circle (3 faces); his does not.
 
 ## Stances
 

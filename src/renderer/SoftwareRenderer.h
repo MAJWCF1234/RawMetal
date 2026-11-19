@@ -432,6 +432,8 @@ private:
     // The body the local player wore last frame: a change re-makes its outside
     // poser, turn measures and blends.
     int m_localCharacter=-1;
+    // The lab's view of the body: when collecting, each face drawn this frame (its index, world corners).
+    struct DrawnBodyFace{size_t face;std::array<Point3,3> p;};bool m_collectBodyFaces=false;std::vector<DrawnBodyFace> m_drawnBodyFaces;
     int m_bodyStance=-1,m_bodyTransitionClip=-1;float m_bodyTransitionStart=0,m_bodyTransitionLength=1,m_bodyTransitionRange=1;
     // The clip it last showed and the one it is blending from (.2 s).
     int m_bodyClip=-1,m_bodyFromClip=-1;float m_bodyFromPhase=0,m_bodyBlendStart=-1,m_bodyLastElapsed=-1;
