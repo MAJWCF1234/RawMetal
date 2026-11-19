@@ -82,6 +82,8 @@ struct InputState {
     float mouseDy = 0.0f;
     bool vrTracked=false;
     std::array<bool,2> vrGrip{};
+    // Each hand's trigger (by role: 0 off hand, 1 gun hand); fire is the gun hand's.
+    std::array<bool,2> vrTrigger{};
     float vrYaw=0,vrPitch=0,vrEye=1.42f,vrMoveForward=0,vrMoveRight=0;
 };
 
@@ -398,7 +400,9 @@ public:
     void update(const InputState& input, float dt);
     void moveVrRoom(Vec2 delta){tryMove(delta);}
     void setVrAim(Point3 position,Point3 direction,bool valid,bool support=false){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;m_vrSupportGrip=support&&valid;}
-    void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandValid[side]=valid;}
+    // up: the hand's own up (the controller's, mapped to game space as its pointing is); left zero, the up nearest the
+    // world's across the pointing (a hand held level, no roll).
+    void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={},Point3 up={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandUp[side]=up;m_vrHandValid[side]=valid;}
     bool vrSupportGrip()const{return m_vrSupportGrip;}
     // Developer mode (--dev, console DEV): no damage, no creatures, every door open.
     // Console noclip: fly through walls (Movement.cpp). Never saved.
@@ -518,6 +522,15 @@ public:
     static constexpr float TwoHandGrace=.15f;
     static int twoHandRelease(bool carryGrip,bool secondGrip,float& grace,float dt);
     static bool testVrHardening(std::ostream& report);
+    // --vr-test: held props turn with the hand (one and two hands), grip down takes and grip up drops, the trigger punts.
+    static bool testVrHeldProps(std::ostream& report,Point3(*map)(Point3)=nullptr);
+    // A VR hand's turn in game space: its pointing on +x, its up on +z (a proper rotation built in game space from the two
+    // mapped vectors, so the tracking mirror cancels out of every turn taken between two of them).
+    std::array<float,4> vrHandTurn(int hand)const;
+    // The punt (VR trigger while holding a prop, desktop fire): thrown along dir at PuntSpeed scaled by its mass.
+    static constexpr float PuntSpeed=9.f;
+    static float puntSpeed(const Clutter& c);
+    void puntHeld(Point3 dir,float lift);
     const PhysgloveState& physgloves()const{return m_physglove;}
     // Where a prop pulled by `hand` is caught (its middle): before the eye at carry reach, or in the VR hand.
     Point3 physgloveCatchPoint(int hand,const Clutter& c)const;
@@ -530,8 +543,9 @@ public:
     Point3 vrHandProxy(int hand)const{return m_vrHandProxy[size_t(hand&1)];}
     bool vrHandBlocked(int hand)const{return m_vrHandBlocked[size_t(hand&1)];}
     // Liquids (Liquids.cpp): drops in the air and the puddles they made, this map's, in its own coordinates.
-    struct LiquidDrop {Point3 p{},v{};liquid::Kind kind=liquid::Kind::Water;float volume=0;int stream=0;};   // stream: the mouth or hole it ran from (0: a spill), drops of one stream in the order they left
-    struct Puddle {Point3 at{};liquid::Kind kind=liquid::Kind::Water;float volume=0,radius=0;};
+    // level: the map (chunk) it was spilt in; its places are that map's own, and it is drawn and kept only there.
+    struct LiquidDrop {Point3 p{},v{};liquid::Kind kind=liquid::Kind::Water;float volume=0;int stream=0;int level=0;};   // stream: the mouth or hole it ran from (0: a spill), drops of one stream in the order they left
+    struct Puddle {Point3 at{};liquid::Kind kind=liquid::Kind::Water;float volume=0,radius=0;int level=0;};
     const std::vector<LiquidDrop>& liquidDrops()const{return m_liquidDrops;}
     const std::vector<Puddle>& puddles()const{return m_puddles;}
     // Fill a prop with liquid (a vessel only); a round holing it at a world point.
@@ -1377,7 +1391,13 @@ private:
     void updatePhysgloves(const InputState& input,float dt);
     // Two-hand VR carry (Clutter.cpp): the second hand's grip on the held prop, in the prop's frame at the grab.
     int m_vrSecondHand=-1;float m_vrReleaseGrace=0;std::array<Point3,2> m_vrGripLocal{};std::array<float,4> m_vrGripTurn{1,0,0,0};Point3 m_vrGripAxis{},m_vrGripUp{};
+    // Each hand's turn as the second hand took hold (the roll about the line between the hands is the mean of their turns since).
+    std::array<std::array<float,4>,2> m_vrGripHandTurn{};
     bool updateTwoHandCarry(const InputState& input,Clutter& c);bool grabSecondHand(int hand);
+    // One-hand VR carry: the prop's turn and middle in the carry hand's frame, taken as the hand closed on it (or as it
+    // came back to one hand), so it turns exactly with the hand from where it was held.
+    bool m_vrHoldSet=false;std::array<float,4> m_vrHoldTurn{1,0,0,0};Point3 m_vrHoldLocal{};
+    std::array<bool,2> m_previousVrTrigger{};
     Point3 carryVelocity()const;
     // VR hand bodies (VrHands.cpp): each hand a kinematic sphere in the solver, its drawn place held out of props.
     std::array<Point3,2> m_vrHandProxy{};std::array<bool,2> m_vrHandBlocked{},m_vrHandProxySet{};bool m_vrHandStepped=false;
@@ -1738,7 +1758,7 @@ private:
     bool m_vrAimValid=false,m_vrSupportGrip=false,m_vrChamberEmpty=false,m_vrPumpBack=false;float m_vrPumpRest=0,m_vrPumpAlong=0;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;
-    std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{};
+    std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{},m_vrHandUp{};
     std::array<bool,2> m_vrHandValid{},m_vrMeleeTracked{};
     std::array<Point3,2> m_vrPreviousFist{};
     std::array<float,2> m_vrFistCooldown{};

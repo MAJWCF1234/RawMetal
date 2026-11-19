@@ -109,7 +109,7 @@ struct VrRuntime::Impl {
  std::array<VrHand,2> hands{};uint32_t width=0,height=0;float yaw=0,headStartY=0;Point3 previousHead{};bool calibrated=false,trackingInterrupted=false,menuWasOpen=false;int pointerX=-1,pointerY=-1;
  // The gun hand's grip, held from the last frame; a draw from a holster, and whether the hand has left it since
  // (a release back at the holster puts the gun away only then).
- std::array<bool,2> previousGrip{},consumed{};int drawnFrom=0;bool leftHolster=false;
+ std::array<bool,2> previousGrip{},consumed{},gripDown{};int drawnFrom=0;bool leftHolster=false;
  // Tracking metres to game metres (avatarScale), the hips' facing (lagging the head), the comfort vignette.
  float scale=1,bodyYaw=0,turnRate=0,vignette=0;bool bodyReady=false;
  VrTiming timing;int timingFrames=0;float displayHz=0;
@@ -253,9 +253,9 @@ void VrRuntime::suspendTracking(Game&game,InputState&input){
   // Keep tracked movement enabled but neutral: PC keys and stale controller
   // actions must not move the player while the headset pose is unavailable.
   input.vrTracked=true;input.vrYaw=game.player().angle;input.vrPitch=game.player().pitch;input.vrEye=game.player().eye;
-  input.vrMoveForward=input.vrMoveRight=0;input.vrGrip={};input.fire=input.use=input.jump=input.reload=false;
+  input.vrMoveForward=input.vrMoveRight=0;input.vrGrip={};input.vrTrigger={};input.fire=input.use=input.jump=input.reload=false;
   input.pointerX=input.pointerY=m->pointerX=m->pointerY=-1;
-  m->previousGrip={};m->consumed={};m->previousCrouch=false;m->drawnFrom=0;m->turnRate=0;m->vignette=0;m->support=false;
+  m->previousGrip={};m->consumed={};m->gripDown={};m->previousCrouch=false;m->drawnFrom=0;m->turnRate=0;m->vignette=0;m->support=false;
   for(auto&h:m->hands)h={};for(auto&t:m->track)t.valid=false;game.setVrAim({}, {},false);game.setVrHand(0,{}, {},false);game.setVrHand(1,{}, {},false);
   // Resume at the recovered tracking origin rather than applying the whole
   // unobserved head displacement as a room-scale collision move.
@@ -301,7 +301,10 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  bool jumpButton=pressed(1,vr::k_EButton_A),reloadButton=pressed(1,vr::k_EButton_ApplicationMenu),crouchButton=pressed(0,vr::k_EButton_A),menuButton=pressed(0,vr::k_EButton_ApplicationMenu);
  if(m->input&&m->set){
   auto digital=[&](int action,bool fallback){vr::InputDigitalActionData_t data{};return m->input->GetDigitalActionData(m->actions[action],&data,sizeof(data),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&data.bActive?data.bState:fallback;};
-  for(int side=0;side<2;++side){states[side].rAxis[1].x=digital(side,states[side].rAxis[1].x>.65f)?1.f:0.f;vr::InputAnalogActionData_t squeeze{};bool grip=digital(side+2,(states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))!=0);if(m->input->GetAnalogActionData(m->actions[4+side],&squeeze,sizeof(squeeze),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&squeeze.bActive)grip|=squeeze.x>.65f;if(grip)states[side].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_Grip);else states[side].ulButtonPressed&=~vr::ButtonMaskFromId(vr::k_EButton_Grip);vr::InputAnalogActionData_t move{};if(m->input->GetAnalogActionData(m->actions[6+side],&move,sizeof(move),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&move.bActive)sticks[side]={move.x,move.y};}
+  for(int side=0;side<2;++side){states[side].rAxis[1].x=digital(side,states[side].rAxis[1].x>.65f)?1.f:0.f;vr::InputDigitalActionData_t click{};vr::InputAnalogActionData_t squeeze{};
+   const bool clickActive=m->input->GetDigitalActionData(m->actions[size_t(side+2)],&click,sizeof(click),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&click.bActive;
+   const bool squeezeActive=m->input->GetAnalogActionData(m->actions[size_t(4+side)],&squeeze,sizeof(squeeze),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&squeeze.bActive;
+   const bool grip=gripHeld(m->gripDown[size_t(side)],clickActive,click.bState,squeezeActive,squeeze.x,(states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))!=0);m->gripDown[size_t(side)]=grip;if(grip)states[side].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_Grip);else states[side].ulButtonPressed&=~vr::ButtonMaskFromId(vr::k_EButton_Grip);vr::InputAnalogActionData_t move{};if(m->input->GetAnalogActionData(m->actions[6+side],&move,sizeof(move),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&move.bActive)sticks[side]={move.x,move.y};}
   // Once SteamVR has loaded the bindings, record what drives each button action.
   if(++m->framesSeen==180){wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);std::ofstream log(std::filesystem::path(local)/L"RawMetal/vr/bindings-active.txt");
    const char* labels[]={"jump","reload","menu","inventory","crouch"};const int ids[]={8,9,10,11,12};
@@ -324,7 +327,7 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  input.crouch=!m->seated&&input.vrEye<1.f;
  bool desktopClick=input.fire,desktopAccept=input.menuAccept;
  const bool gunTrigger=states[gunSide].rAxis[1].x>.65f,offTrigger=states[offSide].rAxis[1].x>.65f;
- input.fire=focused&&m->hands[1].tracked&&gunTrigger;input.use=focused&&((states[0].ulButtonPressed|states[1].ulButtonPressed)&vr::ButtonMaskFromId(vr::k_EButton_Grip));input.jump=focused&&jumpButton;input.reload=focused&&reloadButton;input.menuAccept|=input.fire||(focused&&offTrigger);input.menuUp|=focused&&moveStick.y>.6f;input.menuDown|=focused&&moveStick.y<-.6f;input.escape|=focused&&menuButton;
+ input.fire=focused&&m->hands[1].tracked&&gunTrigger;input.vrTrigger={focused&&m->hands[0].tracked&&offTrigger,input.fire};input.use=focused&&((states[0].ulButtonPressed|states[1].ulButtonPressed)&vr::ButtonMaskFromId(vr::k_EButton_Grip));input.jump=focused&&jumpButton;input.reload=focused&&reloadButton;input.menuAccept|=input.fire||(focused&&offTrigger);input.menuUp|=focused&&moveStick.y>.6f;input.menuDown|=focused&&moveStick.y<-.6f;input.escape|=focused&&menuButton;
  // The crouch button toggles a crouch that also lowers the view.
  if(focused&&crouchButton&&!m->previousCrouch)m->crouchToggled=!m->crouchToggled;m->previousCrouch=crouchButton;
  if(m->crouchToggled&&!game.paused()&&!game.titleScreen()){input.crouch=true;input.vrEye=std::max(.15f,input.vrEye-(Player::StandingEye-Player::CrouchedEye));}
@@ -385,7 +388,7 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  auto reachShift=[&](int role){const int side=m->side[size_t(role)];return solved.wrist[size_t(side)]-body.hands[size_t(side)].wrist;};
  aim=aim+reachShift(1);aim.x-=origin.x;aim.y-=origin.y;
  game.setVrAim(aim,aimDir,m->hands[1].tracked&&focused,support);
- for(int role=0;role<2;++role){const int side=m->side[size_t(role)];auto hand=m->hands[size_t(role)].position+(m->hands[size_t(role)].tracked?reachShift(role):Point3{});hand.x-=origin.x;hand.y-=origin.y;Point3 velocity{};if(devices[side]<m->poses.size()){const auto&v=m->poses[devices[side]].vVelocity;velocity=rotateTracking({v.v[0],v.v[1],v.v[2]},m->yaw)*m->scale;}game.setVrHand(role,hand,m->hands[size_t(role)].basis[2]*-1,m->hands[size_t(role)].tracked&&focused,velocity);}
+ for(int role=0;role<2;++role){const int side=m->side[size_t(role)];auto hand=m->hands[size_t(role)].position+(m->hands[size_t(role)].tracked?reachShift(role):Point3{});hand.x-=origin.x;hand.y-=origin.y;Point3 velocity{};if(devices[side]<m->poses.size()){const auto&v=m->poses[devices[side]].vVelocity;velocity=rotateTracking({v.v[0],v.v[1],v.v[2]},m->yaw)*m->scale;}game.setVrHand(role,hand,m->hands[size_t(role)].basis[2]*-1,m->hands[size_t(role)].tracked&&focused,velocity,m->hands[size_t(role)].basis[1]);}
  // The comfort vignette: the setting's strength, as far as the view is being moved or turned by the sticks.
  m->vignette=menuOpen?0.f:cfg.vrVignette*std::clamp(std::max(std::hypot(input.vrMoveForward,input.vrMoveRight),std::fabs(m->turnRate)/2.1f),0.f,1.f);
  // The compositor's timing of the last frame, and the render scale for the next (dynamic unless fixed).
@@ -483,6 +486,18 @@ Point3 VrRuntime::lazyFollow(Point3 anchor,Point3 forward,float dt,float slack){
  const Point3 across=unit3(f-a*c);if(dot3(across,across)<.5f)return f;
  return unit3(a*std::cos(step)+across*std::sin(step));
 }
+// A hand's grip from SteamVR Input: the bound click and squeeze actions alone while either is bound (the legacy
+// controller state is not asked then: on some controllers its grip bit stays set while the hand only rests on the
+// handle, which kept a prop held after the grip was let go); the squeeze closes past 0.6 and opens below 0.45.
+bool VrRuntime::gripHeld(bool was,bool clickActive,bool click,bool squeezeActive,float squeeze,bool legacy){
+ if(clickActive||squeezeActive)return (clickActive&&click)||(squeezeActive&&squeeze>(was?.45f:.6f));
+ return legacy;}
+bool VrRuntime::testGrip(){
+ // Bound squeeze: closes past 0.6, holds to 0.45, opens below; a stuck legacy bit is ignored.
+ if(gripHeld(false,false,false,true,.55f,true)||!gripHeld(false,false,false,true,.7f,false)||!gripHeld(true,false,false,true,.5f,false)||gripHeld(true,false,false,true,.4f,true))return false;
+ // Bound click (Vive): its state alone; nothing bound: the legacy bit.
+ if(!gripHeld(false,true,true,false,0,false)||gripHeld(true,true,false,false,0,true)||!gripHeld(false,false,false,false,0,true)||gripHeld(true,false,false,false,0,false))return false;
+ return true;}
 bool VrRuntime::testDetection(){
  // The registry key must carry real backslashes (the 1.0.4-1.5.5 bug).
  if(std::wstring(SteamKey)!=std::wstring(L"Software")+L'\\'+L"Valve"+L'\\'+L"Steam")return false;
@@ -608,6 +623,8 @@ bool VrRuntime::testAll(std::ostream& report){
  run("tracking recovery, foregrip support, coordinate axes, rigid-view inversion, shoulder box",testMath());
  ok&=testSupport(report);ok&=testComfortMath(report);ok&=testAvatar(report);ok&=SoftwareRenderer::testVrAvatar(report);
  ok&=Game::testComfortMenu(report);ok&=Game::testVrHardening(report);
+ run("grip from the bound actions, with hysteresis, no stuck legacy bit",testGrip());
+ ok&=Game::testVrHeldProps(report);ok&=Game::testVrHeldProps(report,[](Point3 p){return rotateTracking(p,.7f);});
  run("articulated hand meshes (Mesh::testVrHands)",Mesh::testVrHands());run("physical melee",Game::testVrMelee());run("controller interaction",Game::testVrInteraction());
  report<<(ok?"ALL PASSED":"FAILED")<<'\n';return ok;
 }
