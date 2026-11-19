@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include "../game/Game.h"
+#include "../game/Avatar.h"
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
@@ -192,9 +193,26 @@ private:
     // This frame's camera (Game::view): the player, or a locker's path in or out.
     Player m_view;
     bool m_vrReuseScene=false; // second eye: replay the first eye's geometry
-    std::array<std::vector<MeshTriangle>,2> m_vrHandMeshes;
-    std::vector<MeshTriangle> m_vrSupportGripMesh; // the left hand closed round the fore-end
+    // The VR avatar (game/Avatar.h, docs/Systems/avatar.md): her body from the first-person body pass (legs and
+    // torso, leaned and turned by the solve), her arms (the viewmodel's, resource 111) bent by two-bone IK onto
+    // the tracked hands with the tracked finger curls, the gun in her hand and the holstered guns on her back and
+    // hip. The pose and its solve are made once a frame (the first eye) and drawn from there.
     void drawTrackedHands(const Game& game);
+    AvatarPose m_vrPose;AvatarSolve m_vrSolve;bool m_vrPoseReady=false;
+    Point3 m_vrCardAnchor{};double m_vrCardClock=-1;float m_vrStatusTime=0;int m_vrStatusKey=-1;bool m_vrForeEndMeasured=false;
+ public:
+    // The arm rig posed on a solve (shared by the drawing and --vr-test): its shoulders' middle in rig space and
+    // the game metres per rig unit, for rigToWorld.
+    struct VrRig {Point3 mid{};float scale=1;};
+    static VrRig poseVrArms(Mesh& arms,const AvatarSolve& solve);
+    static Point3 rigToWorld(const VrRig& rig,const AvatarSolve& solve,Point3 q){const Point3 d=q-rig.mid;return solve.shoulders+(solve.torsoLeft*d.x+solve.torsoUp*d.y+solve.torsoForward*d.z)*rig.scale;}
+    // --vr-test: the avatar's arms on scripted poses reach the hands, turn to their frames, bend the elbows out
+    // and down, close the fingers as tracked; writes vr-avatar-arms.obj (the arms and body points) beside it.
+    static bool testVrAvatar(std::ostream& report);
+    // The lab's engine.vr-bench (no headset): one eye of the Quest (1596 x 1708) drawn headless by Vulkan at
+    // render scales 1, 0.9, 0.8 and 0.7, ms a frame (the scene built, drawn and read back), into the report.
+    static bool benchVrEye(std::ostream& report);
+ private:
     bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;
     // Static caches bake ambient only; Vulkan adds lamps per pixel.
@@ -275,7 +293,7 @@ private:
     Texture m_vrWristTexture;
     // Alyx-style VR displays: health on the back of the left hand, the load on
     // the gun, and area titles and subtitles floating ahead (additive glass).
-    Texture m_vrHealthTexture,m_vrAmmoTexture,m_vrTitleTexture,m_vrCaptionTexture;
+    Texture m_vrHealthTexture,m_vrAmmoTexture,m_vrTitleTexture,m_vrCaptionTexture,m_vrRateTexture;std::string m_vrRateShown;int m_vrRateFrames=0;
     int m_vrHealthShown=-1,m_vrAmmoShown=-1;float m_vrTitleShown=-1;std::string m_vrCaptionShown,m_vrObjective;float m_vrObjectiveTime=0;
     Texture m_muzzleFlash;
     Texture m_water,m_coastWater;

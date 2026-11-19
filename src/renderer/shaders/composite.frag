@@ -4,13 +4,15 @@ layout(set=0,binding=1) uniform sampler2D hudImage;
 // Exposure stage output: b holds the eased focus distance.
 layout(set=0,binding=2) uniform sampler2D exposureImage;
 layout(push_constant) uniform Params { float underwater; float sceneDim; float damageFlash; float shotKick; float hdrScene; float vrMode; float alarm; float postBloom;
- float lensAperture; float filmTime; float lensEffects; float aspect; } params;
+ float lensAperture; float filmTime; float lensEffects; float aspect; float renderScale; } params;
+// renderScale: the share of the scene image drawn (VR dynamic resolution; 1 elsewhere). The scene is read in
+// that top-left share, everything screen-based (vignettes, the HUD) over the whole view.
 // lensAperture scales depth of field, lensEffects the chromatic aberration,
 // vignetting, grain and warm bloom; both 1 for the tuned look, 0 for off.
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 color;
 vec3 highlight(vec2 p){
- vec3 sampleColor=texture(sceneImage,clamp(p,vec2(0.0),vec2(1.0))).rgb;
+ vec3 sampleColor=texture(sceneImage,clamp(p,vec2(0.0),vec2(params.renderScale)-0.5/vec2(textureSize(sceneImage,0)))).rgb;
  return max(sampleColor-vec3(params.hdrScene>0.5?1.0:0.72),vec3(0.0));
 }
 vec3 filmic(vec3 c){c=max(c,vec3(0.0));return clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14),vec3(0.0),vec3(1.0));}
@@ -81,16 +83,17 @@ vec3 focusedScene(vec2 p){
 void main(){
  vec2 centered=(uv-.5)*2.0;float radius=length(centered);float edge=clamp((radius-.48)/.52,0.0,1.0);edge=edge*edge*(3.0-2.0*edge);
  vec2 pixel=1.0/vec2(textureSize(sceneImage,0));vec2 shift=normalize(centered+vec2(1e-5))*pixel*2.0*edge*clamp(params.shotKick,0.0,1.0);
- vec3 scene=focusedScene(uv);
- if(params.lensAperture>0.0||params.lensEffects>0.0)scene=depthOfField(uv,lensSample(uv));
- if(params.shotKick>0.001){scene.r=texture(sceneImage,uv+shift).r;scene.b=texture(sceneImage,uv-shift).b;}
+ vec2 st=uv*params.renderScale;
+ vec3 scene=focusedScene(st);
+ if(params.lensAperture>0.0||params.lensEffects>0.0)scene=depthOfField(st,lensSample(st));
+ if(params.shotKick>0.001){scene.r=texture(sceneImage,st+shift).r;scene.b=texture(sceneImage,st-shift).b;}
  // Only bright emitters bleed. Blur their highlights, never the base image or
  // the full-resolution HUD, so low-resolution textures stay visibly crisp.
  vec2 glowPixel=1.0/vec2(textureSize(sceneImage,0));
- vec3 bloom=highlight(uv+vec2(2.0,0.0)*glowPixel)+highlight(uv-vec2(2.0,0.0)*glowPixel)
-           +highlight(uv+vec2(0.0,2.0)*glowPixel)+highlight(uv-vec2(0.0,2.0)*glowPixel);
- bloom+=0.5*(highlight(uv+vec2(11.0,7.0)*glowPixel)+highlight(uv-vec2(11.0,7.0)*glowPixel)
-            +highlight(uv+vec2(11.0,-7.0)*glowPixel)+highlight(uv-vec2(11.0,-7.0)*glowPixel));
+ vec3 bloom=highlight(st+vec2(2.0,0.0)*glowPixel)+highlight(st-vec2(2.0,0.0)*glowPixel)
+           +highlight(st+vec2(0.0,2.0)*glowPixel)+highlight(st-vec2(0.0,2.0)*glowPixel);
+ bloom+=0.5*(highlight(st+vec2(11.0,7.0)*glowPixel)+highlight(st-vec2(11.0,7.0)*glowPixel)
+            +highlight(st+vec2(11.0,-7.0)*glowPixel)+highlight(st-vec2(11.0,-7.0)*glowPixel));
  // The post pass already added a wider bloom.
  // Halation: light scattered back through film's red layer around highlights.
  if(params.lensEffects>0.0)scene+=bloom*vec3(0.06,0.018,0.006)*params.lensEffects;

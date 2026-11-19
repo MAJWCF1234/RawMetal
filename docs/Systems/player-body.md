@@ -171,8 +171,10 @@ Three, as Metal Gear has them (`Player`, `Game::updateMovement`):
     beam itself still leaves her eye).
   - A change of hold blends over 0.2 s from the pose last drawn, which stays
     put while her facing turns.
-- **Never drawn:** in VR (the tracked hands have nothing joining them to a
-  body), inside lockers, and in inspection or test cameras
+- **In VR** she is the avatar (docs/Systems/avatar.md): this body under the
+  headset, legs from the stick and the hips' facing, torso leaned and turned
+  toward the head, and the viewmodel arms bent by IK onto the controllers.
+- **Never drawn:** inside lockers, and in inspection or test cameras
   (`Game::inspectionCamera`, set by `mapInspection`).
 
 ## First-person arms
