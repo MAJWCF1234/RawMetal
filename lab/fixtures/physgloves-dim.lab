@@ -1,0 +1,8 @@
+# Physgloves: the target highlight in a dim room (tube physgloves, run alone with --fixtures=physgloves-dim --frames=22):
+# the box on the high shelf under one weak lamp, as the player sees it targeted before the pull.
+world room
+camera 5.4 8.5 -999 0 0
+light 6.4 6.6 3.0 .55 6
+scene pull
+size 1600 900
+frames 110
