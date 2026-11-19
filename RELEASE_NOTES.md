@@ -4,7 +4,9 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.5.8
+## v1.5.8 - Her own two hands (2026-11-19)
+
+In the headset you are no longer a pair of hands in the dark; you are Claire, all of her. Above the hill the Builder grows a hundred rooms' worth of new things, and the crates that haunted it are laid to rest.
 
 - **All of her, in VR.** In the headset you are Claire, the way VRChat has it. Look down and her body is there. Her arms run from her shoulders to your hands and bend at the elbow as yours do, and her fingers close as yours close. Her legs walk with the stick and kneel when you duck. Her shoulders turn after your head, and she leans when you stoop. Nothing floats free of her.
 - **Guns on her body.** The shotgun rides on her back and the handgun at her hip. Reach over a shoulder or down to the hip and grip to draw one. Let go back at its holster and it goes away; let go anywhere else and it stays in her hand. On the shotgun, the other hand wraps the fore-end, the wood slides back with it when you pump, and a reload takes that hand to her hip and back to the gun.
@@ -25,7 +27,9 @@ Changelog of shipped updates. Newest first. Each section is one release.
 - **Turn a material.** Planks, tiles, brick courses, tread plate and grating can run either way. In the Campaign Builder's Paint tool (and the Floor and Flooring tools) R turns the paint a quarter and Shift+R turns it back; a floor just painted turns with it, so you see it turn. A picked block, shape, stair or balcony floor has a Turn box; any angle is under Advanced. The game draws the turn exactly as the Builder shows it, and older maps look as they always did. The Starter Map's hillside house has its planks turned.
 - **The ghost is what you get.** A placing tool's ghost, on the plan and in the 3D view, is now made by the placement itself: a desk snapped to a wall shows against the wall and turned, a sign on its wall, a lamp in a cave on the cave's floor, a pipe or cable from where the drag really starts. A drag on the plan shows the real result in 3D, a preview held back while the picture was busy catches up, and switching tools, maps or floors, Undo and Redo leave no ghost behind. A picked thing that was turned is ringed the way it stands.
 - **Nudge with the keyboard.** With something picked, the arrow keys move it a grid step along the floor and Page Up and Page Down raise and lower it (Shift for a centimetre, Ctrl for a metre). In the 3D view Up moves it away from you. Each press is one Undo, a held key one in all, and the floor stops a lowering once before letting it sink. With nothing picked the keys work as before.
-- **No more phantom crates and barrels in the Builder's 3D view.** A new preview scene built in the memory the last one had, with the same tiles and the same edit count, kept drawing the old scene's baked fixtures: crates and barrels that were not in the map, that came and went and could not be deleted. The renderer now knows each game and each map by its own number, never by where it sits in memory, puts the fixtures, structures, props and signs it bakes into its key, and lets go of a cache as soon as what it held is gone, so no shadow or reflection of it stays behind.
+- **No more phantom crates and barrels in the Builder's 3D view.** Crates and barrels that were never in the map came and went in the 3D view and could not be deleted. They were the ghosts of an earlier preview: a new one built in the same memory kept drawing what the old one had baked. The renderer now knows each game and each map by its own number, never by where it sits in memory, and lets go of what it baked as soon as the map it belonged to is gone.
+
+Verified with the Campaign Builder's full editing test, the game's VR, liquid, kit, parts, material-turn and scene-reuse tests, and tools/release/ship.py.
 
 ---
 
