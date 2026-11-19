@@ -34,6 +34,9 @@
 #include <array>
 #include <memory>
 #include <queue>
+#include <functional>
+#include <unordered_map>
+#include <limits>
 #include <random>
 #include <climits>
 #include <regex>
@@ -771,7 +774,9 @@ enum {
   // The Cave tool (NativeCaveTool.inc).
   CaveModeList=2640,CaveSizeList,CaveDepthList,
   // The Hang cloth tool (NativeClothTool.inc).
-  ClothKindList=2650,ClothDropList
+  ClothKindList=2650,ClothDropList,
+  // Material turns (NativeMaterialTurn.inc).
+  TurnList=2660,TurnFineBox
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -1051,7 +1056,7 @@ struct Editor {
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
   bool connectTest = false, caveTest = false, kitTest = false;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1146,6 +1151,11 @@ struct Editor {
 #include "NativeFinishRegression.inc"
 #include "NativeFlooringRegression.inc"
 #include "NativeGroundRegression.inc"
+#include "NativeGhost.inc"          // ghosts made by the placement itself
+#include "NativeMaterialTurn.inc"   // material turns: the Paint tool's R, the Turn box
+#include "NativeNudge.inc"          // arrow keys and Page Up / Down move the picked thing
+#include "NativeGhostRegression.inc"
+#include "NativeTurnRegression.inc"
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -1377,9 +1387,12 @@ struct Editor {
       ++b;
     for (int v = a; v <= b; ++v)
       doc.paint(map, layer, across ? v : cx, across ? cy : v, '.');
-    addAuthored({"STRUCT", std::to_string(map), std::to_string(across ? a : cx), std::to_string(across ? cy : a),
+    std::vector<std::string> run{"STRUCT", std::to_string(map), std::to_string(across ? a : cx), std::to_string(across ? cy : a),
              std::to_string(across ? b + 1 : cx + 1), std::to_string(across ? cy + 1 : b + 1), nativeNumber(layerElevation()),
-             nativeNumber(wallTop()), "0", std::to_string(material)});
+             nativeNumber(wallTop()), "0", std::to_string(material)};
+    withLayTurn(run);
+    addAuthored(run);
+    noteLaid(run);
     return true;
   }
   // ---- Draw shape: the outline becomes walls, a block or terraces.
@@ -1928,6 +1941,7 @@ struct Editor {
       if (pickUp) {
         int id = field < f.size() ? int(number(f[field], 0)) : 0;
         choosePaint({"mat-" + std::to_string(id), materialName(id), id, 0});
+        paintTurn = turnOf(doc.lines[index], "turn"), showTurn(); // its turn comes up with it
         sfx::play(sfx::Click, .7f);
         message(L"Picked up " + paintChoice.name + L". Click to paint with it.");
         return;
@@ -1936,6 +1950,7 @@ struct Editor {
         f.resize(field + 1);
       f[field] = std::to_string(paintMaterial());
       doc.replace(index, f);
+      paintTurned(index, "turn");
       message(L"Painted " + plainKind(f[0]) + L": " + materialName(paintMaterial()) + L".");
       return;
     }
@@ -1982,15 +1997,21 @@ struct Editor {
       f.resize(5, "-1");
     f[size_t(surface)] = std::to_string(paintFinish());
     doc.replace(found.front(), f);
+    paintTurned(found.front(), surface == 2 ? "wallturn" : surface == 3 ? "floorturn" : "ceilingturn");
     message(L"All " + std::wstring(which[surface]) + L" on this map are now " + wide(parts::finishNames[paintFinish()]) + L".");
   }
   void paintGesture(float ax, float ay, float bx, float by) {
     bool pickUp = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+    paintGestureNow(ax, ay, bx, by, pickUp);
+    if (!pickUp)
+      endPaintStroke(); // R turns what this stroke painted (NativeMaterialTurn.inc)
+  }
+  void paintGestureNow(float ax, float ay, float bx, float by, bool pickUp) {
     float z = pickZ;
     int surface = pickSurface;
     pickZ = -1000.f, pickSurface = 0;
     if (!pickUp)
-      remember();
+      remember(), beginPaintStroke();
     if (std::abs(ax - bx) < .3f && std::abs(ay - by) < .3f) {
       paintSpot(bx, by, z, surface, pickUp);
     } else {
@@ -2012,6 +2033,7 @@ struct Editor {
             f.resize(field + 1);
           f[field] = std::to_string(paintMaterial());
           doc.replace(i, f);
+          paintTurned(i, "turn");
           ++painted;
         }
       if (painted)
@@ -2445,6 +2467,8 @@ struct Editor {
       publishedAt[revision] = edperf::now();
   }
   void publish(bool edit = true, bool adjustDressing = true) {
+    if (ghostDryRun) // a ghost being worked out (NativeGhost.inc): nothing leaves for the engine
+      return;
     livePending = false;
     // A 3D preview publishes its scratch copy and nothing else.
     if (ghosting) {
@@ -4043,6 +4067,11 @@ struct Editor {
     while (f.size() > size_t(std::max(2, s.required)) && f.back().empty())
       f.pop_back();
     normalize(f);
+    // Clicked on the floor of a cave in 3D: measured from it, not the land over it (NativeGhost.inc).
+    if (placeInCave && caveKind(k) && onTerrain() && layer == 0) {
+      doc.ensureFormat2();
+      f.push_back("cave=1");
+    }
     addAuthored(f);
     if (k == "BREAKABLE" && !glassHeader.empty())
       addAuthored(glassHeader), glassHeader.clear();
@@ -4117,7 +4146,13 @@ struct Editor {
     size_t before = doc.lines.size();
     auto text = quiet() ? std::string{} : doc.text();
     int used = tool;
+    const auto versionBefore = doc.version;
     gestureNow(ax, ay, bx, by);
+    if (!ghosting) {
+      placeInCave = false;
+      if (doc.version != versionBefore)
+        holdGhost(bx, by);
+    }
     if (quiet() || doc.text() == text)
       return;
     const auto &info = toolInfo[std::clamp(used, 0, ToolCount - 1)];
@@ -4141,7 +4176,7 @@ struct Editor {
     celebrate();
   }
   void gestureNow(float ax, float ay, float bx, float by) {
-    noteAction("gesture " + utf8(toolInfo[std::clamp(tool, 0, ToolCount - 1)].name) + " map " + std::to_string(map) + " floor " + std::to_string(layer) + " from " +
+    if (!ghosting) noteAction("gesture " + utf8(toolInfo[std::clamp(tool, 0, ToolCount - 1)].name) + " map " + std::to_string(map) + " floor " + std::to_string(layer) + " from " +
                std::to_string(ax) + "," + std::to_string(ay) + " to " + std::to_string(bx) + "," + std::to_string(by)); // the crash log's last actions
     if(effectiveFloorView(floorLayer(layer)).locked){message(L"Unlock the active floor before editing it.");if(!quiet())sfx::play(sfx::Error,.6f,.02f);return;}
     const auto &info = toolInfo[std::clamp(tool, 0, ToolCount - 1)];
@@ -4278,6 +4313,10 @@ struct Editor {
   // A 3D drag shows the real result while the button is held: the gesture
   // runs on a scratch copy that only the engine sees; the document is untouched.
   void previewGesture(float ax, float ay, float bx, float by) {
+    if (!ghosting) { // catchUpPreview shows it once it can
+      previewWanted = {ax, ay, bx, by};
+      previewHeld = true;
+    }
     char shape = toolInfo[std::clamp(tool, 0, ToolCount - 1)].shape;
     if (!engineLive || ghosting || shape == 'c' || shape == 'v' || shape == 'a' || shape == 's' ||
         renderedRevision != revision || GetTickCount64() - lastGhost < 120)
@@ -4294,6 +4333,7 @@ struct Editor {
     record = keepRecord, tool = keepTool, kind = keepKind;
     lastGhost = GetTickCount64();
     ghostShown = true;
+    previewShown = {ax, ay, bx, by};
   }
   // Puts the engine back on the real document after an abandoned preview.
   void dropGhost() {
@@ -4506,8 +4546,10 @@ struct Editor {
       }
       if (tool != 0) {
         float fx, fy;
-        if (!pointOnFloor(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy))
+        bool cave = false;
+        if (!placementPoint(ox, oy, oz, dx, dy, dz, fx, fy, cave)) // the ground, a floor, or a cave's floor (NativeGhost.inc)
           return;
+        placeInCave = cave && !brushTool();
         fx = std::clamp(fx, 0.f, 23.99f), fy = std::clamp(fy, 0.f, 23.99f);
         // The same tools as the plan: brush paints under the pointer, drag
         // tools stretch from the press, clicks place at once.
@@ -4573,7 +4615,8 @@ struct Editor {
       }
     } else if (viewRect) {
       float fx = hoverX, fy = hoverY;
-      if (pointOnFloor(ox, oy, oz, dx, dy, dz, layerElevation(), fx, fy)) {
+      bool caveNow = false;
+      if (placementPoint(ox, oy, oz, dx, dy, dz, fx, fy, caveNow)) {
         fx = std::clamp(fx, 0.f, 23.99f), fy = std::clamp(fy, 0.f, 23.99f);
         hoverX = fx, hoverY = fy;
         viewX1 = int(fx), viewY1 = int(fy);
@@ -4588,7 +4631,7 @@ struct Editor {
         // A refused gesture (a door dragged the wrong way) must not leave its preview behind.
         if (changeCount == before)
           dropGhost();
-        ghostShown = false;
+        ghostShown = false, previewHeld = false;
       }
     }
   }
@@ -4669,6 +4712,10 @@ struct Editor {
       int field=GetDlgCtrlID(msg.hwnd);
       if(msg.wParam==VK_RETURN&&(field==LayerName||field==LayerElevationField||field==LayerThicknessField)){handleLayerCommand(LayerCommit,0);return true;}
       // Enter in a field keeps the change at once.
+      if (msg.wParam == VK_RETURN && field == TurnFineBox) {
+        applyFineTurn();
+        return true;
+      }
       if (msg.wParam == VK_RETURN && GetParent(msg.hwnd) == form) {
         apply();
         return true;
@@ -4736,8 +4783,11 @@ struct Editor {
         message(L"The next shape faces " + wide(retro::prim::facingWord(primFacing)) + L".");
         InvalidateRect(plan, nullptr, FALSE);
       }
+      else if (tool == PaintTool || tool == FlooringTool || tool == 2)
+        turnPaint(shift ? -90.f : 90.f); // the paint turns (NativeMaterialTurn.inc)
       else
       rotateSelected();
+      refreshGhost();
       return true;
     }
     if (msg.wParam == 'V' && !ctrl) {
@@ -4762,6 +4812,8 @@ struct Editor {
         return true;
       }
     }
+    if (nudgeKey(msg, ctrl, shift)) // the picked thing, a grid step a press (NativeNudge.inc)
+      return true;
     float step = shift ? 1.f : snap > 0 ? snap : .1f;
     if (msg.wParam == VK_LEFT)
       moveSelected(-step, 0);
@@ -5144,7 +5196,7 @@ struct Editor {
                       natureSetList, natureDensityList, natureScaleList, natureModeList, GetDlgItem(window, NatureAlignToggle),
                       waterModeList, waterMurkSlider, waterWetSlider, footingModeList, footingSnapList, footingRaiseBox, footingHeightBox,
                       GetDlgItem(window, FootingStepsToggle), GetDlgItem(window, FootingAdvancedToggle), flooringLookList, flooringSlopeList,
-                      GetDlgItem(window, FlooringTrimToggle)})
+                      GetDlgItem(window, FlooringTrimToggle), turnList, turnFineBox})
       if (list)
         ShowWindow(list, SW_HIDE);
     for (HWND list : glazingControls())
@@ -5270,6 +5322,7 @@ struct Editor {
       footingRows(row);
     if (tool == FlooringTool)
       flooringRows(row); // a floor look and its edge trim (NativeFlooringMethods.inc)
+    turnRows(row); // the paint's turn, or the picked surface's (NativeMaterialTurn.inc)
     if (tool == 8 || tool == 9 || tool == 14 || tool == 15)
       row(heightList, L"Height");
     if (tool == 13)
@@ -6332,6 +6385,9 @@ struct Editor {
     verifyGround(false); // NativeGroundRegression.inc: rooms on the land, footings, raise, patios
     verifyFlooring(); // NativeFlooringRegression.inc: the Flooring tool
     verifyCaveRegressions(); // NativeCaveRegression.inc: the Cave tool and the Move brush
+    verifyGhosts(false);         // NativeGhostRegression.inc: every placing tool's ghost is what it places
+    verifyMaterialTurns(false);  // NativeTurnRegression.inc: paint, turn, save and open again
+    verifyNudges();              // NativeTurnRegression.inc: arrow keys and Page Up / Down
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -8789,7 +8845,21 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     if (!object)
       return false;
     x = int(ox + object->x * cell), y = int(oy + object->y * cell);
-    hw = int(std::max(4.f, object->width * cell * .5f)), hd = int(std::max(4.f, object->depth * cell * .5f));
+    // The ring round the thing as it is turned (yaw, facing): its turned corners' bounds, not its
+    // unturned width and depth (a desk turned against a wall was ringed the other way round).
+    float halfW = object->width * .5f, halfD = object->depth * .5f;
+    {
+      auto f = NativeDocument::fields(e->doc.lines[size_t(index)]);
+      const int schema = e->schemaFor(f);
+      if (schema >= 0 && object->points.size() == 1) {
+        auto corners = nativeCorners(e->schemas[size_t(schema)].fields, f);
+        if (!corners.empty()) {
+          halfW = halfD = 0;
+          for (auto [cx, cy] : corners) halfW = std::max(halfW, std::abs(cx - object->x)), halfD = std::max(halfD, std::abs(cy - object->y));
+        }
+      }
+    }
+    hw = int(std::max(4.f, halfW * cell)), hd = int(std::max(4.f, halfD * cell));
     name = plainKind(NativeDocument::fields(e->doc.lines[size_t(index)])[0]);
     return true;
   };
@@ -8832,7 +8902,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
   if(e->selectingArea)outline(std::min(e->areaX,e->areaEndX),std::min(e->areaY,e->areaEndY),std::max(e->areaX,e->areaEndX),std::max(e->areaY,e->areaEndY),ui::Selected,1,PS_DASH);
   // Ghost of what the tool will make: the stretched box or line while
   // dragging (here or in 3D), else a marker under the pointer.
-  if (e->tool != 0 && (e->hoverInside || e->drag || e->viewRect)) {
+  if (e->tool != 0 && (e->hoverInside || e->drag || e->viewRect || (e->viewGhostOn && e->ghostTool()))) {
     char shape = info.shape;
     bool stretching = (e->drag || e->viewRect) && !e->brushing && e->dragTool();
     float hx = e->hoverX, hy = e->hoverY;
@@ -8845,7 +8915,17 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     };
     if (e->tool == 8 && e->kitInHand >= 0)
       e->drawKitGhost(dc, ox, oy, cell, hx, hy, ghost); // the held kit, as a click sets it down
-    else if (e->tool == 9)
+    else if (e->ghostTool() && shape != 'd' && !e->ghostLegacyDraw) {
+      // The records the click or drag will write, worked out by the placement itself (NativeGhost.inc).
+      if (!e->drawPlacementGhost(dc, ox, oy, cell, ghost) && e->tool == ConnectTool && e->connectPending) {
+        auto p = ui::dashedPen(3, ghost);
+        auto old = SelectObject(dc, p);
+        MoveToEx(dc, int(ox + e->connectFromX * cell), int(oy + e->connectFromY * cell), nullptr);
+        LineTo(dc, int(ox + hx * cell), int(oy + hy * cell));
+        SelectObject(dc, old);
+        DeleteObject(p);
+      }
+    } else if (e->tool == 9)
       e->drawShapeGhost(dc, ox, oy, cell, stretching, hx, hy, ghost);
     else if (shape == 'T' || shape == 'N' || shape == 'G')
       e->drawBrushRing(dc, ox, oy, cell, hx, hy);
@@ -9015,6 +9095,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     if (m == WM_MOUSELEAVE) {
       e->hoverInside = false;
       e->hoverRecord = -1;
+      e->refreshGhost();
       InvalidateRect(h, nullptr, FALSE);
       return 0;
     }
@@ -9081,6 +9162,12 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       e->hoverInside = inside(l);
         auto [x, y] = worldPoint(l);
       e->hoverX = x, e->hoverY = y;
+      if (e->tool == PaintTool)
+        e->paintPointer(std::to_string(e->cellOf(x)) + "," + std::to_string(e->cellOf(y)));
+      // A drag on the plan shows the real result in 3D as a drag there does (previewGesture).
+      if (e->drag && !e->objectDrag && !e->brushing && !e->selectingArea && e->dragTool())
+        e->previewGesture(e->dragFX, e->dragFY, x, y);
+      e->refreshGhost(); // NativeGhost.inc
       if(e->drag&&e->selectingArea){e->areaEndX=x;e->areaEndY=y;InvalidateRect(h,nullptr,FALSE);return 0;}
       if (e->drag && e->brushing) {
         e->brushCell(x, y);
@@ -9141,7 +9228,11 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
       auto [x, y] = worldPoint(l);
       try {
+        const auto before = e->changeCount;
         e->gesture(e->dragFX, e->dragFY, x, y);
+        if (e->changeCount == before)
+          e->dropGhost();
+        e->ghostShown = false, e->previewHeld = false;
       } catch (const std::exception &x) {
         e->message(wide(x.what()));
       }
@@ -9590,7 +9681,8 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         std::string rest;
         std::getline(in, rest);
         std::getline(in, rest);
-        if(state=="READY")e->applyHoverRay(e->channelText(e->session/L"hover.txt"));
+        if(state=="READY"){const auto hover=e->channelText(e->session/L"hover.txt");e->applyHoverRay(hover);e->pointerIn3D=hover.rfind("HOVER",0)==0;e->ghostHover(hover);
+          if(e->tool==PaintTool){e->paintHoverRay=e->pointerIn3D?hover:std::string();if(e->pointerIn3D)e->paintPointer(hover);}}
         if (state == "READY" && rest.rfind("PICK ", 0) == 0) {
           try {
             e->applyPick(rest);
@@ -9598,6 +9690,8 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             e->message(wide(x.what()));
           }
         }
+        if (state == "READY")
+          e->catchUpPreview();
         if (state == "ERROR") {
           std::string error = rest, line;
           while (std::getline(in, line))
@@ -9801,6 +9895,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
       }
       if (id == MapList && notification == LBN_SELCHANGE) {
+        e->cancelPlacement();
         auto n = SendMessageW(e->mapList, LB_GETCURSEL, 0, 0);
         e->map = int(SendMessageW(e->mapList, LB_GETITEMDATA, n, 0));
         e->layer = 0;
@@ -9810,6 +9905,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if(id>=InspectorTab&&id<=LayerFootprint){e->handleLayerCommand(id,notification);return 0;}
       if (id == LayerList && notification == CBN_SELCHANGE) {
+        e->cancelPlacement();
         auto n = SendMessageW(e->layerList, CB_GETCURSEL, 0, 0);
         e->layer = int(SendMessageW(e->layerList, CB_GETITEMDATA, n, 0));
         e->selectRecord(-1);e->writeControl();
@@ -9842,7 +9938,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->useMaterial();
         return 0;
       }
-      if (e->footingCommand(id, notification) || e->flooringCommand(id, notification))
+      if (e->footingCommand(id, notification) || e->flooringCommand(id, notification) || e->turnCommand(id, notification))
         return 0;
       if (id == FinishPartList && notification == CBN_SELCHANGE) {
         e->finishPart = std::clamp(int(SendMessageW(e->finishPartList, CB_GETCURSEL, 0, 0)), 0, 2);
@@ -9960,6 +10056,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             e->tool = 17;
           e->message(e->regionStamp.width > 0 ? L"Copy turned. Click where it should go." : L"Copy an area first.");
         } else {
+          e->cancelPlacement(); // a held drag or preview of the last tool goes (NativeGhost.inc)
           e->tool = selected;
           e->kitInHand = -1; // a tool picked anew puts down a held kit
           if (*toolInfo[selected].kind)
@@ -9972,6 +10069,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           if (selected == 8 || (selected == 14 && e->listIndex(e->clutterList) == 7))
             e->useModelSelection();
           e->message(toolInfo[selected].hint);
+          e->refreshGhost();
         }
         e->group = toolInfo[e->tool].group;
         e->repaintTools();
@@ -10092,6 +10190,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         break;
       }
       case Undo:
+        e->cancelPlacement();
         if (!e->history.empty() && !e->quiet())
           sfx::play(sfx::Back, .8f);
         if (!e->history.empty()) {
@@ -10103,6 +10202,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         break;
       case Redo:
+        e->cancelPlacement();
         if (!e->future.empty() && !e->quiet())
           sfx::play(sfx::Redo, .8f);
         if (!e->future.empty()) {
@@ -10293,7 +10393,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
-                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test", L"--kit-test"})
+                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test", L"--kit-test",
+                        L"--ghost-test", L"--turn-test", L"--nudge-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10426,6 +10527,14 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The Shape tool alone, with its pictures (NativeShapeRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--shape-test")
       e.backgroundTest = e.shapeTest = true;
+    // Ghosts against what is placed, material turns, keyboard nudges (NativeGhostRegression.inc,
+    // NativeTurnRegression.inc); --editing-test runs them too, without the engine pictures.
+    if (argc > 1 && std::wstring(argv[1]) == L"--ghost-test")
+      e.backgroundTest = e.ghostTest = true;
+    if (argc > 1 && std::wstring(argv[1]) == L"--turn-test")
+      e.backgroundTest = e.turnTest = true;
+    if (argc > 1 && std::wstring(argv[1]) == L"--nudge-test")
+      e.backgroundTest = e.nudgeTest = true;
     // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
     if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
       e.backgroundTest = e.picturesTest = true;
@@ -10742,6 +10851,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.fillFinishParts(true);
     e.createFootingControls();
     e.createFlooringControls();
+    e.createTurnControls();
     e.roleList = e.controlWindow(L"COMBOBOX", L"",
                                  CBS_DROPDOWNLIST | WS_VSCROLL, RoleList);
     for (auto role : Editor::people)
@@ -11092,6 +11202,18 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.connectTest) {
       int code = 0;
       try { e.verifyConnectRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-connect-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.ghostTest || e.turnTest || e.nudgeTest) {
+      int code = 0;
+      const wchar_t *file = e.ghostTest ? L"native-editor-ghost-test.txt" : e.turnTest ? L"native-editor-turn-test.txt" : L"native-editor-nudge-test.txt";
+      try {
+        if (e.ghostTest) e.verifyGhosts(true);
+        else if (e.turnTest) e.verifyMaterialTurns(true);
+        else e.verifyNudges();
+      } catch (const std::exception &error) { std::ofstream(e.root / file, std::ios::app) << "FAIL: " << error.what() << '\n'; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

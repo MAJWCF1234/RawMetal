@@ -242,9 +242,9 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    // changed after it was laid (or that no longer expands the same) is written as its boxes.
    std::map<size_t,const AuthoredMapData::PrimitiveRecord*> primAt;
    auto same=[](const Structure& a,const Structure& b){return a.x1==b.x1&&a.y1==b.y1&&a.x2==b.x2&&a.y2==b.y2&&a.bottom==b.bottom&&a.top==b.top&&a.rail==b.rail&&
-    a.material==b.material&&a.solid==b.solid&&a.shape==b.shape&&a.facing==b.facing&&a.skew==b.skew&&a.layerSurface==b.layerSurface&&a.topFinish==b.topFinish&&a.trim==b.trim&&!a.drape&&!b.drape;};
+    a.material==b.material&&a.solid==b.solid&&a.shape==b.shape&&a.facing==b.facing&&a.skew==b.skew&&a.layerSurface==b.layerSurface&&a.topFinish==b.topFinish&&a.trim==b.trim&&a.turn==b.turn&&!a.drape&&!b.drape;};
    for(const auto& p:m.primitives){if(!p.count||p.first+p.count>m.structures.size())continue;
-    std::vector<Structure> again;try{Primitive q{p.kind,p.x,p.y,p.z,p.w,p.d,p.h,p.facing,p.material,p.solid};q.hand=p.hand;q.rails=p.rails;q.thick=p.thick;expandPrimitive(q,again);}catch(const std::exception&){continue;}
+    std::vector<Structure> again;try{Primitive q{p.kind,p.x,p.y,p.z,p.w,p.d,p.h,p.facing,p.material,p.solid};q.hand=p.hand;q.rails=p.rails;q.thick=p.thick;q.turn=p.turn;expandPrimitive(q,again);}catch(const std::exception&){continue;}
     bool kept=again.size()==p.count;for(size_t k=0;kept&&k<p.count;++k)kept=same(again[k],m.structures[p.first+k]);
     if(kept&&!primAt.count(p.first))primAt[p.first]=&p;}
    for(size_t i=0;i<m.structures.size();++i){
@@ -479,6 +479,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  d.eq("visibleResidencyGroups",a.visibleResidencyGroups==b.visibleResidencyGroups,true);
  d.eq("openNorth",a.openNorth,b.openNorth);d.eq("openSouth",a.openSouth,b.openSouth);d.eq("openWest",a.openWest,b.openWest);d.eq("openEast",a.openEast,b.openEast);
  d.eq("wallSurface",a.wallSurface,b.wallSurface);d.eq("floorSurface",a.floorSurface,b.floorSurface);d.eq("ceilingSurface",a.ceilingSurface,b.ceilingSurface);
+ d.eq("wallTurn",a.wallTurn,b.wallTurn);d.eq("floorTurn",a.floorTurn,b.floorTurn);d.eq("ceilingTurn",a.ceilingTurn,b.ceilingTurn);
  d.count("layers",a.layers.size(),b.layers.size());
  for(size_t i=0;i<std::min(a.layers.size(),b.layers.size());++i){const auto&p=a.layers[i];const auto&q=b.layers[i];auto w=at("layer",i);d.eq(w+".name",p.name,q.name);d.eq(w+".elevation",p.elevation,q.elevation);d.eq(w+".thickness",p.thickness,q.thickness);for(size_t r=0;r<24;++r)d.eq(w+".row"+std::to_string(r),p.rows[r],q.rows[r]);}
  d.count("doors",a.doors.size(),b.doors.size());
@@ -536,7 +537,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  for(size_t i=0;i<std::min(a.compactors.size(),b.compactors.size());++i){const auto&p=a.compactors[i];const auto&q=b.compactors[i];auto w=at("compactor",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bed",p.bed,q.bed);d.eq(w+".raised",p.raised,q.raised);d.eq(w+".period",p.period,q.period);d.eq(w+".stopState",p.stopState,q.stopState);}
  d.count("structures",a.structures.size(),b.structures.size());
  for(size_t i=0;i<std::min(a.structures.size(),b.structures.size());++i){const auto&p=a.structures[i];const auto&q=b.structures[i];auto w=at("structure",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);
-  d.eq(w+".rail",p.rail,q.rail);d.eq(w+".material",p.material,q.material);d.eq(w+".solid",p.solid,q.solid);d.eq(w+".shape",int(p.shape),int(q.shape));d.eq(w+".facing",int(p.facing),int(q.facing));}
+  d.eq(w+".rail",p.rail,q.rail);d.eq(w+".material",p.material,q.material);d.eq(w+".solid",p.solid,q.solid);d.eq(w+".shape",int(p.shape),int(q.shape));d.eq(w+".facing",int(p.facing),int(q.facing));d.eq(w+".turn",p.turn,q.turn);}
  d.count("stairs",a.stairs.size(),b.stairs.size());
  for(size_t i=0;i<std::min(a.stairs.size(),b.stairs.size());++i){const auto&p=a.stairs[i];const auto&q=b.stairs[i];auto w=at("stair",i);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);d.eq(w+".steps",p.steps,q.steps);
   d.eq(w+".alongY",p.alongY,q.alongY);d.eq(w+".ascending",p.ascending,q.ascending);d.eq(w+".openUnderside",p.openUnderside,q.openUnderside);d.eq(w+".tread",p.treadThickness,q.treadThickness);d.eq(w+".sideRails",p.sideRails,q.sideRails);}

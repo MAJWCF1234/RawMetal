@@ -18,6 +18,39 @@ outdoors and the map soundtrack.
 
 ## The friendly layout (2026-11)
 
+### Turning a material
+
+Planks, tiles, brick courses, tread plate and grating can run either way.
+- **Paint** (and **Floor**, **Flooring**): **R** turns the paint a quarter, **Shift+R** back.
+  A stroke just painted (or a floor just laid) turns with it, so the 3D view shows it turn;
+  with nothing just painted, the surface under the pointer shows the turned paint in the 3D
+  view until the pointer moves on. Alt+click picks a paint up with its turn.
+- **Turn** on the right: the paint's turn with those tools, or a picked block, shape, stair
+  (its step tops) or storey (its balconies). Advanced adds a box for any angle.
+- It is written as map format 2 named fields: `turn`, `treadturn`, `deckturn`, `wallturn`,
+  `floorturn`, `ceilingturn` (docs/Systems/map-format.md). `--turn-test`
+  (`NativeMaterialTurn.inc`, `NativeTurnRegression.inc`; pictures `.build/interaction/turn-*.bmp`).
+
+### Ghosts are the placement
+
+A placing tool's ghost (the plan's dashed outline, the 3D view's outline under the pointer) is
+the record the click or drag would write, made by the placement itself on a scratch copy
+(`NativeGhost.inc`): wall snap, soft snap, size, facing, R turns and height (the land, a
+footing's floor, an upper floor, a cave's floor) are the placement's. A drag held on the plan or
+in 3D shows the real result in the 3D view, and a throttled preview catches up when the pointer
+stops. Placing hides the ghost until the pointer moves on; switching tools, maps or floors, Undo
+and Redo drop a held drag and its preview. A click on a cave's floor in 3D places the thing there
+(`cave=1`). `--ghost-test` (`NativeGhostRegression.inc`; pictures `.build/interaction/ghost-*.bmp`).
+
+### Nudging with the keyboard
+
+With something picked, the **arrow keys** move it a grid step along the floor and **Page Up /
+Page Down** raise and lower it (Shift: 1 cm, Ctrl: 1 m). On the plan Up is north; in the 3D view
+Up moves it away from you, along the map's axis nearest the camera. Each press is one Undo (a held
+key's repeats are one). The floor stops a lowering once; press again to sink it. A footing floor
+takes what stands on it. With nothing picked the keys do what they did. `--nudge-test`
+(`NativeNudge.inc`).
+
 ### Connect: ropes, chains, hinges and the rest
 
 **Connect** (Decor page, the chain icon) joins a loose thing to another thing, a

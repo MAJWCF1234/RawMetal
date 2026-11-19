@@ -97,8 +97,13 @@
     }
     remember();
     doc.ensureFormat2();
+    withLayTurn(f); // laid turned (R, or the Turn box; NativeMaterialTurn.inc)
     doc.addOnLayer(f, layer);
     publish();
+    if (!ghosting) { // R turns the floor just laid (NativeMaterialTurn.inc)
+      lastPainted.assign(1, {NativeDocument::join(f), "turn"});
+      lastPaintVersion = doc.version;
+    }
     const int at = int(doc.records("STRUCT", map).back());
     if (!ghosting) selectRecord(at);
     message(std::wstring(look.name) + L" laid" + (land ? (flooringLevel ? L", made level." : L", following the ground.") : L".") + L" Paint it or its edge trim to change them.");

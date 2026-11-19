@@ -9,7 +9,9 @@
 //  - The renderer draws each hand at its proxy (Scene3D drawTrackedHands, Game::vrHandOffset).
 #include "Game.h"
 #include "physics/PropBodies.h"
+#include "../world/ModelIds.h"
 #include <cmath>
+#include <sstream>
 namespace retro {
 namespace {
 constexpr float HandRadius=.045f,HandPush=2.5f,HeavyHand=12.f,Stride=.02f;
@@ -73,4 +75,67 @@ void Game::followVrHands(){
  for(int hand=0;hand<2;++hand){if(!vrHandFree(hand)){m_vrHandProxySet[size_t(hand)]=false;m_vrHandBlocked[size_t(hand)]=false;continue;}
   if(!m_vrHandStepped){m_vrHandProxy[size_t(hand)]=m_vrHandPosition[size_t(hand)];m_vrHandProxySet[size_t(hand)]=true;m_vrHandBlocked[size_t(hand)]=false;}}
  m_vrHandStepped=false;}
+// --vr-test: held props in VR from scripted hand poses (no headset).
+//  - One hand holds a crate; the hand turns 90 degrees about each axis in 10 degree steps: the crate's own axes turn
+//    exactly as the hand's (within 2 degrees) and its middle stays where it was in the hand (1 cm).
+//  - Two hands hold it; both turn together 90 degrees about each axis round the crate's middle: the same.
+//  - With map (VrRuntime: tracking space into game space, the mirror), the poses are authored in tracking space and
+//    mapped, and the crate must turn as the mirror of the tracking turn (M R M^T), not by R itself.
+//  - Grip down takes, grip up drops; the trigger punts at the punt's speed along the hand; a drawn gun's trigger does not.
+bool Game::testVrHeldProps(std::ostream& report,Point3(*map)(Point3)){
+ using namespace vectra;bool ok=true;auto check=[&](bool pass,const std::string& what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
+ const char* space=map?" (tracking poses through the mirror)":"";
+ auto toGame=[&](V3 v){if(!map)return v;const Point3 p=map({v.x,v.y,v.z});return V3{p.x,p.y,p.z};};
+ // map is orthogonal: its inverse is its transpose.
+ auto toSource=[&](V3 v){if(!map)return v;const V3 cx=toGame({1,0,0}),cy=toGame({0,1,0}),cz=toGame({0,0,1});return V3{dot(cx,v),dot(cy,v),dot(cz,v)};};
+ const V3 f0=map?V3{0,0,-1}:V3{1,0,0},u0=map?V3{0,1,0}:V3{0,0,1};
+ auto pt=[](V3 v){return Point3{v.x,v.y,v.z};};
+ auto degrees=[](V3 a,V3 b){return std::acos(std::clamp(dot(norm(a),norm(b)),-1.f,1.f))*57.2958f;};
+ auto scene=[&](){auto g=validationScene(Enemy::Kind::Huntsman);g.m_enemies.clear();Clutter c;c.kind=7;c.model=model::wooden_crate;c.dims={.5f,.4f,.36f};c.pos={4.3f,4.5f};c.z=1.f;
+  g.m_clutter={c};g.m_player.pos={3.2f,4.5f};g.m_player.angle=0;return g;};
+ const char* axisName[3]={"x","y","z"};
+ for(int hands=1;hands<=2;++hands)for(int k=0;k<3;++k){
+  auto g=scene();const V3 centre=propCentre(g.m_clutter[0]);const float dt=1.f/90;InputState in{};in.vrTracked=true;
+  // Hand places about the middle, in the source space: one hand just behind it; two at its two ends (along source y).
+  const V3 side=norm(toSource({0,1,0}));
+  std::array<V3,2> at{};if(hands==1)at[1]=toSource(V3{-.12f,0,0});else{at[1]=side*-.27f;at[0]=side*.27f;}
+  auto pose=[&](const Quat& r){for(int h=0;h<2;++h){const bool used=hands==2||h==1;
+   g.setVrHand(h,pt(centre+toGame(r.rotate(at[size_t(h)]))),pt(toGame(r.rotate(f0))),used,{},pt(toGame(r.rotate(u0))));}};
+  pose(Quat{});in.vrGrip[1]=true;g.updateInteraction(in,dt);g.updateClutter(in,dt);
+  if(hands==2){in.vrGrip[0]=true;g.updateInteraction(in,dt);g.updateClutter(in,dt);}
+  const bool took=g.holdingClutter()&&(hands==1||g.m_vrSecondHand==0);
+  const Quat q0=propOrientation(g.m_clutter[0]);const V3 c0=propCentre(g.m_clutter[0]);
+  V3 axis{};(&axis.x)[k]=1;float worst=0,drift=0;
+  for(int step=1;step<=9;++step){const Quat r=Quat::axisAngle(axis,float(step)*10.f*kPi/180);pose(r);g.updateInteraction(in,dt);g.updateClutter(in,dt);if(!g.holdingClutter())break;
+   const Quat q=propOrientation(g.m_clutter[0]);
+   for(V3 local:{V3{1,0,0},V3{0,1,0},V3{0,0,1}}){const V3 want=toGame(r.rotate(toSource(q0.rotate(local))));worst=std::max(worst,degrees(q.rotate(local),want));}
+   const V3 wantCentre=centre+toGame(r.rotate(toSource(c0-centre)));drift=std::max(drift,len(propCentre(g.m_clutter[0])-wantCentre));}
+  std::ostringstream what;what<<(hands==1?"one hand":"two hands")<<" turned 90 degrees about "<<axisName[k]<<space<<": the crate turns with "<<(hands==1?"it":"them")<<" (worst "<<worst<<" deg, middle off "<<drift*100<<" cm"<<(took?"":", not taken")<<(g.holdingClutter()?"":", dropped")<<")";
+  check(took&&g.holdingClutter()&&worst<2.f&&drift<.01f,what.str());}
+ if(map)return ok;
+ // Grip down takes, grip up drops (no toggle: the same hand opening lets go; a press with no prop near takes nothing).
+ {auto g=scene();InputState in{};in.vrTracked=true;const V3 c=propCentre(g.m_clutter[0]);g.setVrHand(0,pt(c+V3{-.1f,0,0}),{1,0,0},true);g.setVrHand(1,{3.2f,3.f,1.f},{1,0,0},true);
+  in.vrGrip[1]=true;in.use=true;g.updateInteraction(in,.01f);g.updateInteraction(in,.01f);const bool farHand=!g.holdingClutter();
+  in.vrGrip[1]=false;g.updateInteraction(in,.01f);in.vrGrip[0]=true;g.updateInteraction(in,.01f);g.updateClutter(in,.01f);const bool taken=g.holdingClutter()&&g.m_vrCarryHand==0;
+  g.updateInteraction(in,.01f);g.updateClutter(in,.01f);const bool kept=g.holdingClutter();
+  in.vrGrip[0]=false;in.use=false;g.updateInteraction(in,.01f);const bool dropped=!g.holdingClutter();
+  g.updateInteraction(in,.01f);g.updateClutter(in,.01f);const bool stays=!g.holdingClutter();
+  check(farHand&&taken&&kept&&dropped&&stays,"grip down takes the crate, grip held keeps it, grip up drops it and it stays dropped (a far hand's grip takes nothing)");}
+ // The trigger punts: the holding hand's, or the empty gun hand's; along the holding hand's pointing at the punt speed.
+ for(int which=0;which<3;++which){auto g=scene();InputState in{};in.vrTracked=true;const V3 c=propCentre(g.m_clutter[0]);const V3 dir=norm({.8f,.3f,.2f});
+  g.setVrHand(0,pt(c+V3{-.1f,0,0}),pt(dir),true);g.setVrHand(1,{3.4f,4.2f,1.1f},{1,0,0},true);g.equipWeapon(WeaponId::Fists);
+  in.vrGrip[0]=true;g.updateInteraction(in,.01f);g.updateClutter(in,1.f/240);const bool taken=g.holdingClutter();const float mass=g.m_clutter[0].mass();
+  if(which==2){g.m_weaponEquipped=true;g.m_equippedWeapon=WeaponId::Handgun;g.m_holster=0;g.m_switchTarget=WeaponId::Fists;}
+  in.vrTrigger[which==0?0:1]=true;g.updateInteraction(in,1.f/240);g.updateClutter(in,1.f/240);const auto& p=g.m_clutter[0];
+  const V3 v{p.velocity.x,p.velocity.y,p.vz};const float want=PuntSpeed*std::clamp(std::sqrt(2.5f/mass),.35f,1.f),got=len(v);
+  std::ostringstream what;
+  if(which<2){what<<(which==0?"the holding hand's trigger":"the empty gun hand's trigger")<<" punts the "<<mass<<" kg crate along the hand at "<<got<<" m/s (want "<<want<<", 3%)";
+   check(taken&&!g.holdingClutter()&&std::fabs(got-want)<.03f*want&&degrees(v,dir)<3.f&&p.projectile,what.str());}
+  else{what<<"with a gun drawn the gun hand's trigger fires and leaves the crate in the other hand";check(taken&&g.holdingClutter(),what.str());}}
+ // A second press of the same trigger while held does not punt twice (the press, not the hold).
+ {auto g=scene();InputState in{};in.vrTracked=true;const V3 c=propCentre(g.m_clutter[0]);g.setVrHand(0,pt(c+V3{-.1f,0,0}),{1,0,0},true);g.setVrHand(1,{}, {},false);
+  in.vrTrigger[0]=true;in.vrGrip[0]=true;g.updateInteraction(in,.01f);g.updateClutter(in,.01f);
+  check(g.holdingClutter(),"a trigger already held as the hand closes does not punt what it takes");}
+ return ok;
+}
 }

@@ -16,7 +16,7 @@
     if(primGuides(out))return out; // a shape's real outline, its handles and facing arrow (NativeShapeTool.inc)
     auto corners=nativeCorners(schemas[size_t(schema)].fields,f);if(corners.empty())return out;
     // Outdoors the outline stands where the thing stands: on the ground under it.
-    auto box=worldBox(f);float bottom=box?box->bottom:layerElevation(),top=box?box->top:bottom+.1f;
+    auto box=worldBoxLine(doc.lines[size_t(record)]);float bottom=box?box->bottom:layerElevation(),top=box?box->top:bottom+.1f;
     if(!box&&f[0]=="STRUCT"&&f.size()>7){float lift=onTerrain()?groundAt((number(f[2],0)+number(f[4],0))*.5f,(number(f[3],0)+number(f[5],0))*.5f):0.f;bottom=number(f[6],bottom)+lift;top=number(f[7],top)+lift;}
     const auto& names=schemas[size_t(schema)].fields;
     bool upper=nativeField(names,f,"top")!=size_t(-1)||nativeField(names,f,"height")!=size_t(-1)||nativeField(names,f,"h")!=size_t(-1);
@@ -121,7 +121,7 @@
     std::vector<std::pair<float,float>> corners;float bottom=layerElevation(),top=ceilingHeight();
     if(viewHoverRecord>=0&&viewHoverRecord!=record&&size_t(viewHoverRecord)<doc.lines.size()){
       auto f=NativeDocument::fields(doc.lines[size_t(viewHoverRecord)]);int schema=schemaFor(f);if(schema<0)return out;
-      corners=nativeCorners(schemas[size_t(schema)].fields,f);if(auto box=worldBox(f)){bottom=box->bottom;top=box->top;}
+      corners=nativeCorners(schemas[size_t(schema)].fields,f);if(auto box=worldBoxLine(doc.lines[size_t(viewHoverRecord)])){bottom=box->bottom;top=box->top;}
     }else if(viewHoverCell>=0){float x=float(viewHoverCell%24),y=float(viewHoverCell/24);corners={{x,y},{x+1,y},{x+1,y+1},{x,y+1}};}else return out;
     for(size_t i=0;i<corners.size();++i){auto a=corners[i],b=corners[(i+1)%corners.size()];
       out.push_back({a.first,a.second,top,b.first,b.second,top,4});out.push_back({a.first,a.second,bottom,b.first,b.second,bottom,4});out.push_back({a.first,a.second,bottom,a.first,a.second,top,4});}

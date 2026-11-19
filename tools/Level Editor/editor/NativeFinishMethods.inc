@@ -253,7 +253,7 @@
         message(L"A footing takes a material, not a room finish or this paint. Pick another.");
         return true;
       }
-      if (part == 0) f[9] = std::to_string(paintMaterial()), doc.replace(at, f);
+      if (part == 0) f[9] = std::to_string(paintMaterial()), doc.replace(at, f), paintTurned(at, "turn");
       else setFinish(at, footingKey(part), paintMaterial());
       static const wchar_t *parts[] = {L"Floor", L"Foundation", L"Edge trim"};
       message(std::wstring(parts[part]) + L" painted " + materialName(paintMaterial()) + L".");
@@ -279,7 +279,10 @@
       message(L"Stairs and balconies take a material, not a room finish or this paint. Pick another.");
       return true;
     }
-    setFinish(at, key, paintMaterial());
+    at = setFinish(at, key, paintMaterial());
+    // A step top or a balcony floor lays the paint's turn too (NativeMaterialTurn.inc).
+    if (std::string_view(key) == "tread") paintTurned(at, "treadturn");
+    else if (std::string_view(key) == "deck") paintTurned(at, "deckturn");
     static const wchar_t* stairParts[] = {L"Step tops", L"Step fronts", L"Side rails"};
     static const wchar_t* deckParts[] = {L"Balcony floor", L"Balcony edge", L"Railing"};
     message(std::wstring((stair ? stairParts : deckParts)[part]) + L" painted " + materialName(paintMaterial()) +

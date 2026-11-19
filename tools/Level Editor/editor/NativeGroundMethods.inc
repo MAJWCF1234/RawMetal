@@ -330,7 +330,9 @@
     std::vector<std::string> f{"STRUCT", std::to_string(map), nativeNumber(x0), nativeNumber(y0), nativeNumber(x1), nativeNumber(y1),
                                nativeNumber(level), nativeNumber(level + .1f), "0", std::to_string(material), "footing=pad", "snap=fixed"};
     doc.ensureFormat2();
+    withLayTurn(f);
     doc.addOnLayer(f, layer);
+    noteLaid(f);
     return true;
   }
   // The Erase tool on the land takes up the footing floors it covers whole.
