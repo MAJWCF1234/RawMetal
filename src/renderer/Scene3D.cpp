@@ -3963,7 +3963,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // her chest, belt, legs and boots in step with the footsteps. Her whole
  // silhouette throws the floor shadow under the nearest lamp. A replay or film
  // camera outside her draws her in clean captures too.
- if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&!m_vrRendering&&(!m_environmentInspection||m_bodyOutside)&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
+ if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&(!m_vrRendering||m_vrPoseReady)&&(!m_environmentInspection||m_bodyOutside)&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
   auto&mesh=m_claireMesh;const auto&state=game.player();
   if(m_claireFaceTexture.size()!=mesh.triangles.size()){
    // Classify once, on the bind pose: material by name, and the head (above
@@ -4037,6 +4037,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     else if(std::fabs(d)>1.1f){m_tpTurnSign=d>0?1:-1;{const int base=state.crouched?30:28;m_tpTurnClip=(m_turnYaw[size_t(base-28)]>0)==(d>0)?base:base+1;}m_tpTurnStart=t;m_tpTurnLength=state.crouched?1.27f:1.f;clip=m_tpTurnClip;phase=0;}}
    bodyAngle=m_tpBodyYaw;}
   else m_tpBodyYaw=-1e9f;
+  // VR (the avatar, game/Avatar.h): the legs and the hips' facing come from the solve; her torso is leaned and
+  // turned toward the head below, and her arms are the IK arms (drawTrackedHands).
+  const bool vrBody=m_vrRendering&&m_vrPoseReady;
+  if(vrBody){clip=m_vrSolve.legsClip;phase=m_vrSolve.legsPhase;bodyAngle=m_vrPose.bodyYaw;}
   // A change of clip blends over .2 s from the pose it left.
   const float now=game.elapsed();if(!game.dead())m_bodyDeathStart=-1;
   if(m_bodyLastElapsed<0||now<m_bodyLastElapsed||now-m_bodyLastElapsed>1.f){m_bodyClip=-1;m_bodyBlendStart=-1;m_outsideKey=-1;m_outsideAir=0;}
@@ -4132,7 +4136,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    m_bodyClip=-1;m_bodyBlendStart=-1;
   }else{m_outsideKey=-1;
   if(clip!=m_bodyClip){if(m_bodyClip>=0){m_bodyFrom=mesh.triangles;m_bodyBlendStart=now;}m_bodyClip=clip;}
-  mesh.poseCreature(clip,phase);
+  if(vrBody&&m_claireOutside.prepare(mesh)){m_claireOutside.compose(mesh,clip,phase,ClaireOutside::Layer{},-m_vrSolve.lean,-m_vrSolve.twist);m_claireOutside.publish(mesh,1.f);}
+  else mesh.poseCreature(clip,phase);
   const float blend=m_bodyBlendStart<0?1.f:std::clamp((now-m_bodyBlendStart)/.2f,0.f,1.f);
   if(blend<1&&m_bodyFrom.size()==mesh.triangles.size())for(size_t f=0;f<mesh.triangles.size();++f)for(int v=0;v<3;++v){auto&p=mesh.triangles[f].v[v].p;const auto&q=m_bodyFrom[f].v[v].p;p=q+(p-q)*blend;}
   else m_bodyBlendStart=-1;
@@ -4150,7 +4155,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // From outside she stands on the player's position itself.
   Vec2 at=outside?state.pos:state.pos-forward*.14f;const float feet=state.z;
   if(!m_bodyOutside){Point3 head{};int count=0;for(size_t f=0;f<mesh.triangles.size()&&f<m_claireHeadFace.size();++f)if(m_claireHeadFace[f])for(const auto&v:mesh.triangles[f].v){head=head+v.p;++count;}
-   if(count){head=(head*(1.f/count)-center)*scale;const Vec2 side{std::sin(angle),-std::cos(angle)};at=state.pos-forward*.10f-forward*head.z-side*head.x;}}
+   if(count){head=(head*(1.f/count)-center)*scale;const Vec2 side{std::sin(angle),-std::cos(angle)};const Vec2 ahead=vrBody?Vec2{std::cos(angle),std::sin(angle)}:forward;at=(vrBody?Vec2{m_vrPose.head.x,m_vrPose.head.y}:state.pos)-ahead*(.10f+head.z)-side*head.x;}}
   Point3 receiver{at.x,at.y,feet+.85f};
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
   if(!w.outdoors())for(const auto&source:w.lights()){auto emitter=source.emitter();float dx=emitter.x-at.x,dy=emitter.y-at.y,d2=dx*dx+dy*dy;
@@ -4163,7 +4168,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Mirroring back reverses the winding, so each face swaps two corners.
   // First person also leaves out anything within reach of the eye (a crouch
   // puts the eye inside her torso).
-  const Point3 eye{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
+  const Point3 eye=vrBody?m_vrPose.head:Point3{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
   for(size_t f=0;f<mesh.triangles.size();++f){auto face=mesh.triangles[f];
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
     v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
@@ -4400,53 +4405,173 @@ Point3 SoftwareRenderer::vrPistolPoint(Point3 p,bool handFrame){
  // the grip sits through the fist (the controller frame keeps older offsets).
  return handFrame?Point3{-p.x,p.y,-p.z}:Point3{-p.x,p.y-.04f,-p.z+.06f};
 }
+// The arm rig (resource 111: x her left, y up, z ahead, right-handed like SteamVR's tracking space) laid on the
+// avatar: its shoulders' middle on the solve's, scaled so its arm (shoulder to wrist) is AvatarArmReach. The
+// solve's game-space hand frames go into the rig through AvatarSolve::rig (game space is a mirror of the
+// rig's, so the map is a reflection and the frames arrive as proper rotations: testAvatar checks the chain).
+SoftwareRenderer::VrRig SoftwareRenderer::poseVrArms(Mesh& arms,const AvatarSolve& s){
+ VrRig rig;
+ auto at=[&](const char* bone){return arms.bonePosition(bone);};
+ auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+ // The shoulders do not move with the arms' IK: read them (and the bones' lengths) from any pose of the rig.
+ Point3 sr=at("upper_arm.R"),sl=at("upper_arm.L");
+ if(len(sr-sl)<1e-4f){Mesh::ArmHold hold;arms.poseTracked({-.2f,1.2f,.3f},{.2f,1.2f,.3f},hold,{});sr=at("upper_arm.R");sl=at("upper_arm.L");}
+ const float arm=len(at("forearm.R")-sr)+len(at("hand.R")-at("forearm.R"));
+ rig.mid=(sr+sl)*.5f;rig.scale=arm>1e-4f?AvatarArmReach/arm:1.f;
+ auto toRig=[&](Point3 w){return rig.mid+s.rig(w-s.shoulders)*(1.f/rig.scale);};
+ Mesh::ArmHold hold;hold.forward={s.rig(s.forward[1]),s.rig(s.forward[0])};hold.palm={s.rig(s.palm[1]),s.rig(s.palm[0])};
+ // Elbows out to her sides, down and a little back, as arms hang and reach; the forearm takes half the
+ // wrist's roll, as the radius does, so a turned hand does not wring the wrist.
+ hold.elbow={Point3{-1,-1.2f,-.4f},Point3{1,-1.2f,-.4f}};hold.forearmRoll=.5f;
+ arms.poseTracked(toRig(s.wrist[1]),toRig(s.wrist[0]),hold,{s.curls[1],s.curls[0]});
+ return rig;
+}
 void SoftwareRenderer::drawTrackedHands(const Game&game){
- auto origin=game.chunkOffset(game.level());const auto&hands=VrRuntime::active()->hands();
+ auto*runtime=VrRuntime::active();const auto origin=game.chunkOffset(game.level());const auto&hands=runtime->hands();
+ auto local=[&](Point3 w){w.x-=origin.x;w.y-=origin.y;return w;};
+ auto unit=[](Point3 v){const float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
  auto draw=[&](const MeshTriangle&face,const Texture&texture,const VrHand&hand){
-  MeshVertex vertices[3];for(int i=0;i<3;++i){vertices[i]=face.v[i];auto p=face.v[i].p;auto world=hand.position+hand.basis[0]*p.x+hand.basis[1]*p.y+hand.basis[2]*p.z;world.x-=origin.x;world.y-=origin.y;vertices[i].p=cameraPoint(world,game);}
+  MeshVertex vertices[3];for(int i=0;i<3;++i){vertices[i]=face.v[i];auto p=face.v[i].p;auto world=hand.position+hand.basis[0]*p.x+hand.basis[1]*p.y+hand.basis[2]*p.z;vertices[i].p=cameraPoint(world,game);}
   triangle3D(vertices[0],vertices[1],vertices[2],texture,.85f);
  };
- // The hand mesh sits in SteamVR's skeletal hand frame; without skeletal input
- // it falls back to the controller frame.
- for(int side=0;side<2;++side)if(hands[side].tracked){VrHand frame=hands[side];if(frame.handFrame){frame.position=frame.handOrigin;frame.basis=frame.handBasis;}frame.position=frame.position+game.vrHandOffset(side);   // (held out of the props it pushes: VrHands.cpp)
-  for(const auto&triangle:m_vrHandMeshes[side]){const int claire=claireMaterial(m_armsMesh,triangle.part);draw(triangle,claire>=0?m_claireTextures[size_t(claire)]:m_arms,frame);}}
- // Alyx-style displays (SoftwareRenderer::prepareVrDisplays): camera-facing
- // glass cards on the back of the left hand and on the gun, and title and
- // subtitle cards held ahead of the head. Both windings, so no culling.
+ const AvatarPose&pose=m_vrPose;const AvatarSolve&solve=m_vrSolve;
+ // Her arms: the viewmodel's arms on the avatar's shoulders, wrists on the hands (VRChat's upper-body IK), the
+ // fingers as tracked; nothing of hers floats free of her.
+ Point3 gunShift{};
+ if(m_vrPoseReady){
+  const VrRig rig=poseVrArms(m_armsMesh,solve);
+  for(const auto&face:m_armsMesh.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=cameraPoint(rigToWorld(rig,solve,face.v[i].p),game);}
+   const int claire=claireMaterial(m_armsMesh,face.part);triangle3D(v[0],v[1],v[2],claire>=0?m_claireTextures[size_t(claire)]:m_arms,.85f);}
+  // The gun rides her drawn hand: where the arm put the wrist, against where the tracked wrist is.
+  const int g=pose.gunSide&1;gunShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))-pose.hands[size_t(g)].wrist;
+  if(!std::isfinite(gunShift.x)||!std::isfinite(gunShift.y)||!std::isfinite(gunShift.z)||std::sqrt(gunShift.x*gunShift.x+gunShift.y*gunShift.y+gunShift.z*gunShift.z)>.6f)gunShift={};
+  // The holsters: the shotgun across her back, the pistol at the gun hand's hip, while they are not in her hand.
+  auto holster=[&](const Mesh& mesh,const Texture& texture,Point3 at,Point3 back,Point3 up,bool pistol){
+   back=unit(back);up=unit(up-back*(back.x*up.x+back.y*up.y+back.z*up.z));const Point3 right{back.y*up.z-back.z*up.y,back.z*up.x-back.x*up.z,back.x*up.y-back.y*up.x};   // right = back x up: the mirrored frame gunBasis has
+   VrHand frame;frame.position=at;frame.basis={right,up,back};
+   if(pistol)for(auto face:mesh.triangles){for(auto&v:face.v)v.p=vrPistolPoint(v.p,true);draw(face,texture,frame);}
+   else{const auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const float scale=.85f/std::max({range.x,range.y,range.z});
+    for(auto face:mesh.triangles){if(face.part==3)continue;for(auto&v:face.v){const auto p=(v.p-center)*scale;v.p={-p.x,p.y,p.z};}draw(face,texture,frame);}}};
+  if(pose.back)holster(m_weaponMesh,m_weaponTexture,solve.backSlot,solve.torsoUp*-.75f+solve.torsoLeft*(pose.gunSide?-.65f:.65f),solve.torsoForward*-1.f,false);
+  if(pose.hip)holster(m_handgunMesh,m_handgunTexture,solve.hipSlot,Point3{0,0,1},solve.bodyForward,true);
+ }
+ // Cards: the area title, the subtitles and a short status line (health, and the load while it changes or a
+ // reload runs) hang ahead of the head on a direction that lags it (VrRuntime::lazyFollow) and face the eye.
+ // Nothing is fixed to her hands or wrists.
  auto card=[&](Point3 c,float width,float height,const Texture&texture){if(texture.pixels.empty())return;
   MeshVertex a{{c.x-width*.5f,c.y-height*.5f,c.z},0,1},b{{c.x+width*.5f,c.y-height*.5f,c.z},1,1},d{{c.x+width*.5f,c.y+height*.5f,c.z},1,0},e{{c.x-width*.5f,c.y+height*.5f,c.z},0,0};
   triangle3D(a,b,d,texture,1.f);triangle3D(a,d,e,texture,1.f);triangle3D(a,d,b,texture,1.f);triangle3D(a,e,d,texture,1.f);};
- auto at=[&](Point3 world){world.x-=origin.x;world.y-=origin.y;return cameraPoint(world,game);};
- // Each card sits just above its hand and is pulled toward the eye, so the
- // hand or the gun never hides it.
- auto clear=[](Point3 c,float lift,float pull){c.y+=lift;float l=std::sqrt(c.x*c.x+c.y*c.y+c.z*c.z);return l>pull?c*((l-pull)/l):c;};
- if(hands[0].tracked){const auto&h=hands[0];card(clear(at(h.handFrame?h.handOrigin+h.handBasis[2]*-.05f:h.position),.05f,.07f),.10f,.019f,m_vrHealthTexture);}
- card({0,.24f,1.8f},1.2f,.15f,m_vrTitleTexture);card({0,-.42f,1.5f},.9f,.127f,m_vrCaptionTexture);
+ {Point3 headAt,look;if(runtime->head(game,headAt,look)){
+   const double clock=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+   const float dt=m_vrCardClock<0?0.f:float(std::clamp(clock-m_vrCardClock,0.,.1));m_vrCardClock=clock;
+   const Point3 target=unit({look.x,look.y,std::clamp(look.z,-.45f,.45f)});
+   if(m_vrCardAnchor.x*m_vrCardAnchor.x+m_vrCardAnchor.y*m_vrCardAnchor.y+m_vrCardAnchor.z*m_vrCardAnchor.z<.5f)m_vrCardAnchor=target;
+   m_vrCardAnchor=VrRuntime::lazyFollow(m_vrCardAnchor,target,dt);
+   auto place=[&](float distance,float lift){return cameraPoint(headAt+m_vrCardAnchor*distance+Point3{0,0,lift},game);};
+   card(place(1.8f,.24f),1.2f,.15f,m_vrTitleTexture);card(place(1.5f,-.42f),.9f,.127f,m_vrCaptionTexture);
+   const int health=int(std::clamp(game.player().health,0.f,100.f)),statusKey=health*4096+game.firearmPool().loaded*64+int(game.activeFirearm());
+   if(statusKey!=m_vrStatusKey){m_vrStatusKey=statusKey;m_vrStatusTime=4.f;}m_vrStatusTime=std::max(0.f,m_vrStatusTime-dt);
+   if(m_vrStatusTime>0||health<30||game.reloading()){const Point3 c=place(1.5f,-.55f);card(c+Point3{-.07f,0,0},.10f,.019f,m_vrHealthTexture);if(!game.unarmed())card(c+Point3{.07f,0,0},.08f,.04f,m_vrAmmoTexture);}
+   if(game.settings().vrFrameRate)card(place(1.5f,-.66f),.6f,.0375f,m_vrRateTexture);}}
+ // The comfort vignette: a dark ring closing in from the edges of the view as the sticks move or turn it
+ // (VrRuntime::vignette), feathered at its inner edge. In the view's own space, so it rides the head.
+ if(const float v=runtime->vignette();v>.01f){
+  static const Texture black{1,1,{0xff000000u}};static const Texture feather=[]{Texture t{1,1,{0x90000000u}};t.transparent=true;return t;}();
+  const float depth=.35f,inner=1.25f-.7f*std::clamp(v,0.f,1.f),soft=inner*1.3f,outer=4.f;
+  auto ring=[&](float r0,float r1,const Texture&t){for(int k=0;k<32;++k){const float a0=float(k)*kPi/16,a1=float(k+1)*kPi/16;
+   const MeshVertex p0{{std::cos(a0)*r0*depth,std::sin(a0)*r0*depth,depth},0,0},p1{{std::cos(a1)*r0*depth,std::sin(a1)*r0*depth,depth},0,0},q0{{std::cos(a0)*r1*depth,std::sin(a0)*r1*depth,depth},0,0},q1{{std::cos(a1)*r1*depth,std::sin(a1)*r1*depth,depth},0,0};
+   triangle3D(p0,q0,q1,t,1.f);triangle3D(p0,q1,q0,t,1.f);triangle3D(p0,q1,p1,t,1.f);triangle3D(p0,p1,q1,t,1.f);}};
+  ring(inner,soft,feather);ring(soft,outer,black);}
 
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
   VrHand gun=hands[1];if(gun.handFrame){gun.position=gun.gunOrigin;gun.basis=gun.gunBasis;}
+  gun.position=local(gun.position)+gunShift;
   const bool pistol=game.activeFirearm()==WeaponId::Handgun;
-  if(game.vrSupportGrip()&&hands[0].tracked&&!pistol){
-   auto delta=(hands[0].handFrame?hands[0].gunOrigin:hands[0].position)-gun.position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
+  // Without skeletal input there is no tracking-space frame to aim through the support hand: the old game-space
+  // aim along the hands' line stands in (the controller frame's offsets).
+  if(game.vrSupportGrip()&&hands[0].tracked&&!pistol&&!hands[0].snapped){
+   auto delta=local(hands[0].handFrame?hands[0].gunOrigin:hands[0].position)-gun.position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
    if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=gun.basis[1];
     Point3 side={back.y*upHint.z-back.z*upHint.y,back.z*upHint.x-back.x*upHint.z,back.x*upHint.y-back.y*upHint.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
     if(sideLength>.0001f){side=side*(1.f/sideLength);Point3 up={side.y*back.z-side.z*back.y,side.z*back.x-side.x*back.z,side.x*back.y-side.y*back.x};gun.basis={side,up,back};}
    }
   }
+  // A reload tips the muzzle up (the support hand goes to the hip and the port: solveAvatar).
+  if(pose.reload>0){const float t=std::sin(std::clamp(pose.reload,0.f,1.f)*kPi)*.45f;const Point3 r=unit(gun.basis[0]);
+   auto turn=[&](Point3 v){const float c=std::cos(t),s=std::sin(t),d=r.x*v.x+r.y*v.y+r.z*v.z;const Point3 x{r.y*v.z-r.z*v.y,r.z*v.x-r.x*v.z,r.x*v.y-r.y*v.x};return v*c+x*s+r*(d*(1-c));};
+   gun.basis={gun.basis[0],turn(gun.basis[1]),turn(gun.basis[2])};}
   auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=.85f/std::max({range.x,range.y,range.z});
   // In the grip frame the pistol grip sits in the palm (13 cm behind the model's
   // centre) with the bore about 6 cm above the fist; the controller frame keeps
   // its older offsets.
   const float gripLift=hands[1].handFrame?0.f:.055f,gripBack=hands[1].handFrame?.13f:.25f;
+  // The fore-end (the pump, part 2) in the gun frame, measured once for the support hand's snap (supportPose).
+  if(!m_vrForeEndMeasured){Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};int n=0;
+   for(const auto&face:m_weaponMesh.triangles)if(face.part==2)for(const auto&v:face.v){const auto p=(v.p-center)*scale;const Point3 q{-p.x,p.y,p.z-.13f};low={std::min(low.x,q.x),std::min(low.y,q.y),std::min(low.z,q.z)};high={std::max(high.x,q.x),std::max(high.y,q.y),std::max(high.z,q.z)};++n;}
+   if(n)VrRuntime::setForeEnd((low+high)*.5f,(high.z-low.z)*.5f);m_vrForeEndMeasured=true;}
   // The pistol (vrPistolPoint), its slide home or locked back on an empty magazine.
   if(pistol){const float slide=game.slideLocked()?.026f:0.f;for(auto face:m_handgunMesh.triangles){for(auto&v:face.v){auto p=v.p;if(face.part==4)p.z-=slide;v.p=vrPistolPoint(p,hands[1].handFrame);}draw(face,m_handgunTexture,gun);}}
-  else for(auto face:m_weaponMesh.triangles){for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack};}draw(face,m_weaponTexture,gun);}
-  // The load, on a plate on the left of the receiver (facing the player's eye
-  // when the gun is held right-handed), or of the pistol's slide; drawn both ways round.
-  if(!m_vrAmmoTexture.pixels.empty()){const float x=pistol?-.021f:-.036f,y0=pistol?.022f:.022f,y1=pistol?.05f:.052f,z0=pistol?-.11f:-.08f,z1=pistol?-.05f:-.02f;
-   MeshTriangle plate{{{{x,y0,z0},0,1},{{x,y0,z1},1,1},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y1,z0},0,0}}};draw(plate,m_vrAmmoTexture,gun);
-   plate={{{{x,y0,z0},0,1},{{x,y1,z1},1,0},{{x,y0,z1},1,1}}};draw(plate,m_vrAmmoTexture,gun);plate={{{{x,y0,z0},0,1},{{x,y1,z0},0,0},{{x,y1,z1},1,0}}};draw(plate,m_vrAmmoTexture,gun);}
+  // The shotgun: its pump (part 2) slides back with the physical pump stroke; the spent shell (part 3) shows
+  // only as it is thrown out.
+  else{const float pump=pose.pump,shot=game.shotAge();
+   for(auto face:m_weaponMesh.triangles){if(face.part==3&&(shot<.09f||shot>.45f))continue;
+    for(auto&v:face.v){auto p=(v.p-center)*scale;v.p={-p.x,p.y-gripLift,p.z-gripBack+(face.part==2?pump:0.f)};
+     if(face.part==3){const float t=shot-.09f;v.p=v.p+Point3{-t*1.8f,t*.85f-t*t*3.5f,t*.3f};}}
+    draw(face,m_weaponTexture,gun);}}
  }
+}
+// --vr-test: the avatar's arms on scripted poses (no headset), numerically, and an OBJ of them.
+bool SoftwareRenderer::testVrAvatar(std::ostream& report){
+ bool ok=true;auto check=[&](bool pass,const std::string& what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
+ auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+ auto unitv=[&](Point3 v){const float l=len(v);return l>1e-6f?v*(1/l):Point3{};};
+ auto dotv=[](Point3 a,Point3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+ auto crossv=[](Point3 a,Point3 b){return Point3{a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};};
+ Mesh arms(111);if(arms.triangles.size()<100){check(false,"the arm rig (resource 111) loads");return false;}
+ check(arms.bonePosition("upper_arm.L").x>arms.bonePosition("upper_arm.R").x,"the rig's +x is her left");
+ // Scripted poses, as VrRuntime would give them: a hand frame made in tracking space (right-handed: x right,
+ // y up, -z ahead) and mapped to game space by the same mirror (rotateTracking).
+ const float yaw=.6f,c=std::cos(yaw),sn=std::sin(yaw);auto toGame=[&](Point3 v){return Point3{-v.z*c-v.x*sn,-v.z*sn+v.x*c,v.y};};
+ struct Case{const char* name;Point3 right,left;Point3 rightForward,rightPalm,leftForward,leftPalm;};
+ // Wrists relative to the eye in tracking space; frames: fingers ahead, palms in (a natural reach) and others.
+ const Case cases[]={
+  {"reach ahead, palms in",{.2f,-.35f,-.35f},{-.2f,-.35f,-.35f},{0,0,-1},{-1,0,0},{0,0,-1},{1,0,0}},
+  {"hands low at the sides, palms back",{.25f,-.75f,0},{-.25f,-.75f,0},{0,-1,0},{0,0,1},{0,-1,0},{0,0,1}},
+  {"right high, left across the chest, palms down",{.25f,.05f,-.3f},{.1f,-.35f,-.25f},{0,0,-1},{0,-1,0},{1,0,0},{0,-1,0}},
+  {"pistol held out, left cupping",{.05f,-.2f,-.45f},{0,-.25f,-.4f},{0,.3f,-1},{-1,0,0},{.3f,0,-1},{0,1,0}}};
+ Point3 head{5,5,1.42f};std::ofstream obj("vr-avatar-arms.obj");int vertexBase=0,caseIndex=0;
+ for(const auto&cs:cases){
+  AvatarPose pose;pose.active=true;pose.head=head;pose.headYaw=pose.bodyYaw=std::atan2(toGame({0,0,-1}).y,toGame({0,0,-1}).x);pose.root={head.x,head.y,0};pose.eye=1.42f;
+  auto hand=[&](Point3 w,Point3 f,Point3 p){AvatarHand h;h.tracked=true;h.wrist=head+toGame(w);f=unitv(f);p=unitv(p-f*dotv(p,f));h.forward=toGame(f);h.palm=toGame(p);h.curls={.2f,.3f,.5f,.7f,.9f};return h;};
+  pose.hands[1]=hand(cs.right,cs.rightForward,cs.rightPalm);pose.hands[0]=hand(cs.left,cs.leftForward,cs.leftPalm);
+  const AvatarSolve s=solveAvatar(pose,0);const VrRig rig=poseVrArms(arms,s);
+  for(int side=0;side<2;++side){const char* suffix=side?".R":".L";const int physical=side;   // [0] left, [1] right
+   const Point3 wrist=rigToWorld(rig,s,arms.bonePosition((std::string("hand")+suffix).c_str()));
+   const Point3 middle=rigToWorld(rig,s,arms.bonePosition((std::string("f_middle.01")+suffix).c_str()));
+   const Point3 index=rigToWorld(rig,s,arms.bonePosition((std::string("f_index.01")+suffix).c_str())),pinky=rigToWorld(rig,s,arms.bonePosition((std::string("f_pinky.01")+suffix).c_str()));
+   const Point3 elbow=rigToWorld(rig,s,arms.bonePosition((std::string("forearm")+suffix).c_str())),shoulder=rigToWorld(rig,s,arms.bonePosition((std::string("upper_arm")+suffix).c_str()));
+   const float gap=len(wrist-s.wrist[size_t(physical)]);const float aim=std::acos(std::clamp(dotv(unitv(middle-wrist),s.forward[size_t(physical)]),-1.f,1.f))*57.3f;
+   // The palm as the mesh has it, made the way VrRuntime's handFrame makes it from the same joints. The cross
+   // product is taken in the rig (right-handed, as tracking space is): taken in game space, a mirror, it would
+   // come out reversed.
+   const Point3 rigAcross=s.rig(index-pinky),rigForward=unitv(s.rig(middle-wrist));Point3 palm=unitv(crossv(rigAcross,rigForward)*(physical==0?-1.f:1.f));
+   const float palmError=std::acos(std::clamp(dotv(palm,unitv(s.rig(s.palm[size_t(physical)]))),-1.f,1.f))*57.3f;
+   const auto r=arms.gripReport(physical==1?0:1);
+   const Point3 mid=(shoulder+wrist)*.5f;const float outward=dotv(elbow-mid,s.torsoLeft)*(physical==0?1.f:-1.f),below=dotv(elbow-mid,s.torsoUp);
+   char line[200];std::snprintf(line,sizeof line,"%s, %s hand: wrist %.1f cm off, fingers %.0f deg, palm %.0f deg, elbow out %.1f cm down %.1f cm, palm curl %.2f",cs.name,physical?"right":"left",gap*100,aim,palmError,outward*100,-below*100,r.palmCurl);
+   check(gap<.02f&&aim<8&&palmError<12&&r.palmCurl>0&&outward>-.02f,line);}
+  // Her shoulders under her head, the arm the solve's length.
+  check(len(rigToWorld(rig,s,arms.bonePosition("upper_arm.R"))-s.shoulder[1])<.06f,std::string(cs.name)+": the rig's right shoulder on the solve's");
+  obj<<"o case"<<caseIndex++<<'\n';for(const auto&face:arms.triangles){for(const auto&v:face.v){const Point3 w=rigToWorld(rig,s,v.p);obj<<"v "<<w.x<<' '<<w.z<<' '<<-w.y<<'\n';}obj<<"f "<<vertexBase+1<<' '<<vertexBase+2<<' '<<vertexBase+3<<'\n';vertexBase+=3;}
+  head.x+=1.2f;
+ }
+ // Tracked fingers close the mesh's fingers: an open hand and a fist differ.
+ {AvatarPose pose;pose.active=true;pose.head={0,0,1.42f};pose.root={0,0,0};for(auto&h:pose.hands){h.tracked=true;h.wrist={.35f,0,1.1f};h.forward={1,0,0};h.palm={0,0,-1};}
+  pose.hands[0].wrist.y=.2f;pose.hands[1].wrist.y=-.2f;
+  auto skin=[&](float curl){for(auto&h:pose.hands)h.curls.fill(curl);const AvatarSolve s=solveAvatar(pose,0);poseVrArms(arms,s);return arms.triangles;};
+  const auto open=skin(0),fist=skin(1);float moved=0;for(size_t i=0;i<std::min(open.size(),fist.size());++i)for(int j=0;j<3;++j)moved=std::max(moved,len(open[i].v[j].p-fist[i].v[j].p));
+  check(moved>.02f,"a tracked fist closes her fingers (the skin moves up to "+std::to_string(int(moved*1000))+" rig mm)");}
+ return ok;
 }
 namespace {
 // The player's pistol (medic-handgun.obj): model metres, the grip at the
@@ -4923,5 +5048,25 @@ SoftwareRenderer::ShardLook SoftwareRenderer::shardLook(const Clutter& c)const{
   case ShardOf::Model:if(c.shardModel>=0&&c.shardModel<FacilityModelCount)return {&m_facilityMeshes[size_t(c.shardModel)],&facilityTexture(c.shardModel,0),false};break;
   default:break;}
  return {nullptr,&m_crateTexture,false};
+}
+}
+namespace retro {
+bool SoftwareRenderer::benchVrEye(std::ostream& report){
+ const bool post=SoftwareRenderer::postProcessing();SoftwareRenderer::setPostProcessing(false);   // VR has no post stage
+ struct Place{const char* name;Vec2 at;float angle;int level;};
+ const Place places[]={{"Security Office corridor (the VR smoke test's view)",{11.3f,3.5f},1.570796f,0},{"map 0, across the room",{7.5f,12.5f},0.f,0}};
+ bool ok=true;report.setf(std::ios::fixed);report.precision(2);
+ report<<"One Quest eye (1596 x 1708 at scale 1), headless Vulkan, post-processing off, 4x MSAA (VR uses 2x), mean of 20 frames\n";
+ for(const auto&place:places){report<<place.name<<":\n";double full=0;
+  for(float scale:{1.f,.9f,.8f,.7f}){const int w=int(1596*scale+.5f),h=int(1708*scale+.5f);
+   auto renderer=std::make_unique<SoftwareRenderer>(w,h);if(!renderer->enableHardware()){report<<"  no Vulkan device: "<<renderer->hardwareName()<<'\n';ok=false;break;}
+   auto game=Game::mapInspection(place.at,place.angle,0,place.level);game.equipWeapon(WeaponId::Shotgun);
+   for(int i=0;i<6;++i)renderer->render(game);
+   // The wait for the GPU after the commands are recorded is the GPU's frame (the headless path waits on its
+   // fence); recording and the readback's conversion to pixels are CPU work the headset path does not do.
+   double gpu=0,record=0;const auto start=std::chrono::steady_clock::now();for(int i=0;i<20;++i){renderer->render(game);if(renderer->m_gpu){const auto t=renderer->m_gpu->finishTimes();record+=t[0];gpu+=t[1];}}
+   const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()/20;gpu/=20;record/=20;if(scale==1.f)full=gpu;
+   report<<"  scale "<<scale<<" ("<<w<<" x "<<h<<"): GPU "<<gpu<<" ms"<<(full>0&&scale<1?" ("+std::to_string(int((1-gpu/full)*100+.5))+" % less than full size)":"")<<", command recording "<<record<<" ms, whole headless frame "<<ms<<" ms\n";}}
+ SoftwareRenderer::setPostProcessing(post);return ok;
 }
 }

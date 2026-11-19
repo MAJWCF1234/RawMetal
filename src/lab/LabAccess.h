@@ -150,6 +150,8 @@ struct LabAccess {
  static std::vector<MeshTriangle> creatureCorpseMesh(SoftwareRenderer& r,const Enemy& e){std::vector<MeshTriangle> out;r.poseCreatureMesh(e,0,true,out);return out;}
  static const humanoid::Labels& humanParts(SoftwareRenderer& r,int i){return SoftwareRenderer::humanParts(humanMesh(r,i),i<6?i:-1-(i-6));}
  static Point3 cameraPoint(const SoftwareRenderer& r,Point3 p){return r.cameraPoint(p,r.m_view);}
+ // The last frame's view depth at a pixel (9999 where nothing was drawn): tubes/Kits.cpp.
+ static float depthAt(const SoftwareRenderer& r,int x,int y){return r.m_zbuffer[size_t(y)*size_t(r.width())+size_t(x)];}
  // Plant physbones (tubes/Plants.cpp).
  static PlantBones& plants(SoftwareRenderer& r){return r.m_plants;}
  static bool plantModel(SoftwareRenderer& r,int model){return r.plantModel(model);}

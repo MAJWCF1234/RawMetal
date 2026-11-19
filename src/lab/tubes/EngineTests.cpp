@@ -4,6 +4,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "renderer/Carcass.h"
+#include "vr/VrRuntime.h"
 #include "world/CampaignExport.h"
 #include "world/CampaignMaps.h"
 #include "world/Primitives.h"
@@ -14,6 +15,8 @@ namespace retro::lab {
 namespace {
 bool engine(const char* name,const char* summary,bool(*run)()){return add({.name=std::string("engine.")+name,.summary=summary,.standalone=run});}
 const bool registered=[]{
+ engine("vr","--vr-test: the avatar's solve, arms and mirror chain, the fore-end snap, comfort maths and menu, hand hardening (no headset)",+[]{std::ofstream r("vr-test.txt");return VrRuntime::testAll(r);});
+ engine("vr-bench","one Quest eye headless at render scales 1-0.7 (timings in vr-bench.txt; passes when Vulkan draws)",+[]{std::ofstream r("vr-bench.txt");return SoftwareRenderer::benchVrEye(r);});
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);
  engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
  engine("settings","--each-test=settings: the pause menu's rows (sliders, toggles, pull highlight), their persistence, restart and quit",&Game::testSettings);
