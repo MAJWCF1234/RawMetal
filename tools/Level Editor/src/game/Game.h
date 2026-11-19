@@ -1483,7 +1483,7 @@ private:
     void stepCloth(float dt);
     std::vector<std::shared_ptr<ClothRun>> m_cloths;const void* m_clothMap=nullptr;int m_clothLevel=-1;Point3 m_clothPlayerAt{};bool m_clothPlayerSeen=false;
     // What the last rigid step did (the lab's perf and debug views).
-    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
+    struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0,ccdSweeps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0,ccdMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);
     // The player on a soft prop (a floor mattress, a bedroll): its pressed top under p, or `height`.
     float softGround(Vec2 p,float feet,float height,float radius)const;
