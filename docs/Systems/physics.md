@@ -82,6 +82,15 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
   directions, preferring faces. A face contact clips the incident face to the reference face's sides, which
   gives up to four points (the deepest, then the widest spread). An edge contact uses the closest points of
   the two edges. A sphere meets a box, a cylinder or another sphere exactly.
+- **Round cylinders** (`Settings::roundCylinders`, Vectra.cpp `roundFix`). A cylinder against a box or a hull (a drum, a
+  barrel, a mug, a tyre, a jar against a crate, a table, a rock) is a true round: its prism finds the contact, and a cap
+  flat on a face keeps it (flat is flat); where its round side is in it, the contact is worked again from the cylinder
+  itself. Against one of the other's faces, the cylinder's exact feature along that face's normal (its side's line, or a
+  rim point) clipped to the face, as the world's floor meets it; against an edge or a corner, each point's exact distance
+  from the round. Two cylinders, and a cylinder and a capsule, still meet as their prisms. (The world met round parts
+  exactly already.) A drum rolled on its side at 2 m/s over a static slab: as the prism its vertical speed varied by
+  12,423 e-6 m^2/s^2 and its speed by 9,909 e-6 (it bumped to 0.2 m/s); as the round by 0.0000 e-6 and 0.57 e-6, still
+  rolling at 1.62 m/s. Stood leant 2 degrees on its end on the slab it settles flat and sleeps (`vectra-shapes`, drums).
 - **Hulls** use the same separating axis test. Their edge pairs are tested only where the two edges' arcs cross on the
   Gauss map (Gregorius; each arc's plane taken from its edge, so a glass shard's knife edge, whose faces' normals are nearly
   opposite, is still right), with each pair rejected by two dot products first. A hull's incident face is chosen among the
@@ -509,7 +518,11 @@ Not the default yet. ragdoll-fall, 14 fixtures (lab, 2026-11-18):
   pours out by itself.
 - **Hand.** The held prop spins with the hand (its turn since the last frame), so a crate swung round carries
   what stands on it by friction and flings it off when jerked.
-- **Water.** Each part is 27 cells, each under the surface by its own share. The lift acts at the middle of
+- **Water.** Each part is 27 cells, each under the surface by its own share. A round part's (a cylinder's, a capsule's)
+  cells lie round its axis, one on it and eight on a ring (at 0.72 of its radius: each holds as much of its section), each
+  as tall as its disc stands, so a drum turning in the water rides on fewer corners: afloat on its side and turned about
+  its axis at 4 rad/s its vertical speed varies by 2,158 e-6 m^2/s^2, 6,864 e-6 with the square turned with it as before
+  (`water.round_cells` 0; `vectra-shapes`, drums). The lift acts at the middle of
   what is under, drawn toward the body's middle (`water.lever`: a prop's mass is in its walls), and the water
   rights a floater onto its nearest face it can float on: one whose waterplane's lever over the draft (BM) beats
   the drop from the middle of what is under to its own (BG, taken at `water.hollow` of a solid block's). A crate

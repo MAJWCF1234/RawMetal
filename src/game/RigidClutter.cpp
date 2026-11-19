@@ -464,8 +464,15 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();wetCells.clear();
      for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];V3 cellsAt,half;partVolumeBox(part,cellsAt,half);
       const float vol=half.x*half.y*half.z;const M3 r=turn*part.turn.matrix();
-      const float tall=(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
-      for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){const V3 l=cellsAt+part.turn.rotate(V3{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f});const V3 at=b.toWorld(l);
+      // A round part's (a drum's, a pipe's) cells lie round its axis: one on it and eight on the ring that halves its section's
+      // outer eight ninths, and a cell is as tall as its disc stands, so a drum rolling in the water rides on no corners (in a
+      // square turned with it, its lift rose and fell four times a turn). water.round_cells 0: the square.
+      const bool round=(part.kind==PartKind::Cylinder||part.kind==PartKind::Capsule)&&tune("water.round_cells",1.f)>.5f;const float ring=.722f*part.half.x;
+      const float tall=round?(half.x*std::sqrt(std::max(0.f,1-r.m[2][2]*r.m[2][2]))+std::fabs(r.m[2][2])*half.z)*2.f/3.f
+                            :(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
+      for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){
+       V3 o{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f};if(round){if(i||j){const float g=std::atan2(float(j),float(i));o.x=std::cos(g)*ring;o.y=std::sin(g)*ring;}else o.x=o.y=0;}
+       const V3 l=cellsAt+part.turn.rotate(o);const V3 at=b.toWorld(l);
        const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);wetCells.push_back({at-b.x,wet*std::pow(vol*8.f/27.f,2.f/3.f)});}}}
      const float f=all>0?under/all:0.f;
      if(f>0){middle=middle*(1/under);const float rho=buoyancy::density(c),k=buoyancy::drag(c)*tune("water.drag",1.f);const bool floater=rho<buoyancy::WaterDensity;

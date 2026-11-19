@@ -385,6 +385,35 @@ int capsuleHull(const Body& A,int pa,const Body& B,int pb,const Hull& h,bool cap
     for(float x:{a0,a1}){const V3 p=s0+seg*x;const float si=dot(nf,p)-h.d[fb]-r;if(si<=margin)setPoint(m,A,B,p-nf*(r+si*.5f),si,0x3000000u|std::uint32_t(m.count));}
     if(m.count)return m.count;m.normal=capsuleA?neg(n):n;}}}
  setPoint(m,A,B,core-n*(r+sep*.5f),sep,0x3000000);return 1;}
+// A cylinder's round against a box or a hull (Settings::roundCylinders). The prisms' separating axis test finds the
+// contact, and a cap flat on a face keeps it (flat is flat). Where the round side is in it, the contact is worked again
+// from the true cylinder: lying against one of the other's faces, the cylinder's exact feature along that face's normal
+// (its side's line, or a rim point) clipped to the face's sides, as the world's floor meets it; against an edge or a
+// corner, each point's exact distance from the round. A drum rolled over a crate rolls as a round does, not over the
+// twelve corners of its prism.
+// (A cylinder against a box or a hull; two cylinders, or a cylinder and a capsule, still meet as their prisms.)
+bool roundAgainst(PartKind a,PartKind b){return (a==PartKind::Cylinder&&(b==PartKind::Box||b==PartKind::Hull))||(b==PartKind::Cylinder&&(a==PartKind::Box||a==PartKind::Hull));}
+int roundFix(const Body& A,int pa,const Body& B,int pb,const Hull& ha,const Hull& hb,float margin,Manifold& m){
+ if(m.count<=0)return m.count;
+ const bool cylA=A.shape->parts[size_t(pa)].kind==PartKind::Cylinder;const Body& C=cylA?A:B;const int pc=cylA?pa:pb;const Hull& P=cylA?hb:ha;
+ V3 cc;Quat ct;partFrame(C,pc,cc,ct);const V3 axis=ct.rotate({0,0,1});
+ const V3 nPC=cylA?neg(m.normal):m.normal;   // from the other into the cylinder
+ if(std::fabs(dot(nPC,axis))>.9f)return m.count;   // on a cap
+ // Against a face of the other: its exact feature, clipped to the face.
+ int f=-1;float most=.9f;for(int k=0;k<P.t->nf;++k){const float d=dot(P.n[k],nPC);if(d>most){most=d;f=k;}}
+ if(f>=0){const V3 n=P.n[f];std::array<V3,8> feat{};const int k=supportFeature(C,pc,neg(n),feat);const auto& F=P.t->f[f];Manifold out=m;out.count=0;
+  for(int i=0;i<k&&out.count<4;++i){const V3 p=feat[size_t(i)];bool in=true;
+   for(int e=0;e<F.n&&in;++e){const V3 a=P.v[F.idx[e]],b=P.v[F.idx[(e+1)%F.n]];in=dot(norm(cross(b-a,n)),p-a)<=.002f;}
+   const float s=dot(n,p)-P.d[f];if(!in||s>margin)continue;
+   setPoint(out,A,B,p-n*(s*.5f),s,0x4000000u|std::uint32_t(f<<8|i));}
+  if(out.count){out.normal=cylA?neg(n):n;m=out;return m.count;}}
+ // Against an edge or a corner: each of the other's points from the true round (its nearest place on the cylinder).
+ Manifold out=m;out.count=0;V3 sum{};
+ for(int i=0;i<m.count;++i){const auto& c=m.points[size_t(i)];const V3 onP=c.p-nPC*(c.separation*.5f);V3 surface,outward;float d;
+  nearestPoint(C,pc,onP,surface,outward,d);if(d>margin)continue;sum=sum+outward;setPoint(out,A,B,(onP+surface)*.5f,d,c.feature);}
+ if(!out.count){m.count=0;return 0;}
+ const V3 nC=norm(sum,neg(nPC));out.normal=cylA?nC:neg(nC);   // the normal from A to B: out of the cylinder when it is A
+ m=out;return m.count;}
 // A point's nearest place on a part (sphere centre against box or cylinder): the surface point and the
 // outward normal there, and whether the point is inside.
 bool nearestOnPart(const Body& b,int part,V3 point,V3& surface,V3& normal,float& distance){
@@ -501,7 +530,8 @@ int collideParts(const Body& A,int pa,const Body& B,int pb,float margin,Manifold
  if(a.kind==PartKind::Capsule&&b.kind==PartKind::Capsule)return roundRound(A,pa,B,pb,margin,m);
  if(a.kind==PartKind::Capsule){const Hull hb=hullOf(B,pb);return capsuleHull(A,pa,B,pb,hb,true,margin,m);}
  if(b.kind==PartKind::Capsule){const Hull ha=hullOf(A,pa);return capsuleHull(A,pa,B,pb,ha,false,margin,m);}
- const Hull ha=hullOf(A,pa),hb=hullOf(B,pb);return hullHull(A,B,ha,hb,margin,m);}
+ const Hull ha=hullOf(A,pa),hb=hullOf(B,pb);const int found=hullHull(A,B,ha,hb,margin,m);
+ return found&&roundAgainst(a.kind,b.kind)?roundFix(A,pa,B,pb,ha,hb,margin,m):found;}
 
 // ---- The solver -----------------------------------------------------------------------------------
 namespace {
@@ -561,7 +591,8 @@ void Space::collide(float dt){
    ++pairsTested;Manifold m;
    const PartKind ka=a.shape->parts[size_t(pa)].kind,kb=b.shape->parts[size_t(pb)].kind;
    int found;
-   if(polyhedral(ka)&&polyhedral(kb))found=collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m);
+   if(polyhedral(ka)&&polyhedral(kb)){found=collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m);
+    if(found&&settings.roundCylinders&&roundAgainst(ka,kb))found=roundFix(a,pa,b,pb,hull(i,pa),hull(j,pb),margin,m);}
    else if(ka==PartKind::Capsule&&polyhedral(kb)){m.count=0;m.partA=pa;m.partB=pb;found=capsuleHull(a,pa,b,pb,hull(j,pb),true,margin,m);}
    else if(kb==PartKind::Capsule&&polyhedral(ka)){m.count=0;m.partA=pa;m.partB=pb;found=capsuleHull(a,pa,b,pb,hull(i,pa),false,margin,m);}
    else found=collideParts(a,pa,b,pb,margin,m);

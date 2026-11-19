@@ -8,7 +8,8 @@
 //    box, a barrel one cylinder, a chair a compound of boxes, an open crate a floor and four walls.
 //  - The narrow phase finds Manifolds (up to four points, one normal) between two bodies' parts: the
 //    separating axis test over faces and edge pairs of convex polyhedra (a cylinder is a 12-sided prism
-//    there), with the incident face clipped to the reference face for a full manifold; spheres exactly.
+//    there, its round side then worked again as a true round against a box or a hull: Settings::roundCylinders),
+//    with the incident face clipped to the reference face for a full manifold; spheres exactly.
 //    Contacts against the static world come from the caller (Space::worldContacts): the game asks its
 //    own World for them (RigidClutter.cpp), a lab tube asks a plane.
 //  - Space::step runs one fixed step: contacts are found once, then `substeps` soft substeps (TGS-soft,
@@ -373,6 +374,9 @@ struct Settings {
  // number), and a step asks the world at most about ccdBudget sweeps, each fast body its share of what is left (its leading
  // edges' points thinned first). 0: no bound (every 2.5 cm along every edge, through every piece of the turn: the old way).
  int ccdProbes=128,ccdBudget=4096;
+ // A cylinder meets a box or a hull as a true round (Vectra.cpp roundFix): its prism finds the contact, and where its side
+ // is in it the contact is worked again from the round. false: the 12-sided prism alone (as before).
+ bool roundCylinders=true;
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
 struct ContactEvent {int a=-1,b=-1,partA=0,partB=0;V3 point{},normal{};float approach=0,impulse=0,effectiveMass=0;Surface surface{};};
