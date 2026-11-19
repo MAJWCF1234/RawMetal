@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit e37d33ceb1745af694aba9e38171678dfb1960d9
-# 2026-11-19 01:35, release: v1.5.8, her own two hands
+commit b4291936d143feb024bc264859b0e1e7e1286609
+# 2026-11-19 09:39, Merge branch 'worktree-agent-a1b3d5bcd54ad2550'

@@ -14,6 +14,9 @@
 #include "world/CustomCampaign.h"
 #include "world/Primitives.h"
 #include "vr/VrRuntime.h"
+#include "net/Loopback.h"
+#include "net/Match.h"
+#include "net/EosSession.h"
 #include <windows.h>
 #include <commctrl.h>
 #include <shellapi.h>
@@ -2206,7 +2209,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      {auto game=retro::Game::exclusionInspection(0);for(int i=0;i<30;++i)game.update({},1.f/60.f);
       retro::InputState esc{};esc.escape=true;game.update(esc,1.f/60.f);game.update({},1.f/60.f);
       for(int i=0;i<11;++i){retro::InputState down{};down.menuDown=true;game.update(down,1.f/60.f);game.update({},1.f/60.f);}
-      retro::InputState held{};held.menuAccept=true;held.fire=true;held.pointerX=retro::TitleMenuLayout::X+20;held.pointerY=retro::TitleMenuLayout::Y+4*retro::TitleMenuLayout::RowHeight+10;
+      retro::InputState held{};held.menuAccept=true;held.fire=true;held.pointerX=retro::TitleMenuLayout::X+20;held.pointerY=retro::TitleMenuLayout::rowY(retro::TitleQuit)+10;
       for(int i=0;i<10;++i){game.update(held,1.f/60.f);renderer->render(game);}
       const bool open=game.titleScreen()&&!game.quitRequested();report<<"held click on quit-to-title over the title QUIT row: "<<(open?"title stays":"GAME QUIT")<<"\n";
       if(!open){report<<"FAIL\n";return 12;}}
@@ -2273,6 +2276,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // A correct hold measures about .07-.08 m (the rig's hands are large for the
      // pistol); a hand slid off the grip or a finger off the trigger goes past .095.
      report<<"worst grip error "<<worst<<"\nworst finger contact "<<contact<<" m\n";return worst<.025f&&contact<.095f?0:10;}
+    if(commandArguments().find(L"--net-loopback-test")){std::ofstream report("net-loopback-test.txt");return retro::net::testLoopback(report)?0:61;}
+    if(commandArguments().find(L"--net-test")){std::ofstream report("net-test.txt");return retro::net::testMatch(report)?0:62;}
+    if(commandArguments().find(L"--eos-test")){std::ofstream report("eos-test.txt");return retro::net::testEos(report)?0:63;}
     if(commandArguments().find(L"--vr-test")){std::ofstream report("vr-test.txt");const bool passed=retro::VrRuntime::testAll(report);return passed?0:60;}
     int doorArgc=0;LPWSTR* doorArgv=CommandLineToArgvW(GetCommandLineW(),&doorArgc);
     bool bare=doorArgv&&doorArgc<=1;if(doorArgv)LocalFree(doorArgv);
@@ -2305,6 +2311,11 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
     window.showLoading(0,L"LOADING");
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
+    // Multiplayer: the EOS session (Offline when this copy has no keys). Making it is cheap; its first tick starts
+    // the SDK unpack and sign-in in the background. The loading screen ticks it until the game exists; from then
+    // Game::update ticks it once a frame. Declared before the game, so the game (and any match over the session)
+    // goes first and the session then leaves its lobby and shuts EOS down.
+    std::unique_ptr<retro::net::Session> netSession=retro::net::makeEosSession();
     std::unique_ptr<retro::Game> gameStorage;std::unique_ptr<retro::SoftwareRenderer> rendererStorage;
     std::atomic<int> loadStage{0};std::atomic<bool> loadDone{false};std::exception_ptr loadFailure;
     std::thread loader([&]{
@@ -2343,6 +2354,7 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
       int stage=loadStage;if(stage!=shown){shown=stage;stageStart=std::chrono::steady_clock::now();}
       float t=std::chrono::duration<float>(std::chrono::steady_clock::now()-stageStart).count();
       if(!closed)window.showLoading(from[shown]+(to[shown]-from[shown])*(1-std::exp(-1.6f*t/expected[shown])),status[shown]);
+      netSession->tick();   // sign-in can start while the world loads (no Game yet to tick it)
       Sleep(16);
      }
      loader.join();if(loadFailure)std::rethrow_exception(loadFailure);
@@ -2350,13 +2362,14 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
     }
     window.showLoading(1,L"STARTING THE RENDERER");
     auto& game=*gameStorage;auto& renderer=*rendererStorage;
+    game.setNetSession(netSession.get());
     retro::AudioEngine audio;
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     int menuTestFrames=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(handoff&&!game.editorRequested()&&commandArguments().find(L"--menu-editor-test")&&++menuTestFrames>90){handoff->edit=true;handoff->fresh=true;handoff->project.clear();break;}
         if(handoff&&game.editorRequested()){handoff->edit=true;handoff->fresh=game.editorStartsFresh();handoff->project=game.editorProject();break;}

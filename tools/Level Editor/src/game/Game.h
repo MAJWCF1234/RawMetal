@@ -31,6 +31,8 @@
 #include <iosfwd>
 #include <utility>
 #include <optional>
+#include "../net/NetTypes.h"
+namespace retro::net{class Match;}
 #include <tuple>
 #include <cstdint>
 #include "Ragdoll.h"
@@ -72,6 +74,7 @@ struct InputState {
     bool subdue=false;
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
+    bool scoreboard=false;   // Tab, or the controller's back/view button, held: the match's scoreboard
     bool inventory=false;
     // 1-4 while a number key is held: a reply in a conversation. Outside one,
     // 1/2/3 pick fists, the shotgun or the handgun.
@@ -365,9 +368,28 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
- int pullHighlight=1;};   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+ int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+ int character=0;};     // character: the player's body, 0 Claire, 1 the Limitator (SoftwareRenderer::playerBody)
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
-struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
+// The title's main menu (Settings.cpp, MultiplayerMenu.cpp; drawn by renderer/FrontEnd.cpp) in three groups: the
+// campaign (new game, custom maps, load game), MULTIPLAYER, then settings and quit, a gap between groups. rowY and
+// rowAt are shared by the pointer and the renderer. The custom map archive's rows are evenly spaced from Y.
+struct TitleMenuLayout {
+ static constexpr int X=66,Y=150,Width=250,RowHeight=22,Rows=6,Gap=10;
+ static constexpr int rowY(int row){return Y+row*RowHeight+(row>=3?Gap:0)+(row>=4?Gap:0);}
+ static constexpr int rowAt(int y){for(int r=0;r<Rows;++r)if(y>=rowY(r)&&y<rowY(r)+RowHeight)return r;return -1;}
+};
+enum TitleRow:int{TitleNewGame=0,TitleCustomMaps=1,TitleLoadGame=2,TitleMultiplayer=3,TitleSettings=4,TitleQuit=5};
+// One row of a multiplayer page on the title (MultiplayerMenu.cpp builds them, FrontEnd.cpp draws them; the pointer
+// hits the same boxes). Row: a menu row; Chip: a small toggle in a strip; Lobby: a browser row (lobby: its index in
+// the session's results); Field: a text field; Back: the page's way out.
+struct TitleItem {
+ enum Kind:std::uint8_t{Row,Chip,Lobby,Field,Back} kind=Row;
+ int x=0,y=0,w=0,h=0;
+ std::string label,value;
+ bool enabled=true;
+ int lobby=-1,action=0;
+};
 
 
 class Game {
@@ -405,6 +427,48 @@ public:
     bool menuFromTitle()const{return m_menuFromTitle;}
 
     void update(const InputState& input, float dt);
+    // Multiplayer (src/net, docs/Systems/multiplayer.md). main owns the Session (EOS, or none); the Match is
+    // the game over it and fills remotePlayers and matchView, which the menus, HUD and renderer read.
+    void setNetSession(net::Session* session){m_netSession=session;}
+    net::Session* netSession()const{return m_netSession;}
+    net::Match* match()const{return m_match.get();}
+    const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
+    const net::MatchView& matchView()const{return m_matchView;}
+    bool inMatch()const{return m_matchView.active;}
+    // A VR player's avatar as VrRuntime solves it, sent to the others in a match (main sets it each frame).
+    void setNetAvatar(const AvatarPose& pose){m_netAvatar=pose;}
+    // Bodies of the players in a match, in the active chunk's frame: Match lends them to traceShot while it
+    // resolves a shot (they come back as ShotKind::Player with index slot+1); never seen by anything else.
+    struct NetBody {int slot=0;Vec2 pos{};float z=0,height=Player::StandingHeight;};
+    // The multiplayer pages on the title (MultiplayerMenu.cpp, docs/Systems/multiplayer.md). They call the Session
+    // directly and pump it while open; once the session is InLobby the Match takes over.
+    enum class TitlePage:std::uint8_t{Main,Multiplayer,QuickMatch,Browse,Host,Lobby,JoinCode,Character};
+    TitlePage titlePage()const{return m_titlePage;}
+    void openTitlePage(TitlePage page);
+    std::vector<TitleItem> titleItems()const;          // the current multiplayer page's rows (Main: none)
+    // The session in a word ("SIGNED IN", "OFFLINE", "SIGNING IN", ...) and why, in plain words; usable: it can
+    // host, search and join now.
+    std::string sessionWord()const;
+    std::string sessionReason()const;
+    bool sessionUsable()const;
+    const std::string& joinCodeTyped()const{return m_joinTyped;}
+    float joinCodeCopied()const{return m_joinCopied;}  // seconds the COPIED note still shows
+    int browseMode()const{return m_browseMode;}         // 0 any, 1 deathmatch, 2 co-op
+    bool browseHideFull()const{return m_browseHideFull;}
+    int browseScroll()const{return m_browseScroll;}
+    bool browseSearched()const{return m_browseSearched;}
+    struct HostDraft{net::Mode mode=net::Mode::Deathmatch;int map=0,maxPlayers=8;bool privateGame=false;std::string name;};
+    const HostDraft& hostDraft()const{return m_hostDraft;}
+    // The loaded custom campaigns whose MULTIPLAYER record allows the mode, by index in customCampaigns order.
+    std::vector<int> hostableMaps(net::Mode mode)const;
+    std::string customCampaignName(int index)const;
+    const MultiplayerSettings* campaignMultiplayer(int index)const{return index>=0&&index<int(m_customCampaigns.size())&&m_customCampaigns[size_t(index)]?&m_customCampaigns[size_t(index)]->multiplayer:nullptr;}
+    std::string titleNotice()const{return m_titleNotice;}
+    // Held Tab (or the controller's back/view button) in a match: the scoreboard.
+    bool scoreboardHeld()const{return m_scoreboardHeld;}
+    // LEAVE MATCH (the pause menu): leaves the session's lobby and returns to the title's MULTIPLAYER page.
+    void leaveMatch();
+    static bool testMultiplayerMenu(std::ostream& report);
     void moveVrRoom(Vec2 delta){tryMove(delta);}
     void setVrAim(Point3 position,Point3 direction,bool valid,bool support=false){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;m_vrSupportGrip=support&&valid;}
     // up: the hand's own up (the controller's, mapped to game space as its pointing is); left zero, the up nearest the
@@ -1758,6 +1822,26 @@ private:
     bool crateFree(const World& w,size_t index,Vec2 at)const;
     void restoreCrates(World& w,int level)const;
     Player m_player;
+    net::Session* m_netSession=nullptr;          // multiplayer: not owned, not saved
+    std::shared_ptr<net::Match> m_match;          // live while in a match (Match.h)
+    std::vector<net::RemotePlayer> m_remotePlayers;
+    net::MatchView m_matchView;
+    // The title's multiplayer pages (MultiplayerMenu.cpp).
+    TitlePage m_titlePage=TitlePage::Main;
+    int m_browseMode=0,m_browseScroll=0;bool m_browseHideFull=true,m_browseSearched=false,m_quickSearching=false;int m_quickMode=0;
+    HostDraft m_hostDraft;std::string m_joinTyped,m_titleNotice;float m_joinCopied=0;
+    bool m_scoreboardHeld=false;
+    void updateMultiplayerMenu(const InputState& input);
+    void drainSessionEvents();
+    void browseRefresh();
+    friend class net::Match;
+    // Multiplayer hooks the Match sets (Match.cpp): a guest's scripts and creature minds stay off (the host runs
+    // them and sends what happens), and the bodies a shot is traced against while the Match resolves it.
+    bool m_netScriptsOff=false,m_netCreaturesRemote=false;
+    const std::vector<NetBody>* m_netBodies=nullptr;
+    AvatarPose m_netAvatar{};
+    void updateNet();                              // the Session's frame: makes and drops the Match
+    void updateFrame(const InputState& input,float dt);
     std::vector<Enemy> m_enemies;
     std::vector<FriendlyActor> m_friendlyActors;
     std::vector<AiStimulus> m_guardShots;

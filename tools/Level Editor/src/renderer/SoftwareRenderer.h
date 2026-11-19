@@ -11,6 +11,7 @@
 #include "ClaireOutside.h"
 #include "LightProbes.h"
 #include <future>
+#include <functional>
 namespace retro::signart{struct Design;}
 namespace retro::cull{struct CullIndex;}
 namespace retro::humanoid{struct Labels;}
@@ -409,9 +410,38 @@ private:
     // vest, skirt, jacket, mask, eyes, hair.
     Mesh m_claireMesh{2300,"",2301,2312};
     std::array<Texture,10> m_claireTextures;
-    // Per face: its texture, and whether first person leaves it out (her
-    // head, hair and arms; the viewmodel's arms stand in for hers).
-    std::vector<unsigned char> m_claireFaceTexture,m_claireFaceHidden,m_claireHeadFace; float m_claireHeadHeight=0;int m_claireHeadSamples=0; int m_bodyStance=-1,m_bodyTransitionClip=-1;float m_bodyTransitionStart=0,m_bodyTransitionLength=1,m_bodyTransitionRange=1;
+public:
+    // A player body (docs/Systems/player-body.md): 0 Claire, 1 the Limitator, as
+    // Settings::character and RemotePlayer::character choose. Its mesh is posed
+    // by clips in ClaireOutside::Clip order (Mesh::poseCreature, or a ClaireOutside
+    // of the caller's own: prepare, compose, publish) and drawn face by face with
+    // faceTexture, mirrored as the local body is (+X is the body's left). The
+    // viewmodel's and the VR avatar's arms take armTextures, by claireMaterial.
+    // A Limitator whose files are missing or do not load is Claire (character 0).
+    struct PlayerBody {
+     int character=0;
+     Mesh* mesh=nullptr;
+     std::vector<const Texture*> faceTexture;                  // per face of mesh->triangles
+     std::vector<unsigned char> faceHidden,headFace,eyeFace;   // first person leaves it out (head, hair, arms); above the neck; the eyes or the mask's front (its facing)
+     float headHeight=.93f;                                    // the head's centre as a share of the bind height
+     const std::array<Texture,10>* armTextures=nullptr;        // the arms' textures, in Claire's material order
+    };
+    PlayerBody& playerBody(int character);
+private:
+    // The Limitator (Settings::character 1): his FBX (2290) on his 40 clips
+    // (2291, kept as bones and skinned on load: SkeletalBank.h) and his two
+    // materials (2293 body, 2294 head). His mesh loads the first time he is
+    // asked for; his arm textures dress the viewmodel's and the VR avatar's arms.
+    std::unique_ptr<Mesh> m_limitatorMesh;bool m_limitatorFailed=false,m_limitatorTexturesReady=false;
+    std::array<Texture,2> m_limitatorTextures;std::array<Texture,10> m_limitatorArmTextures;
+    std::array<PlayerBody,2> m_playerBodies;
+    void classifyPlayerBody(PlayerBody& body);
+    // The body the local player wore last frame: a change re-makes its outside
+    // poser, turn measures and blends.
+    int m_localCharacter=-1;
+    // The lab's view of the body: when collecting, each face drawn this frame (its index, world corners).
+    struct DrawnBodyFace{size_t face;std::array<Point3,3> p;};bool m_collectBodyFaces=false;std::vector<DrawnBodyFace> m_drawnBodyFaces;
+    int m_bodyStance=-1,m_bodyTransitionClip=-1;float m_bodyTransitionStart=0,m_bodyTransitionLength=1,m_bodyTransitionRange=1;
     // The clip it last showed and the one it is blending from (.2 s).
     int m_bodyClip=-1,m_bodyFromClip=-1;float m_bodyFromPhase=0,m_bodyBlendStart=-1,m_bodyLastElapsed=-1;
     std::vector<MeshTriangle> m_bodyFrom;
@@ -612,6 +642,28 @@ private:
     void drawComputer(const Game& game,int terminal);
     void drawHud(const Game& game);
     void drawTitle(const Game& game);
+    // The title's multiplayer pages and a match's HUD: scoreboard, kill feed, status, respawn (FrontEnd.cpp).
+    void drawTitleItems(const Game& game);
+    void drawMatchHud(const Game& game);
+    // The other players in a match, posed full bodies (RemotePlayers.cpp): drawn inside drawScene through its own
+    // lit triangle (both renderers take it), and their name tags over the frame.
+    struct RemoteDrawHooks{
+     std::function<void(MeshVertex,MeshVertex,MeshVertex,const Texture&,float)> tri;          // a lit, moving triangle
+     std::function<void(Point3 centre,float width,float depth,float height,float yaw)> light; // the world's light at a body
+     std::function<void(Point3 normal,Point3 outward)> face;                                  // a face picks its side of it
+    };
+    void drawRemotePlayers(const Game& game,const RemoteDrawHooks& hooks);
+    void drawNameTags(const Game& game);
+    struct RemoteBodies;struct RemoteBodiesFree{void operator()(RemoteBodies*)const;};
+    std::unique_ptr<RemoteBodies,RemoteBodiesFree> m_remote;
+    RemoteBodies& remoteBodies();
+public:
+    // What drawing the other players measured this frame, one per remote player (the multiplayer-ui lab tube).
+    struct RemoteBodyReport{int slot=-1;bool drawn=false,vr=false,tag=false;int lower=-1,layer=-1,character=0,held=0;Point3 feet{},head{},low{},high{};float tagX=-1,tagY=-1;};
+    const std::vector<RemoteBodyReport>& remoteBodyReports()const;
+    // A player's body by Settings::character: 0 Claire, 1 the Limitator (Claire stands in until his body is built in).
+    bool characterBuilt(int character)const;
+private:
     void drawLoading(const Game& game);
     void drawConsole(const Game& game);
     float m_frameMs=0;

@@ -228,6 +228,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   // until the first visible limb caused quarter-second gameplay stalls.
   for(const auto&texture:m_workerTextures)queue(texture);
   for(const auto&texture:m_claireTextures)queue(texture);
+  if(m_limitatorTexturesReady)for(const auto&texture:m_limitatorTextures)queue(texture);
   for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})queue(*texture);
   for(const auto&texture:m_staffTextures)queue(texture);
   if(!m_logo.pixels.empty())queue(m_logo);
@@ -262,6 +263,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  for(auto& texture:m_hazmatTextures)texture=loadTexture(246);
  for(int i=0;i<3;++i){m_workerTextures[i]=loadTexture(279+i);deriveSurfaceNormal(m_workerTextures[i],.35f);m_workerTextures[i].glossStrength=.05f;}
  for(int i=0;i<10;++i){auto&texture=m_claireTextures[size_t(i)];texture=loadTexture(2302+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=i==3||i==4||i==7?.18f:.05f;}
+ // The Limitator's two materials (body, head). Without them he is not offered: playerBody gives Claire.
+ try{for(int i=0;i<2;++i){auto&texture=m_limitatorTextures[size_t(i)];texture=loadTexture(2293+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=.05f;}m_limitatorTexturesReady=true;}catch(const std::exception&){m_limitatorTexturesReady=false;}
  // The transformed wear the same suit, drained of colour and darkened with
  // ash: half the saturation, two thirds the light, an olive cast.
  {auto scorch=[](std::uint32_t&pixel){float r=float((pixel>>16)&255),g=float((pixel>>8)&255),b=float(pixel&255),grey=r*.3f+g*.59f+b*.11f;
@@ -611,7 +614,7 @@ startupMark("engine textures"); m_concreteFloor=m_concrete;
    {&m_handgunTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
    {&m_cursedTexture,M::Rust},{&m_droneTexture,M::PaintedMetal},{&m_arms,M::Clothing}};
   for(auto [t,m]:named)apply(*t,m,"engine");
-  for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");
+  for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");if(m_limitatorTexturesReady)for(auto& t:m_limitatorTextures)apply(t,M::Clothing,"limitator");
   for(auto* t:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})apply(*t,M::Clothing,"transformed");
   for(auto& role:m_cleanupTextures)for(auto& t:role)apply(t,M::Clothing,"cleanup");
   for(auto* water:{&m_water,&m_murkWater,&m_coastWater})apply(*water,M::Water,"water");
@@ -1338,50 +1341,7 @@ void SoftwareRenderer::drawLoading(const Game& game){
  const int percent=int(game.loadProgress()*100.f+.5f);char text[16];std::snprintf(text,sizeof text,"%d%%",percent);
  uiText((m_width-uiTextWidth(text,3,11))/2,y+18,text,dim,3,11);
 }
-void SoftwareRenderer::drawTitle(const Game& game){
- static unsigned tick=0;++tick;const bool blink=(tick/30)%2==0;
- if(!hardwarePresentsWindow())for(auto&p:m_pixels)p=shade(p,.17f);
- const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0),amber=rgb(232,160,60);
- // Smoke the left of the frame so the menu reads over the dimmed scene.
- gradient(0,0,m_width*3/4,m_height,black,.94f,0.f,true);
- gradient(0,0,m_width,64,black,.75f,0.f,false);gradient(0,m_height-72,m_width,72,black,0.f,.9f,false);
- for(int y=0;y<m_height;y+=2)fill(0,y,m_width,1,black,.16f);
- for(int i=0;i<700;++i){unsigned h=unsigned(i)*2654435761u^tick*40503u;h^=h>>15;h*=2246822519u;h^=h>>13;blend(int(h%unsigned(m_width)),int((h>>10)%unsigned(m_height)),(h>>5)&1?bone:black,.09f);}
- // Header strip.
- fill(40,25,5,5,red,1);uiText(52,20,"DEPTHWORKS INDUSTRIAL  //  SITE 9 EXTRACTION COMPLEX",dim,0,11,1,1);
- const char* clock="SHIFT 03 / 03:14 AM";uiText(m_width-40-uiTextWidth(clock,3,11),20,clock,dim,3,11);
- fill(40,38,m_width-80,1,bone,.10f);
- // Wordmark: a red plate misregistered under bone type, torn every few seconds.
- const char* mark="DEPTHWORKS";const int markX=36,markY=44;
- uiText(markX+3,markY+2,mark,red,2,74,.85f,2);uiText(markX,markY,mark,bone,2,74,1,2);
- if(tick>60&&(tick/7)%23==0){unsigned h=tick*747796405u;int band=markY+12+int(h%50),shift=6+int((h>>8)%14);
-  for(int y=band;y<std::min(m_height,band+4+int((h>>4)%6));++y){auto row=m_pixels.begin()+size_t(y)*m_width;std::rotate(row,row+m_width-shift,row+m_width);}}
- fill(40,134,4,16,red,1);
- uiText(52,133,game.customMapsOpen()?"CUSTOM MAP ARCHIVE":"CONTAINMENT FAILURE",red,0,15,1,3);
- uiText(52,153,game.customMapsOpen()?"Drop .rmc campaign files in /custom maps":"Something broke loose below the foundry. Nobody is coming.",dim,1,13);
- const char* normalLabels[]={"NEW CAMPAIGN","PROJECTS","STARTER MAP","SETTINGS","QUIT"};
- for(int row=0;row<game.titleRows();++row){
-  int y=TitleMenuLayout::Y+row*TitleMenuLayout::RowHeight;bool selected=row==game.titleSelection();
-  std::string customLabel=game.customMapsOpen()?game.customMenuLabel(row):std::string{};
-  const char* label=game.customMapsOpen()?customLabel.c_str():normalLabels[row];
-  if(selected){gradient(TitleMenuLayout::X-14,y,TitleMenuLayout::Width+14,23,red,.55f,0.f,true);fill(TitleMenuLayout::X-14,y,3,23,red,1);}
-  char index[4];std::snprintf(index,sizeof(index),"%02d",row+1);
-  uiText(TitleMenuLayout::X,y+6,index,selected?bone:dim,3,10,selected?1.f:.55f);
-  uiText(TitleMenuLayout::X+24,y,label,selected?bone:dim,0,19,selected?1.f:.8f,1);
-  if(selected)uiText(TitleMenuLayout::X+TitleMenuLayout::Width-16,y+1,">",bone,0,19,.8f);
- }
- // Facility status readout.
- const int sx=m_width-218,sy=196;
- uiText(sx,sy,"FACILITY STATUS",dim,0,11,1,2);fill(sx,sy+16,178,1,bone,.14f);
- const char* keys[]={"MAIN POWER","SERVICE LIFT","CONTAINMENT","PERSONNEL"};const char* values[]={"DEGRADED","EMERGENCY","FAILED","UNACCOUNTED"};
- for(int i=0;i<4;++i){uiText(sx,sy+24+i*17,keys[i],dim,3,11,.85f);uiText(sx+178-uiTextWidth(values[i],3,11),sy+24+i*17,values[i],i<2?amber:red,3,11);}
- if(blink)fill(sx,sy+101,6,6,red,1);uiText(sx+12,sy+96,"ALARM ACTIVE / ALL LEVELS",red,0,11,blink?1.f:.55f,1);
- // Footer: key caps and build tag.
- fill(40,m_height-36,m_width-80,1,bone,.10f);
- int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
- cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.5.8  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
-}
+// drawTitle: FrontEnd.cpp.
 
 void SoftwareRenderer::drawSettings(const Game& game){
  if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
@@ -1392,16 +1352,19 @@ void SoftwareRenderer::drawSettings(const Game& game){
  auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;const bool comfortPage=page==Game::MenuPage::Comfort;
  const char* title=comfortPage?"VR COMFORT":settingsPage?(game.menuFromTitle()?"SETTINGS":"PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
  uiText(x+16,y+9,title,bone,0,20,1,2);
- const char* subtitle=comfortPage?"TURNING / BODY / FRAME RATE":settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
+ std::string subtitleText=comfortPage?"TURNING / BODY / FRAME RATE":settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
+ // In a match: the lobby's join code (to hand to whoever should come down), and the match does not stop.
+ const bool match=game.inMatch();if(match&&settingsPage)subtitleText=game.matchView().joinCode.empty()?"THE MATCH GOES ON":"JOIN CODE  "+game.matchView().joinCode;
+ const char* subtitle=subtitleText.c_str();
  uiText(x+MenuLayout::Width-16-uiTextWidth(subtitle,0,10,1),y+16,subtitle,red,0,10,1,1);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","PULL HIGHLIGHT","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
+ const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","PULL HIGHLIGHT","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",match?"LEAVE MATCH":game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   if(selected){gradient(x+10,top,MenuLayout::Width-20,19,red,.5f,0.f,true);fill(x+10,top,2,19,red,1);}
   else fill(x+10,top+18,MenuLayout::Width-20,1,bone,.05f);
   static const char* comfortLabels[]={"BACK","TURN SPEED","COMFORT VIGNETTE","SEATED MODE","RECALIBRATE HEIGHT","LEFT-HANDED","RENDER SCALE","FRAME RATE READOUT"};
   const char* label=comfortPage?comfortLabels[std::clamp(row,0,7)]:settingsPage&&row==5&&game.vrMenu()?"VR COMFORT...":settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
-  uiText(x+20,top+2,label,selected?bone:dim,0,13,1,1);
+  uiText(x+20,top+2,label,selected?bone:dim,0,13,match&&settingsPage&&row>=9&&row<=11?.3f:1.f,1);
   if(settingsPage&&((row>=1&&row<=4)||row==6||row==7)){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:row==4?settings.sensitivity:row==6?settings.depthOfField:settings.lensEffects;
    float normalized=std::clamp(row==4?(value-.2f)/2.8f:row>=6?value*.5f:value,0.f,1.f);int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
    fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);
@@ -1682,7 +1645,7 @@ void SoftwareRenderer::render(const Game& game){
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else drawHud(game);if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else{if(!game.remotePlayers().empty())drawNameTags(game);drawHud(game);if(game.inMatch())drawMatchHud(game);}if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
  if(!m_editorGuides.empty())drawEditorGuides(game);
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;

@@ -681,6 +681,18 @@ const char* glazeWord(Glaze glaze);
 // first lead on a panel adds the panel's pilot lamp, lit until any lead on it tears. Returns
 // what is wrong (no such fixture, prop or port) or an empty string.
 std::string seatTestLead(AuthoredMapData& m,Lead& l,int panel,std::string_view socket,std::string_view terminal);
+// Multiplayer on a custom campaign (docs/Systems/multiplayer.md): the MULTIPLAYER record (which modes, the
+// deathmatch map, limits) and SPAWN records (where players start in a match), set in the Campaign Builder.
+// A campaign with neither still plays: every mode on, spawns found on open floor of the start map.
+struct MultiplayerSpawn{int map=0;float x=0,y=0,z=0,yaw=0;int team=0;};  // team 0 any; map: index in maps
+struct MultiplayerSettings{
+    bool deathmatch=true,coop=true;
+    int deathmatchMap=-1;            // the map a deathmatch plays on; -1 the start map
+    int maxPlayers=8,fragLimit=20;   // fragLimit 0 none
+    float timeLimitMinutes=10;       // 0 none
+    bool friendlyFire=false;         // co-op: players' shots hurt each other
+    std::vector<MultiplayerSpawn> spawns;
+};
 struct CustomCampaign {
     std::string name;
     std::string sourceFile;
@@ -690,6 +702,7 @@ struct CustomCampaign {
     std::vector<std::shared_ptr<const AuthoredMapData>> maps;
     // The FORMAT record's version (1 when the file has none).
     int format=1;
+    MultiplayerSettings multiplayer;
 };
 
 class World {
