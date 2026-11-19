@@ -533,7 +533,7 @@ void Game::update(const InputState& input, float dt) {
       else showTitleScreen();
      }else if(m_paused&&m_menuPage!=MenuPage::Settings){
       if(m_menuPage==MenuPage::Overwrite||m_menuPage==MenuPage::ConfirmLoad){m_menuPage=m_menuPage==MenuPage::Overwrite?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
-      else {m_menuSelection=m_menuPage==MenuPage::Save?7:m_menuPage==MenuPage::Load?8:6;m_menuPage=MenuPage::Settings;}
+      else {m_menuSelection=m_menuPage==MenuPage::Save?10:m_menuPage==MenuPage::Load?11:9;m_menuPage=MenuPage::Settings;}
       m_menuMessage.clear();
      }else {m_paused=!m_paused;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_menuMessage.clear();}
      m_dragSlider=-1;m_menuPrevious=input;m_suppressFire=true;return;
