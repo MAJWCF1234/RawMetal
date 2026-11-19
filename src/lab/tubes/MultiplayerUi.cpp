@@ -134,9 +134,13 @@ const bool tube=add({
   Game host=title;host.setNetSession(hostSession.get());host.openTitlePage(Game::TitlePage::Host);
   rows(s,"host",shot(host,"HOST A GAME"),host);
   {LabAccess::titleSelection(host)=5;InputState accept{};accept.menuAccept=true;tickUpdate(host,accept,1.f/60);tickUpdate(host,{},1.f/60);tickUpdate(host,{},1.f/60);}
-  s.board["mp.page.lobby.open"]=host.titlePage()==Game::TitlePage::Lobby&&hostSession->state()==net::SessionState::InLobby;
-  {const Image im=shot(host,"LOBBY: the join code, big and copyable");rows(s,"lobby",im,host);
-   s.board["mp.page.lobby.code_words"]=light(im,im.width-292,146+30,im.width-40,146+84,120);s.board["mp.page.lobby.code_length"]=double(hostSession->state()==net::SessionState::InLobby?hostSession->lobby().joinCode.size():0);}
+  // A host who has the map goes straight down into it (the Match starts at once); the lobby page is the waiting
+  // room of a guest whose welcome (and perhaps the map) has not arrived yet.
+  s.board["mp.page.host.dropped_in"]=hostSession->state()==net::SessionState::InLobby&&!host.titleScreen();
+  Game guest=title;guest.setNetSession(guestSession.get());guestSession->joinCode(hostSession->lobby().joinCode);tickUpdate(guest,{},1.f/60);
+  s.board["mp.page.lobby.open"]=guest.titlePage()==Game::TitlePage::Lobby&&guestSession->state()==net::SessionState::InLobby;
+  {const Image im=shot(guest,"LOBBY: a guest waiting on the host, the code big and copyable");rows(s,"lobby",im,guest);
+   s.board["mp.page.lobby.code_words"]=light(im,im.width-292,146+30,im.width-40,146+84,120);s.board["mp.page.lobby.code_length"]=double(guestSession->state()==net::SessionState::InLobby?guestSession->lobby().joinCode.size():0);}
   // A full-size sheet of every picture, to judge the type and spacing by eye.
   {std::vector<std::pair<std::string,const Image*>> tiles;std::vector<Image> images;images.reserve(s.shots.size());
    for(const auto& sh:s.shots){Image i(sh.width,sh.height);i.pixels=sh.pixels;images.push_back(std::move(i));}
@@ -168,7 +172,8 @@ const bool tube=add({
   r.check("offline, the four rows that need a session are greyed",b("mp.page.offline.greyed")==4);
   r.check("the browser lists the five listed games, not the private one",b("mp.page.browse.lobbies")==5,fixed(b("mp.page.browse.lobbies"),0)+" rows");
   r.check("the browser's mode filter (DEATHMATCH) with full games hidden leaves the open deathmatches",b("mp.page.browse.deathmatch_lobbies")==2,fixed(b("mp.page.browse.deathmatch_lobbies"),0)+" rows");
-  r.check("HOST GAME opens a lobby and shows its code big",b("mp.page.lobby.open")>0&&b("mp.page.lobby.code_length")==7&&b("mp.page.lobby.code_words")>500,fixed(b("mp.page.lobby.code_words"),0)+" lit pixels in the code");
+  r.check("HOST GAME takes a host who has the map straight down into it",b("mp.page.host.dropped_in")>0);
+  r.check("a joining guest waits on the lobby page with the code big",b("mp.page.lobby.open")>0&&b("mp.page.lobby.code_length")==7&&b("mp.page.lobby.code_words")>500,fixed(b("mp.page.lobby.code_words"),0)+" lit pixels in the code");
   {std::ostringstream o;const bool ok=Game::testMultiplayerMenu(o);std::string failed;std::istringstream in(o.str());for(std::string line;std::getline(in,line);)if(line.rfind("FAIL",0)==0)failed+=line+"; ";
    r.check("the menus' flow: offline greying, host, browse, join code, leave, LEAVE MATCH, the character saved (Game::testMultiplayerMenu)",ok,failed.empty()?"all pass":failed);}
  },

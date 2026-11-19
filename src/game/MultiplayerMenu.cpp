@@ -290,7 +290,8 @@ bool Game::testMultiplayerMenu(std::ostream& report){
  host.m_titleSelection=4;{InputState typed{};typed.textInput="\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bThe Pit";tickUpdate(host,typed,1.f/60);tickUpdate(host,{},1.f/60);}
  check(host.hostDraft().name=="The Pit","the game's name is typed into NAME");
  host.m_titleSelection=5;key(host,&InputState::menuAccept);tickUpdate(host,{},1.f/60);
- check(hostSession->state()==net::SessionState::InLobby&&host.titlePage()==TitlePage::Lobby,"HOST GAME opens a lobby and the page shows it");
+ for(int i=0;i<10;++i)tickUpdate(host,{},1.f/60);
+ check(hostSession->state()==net::SessionState::InLobby&&!host.titleScreen()&&host.inMatch(),"HOST GAME opens a lobby and takes the host, who has the map, straight down into it");
  const std::string code=hostSession->lobby().joinCode;
  check(!code.empty()&&hostSession->lobby().maxPlayers==6&&hostSession->lobby().name=="The Pit"&&hostSession->lobby().map=="Menu Arena.rmc"&&hostSession->lobby().mapHash.size()==16,"the lobby has a code, six places, the name, the map file and its hash");
  // The guest's browser lists it; then a typed code joins it.
@@ -304,10 +305,15 @@ bool Game::testMultiplayerMenu(std::ostream& report){
  {InputState typed{};typed.textInput=code;for(auto& c:typed.textInput)c=char(std::tolower(static_cast<unsigned char>(c)));tickUpdate(guest,typed,1.f/60);tickUpdate(guest,{},1.f/60);}
  check(net::normaliseJoinCode(guest.joinCodeTyped())==code,"JOIN BY CODE: the typed code reads as the host's ("+guest.joinCodeTyped()+")");
  guest.m_titleSelection=1;key(guest,&InputState::menuAccept);tickUpdate(guest,{},1.f/60);
- check(guestSession->state()==net::SessionState::InLobby&&guestSession->lobby().id==hostSession->lobby().id&&guest.titlePage()==TitlePage::Lobby,"JOIN joins the host's lobby");
- // LEAVE leaves.
+ check(guestSession->state()==net::SessionState::InLobby&&guestSession->lobby().id==hostSession->lobby().id&&guest.titlePage()==TitlePage::Lobby,"JOIN joins the host's lobby and waits on the lobby page");
+ // LEAVE on the lobby page, while the welcome is still on its way, leaves.
  {const auto items=guest.titleItems();for(int i=0;i<int(items.size());++i)if(items[size_t(i)].action==ActLeave)guest.m_titleSelection=i;}
  key(guest,&InputState::menuAccept);check(guestSession->state()==net::SessionState::Ready&&guest.titlePage()==TitlePage::Multiplayer,"LEAVE leaves the lobby and returns to MULTIPLAYER");
+ // Joining again, the guest (who has the map) is welcomed and goes down into the host's game.
+ guestSession->joinCode(code);for(int i=0;i<40&&guest.titleScreen();++i){tickUpdate(host,{},1.f/60);tickUpdate(guest,{},1.f/60);}
+ check(!guest.titleScreen()&&guest.inMatch(),"a guest who has the map is welcomed and plays");
+ guest.leaveMatch();for(int i=0;i<3;++i)tickUpdate(guest,{},1.f/60);
+ check(guestSession->state()==net::SessionState::Ready&&!guest.inMatch(),"LEAVE MATCH takes the guest out of the game");
  // In a match the pause menu's last row leaves it.
  {host.m_titleScreen=false;host.m_matchView.active=true;host.m_paused=true;host.m_menuPage=MenuPage::Settings;host.m_menuFromTitle=false;host.m_menuSelection=10;
   key(host,&InputState::menuAccept);check(host.paused()&&host.menuPage()==MenuPage::Settings,"in a match SAVE GAME does nothing");

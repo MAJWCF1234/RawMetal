@@ -283,17 +283,17 @@ EosSession* g_live=nullptr;   // EOS is one per process, so is this session; cal
 
 class EosSession final:public Session{
 public:
- EosSession(){
-  g_live=this;
-  wchar_t user[257]{};DWORD n=257;std::wstring name=GetUserNameW(user,&n)?std::wstring(user):std::wstring(L"Player");
-  if(name.empty())name=L"Player";
-  m_name=utf8(name);while(m_name.size()>EOS_CONNECT_USERLOGININFO_DISPLAYNAME_MAX_LENGTH&&!name.empty()){name.pop_back();m_name=utf8(name);}
- }
+ EosSession(){g_live=this;}   // nothing else: the name and EOS itself wait for the first tick (start-up stays instant)
  ~EosSession()override{shutdown();if(g_live==this)g_live=nullptr;}
 
  void tick()override{
   if(m_phase==Phase::Dead)return;
   if(m_phase==Phase::Start){
+   if(m_name.empty()){
+   wchar_t user[257]{};DWORD n=257;std::wstring name=GetUserNameW(user,&n)?std::wstring(user):std::wstring(L"Player");
+   if(name.empty())name=L"Player";
+   m_name=utf8(name);while(m_name.size()>EOS_CONNECT_USERLOGININFO_DISPLAYNAME_MAX_LENGTH&&!name.empty()){name.pop_back();m_name=utf8(name);}
+   }
    g_log.open();g_log.line("DepthWorks " RAWMETAL_EOS_PRODUCT_VERSION ": multiplayer starting; display name '"+m_name+"'");
    if(g_eosShutDown){goOffline("multiplayer was shut down in this run; restart the game to play online");return;}
    m_phase=Phase::Loading;
