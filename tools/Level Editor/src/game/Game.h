@@ -37,6 +37,7 @@
 #include "Electricity.h"
 #include "SoftBodies.h"
 #include "physics/Vectra.h"
+#include "Cloth.h"
 
 namespace retro {
 // Bumped once per chunk built while a save loads on a worker thread, so the
@@ -1075,6 +1076,12 @@ public:
     // its ends (map coordinates; a pulley's four points: end, wheel, wheel, end). False when there is nothing to draw.
     int jointProp(int level,int spawn,int hint=-1)const;
     bool jointLine(int level,int joint,std::array<Point3,4>& points,int& count)const;
+    // Curtains, straps and cables (Cloth.cpp, CLOTH records) on the level played: how many, and how each hangs now (its
+    // beads, `cols` along it and `rows` down it, row 0 the top; and their radius). A round along origin..end knocks them.
+    int clothCount()const{return int(m_cloths.size());}
+    bool clothBeads(int index,std::vector<Point3>& points,int& cols,int& rows,float& bead)const;
+    const ClothRun* clothRun(int index)const;
+    void shootCloth(Point3 origin,Point3 end);
     // The highest top of a jointed prop under p within a step of `feet` (Movement's ground), or -1e9.
     float jointedPropTop(Vec2 p,float feet,float radius)const;
     // Feet at p on (or over) the top face of prop i of `level` when a joint holds it: it does not block him (a tilted plank).
@@ -1472,6 +1479,9 @@ private:
     void snapPropJoint(int level,int joint,Point3 at,bool quiet=false);
     // A round along origin..end cuts every rope or chain it passes within its thickness of.
     void cutJointsByShot(Point3 origin,Point3 end);
+    // One frame of the curtains, straps and cables (Cloth.cpp): built afresh when the level or its map changes.
+    void stepCloth(float dt);
+    std::vector<std::shared_ptr<ClothRun>> m_cloths;const void* m_clothMap=nullptr;int m_clothLevel=-1;Point3 m_clothPlayerAt{};bool m_clothPlayerSeen=false;
     // What the last rigid step did (the lab's perf and debug views).
     struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);
