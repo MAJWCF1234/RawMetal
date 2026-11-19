@@ -363,6 +363,11 @@ struct Settings {
  // A hinge's, weld's, slider's, distance's or rope's correction is held to this much a pass (m, rad): one wrenched far open
  // closes over a few steps, never thrown through what is beside it.
  float projectMaxLinear=.1f,projectMaxAngular=.3f;
+ // Continuous collision against the world (Queries.cpp): a fast body is swept by at most ccdProbes points (its corners and
+ // edges' middles, and along its leading edges every 2.5 cm where a thin thing could pass it whole, wider to keep to the
+ // number), and a step asks the world at most about ccdBudget sweeps, each fast body its share of what is left (its leading
+ // edges' points thinned first). 0: no bound (every 2.5 cm along every edge, through every piece of the turn: the old way).
+ int ccdProbes=128,ccdBudget=4096;
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
 struct ContactEvent {int a=-1,b=-1,partA=0,partB=0;V3 point{},normal{};float approach=0,impulse=0,effectiveMass=0;Surface surface{};};
@@ -396,6 +401,7 @@ struct Space {
  // Stats.
  int pairsTested=0,worldManifolds=0,iterationsRun=0;
  double worldMs=0,pairMs=0,solveMs=0;   // where the last step's time went (collide's world and pair halves, the substeps)
+ double ccdMs=0;int ccdSweeps=0;        // the last step's continuous collision: its time, and the world sweeps it asked
  // One fixed step of dt.
  void step(float dt);
  // Islands: groups of touching, moving bodies (filled by step).

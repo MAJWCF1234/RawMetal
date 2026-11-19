@@ -211,9 +211,21 @@ would cost more than it saved.
     is not put back by its centre's sweep. A six-box ragdoll thrown at 15 m/s at a 3 cm wall, a 20 kg door slammed at
     15 rad/s into a 3 cm post and a lamp whipped on its chain at 20 m/s at a 3 cm pole stay on their side with their
     joints together (`vectra-ccd`, 60 and 120 steps a second); with `RM_CCD=off` the door and the lamp go through.
-  - **Against the world.** Points along its edges (corners, every 2.5 cm along each edge, a cylinder's rims
-    and side lines) are ray cast by `Space::sweep` through the step, in pieces of at most 0.15 rad of its turn.
-    Trailing points and points that hardly move are skipped. A point that strikes a surface counts when it
+  - **Against the world.** Points on its edges are ray cast by `Space::sweep` through the step: its corners (a
+    cylinder's and a capsule's rings of eight), each edge's middle, and along each edge every 2.5 cm where the point
+    leads (it goes out of a face round it, not into the body) and goes further than the body is thick (a thin thing
+    could pass it whole there; nearer, it would end inside the body, which the contacts push out). Points that lead
+    nowhere or hardly move are left out. A body is held to `Settings::ccdProbes` (128) points, its leading edges' points
+    spaced wider to keep to it, and a step to about `ccdBudget` (4096) sweeps, each fast body its share of what is left
+    (its leading edges thinned first, its corners and middles always). Each point's way is swept in pieces of the turn,
+    as few as keep its chord within 2 mm of its arc (a power of two, at most the 0.15 rad pieces the body's reach asks):
+    a point near the middle of a turning body takes one. `ccdProbes 0` (knob `props.ccd_probes`, with
+    `props.ccd_budget`) is the old way, every 2.5 cm along every edge through every piece. Twenty crates of 0.3 to 1 m
+    launched by a blast in a pen of 3 cm walls ask 2,412 world sweeps over half a second (100 in the worst step) where
+    the old way asked 25,023 (1,130), 2.5 ms against 4.5 on the bare core; in the game, against the World, 2,706 against
+    28,572 and 3.9 ms against 18.8; none gets out either way. A 1 m crate thrown at 35 m/s turning at 10 rad/s asks 11
+    in its first step (304), the plank spinning at 60 rad/s by its 3 cm post 11,659 in a second (20,526), still never
+    through it (`vectra-ccd`). Trailing points are skipped as before. A point that strikes a surface counts when it
     went through what it struck (a ray back from where it ends finds a face between) or ends more than 2 cm
     into it; shallower is the contacts' business. The body goes back to that moment, 1 mm off the surface, and
     takes a blow at the middle of the points that struck that face together (so a plank's face hitting a post
@@ -561,6 +573,8 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `pad.hertz`, `pad.damping`, `pad.limit` | 2.5, 0.25, 1.5 | the mattress hinges |
 | `joints.tear` | 0.5 | how far a jointed prop is pulled from its joint before the joint gives (m) |
 | `props.sample_spacing` | 0.12 | spacing of the world contact samples |
+| `props.ccd_probes` | 128 | the most points a fast body is swept against the world by (0: every 2.5 cm along every edge) |
+| `props.ccd_budget` | 4096 | about the most world sweeps continuous collision asks in a step (0: no bound) |
 | `props.player_hertz` | 5 | the player body's contact stiffness |
 | `props.player_mass` | 20 | the player body's mass (kg) |
 | `props.pad_hertz` | 4 | padded props' contact stiffness |

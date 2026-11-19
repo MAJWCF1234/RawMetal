@@ -785,7 +785,7 @@ void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularH
  b.updateInertia();const M3 I=b.q.matrix()*b.inertiaLocal*b.q.matrix().transposed();V3 L=I*dw;const float lc=maxTorque*dt,ll=len(L);
  if(ll>lc&&ll>0)L=L*(lc/ll);b.w=b.w+b.invInertia*L;}
 void Space::step(float dt){
- events.clear();jointEvents.clear();if(dt<=0||bodies.empty()){manifolds.clear();return;}
+ events.clear();jointEvents.clear();ccdSweeps=0;ccdMs=0;if(dt<=0||bodies.empty()){manifolds.clear();return;}
  // A joint does not hold a moving body to a sleeping one: what is joined to something awake wakes (through
  // the whole chain).
  for(bool woke=true;woke;){woke=false;for(auto*c:constraints){const int a=c->bodyA(),b=c->bodyB();if(a<0||b<0)continue;if(auto*j=c->joint();j&&j->broken)continue;
@@ -825,7 +825,7 @@ void Space::step(float dt){
   // A face landing flat brings the body's whole mass at the middle, not one corner's share.
   if(m.count>1&&m.midMass>mass)mass=m.midMass;
   if(approach>.3f)events.push_back({m.a,m.b,m.partA,m.partB,at,m.normal,approach,impulse,mass,m.surface});}
- continuous(dt,start);
+ {const auto c0=std::chrono::steady_clock::now();continuous(dt,start);ccdMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-c0).count();}
  // What the substeps left open of a joint that asks for it (a ragdoll's), put back by position.
  for(int it=0;it<settings.projectIterations;++it)for(auto*c:constraints)c->project(*this);
  islands(dt);

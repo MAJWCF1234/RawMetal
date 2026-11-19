@@ -74,7 +74,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  using namespace vectra;
  auto& rp=m_rigidProps[level];
  if(level==m_level)updateBodyKnocks(dt);   // the men and creatures props knocked, stumbling on (once a frame)
- if(level==m_level){m_rigidStats.steps=0;m_rigidStats.ms=m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;}
+ if(level==m_level){m_rigidStats.steps=0;m_rigidStats.ccdSweeps=0;m_rigidStats.ms=m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=m_rigidStats.ccdMs=0;}
  const Vec2 shift=chunkOffset(level)-chunkOffset(m_level);
  // A point in this list's coordinates, in the world that holds it (p becomes that world's own coordinates).
  auto physicalWorld=[&](Vec2& p)->const World&{auto local=p-shift;if(local.x>=0&&local.x<24&&local.y>=0&&local.y<24){p=local;return level==m_level?m_world:m_chunks[level].world;}return worldAt(p);};
@@ -95,7 +95,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);space.settings.ccdProbes=int(tune("props.ccd_probes",float(space.settings.ccdProbes)));space.settings.ccdBudget=int(tune("props.ccd_budget",float(space.settings.ccdBudget)));
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<int> partOf;std::vector<Hit> hits;std::array<V3,8> feature{};
  struct WetCell {V3 r;float area;};std::vector<WetCell> wetCells;   // a body's cells under water this step (its arm to each, wet face area)
@@ -510,7 +510,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
-  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(level==m_level&&m_vrInputActive){settleVrHands(space,held);m_vrHandStepped=true;}if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
+  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(level==m_level&&m_vrInputActive){settleVrHands(space,held);m_vrHandStepped=true;}if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;if(level==m_level){m_rigidStats.ccdMs+=space.ccdMs;m_rigidStats.ccdSweeps+=space.ccdSweeps;}m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
   for(const auto&rec:chains){bool still=true;for(int k:rec.body)still&=wasAsleep[size_t(k)]&&space.bodies[size_t(k)].sleeping;if(!still)writeChain(rec);}
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];
