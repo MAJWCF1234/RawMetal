@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 100e50d2bb93c4918511ed2bc9ca53c63174cd7a
-# 2026-11-19, chore: sync the Campaign Builder with v1.5.8 (VR avatar, kits, material turns, ghosts, nudges, cache keys)
+commit e37d33ceb1745af694aba9e38171678dfb1960d9
+# 2026-11-19 01:35, release: v1.5.8, her own two hands
