@@ -357,8 +357,8 @@ struct Player {
 // far a firearm has dropped to low ready while running.
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,sprint=0;};
 // depthOfField and lensEffects scale the cinematic lens (1 = the tuned look, 0 off, up to 2).
-struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;};
-struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=330,RowTop=Y+46,RowHeight=21,Rows=12,SliderX=X+179,SliderWidth=75;};
+struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;int pullHighlight=1;};   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 
 
@@ -642,7 +642,7 @@ public:
     static bool testNpcVoices();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?8:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:2;}
+    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?9:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:2;}
     const std::string& menuMessage()const{return m_menuMessage;}
     const std::string& slotLabel(int slot)const{return m_slotLabels[slot];}
     const std::string& checkpointLabel()const{return m_checkpointLabel;}
