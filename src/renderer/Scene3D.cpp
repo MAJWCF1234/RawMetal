@@ -4292,6 +4292,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
  }
+ // The other players in a match (RemotePlayers.cpp), lit by the world's light as her body is.
+ if(level==game.level()&&!m_staticGeometryBuild&&!game.titleScreen()&&!game.remotePlayers().empty()){
+  ExteriorLight remoteLights{};movingGeometry=true;objectLighting=true;objectNormalLighting=nullptr;
+  const RemoteDrawHooks hooks{[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture& t,float light){tri(a,b,c,t,light);},
+   [&](Point3 centre,float width,float depth,float height,float yaw){remoteLights=exteriorLight(centre,width,depth,height,yaw,true);},
+   [&](Point3 normal,Point3 outward){selectFaceLight(remoteLights,normal,outward);}};
+  drawRemotePlayers(game,hooks);
+  objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;}
  // Recognizable authored supplies, with their original UVs and world depth.
  for(auto&p:game.chunkPickups(level))if(p.active){
   const float base=p.z>-999?p.z:w.floorHeight(p.pos.x,p.pos.y);

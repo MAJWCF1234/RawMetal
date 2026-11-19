@@ -179,6 +179,13 @@ struct LabAccess {
  #ifdef RAWMETAL_LAB_HAS_CLAIRE_OUTSIDE
  static const ClaireOutside::Report& claireReport(const SoftwareRenderer& r){return r.m_outsideReport;}
  #endif
+ // ---- Multiplayer (src/net): what the Match fills, filled by hand (tubes/MultiplayerUi.cpp) ----
+ static std::vector<net::RemotePlayer>& remotePlayers(Game& g){return g.m_remotePlayers;}
+ static net::MatchView& matchView(Game& g){return g.m_matchView;}
+ static void holdScoreboard(Game& g,bool on){g.m_scoreboardHeld=on;}
+ static std::vector<std::shared_ptr<const CustomCampaign>>& customCampaigns(Game& g){return g.m_customCampaigns;}
+ static int& titleSelection(Game& g){return g.m_titleSelection;}
+ static void pause(Game& g,bool on){g.m_paused=on;g.m_menuPage=Game::MenuPage::Settings;g.m_menuFromTitle=false;g.m_menuSelection=12;}
  // ---- Snapshot: the scene in play as a lab fixture (console `labsnap NAME`) ----
  // Writes DIR/NAME.lab (world, camera) and DIR/NAME.sav (the game's own save:
  // every state, creature, door and body as play left them). DIR is RM_LAB_FIXTURES

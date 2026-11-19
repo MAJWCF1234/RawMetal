@@ -11,6 +11,7 @@
 #include "ClaireOutside.h"
 #include "LightProbes.h"
 #include <future>
+#include <functional>
 namespace retro::signart{struct Design;}
 namespace retro::cull{struct CullIndex;}
 namespace retro::humanoid{struct Labels;}
@@ -606,6 +607,28 @@ private:
     void drawComputer(const Game& game,int terminal);
     void drawHud(const Game& game);
     void drawTitle(const Game& game);
+    // The title's multiplayer pages and a match's HUD: scoreboard, kill feed, status, respawn (FrontEnd.cpp).
+    void drawTitleItems(const Game& game);
+    void drawMatchHud(const Game& game);
+    // The other players in a match, posed full bodies (RemotePlayers.cpp): drawn inside drawScene through its own
+    // lit triangle (both renderers take it), and their name tags over the frame.
+    struct RemoteDrawHooks{
+     std::function<void(MeshVertex,MeshVertex,MeshVertex,const Texture&,float)> tri;          // a lit, moving triangle
+     std::function<void(Point3 centre,float width,float depth,float height,float yaw)> light; // the world's light at a body
+     std::function<void(Point3 normal,Point3 outward)> face;                                  // a face picks its side of it
+    };
+    void drawRemotePlayers(const Game& game,const RemoteDrawHooks& hooks);
+    void drawNameTags(const Game& game);
+    struct RemoteBodies;struct RemoteBodiesFree{void operator()(RemoteBodies*)const;};
+    std::unique_ptr<RemoteBodies,RemoteBodiesFree> m_remote;
+    RemoteBodies& remoteBodies();
+public:
+    // What drawing the other players measured this frame, one per remote player (the multiplayer-ui lab tube).
+    struct RemoteBodyReport{int slot=-1;bool drawn=false,vr=false,tag=false;int lower=-1,layer=-1,character=0,held=0;Point3 feet{},head{},low{},high{};float tagX=-1,tagY=-1;};
+    const std::vector<RemoteBodyReport>& remoteBodyReports()const;
+    // A player's body by Settings::character: 0 Claire, 1 the Limitator (Claire stands in until his body is built in).
+    bool characterBuilt(int character)const;
+private:
     void drawLoading(const Game& game);
     void drawConsole(const Game& game);
     float m_frameMs=0;

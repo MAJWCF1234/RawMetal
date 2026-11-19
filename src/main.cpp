@@ -2175,7 +2175,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      {auto game=retro::Game::exclusionInspection(0);for(int i=0;i<30;++i)game.update({},1.f/60.f);
       retro::InputState esc{};esc.escape=true;game.update(esc,1.f/60.f);game.update({},1.f/60.f);
       for(int i=0;i<11;++i){retro::InputState down{};down.menuDown=true;game.update(down,1.f/60.f);game.update({},1.f/60.f);}
-      retro::InputState held{};held.menuAccept=true;held.fire=true;held.pointerX=retro::TitleMenuLayout::X+20;held.pointerY=retro::TitleMenuLayout::Y+4*retro::TitleMenuLayout::RowHeight+10;
+      retro::InputState held{};held.menuAccept=true;held.fire=true;held.pointerX=retro::TitleMenuLayout::X+20;held.pointerY=retro::TitleMenuLayout::rowY(retro::TitleQuit)+10;
       for(int i=0;i<10;++i){game.update(held,1.f/60.f);renderer->render(game);}
       const bool open=game.titleScreen()&&!game.quitRequested();report<<"held click on quit-to-title over the title QUIT row: "<<(open?"title stays":"GAME QUIT")<<"\n";
       if(!open){report<<"FAIL\n";return 12;}}
