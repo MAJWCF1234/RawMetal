@@ -181,6 +181,11 @@
     const int k1 = kitIndex("kit_lab"), k2 = kitIndex("kit_kitchen");
     placeKit(k1, 5, 12, 0);
     placeKit(k2, 19, 12, 0);
+    for (auto i : doc.records("MAP", map)) { // a tall hall, so the picture looks down into the rooms
+      auto f = NativeDocument::fields(doc.lines[i]);
+      if (f.size() > 9)
+        f[9] = "9", doc.replace(i, f);
+    }
     std::wstring ppm;
     if (fs::exists(engineExecutable())) {
       auto session = folder / L"kits-builder-session";
@@ -188,7 +193,7 @@
       doc.save(session / L"working.rmc");
       std::ofstream(session / L"control.txt") << "1 " << map << " 0 0 0 0 0 0 0\n" << editorViewControl();
       std::ofstream(session / L"look.txt") << "LOOK 0 0 0 0\n";
-      std::ofstream(session / L"film.txt") << "FILM 1 12 22.8 3.4 -90 -16 74\n";
+      std::ofstream(session / L"film.txt") << "FILM 1 12 23 8.2 -90 -38 84\n";
       const auto picture = folder / L"kits-builder-3d.ppm";
       std::error_code ec;
       fs::remove(picture, ec);
