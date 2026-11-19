@@ -37,6 +37,11 @@ Use this list in the headset (Quest through SteamVR) to check what the automated
 - [ ] Let go with both hands in one motion. It flies at your hands' speed and doesn't jump to one hand first.
 - [ ] Let go with one hand only. After a moment the other hand holds it alone.
 - [ ] Do both grabs crouched, and with your back against a wall.
+- [ ] Hold a crate in one hand and turn your wrist slowly: palm up, palm down, tip it forward and back, swing it left and right. The crate turns exactly as your hand does, the same way round, with no flip, mirror or snap. It does not jump to point where your hand points when you grab it.
+- [ ] With both hands on it, roll both wrists the same way. The crate rolls with them.
+- [ ] Squeeze the grip on a prop, then open your hand. It drops at once. Try it with a light, half squeeze too (Index: a soft squeeze).
+- [ ] Holding a prop, pull the trigger of the hand that holds it. It is punted along that hand's pointing: a bottle flies, a heavy crate is shoved. With no gun drawn, the gun hand's trigger does the same. With a gun drawn, its trigger fires and the prop stays in your other hand.
+- [ ] Break a full bottle, walk into the next area and look around. The spill is not there; go back and it is where it fell.
 - [ ] Push a light box with an open hand. It moves; her hand doesn't pass into it. Press into a heavy drum: her hand stops at its surface.
 - [ ] Try to grab something bolted down. It doesn't come loose.
 - [ ] Physgloves:
