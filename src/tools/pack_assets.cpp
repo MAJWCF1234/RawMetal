@@ -87,6 +87,18 @@ int main(int argc,char** argv){try{
   }
   if(!count)throw std::runtime_error("Empty asset manifest");std::cout<<count<<" packaged resources match source: PNG pixels/dimensions, byte-identical audio/models/animation; "<<generated<<" neural reconstructions match native decoded output; "<<gridded<<" animations match their 3 mm release grid; "<<lossy<<" lossy textures match their screened WebP\n";return 0;
  }
+ if(argc==4&&std::string(argv[1])=="--pack-file"){
+  // One file outside assets.rc (the EOS SDK DLL, src/net/EosSession.cpp): the same RMZ1 record and LZMS
+  // stream the manifest's resources get, so loadResourceFromModule unpacks it unchanged.
+  std::ifstream file(argv[2],std::ios::binary);if(!file)throw std::runtime_error(std::string("Cannot read ")+argv[2]);
+  Bytes original((std::istreambuf_iterator<char>(file)),{});if(original.empty())throw std::runtime_error("Empty input file");
+  Bytes packed=compress(original);verify(packed,original);uint32_t size=uint32_t(original.size()),encoding=0;
+  Bytes record(12+packed.size());std::memcpy(record.data(),"RMZ1",4);std::memcpy(record.data()+4,&size,4);std::memcpy(record.data()+8,&encoding,4);std::memcpy(record.data()+12,packed.data(),packed.size());
+  fs::path destination=argv[3],temporary=destination.wstring()+L".tmp";
+  {std::ofstream output(temporary,std::ios::binary);output.write(reinterpret_cast<const char*>(record.data()),record.size());if(!output)throw std::runtime_error("Cannot write packed file");}
+  publish(temporary,destination);
+  std::cout<<fs::path(argv[2]).filename().string()<<": "<<original.size()<<" -> "<<record.size()<<" bytes; round-trip PASS\n";return 0;
+ }
  if(argc!=4)throw std::runtime_error("Usage: pack_assets source-dir output-dir bundle-path");fs::path source=argv[1],out=argv[2];fs::create_directories(out);
  struct Entry{uint32_t id;Bytes bytes;};std::vector<Entry> entries;
  std::map<std::array<unsigned char,32>,size_t> canonicalResources;
