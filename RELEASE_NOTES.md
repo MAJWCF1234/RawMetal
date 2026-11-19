@@ -4,6 +4,38 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.8
+
+- **All of her, in VR.** In the headset you are Claire, the way VRChat has it. Look down and her body is there. Her arms run from her shoulders to your hands and bend at the elbow as yours do, and her fingers close as yours close. Her legs walk with the stick and kneel when you duck. Her shoulders turn after your head, and she leans when you stoop. Nothing floats free of her.
+- **Guns on her body.** The shotgun rides on her back and the handgun at her hip. Reach over a shoulder or down to the hip and grip to draw one. Let go back at its holster and it goes away; let go anywhere else and it stays in her hand. On the shotgun, the other hand wraps the fore-end, the wood slides back with it when you pump, and a reload takes that hand to her hip and back to the gun.
+- **VR COMFORT.** A new page under Settings in VR has the turn speed (turning is smooth only), a comfort vignette that closes in while the sticks move you, seated play, height recalibration, left-handed play, the render scale and a frame-rate readout.
+- **Steadier frames.** In VR each eye can be drawn at a smaller share of its size and stretched by SteamVR. On AUTO the game picks the share from how long the last frame took. The far sun shadows are redrawn every other frame.
+- **Subtitles that follow.** Subtitles, area titles and a short health and ammunition line hang ahead of you and drift round after your look instead of being pinned to the face. Nothing is fixed to her hands or wrists any more.
+- **Steadier hands.** Two hands letting go of a crate a moment apart throw it with both. A gun hand or a hand on the fore-end no longer sets off the Physgloves when pumping. A VR hand can no longer wrench loose what is bolted down. A hand that jumps when tracking returns is drawn where it is, not dragged through what lies between.
+- **Untried in a headset.** None of this has been tried in a headset yet. docs/Systems/vr-playtest.md lists what to try.
+
+---
+
+## v1.5.7 - The headset again (2026-11-18)
+
+A fix for the choice that went missing.
+
+- **Play in VR is back.** Since v1.0.4 the game has looked for SteamVR in the wrong place in the registry, decided there was no headset, and never asked how you wanted to play. It looks in the right place now, finds SteamVR in a second Steam library too, and asks again: Play on PC, or Play in VR. If it ever cannot find the headset, RawMetal-vr.txt beside the game says exactly why.
+
+Verified with tools/release/ship.py and the game's VR test, which now checks the headset detection itself.
+
+---
+
+## v1.5.6 - A quieter hand (2026-11-18)
+
+A small fix for something players said shone too brightly.
+
+- **No more orange.** What the Physgloves are about to pull no longer burns orange. A thin, cold line traces its edge and breathes slowly, and the crosshair draws in a little; nothing else around it lights up. Settings has a Pull Highlight row to make it subtle or turn it off.
+
+Verified with tools/release/ship.py and the feature lab's Physgloves and settings tubes.
+
+---
+
 ## v1.5.5 - Sure footing (2026-11-18)
 
 A fix for floors that played like ice, and for the things that came apart when struck too hard.

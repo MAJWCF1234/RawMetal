@@ -20,6 +20,11 @@ Quat arc(V3 a,V3 b){const float d=vectra::dot(a,b);if(d<-.9999f){V3 t,u;vectra::
 // The part of v at right angles to unit axis, unit (fallback when v lies along it).
 V3 across(V3 v,V3 axis,V3 fallback){const V3 p=v-axis*vectra::dot(v,axis);const float l=vectra::len(p);return l>1e-3f?p*(1/l):fallback;}
 }
+int Game::twoHandRelease(bool carryGrip,bool secondGrip,float& grace,float dt){
+ if(carryGrip&&secondGrip){grace=0;return 0;}
+ if(!carryGrip&&!secondGrip){grace=0;return 3;}
+ grace+=dt;if(grace<TwoHandGrace)return 0;
+ grace=0;return carryGrip?1:2;}
 Point3 Game::carryVelocity()const{
  if(m_vrInputActive&&m_vrHandValid[size_t(m_vrCarryHand)]){Point3 v=m_vrHandVelocity[size_t(m_vrCarryHand)];
   if(m_vrSecondHand>=0&&m_vrHandValid[size_t(m_vrSecondHand)])v=(v+m_vrHandVelocity[size_t(m_vrSecondHand)])*.5f;return v;}

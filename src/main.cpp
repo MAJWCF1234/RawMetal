@@ -1833,7 +1833,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         save("repair-sign.ppm",retro::Game::liftInspection(0,3));
         auto menu=retro::Game::liftInspection(retro::World::LiftRideComplete);menu.setSaveDirectory(L"inspection-empty-saves");retro::InputState input{};input.escape=true;menu.update(input,.01f);save("repair-pause.ppm",menu);
         auto click=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::MenuLayout::X+30;i.pointerY=retro::MenuLayout::RowTop+row*retro::MenuLayout::RowHeight+7;menu.update(i,.01f);};
-        click(7);save("repair-save.ppm",menu);click(3);click(8);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
+        click(10);save("repair-save.ppm",menu);click(3);click(11);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
     }
     if(commandArguments().find(L"--console-test"))return retro::Game::testConsole()?0:34;
     if(commandArguments().find(L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
@@ -2239,10 +2239,12 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // A correct hold measures about .07-.08 m (the rig's hands are large for the
      // pistol); a hand slid off the grip or a finger off the trigger goes past .095.
      report<<"worst grip error "<<worst<<"\nworst finger contact "<<contact<<" m\n";return worst<.025f&&contact<.095f?0:10;}
-    if(commandArguments().find(L"--vr-test")){bool passed=retro::VrRuntime::testMath()&&retro::Mesh::testVrHands()&&retro::Game::testVrMelee()&&retro::Game::testVrInteraction();std::ofstream("vr-test.txt")<<(passed?"PASS: tracking recovery, foregrip support, coordinate axes, rigid-view inversion, wrist clicks, shoulder slot, articulated hands, physical melee and controller interaction\n":"FAIL\n");return passed?0:60;}
+    if(commandArguments().find(L"--vr-test")){std::ofstream report("vr-test.txt");const bool passed=retro::VrRuntime::testAll(report);return passed?0:60;}
     bool vrMode=commandArguments().find(L"--vr")!=nullptr;
     // Double-clicked with a headset SteamVR can see: ask PC or VR. Without one there is nothing to ask.
-    if(!*commandLine&&retro::VrRuntime::headsetPresent()){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
+    // Every double-click launch records what detection saw in RawMetal-vr.txt, so a missing choice is diagnosable.
+    retro::VrDetection vrDetection;if(!*commandLine){vrDetection=retro::VrRuntime::detectHeadset();std::ofstream("RawMetal-vr.txt")<<"VR choice "<<(vrDetection.offered?"offered":"not offered")<<": "<<vrDetection.reason<<'\n'<<vrDetection.log;}
+    if(!*commandLine&&vrDetection.offered){TASKDIALOG_BUTTON buttons[]={{100,L"Play on PC"},{101,L"Play in VR"}};TASKDIALOGCONFIG dialog{};dialog.cbSize=sizeof(dialog);dialog.pszWindowTitle=L"Depthworks";dialog.pszMainInstruction=L"How would you like to play?";dialog.pszContent=L"VR requires SteamVR and a connected headset.";dialog.cButtons=2;dialog.pButtons=buttons;dialog.nDefaultButton=100;dialog.dwCommonButtons=TDCBF_CANCEL_BUTTON;int choice=0;HRESULT result=TaskDialogIndirect(&dialog,&choice,nullptr,nullptr);if(FAILED(result))throw std::runtime_error("Could not open the PC/VR launch chooser");if(choice==IDCANCEL)return 0;vrMode=choice==101;}
     std::unique_ptr<retro::VrRuntime> vrRuntime;
     if(vrMode){vrRuntime=std::make_unique<retro::VrRuntime>();std::string error;if(!vrRuntime->initialize(error))throw std::runtime_error(error);}
     retro::Win32Window window(W,H,L"Depthworks");

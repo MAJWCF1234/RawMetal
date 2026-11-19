@@ -357,8 +357,13 @@ struct Player {
 // far a firearm has dropped to low ready while running.
 struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,sprint=0;};
 // depthOfField and lensEffects scale the cinematic lens (1 = the tuned look, 0 off, up to 2).
-struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;};
-struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=330,RowTop=Y+46,RowHeight=21,Rows=12,SliderX=X+179,SliderWidth=75;};
+// VR comfort (the VR COMFORT page; VrRuntime reads them): turn speed (1 = 120 degrees a second; turning is smooth
+// only), the vignette's strength while moving or turning (0 off), seated play, a left-handed avatar (gun hand, hip
+// holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
+struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
+ float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
+ int pullHighlight=1;};   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 
 
@@ -504,7 +509,15 @@ public:
     // be caught. target: the prop highlighted (this map's list, -1 none); flying: the prop pulled and not
     // yet caught or missed; lurch: it was too heavy to fly and only lurched.
     struct PhysgloveState {int target=-1,hand=1;bool locked=false;int flying=-1,flyingHand=1;float flight=0,window=0;bool lurch=false;
-     Point3 aimedAt{};std::array<bool,2> grip{};bool key=false,popping=false;float popRim=0;int pulls=0,catches=0,misses=0;};
+     Point3 aimedAt{};std::array<bool,2> grip{};bool key=false,popping=false;float popRim=0;int pulls=0,catches=0,misses=0;float lockAge=0;};
+    // VR: a hand that can lock the Physgloves on: not the hand holding a drawn gun, not the hand on its fore-end.
+    bool physgloveHandFree(int hand)const{return !(hand==1&&m_weaponEquipped&&!unarmed())&&!(hand==0&&m_vrSupportGrip);}
+    // Two-hand carry (TwoHand.cpp): one hand of two letting go is only acted on after TwoHandGrace, so both hands
+    // opening a few frames apart throw the prop with both instead of handing it to the last hand for a frame.
+    // 0 keep both, 1 the second hand lets go, 2 it passes to the second hand, 3 both let go: thrown.
+    static constexpr float TwoHandGrace=.15f;
+    static int twoHandRelease(bool carryGrip,bool secondGrip,float& grace,float dt);
+    static bool testVrHardening(std::ostream& report);
     const PhysgloveState& physgloves()const{return m_physglove;}
     // Where a prop pulled by `hand` is caught (its middle): before the eye at carry reach, or in the VR hand.
     Point3 physgloveCatchPoint(int hand,const Clutter& c)const;
@@ -640,9 +653,16 @@ public:
     // backslash): its saves and settings are copied into the right one, never over a newer file.
     static void adoptMisplacedSaves(const std::wstring& localAppData);
     static bool testNpcVoices();
-    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart};
+    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart,Comfort};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?8:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:2;}
+    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?9:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Comfort?ComfortRows:2;}
+    // VR: the settings' INVERT MOUSE Y row (no mouse in a headset) opens VR COMFORT instead: 0 back, 1 turn
+    // speed, 2 vignette, 3 seated, 4 recalibrate height, 5 left-handed, 6 render scale, 7 frame-rate readout.
+    static constexpr int ComfortRows=8;
+    bool vrMenu()const{return m_vrInputActive;}
+    // Recalibrate height was chosen: VrRuntime takes it (once) and sets the standing eye to the head's height now.
+    bool takeVrRecalibrate(){const bool r=m_vrRecalibrate;m_vrRecalibrate=false;return r;}
+    static bool testComfortMenu(std::ostream& report);
     const std::string& menuMessage()const{return m_menuMessage;}
     const std::string& slotLabel(int slot)const{return m_slotLabels[slot];}
     const std::string& checkpointLabel()const{return m_checkpointLabel;}
@@ -1356,7 +1376,7 @@ private:
     PhysgloveState m_physglove;
     void updatePhysgloves(const InputState& input,float dt);
     // Two-hand VR carry (Clutter.cpp): the second hand's grip on the held prop, in the prop's frame at the grab.
-    int m_vrSecondHand=-1;std::array<Point3,2> m_vrGripLocal{};std::array<float,4> m_vrGripTurn{1,0,0,0};Point3 m_vrGripAxis{},m_vrGripUp{};
+    int m_vrSecondHand=-1;float m_vrReleaseGrace=0;std::array<Point3,2> m_vrGripLocal{};std::array<float,4> m_vrGripTurn{1,0,0,0};Point3 m_vrGripAxis{},m_vrGripUp{};
     bool updateTwoHandCarry(const InputState& input,Clutter& c);bool grabSecondHand(int hand);
     Point3 carryVelocity()const;
     // VR hand bodies (VrHands.cpp): each hand a kinematic sphere in the solver, its drawn place held out of props.
@@ -1769,7 +1789,7 @@ private:
     float m_areaTitleTime=0;
     unsigned m_stepVariant=0;
     bool m_audioMuted=false,m_musicEnabled=true,m_previousMute=false,m_previousMusic=false,m_previousFlashlight=false;
-    Settings m_settings;
+    Settings m_settings;bool m_vrRecalibrate=false;
     bool m_paused=false,m_inventoryOpen=false,m_quitRequested=false,m_previousEscape=false,m_previousInventory=false,m_suppressFire=false;
     int m_menuSelection=0,m_pointerX=-1,m_pointerY=-1,m_dragSlider=-1;
     std::array<bool,2> m_previousVrGrip{};

@@ -85,6 +85,7 @@ add_executable(RawMetal WIN32
     game/Cloth.cpp
     game/Physgloves.cpp
     game/TwoHand.cpp
+    game/Avatar.cpp
     game/VrHands.cpp
     game/Liquids.cpp
     game/physics/Vectra.cpp

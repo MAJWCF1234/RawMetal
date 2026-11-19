@@ -77,7 +77,8 @@ const bool registered=add({
    if(f==118){const auto u=vectra::propOrientation(c).rotate({0,0,1});
     // Both wrists tipped 29 degrees: the crate turns about the line between the hands by their roll across it.
     w.v["roll"]=std::acos(std::clamp(u.x*float(w.v["ux"])+u.y*float(w.v["uy"])+u.z*float(w.v["uz"]),-1.f,1.f))*57.2958f;observe(s,g,"two-hands-rolled");}
-   if(f==130)w.v["backToOne"]=LabAccess::held(g)==w.a&&g.vrSecondHand()<0;
+   // (One hand of two letting go is acted on after Game::TwoHandGrace: by frame 139 the right holds it alone.)
+   if(f==139)w.v["backToOne"]=LabAccess::held(g)==w.a&&g.vrSecondHand()<0;
    if(f==141)w.v["dropped"]=LabAccess::held(g)<0;}
   if(scene=="push"&&w.a>=0&&w.b>=0){
    // Right: a swat through the box at 4 m/s, 5.6 -> 7.0 along x at the box's middle height. Left: into the drum at 1 m/s.
