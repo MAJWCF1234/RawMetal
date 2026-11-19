@@ -260,11 +260,14 @@ void Match::respawn(int slot){
  wire::Writer w;w.u8(Respawn).u8(unsigned(slot)).u8(s.life).u8(unsigned(sp.level)).f32(sp.world.x-o.x).f32(sp.world.y-o.y).f32(sp.world.z).angle(sp.yaw);
  broadcast(Events,w,true);m_rosterDirty=true;
 }
+// To a place on a given map. A custom campaign's maps need not sit side by side on one grid (their offsets may
+// coincide), so another map is loaded outright, carrying health and rounds, rather than walked into: placing the
+// player at the other map's coordinates inside this one put them in its walls.
 void Match::teleportLocal(int level,Point3 world){
- Game& g=m_game;const Vec2 o=origin(g.m_level);
+ Game& g=m_game;level=std::clamp(level,0,std::max(0,g.chunkCount()-1));
+ if(level!=g.m_level)g.loadLevel(level,true);
+ const Vec2 o=origin(level);
  g.m_player.pos={world.x-o.x,world.y-o.y};g.m_player.z=world.z;g.m_player.verticalVelocity=0;g.m_velocity={};
- if(levelAt({world.x,world.y})!=g.m_level)g.crossChunkBoundary();
- (void)level;
 }
 void Match::placePlayer(int slot,int level,Point3 world){
  if(slot<0||slot>=MaxSlots||!m_host)return;auto& s=m_slots[size_t(slot)];if(!s.used)return;
@@ -576,10 +579,11 @@ void Match::handleEvent(const Packet& p){
   const int level=int(r.u8());Point3 at;at.x=r.f32();at.y=r.f32();at.z=r.f32();const float angle=r.angle();if(r.bad||level>=g.chunkCount()||m_mode!=Mode::Coop)return;
   const Vec2 o=origin(level);const Point3 host{at.x+o.x,at.y+o.y,at.z};const NetPlayerState me=localState();
   if(distance2(me.world,host)>30.f||std::fabs(me.world.z-host.z)>6.f){
-   Point3 beside=host;const int hostLevel=levelAt({host.x,host.y});
-   for(int k=0;k<8;++k){const float a=float(k+m_selfSlot)*kPi*.25f;const Point3 c{host.x+std::cos(a)*1.2f,host.y+std::sin(a)*1.2f,host.z};const World* w=worldOf(levelAt({c.x,c.y}));if(!w)continue;const Vec2 co=origin(levelAt({c.x,c.y}));
-    if(w->fits(c.x-co.x,c.y-co.y,c.z,Player::StandingHeight,false)){beside=c;break;}}
-   teleportLocal(hostLevel,beside);g.m_player.angle=angle;}
+   // Beside the host on the host's own map (the message names it; a point's map cannot be read from its
+   // coordinates where maps overlap), on open floor.
+   Point3 beside={host.x+std::cos(angle)*1.2f,host.y+std::sin(angle)*1.2f,host.z};
+   if(!freeSpot(level,beside)){beside=host;freeSpot(level,beside);}
+   teleportLocal(level,beside);g.m_player.angle=angle;}
   break;}
  case RoundOver:{m_over=true;m_winner=r.str();m_restartIn=RestartAfter;break;}
  case RoundStart:{m_round=int(r.u8());m_over=false;m_winner.clear();m_feed.clear();m_restartIn=-1;break;}
@@ -597,6 +601,9 @@ void Match::publish(float dt){
   const float t=renderTime();const Vec2 here=origin(g.m_level);
   for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i==m_selfSlot||!s.used||!s.haveState||!s.spawned)continue;
    NetPlayerState st;if(!sampleAt(s,t,st))continue;
+   // Only someone on this map, or on a stitched neighbour of it (its own place on the grid): a player left on
+   // another map of a custom campaign would otherwise be drawn at their coordinates there, inside these walls.
+   if(st.level!=g.m_level&&(!g.chunkResident(st.level)||(origin(st.level).x==here.x&&origin(st.level).y==here.y)))continue;
    RemotePlayer rp;rp.slot=std::uint8_t(i);rp.name=s.name;rp.position={st.world.x-here.x,st.world.y-here.y,st.world.z};
    rp.angle=st.angle;rp.pitch=st.pitch;rp.velocity=st.velocity;rp.crouched=st.crouched;rp.prone=st.prone;rp.grounded=st.grounded;rp.weapon=st.weapon;
    rp.shotAge=std::max(0.f,t-s.lastShotAt);rp.reloadAge=st.reloadAge;rp.health=st.health;rp.alive=st.alive;
