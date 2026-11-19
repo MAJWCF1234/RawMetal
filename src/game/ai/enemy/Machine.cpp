@@ -102,12 +102,13 @@ bool Game::machineUpdate(Enemy& e,const std::vector<AiStimulus>& stimuli,float d
   return true;}
  if(e.sleeping()){
   e.moving=false;
-  const Vec2 toPlayer=e.pos-m_player.pos;const float far=length(toPlayer);
-  if(state(e.wakeState)){wakeMachine(e,m_player.pos,m_player.z,false);return true;}             // its room's power came on
-  if(e.hp<e.maxHp){wakeMachine(e,m_player.pos,m_player.z,true);return true;}                    // hurt
-  // A torch in its face, close.
-  if(flashlightOn()&&far<TorchReach&&far>.01f&&std::fabs(m_player.z-e.z)<2.f){const Vec2 look{std::cos(m_player.angle),std::sin(m_player.angle)};
-   if(dot(look,toPlayer*(1.f/far))>.9f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,mid)){wakeMachine(e,m_player.pos,m_player.z,true);return true;}}
+  {const Player& near=*nearestPlayer(e.pos,e.z).body;
+   if(state(e.wakeState)){wakeMachine(e,near.pos,near.z,false);return true;}             // its room's power came on
+   if(e.hp<e.maxHp){wakeMachine(e,near.pos,near.z,true);return true;}}                   // hurt
+  // A torch in its face, close: any player's.
+  for(const auto& p:players()){const Player& b=*p.body;const Vec2 toPlayer=e.pos-b.pos;const float far=length(toPlayer);
+   if(playerTorch(p)&&far<TorchReach&&far>.01f&&std::fabs(b.z-e.z)<2.f){const Vec2 look{std::cos(b.angle),std::sin(b.angle)};
+    if(dot(look,toPlayer*(1.f/far))>.9f&&m_world.rayClear(b.pos,b.z+b.eye,e.pos,mid)){wakeMachine(e,b.pos,b.z,true);return true;}}}
   // A loud noise near it: a shot, a crash, a blast.
   for(const auto&s:stimuli){if(s.step||!(s.loud||(s.categories&(ai::SoundWeapon|ai::SoundDanger))))continue;
    const float d=length(s.source-e.pos);if(d>.5f&&d<std::min(NoiseReach,s.radius*t.hearingScale)&&std::fabs(s.z-e.z)<3.f){
@@ -122,9 +123,9 @@ bool Game::machineUpdate(Enemy& e,const std::vector<AiStimulus>& stimuli,float d
   return true;
  }
  // Light draws it: a torch on it from across the room is as good as a sound.
- if(flashlightOn()&&std::fabs(m_player.z-e.z)<2.f){const Vec2 toPlayer=e.pos-m_player.pos;const float far=length(toPlayer);const Vec2 look{std::cos(m_player.angle),std::sin(m_player.angle)};
-  if(far>.01f&&far<12.f&&dot(look,toPlayer*(1.f/far))>.8f&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,mid)){
-   e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=std::max(e.awareness,6.f);if(e.state==Enemy::State::Idle||e.state==Enemy::State::Search)e.state=Enemy::State::Investigate;}}
+ for(const auto& p:players()){const Player& b=*p.body;if(!playerTorch(p)||std::fabs(b.z-e.z)>=2.f)continue;const Vec2 toPlayer=e.pos-b.pos;const float far=length(toPlayer);const Vec2 look{std::cos(b.angle),std::sin(b.angle)};
+  if(far>.01f&&far<12.f&&dot(look,toPlayer*(1.f/far))>.8f&&m_world.rayClear(b.pos,b.z+b.eye,e.pos,mid)){
+   e.lastKnown=b.pos;e.lastKnownZ=b.z;e.awareness=std::max(e.awareness,6.f);if(e.state==Enemy::State::Idle||e.state==Enemy::State::Search)e.state=Enemy::State::Investigate;}}
  // Its motors as it raises the lantern: a long grind under the wind-up.
  if(e.windup>t.windup-dt*1.5f&&e.windup>0)m_sounds.push_back({Sound::LiftMotor,e.pos,.6f,.8f,true,16,mid});
  return false;

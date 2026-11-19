@@ -21,12 +21,12 @@ void writeUnit(wire::Writer& w,Point3 p){w.q8(p.x,127).q8(p.y,127).q8(p.z,127);}
 Point3 readUnit(wire::Reader& r){Point3 p;p.x=r.q8(127);p.y=r.q8(127);p.z=r.q8(127);return p;}
 }
 
-// ----- Player state on the wire: 17 bytes (18 with health), plus 60 for a VR avatar -----
+// ----- Player state on the wire: 18 bytes (19 with health), plus 60 for a VR avatar -----
 void writePlayerState(wire::Writer& w,const NetPlayerState& s,Vec2 o,bool withHealth){
  w.u8(unsigned(std::clamp(s.level,0,255))).q16(s.world.x-o.x,256).q16(s.world.y-o.y,256).q16(s.world.z,256).angle(s.angle).q16(s.pitch,10000)
   .q8(s.velocity.x,16).q8(s.velocity.y,16)
   .u8((s.crouched?1u:0u)|(s.prone?2u:0u)|(s.grounded?4u:0u)|(s.vr?8u:0u)|(s.alive?16u:0u)|(unsigned(std::clamp(s.weapon,0,3))<<5))
-  .u8(s.shots).u8(s.reloadAge>=25?255u:unsigned(std::lround(std::max(0.f,s.reloadAge)*10))).u8(s.life);
+  .u8(s.shots).u8(s.reloadAge>=25?255u:unsigned(std::lround(std::max(0.f,s.reloadAge)*10))).u8(s.life).u8((s.torch?1u:0u)|(s.hidden?2u:0u));
  if(withHealth)w.u8(unsigned(std::clamp(int(std::ceil(s.health)),0,255)));
  if(!s.vr)return;
  const auto& p=s.pose;
@@ -41,6 +41,7 @@ bool readPlayerState(wire::Reader& r,NetPlayerState& s,bool withHealth){
  s.velocity.x=r.q8(16);s.velocity.y=r.q8(16);
  const unsigned flags=r.u8();s.crouched=flags&1;s.prone=flags&2;s.grounded=flags&4;s.vr=flags&8;s.alive=flags&16;s.weapon=int(flags>>5&3);
  s.shots=std::uint8_t(r.u8());const unsigned reload=r.u8();s.reloadAge=reload==255?99.f:float(reload)/10.f;s.life=std::uint8_t(r.u8());
+ {const unsigned extra=r.u8();s.torch=extra&1;s.hidden=(extra&2)!=0;}
  if(withHealth)s.health=float(r.u8());
  s.pose={};
  if(s.vr){auto& p=s.pose;
@@ -83,7 +84,7 @@ NetPlayerState Match::localState()const{
  s.weapon=g.m_weaponEquipped&&!g.unarmed()?int(g.m_equippedWeapon):0;s.shots=m_shotCounter;
  s.reloadAge=g.m_reloadTimer>0?g.m_reloadLength-g.m_reloadTimer:99.f;s.health=p.health;
  s.life=m_host&&m_selfSlot>=0?m_slots[size_t(m_selfSlot)].life:m_lifeLocal;
- s.vr=g.m_vrInputActive&&g.m_netAvatar.active;
+ s.vr=g.m_vrInputActive&&g.m_netAvatar.active;s.torch=g.flashlightOn();s.hidden=g.hiddenLocker()>=0;
  if(s.vr){s.pose=g.m_netAvatar;const Point3 feet{p.pos.x,p.pos.y,p.z};s.pose.head=s.pose.head-feet;s.pose.root=s.pose.root-feet;for(auto& h:s.pose.hands)h.wrist=h.wrist-feet;}
  return s;
 }
@@ -126,7 +127,7 @@ void Match::hostFrame(float dt){
  for(int i=0;i<MaxSlots;++i){auto& s=m_slots[size_t(i)];
   if(s.used&&s.ready&&!s.alive&&s.respawnIn>=0&&!m_over&&(s.respawnIn-=dt)<=0)respawn(i);}
  if(m_mode==Mode::Deathmatch){
-  clearCreatures();
+  clearCreatures();m_game.m_remoteBodies.clear();
   if(!m_over){
    m_roundClock+=dt;m_timeLeft=m_timeLimit>0?std::max(0.f,m_timeLimit-m_roundClock):-1.f;
    bool limit=m_timeLimit>0&&m_timeLeft<=0;for(const auto& s:m_slots)limit|=s.used&&m_fragLimit>0&&s.frags>=m_fragLimit;
@@ -136,6 +137,7 @@ void Match::hostFrame(float dt){
   if((m_creatureTimer-=dt)<=0){m_creatureTimer=CreatureInterval;sendCreatures();}
   if((m_doorTimer-=dt)<=0){m_doorTimer=DoorInterval;sendDoors();}
   trackPickups();
+  coopHostFrame(dt);   // the guests among the minds' players; what the minds do, to the guests (MatchCoop.cpp)
   // The host went somewhere new (a transfer, a lift, a script): guests far from it follow.
   if(g.m_level!=m_lastLevel){m_lastLevel=g.m_level;const Vec2 o=origin(g.m_level);
    wire::Writer w;w.u8(Travel).u8(unsigned(g.m_level)).f32(own.world.x-o.x).f32(own.world.y-o.y).f32(own.world.z).angle(own.angle);broadcast(Events,w,true);}
@@ -211,7 +213,10 @@ void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direct
   g.m_shotRays.push_back({o,direction,hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
   g.hitBurst(g.m_level,hit.point,direction,ImpactMaterial::Flesh,-1,.9f,false);
   damage(hit.index-1,shooter,hitscanDamageAt(gun.hitscan,hit.damageDistance),weapon);
- }else g.resolveShot(hit,o,direction,gun.hitscan,shooter==m_selfSlot);   // creatures, glass, props, the wall's mark
+ }else{   // creatures, glass, props, the wall's mark: a player's shot, whoever fired it (Game::m_shooter)
+  const float flash=g.m_hitFlash;g.m_shooter=shooter==m_selfSlot?0:shooter;
+  g.resolveShot(hit,o,direction,gun.hitscan,true);g.m_shooter=0;
+  if(shooter!=m_selfSlot)g.m_hitFlash=flash;}   // the hit marker is the shooter's own
 }
 
 void Match::damage(int victim,int attacker,float amount,int weapon){
@@ -387,7 +392,7 @@ void Match::guestFrame(float dt){
  if((m_stateTimer-=dt)<=0){m_stateTimer=std::max(0.f,m_stateTimer+GuestInterval);sendGuestState();}
  if(m_selfRespawnIn>0)m_selfRespawnIn=std::max(0.f,m_selfRespawnIn-dt);
  if(m_over&&m_restartIn>0)m_restartIn=std::max(0.f,m_restartIn-dt);
- if(m_mode==Mode::Coop){trackPickups();trackDoors(dt);smoothCreatures(dt);}else clearCreatures();
+ if(m_mode==Mode::Coop){trackPickups();trackDoors(dt);smoothCreatures(dt);coopGuestFrame(dt);}else clearCreatures();
 }
 void Match::sendGuestState(){
  const NetPlayerState s=localState();
@@ -420,6 +425,7 @@ void Match::handleState(const Packet& p){
   acceptGuestState(slot,s);return;
  }
  if(p.from!=m_hostId)return;
+ if(handleCoopState(type,r))return;   // the people (MatchCoop.cpp)
  if(type==Snapshot){
   const std::uint32_t ms=r.u32();const int round=int(r.u8());const int left=r.i16();const bool over=r.u8()!=0;const int count=int(r.u8());if(r.bad)return;
   if(m_haveSnapshot&&std::int32_t(ms-m_lastSnapshotMs)<0)return;   // an older one, overtaken
@@ -480,6 +486,7 @@ void Match::handleEvent(const Packet& p){
   list[size_t(index)].active=false;m_pickupSeen.resize(size_t(g.chunkCount()));auto& seen=m_pickupSeen[size_t(level)];if(size_t(index)<seen.size())seen[size_t(index)]=0;return true;};
  if(m_host){
   const int slot=slotOf(p.from);if(slot<0)return;
+  if(handleCoopEvent(slot,type,r))return;   // a guest's hand on a terminal (MatchCoop.cpp)
   if(type==Shot){
    const int weapon=int(r.u8());const int level=int(r.u8());Point3 o;o.x=r.f32();o.y=r.f32();o.z=r.f32();const Point3 d=readVec(r,32767);r.u32();const std::uint32_t view=r.u32();
    if(r.bad||level>=g.chunkCount())return;resolveShot(slot,weapon,level,o,d,float(view)/1000.f);
@@ -546,7 +553,7 @@ void Match::handleEvent(const Packet& p){
   break;}
  case RoundOver:{m_over=true;m_winner=r.str();m_restartIn=RestartAfter;break;}
  case RoundStart:{m_round=int(r.u8());m_over=false;m_winner.clear();m_feed.clear();m_restartIn=-1;break;}
- default:break;
+ default:handleCoopEvent(-1,type,r);break;   // script effects, the state store (MatchCoop.cpp)
  }
 }
 

@@ -369,6 +369,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    else throw std::runtime_error("invalid SCRIPT_TRIGGER scope; use box, map or campaign");
    if(match=="all"||match.empty())event->matchAny=false;else if(match=="any")event->matchAny=true;else throw std::runtime_error("invalid SCRIPT_TRIGGER match; use all or any");
    event->rearm=boolean(f,5,"trigger repeat");event->once=!event->rearm;if(given(6))event->once=boolean(f,6,"trigger once");
+   if(const auto* players=findNamedField(namedFields,"players")){const auto v=decode(players->value);
+    if(v=="all")event->allPlayers=true;else if(v=="any")event->allPlayers=false;else throw std::runtime_error("players="+players->value+" is not any or all");}
   }else if(tag=="SCRIPT_ACTION"){
    if(f.size()<4)throw std::runtime_error("malformed SCRIPT_ACTION record");auto map=mapAt(maps,f);auto eventId=scriptName(f,2,"action event name");
    auto event=std::find_if(map->scriptEvents.begin(),map->scriptEvents.end(),[&](const ScriptEvent&candidate){return candidate.id==eventId;});if(event==map->scriptEvents.end())throw std::runtime_error("script action references an undeclared event");

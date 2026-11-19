@@ -9,15 +9,19 @@ namespace retro {
 void Game::updateExposure(float dt){
  if(hiddenLocker()>=0){m_playerExposure=0;return;} // no lamp reaches inside a shut locker
  if((m_exposureTimer-=dt)>0)return;m_exposureTimer=.1f;
- const Vec2 at=m_player.pos;const float chest=m_player.z+m_player.hullHeight()*.6f;
+ m_playerExposure=lightAt(m_player.pos,m_player.z+m_player.hullHeight()*.6f,flashlightOn());
+}
+// How lit a body is: every lamp it sees, the room's ambient, darkness, and its own torch. Every player's
+// exposure (the local one's above, a co-op guest's on the host) is this.
+float Game::lightAt(Vec2 at,float chest,bool torch)const{
  float lit=m_world.definition().ambient*.8f;
  for(const auto& lamp:m_world.lights()){float power=lampPower(lamp);if(power<=0)continue;
   float dz=lamp.z-chest,distance=std::sqrt(lengthSq(lamp.position-at)+dz*dz),range=std::max(1.f,lamp.range);if(distance>=range)continue;
   float falloff=1-distance/range,share=power*lamp.intensity*falloff*falloff;if(share<.02f)continue;
   if(m_world.lightRayClear(lamp.position,lamp.z-.05f,at,chest))lit+=share;
  }
- lit*=1-m_darkness;if(flashlightOn())lit=std::max(lit,1.f);
- m_playerExposure=std::clamp(lit,0.f,1.f);
+ lit*=1-m_darkness;if(torch)lit=std::max(lit,1.f);
+ return std::clamp(lit,0.f,1.f);
 }
 void Game::knockOnWall(){
  if(m_elapsed-m_lastKnock<.6f||!m_player.grounded)return;

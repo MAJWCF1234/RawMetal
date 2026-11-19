@@ -23,7 +23,8 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    float distance=rayBoxFraction(origin,ray*range,center-Point3{radius,radius,0},center+Point3{radius,radius,height},&n)*range;
    if(distance<hit.distance-.0001f)hit={kind,level,index,distance,distance,origin+ray*distance,n};
   };
-  if(includePlayer&&!dead())body(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight(),.2f);
+  // Every player's body (index: its players() id; single player: the player, 0).
+  if(includePlayer)for(const auto& p:players())if(p.alive())body(ShotKind::Player,m_level,p.id,p.body->pos,p.body->z,p.body->hullHeight(),.2f);
   // A match's players (Match lends them while it resolves a shot): Player index slot+1.
   if(m_netBodies)for(const auto&b:*m_netBodies)body(ShotKind::Player,m_level,b.slot+1,b.pos,b.z,b.height,.25f);
   for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(int(i)==ignoredNpc||!chunkResident(npc.level)||!autonomousActor(track)||(npc.pose.clip==4&&!npcIncapacitated(i))||(track.deadState&&state(track.deadState)))continue;
@@ -124,9 +125,9 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point,hit.distance);return;}
  definition.dmgNear*=attenuation;definition.dmgMid*=attenuation;definition.dmgFar*=attenuation;definition.actorDamage*=attenuation;if(damageOverride>0)damageOverride*=attenuation;
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
- if(hit.kind==ShotKind::Player){receiveDamage(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
+ if(hit.kind==ShotKind::Player){if(const auto* p=playerById(hit.index))hurtPlayer(*p,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
  if(hit.kind==ShotKind::Drone){damageEngineerDrone(hit.index,damageOverride>0?damageOverride:definition.actorDamage,attacker);if(playerFired)m_hitFlash=1;return;}
- if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,0};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,-1,.8f,false);return;}
+ if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,m_shooter};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,-1,.8f,false);return;}
  if(hit.kind==ShotKind::Actor){const auto&actor=world.actorTracks().at(size_t(hit.index));if(!actor.health)return;const auto&pose=world.actorPose(size_t(hit.index));int previous=std::clamp(state(actor.damageState),0,actor.health);int damage=previous+std::min(actor.health-previous,int(std::ceil(std::min(damageOverride>0?damageOverride:definition.actorDamage,float(actor.health)))));setState(actor.damageState,damage);if(playerFired)m_hitFlash=1;
   hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,humanActorVisual(actor.visual)?-1:int(actor.visual==ActorVisual::Wasp?CreatureKind::Wasp:CreatureKind::Huntsman),damage>=actor.health?1.5f:.9f,damage>=actor.health);
   bool killed=damage>=actor.health;if(killed){setState(actor.deadState,1);setState(actorPositionState(actor.deadState,0),int(std::round(pose.position.x*1000)));setState(actorPositionState(actor.deadState,1),int(std::round(pose.position.y*1000)));setState(actorPositionState(actor.deadState,2),int(std::round(pose.z*1000)));if(!humanActorVisual(actor.visual)){if(hit.level==m_level)++m_kills;else ++m_chunks[hit.level].kills;}}
@@ -136,13 +137,13 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  }
  if(hit.kind==ShotKind::Enemy){auto&enemy=(hit.level==m_level?m_enemies:m_chunks[hit.level].enemies).at(size_t(hit.index));
   // A gunshot wound is a stimulus: the creature turns on the shooter even if it never saw them.
-  if(playerFired&&enemy.alive){enemy.recognition=1;enemy.lastKnown=m_player.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=m_player.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
+  if(playerFired&&enemy.alive){const Player& by=*(playerById(m_shooter)?playerById(m_shooter):&players().front())->body;enemy.aggro=m_shooter;enemy.aggroTime=m_elapsed;enemy.recognition=1;enemy.lastKnown=by.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=by.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
   // A hide (the cursed equipment's steel) turns most of a round; a blast is not a round.
   const float armour=m_blastShot?1.f:creatureTraits(enemy.kind).armour;
   const float dealt=(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance))*armour;const Point3 local{shift.x,shift.y,0};const bool living=enemy.alive;
   if(living)enemy.wound(origin+local,direction);
   const float flinch=enemy.painFlash;
-  bool killed=applyEnemyDamage(enemy,dealt,playerFired,playerFired&&hit.damageDistance<definition.closeHitStop,hit.level);
+  bool killed=applyEnemyDamage(enemy,dealt,playerFired,playerFired&&m_shooter==0&&hit.damageDistance<definition.closeHitStop,hit.level);   // the hit-stop is the local shooter's
   // What a hide turns sparks off it as off any steel, and it does not flinch at it.
   if(armour<1&&living){enemy.painFlash=killed?enemy.painFlash:flinch;sparkBurst(hit.level,hit.point+local,direction*-1.f,.95f,14,false);}
   // It goes down the way the round was travelling.

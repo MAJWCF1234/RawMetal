@@ -177,6 +177,9 @@ struct ScriptEvent {
  StateId id=0;int level=0;float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100;StateId requireState=0;int requireValue=1;bool requireEnemiesClear=false,once=true;
  // rearm: fire once each time the gates become true (latched in the fired list), instead of once ever.
  Scope scope=Scope::Box;bool matchAny=false,rearm=false;std::vector<ScriptCondition> conditions;
+ // SCRIPT_TRIGGER players=all (map format 2): ready only when it is ready for every player (in co-op, all of
+ // them in the box); players=any, the default, fires for whichever player it is ready for (single player: you).
+ bool allPlayers=false;
  std::vector<ScriptAction> actions;
 };
 }

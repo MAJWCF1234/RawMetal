@@ -47,7 +47,7 @@ static bool sameMapName(const std::string& a,const std::string& b){
 }
 
 Match::Match(Game& game):m_game(game),m_session(game.m_netSession){}
-Match::~Match()=default;
+Match::~Match(){m_game.m_remoteBodies.clear();m_game.m_netHurts.clear();m_game.m_netUses.clear();m_game.m_scriptFx.clear();}
 
 void Match::send(const PeerId& to,std::uint8_t channel,const wire::Writer& w,bool reliable){
  if(!m_session||to.empty()||to==m_self)return;
@@ -151,7 +151,7 @@ void Match::startWorld(std::shared_ptr<const CustomCampaign> campaign,int level)
  m_campaign=campaign;m_mapName=campaign->name;
  if(m_mode==Mode::Deathmatch)clearCreatures();
  m_spawns.clear();buildSpawns();
- m_pickupSeen.clear();m_doorSeen.clear();m_doorTouched.clear();m_doorLevel=-1;m_creatureTargets.clear();m_creatureLevel=-1;
+ m_pickupSeen.clear();m_doorSeen.clear();m_doorTouched.clear();m_doorLevel=-1;m_creatureTargets.clear();m_creatureLevel=-1;clearCoop();
  m_lastLevel=g.m_level;m_phase=Phase::Playing;m_played=true;
 }
 
@@ -200,6 +200,7 @@ void Match::handleControl(const Packet& p){
     wire::Writer w;w.u8(PickupsInit);std::vector<std::pair<int,int>> taken;
     for(int level=0;level<m_game.chunkCount();++level)if(m_game.chunkResident(level)){const auto& list=m_game.chunkPickups(level);for(size_t i=0;i<list.size();++i)if(!list[i].active)taken.push_back({level,int(i)});}
     w.u16(unsigned(taken.size()));for(auto [level,i]:taken)w.u8(unsigned(level)).u16(unsigned(i));send(p.from,Events,w,true);
+    sendStateSync(true,&p.from);   // the whole state store, as it stands (MatchCoop.cpp)
    }
    if(already&&s.haveState)s.spawned=true;else respawn(slot);
    if(m_over){wire::Writer w;w.u8(RoundOver).str(m_winner);send(p.from,Events,w,true);}

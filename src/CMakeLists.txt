@@ -91,6 +91,7 @@ add_executable(RawMetal WIN32
     net/EosSession.cpp
     net/Match.cpp
     net/MatchPlay.cpp
+    net/MatchCoop.cpp
     net/MatchTest.cpp
     game/MultiplayerMenu.cpp
     renderer/RemotePlayers.cpp

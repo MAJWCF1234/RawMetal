@@ -148,7 +148,8 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
  else civilianEscortIntent(world,level,actor,track,pose,dt,enemies,goal,goalZ,wantsMove,speedScale);
  bool wantCrouch=false;
  if(config.mode==ActorAiMode::Guard&&!get("evac_level"))wantCrouch=get("guard_cover_mode")==2||get("guard_under_fire")>0||get("weapon_reload")>0||get("weapon_reloading")||(track.health>0&&state(track.damageState)>=int(track.health*.65f));
- if((config.mode==ActorAiMode::Escort||config.mode==ActorAiMode::Civilian)&&level==m_level&&m_player.crouched&&length(pose.position-m_player.pos)<3.5f)wantCrouch=true;
+ // A crouching player close by (any of them) has him crouch too.
+ if((config.mode==ActorAiMode::Escort||config.mode==ActorAiMode::Civilian)&&level==m_level)for(const auto& p:players())if(p.body->crouched&&length(pose.position-p.body->pos)<3.5f){wantCrouch=true;break;}
  float crouchHeight=npcCrouchedHeight(track);
  if(!wantCrouch&&grounded&&!friendlyBodyFits(level,pose.position,pose.z,standing)&&friendlyBodyFits(level,pose.position,pose.z,crouchHeight))wantCrouch=true;
  // Duck before the standing planner rejects a low passage. Both sweeps retain
@@ -230,8 +231,9 @@ ActorPose Game::updateFriendlyAI(World& world,int level,size_t actor,const Actor
      if(progress>best&&friendlyWalkSegment(level,pose.position,pose.z,component,height,&z)){best=progress;slide=component;slideZ=z;}}
     if(best>0){next=slide;feet=slideZ;clear=true;}
    }
-   auto player=m_player.pos+chunkOffset(m_level)-chunkOffset(level);
-  if(feet<m_player.z+m_player.hullHeight()&&feet+height>m_player.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;
+   // No player's body is walked through.
+   for(const auto& p:players()){const Player& b=*p.body;auto player=b.pos+chunkOffset(m_level)-chunkOffset(level);
+  if(feet<b.z+b.hullHeight()&&feet+height>b.z&&std::fabs(next.x-player.x)<.45f&&std::fabs(next.y-player.y)<.45f&&lengthSq(next-player)<lengthSq(pose.position-player))clear=false;}
    for(const auto&enemy:enemies)if(enemy.alive&&enemy.bodyBottom()<feet+height&&enemy.bodyTop()>feet&&lengthSq(next-enemy.pos)<(enemy.contactRadius()+.2f)*(enemy.contactRadius()+.2f)&&lengthSq(next-enemy.pos)<lengthSq(pose.position-enemy.pos))clear=false;
   for(const auto&drone:drones){if(feet>=drone.position.z+EngineerDroneHeight||feet+height<=drone.position.z)continue;auto shift=chunkOffset(drone.level)-chunkOffset(level);Vec2 body{drone.position.x+shift.x,drone.position.y+shift.y};
    if(lengthSq(next-body)<.85f*.85f&&lengthSq(next-body)<lengthSq(pose.position-body))clear=false;

@@ -86,7 +86,10 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  float eye=pose.z+friendlyHullHeight(actor,track)*.85f;auto previous=guardTarget(actor);
  bool freshHit=(track.damageState&&state(track.damageState)>get("guard_damage"))||get("hit_source");
  Vec2 playerLocal=m_player.pos+chunkOffset(m_level)-globalOrigin;
- bool nearThreat=(factionsHostile(npcFaction(track),AiFaction::Player)&&lengthSq(playerLocal-pose.position)<3.f*3.f&&std::fabs(m_player.z-pose.z)<track.scale)||(previous.valid()&&lengthSq(previous.position-pose.position)<3.f*3.f);
+ // Any player close by (players(): single player, the player).
+ bool nearThreat=false;
+ if(factionsHostile(npcFaction(track),AiFaction::Player))for(const auto& p:players()){const Vec2 at=p.body->pos+chunkOffset(m_level)-globalOrigin;if(lengthSq(at-pose.position)<3.f*3.f&&std::fabs(p.body->z-pose.z)<track.scale){nearThreat=true;break;}}
+ nearThreat=nearThreat||(previous.valid()&&lengthSq(previous.position-pose.position)<3.f*3.f);
  if(!nearThreat)for(size_t i=0;i<m_friendlyActors.size();++i){const auto&other=m_friendlyActors[i];const auto&t=other.track();
   if(i==actor||!t.health||npcIncapacitated(i)||(t.deadState&&state(t.deadState))||!factionsHostile(npcFaction(track),npcFaction(t)))continue;
   if(lengthSq(other.pose.position+chunkOffset(other.level)-globalOrigin-pose.position)<9.f&&std::fabs(other.pose.z-pose.z)<track.scale){nearThreat=true;break;}
@@ -121,7 +124,7 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   if(!get("guard_memory")||!get("guard_target_kind"))return false;
   auto kind=ShotKind(get("guard_target_kind"));int targetLevel=get("guard_target_level")-1,index=get("guard_target_index")-1;
   Vec2 position{};float feet=0,corpseEye=.25f;
-  if(kind==ShotKind::Player){if(!dead())return false;targetLevel=m_level;position=m_player.pos;feet=m_player.z;}
+  if(kind==ShotKind::Player){const auto* p=playerById(index);if(!p||p->alive())return false;targetLevel=m_level;position=p->body->pos;feet=p->body->z;}
   else if(kind==ShotKind::Npc){
    if(index<0||size_t(index)>=m_friendlyActors.size()||size_t(index)==actor)return false;
    const auto&other=m_friendlyActors[size_t(index)];const auto&t=other.track();
@@ -180,7 +183,9 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
    auto worldBody=buddy.pose.position+chunkOffset(buddy.level)-chunkOffset(m_level);
    if(!soundRayClear(observer,eye,worldBody,bodyEye))continue;
    remember(buddy.pose.position+chunkOffset(buddy.level),buddy.pose.z);
-   AiTarget blame{ShotKind::Player,m_level,0};blame.position=m_player.pos+chunkOffset(m_level)-globalOrigin;blame.feet=m_player.z;blame.height=m_player.hullHeight();blame.eye=m_player.eye;blame.faction=AiFaction::Player;
+   // He blames the player nearest him (single player: the player).
+   const PlayerView& culprit=nearestPlayer(observer,pose.z);const Player& cb=*culprit.body;
+   AiTarget blame{ShotKind::Player,m_level,culprit.id};blame.position=cb.pos+chunkOffset(m_level)-globalOrigin;blame.feet=cb.z;blame.height=cb.hullHeight();blame.eye=cb.eye;blame.faction=AiFaction::Player;
    rememberGuardTarget(actor,blame);previous=blame;confirmed=true;recognition=config.recognitionMs;casualty=true;
    mode=visible?GuardState::Alert:GuardState::Investigate;break;
   }
@@ -196,9 +201,9 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
   // all buy time (at the end of his sight, three times as long before the rest).
   // The creatures make the player out by the same formula (Perception.h).
   float rate=1.f;
-  if(target.kind==ShotKind::Player&&!confirmed&&!casualty){
+  if(target.kind==ShotKind::Player&&!confirmed&&!casualty&&playerById(target.index)){const PlayerView& seen=*playerById(target.index);
    auto toward=target.position-pose.position;float dz=target.feet+target.eye-eye,distance=std::sqrt(lengthSq(toward)+dz*dz);
-   rate=aiRecognitionRate(distance,config.sightRange,dot(normalized(toward),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)}),config.sightDot,m_player.crouched,length(m_velocity),m_playerExposure);
+   rate=aiRecognitionRate(distance,config.sightRange,dot(normalized(toward),Vec2{std::sin(pose.yaw),std::cos(pose.yaw)}),config.sightDot,seen.body->crouched,length(playerVelocity(seen)),playerLit(seen));
    // A squad on Caution knows someone is about: near or far, it makes them out sooner.
    if(guardCaution(actor))rate*=1.6f;
   }
@@ -266,7 +271,8 @@ void Game::guardIntent(int level,size_t actor,const ActorTrack& track,ActorPose&
  // up over a man making them out, the sting on his '!' (once per detection,
  // however often cover breaks his line); several men at once sound once.
  if(!confirmed)put("guard_sting",0);
- if(visible&&target.kind==ShotKind::Player&&guardHostileToPlayer(actor)){
+ // (The stings are the local player's own: a guard making out another player plays none here.)
+ if(visible&&target.kind==ShotKind::Player&&guardHostileToPlayer(actor)&&playerById(target.index)&&playerById(target.index)->local){
   if(mode==GuardState::Alert&&confirmed&&!get("guard_sting")){put("guard_sting",1);if(m_alarmSting<=0){sound(Sound::DetectSting,.9f);m_alarmSting=.4f;}}
   else if(mode==GuardState::Suspicious&&oldMode!=int(GuardState::Suspicious)&&!oldRecognition&&m_alarmTick<=0){sound(Sound::SuspicionTick,.5f);m_alarmTick=.8f;}
  }

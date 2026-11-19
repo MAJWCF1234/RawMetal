@@ -109,7 +109,7 @@ void Game::updateEngineerDrones(float dt){
   Point3 p{get("x")*.001f-origin.x+get("x_fraction")*.000001f,get("y")*.001f-origin.y+get("y_fraction")*.000001f,get("z")*.001f};Vec2 here{p.x,p.y},ownerLocal=npc.pose.position+chunkOffset(npc.level)-origin;
   auto target=guardTarget(size_t(owner));bool confirmed=state(friendlyKey(size_t(owner),"guard_confirmed"))&&state(friendlyKey(size_t(owner),"guard_memory"));auto live=confirmed?resolveGuardTarget(size_t(owner),{target.kind,target.level,target.index}):AiTarget{};
   // A player shut in a locker is behind steel: the drone has nothing to aim at.
-  if(live.kind==ShotKind::Player&&hiddenLocker()>=0)live={};
+  if(live.kind==ShotKind::Player&&playerById(live.index)&&playerHidden(*playerById(live.index)))live={};
   Point3 eye{p.x+shift.x,p.y+shift.y,p.z+EngineerDroneHeight*.85f},aim{};ShotHit hit;bool seen=false;
   if(live.valid()){auto ownerShift=chunkOffset(npc.level)-active;aim={live.position.x+ownerShift.x,live.position.y+ownerShift.y,live.feet+live.height*.6f};auto direction=aim-eye;float range=norm3(direction);
    if(range>.01f&&range<12){hit=traceShot(eye,direction,range+.05f,-1,true,nullptr,{ShotKind::Drone,level,slot});seen=sameTarget(hit,live);}
@@ -151,7 +151,7 @@ void Game::updateEngineerDrones(float dt){
    auto deltaWay=waypoint-here;float distance=length(deltaWay);auto direction=normalized(deltaWay);auto end=here+direction*std::min(distance,1.6f*dt);float feet=-10000;bool clear=true;
    for(float x:{-.4f,0.f,.4f})for(float y:{-.4f,0.f,.4f}){float supported=p.z;clear&=friendlyWalkSegment(level,here+Vec2{x,y},p.z,end+Vec2{x,y},EngineerDroneHeight,&supported);feet=std::max(feet,supported);}
    auto activeEnd=end+origin-active;auto bodyOverlap=[&](Vec2 point,float bottom,float top,float radius){float combined=EngineerDroneRadius+radius;if(feet<top&&feet+EngineerDroneHeight>bottom&&lengthSq(activeEnd-point)<combined*combined)clear=false;};
-   bodyOverlap(m_player.pos,m_player.z,m_player.z+m_player.hullHeight(),.2f);
+   for(const auto& pl:players())bodyOverlap(pl.body->pos,pl.body->z,pl.body->z+pl.body->hullHeight(),.2f);
    for(const auto&other:m_friendlyActors)if(autonomousActor(other.track())&&other.pose.clip!=4&&(!other.track().deadState||!state(other.track().deadState)))bodyOverlap(other.pose.position+chunkOffset(other.level)-active,other.pose.z,other.pose.z+other.track().scale,.25f);
    for(int chunk=0;chunk<chunkCount();++chunk)if(chunkResident(chunk)){auto off=chunkOffset(chunk)-active;const auto&enemies=chunk==m_level?m_enemies:m_chunks[chunk].enemies;for(const auto&enemy:enemies)if(enemy.alive)bodyOverlap(enemy.pos+off,enemy.bodyBottom(),enemy.bodyTop(),enemy.kind==Enemy::Kind::Wasp?.28f:.4f);
     const auto&world=friendlyWorld(chunk);for(size_t index=0;index<world.actorTracks().size();++index){const auto&other=world.actorTracks()[index];const auto&pose=world.actorPose(index);if(other.ai.mode==ActorAiMode::Scripted&&!other.platform&&pose.clip!=4&&(!other.deadState||!state(other.deadState)))bodyOverlap(pose.position+off,pose.z,pose.z+other.scale,other.visual==ActorVisual::Cargo?other.scale*.5f:.2f);}}

@@ -5,7 +5,8 @@ AiTarget Game::resolveGuardTarget(size_t actor,AiTargetRef ref)const{
  perf::count(perf::GuardTargets);
  AiTarget target;if(actor>=m_friendlyActors.size()||npcIncapacitated(actor))return target;auto origin=chunkOffset(m_friendlyActors[actor].level);
  target.kind=ref.kind;target.level=ref.level;target.index=ref.index;
- if(ref.kind==ShotKind::Player){if(dead())return {};target.level=m_level;target.index=0;target.position=m_player.pos;target.feet=m_player.z;target.height=m_player.hullHeight();target.eye=m_player.eye;target.faction=AiFaction::Player;}
+ // A player: index is its players() id (single player: the player, 0).
+ if(ref.kind==ShotKind::Player){const auto* p=playerById(ref.index);if(!p||!p->alive())return {};const Player& b=*p->body;target.level=m_level;target.index=p->id;target.position=b.pos;target.feet=b.z;target.height=b.hullHeight();target.eye=b.eye;target.faction=AiFaction::Player;}
  else if(ref.kind==ShotKind::Npc){if(ref.index<0||size_t(ref.index)>=m_friendlyActors.size()||size_t(ref.index)==actor||npcIncapacitated(size_t(ref.index)))return {};const auto&npc=m_friendlyActors[size_t(ref.index)];const auto&t=npc.track();if(!autonomousActor(t)||npc.pose.clip==4||!t.health||(t.deadState&&state(t.deadState)))return {};float body=friendlyHullHeight(size_t(ref.index),t);target.level=npc.level;target.position=npc.pose.position;target.feet=npc.pose.z;target.height=body;target.eye=body*.85f;target.faction=npcFaction(t);}
  else if(ref.kind==ShotKind::Enemy){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&enemies=ref.level==m_level?m_enemies:m_chunks[ref.level].enemies;if(ref.index<0||size_t(ref.index)>=enemies.size()||!enemies[size_t(ref.index)].alive)return {};const auto&e=enemies[size_t(ref.index)];target.position=e.pos;target.feet=e.bodyBottom();target.height=e.bodyTop()-e.bodyBottom();target.eye=target.height*.65f;target.faction=e.faction;}
  else if(ref.kind==ShotKind::Actor){if(ref.level<0||ref.level>=chunkCount()||!chunkResident(ref.level))return {};const auto&w=ref.level==m_level?m_world:m_chunks[ref.level].world;if(ref.index<0||size_t(ref.index)>=w.actorTracks().size())return {};const auto&t=w.actorTracks()[size_t(ref.index)];const auto&p=w.actorPose(size_t(ref.index));if(t.ai.mode!=ActorAiMode::Scripted||state(actorAiState(ref.level,size_t(ref.index),t.timerState,"restraint"))||t.platform||!t.health||p.clip==4||(t.deadState&&state(t.deadState))||(t.ai.enableState&&!state(t.ai.enableState)))return {};target.position=p.position;target.feet=p.z;target.height=t.scale;target.eye=t.scale*.85f;target.faction=npcFaction(t);}
@@ -30,13 +31,14 @@ bool Game::guardCanSee(size_t actor,const ActorPose&pose,const AiTarget&target)c
  perf::count(perf::GuardSight);
  if(actor>=m_friendlyActors.size()||npcIncapacitated(actor)||!target.valid())return false;auto live=resolveGuardTarget(actor,{target.kind,target.level,target.index});if(!live.valid())return false;const auto&npc=m_friendlyActors[actor];const auto&c=npc.track().ai;float eye=friendlyHullHeight(actor,npc.track())*.85f;auto delta=live.position-pose.position;float z=live.feet+live.eye-pose.z-eye;
  // Steel doors: nobody outside a locker sees the player shut in it.
- if(live.kind==ShotKind::Player&&hiddenLocker()>=0)return false;
+ const PlayerView* seenPlayer=live.kind==ShotKind::Player?playerById(live.index):nullptr;
+ if(seenPlayer&&playerHidden(*seenPlayer))return false;
  // Crouched targets present a smaller silhouette; shrink recognition range so
  // sneaking closer is required before the cone can lock on.
- float range=c.sightRange;if(live.kind==ShotKind::Player&&m_player.crouched)range*=.55f;else if(live.height<Player::StandingHeight*.75f)range*=.55f;
+ float range=c.sightRange;if(seenPlayer&&seenPlayer->body->crouched)range*=.55f;else if(live.height<Player::StandingHeight*.75f)range*=.55f;
  // In shadow the player is a shape he has to be close to make out; once he
  // has confirmed them he keeps tracking whatever the light.
- if(live.kind==ShotKind::Player&&!state(friendlyKey(actor,"guard_confirmed")))range*=.55f+.45f*std::min(1.f,m_playerExposure*2.f);
+ if(seenPlayer&&!state(friendlyKey(actor,"guard_confirmed")))range*=.55f+.45f*std::min(1.f,playerLit(*seenPlayer)*2.f);
  // A squad on Caution sees 15% further (looked up only where that decides it),
  // and so does a man in Alert: the Alert that ends Caution must not shorten
  // the sight that made it, or he loses the player the frame he finds them.
@@ -52,7 +54,7 @@ AiTarget Game::guardThreat(size_t actor,const ActorPose&pose)const{
   if(!factionsHostile(faction,t.faction)&&!personal)return;if(!guardCanSee(actor,pose,t))return;
   float height=t.feet-pose.z,value=lengthSq(t.position-pose.position)+height*height;if(personal)value*=.8f;if(value<score){best=t;score=value;}
  };
- consider({ShotKind::Player,m_level,0});
+ for(const auto& p:players())consider({ShotKind::Player,m_level,p.id});
  for(size_t i=0;i<m_friendlyActors.size();++i)if(i!=actor)consider({ShotKind::Npc,m_friendlyActors[i].level,int(i)});
  for(const auto&drone:engineerDrones())consider({ShotKind::Drone,drone.level,drone.slot});
  for(int level=0;level<chunkCount();++level)if(chunkResident(level)){const auto&w=level==m_level?m_world:m_chunks[level].world;const auto&enemies=level==m_level?m_enemies:m_chunks[level].enemies;
@@ -72,7 +74,7 @@ bool Game::guardMeleeReady(size_t actor,const ActorPose&pose,const AiTarget&t)co
 }
 void Game::damageGuardTarget(size_t actor,float amount){
  auto t=guardTarget(actor);if(!t.valid())return;const auto&npc=m_friendlyActors[actor];auto shift=chunkOffset(npc.level)-chunkOffset(m_level);Point3 from{npc.pose.position.x+shift.x,npc.pose.position.y+shift.y,npc.pose.z+npc.track().scale*.65f},to{t.position.x+shift.x,t.position.y+shift.y,t.feet+t.height*.6f};auto direction=to-from;float distance=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(distance>.001f)direction=direction*(1/distance);
- if(t.kind==ShotKind::Player){receiveDamage(amount,{from.x,from.y},true);return;}
+ if(t.kind==ShotKind::Player){if(const auto* p=playerById(t.index))hurtPlayer(*p,amount,{from.x,from.y},true);return;}
  resolveShot({t.kind,t.level,t.index,distance,distance,to,{}},from,direction,weaponDef(WeaponId::Shotgun).hitscan,false,amount,{ShotKind::Npc,npc.level,int(actor)});
 }
 bool Game::guardCovered(size_t actor,const ActorPose&pose,const AiTarget&t)const{
