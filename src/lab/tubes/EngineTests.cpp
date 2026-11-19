@@ -5,6 +5,9 @@
 #include "lab/LabAccess.h"
 #include "renderer/Carcass.h"
 #include "vr/VrRuntime.h"
+#include "net/Loopback.h"
+#include "net/Match.h"
+#include "net/EosSession.h"
 #include "world/CampaignExport.h"
 #include "world/CampaignMaps.h"
 #include "world/Primitives.h"
@@ -15,6 +18,9 @@ namespace retro::lab {
 namespace {
 bool engine(const char* name,const char* summary,bool(*run)()){return add({.name=std::string("engine.")+name,.summary=summary,.standalone=run});}
 const bool registered=[]{
+ engine("net-loopback","--net-loopback-test: the in-memory session hub: lobbies, codes, quick match, host hand-over, packets",+[]{std::ofstream r("net-loopback-test.txt");return net::testLoopback(r);});
+ engine("net","--net-test: matches over the loopback hub: several Games in one process play deathmatch and co-op",+[]{std::ofstream r("net-test.txt");return net::testMatch(r);});
+ engine("eos","--eos-test: signs in to Epic's Dev sandbox, hosts a lobby, finds it, leaves (needs the internet and baked keys)",+[]{std::ofstream r("eos-test.txt");return net::testEos(r);});
  engine("vr","--vr-test: the avatar's solve, arms and mirror chain, the fore-end snap, comfort maths and menu, hand hardening (no headset)",+[]{std::ofstream r("vr-test.txt");return VrRuntime::testAll(r);});
  engine("vr-bench","one Quest eye headless at render scales 1-0.7 (timings in vr-bench.txt; passes when Vulkan draws)",+[]{std::ofstream r("vr-bench.txt");return SoftwareRenderer::benchVrEye(r);});
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);

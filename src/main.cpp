@@ -14,6 +14,9 @@
 #include "world/CustomCampaign.h"
 #include "world/Primitives.h"
 #include "vr/VrRuntime.h"
+#include "net/Loopback.h"
+#include "net/Match.h"
+#include "net/EosSession.h"
 #include <windows.h>
 #include <commctrl.h>
 #include <shellapi.h>
@@ -2239,6 +2242,9 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
      // A correct hold measures about .07-.08 m (the rig's hands are large for the
      // pistol); a hand slid off the grip or a finger off the trigger goes past .095.
      report<<"worst grip error "<<worst<<"\nworst finger contact "<<contact<<" m\n";return worst<.025f&&contact<.095f?0:10;}
+    if(commandArguments().find(L"--net-loopback-test")){std::ofstream report("net-loopback-test.txt");return retro::net::testLoopback(report)?0:61;}
+    if(commandArguments().find(L"--net-test")){std::ofstream report("net-test.txt");return retro::net::testMatch(report)?0:62;}
+    if(commandArguments().find(L"--eos-test")){std::ofstream report("eos-test.txt");return retro::net::testEos(report)?0:63;}
     if(commandArguments().find(L"--vr-test")){std::ofstream report("vr-test.txt");const bool passed=retro::VrRuntime::testAll(report);return passed?0:60;}
     bool vrMode=commandArguments().find(L"--vr")!=nullptr;
     // Double-clicked with a headset SteamVR can see: ask PC or VR. Without one there is nothing to ask.

@@ -86,6 +86,11 @@ add_executable(RawMetal WIN32
     game/Physgloves.cpp
     game/TwoHand.cpp
     game/Avatar.cpp
+    net/Loopback.cpp
+    net/EosSession.cpp
+    net/Match.cpp
+    game/MultiplayerMenu.cpp
+    renderer/RemotePlayers.cpp
     game/VrHands.cpp
     game/Liquids.cpp
     game/physics/Vectra.cpp

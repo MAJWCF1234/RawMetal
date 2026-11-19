@@ -30,6 +30,8 @@
 #include <iosfwd>
 #include <utility>
 #include <optional>
+#include "../net/NetTypes.h"
+namespace retro::net{class Match;}
 #include <tuple>
 #include <cstdint>
 #include "Ragdoll.h"
@@ -364,7 +366,8 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
- int pullHighlight=1;};   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+ int pullHighlight=1;
+ int character=0;};       // the body you play as and others see: 0 Claire, 1 the Limitator (male)   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 
@@ -398,6 +401,14 @@ public:
     bool menuFromTitle()const{return m_menuFromTitle;}
 
     void update(const InputState& input, float dt);
+    // Multiplayer (src/net, docs/Systems/multiplayer.md). main owns the Session (EOS, or none); the Match is
+    // the game over it and fills remotePlayers and matchView, which the menus, HUD and renderer read.
+    void setNetSession(net::Session* session){m_netSession=session;}
+    net::Session* netSession()const{return m_netSession;}
+    net::Match* match()const{return m_match.get();}
+    const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
+    const net::MatchView& matchView()const{return m_matchView;}
+    bool inMatch()const{return m_matchView.active;}
     void moveVrRoom(Vec2 delta){tryMove(delta);}
     void setVrAim(Point3 position,Point3 direction,bool valid,bool support=false){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;m_vrSupportGrip=support&&valid;}
     // up: the hand's own up (the controller's, mapped to game space as its pointing is); left zero, the up nearest the
@@ -1722,6 +1733,11 @@ private:
     bool crateFree(const World& w,size_t index,Vec2 at)const;
     void restoreCrates(World& w,int level)const;
     Player m_player;
+    net::Session* m_netSession=nullptr;          // multiplayer: not owned, not saved
+    std::shared_ptr<net::Match> m_match;          // live while in a match (Match.h)
+    std::vector<net::RemotePlayer> m_remotePlayers;
+    net::MatchView m_matchView;
+    friend class net::Match;
     std::vector<Enemy> m_enemies;
     std::vector<FriendlyActor> m_friendlyActors;
     std::vector<AiStimulus> m_guardShots;
