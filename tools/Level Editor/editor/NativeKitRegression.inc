@@ -44,8 +44,10 @@
     SendMessageW(window, WM_COMMAND, ToolBase + 8, 0);
     layout();
     partTab = parts::Kits;
+    if (modelSearch) // a search an earlier check left would narrow the page
+      SetWindowTextW(modelSearch, L"");
     refreshParts();
-    require(int(partsGrid.items.size()) == KitCount, "the Kits tab does not show every kit");
+    require(int(partsGrid.items.size()) == KitCount, "the Kits tab shows " + std::to_string(partsGrid.items.size()) + " of " + std::to_string(KitCount) + " kits");
     int tile = -1;
     for (size_t i = 0; i < partsGrid.items.size(); ++i)
       if (partsGrid.items[i].key == "kit-kit_office")
