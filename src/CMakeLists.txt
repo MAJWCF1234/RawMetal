@@ -355,6 +355,8 @@ if(MSVC)
     message(FATAL_ERROR "RAWMETAL_PGO_PHASE must be OFF, GENERATE or USE")
   endif()
   set_source_files_properties(vr/VrRuntime.cpp ThirdParty/ufbx/ufbx.c PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/O1>")
+  # The built-in tests (--each-test, --net-test, ...) never run in play: built for size, they keep the exe under its cap.
+  set_source_files_properties(game/CampaignMapTest.cpp net/MatchTest.cpp game/MapFormatTest.cpp renderer/ParticlesTest.cpp game/ServiceMapTest.cpp game/WorldIsolationTest.cpp game/EngineRegressionTest.cpp game/DoorAxisTest.cpp game/GameplayRegressionTest.cpp game/ExclusionTest.cpp renderer/ThirdPersonTest.cpp game/ExclusionAuthoringTest.cpp game/PrologueTest.cpp game/GantryTest.cpp renderer/SkyboxTest.cpp renderer/SurfaceSetTest.cpp game/ZonePeopleTest.cpp PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:/O1>")
 else()
   target_compile_options(RawMetal PRIVATE -Wall -Wextra -Wpedantic)
 endif()
