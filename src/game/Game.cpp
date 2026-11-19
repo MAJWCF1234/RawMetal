@@ -372,7 +372,7 @@ void Game::shoot(){
  const float pitchVary=gun.cycle.fullAuto?.94f+.12f*nextSpreadRandom():1.f;
  m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,pitchVary,false,17,origin.z});
  // The pistols throw their brass with every round (the pump gun when it is worked).
- if(sidearm(m_equippedWeapon)&&!(m_vrAimValid&&m_equippedWeapon==WeaponId::Handgun))ejectCasing(m_equippedWeapon==WeaponId::Handgun?1:2,ejectionPort(m_equippedWeapon),ejectionVelocity(m_equippedWeapon));
+ if(sidearm(m_equippedWeapon)&&!(m_vrAimValid&&vrMagazineGun(m_equippedWeapon)))ejectCasing(m_equippedWeapon==WeaponId::Handgun?1:2,ejectionPort(m_equippedWeapon),ejectionVelocity(m_equippedWeapon));
  // In a match the host traces every shot, its own included (Match.cpp); the flash and recoil stay here.
  if(m_match&&m_match->localShot(origin,direction,int(m_equippedWeapon)))return;
  auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);

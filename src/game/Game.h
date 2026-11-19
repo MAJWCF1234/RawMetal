@@ -583,7 +583,7 @@ public:
     // measurements, so the game and its tests agree with the drawing without a renderer.
     //  muzzle: where the bore leaves the gun; rearSight/frontSight: the tops of the sights (the sight line);
     //  port: the ejection port (where a case is thrown from); magwell: the seated magazine's base, magAxis the way
-    //  it slides up into the grip, magLength how far; slideRear: where a hand takes the slide to rack it;
+    //  it slides up into the grip, magLength how far; slideRear: where a hand takes the slide (the MAC-11: its charging knob) to rack it;
     //  loadingPort: under the receiver, where shells go into the tube.
     struct VrGunGeometry {Point3 muzzle{},rearSight{},frontSight{},port{},magwell{},magAxis{0,1,0},slideRear{},loadingPort{};float magLength=.11f;};
     static void setVrGunGeometry(WeaponId id,const VrGunGeometry& geometry);
@@ -605,17 +605,21 @@ public:
     // What the VR drawing shows: held 0 nothing in the support hand, 1 a magazine, 2 a shell; seat how far it is
     // into its port (0 at the opening to 1 home; -1 not at it) and depth the magazine's base below its seated place
     // (m); the pistol's magazine out and slide travel back (m); the magazine last dropped, falling or on the floor.
-    struct VrGunView {int held=0;float seat=-1,depth=0;bool magOut=false;float slide=0;bool dropped=false;Point3 dropAt{},dropRight{},dropUp{},dropBack{};};
+    struct VrGunView {int held=0;float seat=-1,depth=0;bool magOut=false;float slide=0;bool dropped=false;Point3 dropAt{},dropRight{},dropUp{},dropBack{};WeaponId dropGun=WeaponId::Handgun;};
     VrGunView vrGunView()const;
-    // The VR reload button (B on the gun hand): drops the handgun's magazine, or with a loaded one in on a locked-back
-    // slide, releases the slide. The shotgun loads by hand only: the button does nothing to it.
+    // The VR reload button (B on the gun hand): drops the handgun's or the MAC-11's magazine, or (the handgun only)
+    // with a loaded one in on a locked-back slide, releases the slide. The shotgun loads by hand only: the button
+    // does nothing to it. The MAC-11 has no bolt release: its locked-back knob is pulled back by hand.
     void vrReloadButton();
-    // The trigger may fire: the handgun has a round chambered, the shotgun has been pumped.
+    // The trigger may fire: the handgun or MAC-11 has a round chambered, the shotgun has been pumped.
+    // vrMagazineGun: a gun the VR hands reload by magazine (the handgun, the MAC-11).
+    static constexpr bool vrMagazineGun(WeaponId id){return id==WeaponId::Handgun||id==WeaponId::MachinePistol;}
     bool vrGunReady()const;
     // The support hand holds a magazine or shell, or has just put one in and has not opened since: no fore-end snap,
     // no two-hand hold and no grab for it until it opens.
     bool vrSupportBusy()const{return m_vrGun.held!=0||m_vrGun.spentGrip;}
-    // A support-hand fist here would take the handgun's slide (it needs racking: nothing chambered).
+    // A support-hand fist here would take the handgun's slide or the MAC-11's charging knob (it needs racking:
+    // nothing chambered).
     bool vrRackZone(Point3 fist)const;
     bool vrRacking()const{return m_vrGun.racking;}
     static bool testVrGuns(std::ostream& report);
@@ -2073,7 +2077,7 @@ private:
      bool magOut=false,chambered=false,slideBack=false,racking=false;Point3 rackFrom{};float rack=0,rackMax=0,seat=-1,depth=0;
      bool spent=false;float cycleAt=-1;
      float kickBack=0,kickBackV=0,kickRise=0,kickRiseV=0;
-     bool dropped=false,dropRest=false;Point3 dropAt{},dropVelocity{},dropRight{},dropUp{},dropBack{};float dropAge=0;} m_vrGun;
+     bool dropped=false,dropRest=false;Point3 dropAt{},dropVelocity{},dropRight{},dropUp{},dropBack{};float dropAge=0;WeaponId dropGun=WeaponId::Handgun;} m_vrGun;
     VrGunInput m_vrGunIn;
     std::vector<VrHaptic> m_vrHaptics;
     // Every case the VR guns threw through ejectCasing (kind, where, how fast), the last 16: what the tests read.

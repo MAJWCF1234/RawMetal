@@ -51,7 +51,7 @@ float axis(float value){float a=std::fabs(value);return a<.18f?0:std::copysign(s
 }
 struct VrRuntime::Impl {
  HMODULE dll=nullptr;void(__cdecl* shutdown)()=nullptr;vr::IVRSystem* system=nullptr;vr::IVRCompositor* compositor=nullptr;vr::IVRInput* input=nullptr;
- std::array<vr::VRActionHandle_t,13> actions{};bool crouchToggled=false,previousCrouch=false;int framesSeen=0;
+ std::array<vr::VRActionHandle_t,BindingActions> actions{};bool crouchToggled=false,previousCrouch=false;int framesSeen=0;
  // SteamVR's grip pose: the same hand frame on every controller (the legacy
  // device pose is pitched differently on Touch, Index and Vive controllers).
  vr::VRActionHandle_t grip[2]{};std::array<vr::HmdMatrix34_t,2> raw{},gripPose{};std::array<bool,2> gripValid{};
@@ -99,7 +99,7 @@ struct VrRuntime::Impl {
   // raised by the grip's rake (gunFrame). Built in tracking space like the hand, so the aim and the model agree
   // with the hand the player sees. The mesh frame's +y is the palm side (the closed fist spans y -0.03 to
   // +0.06): the grip goes through the fist, 7.5 cm along and 3 cm into the palm.
-  Point3 right,up,back;gunFrame(across,palm,forward,physical==0,right,up,back);
+  Point3 right,up,back;gunFrame(across,palm,forward,physical==0,right,up,back,gunPitch(game.equippedWeapon()));
   const Point3 grip=wrist+forward*GripAlong+palm*GripIn;
   h.gunOrigin=world(grip,game);h.gunBasis={rotateTracking(right,yaw),rotateTracking(up,yaw),rotateTracking(back,yaw)};
   track[size_t(role)]={true,wrist,across,palm,forward,grip,right,up,back};
@@ -118,7 +118,7 @@ struct VrRuntime::Impl {
   SupportPose s;
   if(supportKind==1){s=supportPose(g.grip,g.right,g.up,o.wrist,o.across,o.palm,o.forward,g_foreEnd,g_foreEndHalf,pump,side[0]==0,elbow());
    auto&gun=hands[1];gun.gunBasis={rotateTracking(s.gunRight,yaw),rotateTracking(s.gunUp,yaw),rotateTracking(s.gunBack,yaw)};}
-  else if(supportKind==2)s=pistolSupportPose(g.grip,g.right,g.up,g.back,side[0]==0);
+  else if(supportKind==2)s=pistolSupportPose(g.grip,g.right,g.up,g.back,side[0]==0,gunPitch(game.equippedWeapon()));
   else return;
   auto&h=hands[0];h.handOrigin=world(s.wrist,game);h.handBasis={rotateTracking(s.across,yaw),rotateTracking(s.palm,yaw),rotateTracking(s.forward*-1.f,yaw)};h.snapped=true;
  }
@@ -240,25 +240,10 @@ bool VrRuntime::initialize(std::string& error){
   if(!m->width||!m->height||m->width>8192||m->height>8192)throw std::runtime_error("SteamVR returned an invalid eye render size.");
   m->displayHz=m->system->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd,vr::Prop_DisplayFrequency_Float);if(!(m->displayHz>30&&m->displayHz<200))m->displayHz=90;m->timing.hz=m->displayHz;
   if(m->input){wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);auto folder=std::filesystem::path(local)/L"RawMetal/vr";std::filesystem::create_directories(folder);
-   const char* names[]={"triggerleft","triggerright","gripleft","gripright","squeezeleft","squeezeright","move","turn","jump","reload","menu","inventory","crouch"};
-   // v3 (2026-11-19): the vibration outputs (haptic pulses on shots, reloads, the pump and the holsters). SteamVR
-   // caches default bindings by file name, so a binding change takes a new name.
-   std::ofstream manifestFile(folder/L"actions.json");manifestFile<<R"({"action_sets":[{"name":"/actions/game","usage":"leftright"}],"actions":[{"name":"/actions/game/in/left","type":"skeleton","skeleton":"/skeleton/hand/left"},{"name":"/actions/game/in/right","type":"skeleton","skeleton":"/skeleton/hand/right"},{"name":"/actions/game/out/hapticleft","type":"vibration"},{"name":"/actions/game/out/hapticright","type":"vibration"})";
-   for(int i=0;i<13;++i)manifestFile<<",{\"name\":\"/actions/game/in/"<<names[i]<<"\",\"type\":\""<<(i==6||i==7?"vector2":i==4||i==5?"vector1":"boolean")<<"\"}";
-   manifestFile<<R"(],"default_bindings":[{"controller_type":"knuckles","binding_url":"knuckles-v3.json"},{"controller_type":"oculus_touch","binding_url":"oculus_touch-v3.json"},{"controller_type":"vive_controller","binding_url":"vive_controller-v3.json"}]})";manifestFile.close();
-   for(const char*controller:{"knuckles","oculus_touch","vive_controller"}){
-    bool vive=std::string(controller)=="vive_controller",index=std::string(controller)=="knuckles";std::ofstream file(folder/(std::string(controller)+"-v3.json"));
-    file<<"{\"controller_type\":\""<<controller<<R"(","name":"RawMetal gameplay","bindings":{"/actions/game":{"haptics":[{"output":"/actions/game/out/hapticleft","path":"/user/hand/left/output/haptic"},{"output":"/actions/game/out/hapticright","path":"/user/hand/right/output/haptic"}],"skeleton":[{"output":"/actions/game/in/left","path":"/user/hand/left/input/skeleton/left"},{"output":"/actions/game/in/right","path":"/user/hand/right/input/skeleton/right"}],"sources":[)";
-    bool first=true;auto source=[&](const char*hand,const char*control,const char*mode,const char*slot,const char*action){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/"<<control<<"\",\"mode\":\""<<mode<<"\",\"inputs\":{\""<<slot<<"\":{\"output\":\"/actions/game/in/"<<action<<"\"}}}";};
-    for(int side=0;side<2;++side){const char*hand=side?"right":"left";source(hand,"trigger","button","click",names[side]);source(hand,"grip",vive?"button":index?"force_sensor":"trigger",vive?"click":index?"force":"pull",names[(vive?2:4)+side]);if(side&&!vive){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/right/input/"<<(index?"thumbstick":"joystick")<<"\",\"mode\":\"joystick\",\"inputs\":{\"position\":{\"output\":\"/actions/game/in/turn\"},\"click\":{\"output\":\"/actions/game/in/inventory\"}}}";}
-     else source(hand,vive?"trackpad":index?"thumbstick":"joystick",vive?"trackpad":"joystick","position",side?"turn":"move");}
-    if(vive){source("left","application_menu","button","click","menu");source("right","application_menu","button","click","reload");
-     // Touch supplies locomotion; clicks select discrete cardinal actions.
-     auto dpad=[&](const char*hand,const char*north,const char*south){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/trackpad\",\"mode\":\"dpad\",\"parameters\":{\"sub_mode\":\"click\"},\"inputs\":{\"north\":{\"output\":\"/actions/game/in/"<<north<<"\"},\"south\":{\"output\":\"/actions/game/in/"<<south<<"\"}}}";};
-     dpad("left","crouch","inventory");dpad("right","jump","inventory");}else{source("right","a","button","click","jump");source("right","b","button","click","reload");source("left",index?"a":"x","button","click","crouch");source("left",index?"b":"y","button","click","menu");}
-    file<<"]}}}";
-   }
-   auto manifest=(folder/L"actions.json").string();if(m->input->SetActionManifestPath(manifest.c_str())==vr::VRInputError_None){m->input->GetActionSetHandle("/actions/game",&m->set);for(int i=0;i<13;++i)m->input->GetActionHandle((std::string("/actions/game/in/")+names[i]).c_str(),&m->actions[i]);m->input->GetActionHandle("/actions/game/in/left",&m->skeleton[0]);m->input->GetActionHandle("/actions/game/in/right",&m->skeleton[1]);m->input->GetActionHandle("/actions/game/out/hapticleft",&m->haptic[0]);m->input->GetActionHandle("/actions/game/out/hapticright",&m->haptic[1]);}
+   const char* const* names=bindingActionNames();
+   {std::ofstream manifestFile(folder/L"actions.json");manifestFile<<actionManifest();}
+   for(const char*controller:{"knuckles","oculus_touch","vive_controller"}){std::ofstream file(folder/(std::string(controller)+"-v"+std::to_string(BindingsVersion)+".json"));file<<controllerBindings(controller);}
+   auto manifest=(folder/L"actions.json").string();if(m->input->SetActionManifestPath(manifest.c_str())==vr::VRInputError_None){m->input->GetActionSetHandle("/actions/game",&m->set);for(int i=0;i<BindingActions;++i)m->input->GetActionHandle((std::string("/actions/game/in/")+names[i]).c_str(),&m->actions[size_t(i)]);m->input->GetActionHandle("/actions/game/in/left",&m->skeleton[0]);m->input->GetActionHandle("/actions/game/in/right",&m->skeleton[1]);m->input->GetActionHandle("/actions/game/out/hapticleft",&m->haptic[0]);m->input->GetActionHandle("/actions/game/out/hapticright",&m->haptic[1]);}
   }
   current=this;return true;
  }catch(const std::exception&e){error=e.what();return false;}
@@ -338,13 +323,15 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
    const bool grip=gripHeld(m->gripDown[size_t(side)],clickActive,click.bState,squeezeActive,squeeze.x,(states[side].ulButtonPressed&vr::ButtonMaskFromId(vr::k_EButton_Grip))!=0);m->gripDown[size_t(side)]=grip;if(grip)states[side].ulButtonPressed|=vr::ButtonMaskFromId(vr::k_EButton_Grip);else states[side].ulButtonPressed&=~vr::ButtonMaskFromId(vr::k_EButton_Grip);vr::InputAnalogActionData_t move{};if(m->input->GetAnalogActionData(m->actions[6+side],&move,sizeof(move),vr::k_ulInvalidInputValueHandle)==vr::VRInputError_None&&move.bActive)sticks[side]={move.x,move.y};}
   // Once SteamVR has loaded the bindings, record what drives each button action.
   if(++m->framesSeen==180){wchar_t local[32768]{};GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);std::ofstream log(std::filesystem::path(local)/L"RawMetal/vr/bindings-active.txt");
-   const char* labels[]={"jump","reload","menu","inventory","crouch"};const int ids[]={8,9,10,11,12};
-   for(int k=0;k<5;++k){vr::VRInputValueHandle_t origins[vr::k_unMaxActionOriginCount]{};log<<labels[k]<<":";if(m->input->GetActionOrigins(m->set,m->actions[size_t(ids[k])],origins,vr::k_unMaxActionOriginCount)==vr::VRInputError_None)for(auto origin:origins){if(!origin)break;char name[128]{};m->input->GetOriginLocalizedName(origin,name,sizeof name,vr::VRInputString_All);log<<" ["<<name<<"]";}log<<'\n';}
+   const char* labels[]={"jump","reload","menu","inventory","crouch","talk"};const int ids[]={8,9,10,11,12,13};
+   for(int k=0;k<6;++k){vr::VRInputValueHandle_t origins[vr::k_unMaxActionOriginCount]{};log<<labels[k]<<":";if(m->input->GetActionOrigins(m->set,m->actions[size_t(ids[k])],origins,vr::k_unMaxActionOriginCount)==vr::VRInputError_None)for(auto origin:origins){if(!origin)break;char name[128]{};m->input->GetOriginLocalizedName(origin,name,sizeof name,vr::VRInputString_All);log<<" ["<<name<<"]";}log<<'\n';}
    // The vibration outputs: bound, they are played through SteamVR Input; not, through the legacy pulse.
    for(int h=0;h<2;++h){vr::VRInputValueHandle_t origins[vr::k_unMaxActionOriginCount]{};bool bound=false;log<<(h?"haptic right:":"haptic left:");
     if(m->haptic[h]&&m->input->GetActionOrigins(m->set,m->haptic[h],origins,vr::k_unMaxActionOriginCount)==vr::VRInputError_None)for(auto origin:origins){if(!origin)break;bound=true;char name[128]{};m->input->GetOriginLocalizedName(origin,name,sizeof name,vr::VRInputString_All);log<<" ["<<name<<"]";}
     m->hapticBound[size_t(h)]=bound;log<<(bound?"":" (unbound: legacy pulse)")<<'\n';}}
   jumpButton=digital(8,jumpButton);reloadButton=digital(9,reloadButton);crouchButton=digital(12,crouchButton);menuButton=digital(10,menuButton);input.inventory|=digital(11,false);
+  // Push-to-talk: held (the left thumbstick pressed in by default), the voice chat sends (InputState::talk).
+  input.talk|=m->system->IsInputAvailable()&&digital(13,false);
  }
  // SteamVR action state can outlive its tracked device. Discard it before
  // locomotion/menu/use processing, including the legacy input fallback.
@@ -427,7 +414,8 @@ AvatarPose VrRuntime::avatar(const Game& game)const{
  p.gunSide=std::uint8_t(m->side[1]);
  const bool armed=game.weaponEquipped()&&!game.unarmed();p.inHand=armed?std::uint8_t(int(game.equippedWeapon())+1):0;
  p.back=p.inHand==int(WeaponId::Shotgun)+1?0:std::uint8_t(int(WeaponId::Shotgun)+1);
- p.hip=game.hasHandgun()&&p.inHand!=int(WeaponId::Handgun)+1?std::uint8_t(int(WeaponId::Handgun)+1):0;
+ // The hip: the sidearm not in hand (the handgun or the MAC-11; with both carried and neither out, the one drawn last).
+ p.hip=std::uint8_t(game.hipHolster(armed?game.equippedWeapon():WeaponId::Fists));
  p.support=m->support&&game.vrSupportGrip();p.pump=game.vrPumpOffset();p.reload=game.reloadProgress();
  return p;
 }
@@ -467,12 +455,55 @@ bool VrRuntime::foregripSupport(Point3 right,Point3 left,Point3 rightForward,boo
  return along/distance>.8f&&distance*distance-along*along<=.12f*.12f;
 }
 void VrRuntime::setForeEnd(Point3 centre,float half){if(half>.01f&&half<.4f&&std::isfinite(centre.x)&&std::isfinite(centre.y)&&std::isfinite(centre.z)){g_foreEnd=centre;g_foreEndHalf=half;}}
-void VrRuntime::gunFrame(Point3 across,Point3 palm,Point3 forward,bool leftHand,Point3& right,Point3& up,Point3& back){
+// The actions in handle order: 0-1 triggers, 2-3 grip clicks, 4-5 grip squeezes (vector1), 6 move and 7 turn
+// (vector2), then the buttons. v3 (2026-11-19) added the vibration outputs; v4 (2026-11-19) push-to-talk ("talk",
+// held: the left thumbstick pressed in on Touch and Index, the left trackpad's west click on a Vive wand).
+const char* const* VrRuntime::bindingActionNames(){
+ static const char* const names[BindingActions]={"triggerleft","triggerright","gripleft","gripright","squeezeleft","squeezeright","move","turn","jump","reload","menu","inventory","crouch","talk"};
+ return names;}
+std::string VrRuntime::actionManifest(){
+ const char* const* names=bindingActionNames();std::ostringstream out;const std::string v="-v"+std::to_string(BindingsVersion)+".json";
+ out<<R"({"action_sets":[{"name":"/actions/game","usage":"leftright"}],"actions":[{"name":"/actions/game/in/left","type":"skeleton","skeleton":"/skeleton/hand/left"},{"name":"/actions/game/in/right","type":"skeleton","skeleton":"/skeleton/hand/right"},{"name":"/actions/game/out/hapticleft","type":"vibration"},{"name":"/actions/game/out/hapticright","type":"vibration"})";
+ for(int i=0;i<BindingActions;++i)out<<",{\"name\":\"/actions/game/in/"<<names[i]<<"\",\"type\":\""<<(i==6||i==7?"vector2":i==4||i==5?"vector1":"boolean")<<"\"}";
+ out<<R"(],"default_bindings":[{"controller_type":"knuckles","binding_url":"knuckles)"<<v<<R"("},{"controller_type":"oculus_touch","binding_url":"oculus_touch)"<<v<<R"("},{"controller_type":"vive_controller","binding_url":"vive_controller)"<<v<<R"("}]})";
+ return out.str();}
+std::string VrRuntime::controllerBindings(const std::string& controller){
+ const char* const* names=bindingActionNames();std::ostringstream file;const bool vive=controller=="vive_controller",index=controller=="knuckles";
+ file<<"{\"controller_type\":\""<<controller<<R"(","name":"RawMetal gameplay","bindings":{"/actions/game":{"haptics":[{"output":"/actions/game/out/hapticleft","path":"/user/hand/left/output/haptic"},{"output":"/actions/game/out/hapticright","path":"/user/hand/right/output/haptic"}],"skeleton":[{"output":"/actions/game/in/left","path":"/user/hand/left/input/skeleton/left"},{"output":"/actions/game/in/right","path":"/user/hand/right/input/skeleton/right"}],"sources":[)";
+ bool first=true;auto source=[&](const char*hand,const char*control,const char*mode,const char*slot,const char*action){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/"<<control<<"\",\"mode\":\""<<mode<<"\",\"inputs\":{\""<<slot<<"\":{\"output\":\"/actions/game/in/"<<action<<"\"}}}";};
+ // A stick: its position and its click (pressed in).
+ auto stick=[&](const char*hand,const char*position,const char*click){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/"<<(index?"thumbstick":"joystick")<<"\",\"mode\":\"joystick\",\"inputs\":{\"position\":{\"output\":\"/actions/game/in/"<<position<<"\"},\"click\":{\"output\":\"/actions/game/in/"<<click<<"\"}}}";};
+ for(int side=0;side<2;++side){const char*hand=side?"right":"left";source(hand,"trigger","button","click",names[side]);source(hand,"grip",vive?"button":index?"force_sensor":"trigger",vive?"click":index?"force":"pull",names[(vive?2:4)+side]);
+  if(vive)source(hand,"trackpad","trackpad","position",side?"turn":"move");
+  else if(side)stick("right","turn","inventory");
+  else stick("left","move","talk");}   // the left stick pressed in: push-to-talk
+ if(vive){source("left","application_menu","button","click","menu");source("right","application_menu","button","click","reload");
+  // Touch supplies locomotion; clicks select discrete cardinal actions.
+  auto dpad=[&](const char*hand,const char*north,const char*south,const char*west){if(!first)file<<',';first=false;file<<"{\"path\":\"/user/hand/"<<hand<<"/input/trackpad\",\"mode\":\"dpad\",\"parameters\":{\"sub_mode\":\"click\"},\"inputs\":{\"north\":{\"output\":\"/actions/game/in/"<<north<<"\"},\"south\":{\"output\":\"/actions/game/in/"<<south<<"\"}";
+   if(west)file<<",\"west\":{\"output\":\"/actions/game/in/"<<west<<"\"}";file<<"}}";};
+  dpad("left","crouch","inventory","talk");dpad("right","jump","inventory",nullptr);}
+ else{source("right","a","button","click","jump");source("right","b","button","click","reload");source("left",index?"a":"x","button","click","crouch");source("left",index?"b":"y","button","click","menu");}
+ file<<"]}}}";
+ return file.str();}
+// The bindings as written: v4 file names, push-to-talk declared and held on the left stick's click, nothing else on it.
+bool VrRuntime::testBindings(std::ostream& report){
+ bool ok=true;auto check=[&](bool pass,const std::string& what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
+ auto count=[](const std::string& s,const std::string& what){int n=0;for(size_t at=s.find(what);at!=std::string::npos;at=s.find(what,at+1))++n;return n;};
+ const std::string manifest=actionManifest();
+ check(BindingsVersion==4&&count(manifest,"-v4.json")==3&&count(manifest,"-v3.json")==0&&count(manifest,R"({"name":"/actions/game/in/talk","type":"boolean"})")==1&&std::string(bindingActionNames()[13])=="talk",
+  "the manifest declares talk (boolean) and points at the v4 default bindings");
+ for(const char* controller:{"oculus_touch","knuckles"}){const std::string b=controllerBindings(controller),stickName=std::string(controller)=="knuckles"?"thumbstick":"joystick";
+  const std::string left=R"({"path":"/user/hand/left/input/)"+stickName+R"(","mode":"joystick","inputs":{"position":{"output":"/actions/game/in/move"},"click":{"output":"/actions/game/in/talk"}}})";
+  check(count(b,left)==1&&count(b,"/actions/game/in/talk")==1&&count(b,"/actions/game/in/reload")==1&&count(b,"/actions/game/in/jump")==1&&count(b,"/actions/game/in/crouch")==1&&count(b,"/actions/game/in/menu")==1&&count(b,"/actions/game/in/inventory")==1,
+   std::string(controller)+": the left stick moves and, pressed in, is push-to-talk; A jump, B reload, X crouch, Y menu, right stick click inventory unchanged");}
+ {const std::string b=controllerBindings("vive_controller");check(count(b,R"("west":{"output":"/actions/game/in/talk"})")==1&&count(b,"/actions/game/in/talk")==1,"vive_controller: push-to-talk on the left trackpad's west click");}
+ return ok;}
+void VrRuntime::gunFrame(Point3 across,Point3 palm,Point3 forward,bool leftHand,Point3& right,Point3& up,Point3& back,float pitch){
  (void)palm;
  // Square to the knuckles: back from them, up the fist toward the index finger (across runs the other way on a left
  // hand), right = up x back (right-handed, as tracking space is). Then the muzzle is raised by the grip's rake.
  const Point3 b0=unit3(forward*-1.f);Point3 u0=across*(leftHand?-1.f:1.f);u0=unit3(u0-b0*dot3(u0,b0));
- const float c=std::cos(GunPitch),sn=std::sin(GunPitch);
+ const float c=std::cos(pitch),sn=std::sin(pitch);
  right=unit3(cross3(u0,b0));back=unit3(b0*c-u0*sn);up=unit3(u0*c+b0*sn);
 }
 VrRuntime::SupportPose VrRuntime::supportPose(Point3 grip,Point3 gunRight,Point3 gunUp,Point3 wrist,Point3 across,Point3 palm,Point3 forward,Point3 foreEnd,float half,float pump,bool leftHand,Point3 elbow){
@@ -507,12 +538,12 @@ VrRuntime::SupportPose VrRuntime::supportPose(Point3 grip,Point3 gunRight,Point3
  s.across=a;s.palm=p;s.forward=f;s.wrist=onWood-(f*GripAlong+p*GripIn);
  return s;
 }
-VrRuntime::SupportPose VrRuntime::pistolSupportPose(Point3 grip,Point3 gunRight,Point3 gunUp,Point3 gunBack,bool leftHand){
+VrRuntime::SupportPose VrRuntime::pistolSupportPose(Point3 grip,Point3 gunRight,Point3 gunUp,Point3 gunBack,bool leftHand,float pitch){
  SupportPose s;s.gunRight=gunRight;s.gunUp=gunUp;s.gunBack=gunBack;
  const Point3 muzzle=gunBack*-1.f,toGun=gunRight*(leftHand?1.f:-1.f);   // from the support side toward the gun hand
  // Up the grip as the gun hand's fist runs (the rake back from the gun's up), knuckles forward and round the front
  // of the gun hand's fingers.
- const Point3 c=unit3(gunUp*std::cos(GunPitch)-gunBack*std::sin(GunPitch));
+ const Point3 c=unit3(gunUp*std::cos(pitch)-gunBack*std::sin(pitch));
  Point3 f=muzzle*std::cos(.6f)+toGun*std::sin(.6f);f=unit3(f-c*dot3(f,c));
  const Point3 a=c*(leftHand?-1.f:1.f),p=unit3(cross3(a,f));
  const Point3 hold=grip-toGun*.035f-c*.03f+muzzle*.005f;
@@ -531,20 +562,21 @@ void VrRuntime::playHands(Game& game,InputState& input,bool focused,bool menuOpe
  for(int role=0;role<2;++role)input.vrGrip[size_t(role)]=focused&&M.hands[size_t(role)].tracked&&M.rawGrip[size_t(role)];
  const std::array<bool,2> grips=input.vrGrip;
  const bool armed=game.weaponEquipped()&&!game.unarmed();
- const bool firearm=armed&&(game.activeFirearm()==WeaponId::Shotgun||game.activeFirearm()==WeaponId::Handgun);
+ const bool firearm=armed&&playerFirearm(game.activeFirearm());
  // Holsters on her body (avatarSlotAt): the gun hand gripping over a shoulder draws the shotgun from her back,
- // at the hip the handgun. A drawn gun stays in the hand when the grip is let go; let go back at its own holster
+ // at the hip the sidearm riding there (the handgun or the MAC-11: Game::hipHolster). A drawn gun stays in the hand when the grip is let go; let go back at its own holster
  // (after leaving it) and it is put away there. A grip spent on a holster does not also grab or use.
  // The support hand at the belt pouch with a gun drawn takes a magazine or shell (VrGuns.cpp); that grip, a
  // magazine or shell in the hand and a hand on the slide are the gun's, not a grab either.
  {const AvatarPose body=avatar(game);const Point3 at=body.hands[size_t(gunSide)].wrist;const bool grip=input.vrGrip[1],was=M.previousGrip[1];
   const int slot=M.hands[1].tracked?avatarSlotAt(body,at):0;
-  const int heldSlot=!armed?0:game.equippedWeapon()==WeaponId::Shotgun?1:game.equippedWeapon()==WeaponId::Handgun?2:0;
+  const int heldSlot=!armed?0:game.equippedWeapon()==WeaponId::Shotgun?1:sidearm(game.equippedWeapon())?2:0;
+  const int hipGun=game.hipHolster(armed?game.equippedWeapon():WeaponId::Fists);
   if(M.drawnFrom&&slot!=M.drawnFrom)M.leftHolster=true;
   if(grip&&!was&&!menuOpen&&!game.holdingClutter()&&slot){
-   const WeaponId want=slot==1?WeaponId::Shotgun:WeaponId::Handgun;
+   const WeaponId want=slot==1?WeaponId::Shotgun:hipGun?WeaponId(hipGun-1):WeaponId::Fists;
    if(heldSlot==slot){M.drawnFrom=slot;M.leftHolster=true;M.consumed[1]=true;}   // gripping it at its own holster: let go to put it away
-   else if(game.ownsWeapon(want)){input.weaponSlot=int(want)+1;M.drawnFrom=slot;M.leftHolster=false;M.consumed[1]=true;game.vrHaptic(1,.03f,120,.35f,"draw");}}
+   else if(want!=WeaponId::Fists&&game.ownsWeapon(want)){input.weaponSlot=int(want)+1;M.drawnFrom=slot;M.leftHolster=false;M.consumed[1]=true;game.vrHaptic(1,.03f,120,.35f,"draw");}}
   if(!grip&&was&&M.drawnFrom&&heldSlot==M.drawnFrom&&slot==M.drawnFrom&&M.leftHolster&&!menuOpen){input.weaponSlot=int(WeaponId::Fists)+1;M.drawnFrom=0;game.vrHaptic(1,.03f,100,.3f,"holster");}
   if(!armed&&!grip)M.drawnFrom=0;
   const Point3 fist0=local(M.hands[0].handFrame?M.hands[0].gunOrigin:M.hands[0].position);
@@ -561,7 +593,7 @@ void VrRuntime::playHands(Game& game,InputState& input,bool focused,bool menuOpe
  if(canSupport&&game.activeFirearm()==WeaponId::Shotgun){
   const Point3 right=gunHand.handFrame?gunHand.gunOrigin:gunHand.position,left=M.hands[0].handFrame?M.hands[0].gunOrigin:M.hands[0].position,handForward=(gunHand.handFrame?gunHand.gunBasis[2]:gunHand.basis[2])*-1;
   if(foregripSupport(right,left,handForward,grips[0])){support=true;if(M.track[0].valid&&M.track[1].valid)M.supportKind=1;else{legacy=true;legacyAim=unit3(left-right);}}}
- else if(canSupport&&game.activeFirearm()==WeaponId::Handgun&&grips[0]&&M.track[0].valid&&M.track[1].valid){
+ else if(canSupport&&sidearm(game.activeFirearm())&&grips[0]&&M.track[0].valid&&M.track[1].valid){
   const Point3 f0=M.hands[0].gunOrigin,f1=gunHand.gunOrigin;
   if(len3(f0-f1)<.13f&&!game.vrRackZone(local(f0))&&!game.vrRacking()){support=true;M.supportKind=2;}}
  M.support=M.supportKind!=0;
@@ -756,7 +788,7 @@ bool VrRuntime::testGuns(std::ostream& report){
  auto spin=[](Point3 v,Point3 k,float t){k=unit3(k);return v*std::cos(t)+cross3(k,v)*std::sin(t)+k*(dot3(k,v)*(1-std::cos(t)));};
  // The hand that holds the gun with its sights on the line from the eye to a target: the gun frame wanted, back to
  // the hand that makes it (gunFrame undone), its joints.
- auto aimedHand=[&](Point3 eye,Point3 target,const Game::VrGunGeometry& g,bool leftHand,float eyeRelief){
+ auto aimedHand=[&](Point3 eye,Point3 target,const Game::VrGunGeometry& g,bool leftHand,float eyeRelief,float pitch){
   const Point3 sight=unit3(target-eye);const Point3 dg=unit3(g.frontSight-g.rearSight);   // the sight line in the gun frame
   // The gun frame: level (right horizontal), its sight line along the eye's line.
   Point3 back0=sight*-1.f,right0=unit3(cross3({0,1,0},back0));Point3 up0=cross3(back0,right0);
@@ -764,16 +796,17 @@ bool VrRuntime::testGuns(std::ostream& report){
   const float tilt=std::atan2(dg.y,-dg.z);Point3 back=spin(back0,right0,-tilt),up=spin(up0,right0,-tilt);
   const Point3 grip=eye+sight*eyeRelief-(right0*g.rearSight.x+up*g.rearSight.y+back*g.rearSight.z);
   // Undo gunFrame's raise: the knuckles' way and the fist's channel.
-  const float c=std::cos(GunPitch),sn=std::sin(GunPitch);const Point3 b0=back*c+up*sn,u0=up*c-back*sn;
+  const float c=std::cos(pitch),sn=std::sin(pitch);const Point3 b0=back*c+up*sn,u0=up*c-back*sn;
   return scriptHand(grip,b0*-1.f,u0,leftHand);};
  const Point3 eye{0,Player::StandingEye,0};
- for(WeaponId gun:{WeaponId::Handgun,WeaponId::Shotgun})for(bool lefty:{false,true}){
+ for(WeaponId gun:{WeaponId::Handgun,WeaponId::Shotgun,WeaponId::MachinePistol})for(bool lefty:{false,true}){
   if(gun==WeaponId::Shotgun&&lefty)continue;
-  const std::string name=std::string(gun==WeaponId::Handgun?"handgun":"shotgun")+(lefty?", left-handed":"");
+  const bool magGun=Game::vrMagazineGun(gun);const float pitch=gunPitch(gun);
+  const std::string name=std::string(gun==WeaponId::Handgun?"handgun":gun==WeaponId::MachinePistol?"MAC-11":"shotgun")+(lefty?", left-handed":"");
   Game game=Game::vrGunScene(gun,{20,6},lefty);VrRuntime runtime;InputState input{};
   const auto g=Game::vrGunGeometry(gun);const Point3 target=eye+Point3{.35f,-.25f,-10.f};
   VrScript pose;pose.head=eye;pose.headForward=unit3(target-eye);const int gunHand=lefty?0:1,other=1-gunHand;
-  pose.joints[size_t(gunHand)]=aimedHand(eye,target,g,lefty,gun==WeaponId::Handgun?.32f:.18f);
+  pose.joints[size_t(gunHand)]=aimedHand(eye,target,g,lefty,gun==WeaponId::Handgun?.32f:gun==WeaponId::MachinePistol?.30f:.18f,pitch);
   pose.joints[size_t(other)]=scriptHand(eye+Point3{lefty?.3f:-.3f,-.55f,-.1f},{0,0,-1},{0,1,0},!lefty);pose.tracked={true,true};
   for(int k=0;k<4;++k){runtime.script(game,input,pose,1.f/60);game.update(input,1.f/60);}
   const auto&h=runtime.hands()[1];const auto origin=game.chunkOffset(game.level());auto local=[&](Point3 w){w.x-=origin.x;w.y-=origin.y;return w;};
@@ -787,16 +820,20 @@ bool VrRuntime::testGuns(std::ostream& report){
   // The bore follows the hand: the grip angle off the knuckles, the model's grip along the fist.
   {const auto&t=runtime.m->track[1];const Point3 knuckles=rotateTracking(t.forward,runtime.m->yaw),channel=rotateTracking(t.across*(lefty?-1.f:1.f),runtime.m->yaw);
    const Point3 magAxis=unit3(h.gunBasis[0]*g.magAxis.x+h.gunBasis[1]*g.magAxis.y+h.gunBasis[2]*g.magAxis.z);
-   check(std::fabs(angle(bore,knuckles)-GunPitch)<.01f&&dot3(h.gunBasis[1],channel)>.95f&&(gun!=WeaponId::Handgun||angle(magAxis,channel)<.09f),name+": the bore runs "+deg(angle(bore,knuckles))+" degrees above the knuckles and the gun's up along the fist"+(gun==WeaponId::Handgun?" (the magazine "+deg(angle(magAxis,channel))+" degrees off the fist's channel)":""));
+   check(std::fabs(angle(bore,knuckles)-pitch)<.01f&&dot3(h.gunBasis[1],channel)>.95f&&(!magGun||angle(magAxis,channel)<.09f),name+": the bore runs "+deg(angle(bore,knuckles))+" degrees above the knuckles and the gun's up along the fist"+(magGun?" (the magazine "+deg(angle(magAxis,channel))+" degrees off the fist's channel)":""));
    check(h.gunBasis[1].z>.9f,name+": the gun is upright in the hand");}
   // The sight line and the bore agree; the trace leaves from the muzzle along the bore and meets the sight line at the zero.
   Point3 o,d;Game::vrShotLine(g,local(h.gunOrigin),h.gunBasis[0],h.gunBasis[1],h.gunBasis[2],o,d);
-  check(angle(sightLine,bore)<.017f&&angle(d,bore)<.017f&&angle(d,sightLine)<.01f,name+": sight line, bore and shot within a degree ("+deg(angle(sightLine,bore))+", "+deg(angle(d,bore))+", "+deg(angle(d,sightLine))+")");
+  // The MAC-11's sights are cut 1.1 degrees down onto the bore on the model (rear 4 mm higher than front): 1.5 for it.
+  const float sightTolerance=gun==WeaponId::MachinePistol?.026f:.017f;
+  check(angle(sightLine,bore)<sightTolerance&&angle(d,bore)<sightTolerance&&angle(d,sightLine)<.01f,name+": sight line, bore and shot within "+(gun==WeaponId::MachinePistol?"1.5 degrees":"a degree")+" ("+deg(angle(sightLine,bore))+", "+deg(angle(d,bore))+", "+deg(angle(d,sightLine))+")");
   // Fire: the trace the game records.
+  // A full-auto gun throws each round somewhere on its spread's cone (Game::shotSpread): that much more is allowed.
+  const float cone=playerWeaponDef(gun).cycle.fullAuto?game.shotSpread():0.f;
   pose.trigger[size_t(gunHand)]=true;runtime.script(game,input,pose,1.f/60);game.update(input,1.f/60);pose.trigger[size_t(gunHand)]=false;
   const bool fired=!game.shotRays().empty();const ShotRay ray=fired?game.shotRays().back():ShotRay{};
   const float atTarget=fired?offLine(targetAt,ray.origin,ray.direction):1.f;
-  check(fired&&len3(ray.origin-at(g.muzzle))<.002f&&angle(ray.direction,bore)<.017f&&atTarget<.025f,name+": the shot leaves from the muzzle along the bore and passes "+std::to_string(int(atTarget*1000+.5f))+" mm from the point the sights were on at 10 m");
+  check(fired&&len3(ray.origin-at(g.muzzle))<.002f&&angle(ray.direction,bore)<sightTolerance+cone&&atTarget<.025f+10.f*cone,name+": the shot leaves from the muzzle along the bore and passes "+std::to_string(int(atTarget*1000+.5f))+" mm from the point the sights were on at 10 m");
   // The recoil turns the gun in the hand, not the view; the view's yaw and pitch are the head's.
   for(int k=0;k<3;++k){runtime.script(game,input,pose,1.f/60);game.update(input,1.f/60);}
   const auto&k2=runtime.hands()[1];check(game.vrRecoil().rise>.02f&&angle(k2.gunBasis[2]*-1.f,bore)>.02f&&std::fabs(game.player().pitch-input.vrPitch)<1e-4f,name+": the kick lifts the gun in the hand while the view stays on the head");}
@@ -810,7 +847,13 @@ bool VrRuntime::testGuns(std::ostream& report){
   runtime.script(game,input,pose,1.f/60);game.update(input,1.f/60);
   pose.grip[1]=true;runtime.script(game,input,pose,1.f/60);const int slot=input.weaponSlot;bool pulse=false;for(const auto&p:game.vrHaptics())pulse|=std::string(p.cause)=="draw"&&p.hand==1;
   game.update(input,1.f/60);
-  check(slot==int(WeaponId::Handgun)+1&&pulse,"gripping at the hip draws the handgun, with a pulse on the gun hand");}
+  check(slot==int(WeaponId::Handgun)+1&&pulse,"gripping at the hip draws the handgun, with a pulse on the gun hand");
+  // The MAC-11 drawn last rides the hip instead (Game::hipHolster): the avatar wears it there and the grip draws it.
+  {Game mac=Game::vrGunScene(WeaponId::MachinePistol,{32,32});mac.equipWeapon(WeaponId::Shotgun);VrRuntime r2;InputState in2{};pose.grip[1]=false;
+   r2.script(mac,in2,pose,1.f/60);mac.update(in2,1.f/60);const int worn=r2.avatar(mac).hip;pose.grip[1]=true;in2={};r2.script(mac,in2,pose,1.f/60);
+   check(worn==int(WeaponId::MachinePistol)+1&&in2.weaponSlot==int(WeaponId::MachinePistol)+1,"with the MAC-11 drawn last it rides the hip, and gripping there draws it");
+   mac.update(in2,1.f/60);for(int k=0;k<60;++k){InputState i3{};pose.grip[1]=true;r2.script(mac,i3,pose,1.f/60);mac.update(i3,1.f/60);}
+   check(mac.equippedWeapon()==WeaponId::MachinePistol&&r2.avatar(mac).hip==int(WeaponId::Handgun)+1,"in the hand, the handgun takes the hip ("+std::to_string(int(r2.avatar(mac).hip))+")");}}
  // Two hands on the pistol: the support hand closing beside the gun hand wraps it; the aim stays the gun hand's.
  {Game game=Game::vrGunScene(WeaponId::Handgun,{20,6});VrRuntime runtime;InputState input{};VrScript pose;pose.head=eye;
   const Point3 hold=eye+Point3{0,-.15f,-.4f};pose.joints[1]=scriptHand(hold,{0,0,-1},{0,1,0},false);
@@ -850,7 +893,7 @@ bool VrRuntime::testAll(std::ostream& report){
  lap("solve, arms, support");ok&=Game::testComfortMenu(report);ok&=Game::testVrHardening(report);lap("comfort menu, hardening");
  run("grip from the bound actions, with hysteresis, no stuck legacy bit",testGrip());
  ok&=Game::testVrHeldProps(report);ok&=Game::testVrHeldProps(report,[](Point3 p){return rotateTracking(p,.7f);});lap("held props");
- ok&=SoftwareRenderer::testVrGunGeometry(report);lap("gun geometry");ok&=testGuns(report);lap("guns in scripted hands");ok&=Game::testVrGuns(report);lap("hand reloads, pump, recoil, haptics");
+ ok&=testBindings(report);ok&=SoftwareRenderer::testVrGunGeometry(report);lap("bindings, gun geometry");ok&=testGuns(report);lap("guns in scripted hands");ok&=Game::testVrGuns(report);lap("hand reloads, pump, recoil, haptics");
  run("articulated hand meshes (Mesh::testVrHands)",Mesh::testVrHands());run("physical melee",Game::testVrMelee());run("controller interaction",Game::testVrInteraction());lap("hand meshes, melee, interaction");
  report<<(ok?"ALL PASSED":"FAILED")<<'\n';return ok;
 }

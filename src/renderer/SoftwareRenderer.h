@@ -215,6 +215,9 @@ private:
     static Point3 vrShotgunPoint(const Mesh& mesh,Point3 model);
     // A gun mesh's working points in the VR gun frame (Game::VrGunGeometry), measured from its parts.
     static Game::VrGunGeometry measureVrGun(const Mesh& mesh,bool pistol);
+    // The MAC-11's (mac11.fbx, resource 3353): the muzzle, the receiver's sights, the right-side port, the long
+    // magazine's well and line, the cocking knob (slideRear).
+    static Game::VrGunGeometry measureVrMac(const Mesh& mesh);
     // --vr-test: the game's gun points agree with the meshes as the VR hands draw them; the sights over the bore.
     static bool testVrGunGeometry(std::ostream& report);
     // The arm rig posed on a solve (shared by the drawing and --vr-test): its shoulders' middle in rig space and
@@ -628,6 +631,9 @@ public:
     // (thumb, index, middle, ring, pinky) closed on its grip, the index still
     // the player's own trigger finger.
     static Point3 vrPistolPoint(Point3 model,bool handFrame);
+    // The same for the MAC-11 (its origin is the grip's top: lifted MacLift into the fist).
+    static constexpr float MacLift=.02f;
+    static Point3 vrMacPoint(Point3 model,bool handFrame);
     // Where the pistol's grip is in view space (rig inspection centres on it).
     Point3 pistolGripView(const Game& game)const{return pistolHold(game).origin;}
     static std::array<float,5> pistolCurls(const std::array<float,5>& tracked){return {std::clamp(tracked[0],.30f,.50f),std::clamp(tracked[1],.25f,.60f),std::max(tracked[2],.85f),std::max(tracked[3],.85f),std::max(tracked[4],.85f)};}

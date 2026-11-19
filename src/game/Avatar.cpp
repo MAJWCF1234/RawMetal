@@ -38,10 +38,10 @@ AvatarSolve solveAvatar(const AvatarPose& p,float time){
   s.wrist[size_t(h)]=w;s.forward[size_t(h)]=fw;s.palm[size_t(h)]=pa;s.curls[size_t(h)]=hand.curls;}
  // The fingers on what they hold: the gun hand round its grip (the index on the trigger as far as the player's
  // own index is), the other hand round the fore-end.
- if(p.inHand==3)s.curls[size_t(g)]={.35f,std::clamp(p.hands[size_t(g)].curls[1],.25f,.5f),.85f,.88f,.9f};
+ if(p.inHand==3||p.inHand==4)s.curls[size_t(g)]={.35f,std::clamp(p.hands[size_t(g)].curls[1],.25f,.5f),.85f,.88f,.9f};
  else if(p.inHand==2)s.curls[size_t(g)]={.55f,std::clamp(p.hands[size_t(g)].curls[1],.3f,.55f),.85f,.95f,.85f};
  if(p.support&&p.inHand==2)s.curls[size_t(o)]={.45f,.75f,.85f,.9f,.9f};
- if(p.support&&p.inHand==3)s.curls[size_t(o)]={.5f,.8f,.85f,.9f,.9f};   // round the gun hand's fingers
+ if(p.support&&(p.inHand==3||p.inHand==4))s.curls[size_t(o)]={.5f,.8f,.85f,.9f,.9f};   // round the gun hand's fingers
  // A reload: the other hand goes down to the shells (or the magazine) at its hip and up to the gun, three times
  // for the shotgun's shells, once for a magazine.
  if(p.reload>0&&p.inHand){const int cycles=p.inHand==2?3:1;const float t=std::fmod(p.reload*float(cycles),1.f),u=t<.35f?0.f:t<.75f?(t-.35f)/.4f:1.f,ease=u*u*(3-2*u);

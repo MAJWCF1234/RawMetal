@@ -24,13 +24,30 @@ Use this list in the headset (Quest through SteamVR) to check what the automated
 
 - [ ] Reach over either shoulder with your gun hand and squeeze the grip. The shotgun comes off her back into the hand.
 - [ ] Reach to the gun-side hip and squeeze. The handgun comes out (once you own it). While it isn't drawn, you can see it on her hip.
+- [ ] Own the MAC-11 too: the hip carries the sidearm you are not holding (with neither out, the one drawn last). Draw the MAC-11 from the hip, then put the shotgun in your hand: the MAC-11 is the one on her hip.
 - [ ] Let go of the grip anywhere else. The gun stays in her hand.
 - [ ] Move the gun away, bring it back to its holster and let go there. It goes back.
 - [ ] Each draw and each put-away gives a short buzz in the gun hand.
 
 ## 2a. Gunplay (2026-11-19)
 
-The controller bindings are now version 3 (`*-v3.json` in `%LOCALAPPDATA%/RawMetal/vr`): they add the two vibration outputs. SteamVR picks the new defaults up by their new name. If you had changed the bindings yourself, check them once in the SteamVR binding screen.
+### Push-to-talk and bindings version 4
+
+The controller bindings are now version 4 (`*-v4.json` in `%LOCALAPPDATA%/RawMetal/vr`): they add push-to-talk for voice chat. SteamVR picks the new defaults up by their new name. If you had changed the bindings yourself, check them once in the SteamVR binding screen.
+
+| Button | Action |
+|---|---|
+| Right A | Jump |
+| Right B | Magazine out / reload |
+| Left X | Crouch toggle |
+| Left Y | Menu |
+| Right stick click | Inventory |
+| **Left stick click, held** | **Push-to-talk** |
+
+- [ ] In a match, press the left stick in and hold it while you speak. The other player hears you while it is held and not after you let go. Walking with the stick does not open the microphone by itself.
+- [ ] `bindings-active.txt` now has a `talk:` line naming the left stick (Vive wands: the left trackpad's west click).
+
+Version 3 of the bindings added the two vibration outputs.
 
 ### Aim
 
@@ -41,6 +58,7 @@ The gun now points the way a real pistol sits in your hand. The barrel runs 14 d
 - [ ] Do the same with the shotgun: the bead on the end of the barrel, the top of the receiver behind it.
 - [ ] Do it with **LEFT-HANDED** on. The gun is upright in your left hand. Before this fix it was upside down.
 - [ ] If the barrel still points too high or too low, say by how much. The angle is one number (`VrRuntime::GunPitch`).
+- [ ] The MAC-11's grip is square to its barrel, so it sits 10 degrees lower in the same hand than the pistol (`VrRuntime::MacPitch`, 4 degrees above the knuckles). Hold it out: the barrel points where you point and the long magazine runs straight down out of the bottom of your fist. Raise it to the eye: the rear sight's notch at the back of the receiver and the front post line up.
 
 ### Reloading by hand
 
@@ -52,6 +70,11 @@ Reloading is by hand only. The button no longer starts a timed reload. Ammo come
   - [ ] Bring it under the grip. Once it is lined up with the magazine well, it slides up with your hand. Push it home. It clicks in, both hands buzz, and the counter fills to 12 or what is left.
   - [ ] Fire until it is empty. The slide locks back.
   - [ ] Put in a fresh magazine, then press B again (the slide release), or take the back of the slide with your other hand, pull it back 2 cm and let go. Either one chambers a round.
+- [ ] **MAC-11:**
+  - [ ] Hold the trigger. It fires at its full-auto rate (18 a second) while held, with a quick, light buzz for each round and a .380 case thrown out of the port on the right of the receiver for each round. The gun climbs a few degrees in your hand during a burst and settles when you let go; the view never moves.
+  - [ ] Press B. The long magazine drops out. Take a fresh one from the belt pouch and push it straight up into the grip until it clicks; the counter fills to 32 or what is left of the .380.
+  - [ ] Fire it empty. The cocking knob on top of the receiver stays back. After a fresh magazine, take the knob with your other hand, pull it back 2 cm and let go: it chambers. B does not release it (the MAC-11 has no bolt release; B drops the magazine again).
+  - [ ] Close your other hand round the gun hand: it wraps the grip as on the pistol, and the kick is about half.
 - [ ] **Shotgun:**
   - [ ] With the shotgun drawn, squeeze your other hand at the same belt pouch. It takes one shell.
   - [ ] Push it into the loading port under the gun, just ahead of the trigger guard. It lines up as it gets close and goes in with a click and a buzz. The counter goes up by one.
@@ -70,7 +93,7 @@ Reloading is by hand only. The button no longer starts a timed reload. Ammo come
 
 ### Feel
 
-- [ ] Every shot kicks the gun back and lifts the muzzle (handgun about 7 degrees and 1 cm back, shotgun about 10 degrees and 2 cm back, half the rise with two hands). It settles back into your hand within a third of a second. The view never moves.
+- [ ] Every shot kicks the gun back and lifts the muzzle (handgun about 7 degrees and 1 cm back, shotgun about 10 degrees and 2 cm back, the MAC-11 about 2 degrees a round, half the rise with two hands). It settles back into your hand within a third of a second. The view never moves.
 - [ ] Every shot gives a sharp buzz in the gun hand, and in the support hand too if it is on the gun. Softer pulses come on: the magazine out, the pouch, the magazine seating, the slide, the pump back and forward, a shell going in, a dry trigger, the draw and the put-away.
 - [ ] With your eyes closed, the shot, the magazine, the slide, the pump and the shell sounds come from the gun or from the hand doing the work, not from your head.
 - [ ] If there is no buzz at all, send `bindings-active.txt`. Its `haptic left/right` lines say whether SteamVR bound the vibration outputs. If they were not bound, the game falls back to the old single pulse.
@@ -137,8 +160,9 @@ For each, give FPS / HZ, GPU MS and the scale percentage, with RENDER SCALE on A
 - **Mirror chain:** a tracking-space frame mapped to game space and then into the arm rig comes out as a proper rotation.
 - **Arm IK on scripted poses:** wrist within 2 cm of its target, finger and palm direction, elbows outward, palm curl sign, tracked fingers closing.
 - **Fore-end snap:** a Touch controller held upright under the wood snaps palm-under with the wrist below the wood, knuckles away from the elbow. A full roll of the controller is followed within 35 degrees and never jumps more than 4 degrees a step. A ±50 degree swing does not flip. The gun is aimed through the support fist, and the pump travel is checked. The two-handed pistol grip is checked for both hands.
-- **Aim (scripted poses through `VrRuntime::script`):** handgun (both hands) and shotgun. Raised to the eye, the eye looks through both sights onto a target 10 m away. The bore runs 14 degrees above the knuckles. The handgun's magazine lies within 5 degrees of the fist's channel. The gun is upright, left-handed too. The sight line, bore and shot agree within a degree. The fired trace starts at the drawn muzzle and passes within 2.5 cm of the point the sights were on. The recoil lifts the gun but not the view.
-- **Gun geometry:** the muzzle, sights, port, magazine well, slide and loading port the game uses match the drawn meshes within 4 mm.
+- **Aim (scripted poses through `VrRuntime::script`):** handgun and MAC-11 (both hands) and shotgun. Raised to the eye, the eye looks through both sights onto a target 10 m away. The bore runs 14 degrees above the knuckles (the MAC-11: 4). The handgun's and the MAC-11's magazines lie within 5 degrees of the fist's channel. The gun is upright, left-handed too. The sight line, bore and shot agree within a degree. The fired trace starts at the drawn muzzle and passes within 2.5 cm of the point the sights were on. The recoil lifts the gun but not the view.
+- **Gun geometry:** the muzzle, sights, port, magazine well, slide (the MAC-11's cocking knob) and loading port the game uses match the drawn meshes within 4 mm, for all three guns; `vr-gun-mac11-side.ppm` shows the MAC-11's points.
+- **Bindings:** the manifest declares `talk` and points at the v4 files; on Touch and Index the left stick's click is push-to-talk and nothing else moved; on a Vive wand it is the left trackpad's west click.
 - **Hand reloads (`Game::testVrGuns`):**
   - the magazine drop, pouch, mid-seat and seat, with 12 loaded from the pool;
   - the locked slide, the slide release and the rack by hand;
@@ -146,9 +170,10 @@ For each, give FPS / HZ, GPU MS and the scale percentage, with RENDER SCALE on A
   - the pump's back stroke throws the case through `Game::ejectCasing` from the ejection port, with the hand's speed, and the forward stroke chambers;
   - the one-handed self-cycle;
   - recoil that settles within 350 ms and leaves the view alone, half with two hands;
-  - the haptic pulses on each event (a recorded list).
-- **Holster draw:** a grip at the hip draws the handgun with a pulse.
-- **Pictures:** the lab's `vr-guns` tube draws the VR view from scripted poses: the shotgun two-handed, pumped, a pistol magazine part way in, and a shell part way into the port.
+  - the haptic pulses on each event (a recorded list);
+  - the MAC-11: one .380 case per round through `ejectCasing` (the desktop shot skips it in VR), at the port with the gun hand's speed; 17-19 rounds and as many light pulses in a held second; a burst that rides the gun up but not the view; the magazine drop, pouch, mid-seat and seat with 32 from the .380 pool; the knob locked back on empty, no bolt release on B, and the knob pulled by hand to chamber.
+- **Holster draw:** a grip at the hip draws the handgun with a pulse; with the MAC-11 drawn last the hip wears it and the grip draws it, and with it in hand the handgun takes the hip.
+- **Pictures:** the lab's `vr-guns` tube draws the VR view from scripted poses: the shotgun two-handed, pumped, a pistol magazine part way in, a shell part way into the port, the MAC-11 in hand and mid-burst, its magazine part way up the grip and its knob pulled, and the MAC-11 on her hip.
 - **Lazy-follow cards.**
 - **Dynamic-resolution controller.**
 - **Avatar scale.**
@@ -158,7 +183,8 @@ For each, give FPS / HZ, GPU MS and the scale percentage, with RENDER SCALE on A
 Everything that depends on SteamVR has only been reasoned about, not run:
 
 - real poses, and the skeletal finger data;
-- whether 14 degrees is the right grip angle for your hand on a Touch controller;
+- whether 14 degrees is the right grip angle for your hand on a Touch controller (and 4 for the MAC-11);
+- push-to-talk on the real left stick, and SteamVR taking up the v4 defaults;
 - the vibration outputs on the real controllers;
 - the compositor's timing;
 - the texture bounds used by the render scale;

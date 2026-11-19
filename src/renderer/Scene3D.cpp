@@ -4598,15 +4598,17 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   // A magazine or shell rides the other hand the same way.
   supportShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.L":"hand.R"))-pose.hands[size_t(1-g)].wrist;
   if(!std::isfinite(supportShift.x)||!std::isfinite(supportShift.y)||!std::isfinite(supportShift.z)||std::sqrt(supportShift.x*supportShift.x+supportShift.y*supportShift.y+supportShift.z*supportShift.z)>.6f)supportShift={};
-  // The holsters: the shotgun across her back, the pistol at the gun hand's hip, while they are not in her hand.
-  auto holster=[&](const Mesh& mesh,const Texture& texture,Point3 at,Point3 back,Point3 up,bool pistol){
+  // The holsters: the shotgun across her back, the sidearm not in hand (the pistol or the MAC-11: AvatarPose::hip) at
+  // the gun hand's hip, while they are not in her hand.
+  auto holster=[&](const Mesh& mesh,const Texture& texture,Point3 at,Point3 back,Point3 up,bool pistol,bool mac=false){
    back=unit(back);up=unit(up-back*(back.x*up.x+back.y*up.y+back.z*up.z));const Point3 right{back.y*up.z-back.z*up.y,back.z*up.x-back.x*up.z,back.x*up.y-back.y*up.x};   // right = back x up: the mirrored frame gunBasis has
    VrHand frame;frame.position=at;frame.basis={right,up,back};
-   if(pistol)for(auto face:mesh.triangles){for(auto&v:face.v)v.p=vrPistolPoint(v.p,true);draw(face,texture,frame);}
+   if(pistol)for(auto face:mesh.triangles){for(auto&v:face.v)v.p=mac?vrMacPoint(v.p,true):vrPistolPoint(v.p,true);draw(face,texture,frame);}
    else{const auto center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;const float scale=.85f/std::max({range.x,range.y,range.z});
     for(auto face:mesh.triangles){if(face.part==3)continue;for(auto&v:face.v){const auto p=(v.p-center)*scale;v.p={-p.x,p.y,p.z};}draw(face,texture,frame);}}};
   if(pose.back)holster(m_weaponMesh,m_weaponTexture,solve.backSlot,solve.torsoUp*-.75f+solve.torsoLeft*(pose.gunSide?-.65f:.65f),solve.torsoForward*-1.f,false);
-  if(pose.hip)holster(m_handgunMesh,m_handgunTexture,solve.hipSlot,Point3{0,0,1},solve.bodyForward,true);
+  if(pose.hip==int(WeaponId::MachinePistol)+1)holster(m_macMesh,m_macTexture,solve.hipSlot,Point3{0,0,1},solve.bodyForward,true,true);
+  else if(pose.hip)holster(m_handgunMesh,m_handgunTexture,solve.hipSlot,Point3{0,0,1},solve.bodyForward,true);
  }
  // Cards: the area title, the subtitles and a short status line (health, and the load while it changes or a
  // reload runs) hang ahead of the head on a direction that lags it (VrRuntime::lazyFollow) and face the eye.
@@ -4637,28 +4639,32 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   ring(inner,soft,feather);ring(soft,outer,black);}
 
  // The guns' working points from the meshes as they are drawn here (Game::VrGunGeometry), handed to the game once.
- if(!m_vrGunMeasured){Game::setVrGunGeometry(WeaponId::Handgun,measureVrGun(m_handgunMesh,true));Game::setVrGunGeometry(WeaponId::Shotgun,measureVrGun(m_weaponMesh,false));m_vrGunMeasured=true;}
+ if(!m_vrGunMeasured){Game::setVrGunGeometry(WeaponId::Handgun,measureVrGun(m_handgunMesh,true));Game::setVrGunGeometry(WeaponId::Shotgun,measureVrGun(m_weaponMesh,false));Game::setVrGunGeometry(WeaponId::MachinePistol,measureVrMac(m_macMesh));m_vrGunMeasured=true;}
  const auto view=game.vrGunView();
- const auto pistolGeometry=Game::vrGunGeometry(WeaponId::Handgun);
+ const auto pistolGeometry=Game::vrGunGeometry(WeaponId::Handgun),macGeometry=Game::vrGunGeometry(WeaponId::MachinePistol);
+ // A magazine (the pistol's part 5, the MAC-11's part 8) in a frame, its point at `offset` from the gun frame's.
+ auto drawMagazine=[&](bool mac,Point3 offset,Point3 at,const std::array<Point3,3>& basis){VrHand frame;frame.position=at;frame.basis=basis;
+  for(auto face:(mac?m_macMesh:m_handgunMesh).triangles){if(face.part!=(mac?8:5))continue;for(auto&v:face.v)v.p=(mac?vrMacPoint(v.p,true):vrPistolPoint(v.p,true))+offset;draw(face,mac?m_macTexture:m_handgunTexture,frame);}};
  // One part of a mesh in a frame (its points already moved into the frame's own coordinates by point()).
  auto drawPart=[&](const Mesh& mesh,const Texture& texture,int part,auto point,Point3 at,const std::array<Point3,3>& basis){VrHand frame;frame.position=at;frame.basis=basis;
   for(auto face:mesh.triangles){if(face.part!=part)continue;for(auto&v:face.v)v.p=point(v.p);draw(face,texture,frame);}};
  // A magazine let fall: where it fell, or on the floor.
- if(view.dropped){const Point3 middle=pistolGeometry.magwell+pistolGeometry.magAxis*(pistolGeometry.magLength*.5f);
-  drawPart(m_handgunMesh,m_handgunTexture,5,[&](Point3 p){return vrPistolPoint(p,true)-middle;},view.dropAt,{view.dropRight,view.dropUp,view.dropBack});}
+ if(view.dropped){const bool mac=view.dropGun==WeaponId::MachinePistol;const auto&g=mac?macGeometry:pistolGeometry;const Point3 middle=g.magwell+g.magAxis*(g.magLength*.5f);
+  drawMagazine(mac,middle*-1.f,view.dropAt,{view.dropRight,view.dropUp,view.dropBack});}
  // The support hand's fist as drawn, and a frame in it (up the fist toward the index, back from the knuckles: the
  // frame a gun would have in that hand), for a magazine or shell it holds.
  const VrHand&off=hands[0];const bool offFrame=off.tracked&&off.handFrame&&!off.snapped;const Point3 fist=local(off.gunOrigin)+supportShift;
  Point3 shellMiddle{};{int n=0;for(const auto&face:m_weaponMesh.triangles)if(face.part==3)for(const auto&v:face.v){shellMiddle=shellMiddle+vrShotgunPoint(m_weaponMesh,v.p);++n;}if(n)shellMiddle=shellMiddle*(1.f/float(n));}
- if(offFrame&&view.held==1&&view.seat<0)drawPart(m_handgunMesh,m_handgunTexture,5,[&](Point3 p){return vrPistolPoint(p,true)-pistolGeometry.magwell;},fist,off.gunBasis);
+ const bool macOut=game.activeFirearm()==WeaponId::MachinePistol;
+ if(offFrame&&view.held==1&&view.seat<0)drawMagazine(macOut,(macOut?macGeometry:pistolGeometry).magwell*-1.f,fist,off.gunBasis);
  if(offFrame&&view.held==2&&view.seat<0)drawPart(m_weaponMesh,m_weaponTexture,3,[&](Point3 p){return vrShotgunPoint(m_weaponMesh,p)-shellMiddle+Point3{0,.015f,0};},fist,off.gunBasis);
  if(hands[1].tracked&&!game.unarmed()&&(!game.holdingClutter()||game.vrCarryHand()!=1)){
   VrHand gun=hands[1];if(gun.handFrame){gun.position=gun.gunOrigin;gun.basis=gun.gunBasis;}
   gun.position=local(gun.position)+gunShift;
-  const bool pistol=game.activeFirearm()==WeaponId::Handgun;
+  const bool pistol=game.activeFirearm()==WeaponId::Handgun,mac=game.activeFirearm()==WeaponId::MachinePistol;
   // Without skeletal input there is no tracking-space frame to aim through the support hand: the old game-space
   // aim along the hands' line stands in (the controller frame's offsets).
-  if(game.vrSupportGrip()&&hands[0].tracked&&!pistol&&!hands[0].snapped){
+  if(game.vrSupportGrip()&&hands[0].tracked&&!pistol&&!mac&&!hands[0].snapped){
    auto delta=local(hands[0].handFrame?hands[0].gunOrigin:hands[0].position)-gun.position;float length=std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z);
    if(length>.0001f){Point3 back={-delta.x/length,-delta.y/length,-delta.z/length},upHint=gun.basis[1];
     Point3 side={back.y*upHint.z-back.z*upHint.y,back.z*upHint.x-back.x*upHint.z,back.x*upHint.y-back.y*upHint.x};float sideLength=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);
@@ -4682,7 +4688,12 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
   // magazine (part 5) in, out (drawn in the hand or on the floor) or part way up the well on its line.
   if(pistol){const float slide=view.slide;
    for(auto face:m_handgunMesh.triangles){if(face.part==5&&view.magOut)continue;for(auto&v:face.v){auto p=v.p;if(face.part==4)p.z-=slide;v.p=vrPistolPoint(p,hands[1].handFrame);}draw(face,m_handgunTexture,gun);}
-   if(view.held==1&&view.seat>=0&&view.magOut){const Point3 down=pistolGeometry.magAxis*-view.depth;drawPart(m_handgunMesh,m_handgunTexture,5,[&](Point3 p){return vrPistolPoint(p,true)+down;},gun.position,gun.basis);}}
+   if(view.held==1&&view.seat>=0&&view.magOut)drawMagazine(false,pistolGeometry.magAxis*-view.depth,gun.position,gun.basis);}
+  // The MAC-11 (vrMacPoint): its cocking knob (part 9) back when locked or pulled by the support hand; its long
+  // magazine (part 8) in, out, or part way up the grip on its line.
+  else if(mac){const float knob=view.slide;
+   for(auto face:m_macMesh.triangles){if(face.part==8&&view.magOut)continue;for(auto&v:face.v){auto p=v.p;if(face.part==9)p.z-=knob;v.p=vrMacPoint(p,hands[1].handFrame);}draw(face,m_macTexture,gun);}
+   if(view.held==1&&view.seat>=0&&view.magOut)drawMagazine(true,macGeometry.magAxis*-view.depth,gun.position,gun.basis);}
   // The shotgun: its pump (part 2) slides back with the physical pump stroke. Its shell (part 3) is never drawn on
   // it: a spent case leaves through Game::ejectCasing from the pump; a fresh one is drawn in the support hand, or
   // part way into the loading port on its line.

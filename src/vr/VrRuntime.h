@@ -70,7 +70,12 @@ public:
  // square to its slide, a Glock's 22, the Touch controller's handle more), so the bore follows the hand the way the
  // real gun would and the model's grip lies along the fist instead of poking out of its heel.
  static constexpr float GunPitch=.2443f;   // 14 degrees
- static void gunFrame(Point3 across,Point3 palm,Point3 forward,bool leftHand,Point3& right,Point3& up,Point3& back);
+ // The MAC-11's grip is square to its bore (its magazine runs straight down through it, measured from mac11.fbx):
+ // raised only the 4 degrees the medic pistol's 10-degree grip sits under GunPitch, so its magazine lies along the
+ // fist's channel as the pistol's does, and the same hand points it that much lower than the pistol.
+ static constexpr float MacPitch=.0698f;   // 4 degrees
+ static float gunPitch(WeaponId gun){return gun==WeaponId::MachinePistol?MacPitch:GunPitch;}
+ static void gunFrame(Point3 across,Point3 palm,Point3 forward,bool leftHand,Point3& right,Point3& up,Point3& back,float pitch=GunPitch);
  // The support hand on the fore-end, worked in tracking space (right-handed; game space is its mirror, so
  // frames are built here and only then mapped). In: the gun hand's grip point and its gun frame's right and
  // up, the support hand's skeletal frame (wrist, across pinky to index, palm, forward along the knuckles), the
@@ -91,7 +96,15 @@ public:
  // The support hand round the pistol's grip (tracking space): its fist on the support side of the gun hand and a
  // little lower, the channel up the grip, knuckles forward and round the front of the gun hand's fingers, the palm
  // toward the gun. Only the hand moves: the pistol aims from the gun hand.
- static SupportPose pistolSupportPose(Point3 grip,Point3 gunRight,Point3 gunUp,Point3 gunBack,bool leftHand);
+ static SupportPose pistolSupportPose(Point3 grip,Point3 gunRight,Point3 gunUp,Point3 gunBack,bool leftHand,float pitch=GunPitch);
+ // SteamVR Input: the action manifest and each controller's default bindings, written to %LOCALAPPDATA%/RawMetal/vr.
+ // SteamVR caches default bindings by file name, so a binding change takes a new BindingsVersion (the files are
+ // <controller>-v<BindingsVersion>.json). BindingActions: the boolean, vector1 and vector2 inputs in handle order.
+ static constexpr int BindingsVersion=4,BindingActions=14;
+ static const char* const* bindingActionNames();
+ static std::string actionManifest();
+ static std::string controllerBindings(const std::string& controller);
+ static bool testBindings(std::ostream& report);
  static bool testSupport(std::ostream& report);
  // A pose without SteamVR, for tests and the lab's VR captures: the head (tracking space, where it looks), each
  // physical hand's skeletal joints (wrist, index, middle and little-finger knuckles, tracking space), its velocity,
