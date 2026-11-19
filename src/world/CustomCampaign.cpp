@@ -182,6 +182,13 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   int value=-1;const auto& v=field->value;const auto end=v.data()+v.size();const auto r=std::from_chars(v.data(),end,value);
   if(v.empty()||r.ec!=std::errc{}||r.ptr!=end||!finishMaterialAllowed(value))throw std::runtime_error(std::string(key)+"="+v+" is not a finish; use a structure material 0-51 (not 1, 4, 6, 9, 17 or 30)");
   return value;};
+ // A material turn (turn=, treadturn=, deckturn=, wallturn=...): degrees the texture is turned on
+ // its faces, kept in [0, 360); absent, 0 (the texture runs as it always has).
+ auto turnField=[](const NamedFields& fields,const char* key){
+  const auto* field=findNamedField(fields,key);if(!field)return 0.f;
+  float value=0;const auto& v=field->value;const auto end=v.data()+v.size();const auto r=std::from_chars(v.data(),end,value);
+  if(v.empty()||r.ec!=std::errc{}||r.ptr!=end||!(value>=-360.f&&value<=360.f))throw std::runtime_error(std::string(key)+"="+v+" is not a turn; use degrees from 0 to 360 (90 turns it a quarter)");
+  value=std::fmod(value,360.f);if(value<0)value+=360.f;return value;};
  auto parseRecord=[&](std::vector<std::string> f,const NamedFields& namedFields){
   const std::string tag=f[0];
   // A field the exporter appends to an older record (empty or absent keeps the default).
@@ -269,6 +276,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    int wall=integer(f,2,"wall surface"),floor=integer(f,3,"floor surface"),ceiling=integer(f,4,"ceiling surface");
    for(int surface:{wall,floor,ceiling})if(surface<SurfaceDefault||surface>=SurfaceCount)throw std::runtime_error("invalid surface; use -1 through 12");
    map->wallSurface=wall;map->floorSurface=floor;map->ceilingSurface=ceiling;
+   // wallturn= floorturn= ceilingturn=: each set's texture turned (planks across the room).
+   map->wallTurn=turnField(namedFields,"wallturn");map->floorTurn=turnField(namedFields,"floorturn");map->ceilingTurn=turnField(namedFields,"ceilingturn");
   }else if(tag=="OBJECTIVE_TEXT"){
    if(f.size()!=4)throw std::runtime_error("malformed OBJECTIVE_TEXT record");auto map=mapAt(maps,f);auto id=scriptName(f,2,"objective name");auto label=decode(f[3]);
    if(label.empty()||label.size()>80||!std::all_of(label.begin(),label.end(),[](unsigned char c){return c>=32&&c<=126;})||std::all_of(label.begin(),label.end(),[](char c){return c==' ';}))throw std::runtime_error("invalid objective text; use 1 to 80 printable ASCII characters");
@@ -383,7 +392,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   }else if(tag=="LAYER"){
    if(f.size()<6)throw std::runtime_error("malformed LAYER record");auto& layer=layerAt(maps,f);layer.name=decode(f[3]);layer.elevation=number(f,4,"layer elevation");layer.thickness=number(f,5,"layer thickness");
    // deck= edge= railing=: structure materials for a balcony's walking face, its fascia and its rails.
-   layer.deck=finishField(namedFields,"deck");layer.edge=finishField(namedFields,"edge");layer.railing=finishField(namedFields,"railing");
+   layer.deck=finishField(namedFields,"deck");layer.edge=finishField(namedFields,"edge");layer.railing=finishField(namedFields,"railing");layer.deckTurn=turnField(namedFields,"deckturn");
   }else if(tag=="ROW"){
    if(f.size()<5)throw std::runtime_error("malformed ROW record");auto& layer=layerAt(maps,f);int row=integer(f,3,"row index");if(row<0||row>=24)throw std::runtime_error("invalid row index");layer.rows[size_t(row)]=f[4];
   }else if(tag=="DOOR"){
@@ -424,6 +433,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(given(12)){int facing=integer(f,12,"structure facing");if(facing<0||facing>3)throw std::runtime_error("invalid structure facing");map->structures.back().facing=std::uint8_t(facing);}
    // A light shaft is only light: nothing walks into it.
    if(map->structures.back().material==LightShaftMaterial)map->structures.back().solid=false;
+   // turn=: degrees its material's texture is turned on every face (planks, tiles, brick courses).
+   map->structures.back().turn=turnField(namedFields,"turn");
    // trim= trimwidth=: a flooring's edge band, a structure material along its sides (World::splitFinishes).
    {auto& s=map->structures.back();s.trim=finishField(namedFields,"trim");
     if(const auto* field=findNamedField(namedFields,"trimwidth")){float w=0;const auto& v=field->value;const auto r=std::from_chars(v.data(),v.data()+v.size(),w);
@@ -458,6 +469,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(const auto* rails=findNamedField(namedFields,"rails")){const auto& v=rails->value;if(v!="both"&&v!="left"&&v!="right"&&v!="none")throw std::runtime_error("rails="+v+" is not both, left, right or none");primitive.rails=v=="both"?3:v=="left"?1:v=="right"?2:0;}
     if(const auto* thick=findNamedField(namedFields,"thick")){float t=0;const auto& v=thick->value;const auto r=std::from_chars(v.data(),v.data()+v.size(),t);
      if(v.empty()||r.ec!=std::errc{}||r.ptr!=v.data()+v.size()||!(t>=.05f&&t<=1.5f))throw std::runtime_error("thick="+v+" is out of range (0.05 to 1.5)");primitive.thick=t;}
+    primitive.turn=turnField(namedFields,"turn");
     addPrimitive(*map,primitive,f.size()>11&&!f[11].empty());}
    catch(const std::runtime_error& e){throw std::runtime_error("map "+f[1]+" PRIM: "+e.what());}
   }else if(tag=="FIXTURE"){
@@ -692,7 +704,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     number(f,2,"stair x1"),number(f,3,"stair y1"),number(f,4,"stair x2"),number(f,5,"stair y2"),number(f,6,"stair bottom"),number(f,7,"stair top"),
     integer(f,8,"stair steps"),boolean(f,9,"stair along y"),boolean(f,10,"stair ascending"),f.size()>11&&!f[11].empty()?boolean(f,11,"stair open underside"):false,f.size()>12&&!f[12].empty()?number(f,12,"stair tread thickness"):.12f,f.size()>13&&!f[13].empty()?boolean(f,13,"stair side rails"):false});
    // tread= riser= stringer=: structure materials for the walking face, the step body and the side guards.
-   {auto& st=map->stairs.back();st.tread=finishField(namedFields,"tread");st.riser=finishField(namedFields,"riser");st.stringer=finishField(namedFields,"stringer");}
+   {auto& st=map->stairs.back();st.tread=finishField(namedFields,"tread");st.riser=finishField(namedFields,"riser");st.stringer=finishField(namedFields,"stringer");st.treadTurn=turnField(namedFields,"treadturn");}
   }else if(tag=="CREATURE"){
    if(f.size()<6)throw std::runtime_error("malformed CREATURE record");auto map=mapAt(maps,f);int kind=integer(f,2,"creature kind");if(kind<0||kind>=CreatureKindCount)throw std::runtime_error("invalid creature kind");
    CreatureSpawn spawn{CreatureKind(kind),{number(f,3,"creature x"),number(f,4,"creature y")},number(f,5,"creature z")};

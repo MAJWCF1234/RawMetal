@@ -1914,7 +1914,8 @@ def hillside(s, slot, catalogue, m):
     a foundation on the low side, raised 0.3 m on brick with a stone edge, steps from its door,
     stairs inside to a gallery (step tops, step fronts, side rails, balcony floor, edge and
     railing in their own materials) and a rug; a stilted deck; steps up the slope in terraces;
-    a level patio with a brick edge and a path down to it that follows the ground."""
+    a level patio with a brick edge and a path down to it that follows the ground. The house's
+    planks run turned a quarter (turn=90)."""
     i, ox, oy = m['index'], 24 * m['col'], 24 * m['row']
     olive = 0x8aa040
     # The hill: 3 m to the north, 0 to the south, a slope between; the flats' blends end at
@@ -1930,7 +1931,7 @@ def hillside(s, slot, catalogue, m):
     m['walls'] |= {(x, y) for x in range(3, 11) for y in range(7, 14) if x in (3, 10) or y in (7, 13)}
     m['walls'] -= {(6, 13), (7, 13)}
     s.rec(m, 'STRUCT', i, 3, 7, 11, 14, 0, .1, 0, 51,
-          'footing=foundation|snap=high|raise=0.3|base=31|cap=33|capwidth=0.12')
+          'footing=foundation|snap=high|raise=0.3|base=31|cap=33|capwidth=0.12|turn=90')  # planks turned a quarter (turn=, the Builder's R)
     s.rec(m, 'DOOR', i, 6, 8, 13.5, 0, 0, 0, 1, 0, -1, '', '', '', 1, '', '', '', '', '', '', 0)
     # Inside: stairs up the west wall to a gallery along the north wall, a rug by the door.
     s.rec(m, 'STAIR', i, 4, 9, 5, 12.9, 0, 2.6, 13, 1, 0, 0, .12, 1, 'tread=51|riser=31|stringer=19')

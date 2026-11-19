@@ -160,6 +160,32 @@ bool Game::testMapFormat(){
    check(exportRmc("T",{{c->maps[0],-1}}).text.find("|trim=32|trimwidth=0.15")!=std::string::npos,"the exporter writes the trim back");
    check(refused(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51|trimwidth=0.1\n"),"trimwidth").empty(),"trimwidth= without trim= is refused");}
 
+  // ---- Material turns: STRUCT/PRIM turn=, STAIR treadturn=, LAYER deckturn=, SURFACE wallturn= floorturn= ceilingturn= ----
+  {const std::string body="STRUCT|0|4|4|8|7|0|0.03|0|51|turn=90\nSTRUCT|0|9|4|12|7|0|0.03|0|51\nSTRUCT|0|13|4|16|7|0|0.03|0|51|turn=-90|trim=32\n"
+    "PRIM|0|box|18|6|0|2|2|0.5|0|46|turn=180\nSTAIR|0|6|10|12|12|0|3|12|0|1|tread=51|riser=15|treadturn=90\nSURFACE|0|0|8|-1|floorturn=90|wallturn=270\n";
+   auto c=loadCustomCampaignText(room("FORMAT|2\n",body),"turns.rmc");Game g(c);const auto& s=g.world().structures();
+   int turned=0,plain=0,back=0,trimTurned=0,prim=0,treads=0,risers=0;
+   for(const auto& st:s){
+    if(st.material==51&&st.x1==4)turned+=st.turn==90;
+    if(st.material==51&&st.x1==9)plain+=st.turn==0;
+    if(st.material==51&&st.x1>13&&st.x2<16)back+=st.turn==270;
+    if(st.material==32)trimTurned+=st.turn!=0;
+    if(st.material==46)prim+=st.turn==180;
+    if(st.material==51&&st.x1>=6&&st.y1>=10&&st.top-st.bottom<.05f)treads+=st.turn==90;
+    if(st.material==15&&st.y1>=10)risers+=st.turn==0;}
+   check(c&&turned==1&&plain==1&&back==1&&trimTurned==0,"turn= turns a block's material (absent, 0; -90 is 270); its edge trim keeps the band's own way");
+   check(prim>0&&treads==12&&risers==12,"a shape's boxes take its turn; treadturn= turns the step tops, not the fronts ("+std::to_string(prim)+" shape pieces, "+std::to_string(treads)+" tops)");
+   check(std::fabs(g.world().floorTurn()-90)<1e-4f&&std::fabs(g.world().wallTurn()-270)<1e-4f&&g.world().ceilingTurn()==0,"SURFACE floorturn= and wallturn= reach the map");
+   const auto exported=exportRmc("Turns",{{c->maps[0],-1}}).text;
+   check(exported.find("|51|turn=90")!=std::string::npos&&exported.find("|turn=180")!=std::string::npos&&exported.find("treadturn=90")!=std::string::npos&&exported.find("floorturn=90|wallturn=270")!=std::string::npos,
+    "the exporter writes every turn back");
+   {auto again=loadCustomCampaignText(exported,"turns-again.rmc");const auto differences=again?compareAuthoredMaps(*c->maps[0],*again->maps[0],false):std::vector<std::string>{"did not load"};
+    check(differences.empty(),"a turned map exports and loads back the same"+(differences.empty()?std::string():": "+differences.front()));}
+   {const auto why=refused(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51|turn=sideways\n"),"turn=sideways");check(why.empty(),"a turn that is not degrees is refused, naming it ("+why+")");}
+   {const auto why=refused(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51|turn=450\n"),"turn=450");check(why.empty(),"a turn past 360 is refused ("+why+")");}
+   {auto none=loadCustomCampaignText(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51\n"),"plain.rmc"),zero=loadCustomCampaignText(room("FORMAT|2\n","STRUCT|0|4|4|8|7|0|0.03|0|51|turn=360\n"),"zero.rmc");
+    check(none&&zero&&compareAuthoredMaps(*none->maps[0],*zero->maps[0],false).empty(),"turn=360 is no turn: the same map as one without it");}}
+
   // ---- Footings indoors: a room raised 0.6 m on a brick base with a stone edge; its door gets steps ----
   {std::string body="STRUCT|0|8|8|14|13|0|0.1|0|50|footing=foundation|raise=0.6|base=31|cap=33|capwidth=0.12\n"
     "DOOR|0|10|12|8.5|0|0|0|1|0|-1||||1|||||||0\n";
