@@ -2534,7 +2534,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // they left the mouth or hole), turned to face the eye, tapering as it falls and thins, its edges catching the light;
  // where its drops have pulled apart it breaks into droplets. A spill's drops are droplets. A puddle is a soft-edged
  // film: water a dark wet sheen that mirrors the lights, oil darker and glossy, the chemical faintly green and glowing.
- if(level==game.level()){
+ // Each map's own spills only, at its own places (the chunk being drawn), never another map's at the same spot.
+ if(!game.puddles().empty()||!game.liquidDrops().empty()){
   auto tint=[](int k,float r,float g,float b){(void)k;auto ch=[](float v){return unsigned(std::clamp(v,0.f,1.f)*255);};return (ch(r)<<16)|(ch(g)<<8)|ch(b);};
   // The ribbon's sheet: across it, bright translucent edges and a clearer middle.
   static const std::array<Texture,3> ribbons=[&]{std::array<Texture,3> out;for(int k=0;k<3;++k){const auto& tr=liquid::traits[k];Texture t{16,2,std::vector<std::uint32_t>(32)};
@@ -2559,17 +2560,17 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     t.transparent=true;t.clampEdges=true;SoftwareRenderer::applyMaterial(t,int(Material::Water),"puddle");t.glossStrength=k==2?.7f:.97f;
     if(k==2){t.emission.resize(t.pixels.size());for(size_t i=0;i<t.pixels.size();++i){const unsigned a=t.pixels[i]>>24;t.emission[i]=0xff000000u|((a*30/255)<<16)|((a*110/255)<<8)|(a*25/255);}}
     out[size_t(k)][size_t(v)]=std::move(t);}return out;}();
-  for(const auto& p:game.puddles()){const int kind=std::clamp(int(p.kind),0,2);const unsigned h=unsigned(std::fabs(p.at.x*91.7f+p.at.y*53.3f))%997u;const auto& t=films[size_t(kind)][h%3u];
+  for(const auto& p:game.puddles()){if(p.level!=level)continue;const int kind=std::clamp(int(p.kind),0,2);const unsigned h=unsigned(std::fabs(p.at.x*91.7f+p.at.y*53.3f))%997u;const auto& t=films[size_t(kind)][h%3u];
    const float r=p.radius*1.25f,turn=float(h)*.0063f,c=std::cos(turn)*r,sn=std::sin(turn)*r,z=p.at.z+.004f;
    const MeshVertex A{{p.at.x-c+sn,p.at.y-sn-c,z},0,0,1},B{{p.at.x+c+sn,p.at.y+sn-c,z},1,0,1},C{{p.at.x+c-sn,p.at.y+sn+c,z},1,1,1},D{{p.at.x-c-sn,p.at.y-sn+c,z},0,1,1};
    tri(A,B,C,t,1.f);tri(A,C,D,t,1.f);}
-  const auto& pv=game.player();const Point3 eye{pv.pos.x,pv.pos.y,pv.z+pv.eye};
+  const Point3 eye{player.pos.x,player.pos.y,player.z+player.eye};
   auto facing=[&](Point3 at,Point3 along,float half){Point3 to=eye-at;Point3 s{along.y*to.z-along.z*to.y,along.z*to.x-along.x*to.z,along.x*to.y-along.y*to.x};const float l=std::sqrt(s.x*s.x+s.y*s.y+s.z*s.z);
    return l>1e-6f?s*(half/l):Point3{half,0,0};};
   auto bead=[&](const Game::LiquidDrop& d,float size){const auto& t=beads[size_t(std::clamp(int(d.kind),0,2))];Point3 to=eye-d.p;const float l=std::sqrt(to.x*to.x+to.y*to.y+to.z*to.z);if(l<1e-4f)return;to=to*(1/l);
    Point3 u=std::fabs(to.z)<.95f?Point3{-to.y,to.x,0}:Point3{1,0,0};const float ul=std::sqrt(u.x*u.x+u.y*u.y+u.z*u.z);u=u*(size/ul);const Point3 w{to.y*u.z-to.z*u.y,to.z*u.x-to.x*u.z,to.x*u.y-to.y*u.x};
    const MeshVertex A{d.p-u-w,0,0,1},B{d.p+u-w,1,0,1},C{d.p+u+w,1,1,1},D{d.p-u+w,0,1,1};tri(A,B,C,t,1.15f);tri(A,C,D,t,1.15f);};
-  std::map<int,std::vector<const Game::LiquidDrop*>> streams;for(const auto& d:game.liquidDrops()){if(d.stream>0)streams[d.stream].push_back(&d);else bead(d,.006f);}
+  std::map<int,std::vector<const Game::LiquidDrop*>> streams;for(const auto& d:game.liquidDrops()){if(d.level!=level)continue;if(d.stream>0)streams[d.stream].push_back(&d);else bead(d,.006f);}
   for(const auto& [id,run]:streams){(void)id;if(run.empty())continue;const auto& t=ribbons[size_t(std::clamp(int(run.back()->kind),0,2))];const float width=run.back()->kind==liquid::Kind::Oil?.013f:.011f;
    // From the newest (at the mouth) down: one ribbon while the drops stay close, droplets once they have pulled apart.
    float along=0;bool broken=false;

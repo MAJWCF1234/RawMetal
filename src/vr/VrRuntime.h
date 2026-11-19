@@ -55,6 +55,8 @@ public:
  static std::string vrpathRuntime(const std::string& json);
  static const wchar_t* const SteamKey;
  static bool testDetection();
+ static bool gripHeld(bool was,bool clickActive,bool click,bool squeezeActive,float squeeze,bool legacy);
+ static bool testGrip();
  static bool testMath();
  // --vr-test and the lab's engine.vr: every VR check that needs no headset, one PASS/FAIL line each.
  static bool testAll(std::ostream& report);
