@@ -1,0 +1,9 @@
+# The Starter Map's Kits Gallery (maps 126 and 127 on the forest's cells there): every kit the Campaign
+# Builder's Kits tab offers (tools/campaign/kits.py), set down as PREFAB_PLACEs on two levelled yards.
+# Tubes: kits.
+world custom "custom maps/Starter Map.rmc"
+map-name Kits Gallery
+camera 8.25 23.5 -999 -90 -8
+scenery-only
+size 1280 720
+frames 12
