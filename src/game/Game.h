@@ -361,8 +361,9 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // only), the vignette's strength while moving or turning (0 off), seated play, a left-handed avatar (gun hand, hip
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
- float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;};
-struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=330,RowTop=Y+46,RowHeight=21,Rows=12,SliderX=X+179,SliderWidth=75;};
+ float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
+ int pullHighlight=1;};   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 
 
@@ -654,7 +655,7 @@ public:
     static bool testNpcVoices();
     enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart,Comfort};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?8:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Comfort?ComfortRows:2;}
+    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?9:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Comfort?ComfortRows:2;}
     // VR: the settings' INVERT MOUSE Y row (no mouse in a headset) opens VR COMFORT instead: 0 back, 1 turn
     // speed, 2 vignette, 3 seated, 4 recalibrate height, 5 left-handed, 6 render scale, 7 frame-rate readout.
     static constexpr int ComfortRows=8;

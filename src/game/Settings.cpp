@@ -103,14 +103,14 @@ void Game::updateMenu(const InputState& input){
  }
  if(m_menuPage!=MenuPage::Settings){
   if(m_menuPage==MenuPage::ConfirmRestart){
-   if(activate){if(m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=8;}
+   if(activate){if(m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=9;}
     else {restart();m_paused=false;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_suppressFire=true;}}
    m_menuPrevious=input;return;
   }
   if(activate){
    if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
     bool saving=m_menuPage==MenuPage::Save;int backRow=saving?3:4;
-    if(m_menuSelection==backRow){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?7:8;m_menuMessage.clear();}}
+    if(m_menuSelection==backRow){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?10:11;m_menuMessage.clear();}}
     else if(!saving&&m_menuSelection==3){m_menuMessage.clear();loadCheckpoint();}
     else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
      if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
@@ -139,13 +139,15 @@ void Game::updateMenu(const InputState& input){
  // In VR the mouse row is VR COMFORT.
  if(m_menuSelection==5&&activate&&m_vrInputActive){m_menuPage=MenuPage::Comfort;m_menuSelection=1;m_dragSlider=-1;m_menuMessage.clear();m_menuPrevious=input;return;}
  if(m_menuSelection==5&&(activate||direction)&&!m_vrInputActive)m_settings.invertMouse=!m_settings.invertMouse;
+ // The Physgloves target's outline: SUBTLE or NONE (the reticle still tightens on a prop either way).
+ if(m_menuSelection==8&&(activate||direction))m_settings.pullHighlight=m_settings.pullHighlight?0:1;
  if(activate&&m_menuSelection==0){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_paused=false;m_suppressFire=true;}}
- if(activate&&m_menuSelection==8){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
- if(activate&&(m_menuSelection==9||m_menuSelection==10)){m_menuPage=m_menuSelection==9?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
+ if(activate&&m_menuSelection==9){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
+ if(activate&&(m_menuSelection==10||m_menuSelection==11)){m_menuPage=m_menuSelection==10?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
  // Returning to the title hands it the input that chose it: a click or key
  // still held must not land on the title row under the pointer (QUIT GAME
  // closed the game outright).
- if(activate&&m_menuSelection==11){if(m_menuFromTitle)m_quitRequested=true;else {showTitleScreen();m_titlePrevious=input;}}
+ if(activate&&m_menuSelection==12){if(m_menuFromTitle)m_quitRequested=true;else {showTitleScreen();m_titlePrevious=input;}}
  m_menuPrevious=input;
 }
 void Game::loadSettings(const std::wstring& path){
@@ -154,7 +156,8 @@ void Game::loadSettings(const std::wstring& path){
  if(!std::isfinite(settings.master)||!std::isfinite(settings.music)||!std::isfinite(settings.effects)||!std::isfinite(settings.sensitivity))return;
  settings.master=std::clamp(settings.master,0.f,1.f);settings.music=std::clamp(settings.music,0.f,1.f);settings.effects=std::clamp(settings.effects,0.f,1.f);settings.sensitivity=std::clamp(settings.sensitivity,.2f,3.f);settings.invertMouse=inverted!=0;
  // Lens settings came later: older files keep the default look.
- float dof=1,lens=1;if(file>>dof>>lens&&std::isfinite(dof)&&std::isfinite(lens)){settings.depthOfField=std::clamp(dof,0.f,2.f);settings.lensEffects=std::clamp(lens,0.f,2.f);}
+ float dof=1,lens=1;if(file>>dof>>lens&&std::isfinite(dof)&&std::isfinite(lens)){settings.depthOfField=std::clamp(dof,0.f,2.f);settings.lensEffects=std::clamp(lens,0.f,2.f);
+  int highlight=1;if(file>>highlight)settings.pullHighlight=highlight?1:0;}
  // VR comfort came later still.
  float turn=1,vignette=.5f,scale=0;int seated=0,lefty=0,rate=0;
  if(file>>turn>>vignette>>seated>>lefty>>rate>>scale&&std::isfinite(turn)&&std::isfinite(vignette)&&std::isfinite(scale)){
@@ -164,7 +167,7 @@ void Game::loadSettings(const std::wstring& path){
 }
 void Game::saveSettings(const std::wstring& path)const{
  std::error_code error;auto filePath=std::filesystem::path(path);std::filesystem::create_directories(filePath.parent_path(),error);if(error)return;
- std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<' '<<m_settings.depthOfField<<' '<<m_settings.lensEffects
+ std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<' '<<m_settings.depthOfField<<' '<<m_settings.lensEffects<<' '<<m_settings.pullHighlight
   <<' '<<m_settings.vrTurnSpeed<<' '<<m_settings.vrVignette<<' '<<int(m_settings.vrSeated)<<' '<<int(m_settings.vrLeftHanded)<<' '<<int(m_settings.vrFrameRate)<<' '<<m_settings.vrRenderScale<<'\n';
 }
 // The VR COMFORT page: reached from the settings' row 5 in VR only, each row changes its setting, the values
@@ -253,13 +256,19 @@ bool Game::testSettings(){
  {auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-test.txt";game.saveSettings(path.wstring());Game reloaded;reloaded.loadSettings(path.wstring());
   std::error_code error;std::filesystem::remove(path,error);
   if(std::fabs(reloaded.settings().depthOfField-1.6f)>.001f||std::fabs(reloaded.settings().lensEffects-1.6f)>.001f)return false;}
+ // The pull highlight row toggles SUBTLE / NONE on a click, and NONE survives a save and load.
+ {game.update({},.02f);click.fire=true;click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);
+  if(game.settings().pullHighlight!=0||game.menuSelection()!=8)return false;
+  auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-highlight.txt";game.saveSettings(path.wstring());Game reloaded;reloaded.loadSettings(path.wstring());
+  std::error_code error;std::filesystem::remove(path,error);if(reloaded.settings().pullHighlight!=0)return false;
+  click.fire=false;game.update(click,.02f);game.update({},.02f);click.fire=true;game.update(click,.02f);if(game.settings().pullHighlight!=1)return false;click.fire=false;game.update(click,.02f);}
  click.fire=true;
- game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);
+ game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(game.menuPage()!=MenuPage::ConfirmRestart||!game.paused())return false;
  game.update({},.02f);click.pointerY=MenuLayout::RowTop+0*MenuLayout::RowHeight+5;game.update(click,.02f);if(game.menuPage()!=MenuPage::Settings)return false;
- game.update({},.02f);click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
+ game.update({},.02f);click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(game.paused()||game.player().health!=100)return false;
- InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+11*MenuLayout::RowHeight+5;game.update(click,.02f);
+ InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+12*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(!game.titleScreen()||game.quitRequested())return false;
  game.update({},.02f);game.m_titleSelection=4;InputState quit{};quit.menuAccept=true;game.update(quit,.02f);if(!game.quitRequested())return false;
  std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";

@@ -4,6 +4,8 @@
 #include <memory>
 #include <array>
 #include <string>
+#include <functional>
+#include <filesystem>
 #include <vulkan/vulkan.h>
 namespace retro {
 // position/basis: the controller (aim) frame. handOrigin/handBasis: where SteamVR's
@@ -20,6 +22,12 @@ struct VrEye {Point3 position{};std::array<float,16> clip{};};
 // What the compositor measured of the last frame (IVRCompositor::GetFrameTiming): the display's rate, the game's
 // GPU time for both eyes, the interval between its frames, and frames the compositor had to drop or reproject.
 struct VrTiming {float hz=90,gpuMs=0,frameMs=0;unsigned dropped=0,reprojected=0;float scale=1;};
+// What the launch chooser is told: offer VR or not, why, which openvr_api.dll answered,
+// and every step taken (written to RawMetal-vr.txt).
+struct VrDetection {bool offered=false;std::string reason,runtime,log;};
+// The inputs to detection, so a test can stand in for the registry, disk and runtime.
+// query: 1 headset present, 0 none, -1 the DLL could not be loaded or asked.
+struct VrProbe {std::wstring steamPath;std::string vrpathJson,note;std::function<bool(const std::filesystem::path&)> exists;std::function<int(const std::filesystem::path&,std::string&)> query;};
 class VrRuntime {
 public:
  VrRuntime();~VrRuntime();
@@ -42,6 +50,11 @@ public:
  static VrRuntime* active();
  // A headset SteamVR can see, asked without starting SteamVR: the PC/VR choice is only offered then.
  static bool headsetPresent();
+ static VrDetection detectHeadset();
+ static VrDetection detect(const VrProbe& probe);
+ static std::string vrpathRuntime(const std::string& json);
+ static const wchar_t* const SteamKey;
+ static bool testDetection();
  static bool testMath();
  // --vr-test and the lab's engine.vr: every VR check that needs no headset, one PASS/FAIL line each.
  static bool testAll(std::ostream& report);

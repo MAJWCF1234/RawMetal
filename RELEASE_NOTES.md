@@ -4,6 +4,26 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.7 - The headset again (2026-11-18)
+
+A fix for the choice that went missing.
+
+- **Play in VR is back.** Since v1.0.4 the game has looked for SteamVR in the wrong place in the registry, decided there was no headset, and never asked how you wanted to play. It looks in the right place now, finds SteamVR in a second Steam library too, and asks again: Play on PC, or Play in VR. If it ever cannot find the headset, RawMetal-vr.txt beside the game says exactly why.
+
+Verified with tools/release/ship.py and the game's VR test, which now checks the headset detection itself.
+
+---
+
+## v1.5.6 - A quieter hand (2026-11-18)
+
+A small fix for something players said shone too brightly.
+
+- **No more orange.** What the Physgloves are about to pull no longer burns orange. A thin, cold line traces its edge and breathes slowly, and the crosshair draws in a little; nothing else around it lights up. Settings has a Pull Highlight row to make it subtle or turn it off.
+
+Verified with tools/release/ship.py and the feature lab's Physgloves and settings tubes.
+
+---
+
 ## v1.5.5 - Sure footing (2026-11-18)
 
 A fix for floors that played like ice, and for the things that came apart when struck too hard.

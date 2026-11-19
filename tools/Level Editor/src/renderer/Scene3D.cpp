@@ -2391,11 +2391,36 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int i=0;i<count;++i){float a=i*2.399963f,life=std::min(t,1.4f),r=(.3f+(i%5)*.12f)*life;Point3 p{e.pos.x+std::cos(a)*r+e.direction.x*life*.4f,e.pos.y+std::sin(a)*r+e.direction.y*life*.4f,e.z+e.height*.6f+(1.8f+(i%3)*.4f)*life-7*life*life};float floor=w.floorHeight(p.x,p.y)+.012f;bool landed=p.z<=floor;p.z=std::max(p.z,floor);float size=.012f*(1-std::max(0.f,t-1.5f));Point3 u{std::cos(a+t*9)*size,std::sin(a+t*9)*size,0};tri({p-u,0,0},{p+u,1,0},{p+Point3{0,size,landed?0.f:size},.5f,1},chipSheet,1.5f);}
  }
  auto softPadOf=[&](const Clutter&c)->const SoftPad*{if(!soft::isSoft(c))return nullptr;const auto&list=game.chunkClutter(level);const auto i=&c-list.data();return i>=0&&i<std::ptrdiff_t(list.size())?game.softPad(level,-1,int(i)):nullptr;};
- // The prop the Physgloves point at (Physgloves.cpp): drawn a little brighter, a slow pulse, and never from the resting cache.
+ // The prop the Physgloves point at (Physgloves.cpp): never drawn from the resting cache, its own light untouched, and
+ // traced along its silhouette by a thin, faint, cool line (gloveOutline) that breathes slowly; it lights nothing around
+ // it and is hidden behind what stands in front of it. The pull highlight setting turns the line off.
  const Clutter* gloveTarget=level==game.level()&&game.physgloves().target>=0&&game.physgloves().target<int(game.clutter().size())?&game.clutter()[size_t(game.physgloves().target)]:nullptr;
- const float glovePulse=1.22f+.12f*std::sin(game.elapsed()*7.f);
- // And wrapped in a faint warm glow: its faces again, 6% larger, additive.
- static const Texture gloveGlow=[]{Texture t{2,2,std::vector<std::uint32_t>(4,0x60c08a3au)};t.additive=true;return t;}();
+ const bool gloveLine=gloveTarget&&game.settings().pullHighlight!=0;
+ // Across the line: soft both sides of the edge, strongest on it. The additive tint (scene.frag, the rasteriser) warms
+ // red 1, green .72, blue .35, so the sheet is cut the other way: what shows is a pale steel blue-grey.
+ static const Texture gloveRim=[]{constexpr int n=16;Texture t{n,1,std::vector<std::uint32_t>(n)};t.additive=true;t.clampEdges=true;
+  for(int i=0;i<n;++i){const float across=std::fabs((float(i)+.5f)/n-.5f)*2,a=(1-across)*(1-across);t.pixels[size_t(i)]=(unsigned(a*255.f+.5f)<<24)|(68u<<16)|(108u<<8)|255u;}return t;}();
+ std::vector<std::array<Point3,3>> gloveFaces;
+ auto gloveOutline=[&]{if(gloveFaces.empty())return;
+  // An edge is on the silhouette where a face toward the eye meets one away from it (or a face toward it ends).
+  const Point3 eye{player.pos.x,player.pos.y,player.z+player.eye};
+  struct Edge{Point3 a,b;int faces=0;bool front=false,back=false;};std::unordered_map<std::uint64_t,Edge> edges;edges.reserve(gloveFaces.size()*2);
+  auto cell=[](Point3 p){std::uint64_t h=1469598103934665603ull;for(float v:{p.x,p.y,p.z}){h^=std::uint64_t(std::int64_t(std::llround(v*8192.f)));h*=1099511628211ull;}return h;};
+  for(const auto&f:gloveFaces){const Point3 n=cross3(f[1]-f[0],f[2]-f[0]),toward=(f[0]+f[1]+f[2])*(1.f/3.f)-eye;const float facing=n.x*toward.x+n.y*toward.y+n.z*toward.z;
+   if(n.x*n.x+n.y*n.y+n.z*n.z<1e-14f)continue;
+   for(int k=0;k<3;++k){const Point3 a=f[size_t(k)],b=f[size_t((k+1)%3)];const std::uint64_t ka=cell(a),kb=cell(b);if(ka==kb)continue;
+    auto&e=edges[std::min(ka,kb)*0x9e3779b97f4a7c15ull^std::max(ka,kb)];if(!e.faces){e.a=a;e.b=b;}++e.faces;(facing<0?e.front:e.back)=true;}}
+  // Breathing, not blinking: a 3.5 s swell between 80 and 100%.
+  const float strength=.8f*(.9f+.1f*std::sin(game.elapsed()*1.8f));
+  const bool keepObject=objectLighting;objectLighting=false;
+  for(const auto&[key,e]:edges){if(!((e.front&&e.back)||(e.faces==1&&e.front)))continue;
+   const Point3 mid=(e.a+e.b)*.5f;Point3 toEye=eye-mid;const float dist=std::sqrt(toEye.x*toEye.x+toEye.y*toEye.y+toEye.z*toEye.z);if(dist<.05f)continue;toEye=toEye*(1/dist);
+   Point3 side=cross3(e.b-e.a,toEye);const float sl=std::sqrt(side.x*side.x+side.y*side.y+side.z*side.z);if(sl<1e-6f)continue;
+   // About three pixels wide wherever it is (its width grows with the distance), lifted 1.5 cm toward the eye off its own faces.
+   side=side*(.0026f*dist/sl);const Point3 lift=toEye*std::min(.015f,dist*.01f);
+   const MeshVertex A{e.a-side+lift,0,.5f,1},B{e.a+side+lift,1,.5f,1},C{e.b+side+lift,1,.5f,1},D{e.b-side+lift,0,.5f,1};
+   tri(A,B,C,gloveRim,strength);tri(A,C,D,gloveRim,strength);}
+  objectLighting=keepObject;gloveFaces.clear();};
  // Liquid (Liquids.h): seen through the bottle's glass, which is drawn clear while it holds some, the liquid inside is
  // a translucent tint of its kind (water nearly clear, oil a dark amber, the chemical a glowing green) with a glossy
  // surface: the inner shape (12 sides) cut by its surface plane, the cut drawn as the surface, a little brighter.
@@ -2451,8 +2476,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // A mattress bent on its bones (Clutter::bend): its mesh cut fine everywhere and each vertex carried by its segment.
    const bool boned=c.bend[0]!=0||c.bend[1]!=0;
    for(auto face:boned?softmesh::refinedAll(c.model,mesh):pad?softmesh::refined(c.model,mesh):mesh.triangles){float faceShade=pad?0.f:1.f;for(auto&v:face.v){auto p=v.p-center;if(pad){const float bent=softmesh::bend(c.model,*pad,mesh,v.p),k=softmesh::shade(c.model,*pad,mesh,v.p,bent,softL);p.y-=bent;v.light*=k;faceShade+=k/3;}
-    Point3 local{p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y)};if(boned)local=vectra::chainSkin(c,local);auto r=c.rotate(local.x,local.y,local.z);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade*(&c==gloveTarget?glovePulse:1.f);tri(face.v[0],face.v[1],face.v[2],glassOf(c,lookedTexture(c.model,face.part,c.traits.get())),light);
-    if(&c==gloveTarget){auto shell=face;const Point3 o{c.pos.x,c.pos.y,mid};for(auto&v:shell.v)v.p=o+(v.p-o)*1.06f;tri(shell.v[0],shell.v[1],shell.v[2],gloveGlow,1.f);}}
+    Point3 local{p.x*size[0]/std::max(.001f,range.x),p.z*size[1]/std::max(.001f,range.z),p.y*size[2]/std::max(.001f,range.y)};if(boned)local=vectra::chainSkin(c,local);auto r=c.rotate(local.x,local.y,local.z);v.p={c.pos.x+r[0],c.pos.y+r[1],mid+r[2]};}auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float light=(.8f+.25f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z)))*faceShade;tri(face.v[0],face.v[1],face.v[2],glassOf(c,lookedTexture(c.model,face.part,c.traits.get())),light);
+    if(gloveLine&&&c==gloveTarget)gloveFaces.push_back({face.v[0].p,face.v[1].p,face.v[2].p});}
+   if(gloveLine&&&c==gloveTarget)gloveOutline();
   }else if(const auto look=woodShard?shardLook(c):ShardLook{};look.mesh){
    // An eighth of the thing that broke, cut from its own mesh: its faces clipped to that eighth of
    // its box (clean cut edges, its own UVs), drawn with its own sheet about the eighth's centre (Clutter::shards).

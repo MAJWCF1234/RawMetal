@@ -119,19 +119,83 @@ struct VrRuntime::Impl {
 VrRuntime::VrRuntime():m(std::make_unique<Impl>()){}
 VrRuntime::~VrRuntime(){if(current==this)current=nullptr;}
 VrRuntime* VrRuntime::active(){return current;}
-bool VrRuntime::headsetPresent(){
- wchar_t steam[32768]{};DWORD bytes=sizeof(steam);if(RegGetValueW(HKEY_CURRENT_USER,L"Software\\Valve\\Steam",L"SteamPath",RRF_RT_REG_SZ,nullptr,steam,&bytes)!=ERROR_SUCCESS)return false;
- auto path=std::filesystem::path(steam)/L"steamapps/common/SteamVR/bin/win64/openvr_api.dll";if(!std::filesystem::exists(path))return false;
- HMODULE dll=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);if(!dll)return false;
- auto present=reinterpret_cast<bool(__cdecl*)()>(GetProcAddress(dll,"VR_IsHmdPresent"));bool found=present&&present();FreeLibrary(dll);return found;
+// The registry key Steam records its folder under. Written with escaped backslashes:
+// 1.0.4 to 1.5.5 had L"Software\Valve\Steam" here, which C++ reads as
+// "SoftwareValveSteam", so the lookup always failed and the PC/VR choice never appeared.
+const wchar_t* const VrRuntime::SteamKey=L"Software\\Valve\\Steam";
+namespace {
+std::string narrow(const std::filesystem::path& p){auto u=p.u8string();return std::string(u.begin(),u.end());}
+std::filesystem::path widen(const std::string& s){return std::filesystem::path(std::u8string(s.begin(),s.end()));}
+std::wstring steamFolder(std::string& note){
+ wchar_t steam[32768]{};DWORD bytes=sizeof(steam);
+ LSTATUS status=RegGetValueW(HKEY_CURRENT_USER,VrRuntime::SteamKey,L"SteamPath",RRF_RT_REG_SZ,nullptr,steam,&bytes);
+ if(status==ERROR_SUCCESS)return steam;
+ note+="HKCU\\Software\\Valve\\Steam SteamPath: not found (error "+std::to_string(status)+")\n";
+ bytes=sizeof(steam);status=RegGetValueW(HKEY_LOCAL_MACHINE,L"SOFTWARE\\WOW6432Node\\Valve\\Steam",L"InstallPath",RRF_RT_REG_SZ,nullptr,steam,&bytes);
+ if(status==ERROR_SUCCESS)return steam;
+ note+="HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam InstallPath: not found (error "+std::to_string(status)+")\n";
+ return {};
 }
+std::string readVrpath(std::string& note){
+ wchar_t local[32768]{};if(!GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768)){note+="LOCALAPPDATA is not set\n";return {};}
+ auto file=std::filesystem::path(local)/L"openvr/openvrpaths.vrpath";std::ifstream in(file,std::ios::binary);
+ if(!in){note+="openvrpaths.vrpath: not found at "+narrow(file)+"\n";return {};}
+ std::stringstream text;text<<in.rdbuf();return text.str();
+}
+// Load the runtime's openvr_api.dll and ask it; never starts SteamVR. 1 present, 0 absent, -1 failed.
+int queryRuntime(const std::filesystem::path& dllPath,std::string& note){
+ HMODULE dll=LoadLibraryExW(dllPath.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
+ if(!dll){note+="LoadLibraryExW failed (error "+std::to_string(GetLastError())+")\n";return -1;}
+ auto installed=reinterpret_cast<bool(__cdecl*)()>(GetProcAddress(dll,"VR_IsRuntimeInstalled"));
+ auto present=reinterpret_cast<bool(__cdecl*)()>(GetProcAddress(dll,"VR_IsHmdPresent"));
+ if(!present){FreeLibrary(dll);note+="VR_IsHmdPresent export missing\n";return -1;}
+ if(installed)note+=std::string("VR_IsRuntimeInstalled: ")+(installed()?"yes":"no")+"\n";
+ bool found=present();FreeLibrary(dll);note+=std::string("VR_IsHmdPresent: ")+(found?"yes":"no")+"\n";return found?1:0;
+}
+}
+std::string VrRuntime::vrpathRuntime(const std::string& json){
+ auto key=json.find("\"runtime\"");if(key==std::string::npos)return {};
+ auto open=json.find('[',key);if(open==std::string::npos)return {};
+ auto start=json.find('"',open);auto close=json.find(']',open);if(start==std::string::npos||(close!=std::string::npos&&start>close))return {};
+ std::string out;for(size_t i=start+1;i<json.size()&&json[i]!='"';++i){if(json[i]=='\\'&&i+1<json.size())++i;out+=json[i];}
+ return out;
+}
+VrDetection VrRuntime::detect(const VrProbe& probe){
+ VrDetection d;d.log=probe.note;
+ std::vector<std::filesystem::path> candidates;
+ // openvrpaths.vrpath is what SteamVR itself reads; it also finds SteamVR in a second Steam library.
+ auto runtime=vrpathRuntime(probe.vrpathJson);
+ if(!runtime.empty())candidates.push_back(widen(runtime)/L"bin/win64/openvr_api.dll");else if(!probe.vrpathJson.empty())d.log+="openvrpaths.vrpath: no runtime entry\n";
+ if(!probe.steamPath.empty())candidates.push_back(std::filesystem::path(probe.steamPath)/L"steamapps/common/SteamVR/bin/win64/openvr_api.dll");
+ if(candidates.empty()){d.reason="Steam and SteamVR were not found";d.log+="result: "+d.reason+"\n";return d;}
+ for(const auto& c:candidates){
+  bool exists=probe.exists(c);d.log+="candidate "+narrow(c)+": "+(exists?"exists":"missing")+"\n";
+  if(!exists)continue;
+  d.runtime=narrow(c);int answer=probe.query(c,d.log);
+  if(answer<0){d.reason="openvr_api.dll could not be queried: "+d.runtime;continue;}
+  d.offered=answer>0;d.reason=d.offered?"SteamVR sees a headset":"SteamVR is installed but sees no headset (connect it and start Quest Link or Air Link)";
+  d.log+="result: "+d.reason+"\n";return d;
+ }
+ if(d.reason.empty())d.reason="SteamVR's openvr_api.dll was not found";
+ d.log+="result: "+d.reason+"\n";return d;
+}
+VrDetection VrRuntime::detectHeadset(){
+ VrProbe probe;probe.steamPath=steamFolder(probe.note);probe.vrpathJson=readVrpath(probe.note);
+ probe.exists=[](const std::filesystem::path& p){std::error_code e;return std::filesystem::exists(p,e);};
+ probe.query=queryRuntime;
+ return detect(probe);
+}
+bool VrRuntime::headsetPresent(){return detectHeadset().offered;}
 void VrRuntime::shutdownGraphics(){if(m->overlay&&m->panel){m->overlay->DestroyOverlay(m->panel);m->panel=0;}if(m->shutdown&&m->system)m->shutdown();m->system=nullptr;m->compositor=nullptr;m->input=nullptr;m->overlay=nullptr;if(current==this)current=nullptr;}
 bool VrRuntime::initialize(std::string& error){
  try{
   // Load only the Steam installation's runtime, never an arbitrary current-directory DLL.
-  wchar_t steam[32768]{};DWORD bytes=sizeof(steam);if(RegGetValueW(HKEY_CURRENT_USER,L"Software\\Valve\\Steam",L"SteamPath",RRF_RT_REG_SZ,nullptr,steam,&bytes)!=ERROR_SUCCESS)throw std::runtime_error("Steam installation was not found.");
-  auto path=std::filesystem::path(steam)/L"steamapps/common/SteamVR/bin/win64/openvr_api.dll";
-  m->dll=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);if(!m->dll)throw std::runtime_error("Install SteamVR in the Steam library, then retry VR mode.");
+  VrProbe probe;probe.steamPath=steamFolder(probe.note);probe.vrpathJson=readVrpath(probe.note);
+  probe.exists=[](const std::filesystem::path& p){std::error_code e;return std::filesystem::exists(p,e);};
+  probe.query=[](const std::filesystem::path&,std::string&){return 1;}; // only locate it here; VR_Init reports the headset
+  auto found=detect(probe);if(found.runtime.empty())throw std::runtime_error("SteamVR was not found ("+found.reason+"). Install SteamVR, then retry VR mode.\n"+found.log);
+  auto path=widen(found.runtime);
+  m->dll=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);if(!m->dll)throw std::runtime_error("Could not load "+found.runtime+" (error "+std::to_string(GetLastError())+"). Reinstall SteamVR, then retry VR mode.");
   auto init=reinterpret_cast<uint32_t(__cdecl*)(vr::EVRInitError*,vr::EVRApplicationType,const char*)>(GetProcAddress(m->dll,"VR_InitInternal2"));
   auto get=reinterpret_cast<void*(__cdecl*)(const char*,vr::EVRInitError*)>(GetProcAddress(m->dll,"VR_GetGenericInterface"));
   m->shutdown=reinterpret_cast<void(__cdecl*)()>(GetProcAddress(m->dll,"VR_ShutdownInternal"));
@@ -419,6 +483,31 @@ Point3 VrRuntime::lazyFollow(Point3 anchor,Point3 forward,float dt,float slack){
  const Point3 across=unit3(f-a*c);if(dot3(across,across)<.5f)return f;
  return unit3(a*std::cos(step)+across*std::sin(step));
 }
+bool VrRuntime::testDetection(){
+ // The registry key must carry real backslashes (the 1.0.4-1.5.5 bug).
+ if(std::wstring(SteamKey)!=std::wstring(L"Software")+L'\\'+L"Valve"+L'\\'+L"Steam")return false;
+ std::set<std::wstring> disk;int queried=0;int answer=1;
+ auto probe=[&](std::wstring steam,std::string vrpath){VrProbe p;p.steamPath=steam;p.vrpathJson=vrpath;
+  p.exists=[&](const std::filesystem::path& f){return disk.count(f.lexically_normal().wstring())>0;};
+  p.query=[&](const std::filesystem::path&,std::string&){++queried;return answer;};return detect(p);};
+ auto add=[&](std::filesystem::path f){disk.insert(f.lexically_normal().wstring());};
+ // Nothing installed: no VR row, and a reason.
+ auto none=probe(L"",std::string());if(none.offered||none.reason.empty()||queried)return false;
+ // Steam present, SteamVR present, headset seen: the choice is offered.
+ add(std::filesystem::path(L"C:/Steam")/L"steamapps/common/SteamVR/bin/win64/openvr_api.dll");
+ auto present=probe(L"C:/Steam",std::string());if(!present.offered||present.runtime.empty()||queried!=1)return false;
+ // Headset off: hidden, with a reason that names the cause.
+ answer=0;auto off=probe(L"C:/Steam",std::string());if(off.offered||off.reason.find("no headset")==std::string::npos)return false;
+ // The DLL will not load: hidden, the path is in the reason.
+ answer=-1;auto broken=probe(L"C:/Steam",std::string());if(broken.offered||broken.reason.find("openvr_api.dll")==std::string::npos)return false;
+ // SteamVR in a second library, found through openvrpaths.vrpath even with Steam's own folder empty.
+ answer=1;add(std::filesystem::path(L"D:/Games/SteamLibrary/steamapps/common/SteamVR")/L"bin/win64/openvr_api.dll");
+ const std::string vrpath="{\n\t\"config\" : [ \"C:\\\\Steam\\\\config\" ],\n\t\"runtime\" : [\n\t\t\"D:\\\\Games\\\\SteamLibrary\\\\steamapps\\\\common\\\\SteamVR\"\n\t],\n\t\"version\" : 1\n}";
+ if(vrpathRuntime(vrpath)!="D:\\Games\\SteamLibrary\\steamapps\\common\\SteamVR")return false;
+ auto library=probe(L"",vrpath);if(!library.offered||library.runtime.find("SteamLibrary")==std::string::npos)return false;
+ if(!vrpathRuntime("{\"runtime\":[]}").empty())return false;
+ return true;
+}
 bool VrRuntime::testMath(){
  if(!transientCompositor(vr::VRCompositorError_DoNotHaveFocus)||!transientCompositor(vr::VRCompositorError_IsNotSceneApplication)||transientCompositor(vr::VRCompositorError_InvalidTexture))return false;
  for(int side:{0,1})for(Point3 forward:{Point3{0,0,1},Point3{1,0,0}})for(Point3 across:{Point3{},forward}){
@@ -515,6 +604,7 @@ bool VrRuntime::testComfortMath(std::ostream& report){
 }
 bool VrRuntime::testAll(std::ostream& report){
  bool ok=true;auto run=[&](const char* name,bool pass){report<<(pass?"PASS: ":"FAIL: ")<<name<<'\n';ok&=pass;};
+ run("SteamVR detection (registry key, libraries, headset off, broken runtime)",testDetection());
  run("tracking recovery, foregrip support, coordinate axes, rigid-view inversion, shoulder box",testMath());
  ok&=testSupport(report);ok&=testComfortMath(report);ok&=testAvatar(report);ok&=SoftwareRenderer::testVrAvatar(report);
  ok&=Game::testComfortMenu(report);ok&=Game::testVrHardening(report);

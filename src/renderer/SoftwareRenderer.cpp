@@ -1062,7 +1062,9 @@ void SoftwareRenderer::drawHud(const Game& game){
   const Point3 hit=eye+aim*reach;const auto&v=m_view;const float vy=std::cos(v.angle),vx=std::sin(v.angle),cp=std::cos(v.pitch/140.f),sp=std::sin(v.pitch/140.f),focal=Projection{float(m_width)/m_height}.focal(float(m_width));
   const Point3 lens{v.pos.x,v.pos.y,v.z+v.eye},forward{vy*cp,vx*cp,sp},right{-vx,vy,0},up{-vy*sp,-vx*sp,cp},d=hit-lens;const float depth=d.x*forward.x+d.y*forward.y+d.z*forward.z;
   if(depth>.1f){cx=std::clamp(int(m_width*.5f+(d.x*right.x+d.y*right.y+d.z*right.z)/depth*focal),8,m_width-8);cy=std::clamp(int(m_height*.5f-(d.x*up.x+d.y*up.y+d.z*up.z)/depth*focal),8,m_height-8);}}
- if(!locker){fill(cx-7,cy,4,1,cross,.85f);fill(cx+4,cy,4,1,cross,.85f);fill(cx,cy-7,1,4,cross,.85f);fill(cx,cy+4,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
+ // On a prop the Physgloves can pull, the cross draws in a little and cools to the outline's steel grey (Scene3D).
+ const bool pullable=game.physgloves().target>=0&&game.hitFlash()<=0;const int gap=pullable?5:7;if(pullable)cross=rgb(196,210,224);
+ if(!locker){fill(cx-gap,cy,4,1,cross,.85f);fill(cx+gap-3,cy,4,1,cross,.85f);fill(cx,cy-gap,1,4,cross,.85f);fill(cx,cy+gap-3,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
  if(auto target=shut?nullptr:game.targetEnemy()){
   int x=m_width/2-65,y=m_height-60;
   uiText(x,y-6,target->name(),paper,0,11,1,1);
@@ -1376,7 +1378,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  fill(40,m_height-36,m_width-80,1,bone,.10f);
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+16;};
  cap("ENTER","SELECT");cap("ESC","BACK");cap("ARROWS","NAVIGATE");
- const char* build="V1.5.5  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.5.7  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 void SoftwareRenderer::drawSettings(const Game& game){
@@ -1390,7 +1392,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
  uiText(x+16,y+9,title,bone,0,20,1,2);
  const char* subtitle=comfortPage?"TURNING / BODY / FRAME RATE":settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
  uiText(x+MenuLayout::Width-16-uiTextWidth(subtitle,0,10,1),y+16,subtitle,red,0,10,1,1);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
+ const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","PULL HIGHLIGHT","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
  auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   if(selected){gradient(x+10,top,MenuLayout::Width-20,19,red,.5f,0.f,true);fill(x+10,top,2,19,red,1);}
@@ -1415,6 +1417,7 @@ void SoftwareRenderer::drawSettings(const Game& game){
    if(row==3||row==5||row==7)uiText(MenuLayout::SliderX,top+3,on?"ON":"OFF",on?red:bone,3,11);
    if(row==6){char valueText[16];if(settings.vrRenderScale<=0)std::snprintf(valueText,sizeof valueText,"AUTO");else std::snprintf(valueText,sizeof valueText,"%d%%",int(settings.vrRenderScale*100+.5f));uiText(MenuLayout::SliderX,top+3,valueText,bone,3,11);}
   }
+  if(settingsPage&&row==8)uiText(MenuLayout::SliderX,top+3,settings.pullHighlight?"SUBTLE":"NONE",bone,3,11);
  }
  if(comfortPage)uiText(x+16,y+MenuLayout::Height-46,game.menuMessage().c_str(),red,0,11,1,1);
  else if(!settingsPage){uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);}

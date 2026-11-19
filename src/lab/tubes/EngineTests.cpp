@@ -19,6 +19,7 @@ const bool registered=[]{
  engine("vr-bench","one Quest eye headless at render scales 1-0.7 (timings in vr-bench.txt; passes when Vulkan draws)",+[]{std::ofstream r("vr-bench.txt");return SoftwareRenderer::benchVrEye(r);});
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);
  engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
+ engine("settings","--each-test=settings: the pause menu's rows (sliders, toggles, pull highlight), their persistence, restart and quit",&Game::testSettings);
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
  engine("map-format","--each-test=map-format: named fields, names, overrides, prefabs, properties, FORMAT 2",&Game::testMapFormat);
