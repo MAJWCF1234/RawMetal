@@ -4,6 +4,22 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.6.0 - Not alone down here (2026-11-19)
+
+Others came down after you. Not all of them came to help.
+
+- **Multiplayer.** Deathmatch on custom maps and co-op through a campaign, hosted by players, free, over Epic Online Services. No Epic account is needed: the game signs you in on its own. MULTIPLAYER on the title holds it all: QUICK MATCH finds the fullest open game of a kind or opens your own; BROWSE lists open games with their map, players and ping; HOST A GAME picks the mode, the map, how many come down and whether the game is listed; JOIN BY CODE takes the six characters a friend gives you (no 0, O, 1, I or L to misread). A player who lacks the map is handed it as they join. Nobody forwards a port: the connection finds its way through, or through Epic's relays.
+- **In a match.** Tab holds the scoreboard. The kill feed runs in the corner, the clock and the frag limit at the top, the count to your return in the middle when you fall. The host's shots and everyone's are judged on the host, against where each player stood when the shot was seen. In deathmatch there are no creatures, only each other; spawns are the map's own, or found on open floor, and a round ends at its frag or time limit and begins again. In co-op you go down together; a fallen player rises beside the host. The pause menu shows the code and holds LEAVE MATCH; no game is saved in a match.
+- **VR and desk together.** A player in a headset is seen whole, arms and fingers as their hands move; a player at a desk is seen running, aiming and reloading. Both play the same match.
+- **The Limitator.** A second body to go down in: heavier, helmeted, scarfed. CHARACTER, on the multiplayer page, chooses Claire or him; he is who you are in first person, in third person and in VR, and who the others see.
+- **A new front door.** The title is grouped and lit: the campaign, then MULTIPLAYER with the state of your link beside it, then settings and quit. A line beneath names what each does. Mouse, keys, a controller and the VR pointer all work it.
+- **The Builder makes arenas.** A Multiplayer page sets a campaign's modes, the deathmatch map, how many may come, the frag and time limits and friendly fire. The Spawn tool sets where players start: a ghost figure with its facing, R to turn, a click to set, a team if you want one. The Starter Map's paint yard is now a small arena with eight spawns.
+- **Still to come.** In co-op the creatures and the people below still only notice the host; scripts answer only the host's steps. The next update teaches them everyone. None of this has yet been played between two machines.
+
+Verified with the multiplayer, session, Epic sign-in, menu, Limitator, Claire, map format, kits, VR, third-person and settings tests, and tools/release/ship.py.
+
+---
+
 ## v1.5.8 - Her own two hands (2026-11-19)
 
 In the headset you are no longer a pair of hands in the dark; you are Claire, all of her. Above the hill the Builder grows a hundred rooms' worth of new things, and the crates that haunted it are laid to rest.
