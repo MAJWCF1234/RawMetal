@@ -2,6 +2,7 @@
 #include "../renderer/SoftwareRenderer.h"
 #include "../world/CustomCampaign.h"
 #include "../lab/LabAccess.h"
+#include "../net/Match.h"
 #include <sstream>
 #include <cctype>
 #include <fstream>
@@ -56,6 +57,13 @@ void Game::executeConsole(std::string command){
  else if(verb=="noclip"){const bool on=arg=="on"||(arg.empty()&&!m_noclip);
   if(arg.empty()||arg=="on"||arg=="off"){setNoclip(on);m_consoleLog.push_back(on?"NOCLIP ON: FLY WHERE YOU LOOK. JUMP UP, CROUCH DOWN, SPRINT FAST.":"NOCLIP OFF.");}
   else m_consoleLog.push_back("USE NOCLIP, NOCLIP ON OR NOCLIP OFF.");}
+ // TP <WHO> [<TO>]: in a match the host moves a player beside another (names by their first letters; no TO, or
+ // ME: beside the host). UNSTUCK: out of a wall or a tight spot, to the nearest open floor.
+ else if(verb=="tp"){if(!m_match)m_consoleLog.push_back("TP MOVES PLAYERS IN A MULTIPLAYER GAME.");
+  else if(arg.empty())m_consoleLog.push_back("USE TP <NAME> [<NAME>]: THE FIRST PLAYER GOES TO THE SECOND (NO SECOND: TO YOU).");
+  else m_consoleLog.push_back(m_match->consoleTeleport(arg,extra));}
+ else if(verb=="unstuck"){m_stuckTime=1;if(!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_consoleLog.push_back(unstickPlayer()?"MOVED TO OPEN FLOOR.":"NO OPEN FLOOR NEARBY. ASK THE HOST TO TP YOU.");
+  else m_consoleLog.push_back("YOU ARE NOT STUCK.");m_stuckTime=0;}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
  else if(verb=="r_scale"){
   if(arg=="50"||arg=="75"||arg=="100"){m_renderScale=arg=="50"?.5f:arg=="75"?.75f:1.f;m_consoleLog.push_back("3D RENDER SCALE "+arg+" PERCENT. HUD STAYS FULL RESOLUTION.");}

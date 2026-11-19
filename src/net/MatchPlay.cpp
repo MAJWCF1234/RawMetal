@@ -170,6 +170,9 @@ void Match::acceptGuestState(int slot,const NetPlayerState& s){
   const float horizontal=distance2(s.world,prev.world),dz=s.world.z-prev.world.z;
   bool bad=horizontal>9.f*elapsed+1.f||dz>5.f*elapsed+1.5f||dz<-(40.f*elapsed+3.f);
   if(!bad&&horizontal>.05f&&s.level==prev.level)if(const World* w=worldOf(s.level)){const Vec2 o=origin(s.level);
+   // From inside solid (an authored spawn in a wall, a door shut on them) every way out crosses it: a player who
+   // was not standing in the open is let out, or the host would send them back into the wall forever.
+   if(w->fits(prev.world.x-o.x,prev.world.y-o.y,prev.world.z,stanceHeight(prev),false))
    bad=!w->rayClear({prev.world.x-o.x,prev.world.y-o.y},prev.world.z+std::min(.9f,stanceHeight(prev)*.6f),{s.world.x-o.x,s.world.y-o.y},s.world.z+std::min(.9f,stanceHeight(s)*.6f),false,false);}
   if(bad){
    if(sl.correctCooldown<=0){sl.correctCooldown=.5f;++sl.life;const Vec2 o=origin(prev.level);
@@ -290,6 +293,32 @@ Match::Spawn Match::chooseSpawn(int slot){
  return m_spawns[best];
 }
 // Co-op: beside the host, on open floor it can see (the host itself beside a living guest).
+bool Match::freeSpot(int level,Point3& world)const{
+ const World* w=worldOf(level);if(!w)return false;const Vec2 o=origin(level);const float px=world.x-o.x,py=world.y-o.y;
+ if(w->fits(px,py,world.z,Player::StandingHeight,false))return true;
+ for(float r=.25f;r<=2.f;r+=.25f)for(int k=0;k<16;++k){const float a=float(k)*kPi/8,x=px+std::cos(a)*r,y=py+std::sin(a)*r;
+  const float f=w->hasTerrain()?w->supportBelow(x,y,world.z+1.f):w->floorHeight(x,y);
+  if(!std::isfinite(f)||std::fabs(f-world.z)>.6f||!w->fits(x,y,f,Player::StandingHeight,false))continue;
+  world={x+o.x,y+o.y,f};return true;}
+ return false;
+}
+std::string Match::consoleTeleport(const std::string& who,const std::string& to){
+ if(!m_host)return "ONLY THE HOST CAN MOVE PLAYERS.";
+ auto lower=[](std::string s){for(auto& c:s)c=char(std::tolower(static_cast<unsigned char>(c)));return s;};
+ auto find=[&](const std::string& n)->int{if(n.empty()||n=="me")return m_selfSlot;int hit=-1;
+  for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(!s.used||lower(s.name).rfind(lower(n),0)!=0)continue;if(hit>=0)return -2;hit=i;}return hit;};
+ const int a=find(who),b=find(to);
+ if(a==-2||b==-2)return "MORE THAN ONE PLAYER'S NAME STARTS THAT WAY. TYPE MORE OF IT.";
+ if(a<0||b<0)return "NO PLAYER IN THIS GAME HAS THAT NAME.";
+ if(a==b)return "THAT IS THE SAME PLAYER.";
+ const Game& g=m_game;int level;Point3 at;float facing;
+ if(b==m_selfSlot){const Vec2 o=origin(g.m_level);level=g.m_level;at={g.m_player.pos.x+o.x,g.m_player.pos.y+o.y,g.m_player.z};facing=g.m_player.angle;}
+ else{const auto& t=m_slots[size_t(b)];if(!t.haveState)return "THAT PLAYER HAS NOT ARRIVED YET.";level=t.latest.level;at=t.latest.world;facing=t.latest.angle;}
+ Point3 spot{at.x+std::cos(facing)*1.f,at.y+std::sin(facing)*1.f,at.z};   // a step in front of them, never inside them
+ if(!freeSpot(level,spot)){spot=at;freeSpot(level,spot);}
+ placePlayer(a,level,spot);
+ return "MOVED "+m_slots[size_t(a)].name+" TO "+m_slots[size_t(b)].name+".";
+}
 Match::Spawn Match::besideHost(int slot){
  int anchor=m_selfSlot;
  if(slot==m_selfSlot){anchor=-1;for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i!=slot&&s.used&&s.alive&&s.spawned&&s.haveState){anchor=i;break;}}}
@@ -307,7 +336,8 @@ void Match::buildSpawns(){
  const int level=m_mode==Mode::Deathmatch?m_mapLevel:std::clamp(m_campaign->startMap,0,int(m_campaign->maps.size())-1);
  for(const auto& sp:m_campaign->multiplayer.spawns){if(sp.map!=level)continue;const World* w=worldOf(sp.map);if(!w)continue;
   float z=w->supportBelow(sp.x,sp.y,sp.z+1.f);if(!std::isfinite(z)||z<sp.z-2.f)z=w->floorHeight(sp.x,sp.y);
-  const Vec2 o=origin(sp.map);m_spawns.push_back({sp.map,{sp.x+o.x,sp.y+o.y,z},sp.yaw*kPi/180.f});}
+  const Vec2 o=origin(sp.map);Point3 at{sp.x+o.x,sp.y+o.y,z};freeSpot(sp.map,at);   // an authored spawn in a wall moves to the open floor beside it
+  m_spawns.push_back({sp.map,at,sp.yaw*kPi/180.f});}
  if(!m_spawns.empty())return;
  const World* w=worldOf(level);if(!w)return;
  std::vector<Point3> cells;

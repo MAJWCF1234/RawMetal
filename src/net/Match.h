@@ -113,6 +113,13 @@ private:
  void applySpawn(int level,Point3 world,float yaw);
  void teleportLocal(int level,Point3 world);
  void placePlayer(int slot,int level,Point3 world);   // the host moves a player (a correction they cannot refuse)
+ // The nearest spot within 2 m where a standing player fits on the floor; false (world untouched) if none.
+ bool freeSpot(int level,Point3& world)const;
+public:
+ // Console TP (the host only): moves the player whose name starts with who beside the one whose name starts with
+ // to ("me" or nothing: the host). Returns the console's answer.
+ std::string consoleTeleport(const std::string& who,const std::string& to);
+private:
  Spawn chooseSpawn(int slot);
  Spawn besideHost(int slot);
  void buildSpawns();
