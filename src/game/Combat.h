@@ -5,7 +5,9 @@ namespace retro {
 
 // Compact combat tables for industrial-horror loadouts. Add a WeaponDef row to
 // expand firearms; fists stay a MeleeDef so holster/stow does not need a gun stub.
-enum class WeaponId : std::uint8_t { Fists=0, Shotgun=1, Handgun=2 };
+// MachinePistol: the MAC-11, a full-auto sidearm worn at the hip (being added 2026-11-19; until its worker lands
+// nothing equips it and Player::pools has no slot for it).
+enum class WeaponId : std::uint8_t { Fists=0, Shotgun=1, Handgun=2, MachinePistol=3 };
 
 struct HitscanDef {
  float maxRange=18.f;

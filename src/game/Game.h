@@ -428,6 +428,10 @@ public:
     const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
     const net::MatchView& matchView()const{return m_matchView;}
     bool inMatch()const{return m_matchView.active;}
+    // Spent cases (Casings.cpp): a fired or pumped-out shell, or a pistol's brass, thrown from the ejection port in
+    // world space; it tumbles, bounces, clinks and lies a while. Every gun and the VR pump call this; the renderer
+    // draws casings(). kind: 0 a shotgun shell, 1 9 mm brass (the handgun), 2 .380 brass (the MAC-11).
+    void ejectCasing(int kind,Point3 position,Point3 velocity);
     // A VR player's avatar as VrRuntime solves it, sent to the others in a match (main sets it each frame).
     void setNetAvatar(const AvatarPose& pose){m_netAvatar=pose;}
     // Bodies of the players in a match, in the active chunk's frame: Match lends them to traceShot while it

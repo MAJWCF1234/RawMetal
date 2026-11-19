@@ -86,6 +86,7 @@ add_executable(RawMetal WIN32
     game/Physgloves.cpp
     game/TwoHand.cpp
     game/Avatar.cpp
+    game/Casings.cpp
     net/Loopback.cpp
     net/EosSession.cpp
     net/Match.cpp
