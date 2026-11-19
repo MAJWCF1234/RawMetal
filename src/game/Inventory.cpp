@@ -4,9 +4,9 @@ namespace retro {
 void Game::updateInventory(const InputState& input){
  bool click=input.fire&&!m_inventoryClick,use=(input.use||input.menuAccept)&&!m_inventoryUse;
  m_inventoryClick=input.fire;m_inventoryUse=input.use||input.menuAccept;
- // Items: 0 shotgun, 1 shells, 2 first aid, 3 9 mm (kept before the pistol is owned).
+ // Items: 0 shotgun, 1 shells, 2 first aid, 3 9 mm (kept before the pistol is owned), 4 .380 (before the MAC-11).
  const bool shotgunOut=m_weaponEquipped&&m_equippedWeapon==WeaponId::Shotgun;
- auto exists=[&](int item){return item==0||(item==1?m_player.pool(WeaponId::Shotgun).total>0:item==3?m_player.pool(WeaponId::Handgun).total>0:m_medkits>0);};
+ auto exists=[&](int item){return item==0||(item==1?m_player.pool(WeaponId::Shotgun).total>0:item==3?m_player.pool(WeaponId::Handgun).total>0:item==4?m_player.pool(WeaponId::MachinePistol).total>0:m_medkits>0);};
  auto stored=[&](int item){return exists(item)&&!(item==0&&shotgunOut);};
  auto activate=[&](){
   if(m_selectedItem==0)equipWeapon(shotgunOut?WeaponId::Fists:WeaponId::Shotgun);
@@ -18,8 +18,10 @@ void Game::updateInventory(const InputState& input){
  if(x>=480&&x<586&&y>=36&&y<58){m_inventoryOpen=false;m_suppressFire=true;return;}
  if(x>=350&&x<574&&y>=280&&y<310){activate();return;}
  if(x>=62&&x<322&&y>=64&&y<136){m_selectedItem=0;if(!shotgunOut)activate();return;}
- // The secondary slot is the handgun once owned (click to draw, again to holster), else the fists.
- if(x>=62&&x<322&&y>=144&&y<216){const bool pistolOut=m_weaponEquipped&&m_equippedWeapon==WeaponId::Handgun;equipWeapon(hasHandgun()&&!pistolOut?WeaponId::Handgun:WeaponId::Fists);m_selectedItem=0;return;}
+ // The secondary slot holds the sidearms once owned (click one to draw it, again to holster), else the fists.
+ // With both, the handgun is its left half and the MAC-11 its right.
+ if(x>=62&&x<322&&y>=144&&y<216){const WeaponId pick=hasHandgun()&&hasMachinePistol()?(x<192?WeaponId::Handgun:WeaponId::MachinePistol):hasMachinePistol()?WeaponId::MachinePistol:WeaponId::Handgun;
+  const bool out=m_weaponEquipped&&m_equippedWeapon==pick;equipWeapon(ownsWeapon(pick)&&!out?pick:WeaponId::Fists);m_selectedItem=0;return;}
  if(x<350||x>=554||y<94||y>=239)return;
  int cell=(y-94)/29*6+(x-350)/34;
  auto width=[](int i){return i==0?4:i==2?2:1;};

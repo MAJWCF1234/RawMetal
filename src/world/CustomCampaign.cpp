@@ -777,7 +777,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>11||spawn.scale<.5f||spawn.scale>2||spawn.health<0||spawn.health>5000||spawn.prey<-1||spawn.prey>4096)throw std::runtime_error("creature parameters out of range");
    map->creatureSpawns.push_back(spawn);
   }else if(tag=="PICKUP"){
-   if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::HandgunAmmo))throw std::runtime_error("invalid pickup kind");
+   if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::MachinePistol))throw std::runtime_error("invalid pickup kind");
    map->pickupSpawns.push_back({{number(f,3,"pickup x"),number(f,4,"pickup y")},PickupKind(kind)});
    if(given(5))map->pickupSpawns.back().z=number(f,5,"pickup z"); // absolute height (empty: on the floor)
   }else if(tag=="CLUTTER"){

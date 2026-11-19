@@ -49,7 +49,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1,4};m_lastSidearm=WeaponId::Handgun;m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -62,6 +62,7 @@ void Game::equipWeapon(WeaponId id){
  if(!playerFirearm(id)||!ownsWeapon(id))return;
  if(id!=m_equippedWeapon){m_reloadTimer=0;m_vrChamberEmpty=m_vrPumpBack=false;}
  m_handsLowered=false;m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.pool(id).total>0?0.f:1.f;
+ if(sidearm(id))m_lastSidearm=id;
 }
 void Game::selectWeapon(WeaponId id){
  if(id==WeaponId::Fists){equipWeapon(id);return;}
@@ -178,6 +179,7 @@ void Game::crossChunkBoundary(){
  int firstFollower=int(m_enemies.size());
  for(auto&enemy:followers){enemy.z=enemy.arrive>0?m_world.supportBelow(enemy.waypoint.x,enemy.waypoint.y,m_player.z+.25f):m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.homeZ=enemy.z;m_enemies.push_back(enemy);}
  m_playerNoise.pos+=shift;
+ for(auto&c:m_casings){c.position.x+=shift.x;c.position.y+=shift.y;}
  for(auto&ref:moved)if(ref.index<0)ref.index=firstFollower-1-ref.index;
  if(!moved.empty())remapEnemyRefs(previous,moved);
  for(auto&event:m_sounds)if(event.spatial||std::isfinite(event.z))event.position+=shift;
@@ -195,7 +197,7 @@ void Game::loadLevel(int level,bool carry) {
     m_player.pitch = m_world.definition().spawnPitch;
     m_player.health = 100.0f;
     // A fresh map: the shotgun's 72 with six in the tube, no 9 mm and no handgun rounds.
-    m_player.pools={AmmoPool{},AmmoPool{72,6},AmmoPool{}};
+    m_player.pools={AmmoPool{},AmmoPool{72,6},AmmoPool{},AmmoPool{}};
     if(carry){m_player.health=health;m_player.pools=pools;}
     m_player.z = m_world.hasTerrain()?groundHeight(m_player.pos,float(World::TerrainMaxZ+1)):m_world.definition().spawnHeight;
     m_player.verticalVelocity = 0.0f;
@@ -212,6 +214,7 @@ void Game::loadLevel(int level,bool carry) {
     m_weaponKick = 0.0f; m_reloadTimer=0; m_shotCooldown = 0.0f;
     m_damageFlash = 0.0f;
     m_elapsed = 0.0f;
+    m_casings.clear();m_spread=m_recoilDebt=0;   // spent cases belong to the map they fell in
     m_waterSplashes.clear();m_waterFeet=-1e9f;m_wakeWay=0;m_waterSoundsSeen=0;m_waterNpcDown.clear();m_waterDeaths.clear();
     m_kills = 0;
     m_won = false;
@@ -352,7 +355,24 @@ void Game::shoot(){
  float pitch=m_player.pitch/140.f;Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction{std::cos(m_player.angle)*std::cos(pitch),std::sin(m_player.angle)*std::cos(pitch),std::sin(pitch)};
  if(m_vrAimValid){origin=m_vrAimPosition;direction=m_vrAimDirection;}
  float size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(size>.0001f)direction=direction*(1/size);
- m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,1,false,17,origin.z});
+ // Full auto: the round leaves anywhere in the bloomed cone (evenly over its disc),
+ // then the view climbs and wanders for the next.
+ if(gun.cycle.fullAuto){
+  const float cone=shotSpread(),turn=nextSpreadRandom()*2*kPi,r=cone*std::sqrt(nextSpreadRandom());
+  Point3 side{-direction.y,direction.x,0};float l=std::sqrt(side.x*side.x+side.y*side.y);side=l>1e-4f?side*(1/l):Point3{1,0,0};
+  const Point3 up{direction.y*side.z-direction.z*side.y,direction.z*side.x-direction.x*side.z,direction.x*side.y-direction.y*side.x};
+  direction=direction+side*(std::cos(turn)*r)+up*(std::sin(turn)*r);size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);direction=direction*(1/size);
+  m_spread=std::min(gun.cycle.spreadMax,m_spread+gun.cycle.spreadPerShot);
+  if(!m_vrAimValid){const float steady=1-(1-gun.cycle.spreadAimed)*.5f*m_aimBlend;   // down the sights it climbs a little less
+   const float climb=gun.cycle.recoilClimb*steady*(.85f+.3f*nextSpreadRandom());
+   const float before=m_player.pitch;m_player.pitch=std::clamp(m_player.pitch+climb,-210.f,210.f);m_recoilDebt+=m_player.pitch-before;
+   m_player.angle=wrapAngle(m_player.angle+(nextSpreadRandom()*2-1)*gun.cycle.recoilYaw*steady);}
+ }
+ // Each round's own report: a full-auto stream is not one sample repeated.
+ const float pitchVary=gun.cycle.fullAuto?.94f+.12f*nextSpreadRandom():1.f;
+ m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,pitchVary,false,17,origin.z});
+ // The pistols throw their brass with every round (the pump gun when it is worked).
+ if(sidearm(m_equippedWeapon))ejectCasing(m_equippedWeapon==WeaponId::Handgun?1:2,ejectionPort(m_equippedWeapon),ejectionVelocity(m_equippedWeapon));
  // In a match the host traces every shot, its own included (Match.cpp); the flash and recoil stay here.
  if(m_match&&m_match->localShot(origin,direction,int(m_equippedWeapon)))return;
  auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);
@@ -448,15 +468,21 @@ void Game::updatePickups() {
             }
             float gained=std::min(35.f,100.f-m_player.health);m_player.health+=gained;
             m_pickupNotice="RECOVERED "+std::to_string(int(gained))+" HEALTH";
+        } else if (p.kind == Pickup::Kind::MachinePistol) {
+            // The MAC-11 itself, a full magazine in it; drawn when it is new, otherwise its rounds.
+            const auto&def=playerWeaponDef(WeaponId::MachinePistol);const bool fresh=!hasMachinePistol();
+            grantMachinePistol(def.cycle.tubeCapacity);
+            m_pickupNotice=std::string(fresh?"TOOK MAC-11 / .380 x ":"TOOK .380 x ")+std::to_string(def.cycle.tubeCapacity);
+            if(fresh&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::MachinePistol);
         } else {
-            // Each box feeds its own gun, whatever is in hand; 9 mm waits for the pistol.
-            const bool nine=p.kind==Pickup::Kind::HandgunAmmo;const auto&def=playerWeaponDef(nine?WeaponId::Handgun:WeaponId::Shotgun);
+            // Each box feeds its own gun, whatever is in hand; 9 mm waits for the pistol, .380 for the MAC-11.
+            const bool nine=p.kind==Pickup::Kind::HandgunAmmo,mac=p.kind==Pickup::Kind::MacAmmo;const auto&def=playerWeaponDef(nine?WeaponId::Handgun:mac?WeaponId::MachinePistol:WeaponId::Shotgun);
             int rounds=def.cycle.pickupAmount;m_player.pool(def.id).total+=rounds;
-            m_pickupNotice="COLLECTED "+std::to_string(rounds)+(nine?" ROUNDS 9MM":" SHELLS");
+            m_pickupNotice="COLLECTED "+std::to_string(rounds)+(nine?" ROUNDS 9MM":mac?" ROUNDS .380":" SHELLS");
         }
         p.active = false;
         m_pickupNoticeTime=2.f;
-        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:1.f);
+        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:p.kind==Pickup::Kind::MacAmmo?1.04f:p.kind==Pickup::Kind::MachinePistol?.9f:1.f);
     }
 }
 const Pickup* Game::nearbyPickup()const{
@@ -544,9 +570,9 @@ void Game::updateFrame(const InputState& input, float dt) {
     // the locker and the hold give the gun back themselves when they end.
     const bool handsBusy=hiddenLocker()>=0||lockerViewLocked()||heldNpc()>=0||takedownActive()||captured();
     if(input.weaponScroll&&!handsBusy&&!holdingClutter()){selectWeapon(wheelWeapon(input.weaponScroll));m_suppressFire=true;}
-    // 1/2/3 pick a weapon directly, but in a conversation the digits are replies.
-    {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=3?input.choice:0;m_previousChoice=input.choice;
-     if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=3&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
+    // 1/2/3/4 pick a weapon directly (fists, shotgun, handgun, MAC-11), but in a conversation the digits are replies.
+    {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=4?input.choice:0;m_previousChoice=input.choice;
+     if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=4&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
     for(auto&e:m_enemies)if(!e.alive)e.deathTime+=dt;
     m_hitFlash=std::max(0.f,m_hitFlash-dt*5.f);
 
@@ -604,7 +630,7 @@ void Game::updateFrame(const InputState& input, float dt) {
         bool carryingAtStart=heldNpc()>=0||(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1));{perf::Scope profile(perf::Clutter);updateClutter(input,dt);}
 
         // A pending switch lowers the gun in hand, swaps it at the bottom and raises the new one.
-        if(m_switchTarget!=WeaponId::Fists&&m_holster>=1.f){m_equippedWeapon=m_switchTarget;m_switchTarget=WeaponId::Fists;m_switchRaise=true;m_vrChamberEmpty=m_vrPumpBack=false;}
+        if(m_switchTarget!=WeaponId::Fists&&m_holster>=1.f){m_equippedWeapon=m_switchTarget;m_switchTarget=WeaponId::Fists;m_switchRaise=true;m_vrChamberEmpty=m_vrPumpBack=false;if(sidearm(m_equippedWeapon))m_lastSidearm=m_equippedWeapon;}
         const auto&cycle=equippedWeaponDef().cycle;const auto&melee=kUnarmedMelee;auto&rounds=m_player.pool(m_equippedWeapon);
         float oldReload=m_reloadTimer;m_reloadTimer=std::max(0.f,m_reloadTimer-dt);
         if(oldReload>0&&m_reloadLength>0){float before=1-oldReload/m_reloadLength,after=1-m_reloadTimer/m_reloadLength;
@@ -619,11 +645,12 @@ void Game::updateFrame(const InputState& input, float dt) {
          const float rack=ShellStart+shells*ShellInsert+ShellFinish*.45f;if(before<rack&&after>=rack)sound(cycle.pumpSound,.8f);
          if(m_reloadTimer==0)m_emptyReload=false;}
         else if(oldReload>0&&m_reloadTimer==0){rounds.loaded=std::min(cycle.tubeCapacity,rounds.total);if(cycle.pumpSoundAt>0)m_shotAge=0;m_emptyReload=false;}
-        m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
+        // Full auto carries what is left of the interval into the next one, so it fires at its rate at any frame rate.
+        m_shotCooldown=cycle.fullAuto&&m_shotCooldown>0?std::max(-dt,m_shotCooldown-dt):std::max(0.f,m_shotCooldown-dt);
         m_guarding=heldNpc()<0&&!takedownActive()&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         // Right mouse with the shotgun up brings it to the eye (not sprinting,
         // reloading, switching or holding someone); about a fifth of a second.
-        {const bool aim=input.guard&&!unarmed()&&m_equippedWeapon==WeaponId::Shotgun&&m_holster<.05f&&!reloading()&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
+        {const bool aim=input.guard&&!unarmed()&&(m_equippedWeapon==WeaponId::Shotgun||m_equippedWeapon==WeaponId::MachinePistol)&&m_holster<.05f&&!reloading()&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
          m_aimBlend=std::clamp(m_aimBlend+(aim?dt:-dt)*6.f,0.f,1.f);}
         float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&!takedownActive()&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         // Put away it stays down even straight after a shot (only an emptied gun
@@ -644,8 +671,9 @@ void Game::updateFrame(const InputState& input, float dt) {
         if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&m_vrChamberEmpty&&pumpGun)) {
             // Semi-automatic: one round per press, the trigger released before the next.
             const bool raised=m_weaponEquipped&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists,press=!cycle.semiAuto||m_triggerReset;
-            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked&&m_vrSupportGrip&&pumpGun){m_vrChamberEmpty=true;m_vrPumpBack=false;m_vrPumpRest=m_vrPumpAlong;}}
-            else if(cycle.semiAuto&&raised&&press&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=cycle.fireCooldown;}
+            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=(cycle.fullAuto?std::min(0.f,m_shotCooldown):0.f)+cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked&&m_vrSupportGrip&&pumpGun){m_vrChamberEmpty=true;m_vrPumpBack=false;m_vrPumpRest=m_vrPumpAlong;}}
+            // Dry: one click a press (a full-auto gun clicks once, not on and on while held).
+            else if((cycle.semiAuto||cycle.fullAuto)&&raised&&m_triggerReset&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=std::max(cycle.fireCooldown,.2f);}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
         // Console summons' standing orders (Summon.cpp), before anyone thinks.
@@ -666,6 +694,7 @@ void Game::updateFrame(const InputState& input, float dt) {
         resolveHeldPropBodies();
         {perf::Scope profile(perf::Voices);updateStances(dt);updateNpcVoices(dt);updateAmbience(dt);}
         {perf::Scope profile(perf::Pickups);updatePickups();updateSidearms();}
+        updateCasings(dt);
 
         // Campaign completion is explicit through scripted content. Reaching the
         // numerically last compiled chunk is never an implicit ending.
@@ -679,8 +708,15 @@ void Game::updateFrame(const InputState& input, float dt) {
 }
 void Game::updateWeaponMotion(const InputState& input,float dt){
  const auto&cycle=equippedWeaponDef().cycle;
- if(m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt)sound(cycle.pumpSound,.65f);
+ if(m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt){sound(cycle.pumpSound,.65f);
+  // The pump worked back throws the spent shell out of the port (in VR the hand's own stroke does).
+  if(m_equippedWeapon==WeaponId::Shotgun&&!input.vrTracked&&!dead())ejectCasing(0,ejectionPort(WeaponId::Shotgun),ejectionVelocity(WeaponId::Shotgun));}
  m_shotAge+=dt;
+ // Full auto: let go (or between bursts) the climb comes back by its share and the spread settles.
+ if(cycle.fullAuto||m_spread>0||m_recoilDebt>0){const bool firing=input.fire&&m_shotAge<cycle.fireCooldown*1.6f;
+  if(!firing){m_spread=std::max(0.f,m_spread-cycle.spreadSettle*dt);
+   if(m_recoilDebt>0){const float give=std::min(m_recoilDebt,(m_recoilDebt*9.f+4.f)*dt);if(!input.vrTracked)m_player.pitch=std::clamp(m_player.pitch-give*cycle.recoilReturn,-210.f,210.f);m_recoilDebt-=give;}}
+  if(!cycle.fullAuto){m_spread=0;m_recoilDebt=0;}}
  float yawRate=input.mouseDx*.0022f*m_settings.sensitivity/std::max(dt,.001f);
  float pitchRate=input.mouseDy*.308f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);
  Vec2 target{std::clamp(-yawRate*.042f,-.19f,.19f),std::clamp(pitchRate*.035f,-.15f,.15f)};

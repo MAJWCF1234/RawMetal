@@ -534,7 +534,10 @@ void gather(const Game& game,const World& w,const Particles::View& view,const Pa
  splashes(game.waterSplashes());if(extra)splashes(extra->splashes);
  // Gun smoke: a shot leaves a wisp in front of the muzzle that drifts on and hangs (a shotgun's pellets are one shot).
  auto shots=[&](const std::vector<ShotRay>& list){float lastTime=-1e9f;for(const auto&r:list){if(r.level!=level)continue;const float age=now-r.time;if(age<0||age>3.f||std::fabs(r.time-lastTime)<1e-4f)continue;lastTime=r.time;
-  const Point3 d=unit(r.direction,{1,0,0});Source s;s.species=Species::Smoke;s.seed=seedAt(r.origin,r.time,0x61u);s.at=r.origin+d*.85f-Up*.1f;s.travel=d*.45f+Up*.12f;s.cone=.5f;s.size=.03f;s.grow=.34f;s.life=2.4f;s.count=5;s.t0=r.time;s.spread=.05f;s.strength=.5f;out.push_back(s);}};
+  const Point3 d=unit(r.direction,{1,0,0});Source s;s.species=Species::Smoke;s.seed=seedAt(r.origin,r.time,0x61u);s.at=r.origin+d*.85f-Up*.1f;s.travel=d*.45f+Up*.12f;s.cone=.5f;s.size=.03f;s.grow=.34f;s.life=2.4f;s.count=5;s.t0=r.time;s.spread=.05f;s.strength=.5f;
+  // A light round (the MAC-11's .380, eighteen a second) leaves a thin wisp: a held burst hazes the air, not a wall.
+  if(r.damage>0&&r.damage<16.f){s.count=2;s.grow=.2f;s.life=1.5f;s.strength=.2f;}
+  out.push_back(s);}};
  shots(game.shotRays());if(extra)shots(extra->shots);
  // A blast: thick smoke that rolls up and hangs, a ring of dust racing out along the floor, chunks thrown
  // and bouncing, embers, and the ceiling over it shaken loose.

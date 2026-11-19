@@ -232,7 +232,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})queue(*texture);
   for(const auto&texture:m_staffTextures)queue(texture);
   if(!m_logo.pixels.empty())queue(m_logo);
-  queue(m_droneTexture);queue(m_handgunTexture);
+  queue(m_droneTexture);queue(m_handgunTexture);queue(m_macTexture);queue(m_macAmmoTexture);queue(m_brassTexture);
   for(const auto&texture:m_paperProps)queue(texture);
   for(const auto&role:m_cleanupTextures)for(const auto&texture:role)queue(texture);
   for(const auto&texture:m_clutterTextures)queue(texture);for(const auto&[name,unused]:m_facilityOrder){
@@ -278,6 +278,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    const auto&mesh=*cleanupMeshes()[size_t(role)];if(corners!=mesh.triangles.size()*3||joints.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup attachment topology mismatch");
    std::memcpy(m_cleanupArms[role].data(),joints.data()+4,72);std::memcpy(m_cleanupPalms[role].data(),joints.data()+76,24);m_cleanupWeights[role].resize(corners);std::memcpy(m_cleanupWeights[role].data(),joints.data()+104,size_t(corners)*4);for(const auto&weight:m_cleanupWeights[role])if(weight[3]>1)throw std::runtime_error("Invalid cleanup arm side");}
  m_handgunTexture=loadTexture(338);deriveSurfaceNormal(m_handgunTexture,.3f);m_handgunTexture.glossStrength=.25f;
+ // Parkerized black: a little sheen, no relief taken from the sheet's noise (it sparkled grey).
+ m_macTexture=loadTexture(3354);m_macTexture.glossStrength=.08f;
+ m_macAmmoTexture=loadTexture(3356);m_brassTexture=loadTexture(3358);m_brassTexture.glossStrength=.35f;
  m_droneTexture=loadTexture(335);deriveSurfaceNormal(m_droneTexture,.3f);m_droneTexture.glossStrength=.2f;
  {auto emission=loadTexture(336);if(emission.width!=m_droneTexture.width||emission.height!=m_droneTexture.height)throw std::runtime_error("Drone emission dimensions mismatch");m_droneTexture.emission=std::move(emission.pixels);}
  {Texture missing{64,64,std::vector<std::uint32_t>(64*64)};for(int y=0;y<64;++y)for(int x=0;x<64;++x)missing.pixels[size_t(y*64+x)]=((x/8+y/8)&1)?0xff000000u:0xffff00ffu;prepareDecal(missing,false);m_missingTexture=std::move(missing);}
@@ -611,7 +614,7 @@ startupMark("engine textures"); m_concreteFloor=m_concrete;
    {&m_ironTexture,M::BareSteel},{&m_darkMetalTexture,M::BareSteel},{&m_rubberTexture,M::Rubber},{&m_leatherTexture,M::Leather},
    {&m_officeTile,M::Vinyl},{&m_officeWall,M::Plaster},{&m_dropCeiling,M::Plaster},{&m_securityCarpet,M::Fabric},{&m_officeCarpet,M::Fabric},
    {&m_areaWalls[0],M::Plaster},{&m_areaWalls[1],M::Plaster},{&m_areaWalls[2],M::Plaster},{&m_areaFloors[0],M::SealedConcrete},{&m_areaFloors[1],M::SealedConcrete},{&m_areaFloors[2],M::SealedConcrete},
-   {&m_handgunTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
+   {&m_handgunTexture,M::BareSteel},{&m_brassTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
    {&m_cursedTexture,M::Rust},{&m_droneTexture,M::PaintedMetal},{&m_arms,M::Clothing}};
   for(auto [t,m]:named)apply(*t,m,"engine");
   for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");if(m_limitatorTexturesReady)for(auto& t:m_limitatorTextures)apply(t,M::Clothing,"limitator");
@@ -1051,9 +1054,11 @@ void SoftwareRenderer::drawHud(const Game& game){
   uiText(reserveX-6-loadedWidth,m_height-52,b,ammo.loaded==0?red:bone,0,40,hud);
   std::snprintf(b,sizeof(b),"/ %02d",ammo.reserve);uiText(reserveX,m_height-31,b,muted,0,16,hud);
   uiText(reserveX,m_height-46,ammo.caliber,muted,0,10,hud,2);
-  // One pip a round in the magazine: six shells, or twelve 9 mm in two groups of six.
+  // One pip a round in the magazine: six shells, twelve 9 mm in two groups of six, or
+  // the MAC-11's thirty-two .380 in two rows of sixteen, groups of eight.
   const bool narrow=ammo.capacity>8;const int pitch=narrow?5:6,right=reserveX-6-loadedWidth-12;
-  for(int i=0;i<ammo.capacity;++i)fill(right-i*pitch-(narrow&&i>=6?4:0),m_height-34,3,10,i<ammo.loaded?amber:bone,(i<ammo.loaded?1.f:.15f)*hud);
+  if(ammo.capacity>16){const int row=(ammo.capacity+1)/2;for(int i=0;i<ammo.capacity;++i){const int c=i%row,r=i/row;fill(right-c*4-(c>=8?3:0),m_height-37+r*7,2,5,i<ammo.loaded?amber:bone,(i<ammo.loaded?1.f:.15f)*hud);}}
+  else for(int i=0;i<ammo.capacity;++i)fill(right-i*pitch-(narrow&&i>=6?4:0),m_height-34,3,10,i<ammo.loaded?amber:bone,(i<ammo.loaded?1.f:.15f)*hud);
   // A magazine reads 0 until it seats: no prompt while the change is under way.
   if(ammo.loaded==0&&!game.reloading())uiText(m_width/2-uiTextWidth("RELOAD  [R]",0,12,2)/2,m_height/2+24,"RELOAD  [R]",red,0,12,hud,2);}
  std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f*hud,2);
@@ -1135,7 +1140,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(game.pickupNoticeTime()>0&&!shut)promptPanel(offVents(m_height-65,23),game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=shut?nullptr:game.nearbyPickup()){
-  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
+  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":pickup->kind==Pickup::Kind::MacAmmo?".380 / 32 ROUNDS":pickup->kind==Pickup::Kind::MachinePistol?"MAC-11 / .380 x 32":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   promptPanel(m_height-65,message,amber);
  }
  // Shut in, the hint sits low on the steel under the vent band, off the
@@ -1283,9 +1288,9 @@ void SoftwareRenderer::drawVrStatus(const Game&game){
  std::snprintf(data,sizeof(data),"HEALTH %03d",int(game.player().health));text(24,67,data,green,5);
  rect(24,106,592,16,0xff082510u);rect(24,106,int(592*std::clamp(game.player().health/100.f,0.f,1.f)),16,green);
  // The firearm in hand (or last drawn): its magazine and reserve.
- {const auto&rounds=game.firearmPool();const bool nine=game.activeFirearm()==WeaponId::Handgun;std::snprintf(data,sizeof(data),"%s %02d / %02d",nine?"9MM":"SHELLS",rounds.loaded,std::max(0,rounds.total-rounds.loaded));text(24,142,data,green,4);}
+ {const auto&rounds=game.firearmPool();const bool nine=game.activeFirearm()==WeaponId::Handgun,mac=game.activeFirearm()==WeaponId::MachinePistol;std::snprintf(data,sizeof(data),"%s %02d / %02d",nine?"9MM":mac?".380":"SHELLS",rounds.loaded,std::max(0,rounds.total-rounds.loaded));text(24,142,data,green,4);}
  std::snprintf(data,sizeof(data),"CONTACTS %02d / PURGED %02d",game.enemiesRemaining(),game.kills());text(24,185,data,green,3);
- text(24,222,game.world().custom()?game.world().customMapName():game.world().campaign()?CampaignMapNames[game.level()]:"ASHFALL EXCLUSION ZONE",green,2);text(24,245,game.equippedWeapon()==WeaponId::Handgun?"HANDGUN EQUIPPED":game.equippedWeapon()==WeaponId::Shotgun?"SHOTGUN EQUIPPED":"EMPTY HANDS",green,2);
+ text(24,222,game.world().custom()?game.world().customMapName():game.world().campaign()?CampaignMapNames[game.level()]:"ASHFALL EXCLUSION ZONE",green,2);text(24,245,game.equippedWeapon()==WeaponId::Handgun?"HANDGUN EQUIPPED":game.equippedWeapon()==WeaponId::MachinePistol?"MAC-11 EQUIPPED":game.equippedWeapon()==WeaponId::Shotgun?"SHOTGUN EQUIPPED":"EMPTY HANDS",green,2);
  if(auto hint=game.interactionHint())text(24,272,hint,green);if(game.pickupNoticeTime()>0)text(290,245,game.pickupNotice().c_str(),green);if(auto caption=game.actorCaption();!caption.empty())text(24,260,std::string(caption).c_str(),green);
  // Map and contacts remain available on the device, never across the headset view.
  for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(game.world().solid(x+.5f,y+.5f))rect(530+x*3,180+y*3,3,3,0xff0b3417u);const auto&p=game.player();rect(530+int(p.pos.x*3),180+int(p.pos.y*3),3,3,green);for(const auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(530+int(e.pos.x*3),180+int(e.pos.y*3),3,3,green);auto exit=game.world().exitPoint();rect(530+int(exit.x*3),180+int(exit.y*3),4,4,green);
@@ -1436,25 +1441,30 @@ void SoftwareRenderer::drawInventory(const Game& game){
  const bool shotgunOut=game.equippedWeapon()==WeaponId::Shotgun,pistolOut=game.equippedWeapon()==WeaponId::Handgun;
  if(shotgunOut)icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
  label(76,123,shotgunOut?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
- // Secondary: the handgun once owned (drawn from its own mesh), else the fists.
- if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW",paper);}
+ // Secondary: the sidearms once owned (each drawn from its own mesh; with both, the
+ // handgun on the left half and the MAC-11 on the right), else the fists.
+ const bool macOut=game.equippedWeapon()==WeaponId::MachinePistol;
+ if(game.hasHandgun()&&game.hasMachinePistol()){icon(m_handgunMesh,m_handgunTexture,76,152,100,30,true);icon(m_macMesh,m_macTexture,206,150,90,34,true);
+  label(76,173,pistolOut?"HANDGUN / HOLSTER":"HANDGUN / DRAW",paper);label(206,173,macOut?"MAC-11 / HOLSTER":"MAC-11 / DRAW",paper);}
+ else if(game.hasMachinePistol()){icon(m_macMesh,m_macTexture,76,150,110,34,true);label(76,173,macOut?"MAC-11 / CLICK TO HOLSTER":"MAC-11 / CLICK TO DRAW",paper);}
+ else if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW",paper);}
  else label(76,173,"FISTS / CLICK TO HOLSTER",paper);
  label(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
  label(76,258,"ARMOR: EMPTY",muted);
- int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
+ int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem||item.id==Game::MachinePistolItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
  if(keys>shown){std::string more="+ "+std::to_string(keys-shown)+" MORE KEY ITEMS";label(76,keyY+shown*11,more.c_str(),muted);}
  for(int row=0;row<5;++row)for(int col=0;col<6;++col){fill(350+col*34,94+row*29,31,26,rgb(236,228,214),.05f);frame(350+col*34,94+row*29,31,26,rgb(236,228,214),.10f);}
- // Items 0 shotgun, 1 shells, 2 first aid, 3 9 mm (a stack waits for the pistol).
- const int shells=game.player().pool(WeaponId::Shotgun).total,nine=game.player().pool(WeaponId::Handgun).total;
- int occupied=0;for(int item=0;item<4;++item){if((item==0&&shotgunOut)||(item==1&&shells==0)||(item==2&&game.medkits()==0)||(item==3&&nine==0))continue;
+ // Items 0 shotgun, 1 shells, 2 first aid, 3 9 mm (a stack waits for the pistol), 4 .380 (for the MAC-11).
+ const int shells=game.player().pool(WeaponId::Shotgun).total,nine=game.player().pool(WeaponId::Handgun).total,acp=game.player().pool(WeaponId::MachinePistol).total;
+ int occupied=0;for(int item=0;item<5;++item){if((item==0&&shotgunOut)||(item==1&&shells==0)||(item==2&&game.medkits()==0)||(item==3&&nine==0)||(item==4&&acp==0))continue;
   int cell=game.itemCell(item),ix=350+cell%6*34,iy=94+cell/6*29,iw=item==0?133:item==2?65:31;occupied+=item==0?8:item==2?4:2;
   fill(ix,iy,iw,55,rgb(30,26,24),.85f);if(game.selectedItem()==item){rect(ix,iy,iw,1,amber);rect(ix,iy,1,55,amber);rect(ix+iw-1,iy,1,55,amber);rect(ix,iy+54,iw,1,amber);}
-  icon(item==0?m_weaponMesh:item==1?m_shellsMesh:item==3?m_nineMesh:m_medkitMesh,item==0?m_weaponTexture:item==1?m_shellsTexture:item==3?m_nineTexture:m_medkitTexture,ix+3,iy+3,iw-6,39,item==0);
-  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?shells:item==3?nine:game.medkits());label(ix+5,iy+45,count,paper);
+  icon(item==0?m_weaponMesh:item==1?m_shellsMesh:item==3?m_nineMesh:item==4?m_macAmmoMesh:m_medkitMesh,item==0?m_weaponTexture:item==1?m_shellsTexture:item==3?m_nineTexture:item==4?m_macAmmoTexture:m_medkitTexture,ix+3,iy+3,iw-6,39,item==0);
+  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?shells:item==3?nine:item==4?acp:game.medkits());label(ix+5,iy+45,count,paper);
  }
  char status[40];std::snprintf(status,sizeof(status),"%d / 30 CELLS  HP %d",occupied,int(game.player().health));label(350,250,status,muted);
- const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2","9MM ROUNDS / 1 X 2"};label(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
- fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":game.selectedItem()==3?"9MM IS USED BY THE HANDGUN":"AMMO IS USED BY THE SHOTGUN",amber);
+ const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2","9MM ROUNDS / 1 X 2",".380 ROUNDS / 1 X 2"};label(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
+ fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":game.selectedItem()==3?"9MM IS USED BY THE HANDGUN":game.selectedItem()==4?".380 IS USED BY THE MAC-11":"AMMO IS USED BY THE SHOTGUN",amber);
  label(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);label(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
 }
 void SoftwareRenderer::drawConsole(const Game& game){

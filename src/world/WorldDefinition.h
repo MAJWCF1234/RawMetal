@@ -115,7 +115,7 @@ inline constexpr float TransformedLeap=.4f,TransformedHold=2.f,TransformedStumbl
 // The area score a map plays; stitched maps share one so the loop carries on.
 // Silence: the map plays no score at all (held quiet for effect; its ambience carries it).
 enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Research, Clinic, Silence, Count };
-enum class PickupKind { Health, Ammo, HandgunAmmo }; // Values retain the existing save format (HandgunAmmo from version 19).
+enum class PickupKind { Health, Ammo, HandgunAmmo, MacAmmo, MachinePistol }; // Values retain the existing save format (HandgunAmmo from version 19; the MAC-11's box and the gun itself from the pickups section's version 2).
 // The air of a map or zone: linear RGB haze colour (0-1) and density per metre
 // (0-.1). A negative density leaves it to the environment, today's look:
 // interior .11,.15,.18 at .008, outdoors by sky (World::haze). Density also

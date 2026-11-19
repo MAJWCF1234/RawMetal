@@ -1,0 +1,12 @@
+# The MAC-11 in the regression room: first person idle, a burst, the cases on the floor, aimed,
+# both reloads, the knob held back on empty, sprinting, the shotgun's shell and the handgun's brass,
+# then third person for Claire and the Limitator, and the .380 box and the gun on the floor.
+# Tubes: mac11.
+world room
+camera 12 12 -999 0 0
+light 13.5 12 3.2 1.4 9
+light 9 8.5 3.2 0.9 8
+light 12 14 3.2 1.0 8
+hud on
+size 960 540
+frames 840

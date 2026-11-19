@@ -41,6 +41,7 @@ const char* Game::questItemName(StateId id){
  if(id==ReactorAuthDisk)return "REACTOR AUTH DISK";
  if(id==Flashlight)return "FLASHLIGHT";
  if(id==HandgunItem)return "HANDGUN";
+ if(id==MachinePistolItem)return "MAC-11";
  if(id==stateId("keycard"))return "KEYCARD";
  if(id==stateId("fuse"))return "FUSE";
  if(id==stateId("tool"))return "SERVICE TOOL";
@@ -84,6 +85,8 @@ void Game::executeScriptAction(const ScriptAction& action){
   case ScriptAction::Type::GiveItem:
    // The pistol comes loaded and in hand: a full magazine per count.
    if(action.id==HandgunItem){grantHandgun(std::max(1,action.value)*playerWeaponDef(WeaponId::Handgun).cycle.tubeCapacity);equipWeapon(WeaponId::Handgun);m_pickupNotice="HANDGUN / 9MM x "+std::to_string(m_player.pool(WeaponId::Handgun).total);m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f,.92f);break;}
+   // The MAC-11 the same: loaded, a full magazine per count, and drawn.
+   if(action.id==MachinePistolItem){grantMachinePistol(std::max(1,action.value)*playerWeaponDef(WeaponId::MachinePistol).cycle.tubeCapacity);equipWeapon(WeaponId::MachinePistol);m_pickupNotice="MAC-11 / .380 x "+std::to_string(m_player.pool(WeaponId::MachinePistol).total);m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f,.9f);break;}
    giveQuestItem(action.id,std::max(1,action.value));if(action.id==Flashlight){m_pickupNotice="FLASHLIGHT ACQUIRED / F TO TOGGLE";m_pickupNoticeTime=3.f;sound(Sound::Pickup,.6f);}break;
   case ScriptAction::Type::TakeItem:takeQuestItem(action.id,std::max(1,action.value));break;
   case ScriptAction::Type::OpenDoor:if(action.index>=0&&action.index<int(m_world.doors().size())){auto d=m_world.doors()[size_t(action.index)];m_world.setDoor(action.index,d.open,true);}break;

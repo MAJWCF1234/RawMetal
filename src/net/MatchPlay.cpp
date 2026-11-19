@@ -186,7 +186,7 @@ void Match::acceptGuestState(int slot,const NetPlayerState& s){
 // shooter saw them (rewound to the time their view showed, at most 0.3 s), then its damage and its marks.
 void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direction,float viewTime){
  Game& g=m_game;
- if(m_over||weapon<1||weapon>2||shooter<0||shooter>=MaxSlots)return;
+ if(m_over||weapon<1||weapon>3||shooter<0||shooter>=MaxSlots)return;
  auto& sh=m_slots[size_t(shooter)];if(!sh.used||!sh.alive)return;
  const auto& gun=playerWeaponDef(WeaponId(weapon));
  const Vec2 lo=origin(level),ao=origin(g.m_level);const Point3 o{at.x+lo.x-ao.x,at.y+lo.y-ao.y,at.z};
@@ -403,7 +403,7 @@ bool Match::localShot(Point3 o,Point3 direction,int weapon){
   .u32((std::uint32_t(m_stateSeq)<<16)^m_shotCounter).u32(millis(renderTime()));
  send(m_hostId,Events,w,true);
  // The tracer at once; the mark it leaves comes back from the host.
- const auto& gun=playerWeaponDef(WeaponId(std::clamp(weapon,1,2)));const auto hit=g.traceShot(o,direction,gun.hitscan.maxRange);
+ const auto& gun=playerWeaponDef(WeaponId(std::clamp(weapon,1,3)));const auto hit=g.traceShot(o,direction,gun.hitscan.maxRange);
  g.m_shotRays.push_back({o,direction,hit.kind==ShotKind::None?gun.hitscan.maxRange:hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
  return true;
 }
@@ -502,7 +502,7 @@ void Match::handleEvent(const Packet& p){
   Point3 d=e-o;const float range=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(range<.001f)return;d=d*(1/range);
   if(shooter!=m_selfSlot){
    g.m_shotRays.push_back({o,d,range,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
-   g.m_sounds.push_back({playerWeaponDef(WeaponId(std::clamp(weapon,1,2))).cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});}
+   g.m_sounds.push_back({playerWeaponDef(WeaponId(std::clamp(weapon,1,3))).cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});}
   if(kind==2)return;
   const Vec2 aw=origin(g.m_level);const int at=levelAt({e.x+aw.x,e.y+aw.y});const World* w=worldOf(at);if(!w)return;
   const Vec2 back=origin(g.m_level)-origin(at);const Point3 local{e.x+back.x,e.y+back.y,e.z};

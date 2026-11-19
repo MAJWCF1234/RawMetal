@@ -115,7 +115,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
   Point3 aim{0,0,1};
   if(vr){const AvatarSolve solve=solveAvatar(r.pose,now);lower=solve.legsClip;lowerPhase=solve.legsPhase;pitch=-solve.lean;yaw=-solve.twist;}
   else{
-   held=!r.alive?0:r.weapon==1?1:r.weapon==2?2:0;
+   held=!r.alive?0:r.weapon==1?1:r.weapon==2?2:r.weapon==3?3:0;   // 3: the MAC-11, held as the pistol
    const bool upright=r.alive&&r.grounded&&!r.prone;
    const float shot=r.shotAge,look=std::clamp(r.pitch,-1.2f,1.2f);
    const bool recent=shot<3.f;    // a player who fired lately holds the gun up on their aim
@@ -125,7 +125,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
     const bool reloading=r.reloadAge<1.8f;
     if(speed<.25f&&!reloading){if(shot<.3f){lower=Clip::RifleShot;lowerPhase=shot/.3f;aimed=1;}else if(recent){lower=r.crouched?Clip::CrouchAim:Clip::AimIdle;lowerPhase=std::fmod(now/(r.crouched?1.9f:2.03f),1.f);aimed=1;}}
     else if(!reloading){if(shot<.3f){layer={Clip::RifleShot,shot/.3f,1};aimed=1;}else if(recent){layer={Clip::AimIdle,std::fmod(now/2.03f,1.f),1};aimed=1;}}}
-   else if(held==2&&upright){
+   else if(held>=2&&upright){
     if(r.reloadAge<1.5f)layer={Clip::PistolReload,r.reloadAge/1.5f,1};
     else if(shot<.45f){layer={Clip::PistolShoot,shot/.45f,1};aimed=1;}
     else if(shot<1.5f||recent){layer={Clip::PistolAim,0,1,look>0?Clip::PistolAimUp:Clip::PistolAimDown,0,std::clamp(std::fabs(look)/.9f,0.f,1.f)};aimed=1;}
@@ -152,7 +152,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
   report.lower=lower;report.layer=layer.clip;report.held=held;
   // The gun in their hands (the shotgun in both, remembered in the right while the left reloads; the pistol in the right).
   ClaireOutside::Gun heldGun{};Point3 socket{};
-  if(held){const bool pistol=held==2;socket=pistol?Point3{0,-.022f,-.012f}:TriggerSocket;
+  if(held){const bool pistol=held>=2;socket=pistol?Point3{0,-.022f,-.012f}:TriggerSocket;
    const auto rh=b.outside.hand(0);const auto lh=b.outside.hand(1);const float metre=b.outside.perMetre();
    auto lay=lh;if(r.prone){Point3 d=lh.grip-rh.grip;d.y*=.15f;lay.grip=rh.grip+d;}
    heldGun=pistol?ClaireOutside::fitPistol(rh,socket,metre):ClaireOutside::fitLongGun(rh,lay,socket,SupportSocket,{0,0,-1},metre/gunLength);
@@ -196,16 +196,16 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
     std::swap(v[1],v[2]);const Point3 n=cross(v[1].p-v[0].p,v[2].p-v[0].p);hooks.face(n,(v[0].p+v[1].p+v[2].p)*(1.f/3.f)-receiver);
     const int m=materialOf(m_armsMesh,face.part);hooks.tri(v[0],v[1],v[2],m>=0?m_claireTextures[size_t(m)]:m_arms,.85f);}
    // The gun in the hand that holds it: the bore along the fingers, kept level about it.
-   if(r.pose.inHand==2||r.pose.inHand==3){const int g=r.pose.gunSide&1;const bool pistol=r.pose.inHand==3;
+   if(r.pose.inHand>=2&&r.pose.inHand<=4){const int g=r.pose.gunSide&1;const bool pistol=r.pose.inHand>=3,mac=r.pose.inHand==4;
     const Point3 wrist=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))+shift;
     const Point3 bore=unit(r.pose.hands[size_t(g)].forward),back=bore*-1.f;Point3 up=Point3{0,0,1}-bore*bore.z;up=unit(dot(up,up)<1e-4f?Point3{1,0,0}:up);const Point3 side=cross(back,up);
-    const Point3 origin=wrist+bore*.07f;held=pistol?2:1;
+    const Point3 origin=wrist+bore*.07f;held=mac?3:pistol?2:1;
     auto place=[&](Point3 p){return origin+side*p.x+up*p.y+back*p.z;};
-    if(pistol)for(auto face:m_handgunMesh.triangles){for(auto& v:face.v)v.p=place({-v.p.x,v.p.y,-v.p.z});std::swap(face.v[1],face.v[2]);hooks.face(cross(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),face.v[0].p-receiver);hooks.tri(face.v[0],face.v[1],face.v[2],m_handgunTexture,.8f);}
+    if(pistol)for(auto face:(mac?m_macMesh:m_handgunMesh).triangles){for(auto& v:face.v)v.p=place({-v.p.x,v.p.y,-v.p.z});std::swap(face.v[1],face.v[2]);hooks.face(cross(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),face.v[0].p-receiver);hooks.tri(face.v[0],face.v[1],face.v[2],mac?m_macTexture:m_handgunTexture,.8f);}
     else{const auto c=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,rr=m_weaponMesh.maximum-m_weaponMesh.minimum;const float s=.85f/std::max({rr.x,rr.y,rr.z});
      for(auto face:m_weaponMesh.triangles){if(face.part==3)continue;for(auto& v:face.v){const auto p=(v.p-c)*s;v.p=place({-p.x,p.y,p.z-.13f});}std::swap(face.v[1],face.v[2]);
       hooks.face(cross(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),face.v[0].p-receiver);hooks.tri(face.v[0],face.v[1],face.v[2],m_weaponTexture,.8f);}}}}
-  else if(held){const bool pistol=held==2;const auto& gunMesh=pistol?m_handgunMesh:m_weaponMesh;const auto& gunTexture=pistol?m_handgunTexture:m_weaponTexture;
+  else if(held){const bool pistol=held>=2;const auto& gunMesh=held==3?m_macMesh:pistol?m_handgunMesh:m_weaponMesh;const auto& gunTexture=held==3?m_macTexture:pistol?m_handgunTexture:m_weaponTexture;
    for(auto face:gunMesh.bindTriangles()){if(!pistol&&face.part==3)continue;
     for(auto& v:face.v)v.p=world(ClaireOutside::place(heldGun,socket,v.p));std::swap(face.v[1],face.v[2]);
     {bool near=false;for(const auto& v:face.v){const Point3 d=v.p-eye;near=near||dot(d,d)<.3f*.3f;}if(near)continue;}
