@@ -4,12 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.7 - The headset again (2026-11-18)
+
+A fix for the choice that went missing.
+
+- **Play in VR is back.** Since v1.0.4 the game has looked for SteamVR in the wrong place in the registry, decided there was no headset, and never asked how you wanted to play. It looks in the right place now, finds SteamVR in a second Steam library too, and asks again: Play on PC, or Play in VR. If it ever cannot find the headset, RawMetal-vr.txt beside the game says exactly why.
+
+Verified with tools/release/ship.py and the game's VR test, which now checks the headset detection itself.
+
+---
+
 ## v1.5.6 - A quieter hand (2026-11-18)
 
 A small fix for something players said shone too brightly.
 
 - **No more orange.** What the Physgloves are about to pull no longer burns orange. A thin, cold line traces its edge and breathes slowly, and the crosshair draws in a little; nothing else around it lights up. Settings has a Pull Highlight row to make it subtle or turn it off.
-- **The headset is seen again.** Since 1.0.4 the game looked for Steam under a misspelled registry key, so it never saw SteamVR and never asked "Play on PC or in VR". Double-click the game with SteamVR running and the headset connected, and the choice is back. It now also finds SteamVR installed in a second Steam library, and every launch writes what it found, and why, to RawMetal-vr.txt.
 
 Verified with tools/release/ship.py and the feature lab's Physgloves and settings tubes.
 
