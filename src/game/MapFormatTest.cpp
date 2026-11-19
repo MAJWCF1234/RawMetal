@@ -245,6 +245,61 @@ bool Game::testMapFormat(){
     size_t faces=0,met=0;const auto& s=g.world().structures();for(const auto& face:s)if(face.material==51){++faces;for(const auto& body:s)met+=body.material==31&&std::fabs(body.x1-face.x1)<1e-4f&&std::fabs(body.y1-face.y1)<1e-4f&&std::fabs(body.top-face.bottom)<1e-4f;}
     check(faces==8&&met==8,"on a hill every step top sits exactly on its step ("+std::to_string(met)+" of "+std::to_string(faces)+")");}
   }
+
+  // ---- Multiplayer: MULTIPLAYER and SPAWN (docs/Systems/multiplayer.md), named fields only ----
+  {for(const char* head:{"","FORMAT|2\n"}){auto plain=loadCustomCampaignText(room(head,""),"plain.rmc");const auto& mp=plain->multiplayer;const auto text=exportRmc(plain->name,{{plain->maps[0],-1}},0).text;
+    check(mp.deathmatch&&mp.coop&&mp.deathmatchMap==-1&&mp.maxPlayers==8&&mp.fragLimit==20&&mp.timeLimitMinutes==10&&!mp.friendlyFire&&mp.spawns.empty()&&
+     text.find("MULTIPLAYER")==std::string::npos&&text.find("SPAWN|")==std::string::npos,
+     std::string("without the records (")+(*head?"format 2":"format 1")+") every mode is on at the defaults, no spawns, and the export writes neither");}
+   const std::string records="MULTIPLAYER|deathmatch=1|coop=0|dmmap=0|maxplayers=12|fraglimit=30|timelimit=7.5|friendlyfire=1\n"
+    "SPAWN|map=0|x=12.5|y=4|z=0|yaw=90|team=0\nSPAWN|map=0|x=3|y=20.25|z=1.5|yaw=-45|team=2\nSPAWN|map=0|x=6|y=6\n";
+   auto c=loadCustomCampaignText(room("FORMAT|2\n",records),"multiplayer.rmc");const auto& mp=c->multiplayer;
+   check(mp.deathmatch&&!mp.coop&&mp.deathmatchMap==0&&mp.maxPlayers==12&&mp.fragLimit==30&&std::fabs(mp.timeLimitMinutes-7.5f)<1e-6f&&mp.friendlyFire,
+    "MULTIPLAYER is read: deathmatch on, co-op off, deathmatch on map 0, 12 players, 30 frags, 7.5 minutes, friendly fire");
+   const bool spawnsRead=mp.spawns.size()==3&&mp.spawns[0].map==0&&mp.spawns[0].x==12.5f&&mp.spawns[0].y==4&&mp.spawns[0].yaw==90&&mp.spawns[0].team==0&&
+    mp.spawns[1].x==3&&mp.spawns[1].y==20.25f&&mp.spawns[1].z==1.5f&&mp.spawns[1].yaw==-45&&mp.spawns[1].team==2&&
+    mp.spawns[2].x==6&&mp.spawns[2].y==6&&mp.spawns[2].z==0&&mp.spawns[2].yaw==0&&mp.spawns[2].team==0;
+   check(spawnsRead,"SPAWN records are read in order with their map, spot, height, turn and team (z, yaw and team default to 0; "+std::to_string(mp.spawns.size())+" spawns)");
+   {auto partial=loadCustomCampaignText(room("FORMAT|2\n","MULTIPLAYER|coop=0\n"),"partial.rmc");const auto& p=partial->multiplayer;
+    check(p.deathmatch&&!p.coop&&p.deathmatchMap==-1&&p.maxPlayers==8&&p.fragLimit==20&&p.timeLimitMinutes==10&&!p.friendlyFire,"a MULTIPLAYER field left out keeps its default");}
+   const auto first=exportRmc(c->name,{{c->maps[0],-1}},0).text;
+   check(first.find("\nMULTIPLAYER|deathmatch=1|coop=0|dmmap=0|maxplayers=12|fraglimit=30|timelimit=7.5|friendlyfire=1\nSPAWN|map=0|x=12.5|y=4|z=0|yaw=90|team=0\n"
+    "SPAWN|map=0|x=3|y=20.25|z=1.5|yaw=-45|team=2\nSPAWN|map=0|x=6|y=6\n")!=std::string::npos&&first.find("\nFORMAT|2\n")!=std::string::npos,
+    "the exporter writes MULTIPLAYER and every SPAWN back byte for byte, in order, under FORMAT|2");
+   auto again=loadCustomCampaignText(first,"multiplayer-again.rmc");const auto second=exportRmc(again->name,{{again->maps[0],-1}},0).text;
+   const auto& b=again->multiplayer;bool same=b.spawns.size()==mp.spawns.size()&&b.deathmatch==mp.deathmatch&&b.coop==mp.coop&&b.deathmatchMap==mp.deathmatchMap&&b.maxPlayers==mp.maxPlayers&&
+    b.fragLimit==mp.fragLimit&&b.timeLimitMinutes==mp.timeLimitMinutes&&b.friendlyFire==mp.friendlyFire;
+   for(size_t i=0;same&&i<b.spawns.size();++i){const auto&x=b.spawns[i];const auto&y=mp.spawns[i];same=x.map==y.map&&x.x==y.x&&x.y==y.y&&x.z==y.z&&x.yaw==y.yaw&&x.team==y.team;}
+   check(first==second&&same,"export, parse, export writes the same file and reads the same settings and spawns");
+   {Game g(c);for(int i=0;i<10;++i)g.update({},1.f/60);check(g.m_level==0,"a campaign with MULTIPLAYER and SPAWN records still plays alone");}
+   auto refusal=[&](const std::string& head,const std::string& body,const std::string& expect,const std::string& what){const auto why=refused(room(head,body),expect);check(why.empty(),what+" ("+why+")");};
+   refusal("","MULTIPLAYER|deathmatch=1\n","FORMAT|2","MULTIPLAYER in a version 1 file is refused, saying it needs FORMAT|2");
+   refusal("FORMAT|2\n","MULTIPLAYER|1|coop=1\n","named key=value fields only","a positional MULTIPLAYER field is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|deathmatch=2\n","deathmatch=2","a mode that is not 1 or 0 is refused, naming it");
+   refusal("FORMAT|2\n","MULTIPLAYER|maxplayers=40\n","maxplayers=40","more than 16 players is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|maxplayers=1\n","maxplayers=1","fewer than 2 players is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|fraglimit=2.5\n","whole number","a fraction of a frag is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|timelimit=-1\n","timelimit=-1","a negative time limit is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|lives=3\n","no field lives","an unknown MULTIPLAYER field is refused, naming it");
+   refusal("FORMAT|2\n","MULTIPLAYER|coop=1\nMULTIPLAYER|coop=0\n","one MULTIPLAYER","a second MULTIPLAYER record is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|coop=1|coop=0\n","twice","a field given twice is refused");
+   refusal("FORMAT|2\n","MULTIPLAYER|dmmap=5\n","dmmap=5","a deathmatch map the campaign does not have is refused");
+   refusal("FORMAT|2\n","SPAWN|map=0|x=4\n","needs y","a SPAWN without y is refused");
+   refusal("FORMAT|2\n","SPAWN|map=3|x=4|y=4\n","map=3","a SPAWN on a map the campaign does not have is refused");
+   refusal("FORMAT|2\n","SPAWN|map=0|x=30|y=4\n","x=30","a SPAWN outside its map is refused");
+   refusal("FORMAT|2\n","SPAWN|map=0|x=4|y=4|team=9\n","team=9","a team past 4 is refused");
+   refusal("FORMAT|2\n","SPAWN|map=0|x=4|y=4|yaw=north\n","yaw=north","a turn that is not degrees is refused");
+   {std::string many;for(int i=0;i<65;++i)many+="SPAWN|map=0|x=4|y=4\n";refusal("FORMAT|2\n",many,"too many SPAWN","more than 64 spawns are refused");}
+   // The Starter Map shows it off: a MULTIPLAYER record and 8 spawns in the Ground paint yard.
+   const auto starter=campaignWorkspace()/"custom maps"/"Starter Map.rmc";std::error_code ec;
+   if(!campaignWorkspace().empty()&&std::filesystem::exists(starter,ec)){auto s=loadCustomCampaignFile(starter);const auto& sm=s->multiplayer;
+    const bool yard=sm.deathmatchMap>=0&&sm.deathmatchMap<int(s->maps.size())&&s->maps[size_t(sm.deathmatchMap)]->name=="Starter Map / Ground paint";
+    int there=0;for(const auto& sp:sm.spawns)there+=sp.map==sm.deathmatchMap;
+    check(yard&&sm.spawns.size()==8&&there==8,"the Starter Map plays deathmatch in its Ground paint yard with 8 spawns there ("+std::to_string(there)+")");
+    // Where a player is put there: the walked support under the spot (Game puts the start on it).
+    if(yard){World w(sm.deathmatchMap,s->maps[size_t(sm.deathmatchMap)]);float worst=0;std::string under;
+     for(const auto& sp:sm.spawns){const float floor=w.supportBelow(sp.x,sp.y,sp.z+2);worst=std::max(worst,std::fabs(floor-sp.z));under+=(under.empty()?"":", ")+std::to_string(floor).substr(0,5);}
+     check(worst<.05f,"each Starter spawn stands at its floor's height ("+std::to_string(worst)+" m off at worst; floors "+under+")");}}}
  }catch(const std::exception& e){check(false,std::string("threw: ")+e.what());}
  report<<(failed?"FAILED ":"PASSED ")<<failed<<" failures\n";
  return failed==0;

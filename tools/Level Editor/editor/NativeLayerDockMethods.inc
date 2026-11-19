@@ -77,7 +77,7 @@
     publish(true,false);InvalidateRect(layerPreview,nullptr,FALSE);if(final)opacityDragging=false;
   }
   void handleLayerCommand(int id,int notification) {
-    if(id==InspectorTab||id==LayerTab){layersDock=id==LayerTab;if(layersDock)refreshLayerDock();relayout();return;}
+    if(id==InspectorTab||id==LayerTab){layersDock=id==LayerTab;multiplayerDock=false;if(layersDock)refreshLayerDock();relayout();return;}
     if(id==LayerStack&&notification==LBN_SELCHANGE){int row=int(SendMessageW(layerStack,LB_GETCARETINDEX,0,0)),chosen=int(SendMessageW(layerStack,LB_GETITEMDATA,row,0));
       if(chosen<=-2){selectedLayerGroup=-chosen-2;auto g=floorGroup(selectedLayerGroup);SetWindowTextW(layerName,wide(g.name).c_str());SendMessageW(layerOpacity,TBM_SETPOS,TRUE,int(g.opacity*100));EnableWindow(layerElevationInput,FALSE);EnableWindow(layerThicknessInput,FALSE);SetWindowTextW(GetDlgItem(window,LayerCommit),L"Rename group");}
       if(chosen>=0){selectedLayerGroup=-1;EnableWindow(layerElevationInput,TRUE);EnableWindow(layerThicknessInput,TRUE);SetWindowTextW(GetDlgItem(window,LayerCommit),L"Apply floor");layer=chosen;selectRecord(-1);auto a=floorLayer(layer);SetWindowTextW(layerName,wide(a.name).c_str());SetWindowTextW(layerElevationInput,wide(nativeNumber(a.elevation)).c_str());SetWindowTextW(layerThicknessInput,wide(nativeNumber(a.thickness)).c_str());SendMessageW(layerOpacity,TBM_SETPOS,TRUE,int(a.opacity*100));writeControl();InvalidateRect(plan,nullptr,FALSE);InvalidateRect(layerPreview,nullptr,FALSE);}return;}

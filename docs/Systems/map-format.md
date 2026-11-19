@@ -204,8 +204,12 @@ written back by CampaignExport.cpp; physics.md has how they play). Heights are a
 - The exporter writes the records back as read; `sameTerrainOver` compares the strokes that reach a map, so the Builder's live picture rebuilds only the maps a stroke reached. Old maps have no CAVE records and load as before; saves are unaffected.
 - The Builder's **Cave** tool writes them: dig (brush a tunnel at the depth picked, click a cavern), cave mouth (drag in from the hillside), fill back, move the wall, smooth, flatten the floor. The Terrain tool's **Move** brush drags the land after the pointer (Shift lifts it). `--cave-test` (NativeCaveRegression.inc; `--editing-test` runs it too) drives both. The lab tube `caves` (src/lab/tubes/Caves.cpp, lab/fixtures/caves.rmc) checks the carving renders, no holes, a walk in, the rock holding, `cave=1`, darkness and an export round trip.
 
+## Multiplayer (MULTIPLAYER, SPAWN)
+`MULTIPLAYER|deathmatch=1|coop=1|dmmap=-1|maxplayers=8|fraglimit=20|timelimit=10|friendlyfire=0` and `SPAWN|map=0|x=12.5|y=4|z=0|yaw=90|team=0` are the first records made of named fields alone (no positional fields; the map is `map=`). They need `FORMAT|2`, are campaign-wide (kept on map 0, written back under CAMPAIGN as read) and arrive as `CustomCampaign::multiplayer`. Ranges and meaning: docs/Systems/multiplayer.md "Maps". The Builder reads a SPAWN as the positional fields `map|x|y|z|turn|team` (NativeDocument `namedOnlyKeys`) so its tools work on it as on any record, and writes it back as named fields.
+
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
+  - MULTIPLAYER and SPAWN: parsed, defaults when absent, every refusal, the round trip byte for byte, the Starter Map's 8 spawns on their floor;
   - version 1 left alone, and every refusal;
   - names, prefab placement and unknown keys;
   - export → parse → export as a fixed point;

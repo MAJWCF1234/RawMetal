@@ -591,6 +591,27 @@ still rebuild everything. `--editor-live-render-test` checks it with two maps
 side by side; `--editor-perf-test --perf-trace` prints `static rebuilds N` for
 every edit in `.build/editor-preview-trace.txt`.
 
+### Multiplayer page and Spawn tool
+
+The **Multiplayer** tab (beside Inspector and Floors / layers) sets how the campaign plays
+with others (docs/Systems/multiplayer.md): **Deathmatch** and **Co-op** on or off, the map a
+deathmatch plays on (the start map unless picked), how many players, the frags that win and
+the minutes a match lasts (each may be no limit), and **Friendly fire** for co-op. Each change
+is one Ctrl+Z and writes one `MULTIPLAYER` record under `CAMPAIGN` (and `FORMAT|2` at the top).
+The page counts the spawns and warns when deathmatch is on and its map has fewer than 4: the
+game then finds spots on open floor itself. **Place spawns** takes up the Spawn tool.
+
+**Spawn** (People page) places `SPAWN` records, where a match player starts. A ghost figure with
+an arrow the way it faces follows the pointer on the plan and in 3D (it is the record the click
+writes, NativeGhost.inc); **R** turns it an eighth (Shift+R back), a click sets it down on the
+floor or the land under it, and one Ctrl+Z takes it back. Pick a spawn to turn it (R), give it
+a team (the Team box: anyone or 1 to 4), nudge it (arrows, Page Up / Page Down), copy or
+delete it. Spawns show as small figures on the plan (a T and the team beside a teamed one) and
+in 3D. A SPAWN is named fields only in the file; the Builder reads it as `map|x|y|z|turn|team`
+(NativeDocument `namedOnlyKeys`), so every tool works on it. `--multiplayer-test`
+(`NativeMultiplayerRegression.inc`; `--editing-test` runs it too; pictures
+`.build/interaction/multiplayer-*.bmp`).
+
 ### Floors, selection and adjoining maps (v1.2.16)
 
 Use the selector and **Shift-click** to add or remove objects from the selection.

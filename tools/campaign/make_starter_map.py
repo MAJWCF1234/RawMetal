@@ -114,6 +114,7 @@ class Starter:
         self.start = 0          # the map you spawn in
         self.format2 = False    # FORMAT|2: some record carries named fields (GLAZING, BREACH)
         self.prefabs = []       # PREFAB blocks (the Kits Gallery's kits), written above the first map
+        self.multiplayer = []   # MULTIPLAYER and SPAWN records (docs/Systems/multiplayer.md), under CAMPAIGN
 
     # --- maps -------------------------------------------------------------------------------
     def new_map(self, name, col, row, ceiling=4.0, surface=None, ambient=.34, shift=True):
@@ -248,6 +249,10 @@ class Starter:
                '# every line below is one record of the format it explains. Lines starting # are notes.',
                '', '--- CUSTOM_CAMPAIGN_DATA_START ---', '# Map format 2: records may end in named key=value fields (GUIDE.html, section 9).',
                'FORMAT|2', 'CAMPAIGN|STARTER MAP|%d' % self.start]
+        if self.multiplayer:
+            out += ['', '# ==== Multiplayer: the modes, the deathmatch map and where match players start ====',
+                    '# MULTIPLAYER|deathmatch|coop|dmmap|maxplayers|fraglimit (0 none)|timelimit (minutes, 0 none)|friendlyfire',
+                    '# SPAWN|map|x|y|z|yaw (degrees, 0 east, 90 south)|team (0 any). All named fields (docs/Systems/multiplayer.md).'] + self.multiplayer
         if self.prefabs:
             out += ['', '# ==== Prefabs: the Campaign Builder\'s kits (tools/campaign/kits.py), in metres from their middle;',
                     '# the Kits Gallery sets each down with a PREFAB_PLACE ===='] + self.prefabs
@@ -1853,6 +1858,14 @@ def outdoors(s, slot, catalogue):
         s.post_sign(m, x1 + 2.5, y1 - .2, 'GROUND %d' % k, name, olive, 1.2)
         s.zone(m, x1 - .5, y1 - 1.3, x1 + 5.5, y1 + 5.2, 'GROUND kind %d / %s' % (k, name))
         s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': x1 + 2.5, 'y': y1 + 2.5, 'title': 'GROUND %d' % k, 'name': name})
+    # Multiplayer: deathmatch plays in this level yard. Eight spawns ring its middle (12, 12.5), 6.5 m
+    # out between the ground squares, each facing the middle, on the pad (terrain walks 0.5 m over its level 0);
+    # co-op starts where the campaign does.
+    s.multiplayer += ['MULTIPLAYER|deathmatch=1|coop=1|dmmap=%d|maxplayers=8|fraglimit=20|timelimit=10|friendlyfire=0' % m['index']]
+    for k in range(8):
+        a = math.radians(45 * k)
+        x, y = 12 - 6.5 * math.cos(a), 12.5 - 6.5 * math.sin(a)
+        s.multiplayer.append('SPAWN|map=%d|x=%g|y=%g|z=0.5|yaw=%d|team=0' % (m['index'], round(x, 2), round(y, 2), 45 * k))
 
     # Terrain: the noise as it comes, a raised plateau and a level road cut through it.
     m = s.outdoor_map('Terrain', 1, row)

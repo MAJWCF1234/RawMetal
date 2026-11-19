@@ -574,6 +574,8 @@ static std::wstring plainKind(const std::string &kind) {
                              {"DARK", L"Darkness"},
                              {"EMITTER", L"Emitter"},
                              {"# EDITOR_FILM", L"Film camera"},
+                             {"SPAWN", L"Spawn"},
+                             {"MULTIPLAYER", L"Multiplayer"},
                              {"COMPACTOR", L"Crusher"},
                              {"BREAKABLE", L"Glass"},
                              {"PICKUP", L"Health or ammo"},
@@ -776,7 +778,9 @@ enum {
   // The Hang cloth tool (NativeClothTool.inc).
   ClothKindList=2650,ClothDropList,
   // Material turns (NativeMaterialTurn.inc).
-  TurnList=2660,TurnFineBox
+  TurnList=2660,TurnFineBox,
+  // The Multiplayer page and the Spawn tool (NativeMultiplayer.inc).
+  MultiplayerTab=2670,SpawnTeamList,MpDeathmatch,MpCoop,MpMapList,MpPlayersList,MpFragList,MpTimeList,MpFriendlyFire,MpPlaceSpawns
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -841,12 +845,14 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Connect", L"⛓", L"Join a loose thing to another thing, a wall or the ceiling: a rope, chain, hinge, spring, weld, motor or pulley (pick on the right). Drag from the thing to what it joins, or click one then the other. Hanging lamp: click under a ceiling.", 1, "JOINT", 'l'},
     {L"Cave", L"◗", L"Dig the underground: brush tunnels and click caverns into the land at the depth picked, drag a cave mouth in from the hillside, fill back, pull a wall, smooth it, level a floor. Ctrl+Z takes a stroke back.", 4, "CAVE", 'T'},
     {L"Hang cloth", L"≋", L"Hang a curtain, a strap or a cable (pick on the right). Curtain: drag along where its top hangs. Strap: click where it hangs from. Cable: drag from one end to the other; a loose cable from the wall to where its end lies. It sways when walked through and drapes over things.", 1, "CLOTH", 'l'},
+    {L"Spawn", L"⚑", L"Click where a player starts in a multiplayer match. R turns the way they face. Pick one to turn it, give it a team or nudge it. The Multiplayer page has the rest.", 2, "SPAWN", 'p'},
 };
 static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
                      TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
-                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50, CaveTool = 51, ClothTool = 52;
+                                          GlassTool = 35, GlazingTool = 47, BreachTool = 48, GrowthTool = 49, ConnectTool = 50, CaveTool = 51, ClothTool = 52,
+                     SpawnTool = 53;
 static constexpr const wchar_t *groupNames[] = {L"Build", L"Decor", L"People", L"Logic", L"World"};
 // The few fields a person ever needs, in plain words. Everything else waits behind Advanced.
 struct Friendly {
@@ -855,6 +861,9 @@ struct Friendly {
 };
 static constexpr Friendly friendlyFields[] = {
     {"CAMPAIGN", "name", L"Campaign name"},
+    {"SPAWN", "turn", L"Faces (degrees: 0 east, 90 south)"},
+    {"SPAWN", "team", L"Team (0 anyone, 1 to 4)"},
+    {"SPAWN", "z", L"Floor height (m)"},
     {"MAP", "name", L"Map name"},
     {"MAP", "ceiling", L"Ceiling height (m)"},
     {"MAP", "skybox", L"Sky"},
@@ -1056,7 +1065,7 @@ struct Editor {
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
   bool connectTest = false, caveTest = false, kitTest = false;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1156,6 +1165,8 @@ struct Editor {
 #include "NativeNudge.inc"          // arrow keys and Page Up / Down move the picked thing
 #include "NativeGhostRegression.inc"
 #include "NativeTurnRegression.inc"
+#include "NativeMultiplayer.inc"           // the Multiplayer page and the Spawn tool
+#include "NativeMultiplayerRegression.inc" // --multiplayer-test
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -2549,8 +2560,12 @@ struct Editor {
         namedLabels[(*it)[1]] = html((*it)[2]);
     }
     schemas.erase(std::remove_if(schemas.begin(), schemas.end(),
-                                 [](auto &s) { return s.kind == "LEAD"; }),
+                                 [](auto &s) { return s.kind == "LEAD" || s.kind == "SPAWN" || s.kind == "MULTIPLAYER"; }),
                   schemas.end());
+    // A match spawn (NativeMultiplayer.inc): named fields only in the file, read as these
+    // positional fields (NativeDocument::fields). Its turn is degrees, so it is not a yaw.
+    schemas.push_back({"SPAWN", "Where a match player starts: the spot, the floor's height, the way they face and their team.",
+                       {"SPAWN", "map", "x", "y", "z", "turn", "team"}, 7, true});
     schemas.push_back(
         {"LEAD",
          "Cable endpoints, length, insulation, live state and attachments.",
@@ -3182,7 +3197,7 @@ struct Editor {
     edperf::Scope perfScope("ui_selectRecord");
     if (ghosting)
       return;
-    if(index>=0&&size_t(index)<doc.lines.size()&&handleFor(size_t(index)))layersDock=false;
+    if(index>=0&&size_t(index)<doc.lines.size()&&handleFor(size_t(index)))layersDock=multiplayerDock=false;
     if(index!=record||!preserveSelection){mapHeightSelection=false;floorTransformSelection=false;}
     selectRecordOnly(index, preserveSelection);
     if(!session.empty()&&engineLive)writeControl();
@@ -3289,6 +3304,10 @@ struct Editor {
     }
     if (filmPicked()) {
       turnFilm();
+      return;
+    }
+    if (spawnPicked()) {
+      turnSpawn(45.f); // an eighth round (NativeMultiplayer.inc)
       return;
     }
     auto f = NativeDocument::fields(doc.lines[size_t(record)]);
@@ -4020,6 +4039,8 @@ struct Editor {
       f = emitterFields(emitterPresets[std::clamp(emitterPreset, 0, EmitterPresetCount - 1)], bx, by);
     } else if (k == FilmKind) {
       authorFilm(f, ax, ay, bx, by);
+    } else if (k == "SPAWN") {
+      authorSpawn(set, bx, by); // the floor under it, the turn R gave, the team picked (NativeMultiplayer.inc)
     } else if (k == "PIPE") {
       set("x1", n(ax)), set("y1", n(ay)), set("x2", n(bx)), set("y2", n(by));
       // A click makes a riser from the floor up; a drag runs along the ceiling.
@@ -4778,6 +4799,8 @@ struct Editor {
         turnDoorGhost(); // the Door tool turns the door it is about to fit
       else if (tool == FilmTool && !filmPicked())
         turnFilm(); // the Film camera tool turns the camera it is about to place
+      else if (tool == SpawnTool && !spawnPicked())
+        turnSpawn(shift ? -45.f : 45.f); // the Spawn tool turns the spawn it is about to place
       else if (tool == 9) { // the Shape tool turns the shape it is about to place
         primFacing = (primFacing + 1) & 3;
         message(L"The next shape faces " + wide(retro::prim::facingWord(primFacing)) + L".");
@@ -5184,7 +5207,10 @@ struct Editor {
     laps.lap("layout_tools_plan");
     // Right column: what the tool will do, then what is selected. Nothing else.
     int rx = w - 326, y = 108;
-    placeControl(GetDlgItem(window,InspectorTab),rx,y,152,30,TRUE);placeControl(GetDlgItem(window,LayerTab),rx+160,y,152,30,TRUE);y+=38;
+    placeControl(GetDlgItem(window,InspectorTab),rx,y,94,30,TRUE);placeControl(GetDlgItem(window,LayerTab),rx+97,y,118,30,TRUE);
+    placeControl(GetDlgItem(window,MultiplayerTab),rx+218,y,94,30,TRUE);y+=38;
+    for(HWND c:multiplayerControls())if(c)ShowWindow(c,SW_HIDE); // the Multiplayer page shows them (NativeMultiplayer.inc)
+    if(spawnTeamList)ShowWindow(spawnTeamList,SW_HIDE);
     for(HWND c:{layerStack,layerPreview,layerName,layerElevationInput,layerThicknessInput,layerOpacity,layerGroupList})if(c)ShowWindow(c,SW_HIDE);
     for(int id:{LayerMenu,LayerVisible,LayerLock,LayerCommit,LayerReferences})ShowWindow(GetDlgItem(window,id),SW_HIDE);
     for (HWND list : {upperFloorTiles, finishPartList, modelSearch, modelList, materialList, roleList, behaviourList, groundList, heightList,
@@ -5219,7 +5245,7 @@ struct Editor {
         ShowWindow(list, SW_HIDE);
     for (int id : {AutoDetail, NewObject, Apply})
       ShowWindow(GetDlgItem(window, id), SW_HIDE);
-    if(!layersDock){
+    if(!layersDock&&!multiplayerDock){
     ShowWindow(form,SW_SHOW);for(int id:{TurnSelected,Duplicate,Remove,Advanced,MakePrefab,PlacePrefab})ShowWindow(GetDlgItem(window,id),SW_SHOW);
     const auto &info = toolInfo[std::clamp(tool, 0, ToolCount - 1)];
     headingCaption = captions.size();
@@ -5478,6 +5504,9 @@ struct Editor {
       row(preyList, L"Hunts first");
       row(hunterList, L"Recurring as");
     }
+    // The Spawn tool, or a picked spawn: its team, the count and the warning (NativeMultiplayer.inc).
+    if (tool == SpawnTool || spawnPicked())
+      spawnRows(row, caption, rx, y);
     if (doorPicked() && doorKindList) {
       syncDoorControls();
       row(doorKindList, L"Opens by");
@@ -5519,7 +5548,8 @@ struct Editor {
       for(HWND c:{form,partsGrid.hwnd,paintGrid.hwnd,brightSlider,reachSlider,warmSlider,timeSlider})if(c)ShowWindow(c,SW_HIDE);
       for(HWND c:partTabButtons)ShowWindow(c,SW_HIDE);for(HWND c:swatches)ShowWindow(c,SW_HIDE);
       for(int id:{TurnSelected,Duplicate,Remove,Advanced,NewObject,Apply,FlickerToggle,OutlineWalls,OutlineBlock,OutlineTerraces,MakePrefab,PlacePrefab,TakeApart})ShowWindow(GetDlgItem(window,id),SW_HIDE);
-      layoutLayerDock(rx,y,312,h-100);
+      if(multiplayerDock)layoutMultiplayerPage(rx,y,312,h-100); // NativeMultiplayer.inc
+      else layoutLayerDock(rx,y,312,h-100);
     }
     bool fresh = !restoredFrom.empty();
     laps.lap("layout_right");
@@ -6388,6 +6418,7 @@ struct Editor {
     verifyGhosts(false);         // NativeGhostRegression.inc: every placing tool's ghost is what it places
     verifyMaterialTurns(false);  // NativeTurnRegression.inc: paint, turn, save and open again
     verifyNudges();              // NativeTurnRegression.inc: arrow keys and Page Up / Down
+    verifyMultiplayer(false);    // NativeMultiplayerRegression.inc: the Multiplayer page and the Spawn tool
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -6632,7 +6663,7 @@ struct Editor {
             {"LIGHT", 6}, {"SIGN", 7}, {"FIXTURE", 8}, {"PRIM", 9}, {"PIPE", 10}, {"WATER", 11}, {"STAIR", 12},
             {"CLUTTER", 14}, {"TERMINAL", 15}, {"STRUCT", 20}, {"DOOR", 21}, {"HAZARD", 22}, {"ZONE", 28},
             {"SCRIPT_EVENT", 29}, {"PICKUP", 30}, {"LEAD", 31}, {"EMITTER", 32}, {"DARK", 33}, {"COMPACTOR", 34},
-            {"BREAKABLE", 35}, {"CREATURE", CreatureTool}, {"SURFACE", 26}};
+            {"BREAKABLE", 35}, {"CREATURE", CreatureTool}, {"SURFACE", 26}, {"SPAWN", SpawnTool}};
         if (auto it = tools.find(k); it != tools.end())
           t = it->second;
         if (k == "ACTOR") {
@@ -8661,7 +8692,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     int hw = int(std::max(4.f, object.width * cell * .5f)),
         hd = int(std::max(4.f, object.depth * cell * .5f));
     // Emitters and film cameras draw their own glyphs (drawEmitterGlyphs, drawFilmCameras).
-    if (f[0] == "EMITTER" || f[0] == "# EDITOR_FILM")
+    if (f[0] == "EMITTER" || f[0] == "# EDITOR_FILM" || f[0] == "SPAWN")
       continue;
     // Plants from the nature pack are drawn as their canopy, green, so a wood reads as a wood
     // (a neighbour's collision copy of a tree is only its dotted trunk ring).
@@ -8719,6 +8750,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
   // The air's emitters and the film cameras (NativeEmitterTool.inc, NativeFilmTool.inc).
   e->drawEmitterGlyphs(dc, ox, oy, cell);
   e->drawFilmCameras(dc, ox, oy, cell);
+  e->drawSpawnMarkers(dc, ox, oy, cell); // match spawns: a figure and its facing (NativeMultiplayer.inc)
   for (auto index : e->doc.records("DOOR", e->map)) {
     if(!e->visibleFloorRecord(index))continue;
     auto f = NativeDocument::fields(e->doc.lines[index]);
@@ -9508,6 +9540,14 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         active = true;
       if (id == SoundToggle && !sfx::muted)
         active = true;
+      // The right column's three pages, and the Multiplayer page's switches when on (NativeMultiplayer.inc).
+      if ((id == InspectorTab && !e->layersDock && !e->multiplayerDock) || (id == LayerTab && e->layersDock && !e->multiplayerDock) ||
+          (id == MultiplayerTab && e->multiplayerDock))
+        active = true;
+      if (id == MpDeathmatch || id == MpCoop || id == MpFriendlyFire) {
+        const auto c = e->multiplayerChoice();
+        active = id == MpDeathmatch ? c.deathmatch : id == MpCoop ? c.coop : c.friendlyFire;
+      }
       if ((id == ThirdPersonToggle && e->thirdPersonPlay) || (id == LightViewButton && e->lightView != 0))
         active = true;
       if (id >= SwatchBase && id < SwatchBase + int(std::size(Editor::gels))) {
@@ -9904,6 +9944,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         return 0;
       }
       if(id>=InspectorTab&&id<=LayerFootprint){e->handleLayerCommand(id,notification);return 0;}
+      if(id>=MultiplayerTab&&id<=MpPlaceSpawns){e->multiplayerCommand(id,notification);return 0;} // NativeMultiplayer.inc
       if (id == LayerList && notification == CBN_SELCHANGE) {
         e->cancelPlacement();
         auto n = SendMessageW(e->layerList, CB_GETCURSEL, 0, 0);
@@ -10394,7 +10435,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
                         L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test", L"--kit-test",
-                        L"--ghost-test", L"--turn-test", L"--nudge-test"})
+                        L"--ghost-test", L"--turn-test", L"--nudge-test", L"--multiplayer-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10535,6 +10576,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.backgroundTest = e.turnTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--nudge-test")
       e.backgroundTest = e.nudgeTest = true;
+    // The Multiplayer page and the Spawn tool alone (NativeMultiplayerRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--multiplayer-test")
+      e.backgroundTest = e.multiplayerTest = true;
     // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
     if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
       e.backgroundTest = e.picturesTest = true;
@@ -10952,6 +10996,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.makeConnectControls(choices);
     e.makeGrowthControls(choices);
     e.makeCaveControls(choices);
+    e.makeMultiplayerControls(choices);
     e.waterModeList = choices(WaterModeList, {L"Draw a pool (drag)", L"Fill a hollow (click)", L"Surface from the bank (click)"});
     for (auto [slider, id] : {std::pair{&e.waterMurkSlider, int(WaterMurkSlider)}, std::pair{&e.waterWetSlider, int(WaterWetSlider)}}) {
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
@@ -11202,6 +11247,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.connectTest) {
       int code = 0;
       try { e.verifyConnectRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-connect-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.multiplayerTest) { // NativeMultiplayerRegression.inc, with pictures
+      int code = 0;
+      try { e.verifyMultiplayer(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-multiplayer-test.txt", std::ios::app) << "FAIL: " << error.what() << '\n'; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

@@ -93,6 +93,56 @@ std::shared_ptr<AuthoredMapData> mapAt(std::vector<std::shared_ptr<AuthoredMapDa
  if(!maps[size_t(index)])maps[size_t(index)]=std::make_shared<AuthoredMapData>();
  return maps[size_t(index)];
 }
+// ---- Multiplayer (docs/Systems/multiplayer.md): named fields only, map format 2 ----
+//   MULTIPLAYER|deathmatch=1|coop=1|dmmap=-1|maxplayers=8|fraglimit=20|timelimit=10|friendlyfire=0
+//   SPAWN|map=0|x=12.5|y=4|z=0|yaw=90|team=0
+// Every MULTIPLAYER field may be left out (its default stands). A SPAWN needs map, x and y:
+// x and y are metres in that map (0-24), z the floor the player stands on (as the MAP's spawn
+// height), yaw degrees (0 east, 90 south), team 0 any. The map numbers are checked once every
+// MAP is read. The fields themselves ride on map 0 like every campaign-wide record's, so the
+// exporter writes them back as they were written.
+constexpr int MultiplayerSpawnLimit=64;
+double multiplayerValue(const NamedField& f,double lo,double hi,bool whole){
+ const auto& v=f.value;double value=0;const auto r=std::from_chars(v.data(),v.data()+v.size(),value);
+ auto range=[&]{auto t=[](double d){char b[32];auto e=std::to_chars(b,b+sizeof b,d);return std::string(b,e.ptr);};return t(lo)+" to "+t(hi);};
+ if(v.empty()||r.ec!=std::errc{}||r.ptr!=v.data()+v.size()||!std::isfinite(value))throw std::runtime_error("named field "+f.key+"="+v+": not a number");
+ if(whole&&value!=std::floor(value))throw std::runtime_error("named field "+f.key+"="+v+": use a whole number");
+ if(value<lo||value>hi)throw std::runtime_error("named field "+f.key+"="+v+": must be "+range());
+ return value;
+}
+bool multiplayerFlag(const NamedField& f){
+ if(f.value=="1")return true;if(f.value=="0")return false;
+ throw std::runtime_error("named field "+f.key+"="+f.value+": use 1 (on) or 0 (off)");
+}
+void readMultiplayerRecord(const std::string& tag,const NamedFields& named,MultiplayerSettings& mp){
+ std::vector<std::string> seen;
+ for(const auto& f:named){
+  if(std::find(seen.begin(),seen.end(),f.key)!=seen.end())throw std::runtime_error(tag+" gives "+f.key+"= twice");seen.push_back(f.key);}
+ auto has=[&](const char* key){return std::find(seen.begin(),seen.end(),key)!=seen.end();};
+ if(tag=="MULTIPLAYER"){
+  for(const auto& f:named){const auto& k=f.key;
+   if(k=="deathmatch")mp.deathmatch=multiplayerFlag(f);
+   else if(k=="coop")mp.coop=multiplayerFlag(f);
+   else if(k=="dmmap")mp.deathmatchMap=int(multiplayerValue(f,-1,WorldChunkCapacity-1,true));
+   else if(k=="maxplayers")mp.maxPlayers=int(multiplayerValue(f,2,16,true));
+   else if(k=="fraglimit")mp.fragLimit=int(multiplayerValue(f,0,999,true));
+   else if(k=="timelimit")mp.timeLimitMinutes=float(multiplayerValue(f,0,120,false));
+   else if(k=="friendlyfire")mp.friendlyFire=multiplayerFlag(f);
+   else throw std::runtime_error("MULTIPLAYER has no field "+k+" (it takes deathmatch, coop, dmmap, maxplayers, fraglimit, timelimit, friendlyfire)");}
+  return;}
+ for(const char* key:{"map","x","y"})if(!has(key))throw std::runtime_error(std::string("SPAWN needs ")+key+"= (map, x and y; z, yaw and team may be left out)");
+ if(mp.spawns.size()>=size_t(MultiplayerSpawnLimit))throw std::runtime_error("too many SPAWN records (at most "+std::to_string(MultiplayerSpawnLimit)+")");
+ MultiplayerSpawn s;
+ for(const auto& f:named){const auto& k=f.key;
+  if(k=="map")s.map=int(multiplayerValue(f,0,WorldChunkCapacity-1,true));
+  else if(k=="x")s.x=float(multiplayerValue(f,0,World::Width,false));
+  else if(k=="y")s.y=float(multiplayerValue(f,0,World::Height,false));
+  else if(k=="z")s.z=float(multiplayerValue(f,-100,400,false));
+  else if(k=="yaw")s.yaw=float(multiplayerValue(f,-360,360,false));
+  else if(k=="team")s.team=int(multiplayerValue(f,0,4,true));
+  else throw std::runtime_error("SPAWN has no field "+k+" (it takes map, x, y, z, yaw, team)");}
+ mp.spawns.push_back(s);
+}
 AuthoredLayerData& layerAt(std::vector<std::shared_ptr<AuthoredMapData>>& maps,const std::vector<std::string>& f){
  auto map=mapAt(maps,f,1);int layer=integer(f,2,"layer index");if(layer<0||layer>31)throw std::runtime_error("invalid custom layer index");
  if(size_t(layer)>=map->layers.size())map->layers.resize(size_t(layer)+1);return map->layers[size_t(layer)];
@@ -134,7 +184,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  // The stream opens on the rest of the start marker's line, so that first read brings this to the marker's line.
  int lineNumber=int(std::count(text.begin(),text.begin()+std::ptrdiff_t(start),'\n'));
  // ---- Map format 2 (EntityTraits.h): the FORMAT record, named fields, names, prefabs ----
- int format=1;bool sawRecord=false;
+ int format=1;bool sawRecord=false,sawMultiplayer=false;
  // Named fields of the campaign-wide records (CAMPAIGN, TERRAIN...), kept on map 0 once it exists.
  std::vector<std::pair<std::string,NamedFields>> campaignFields;std::map<std::string,int> campaignOrdinals;
  std::map<std::pair<const AuthoredMapData*,std::string>,int> ordinals;
@@ -147,7 +197,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
  struct PrefabLine {int line;std::string text;};std::map<std::string,std::vector<PrefabLine>> prefabs;std::string openPrefab;
  // After a record is read: its named fields kept by key, its name filed, its overrides attached.
  auto noteRecord=[&](const std::string& tag,const std::vector<std::string>& f,const NamedFields& namedFields){
-  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="CAVE"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
+  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="CAVE"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART"||tag=="MULTIPLAYER"||tag=="SPAWN";
   if(global){if(namedFields.empty())++campaignOrdinals[tag];else{const int ordinal=campaignOrdinals[tag]++;
     campaignFields.emplace_back(tag=="SIGN_ART"?recordFieldKey(tag,"*",0)+"/"+decode(f[1]):recordFieldKey(tag,"*",ordinal),namedFields);
     if(findNamedField(namedFields,"name"))throw std::runtime_error("a campaign-wide record takes no name");parseEntityTraits(tag,namedFields);}
@@ -610,6 +660,12 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // ACTOR_VOICE|map|actor|role: a voice bank role (1-10) instead of the visual's default.
    if(f.size()!=4)throw std::runtime_error("malformed ACTOR_VOICE record");auto map=mapAt(maps,f);int index=integer(f,2,"actor index"),voice=integer(f,3,"voice role");
    if(index<0||index>=int(map->actorTracks.size())||voice<1||voice>12)throw std::runtime_error("invalid actor voice");map->actorTracks[size_t(index)].voice=voice;
+  }else if(tag=="MULTIPLAYER"||tag=="SPAWN"){
+   // MULTIPLAYER (one per campaign) and SPAWN (where match players start): named fields only.
+   if(format<2&&f.size()>1)throw std::runtime_error(tag+" needs FORMAT|2 as the file's first record (its fields are named)");
+   if(f.size()!=1)throw std::runtime_error(tag+" takes named key=value fields only");
+   if(tag=="MULTIPLAYER"){if(sawMultiplayer)throw std::runtime_error("a campaign has one MULTIPLAYER record");sawMultiplayer=true;}
+   readMultiplayerRecord(tag,namedFields,campaign->multiplayer);
   }else if(tag=="STORM"){
    // STORM|calm ms|warning ms|storm ms|damage per second|ambient ash (0-1): one cycle for the campaign.
    if(f.size()!=6)throw std::runtime_error("malformed STORM record");
@@ -995,6 +1051,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
   World validated(int(i),maps[i]);
  }
  if(campaign->startMap<0||campaign->startMap>=int(maps.size()))throw std::runtime_error("custom campaign start map is invalid");
+ {const auto& mp=campaign->multiplayer;const int count=int(maps.size());
+  if(mp.deathmatchMap>=count)throw std::runtime_error("MULTIPLAYER dmmap="+std::to_string(mp.deathmatchMap)+": the campaign has "+std::to_string(count)+" maps (0 to "+std::to_string(count-1)+"; -1 the start map)");
+  for(size_t i=0;i<mp.spawns.size();++i)if(mp.spawns[i].map>=count)throw std::runtime_error("SPAWN "+std::to_string(i)+" map="+std::to_string(mp.spawns[i].map)+": the campaign has "+std::to_string(count)+" maps");}
  campaign->maps.reserve(maps.size());for(auto& map:maps)campaign->maps.push_back(std::move(map));
  return campaign;
 }
