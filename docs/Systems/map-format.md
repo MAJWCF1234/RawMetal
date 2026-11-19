@@ -207,6 +207,13 @@ written back by CampaignExport.cpp; physics.md has how they play). Heights are a
 ## Multiplayer (MULTIPLAYER, SPAWN)
 `MULTIPLAYER|deathmatch=1|coop=1|dmmap=-1|maxplayers=8|fraglimit=20|timelimit=10|friendlyfire=0` and `SPAWN|map=0|x=12.5|y=4|z=0|yaw=90|team=0` are the first records made of named fields alone (no positional fields; the map is `map=`). They need `FORMAT|2`, are campaign-wide (kept on map 0, written back under CAMPAIGN as read) and arrive as `CustomCampaign::multiplayer`. Ranges and meaning: docs/Systems/multiplayer.md "Maps". The Builder reads a SPAWN as the positional fields `map|x|y|z|turn|team` (NativeDocument `namedOnlyKeys`) so its tools work on it as on any record, and writes it back as named fields.
 
+## Script triggers for every player (SCRIPT_TRIGGER players=)
+`SCRIPT_TRIGGER|0|vault|box|all|0|players=all` waits until the event is ready for every player in the game; `players=any` (the default, and what every older map means) fires it for whichever player it is ready for first. Single player has one player, so both read the same there. In co-op (docs/Systems/multiplayer.md "One path"):
+- an event is tested per player (`Game::scriptEventReadyFor`): on its map, its gates, inside its box;
+- `@health` and `@map` read the player tested; `@kills`, `@remaining`, states and entity properties are the world's;
+- ITEM and TAKE go to the player who fired the event (with `players=all`, the first player, the host).
+Any other value is refused with the field named. The field rides on the record like every named field, so `exportRmc` writes it back as read. The Campaign Builder has no control for it yet.
+
 ## Tests
 - `--each-test=map-format` (the lab's `engine.map-format`, src/game/MapFormatTest.cpp) covers:
   - MULTIPLAYER and SPAWN: parsed, defaults when absent, every refusal, the round trip byte for byte, the Starter Map's 8 spawns on their floor;

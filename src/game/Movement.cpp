@@ -366,11 +366,9 @@ void Game::updateInteraction(const InputState& input,float dt){
    // A locked door's handle gives a turn and stops: heard, not a hint alone.
    else if(m_doorRattle<=0){const auto&d=m_world.doors()[door];const Vec2 c=d.centre();m_sounds.push_back({d.swinging?Sound::LockerLatch:Sound::Door,c,d.swinging?.4f:.3f,d.swinging?.72f:.6f,true,7,m_world.floorHeight(c.x,c.y)+d.z+1.f});m_doorRattle=.6f;}}
   else if(int terminal=nearbyTerminal();terminal>=0){m_activeLog=terminal;m_logTime=9.f;
-   // A screen worked wakes the cursed equipment round about (Machine.cpp); paper does not.
-   if(!m_world.terminals()[terminal].paper())wakeMachinesNear(m_world.terminals()[terminal].position,m_player.z,8.f);if(m_world.terminals()[terminal].reactorAction)useReactorAction(m_world.terminals()[terminal].reactorAction);if(m_world.terminals()[terminal].control){
-   if(m_world.hasLift()){if(m_world.insideLift(m_player.pos.x,m_player.pos.y)&&m_player.pos.y>10.35f&&m_world.startLift()){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}}
-   else m_world.releaseControl();
-  }auto& control=m_world.terminals()[terminal];if(control.activateState&&(!control.requireState||state(control.requireState))){setState(control.activateState,control.toggleState?!state(control.activateState):1);sound(Sound::Door,.6f,.8f);}sound(Sound::Exit,.4f);}
+   const int done=operateTerminal(terminal,players().front().id);
+   if(done&1){m_logTime=0;m_activeLog=-1;sound(Sound::Door,.8f,.7f);}
+   if(done&2)sound(Sound::Door,.6f,.8f);sound(Sound::Exit,.4f);}
   if(!holdingClutter()&&door<0&&m_logTime==0&&!(!input.vrTracked&&enterLocker())&&!openDialogue()&&!(!input.vrTracked&&interactClutter())&&!commandFriendly())knockOnWall();   // (VR: a prop is taken only by the hand that closes on it, above)
  }
  m_previousUse=input.use;m_world.updateDoors(dt);

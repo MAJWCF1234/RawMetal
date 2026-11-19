@@ -657,10 +657,12 @@ void Game::updateFrame(const InputState& input, float dt) {
         // The knocked stagger (RigidClutter.cpp): over whatever their minds just chose.
         poseBodyKnocks(dt);
         {perf::Scope profile(perf::Takedown);updateTakedown(dt);}
+        // A co-op guest: the host's guards think and fight; here they are posed from its snapshots (Match).
+        if(!m_netCreaturesRemote){
         updateEngineerDrones(dt);
         updateGuardCombat(dt);
         {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
-        {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
+        {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}}
         updateEnemies(dt);updateWater(dt,true);
         // AI may walk back into a held prop after the hand sweep; clear that overlap.
         resolveHeldPropBodies();
@@ -812,6 +814,31 @@ bool Game::receiveDamage(float amount,Vec2 source,bool blockable,bool shieldable
  if(blocked){amount*=melee.guardScale;m_verticalSpringVelocity-=.45f;sound(Sound::PunchHit,.35f,.75f);}
  else sound(Sound::Hurt,.7f,.92f);
  if(!m_god)m_player.health=std::max(0.f,m_player.health-amount);m_damageFlash=blocked?.25f:1.f;
+ return true;
+}
+// ----- The players the minds know (Game.h PlayerView; docs/Systems/multiplayer.md "One path") -----
+const std::vector<Game::PlayerView>& Game::players()const{
+ // Written in place: a call made while another walks the list leaves it as it was (same entries, same storage).
+ const size_t n=1+std::min<size_t>(m_remoteBodies.size(),16);
+ if(m_playerViews.size()!=n){m_playerViews.reserve(17);m_playerViews.resize(n);}
+ m_playerViews[0]={0,true,m_level,&m_player};
+ for(size_t i=1;i<n;++i){const auto& r=m_remoteBodies[i-1];m_playerViews[i]={r.id,false,r.level,&r.body};}
+ return m_playerViews;
+}
+const Game::PlayerView* Game::playerById(int id)const{for(const auto& p:players())if(p.id==id)return &p;return nullptr;}
+const Game::PlayerView& Game::nearestPlayer(Vec2 at,float z)const{
+ const auto& list=players();const PlayerView* best=&list.front();float nearest=1e30f;
+ for(const auto& p:list){if(!p.alive())continue;const float dz=p.body->z-z,d=lengthSq(p.body->pos-at)+dz*dz;if(d<nearest){nearest=d;best=&p;}}
+ return *best;
+}
+namespace{const Game::RemoteBody* remoteOf(const std::vector<Game::RemoteBody>& list,int id){for(const auto& r:list)if(r.id==id)return &r;return nullptr;}}
+Vec2 Game::playerVelocity(const PlayerView& p)const{if(p.local)return m_velocity;const auto* r=remoteOf(m_remoteBodies,p.id);return r?r->velocity:Vec2{};}
+float Game::playerLit(const PlayerView& p)const{if(p.local)return m_playerExposure;const auto* r=remoteOf(m_remoteBodies,p.id);return r?r->lit:1.f;}
+bool Game::playerHidden(const PlayerView& p)const{if(p.local)return hiddenLocker()>=0;const auto* r=remoteOf(m_remoteBodies,p.id);return r&&r->hidden;}
+bool Game::playerTorch(const PlayerView& p)const{if(p.local)return flashlightOn();const auto* r=remoteOf(m_remoteBodies,p.id);return r&&r->torch;}
+bool Game::hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable,bool shieldable){
+ if(p.local)return receiveDamage(amount,source,blockable,shieldable);
+ if(amount>0&&p.alive())m_netHurts.push_back({p.id,amount});
  return true;
 }
 Game Game::weaponInspection(int mode,float age){auto game=validationScene(Enemy::Kind::Huntsman,3);

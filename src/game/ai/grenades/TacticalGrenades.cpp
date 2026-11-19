@@ -50,7 +50,7 @@ void Game::explodeTacticalGrenade(int slot,Point3 globalPosition,AiTargetRef att
   if(range>.05f&&tacticalGrenadeTrace(origin,point).kind==ShotKind::Solid)return;float damage=64.f*(1-range/BlastRadius);auto direction=range>.001f?delta*(1/range):Point3{0,0,1};m_blastShot=true;resolveShot({kind,targetLevel,index,range,range,point,{}},origin,direction,weaponDef(WeaponId::Shotgun).hitscan,attacker.kind==ShotKind::Player,damage,attacker);m_blastShot=false;
  };
  blastProps(origin,true);
- if(!dead())blast(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight());
+ for(const auto& p:players())if(p.alive())blast(ShotKind::Player,m_level,p.id,p.body->pos,p.body->z,p.body->hullHeight());   // every player (single player: the player)
  for(const auto&drone:engineerDrones())if(chunkResident(drone.level))blast(ShotKind::Drone,drone.level,drone.slot,{drone.position.x,drone.position.y},drone.position.z,EngineerDroneHeight);
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(chunkResident(npc.level)&&autonomousActor(t)&&t.health&&(npc.pose.clip!=4||npcIncapacitated(i))&&(!t.deadState||!state(t.deadState)))blast(ShotKind::Npc,npc.level,int(i),npc.pose.position,npc.pose.z,friendlyHullHeight(i,t));}
  for(int targetLevel=0;targetLevel<chunkCount();++targetLevel)if(chunkResident(targetLevel)){auto&enemies=targetLevel==m_level?m_enemies:m_chunks[targetLevel].enemies;for(size_t i=0;i<enemies.size();++i){const auto&e=enemies[i];if(e.alive)blast(ShotKind::Enemy,targetLevel,int(i),e.pos,e.bodyBottom(),e.bodyTop()-e.bodyBottom());}

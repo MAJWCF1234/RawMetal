@@ -49,7 +49,7 @@ void Game::wakeHunter(Enemy& e){
  if(const int quarry=hunterPrey(e);quarry>=0){const auto&npc=m_friendlyActors[size_t(quarry)];e.lastKnown=npc.pose.position;e.lastKnownZ=npc.pose.z;e.recognition=0;e.state=Enemy::State::Chase;}
  if(!e.hunter)return;
  // Otherwise it comes out knowing where the player is: it is hunting them.
- if(hunterPrey(e)<0){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=std::max(e.awareness,8.f);e.state=Enemy::State::Investigate;}
+ if(hunterPrey(e)<0){const Player& near=*nearestPlayer(e.pos,e.z).body;e.lastKnown=near.pos;e.lastKnownZ=near.z;e.awareness=std::max(e.awareness,8.f);e.state=Enemy::State::Investigate;}
  // One animal: wherever else it was left awake, it has come here.
  for(int level=0;level<chunkCount();++level){auto&list=level==m_level?m_enemies:m_chunks[size_t(level)].enemies;
   for(auto&other:list)if(&other!=&e&&other.hunter==e.hunter&&other.alive&&!other.wakeState)vanishHunter(other);}
@@ -78,13 +78,14 @@ bool Game::updateFeeding(Enemy& e,float dt){
  auto stop=[&](bool roused){if(e.feedActor>=0&&size_t(e.feedActor)<m_friendlyActors.size())headlessPool(size_t(e.feedActor));e.feeding=0;e.feedActor=-1;
   // The tail of its attack lifts it off the body.
   e.strike=.47f;
-  if(roused){e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=std::max(e.awareness,12.f);e.recognition=1;e.state=Enemy::State::Chase;e.attackCooldown=std::min(e.attackCooldown,.4f);enemySound(e,0,1.f,.85f);}
+  if(roused){const Player& near=*nearestPlayer(e.pos,e.z).body;e.lastKnown=near.pos;e.lastKnownZ=near.z;e.awareness=std::max(e.awareness,12.f);e.recognition=1;e.state=Enemy::State::Chase;e.attackCooldown=std::min(e.attackCooldown,.4f);enemySound(e,0,1.f,.85f);}
   return false;};
  // Hurt, it is off the body at once and after whoever did it.
  if(e.hp<e.feedHp-.01f||e.stalkMode==Enemy::StalkMode::Retreat)return stop(true);
- // The player close in its view rouses it; at its back it does not look up.
- const Vec2 to=m_player.pos-e.pos;const float d=length(to);const Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
- if(hiddenLocker()<0&&std::fabs(m_player.z-e.z)<1.6f&&d<3.f&&(d<1.1f||dot(to*(1.f/std::max(d,.001f)),facing)>traits.sightDot)&&m_world.rayClear(e.pos,e.z+.7f,m_player.pos,m_player.z+m_player.eye))return stop(true);
+ // A player close in its view rouses it; at its back it does not look up.
+ const Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
+ for(const auto& p:players()){if(!p.alive())continue;const Player& b=*p.body;const Vec2 to=b.pos-e.pos;const float d=length(to);
+  if(!playerHidden(p)&&std::fabs(b.z-e.z)<1.6f&&d<3.f&&(d<1.1f||dot(to*(1.f/std::max(d,.001f)),facing)>traits.sightDot)&&m_world.rayClear(e.pos,e.z+.7f,b.pos,b.z+b.eye))return stop(true);}
  e.feeding=std::max(0.f,e.feeding-dt);
  if(e.feeding<=0)return stop(false);
  e.moving=false;e.windup=0;e.strike=0;e.awareness=std::max(e.awareness,1.f);
@@ -104,8 +105,11 @@ bool Game::updateFeeding(Enemy& e,float dt){
 }
 bool Game::hunterFlight(Enemy& e,Vec2& goal,float& goalZ,float dt){
  e.fleeTime+=dt;e.awareness=std::max(e.awareness,4.f);if(e.state==Enemy::State::Search||e.state==Enemy::State::Idle)e.state=Enemy::State::Investigate;
- const float away=length(e.pos-m_player.pos);
- const bool watched=away<26.f&&hiddenLocker()<0&&(m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.z+.55f*e.scale)||m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,e.bodyTop()-.15f));
+ // It runs from the nearest player, and is watched while any player has it in view.
+ const PlayerView& from0=nearestPlayer(e.pos,e.z);const Player& P=*from0.body;
+ const float away=length(e.pos-P.pos);
+ bool watched=false;for(const auto& p:players()){const Player& b=*p.body;
+  watched=watched||(p.alive()||p.local)&&length(e.pos-b.pos)<26.f&&!playerHidden(p)&&(m_world.rayClear(b.pos,b.z+b.eye,e.pos,e.z+.55f*e.scale)||m_world.rayClear(b.pos,b.z+b.eye,e.pos,e.bodyTop()-.15f));}
  // Out of sight and away (or back in its den, or long enough in the dark):
  // it is gone, and the hunter state counts one more escape.
  const bool den=length(e.pos-e.home)<.9f&&away>5.f;
@@ -122,14 +126,14 @@ bool Game::hunterFlight(Enemy& e,Vec2& goal,float& goalZ,float dt){
   Vec2 best=e.home;float bestZ=e.homeZ>-999?e.homeZ:e.z,bestScore=-1e9f;
   auto consider=[&](Vec2 p,float bonus){if(p.x<1||p.y<1||p.x>World::Width-1||p.y>World::Height-1)return;
    const float z=groundHeight(p,e.z+step+1.2f,e.radius());if(std::fabs(z-e.z)>1.3f||!hullFits(p,z,e.hull(),e.radius(),false,false))return;
-   const Vec2 from=e.pos-m_player.pos,run=p-e.pos;const float spread=length(p-m_player.pos);
+   const Vec2 from=e.pos-P.pos,run=p-e.pos;const float spread=length(p-P.pos);
    float score=spread+bonus;
-   if(!m_world.rayClear(m_player.pos,m_player.z+m_player.eye,p,z+.6f))score+=6.f;
+   if(!m_world.rayClear(P.pos,P.z+P.eye,p,z+.6f))score+=6.f;
    if(m_world.rayClear(e.pos,e.z+.5f,p,z+.5f))score+=2.f;
    // Never back past the player to get there.
    if(length(run)>.1f&&length(from)>.1f&&dot(normalized(run),normalized(from))<-.3f&&away<7.f)score-=12.f;
    if(score>bestScore){bestScore=score;best=p;bestZ=z;}};
-  if(length(e.home-m_player.pos)>5.f)consider(e.home,9.f);
+  if(length(e.home-P.pos)>5.f)consider(e.home,9.f);
   for(int i=0;i<16;++i){const float a=float(i)*kPi/8;for(float r:{4.f,7.f})consider(e.pos+Vec2{std::cos(a),std::sin(a)}*r,0);}
   e.hideAt=best;e.hideSet=true;e.stalkTimer=1.2f;e.lastKnownZ=bestZ;
  }
@@ -144,7 +148,7 @@ void Game::hunterArrive(Enemy& e,float dt){
  Vec2 at=e.waypoint;float z=e.homeZ;bool placed=false;
  for(float r:{0.f,.35f,.7f,1.05f,1.4f}){for(int i=0;i<8&&!placed;++i){const float a=float(i)*kPi/4;const Vec2 p=e.waypoint+Vec2{std::cos(a),std::sin(a)}*r;const float g=groundHeight(p,e.homeZ+.3f,e.radius());
    if(std::fabs(g-e.homeZ)<.5f&&hullFits(p,g,e.hull(),e.radius(),false,false)){at=p;z=g;placed=true;}}if(placed)break;}
- e.pos=at;e.z=z;e.verticalVelocity=0;e.home=at;e.homeZ=z;e.lastKnown=m_player.pos;e.lastKnownZ=m_player.z;e.awareness=std::max(e.awareness,8.f);e.state=Enemy::State::Investigate;e.repathTimer=0;e.searchTime=0;e.moving=false;
+ e.pos=at;e.z=z;e.verticalVelocity=0;e.home=at;e.homeZ=z;{const Player& near=*nearestPlayer(e.pos,e.z).body;e.lastKnown=near.pos;e.lastKnownZ=near.z;}e.awareness=std::max(e.awareness,8.f);e.state=Enemy::State::Investigate;e.repathTimer=0;e.searchTime=0;e.moving=false;
  enemySound(e,0,.9f,.92f);
 }
 void Game::hearPlayerNoise(const std::vector<AiStimulus>& stimuli){

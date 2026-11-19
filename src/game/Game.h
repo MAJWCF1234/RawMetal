@@ -184,6 +184,9 @@ struct Enemy {
     // What a fresh spawn of the same record knows that a save does not keep (traits, side, order).
     void adoptTraits(const Enemy& spawn){traits=spawn.traits;faction=spawn.faction;ordered=spawn.ordered;order=spawn.order;anchor=spawn.anchor;anchorZ=spawn.anchorZ;patrolTo=spawn.patrolTo;patrolToZ=spawn.patrolToZ;}
     Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,orderClock=0,fleeClock=0;
+    // Not saved: which player it hunts (Game::players() id; Game::creatureTarget), since when, and the player
+    // who last wounded it and when (aggro). Single player: always the one player, 0.
+    int target=0,aggro=-1;float targetSince=-99,aggroTime=-99;
 };
 
 struct Pickup {
@@ -437,6 +440,35 @@ public:
     // Bodies of the players in a match, in the active chunk's frame: Match lends them to traceShot while it
     // resolves a shot (they come back as ShotKind::Player with index slot+1); never seen by anything else.
     struct NetBody {int slot=0;Vec2 pos{};float z=0,height=Player::StandingHeight;};
+    // Every player the game's minds know (docs/Systems/multiplayer.md "One path"). Script triggers, @-conditions,
+    // creature perception and targeting, guards and people read this list, never m_player alone. Single player is
+    // the list with one entry: the local player (id 0, body &m_player, live). A co-op host adds each guest's body
+    // as the Match last heard it (id: their slot; the host is slot 0). A body is in the active chunk's frame, as
+    // m_player is; level is the chunk it stands in. The list is rebuilt by each call (identical within a frame).
+    struct PlayerView {int id=0;bool local=true;int level=0;const Player* body=nullptr;
+     bool alive()const{return body&&body->health>0;}};
+    const std::vector<PlayerView>& players()const;
+    const PlayerView* playerById(int id)const;          // nullptr: no such player now
+    const PlayerView& nearestPlayer(Vec2 at,float z)const;   // the nearest living one (the local player if none lives)
+    // What the minds read of a player beyond the body: its speed, how lit it is (0..1), whether it is shut in a
+    // locker, whether its torch is on. The local player's are the game's own live values.
+    Vec2 playerVelocity(const PlayerView& p)const;
+    float playerLit(const PlayerView& p)const;
+    bool playerHidden(const PlayerView& p)const;
+    bool playerTorch(const PlayerView& p)const;
+    // A blow on a player from a creature or a guard: the local player takes it as receiveDamage does; a remote
+    // player's goes out through the Match (m_netHurts), the host takes it off that guest and sends it to them.
+    bool hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable=true,bool shieldable=true);
+    // A co-op guest's body as the host keeps it (the Match fills it each frame; empty everywhere else).
+    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false;float lit=1,litTimer=0,stride=0;};
+    // The light on a point (a body's chest): the lamps, the room's ambient and darkness, a torch.
+    float lightAt(Vec2 at,float chest,bool torch)const;
+    // Script effects a co-op host sends on (the Match drains it after the frame; cleared at each script pass):
+    // target -1 everyone, else the player id an item or a shake is for.
+    struct ScriptFx {int target=-1;ScriptAction action;};
+    // A terminal used (a switch, a lever, a lift call): run where the minds run, for that player. On a co-op
+    // guest it is queued for the host (m_netUses) instead. Returns 1 the lift set off, 2 its switch was thrown.
+    int operateTerminal(int terminal,int player);
     // The multiplayer pages on the title (MultiplayerMenu.cpp, docs/Systems/multiplayer.md). They call the Session
     // directly and pump it while open; once the session is InLobby the Match takes over.
     enum class TitlePage:std::uint8_t{Main,Multiplayer,QuickMatch,Browse,Host,Lobby,JoinCode,Character};
@@ -1417,8 +1449,12 @@ private:
     // Props held by anchored= or frozen= (Clutter::pinned), refreshed each physics step.
     void refreshPinnedClutter();
     void updateScripts(float dt);
-    int scriptValue(const ScriptEvent& event,const ScriptCondition& condition)const;
-    bool scriptEventReady(const ScriptEvent& event)const;
+    // @health and @map read the player tested (players()); the rest are the world's.
+    int scriptValue(const ScriptEvent& event,const ScriptCondition& condition,const PlayerView& player)const;
+    // Ready for one player (on its map, its gates, inside its box), and over the players: any of them, or every
+    // one when the trigger says players=all. who: the first player it is ready for.
+    bool scriptEventReadyFor(const ScriptEvent& event,const PlayerView& player)const;
+    bool scriptEventReady(const ScriptEvent& event,int* who=nullptr)const;
     void updateReceivingBreach();
     void executeScriptAction(const ScriptAction& action);
     void updateNoclip(const InputState& input,float dt);
@@ -1604,6 +1640,11 @@ private:
     bool receiveDamage(float amount,Vec2 source,bool blockable=true,bool shieldable=true);
     bool shieldBlow(float amount,Vec2 source);
     void updateEnemies(float dt);
+    // The player a creature hunts (EnemyAI.cpp), chosen each think from players() by threat: seen now (its own
+    // sight and the stealth rules), who wounded it lately, where it last knew someone, nearness; it keeps its
+    // prey unless another is clearly better and never within a second; a pack spreads; the downed are dropped.
+    const PlayerView& creatureTarget(Enemy& e,bool huntsPlayer);
+    const PlayerView& creaturePrey(const Enemy& e)const;   // the one it hunts now (its last choice)
     // Hunter.cpp: the bite that takes a man's head, feeding on him, the
     // recurring hunter's flight, return and ear, and its walk in after the
     // player through a seam.
@@ -1808,6 +1849,16 @@ private:
     bool m_netScriptsOff=false,m_netCreaturesRemote=false;
     const std::vector<NetBody>* m_netBodies=nullptr;
     AvatarPose m_netAvatar{};
+    // The players list (players()) and what it is built from; the co-op traffic the game leaves for the Match.
+    std::vector<RemoteBody> m_remoteBodies;
+    mutable std::vector<PlayerView> m_playerViews;
+    struct NetHurt {int id=0;float amount=0;};
+    std::vector<NetHurt> m_netHurts;
+    std::vector<ScriptFx> m_scriptFx;
+    struct NetUse {int level=0,terminal=0;};
+    std::vector<NetUse> m_netUses;
+    int m_scriptPlayer=0;       // the player whose step or hand fires the script running now
+    int m_shooter=0;            // the player whose shot is being resolved (a co-op host resolving a guest's)
     void updateNet();                              // the Session's frame: makes and drops the Match
     void updateFrame(const InputState& input,float dt);
     std::vector<Enemy> m_enemies;

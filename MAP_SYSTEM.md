@@ -347,6 +347,14 @@ Event gates and triggers (1.2.2). Both records follow their `SCRIPT_EVENT`:
   gates. `repeat 1` fires the event again each time its gates turn true (each
   entry into the box), instead of once ever; the latch is saved, so loading a
   save never refires it.
+- Every player (co-op): an event is tested for each player in the game
+  (`Game::players()`; single player is you alone). `@health` and `@map` read
+  the player tested; `@kills`, `@remaining` and states are the world's. By
+  default it fires for whichever player it is ready for (the first in the box);
+  the named field `players=all` (map format 2) makes it wait until it is ready
+  for every player, e.g. all of them inside the box. Items an event gives or
+  takes go to the player who fired it. docs/Systems/map-format.md "Script
+  triggers for every player".
 
 `RawMetal.exe --each-test=scripting` covers every record above, its rejects and
 a save round trip (`scripting-test.txt`).

@@ -3,6 +3,7 @@
 #include "Wire.h"
 #include "../game/Game.h"
 #include "../world/CustomCampaign.h"
+#include "../world/CampaignExport.h"
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -22,6 +23,21 @@ std::string arenaText(bool padded){
  t+="CREATURE|0|0|19.5|19.5|0||400|net_sleep_a\nCREATURE|0|0|19.5|15.5|0||5|net_sleep_b\nPICKUP|0|1|4.5|19.5\n";
  // Padding (comment lines) so the file takes several frames to arrive and the progress shows.
  if(padded)for(int i=0;i<400;++i)t+="# padding line "+std::to_string(i)+" so the map is sent in many chunks ----------------------\n";
+ return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+}
+// Co-op's one world: a wall across the middle (a gap at x 11-12), a pad and a door to the north, a gathering spot
+// that wants every player and a lever to the south, and a guard (off until guard_on) who walks the north side.
+std::string coopText(){
+ std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nFORMAT|2\nCAMPAIGN|Net Coop|0\nMAP|0|Coop|0|0|3.5|16.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
+ for(int row=0;row<24;++row){std::string r(24,'.');r.front()=r.back()='#';if(row==0||row==23)r=std::string(24,'#');if(row==12)for(int x=1;x<23;++x)if(x!=11&&x!=12)r[size_t(x)]='#';
+  t+="ROW|0|0|"+std::to_string(row)+"|"+r+"\n";}
+ t+="DOOR|0|17|19|6.5|0|0|0|0|0|-1\n";
+ t+="SCRIPT_EVENT|0|pad|20|2|22|4|-10|10||1|0\nSCRIPT_ACTION|0|pad|STATE|pad_hit|1\nSCRIPT_ACTION|0|pad|MESSAGE|PAD PRESSED|3\nSCRIPT_ACTION|0|pad|RAW|4||0|0|0|0|0|0|0|0|\n";
+ t+="SCRIPT_EVENT|0|gather|2|19|5|22|-10|10||1|0\nSCRIPT_TRIGGER|0|gather|box|all|0|players=all\nSCRIPT_ACTION|0|gather|STATE|gathered|1\n";
+ t+="TERMINAL|0|12|20|0|0|Lever|Pull|it|lever_on|0\n";
+ t+="TIMED_SEQUENCE|0|clock|done|0|0|24|24|-0.2|8|30000|30000|0|0|0|0|1|1\nACTOR|0|clock|4|1.6|0|0|0\n"
+    "ACTOR_KEY|0|0|0|5.5|5.5|0|1.57|0|0\nACTOR_KEY|0|0|30000|5.5|5.5|0|1.57|0|1\nACTOR_AI|0|0|3|guard_on|1.4|2|6\nACTOR_GUARD|0|0|11|0.65|600|4000|alert\n"
+    "ACTOR_PATROL|0|0|5.5|5.5|0|300\nACTOR_PATROL|0|0|18.5|5.5|0|300\nACTOR_HEALTH|0|0|90|g_damage|g_dead\nACTOR_WEAPON|0|0|2|650|1000|9|18\n";
  return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
 }
 std::string lobbyText(){
@@ -187,6 +203,92 @@ bool Match::selfTest(std::ostream& report){
   sh->leave();frames(10);
   check(!guest->m_match&&guest->m_titleScreen&&guest->m_matchView.status.find("host left")!=std::string::npos,"co-op ends for the guest when the host leaves, with a plain line: \""+guest->m_matchView.status+"\"");
   playing.clear();
+ }
+ // ===== Co-op: one world for every player (scripts, creatures, guards over Game::players()) =====
+ {
+  const std::string coopFile="Net Coop.rmc";
+  {auto parsed=loadCustomCampaignText(coopText(),"coop.rmc");const ScriptEvent* gather=nullptr;for(const auto& e:parsed->maps[0]->scriptEvents)if(e.id==stateId("gather"))gather=&e;
+   std::string bad=coopText();bad.replace(bad.find("players=all"),11,"players=some");bool refused=false;try{loadCustomCampaignText(bad,"coop.rmc");}catch(const std::exception&){refused=true;}
+   const auto text=exportRmc("Net Coop",{{parsed->maps[0],0}}).text;
+   check(gather&&gather->allPlayers&&refused&&text.find("players=all")!=std::string::npos,"SCRIPT_TRIGGER players=all parses, players=some is refused, and the export writes it back");}
+  {std::ofstream(hostMaps/coopFile,std::ios::binary)<<coopText();std::ofstream(guestMaps/coopFile,std::ios::binary)<<coopText();}
+  LoopbackHub hub;auto sh=hub.connect("Hana"),sg=hub.connect("Gus");
+  auto host=std::make_unique<Game>(loadCustomCampaignFile(hostMaps/coopFile));host->m_customMapDirectory=hostMaps.wstring();
+  auto guest=makeGuest(guestMaps,false);guest->m_customCampaigns.push_back(loadCustomCampaignFile(guestMaps/coopFile));
+  host->setNetSession(sh.get());guest->setNetSession(sg.get());host->m_god=true;
+  playing={host.get(),guest.get()};frames(1);
+  HostOptions o;o.mode=Mode::Coop;o.map=coopFile;o.mapHash=mapFileHash(hostMaps/coopFile);sh->host(o);frames(1);
+  sg->joinCode(sh->lobby().joinCode);
+  until(240,[&]{return guest->m_match&&guest->m_match->started();});frames(30);
+  const int gs=slotOfGame(*guest);
+  check(guest->m_match&&guest->m_match->started()&&gs>0&&host->players().size()==2&&guest->players().size()==1,
+   "co-op world: the host's minds see two players (itself and the guest's body); single player and a guest see one");
+  {const auto* gp=host->playerById(gs);check(gp&&!gp->local&&gap({gp->body->pos.x,gp->body->pos.y,gp->body->z},here(*guest))<.05f,"the guest's body on the host stands where the guest does");}
+  // --- Scripts that know every player ---
+  host->m_player.pos={6.5f,16.5f};put(*host,*guest,{21.f,3.f});frames(30);
+  check(host->state(stateId("pad_hit"))==1&&!host->state(stateId("gathered")),"the guest stepping onto the pad fires its box trigger on the host (the host stands elsewhere)");
+  check(guest->state(stateId("pad_hit"))==1,"the state it set reaches the guest");
+  check(!host->world().doors().empty()&&host->world().doors()[0].opening&&!guest->world().doors().empty()&&guest->world().doors()[0].opening,"the door it opened opens on the guest too");
+  check(guest->pickupNotice()=="PAD PRESSED","its caption shows on the guest (\""+guest->pickupNotice()+"\")");
+  put(*host,*guest,{3.5f,20.5f});frames(30);
+  const bool waited=!host->state(stateId("gathered"));
+  host->m_player.pos={3.f,21.f};frames(30);
+  check(waited&&host->state(stateId("gathered"))==1&&guest->state(stateId("gathered"))==1,"a players=all trigger waits for the second player, then fires (and the guest knows)");
+  // A guest's hand on the lever: worked by the host, its switch known to both.
+  {put(*host,*guest,{12.f,19.f});host->m_player.pos={6.5f,16.5f};frames(20);guest->m_player.angle=kPi*.5f;guest->m_player.pitch=0;
+   InputState pull{};pull.use=true;guest->update(pull,dt);host->update(InputState{},dt);frames(30);
+   check(host->state(stateId("lever_on"))==1&&guest->state(stateId("lever_on"))==1,"a guest pulling a lever runs it on the host, and the guest sees it thrown");}
+  // --- Creatures that choose between players ---
+  auto creature=[&](Vec2 at,float heading){Enemy e;e.kind=Enemy::Kind::Huntsman;e.pos=e.home=e.lastKnown=at;e.z=e.homeZ=0;e.heading=heading;e.hp=e.maxHp=5000;host->m_enemies.push_back(e);return host->m_enemies.size()-1;};
+  host->m_enemies.clear();host->m_player.pos={12.f,18.f};put(*host,*guest,{6.5f,7.5f});frames(10);
+  const float healthBefore=guest->m_player.health;
+  {const size_t c=creature({6.5f,3.5f},kPi*.5f);bool chose=false;for(int i=0;i<30&&!chose;++i){frames(1);chose=host->m_enemies[c].target==gs;}
+   check(chose,"a creature that can see only the guest (the host behind the wall) hunts the guest");
+   until(int(6.f/dt),[&]{return guest->m_player.health<healthBefore-1;});
+   check(guest->m_player.health<healthBefore-1&&std::fabs(host->m_match->m_slots[size_t(gs)].health-guest->m_player.health)<1.f,
+    "its strike, resolved on the host, damages the guest (guest "+std::to_string(int(healthBefore))+" -> "+std::to_string(int(guest->m_player.health))+", the host's count agrees)");
+   // Downed: dropped as a target.
+   host->m_match->damage(gs,-1,1000,0);frames(10);
+   check(guest->dead()&&host->m_enemies[c].target!=gs,"a downed guest is dropped as the creature's target");}
+  frames(int(10.5f/dt));   // the guest comes back beside the host
+  check(!guest->dead(),"the downed guest is back after 10 s");
+  // Both in sight: the nearer is chosen, and small moves for a second do not flip it.
+  {host->m_enemies.clear();host->m_player.pos={10.f,18.f};put(*host,*guest,{11.1f,19.6f});frames(10);
+   const size_t c=creature({6.f,18.f},0.f);frames(2);const int first=host->m_enemies[c].target;int flips=0,last=first;
+   for(int i=0;i<60;++i){const float s=(i/6)%2?.35f:-.35f;host->m_player.pos={10.f+s,18.f};frames(1);const int now=host->m_enemies[c].target;flips+=now!=last;last=now;}
+   check(first==0&&flips==0,"with both in sight it takes the nearer (the host) and keeps it through a second of small moves ("+std::to_string(flips)+" flips)");}
+  // A pack of two splits across the two players.
+  {host->m_enemies.clear();host->m_player.pos={10.f,18.f};put(*host,*guest,{13.f,18.f});frames(10);
+   const size_t a=creature({6.f,17.5f},0.f),b=creature({6.f,18.5f},0.f);frames(3);
+   const int ta=host->m_enemies[a].target,tb=host->m_enemies[b].target;
+   check(ta!=tb&&(ta==0||ta==gs)&&(tb==0||tb==gs),"a pack of two nearer the host splits: one on each player ("+std::to_string(ta)+", "+std::to_string(tb)+")");}
+  host->m_enemies.clear();frames(5);
+  // --- Guards driven by the host ---
+  {host->m_player.pos={12.f,18.f};put(*host,*guest,{12.f,20.f});frames(10);
+   host->setState(stateId("guard_on"),1);frames(20);
+   check(!host->friendlyActors().empty()&&host->autonomousActor(host->friendlyActors()[0].track())&&!guest->friendlyActors().empty(),"the guard is on, on both machines");
+   // Drift the guest's copy away: only the host's snapshots put him back.
+   guest->m_friendlyActors[0].pose.position={20.f,20.f};
+   const Vec2 start=host->friendlyActors()[0].pose.position;float worst=0;
+   for(int i=0;i<int(3.f/dt);++i){frames(1);if(i>30)worst=std::max(worst,length(host->friendlyActors()[0].pose.position-guest->friendlyActors()[0].pose.position));}
+   const float walked=length(host->friendlyActors()[0].pose.position-start);
+   check(walked>1.f&&worst<.6f,"the guard walks his rounds on the host ("+std::to_string(walked).substr(0,4)+" m) and the guest's copy follows its snapshots (worst "+std::to_string(worst).substr(0,4)+" m)");}
+  // The guard makes out the guest (the host is behind the wall) and his fire, resolved on the host, hurts them.
+  {const auto& npc=host->friendlyActors()[0];const Vec2 ahead{std::sin(npc.pose.yaw),std::cos(npc.pose.yaw)};const Vec2 at=npc.pose.position+ahead*3.f;
+   put(*host,*guest,{std::clamp(at.x,1.5f,22.5f),std::clamp(at.y,1.5f,10.5f)});const float before=guest->m_player.health;
+   bool spotted=false;for(int i=0;i<int(4.f/dt)&&!spotted;++i){frames(1);const auto t=host->guardTarget(0);spotted=t.kind==ShotKind::Player&&t.index==gs;}
+   check(spotted,"the guard sees the guest, not the host behind the wall, and takes the guest as his target");
+   until(int(6.f/dt),[&]{return guest->m_player.health<before-1||guest->dead();});
+   check(guest->m_player.health<before-1||guest->dead(),"his fire, traced on the host against the guest's body, wounds the guest ("+std::to_string(int(before))+" -> "+std::to_string(int(guest->m_player.health))+")");
+   // Traffic while he fights: the co-op world's own bytes (scripts, state store, people) to this one guest.
+   {const std::size_t bytes=host->m_match->m_coopBytes;frames(int(2.f/dt));
+    report<<"INFO co-op world traffic to one guest with one guard in a fight: "<<float(host->m_match->m_coopBytes-bytes)/2.f/1024.f<<" KB/s\n";}
+   host->setState(stateId("guard_on"),0);put(*host,*guest,{12.f,20.f});frames(int(11.f/dt));}
+  // Traffic.
+  {const std::size_t before=host->m_match->m_coopBytes;frames(int(2.f/dt));const float perSecond=float(host->m_match->m_coopBytes-before)/2.f;
+   std::size_t creatures=0;{wire::Writer w;w.u8(12).u32(0).u8(0).u16(0);creatures=w.b.size()+20*8;}
+   report<<"INFO co-op world traffic to one guest at rest (state store, clocks): "<<perSecond/1024<<" KB/s; creature snapshots (as before) ~"<<creatures<<" bytes for 8 at 15 Hz ("<<float(creatures)*15/1024<<" KB/s)\n";}
+  sh->leave();frames(10);playing.clear();
  }
  // ===== A lossy, slow hub =====
  {

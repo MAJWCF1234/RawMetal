@@ -17,7 +17,7 @@ void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorT
  for(const auto&enemy:enemies)if(enemy.alive&&fears(enemy.faction))consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  for(size_t i=0;i<world.actorTracks().size();++i){const auto&other=world.actorTracks()[i];if(other.visual!=ActorVisual::Wasp&&other.visual!=ActorVisual::Huntsman)continue;
   const auto&target=world.actorPose(i);if(fears(npcFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
- int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:m_player.pos;}put("damage",damage);put("hit_source",0);
+ int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:nearestPlayer(pose.position,pose.z).body->pos;}put("damage",damage);put("hit_source",0);
  if(danger){fear=4000;mind.setThreat(threat);}mind.setFear(fear);
  bool follow=config.mode==ActorAiMode::Escort?!mind.holding():mind.following();
  speedScale=fear>0?1.5f:1.f;wantsMove=false;
@@ -31,7 +31,8 @@ void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorT
    float score=lengthSq(candidate-threat);if(friendlyWalkSegment(level,pose.position,pose.z,pose.position+direction*.7f,height))score+=10.f;
    if(score>best){best=score;goal=candidate;goalZ=z;wantsMove=true;}}
  }else if(fear==0&&follow&&get("engaged")){
-  if(level==m_level){put("route_next",0);float distance=length(pose.position-m_player.pos);wantsMove=distance>config.followDistance+(get("walking")?-.3f:.3f);if(wantsMove){goal=m_player.pos;goalZ=m_player.z;}}
+  // He keeps with the nearest player (single player: the player).
+  if(level==m_level){const Player& lead=*nearestPlayer(pose.position,pose.z).body;put("route_next",0);float distance=length(pose.position-lead.pos);wantsMove=distance>config.followDistance+(get("walking")?-.3f:.3f);if(wantsMove){goal=lead.pos;goalZ=lead.z;}}
   else{
    int next=get("route_next")-1,wait=std::max(0,get("route_wait")-ms);Vec2 portal{get("portal_x")*.001f,get("portal_y")*.001f};float z=get("portal_z")*.001f;
    bool cached=next>=0&&next<chunkCount()&&next!=level&&get("route_player")==m_level+1&&wait>0&&friendlyBoundaryOpen(level,next,portal+chunkOffset(level));
@@ -53,7 +54,7 @@ void Game::civilianEscortIntent(World& world,int level,size_t actor,const ActorT
  if(follow&&get("engaged")&&fear==0)conditions|=CivilianShouldFollow;
  if(get("engaged"))conditions|=CivilianEngaged;
  if(danger&&damage>0)conditions|=CivilianHurt;
- if(level==m_level&&length(pose.position-m_player.pos)<=config.followDistance+.35f)conditions|=CivilianNearPlayer;
+ if(level==m_level&&length(pose.position-nearestPlayer(pose.position,pose.z).body->pos)<=config.followDistance+.35f)conditions|=CivilianNearPlayer;
  runCivilianSchedule(actor,ms,conditions,wantsMove);
  auto schedule=CivilianSchedule(get("schedule"));
  bool scheduleMove=(get("schedule_step")==1&&get("task_status")==int(CivilianTaskStatus::Running))||(schedule==CivilianSchedule::Flee&&get("task")==int(CivilianTask::Escape)&&get("task_status")==int(CivilianTaskStatus::Running));
@@ -75,7 +76,7 @@ void Game::scriptedHandoffIntent(World& world,int level,size_t actor,const Actor
  for(const auto&enemy:enemies)if(enemy.alive&&fears(enemy.faction))consider(enemy.pos,(enemy.bodyBottom()+enemy.bodyTop())*.5f);
  for(size_t i=0;i<world.actorTracks().size();++i){const auto&other=world.actorTracks()[i];if(other.visual!=ActorVisual::Wasp&&other.visual!=ActorVisual::Huntsman)continue;
   const auto&target=world.actorPose(i);if(fears(npcFaction(other))&&target.clip!=4&&(!other.deadState||!state(other.deadState)))consider(target.position,target.z+other.scale*.5f);}
- int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:m_player.pos;}put("damage",damage);put("hit_source",0);
+ int damage=track.damageState?state(track.damageState):0;if(damage>get("damage")&&level==m_level){danger=true;threat=get("hit_source")?Vec2{get("hit_x")*.001f,get("hit_y")*.001f}:nearestPlayer(pose.position,pose.z).body->pos;}put("damage",damage);put("hit_source",0);
  if(danger){fear=4000;mind.setThreat(threat);}mind.setFear(fear);
  if(fear<=0&&mind.schedule()!=CivilianSchedule::Flee&&mind.schedule()!=CivilianSchedule::Recovery){clearCivilianSchedule(actor);return;}
  if(fear>0&&lengthSq(pose.position-threat)<25.f){

@@ -18,7 +18,7 @@ namespace retro { class Game; struct InputState; struct CustomCampaign; class Wo
 namespace retro::net {
 namespace wire { struct Writer; struct Reader; }
 
-constexpr std::uint16_t ProtocolVersion=1;
+constexpr std::uint16_t ProtocolVersion=2;      // 2: a player state carries torch and locker; co-op scripts, state, people
 constexpr int MaxSlots=16;
 constexpr std::size_t MapChunkBytes=1100;     // a MapData packet's file bytes at most
 
@@ -32,6 +32,7 @@ struct NetPlayerState{
  int level=0;Point3 world{};
  float angle=0,pitch=0;Vec2 velocity{};
  bool crouched=false,prone=false,grounded=true,vr=false,alive=true;
+ bool torch=false,hidden=false;          // their flashlight is on; they are shut in a locker (what creatures and guards see)
  int weapon=1;std::uint8_t shots=0;     // shots: a counter that turns over with every shot fired
  float reloadAge=99,health=100;
  std::uint8_t life=0;                   // bumped by the host at each respawn or correction: older reports are stale
@@ -133,6 +134,26 @@ private:
  const World* worldOf(int level)const;
  float renderTime()const;
  float hostNow()const;
+ // MatchCoop.cpp: co-op's one world. The host's minds see every player (Game::players(): the guests' bodies
+ // are kept here), and what they do reaches the guests: script effects, the state store, the people.
+ void coopHostFrame(float dt);
+ void coopGuestFrame(float dt);
+ void syncBodies(float dt);
+ void sendStateSync(bool full,const PeerId* to);
+ void sendScriptFx();
+ void sendActors();
+ void smoothActors(float dt);
+ void clearCoop();
+ bool handleCoopEvent(int slot,unsigned type,wire::Reader& r);   // slot: the guest it came from (host), -1 a guest
+ bool handleCoopState(unsigned type,wire::Reader& r);
+ bool clockState(std::uint32_t id)const;
+ struct ActorTarget{bool set=false;int level=0;Vec2 pos{};float z=0,yaw=0;};
+ std::vector<std::pair<std::uint32_t,int>> m_sentStates,m_sentObjectives,m_sentProps;
+ std::vector<std::pair<std::uint32_t,float>> m_clockSent;   // a running clock's id and when it was last sent
+ std::vector<std::uint32_t> m_clocks;                       // sorted ids of states that tick every frame
+ float m_syncTimer=0,m_fullSyncTimer=0,m_actorTimer=0;std::uint32_t m_lastActorsMs=0;
+ std::vector<ActorTarget> m_actorTargets;
+ std::size_t m_coopBytes=0;   // co-op world traffic sent (scripts, state, people)
 
  Game& m_game;
  Session* m_session=nullptr;

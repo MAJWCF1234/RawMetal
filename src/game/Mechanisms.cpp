@@ -103,6 +103,25 @@ std::array<electric::Flash,4> Game::weaponFlashes()const{
   for(auto f:electricNow(level).flashes){f.at=f.at+Point3{origin.x,origin.y,0};f.strength*=1+.6f*dark;offer(f);}}
  m_electricFrame.flashes=flashes;m_electricFrame.lit=true;return flashes;
 }
+// A terminal worked by a player (E on it, or a co-op guest's hand the host runs for them): what it does to
+// the world. The screen and its sounds are the hand's own (updateInteraction).
+int Game::operateTerminal(int terminal,int player){
+ if(terminal<0||terminal>=int(m_world.terminals().size()))return 0;
+ const auto& t=m_world.terminals()[size_t(terminal)];
+ const bool switches=t.activateState&&(!t.requireState||state(t.requireState));
+ // A co-op guest: the host works it (the Match sends the hand on), the guest hears its own switch.
+ if(m_netScriptsOff){m_netUses.push_back({m_level,terminal});return switches?2:0;}
+ const PlayerView* who=playerById(player);if(!who)who=&players().front();
+ Vec2 at=who->body->pos;if(who->level!=m_level)at=at+chunkOffset(m_level)-chunkOffset(who->level);
+ int done=0;
+ // A screen worked wakes the cursed equipment round about (Machine.cpp); paper does not.
+ if(!t.paper())wakeMachinesNear(t.position,who->body->z,8.f);if(t.reactorAction)useReactorAction(t.reactorAction);if(t.control){
+  if(m_world.hasLift()){if(m_world.insideLift(at.x,at.y)&&at.y>10.35f&&m_world.startLift())done|=1;}
+  else m_world.releaseControl();
+ }
+ if(t.activateState&&(!t.requireState||state(t.requireState))){setState(t.activateState,t.toggleState?!state(t.activateState):1);done|=2;}
+ return done;
+}
 std::vector<const SequenceCue*> Game::terminalMessages(int terminal)const{
  std::vector<const SequenceCue*> result;if(terminal<0||terminal>=int(m_world.terminals().size()))return result;
  const auto& at=m_world.terminals()[size_t(terminal)].position;const auto& sequences=m_world.timedSequences();
@@ -169,12 +188,17 @@ void Game::updateMechanisms(float dt){
  auto& world=level==m_level?m_world:m_chunks[level].world;
  for(const auto& sequence:world.timedSequences()){
   int age=state(sequence.timerState);
-  bool seen=true;
-  if(age==0&&sequence.sightActor>=0){const auto& actor=world.actorTracks()[sequence.sightActor];auto pose=world.actorPose(sequence.sightActor);Vec2 delta=pose.position-m_player.pos;float height=pose.z+actor.scale*.65f-m_player.z-m_player.eye,range=std::sqrt(dot(delta,delta)+height*height),pitch=m_player.pitch/140.f;
-   float alignment=range>0?(delta.x*std::cos(m_player.angle)*std::cos(pitch)+delta.y*std::sin(m_player.angle)*std::cos(pitch)+height*std::sin(pitch))/range:1;
-   seen=range<=sequence.sightDistance&&alignment>.92f&&world.rayClear(m_player.pos,m_player.z+m_player.eye,pose.position,pose.z+actor.scale*.65f);
+  // A sequence starts when a player stands in its box (and, if it asks, looks at its actor). On a co-op
+  // guest the host starts it (the guest's own body is among the host's players) and its clock comes over.
+  if(age==0&&!m_netScriptsOff)for(const auto& p:players()){if(p.level!=level)continue;
+   const Player& body=*p.body;Vec2 at=body.pos;if(p.level!=m_level)at=at+chunkOffset(m_level)-chunkOffset(p.level);
+   bool seen=true;
+   if(sequence.sightActor>=0){const auto& actor=world.actorTracks()[sequence.sightActor];auto pose=world.actorPose(sequence.sightActor);Vec2 delta=pose.position-at;float height=pose.z+actor.scale*.65f-body.z-body.eye,range=std::sqrt(dot(delta,delta)+height*height),pitch=body.pitch/140.f;
+    float alignment=range>0?(delta.x*std::cos(body.angle)*std::cos(pitch)+delta.y*std::sin(body.angle)*std::cos(pitch)+height*std::sin(pitch))/range:1;
+    seen=range<=sequence.sightDistance&&alignment>.92f&&world.rayClear(at,body.z+body.eye,pose.position,pose.z+actor.scale*.65f);
+   }
+   if(seen&&at.x>=sequence.x1&&at.x<=sequence.x2&&at.y>=sequence.y1&&at.y<=sequence.y2&&body.z>=sequence.bottom&&body.z<=sequence.top){age=1;break;}
   }
-  if(age==0&&seen&&level==m_level&&m_player.pos.x>=sequence.x1&&m_player.pos.x<=sequence.x2&&m_player.pos.y>=sequence.y1&&m_player.pos.y<=sequence.y2&&m_player.z>=sequence.bottom&&m_player.z<=sequence.top)age=1;
   if(age<=0)continue;
   // A finished one-shot rests at its end: nothing more fires (a cue at the
   // very end would otherwise replay every frame).

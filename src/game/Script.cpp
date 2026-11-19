@@ -78,6 +78,11 @@ void Game::spawnCreature(const CreatureSpawn& spawn,float awareness,bool announc
  if(announce){if(e.kind==Enemy::Kind::Brute)sound(Sound::Land,.8f,.7f);else enemySound(m_enemies.back(),0,.55f,.9f);}
 }
 void Game::executeScriptAction(const ScriptAction& action){
+ using T=ScriptAction::Type;
+ // An item is the hands of the player who fired the event: another player's goes to them (the Match sends it).
+ if(action.type==T::GiveItem||action.type==T::TakeItem)if(const auto* p=playerById(m_scriptPlayer);p&&!p->local){m_scriptFx.push_back({p->id,action});return;}
+ // What everyone sees or hears of it goes out too (a co-op host's Match sends m_scriptFx after the frame).
+ if(action.type==T::PlaySound||action.type==T::Shake||action.type==T::ReleaseControl||action.type==T::CompleteCampaign)m_scriptFx.push_back({-1,action});
  switch(action.type){
   case ScriptAction::Type::SetState:if(isEntityProperty(action.id))setEntityPropertyInt(action.id,action.value);else setState(action.id,action.value);break;
   case ScriptAction::Type::SetObjective:setObjective(action.id,static_cast<ObjectiveStatus>(std::clamp(action.value,0,3)));break;
@@ -104,6 +109,7 @@ void Game::executeScriptAction(const ScriptAction& action){
     if(auto close=action.text.find('}',i);action.text[i]=='{'&&close!=std::string::npos){text+=std::to_string(state(stateId(std::string_view(action.text).substr(i+1,close-i-1))));i=close+1;}
     else text+=action.text[i++];
    }
+   {ScriptAction shown=action;shown.text=text;m_scriptFx.push_back({-1,std::move(shown)});}
    m_pickupNotice=std::move(text);m_pickupNoticeTime=action.amount;break;
   }
  }
@@ -138,40 +144,52 @@ void Game::updateReceivingBreach(){
   }
  }
 }
-int Game::scriptValue(const ScriptEvent& event,const ScriptCondition& c)const{
+int Game::scriptValue(const ScriptEvent& event,const ScriptCondition& c,const PlayerView& player)const{
  using S=ScriptCondition::Source;
  switch(c.source){
   case S::State:return isEntityProperty(c.id)?entityPropertyInt(c.id):state(c.id);
   case S::Kills:return event.level==m_level?m_kills:m_chunks[event.level].kills;
   case S::Remaining:return hostilesRemaining(event.level);
-  case S::Health:return int(std::ceil(m_player.health));
-  case S::Map:return m_level;
+  case S::Health:return int(std::ceil(player.body->health));
+  case S::Map:return player.level;
  }
  return 0;
 }
-bool Game::scriptEventReady(const ScriptEvent& event)const{
+bool Game::scriptEventReadyFor(const ScriptEvent& event,const PlayerView& player)const{
  using S=ScriptEvent::Scope;
- if(event.scope!=S::Campaign&&event.level!=m_level)return false;
+ if(event.scope!=S::Campaign&&event.level!=player.level)return false;
  bool tested=false,any=false,all=true;
  auto test=[&](bool ok){tested=true;any|=ok;all&=ok;};
  if(event.requireState)test(state(event.requireState)==event.requireValue);
  for(const auto&c:event.conditions){
-  int v=scriptValue(event,c);using O=ScriptCondition::Op;
+  int v=scriptValue(event,c,player);using O=ScriptCondition::Op;
   test(c.op==O::Equal?v==c.value:c.op==O::NotEqual?v!=c.value:c.op==O::Less?v<c.value:c.op==O::LessEqual?v<=c.value:c.op==O::Greater?v>c.value:v>=c.value);
  }
  if(tested&&!(event.matchAny?any:all))return false;
  if(event.requireEnemiesClear&&hostilesRemaining(event.level)>0)return false;
  if(event.scope!=S::Box)return true;
- return m_player.pos.x>=event.x1&&m_player.pos.x<=event.x2&&m_player.pos.y>=event.y1&&m_player.pos.y<=event.y2&&m_player.z>=event.bottom&&m_player.z<=event.top;
+ // The box is in its own map's frame; a body is in the active chunk's.
+ Vec2 at=player.body->pos;if(player.level!=m_level)at=at+chunkOffset(m_level)-chunkOffset(player.level);
+ const float z=player.body->z;
+ return at.x>=event.x1&&at.x<=event.x2&&at.y>=event.y1&&at.y<=event.y2&&z>=event.bottom&&z<=event.top;
+}
+// Over the players: the first it is ready for (players=any), or every one of them (players=all).
+bool Game::scriptEventReady(const ScriptEvent& event,int* who)const{
+ bool any=false,all=true;int first=-1;
+ for(const auto& p:players()){const bool ok=scriptEventReadyFor(event,p);if(ok&&first<0)first=p.id;any|=ok;all&=ok;
+  if(event.allPlayers?!all:any)break;}
+ if(who)*who=first<0?0:first;
+ return event.allPlayers?all&&first>=0:any;
 }
 void Game::updateScripts(float){
+ m_scriptFx.clear();
  if(m_netScriptsOff)return;   // a multiplayer guest: scripted sequences run on the host alone
  updateReceivingBreach();
  for(const auto&event:m_scriptEvents){
   if(!event.id)continue;
   bool latched=(event.once||event.rearm)&&containsEvent(m_firedEvents,event.id);
   if(event.once&&latched)continue;
-  bool ready=scriptEventReady(event);
+  int who=0;bool ready=scriptEventReady(event,&who);
   // A rearming event stays latched while its gates hold and re-arms once they fail,
   // so it fires once per entry (or each time its states line up), not every frame.
   if(event.rearm&&latched&&!ready){m_firedEvents.erase(std::find(m_firedEvents.begin(),m_firedEvents.end(),event.id));continue;}
@@ -180,8 +198,9 @@ void Game::updateScripts(float){
   // A checkpoint is written after the event's other actions, wherever it is
   // listed: a save taken first would latch a once-event with its states unset,
   // and loading it would lose what the event does (76's blackout did that).
-  bool checkpoint=false;
+  bool checkpoint=false;m_scriptPlayer=who;
   for(const auto&action:event.actions){if(action.type==ScriptAction::Type::Checkpoint){checkpoint=true;continue;}executeScriptAction(action);}
+  m_scriptPlayer=0;
   if(checkpoint)saveCheckpoint();
  }
 }
