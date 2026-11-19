@@ -31,10 +31,35 @@ void Game::addVrHandBodies(vectra::Space& space,std::vector<Clutter>& list,float
   // What it is about to touch wakes (a kinematic body does not wake a sleeper by contact alone).
   if(s>.02f)for(auto&o:space.bodies)if(o.user>=0&&o.sleeping&&vrHandMeets(o)&&o.shape&&lenSq(o.x-b.x)<(o.shape->bound+HandRadius+.05f)*(o.shape->bound+HandRadius+.05f)){o.sleeping=false;o.sleepTime=0;}
   b.user=VrHandBody-hand;b.id=(1<<19)-40-hand;space.bodies.push_back(b);}}
+// --vr-test / engine.vr: the hardening of the VR hands, the two-hand release and the Physgloves lock.
+bool Game::testVrHardening(std::ostream& report){
+ bool ok=true;auto check=[&](bool pass,const char* what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
+ // Two hands letting go a few frames apart: thrown with both, not handed to the last hand for a frame.
+ {float grace=0;int a=twoHandRelease(false,true,grace,1.f/90),b=twoHandRelease(false,false,grace,1.f/90);check(a==0&&b==3,"both hands opening a frame apart throw the prop with both");
+  grace=0;int last=0;for(int i=0;i<30&&!last;++i)last=twoHandRelease(false,true,grace,1.f/90);check(last==2,"the carry hand letting go alone hands it to the other after the grace");
+  grace=0;last=0;for(int i=0;i<30&&!last;++i)last=twoHandRelease(true,false,grace,1.f/90);check(last==1,"the second hand letting go alone leaves it in the carry hand");
+  grace=0;twoHandRelease(false,true,grace,.05f);check(twoHandRelease(true,true,grace,.05f)==0&&grace==0,"a hand closing again within the grace keeps both");}
+ // A pinned prop is not taken by a VR hand.
+ {auto g=validationScene(Enemy::Kind::Huntsman);g.m_enemies.clear();g.m_clutter={{{4.2f,4.5f},{},.56f}};g.m_clutter[0].kind=2;g.m_clutter[0].pinned=true;
+  g.setVrHand(0,{4.2f,4.5f,.7f},{1,0,0},true);g.setVrHand(1,{}, {},false);check(!g.interactClutter()&&!g.holdingClutter(),"a bolted-down prop stays where it is");
+  g.m_clutter[0].pinned=false;check(g.interactClutter()&&g.holdingClutter(),"loose, the same prop is taken");}
+ // The Physgloves lock: not the gun hand while a gun is drawn, not the hand on the fore-end.
+ {auto g=validationScene(Enemy::Kind::Huntsman);g.m_vrInputActive=true;g.m_weaponEquipped=true;g.m_equippedWeapon=WeaponId::Shotgun;g.m_holster=0;g.m_switchTarget=WeaponId::Fists;g.m_switchRaise=false;
+  const bool gunHand=g.physgloveHandFree(1),offHand=g.physgloveHandFree(0);g.m_vrSupportGrip=true;const bool support=g.physgloveHandFree(0);
+  g.m_holster=1;g.m_vrSupportGrip=false;check(!gunHand&&offHand&&!support&&g.physgloveHandFree(1),"the Physgloves lock with a free hand only");}
+ // A tracked hand that jumps (tracking regained) is drawn there at once, not dragged through what lies between.
+ {auto g=validationScene(Enemy::Kind::Huntsman);g.m_enemies.clear();g.setVrHand(0,{4.f,4.5f,1.f},{1,0,0},true);g.setVrHand(1,{}, {},false);
+  vectra::Space space;g.addVrHandBodies(space,g.m_clutter,1.f/90);g.setVrHand(0,{7.f,4.5f,1.f},{1,0,0},true);g.settleVrHands(space,-1);
+  check(lengthOf(g.vrHandProxy(0)-Point3{7.f,4.5f,1.f})<1e-4f&&!g.vrHandBlocked(0),"a hand that jumps 3 m is drawn where it is");}
+ return ok;
+}
 bool Game::vrHandMeets(const vectra::Body& other)const{return !other.kinematic&&other.invMass>=1/HeavyHand;}
 void Game::settleVrHands(const vectra::Space& space,int held){
  using namespace vectra;
  for(int hand=0;hand<2;++hand){if(!vrHandFree(hand)||!m_vrHandProxySet[size_t(hand)])continue;auto&proxy=m_vrHandProxy[size_t(hand)];const Point3 goal=m_vrHandPosition[size_t(hand)];
+  // A jump of the tracked hand (tracking regained, a recalibration, a new map) is no stroke through the props
+  // between: the drawn hand goes straight there.
+  if(lengthOf(goal-proxy)>.6f){proxy=goal;m_vrHandBlocked[size_t(hand)]=false;continue;}
   Point3 way=goal-proxy;const float d=lengthOf(way);const int n=std::max(1,int(std::ceil(d/Stride)));bool blocked=false;
   for(int k=0;k<n;++k){Point3 p=proxy+way*(1.f/float(n));
    for(const auto&b:space.bodies){if(b.user<0||b.user==held||!b.shape)continue;

@@ -49,11 +49,12 @@ const bool registered=add({
  .step=[](Scene& s,float){auto& w=watches()[&s];Game& g=s.g();const std::string scene=s.fixture->value("scene");const int f=s.frame;auto& p=LabAccess::player(g);
   const int pull=20;
   if(scene=="vr"){
-   // The right hand at the chest, pointing at the mug: closed at the pull frame (it locks), snapped back two frames on.
+   // The free hand (not the gun hand: a hand holding a drawn gun does not lock on, Game::physgloveHandFree) at the
+   // chest, pointing at the mug: closed at the pull frame (it locks), snapped back two frames on.
    const Point3 head{p.pos.x,p.pos.y,p.z+1.42f},hand{p.pos.x+.35f,p.pos.y-.18f,p.z+1.15f};const Point3 m=w.start;Point3 d=m-hand;const float n=dist(m,hand);d=d*(1/n);
    Point3 v{};if(f==pull+2||f==pull+3)v=Point3{(head.x-hand.x)*3,(head.y-hand.y)*3,(head.z-hand.z)*3+1.5f};
-   g.setVrHand(1,hand,d,true,v);g.setVrHand(0,{p.pos.x+.3f,p.pos.y+.25f,p.z+1.f},{1,0,0},true);
-   s.input.vrTracked=true;s.input.vrYaw=p.angle;s.input.vrPitch=p.pitch;s.input.vrEye=1.42f;s.input.vrGrip[1]=f>=pull;}
+   g.setVrHand(0,hand,d,true,v);g.setVrHand(1,{p.pos.x+.3f,p.pos.y+.25f,p.z+1.f},{1,0,0},true);
+   s.input.vrTracked=true;s.input.vrYaw=p.angle;s.input.vrPitch=p.pitch;s.input.vrEye=1.42f;s.input.vrGrip[0]=f>=pull;}
   else if(scene=="mouse"){if(f>=pull)s.input.rotateProp=true;if(f==pull+3)s.input.mouseDy=-40;}
   else if(f==pull)s.input.physglove=true;
   if(f==pull)w.v["targeted"]=g.physgloves().target==w.a;

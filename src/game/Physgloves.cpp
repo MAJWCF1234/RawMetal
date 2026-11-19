@@ -108,11 +108,15 @@ void Game::updatePhysgloves(const InputState& input,float dt){
  if(m_vrInputActive&&input.vrTracked){
   for(int hand=0;hand<2;++hand){const bool grip=input.vrGrip[size_t(hand)],pressed=grip&&!s.grip[size_t(hand)];s.grip[size_t(hand)]=grip;
    // A hand closed on nothing in reach while pointing at a prop locks onto it.
-   if(pressed&&!held&&!s.locked&&s.flying<0){const int t=physgloveAim(hand);if(t>=0){s.locked=true;s.hand=hand;s.target=t;}}
+   // (Not the hand holding a drawn gun or its fore-end: pumping the shotgun would yank what it points at.)
+   if(pressed&&!held&&!s.locked&&s.flying<0&&physgloveHandFree(hand)){const int t=physgloveAim(hand);if(t>=0){s.locked=true;s.hand=hand;s.target=t;s.lockAge=0;}}
+   if(s.locked&&s.hand==hand&&!physgloveHandFree(hand))s.locked=false;
    if(s.locked&&s.hand==hand&&!grip)s.locked=false;}
   if(held){s.locked=false;s.target=-1;return;}
   if(s.locked){if(s.target<0||s.target>=int(m_clutter.size())||m_clutter[size_t(s.target)].broken){s.locked=false;return;}
-   // The flick: the wrist snapped back toward the face, or up.
+   // The flick: the wrist snapped back toward the face, or up; not the reach that closed the hand (the
+   // first 45 ms of the lock, under three frames at 60 Hz).
+   s.lockAge+=dt;if(s.lockAge<.045f)return;
    const auto p=m_vrHandPosition[size_t(s.hand)],v=m_vrHandVelocity[size_t(s.hand)];const Point3 head{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye};
    Point3 back=head-p;const float l=lengthOf(back);if(l>1e-3f)back=back*(1/l);
    if(v.x*back.x+v.y*back.y+v.z*back.z>VrFlick||v.z>VrFlick*1.4f)physglovePull(s.target,s.hand);
@@ -121,12 +125,11 @@ void Game::updatePhysgloves(const InputState& input,float dt){
  // Desktop.
  const bool key=input.physglove&&!s.key;s.key=input.physglove;
  if(held){s.locked=false;s.target=-1;return;}
- if(input.rotateProp){if(!s.locked&&s.flying<0){const int t=physgloveAim(-1);if(t>=0){s.locked=true;s.target=t;}}}
+ if(input.rotateProp){if(!s.locked&&s.flying<0){const int t=physgloveAim(-1);if(t>=0){s.locked=true;s.target=t;s.lockAge=0;}}}
  else s.locked=false;
  if(s.locked){if(s.target<0||s.target>=int(m_clutter.size())||m_clutter[size_t(s.target)].broken){s.locked=false;return;}
   if(input.mouseDy<-FlickPixels||key)physglovePull(s.target,-1);return;}
  s.target=s.flying<0?physgloveAim(-1):-1;
  if(key&&s.target>=0)physglovePull(s.target,-1);
- (void)dt;
 }
 }
