@@ -3,6 +3,7 @@
 #include "../core/PackedResource.h"
 #include "../core/ActorBodyAim.h"
 #include "../core/CleanupBodies.h"
+#include "SkeletalBank.h"
 #include <windows.h>
 #include <stdexcept>
 #include <cstring>
@@ -69,11 +70,13 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
  for(auto node:m_scene->nodes)if(node->bone){++bones;info<<" bone "<<node->name.data<<" at "<<node->node_to_world.m03<<","<<node->node_to_world.m13<<","<<node->node_to_world.m23<<"\n";}
  description=info.str();if(triangles.empty())throw std::runtime_error("Mesh has no triangles");
  if(id==242||animationResource){m_creatureFrames=loadResource(animationResource?animationResource:244);uint32_t vertices=0,clips=0,headerSamples=0;
+  // A bank kept as bones (RMS1, SkeletalBank.h) is skinned into its vertex bank here, once.
+  if(skeletal::isBank(m_creatureFrames)){std::string error;m_creatureFrames=skeletal::expand(m_scene,m_creatureFrames,error);if(m_creatureFrames.empty())throw std::runtime_error("Skeletal creature bank: "+error);}
   bool compact=m_creatureFrames.size()>=20&&!std::memcmp(m_creatureFrames.data(),"RMA3",4);
   if(m_creatureFrames.size()<20||(!compact&&std::memcmp(m_creatureFrames.data(),"RMA2",4)))throw std::runtime_error("Invalid creature animation");
   std::memcpy(&vertices,m_creatureFrames.data()+4,4);std::memcpy(&headerSamples,m_creatureFrames.data()+8,4);std::memcpy(&clips,m_creatureFrames.data()+12,4);
   std::memcpy(&m_creatureVertices,m_creatureFrames.data()+16,4);
-  const uint32_t requiredClips=(id==242||id==272||id==2126||id==2129||id==2441)?5u:animationResource==2185?6u:id==2300?16u:1u;
+  const uint32_t requiredClips=(id==242||id==272||id==2126||id==2129||id==2441)?5u:animationResource==2185?6u:id==2300||id==2290?16u:1u;
   if(vertices!=triangles.size()*3||clips<requiredClips||clips>64||m_creatureVertices==0||m_creatureVertices>65535)throw std::runtime_error("Creature animation topology mismatch");
   m_creatureFrameOffset=20+size_t(vertices)*2+(compact?size_t(clips)*4:0);
   if(m_creatureFrames.size()<m_creatureFrameOffset)throw std::runtime_error("Missing creature sample table");

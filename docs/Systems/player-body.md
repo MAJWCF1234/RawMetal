@@ -98,6 +98,60 @@ down to a kneel, 0.9 s up, 0.95 s to and from prone). One gait cycle is two
 footsteps (`Game::bodyGait`), so her feet land on the step sounds. A change of
 clip blends over 0.2 s.
 
+## The Limitator
+
+The second body, for multiplayer and anyone who would rather not be Claire:
+`Settings::character` 1 (0 is Claire), `RemotePlayer::character` for others.
+`O:/retro official/Limitator.zip`, a masked man in a black tactical suit,
+Mixamo-rigged, 4,790 triangles, two 1024x512 textures. Made from it into the
+gitignored library at `src/assets/library/player/`:
+
+| Resource | File |
+| --- | --- |
+| 2290 | `Limitator.fbx` (`tools/player/build_limitator.py` from the pack's) |
+| 2291 | `limitator-animation.bin` (40 clips, RMS1: kept as bones) |
+| 2292 | `limitator-animation.bin.anchors` |
+| 2293, 2294 | `LimitatorBody.png`, `LimitatorHead.png` (the left halves of the pack's, 512x512: see below) |
+
+- The pack's mesh is bound in a pose its armature does not rest in.
+  `build_limitator.py` makes the drawn T-pose the rest, applies the armature's
+  scale and turn, keeps four weights a vertex and names his bones Claire's way,
+  so the bake, `ClaireOutside` and the renderer read him as they read her.
+  He is 2.7 m in his file; like hers, his mesh is scaled to 1.7 m from outside
+  and to the eye in first person.
+- The pack's textures are mirror images left and right and no face crosses
+  the middle, so the script folds every face onto the left half and writes
+  the halves (`... build_limitator.py -- Limitator.fbx OUT.fbx TEXTURE_DIR`).
+  It writes the FBX's arrays undeflated, which the packer packs smaller.
+  Lossy WebP was tried and turned down: on his near-black suit its colour
+  noise lit up green and red under the lamps.
+- His clips are Claire's takes, retargeted onto his rig by the same tool, in
+  `ClaireOutside::Clip` order, all 40 in one bake (her command list above, with
+  her turns and holds in place; `B/firing rifle.fbx:1:6` and
+  `B/reloading.fbx:1:79` are the rifle shot and reload):
+
+  ```
+  RawMetalCreatureBake --skeletal-takes src/assets/library/player/Limitator.fbx src/assets/library/player/limitator-animation.bin \
+   "P/idle.fbx:1:64" "P/run forward.fbx:1:16" ... "B/hit reaction.fbx:1:13" "P/jump down.fbx:1:20"
+  ```
+
+- `--skeletal-takes` writes the bank as bones: each sample's skin-cluster
+  transforms instead of its vertices (`src/renderer/SkeletalBank.h`). `Mesh`
+  skins it back into the RMA3 bank `--takes` would have written when it loads,
+  so nothing that poses a body changes. The bake refuses a bank that loads
+  back more than a millimetre off. 1.4 MB for a 23 MB vertex bank, packed to 567 KB;
+  his five files pack to 988,764 bytes (Claire's bank alone packs to 8.2 MB).
+- He loads the first time he is asked for (`SoftwareRenderer::playerBody`).
+  Missing or broken files make him Claire.
+- His head material (hood and mask) and whatever his arm bones carry are left
+  out in first person. His facing is his mask's front from his head's middle.
+- The viewmodel's and the VR avatar's arms are still Claire's arms, dressed in
+  his sleeve and glove (each the part of his body texture his forearm or hand
+  faces use).
+- Lab: `python tools/dev/lab.py run --feature=limitator` (fixture
+  `limitator-turn`). `limitator.character 0` in `lab/tune.txt` runs the same
+  takes on Claire.
+
 ## Stances
 
 Three, as Metal Gear has them (`Player`, `Game::updateMovement`):

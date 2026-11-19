@@ -364,7 +364,8 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
- int pullHighlight=1;};   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+ int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+ int character=0;};     // character: the player's body, 0 Claire, 1 the Limitator (SoftwareRenderer::playerBody)
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
 struct TitleMenuLayout {static constexpr int X=66,Y=188,Width=238,RowHeight=28,Rows=5;};
 

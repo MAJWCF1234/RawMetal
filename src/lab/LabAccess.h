@@ -179,6 +179,9 @@ struct LabAccess {
  #ifdef RAWMETAL_LAB_HAS_CLAIRE_OUTSIDE
  static const ClaireOutside::Report& claireReport(const SoftwareRenderer& r){return r.m_outsideReport;}
  #endif
+ static Settings& settings(Game& g){return g.m_settings;}
+ // The body the local player was last drawn as (-1 before the first frame).
+ static int localCharacter(const SoftwareRenderer& r){return r.m_localCharacter;}
  // ---- Snapshot: the scene in play as a lab fixture (console `labsnap NAME`) ----
  // Writes DIR/NAME.lab (world, camera) and DIR/NAME.sav (the game's own save:
  // every state, creature, door and body as play left them). DIR is RM_LAB_FIXTURES
