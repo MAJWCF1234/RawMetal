@@ -5,6 +5,8 @@
 //    against it or went through.
 //  vectra-grip: the same crate shoved at 3 m/s across concrete, clinic tile, carpet and a puddle (World surface
 //    materials, mixed with the prop's in Space::prepare): it slides furthest on the wet.
+//  vectra-slide: a crate shoved at 1.5 and 3 m/s, and a crate, a box, a chair and a bottle thrown at 6 m/s from 1 m onto
+//    the regression room's concrete, through Game::update: how far each slides after it lands, and when it stops.
 //  vectra-stack: a 100 kg drum set on a 1 kg crate, and dropped on it: with mass scaling on resting contacts
 //    (Settings::shockNormal) it stays put on the crate, neither sinking into it nor springing off it; without, the
 //    numbers it had. A drum and a crate meeting in the air meet with their true masses (the pass is for a body held
@@ -89,6 +91,33 @@ const bool gripTube=add({.name="vectra-grip",.summary="the floor's own material 
  out.check(s[3].distance>s[0].distance*1.4f,"a crate shoved at 3 m/s slides further on a puddle than on concrete (by 40%)");
  out.check(s[2].distance<s[0].distance,"and less far on carpet");
  out.check(s[0].asleep&&s[3].asleep,"and comes to rest on both");
+ return out.ok;}});
+
+// ---- 3. Slides on the floor, through Game::update ----
+// A prop set going on the regression room's concrete (thrown from 1 m up, or shoved along the floor): where it lands, how
+// far it slides after (along the floor from where it first lands), and when it stops. A wooden crate on concrete grips at
+// about 0.5: shoved at 3 m/s it stops in about 0.6 m (the game's 14 m/s^2), thrown it comes to rest within a metre of
+// where it lands. RM_SLIDE_TRACE=1 prints each frame.
+struct Slide2 {float land=-1,rest=0,slide=0,stop=-1,landAt=0;};
+Slide2 slideProp(int model,float vx,float vz,float z,float spin=0){
+ auto m=regression::room();m->definition.playerStart={2,2};Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};
+ Clutter c;c.kind=7;c.model=model;c.dims=Game::propTraits(model).size;c.pos={4,8};c.z=z;c.sleeping=false;c.velocity={vx,0};c.vz=vz;c.spin=spin;c.projectile=z>.05f;
+ LabAccess::clutter(g)={c};Slide2 r;float was=z;
+ for(int i=0;i<360;++i){g.update({},1.f/60);const auto& k=g.clutter()[0];const float t=float(i+1)/60;
+  if(r.land<0&&k.z<.03f&&(z<.05f||was>=.03f)){r.land=k.pos.x-4;r.landAt=t;}was=k.z;
+  const float speed=std::sqrt(k.velocity.x*k.velocity.x+k.velocity.y*k.velocity.y+k.vz*k.vz);
+  if(r.land>=0&&r.stop<0&&(speed<.03f||k.sleeping))r.stop=t-r.landAt;else if(speed>=.03f&&!k.sleeping)r.stop=-1;
+  if(std::getenv("RM_SLIDE_TRACE")){static std::ofstream tr("vectra-slide-trace.txt");tr<<model<<" "<<i<<" x "<<f3(k.pos.x,3)<<" z "<<f3(k.z,3)<<" v "<<f3(k.velocity.x,3)<<","<<f3(k.velocity.y,3)<<","<<f3(k.vz,3)<<" pitch "<<f3(k.pitch,2)<<" roll "<<f3(k.roll,2)<<(k.sleeping?" asleep":"")<<"\n";}}
+ const auto& k=g.clutter()[0];r.rest=k.pos.x-4;r.slide=r.rest-std::max(0.f,r.land);return r;}
+const bool slideTube=add({.name="vectra-slide",.summary="props shoved and thrown onto concrete through Game::update: how far they slide after landing and when they stop",.standalone=[]{
+ Out out("vectra-slide.txt");
+ struct Case {const char* name;int model;float vx,vz,z,spin;float most;};
+ const Case cases[]={{"crate shoved at 1.5 m/s (a walking push)",model::wooden_crate,1.5f,0,0,0,.4f},{"crate shoved at 3 m/s",model::wooden_crate,3,0,0,0,.8f},
+  {"crate thrown at 6 m/s from 1 m",model::wooden_crate,6,1,1,0,1.f},{"cardboard box thrown at 6 m/s from 1 m",model::prop_cardboard_box,6,1,1,0,1.2f},
+  {"wooden chair thrown at 6 m/s from 1 m (it catches its legs and tumbles)",model::wooden_chair,6,1,1,0,1.6f},{"glass bottle thrown at 6 m/s from 1 m",model::glass_bottle,6,1,1,0,2.5f}};
+ for(const auto& c:cases){const Slide2 r=slideProp(c.model,c.vx,c.vz,c.z,c.spin);
+  out.file<<c.name<<": lands at "<<f3(r.land,2)<<" m, rests at "<<f3(r.rest,2)<<" m: slid "<<f3(r.slide,2)<<" m after landing, still "<<(r.stop<0?std::string("never"):f3(r.stop,2)+" s")<<" after\n";
+  out.check(r.stop>=0&&r.slide<c.most,std::string(c.name)+": comes to rest within "+f3(c.most,1)+" m of where it lands");}
  return out.ok;}});
 
 // ---- 4. A heavy body on a light one ----

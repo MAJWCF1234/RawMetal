@@ -643,7 +643,9 @@ void Space::prepare(float h){
    const bool aUnder=m.normal.z>0;const float under=aUnder?A.invMass:B->invMass,over=aUnder?B->invMass:A.invMass;
    if(under>over&&under>0&&supported[size_t(aUnder?m.a:m.b)]&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
   // Against the world: the surface's own material, where the caller gave one (a puddle is slick, carpet grips).
-  if(!B&&m.surface.gripped())m.material=Material::mix(A.material,m.surface.material());
+  // Its bounce is the two together (the product): a floor of its own give does not let a prop's restitution override it
+  // (a wooden crate on concrete, 0.3 and 0.3, bounces 0.09; rubber 0.25).
+  if(!B&&m.surface.gripped()){m.material=Material::mix(A.material,m.surface.material());m.material.restitution=A.material.restitution*m.surface.restitution;}
   basis(m.normal,m.t1,m.t2);
   const auto key=keyOf(m);auto it=std::lower_bound(cache.begin(),cache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   const Cached* old=it!=cache.end()&&it->first==key?&it->second:nullptr;m.cold=old==nullptr;
@@ -757,6 +759,13 @@ void Space::restitution(){
   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
   const float impulse=std::max(0.f,-(vn+m.material.restitution*approach)/k);if(impulse<=0)continue;
   const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-A.invInertia*cross(rA,P)*m.scaleA;}if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+B->invInertia*cross(rB,P)*m.scaleB;}
+  // A bounce off the world takes friction as any blow does: against the sliding at that point, at most the dynamic friction
+  // times the bounce (left without, a crate thrown down onto concrete kept most of its sideways speed and skated on).
+  if(!B){const V3 dv2=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const V3 vt=dv2-m.normal*dot(dv2,m.normal);const float sl=len(vt);
+   if(sl>1e-4f){const V3 t=vt*(1/sl);const V3 tA=cross(rA,t),tB=cross(rB,t);
+    const float kt=(ma?(A.invMass+dot(tA,A.invInertia*tA))*m.scaleA:0.f)+(mb?(B->invMass+dot(tB,B->invInertia*tB))*m.scaleB:0.f);
+    if(kt>0){const float jt=std::min(m.material.dynamicFriction*impulse,sl/kt);const V3 F=t*(-jt);
+     if(ma){A.v=A.v-F*(A.invMass*m.scaleA);A.w=A.w-A.invInertia*cross(rA,F)*m.scaleA;}if(mb){B->v=B->v+F*(B->invMass*m.scaleB);B->w=B->w+B->invInertia*cross(rB,F)*m.scaleB;}}}}
   for(int k2=0;k2<m.count;++k2){auto&c=m.points[size_t(k2)];c.normalImpulse+=impulse*(c.maxNormalImpulse/weight);c.maxNormalImpulse=std::max(c.maxNormalImpulse,c.normalImpulse);}}
 }
 void Space::storeImpulses(){

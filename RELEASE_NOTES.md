@@ -6,6 +6,7 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ## v1.5.5
 
+- Thrown props no longer skate across the floor like ice: a landing now loses sideways speed to friction, and floors have their own bounce (taken with the prop's), so a crate thrown at 6 m/s comes to rest about 0.9 m from where it lands instead of 1.5 m.
 - Jointed bodies (corpses, hinged doors, chained lamps, bridges) now get continuous collision as one island, so a thrown body or a slammed door no longer passes through a thin wall or post; a joint solver blow-up when a fast-turning limb hit a wall is fixed.
 - Hinges, welds, sliders, distance joints and ropes are now held together by position after hard hits, so a heavy door keeps its pin and a welded pair stays welded.
 - Continuous collision against the world now uses far fewer sweeps: a blast of twenty crates asks about a tenth as many, with nothing passing through walls.

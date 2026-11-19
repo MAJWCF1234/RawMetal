@@ -29,31 +29,31 @@ constexpr float PaneTap=2,PaneRearm=.3f;
 float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:150.f):b.material==22?40.f:300.f;}
 float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
 // The ground's material against a prop: a hard floor that takes no bounce of its own.
-const vectra::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
+const vectra::Material Ground{.6f,.5f,.3f,.004f};   // a floor is rough: what rolls on it comes to rest; its bounce, times the prop's (Space::prepare)
 // The floor's own material where a prop stands on it (the World's surface materials), mixed with the prop's in
 // Space::prepare: painted ground on terrain (grass and mud give, gravel grips and drags what rolls), carpet, a metal
 // deck, the map's floor finish, and over any of them water: a wet patch, most of all a puddle, is slick.
 vectra::Material floorGrip(const World& w,float x,float y,float floor){
  vectra::Material m=Ground;
  const int finish=w.floorSurface();
- if(w.definition().floorMaterial==FloorMaterial::OfficeCarpet)m={.8f,.65f,0,.012f};
- else if(w.metalFloor(int(x),int(y))||finish==SurfaceCorrugated||finish==SurfacePressure)m={.45f,.35f,0,.002f};
- else if(finish==SurfaceClinicTile||finish==SurfaceLabPanel)m={.5f,.4f,0,.003f};
- else if(finish==SurfaceMineTimber)m={.62f,.5f,0,.004f};
- else if(finish==SurfaceRock||finish==SurfaceStone)m={.7f,.6f,0,.006f};
+ if(w.definition().floorMaterial==FloorMaterial::OfficeCarpet)m={.8f,.65f,.1f,.012f};
+ else if(w.metalFloor(int(x),int(y))||finish==SurfaceCorrugated||finish==SurfacePressure)m={.45f,.35f,.35f,.002f};
+ else if(finish==SurfaceClinicTile||finish==SurfaceLabPanel)m={.5f,.4f,.3f,.003f};
+ else if(finish==SurfaceMineTimber)m={.62f,.5f,.25f,.004f};
+ else if(finish==SurfaceRock||finish==SurfaceStone)m={.7f,.6f,.3f,.006f};
  if(w.hasTerrain()&&w.structureSupportBelow(x,y,.02f,floor+.05f)<floor-.03f){   // (not on a structure standing on it)
   const auto o=w.definition().origin;
   switch(w.groundKind(x+o.x,y+o.y)){
-   case GroundShortGrass:case GroundLeafyGrass:case GroundClover:case GroundWild:m={.55f,.45f,0,.03f};break;
-   case GroundDry:case GroundLitter:m={.65f,.55f,0,.012f};break;
-   case GroundGravel:m={.7f,.6f,0,.02f};break;
-   case GroundMud:m={.4f,.3f,0,.03f};break;
+   case GroundShortGrass:case GroundLeafyGrass:case GroundClover:case GroundWild:m={.55f,.45f,.1f,.03f};break;
+   case GroundDry:case GroundLitter:m={.65f,.55f,.15f,.012f};break;
+   case GroundGravel:m={.7f,.6f,.15f,.02f};break;
+   case GroundMud:m={.4f,.3f,.05f,.03f};break;
    default:break;}}
  float wet=0;for(const auto&p:w.wetPatches()){if(x<p.x1||x>p.x2||y<p.y1||y>p.y2)continue;
   if(p.round){const float cx=(p.x1+p.x2)*.5f,cy=(p.y1+p.y2)*.5f,rx=std::max(.01f,(p.x2-p.x1)*.5f),ry=std::max(.01f,(p.y2-p.y1)*.5f);if((x-cx)*(x-cx)/(rx*rx)+(y-cy)*(y-cy)/(ry*ry)>1)continue;}
   wet=std::max(wet,std::clamp(p.amount,0.f,1.f)*(p.puddle?1.f:.6f));}
  if(wet>0){const vectra::Material water{.22f,.15f,0,.002f};auto mixTo=[&](float a,float b){return a+(b-a)*wet;};
-  m={mixTo(m.staticFriction,water.staticFriction),mixTo(m.dynamicFriction,water.dynamicFriction),m.restitution,mixTo(m.rolling,water.rolling)};}
+  m={mixTo(m.staticFriction,water.staticFriction),mixTo(m.dynamicFriction,water.dynamicFriction),mixTo(m.restitution,.1f),mixTo(m.rolling,water.rolling)};}
  return m;}
 struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0,part=0;};
 // Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad. (The deepest is the
