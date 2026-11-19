@@ -77,6 +77,10 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
   - The last row adds a field (`key=value`), and an emptied row removes one.
   - Adding the first named field puts in `FORMAT|2`.
 - **Make prefab** turns the picked things into a block and one placement. **Place prefab** adds another placement with its own name prefix. Each is one Ctrl+Z.
+- **Kits** (the parts browser's Kits tab; `tools/campaign/kits.py` writes them into `editor/NativeKits.inc`) are ready-made prefabs: eight rooms, four corridor pieces on a 3 m grid, a stairwell, a lift lobby, two doorways, a catwalk run, a loading dock, a yard fence, a ruin corner and a campsite.
+  - Picking one holds it: its ghost follows the pointer on the plan (every piece, the footprint and an arrow to its front), R turns it a quarter, a click sets it down on the half metre as one `PREFAB_PLACE`, its block written above the first map the first time. One Ctrl+Z takes both back.
+  - A placed kit's pieces show dotted on the plan. R turns it like any placement. **Take apart** makes its pieces loose records, picked, where the game draws them (`src/world/PrefabTransform.h`, which the game's reader uses too), and drops the block once nothing places it. One Ctrl+Z puts it back together.
+  - The Starter Map's Kits Gallery (maps 126 and 127) sets every kit down; `RawMetalEditor.exe --kit-test` places, turns, saves and takes them apart, with pictures.
 
 ## Openings: window walls
 `GLAZING|map|x1|y1|x2|y2|bottom|top` is a new record, with its options as named fields (`cols spacing rows sill head frame depth look door door_head pane panes infill cut wall health`; the guide's section 8 and 9 list them).
