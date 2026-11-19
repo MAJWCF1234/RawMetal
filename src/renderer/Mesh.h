@@ -66,6 +66,10 @@ public:
  CreatureLayerPose creatureLayerPoseAt(int clip,float phase)const{return sampleCreatureLayerPose(clip,phase);}
  static bool testCleanupTankAim();
  void poseAttached(Point3 right,Point3 left,float elbowSwing,float pitch,float yaw,float phase,float recoil,const ArmHold* hold=nullptr);
+ // The VR avatar's arms: both wrists at right and left (rig space) turned to hold's hand frames, the elbows
+ // toward hold.elbow, and each finger bent by its tracked curl (thumb to little finger, 0 open, 1 the fist):
+ // curls[0] the right hand, [1] the left.
+ void poseTracked(Point3 right,Point3 left,const ArmHold& hold,const std::array<std::array<float,5>,2>& curls);
  Point3 bonePosition(const char* name)const;
  std::vector<MeshTriangle> trackedHand(bool left,const std::array<float,5>& curls);
  Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
@@ -125,6 +129,7 @@ private:
  ufbx_scene* m_scene=nullptr;
  ufbx_scene* m_bindScene=nullptr;
  std::vector<ufbx_transform_override> m_fingerGrip;
+ std::array<std::array<float,5>,2> m_trackedCurls{};   // poseTracked's curls (pose's curl set 3)
 };
 // A model decoded the first time something draws, measures or warms it, not at start-up:
 // the library grows by the model and a map uses a few dozen of them. get() is safe from
