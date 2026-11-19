@@ -1,0 +1,9 @@
+# Spilt liquid belongs to its map (tube liquids): a spill in campaign map 4 is not drawn in map 5.
+world campaign
+map 4
+scenery-only
+open-doors
+camera 12 20 -999 90 -30
+scene maps
+size 1280 720
+frames 46

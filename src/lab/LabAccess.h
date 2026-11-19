@@ -38,6 +38,9 @@ struct LabAccess {
  static void setCamera(Game& g,Vec2 pos,float z,float yaw,float pitch){g.m_inspectionCamera=true;g.m_player.pos=pos;g.m_player.angle=yaw;g.m_player.pitch=pitch;
   g.m_player.z=z>-998?z:(g.m_world.hasTerrain()?g.groundHeight(pos,float(World::TerrainMaxZ+1)):g.m_world.floorHeight(pos.x,pos.y));}
  static void playerCamera(Game& g){g.m_inspectionCamera=false;}
+ static std::vector<Game::Puddle>& puddles(Game& g){return g.m_puddles;}
+ static std::vector<Game::LiquidDrop>& liquidDrops(Game& g){return g.m_liquidDrops;}
+ static void crossChunk(Game& g){g.crossChunkBoundary();g.updateStreaming(0);}
  static World& world(Game& g){return g.m_world;}
  static std::vector<Enemy>& enemies(Game& g){return g.m_enemies;}
  static void stepProps(Game& g,float dt,const InputState& input={}){g.updateClutter(input,dt);}
