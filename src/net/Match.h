@@ -11,6 +11,7 @@
 #include <deque>
 #include <filesystem>
 #include <iosfwd>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -64,6 +65,13 @@ public:
  static std::size_t snapshotBytes(int players,bool vr);
  static std::size_t guestStateBytes(bool vr);
  static bool selfTest(std::ostream& report);
+ // Chat (MatchChat.cpp): a line from this player, cleaned and cut to ChatMax; the host relays every line to everyone
+ // (the sender too). False: refused (empty, or faster than ChatBurst lines then one per ChatRefill seconds).
+ bool sendChat(const std::string& text);
+ static constexpr std::size_t ChatMax=120;
+ static constexpr float ChatBurst=4,ChatRefill=1.5f;
+ static std::string cleanChat(const std::string& text);     // printable ASCII, trimmed, at most ChatMax
+ static std::string maskChat(const std::string& text);      // the word filter: listed words become asterisks
 private:
  enum class Phase{Joining,Downloading,Playing,Ended};
  struct Sample{float t=0;NetPlayerState s;};
@@ -161,6 +169,15 @@ private:
  float m_syncTimer=0,m_fullSyncTimer=0,m_actorTimer=0;std::uint32_t m_lastActorsMs=0;
  std::vector<ActorTarget> m_actorTargets;
  std::size_t m_coopBytes=0;   // co-op world traffic sent (scripts, state, people)
+ // MatchChat.cpp: chat lines and notices (joined, left, kills) and the voice upkeep (mutes, speaking marks,
+ // proximity volumes in co-op), all after the game's own frame.
+ struct ChatEntry{std::string from,text;bool notice=false,self=false;float age=0;};
+ void handleChat(const Packet& p);
+ void pushChat(const std::string& from,const std::string& text,bool notice,bool self);
+ bool takeChatToken(const PeerId& peer);
+ void relayChat(int slot,const std::string& text);
+ void chatNotices();
+ void publishComms(float dt);
 
  Game& m_game;
  Session* m_session=nullptr;
@@ -187,6 +204,10 @@ private:
  std::vector<CreatureTarget> m_creatureTargets;int m_creatureLevel=-1;
  int m_lastLevel=-1;
  std::size_t m_lastSnapshotBytes=0,m_bytesSent=0,m_bytesReceived=0;
+ std::deque<ChatEntry> m_chat;
+ std::map<PeerId,std::pair<float,float>> m_chatBuckets;   // tokens and when they were last counted, by sender
+ std::array<PeerId,MaxSlots> m_chatKnown{};std::array<std::string,MaxSlots> m_chatKnownName{};bool m_chatPrimed=false;
+ float m_voiceTimer=0;std::map<PeerId,float> m_peerVolume;std::map<PeerId,bool> m_peerMuted;
  friend bool testMatch(std::ostream& report);
 };
 // --net-test: matches over a LoopbackHub, several Games in one process.

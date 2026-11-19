@@ -280,7 +280,7 @@ void Match::update(const InputState&,float dt){
   if(p.channel==Control)handleControl(p);
   else if(p.channel==MapData)handleMapData(p);
   else if(p.channel==State)handleState(p);
-  else if(p.channel==Events)handleEvent(p);
+  else if(p.channel==Events){if(p.data[0]==ChatSay||p.data[0]==ChatRelay)handleChat(p);else handleEvent(p);}
   if(m_finished)return;
  }
  if(m_host){if(m_phase==Phase::Playing)hostFrame(dt);sendUploads();if(m_rosterDirty||(m_rosterTimer-=dt)<=0)sendRoster();}
@@ -288,7 +288,9 @@ void Match::update(const InputState&,float dt){
   if(m_phase==Phase::Joining&&m_helloTimer>0&&(m_helloTimer-=dt)<=0)guestHello();
   if(m_phase==Phase::Playing)guestFrame(dt);
  }
+ chatNotices();
  publish(dt);
+ publishComms(dt);
 }
 
 }

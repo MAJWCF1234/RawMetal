@@ -245,6 +245,8 @@ void SoftwareRenderer::drawNameTags(const Game& game){
   gradient(x-14,y-1,w/2+14,13,black,0.f,.5f*alpha,true);gradient(x+w/2,y-1,w/2+14,13,black,.5f*alpha,0.f,true);
   if(partner)fill(x-7,y+4,3,3,amber,alpha);else if(r.health<35&&r.alive)fill(x-7,y+4,3,3,red,alpha);
   uiText(x,y,name.c_str(),bone,0,10,alpha,1);
+  // Speaking: three small bars after the name, the middle one tallest.
+  if(r.speaking)for(int k=0;k<3;++k){const int h=k==1?8:5;fill(x+w+6+k*3,y+9-h,2,h,amber,alpha);}
   if(report){report->tag=true;report->tagX=sx;report->tagY=syp;}
  }
 }

@@ -74,6 +74,8 @@ struct InputState {
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
     bool scoreboard=false;   // Tab, or the controller's back/view button, held: the match's scoreboard
+    bool chat=false;         // T in a match: opens the chat line (typed text then arrives in textInput)
+    bool talk=false;         // the push-to-talk key (Settings::pushToTalkKey, V by default), held
     bool inventory=false;
     // 1-4 while a number key is held: a reply in a conversation. Outside one,
     // 1/2/3 pick fists, the shotgun or the handgun.
@@ -376,8 +378,46 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
- int character=0;};     // character: the player's body, 0 Claire, 1 the Limitator (SoftwareRenderer::playerBody)
+ int character=0;       // character: the player's body, 0 Claire, 1 the Limitator (SoftwareRenderer::playerBody)
+ // Communication (the COMMUNICATION page; docs/Systems/multiplayer.md "Chat and voice"): text chat and its word
+ // filter; voice 0 off, 1 push to talk, 2 open mic; the push-to-talk key (a Windows virtual-key code); open mic's
+ // threshold on the mic meter (0-1); mic and speakers by device name ("" the system default); mic and voice
+ // volumes (0-2, 1 as it comes); proximity voice in co-op; players muted, by display name.
+ bool textChat=true,chatFilter=true;int voiceMode=1,pushToTalkKey=0x56;float openMicThreshold=.25f,micVolume=1,voiceVolume=1;bool proximityVoice=true;
+ std::string micDevice,speakerDevice;std::vector<std::string> mutedPlayers;
+ bool muted(const std::string& name)const{for(const auto& n:mutedPlayers)if(n==name)return true;return false;}
+};
+// The save and load pages and their confirmations: a slab in the middle (PAUSE and SETTINGS have their own layouts).
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
+// PAUSE (SettingsMenu.cpp; drawn by renderer/FrontEnd.cpp) in the title's language: grouped rows from X,Y. Out of a
+// match: RESUME, SETTINGS | SAVE GAME, LOAD GAME | RESTART, QUIT TO TITLE. In a match: RESUME, SETTINGS | JOIN CODE |
+// LEAVE MATCH. rowY and rowAt are shared by the pointer and the renderer.
+enum PauseRow:int{PauseResume=0,PauseSettings=1,PauseSave=2,PauseLoad=3,PauseRestart=4,PauseQuit=5,PauseMatchCode=2,PauseMatchLeave=3};
+struct PauseMenuLayout {
+ static constexpr int X=66,Y=150,Width=250,RowHeight=22,Gap=10;
+ static constexpr int rows(bool match){return match?4:6;}
+ static constexpr int rowY(int row,bool match){return Y+row*RowHeight+(row>=2?Gap:0)+(row>=(match?3:4)?Gap:0);}
+ static constexpr int rowAt(int y,bool match){for(int r=0;r<rows(match);++r)if(y>=rowY(r,match)&&y<rowY(r,match)+RowHeight)return r;return -1;}
+};
+// SETTINGS (SettingsMenu.cpp; drawn by renderer/FrontEnd.cpp): the column of pages on the left (BACK under them),
+// the open page's rows on the right, the chosen row's one plain line at HelpY. Sliders run from SliderX.
+enum class SettingsTab:std::uint8_t{Audio,Video,Controls,Gameplay,Communication,Vr,Count};
+struct SettingsLayout {
+ static constexpr int TabX=40,TabY=72,TabWidth=140,TabHeight=19,BackGap=10;
+ static constexpr int RowX=206,RowY=72,RowWidth=394,RowHeight=17,SliderX=RowX+214,SliderWidth=104,HelpY=306;
+ static constexpr int tabY(int tab){return TabY+tab*TabHeight+(tab>=int(SettingsTab::Count)?BackGap:0);}   // tab Count is BACK
+ static constexpr int rowY(int row){return RowY+row*RowHeight;}
+};
+// What SETTINGS shows: the page column and the open page's rows, where the pointer finds them and the renderer draws them.
+struct MenuItem {
+ enum Kind:std::uint8_t{Tab,Slider,Toggle,Choice,Action,Back} kind=Action;
+ int x=0,y=0,w=0,h=0;
+ std::string label,value,help;
+ float fraction=-1;     // a slider's position, 0-1
+ float meter=-1;        // a live level under the slider (the mic), 0-1; -1 none
+ bool enabled=true,current=false,armed=false,warn=false;   // current: the open page's tab; armed: waiting for its confirm
+ int id=0;
+};
 // The title's main menu (Settings.cpp, MultiplayerMenu.cpp; drawn by renderer/FrontEnd.cpp) in three groups: the
 // campaign (new game, custom maps, load game), MULTIPLAYER, then settings and quit, a gap between groups. rowY and
 // rowAt are shared by the pointer and the renderer. The custom map archive's rows are evenly spaced from Y.
@@ -436,6 +476,20 @@ public:
     const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
     const net::MatchView& matchView()const{return m_matchView;}
     bool inMatch()const{return m_matchView.active;}
+    // Chat in a match (SettingsMenu.cpp keeps the typing, MatchChat.cpp the lines): T opens the line, Enter sends,
+    // Esc drops it; chatTyped is the line so far. sendChat hands a line to the Match (false: refused).
+    bool chatOpen()const{return m_chatOpen;}
+    const std::string& chatTyped()const{return m_chatTyped;}
+    bool sendChat(const std::string& text);
+    // The newest chat line for the VR caption strip (no typing in a headset), "" when none is fresh.
+    std::string vrChatCaption()const;
+    // The mic meter the COMMUNICATION page shows: TEST MY MIC's own listening, else the session's level in a voice
+    // room; -1 when nothing is listening.
+    float micMeter()const;
+    bool micTesting()const{return m_micTest;}
+    // Mutes or unmutes a player by display name (the scoreboard, the COMMUNICATION page); kept in the settings.
+    void setPlayerMuted(const std::string& name,bool muted);
+    int scoreboardPick()const{return m_scoreboardPick;}     // the scoreboard row the arrows picked (-1 none)
     // Spent cases (Casings.cpp): a fired or pumped-out shell, or a pistol's brass, thrown from the ejection port in
     // world space; it tumbles, bounces, clinks and lies a while. Every gun and the VR pump call this; the renderer
     // draws casings(). kind: 0 a shotgun shell, 1 9 mm brass (the handgun), 2 .380 brass (the MAC-11).
@@ -830,13 +884,24 @@ public:
     // backslash): its saves and settings are copied into the right one, never over a newer file.
     static void adoptMisplacedSaves(const std::wstring& localAppData);
     static bool testNpcVoices();
-    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart,Comfort};
+    // Pause: PAUSE (PauseRow); Options: SETTINGS (SettingsTab pages); the save and load pages and their
+    // confirmations. RESTART, QUIT TO TITLE and RESET TO DEFAULTS confirm in place, on a second press.
+    enum class MenuPage {Pause,Save,Load,Overwrite,ConfirmLoad,Options};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?9:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Comfort?ComfortRows:2;}
-    // VR: the settings' INVERT MOUSE Y row (no mouse in a headset) opens VR COMFORT instead: 0 back, 1 turn
-    // speed, 2 vignette, 3 seated, 4 recalibrate height, 5 left-handed, 6 render scale, 7 frame-rate readout.
-    static constexpr int ComfortRows=8;
+    int menuRows()const{return m_menuPage==MenuPage::Pause?PauseMenuLayout::rows(m_matchView.active):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Options?int(settingsRows().size()):2;}
     bool vrMenu()const{return m_vrInputActive;}
+    // SETTINGS: the open page, whether the page column has the keys (else its rows), the muted-players list open on
+    // COMMUNICATION, the armed row (a confirm waiting; -1 none), and the rows and items the pointer and renderer see.
+    SettingsTab settingsTab()const{return m_settingsTab;}
+    bool settingsOnTabs()const{return m_settingsOnTabs;}
+    bool settingsMutedList()const{return m_settingsMuted;}
+    int menuArmed()const{return m_menuArmed;}
+    std::vector<int> settingsRows()const;               // the open page's row ids (SettingsMenu.cpp)
+    std::vector<MenuItem> settingsItems()const;         // the page column, BACK, then the rows
+    static const char* settingsTabName(SettingsTab tab);
+    void openSettings(SettingsTab tab);                 // from PAUSE or the title
+    bool takeSettingsSave(){const bool r=m_settingsSaveDue;m_settingsSaveDue=false;return r;}   // left SETTINGS: main saves
+    static bool testSettingsMenu(std::ostream& report);
     // Recalibrate height was chosen: VrRuntime takes it (once) and sets the standing eye to the head's height now.
     bool takeVrRecalibrate(){const bool r=m_vrRecalibrate;m_vrRecalibrate=false;return r;}
     static bool testComfortMenu(std::ostream& report);
@@ -1428,7 +1493,25 @@ private:
     int m_titleSelection=0,m_customMenuOffset=0;
     InputState m_titlePrevious;
     void updateTitle(const InputState& input);
-    MenuPage m_menuPage=MenuPage::Settings;
+    MenuPage m_menuPage=MenuPage::Pause;
+    // PAUSE and SETTINGS (SettingsMenu.cpp).
+    SettingsTab m_settingsTab=SettingsTab::Audio;bool m_settingsOnTabs=true,m_settingsMuted=false,m_settingsSaveDue=false;int m_menuArmed=-1;
+    void updatePauseMenu(const InputState& input);
+    void updateSettingsMenu(const InputState& input);
+    void settingsEscape();
+    void leaveSettings();
+    void settingsChange(int id,int direction,bool activate);
+    void settingsDrag(int id,float fraction);
+    void settingsReset(SettingsTab tab);
+    // Chat and voice (SettingsMenu.cpp): the chat line, the scoreboard's mute pick, the voice settings handed to the
+    // session, TEST MY MIC's listening (shared: a copied Game listens on the same device).
+    bool m_chatOpen=false,m_chatFeeding=false,m_previousChat=false,m_micTest=false;std::string m_chatTyped;
+    int m_scoreboardPick=-1;InputState m_boardPrevious;
+    net::VoiceSettings m_voiceApplied;bool m_voicePushed=false;
+    std::shared_ptr<class MicMonitor> m_micMonitor;
+    void updateChat(const InputState& input);
+    void updateScoreboardPick(const InputState& input);
+    void updateVoice(const InputState& input);
     std::wstring m_saveDirectory;
     std::array<std::string,3> m_slotLabels{"SLOT 1 / EMPTY","SLOT 2 / EMPTY","SLOT 3 / EMPTY"};
     std::string m_checkpointLabel="AUTOSAVE / EMPTY";

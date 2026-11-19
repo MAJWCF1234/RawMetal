@@ -674,6 +674,10 @@ private:
     // The title's multiplayer pages and a match's HUD: scoreboard, kill feed, status, respawn (FrontEnd.cpp).
     void drawTitleItems(const Game& game);
     void drawMatchHud(const Game& game);
+    void drawChat(const Game& game);           // FrontEnd.cpp: the match's chat box, lower left
+    void drawPauseMenu(const Game& game);      // FrontEnd.cpp: PAUSE in the title's language
+    void drawSettingsMenu(const Game& game);   // FrontEnd.cpp: SETTINGS, its pages and rows
+    void drawMenuFooter(bool change);          // FrontEnd.cpp: the keys a menu takes, along the bottom
     // The other players in a match, posed full bodies (RemotePlayers.cpp): drawn inside drawScene through its own
     // lit triangle (both renderers take it), and their name tags over the frame.
     struct RemoteDrawHooks{

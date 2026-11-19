@@ -41,6 +41,19 @@ void LoopbackHub::removeMember(const PeerId& peer){
 }
 
 LoopbackSession::~LoopbackSession(){leave();m_hub.sessions.erase(m_id);}
+VoiceStatus LoopbackSession::voiceStatus()const{
+ VoiceStatus s;s.available=m_signedIn;if(!m_signedIn){s.reason="not signed in yet";return s;}
+ s.inRoom=!m_lobbyId.empty()||fakeVoiceRoom;
+ s.transmitting=s.inRoom&&(m_voice.mode==VoiceMode::PushToTalk?m_talking:m_voice.mode==VoiceMode::OpenMic&&fakeMicLevel>=m_voice.openMicThreshold);
+ return s;
+}
+bool LoopbackSession::peerSpeaking(const PeerId& peer)const{
+ if(m_voice.mode==VoiceMode::Off||m_lobbyId.empty())return false;
+ if(auto m=mutedPeers.find(peer);m!=mutedPeers.end()&&m->second)return false;
+ const auto it=m_hub.sessions.find(peer);if(it==m_hub.sessions.end())return false;
+ const LoopbackSession& other=*it->second;
+ return other.m_lobbyId==m_lobbyId&&other.voiceStatus().transmitting;
+}
 void LoopbackSession::tick(){
  if(!m_signedIn){m_signedIn=true;m_state=SessionState::Ready;}
  ++m_hub.clock;

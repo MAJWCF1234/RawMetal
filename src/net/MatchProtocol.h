@@ -37,6 +37,9 @@ enum Message:std::uint8_t{
                  //   sound, shake, caption, release, ending; or an item for the guest it is sent to)
  StateSync=35,   // host -> all (co-op): u8 full, u16 count {u32 id, i32 value}, u8 count {u32 objective, u8 status},
                  //   u16 count {u32 property, i32 value}; full replaces, otherwise only what changed
+ ChatSay=40,     // guest -> host: str text (MatchChat.cpp: the host cleans it, rate-limits it and relays it)
+ ChatRelay=41,    // host -> all: u8 slot, str name, str text (a chat line everyone shows, the sender too)
+                 //   An older game ignores both (handleEvent drops unknown types), so the protocol stays 1.
  // MapData (reliable)
  MapChunk=30,    // host -> guest: u32 total, u32 offset, bytes (<= MapChunkBytes)
 };

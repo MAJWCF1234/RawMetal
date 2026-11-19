@@ -65,7 +65,7 @@ InputState Win32Window::input(bool menuOpen){
  setMenu(menuOpen);InputState i{};i.textInput=std::move(m_textInput);m_textInput.clear();if(!focused()){i.textInput.clear();return i;}
  auto key=[](int value){return (GetAsyncKeyState(value)&0x8000)!=0;};
  i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.prone=key('Z');i.fire=key(VK_LBUTTON);i.reload=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');i.flashlight=key('F');i.subdue=key('Q');i.physglove=key('G');
- i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);i.scoreboard=key(VK_TAB);
+ i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);i.scoreboard=key(VK_TAB);i.chat=key('T');i.talk=m_talkKey>0&&key(m_talkKey);
  {const PadState pad=readPad();if(pad.connected){const auto b=pad.buttons;const int dead=16000;
   i.menuUp|=(b&0x0001)||pad.ly>dead;i.menuDown|=(b&0x0002)||pad.ly<-dead;i.menuLeft|=(b&0x0004)||pad.lx<-dead;i.menuRight|=(b&0x0008)||pad.lx>dead;
   i.escape|=(b&0x0010)!=0||(menuOpen&&(b&0x2000));i.scoreboard|=(b&0x0020)!=0;i.menuAccept|=menuOpen&&(b&0x1000);}}

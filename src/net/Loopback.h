@@ -52,6 +52,21 @@ public:
  bool send(const PeerId& to,std::uint8_t channel,const std::uint8_t* data,std::size_t size,bool reliable)override;
  bool receive(Packet& out)override;
  bool pollEvent(SessionEvent& out)override;
+ // Voice, faked: a member transmits when push-to-talk is held, or in open mic while fakeMicLevel is over the
+ // threshold; another member hears it speaking unless it muted them. Mutes and volumes are kept for tests.
+ void setVoice(const VoiceSettings& v)override{m_voice=v;++voiceUpdates;}
+ void setTalking(bool held)override{m_talking=held;}
+ VoiceStatus voiceStatus()const override;
+ std::vector<AudioDevice> inputDevices()const override{return fakeInputs;}
+ std::vector<AudioDevice> outputDevices()const override{return fakeOutputs;}
+ float micLevel()const override{return voiceStatus().inRoom?fakeMicLevel:0.f;}
+ bool peerSpeaking(const PeerId& peer)const override;
+ void setPeerMuted(const PeerId& peer,bool muted)override{mutedPeers[peer]=muted;}
+ void setPeerVolume(const PeerId& peer,float volume)override{peerVolumes[peer]=volume;}
+ float fakeMicLevel=0;bool fakeVoiceRoom=false;          // tests: the mic's level; a voice room without a lobby
+ std::vector<AudioDevice> fakeInputs,fakeOutputs;
+ std::map<PeerId,bool> mutedPeers;std::map<PeerId,float> peerVolumes;int voiceUpdates=0;
+ const VoiceSettings& voice()const{return m_voice;}
  // The hub's side.
  void deliver(Packet&& packet){m_inbox.push_back(std::move(packet));}
  void event(const SessionEvent& e){m_events.push_back(e);}
@@ -65,6 +80,7 @@ private:
  std::string m_lobbyId;std::vector<LobbyInfo> m_results;
  std::deque<Packet> m_inbox;std::deque<SessionEvent> m_events;
  LobbyInfo m_none{};
+ VoiceSettings m_voice{};bool m_talking=false;
 };
 
 // --net-loopback-test: the hub's lobbies, codes, quick match, hand-over and packets.
