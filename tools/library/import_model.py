@@ -4,7 +4,7 @@ Run under Blender (it reads FBX, OBJ and GLB the same way):
 
   blender -b --python tools/library/import_model.py -- --src "O:/retro official/.../thing.fbx"
       --name thing --root "O:/retro official/.../pack" [--objects REGEX] [--exclude REGEX]
-      [--max-tex 512] [--yaw DEG] [--tex-suffix _summer]
+      [--max-tex 512] [--yaw DEG] [--scale K] [--tex-suffix _summer]
 
 It joins the chosen mesh objects, applies transforms, puts the footprint centre
 at the origin with the base at z=0, prefixes every material with the model name
@@ -33,6 +33,8 @@ def args():
     p.add_argument('--exclude', default=None)
     p.add_argument('--max-tex', type=int, default=512)
     p.add_argument('--yaw', type=float, default=0)
+    p.add_argument('--scale', type=float, default=1.0,
+                   help='scale the model by K (a pack exported in other units)')
     p.add_argument('--tex-suffix', default='',
                    help='also look for TEXTURE+SUFFIX (e.g. _summer for seasonal packs)')
     return p.parse_args(argv)
@@ -125,6 +127,8 @@ def export(a, root, source, name, pattern):
         bpy.ops.object.join()
     o = bpy.context.view_layer.objects.active
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    if a.scale != 1.0:
+        o.data.transform(mathutils.Matrix.Scale(a.scale, 4))
     if a.yaw:
         rot = mathutils.Matrix.Rotation(a.yaw * 3.14159265 / 180, 4, 'Z')
         o.data.transform(rot)
@@ -192,6 +196,20 @@ def export(a, root, source, name, pattern):
                     f = a.max_tex / max(w, h)
                     src.scale(max(1, int(w * f)), max(1, int(h * f)))
                 src.filepath_raw = os.path.join(OUT, tex_name); src.file_format = 'PNG'; src.save()
+        if tex_name is None:
+            # No image node: packs that pair MT_Name materials with TX_Name.png (the MS_ props).
+            stem = re.sub(r'^(MT|MAT|M)_', '', re.sub(r'\.\d+$', '', mat.name), flags=re.I)
+            for cand in ('TX_' + stem + '.png', stem + '.png'):
+                found = find_file(root, cand)
+                if found and os.path.basename(found).lower() == cand.lower():
+                    tex_name = clean + '.png'
+                    src = bpy.data.images.load(found, check_existing=True)
+                    w, h = src.size
+                    if max(w, h) > a.max_tex:
+                        f = a.max_tex / max(w, h)
+                        src.scale(max(1, int(w * f)), max(1, int(h * f)))
+                    src.filepath_raw = os.path.join(OUT, tex_name); src.file_format = 'PNG'; src.save()
+                    break
         if tex_name is None:
             tex_name = clean + '.png'
             img = bpy.data.images.new(clean, 4, 4, alpha=False)

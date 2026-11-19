@@ -7,6 +7,7 @@
 #include "../src/world/TerrainField.h" // the ground the engine builds, sampled the same here (NativeOutdoorMethods.inc)
 #include "../src/world/Footing.h" // footings planned as the engine plans them (NativeGroundMethods.inc)
 #include "../src/world/PrimitiveKinds.h" // the Shape tool's kinds, sizes and outlines (NativeShapeTool.inc)
+#include "../src/world/PrefabTransform.h" // a placed kit's pieces where the game puts them (NativeKitMethods.inc)
 #include "NativeCommands.h"
 #include "NativeDocument.h"
 #include "NativeObjects.h"
@@ -752,7 +753,7 @@ enum {
   TerrainModeList=740,TerrainSizeList,TerrainStrengthList,TerrainHeightBox,NatureSetList,NatureDensityList,NatureScaleList,NatureModeList,
   NatureAlignToggle,WaterModeList,WaterMurkSlider,WaterWetSlider,
   // Prefabs (NativePrefabMethods.inc).
-  MakePrefab=780,PlacePrefab,
+  MakePrefab=780,PlacePrefab,TakeApart, // Take apart: a placed kit's pieces made loose (NativeKitMethods.inc)
   // Stair and balcony finishes (NativeFinishMethods.inc).
   FinishPartList=873,
   // Footings: a room or floor on the land, or raised (NativeGroundMethods.inc).
@@ -1049,7 +1050,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool connectTest = false, caveTest = false;
+  bool connectTest = false, caveTest = false, kitTest = false;
   bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
@@ -1127,6 +1128,8 @@ struct Editor {
 #include "NativeOutdoorMethods.inc"
 #include "NativeOutdoorRegression.inc"
 #include "NativePrefabMethods.inc"
+#include "NativeKitMethods.inc"
+#include "NativeKitRegression.inc"
 #include "NativeFormatRegression.inc"
 #include "NativeGlazingTool.inc"
 #include "NativeGlazingRegression.inc"
@@ -1733,6 +1736,8 @@ struct Editor {
       out.push_back({"prim-" + std::to_string(k), wide(retro::prim::kinds[size_t(k)].label), k, parts::Shapes, int(retro::prim::kinds[size_t(k)].section)});
     for (int n = 1, count = stampCount(); n <= count; ++n)
       out.push_back({"stamp-" + std::to_string(n), L"Stamp " + std::to_wstring(n), n, parts::Stamps});
+    for (int k = 0; k < KitCount; ++k) // NativeKitMethods.inc: rooms, corridors, stairs, docks, yards
+      out.push_back({std::string("kit-") + kitDefs[k].key, kitDefs[k].title, k, parts::Kits});
     return out;
   }
   bool browsing() const { return tool == 8 || tool == 9 || (tool == 14 && listIndex(clutterList) == 7); }
@@ -1740,7 +1745,9 @@ struct Editor {
     if (!partsGrid.hwnd)
       return;
     auto query = lowered(modelSearch ? utf8(label(modelSearch)) : std::string{});
-    std::string current = tool == 9 ? "prim-" + std::to_string(listIndex(primList)) : "model-" + std::to_string(selectedModel());
+    std::string current = tool == 9               ? "prim-" + std::to_string(listIndex(primList))
+                          : tool == 8 && kitInHand >= 0 ? std::string("kit-") + kitDefs[kitInHand].key
+                                                        : "model-" + std::to_string(selectedModel());
     std::vector<parts::Item> shown;
     int pick = -1;
     for (auto &item : allParts()) {
@@ -1785,6 +1792,11 @@ struct Editor {
       message(had ? item.name + L" is no longer saved." : item.name + L" saved. Find it under \u2605 Saved.");
       return;
     }
+    if (item.group == parts::Kits) {
+      holdKit(item.value);
+      refreshParts();
+      return;
+    }
     if (item.group == parts::Stamps) {
       if (loadStamp(item.value)) {
         SendMessageW(window, WM_COMMAND, ToolBase + 17, 0);
@@ -1792,6 +1804,7 @@ struct Editor {
       }
       return;
     }
+    kitInHand = -1; // a part or shape tile puts down a held kit
     if (item.group == parts::Shapes) {
       if (tool != 9)
         SendMessageW(window, WM_COMMAND, ToolBase + 9, 0);
@@ -2117,6 +2130,24 @@ struct Editor {
       const float eye = k < 10 ? (arch ? 2.6f : 2.3f) : std::clamp(usual.h * .7f + away * .3f, 1.2f, 7.f);
       const float target = k < 10 ? (arch ? 1.7f : 1.f) : usual.h * .45f;
       shot("prim-" + std::to_string(k), doc2, 12 + away * .7071f, 12 + away * .7071f, eye, 225, target, away);
+    }
+    // Kits (NativeKitMethods.inc): set down as the Builder sets one, seen from high over the south-east
+    // corner so a room shows over its walls.
+    for (int k = 0; k < KitCount; ++k) {
+      const std::string key = std::string("kit-") + kitDefs[k].key;
+      if (!needed(key))
+        continue;
+      NativeDocument doc2 = base;
+      try {
+        ensureKitBlock(doc2, k);
+      } catch (...) {
+        continue; // a model this build lacks: the tile keeps its placeholder
+      }
+      doc2.add({"PREFAB_PLACE", "0", encoded(kitDefs[k].key), "12", "12", "0", "0"});
+      const float s = std::max(kitDefs[k].w, kitDefs[k].d), away = std::clamp(s * .95f + 2.f, 4.f, 13.f);
+      doc2.add({"LIGHT", "0", "15", "15", "7", "0", "0", "1.6", "22", "4800"});
+      doc2.add({"LIGHT", "0", "9", "10", "6", "0", "0", "1.1", "18", "5200"});
+      shot(key, doc2, 12 + away * .7071f, 12 + away * .7071f, std::clamp(s * .75f + 2.5f, 4.f, 8.5f), 225, .4f, away);
     }
     for (auto &[id, name] : structureMaterials) {
       if (!parts::paintable(name))
@@ -4118,6 +4149,10 @@ struct Editor {
       paintGesture(ax, ay, bx, by);
       return;
     }
+    if (tool == 8 && kitInHand >= 0) { // a kit from the Kits tab (NativeKitMethods.inc)
+      placeKit(kitInHand, bx, by, kitTurn);
+      return;
+    }
     if (info.shape == 'K') {
       corridor(ax, ay, bx, by);
       return;
@@ -4690,7 +4725,9 @@ struct Editor {
       return true;
     }
     if (msg.wParam == 'R') {
-      if (tool == DoorTool)
+      if (tool == 8 && kitInHand >= 0)
+        turnKitInHand(); // the kit about to be set down
+      else if (tool == DoorTool)
         turnDoorGhost(); // the Door tool turns the door it is about to fit
       else if (tool == FilmTool && !filmPicked())
         turnFilm(); // the Film camera tool turns the camera it is about to place
@@ -5328,6 +5365,12 @@ struct Editor {
     placeControl(GetDlgItem(window, MakePrefab), rx, y, 153, 30, TRUE);
     placeControl(GetDlgItem(window, PlacePrefab), rx + 159, y, 153, 30, TRUE);
     y += 38;
+    // A placed kit (or prefab) picked: Take apart frees its pieces.
+    ShowWindow(GetDlgItem(window, TakeApart), prefabPlacePicked() && selectedRecords.size() <= 1 ? SW_SHOW : SW_HIDE);
+    if (prefabPlacePicked() && selectedRecords.size() <= 1) {
+      placeControl(GetDlgItem(window, TakeApart), rx, y, 312, 30, TRUE);
+      y += 38;
+    }
     bool lamp = lightPicked();
     for (HWND c : {brightSlider, reachSlider, warmSlider, GetDlgItem(window, FlickerToggle)})
       if (c)
@@ -5422,7 +5465,7 @@ struct Editor {
     }else{
       for(HWND c:{form,partsGrid.hwnd,paintGrid.hwnd,brightSlider,reachSlider,warmSlider,timeSlider})if(c)ShowWindow(c,SW_HIDE);
       for(HWND c:partTabButtons)ShowWindow(c,SW_HIDE);for(HWND c:swatches)ShowWindow(c,SW_HIDE);
-      for(int id:{TurnSelected,Duplicate,Remove,Advanced,NewObject,Apply,FlickerToggle,OutlineWalls,OutlineBlock,OutlineTerraces,MakePrefab,PlacePrefab})ShowWindow(GetDlgItem(window,id),SW_HIDE);
+      for(int id:{TurnSelected,Duplicate,Remove,Advanced,NewObject,Apply,FlickerToggle,OutlineWalls,OutlineBlock,OutlineTerraces,MakePrefab,PlacePrefab,TakeApart})ShowWindow(GetDlgItem(window,id),SW_HIDE);
       layoutLayerDock(rx,y,312,h-100);
     }
     bool fresh = !restoredFrom.empty();
@@ -6282,6 +6325,7 @@ struct Editor {
     verifyGlazingRegressions(false); // NativeGlazingRegression.inc: the Window wall and Glass tools
     verifyBreachRegressions(false);  // NativeBreachRegression.inc: the Breach tool
     verifyConnectRegressions(false); // NativeConnectRegression.inc: the Connect tool
+    verifyKits(false); // NativeKitRegression.inc: kits placed, turned, saved and taken apart
     verifyGrowthRegressions(false);  // NativeGrowthRegression.inc: the Growth brush
     verifyShapes(false);             // NativeShapeRegression.inc: the Shape tool's palette, sizing, handles and picking
     verifyFinishes(); // NativeFinishRegression.inc: stair and balcony finishes
@@ -8784,6 +8828,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
         int x=int(ox+corners[i].first*cell),y=int(oy+corners[i].second*cell);RECT q{x-5,y-5,x+6,y+6};FillRect(dc,&q,brush);}
       DeleteObject(brush);}}
   e->drawShapeSelection(dc, ox, oy, cell); // a picked shape: its real outline and the way it faces
+  e->drawPlacedPrefabs(dc, ox, oy, cell);  // placed kits and prefabs: their pieces in dots (NativeKitMethods.inc)
   if(e->selectingArea)outline(std::min(e->areaX,e->areaEndX),std::min(e->areaY,e->areaEndY),std::max(e->areaX,e->areaEndX),std::max(e->areaY,e->areaEndY),ui::Selected,1,PS_DASH);
   // Ghost of what the tool will make: the stretched box or line while
   // dragging (here or in 3D), else a marker under the pointer.
@@ -8798,7 +8843,9 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
       if (shape == 'R' && e->autoDetail)
         outline(x0 + 1, y0 + 1, x1 - 1, y1 - 1, ui::Lamp, 1, PS_DOT);
     };
-    if (e->tool == 9)
+    if (e->tool == 8 && e->kitInHand >= 0)
+      e->drawKitGhost(dc, ox, oy, cell, hx, hy, ghost); // the held kit, as a click sets it down
+    else if (e->tool == 9)
       e->drawShapeGhost(dc, ox, oy, cell, stretching, hx, hy, ghost);
     else if (shape == 'T' || shape == 'N' || shape == 'G')
       e->drawBrushRing(dc, ox, oy, cell, hx, hy);
@@ -9914,6 +9961,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
           e->message(e->regionStamp.width > 0 ? L"Copy turned. Click where it should go." : L"Copy an area first.");
         } else {
           e->tool = selected;
+          e->kitInHand = -1; // a tool picked anew puts down a held kit
           if (*toolInfo[selected].kind)
             e->chooseKind(toolInfo[selected].kind);
           // The Sign tool brings its designer; another tool puts it away unless a sign is picked.
@@ -10133,6 +10181,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       case PlacePrefab:
         e->placePrefab();
         break;
+      case TakeApart:
+        e->takeKitApart();
+        e->relayout();
+        break;
       case Duplicate:
         e->copySelected();
         break;
@@ -10241,7 +10293,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       for (auto mode : {L"--selftest", L"--background-test", L"--layout-test", L"--editing-test", L"--remake-test",
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
-                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test"})
+                        L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test", L"--kit-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10366,6 +10418,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.backgroundTest = e.connectTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--cave-test")
       e.backgroundTest = e.caveTest = true;
+    // Kits alone, with their pictures (NativeKitRegression.inc; --editing-test runs it too, without them).
+    if (argc > 1 && std::wstring(argv[1]) == L"--kit-test")
+      e.backgroundTest = e.kitTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--growth-test")
       e.backgroundTest = e.growthTest = true;
     // The Shape tool alone, with its pictures (NativeShapeRegression.inc; --editing-test runs it too).
@@ -10415,6 +10470,12 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.makeThumbnails(true);
       size_t made = 0, wanted = 0;
       for (auto &item : e.allParts()) {
+        if (item.group == parts::Stamps)
+          continue; // a stamp's tile is drawn from its own copy, not by the engine
+        if (item.group == parts::Kits) {
+          ++wanted, made += e.thumbs.exists(item.key);
+          continue;
+        }
         if (item.group != parts::Shapes && (item.value >= int(std::size(retro::model::size)) || retro::model::size[item.value][2] <= 0))
           continue; // no size table: a placeholder tile
         ++wanted, made += e.thumbs.exists(item.key);
@@ -10607,6 +10668,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
              {Duplicate, L"Copy"},
              {MakePrefab, L"\u2756 Make prefab"},
              {PlacePrefab, L"Place prefab"},
+             {TakeApart, L"✂ Take apart"},
              {TurnSelected, L"⟳ Turn"},
              {Advanced, L"Advanced"},
              {AutoDetail, L"Auto lamps and door: on"},
@@ -10947,6 +11009,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                {Furnish, L"Hang lamps over every open floor and sign each door."}, {Outdoors, L"Open the sky and grow land around this map."},
                {Remove, L"Delete what is picked. Delete key."}, {Duplicate, L"Copy what is picked. Ctrl+D."},
                {TurnSelected, L"Turn what is picked a quarter. R key."}, {Advanced, L"Show every number the game reads."},
+               {TakeApart, L"Free a placed kit's pieces to move, change or remove one by one. Ctrl+Z puts it back."},
                {ListenMusic, L"Hear this map's music."}, {AutoDetail, L"Click to switch."}})
         if (HWND control = GetDlgItem(e.window, id))
           tip(control, text);
@@ -11015,6 +11078,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.caveTest) {
       int code = 0;
       try { e.verifyCaveRegressions(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-cave-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.kitTest) {
+      int code = 0;
+      try { e.verifyKits(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-kit-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;

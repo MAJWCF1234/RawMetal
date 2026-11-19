@@ -13,6 +13,12 @@ Changelog of shipped updates. Newest first. Each section is one release.
 - **Subtitles that follow.** Subtitles, area titles and a short health and ammunition line hang ahead of you and drift round after your look instead of being pinned to the face. Nothing is fixed to her hands or wrists any more.
 - **Steadier hands.** Two hands letting go of a crate a moment apart throw it with both. A gun hand or a hand on the fore-end no longer sets off the Physgloves when pumping. A VR hand can no longer wrench loose what is bolted down. A hand that jumps when tracking returns is drawn where it is, not dragged through what lies between.
 - **Untried in a headset.** None of this has been tried in a headset yet. docs/Systems/vr-playtest.md lists what to try.
+- **104 new parts for the Campaign Builder**, from the purchased packs: cubicles, beds, sofas and wardrobes, a diner kitchen and a bathroom, shelving, crates and boxes, machinery and lab pieces, lamps, doorways, lift doors, windows and tunnel junctions, a minivan, fences, a tent and campfire, rocks, and horror dressing (cobwebs, masks, a butcher's knife, a bare bed frame).
+- **New parts-browser tabs:** Kits, Kitchen, Storage, Outdoor and Horror. Street barriers, fences and cars from earlier packs moved to Outdoor.
+- **Kits:** 21 ready-made pieces to drop into a map: eight furnished rooms (office, ward, lab, bathroom, storage room, control room, server room, kitchen), four corridor pieces on a 3 m grid, a stairwell, a lift lobby, two doorways, a catwalk run, a loading dock, a yard fence, a ruin corner and a campsite.
+- Picking a kit shows its ghost on the plan with an arrow to its front. R turns it, a click sets it down, and one Ctrl+Z takes it back. A placed kit turns with R like anything else, and **Take apart** frees its pieces to move or change one by one.
+- **Starter Map:** a Kits Gallery with every kit set down, and two more Parts Gallery yards with every new part, all on forest maps that were already there, so no map moves.
+- The library importer can scale a pack and finds the textures some packs name differently. A texture shared by several models is now stored once.
 
 ---
 

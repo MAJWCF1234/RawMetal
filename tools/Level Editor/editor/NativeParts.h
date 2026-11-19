@@ -93,7 +93,8 @@ inline std::wstring nice(std::string name) {
     name = (crystal ? "resonance_crystal_" : "bedrock_") + size;
   }
   for (auto prefix : {"lab_", "med_", "pwr_", "ind_", "cave_", "mine_", "scrap_", "psx_", "anl_", "office_",
-                      "prop_", "item_", "art_", "clinic_", "urb_", "bld_"})
+                      "prop_", "item_", "art_", "clinic_", "urb_", "bld_", "fur_", "home_", "store_", "mach_",
+                      "dress_", "out_", "nat_", "hor_"})
     if (name.rfind(prefix, 0) == 0 && name.size() > strlen(prefix) + 2) {
       name = name.substr(strlen(prefix));
       break;
@@ -110,12 +111,26 @@ inline std::wstring nice(std::string name) {
   }
   return out;
 }
-// The browser's tabs. Favourites first, Shapes as a first-class page.
-inline const wchar_t *const partTabs[] = {L"★ Saved", L"Furniture", L"Machines", L"Lab",  L"Lights",
-                                          L"Signs",        L"Props",     L"Shapes",   L"Building", L"Nature",
-                                          L"Caves",        L"Mine",      L"Scrap",    L"Big",      L"Stamps"};
-enum PartTab { Saved, Furniture, Machines, Lab, Lights, Signs, Props, Shapes, Building, Nature, Caves, Mine, Scrap, Big, Stamps, TabCount };
+// The browser's tabs. Favourites first, then the ready-made Kits (NativeKits.inc), Shapes as a first-class page.
+inline const wchar_t *const partTabs[] = {L"★ Saved", L"Kits",    L"Furniture", L"Kitchen", L"Storage",
+                                          L"Machines", L"Lab",     L"Lights",    L"Signs",   L"Props",
+                                          L"Horror",   L"Shapes",  L"Building",  L"Outdoor", L"Nature",
+                                          L"Caves",    L"Mine",    L"Scrap",     L"Big",     L"Stamps"};
+enum PartTab { Saved, Kits, Furniture, Kitchen, Storage, Machines, Lab, Lights, Signs, Props, Horror, Shapes, Building, Outdoor,
+               Nature, Caves, Mine, Scrap, Big, Stamps, TabCount };
 inline int tabOf(const std::string &n) {
+  // The 1.5.6 parts say where they go by their prefix (docs/Assets/library-parts-1.5.6.md).
+  static const std::pair<const char *, int> prefixes[] = {{"fur_", Furniture}, {"home_", Kitchen}, {"store_", Storage},
+                                                          {"mach_", Machines}, {"dress_", Props},  {"out_", Outdoor},
+                                                          {"nat_", Nature},    {"hor_", Horror},   {"lamp_", Lights}};
+  for (auto [prefix, tab] : prefixes)
+    if (n.rfind(prefix, 0) == 0)
+      return tab;
+  // Street and yard pieces from earlier packs join them outdoors: barriers, fences, cars, tyres.
+  static const std::set<std::string> yard{"barrier", "fence_wood", "ind_fence", "ind_roadblock", "ind_sandbags",
+                                          "ind_barrier_wall", "dumpster", "tire"};
+  if (n.rfind("urb_", 0) == 0 || n.rfind("car_", 0) == 0 || yard.count(n))
+    return Outdoor;
   if (has(n, {"lamp", "light", "lantern", "candle", "brazier"}))
     return Lights;
   if (has(n, {"sign", "billboard", "notice", "metro_map", "status_display", "pa_horn", "painting", "clock"}))

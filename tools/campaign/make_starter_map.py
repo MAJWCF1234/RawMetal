@@ -113,6 +113,7 @@ class Starter:
         self.closed = set()     # pairs of neighbouring cells whose shared edge stays shut
         self.start = 0          # the map you spawn in
         self.format2 = False    # FORMAT|2: some record carries named fields (GLAZING, BREACH)
+        self.prefabs = []       # PREFAB blocks (the Kits Gallery's kits), written above the first map
 
     # --- maps -------------------------------------------------------------------------------
     def new_map(self, name, col, row, ceiling=4.0, surface=None, ambient=.34, shift=True):
@@ -247,6 +248,9 @@ class Starter:
                '# every line below is one record of the format it explains. Lines starting # are notes.',
                '', '--- CUSTOM_CAMPAIGN_DATA_START ---', '# Map format 2: records may end in named key=value fields (GUIDE.html, section 9).',
                'FORMAT|2', 'CAMPAIGN|STARTER MAP|%d' % self.start]
+        if self.prefabs:
+            out += ['', '# ==== Prefabs: the Campaign Builder\'s kits (tools/campaign/kits.py), in metres from their middle;',
+                    '# the Kits Gallery sets each down with a PREFAB_PLACE ===='] + self.prefabs
         if self.world:
             out += ['', '# ==== Campaign-wide: terrain, ground paint, horizon (world metres; outdoor maps only) ===='] + self.world
             if self.thresholds:
@@ -306,7 +310,13 @@ GALLERY_EXTRA = ('mine_lantern', 'mine_barrel', 'mine_barrel_wide', 'mine_crate'
 
 
 def in_gallery(name):
-    return name.startswith('bld_') or name in GALLERY_EXTRA
+    return (name.startswith('bld_') or name in GALLERY_EXTRA) and name not in PARTS_156
+
+
+# The parts imported for 1.5.6 (tools/library/batches/parts-1.5.6.json, docs/Assets/library-parts-1.5.6.md):
+# they furnish the Kits Gallery's kits, and stay out of the museum rows and the Parts Gallery.
+PARTS_156 = {n for job in json.load(open(os.path.join(ROOT, 'tools', 'library', 'batches', 'parts-1.5.6.json')))
+             for n in (job['pick'] if 'pick' in job else [job['name']])}
 
 
 def models():
@@ -596,6 +606,7 @@ def build():
     for sl, name, w, d, h, yaw in allm:
         if name.startswith('growth_'): continue      # the Growth brush's pieces stand in the Showcase Atrium instead
         if in_gallery(name): continue                # the 1.5.3 parts stand in the Parts Gallery (no museum row grows)
+        if name in PARTS_156: continue               # the 1.5.6 parts furnish the Kits Gallery instead (likewise)
         groups[next(t for t, test in SECTIONS if test(name, sl))].append((sl, name, w, d, h, yaw))
     palette = [0xc8a050, 0x60a0d0, 0xd06060, 0x60c0a0, 0xd0b040, 0xa08060, 0x8080c0, 0xc07040, 0x70b050]
     for gi, (title, _) in enumerate(SECTIONS):
@@ -1952,7 +1963,7 @@ GALLERY_ORDER = (('walls', ('bld_wall',)), ('pillars and beams', ('bld_pillar', 
                  ('mine stores', ('mine_',)), ('cave rock', ('cave_rock',)), ('cave gems', ('cave_gem',)))
 
 
-def parts_gallery(s, slot, catalogue, yards):
+def parts_gallery(s, slot, catalogue, yards, names=None, version='1.5.3', tabs='Building, Mine and Caves tabs'):
     """PARTS GALLERY: the parts imported for 1.5.3 set out on two levelled gravel yards, north and
     south, each part at its own size (the biggest brought down to 2.9 m across, 3.4 m tall), shelf
     by shelf: walls, pillars and beams, stairs, doors and windows, decks and rails, pipes and
@@ -1961,11 +1972,11 @@ def parts_gallery(s, slot, catalogue, yards):
     Caves."""
     for m in yards:
         ox, oy = 24 * m['col'], 24 * m['row']
-        s.world += ['# Parts Gallery (map %d): a level gravel yard for the 1.5.3 parts.' % m['index']]
+        s.world += ['# Parts Gallery (map %d): a level gravel yard for the %s parts.' % (m['index'], version)]
         s.world.append('TERRAIN_FLAT|%d|%d|%d|%d|0|2' % (ox + 2, oy + 1, ox + 22, oy + 23))
         s.world.append('GROUND|%d|%d|%d|%d|6|1' % (ox + 1, oy + 1, ox + 23, oy + 23))
     s.zone(yards[0], 0, 0, 24, 1.5, '', 'PARTS GALLERY')
-    names = [n for n in catalogue if in_gallery(n)]
+    names = [n for n in catalogue if in_gallery(n)] if names is None else [n for n in catalogue if n in names]
     yaw_of = {n: y0 for _, n, *_, y0 in models()}
 
     def group(n):
@@ -1989,7 +2000,7 @@ def parts_gallery(s, slot, catalogue, yards):
         s.rec(m, 'FIXTURE', m['index'], slot[n], cx, cy, 0, sw, sd, sh, yaw, solid)
         s.zone(m, x - .2, y - .2, x + fw + .2, y + fd + .2, ('#%d %s' % (slot[n], n))[:40])
         x, row_d = x + fw + .7, max(row_d, fd)
-    s.post_sign(yards[0], 12, 2.2, 'PARTS GALLERY', 'Building, Mine and Caves tabs', 0xc8a050, 2.0)
+    s.post_sign(yards[0], 12, 2.2, 'PARTS GALLERY', tabs, 0xc8a050, 2.0)
     for m in yards:
         s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': 12, 'y': 12, 'title': 'PARTS GALLERY',
                         'name': '%d parts from the packs' % len(names)})
@@ -2346,6 +2357,17 @@ def building(s, slot, catalogue):
             s.raised = [e for e in s.raised if e[0] is not yard]
             s.absolute = [e for e in s.absolute if e[0] is not yard]
         parts_gallery(s, slot, catalogue, yards)
+    # The 1.5.6 parts (the ones the kits are built from, and the rest): two more yards east of the Kits
+    # Gallery, on the forest's maps there (every number stays).
+    yards = [cells.get((OX + 7 + k, 1 + len(SECTIONS) + 1 + OY)) for k in (0, 1)]
+    if all(y is not None and y in forest for y in yards):
+        for yard, name in zip(yards, ('Parts Gallery 3', 'Parts Gallery 4')):
+            yard['name'], yard['records'] = name, []
+            s.raised = [e for e in s.raised if e[0] is not yard]
+            s.absolute = [e for e in s.absolute if e[0] is not yard]
+        parts_gallery(s, slot, catalogue, yards, PARTS_156, '1.5.6', 'Furniture, Kitchen, Storage, Outdoor, Horror tabs')
+        for m in yards:                          # level to the shelves' far ends (they reach 22.6 m)
+            s.world.append('TERRAIN_FLAT|%d|%d|%d|%d|0|2' % (24 * m['col'] + 1, 24 * m['row'] + 1, 24 * m['col'] + 23, 24 * m['row'] + 23))
     # The Mine: under a hill east of the gallery, on the forest's maps there (every number stays).
     mine = [cells.get((OX + 3 + dc, 1 + len(SECTIONS) + 2 + OY + dr)) for dc, dr in ((0, 0), (1, 0), (0, 1), (1, 1))]
     if all(c is not None and c in forest for c in mine):
@@ -2353,6 +2375,58 @@ def building(s, slot, catalogue):
         s.raised = [e for e in s.raised if e[0] is not mine[0]]
         s.absolute = [e for e in s.absolute if e[0] is not mine[0]]
         underground(s, slot, catalogue, mine[0], mine[1], mine[2], mine[3])
+    # The Kits Gallery: east of the Hillside past one more stand of forest, on the forest's maps there.
+    yards = [cells.get((OX + 5 + k, 1 + len(SECTIONS) + 1 + OY)) for k in (0, 1)]
+    if all(y is not None and y in forest for y in yards):
+        for yard, name in zip(yards, ('Kits Gallery', 'Kits Gallery 2')):
+            yard['name'], yard['records'] = name, []
+            s.raised = [e for e in s.raised if e[0] is not yard]
+            s.absolute = [e for e in s.absolute if e[0] is not yard]
+        kits_gallery(s, slot, yards)
+
+
+# Where each kit stands in the Kits Gallery: yard, middle x, y and its turn in quarters. The first yard
+# holds the rooms, doors south; the second the corridors joined into one run, the building pieces and
+# the outdoor kits.
+KIT_SPOTS = {
+    'kit_office': (0, 4.5, 4.5, 0), 'kit_ward': (0, 12, 4.5, 0), 'kit_lab': (0, 19.5, 4.5, 0),
+    'kit_bathroom': (0, 4.5, 12, 0), 'kit_storage': (0, 12, 12, 0), 'kit_control_room': (0, 19.5, 12, 0),
+    'kit_server_room': (0, 4.5, 19.5, 0), 'kit_kitchen': (0, 12, 19.5, 0), 'kit_lift_lobby': (0, 19.5, 19.5, 0),
+    'kit_loading_dock': (1, 5.5, 4.5, 0), 'kit_stairwell': (1, 12.5, 4.5, 0), 'kit_ruin_corner': (1, 19.5, 4.5, 0),
+    'kit_corridor': (1, 3.5, 12, 0), 'kit_corridor_cross': (1, 3.5, 16.5, 0), 'kit_corridor_tee': (1, 6.5, 16.5, 0),
+    'kit_corridor_corner': (1, 9.5, 16.5, 1), 'kit_catwalk': (1, 17, 10.5, 0), 'kit_doorway': (1, 14.5, 14.5, 0),
+    'kit_doorway_wide': (1, 19.5, 14.5, 0), 'kit_campsite': (1, 19, 20, 0), 'kit_yard_fence': (1, 8, 22.4, 0)}
+
+
+def kits_gallery(s, slot, yards):
+    """KITS GALLERY: every level-design kit the Campaign Builder offers (tools/campaign/kits.py), set
+    down as the Builder sets one: a PREFAB block written once at the top of the file and a
+    PREFAB_PLACE where it stands. The first yard holds the eight rooms and the lift lobby, the second
+    the corridors joined into one run, the stairwell, doorways, catwalk, loading dock, yard fence, ruin
+    corner and campsite. One sign per yard."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import kits as kitlib
+    catalog = kitlib.load_catalog()
+    built = kitlib.build(catalog)
+    if set(KIT_SPOTS) != {k.key for k in built}:
+        raise SystemExit('KIT_SPOTS and tools/campaign/kits.py name different kits')
+    for m in yards:
+        ox, oy = 24 * m['col'], 24 * m['row']
+        s.world += ['# Kits Gallery (map %d): a level gravel yard for the Campaign Builder\'s kits.' % m['index']]
+        s.world.append('TERRAIN_FLAT|%d|%d|%d|%d|0|2' % (ox + 1, oy + 1, ox + 23, oy + 23))
+        s.world.append('GROUND|%d|%d|%d|%d|6|1' % (ox + 1, oy + 1, ox + 23, oy + 23))
+    for k in built:
+        s.prefabs += ['# Kit: %s (%s)' % (k.title, k.note), 'PREFAB|' + k.key] + kitlib.prefab_lines(k, slot) + ['PREFAB_END']
+        yard, x, y, quarters = KIT_SPOTS[k.key]
+        m = yards[yard]
+        s.rec(m, 'PREFAB_PLACE', m['index'], k.key, x, y, 0, quarters * HALF)
+        w, d = (k.d, k.w) if quarters % 2 else (k.w, k.d)
+        s.zone(m, x - w / 2, y - d / 2, x + w / 2, y + d / 2, ('KIT / %s' % k.title)[:40])
+    s.post_sign(yards[0], 8.25, 8.2, 'KITS GALLERY', 'rooms: the Builder\'s Kits tab', 0x70b0c8, 2.0)
+    s.post_sign(yards[1], 9, 12.6, 'KITS GALLERY', 'corridors, stairs, docks, outdoors', 0x70b0c8, 2.0)
+    for m in yards:
+        s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': 12, 'y': 12, 'title': 'KITS GALLERY',
+                        'name': '%d kits from the Builder' % len(built)})
 
 
 def main():
