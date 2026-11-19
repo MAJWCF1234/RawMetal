@@ -142,6 +142,7 @@
     blank.addRoom("Hall");
     adoptDocument(std::move(blank), {}, true);
     autoDressingEnabled = false;
+    SendMessageW(window, WM_COMMAND, ToolBase + 0, 0); // Select: the Turn box turns the picked floor
     addAuthored({"STRUCT", std::to_string(map), "7", "7", "17", "17", "0", "0.03", "0", "51"});
     publish();
     auto lean = [&](const fs::path &ppm, int &w, int &h) {
@@ -168,6 +169,8 @@
     const double before = lean(shoot(L"turn-before"), w, h);
     selectRecord(int(doc.records("STRUCT", map).back()));
     chooseTurn(90);
+    if (namedValue(doc.lines[doc.records("STRUCT", map).back()], "turn") != "90")
+      throw std::runtime_error("Turn regression: the Turn box did not turn the floor for the picture");
     const double after = lean(shoot(L"turn-after"), w, h);
     report << "turn pictures: " << w << "x" << h << " engine frames; lean as laid " << before << ", turned " << after << '\n';
     if (!(before * after < 0 && std::abs(before) > .1 && std::abs(after) > .1))

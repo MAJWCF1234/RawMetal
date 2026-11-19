@@ -384,8 +384,11 @@
     adoptDocument(std::move(blank), {}, true);
     autoDressingEnabled = false, snap = .25f, smartSnap = true;
     SendMessageW(window, WM_COMMAND, ToolBase + 8, 0);
+    int deskModel = 24; // a long desk: its turn against the wall shows
+    for (auto &[id, name] : models)
+      if (lowered(name).find("desk") != std::string::npos && id < int(std::size(retro::model::size)) && retro::model::size[id][0] > 1.2f) { deskModel = id; break; }
     for (LRESULT i = 0, n = SendMessageW(modelList, CB_GETCOUNT, 0, 0); i < n; ++i)
-      if (SendMessageW(modelList, CB_GETITEMDATA, i, 0) == 24) {
+      if (SendMessageW(modelList, CB_GETITEMDATA, i, 0) == deskModel) {
         SendMessageW(modelList, CB_SETCURSEL, i, 0);
         SendMessageW(window, WM_COMMAND, MAKEWPARAM(ModelList, CBN_SELCHANGE), reinterpret_cast<LPARAM>(modelList));
         break;
@@ -399,26 +402,40 @@
     GetWindowRect(window, &was);
     SetWindowPos(window, nullptr, -6000, 0, 2300, 1000, SWP_NOZORDER | SWP_NOACTIVATE);
     layout();
-    const float px = 2.15f, py = 9.4f; // a step off the west wall: the desk goes to the wall
+    // The plan zoomed on the west wall, the spot near the middle.
+    planZoom = 3.f, planPanX = planPanY = 0;
+    {const float cell = planView().cell;planPanX = cell * (12 - 3.5f), planPanY = cell * (12 - 9.5f);}
+    const float px = 1.55f, py = 9.5f; // half a metre off the west wall: the desk goes to the wall, turned
     hoverInside = true;
     // After: the ghost the placement makes, in the plan and the 3D view (before the click).
     mouse(WM_MOUSEMOVE, px + 1, py, 0);
     mouse(WM_MOUSEMOVE, px, py, 0);
-    windowPicture(folder / L"ghost-after-hover.bmp", ghostEngine(L"ghost-after-hover", 6.5f, 9.4f, 2.4f, 180.f, -18.f));
+    {
+      // The 3D pane: what a press held there shows (previewGesture: the gesture run on a scratch copy).
+      NativeDocument keep = doc;
+      const int keepRecord = record;
+      ghosting = true;
+      gesture(px, py, px, py);
+      ghosting = false;
+      const auto preview = ghostEngine(L"ghost-after-hover", 6.5f, 9.4f, 2.4f, 180.f, -18.f);
+      doc = std::move(keep), record = keepRecord;
+      windowPicture(folder / L"ghost-after-hover.bmp", preview);
+    }
     mouse(WM_LBUTTONDOWN, px, py, MK_LBUTTON);
     mouse(WM_LBUTTONUP, px, py, MK_LBUTTON);
-    mouse(WM_MOUSEMOVE, px + 1, py, 0);
-    mouse(WM_MOUSEMOVE, px, py, 0); // the next desk's ghost lies exactly over the one placed
-    windowPicture(folder / L"ghost-after-placed.bmp", ghostEngine(L"ghost-after-placed", 6.5f, 9.4f, 2.4f, 180.f, -18.f));
+    // The pointer where it was: the desk placed exactly where its ghost stood (the ghost rests until the pointer moves).
+    const auto placed = ghostEngine(L"ghost-after-placed", 6.5f, 9.4f, 2.4f, 180.f, -18.f);
+    windowPicture(folder / L"ghost-after-placed.bmp", placed);
     // Before: the same desk, the plan's ghost drawn the v1.5.6 way (a box at the pointer).
     ghostLegacyDraw = true;
     InvalidateRect(plan, nullptr, FALSE);
-    windowPicture(folder / L"ghost-before.bmp", {});
+    windowPicture(folder / L"ghost-before.bmp", placed);
     ghostLegacyDraw = false;
+    fitPlan();
     SetWindowPos(window, nullptr, was.left, was.top, was.right - was.left, was.bottom - was.top, SWP_NOZORDER | SWP_NOACTIVATE);
     std::ofstream(root / L"native-editor-ghost-test.txt", std::ios::app)
         << "PICTURES: .build/interaction/ghost-before.bmp (v1.5.6's plan ghost, a box at the pointer, beside the desk the click put against the wall), "
            "ghost-after-hover.bmp (the ghost the placement makes, in the plan and the 3D view, before the click), "
-           "ghost-after-placed.bmp (after the click: the next ghost lies exactly on the desk placed)\n";
+           "ghost-after-placed.bmp (after the click: the desk stands where its ghost stood, turned against the wall)\n";
     dirty = false;
   }

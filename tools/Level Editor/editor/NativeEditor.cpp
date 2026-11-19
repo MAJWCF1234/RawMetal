@@ -8801,7 +8801,21 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     if (!object)
       return false;
     x = int(ox + object->x * cell), y = int(oy + object->y * cell);
-    hw = int(std::max(4.f, object->width * cell * .5f)), hd = int(std::max(4.f, object->depth * cell * .5f));
+    // The ring round the thing as it is turned (yaw, facing): its turned corners' bounds, not its
+    // unturned width and depth (a desk turned against a wall was ringed the other way round).
+    float halfW = object->width * .5f, halfD = object->depth * .5f;
+    {
+      auto f = NativeDocument::fields(e->doc.lines[size_t(index)]);
+      const int schema = e->schemaFor(f);
+      if (schema >= 0 && object->points.size() == 1) {
+        auto corners = nativeCorners(e->schemas[size_t(schema)].fields, f);
+        if (!corners.empty()) {
+          halfW = halfD = 0;
+          for (auto [cx, cy] : corners) halfW = std::max(halfW, std::abs(cx - object->x)), halfD = std::max(halfD, std::abs(cy - object->y));
+        }
+      }
+    }
+    hw = int(std::max(4.f, halfW * cell)), hd = int(std::max(4.f, halfD * cell));
     name = plainKind(NativeDocument::fields(e->doc.lines[size_t(index)])[0]);
     return true;
   };
