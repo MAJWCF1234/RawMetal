@@ -75,6 +75,8 @@ struct InputState {
     bool mute = false, music = false;
     bool escape=false, menuUp=false,menuDown=false,menuLeft=false,menuRight=false,menuAccept=false;
     bool scoreboard=false;   // Tab, or the controller's back/view button, held: the match's scoreboard
+    bool chat=false;         // T in a match: opens the chat line (typed text then arrives in textInput)
+    bool talk=false;         // the push-to-talk key (Settings::pushToTalkKey, V by default), held
     bool inventory=false;
     // 1-4 while a number key is held: a reply in a conversation. Outside one,
     // 1/2/3 pick fists, the shotgun or the handgun.
@@ -185,6 +187,9 @@ struct Enemy {
     // What a fresh spawn of the same record knows that a save does not keep (traits, side, order).
     void adoptTraits(const Enemy& spawn){traits=spawn.traits;faction=spawn.faction;ordered=spawn.ordered;order=spawn.order;anchor=spawn.anchor;anchorZ=spawn.anchorZ;patrolTo=spawn.patrolTo;patrolToZ=spawn.patrolToZ;}
     Vec2 anchor{},patrolTo{};float anchorZ=0,patrolToZ=0,orderClock=0,fleeClock=0;
+    // Not saved: which player it hunts (Game::players() id; Game::creatureTarget), since when, and the player
+    // who last wounded it and when (aggro). Single player: always the one player, 0.
+    int target=0,aggro=-1;float targetSince=-99,aggroTime=-99;
 };
 
 struct Pickup {
@@ -296,6 +301,12 @@ struct Clutter {
  bool pinned=false;
  // Liquid in it (Liquids.h: a bottle's water, oil or chemical, its sloshing surface, a hole): saved in the "liquids" section.
  liquid::State liquid;
+ // A match's name for it (docs/Systems/multiplayer.md "Props"): (map+1)<<16 | its CLUTTER record+1 for an
+ // authored prop (seedClutter, the same on every machine), (map+1)<<16 | 0x8000+n for one the host spawned,
+ // NetDebris for a shard or gib (each machine's own, never sent). netHolder: on a host, the slot of the guest
+ // carrying it (the guest's hand poses it; the solver leaves it be), else -1. Neither is saved.
+ static constexpr std::uint32_t NetDebris=0xFFFFFFFFu;
+ std::uint32_t netId=0;int netHolder=-1;
  PropMaterial material()const;float mass()const;float supportHeight()const;
  float friction()const{return traits&&traits->friction>=0?traits->friction*8.f:model>=0?propMaterialTraits(material()).friction:7.f;}
  float restitution()const{return traits&&traits->restitution>=0?traits->restitution:propMaterialTraits(material()).restitution;}
@@ -330,6 +341,11 @@ struct Clutter {
 // One firearm's rounds: total counts the loaded ones too, so the reserve is
 // total-loaded and loaded<=total always.
 struct AmmoPool {int total=0,loaded=0;bool operator==(const AmmoPool&)const=default;};
+// A spent case in the world (Casings.cpp): thrown from a gun's ejection port, it
+// tumbles, bounces off floors, walls and props with a clink, then lies a while.
+// In the active chunk's coordinates; kind 0 a shotgun shell, 1 9 mm brass, 2 .380
+// brass. Runtime only: not saved, cleared with the map.
+struct Casing {Point3 position{},velocity{},spin{};float yaw=0,pitch=0,roll=0,age=0,still=0;int kind=0,bounces=0;bool resting=false;};
 // A downed sidearm carrier's unlooted pistol on the floor, in its level's local coordinates.
 struct DroppedSidearm {Point3 position{};float yaw=0;int level=0;size_t actor=0;};
 struct Player {
@@ -347,7 +363,7 @@ struct Player {
     float pitch = 0.0f;
     float health = 100.0f;
     // Rounds per firearm, indexed by WeaponId (Fists holds none).
-    std::array<AmmoPool,3> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{}};
+    std::array<AmmoPool,4> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{},AmmoPool{}};
     AmmoPool& pool(WeaponId id){return pools[size_t(id)];}
     const AmmoPool& pool(WeaponId id)const{return pools[size_t(id)];}
     float z = 0.0f;
@@ -369,8 +385,46 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
- int character=0;};     // character: the player's body, 0 Claire, 1 the Limitator (SoftwareRenderer::playerBody)
+ int character=0;       // character: the player's body, 0 Claire, 1 the Limitator (SoftwareRenderer::playerBody)
+ // Communication (the COMMUNICATION page; docs/Systems/multiplayer.md "Chat and voice"): text chat and its word
+ // filter; voice 0 off, 1 push to talk, 2 open mic; the push-to-talk key (a Windows virtual-key code); open mic's
+ // threshold on the mic meter (0-1); mic and speakers by device name ("" the system default); mic and voice
+ // volumes (0-2, 1 as it comes); proximity voice in co-op; players muted, by display name.
+ bool textChat=true,chatFilter=true;int voiceMode=1,pushToTalkKey=0x56;float openMicThreshold=.25f,micVolume=1,voiceVolume=1;bool proximityVoice=true;
+ std::string micDevice,speakerDevice;std::vector<std::string> mutedPlayers;
+ bool muted(const std::string& name)const{for(const auto& n:mutedPlayers)if(n==name)return true;return false;}
+};
+// The save and load pages and their confirmations: a slab in the middle (PAUSE and SETTINGS have their own layouts).
 struct MenuLayout {static constexpr int X=(DisplayWidth-304)/2,Y=(DisplayHeight-330)/2,Width=304,Height=351,RowTop=Y+46,RowHeight=21,Rows=13,SliderX=X+179,SliderWidth=75;};
+// PAUSE (SettingsMenu.cpp; drawn by renderer/FrontEnd.cpp) in the title's language: grouped rows from X,Y. Out of a
+// match: RESUME, SETTINGS | SAVE GAME, LOAD GAME | RESTART, QUIT TO TITLE. In a match: RESUME, SETTINGS | JOIN CODE |
+// LEAVE MATCH. rowY and rowAt are shared by the pointer and the renderer.
+enum PauseRow:int{PauseResume=0,PauseSettings=1,PauseSave=2,PauseLoad=3,PauseRestart=4,PauseQuit=5,PauseMatchCode=2,PauseMatchLeave=3};
+struct PauseMenuLayout {
+ static constexpr int X=66,Y=150,Width=250,RowHeight=22,Gap=10;
+ static constexpr int rows(bool match){return match?4:6;}
+ static constexpr int rowY(int row,bool match){return Y+row*RowHeight+(row>=2?Gap:0)+(row>=(match?3:4)?Gap:0);}
+ static constexpr int rowAt(int y,bool match){for(int r=0;r<rows(match);++r)if(y>=rowY(r,match)&&y<rowY(r,match)+RowHeight)return r;return -1;}
+};
+// SETTINGS (SettingsMenu.cpp; drawn by renderer/FrontEnd.cpp): the column of pages on the left (BACK under them),
+// the open page's rows on the right, the chosen row's one plain line at HelpY. Sliders run from SliderX.
+enum class SettingsTab:std::uint8_t{Audio,Video,Controls,Gameplay,Communication,Vr,Count};
+struct SettingsLayout {
+ static constexpr int TabX=40,TabY=72,TabWidth=140,TabHeight=19,BackGap=10;
+ static constexpr int RowX=206,RowY=72,RowWidth=394,RowHeight=17,SliderX=RowX+214,SliderWidth=104,HelpY=306;
+ static constexpr int tabY(int tab){return TabY+tab*TabHeight+(tab>=int(SettingsTab::Count)?BackGap:0);}   // tab Count is BACK
+ static constexpr int rowY(int row){return RowY+row*RowHeight;}
+};
+// What SETTINGS shows: the page column and the open page's rows, where the pointer finds them and the renderer draws them.
+struct MenuItem {
+ enum Kind:std::uint8_t{Tab,Slider,Toggle,Choice,Action,Back} kind=Action;
+ int x=0,y=0,w=0,h=0;
+ std::string label,value,help;
+ float fraction=-1;     // a slider's position, 0-1
+ float meter=-1;        // a live level under the slider (the mic), 0-1; -1 none
+ bool enabled=true,current=false,armed=false,warn=false;   // current: the open page's tab; armed: waiting for its confirm
+ int id=0;
+};
 // The title's main menu (Settings.cpp, MultiplayerMenu.cpp; drawn by renderer/FrontEnd.cpp) in three groups: the
 // campaign (new game, custom maps, load game), MULTIPLAYER, then settings and quit, a gap between groups. rowY and
 // rowAt are shared by the pointer and the renderer. The custom map archive's rows are evenly spaced from Y.
@@ -435,15 +489,67 @@ public:
     const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
     const net::MatchView& matchView()const{return m_matchView;}
     bool inMatch()const{return m_matchView.active;}
+    // Chat in a match (SettingsMenu.cpp keeps the typing, MatchChat.cpp the lines): T opens the line, Enter sends,
+    // Esc drops it; chatTyped is the line so far. sendChat hands a line to the Match (false: refused).
+    bool chatOpen()const{return m_chatOpen;}
+    const std::string& chatTyped()const{return m_chatTyped;}
+    bool sendChat(const std::string& text);
+    // The newest chat line for the VR caption strip (no typing in a headset), "" when none is fresh.
+    std::string vrChatCaption()const;
+    // The mic meter the COMMUNICATION page shows: TEST MY MIC's own listening, else the session's level in a voice
+    // room; -1 when nothing is listening.
+    float micMeter()const;
+    bool micTesting()const{return m_micTest;}
+    // Mutes or unmutes a player by display name (the scoreboard, the COMMUNICATION page); kept in the settings.
+    void setPlayerMuted(const std::string& name,bool muted);
+    int scoreboardPick()const{return m_scoreboardPick;}     // the scoreboard row the arrows picked (-1 none)
     // Spent cases (Casings.cpp): a fired or pumped-out shell, or a pistol's brass, thrown from the ejection port in
     // world space; it tumbles, bounces, clinks and lies a while. Every gun and the VR pump call this; the renderer
     // draws casings(). kind: 0 a shotgun shell, 1 9 mm brass (the handgun), 2 .380 brass (the MAC-11).
     void ejectCasing(int kind,Point3 position,Point3 velocity);
+    const std::vector<Casing>& casings()const{return m_casings;}
+    static constexpr int MaxCasings=48;          // the oldest goes when a new one would pass this
+    static constexpr float CasingLife=14.f;      // seconds a case lies once it has come to rest
+    // Where the gun in hand throws its case from, in the active chunk's world
+    // space, and the way it goes (the right of the bore, up and a little back),
+    // with the player's own motion added. Desktop: from the view; VR: the aim.
+    Point3 ejectionPort(WeaponId gun)const;
+    Point3 ejectionVelocity(WeaponId gun);
     // A VR player's avatar as VrRuntime solves it, sent to the others in a match (main sets it each frame).
     void setNetAvatar(const AvatarPose& pose){m_netAvatar=pose;}
     // Bodies of the players in a match, in the active chunk's frame: Match lends them to traceShot while it
     // resolves a shot (they come back as ShotKind::Player with index slot+1); never seen by anything else.
     struct NetBody {int slot=0;Vec2 pos{};float z=0,height=Player::StandingHeight;};
+    // Every player the game's minds know (docs/Systems/multiplayer.md "One path"). Script triggers, @-conditions,
+    // creature perception and targeting, guards and people read this list, never m_player alone. Single player is
+    // the list with one entry: the local player (id 0, body &m_player, live). A co-op host adds each guest's body
+    // as the Match last heard it (id: their slot; the host is slot 0). A body is in the active chunk's frame, as
+    // m_player is; level is the chunk it stands in. The list is rebuilt by each call (identical within a frame).
+    struct PlayerView {int id=0;bool local=true;int level=0;const Player* body=nullptr;
+     bool alive()const{return body&&body->health>0;}};
+    const std::vector<PlayerView>& players()const;
+    const PlayerView* playerById(int id)const;          // nullptr: no such player now
+    const PlayerView& nearestPlayer(Vec2 at,float z)const;   // the nearest living one (the local player if none lives)
+    // What the minds read of a player beyond the body: its speed, how lit it is (0..1), whether it is shut in a
+    // locker, whether its torch is on. The local player's are the game's own live values.
+    Vec2 playerVelocity(const PlayerView& p)const;
+    float playerLit(const PlayerView& p)const;
+    bool playerHidden(const PlayerView& p)const;
+    bool playerTorch(const PlayerView& p)const;
+    // A blow on a player from a creature or a guard: the local player takes it as receiveDamage does; a remote
+    // player's goes out through the Match (m_netHurts), the host takes it off that guest and sends it to them.
+    bool hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable=true,bool shieldable=true);
+    // A co-op guest's body as the host keeps it (the Match fills it each frame; empty everywhere else).
+    // pushing: they lean into something (walking keys held while stopped): a prop is shoved their way.
+    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false,pushing=false;float lit=1,litTimer=0,stride=0;};
+    // The light on a point (a body's chest): the lamps, the room's ambient and darkness, a torch.
+    float lightAt(Vec2 at,float chest,bool torch)const;
+    // Script effects a co-op host sends on (the Match drains it after the frame; cleared at each script pass):
+    // target -1 everyone, else the player id an item or a shake is for.
+    struct ScriptFx {int target=-1;ScriptAction action;};
+    // A terminal used (a switch, a lever, a lift call): run where the minds run, for that player. On a co-op
+    // guest it is queued for the host (m_netUses) instead. Returns 1 the lift set off, 2 its switch was thrown.
+    int operateTerminal(int terminal,int player);
     // The multiplayer pages on the title (MultiplayerMenu.cpp, docs/Systems/multiplayer.md). They call the Session
     // directly and pump it while open; once the session is InLobby the Match takes over.
     enum class TitlePage:std::uint8_t{Main,Multiplayer,QuickMatch,Browse,Host,Lobby,JoinCode,Character};
@@ -479,6 +585,60 @@ public:
     // world's across the pointing (a hand held level, no roll).
     void setVrHand(int side,Point3 position,Point3 direction,bool valid,Point3 velocity={},Point3 up={}){m_vrHandVelocity[side]=velocity;m_vrInputActive=true;m_vrHandPosition[side]=position;m_vrHandDirection[side]=direction;m_vrHandUp[side]=up;m_vrHandValid[side]=valid;}
     bool vrSupportGrip()const{return m_vrSupportGrip;}
+    // --- VR guns by hand (VrGuns.cpp; docs/Systems/vr-playtest.md) ---------------------------------------------
+    // Each frame VrRuntime hands the game the drawn gun's frame (game space, chunk-relative: the grip in the fist and
+    // the gun's right, up and back, back pointing from the muzzle to the grip), each hand's fist, velocity and grip
+    // (by role: 0 the support hand, 1 the gun hand) and whether the support hand's wrist is at the belt pouch. From
+    // that the game runs the handgun's magazine and slide and the shotgun's shells and pump; the recoil the gun shows
+    // and the haptic pulses VrRuntime plays come back out. Desktop play never touches any of it.
+    struct VrGunInput {bool valid=false;Point3 grip{},right{},up{},back{};std::array<Point3,2> fist{},velocity{};std::array<bool,2> grips{};bool pouch=false;};
+    // A gun model's working points in the gun frame (x right, y up, z back: metres from the grip in the fist), as
+    // the VR hands draw it. The renderer measures them from the meshes (setVrGunGeometry); the defaults are those
+    // measurements, so the game and its tests agree with the drawing without a renderer.
+    //  muzzle: where the bore leaves the gun; rearSight/frontSight: the tops of the sights (the sight line);
+    //  port: the ejection port (where a case is thrown from); magwell: the seated magazine's base, magAxis the way
+    //  it slides up into the grip, magLength how far; slideRear: where a hand takes the slide (the MAC-11: its charging knob) to rack it;
+    //  loadingPort: under the receiver, where shells go into the tube.
+    struct VrGunGeometry {Point3 muzzle{},rearSight{},frontSight{},port{},magwell{},magAxis{0,1,0},slideRear{},loadingPort{};float magLength=.11f;};
+    static void setVrGunGeometry(WeaponId id,const VrGunGeometry& geometry);
+    static VrGunGeometry vrGunGeometry(WeaponId id);
+    // The shot's line from a gun frame (game space): from the muzzle toward the point 15 m out along the sight line
+    // (the gun's zero), so the bore, the sights and the trace agree.
+    static constexpr float VrZero=15.f;
+    static void vrShotLine(const VrGunGeometry& g,Point3 grip,Point3 right,Point3 up,Point3 back,Point3& origin,Point3& direction);
+    void setVrGunInput(const VrGunInput& in){m_vrGunIn=in;}
+    // Recoil on the gun in the hand (never the view): metres pushed back along the bore, radians of muzzle rise.
+    struct VrRecoil {float back=0,rise=0;};
+    VrRecoil vrRecoil()const{return {m_vrGun.kickBack,m_vrGun.kickRise};}
+    // Haptic pulses asked of the controllers (by role); VrRuntime takes and plays them each frame. cause names the
+    // event (shot, magazine out, magazine seated, slide, pump back, pump forward, shell, draw, holster, pouch).
+    struct VrHaptic {int hand=1;float seconds=.02f,frequency=160,amplitude=.5f;const char* cause="";};
+    void vrHaptic(int hand,float seconds,float frequency,float amplitude,const char* cause){m_vrHaptics.push_back({hand,seconds,frequency,amplitude,cause});}
+    std::vector<VrHaptic> takeVrHaptics(){std::vector<VrHaptic> out;out.swap(m_vrHaptics);return out;}
+    const std::vector<VrHaptic>& vrHaptics()const{return m_vrHaptics;}
+    // What the VR drawing shows: held 0 nothing in the support hand, 1 a magazine, 2 a shell; seat how far it is
+    // into its port (0 at the opening to 1 home; -1 not at it) and depth the magazine's base below its seated place
+    // (m); the pistol's magazine out and slide travel back (m); the magazine last dropped, falling or on the floor.
+    struct VrGunView {int held=0;float seat=-1,depth=0;bool magOut=false;float slide=0;bool dropped=false;Point3 dropAt{},dropRight{},dropUp{},dropBack{};WeaponId dropGun=WeaponId::Handgun;};
+    VrGunView vrGunView()const;
+    // The VR reload button (B on the gun hand): drops the handgun's or the MAC-11's magazine, or (the handgun only)
+    // with a loaded one in on a locked-back slide, releases the slide. The shotgun loads by hand only: the button
+    // does nothing to it. The MAC-11 has no bolt release: its locked-back knob is pulled back by hand.
+    void vrReloadButton();
+    // The trigger may fire: the handgun or MAC-11 has a round chambered, the shotgun has been pumped.
+    // vrMagazineGun: a gun the VR hands reload by magazine (the handgun, the MAC-11).
+    static constexpr bool vrMagazineGun(WeaponId id){return id==WeaponId::Handgun||id==WeaponId::MachinePistol;}
+    bool vrGunReady()const;
+    // The support hand holds a magazine or shell, or has just put one in and has not opened since: no fore-end snap,
+    // no two-hand hold and no grab for it until it opens.
+    bool vrSupportBusy()const{return m_vrGun.held!=0||m_vrGun.spentGrip;}
+    // A support-hand fist here would take the handgun's slide or the MAC-11's charging knob (it needs racking:
+    // nothing chambered).
+    bool vrRackZone(Point3 fist)const;
+    bool vrRacking()const{return m_vrGun.racking;}
+    static bool testVrGuns(std::ostream& report);
+    // A lit room with no creatures and the gun raised (VrRuntime's scripted checks, the lab's VR captures).
+    static Game vrGunScene(WeaponId gun,AmmoPool rounds,bool leftHanded=false);
     // Developer mode (--dev, console DEV): no damage, no creatures, every door open.
     // Console noclip: fly through walls (Movement.cpp). Never saved.
     bool noclip()const{return m_noclip;}
@@ -492,7 +652,7 @@ public:
     float aimBlend()const{return m_aimBlend;}
     // VR pump: fired with the support hand on the fore-end, the shotgun waits for
     // a stroke (back 7 cm, forward again). How far back the pump is, for drawing.
-    float vrPumpOffset()const{return m_vrChamberEmpty&&m_vrSupportGrip?std::clamp(m_vrPumpRest-m_vrPumpAlong,0.f,.1f):0.f;}
+    float vrPumpOffset()const{return m_vrSupportGrip&&m_equippedWeapon==WeaponId::Shotgun?std::clamp(m_vrPumpRest-m_vrPumpAlong,0.f,.09f):0.f;}
     void restart();
     int level()const{return m_level;}
     // Campaign content count; runtime custom packs use their authored map count.
@@ -765,13 +925,24 @@ public:
     // backslash): its saves and settings are copied into the right one, never over a newer file.
     static void adoptMisplacedSaves(const std::wstring& localAppData);
     static bool testNpcVoices();
-    enum class MenuPage {Settings,Save,Load,Overwrite,ConfirmLoad,ConfirmRestart,Comfort};
+    // Pause: PAUSE (PauseRow); Options: SETTINGS (SettingsTab pages); the save and load pages and their
+    // confirmations. RESTART, QUIT TO TITLE and RESET TO DEFAULTS confirm in place, on a second press.
+    enum class MenuPage {Pause,Save,Load,Overwrite,ConfirmLoad,Options};
     MenuPage menuPage()const{return m_menuPage;}
-    int menuRows()const{return m_menuPage==MenuPage::Settings?(m_menuFromTitle?9:MenuLayout::Rows):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Comfort?ComfortRows:2;}
-    // VR: the settings' INVERT MOUSE Y row (no mouse in a headset) opens VR COMFORT instead: 0 back, 1 turn
-    // speed, 2 vignette, 3 seated, 4 recalibrate height, 5 left-handed, 6 render scale, 7 frame-rate readout.
-    static constexpr int ComfortRows=8;
+    int menuRows()const{return m_menuPage==MenuPage::Pause?PauseMenuLayout::rows(m_matchView.active):m_menuPage==MenuPage::Save?4:m_menuPage==MenuPage::Load?5:m_menuPage==MenuPage::Options?int(settingsRows().size()):2;}
     bool vrMenu()const{return m_vrInputActive;}
+    // SETTINGS: the open page, whether the page column has the keys (else its rows), the muted-players list open on
+    // COMMUNICATION, the armed row (a confirm waiting; -1 none), and the rows and items the pointer and renderer see.
+    SettingsTab settingsTab()const{return m_settingsTab;}
+    bool settingsOnTabs()const{return m_settingsOnTabs;}
+    bool settingsMutedList()const{return m_settingsMuted;}
+    int menuArmed()const{return m_menuArmed;}
+    std::vector<int> settingsRows()const;               // the open page's row ids (SettingsMenu.cpp)
+    std::vector<MenuItem> settingsItems()const;         // the page column, BACK, then the rows
+    static const char* settingsTabName(SettingsTab tab);
+    void openSettings(SettingsTab tab);                 // from PAUSE or the title
+    bool takeSettingsSave(){const bool r=m_settingsSaveDue;m_settingsSaveDue=false;return r;}   // left SETTINGS: main saves
+    static bool testSettingsMenu(std::ostream& report);
     // Recalibrate height was chosen: VrRuntime takes it (once) and sets the standing eye to the head's height now.
     bool takeVrRecalibrate(){const bool r=m_vrRecalibrate;m_vrRecalibrate=false;return r;}
     static bool testComfortMenu(std::ostream& report);
@@ -916,7 +1087,23 @@ public:
     // The handgun is owned as a quest item: saved, carried and cleared with the others.
     static constexpr StateId HandgunItem=stateId("handgun");
     bool hasHandgun()const{return hasQuestItem(HandgunItem);}
-    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||id==WeaponId::Shotgun||(id==WeaponId::Handgun&&hasHandgun());}
+    // The MAC-11 too (a floor pickup, a script's GIVE, `give mac11`).
+    static constexpr StateId MachinePistolItem=stateId("machine_pistol");
+    bool hasMachinePistol()const{return hasQuestItem(MachinePistolItem);}
+    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||id==WeaponId::Shotgun||(id==WeaponId::Handgun&&hasHandgun())||(id==WeaponId::MachinePistol&&hasMachinePistol());}
+    // The MAC-11 with `rounds` more .380; a first one comes with them in its magazine.
+    void grantMachinePistol(int rounds);
+    // The hip holster's contents (AvatarPose::hip, WeaponId+1, 0 empty) with `inHand`
+    // drawn: one sidearm rides there, the one not in hand. With both owned and
+    // neither drawn it is the one drawn last (the MAC-11 when it was the last
+    // carried there); the long gun is on the back.
+    int hipHolster(WeaponId inHand)const;
+    // The full-auto gun's state: the spread's bloom (radians over its base) and
+    // how far the view has climbed in this burst (pitch units still to return).
+    float spreadBloom()const{return m_spread;}
+    float recoilDebt()const{return m_recoilDebt;}
+    // The cone a round from the gun in hand leaves within now (radians, half-angle).
+    float shotSpread()const;
     // The handgun with `rounds` more 9 mm; a first one comes with them in its magazine (console, map shots).
     void grantHandgun(int rounds);
     // Inspection only (map shots): every sidearm carrier on this level killed, so his pistol falls.
@@ -1283,7 +1470,8 @@ public:
     bool emptyReload()const{return m_reloadTimer>0&&m_emptyReload;}
     // The handgun's slide is held back: its magazine ran dry, until an empty
     // reload passes cycle.rackAt (the rack) or rounds are loaded.
-    bool slideLocked()const{return m_equippedWeapon==WeaponId::Handgun&&firearmPool().loaded<=0&&!(m_reloadTimer>0&&m_emptyReload&&reloadProgress()>=equippedWeaponDef().cycle.rackAt);}
+    // The MAC-11's bolt the same: its cocking knob stays back on an empty magazine.
+    bool slideLocked()const{return sidearm(m_equippedWeapon)&&firearmPool().loaded<=0&&!(m_reloadTimer>0&&m_emptyReload&&reloadProgress()>=equippedWeaponDef().cycle.rackAt);}
     int medkits()const{return m_medkits;}
     int selectedItem()const{return m_selectedItem;}
     int itemCell(int item)const{return m_itemCells[item];}
@@ -1350,7 +1538,25 @@ private:
     std::string m_titleNotice;
     InputState m_titlePrevious;
     void updateTitle(const InputState& input);
-    MenuPage m_menuPage=MenuPage::Settings;
+    MenuPage m_menuPage=MenuPage::Pause;
+    // PAUSE and SETTINGS (SettingsMenu.cpp).
+    SettingsTab m_settingsTab=SettingsTab::Audio;bool m_settingsOnTabs=true,m_settingsMuted=false,m_settingsSaveDue=false;int m_menuArmed=-1;
+    void updatePauseMenu(const InputState& input);
+    void updateSettingsMenu(const InputState& input);
+    void settingsEscape();
+    void leaveSettings();
+    void settingsChange(int id,int direction,bool activate);
+    void settingsDrag(int id,float fraction);
+    void settingsReset(SettingsTab tab);
+    // Chat and voice (SettingsMenu.cpp): the chat line, the scoreboard's mute pick, the voice settings handed to the
+    // session, TEST MY MIC's listening (shared: a copied Game listens on the same device).
+    bool m_chatOpen=false,m_chatFeeding=false,m_previousChat=false,m_micTest=false;std::string m_chatTyped;
+    int m_scoreboardPick=-1;InputState m_boardPrevious;
+    net::VoiceSettings m_voiceApplied;bool m_voicePushed=false;
+    std::shared_ptr<class MicMonitor> m_micMonitor;
+    void updateChat(const InputState& input);
+    void updateScoreboardPick(const InputState& input);
+    void updateVoice(const InputState& input);
     std::wstring m_saveDirectory;
     std::array<std::string,3> m_slotLabels{"SLOT 1 / EMPTY","SLOT 2 / EMPTY","SLOT 3 / EMPTY"};
     std::string m_checkpointLabel="AUTOSAVE / EMPTY";
@@ -1451,8 +1657,12 @@ private:
     // Props held by anchored= or frozen= (Clutter::pinned), refreshed each physics step.
     void refreshPinnedClutter();
     void updateScripts(float dt);
-    int scriptValue(const ScriptEvent& event,const ScriptCondition& condition)const;
-    bool scriptEventReady(const ScriptEvent& event)const;
+    // @health and @map read the player tested (players()); the rest are the world's.
+    int scriptValue(const ScriptEvent& event,const ScriptCondition& condition,const PlayerView& player)const;
+    // Ready for one player (on its map, its gates, inside its box), and over the players: any of them, or every
+    // one when the trigger says players=all. who: the first player it is ready for.
+    bool scriptEventReadyFor(const ScriptEvent& event,const PlayerView& player)const;
+    bool scriptEventReady(const ScriptEvent& event,int* who=nullptr)const;
     void updateReceivingBreach();
     void executeScriptAction(const ScriptAction& action);
     void updateNoclip(const InputState& input,float dt);
@@ -1640,6 +1850,11 @@ private:
     bool receiveDamage(float amount,Vec2 source,bool blockable=true,bool shieldable=true);
     bool shieldBlow(float amount,Vec2 source);
     void updateEnemies(float dt);
+    // The player a creature hunts (EnemyAI.cpp), chosen each think from players() by threat: seen now (its own
+    // sight and the stealth rules), who wounded it lately, where it last knew someone, nearness; it keeps its
+    // prey unless another is clearly better and never within a second; a pack spreads; the downed are dropped.
+    const PlayerView& creatureTarget(Enemy& e,bool huntsPlayer);
+    const PlayerView& creaturePrey(const Enemy& e)const;   // the one it hunts now (its last choice)
     // Hunter.cpp: the bite that takes a man's head, feeding on him, the
     // recurring hunter's flight, return and ear, and its walk in after the
     // player through a seam.
@@ -1844,6 +2059,50 @@ private:
     bool m_netScriptsOff=false,m_netCreaturesRemote=false;
     const std::vector<NetBody>* m_netBodies=nullptr;
     AvatarPose m_netAvatar{};
+    // The players list (players()) and what it is built from; the co-op traffic the game leaves for the Match.
+    std::vector<RemoteBody> m_remoteBodies;
+    mutable std::vector<PlayerView> m_playerViews;
+    struct NetHurt {int id=0;float amount=0;};
+    std::vector<NetHurt> m_netHurts;
+    std::vector<ScriptFx> m_scriptFx;
+    struct NetUse {int level=0,terminal=0;};
+    std::vector<NetUse> m_netUses;
+    int m_scriptPlayer=0;       // the player whose step or hand fires the script running now
+    int m_shooter=0;            // the player whose shot is being resolved (a co-op host resolving a guest's)
+    // ----- Several maps at once (ForeignChunks.cpp; docs/Systems/multiplayer.md "Several maps") -----
+    // A co-op host runs every map a player stands on. Its own map is the active chunk as always; each other one
+    // is swapped in as the active chunk for a frame of its own (ChunkFrame) in which its creatures, people and
+    // scripts think against the players on it (players() holds the players in the active chunk's frame: its map
+    // and the maps stitched beside it on the grid). m_netForeign: the maps that get such a frame this update
+    // (the Match sets it); m_netKeep: maps kept resident for a player on them or beside them. Both empty alone.
+    std::vector<char> m_netForeign,m_netKeep;
+    bool m_foreignFrame=false;int m_foreignHome=-1;Player m_foreignLocal{};
+    struct ChunkFrame {
+     Game& g;int home=-1,level=-1,held=-1,carry=-1;bool swapped=false,homeResident=false;Vec2 delta{};
+     std::vector<SoundEvent> sounds;PlayerNoise noise{};
+     ChunkFrame(Game& game,int level);~ChunkFrame();
+     ChunkFrame(const ChunkFrame&)=delete;ChunkFrame& operator=(const ChunkFrame&)=delete;
+    };
+    void updateForeignChunks(float dt);
+    // Whether a map's players and things are in the active chunk's frame: it, or a resident map stitched beside
+    // it (touching on the grid; maps of a custom campaign may share an origin and are then not in each other's).
+    bool inPlayerFrame(int level)const;
+    bool stitchedTo(int a,int b)const;
+    // A person thinks in this update's frame: the host's own frame takes everyone not on a map that has its own.
+    bool actorInFrame(int level)const{if(m_foreignFrame)return level==m_level;return level<0||size_t(level)>=m_netForeign.size()||!m_netForeign[size_t(level)];}
+    // To another map keeping every map's state (the Match's teleports): the active chunk is stored and that one
+    // swapped in as crossing a seam does; the player is placed by the caller.
+    void enterChunk(int level);
+    // ----- Props in a match (MatchProps.cpp): the host's are the truth -----
+    // m_netPropsRemote (a guest): props are posed from the host; a hand, a punch or a kick on one is sent to the
+    // host (m_netPropIntents) instead of done here, and nothing breaks here but what the host breaks.
+    // m_netPropsHost: breaks are queued for the guests (m_netPropEvents). m_netPropApply: the Match is applying the
+    // host's word (or a guest's intent on the host). m_propSimulating: inside the solver's own step.
+    bool m_netPropsRemote=false,m_netPropsHost=false,m_netPropApply=false,m_propSimulating=false;
+    struct NetPropIntent {int type=0,level=0;std::uint32_t id=0;Point3 at{},v{};float amount=0;};   // type 0 knock (v impulse), 1 damage (v way)
+    std::vector<NetPropIntent> m_netPropIntents;
+    struct NetPropEvent {int level=0;std::uint32_t id=0;Point3 way{};};   // a prop the host broke
+    std::vector<NetPropEvent> m_netPropEvents;
     void updateNet();                              // the Session's frame: makes and drops the Match
     void updateFrame(const InputState& input,float dt);
     std::vector<Enemy> m_enemies;
@@ -1886,6 +2145,24 @@ private:
     bool m_navAuthority=true;
     bool m_vrAimValid=false,m_vrSupportGrip=false,m_vrChamberEmpty=false,m_vrPumpBack=false;float m_vrPumpRest=0,m_vrPumpAlong=0;
     Point3 m_vrAimPosition{},m_vrAimDirection{};
+    // VR guns by hand (VrGuns.cpp). gun: the weapon this state is for (a switch resets it). held: 1 a magazine, 2 a
+    // shell in the support hand; spentGrip: one just went in and the hand has not opened. The handgun: magOut,
+    // chambered, slideBack (locked open), racking (rackFrom the fist where it took the slide, rack its pull back).
+    // The shotgun: spent (a fired case waits in the chamber for the pump), cycleAt (a one-handed shot's self-cycle).
+    // kick*: the recoil springs. drop*: the magazine let fall.
+    struct VrGunState {WeaponId gun=WeaponId::Fists;int held=0;bool spentGrip=false,prevGrip=false,wasSupport=false;
+     bool magOut=false,chambered=false,slideBack=false,racking=false;Point3 rackFrom{};float rack=0,rackMax=0,seat=-1,depth=0;
+     bool spent=false;float cycleAt=-1;
+     float kickBack=0,kickBackV=0,kickRise=0,kickRiseV=0;
+     bool dropped=false,dropRest=false;Point3 dropAt{},dropVelocity{},dropRight{},dropUp{},dropBack{};float dropAge=0;WeaponId dropGun=WeaponId::Handgun;} m_vrGun;
+    VrGunInput m_vrGunIn;
+    std::vector<VrHaptic> m_vrHaptics;
+    // Every case the VR guns threw through ejectCasing (kind, where, how fast), the last 16: what the tests read.
+    struct VrEject {int kind=0;Point3 at{},velocity{};};std::vector<VrEject> m_vrEjected;
+    void vrEject(int kind,Point3 at,Point3 velocity);
+    void updateVrGun(const InputState& input,float dt);
+    void vrShotFired();
+    void soundAt(Sound sound,Point3 at,float gain,float pitch=1);
     bool m_vrInputActive=false;int m_vrCarryHand=1,m_vrInteractionHand=1;
     std::array<Point3,2> m_vrHandPosition{},m_vrHandDirection{},m_vrHandVelocity{},m_vrHandUp{};
     std::array<bool,2> m_vrHandValid{},m_vrMeleeTracked{};
@@ -1896,6 +2173,15 @@ private:
     // A semi-automatic trigger must come back up before the next shot.
     bool m_triggerReset=true;
     int m_previousChoice=0;
+    // Full auto (the MAC-11): the spread's bloom, the view's climb still to give
+    // back, and the seed of the spread's own generator. Not saved.
+    float m_spread=0,m_recoilDebt=0;unsigned m_spreadSeed=0x2545f491u;float nextSpreadRandom();
+    // The sidearm drawn last: the one the hip holster keeps while neither is out.
+    WeaponId m_lastSidearm=WeaponId::Handgun;
+    std::vector<Casing> m_casings;unsigned m_casingSeed=0x9e3779b9u;float m_casingClink=-1;
+    static void placeMachinePistolCell(Game& g);
+    float casingRandom();
+    void updateCasings(float dt);
     // Pending switch: the firearm to swap to at the bottom (Fists: none), then the raise.
     WeaponId m_switchTarget=WeaponId::Fists;bool m_switchRaise=false;
     float m_reloadLength=0;bool m_emptyReload=false;
@@ -1949,8 +2235,8 @@ private:
     bool m_weaponEquipped=true,m_inventoryClick=false,m_inventoryUse=false;
     WeaponId m_equippedWeapon=WeaponId::Shotgun;
     int m_medkits=0,m_selectedItem=-1;
-    // Storage cells: 0 shotgun 4x2, 1 shells 1x2, 2 first aid 2x2, 3 9 mm 1x2 (version 19).
-    std::array<int,4> m_itemCells{12,0,2,1};
+    // Storage cells: 0 shotgun 4x2, 1 shells 1x2, 2 first aid 2x2, 3 9 mm 1x2 (version 19), 4 .380 1x2 (inventory section 2).
+    std::array<int,5> m_itemCells{12,0,2,1,4};
     void sound(Sound sound,float gain=1,float pitch=1);
     void enemySound(const Enemy& enemy,int action,float gain=1,float pitch=1);
     void updateWeaponMotion(const InputState& input,float dt);

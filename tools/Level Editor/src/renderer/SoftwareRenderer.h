@@ -208,7 +208,24 @@ private:
     void drawTrackedHands(const Game& game);
     AvatarPose m_vrPose;AvatarSolve m_vrSolve;bool m_vrPoseReady=false;
     Point3 m_vrCardAnchor{};double m_vrCardClock=-1;float m_vrStatusTime=0;int m_vrStatusKey=-1;bool m_vrForeEndMeasured=false;
+    // m_vrScripted: renderVrScripted's frame (the VR drawing through the desktop camera). m_vrGunMeasured: the
+    // guns' working points have been measured from the meshes and handed to the game (VrGunDraw.cpp).
+    bool m_vrScripted=false,m_vrGunMeasured=false,m_vrViewSet=false;Player m_vrView;
  public:
+    // The VR drawing (her body, arms, the gun in the hand, a magazine or shell in the other) from the active
+    // VrRuntime, a scripted pose (VrRuntime::script) without a headset, drawn through the desktop camera, which
+    // the game has put at the scripted head: the lab's VR captures.
+    // view: another camera to look from (an onlooker beside her), the body still posed from the scripted head.
+    void renderVrScripted(const Game& game,const Player* view=nullptr);
+    // The Remington model point in the VR gun frame (right, up, back; the grip in the fist, the muzzle at -z).
+    static Point3 vrShotgunPoint(const Mesh& mesh,Point3 model);
+    // A gun mesh's working points in the VR gun frame (Game::VrGunGeometry), measured from its parts.
+    static Game::VrGunGeometry measureVrGun(const Mesh& mesh,bool pistol);
+    // The MAC-11's (mac11.fbx, resource 3353): the muzzle, the receiver's sights, the right-side port, the long
+    // magazine's well and line, the cocking knob (slideRear).
+    static Game::VrGunGeometry measureVrMac(const Mesh& mesh);
+    // --vr-test: the game's gun points agree with the meshes as the VR hands draw them; the sights over the bore.
+    static bool testVrGunGeometry(std::ostream& report);
     // The arm rig posed on a solve (shared by the drawing and --vr-test): its shoulders' middle in rig space and
     // the game metres per rig unit, for rigToWorld.
     struct VrRig {Point3 mid{};float scale=1;};
@@ -389,6 +406,9 @@ private:
     // tools/player/build_claire_fp_shotgun.py: clips posed by name, the gun
     // carried by its baked reference points. m_fpShotgunPosed: this frame used it.
     Mesh m_fpShotgun{2313};bool m_fpShotgunPosed=false;float m_fpPush=0,m_fpDrop=0;
+    // The MAC-11 the same way on the pack's pistol rig (tools/player/build_claire_fp_mac11.py):
+    // gun_*, mag_* and knob_* points carry its frame, its magazine and its cocking knob.
+    Mesh m_fpMac{3359};bool m_fpMacPosed=false;
     float m_tpBack=0,m_tpTime=-1;
     // Third person, standing still: her body trails the look and steps round
     // with a 90-degree turn clip once it falls more than ~60 degrees behind.
@@ -400,6 +420,19 @@ private:
     std::array<Point3,6> m_handNormals{};std::array<float,6> m_handLight{};bool m_handLightReady=false;
     struct FpClip{const char*name;float phase;};FpClip fpShotgunClip(const Game&game)const;
     Point3 fpShotgunPoint(Point3 remington,bool pump)const;
+    // The MAC-11's clip for this moment (the reload's frames mapped from the game's
+    // progress, tactical or from empty), and a point of the MAC-11 (its model metres)
+    // carried by the frame (0), the magazine (1) or the knob (2) into view space.
+    FpClip fpMacClip(const Game& game)const;
+    Point3 fpMacPoint(Point3 mac,int part)const;
+public:
+    // What the first-person MAC-11 drew last frame (view space, metres): the
+    // magazine's centre and the gun's, the knob's travel back and the hands'
+    // distance from the grip and the magazine. --feature=mac11 reads it.
+    struct MacReport {bool drawn=false;Point3 magazine{},grip{},muzzle{};float knobBack=0,rightGrip=0,leftMagazine=0;const char* clip="";float phase=0;};
+    const MacReport& macReport()const{return m_macReport;}
+private:
+    MacReport m_macReport;
     Mesh m_waspMesh{114},m_bruteMesh{116},m_wardenMesh{242},m_mutantMesh{272,"",274},m_snatcherMesh{2126,"",2128},m_chimeraMesh{2129,"",2131},m_cursedMesh{2441,"",2443};
     // The transformed: the Worker's body (277) on its own six baked clips.
     Mesh m_transformedMesh{277,"",2185};
@@ -480,6 +513,11 @@ private:
     Mesh m_engineerDrone{333,"",334};
     Texture m_droneTexture,m_handgunTexture;
     Mesh m_handgunMesh{337};
+    // The MAC-11 (its model: metres, the grip's top at the origin, +z the muzzle,
+    // +x its left; MacMagazine part 8, MacBolt the knob part 9), its .380 box and
+    // the brass both pistols throw (tools/player/import_mac11.py).
+    Mesh m_macMesh{3353},m_macAmmoMesh{3355},m_brassMesh{3357};
+    Texture m_macTexture,m_macAmmoTexture,m_brassTexture;
     std::array<std::array<Texture,2>,kCleanupBodies> m_cleanupTextures;
     std::array<std::array<std::array<Point3,3>,2>,kCleanupBodies> m_cleanupArms{};
  std::array<std::array<Point3,2>,kCleanupBodies> m_cleanupPalms{};
@@ -599,6 +637,9 @@ public:
     // (thumb, index, middle, ring, pinky) closed on its grip, the index still
     // the player's own trigger finger.
     static Point3 vrPistolPoint(Point3 model,bool handFrame);
+    // The same for the MAC-11 (its origin is the grip's top: lifted MacLift into the fist).
+    static constexpr float MacLift=.02f;
+    static Point3 vrMacPoint(Point3 model,bool handFrame);
     // Where the pistol's grip is in view space (rig inspection centres on it).
     Point3 pistolGripView(const Game& game)const{return pistolHold(game).origin;}
     static std::array<float,5> pistolCurls(const std::array<float,5>& tracked){return {std::clamp(tracked[0],.30f,.50f),std::clamp(tracked[1],.25f,.60f),std::max(tracked[2],.85f),std::max(tracked[3],.85f),std::max(tracked[4],.85f)};}
@@ -645,6 +686,10 @@ private:
     // The title's multiplayer pages and a match's HUD: scoreboard, kill feed, status, respawn (FrontEnd.cpp).
     void drawTitleItems(const Game& game);
     void drawMatchHud(const Game& game);
+    void drawChat(const Game& game);           // FrontEnd.cpp: the match's chat box, lower left
+    void drawPauseMenu(const Game& game);      // FrontEnd.cpp: PAUSE in the title's language
+    void drawSettingsMenu(const Game& game);   // FrontEnd.cpp: SETTINGS, its pages and rows
+    void drawMenuFooter(bool change);          // FrontEnd.cpp: the keys a menu takes, along the bottom
     // The other players in a match, posed full bodies (RemotePlayers.cpp): drawn inside drawScene through its own
     // lit triangle (both renderers take it), and their name tags over the frame.
     struct RemoteDrawHooks{

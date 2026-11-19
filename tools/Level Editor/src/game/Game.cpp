@@ -89,11 +89,11 @@ bool Game::playCampaignFile(const std::wstring& path,std::string& error){
 void Game::showTitleScreen(){
     m_titleScreen=true;m_titleSelection=0;m_customMenuOffset=0;m_titleNotice.clear();m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;m_openEditor=false;m_editorFresh=true;m_editorProject.clear();
     m_titlePage=TitlePage::Main;
-    m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
+    m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Pause;m_menuArmed=-1;m_chatOpen=false;m_chatTyped.clear();
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1};m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1,4};m_lastSidearm=WeaponId::Handgun;m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -106,6 +106,7 @@ void Game::equipWeapon(WeaponId id){
  if(!playerFirearm(id)||!ownsWeapon(id))return;
  if(id!=m_equippedWeapon){m_reloadTimer=0;m_vrChamberEmpty=m_vrPumpBack=false;}
  m_handsLowered=false;m_equippedWeapon=id;m_weaponEquipped=true;m_holster=m_player.pool(id).total>0?0.f:1.f;
+ if(sidearm(id))m_lastSidearm=id;
 }
 void Game::selectWeapon(WeaponId id){
  if(id==WeaponId::Fists){equipWeapon(id);return;}
@@ -165,6 +166,8 @@ const World& Game::worldAt(Vec2& local)const{
  // Campaign keeps its existing authored offsets; Ashfall can therefore form a
  // genuine 2D grid with the same collision queries.
  Vec2 global=local+chunkOffset(m_level);int other=m_level;
+ // Inside the active chunk it is the active chunk's (two maps of a custom campaign may share an origin).
+ if(local.x>=0&&local.x<World::Width&&local.y>=0&&local.y<World::Height)return m_world;
  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){other=level;break;}
  }
@@ -173,6 +176,8 @@ const World& Game::worldAt(Vec2& local)const{
 }
 void Game::crossChunkBoundary(){
  Vec2 global=m_player.pos+chunkOffset(m_level);int next=m_level;
+ // Still inside this map: no crossing (another map may share its origin).
+ if(m_player.pos.x>=0&&m_player.pos.x<World::Width&&m_player.pos.y>=0&&m_player.pos.y<World::Height)return;
  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
  }
@@ -222,6 +227,7 @@ void Game::crossChunkBoundary(){
  int firstFollower=int(m_enemies.size());
  for(auto&enemy:followers){enemy.z=enemy.arrive>0?m_world.supportBelow(enemy.waypoint.x,enemy.waypoint.y,m_player.z+.25f):m_world.supportBelow(enemy.pos.x,enemy.pos.y,enemy.z+.25f);enemy.lastKnownZ=enemy.homeZ=enemy.z;m_enemies.push_back(enemy);}
  m_playerNoise.pos+=shift;
+ for(auto&c:m_casings){c.position.x+=shift.x;c.position.y+=shift.y;}
  for(auto&ref:moved)if(ref.index<0)ref.index=firstFollower-1-ref.index;
  if(!moved.empty())remapEnemyRefs(previous,moved);
  for(auto&event:m_sounds)if(event.spatial||std::isfinite(event.z))event.position+=shift;
@@ -239,7 +245,7 @@ void Game::loadLevel(int level,bool carry) {
     m_player.pitch = m_world.definition().spawnPitch;
     m_player.health = 100.0f;
     // A fresh map: the shotgun's 72 with six in the tube, no 9 mm and no handgun rounds.
-    m_player.pools={AmmoPool{},AmmoPool{72,6},AmmoPool{}};
+    m_player.pools={AmmoPool{},AmmoPool{72,6},AmmoPool{},AmmoPool{}};
     if(carry){m_player.health=health;m_player.pools=pools;}
     m_player.z = m_world.hasTerrain()?groundHeight(m_player.pos,float(World::TerrainMaxZ+1)):m_world.definition().spawnHeight;
     m_player.verticalVelocity = 0.0f;
@@ -256,6 +262,7 @@ void Game::loadLevel(int level,bool carry) {
     m_weaponKick = 0.0f; m_reloadTimer=0; m_shotCooldown = 0.0f;
     m_damageFlash = 0.0f;
     m_elapsed = 0.0f;
+    m_casings.clear();m_spread=m_recoilDebt=0;   // spent cases belong to the map they fell in
     m_waterSplashes.clear();m_waterFeet=-1e9f;m_wakeWay=0;m_waterSoundsSeen=0;m_waterNpcDown.clear();m_waterDeaths.clear();
     m_kills = 0;
     m_won = false;
@@ -396,7 +403,24 @@ void Game::shoot(){
  float pitch=m_player.pitch/140.f;Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye},direction{std::cos(m_player.angle)*std::cos(pitch),std::sin(m_player.angle)*std::cos(pitch),std::sin(pitch)};
  if(m_vrAimValid){origin=m_vrAimPosition;direction=m_vrAimDirection;}
  float size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(size>.0001f)direction=direction*(1/size);
- m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,1,false,17,origin.z});
+ // Full auto: the round leaves anywhere in the bloomed cone (evenly over its disc),
+ // then the view climbs and wanders for the next.
+ if(gun.cycle.fullAuto){
+  const float cone=shotSpread(),turn=nextSpreadRandom()*2*kPi,r=cone*std::sqrt(nextSpreadRandom());
+  Point3 side{-direction.y,direction.x,0};float l=std::sqrt(side.x*side.x+side.y*side.y);side=l>1e-4f?side*(1/l):Point3{1,0,0};
+  const Point3 up{direction.y*side.z-direction.z*side.y,direction.z*side.x-direction.x*side.z,direction.x*side.y-direction.y*side.x};
+  direction=direction+side*(std::cos(turn)*r)+up*(std::sin(turn)*r);size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);direction=direction*(1/size);
+  m_spread=std::min(gun.cycle.spreadMax,m_spread+gun.cycle.spreadPerShot);
+  if(!m_vrAimValid){const float steady=1-(1-gun.cycle.spreadAimed)*.5f*m_aimBlend;   // down the sights it climbs a little less
+   const float climb=gun.cycle.recoilClimb*steady*(.85f+.3f*nextSpreadRandom());
+   const float before=m_player.pitch;m_player.pitch=std::clamp(m_player.pitch+climb,-210.f,210.f);m_recoilDebt+=m_player.pitch-before;
+   m_player.angle=wrapAngle(m_player.angle+(nextSpreadRandom()*2-1)*gun.cycle.recoilYaw*steady);}
+ }
+ // Each round's own report: a full-auto stream is not one sample repeated.
+ const float pitchVary=gun.cycle.fullAuto?.94f+.12f*nextSpreadRandom():1.f;
+ m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,pitchVary,false,17,origin.z});
+ // The pistols throw their brass with every round (the pump gun when it is worked).
+ if(sidearm(m_equippedWeapon)&&!(m_vrAimValid&&vrMagazineGun(m_equippedWeapon)))ejectCasing(m_equippedWeapon==WeaponId::Handgun?1:2,ejectionPort(m_equippedWeapon),ejectionVelocity(m_equippedWeapon));
  // In a match the host traces every shot, its own included (Match.cpp); the flash and recoil stay here.
  if(m_match&&m_match->localShot(origin,direction,int(m_equippedWeapon)))return;
  auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);
@@ -492,15 +516,21 @@ void Game::updatePickups() {
             }
             float gained=std::min(35.f,100.f-m_player.health);m_player.health+=gained;
             m_pickupNotice="RECOVERED "+std::to_string(int(gained))+" HEALTH";
+        } else if (p.kind == Pickup::Kind::MachinePistol) {
+            // The MAC-11 itself, a full magazine in it; drawn when it is new, otherwise its rounds.
+            const auto&def=playerWeaponDef(WeaponId::MachinePistol);const bool fresh=!hasMachinePistol();
+            grantMachinePistol(def.cycle.tubeCapacity);
+            m_pickupNotice=std::string(fresh?"TOOK MAC-11 / .380 x ":"TOOK .380 x ")+std::to_string(def.cycle.tubeCapacity);
+            if(fresh&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::MachinePistol);
         } else {
-            // Each box feeds its own gun, whatever is in hand; 9 mm waits for the pistol.
-            const bool nine=p.kind==Pickup::Kind::HandgunAmmo;const auto&def=playerWeaponDef(nine?WeaponId::Handgun:WeaponId::Shotgun);
+            // Each box feeds its own gun, whatever is in hand; 9 mm waits for the pistol, .380 for the MAC-11.
+            const bool nine=p.kind==Pickup::Kind::HandgunAmmo,mac=p.kind==Pickup::Kind::MacAmmo;const auto&def=playerWeaponDef(nine?WeaponId::Handgun:mac?WeaponId::MachinePistol:WeaponId::Shotgun);
             int rounds=def.cycle.pickupAmount;m_player.pool(def.id).total+=rounds;
-            m_pickupNotice="COLLECTED "+std::to_string(rounds)+(nine?" ROUNDS 9MM":" SHELLS");
+            m_pickupNotice="COLLECTED "+std::to_string(rounds)+(nine?" ROUNDS 9MM":mac?" ROUNDS .380":" SHELLS");
         }
         p.active = false;
         m_pickupNoticeTime=2.f;
-        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:1.f);
+        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:p.kind==Pickup::Kind::MacAmmo?1.04f:p.kind==Pickup::Kind::MachinePistol?.9f:1.f);
     }
 }
 const Pickup* Game::nearbyPickup()const{
@@ -521,7 +551,9 @@ bool Game::testPickups(){
 // which reads what the player did this frame and sends it, and writes what the others did.
 void Game::update(const InputState& input, float dt) {
     updateNet();
+    updateVoice(input);
     updateFrame(input,dt);
+    if(!m_netForeign.empty())updateForeignChunks(dt);   // a co-op host's other occupied maps (ForeignChunks.cpp)
     if(m_match)m_match->update(input,dt);
 }
 void Game::updateFrame(const InputState& input, float dt) {
@@ -532,30 +564,42 @@ void Game::updateFrame(const InputState& input, float dt) {
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
     bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     m_scoreboardHeld=input.scoreboard&&m_matchView.active&&!m_titleScreen;
+    if(m_scoreboardHeld&&!m_chatOpen)updateScoreboardPick(input);else if(!m_scoreboardHeld)m_scoreboardPick=-1;
+    m_boardPrevious=input;
     drainSessionEvents();   // the menus own the session's events (MultiplayerMenu.cpp)
     if(m_titleScreen){updateTitle(input);return;}
     if(m_peaceful){m_enemies.clear();for(auto&chunk:m_chunks)chunk.enemies.clear();}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
-    if(consolePressed){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
+    if(consolePressed&&!m_chatOpen){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
     if(m_consoleOpen){updateConsole(input);return;}
+    // The chat line has the keys while it is open; the world runs on (a match never stops) with the player still.
+    if(m_chatOpen&&!m_chatFeeding){
+     updateChat(input);m_previousEscape=input.escape;m_previousChat=input.chat;
+     InputState idle{};idle.escape=input.escape;idle.chat=input.chat;idle.scoreboard=input.scoreboard;idle.console=input.console;idle.inventory=input.inventory;idle.flashlight=input.flashlight;
+     m_chatFeeding=true;updateFrame(idle,dt);m_chatFeeding=false;m_suppressFire=true;return;
+    }
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
     bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
     if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
     if(talking()&&escapePressed){closeDialogue();return;}
     if(escapePressed){
-     if(m_paused&&m_menuFromTitle){
+     if(m_paused&&m_menuPage==MenuPage::Options)settingsEscape();   // the rows, then the page column, then out
+     else if(m_paused&&m_menuFromTitle){
       if(m_menuPage==MenuPage::ConfirmLoad){m_menuPage=MenuPage::Load;m_menuSelection=m_pendingSlot;m_menuMessage.clear();}
       else showTitleScreen();
-     }else if(m_paused&&m_menuPage!=MenuPage::Settings){
+     }else if(m_paused&&m_menuPage!=MenuPage::Pause){
       if(m_menuPage==MenuPage::Overwrite||m_menuPage==MenuPage::ConfirmLoad){m_menuPage=m_menuPage==MenuPage::Overwrite?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
-      else {m_menuSelection=m_menuPage==MenuPage::Save?10:m_menuPage==MenuPage::Load?11:9;m_menuPage=MenuPage::Settings;}
+      else {m_menuSelection=m_menuPage==MenuPage::Save?PauseSave:PauseLoad;m_menuPage=MenuPage::Pause;}
       m_menuMessage.clear();
-     }else {m_paused=!m_paused;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_menuMessage.clear();}
+     }else {m_paused=!m_paused;m_menuPage=MenuPage::Pause;m_menuSelection=0;m_menuArmed=-1;m_menuMessage.clear();}
      m_dragSlider=-1;m_menuPrevious=input;m_suppressFire=true;return;
     }
     // A match does not stop for the pause menu: the menu takes the keys while the world runs on without them.
     if(m_paused&&m_match&&!m_menuFromTitle){updateMenu(input);if(m_paused&&!m_titleScreen){m_paused=false;InputState idle{};idle.escape=input.escape;idle.console=input.console;idle.inventory=input.inventory;idle.flashlight=input.flashlight;updateFrame(idle,dt);m_paused=true;m_suppressFire=true;}return;}
     if(m_paused){updateMenu(input);return;}
+    // T in a match opens the chat line (not in VR: there is no typing in a headset).
+    {const bool chatPressed=input.chat&&!m_previousChat;m_previousChat=input.chat;
+     if(chatPressed&&m_match&&m_matchView.active&&m_settings.textChat&&!m_vrInputActive&&!m_chatFeeding){m_chatOpen=true;m_chatTyped.clear();m_suppressFire=true;return;}}
     if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
     if(m_inventoryOpen){updateInventory(input);return;}
     // A conversation keeps the world running; only the player stands and listens.
@@ -583,15 +627,15 @@ void Game::updateFrame(const InputState& input, float dt) {
     if(input.mute&&!m_previousMute)m_audioMuted=!m_audioMuted;
     if(input.music&&!m_previousMusic)m_musicEnabled=!m_musicEnabled;
     m_previousMute=input.mute;m_previousMusic=input.music;
-    if (input.reload && !m_previousReload) reloadWeapon();
+    if (input.reload && !m_previousReload){if(input.vrTracked)vrReloadButton();else reloadWeapon();}   // VR reloads by hand (VrGuns.cpp)
     m_previousReload = input.reload;
     // Hidden in a locker, holding a guard or in a takedown the hands are busy:
     // the locker and the hold give the gun back themselves when they end.
     const bool handsBusy=hiddenLocker()>=0||lockerViewLocked()||heldNpc()>=0||takedownActive()||captured();
     if(input.weaponScroll&&!handsBusy&&!holdingClutter()){selectWeapon(wheelWeapon(input.weaponScroll));m_suppressFire=true;}
-    // 1/2/3 pick a weapon directly, but in a conversation the digits are replies.
-    {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=3?input.choice:0;m_previousChoice=input.choice;
-     if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=3&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
+    // 1/2/3/4 pick a weapon directly (fists, shotgun, handgun, MAC-11), but in a conversation the digits are replies.
+    {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=4?input.choice:0;m_previousChoice=input.choice;
+     if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=4&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
     for(auto&e:m_enemies)if(!e.alive)e.deathTime+=dt;
     m_hitFlash=std::max(0.f,m_hitFlash-dt*5.f);
 
@@ -650,7 +694,7 @@ void Game::updateFrame(const InputState& input, float dt) {
         bool carryingAtStart=heldNpc()>=0||(holdingClutter()&&(!input.vrTracked||m_vrCarryHand==1));{perf::Scope profile(perf::Clutter);updateClutter(input,dt);}
 
         // A pending switch lowers the gun in hand, swaps it at the bottom and raises the new one.
-        if(m_switchTarget!=WeaponId::Fists&&m_holster>=1.f){m_equippedWeapon=m_switchTarget;m_switchTarget=WeaponId::Fists;m_switchRaise=true;m_vrChamberEmpty=m_vrPumpBack=false;}
+        if(m_switchTarget!=WeaponId::Fists&&m_holster>=1.f){m_equippedWeapon=m_switchTarget;m_switchTarget=WeaponId::Fists;m_switchRaise=true;m_vrChamberEmpty=m_vrPumpBack=false;if(sidearm(m_equippedWeapon))m_lastSidearm=m_equippedWeapon;}
         const auto&cycle=equippedWeaponDef().cycle;const auto&melee=kUnarmedMelee;auto&rounds=m_player.pool(m_equippedWeapon);
         float oldReload=m_reloadTimer;m_reloadTimer=std::max(0.f,m_reloadTimer-dt);
         if(oldReload>0&&m_reloadLength>0){float before=1-oldReload/m_reloadLength,after=1-m_reloadTimer/m_reloadLength;
@@ -665,11 +709,12 @@ void Game::updateFrame(const InputState& input, float dt) {
          const float rack=ShellStart+shells*ShellInsert+ShellFinish*.45f;if(before<rack&&after>=rack)sound(cycle.pumpSound,.8f);
          if(m_reloadTimer==0)m_emptyReload=false;}
         else if(oldReload>0&&m_reloadTimer==0){rounds.loaded=std::min(cycle.tubeCapacity,rounds.total);if(cycle.pumpSoundAt>0)m_shotAge=0;m_emptyReload=false;}
-        m_shotCooldown = std::max(0.f,m_shotCooldown-dt);
+        // Full auto carries what is left of the interval into the next one, so it fires at its rate at any frame rate.
+        m_shotCooldown=cycle.fullAuto&&m_shotCooldown>0?std::max(-dt,m_shotCooldown-dt):std::max(0.f,m_shotCooldown-dt);
         m_guarding=heldNpc()<0&&!takedownActive()&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         // Right mouse with the shotgun up brings it to the eye (not sprinting,
         // reloading, switching or holding someone); about a fifth of a second.
-        {const bool aim=input.guard&&!unarmed()&&m_equippedWeapon==WeaponId::Shotgun&&m_holster<.05f&&!reloading()&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
+        {const bool aim=input.guard&&!unarmed()&&(m_equippedWeapon==WeaponId::Shotgun||m_equippedWeapon==WeaponId::MachinePistol)&&m_holster<.05f&&!reloading()&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
          m_aimBlend=std::clamp(m_aimBlend+(aim?dt:-dt)*6.f,0.f,1.f);}
         float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&!takedownActive()&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         // Put away it stays down even straight after a shot (only an emptied gun
@@ -678,20 +723,17 @@ void Game::updateFrame(const InputState& input, float dt) {
         // A switch moves a little quicker than the empty-gun lower.
         float slew=(m_switchTarget!=WeaponId::Fists||m_switchRaise?3.4f:2.6f)*dt;m_holster+=std::clamp(lower-m_holster,-slew,slew);
         if(m_switchRaise&&(lower>0||m_holster<cycle.raiseHolster||!m_weaponEquipped))m_switchRaise=false;
-        const bool pumpGun=m_equippedWeapon==WeaponId::Shotgun;
-        // VR pump: the support hand's distance along the barrel from the grip.
-        if(input.vrTracked){Point3 d=m_vrHandPosition[0]-m_vrAimPosition;m_vrPumpAlong=d.x*m_vrAimDirection.x+d.y*m_vrAimDirection.y+d.z*m_vrAimDirection.z;
-         if(m_vrChamberEmpty&&!m_vrSupportGrip)m_vrChamberEmpty=m_vrPumpBack=false; // let go: it cycles itself
-         if(m_vrChamberEmpty){if(m_vrPumpAlong<m_vrPumpRest-.07f)m_vrPumpBack=true;
-          else if(m_vrPumpBack&&m_vrPumpAlong>m_vrPumpRest-.025f){m_vrChamberEmpty=m_vrPumpBack=false;sound(Sound::Pump,.9f);}}}
+        // VR: the magazine, slide, shells and pump by hand, and the recoil springs (VrGuns.cpp).
+        if(input.vrTracked)updateVrGun(input,dt);
         if(!input.fire)m_triggerReset=true;
         // Firing with a shell in the tube ends a shell-by-shell reload there.
         if(input.fire&&!m_suppressFire&&shellReload()&&rounds.loaded>0&&reloadElapsed()>=ShellStart){m_reloadTimer=0;m_shotCooldown=0;}
-        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&m_vrChamberEmpty&&pumpGun)) {
+        if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&!vrGunReady())) {
             // Semi-automatic: one round per press, the trigger released before the next.
             const bool raised=m_weaponEquipped&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists,press=!cycle.semiAuto||m_triggerReset;
-            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked&&m_vrSupportGrip&&pumpGun){m_vrChamberEmpty=true;m_vrPumpBack=false;m_vrPumpRest=m_vrPumpAlong;}}
-            else if(cycle.semiAuto&&raised&&press&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=cycle.fireCooldown;}
+            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=(cycle.fullAuto?std::min(0.f,m_shotCooldown):0.f)+cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked)vrShotFired();}
+            // Dry: one click a press (a full-auto gun clicks once, not on and on while held).
+            else if((cycle.semiAuto||cycle.fullAuto)&&raised&&m_triggerReset&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=std::max(cycle.fireCooldown,.2f);}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
         }
         // Console summons' standing orders (Summon.cpp), before anyone thinks.
@@ -703,15 +745,18 @@ void Game::updateFrame(const InputState& input, float dt) {
         // The knocked stagger (RigidClutter.cpp): over whatever their minds just chose.
         poseBodyKnocks(dt);
         {perf::Scope profile(perf::Takedown);updateTakedown(dt);}
+        // A co-op guest: the host's guards think and fight; here they are posed from its snapshots (Match).
+        if(!m_netCreaturesRemote){
         updateEngineerDrones(dt);
         updateGuardCombat(dt);
-        {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
-        {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}
+        {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard&&actorInFrame(m_friendlyActors[actor].level))finishGuardTask(actor);}
+        {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}}
         updateEnemies(dt);updateWater(dt,true);
         // AI may walk back into a held prop after the hand sweep; clear that overlap.
         resolveHeldPropBodies();
         {perf::Scope profile(perf::Voices);updateStances(dt);updateNpcVoices(dt);updateAmbience(dt);}
         {perf::Scope profile(perf::Pickups);if(!m_editorObserver)updatePickups();updateSidearms();}
+        updateCasings(dt);
 
         // Campaign completion is explicit through scripted content. Reaching the
         // numerically last compiled chunk is never an implicit ending.
@@ -725,8 +770,15 @@ void Game::updateFrame(const InputState& input, float dt) {
 }
 void Game::updateWeaponMotion(const InputState& input,float dt){
  const auto&cycle=equippedWeaponDef().cycle;
- if(m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt)sound(cycle.pumpSound,.65f);
+ if(!m_vrAimValid&&m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt){sound(cycle.pumpSound,.65f);   // (VR pumps by hand: VrGuns.cpp)
+  // The pump worked back throws the spent shell out of the port (in VR the hand's own stroke does).
+  if(m_equippedWeapon==WeaponId::Shotgun&&!dead())ejectCasing(0,ejectionPort(WeaponId::Shotgun),ejectionVelocity(WeaponId::Shotgun));}
  m_shotAge+=dt;
+ // Full auto: let go (or between bursts) the climb comes back by its share and the spread settles.
+ if(cycle.fullAuto||m_spread>0||m_recoilDebt>0){const bool firing=input.fire&&m_shotAge<cycle.fireCooldown*1.6f;
+  if(!firing){m_spread=std::max(0.f,m_spread-cycle.spreadSettle*dt);
+   if(m_recoilDebt>0){const float give=std::min(m_recoilDebt,(m_recoilDebt*9.f+4.f)*dt);if(!input.vrTracked)m_player.pitch=std::clamp(m_player.pitch-give*cycle.recoilReturn,-210.f,210.f);m_recoilDebt-=give;}}
+  if(!cycle.fullAuto){m_spread=0;m_recoilDebt=0;}}
  float yawRate=input.mouseDx*.0022f*m_settings.sensitivity/std::max(dt,.001f);
  float pitchRate=input.mouseDy*.308f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);
  Vec2 target{std::clamp(-yawRate*.042f,-.19f,.19f),std::clamp(pitchRate*.035f,-.15f,.15f)};
@@ -858,6 +910,36 @@ bool Game::receiveDamage(float amount,Vec2 source,bool blockable,bool shieldable
  if(blocked){amount*=melee.guardScale;m_verticalSpringVelocity-=.45f;sound(Sound::PunchHit,.35f,.75f);}
  else sound(Sound::Hurt,.7f,.92f);
  if(!m_god)m_player.health=std::max(0.f,m_player.health-amount);m_damageFlash=blocked?.25f:1.f;
+ return true;
+}
+// ----- The players the minds know (Game.h PlayerView; docs/Systems/multiplayer.md "One path") -----
+const std::vector<Game::PlayerView>& Game::players()const{
+ // Written in place: a call made while another walks the list leaves it as it was (same entries, same storage).
+ // Only the players in the active chunk's frame (its map and the maps stitched beside it): a player on another map
+ // of a custom campaign (which may share this one's origin) is not here. In another map's frame on a co-op host
+ // (ForeignChunks.cpp) the local player is here only if their map is beside that one, as a stand-in moved into it.
+ const bool local=!m_foreignFrame||inPlayerFrame(m_foreignHome);
+ size_t n=local?1:0;for(size_t i=0;i<m_remoteBodies.size()&&i<16;++i)n+=inPlayerFrame(m_remoteBodies[i].level);
+ if(m_playerViews.size()!=n){m_playerViews.reserve(17);m_playerViews.resize(n);}
+ size_t k=0;
+ if(local)m_playerViews[k++]=m_foreignFrame?PlayerView{0,true,m_foreignHome,&m_foreignLocal}:PlayerView{0,true,m_level,&m_player};
+ for(size_t i=0;i<m_remoteBodies.size()&&i<16&&k<n;++i){const auto& r=m_remoteBodies[i];if(inPlayerFrame(r.level))m_playerViews[k++]={r.id,false,r.level,&r.body};}
+ return m_playerViews;
+}
+const Game::PlayerView* Game::playerById(int id)const{for(const auto& p:players())if(p.id==id)return &p;return nullptr;}
+const Game::PlayerView& Game::nearestPlayer(Vec2 at,float z)const{
+ const auto& list=players();const PlayerView* best=&list.front();float nearest=1e30f;
+ for(const auto& p:list){if(!p.alive())continue;const float dz=p.body->z-z,d=lengthSq(p.body->pos-at)+dz*dz;if(d<nearest){nearest=d;best=&p;}}
+ return *best;
+}
+namespace{const Game::RemoteBody* remoteOf(const std::vector<Game::RemoteBody>& list,int id){for(const auto& r:list)if(r.id==id)return &r;return nullptr;}}
+Vec2 Game::playerVelocity(const PlayerView& p)const{if(p.local)return m_velocity;const auto* r=remoteOf(m_remoteBodies,p.id);return r?r->velocity:Vec2{};}
+float Game::playerLit(const PlayerView& p)const{if(p.local)return m_playerExposure;const auto* r=remoteOf(m_remoteBodies,p.id);return r?r->lit:1.f;}
+bool Game::playerHidden(const PlayerView& p)const{if(p.local)return hiddenLocker()>=0;const auto* r=remoteOf(m_remoteBodies,p.id);return r&&r->hidden;}
+bool Game::playerTorch(const PlayerView& p)const{if(p.local)return flashlightOn();const auto* r=remoteOf(m_remoteBodies,p.id);return r&&r->torch;}
+bool Game::hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable,bool shieldable){
+ if(p.local)return receiveDamage(amount,source,blockable,shieldable);
+ if(amount>0&&p.alive())m_netHurts.push_back({p.id,amount});
  return true;
 }
 Game Game::weaponInspection(int mode,float age){auto game=validationScene(Enemy::Kind::Huntsman,3);

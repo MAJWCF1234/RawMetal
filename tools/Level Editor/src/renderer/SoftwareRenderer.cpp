@@ -232,7 +232,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})queue(*texture);
   for(const auto&texture:m_staffTextures)queue(texture);
   if(!m_logo.pixels.empty())queue(m_logo);
-  queue(m_droneTexture);queue(m_handgunTexture);
+  queue(m_droneTexture);queue(m_handgunTexture);queue(m_macTexture);queue(m_macAmmoTexture);queue(m_brassTexture);
   for(const auto&texture:m_paperProps)queue(texture);
   for(const auto&role:m_cleanupTextures)for(const auto&texture:role)queue(texture);
   for(const auto&texture:m_clutterTextures)queue(texture);for(const auto&[name,unused]:m_facilityOrder){
@@ -278,6 +278,9 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
    const auto&mesh=*cleanupMeshes()[size_t(role)];if(corners!=mesh.triangles.size()*3||joints.size()!=104+size_t(corners)*4)throw std::runtime_error("Cleanup attachment topology mismatch");
    std::memcpy(m_cleanupArms[role].data(),joints.data()+4,72);std::memcpy(m_cleanupPalms[role].data(),joints.data()+76,24);m_cleanupWeights[role].resize(corners);std::memcpy(m_cleanupWeights[role].data(),joints.data()+104,size_t(corners)*4);for(const auto&weight:m_cleanupWeights[role])if(weight[3]>1)throw std::runtime_error("Invalid cleanup arm side");}
  m_handgunTexture=loadTexture(338);deriveSurfaceNormal(m_handgunTexture,.3f);m_handgunTexture.glossStrength=.25f;
+ // Parkerized black: a little sheen, no relief taken from the sheet's noise (it sparkled grey).
+ m_macTexture=loadTexture(3354);m_macTexture.glossStrength=.08f;
+ m_macAmmoTexture=loadTexture(3356);m_brassTexture=loadTexture(3358);m_brassTexture.glossStrength=.35f;
  m_droneTexture=loadTexture(335);deriveSurfaceNormal(m_droneTexture,.3f);m_droneTexture.glossStrength=.2f;
  {auto emission=loadTexture(336);if(emission.width!=m_droneTexture.width||emission.height!=m_droneTexture.height)throw std::runtime_error("Drone emission dimensions mismatch");m_droneTexture.emission=std::move(emission.pixels);}
  {Texture missing{64,64,std::vector<std::uint32_t>(64*64)};for(int y=0;y<64;++y)for(int x=0;x<64;++x)missing.pixels[size_t(y*64+x)]=((x/8+y/8)&1)?0xff000000u:0xffff00ffu;prepareDecal(missing,false);m_missingTexture=std::move(missing);}
@@ -611,7 +614,7 @@ startupMark("engine textures"); m_concreteFloor=m_concrete;
    {&m_ironTexture,M::BareSteel},{&m_darkMetalTexture,M::BareSteel},{&m_rubberTexture,M::Rubber},{&m_leatherTexture,M::Leather},
    {&m_officeTile,M::Vinyl},{&m_officeWall,M::Plaster},{&m_dropCeiling,M::Plaster},{&m_securityCarpet,M::Fabric},{&m_officeCarpet,M::Fabric},
    {&m_areaWalls[0],M::Plaster},{&m_areaWalls[1],M::Plaster},{&m_areaWalls[2],M::Plaster},{&m_areaFloors[0],M::SealedConcrete},{&m_areaFloors[1],M::SealedConcrete},{&m_areaFloors[2],M::SealedConcrete},
-   {&m_handgunTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
+   {&m_handgunTexture,M::BareSteel},{&m_brassTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
    {&m_cursedTexture,M::Rust},{&m_droneTexture,M::PaintedMetal},{&m_arms,M::Clothing}};
   for(auto [t,m]:named)apply(*t,m,"engine");
   for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");if(m_limitatorTexturesReady)for(auto& t:m_limitatorTextures)apply(t,M::Clothing,"limitator");
@@ -1051,9 +1054,11 @@ void SoftwareRenderer::drawHud(const Game& game){
   uiText(reserveX-6-loadedWidth,m_height-52,b,ammo.loaded==0?red:bone,0,40,hud);
   std::snprintf(b,sizeof(b),"/ %02d",ammo.reserve);uiText(reserveX,m_height-31,b,muted,0,16,hud);
   uiText(reserveX,m_height-46,ammo.caliber,muted,0,10,hud,2);
-  // One pip a round in the magazine: six shells, or twelve 9 mm in two groups of six.
+  // One pip a round in the magazine: six shells, twelve 9 mm in two groups of six, or
+  // the MAC-11's thirty-two .380 in two rows of sixteen, groups of eight.
   const bool narrow=ammo.capacity>8;const int pitch=narrow?5:6,right=reserveX-6-loadedWidth-12;
-  for(int i=0;i<ammo.capacity;++i)fill(right-i*pitch-(narrow&&i>=6?4:0),m_height-34,3,10,i<ammo.loaded?amber:bone,(i<ammo.loaded?1.f:.15f)*hud);
+  if(ammo.capacity>16){const int row=(ammo.capacity+1)/2;for(int i=0;i<ammo.capacity;++i){const int c=i%row,r=i/row;fill(right-c*4-(c>=8?3:0),m_height-37+r*7,2,5,i<ammo.loaded?amber:bone,(i<ammo.loaded?1.f:.15f)*hud);}}
+  else for(int i=0;i<ammo.capacity;++i)fill(right-i*pitch-(narrow&&i>=6?4:0),m_height-34,3,10,i<ammo.loaded?amber:bone,(i<ammo.loaded?1.f:.15f)*hud);
   // A magazine reads 0 until it seats: no prompt while the change is under way.
   if(ammo.loaded==0&&!game.reloading())uiText(m_width/2-uiTextWidth("RELOAD  [R]",0,12,2)/2,m_height/2+24,"RELOAD  [R]",red,0,12,hud,2);}
  std::snprintf(b,sizeof(b),"PURGED  %02d / %02d",game.kills(),int(game.enemies().size()));if(!game.enemies().empty())uiText(m_width/2-uiTextWidth(b,0,10,2)/2,m_height-20,b,muted,0,10,.8f*hud,2);
@@ -1135,7 +1140,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(game.pickupNoticeTime()>0&&!shut)promptPanel(offVents(m_height-65,23),game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=shut?nullptr:game.nearbyPickup()){
-  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
+  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":pickup->kind==Pickup::Kind::MacAmmo?".380 / 32 ROUNDS":pickup->kind==Pickup::Kind::MachinePistol?"MAC-11 / .380 x 32":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   promptPanel(m_height-65,message,amber);
  }
  // Shut in, the hint sits low on the steel under the vent band, off the
@@ -1283,9 +1288,9 @@ void SoftwareRenderer::drawVrStatus(const Game&game){
  std::snprintf(data,sizeof(data),"HEALTH %03d",int(game.player().health));text(24,67,data,green,5);
  rect(24,106,592,16,0xff082510u);rect(24,106,int(592*std::clamp(game.player().health/100.f,0.f,1.f)),16,green);
  // The firearm in hand (or last drawn): its magazine and reserve.
- {const auto&rounds=game.firearmPool();const bool nine=game.activeFirearm()==WeaponId::Handgun;std::snprintf(data,sizeof(data),"%s %02d / %02d",nine?"9MM":"SHELLS",rounds.loaded,std::max(0,rounds.total-rounds.loaded));text(24,142,data,green,4);}
+ {const auto&rounds=game.firearmPool();const bool nine=game.activeFirearm()==WeaponId::Handgun,mac=game.activeFirearm()==WeaponId::MachinePistol;std::snprintf(data,sizeof(data),"%s %02d / %02d",nine?"9MM":mac?".380":"SHELLS",rounds.loaded,std::max(0,rounds.total-rounds.loaded));text(24,142,data,green,4);}
  std::snprintf(data,sizeof(data),"CONTACTS %02d / PURGED %02d",game.enemiesRemaining(),game.kills());text(24,185,data,green,3);
- text(24,222,game.world().custom()?game.world().customMapName():game.world().campaign()?CampaignMapNames[game.level()]:"ASHFALL EXCLUSION ZONE",green,2);text(24,245,game.equippedWeapon()==WeaponId::Handgun?"HANDGUN EQUIPPED":game.equippedWeapon()==WeaponId::Shotgun?"SHOTGUN EQUIPPED":"EMPTY HANDS",green,2);
+ text(24,222,game.world().custom()?game.world().customMapName():game.world().campaign()?CampaignMapNames[game.level()]:"ASHFALL EXCLUSION ZONE",green,2);text(24,245,game.equippedWeapon()==WeaponId::Handgun?"HANDGUN EQUIPPED":game.equippedWeapon()==WeaponId::MachinePistol?"MAC-11 EQUIPPED":game.equippedWeapon()==WeaponId::Shotgun?"SHOTGUN EQUIPPED":"EMPTY HANDS",green,2);
  if(auto hint=game.interactionHint())text(24,272,hint,green);if(game.pickupNoticeTime()>0)text(290,245,game.pickupNotice().c_str(),green);if(auto caption=game.actorCaption();!caption.empty())text(24,260,std::string(caption).c_str(),green);
  // Map and contacts remain available on the device, never across the headset view.
  for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(game.world().solid(x+.5f,y+.5f))rect(530+x*3,180+y*3,3,3,0xff0b3417u);const auto&p=game.player();rect(530+int(p.pos.x*3),180+int(p.pos.y*3),3,3,green);for(const auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(530+int(e.pos.x*3),180+int(e.pos.y*3),3,3,green);auto exit=game.world().exitPoint();rect(530+int(exit.x*3),180+int(exit.y*3),4,4,green);
@@ -1324,6 +1329,7 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  if(objective!=m_vrObjective){m_vrObjective=objective;m_vrObjectiveTime=objective.empty()?0.f:6.f;}
  m_vrObjectiveTime=std::max(0.f,m_vrObjectiveTime-1.f/90.f);
  std::string caption(game.actorCaption());if(caption.empty()&&m_vrObjectiveTime>0)caption="OBJECTIVE: "+m_vrObjective;
+ if(caption.empty())caption=game.vrChatCaption();   // a match's newest chat line or notice (no chat box in a headset)
  // With nothing else to say, the strip carries the guards' alarm: ALERT, the Evasion clock, or the Caution clock.
  const int alarm=caption.empty()&&!game.dead()&&!game.won()?game.guardAlarm():0;
  if(alarm==Game::AlarmAlert)caption="ALERT";else if(alarm){const bool evasion=alarm==Game::AlarmEvasion;const int s=((evasion?game.guardEvasion():alarm)+999)/1000;char clock[24];std::snprintf(clock,sizeof clock,evasion?"EVASION  %d:%02d":"CAUTION  %d:%02d",s/60,s%60);caption=clock;}
@@ -1344,51 +1350,30 @@ void SoftwareRenderer::drawLoading(const Game& game){
 // drawTitle: FrontEnd.cpp.
 
 void SoftwareRenderer::drawSettings(const Game& game){
+ if(game.menuPage()==Game::MenuPage::Pause){drawPauseMenu(game);return;}
+ if(game.menuPage()==Game::MenuPage::Options){drawSettingsMenu(game);return;}
  if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
  constexpr int x=MenuLayout::X,y=MenuLayout::Y;
  const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0);
  fill(0,0,m_width,m_height,black,.45f);
  fill(x,y,MenuLayout::Width,MenuLayout::Height,rgb(6,5,5),.9f);frame(x,y,MenuLayout::Width,MenuLayout::Height,bone,.10f);fill(x,y,MenuLayout::Width,2,red,1);
- auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;const bool comfortPage=page==Game::MenuPage::Comfort;
- const char* title=comfortPage?"VR COMFORT":settingsPage?(game.menuFromTitle()?"SETTINGS":"PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
+ // The save and load pages and their confirmations (PAUSE and SETTINGS are drawn in FrontEnd.cpp).
+ auto page=game.menuPage();
+ const char* title=page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":"CONFIRM LOAD";
  uiText(x+16,y+9,title,bone,0,20,1,2);
- std::string subtitleText=comfortPage?"TURNING / BODY / FRAME RATE":settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
- // In a match: the lobby's join code (to hand to whoever should come down), and the match does not stop.
- const bool match=game.inMatch();if(match&&settingsPage)subtitleText=game.matchView().joinCode.empty()?"THE MATCH GOES ON":"JOIN CODE  "+game.matchView().joinCode;
- const char* subtitle=subtitleText.c_str();
+ const char* subtitle=game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED";
  uiText(x+MenuLayout::Width-16-uiTextWidth(subtitle,0,10,1),y+16,subtitle,red,0,10,1,1);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","PULL HIGHLIGHT","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",match?"LEAVE MATCH":game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
- auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   if(selected){gradient(x+10,top,MenuLayout::Width-20,19,red,.5f,0.f,true);fill(x+10,top,2,19,red,1);}
   else fill(x+10,top+18,MenuLayout::Width-20,1,bone,.05f);
-  static const char* comfortLabels[]={"BACK","TURN SPEED","COMFORT VIGNETTE","SEATED MODE","RECALIBRATE HEIGHT","LEFT-HANDED","RENDER SCALE","FRAME RATE READOUT"};
-  const char* label=comfortPage?comfortLabels[std::clamp(row,0,7)]:settingsPage&&row==5&&game.vrMenu()?"VR COMFORT...":settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
-  uiText(x+20,top+2,label,selected?bone:dim,0,13,match&&settingsPage&&row>=9&&row<=11?.3f:1.f,1);
-  if(settingsPage&&((row>=1&&row<=4)||row==6||row==7)){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:row==4?settings.sensitivity:row==6?settings.depthOfField:settings.lensEffects;
-   float normalized=std::clamp(row==4?(value-.2f)/2.8f:row>=6?value*.5f:value,0.f,1.f);int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
-   fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);
-   fill(knob-1,top+4,3,11,bone,1);
-   char valueText[16];if(row==4)std::snprintf(valueText,sizeof(valueText),"%.1fX",value);else if(row>=6)std::snprintf(valueText,sizeof(valueText),"%d%%",int(value*100+.5f));else std::snprintf(valueText,sizeof(valueText),"%d",int(value*100+.5f));
-   uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);
-  }
-  if(settingsPage&&row==5&&!game.vrMenu())uiText(MenuLayout::SliderX,top+3,settings.invertMouse?"ON":"OFF",settings.invertMouse?red:bone,3,11);
-  if(comfortPage){
-   if(row==1||row==2){const float value=row==1?settings.vrTurnSpeed:settings.vrVignette,normalized=std::clamp(row==1?(value-.25f)/1.75f:value,0.f,1.f);const int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
-    fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);fill(knob-1,top+4,3,11,bone,1);
-    char valueText[16];if(row==1)std::snprintf(valueText,sizeof valueText,"%d/S",int(value*120+.5f));else if(value<=0)std::snprintf(valueText,sizeof valueText,"OFF");else std::snprintf(valueText,sizeof valueText,"%d%%",int(value*100+.5f));
-    uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);}
-   const bool on=row==3?settings.vrSeated:row==5?settings.vrLeftHanded:row==7?settings.vrFrameRate:false;
-   if(row==3||row==5||row==7)uiText(MenuLayout::SliderX,top+3,on?"ON":"OFF",on?red:bone,3,11);
-   if(row==6){char valueText[16];if(settings.vrRenderScale<=0)std::snprintf(valueText,sizeof valueText,"AUTO");else std::snprintf(valueText,sizeof valueText,"%d%%",int(settings.vrRenderScale*100+.5f));uiText(MenuLayout::SliderX,top+3,valueText,bone,3,11);}
-  }
-  if(settingsPage&&row==8)uiText(MenuLayout::SliderX,top+3,settings.pullHighlight?"SUBTLE":"NONE",bone,3,11);
+  const char* label=page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":"LOAD / REPLACE CURRENT PROGRESS");
+  uiText(x+20,top+2,label,selected?bone:dim,0,13,1.f,1);
  }
- if(comfortPage)uiText(x+16,y+MenuLayout::Height-46,game.menuMessage().c_str(),red,0,11,1,1);
- else if(!settingsPage){uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);}
+ uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);
  fill(x+10,y+MenuLayout::Height-28,MenuLayout::Width-20,1,bone,.10f);
  uiText(x+16,y+MenuLayout::Height-22,"CLICK / ARROWS / ENTER",dim,0,10,1,1);
- const char* back=settingsPage?(game.menuFromTitle()?"ESC  TITLE":"ESC  RESUME"):"ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
+ const char* back="ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
+ (void)black;
 }
 // A conversation: the speaker's line over the bottom of the view, the
 // replies numbered under it (Game::DialogueFirstReplyY is where the mouse
@@ -1436,25 +1421,30 @@ void SoftwareRenderer::drawInventory(const Game& game){
  const bool shotgunOut=game.equippedWeapon()==WeaponId::Shotgun,pistolOut=game.equippedWeapon()==WeaponId::Handgun;
  if(shotgunOut)icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
  label(76,123,shotgunOut?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
- // Secondary: the handgun once owned (drawn from its own mesh), else the fists.
- if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW",paper);}
+ // Secondary: the sidearms once owned (each drawn from its own mesh; with both, the
+ // handgun on the left half and the MAC-11 on the right), else the fists.
+ const bool macOut=game.equippedWeapon()==WeaponId::MachinePistol;
+ if(game.hasHandgun()&&game.hasMachinePistol()){icon(m_handgunMesh,m_handgunTexture,76,152,100,30,true);icon(m_macMesh,m_macTexture,206,150,90,34,true);
+  label(76,173,pistolOut?"HANDGUN / HOLSTER":"HANDGUN / DRAW",paper);label(206,173,macOut?"MAC-11 / HOLSTER":"MAC-11 / DRAW",paper);}
+ else if(game.hasMachinePistol()){icon(m_macMesh,m_macTexture,76,150,110,34,true);label(76,173,macOut?"MAC-11 / CLICK TO HOLSTER":"MAC-11 / CLICK TO DRAW",paper);}
+ else if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW",paper);}
  else label(76,173,"FISTS / CLICK TO HOLSTER",paper);
  label(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
  label(76,258,"ARMOR: EMPTY",muted);
- int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
+ int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem||item.id==Game::MachinePistolItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
  if(keys>shown){std::string more="+ "+std::to_string(keys-shown)+" MORE KEY ITEMS";label(76,keyY+shown*11,more.c_str(),muted);}
  for(int row=0;row<5;++row)for(int col=0;col<6;++col){fill(350+col*34,94+row*29,31,26,rgb(236,228,214),.05f);frame(350+col*34,94+row*29,31,26,rgb(236,228,214),.10f);}
- // Items 0 shotgun, 1 shells, 2 first aid, 3 9 mm (a stack waits for the pistol).
- const int shells=game.player().pool(WeaponId::Shotgun).total,nine=game.player().pool(WeaponId::Handgun).total;
- int occupied=0;for(int item=0;item<4;++item){if((item==0&&shotgunOut)||(item==1&&shells==0)||(item==2&&game.medkits()==0)||(item==3&&nine==0))continue;
+ // Items 0 shotgun, 1 shells, 2 first aid, 3 9 mm (a stack waits for the pistol), 4 .380 (for the MAC-11).
+ const int shells=game.player().pool(WeaponId::Shotgun).total,nine=game.player().pool(WeaponId::Handgun).total,acp=game.player().pool(WeaponId::MachinePistol).total;
+ int occupied=0;for(int item=0;item<5;++item){if((item==0&&shotgunOut)||(item==1&&shells==0)||(item==2&&game.medkits()==0)||(item==3&&nine==0)||(item==4&&acp==0))continue;
   int cell=game.itemCell(item),ix=350+cell%6*34,iy=94+cell/6*29,iw=item==0?133:item==2?65:31;occupied+=item==0?8:item==2?4:2;
   fill(ix,iy,iw,55,rgb(30,26,24),.85f);if(game.selectedItem()==item){rect(ix,iy,iw,1,amber);rect(ix,iy,1,55,amber);rect(ix+iw-1,iy,1,55,amber);rect(ix,iy+54,iw,1,amber);}
-  icon(item==0?m_weaponMesh:item==1?m_shellsMesh:item==3?m_nineMesh:m_medkitMesh,item==0?m_weaponTexture:item==1?m_shellsTexture:item==3?m_nineTexture:m_medkitTexture,ix+3,iy+3,iw-6,39,item==0);
-  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?shells:item==3?nine:game.medkits());label(ix+5,iy+45,count,paper);
+  icon(item==0?m_weaponMesh:item==1?m_shellsMesh:item==3?m_nineMesh:item==4?m_macAmmoMesh:m_medkitMesh,item==0?m_weaponTexture:item==1?m_shellsTexture:item==3?m_nineTexture:item==4?m_macAmmoTexture:m_medkitTexture,ix+3,iy+3,iw-6,39,item==0);
+  char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?shells:item==3?nine:item==4?acp:game.medkits());label(ix+5,iy+45,count,paper);
  }
  char status[40];std::snprintf(status,sizeof(status),"%d / 30 CELLS  HP %d",occupied,int(game.player().health));label(350,250,status,muted);
- const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2","9MM ROUNDS / 1 X 2"};label(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
- fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":game.selectedItem()==3?"9MM IS USED BY THE HANDGUN":"AMMO IS USED BY THE SHOTGUN",amber);
+ const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2","9MM ROUNDS / 1 X 2",".380 ROUNDS / 1 X 2"};label(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
+ fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":game.selectedItem()==3?"9MM IS USED BY THE HANDGUN":game.selectedItem()==4?".380 IS USED BY THE MAC-11":"AMMO IS USED BY THE SHOTGUN",amber);
  label(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);label(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
 }
 void SoftwareRenderer::drawConsole(const Game& game){
@@ -1480,7 +1470,7 @@ void SoftwareRenderer::render(const Game& game){
     if(!m_gpu||(faces==m_gpu->shadowFacesDrawn()&&captures==m_gpu->reflectionCaptures()&&bakes==m_probeBakesTaken&&!m_gpu->shadowsPending()&&!m_gpu->reflectionsPending()))break;}}
   catch(...){m_settlingFrame=false;throw;}
   m_settlingFrame=false;return;}
- auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();
+ auto start=std::chrono::steady_clock::now();auto afterSubmission=start;m_view=game.view();if(m_vrScripted&&m_vrViewSet)m_view=m_vrView;
  m_bodyOutside=false;
  // A lens position the camera may take: in sight of her head and with room
  // round it (a .4 m box clear of walls, pillars, props and doors).
@@ -1539,13 +1529,13 @@ void SoftwareRenderer::render(const Game& game){
   auto here=game.chunkOffset(game.level())+m_view.pos,other=game.chunkOffset(level);
   float dx=std::max({other.x-here.x,0.f,here.x-other.x-24}),dy=std::max({other.y-here.y,0.f,here.y-other.y-24});return dx*dx+dy*dy<=48.f*48.f;};
  warmChunks(game);
- auto scene=[&]{bool parallel=!m_vrRendering&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
+ auto scene=[&]{bool parallel=!m_vrRendering&&!m_vrScripted&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){drawScene(game,false,level);m_renderedChunks.push_back(level);}
-   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if(m_vrRendering&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
+   if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if((m_vrRendering||m_vrScripted)&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
  if(m_gpu){try{if(m_vrReuseScene)m_gpu->beginReuse();else m_gpu->begin(m_width,m_height);auto origin=game.chunkOffset(game.level());float muzzleFlash=game.muzzleFlash();m_gpu->setView(m_view.pos.x+origin.x,m_view.pos.y+origin.y,m_view.z+m_view.eye,m_view.angle,m_view.pitch/140.f,float(m_width)/std::max(1,m_height),game.flashlightOn(),muzzleFlash,game.elapsed());
@@ -1645,7 +1635,7 @@ void SoftwareRenderer::render(const Game& game){
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else{if(!game.remotePlayers().empty())drawNameTags(game);drawHud(game);if(game.inMatch())drawMatchHud(game);}if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else if(!(game.paused()&&(game.menuPage()==Game::MenuPage::Pause||game.menuPage()==Game::MenuPage::Options))){if(!game.remotePlayers().empty())drawNameTags(game);drawHud(game);if(game.inMatch())drawMatchHud(game);}if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
  if(!m_editorGuides.empty())drawEditorGuides(game);
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
@@ -1672,6 +1662,13 @@ bool SoftwareRenderer::saveSceneCapture(const char*path){
  std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}return true;
 }
 void SoftwareRenderer::saveVrEye(const char*path){std::vector<uint32_t> pixels;m_gpu->captureVrEye(pixels);auto [width,height]=m_gpu->surfaceExtent();std::ofstream file(path,std::ios::binary);file<<"P6\n"<<width<<" "<<height<<"\n255\n";for(auto p:pixels){char rgb[]={char(p>>16),char(p>>8),char(p)};file.write(rgb,3);}}
+void SoftwareRenderer::renderVrScripted(const Game&game,const Player* view){
+ auto*runtime=VrRuntime::active();if(!runtime){render(game);return;}
+ m_vrViewSet=view!=nullptr;if(view)m_vrView=*view;
+ m_vrScripted=true;m_vrPose=runtime->avatar(game);m_vrPoseReady=m_vrPose.active&&!game.titleScreen();if(m_vrPoseReady)m_vrSolve=solveAvatar(m_vrPose,game.elapsed());
+ try{render(game);}catch(...){m_vrScripted=false;m_vrPoseReady=false;m_vrViewSet=false;throw;}
+ m_vrScripted=false;m_vrPoseReady=false;m_vrViewSet=false;
+}
 void SoftwareRenderer::renderVrEye(const Game&game,int eye){
  if(!m_gpu||!m_gpu->vrActive())throw std::runtime_error("VR requires the Vulkan renderer");
  m_vrRendering=true;
