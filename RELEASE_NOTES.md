@@ -4,6 +4,12 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.8
+
+- **No more phantom crates and barrels in the Builder's 3D view.** A new preview scene built in the memory the last one had, with the same tiles and the same edit count, kept drawing the old scene's baked fixtures: crates and barrels that were not in the map, that came and went and could not be deleted. The renderer now knows each game and each map by its own number, never by where it sits in memory, puts the fixtures, structures, props and signs it bakes into its key, and lets go of a cache as soon as what it held is gone, so no shadow or reflection of it stays behind.
+
+---
+
 ## v1.5.7 - The headset again (2026-11-18)
 
 A fix for the choice that went missing.

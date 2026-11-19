@@ -85,6 +85,7 @@ public:
     static bool testSurfaceSets(std::string* report=nullptr);
     static bool testHardware(bool glazingOnly=false);
     static bool testGameplayRendering();
+    static bool testSceneReuse(std::ostream& report); // --each-test=scene-reuse: a game built where the last one was draws only its own content
     // Sparks and arcs (ElectricFx.cpp): an arc lights the wall beside it and lets it go, frames repeat, budgets hold.
     static bool testElectricRendering(std::ostream& report);
     // Every kind falls, comes apart and fades; squibs and debris draw on both back ends.
@@ -161,7 +162,7 @@ public:
     // last one had, with the same epoch, and must not inherit its buffers.
     // The culling stats are kept per world drawn, by address: a new scene starts them afresh, so an old
     // scene's worlds (or one reused at the same address) are not counted into its totals.
-    void forgetScene(){m_lightingGame=nullptr;m_cullStats.clear();}
+    void forgetScene(){m_lightingGame=0;m_cullStats.clear();}
     // Lamp shadow faces drawn so far (Vulkan); 0 on the software path.
     std::uint64_t shadowFacesDrawn()const;
     std::array<double,3> frameStages()const{return {m_sceneMs,m_submitMs,m_presentMs};}
@@ -620,7 +621,7 @@ private:
     std::array<unsigned,Game::MaxChunks> m_chunkStaticSeen{}; // each map's Game::staticRevision when its bakes were made
     WorldId m_lightingWorld=WorldId::Campaign;
     unsigned m_lightingSession=0;
-    const Game* m_lightingGame=nullptr;
+    std::uint64_t m_lightingGame=0; // the game the bakes are for (Game::renderSerial: never its address)
     // Each resident map's light probes, baked on a worker from a copy of the map and swapped in
     // when done (LightProbes.h). key: the lamps, the powers they were baked at, the crystals and
     // the geometry; a map is never left without probes while its next bake runs.

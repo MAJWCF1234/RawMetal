@@ -8,6 +8,8 @@
 #include "../platform/Win32Window.h"
 #include "../audio/AudioEngine.h"
 #include "../game/EngineRegressionScene.h"
+#include "../world/CustomCampaign.h"
+#include "../world/ModelIds.h"
 #include <chrono>
 #include <fstream>
 #include <filesystem>
@@ -16,6 +18,7 @@
 #include <type_traits>
 #include <stdexcept>
 #include <climits>
+#include <new>
 namespace retro {
 bool SoftwareRenderer::testGameplayRendering(){
  std::ofstream report("gameplay-rendering-test.txt");auto storage=std::make_unique<SoftwareRenderer>(640,360);auto&r=*storage;
@@ -697,5 +700,59 @@ bool SoftwareRenderer::testCablePerformance(){
        <<"scene-build avg/p95/max: "<<s[0]<<" / "<<s[1]<<" / "<<s[2]<<" ms\n"
        <<"GPU submit+readback avg/p95/max: "<<g[0]<<" / "<<g[1]<<" / "<<g[2]<<" ms\n";
  return w[1]<=50.f;
+}
+}
+
+namespace retro {
+// --each-test=scene-reuse (lab: engine.scene-reuse). The builder's preview builds one game after another
+// with one renderer. A new game can sit at the address the last one had, with the same tiles, the same
+// lamps and the same edit count; the baked map geometry was keyed on the world's address, so the new scene
+// kept drawing the old one's fixtures: crates and barrels the map did not hold, which nothing could delete.
+// Scene A (crates and barrels in a row on a blank outdoor map) is drawn, destroyed, and scene B (the same
+// map without them) is built in A's own memory and drawn by the same renderer: it must match B drawn by a
+// fresh renderer, and not A.
+bool SoftwareRenderer::testSceneReuse(std::ostream& report){
+ auto pack=[](bool props){
+  std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nFORMAT|2\nCAMPAIGN|Scene reuse|0\n"
+   "MAP|0|Map|0|0|12|3|0|1|4.5|0.34|brutal_wasteland|0|0|0|0|0|-1|0|0|1.570796|0|0\nLAYER|0|0|Ground floor|0|0\n";
+  for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";
+  t+="LIGHT|0|12|12|4.3|0|0|2|24|4000\nTERRAIN|2026|1|2.5|30|0.45\n";
+  if(props)for(int i=0;i<7;++i){const bool crate=i<4;const int x=9+i;
+   t+="FIXTURE|0|"+std::to_string(crate?model::ind_crate:model::ind_barrel)+"|"+std::to_string(x)+"|7|0|"+(crate?"0.81|0.81|0.81":"0.53|0.56|0.95")+"|0|1\n";}
+  return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";};
+ const bool probes=lightProbes();setLightProbes(false);
+ struct Restore{bool on;~Restore(){setLightProbes(on);}}restore{probes};
+ auto draw=[](SoftwareRenderer& r,const Game& g){for(int i=0;i<4;++i)r.render(g);return std::vector<std::uint32_t>(r.pixels(),r.pixels()+size_t(DisplayWidth)*size_t(DisplayHeight));};
+ auto differing=[](const std::vector<std::uint32_t>& a,const std::vector<std::uint32_t>& b){size_t n=0;
+  for(size_t i=0;i<a.size()&&i<b.size();++i){int d=0;for(int shift:{0,8,16})d=std::max(d,std::abs(int((a[i]>>shift)&255)-int((b[i]>>shift)&255)));n+=d>24;}return n;};
+ auto withProps=loadCustomCampaignText(pack(true),"scene-a.rmc"),bare=loadCustomCampaignText(pack(false),"scene-b.rmc");
+ auto reused=std::make_unique<SoftwareRenderer>(DisplayWidth,DisplayHeight),fresh=std::make_unique<SoftwareRenderer>(DisplayWidth,DisplayHeight);
+ if(!reused->enableHardware(nullptr)||!fresh->enableHardware(nullptr)){report<<"FAIL: the offscreen Vulkan renderer is unavailable\n";return false;}
+ reused->setEnvironmentInspection(true);fresh->setEnvironmentInspection(true);
+ // One block of memory for both games, so B is built exactly where A was.
+ void* memory=::operator new(sizeof(Game),std::align_val_t(alignof(Game)));
+ struct Free{void* p;~Free(){::operator delete(p,std::align_val_t(alignof(Game)));}}freeMemory{memory};
+ Game* a=new(memory) Game(withProps);a->update({},1.f/60);
+ const auto pictureA=draw(*reused,*a);
+ const World* worldA=&a->world();const auto epochA=a->renderEpoch(),revisionA=a->staticRevision(0);const auto serialA=a->renderSerial();
+ std::string tilesA;for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)tilesA+=a->world().tile(x,y);
+ const size_t fixturesA=a->world().fixtures().size();
+ a->~Game();
+ Game* b=new(memory) Game(bare);
+ struct Destroy{Game* g;~Destroy(){g->~Game();}}destroyB{b};
+ b->update({},1.f/60);
+ std::string tilesB;for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)tilesB+=b->world().tile(x,y);
+ bool ok=true;auto check=[&](bool good,const std::string& what){ok&=good;report<<(good?"PASS: ":"FAIL: ")<<what<<'\n';};
+ check(fixturesA==7&&b->world().fixtures().empty(),"scene A holds the seven crates and barrels, scene B none");
+ check(&b->world()==worldA&&b->renderEpoch()==epochA&&b->staticRevision(0)==revisionA&&tilesA==tilesB,
+  "B sits where A was: the same world address, render epoch, edit count and tiles (what an address key could not tell apart)");
+ check(b->renderSerial()!=serialA,"B is a different game to the renderer (its own render serial)");
+ const auto pictureB=draw(*reused,*b),reference=draw(*fresh,*b);
+ const size_t fromA=differing(pictureA,reference),stale=differing(pictureB,reference),pixels=reference.size();
+ report<<"pixels that differ: A against B "<<fromA<<", B on the reused renderer against B on a fresh one "<<stale<<" of "<<pixels<<'\n';
+ check(fromA>400,"the crates and barrels are in A's picture");
+ check(stale<=pixels/400,"B on the renderer that drew A shows none of A's crates and barrels");
+ report<<(ok?"PASS":"FAIL")<<": a scene built where the last one was draws only its own content\n";
+ return ok;
 }
 }

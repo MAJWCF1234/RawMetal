@@ -664,6 +664,10 @@ public:
     // builder's live edits), so an edit rebuilds its own map and no other.
     unsigned renderEpoch()const{return m_sessionRevision-m_liveEdits;}
     unsigned staticRevision(int level)const{return renderEpoch()*40503u+(level>=0&&size_t(level)<m_mapEdits.size()?m_mapEdits[size_t(level)]:0u);}
+    // Which game this is, for the renderer's per-game caches: unique in the process, and a copy
+    // or an assignment takes a new one. Never the game's address, which a later game can take
+    // when this one is gone (the builder's preview builds them one after another).
+    std::uint64_t renderSerial()const{return m_renderSerial.value;}
     static bool testPickups();
     static bool testMovement();
     static bool testProgression();
@@ -1217,6 +1221,7 @@ private:
     std::string m_menuMessage;
     int m_pendingSlot=-1;
     unsigned m_sessionRevision=0;
+    MapSerial m_renderSerial; // renderSerial(): a new number on construction, copy and assignment
     unsigned m_liveEdits=0;std::vector<unsigned> m_mapEdits; // live edits so far, and how many touched each map
     void refreshSaveSlots();
     std::string savedLabel(const std::filesystem::path& path,const char* invalid)const;
