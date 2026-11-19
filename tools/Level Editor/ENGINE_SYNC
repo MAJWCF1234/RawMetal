@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit f7fe243cb250c0666ca0cd5d11585eec8f1b8369
-# 2026-11-18 22:27, release: v1.5.7, the headset again
+commit 09f99c2f6f2f33dbcca5fa17f83e96df6aaa64f1
+# 2026-11-18 22:28, chore: sync the Campaign Builder with the SteamVR detection fix
