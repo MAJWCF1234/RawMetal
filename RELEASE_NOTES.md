@@ -4,6 +4,12 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.5.6
+
+- The Physgloves no longer wrap a targeted prop in an orange glow: a thin, faint, cool line traces its outline instead, breathing slowly, and the crosshair draws in a little; Settings > Pull Highlight turns the line off.
+
+---
+
 ## v1.5.5 - Sure footing (2026-11-18)
 
 A fix for floors that played like ice, and for the things that came apart when struck too hard.
