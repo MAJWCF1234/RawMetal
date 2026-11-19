@@ -13,7 +13,7 @@ namespace retro {
 // Match whose Session has left, whose lobby closed or which ended itself is dropped and the title comes back.
 // Quitting to the title from a match's pause menu leaves the lobby.
 void Game::updateNet(){
- if(!m_netSession){if(m_match){m_match.reset();m_remotePlayers.clear();m_matchView={};m_netScriptsOff=m_netCreaturesRemote=false;}return;}
+ if(!m_netSession){if(m_match){m_match.reset();m_remotePlayers.clear();m_matchView={};m_netScriptsOff=m_netCreaturesRemote=false;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();}return;}
  m_netSession->tick();
  auto inLobby=[&]{const auto s=m_netSession->state();return s==net::SessionState::InLobby||((s==net::SessionState::Busy||s==net::SessionState::Failed)&&!m_netSession->lobby().id.empty());};
  if(!m_match&&inLobby())m_match=std::make_shared<net::Match>(*this);
@@ -23,7 +23,7 @@ void Game::updateNet(){
  const bool started=m_match->played();
  std::string status=m_match->finished()?m_match->endStatus():std::string("You left the game");
  m_match.reset();m_remotePlayers.clear();m_matchView={};m_matchView.status=status;
- m_netScriptsOff=m_netCreaturesRemote=false;m_netBodies=nullptr;
+ m_netScriptsOff=m_netCreaturesRemote=false;m_netBodies=nullptr;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();
  if(inLobby())m_netSession->leave();
  if(started&&!m_titleScreen)showTitleScreen();
 }
@@ -47,7 +47,7 @@ static bool sameMapName(const std::string& a,const std::string& b){
 }
 
 Match::Match(Game& game):m_game(game),m_session(game.m_netSession){}
-Match::~Match(){m_game.m_remoteBodies.clear();m_game.m_netHurts.clear();m_game.m_netUses.clear();m_game.m_scriptFx.clear();}
+Match::~Match(){m_game.m_remoteBodies.clear();m_game.m_netHurts.clear();m_game.m_netUses.clear();m_game.m_scriptFx.clear();m_game.m_netPropIntents.clear();m_game.m_netPropEvents.clear();m_game.m_netForeign.clear();m_game.m_netKeep.clear();}
 
 void Match::send(const PeerId& to,std::uint8_t channel,const wire::Writer& w,bool reliable){
  if(!m_session||to.empty()||to==m_self)return;
@@ -131,7 +131,7 @@ void Match::becomeHost(){
  m_host=true;m_hostId=m_self;
  if(m_selfSlot>=0){auto& me=m_slots[size_t(m_selfSlot)];me.used=me.ready=me.spawned=me.host=true;me.peer=m_self;me.health=m_game.m_player.health;me.alive=!m_game.dead();me.latest=localState();me.haveState=true;me.acceptedAt=m_clock;me.life=m_lifeLocal;
   if(!me.alive&&me.respawnIn<0)me.respawnIn=std::max(0.f,m_selfRespawnIn);}
- m_game.m_netScriptsOff=false;m_game.m_netCreaturesRemote=false;
+ m_game.m_netScriptsOff=false;m_game.m_netCreaturesRemote=false;m_game.m_netPropsRemote=false;m_game.m_netPropsHost=true;clearProps();
  if(m_timeLimit>0&&m_timeLeft>=0)m_roundClock=m_timeLimit-m_timeLeft;
  const auto path=localMapFile(m_mapFile);if(path.empty()||!readBytes(path,m_mapBytes))m_mapBytes.clear();
  m_restartIn=m_over?10.f:-1.f;
@@ -147,11 +147,11 @@ void Match::startWorld(std::shared_ptr<const CustomCampaign> campaign,int level)
  g.m_level=std::clamp(level,0,int(campaign->maps.size())-1);
  g.m_titleScreen=g.m_menuFromTitle=g.m_customMapsOpen=g.m_paused=g.m_inventoryOpen=g.m_consoleOpen=false;
  g.restart();g.m_suppressFire=true;
- g.m_netScriptsOff=!m_host;g.m_netCreaturesRemote=!m_host&&m_mode==Mode::Coop;
+ g.m_netScriptsOff=!m_host;g.m_netCreaturesRemote=!m_host&&m_mode==Mode::Coop;g.m_netPropsRemote=!m_host;g.m_netPropsHost=m_host;
  m_campaign=campaign;m_mapName=campaign->name;
  if(m_mode==Mode::Deathmatch)clearCreatures();
  m_spawns.clear();buildSpawns();
- m_pickupSeen.clear();m_doorSeen.clear();m_doorTouched.clear();m_doorLevel=-1;m_creatureTargets.clear();m_creatureLevel=-1;clearCoop();
+ m_pickupSeen.clear();m_doorSeen.clear();m_doorTouched.clear();m_doorLevel=-1;m_creatureTargets.clear();m_creatureLevel=-1;clearCoop();clearProps();
  m_lastLevel=g.m_level;m_phase=Phase::Playing;m_played=true;
 }
 

@@ -6,6 +6,7 @@
 #include "../world/CustomCampaign.h"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 namespace retro::net {
 using namespace protocol;
 namespace {
@@ -26,14 +27,15 @@ void writePlayerState(wire::Writer& w,const NetPlayerState& s,Vec2 o,bool withHe
  w.u8(unsigned(std::clamp(s.level,0,255))).q16(s.world.x-o.x,256).q16(s.world.y-o.y,256).q16(s.world.z,256).angle(s.angle).q16(s.pitch,10000)
   .q8(s.velocity.x,16).q8(s.velocity.y,16)
   .u8((s.crouched?1u:0u)|(s.prone?2u:0u)|(s.grounded?4u:0u)|(s.vr?8u:0u)|(s.alive?16u:0u)|(unsigned(std::clamp(s.weapon,0,3))<<5))
-  .u8(s.shots).u8(s.reloadAge>=25?255u:unsigned(std::lround(std::max(0.f,s.reloadAge)*10))).u8(s.life).u8((s.torch?1u:0u)|(s.hidden?2u:0u));
+  .u8(s.shots).u8(s.reloadAge>=25?255u:unsigned(std::lround(std::max(0.f,s.reloadAge)*10))).u8(s.life).u8((s.torch?1u:0u)|(s.hidden?2u:0u)|(s.pushing?4u:0u));
  if(withHealth)w.u8(unsigned(std::clamp(int(std::ceil(s.health)),0,255)));
  if(!s.vr)return;
  const auto& p=s.pose;
  writeVec(w,p.head,4096);w.angle(p.headYaw).q16(p.headPitch,10000).angle(p.bodyYaw);writeVec(w,p.root,4096);
  w.u8(unsigned(std::clamp(int(std::lround(p.eye*100)),0,255))).u8(unsigned(std::lround(std::fmod(std::fabs(p.gait),kTwoPi)/kTwoPi*255)));
- w.u8((p.crouched?1u:0u)|(p.prone?2u:0u)|(p.grounded?4u:0u)|(p.support?8u:0u)|(p.gunSide?16u:0u)|(p.active?32u:0u));
- w.u8((p.inHand&3u)|((p.back&3u)<<2)|((p.hip&3u)<<4)).u8(unsigned(std::clamp(int(std::lround(p.pump*1000)),0,255))).unit8(p.reload);
+ // Slots hold WeaponId+1 (the MAC-11 is 4): three bits each, the hip's top bit in the flags byte.
+ w.u8((p.crouched?1u:0u)|(p.prone?2u:0u)|(p.grounded?4u:0u)|(p.support?8u:0u)|(p.gunSide?16u:0u)|(p.active?32u:0u)|((p.hip&4u)<<4));
+ w.u8((p.inHand&7u)|((p.back&7u)<<3)|((p.hip&3u)<<6)).u8(unsigned(std::clamp(int(std::lround(p.pump*1000)),0,255))).unit8(p.reload);
  for(const auto& h:p.hands){w.u8(h.tracked?1:0);writeVec(w,h.wrist,4096);writeUnit(w,h.forward);writeUnit(w,h.palm);for(float c:h.curls)w.unit8(c);}
 }
 bool readPlayerState(wire::Reader& r,NetPlayerState& s,bool withHealth){
@@ -41,14 +43,14 @@ bool readPlayerState(wire::Reader& r,NetPlayerState& s,bool withHealth){
  s.velocity.x=r.q8(16);s.velocity.y=r.q8(16);
  const unsigned flags=r.u8();s.crouched=flags&1;s.prone=flags&2;s.grounded=flags&4;s.vr=flags&8;s.alive=flags&16;s.weapon=int(flags>>5&3);
  s.shots=std::uint8_t(r.u8());const unsigned reload=r.u8();s.reloadAge=reload==255?99.f:float(reload)/10.f;s.life=std::uint8_t(r.u8());
- {const unsigned extra=r.u8();s.torch=extra&1;s.hidden=(extra&2)!=0;}
+ {const unsigned extra=r.u8();s.torch=extra&1;s.hidden=(extra&2)!=0;s.pushing=(extra&4)!=0;}
  if(withHealth)s.health=float(r.u8());
  s.pose={};
  if(s.vr){auto& p=s.pose;
   p.head=readVec(r,4096);p.headYaw=r.angle();p.headPitch=r.q16(10000);p.bodyYaw=r.angle();p.root=readVec(r,4096);
   p.eye=float(r.u8())/100.f;p.gait=float(r.u8())/255.f*kTwoPi;
   const unsigned bits=r.u8();p.crouched=bits&1;p.prone=bits&2;p.grounded=bits&4;p.support=bits&8;p.gunSide=std::uint8_t(bits&16?1:0);p.active=bits&32;
-  const unsigned slots=r.u8();p.inHand=std::uint8_t(slots&3);p.back=std::uint8_t(slots>>2&3);p.hip=std::uint8_t(slots>>4&3);p.pump=float(r.u8())/1000.f;p.reload=r.unit8();
+  const unsigned slots=r.u8();p.inHand=std::uint8_t(slots&7);p.back=std::uint8_t(slots>>3&7);p.hip=std::uint8_t((slots>>6&3)|(bits>>4&4));p.pump=float(r.u8())/1000.f;p.reload=r.unit8();
   for(auto& h:p.hands){h.tracked=r.u8()!=0;h.wrist=readVec(r,4096);h.forward=readUnit(r);h.palm=readUnit(r);for(float& c:h.curls)c=r.unit8();}
   p.velocity=s.velocity;
  }
@@ -64,7 +66,8 @@ std::size_t Match::guestStateBytes(bool vr){
 
 // ----- Frames, places, clocks -----
 Vec2 Match::origin(int level)const{const int n=m_game.chunkCount();return n>0?m_game.chunkOffset(std::clamp(level,0,n-1)):Vec2{};}
-int Match::levelAt(Vec2 world)const{
+int Match::levelAt(Vec2 world,int prefer)const{
+ if(prefer>=0&&prefer<m_game.chunkCount()){const auto o=origin(prefer);if(world.x>=o.x&&world.x<o.x+World::Width&&world.y>=o.y&&world.y<o.y+World::Height)return prefer;}
  for(int level=0;level<m_game.chunkCount();++level){const auto o=origin(level);
   if(world.x>=o.x&&world.x<o.x+World::Width&&world.y>=o.y&&world.y<o.y+World::Height)return level;}
  return m_game.m_level;
@@ -85,6 +88,7 @@ NetPlayerState Match::localState()const{
  s.reloadAge=g.m_reloadTimer>0?g.m_reloadLength-g.m_reloadTimer:99.f;s.health=p.health;
  s.life=m_host&&m_selfSlot>=0?m_slots[size_t(m_selfSlot)].life:m_lifeLocal;
  s.vr=g.m_vrInputActive&&g.m_netAvatar.active;s.torch=g.flashlightOn();s.hidden=g.hiddenLocker()>=0;
+ s.pushing=g.m_propPushAttempt&&length(g.m_velocity)<.3f;
  if(s.vr){s.pose=g.m_netAvatar;const Point3 feet{p.pos.x,p.pos.y,p.z};s.pose.head=s.pose.head-feet;s.pose.root=s.pose.root-feet;for(auto& h:s.pose.hands)h.wrist=h.wrist-feet;}
  return s;
 }
@@ -126,6 +130,8 @@ void Match::hostFrame(float dt){
  }
  for(int i=0;i<MaxSlots;++i){auto& s=m_slots[size_t(i)];
   if(s.used&&s.ready&&!s.alive&&s.respawnIn>=0&&!m_over&&(s.respawnIn-=dt)<=0)respawn(i);}
+ trackLevels();   // the maps the guests stand on: kept and run (co-op)
+ hostProps(dt);   // the props, the host's the truth (MatchProps.cpp)
  if(m_mode==Mode::Deathmatch){
   clearCreatures();m_game.m_remoteBodies.clear();
   if(!m_over){
@@ -138,12 +144,28 @@ void Match::hostFrame(float dt){
   if((m_doorTimer-=dt)<=0){m_doorTimer=DoorInterval;sendDoors();}
   trackPickups();
   coopHostFrame(dt);   // the guests among the minds' players; what the minds do, to the guests (MatchCoop.cpp)
-  // The host went somewhere new (a transfer, a lift, a script): guests far from it follow.
-  if(g.m_level!=m_lastLevel){m_lastLevel=g.m_level;const Vec2 o=origin(g.m_level);
-   wire::Writer w;w.u8(Travel).u8(unsigned(g.m_level)).f32(own.world.x-o.x).f32(own.world.y-o.y).f32(own.world.z).angle(own.angle);broadcast(Events,w,true);}
+  // The host went somewhere new (a crossing, a teleport, a respawn): said to everyone. Every map a player stands on
+  // runs, so nobody is left on a frozen map; only with follow on (console COOPFOLLOW) do the guests on the map it
+  // left come along.
+  if(g.m_level!=m_lastLevel){const int left=m_lastLevel;m_lastLevel=g.m_level;const Vec2 o=origin(g.m_level);
+   wire::Writer w;w.u8(Travel).u8(unsigned(g.m_level)).f32(own.world.x-o.x).f32(own.world.y-o.y).f32(own.world.z).angle(own.angle).u8(unsigned(std::clamp(left,0,255))).u8(m_followHost?1:0);broadcast(Events,w,true);
+   if(m_followHost&&left>=0)for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i==m_selfSlot||!s.used||!s.ready||!s.spawned||!s.haveState||!s.alive||s.latest.level!=left)continue;
+    const Spawn sp=besideHost(i);placePlayer(i,sp.level,sp.world);}}
  }
  if((m_stateTimer-=dt)<=0){m_stateTimer=std::max(0.f,m_stateTimer+SnapshotInterval);sendSnapshot();}
  int count=0;for(const auto& s:m_slots)count+=s.used;m_session->setLobbyPlayers(count);
+}
+
+// Co-op: the maps the guests stand on. The host keeps each resident with the maps beside it (Game::m_netKeep) and
+// runs each that is not its own in a frame of its own (m_netForeign, Game::updateForeignChunks).
+void Match::trackLevels(){
+ Game& g=m_game;const int n=g.chunkCount();std::vector<char> foreign(size_t(std::max(0,n)),0),keep(size_t(std::max(0,n)),0);bool any=false,kept=false;
+ if(m_mode==Mode::Coop)for(int i=0;i<MaxSlots;++i){if(i==m_selfSlot)continue;const auto& s=m_slots[size_t(i)];if(!s.used||!s.ready||!s.spawned||!s.haveState)continue;
+  const int level=s.latest.level;if(level<0||level>=n)continue;
+  keep[size_t(level)]=1;kept=true;for(int l=0;l<n;++l)if(g.stitchedTo(l,level))keep[size_t(l)]=1;
+  if(level!=g.m_level){foreign[size_t(level)]=1;any=true;}}
+ if(any)g.m_netForeign=std::move(foreign);else g.m_netForeign.clear();
+ if(kept)g.m_netKeep=std::move(keep);else g.m_netKeep.clear();
 }
 
 void Match::sendSnapshot(){
@@ -194,6 +216,8 @@ void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direct
  if(m_over||weapon<1||weapon>3||shooter<0||shooter>=MaxSlots)return;
  auto& sh=m_slots[size_t(shooter)];if(!sh.used||!sh.alive)return;
  const auto& gun=playerWeaponDef(WeaponId(weapon));
+ // A shot on another map is traced in that map's frame (it swapped in as the active chunk for the while).
+ std::optional<Game::ChunkFrame> frame;if(level!=g.m_level&&level>=0&&level<g.chunkCount()&&g.chunkResident(level)&&!g.stitchedTo(level,g.m_level))frame.emplace(g,level);
  const Vec2 lo=origin(level),ao=origin(g.m_level);const Point3 o{at.x+lo.x-ao.x,at.y+lo.y-ao.y,at.z};
  const float size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);
  if(!std::isfinite(size)||size<.0001f||!std::isfinite(o.x)||!std::isfinite(o.y)||!std::isfinite(o.z))return;
@@ -265,7 +289,7 @@ void Match::respawn(int slot){
 // player at the other map's coordinates inside this one put them in its walls.
 void Match::teleportLocal(int level,Point3 world){
  Game& g=m_game;level=std::clamp(level,0,std::max(0,g.chunkCount()-1));
- if(level!=g.m_level)g.loadLevel(level,true);
+ if(level!=g.m_level)g.enterChunk(level);   // the map left keeps its state: someone may still be on it
  const Vec2 o=origin(level);
  g.m_player.pos={world.x-o.x,world.y-o.y};g.m_player.z=world.z;g.m_player.verticalVelocity=0;g.m_velocity={};
 }
@@ -327,7 +351,7 @@ Match::Spawn Match::besideHost(int slot){
  if(slot==m_selfSlot){anchor=-1;for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i!=slot&&s.used&&s.alive&&s.spawned&&s.haveState){anchor=i;break;}}}
  const NetPlayerState at=anchor>=0?m_slots[size_t(anchor)].latest:m_slots[size_t(slot)].latest;
  for(int k=0;k<8;++k){const float a=float(k+slot)*kPi*.25f;const Point3 c{at.world.x+std::cos(a)*1.2f,at.world.y+std::sin(a)*1.2f,at.world.z};
-  const int level=levelAt({c.x,c.y});const World* w=worldOf(level);if(!w)continue;const Vec2 o=origin(level);
+  const int level=levelAt({c.x,c.y},at.level);const World* w=worldOf(level);if(!w)continue;const Vec2 o=origin(level);
   const Vec2 from{at.world.x-o.x,at.world.y-o.y},to{c.x-o.x,c.y-o.y};
   if(w->fits(to.x,to.y,c.z,Player::StandingHeight,false)&&std::fabs(w->floorHeight(to.x,to.y)-c.z)<.4f&&w->rayClear(from,at.world.z+.9f,to,c.z+.9f,true,false))return {level,c,at.angle};}
  return {at.level,at.world,at.angle};
@@ -378,24 +402,35 @@ void Match::newRound(){
 void Match::clearCreatures(){Game& g=m_game;g.m_enemies.clear();for(auto& c:g.m_chunks)c.enemies.clear();}
 
 // Co-op: the host's creatures on its map (alive, or dead and still lying there), fifty to a packet.
+// Co-op: each map's creatures (alive, or dead and still lying there), fifty to a packet, to the guests on that map
+// or a map stitched beside it (the host runs them all: Game::updateForeignChunks).
 void Match::sendCreatures(){
- const Game& g=m_game;const auto& list=g.m_enemies;std::vector<int> send;
- for(size_t i=0;i<list.size()&&i<1024;++i)if(list[i].alive||list[i].deathTime<Enemy::CorpseLifetime+1)send.push_back(int(i));
- size_t at=0;
- do{wire::Writer w;w.u8(Creatures).u32(millis(m_clock)).u8(unsigned(g.m_level));const size_t countAt=w.b.size();w.u16(0);unsigned n=0;
-  for(;at<send.size()&&n<50;++at,++n){const auto& e=list[size_t(send[at])];const auto& t=creatureTraits(e.kind);
-   w.u16(unsigned(send[at])).u8(unsigned(e.kind)).q16(e.pos.x,256).q16(e.pos.y,256).q16(e.z,256).u8(unsigned(std::lround((e.heading/kTwoPi-std::floor(e.heading/kTwoPi))*256))&255u)
+ const Game& g=m_game;
+ for(int level=0;level<g.chunkCount();++level){
+  std::vector<int> to;for(int i=0;i<MaxSlots;++i)if(i!=m_selfSlot&&seesLevel(i,level))to.push_back(i);
+  if(to.empty()||!g.chunkResident(level))continue;
+  const auto& list=g.chunkEnemies(level);std::vector<int> alive;
+  for(size_t i=0;i<list.size()&&i<1024;++i)if(list[i].alive||list[i].deathTime<Enemy::CorpseLifetime+1)alive.push_back(int(i));
+  size_t at=0;
+  do{wire::Writer w;w.u8(Creatures).u32(millis(m_clock)).u8(unsigned(level)).u16(unsigned(std::min<size_t>(list.size(),1024)));const size_t countAt=w.b.size();w.u16(0);unsigned n=0;
+  for(;at<alive.size()&&n<50;++at,++n){const auto& e=list[size_t(alive[at])];const auto& t=creatureTraits(e.kind);
+   w.u16(unsigned(alive[at])).u8(unsigned(e.kind)).q16(e.pos.x,256).q16(e.pos.y,256).q16(e.z,256).u8(unsigned(std::lround((e.heading/kTwoPi-std::floor(e.heading/kTwoPi))*256))&255u)
     .u8((e.alive?1u:0u)|(e.moving?2u:0u)|(unsigned(std::clamp(e.surfaceMode,0,3))<<2)).u8(unsigned(std::lround(std::fmod(std::fabs(e.gait),kTwoPi)/kTwoPi*255)))
     .unit8(t.windup>0?e.windup/t.windup:0).unit8(e.strike).unit8(e.painFlash).u16(unsigned(std::clamp(int(std::ceil(e.hp)),0,65535)))
     .u8(unsigned(std::clamp(int(e.deathTime*10),0,255))).u8(unsigned(e.stalkMode)).u8(unsigned(std::clamp(int(e.stalkTimer*50),0,255)));}
-  w.b[countAt]=std::uint8_t(n&255);w.b[countAt+1]=std::uint8_t(n>>8);broadcast(State,w,false);
- }while(at<send.size());
+  w.b[countAt]=std::uint8_t(n&255);w.b[countAt+1]=std::uint8_t(n>>8);for(int i:to)send(m_slots[size_t(i)].peer,State,w,false);
+  }while(at<alive.size());
+ }
 }
 void Match::sendDoors(){
- const auto& doors=m_game.m_world.doors();if(doors.empty())return;
- wire::Writer w;w.u8(Doors).u8(unsigned(m_game.m_level));const unsigned n=unsigned(std::min<size_t>(doors.size(),255));w.u8(n);
- for(unsigned i=0;i<n;++i)w.unit8(doors[i].open).u8(doors[i].opening?1:0);
- broadcast(State,w,false);
+ const Game& g=m_game;
+ for(int level=0;level<g.chunkCount();++level){
+  if(!g.chunkResident(level))continue;const auto& doors=g.chunkWorld(level).doors();if(doors.empty())continue;
+  std::vector<int> to;for(int i=0;i<MaxSlots;++i)if(i!=m_selfSlot&&seesLevel(i,level))to.push_back(i);if(to.empty())continue;
+  wire::Writer w;w.u8(Doors).u8(unsigned(level));const unsigned n=unsigned(std::min<size_t>(doors.size(),255));w.u8(n);
+  for(unsigned i=0;i<n;++i)w.unit8(doors[i].open).u8(doors[i].opening?1:0);
+  for(int i:to)send(m_slots[size_t(i)].peer,State,w,false);
+ }
 }
 // Pickups that went this frame, sent on (the host to everyone, a guest to the host).
 void Match::trackPickups(){
@@ -426,6 +461,7 @@ void Match::guestFrame(float dt){
  if(m_selfRespawnIn>0)m_selfRespawnIn=std::max(0.f,m_selfRespawnIn-dt);
  if(m_over&&m_restartIn>0)m_restartIn=std::max(0.f,m_restartIn-dt);
  if(m_mode==Mode::Coop){trackPickups();trackDoors(dt);smoothCreatures(dt);coopGuestFrame(dt);}else clearCreatures();
+ guestProps(dt);   // the host's props, posed; this hand's carry and throws, sent (MatchProps.cpp)
 }
 void Match::sendGuestState(){
  const NetPlayerState s=localState();
@@ -450,7 +486,8 @@ void Match::handleState(const Packet& p){
  Game& g=m_game;wire::Reader r(p.data);const unsigned type=r.u8();
  if(m_phase!=Phase::Playing)return;
  if(m_host){
-  if(type!=GuestState)return;const int slot=slotOf(p.from);if(slot<0||!m_slots[size_t(slot)].ready)return;
+  const int sender=slotOf(p.from);if(sender>=0&&m_slots[size_t(sender)].ready&&handlePropState(sender,type,r))return;   // a guest's carry (MatchProps.cpp)
+  if(type!=GuestState)return;const int slot=sender;if(slot<0||!m_slots[size_t(slot)].ready)return;
   const unsigned seq=r.u16();const std::uint32_t echo=r.u32();const unsigned hold=r.u16();NetPlayerState s;if(!readPlayerState(r,s,true))return;
   auto& sl=m_slots[size_t(slot)];if(sl.seqSeen&&std::int16_t(std::uint16_t(seq-sl.seq))<=0)return;sl.seq=std::uint16_t(seq);sl.seqSeen=true;
   if(echo){const float rtt=m_clock*1000.f-float(echo)-float(hold);if(rtt>=0&&rtt<5000)sl.pingMs=sl.pingMs<0?int(rtt):int(float(sl.pingMs)*.8f+rtt*.2f);}
@@ -459,6 +496,7 @@ void Match::handleState(const Packet& p){
  }
  if(p.from!=m_hostId)return;
  if(handleCoopState(type,r))return;   // the people (MatchCoop.cpp)
+ if(handlePropState(-1,type,r))return;   // the props (MatchProps.cpp)
  if(type==Snapshot){
   const std::uint32_t ms=r.u32();const int round=int(r.u8());const int left=r.i16();const bool over=r.u8()!=0;const int count=int(r.u8());if(r.bad)return;
   if(m_haveSnapshot&&std::int32_t(ms-m_lastSnapshotMs)<0)return;   // an older one, overtaken
@@ -479,9 +517,10 @@ void Match::handleState(const Packet& p){
    if(sl.history.empty()||sl.history.back().t<t)sl.history.push_back({t,s});
    while(sl.history.size()>2&&sl.history.front().t<t-HistorySeconds)sl.history.pop_front();}
  }else if(type==Creatures&&m_mode==Mode::Coop){
-  const std::uint32_t ms=r.u32();const int level=int(r.u8());const int count=int(r.u16());if(r.bad||level>=g.chunkCount()||!g.chunkResident(level))return;
+  const std::uint32_t ms=r.u32();const int level=int(r.u8());const int total=int(r.u16());const int count=int(r.u16());if(r.bad||level>=g.chunkCount()||!g.chunkResident(level))return;
   if(std::int32_t(ms-m_lastCreaturesMs)<0)return;m_lastCreaturesMs=ms;
   auto& list=level==g.m_level?g.m_enemies:g.m_chunks[size_t(level)].enemies;
+  if(list.size()>size_t(total))list.resize(size_t(total));   // none here the host has not (one this guest's crossing carried along)
   const bool here=level==g.m_level;if(here&&m_creatureLevel!=level){m_creatureTargets.clear();m_creatureLevel=level;}
   for(int k=0;k<count;++k){
    const int index=int(r.u16());const auto kind=CreatureKind(r.u8());Vec2 pos;pos.x=r.q16(256);pos.y=r.q16(256);const float z=r.q16(256);const float heading=float(r.u8())/256.f*kTwoPi;
@@ -520,6 +559,7 @@ void Match::handleEvent(const Packet& p){
  if(m_host){
   const int slot=slotOf(p.from);if(slot<0)return;
   if(handleCoopEvent(slot,type,r))return;   // a guest's hand on a terminal (MatchCoop.cpp)
+  if(handlePropEvent(slot,type,r))return;   // a guest's hand, fist or throw on a prop (MatchProps.cpp)
   if(type==Shot){
    const int weapon=int(r.u8());const int level=int(r.u8());Point3 o;o.x=r.f32();o.y=r.f32();o.z=r.f32();const Point3 d=readVec(r,32767);r.u32();const std::uint32_t view=r.u32();
    if(r.bad||level>=g.chunkCount())return;resolveShot(slot,weapon,level,o,d,float(view)/1000.f);
@@ -537,14 +577,14 @@ void Match::handleEvent(const Packet& p){
  switch(type){
  case ShotFx:{
   const int shooter=int(r.u8());const int weapon=int(r.u8());const int level=int(r.u8());Point3 o,e;o.x=r.f32();o.y=r.f32();o.z=r.f32();e.x=r.f32();e.y=r.f32();e.z=r.f32();
-  const int kind=int(r.u8());const Point3 n=readUnit(r);if(r.bad||level>=g.chunkCount())return;
+  const int kind=int(r.u8());const Point3 n=readUnit(r);if(r.bad||level>=g.chunkCount()||!g.inPlayerFrame(level))return;   // (a shot on another map is not seen here)
   const Vec2 shift=origin(level)-origin(g.m_level);o.x+=shift.x;o.y+=shift.y;e.x+=shift.x;e.y+=shift.y;
   Point3 d=e-o;const float range=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(range<.001f)return;d=d*(1/range);
   if(shooter!=m_selfSlot){
    g.m_shotRays.push_back({o,d,range,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
    g.m_sounds.push_back({playerWeaponDef(WeaponId(std::clamp(weapon,1,3))).cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});}
   if(kind==2)return;
-  const Vec2 aw=origin(g.m_level);const int at=levelAt({e.x+aw.x,e.y+aw.y});const World* w=worldOf(at);if(!w)return;
+  const Vec2 aw=origin(g.m_level);const int at=levelAt({e.x+aw.x,e.y+aw.y},level);const World* w=worldOf(at);if(!w)return;
   const Vec2 back=origin(g.m_level)-origin(at);const Point3 local{e.x+back.x,e.y+back.y,e.z};
   if(kind==1){g.hitBurst(at,local,d,ImpactMaterial::Flesh,-1,.9f,false);return;}
   const Point3 struck=local+n*.004f;const auto material=w->impactMaterial(struck,n);
@@ -576,18 +616,15 @@ void Match::handleEvent(const Packet& p){
  case PickupTaken:{const int level=int(r.u8());const int index=int(r.u16());if(!r.bad)takePickup(level,index);break;}
  case PickupsInit:{const int count=int(r.u16());for(int k=0;k<count&&!r.bad;++k){const int level=int(r.u8());const int index=int(r.u16());if(!r.bad)takePickup(level,index);}break;}
  case Travel:{
-  const int level=int(r.u8());Point3 at;at.x=r.f32();at.y=r.f32();at.z=r.f32();const float angle=r.angle();if(r.bad||level>=g.chunkCount()||m_mode!=Mode::Coop)return;
-  const Vec2 o=origin(level);const Point3 host{at.x+o.x,at.y+o.y,at.z};const NetPlayerState me=localState();
-  if(distance2(me.world,host)>30.f||std::fabs(me.world.z-host.z)>6.f){
-   // Beside the host on the host's own map (the message names it; a point's map cannot be read from its
-   // coordinates where maps overlap), on open floor.
-   Point3 beside={host.x+std::cos(angle)*1.2f,host.y+std::sin(angle)*1.2f,host.z};
-   if(!freeSpot(level,beside)){beside=host;freeSpot(level,beside);}
-   teleportLocal(level,beside);g.m_player.angle=angle;}
+  const int level=int(r.u8());Point3 at;at.x=r.f32();at.y=r.f32();at.z=r.f32();const float angle=r.angle();const int left=int(r.u8());const bool follow=r.u8()!=0;
+  if(r.bad||level>=g.chunkCount()||m_mode!=Mode::Coop)return;
+  // Every map a player is on runs, so a guest stays where it is. With follow on the host itself places the guests
+  // who were on the map it left beside it (a correction: a guest that moved itself would be sent back as too fast).
+  (void)at;(void)angle;(void)left;(void)follow;
   break;}
  case RoundOver:{m_over=true;m_winner=r.str();m_restartIn=RestartAfter;break;}
  case RoundStart:{m_round=int(r.u8());m_over=false;m_winner.clear();m_feed.clear();m_restartIn=-1;break;}
- default:handleCoopEvent(-1,type,r);break;   // script effects, the state store (MatchCoop.cpp)
+ default:if(!handlePropEvent(-1,type,r))handleCoopEvent(-1,type,r);break;   // props (MatchProps.cpp); script effects, the state store (MatchCoop.cpp)
  }
 }
 
@@ -603,7 +640,7 @@ void Match::publish(float dt){
    NetPlayerState st;if(!sampleAt(s,t,st))continue;
    // Only someone on this map, or on a stitched neighbour of it (its own place on the grid): a player left on
    // another map of a custom campaign would otherwise be drawn at their coordinates there, inside these walls.
-   if(st.level!=g.m_level&&(!g.chunkResident(st.level)||(origin(st.level).x==here.x&&origin(st.level).y==here.y)))continue;
+   if(!g.inPlayerFrame(st.level))continue;
    RemotePlayer rp;rp.slot=std::uint8_t(i);rp.name=s.name;rp.position={st.world.x-here.x,st.world.y-here.y,st.world.z};
    rp.angle=st.angle;rp.pitch=st.pitch;rp.velocity=st.velocity;rp.crouched=st.crouched;rp.prone=st.prone;rp.grounded=st.grounded;rp.weapon=st.weapon;
    rp.shotAge=std::max(0.f,t-s.lastShotAt);rp.reloadAge=st.reloadAge;rp.health=st.health;rp.alive=st.alive;

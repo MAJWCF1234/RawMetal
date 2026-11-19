@@ -84,12 +84,12 @@ void Match::syncBodies(float dt){
   const auto& st=s.latest;const Vec2 o=origin(g.m_level);auto& b=rb.body;
   rb.id=i;rb.level=st.level;b.pos={st.world.x-o.x,st.world.y-o.y};b.z=st.world.z;b.angle=st.angle;b.pitch=st.pitch*140.f;
   b.prone=st.prone;b.crouched=st.crouched||st.prone;b.grounded=st.grounded;b.eye=b.stanceEye();b.health=s.alive?std::max(s.health,.01f):0.f;
-  rb.velocity=st.velocity;rb.hidden=st.hidden;rb.torch=st.torch;
+  rb.velocity=st.velocity;rb.hidden=st.hidden;rb.torch=st.torch;rb.pushing=st.pushing;
   if((rb.litTimer-=dt)<=0){rb.litTimer=.1f;rb.lit=rb.hidden?0.f:g.lightAt(b.pos,b.z+b.hullHeight()*.6f,rb.torch);}
   // Their footsteps, heard by the minds (and the host) as the local player's are: a stride of the gait, at the
   // floor's and the gait's reach (Game::stepHeard).
   const float speed=length(rb.velocity);const bool sprint=speed>4.2f&&!b.crouched;
-  if(s.alive&&b.grounded&&!rb.hidden&&speed>.2f){rb.stride+=speed*dt;const float stride=b.prone?.6f:b.crouched?.85f:sprint?1.45f:1.22f;
+  if(s.alive&&b.grounded&&!rb.hidden&&speed>.2f&&g.inPlayerFrame(rb.level)){rb.stride+=speed*dt;const float stride=b.prone?.6f:b.crouched?.85f:sprint?1.45f:1.22f;
    if(rb.stride>stride){rb.stride=0;const Sound base=Game::stepSoundAt(g.chunkWorld(std::clamp(rb.level,0,std::max(0,g.chunkCount()-1))),b.pos);
     SoundEvent step{base,b.pos,b.crouched?.045f:sprint?.65f:.48f,.97f,true,17,b.z+.04f};step.aiRadius=Game::stepHeard(base,b.crouched,sprint);g.m_sounds.push_back(step);}}
   next.push_back(rb);
@@ -181,6 +181,7 @@ bool Match::handleCoopEvent(int slot,unsigned type,wire::Reader& r){
   if(type!=Use||m_mode!=Mode::Coop)return false;
   const int level=int(r.u8());const int terminal=int(r.u16());
   if(!r.bad&&level==g.m_level)g.operateTerminal(terminal,slot);   // worked for them, as their own hand would
+  else if(!r.bad&&level>=0&&level<g.chunkCount()&&g.chunkResident(level)){Game::ChunkFrame frame(g,level);g.operateTerminal(terminal,slot);}   // on another map: in its frame
   return true;
  }
  if(type==ScriptFx){

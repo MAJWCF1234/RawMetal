@@ -65,6 +65,10 @@ void Game::executeConsole(std::string command){
  else if(verb=="tp"){if(!m_match)m_consoleLog.push_back("TP MOVES PLAYERS IN A MULTIPLAYER GAME.");
   else if(arg.empty())m_consoleLog.push_back("USE TP <NAME> [<NAME>]: THE FIRST PLAYER GOES TO THE SECOND (NO SECOND: TO YOU).");
   else m_consoleLog.push_back(m_match->consoleTeleport(arg,extra));}
+ // COOPFOLLOW [ON|OFF]: a co-op host's change of map brings along the guests on the map it left (off: everyone's map runs).
+ else if(verb=="coopfollow"){if(!m_match)m_consoleLog.push_back("COOPFOLLOW IS FOR A CO-OP HOST.");
+  else{if(arg=="on"||arg=="off")m_match->setFollowHost(arg=="on");else if(arg.empty())m_match->setFollowHost(!m_match->followHost());
+   m_consoleLog.push_back(m_match->followHost()?"COOPFOLLOW ON: GUESTS ON THE MAP YOU LEAVE COME WITH YOU.":"COOPFOLLOW OFF: EVERYONE STAYS ON THEIR OWN MAP.");}}
  else if(verb=="unstuck"){m_stuckTime=1;if(!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_consoleLog.push_back(unstickPlayer()?"MOVED TO OPEN FLOOR.":"NO OPEN FLOOR NEARBY. ASK THE HOST TO TP YOU.");
   else m_consoleLog.push_back("YOU ARE NOT STUCK.");m_stuckTime=0;}
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}

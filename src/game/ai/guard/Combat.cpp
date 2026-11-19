@@ -193,10 +193,11 @@ ShotHit Game::guardShot(size_t actor,const ActorPose& pose,const NpcWeaponPose& 
 }
 void Game::updateGuardCombat(float dt){
  perf::Scope frameProfile(perf::Combat);
- if(dt<=0)return;updateGuardSquadSlots(dt);
+ if(dt<=0)return;
+ if(!m_foreignFrame){updateGuardSquadSlots(dt);
  // A man a locker burst into, from the leaves reaching him to the floor (Lockers.cpp).
- updateLockerBurst(dt);
- for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();const auto&config=track.ai;if(config.mode!=ActorAiMode::Guard||!config.armed||!chunkResident(npc.level)||m_aiOff||npc.frozen)continue;
+ updateLockerBurst(dt);}
+ for(size_t i=0;i<m_friendlyActors.size();++i){auto&npc=m_friendlyActors[i];const auto&track=npc.track();const auto&config=track.ai;if(config.mode!=ActorAiMode::Guard||!config.armed||!chunkResident(npc.level)||m_aiOff||npc.frozen||!actorInFrame(npc.level))continue;
   const auto&gun=weaponDef(guardHandgun(config)?WeaponId::Handgun:WeaponId::Shotgun);
   auto get=[&](const char*field){return state(friendlyKey(i,field));};auto put=[&](const char*field,int value){setState(friendlyKey(i,field),value);};
   auto cancelAction=[&](){put("weapon_action",0);put("weapon_action_ms",0);put("weapon_action_events",0);put("weapon_bash",0);put("weapon_bash_pose",0);};

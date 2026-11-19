@@ -185,11 +185,14 @@ bool Game::scriptEventReady(const ScriptEvent& event,int* who)const{
  return event.allPlayers?all&&first>=0:any;
 }
 void Game::updateScripts(float){
- m_scriptFx.clear();
+ if(!m_foreignFrame)m_scriptFx.clear();   // (another map's frame adds to what the host's own frame queued)
  if(m_netScriptsOff)return;   // a multiplayer guest: scripted sequences run on the host alone
- updateReceivingBreach();
+ if(!m_foreignFrame)updateReceivingBreach();
  for(const auto&event:m_scriptEvents){
   if(!event.id)continue;
+  // A co-op host with players on several maps: a map's events run in that map's frame (ForeignChunks.cpp).
+  if(!m_netForeign.empty()){const bool mapped=event.scope!=ScriptEvent::Scope::Campaign;
+   if(m_foreignFrame?!(mapped&&event.level==m_level):(mapped&&size_t(event.level)<m_netForeign.size()&&m_netForeign[size_t(event.level)]))continue;}
   bool latched=(event.once||event.rearm)&&containsEvent(m_firedEvents,event.id);
   if(event.once&&latched)continue;
   int who=0;bool ready=scriptEventReady(event,&who);

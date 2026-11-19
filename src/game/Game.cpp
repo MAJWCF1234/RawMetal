@@ -122,6 +122,8 @@ const World& Game::worldAt(Vec2& local)const{
  // Campaign keeps its existing authored offsets; Ashfall can therefore form a
  // genuine 2D grid with the same collision queries.
  Vec2 global=local+chunkOffset(m_level);int other=m_level;
+ // Inside the active chunk it is the active chunk's (two maps of a custom campaign may share an origin).
+ if(local.x>=0&&local.x<World::Width&&local.y>=0&&local.y<World::Height)return m_world;
  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){other=level;break;}
  }
@@ -130,6 +132,8 @@ const World& Game::worldAt(Vec2& local)const{
 }
 void Game::crossChunkBoundary(){
  Vec2 global=m_player.pos+chunkOffset(m_level);int next=m_level;
+ // Still inside this map: no crossing (another map may share its origin).
+ if(m_player.pos.x>=0&&m_player.pos.x<World::Width&&m_player.pos.y>=0&&m_player.pos.y<World::Height)return;
  for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
   if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){next=level;break;}
  }
@@ -505,6 +509,7 @@ void Game::update(const InputState& input, float dt) {
     updateNet();
     updateVoice(input);
     updateFrame(input,dt);
+    if(!m_netForeign.empty())updateForeignChunks(dt);   // a co-op host's other occupied maps (ForeignChunks.cpp)
     if(m_match)m_match->update(input,dt);
 }
 void Game::updateFrame(const InputState& input, float dt) {
@@ -698,7 +703,7 @@ void Game::updateFrame(const InputState& input, float dt) {
         if(!m_netCreaturesRemote){
         updateEngineerDrones(dt);
         updateGuardCombat(dt);
-        {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard)finishGuardTask(actor);}
+        {perf::Scope profile(perf::GuardTasks);for(size_t actor=0;actor<m_friendlyActors.size();++actor)if(m_friendlyActors[actor].track().ai.mode==ActorAiMode::Guard&&actorInFrame(m_friendlyActors[actor].level))finishGuardTask(actor);}
         {perf::Scope profile(perf::Grenades);updateTacticalGrenades(dt);}}
         updateEnemies(dt);updateWater(dt,true);
         // AI may walk back into a held prop after the hand sweep; clear that overlap.
@@ -864,10 +869,15 @@ bool Game::receiveDamage(float amount,Vec2 source,bool blockable,bool shieldable
 // ----- The players the minds know (Game.h PlayerView; docs/Systems/multiplayer.md "One path") -----
 const std::vector<Game::PlayerView>& Game::players()const{
  // Written in place: a call made while another walks the list leaves it as it was (same entries, same storage).
- const size_t n=1+std::min<size_t>(m_remoteBodies.size(),16);
+ // Only the players in the active chunk's frame (its map and the maps stitched beside it): a player on another map
+ // of a custom campaign (which may share this one's origin) is not here. In another map's frame on a co-op host
+ // (ForeignChunks.cpp) the local player is here only if their map is beside that one, as a stand-in moved into it.
+ const bool local=!m_foreignFrame||inPlayerFrame(m_foreignHome);
+ size_t n=local?1:0;for(size_t i=0;i<m_remoteBodies.size()&&i<16;++i)n+=inPlayerFrame(m_remoteBodies[i].level);
  if(m_playerViews.size()!=n){m_playerViews.reserve(17);m_playerViews.resize(n);}
- m_playerViews[0]={0,true,m_level,&m_player};
- for(size_t i=1;i<n;++i){const auto& r=m_remoteBodies[i-1];m_playerViews[i]={r.id,false,r.level,&r.body};}
+ size_t k=0;
+ if(local)m_playerViews[k++]=m_foreignFrame?PlayerView{0,true,m_foreignHome,&m_foreignLocal}:PlayerView{0,true,m_level,&m_player};
+ for(size_t i=0;i<m_remoteBodies.size()&&i<16&&k<n;++i){const auto& r=m_remoteBodies[i];if(inPlayerFrame(r.level))m_playerViews[k++]={r.id,false,r.level,&r.body};}
  return m_playerViews;
 }
 const Game::PlayerView* Game::playerById(int id)const{for(const auto& p:players())if(p.id==id)return &p;return nullptr;}

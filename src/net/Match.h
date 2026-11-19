@@ -14,12 +14,14 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
-namespace retro { class Game; struct InputState; struct CustomCampaign; class World; }
+namespace retro { class Game; struct InputState; struct CustomCampaign; class World; struct Clutter; }
 namespace retro::net {
 namespace wire { struct Writer; struct Reader; }
 
-constexpr std::uint16_t ProtocolVersion=2;      // 2: a player state carries torch and locker; co-op scripts, state, people
+constexpr std::uint16_t ProtocolVersion=3;      // 2: a player state carries torch and locker; co-op scripts, state, people
+                                               // 3: several maps at once (creatures, doors per map), props from the host
 constexpr int MaxSlots=16;
 constexpr std::size_t MapChunkBytes=1100;     // a MapData packet's file bytes at most
 
@@ -34,6 +36,7 @@ struct NetPlayerState{
  float angle=0,pitch=0;Vec2 velocity{};
  bool crouched=false,prone=false,grounded=true,vr=false,alive=true;
  bool torch=false,hidden=false;          // their flashlight is on; they are shut in a locker (what creatures and guards see)
+ bool pushing=false;                     // leaning on something: walking keys held, standing still (a prop goes their way)
  int weapon=1;std::uint8_t shots=0;     // shots: a counter that turns over with every shot fired
  float reloadAge=99,health=100;
  std::uint8_t life=0;                   // bumped by the host at each respawn or correction: older reports are stale
@@ -83,6 +86,7 @@ private:
   float health=100;bool alive=true;float respawnIn=-1,deathAt=-1;std::uint8_t life=0;
   float acceptedAt=-1,correctCooldown=0,spawnGrace=0,lastShotAt=-99;std::uint8_t lastShots=0;
   std::uint16_t seq=0;bool seqSeen=false;
+  std::uint32_t carryId=0;float carryAt=-1;   // the prop their hand carries (the host poses it from their reports)
  };
  struct Spawn{int level=0;Point3 world{};float yaw=0;};
  struct Upload{PeerId peer;std::size_t offset=0;};
@@ -145,7 +149,7 @@ private:
  bool sampleAt(const Slot& slot,float t,NetPlayerState& out)const;
  void publish(float dt);
  Vec2 origin(int level)const;
- int levelAt(Vec2 world)const;
+ int levelAt(Vec2 world,int prefer=-1)const;   // prefer: a map that holds the point wins (maps may share an origin)
  const World* worldOf(int level)const;
  float renderTime()const;
  float hostNow()const;
@@ -178,6 +182,34 @@ private:
  void relayChat(int slot,const std::string& text);
  void chatNotices();
  void publishComms(float dt);
+ // Several maps at once (MatchPlay.cpp): which maps the guests stand on, so the host runs and keeps them.
+ void trackLevels();
+ bool seesLevel(int slot,int level)const;     // that guest is sent this map's creatures, doors and props
+ bool m_followHost=false;                     // the host's change of map brings the guests on the map it left
+public:
+ void setFollowHost(bool on){m_followHost=on;}
+ bool followHost()const{return m_followHost;}
+private:
+ // MatchProps.cpp: props, the host's are the truth. The host sends where each prop that moved now is (and every
+ // prop in turn, slowly), its breaks, spawns and broken panes; a guest poses its props from that (100 ms behind,
+ // as players), carries what its hand holds itself, and sends what its hands, fists and throws do.
+ struct PropSample{float t=0;Point3 at{};std::array<float,4> q{1,0,0,0};bool rest=false;};
+ struct PropTrack{int level=0;std::array<PropSample,4> s{};int n=0;bool done=false;float predictUntil=-1,throwAt=0,blend=0;};
+ struct PropSent{Point3 at{};std::array<float,4> q{1,0,0,0};std::uint8_t flags=0;int liquid=-1,restSends=0;bool known=false;};
+ struct PropCarried{int level=0;std::uint32_t id=0;int slot=-1;};
+ void hostProps(float dt);
+ void guestProps(float dt);
+ void sendPropStates();
+ bool handlePropState(int slot,unsigned type,wire::Reader& r);   // slot: the guest it came from (host), -1 a guest
+ bool handlePropEvent(int slot,unsigned type,wire::Reader& r);
+ void clearProps();
+ Clutter* propById(int level,std::uint32_t id,int* found=nullptr,std::size_t* index=nullptr);
+ std::unordered_map<std::uint32_t,PropTrack> m_propTracks;
+ std::vector<std::unordered_map<std::uint32_t,PropSent>> m_propSent;std::vector<std::size_t> m_propCursor,m_panesSeen;
+ std::vector<std::uint16_t> m_spawnedProps;   // the host's next spawned-prop number on each map
+ std::vector<PropCarried> m_carried;
+ float m_propTimer=0,m_carryTimer=0;std::uint32_t m_lastPropMs=0,m_drivenId=0;int m_drivenLevel=-1;
+ std::size_t m_propBytes=0;   // prop traffic sent (both ways)
 
  Game& m_game;
  Session* m_session=nullptr;
