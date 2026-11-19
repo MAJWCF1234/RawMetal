@@ -30,6 +30,9 @@ enum Message:std::uint8_t{
  RoundOver=29,   // host -> all: str winner
  RoundStart=31,  // host -> all: u8 round
  PickupsInit=32, // host -> joining guest (co-op): u16 count, {u8 level, u16 index}
+ ChatSay=40,     // guest -> host: str text (MatchChat.cpp: the host cleans it, rate-limits it and relays it)
+ ChatRelay=41,    // host -> all: u8 slot, str name, str text (a chat line everyone shows, the sender too)
+                 //   An older game ignores both (handleEvent drops unknown types), so the protocol stays 1.
  // MapData (reliable)
  MapChunk=30,    // host -> guest: u32 total, u32 offset, bytes (<= MapChunkBytes)
 };

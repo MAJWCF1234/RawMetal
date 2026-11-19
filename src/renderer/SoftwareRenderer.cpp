@@ -1324,6 +1324,7 @@ void SoftwareRenderer::prepareVrDisplays(const Game& game){
  if(objective!=m_vrObjective){m_vrObjective=objective;m_vrObjectiveTime=objective.empty()?0.f:6.f;}
  m_vrObjectiveTime=std::max(0.f,m_vrObjectiveTime-1.f/90.f);
  std::string caption(game.actorCaption());if(caption.empty()&&m_vrObjectiveTime>0)caption="OBJECTIVE: "+m_vrObjective;
+ if(caption.empty())caption=game.vrChatCaption();   // a match's newest chat line or notice (no chat box in a headset)
  // With nothing else to say, the strip carries the guards' alarm: ALERT, the Evasion clock, or the Caution clock.
  const int alarm=caption.empty()&&!game.dead()&&!game.won()?game.guardAlarm():0;
  if(alarm==Game::AlarmAlert)caption="ALERT";else if(alarm){const bool evasion=alarm==Game::AlarmEvasion;const int s=((evasion?game.guardEvasion():alarm)+999)/1000;char clock[24];std::snprintf(clock,sizeof clock,evasion?"EVASION  %d:%02d":"CAUTION  %d:%02d",s/60,s%60);caption=clock;}
@@ -1344,51 +1345,30 @@ void SoftwareRenderer::drawLoading(const Game& game){
 // drawTitle: FrontEnd.cpp.
 
 void SoftwareRenderer::drawSettings(const Game& game){
+ if(game.menuPage()==Game::MenuPage::Pause){drawPauseMenu(game);return;}
+ if(game.menuPage()==Game::MenuPage::Options){drawSettingsMenu(game);return;}
  if(!hardwarePresentsWindow())for(auto&pixel:m_pixels)pixel=shade(pixel,.25f);
  constexpr int x=MenuLayout::X,y=MenuLayout::Y;
  const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0);
  fill(0,0,m_width,m_height,black,.45f);
  fill(x,y,MenuLayout::Width,MenuLayout::Height,rgb(6,5,5),.9f);frame(x,y,MenuLayout::Width,MenuLayout::Height,bone,.10f);fill(x,y,MenuLayout::Width,2,red,1);
- auto page=game.menuPage();bool settingsPage=page==Game::MenuPage::Settings;const bool comfortPage=page==Game::MenuPage::Comfort;
- const char* title=comfortPage?"VR COMFORT":settingsPage?(game.menuFromTitle()?"SETTINGS":"PAUSED"):page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":page==Game::MenuPage::ConfirmLoad?"CONFIRM LOAD":"CONFIRM RESTART";
+ // The save and load pages and their confirmations (PAUSE and SETTINGS are drawn in FrontEnd.cpp).
+ auto page=game.menuPage();
+ const char* title=page==Game::MenuPage::Save?"SAVE GAME":page==Game::MenuPage::Load?"LOAD GAME":page==Game::MenuPage::Overwrite?"CONFIRM OVERWRITE":"CONFIRM LOAD";
  uiText(x+16,y+9,title,bone,0,20,1,2);
- std::string subtitleText=comfortPage?"TURNING / BODY / FRAME RATE":settingsPage?(game.menuFromTitle()?"AUDIO / CONTROLS":"SETTINGS / SAVED GAMES"):(game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED");
- // In a match: the lobby's join code (to hand to whoever should come down), and the match does not stop.
- const bool match=game.inMatch();if(match&&settingsPage)subtitleText=game.matchView().joinCode.empty()?"THE MATCH GOES ON":"JOIN CODE  "+game.matchView().joinCode;
- const char* subtitle=subtitleText.c_str();
+ const char* subtitle=game.menuFromTitle()?"SELECT SAVE SLOT":"GAMEPLAY IS PAUSED";
  uiText(x+MenuLayout::Width-16-uiTextWidth(subtitle,0,10,1),y+16,subtitle,red,0,10,1,1);
- const char* labels[]={"RESUME","MASTER VOLUME","MUSIC VOLUME","EFFECTS VOLUME","MOUSE SENSITIVITY","INVERT MOUSE Y","DEPTH OF FIELD","LENS EFFECTS","PULL HIGHLIGHT","RESTART CURRENT GAME...","SAVE GAME...","LOAD GAME...",match?"LEAVE MATCH":game.menuFromTitle()?"QUIT GAME":"QUIT TO TITLE"};
- auto&settings=game.settings();
  for(int row=0;row<game.menuRows();++row){int top=MenuLayout::RowTop+row*MenuLayout::RowHeight;bool selected=row==game.menuSelection();
   if(selected){gradient(x+10,top,MenuLayout::Width-20,19,red,.5f,0.f,true);fill(x+10,top,2,19,red,1);}
   else fill(x+10,top+18,MenuLayout::Width-20,1,bone,.05f);
-  static const char* comfortLabels[]={"BACK","TURN SPEED","COMFORT VIGNETTE","SEATED MODE","RECALIBRATE HEIGHT","LEFT-HANDED","RENDER SCALE","FRAME RATE READOUT"};
-  const char* label=comfortPage?comfortLabels[std::clamp(row,0,7)]:settingsPage&&row==5&&game.vrMenu()?"VR COMFORT...":settingsPage?(row==0&&game.menuFromTitle()?"BACK TO TITLE":labels[row]):page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":page==Game::MenuPage::ConfirmLoad?"LOAD / REPLACE CURRENT PROGRESS":"RESTART / DISCARD CURRENT PROGRESS");
-  uiText(x+20,top+2,label,selected?bone:dim,0,13,match&&settingsPage&&row>=9&&row<=11?.3f:1.f,1);
-  if(settingsPage&&((row>=1&&row<=4)||row==6||row==7)){float value=row==1?settings.master:row==2?settings.music:row==3?settings.effects:row==4?settings.sensitivity:row==6?settings.depthOfField:settings.lensEffects;
-   float normalized=std::clamp(row==4?(value-.2f)/2.8f:row>=6?value*.5f:value,0.f,1.f);int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
-   fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);
-   fill(knob-1,top+4,3,11,bone,1);
-   char valueText[16];if(row==4)std::snprintf(valueText,sizeof(valueText),"%.1fX",value);else if(row>=6)std::snprintf(valueText,sizeof(valueText),"%d%%",int(value*100+.5f));else std::snprintf(valueText,sizeof(valueText),"%d",int(value*100+.5f));
-   uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);
-  }
-  if(settingsPage&&row==5&&!game.vrMenu())uiText(MenuLayout::SliderX,top+3,settings.invertMouse?"ON":"OFF",settings.invertMouse?red:bone,3,11);
-  if(comfortPage){
-   if(row==1||row==2){const float value=row==1?settings.vrTurnSpeed:settings.vrVignette,normalized=std::clamp(row==1?(value-.25f)/1.75f:value,0.f,1.f);const int knob=MenuLayout::SliderX+int(normalized*MenuLayout::SliderWidth);
-    fill(MenuLayout::SliderX,top+9,MenuLayout::SliderWidth,1,bone,.22f);fill(MenuLayout::SliderX,top+8,knob-MenuLayout::SliderX,3,selected?red:bone,selected?1.f:.55f);fill(knob-1,top+4,3,11,bone,1);
-    char valueText[16];if(row==1)std::snprintf(valueText,sizeof valueText,"%d/S",int(value*120+.5f));else if(value<=0)std::snprintf(valueText,sizeof valueText,"OFF");else std::snprintf(valueText,sizeof valueText,"%d%%",int(value*100+.5f));
-    uiText(MenuLayout::SliderX+82,top+3,valueText,bone,3,11);}
-   const bool on=row==3?settings.vrSeated:row==5?settings.vrLeftHanded:row==7?settings.vrFrameRate:false;
-   if(row==3||row==5||row==7)uiText(MenuLayout::SliderX,top+3,on?"ON":"OFF",on?red:bone,3,11);
-   if(row==6){char valueText[16];if(settings.vrRenderScale<=0)std::snprintf(valueText,sizeof valueText,"AUTO");else std::snprintf(valueText,sizeof valueText,"%d%%",int(settings.vrRenderScale*100+.5f));uiText(MenuLayout::SliderX,top+3,valueText,bone,3,11);}
-  }
-  if(settingsPage&&row==8)uiText(MenuLayout::SliderX,top+3,settings.pullHighlight?"SUBTLE":"NONE",bone,3,11);
+  const char* label=page==Game::MenuPage::Save?(row==3?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):game.slotLabel(row).c_str()):page==Game::MenuPage::Load?(row==4?(game.menuFromTitle()?"BACK TO TITLE":"BACK"):row==3?game.checkpointLabel().c_str():game.slotLabel(row).c_str()):(row==0?"CANCEL":page==Game::MenuPage::Overwrite?"OVERWRITE SAVED GAME":"LOAD / REPLACE CURRENT PROGRESS");
+  uiText(x+20,top+2,label,selected?bone:dim,0,13,1.f,1);
  }
- if(comfortPage)uiText(x+16,y+MenuLayout::Height-46,game.menuMessage().c_str(),red,0,11,1,1);
- else if(!settingsPage){uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad||page==Game::MenuPage::ConfirmRestart)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);}
+ uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);
  fill(x+10,y+MenuLayout::Height-28,MenuLayout::Width-20,1,bone,.10f);
  uiText(x+16,y+MenuLayout::Height-22,"CLICK / ARROWS / ENTER",dim,0,10,1,1);
- const char* back=settingsPage?(game.menuFromTitle()?"ESC  TITLE":"ESC  RESUME"):"ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
+ const char* back="ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
+ (void)black;
 }
 // A conversation: the speaker's line over the bottom of the view, the
 // replies numbered under it (Game::DialogueFirstReplyY is where the mouse
@@ -1645,7 +1625,7 @@ void SoftwareRenderer::render(const Game& game){
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
- if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else{if(!game.remotePlayers().empty())drawNameTags(game);drawHud(game);if(game.inMatch())drawMatchHud(game);}if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
+ if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else if(!(game.paused()&&(game.menuPage()==Game::MenuPage::Pause||game.menuPage()==Game::MenuPage::Options))){if(!game.remotePlayers().empty())drawNameTags(game);drawHud(game);if(game.inMatch())drawMatchHud(game);}if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}
  auto overlayEnd=std::chrono::steady_clock::now();perf::costs[perf::Overlay]+=std::chrono::duration<double,std::milli>(overlayEnd-afterSubmission).count();float ms=std::chrono::duration<float,std::milli>(overlayEnd-start).count();m_frameMs=m_frameMs==0?ms:m_frameMs*.9f+ms*.1f;
  if(game.showFps()){char info[96];std::snprintf(info,sizeof(info),"%s %dX%d RENDER %.1F MS / %.0F FPS",m_gpu?"VULKAN":"CPU",sceneWidth,sceneHeight,m_frameMs,1000.f/std::max(.01f,m_frameMs));text(12,m_height-50,info,rgb(225,200,130));}

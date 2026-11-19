@@ -91,6 +91,7 @@ add_executable(RawMetal WIN32
     net/EosSession.cpp
     net/Match.cpp
     net/MatchPlay.cpp
+    net/MatchChat.cpp
     net/MatchTest.cpp
     game/MultiplayerMenu.cpp
     renderer/RemotePlayers.cpp
@@ -104,6 +105,7 @@ add_executable(RawMetal WIN32
     game/physics/PropQueries.cpp
     game/Script.cpp
     game/Settings.cpp
+    game/SettingsMenu.cpp
     game/Saves.cpp
     game/Inventory.cpp
     game/Handgun.cpp
@@ -208,6 +210,7 @@ add_executable(RawMetal WIN32
     game/WaterFx.cpp
     game/Ragdoll.cpp
     audio/AudioEngine.cpp
+    audio/MicMonitor.cpp
     audio/DecodeMusic.cpp
     world/World.cpp
     world/CampaignMaps.cpp
@@ -411,14 +414,22 @@ if(RAWMETAL_EOS_KEYS)
 #define RAWMETAL_EOS_CLIENT_ID \"${RAWMETAL_EOS_client_id}\"
 #define RAWMETAL_EOS_CLIENT_SECRET_XOR {${RAWMETAL_EOS_SECRET_BYTES}0x00}
 #define RAWMETAL_EOS_DLL_RESOURCE 5990
+#define RAWMETAL_EOS_XAUDIO_RESOURCE 5991
 " @ONLY)
   set(RAWMETAL_EOS_RMZ "${CMAKE_BINARY_DIR}/packed/eos-sdk.rmz")
   add_custom_command(OUTPUT "${RAWMETAL_EOS_RMZ}"
     COMMAND $<TARGET_FILE:RawMetalAssetPacker> --pack-file "${RAWMETAL_EOS_DIR}/SDK/Bin/EOSSDK-Win64-Shipping.dll" "${RAWMETAL_EOS_RMZ}"
     DEPENDS RawMetalAssetPacker "${RAWMETAL_EOS_DIR}/SDK/Bin/EOSSDK-Win64-Shipping.dll"
     COMMENT "Packing the EOS SDK DLL into the exe" VERBATIM)
-  file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/eos-sdk.rc" CONTENT "5990 RCDATA \"${RAWMETAL_EOS_RMZ}\"\n")
-  set_source_files_properties("${CMAKE_BINARY_DIR}/eos-sdk.rc" PROPERTIES OBJECT_DEPENDS "${RAWMETAL_EOS_RMZ}")
+  # Voice (EOS RTC) needs XAudio 2.9 under the redistributable's own name: the SDK delay-loads XAudio2_9Redist.dll,
+  # so Windows' own System32\xaudio2_9.dll is not taken. Resource 5991, unpacked beside the SDK DLL's folder.
+  set(RAWMETAL_XAUDIO_RMZ "${CMAKE_BINARY_DIR}/packed/eos-xaudio.rmz")
+  add_custom_command(OUTPUT "${RAWMETAL_XAUDIO_RMZ}"
+    COMMAND $<TARGET_FILE:RawMetalAssetPacker> --pack-file "${RAWMETAL_EOS_DIR}/SDK/Bin/x64/xaudio2_9redist.dll" "${RAWMETAL_XAUDIO_RMZ}"
+    DEPENDS RawMetalAssetPacker "${RAWMETAL_EOS_DIR}/SDK/Bin/x64/xaudio2_9redist.dll"
+    COMMENT "Packing XAudio 2.9 (for EOS voice) into the exe" VERBATIM)
+  file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/eos-sdk.rc" CONTENT "5990 RCDATA \"${RAWMETAL_EOS_RMZ}\"\n5991 RCDATA \"${RAWMETAL_XAUDIO_RMZ}\"\n")
+  set_source_files_properties("${CMAKE_BINARY_DIR}/eos-sdk.rc" PROPERTIES OBJECT_DEPENDS "${RAWMETAL_EOS_RMZ};${RAWMETAL_XAUDIO_RMZ}")
   message(STATUS "EOS: multiplayer keys found; product version ${RAWMETAL_EOS_product_version}")
 else()
   file(REMOVE "${RAWMETAL_GENERATED}/EosConfig.h")

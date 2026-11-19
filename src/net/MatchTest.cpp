@@ -1,5 +1,6 @@
 #include "Match.h"
 #include "Loopback.h"
+#include "MatchProtocol.h"
 #include "Wire.h"
 #include "../game/Game.h"
 #include "../world/CustomCampaign.h"
@@ -158,6 +159,60 @@ bool Match::selfTest(std::ostream& report){
   check(guest->m_player.health<100&&!guest->dead(),"the new host traces the third player's shot and takes the damage");
   playing.clear();
  }
+ // ===== Chat =====
+ {
+  LoopbackHub hub;auto sh=hub.connect("Hana"),sg=hub.connect("Gus"),st=hub.connect("Tam");
+  auto host=makeHost(),guest=makeGuest(thirdMaps,true),third=makeGuest(thirdMaps,true);
+  host->setNetSession(sh.get());guest->setNetSession(sg.get());third->setNetSession(st.get());
+  playing={host.get(),guest.get(),third.get()};frames(1);
+  HostOptions o;o.mode=Mode::Deathmatch;o.map=arenaFile;o.mapHash=mapFileHash(hostMaps/arenaFile);sh->host(o);frames(1);
+  sg->joinCode(sh->lobby().joinCode);until(120,[&]{return guest->m_match&&guest->m_match->started();});frames(20);
+  st->joinCode(sh->lobby().joinCode);until(120,[&]{return third->m_match&&third->m_match->started();});frames(20);
+  auto said=[](const Game& g,const std::string& from,const std::string& text){for(const auto& c:g.m_matchView.chat)if(!c.notice&&c.from==from&&c.text==text)return true;return false;};
+  auto told=[](const Game& g,const std::string& text){for(const auto& c:g.m_matchView.chat)if(c.notice&&c.text==text)return true;return false;};
+  auto count=[](const Game& g,const std::string& prefix){int n=0;for(const auto& c:g.m_matchView.chat)n+=!c.notice&&c.text.rfind(prefix,0)==0;return n;};
+  check(told(*host,"Gus joined the game")&&told(*host,"Tam joined the game")&&told(*guest,"Tam joined the game"),"join notices appear in the chat box (host and the earlier guest)");
+  check(!told(*third,"Gus joined the game")&&!told(*third,"Tam joined the game"),"a newcomer is not told about those already down here, nor about itself");
+  check(guest->sendChat("  hello   down there  "),"a guest's line is accepted");frames(4);
+  check(said(*host,"Gus","hello down there")&&said(*third,"Gus","hello down there")&&said(*guest,"Gus","hello down there"),"a guest's line reaches the host and the other guest (and comes back to the sender), cleaned");
+  {bool self=false;for(const auto& c:guest->m_matchView.chat)self|=c.self&&c.from=="Gus";check(self,"the sender's own line is marked as theirs");}
+  guest->sendChat(std::string(200,'a'));frames(4);
+  {size_t longest=0;for(const auto& c:host->m_matchView.chat)if(!c.notice)longest=std::max(longest,c.text.size());check(longest==Match::ChatMax,"a long line is cut to 120 characters ("+std::to_string(longest)+")");}
+  frames(int(7.f/dt));   // the allowance refills
+  host->sendChat("what the fuck is that shit, Scunthorpe");frames(4);
+  guest->m_settings.chatFilter=false;frames(2);
+  check(said(*third,"Hana","what the **** is that ****, Scunthorpe")&&said(*guest,"Hana","what the fuck is that shit, Scunthorpe"),"the chat filter masks listed words for whoever has it on (and leaves Scunthorpe alone)");
+  third->setPlayerMuted("Gus",true);frames(15);
+  check(!said(*third,"Gus","hello down there")&&said(*host,"Gus","hello down there"),"a muted sender's lines are hidden from the one who muted them, not from the others");
+  check(st->mutedPeers.count(sg->self())&&st->mutedPeers[sg->self()],"muting by name mutes the player's voice in the session too");
+  third->setPlayerMuted("Gus",false);frames(15);check(said(*third,"Gus","hello down there")&&!st->mutedPeers[sg->self()],"unmuting shows the lines again and lets the voice through");
+  {third->m_settings.textChat=false;frames(2);int lines=0;for(const auto& c:third->m_matchView.chat)lines+=!c.notice;
+   check(lines==0,"text chat off hides the players' lines");third->m_settings.textChat=true;}
+  // The allowance: a burst of ten from a guest, by the guest's own count and then past it straight to the host.
+  frames(int(7.f/dt));
+  {int accepted=0;for(int i=0;i<10;++i)accepted+=guest->sendChat("spam "+std::to_string(i));frames(4);
+   check(accepted==4&&count(*host,"spam ")==4&&count(*third,"spam ")==4,"a spam burst of 10 is cut to 4 lines (accepted "+std::to_string(accepted)+", the host shows "+std::to_string(count(*host,"spam "))+")");
+   bool warned=false;for(const auto& c:guest->m_matchView.chat)warned|=c.notice&&c.text.find("Too fast")==0;check(warned,"the sender is told to wait");}
+  frames(int(7.f/dt));
+  {for(int i=0;i<10;++i){wire::Writer w;w.u8(protocol::ChatSay).str("burst "+std::to_string(i));st->send(sh->self(),Events,w.b.data(),w.b.size(),true);}frames(4);
+   check(count(*host,"burst ")==4&&count(*guest,"burst ")==4,"the host holds a guest to the same allowance however the lines are sent ("+std::to_string(count(*host,"burst "))+" of 10 relayed)");}
+  // A kill makes a notice.
+  host->m_player.pos={8.5f,5.5f};put(*host,*guest,{8.5f,8.5f});frames(30);
+  killWith(*host,*guest,4);frames(10);
+  check(told(*third,"Hana killed Gus")&&told(*guest,"Hana killed Gus"),"a kill is a notice in the chat box");
+  // Speaking: Gus holds push-to-talk; the others' scoreboards and name tags show it.
+  {InputState talk{};talk.talk=true;for(int i=0;i<4;++i){host->update({},dt);guest->update(talk,dt);third->update({},dt);}
+   bool board=false,tag=false;for(const auto& r:host->m_matchView.scores)board|=r.name=="Gus"&&r.speaking;for(const auto& r:host->m_remotePlayers)tag|=r.name=="Gus"&&r.speaking;
+   bool selfRow=false;for(const auto& r:guest->m_matchView.scores)selfRow|=r.self&&r.speaking;
+   check(board&&tag&&selfRow,"push-to-talk held: the speaker is marked on the others' scoreboard and name tag, and on their own row");
+   frames(2);bool quiet=true;for(const auto& r:host->m_matchView.scores)quiet&=!r.speaking;check(quiet,"let go, nobody is marked speaking");}
+  {third->m_settings.voiceMode=0;InputState talk{};talk.talk=true;for(int i=0;i<3;++i){host->update({},dt);guest->update(talk,dt);third->update({},dt);}
+   bool heard=false;for(const auto& r:third->m_matchView.scores)heard|=r.name=="Gus"&&r.speaking;check(!heard&&st->voice().mode==VoiceMode::Off,"voice off: the settings reach the session and nobody is heard");third->m_settings.voiceMode=1;}
+  {float volume=-1;frames(15);if(sh->peerVolumes.count(sg->self()))volume=sh->peerVolumes[sg->self()];check(volume==1.f,"deathmatch: voices are heard in full, whatever the distance");}
+  st->leave();frames(10);
+  check(told(*host,"Tam left the game")&&told(*guest,"Tam left the game"),"a leave notice appears");
+  playing.clear();
+ }
  // ===== Co-op =====
  {
   LoopbackHub hub;auto sh=hub.connect("Hana"),sg=hub.connect("Gus");
@@ -184,6 +239,13 @@ bool Match::selfTest(std::ostream& report){
    host->m_god=true;check(host->m_player.health==100,"friendly fire off: the guest's round does not hurt the host");}
   {put(*host,*guest,{4.5f,19.5f});frames(20);
    check(!host->m_pickups.empty()&&!host->m_pickups[0].active&&!guest->m_pickups[0].active,"a pickup the guest takes is gone on the host too");}
+  // Proximity voice: each voice's volume follows the distance and the wall across the middle.
+  {auto volume=[&]{frames(20);return sh->peerVolumes.count(sg->self())?sh->peerVolumes[sg->self()]:-1.f;};
+   host->m_player.pos={12.5f,6.5f};put(*host,*guest,{13.5f,6.5f});const float near=volume();
+   put(*host,*guest,{20.5f,6.5f});const float open=volume();
+   put(*host,*guest,{12.5f,18.5f});const float walled=volume();
+   host->m_settings.proximityVoice=false;const float off=volume();host->m_settings.proximityVoice=true;
+   check(near==1.f&&open>.5f&&open<.9f&&walled>0&&walled<.25f&&off==1.f,"co-op proximity voice: beside "+std::to_string(near)+", 8 m in the open "+std::to_string(open)+", 12 m behind the wall "+std::to_string(walled)+", proximity off "+std::to_string(off));}
   sh->leave();frames(10);
   check(!guest->m_match&&guest->m_titleScreen&&guest->m_matchView.status.find("host left")!=std::string::npos,"co-op ends for the guest when the host leaves, with a plain line: \""+guest->m_matchView.status+"\"");
   playing.clear();

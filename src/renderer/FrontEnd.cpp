@@ -1,5 +1,6 @@
 #include "SoftwareRenderer.h"
 #include "../net/NetTypes.h"
+#include "../net/Match.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -266,6 +267,7 @@ void SoftwareRenderer::drawMatchHud(const Game& game){
  if(m.over){std::string title="MATCH OVER";std::string who=m.winner.empty()?"":upper(m.winner)+(m.mode==net::Mode::Coop?"":" TAKES IT");
   fill(0,0,m_width,m_height,black,.3f);uiText(cx-uiTextWidth(title.c_str(),0,13,6)/2,22,title.c_str(),red,0,13,1,6);
   if(!who.empty())uiText(cx-uiTextWidth(who.c_str(),2,26,2)/2,36,who.c_str(),bone,2,26,1,2);}
+ drawChat(game);
  if(!board)return;
  // The scoreboard: the pause menu's slab, a row a player, yours lit.
  const int w=448,x=(m_width-w)/2,y=m.over?70:52,rowH=17,maxRows=std::max(1,(m_height-y-72)/rowH),rows=std::min(int(m.scores.size()),maxRows);
@@ -283,14 +285,205 @@ void SoftwareRenderer::drawMatchHud(const Game& game){
   if(r.self){gradient(x+10,ry-1,w-20,rowH-1,red,.5f,.08f,true);fill(x+10,ry-1,2,rowH-1,red,1);}else if(i%2)fill(x+10,ry-1,w-20,rowH-1,bone,.03f);
   char rank[8];std::snprintf(rank,sizeof rank,"%d",i+1);uiText(cRank,ry+1,rank,r.self?bone:dim,3,10);
   std::string who=r.name;while(who.size()>3&&uiTextWidth(who.c_str(),0,12)>180)who=who.substr(0,who.size()-4)+"...";
-  const int nw=uiText(cName,ry,who.c_str(),r.self?bone:rgb(206,198,186),0,12);
-  if(r.host)uiText(cName+nw+8,ry+2,"HOST",amber,3,8,1,1);
+  const int nw=uiText(cName,ry,who.c_str(),r.self?bone:rgb(206,198,186),0,12,r.muted?.5f:1.f);
+  int tx=cName+nw+8;
+  // Speaking: three bars, the middle tallest; muted: a red word; the row the arrows picked is framed.
+  if(r.speaking){for(int k=0;k<3;++k){const int bh=k==1?9:6;fill(tx+k*3,ry+11-bh,2,bh,amber,1);}tx+=14;}
+  if(r.host){tx+=uiText(tx,ry+2,"HOST",amber,3,8,1,1)+8;}
+  if(r.muted)uiText(tx,ry+2,"MUTED",red,3,8,1,1);
+  if(i==game.scoreboardPick())frame(x+10,ry-1,w-20,rowH-1,bone,.55f);
   uiText(cFrags,ry+1,std::to_string(r.frags).c_str(),bone,3,11);uiText(cDeaths,ry+1,std::to_string(r.deaths).c_str(),dim,3,11);
   char ping[12];if(r.pingMs<0)std::snprintf(ping,sizeof ping,"--");else std::snprintf(ping,sizeof ping,"%d",r.pingMs);
   uiText(cPing-uiTextWidth(ping,3,10),ry+1,ping,r.pingMs<0?dim:r.pingMs<90?dim:r.pingMs<160?amber:red,3,10);}
  if(m.scores.empty())uiText(cName,y+56,"Nobody else is down here yet.",dim,1,12);
  const int fy=y+h-18;fill(x+12,fy-4,w-24,1,bone,.08f);
  if(!m.joinCode.empty()){uiText(x+16,fy,"JOIN CODE",dim,3,9,1,2);uiText(x+16+uiTextWidth("JOIN CODE",3,9,2)+10,fy-1,m.joinCode.c_str(),bone,3,11,1,2);}
- const char* hint=m.over?"":"RELEASE TAB TO CLOSE";if(*hint)uiText(x+w-16-uiTextWidth(hint,3,8,2),fy+1,hint,dim,3,8,.7f,2);
+ const char* hint=m.over?"":game.scoreboardPick()>=0?"ENTER MUTES OR UNMUTES":"ARROWS PICK A PLAYER TO MUTE";if(*hint)uiText(x+w-16-uiTextWidth(hint,3,8,2),fy+1,hint,dim,3,8,.7f,2);
+}
+
+// The chat box, lower left above the HUD: the last few lines, each fading out after eight seconds; while typing,
+// the last six whatever their age and the line being typed under them. Names in bone, words a shade softer,
+// notices dim and italic-free; your own name in red.
+void SoftwareRenderer::drawChat(const Game& game){
+ const auto& m=game.matchView();
+ const auto bone=rgb(236,228,214),soft=rgb(206,198,186),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0),ink=rgb(10,8,8);
+ const bool typing=game.chatOpen();
+ const int x=16,width=300,lineH=13,bottom=m_height-88;
+ // Wraps one line to the box's width, the name taking the first line's start.
+ struct Piece{std::string text;int indent=0;};
+ auto wrap=[&](const std::string& text,int first,int font,int size){std::vector<Piece> out;std::string rest=text;int indent=first;
+  while(!rest.empty()&&out.size()<4){size_t n=rest.size();while(n>1&&uiTextWidth(rest.substr(0,n).c_str(),font,size)>width-indent){size_t space=rest.rfind(' ',n-1);n=space!=std::string::npos&&space>0?space:n-1;}
+   out.push_back({rest.substr(0,n),indent});rest.erase(0,n);while(!rest.empty()&&rest.front()==' ')rest.erase(0,1);indent=10;}
+  return out;};
+ struct Drawn{const net::ChatLine* line;std::vector<Piece> pieces;float alpha;int nameWidth;};
+ std::vector<Drawn> lines;int rows=0;
+ const size_t keep=typing?6:4;
+ for(size_t i=m.chat.size();i-->0&&lines.size()<keep;){const auto& c=m.chat[i];
+  const float alpha=typing?1.f:c.age<8?1.f:std::max(0.f,1.f-(c.age-8)/2);if(alpha<=0)break;
+  std::string name=c.notice?std::string():upper(c.from)+"  ";
+  const int nw=c.notice?0:uiTextWidth(name.c_str(),0,11,1);
+  Drawn d{&c,wrap(c.text,nw,1,12),alpha,nw};rows+=int(d.pieces.size());lines.push_back(std::move(d));}
+ const int fieldH=typing?18:0;
+ if(lines.empty()&&!typing)return;
+ int y=bottom-fieldH-rows*lineH;
+ if(typing){gradient(0,y-6,x+width+40,bottom-y+12,black,.62f,0.f,true);}
+ for(auto it=lines.rbegin();it!=lines.rend();++it){const auto& d=*it;const auto& c=*d.line;
+  for(size_t k=0;k<d.pieces.size();++k){
+   if(!typing)gradient(x-8,y-1,width/2+40,lineH,black,.5f*d.alpha,0.f,true);
+   if(k==0&&!c.notice){std::string name=upper(c.from);uiText(x,y,name.c_str(),c.self?red:bone,0,11,d.alpha,1);}
+   if(c.notice&&k==0)fill(x,y+6,5,1,dim,d.alpha);
+   uiText(x+d.pieces[k].indent+(c.notice&&k==0?9:0),y,d.pieces[k].text.c_str(),c.notice?dim:soft,1,12,d.alpha);
+   y+=lineH;}
+ }
+ if(typing){
+  static unsigned tick=0;++tick;
+  const int fy=bottom-fieldH+3;fill(x-4,fy,width+8,fieldH-2,ink,.85f);frame(x-4,fy,width+8,fieldH-2,bone,.25f);fill(x-4,fy,2,fieldH-2,red,1);
+  const int lw=uiText(x+2,fy+3,"SAY",red,3,9,1,2)+10;
+  std::string text=game.chatTyped();while(text.size()>1&&uiTextWidth(text.c_str(),1,12)>width-lw-12)text.erase(0,1);
+  const int tw=uiText(x+2+lw,fy+2,text.c_str(),bone,1,12);
+  if((tick/24)%2==0)fill(x+3+lw+tw,fy+4,1,11,red,1);
+  char count[16];std::snprintf(count,sizeof count,"%d",int(net::Match::ChatMax-game.chatTyped().size()));
+  uiText(x+width-uiTextWidth(count,3,8),fy+fieldH+1,count,dim,3,8,.8f);
+  uiText(x,fy+fieldH+1,"ENTER SENDS  /  ESC DROPS IT",dim,3,8,.8f,1);
+ }
+}
+
+// The keys a menu takes, in caps along the bottom (the title's footer).
+void SoftwareRenderer::drawMenuFooter(bool change){
+ const auto bone=rgb(236,228,214),dim=rgb(146,138,128);
+ fill(40,m_height-36,m_width-80,1,bone,.10f);
+ int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+14;};
+ cap("ENTER / A","SELECT");cap("ESC / B","BACK");cap("ARROWS / D-PAD","MOVE");if(change)cap("< >","CHANGE");
+}
+
+// PAUSE: the scene held under smoke, the title's grouped rows and its red selection, a line saying what the chosen
+// row does. RESTART and QUIT TO TITLE ask again in place.
+void SoftwareRenderer::drawPauseMenu(const Game& game){
+ if(!hardwarePresentsWindow())for(auto&p:m_pixels)p=shade(p,.3f);
+ const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0),amber=rgb(232,160,60);
+ const bool match=game.inMatch();
+ fill(0,0,m_width,m_height,black,.3f);gradient(0,0,m_width*3/4,m_height,black,.92f,0.f,true);gradient(0,m_height-80,m_width,80,black,0.f,1.f,false);gradient(0,0,m_width,60,black,.8f,0.f,false);
+ for(int y=0;y<m_height;y+=2)fill(0,y,m_width,1,black,.12f);
+ fill(40,21,5,5,red,1);uiText(52,16,match?"A MATCH IS UNDER WAY  //  IT DOES NOT STOP":"DEPTHWORKS INDUSTRIAL  //  SITE 9 EXTRACTION COMPLEX",dim,0,11,1,1);
+ fill(40,33,m_width-80,1,bone,.10f);
+ fill(40,112,4,16,red,1);uiText(52,111,"PAUSED",red,0,15,1,3);
+ uiText(52,130,match?"The match goes on without you. Nobody waits down here.":"The dark holds its breath. It will not hold it long.",dim,1,13);
+ const int rows=PauseMenuLayout::rows(match);
+ static const char* labels[]={"RESUME","SETTINGS","SAVE GAME","LOAD GAME","RESTART","QUIT TO TITLE"};
+ static const char* notes[]={"Back into the dark.","Sound, sight, hands and voice.","Leave a mark to come back to.","Go back to a mark you left.",
+  "Start this descent over. Unsaved progress is lost.","Climb back up to the title. Unsaved progress is lost."};
+ const int armed=game.menuArmed();
+ for(int row=0;row<rows;++row){
+  const int y=PauseMenuLayout::rowY(row,match),X=PauseMenuLayout::X,W=PauseMenuLayout::Width,H=PauseMenuLayout::RowHeight;const bool selected=row==game.menuSelection();const bool big=row<2;
+  if(row==2||row==(match?3:4))fill(X,y-PauseMenuLayout::Gap/2-1,W-24,1,bone,.08f);
+  if(selected){gradient(X-14,y,W+14,H-2,red,.55f,0.f,true);fill(X-14,y,3,H-2,red,1);}
+  char index[4];std::snprintf(index,sizeof index,"%02d",row+1);
+  uiText(X,y+(big?6:5),index,selected?bone:dim,3,10,selected?1.f:.5f);
+  std::string label=match?(row==0?"RESUME":row==1?"SETTINGS":row==2?"JOIN CODE":"LEAVE MATCH"):labels[row];
+  if(armed==row)label=row==PauseRestart?"RESTART: PRESS AGAIN":"QUIT: PRESS AGAIN";
+  uiText(X+24+(selected?3:0),y+(big?1:3),label.c_str(),armed==row?red:selected?bone:dim,0,big?18:14,selected?1.f:big?.85f:.7f,1);
+  if(match&&row==PauseMatchCode){const std::string code=game.matchView().joinCode.empty()?"------":game.matchView().joinCode;
+   uiText(X+W-26-uiTextWidth(code.c_str(),3,12,2),y+5,code.c_str(),selected?bone:dim,3,12,1,2);}
+  if(selected)uiText(X+W-14,y+(big?1:2),">",bone,0,big?18:14,.8f);
+ }
+ const int noteY=PauseMenuLayout::rowY(rows-1,match)+PauseMenuLayout::RowHeight+6;const int pick=std::clamp(game.menuSelection(),0,rows-1);
+ std::string note=match?(pick==0?notes[0]:pick==1?notes[1]:pick==2?"Give it to whoever should come down. Enter copies it.":"Leave the others to it. They will not wait."):notes[pick];
+ if(armed==pick&&!match)note=pick==PauseRestart?"Press again to start over. Unsaved progress will be lost.":"Press again to go up to the title. Unsaved progress will be lost.";
+ fill(PauseMenuLayout::X,noteY+7,10,1,red,1);uiText(PauseMenuLayout::X+16,noteY,note.c_str(),armed==pick?red:dim,1,12);
+ if(!game.menuMessage().empty())uiText(PauseMenuLayout::X+16,noteY+16,game.menuMessage().c_str(),amber,0,11,1,2);
+ // The right of the frame: where you are, as the title shows the facility.
+ const int sx=m_width-218,sy=150;
+ if(match){const auto& v=game.matchView();uiText(sx,sy,"THE MATCH",dim,0,11,1,2);fill(sx,sy+16,178,1,bone,.14f);
+  std::string map=v.map;if(map.size()>4&&map.ends_with(".rmc"))map.resize(map.size()-4);
+  const std::string players=std::to_string(v.scores.size());
+  const char* keys[]={"MODE","MAP","PLAYERS"};const std::string values[]={net::modeName(v.mode),upper(map),players};
+  for(int i=0;i<3;++i){std::string val=values[i];while(val.size()>3&&uiTextWidth(val.c_str(),3,11)>120)val=val.substr(0,val.size()-4)+"...";
+   uiText(sx,sy+24+i*17,keys[i],dim,3,11,.85f);uiText(sx+178-uiTextWidth(val.c_str(),3,11),sy+24+i*17,val.c_str(),i==0?amber:bone,3,11);}}
+ drawMenuFooter(false);
+}
+
+// SETTINGS: the page column on the left (the open page marked, the chosen one lit), the open page's rows on the
+// right with their sliders, toggles and choices, and under them the chosen row's one plain line.
+void SoftwareRenderer::drawSettingsMenu(const Game& game){
+ if(!hardwarePresentsWindow())for(auto&p:m_pixels)p=shade(p,.22f);
+ const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0),amber=rgb(232,160,60),ink=rgb(10,8,8);
+ fill(0,0,m_width,m_height,black,.8f);gradient(0,0,m_width*2/3,m_height,black,.6f,0.f,true);
+ for(int y=0;y<m_height;y+=2)fill(0,y,m_width,1,black,.12f);
+ const auto tab=game.settingsTab();const bool onTabs=game.settingsOnTabs();const int sel=game.menuSelection();
+ // Header: the page's name and a line in the game's voice (COMMUNICATION: why voice is off, when it is).
+ fill(40,24,4,16,red,1);uiText(52,23,"SETTINGS",red,0,15,1,3);
+ const int kw=uiTextWidth("SETTINGS",0,15,3);uiText(52+kw+12,27,game.settingsMutedList()?"/  MUTED PLAYERS":(std::string("/  ")+Game::settingsTabName(tab)).c_str(),dim,0,11,1,2);
+ std::string line;bool warn=false;
+ switch(tab){
+  case SettingsTab::Audio:line="What reaches you down here, and how loud.";break;
+  case SettingsTab::Video:line="How the lens sees the dark.";break;
+  case SettingsTab::Controls:line="Your hands, and what they answer to.";break;
+  case SettingsTab::Gameplay:line="Small mercies, and the face the others see.";break;
+  case SettingsTab::Communication:{const net::Session* s=game.netSession();const auto st=s?s->voiceStatus():net::VoiceStatus{false,false,false,"voice needs the online service"};
+   if(game.settings().voiceMode==0)line="Voice is off. You neither speak nor hear the others.";
+   else if(!st.available){line="Voice is off: "+st.reason;warn=true;}
+   else if(st.inRoom)line=st.transmitting?"You are being heard.":"In the voice room. The others can hear you when you speak.";
+   else line="Voices carry down here. So does yours.";
+   break;}
+  case SettingsTab::Vr:line=game.vrMenu()?"For a body that is not really here.":"For the headset. They change nothing on a screen.";break;
+  default:break;
+ }
+ while(line.size()>3&&uiTextWidth(line.c_str(),1,13)>m_width-100)line=line.substr(0,line.size()-4)+"...";
+ uiText(52,43,line.c_str(),warn?amber:dim,1,13);
+ if(!game.menuMessage().empty()){const std::string msg=game.menuMessage();uiText(m_width-40-uiTextWidth(msg.c_str(),0,11,2),27,msg.c_str(),amber,0,11,1,2);}
+ fill(40,62,m_width-80,1,bone,.10f);
+ const auto items=game.settingsItems();
+ std::string help;int rowIndex=0;
+ for(size_t i=0;i<items.size();++i){const auto& m=items[i];
+  if(m.kind==MenuItem::Tab||(m.kind==MenuItem::Back&&m.id>=1000)){
+   const int t=m.id-1000;const bool chosen=onTabs&&sel==t;const bool back=m.kind==MenuItem::Back;
+   if(back)fill(m.x,m.y-SettingsLayout::BackGap/2-1,m.w-10,1,bone,.08f);
+   if(chosen){gradient(m.x-14,m.y,m.w+14,m.h-1,red,.55f,0.f,true);fill(m.x-14,m.y,3,m.h-1,red,1);help=m.help;}
+   else if(m.current)fill(m.x-14,m.y+2,2,m.h-5,red,.9f);
+   uiText(m.x+(chosen?3:0),m.y+(back?4:3),back?"< BACK":m.label.c_str(),chosen||m.current?bone:dim,0,back?12:13,chosen||m.current?1.f:.75f,1);
+   continue;}
+  // A row of the open page.
+  const int r=rowIndex++;const bool chosen=!onTabs&&sel==r;const float a=m.enabled?1.f:.4f;
+  const int y=m.y,X=m.x,W=m.w,H=m.h;
+  if(chosen){gradient(X-12,y,W+12,H-1,red,.5f,0.f,true);fill(X-12,y,2,H-1,red,1);help=m.help;}
+  else fill(X,y+H-1,W,1,bone,.05f);
+  const bool back=m.kind==MenuItem::Back,reset=m.label.rfind("RESET",0)==0;
+  if(reset&&!m.armed)fill(X,y-1,W,1,bone,.08f);
+  std::string label=m.label;while(label.size()>3&&uiTextWidth(label.c_str(),0,13,1)>(m.kind==MenuItem::Slider?SettingsLayout::SliderX-X-30:190))label=label.substr(0,label.size()-4)+"...";
+  uiText(X+8+(chosen?3:0),y+2,back?("< "+label).c_str():label.c_str(),m.armed?red:chosen?bone:dim,0,13,(chosen?1.f:.85f)*a,1);
+  const int right=X+W-8;
+  if(m.kind==MenuItem::Slider){
+   const int sx=SettingsLayout::SliderX,sw=SettingsLayout::SliderWidth,knob=sx+int(m.fraction*sw+.5f);
+   if(m.meter>=0){const int mw=int(std::clamp(m.meter,0.f,1.f)*sw);const bool over=m.meter>=m.fraction;
+    fill(sx,y+5,sw,7,ink,.8f);fill(sx,y+5,mw,7,over?amber:dim,over?.85f:.6f);}
+   fill(sx,y+8,sw,1,bone,.25f);fill(sx,y+7,knob-sx,3,chosen?red:bone,(chosen?1.f:.55f)*a);fill(knob-1,y+3,3,11,bone,a);
+   uiText(right-uiTextWidth(m.value.c_str(),3,11),y+3,m.value.c_str(),bone,3,11,a);
+  }else if(!m.value.empty()){
+   std::string v=m.value;const int room=m.kind==MenuItem::Choice?(right-16)-(X+200):right-(X+200);
+   while(v.size()>3&&uiTextWidth(v.c_str(),3,11)>room)v=v.substr(0,v.size()-4)+"...";
+   const int vw=uiTextWidth(v.c_str(),3,11);const int vx=m.kind==MenuItem::Choice?right-12-vw:right-vw;
+   const bool live=m.value=="LISTENING";
+   uiText(vx,y+3,v.c_str(),m.warn?(live?amber:red):chosen?bone:rgb(206,198,186),3,11,a);
+   if(m.kind==MenuItem::Choice&&chosen){uiText(vx-10,y+3,"<",bone,3,11,.7f);uiText(right-6,y+3,">",bone,3,11,.7f);}
+   // TEST MY MIC listening: its level runs beside the word.
+   if(m.meter>=0){const int mx=X+200,mw=std::max(0,vx-14-mx);fill(mx,y+6,mw,5,ink,.8f);fill(mx,y+6,int(std::clamp(m.meter,0.f,1.f)*mw),5,amber,.85f);}
+  }else if(m.kind==MenuItem::Action&&chosen)uiText(right-uiTextWidth(">",0,13),y+2,">",bone,0,13,.8f);
+ }
+ // CONTROLS: the keys, read-only, in two columns under the rows.
+ if(tab==SettingsTab::Controls&&!game.settingsMutedList()){
+  const int ky=SettingsLayout::rowY(int(game.settingsRows().size()))+14;
+  uiText(SettingsLayout::RowX+8,ky,"THE KEYS",dim,0,11,1,2);fill(SettingsLayout::RowX+8,ky+15,SettingsLayout::RowWidth-16,1,bone,.12f);
+  std::string talk="V";{static const std::pair<int,const char*> keys[]={{0x56,"V"},{0x42,"B"},{0x58,"X"},{0x48,"H"},{0x14,"CAPS LOCK"},{0xA4,"LEFT ALT"},{0x05,"MOUSE 4"},{0x06,"MOUSE 5"}};
+   for(const auto& [code,name]:keys)if(code==game.settings().pushToTalkKey)talk=name;}
+  const std::pair<const char*,std::string> binds[]={{"MOVE","W A S D"},{"SPRINT","SHIFT"},{"JUMP","SPACE"},{"CROUCH","C / CTRL"},{"PRONE","Z"},{"FIRE","LEFT MOUSE"},
+   {"GUARD","RIGHT MOUSE"},{"RELOAD","R"},{"USE","E"},{"SUBDUE","Q"},{"FLASHLIGHT","F"},{"PHYSGLOVES","G"},{"TURN A PROP","MIDDLE MOUSE"},{"WEAPONS","1 2 3 / WHEEL"},
+   {"INVENTORY","I"},{"SCOREBOARD","TAB"},{"CHAT","T"},{"PUSH TO TALK",talk},{"SOUND / MUSIC","M / N"},{"PAUSE","ESC"}};
+  const int colW=(SettingsLayout::RowWidth-16)/2;
+  for(int i=0;i<20;++i){const int cx=SettingsLayout::RowX+8+(i/10)*(colW+8),cy=ky+22+(i%10)*13;
+   uiText(cx,cy,binds[i].first,dim,0,10,.9f,1);const std::string& k=binds[i].second;uiText(cx+colW-12-uiTextWidth(k.c_str(),3,10),cy,k.c_str(),bone,3,10);}
+ }
+ if(!help.empty()){std::string h=help;while(h.size()>3&&uiTextWidth(h.c_str(),1,12)>m_width-80-16)h=h.substr(0,h.size()-4)+"...";
+  fill(40,SettingsLayout::HelpY+7,10,1,red,1);uiText(56,SettingsLayout::HelpY,h.c_str(),dim,1,12);}
+ drawMenuFooter(true);
 }
 }

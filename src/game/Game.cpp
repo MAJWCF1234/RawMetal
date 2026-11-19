@@ -45,7 +45,7 @@ void Game::loadCustomCampaignDirectory(std::wstring directory){
 void Game::showTitleScreen(){
     m_titleScreen=true;m_titleSelection=0;m_customMenuOffset=0;m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;
     m_titlePage=TitlePage::Main;m_titleNotice.clear();
-    m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
+    m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Pause;m_menuArmed=-1;m_chatOpen=false;m_chatTyped.clear();
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
@@ -477,6 +477,7 @@ bool Game::testPickups(){
 // which reads what the player did this frame and sends it, and writes what the others did.
 void Game::update(const InputState& input, float dt) {
     updateNet();
+    updateVoice(input);
     updateFrame(input,dt);
     if(m_match)m_match->update(input,dt);
 }
@@ -487,30 +488,42 @@ void Game::updateFrame(const InputState& input, float dt) {
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
     bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     m_scoreboardHeld=input.scoreboard&&m_matchView.active&&!m_titleScreen;
+    if(m_scoreboardHeld&&!m_chatOpen)updateScoreboardPick(input);else if(!m_scoreboardHeld)m_scoreboardPick=-1;
+    m_boardPrevious=input;
     drainSessionEvents();   // the menus own the session's events (MultiplayerMenu.cpp)
     if(m_titleScreen){updateTitle(input);return;}
     if(m_peaceful){m_enemies.clear();for(auto&chunk:m_chunks)chunk.enemies.clear();}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
-    if(consolePressed){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
+    if(consolePressed&&!m_chatOpen){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
     if(m_consoleOpen){updateConsole(input);return;}
+    // The chat line has the keys while it is open; the world runs on (a match never stops) with the player still.
+    if(m_chatOpen&&!m_chatFeeding){
+     updateChat(input);m_previousEscape=input.escape;m_previousChat=input.chat;
+     InputState idle{};idle.escape=input.escape;idle.chat=input.chat;idle.scoreboard=input.scoreboard;idle.console=input.console;idle.inventory=input.inventory;idle.flashlight=input.flashlight;
+     m_chatFeeding=true;updateFrame(idle,dt);m_chatFeeding=false;m_suppressFire=true;return;
+    }
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
     bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
     if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
     if(talking()&&escapePressed){closeDialogue();return;}
     if(escapePressed){
-     if(m_paused&&m_menuFromTitle){
+     if(m_paused&&m_menuPage==MenuPage::Options)settingsEscape();   // the rows, then the page column, then out
+     else if(m_paused&&m_menuFromTitle){
       if(m_menuPage==MenuPage::ConfirmLoad){m_menuPage=MenuPage::Load;m_menuSelection=m_pendingSlot;m_menuMessage.clear();}
       else showTitleScreen();
-     }else if(m_paused&&m_menuPage!=MenuPage::Settings){
+     }else if(m_paused&&m_menuPage!=MenuPage::Pause){
       if(m_menuPage==MenuPage::Overwrite||m_menuPage==MenuPage::ConfirmLoad){m_menuPage=m_menuPage==MenuPage::Overwrite?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
-      else {m_menuSelection=m_menuPage==MenuPage::Save?10:m_menuPage==MenuPage::Load?11:9;m_menuPage=MenuPage::Settings;}
+      else {m_menuSelection=m_menuPage==MenuPage::Save?PauseSave:PauseLoad;m_menuPage=MenuPage::Pause;}
       m_menuMessage.clear();
-     }else {m_paused=!m_paused;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_menuMessage.clear();}
+     }else {m_paused=!m_paused;m_menuPage=MenuPage::Pause;m_menuSelection=0;m_menuArmed=-1;m_menuMessage.clear();}
      m_dragSlider=-1;m_menuPrevious=input;m_suppressFire=true;return;
     }
     // A match does not stop for the pause menu: the menu takes the keys while the world runs on without them.
     if(m_paused&&m_match&&!m_menuFromTitle){updateMenu(input);if(m_paused&&!m_titleScreen){m_paused=false;InputState idle{};idle.escape=input.escape;idle.console=input.console;idle.inventory=input.inventory;idle.flashlight=input.flashlight;updateFrame(idle,dt);m_paused=true;m_suppressFire=true;}return;}
     if(m_paused){updateMenu(input);return;}
+    // T in a match opens the chat line (not in VR: there is no typing in a headset).
+    {const bool chatPressed=input.chat&&!m_previousChat;m_previousChat=input.chat;
+     if(chatPressed&&m_match&&m_matchView.active&&m_settings.textChat&&!m_vrInputActive&&!m_chatFeeding){m_chatOpen=true;m_chatTyped.clear();m_suppressFire=true;return;}}
     if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
     if(m_inventoryOpen){updateInventory(input);return;}
     // A conversation keeps the world running; only the player stands and listens.

@@ -66,6 +66,25 @@ enum class SessionState:std::uint8_t{
  Failed        // the last request failed; reason() says why, state returns to Ready on the next request
 };
 
+// ----- Voice (EOS RTC on the lobby's room; docs/Systems/multiplayer.md "Chat and voice") -----
+enum class VoiceMode:std::uint8_t{Off=0,PushToTalk=1,OpenMic=2};
+inline const char* voiceModeName(VoiceMode m){return m==VoiceMode::OpenMic?"OPEN MIC":m==VoiceMode::PushToTalk?"PUSH TO TALK":"OFF";}
+struct AudioDevice{std::string id,name;bool isDefault=false;};
+// What the player chose (Settings' COMMUNICATION page), handed to the session whenever it changes.
+struct VoiceSettings{
+ VoiceMode mode=VoiceMode::PushToTalk;
+ float openMicThreshold=.25f;  // 0-1 of the mic level meter: open mic sends while the level is above it
+ std::string inputDevice,outputDevice;   // device names; "" the system's default
+ float inputVolume=1,outputVolume=1;     // 0-2, 1 as it comes
+ bool operator==(const VoiceSettings&)const=default;
+};
+struct VoiceStatus{
+ bool available=false;        // the session can carry voice (signed in, the RTC side started)
+ bool inRoom=false;           // in a lobby's voice room now
+ bool transmitting=false;     // the local mic is being sent this moment (push-to-talk held or open mic above threshold)
+ std::string reason;          // when not available, or a device failed: why, in plain words
+};
+
 struct SessionEvent{
  enum Kind:std::uint8_t{MemberJoined,MemberLeft,HostChanged,LobbyClosed,SearchDone,Joined,Hosted,Error} kind=Error;
  PeerId peer;                 // the member concerned (MemberJoined/Left, HostChanged: the new host)
@@ -101,6 +120,18 @@ public:
  virtual bool send(const PeerId& to,std::uint8_t channel,const std::uint8_t* data,std::size_t size,bool reliable)=0;
  virtual bool receive(Packet& out)=0;                     // false when none waits
  virtual bool pollEvent(SessionEvent& out)=0;             // false when none waits
+
+ // Voice. Everything degrades to silence: a session without voice (Offline, no RTC, no devices) answers with
+ // VoiceStatus::available false and a reason; none of these calls fail loudly or block.
+ virtual void setVoice(const VoiceSettings&){}             // applies live
+ virtual void setTalking(bool){}                           // the push-to-talk key, held or not
+ virtual VoiceStatus voiceStatus()const{return {false,false,false,"voice needs a multiplayer session"};}
+ virtual std::vector<AudioDevice> inputDevices()const{return {};}
+ virtual std::vector<AudioDevice> outputDevices()const{return {};}
+ virtual float micLevel()const{return 0;}                  // 0-1, the local mic in a voice room
+ virtual bool peerSpeaking(const PeerId&)const{return false;}
+ virtual void setPeerMuted(const PeerId&,bool){}           // a muted member is not heard at all
+ virtual void setPeerVolume(const PeerId&,float){}         // 0-1 on top of the voice volume (proximity in co-op)
 };
 
 // Join codes: 6 characters from an alphabet without look-alikes (no 0/O, 1/I/L), shown as "XXXX-XX".
@@ -127,10 +158,16 @@ struct RemotePlayer{
  int team=0;                  // 0 none (deathmatch); co-op players are all team 1
  int character=0;             // Settings::character of that player: 0 Claire, 1 the Limitator
  int pingMs=-1;
+ bool speaking=false;         // their voice is heard now (the name tag's mark)
 };
 
-struct ScoreRow{std::uint8_t slot=0;std::string name;int frags=0,deaths=0,pingMs=-1;bool host=false,self=false;};
+struct ScoreRow{std::uint8_t slot=0;std::string name;int frags=0,deaths=0,pingMs=-1;bool host=false,self=false;
+ bool speaking=false,muted=false;};    // speaking: their voice is heard now; muted: this player muted them (by name)
 struct FeedLine{std::string killer,victim;int weapon=0;float age=0;};  // killer empty: the world (a fall, a creature)
+
+// A line in the chat box: a player's words, or a notice (joined, left, a kill). Filtered (masked) and muted
+// players dropped as this machine's settings ask, newest last.
+struct ChatLine{std::string from,text;bool notice=false,self=false;float age=0;};
 
 struct MatchView{
  bool active=false;
@@ -143,6 +180,7 @@ struct MatchView{
  std::string status;                    // one line: "Waiting for the map (42%)", "Respawning in 3", "Host left"
  float respawnIn=-1;                    // the local player's respawn countdown, -1 alive
  bool over=false;std::string winner;    // frag or time limit reached
+ std::vector<ChatLine> chat;            // the last lines of chat and notices, newest last
 };
 
 }

@@ -185,7 +185,14 @@ struct LabAccess {
  static void holdScoreboard(Game& g,bool on){g.m_scoreboardHeld=on;}
  static std::vector<std::shared_ptr<const CustomCampaign>>& customCampaigns(Game& g){return g.m_customCampaigns;}
  static int& titleSelection(Game& g){return g.m_titleSelection;}
- static void pause(Game& g,bool on){g.m_paused=on;g.m_menuPage=Game::MenuPage::Settings;g.m_menuFromTitle=false;g.m_menuSelection=12;}
+ static void pause(Game& g,bool on){g.m_paused=on;g.m_menuPage=Game::MenuPage::Pause;g.m_menuFromTitle=false;g.m_menuSelection=g.m_matchView.active?PauseMatchLeave:PauseResume;g.m_menuArmed=-1;}
+ // SETTINGS on a page (the communication tube); the rows have the keys, on row (or the column when row < 0).
+ static void settings(Game& g,SettingsTab tab,int row){g.m_paused=true;g.m_menuFromTitle=false;g.openSettings(tab);if(row>=0){g.m_settingsOnTabs=false;g.m_menuSelection=row;}}
+ static void chatTyping(Game& g,const std::string& typed,bool open=true){g.m_chatOpen=open;g.m_chatTyped=typed;}
+ static void menuArm(Game& g,int row){g.m_menuSelection=row;g.m_menuArmed=row;}
+ static void openMutedList(Game& g){g.m_settingsMuted=true;g.m_settingsOnTabs=false;g.m_menuSelection=1;}
+ static void micTest(Game& g,bool on){g.m_micTest=on;}
+ static void scoreboardPick(Game& g,int row){g.m_scoreboardPick=row;}
  static Settings& settings(Game& g){return g.m_settings;}
  // The body the local player was last drawn as (-1 before the first frame).
  static int localCharacter(const SoftwareRenderer& r){return r.m_localCharacter;}

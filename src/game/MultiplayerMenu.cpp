@@ -314,10 +314,10 @@ bool Game::testMultiplayerMenu(std::ostream& report){
  check(!guest.titleScreen()&&guest.inMatch(),"a guest who has the map is welcomed and plays");
  guest.leaveMatch();for(int i=0;i<3;++i)tickUpdate(guest,{},1.f/60);
  check(guestSession->state()==net::SessionState::Ready&&!guest.inMatch(),"LEAVE MATCH takes the guest out of the game");
- // In a match the pause menu's last row leaves it.
- {host.m_titleScreen=false;host.m_matchView.active=true;host.m_paused=true;host.m_menuPage=MenuPage::Settings;host.m_menuFromTitle=false;host.m_menuSelection=10;
-  key(host,&InputState::menuAccept);check(host.paused()&&host.menuPage()==MenuPage::Settings,"in a match SAVE GAME does nothing");
-  host.m_menuSelection=12;key(host,&InputState::menuAccept);
+ // In a match the pause menu has no saving: its third row is the join code, its last leaves.
+ {host.m_titleScreen=false;host.m_matchView.active=true;host.m_paused=true;host.m_menuPage=MenuPage::Pause;host.m_menuFromTitle=false;host.m_menuSelection=PauseMatchCode;
+  key(host,&InputState::menuAccept);check(host.paused()&&host.menuPage()==MenuPage::Pause&&host.menuRows()==4,"in a match PAUSE has no SAVE GAME (its third row is the join code)");
+  host.m_menuSelection=PauseMatchLeave;key(host,&InputState::menuAccept);
   check(host.titleScreen()&&host.titlePage()==TitlePage::Multiplayer&&hostSession->state()==net::SessionState::Ready&&!host.inMatch(),"LEAVE MATCH leaves the lobby and shows MULTIPLAYER");}
  return ok;
 }

@@ -1,6 +1,7 @@
 #include "EosSession.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <chrono>
@@ -26,6 +27,10 @@
 #include <eos_connect.h>
 #include <eos_lobby.h>
 #include <eos_p2p.h>
+#include <eos_rtc.h>
+#include <eos_rtc_audio.h>
+#include <Windows/eos_Windows.h>
+#include "../audio/MicMonitor.h"
 #include "../core/PackedResource.h"
 #include "../core/AssetHash.h"
 #endif
@@ -169,6 +174,7 @@ public:
  bool send(const PeerId&,std::uint8_t,const std::uint8_t*,std::size_t,bool)override{return false;}
  bool receive(Packet&)override{return false;}
  bool pollEvent(SessionEvent& out)override{if(m_events.empty())return false;out=m_events.front();m_events.pop_front();return true;}
+ VoiceStatus voiceStatus()const override{return {false,false,false,"multiplayer is offline ("+m_reason+")"};}
 };
 
 } // namespace
@@ -216,36 +222,48 @@ void EOS_CALL onEosLog(const EOS_LogMessage* m){
  g_log.line(std::string("[eos ")+level+" "+(m->Category?m->Category:"")+"] "+(m->Message?m->Message:""));
 }
 
-struct DllLoad{HMODULE module=nullptr;std::string error;std::wstring path;std::size_t packed=0,unpacked=0;bool reused=false;double ms=0;};
-// Off the game's thread: find resource 5990, unpack it once per content hash, load it.
+struct DllLoad{HMODULE module=nullptr;std::string error,xaudioError;std::wstring path,xaudio;std::size_t packed=0,unpacked=0,xaudioPacked=0;bool reused=false;double ms=0;};
+// One packed file (the asset packer's LZMS record in an RCDATA resource) unpacked once per content hash to
+// %LOCALAPPDATA%\RawMetal\eos\<hash>\<name>. Returns its path, or "" with why.
+fs::path unpackResource(int id,const wchar_t* name,const char* what,std::string& error,std::size_t* packedSize,std::size_t* unpackedSize,bool* reused){
+ HMODULE self=GetModuleHandleW(nullptr);
+ HRSRC res=FindResourceW(self,MAKEINTRESOURCEW(id),MAKEINTRESOURCEW(10));
+ if(!res){error=std::string("this copy has no ")+what+" packed inside";return {};}
+ const auto* bytes=static_cast<const unsigned char*>(LockResource(LoadResource(self,res)));const std::size_t size=SizeofResource(self,res);
+ if(!bytes||size<12||std::memcmp(bytes,"RMZ1",4)){error=std::string("the packed ")+what+" is damaged";return {};}
+ std::uint32_t count=0;std::memcpy(&count,bytes+4,4);if(packedSize)*packedSize=size;if(unpackedSize)*unpackedSize=count;
+ const auto hash=assetHash(std::span<const unsigned char>(bytes,size));
+ char hex[17];for(int i=0;i<8;++i)std::snprintf(hex+2*i,3,"%02x",hash[size_t(i)]);
+ const fs::path folder=fs::path(localAppData())/L"RawMetal"/L"eos"/hex,path=folder/name;
+ std::error_code ec;
+ if(fs::exists(path,ec)&&fs::file_size(path,ec)==count&&!ec){if(reused)*reused=true;return path;}
+ const auto file=loadResourceFromModule(self,id);
+ fs::create_directories(folder,ec);if(ec){error="cannot make "+utf8(folder.wstring())+": "+ec.message();return {};}
+ const fs::path temporary=folder/(L"unpack-"+std::to_wstring(GetCurrentProcessId())+L".tmp");
+ {std::ofstream out(temporary,std::ios::binary|std::ios::trunc);out.write(reinterpret_cast<const char*>(file.data()),std::streamsize(file.size()));if(!out){error=std::string("cannot write the ")+what+" to "+utf8(folder.wstring());return {};}}
+ if(!MoveFileExW(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
+  const DWORD why=GetLastError();fs::remove(temporary,ec);
+  // Another copy of the game may have unpacked it in the same moment: take theirs if it is whole.
+  if(!(fs::exists(path,ec)&&fs::file_size(path,ec)==count)){error=std::string("cannot place the ")+what+" (Windows error "+std::to_string(why)+")";return {};}
+ }
+ return path;
+}
+// Off the game's thread: resource 5990 (the SDK) unpacked and loaded, and resource 5991 (XAudio 2.9, for voice)
+// unpacked for the platform to load by path.
 DllLoad loadPackedDll(){
  DllLoad r;const auto t0=Clock::now();
  try{
-  HMODULE self=GetModuleHandleW(nullptr);
-  HRSRC res=FindResourceW(self,MAKEINTRESOURCEW(RAWMETAL_EOS_DLL_RESOURCE),MAKEINTRESOURCEW(10));
-  if(!res){r.error="this copy has no EOS library packed inside";return r;}
-  const auto* bytes=static_cast<const unsigned char*>(LockResource(LoadResource(self,res)));const std::size_t size=SizeofResource(self,res);
-  if(!bytes||size<12||std::memcmp(bytes,"RMZ1",4)){r.error="the packed EOS library is damaged";return r;}
-  std::uint32_t count=0;std::memcpy(&count,bytes+4,4);r.packed=size;r.unpacked=count;
-  const auto hash=assetHash(std::span<const unsigned char>(bytes,size));
-  char hex[17];for(int i=0;i<8;++i)std::snprintf(hex+2*i,3,"%02x",hash[size_t(i)]);
-  const fs::path folder=fs::path(localAppData())/L"RawMetal"/L"eos"/hex,path=folder/L"EOSSDK-Win64-Shipping.dll";
+  const fs::path path=unpackResource(RAWMETAL_EOS_DLL_RESOURCE,L"EOSSDK-Win64-Shipping.dll","EOS library",r.error,&r.packed,&r.unpacked,&r.reused);
+  if(path.empty())return r;
   r.path=path.wstring();
-  std::error_code ec;
-  if(fs::exists(path,ec)&&fs::file_size(path,ec)==count&&!ec)r.reused=true;
-  else{
-   const auto dll=loadResourceFromModule(self,RAWMETAL_EOS_DLL_RESOURCE);
-   fs::create_directories(folder,ec);if(ec){r.error="cannot make "+utf8(folder.wstring())+": "+ec.message();return r;}
-   const fs::path temporary=folder/(L"unpack-"+std::to_wstring(GetCurrentProcessId())+L".tmp");
-   {std::ofstream out(temporary,std::ios::binary|std::ios::trunc);out.write(reinterpret_cast<const char*>(dll.data()),std::streamsize(dll.size()));if(!out){r.error="cannot write the EOS library to "+utf8(folder.wstring());return r;}}
-   if(!MoveFileExW(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)){
-    const DWORD why=GetLastError();fs::remove(temporary,ec);
-    // Another copy of the game may have unpacked it in the same moment: take theirs if it is whole.
-    if(!(fs::exists(path,ec)&&fs::file_size(path,ec)==count)){r.error="cannot place the EOS library (Windows error "+std::to_string(why)+")";return r;}
-   }
-  }
   r.module=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-  if(!r.module)r.error="the EOS library would not load (Windows error "+std::to_string(GetLastError())+")";
+  if(!r.module){r.error="the EOS library would not load (Windows error "+std::to_string(GetLastError())+")";return r;}
+#ifdef RAWMETAL_EOS_XAUDIO_RESOURCE
+  try{r.xaudio=unpackResource(RAWMETAL_EOS_XAUDIO_RESOURCE,L"xaudio2_9redist.dll","XAudio library voice needs",r.xaudioError,&r.xaudioPacked,nullptr,nullptr).wstring();}
+  catch(const std::exception& e){r.xaudioError=std::string("the XAudio library voice needs could not be unpacked: ")+e.what();}
+#else
+  r.xaudioError="this copy has no XAudio library for voice packed inside";
+#endif
  }catch(const std::exception& e){r.error=std::string("the EOS library could not be unpacked: ")+e.what();}
  r.ms=std::chrono::duration<double,std::milli>(Clock::now()-t0).count();
  return r;
@@ -305,6 +323,7 @@ public:
    m_loader.join();
    if(!m_dll.module){goOffline(m_dll.error);return;}
    g_log.line((m_dll.reused?"reused the EOS library at ":"unpacked the EOS library to ")+utf8(m_dll.path)+" ("+std::to_string(m_dll.packed)+" packed, "+std::to_string(m_dll.unpacked)+" bytes) in "+std::to_string(int(m_dll.ms))+" ms");
+   if(!m_dll.xaudio.empty())g_log.line("voice: XAudio 2.9 at "+utf8(m_dll.xaudio)+" ("+std::to_string(m_dll.xaudioPacked)+" bytes packed)");else g_log.line("voice: "+m_dll.xaudioError);
    bringUp();
    if(m_phase==Phase::Dead)return;
   }
@@ -394,6 +413,35 @@ public:
  bool receive(Packet& out)override{if(m_inbox.empty())return false;out=std::move(m_inbox.front());m_inbox.pop_front();return true;}
  bool pollEvent(SessionEvent& out)override{if(m_events.empty())return false;out=m_events.front();m_events.pop_front();return true;}
 
+ // ----- Voice: the lobby's RTC room (docs/Systems/multiplayer.md "Chat and voice") -----
+ void setVoice(const VoiceSettings& v)override{
+  m_voice=v;m_mode=int(v.mode);m_threshold=v.openMicThreshold;applyVoice();
+ }
+ void setTalking(bool held)override{m_talking=held;}
+ VoiceStatus voiceStatus()const override{
+  VoiceStatus s;
+  if(m_phase==Phase::Dead){s.reason=m_reason;return s;}
+  if(!m_rtcReason.empty()){s.reason=m_rtcReason;return s;}
+  if(!m_audioApi){s.reason=m_phase==Phase::Ready?"Epic's voice did not start":"still signing in to Epic";return s;}
+  if(m_phase!=Phase::Ready){s.reason="still signing in to Epic";return s;}
+  s.available=true;s.inRoom=m_roomConnected;s.transmitting=m_roomConnected&&m_gateOpen.load()&&m_voice.mode!=VoiceMode::Off;
+  s.reason=m_deviceReason;
+  return s;
+ }
+ std::vector<AudioDevice> inputDevices()const override{return m_inputs;}
+ std::vector<AudioDevice> outputDevices()const override{return m_outputs;}
+ float micLevel()const override{return m_roomConnected?m_level.load():0.f;}
+ bool peerSpeaking(const PeerId& peer)const override{auto it=m_speaking.find(peer);return m_roomConnected&&m_voice.mode!=VoiceMode::Off&&it!=m_speaking.end()&&it->second;}
+ void setPeerMuted(const PeerId& peer,bool muted)override{m_peerMuted[peer]=muted;applyPeer(peer);}
+ void setPeerVolume(const PeerId& peer,float volume)override{m_peerVolume[peer]=std::clamp(volume,0.f,1.f);applyPeer(peer);}
+ // --eos-test: the room as the session sees it.
+ bool voiceRoomConnected()const{return m_roomConnected;}
+ const std::string& voiceRoomName()const{return m_roomName;}
+ int roomChanges()const{return m_roomChanges;}
+ bool devicesQueried()const{return m_inputsQueried&&m_outputsQueried;}
+ bool lobbyHasRtc()const{return m_lobbyRtcNow;}
+ const std::string& xaudioPath()const{return m_xaudio;}
+
  // --eos-test only: run the join-code search without joining (the test is already in that lobby). The match,
  // with the code kept, lands in results() and SearchDone follows.
  void lookupCode(const std::string& typed){
@@ -420,6 +468,130 @@ private:
  std::deque<SessionEvent> m_events;std::deque<Packet> m_inbox;Reassembler m_reassembler;std::uint16_t m_nextMessage=1;int m_sendWarnings=0;
  EOS_P2P_SocketId m_socket{};
  bool m_leaving=false;
+ // Voice. The gate (push-to-talk, open mic) is applied in the audio thread's AudioBeforeSend: what is not to be
+ // heard is sent as silence, so the meter keeps reading the mic either way.
+ EOS_HRTC m_rtcApi=nullptr;EOS_HRTCAudio m_audioApi=nullptr;std::string m_rtcReason,m_deviceReason,m_xaudio;
+ bool m_lobbyRtc=true,m_lobbyRtcNow=false,m_roomConnected=false,m_inputsQueried=false,m_outputsQueried=false;int m_roomChanges=0;
+ std::string m_roomName;
+ EOS_NotificationId m_roomConnection=EOS_INVALID_NOTIFICATIONID,m_participants=EOS_INVALID_NOTIFICATIONID,m_beforeSend=EOS_INVALID_NOTIFICATIONID,
+                    m_inputState=EOS_INVALID_NOTIFICATIONID,m_devicesChanged=EOS_INVALID_NOTIFICATIONID;
+ std::vector<AudioDevice> m_inputs,m_outputs;
+ VoiceSettings m_voice;std::atomic<bool> m_talking{false},m_gateOpen{false};std::atomic<int> m_mode{1};std::atomic<float> m_threshold{.25f},m_level{0.f};
+ std::atomic<long long> m_lastLoud{0};
+ std::map<PeerId,bool> m_speaking,m_peerMuted,m_appliedMuted;std::map<PeerId,float> m_peerVolume,m_appliedVolume;
+ std::string m_appliedInput="\x01",m_appliedOutput="\x01";int m_appliedSending=-1;float m_appliedSendVolume=-1,m_appliedReceiveVolume=-1;bool m_appliedReceiving=true;
+
+ // Which XAudio 2.9 the RTC side loads: the redistributable unpacked from resource 5991. Windows' own System32
+ // xaudio2_9.dll will not do: the SDK delay-loads XAudio2_9Redist.dll by that name and stops the process when no
+ // module of that name is loaded (found on 2026-11-19, exception 0xC06D007E).
+ std::string findXAudio(){
+  if(m_dll.xaudio.empty()){m_rtcReason=m_dll.xaudioError.empty()?"the XAudio library voice needs is missing":m_dll.xaudioError;return {};}
+  std::error_code ec;if(!fs::is_regular_file(m_dll.xaudio,ec)){m_rtcReason="the XAudio library voice needs is missing";return {};}
+  return utf8(m_dll.xaudio);
+ }
+ static long long nowMs(){return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();}
+ // The audio thread, every 10 ms or so of mic: the level for the meter, and silence unless this player is to be heard.
+ static void EOS_CALL onBeforeSend(const EOS_RTCAudio_AudioBeforeSendCallbackInfo* i){
+  auto* self=static_cast<EosSession*>(i->ClientData);if(!self||!i->Buffer||!i->Buffer->Frames)return;
+  const std::size_t count=std::size_t(i->Buffer->FramesCount)*std::max<std::uint32_t>(1,i->Buffer->Channels);
+  const float level=micLevelOf(i->Buffer->Frames,count);
+  self->m_level=std::max(level,self->m_level.load()*.8f);
+  const int mode=self->m_mode.load();bool open=false;
+  if(mode==int(VoiceMode::PushToTalk))open=self->m_talking.load();
+  else if(mode==int(VoiceMode::OpenMic)){const long long now=nowMs();if(level>=self->m_threshold.load())self->m_lastLoud=now;open=now-self->m_lastLoud.load()<350;}
+  self->m_gateOpen=open;
+  if(!open)std::memset(i->Buffer->Frames,0,count*sizeof(std::int16_t));
+ }
+ void queryDevices(){
+  if(!m_audioApi)return;
+  EOS_RTCAudio_QueryInputDevicesInformationOptions qi{};qi.ApiVersion=EOS_RTCAUDIO_QUERYINPUTDEVICESINFORMATION_API_LATEST;
+  EOS_RTCAudio_QueryInputDevicesInformation(m_audioApi,&qi,nullptr,[](const EOS_RTCAudio_OnQueryInputDevicesInformationCallbackInfo* i){if(g_live)g_live->onDevices(true,i->ResultCode);});
+  EOS_RTCAudio_QueryOutputDevicesInformationOptions qo{};qo.ApiVersion=EOS_RTCAUDIO_QUERYOUTPUTDEVICESINFORMATION_API_LATEST;
+  EOS_RTCAudio_QueryOutputDevicesInformation(m_audioApi,&qo,nullptr,[](const EOS_RTCAudio_OnQueryOutputDevicesInformationCallbackInfo* i){if(g_live)g_live->onDevices(false,i->ResultCode);});
+ }
+ void onDevices(bool input,EOS_EResult r){
+  std::vector<AudioDevice> list;
+  if(r==EOS_EResult::EOS_Success){
+   if(input){EOS_RTCAudio_GetInputDevicesCountOptions c{};c.ApiVersion=EOS_RTCAUDIO_GETINPUTDEVICESCOUNT_API_LATEST;const std::uint32_t n=EOS_RTCAudio_GetInputDevicesCount(m_audioApi,&c);
+    for(std::uint32_t k=0;k<n;++k){EOS_RTCAudio_CopyInputDeviceInformationByIndexOptions o{};o.ApiVersion=EOS_RTCAUDIO_COPYINPUTDEVICEINFORMATIONBYINDEX_API_LATEST;o.DeviceIndex=k;EOS_RTCAudio_InputDeviceInformation* d=nullptr;
+     if(EOS_RTCAudio_CopyInputDeviceInformationByIndex(m_audioApi,&o,&d)==EOS_EResult::EOS_Success&&d){list.push_back({d->DeviceId?d->DeviceId:"",d->DeviceName?d->DeviceName:"",d->bDefaultDevice==EOS_TRUE});EOS_RTCAudio_InputDeviceInformation_Release(d);}}}
+   else{EOS_RTCAudio_GetOutputDevicesCountOptions c{};c.ApiVersion=EOS_RTCAUDIO_GETOUTPUTDEVICESCOUNT_API_LATEST;const std::uint32_t n=EOS_RTCAudio_GetOutputDevicesCount(m_audioApi,&c);
+    for(std::uint32_t k=0;k<n;++k){EOS_RTCAudio_CopyOutputDeviceInformationByIndexOptions o{};o.ApiVersion=EOS_RTCAUDIO_COPYOUTPUTDEVICEINFORMATIONBYINDEX_API_LATEST;o.DeviceIndex=k;EOS_RTCAudio_OutputDeviceInformation* d=nullptr;
+     if(EOS_RTCAudio_CopyOutputDeviceInformationByIndex(m_audioApi,&o,&d)==EOS_EResult::EOS_Success&&d){list.push_back({d->DeviceId?d->DeviceId:"",d->DeviceName?d->DeviceName:"",d->bDefaultDevice==EOS_TRUE});EOS_RTCAudio_OutputDeviceInformation_Release(d);}}}
+  }else g_log.line(std::string("voice: listing the ")+(input?"microphones":"speakers")+" failed: "+resultName(r));
+  (input?m_inputs:m_outputs)=list;(input?m_inputsQueried:m_outputsQueried)=true;
+  g_log.line("voice: "+std::to_string(list.size())+(input?" microphones":" speakers"));
+  if(input&&list.empty())m_deviceReason="no microphone was found";else if(input)m_deviceReason.clear();
+  (input?m_appliedInput:m_appliedOutput)="\x01";applyVoice();   // the chosen device by name may have come or gone
+ }
+ static std::string deviceId(const std::vector<AudioDevice>& list,const std::string& name){for(const auto& d:list)if(d.name==name)return d.id;return {};}
+ // The settings as the RTC side holds them; each call only sends what changed.
+ void applyVoice(){
+  if(!m_audioApi||!m_user)return;
+  if(m_voice.inputDevice!=m_appliedInput&&m_inputsQueried){m_appliedInput=m_voice.inputDevice;const std::string id=deviceId(m_inputs,m_voice.inputDevice);
+   EOS_RTCAudio_SetInputDeviceSettingsOptions o{};o.ApiVersion=EOS_RTCAUDIO_SETINPUTDEVICESETTINGS_API_LATEST;o.LocalUserId=m_user;o.RealDeviceId=id.c_str();o.bPlatformAEC=EOS_TRUE;
+   EOS_RTCAudio_SetInputDeviceSettings(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_OnSetInputDeviceSettingsCallbackInfo* i){if(i->ResultCode!=EOS_EResult::EOS_Success)g_log.line("voice: the microphone was refused: "+resultName(i->ResultCode));});}
+  if(m_voice.outputDevice!=m_appliedOutput&&m_outputsQueried){m_appliedOutput=m_voice.outputDevice;const std::string id=deviceId(m_outputs,m_voice.outputDevice);
+   EOS_RTCAudio_SetOutputDeviceSettingsOptions o{};o.ApiVersion=EOS_RTCAUDIO_SETOUTPUTDEVICESETTINGS_API_LATEST;o.LocalUserId=m_user;o.RealDeviceId=id.c_str();
+   EOS_RTCAudio_SetOutputDeviceSettings(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_OnSetOutputDeviceSettingsCallbackInfo* i){if(i->ResultCode!=EOS_EResult::EOS_Success)g_log.line("voice: the speakers were refused: "+resultName(i->ResultCode));});}
+  if(!m_roomConnected||m_roomName.empty())return;
+  const bool off=m_voice.mode==VoiceMode::Off;
+  const int sending=off?int(EOS_ERTCAudioStatus::EOS_RTCAS_Disabled):int(EOS_ERTCAudioStatus::EOS_RTCAS_Enabled);
+  if(sending!=m_appliedSending){m_appliedSending=sending;
+   EOS_RTCAudio_UpdateSendingOptions o{};o.ApiVersion=EOS_RTCAUDIO_UPDATESENDING_API_LATEST;o.LocalUserId=m_user;o.RoomName=m_roomName.c_str();o.AudioStatus=EOS_ERTCAudioStatus(sending);
+   EOS_RTCAudio_UpdateSending(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_UpdateSendingCallbackInfo* i){if(i->ResultCode!=EOS_EResult::EOS_Success)g_log.line("voice: sending change refused: "+resultName(i->ResultCode));});}
+  if(!off!=m_appliedReceiving){m_appliedReceiving=!off;
+   EOS_RTCAudio_UpdateReceivingOptions o{};o.ApiVersion=EOS_RTCAUDIO_UPDATERECEIVING_API_LATEST;o.LocalUserId=m_user;o.RoomName=m_roomName.c_str();o.ParticipantId=nullptr;o.bAudioEnabled=off?EOS_FALSE:EOS_TRUE;
+   EOS_RTCAudio_UpdateReceiving(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_UpdateReceivingCallbackInfo* i){if(i->ResultCode!=EOS_EResult::EOS_Success)g_log.line("voice: receiving change refused: "+resultName(i->ResultCode));});
+   m_appliedMuted.clear();}
+  const float send=std::clamp(m_voice.inputVolume,0.f,2.f)*50.f,receive=std::clamp(m_voice.outputVolume,0.f,2.f)*50.f;
+  if(std::fabs(send-m_appliedSendVolume)>.5f){m_appliedSendVolume=send;
+   EOS_RTCAudio_UpdateSendingVolumeOptions o{};o.ApiVersion=EOS_RTCAUDIO_UPDATESENDINGVOLUME_API_LATEST;o.LocalUserId=m_user;o.RoomName=m_roomName.c_str();o.Volume=send;
+   EOS_RTCAudio_UpdateSendingVolume(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_UpdateSendingVolumeCallbackInfo*){});}
+  if(std::fabs(receive-m_appliedReceiveVolume)>.5f){m_appliedReceiveVolume=receive;
+   EOS_RTCAudio_UpdateReceivingVolumeOptions o{};o.ApiVersion=EOS_RTCAUDIO_UPDATERECEIVINGVOLUME_API_LATEST;o.LocalUserId=m_user;o.RoomName=m_roomName.c_str();o.Volume=receive;
+   EOS_RTCAudio_UpdateReceivingVolume(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_UpdateReceivingVolumeCallbackInfo*){});}
+  if(!off)for(const auto& [peer,muted]:m_peerMuted)applyPeer(peer);
+  if(!off)for(const auto& [peer,volume]:m_peerVolume)applyPeer(peer);
+ }
+ void applyPeer(const PeerId& peer){
+  if(!m_audioApi||!m_user||!m_roomConnected||m_roomName.empty()||m_voice.mode==VoiceMode::Off)return;
+  EOS_ProductUserId who=EOS_ProductUserId_FromString(peer.c_str());if(!who)return;
+  const bool muted=m_peerMuted.count(peer)&&m_peerMuted[peer];
+  if(auto it=m_appliedMuted.find(peer);it==m_appliedMuted.end()||it->second!=muted){m_appliedMuted[peer]=muted;
+   EOS_RTCAudio_UpdateReceivingOptions o{};o.ApiVersion=EOS_RTCAUDIO_UPDATERECEIVING_API_LATEST;o.LocalUserId=m_user;o.RoomName=m_roomName.c_str();o.ParticipantId=who;o.bAudioEnabled=muted?EOS_FALSE:EOS_TRUE;
+   EOS_RTCAudio_UpdateReceiving(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_UpdateReceivingCallbackInfo*){});}
+  const float volume=(m_peerVolume.count(peer)?m_peerVolume[peer]:1.f)*50.f;
+  if(auto it=m_appliedVolume.find(peer);it==m_appliedVolume.end()||std::fabs(it->second-volume)>.5f){m_appliedVolume[peer]=volume;
+   EOS_RTCAudio_UpdateParticipantVolumeOptions o{};o.ApiVersion=EOS_RTCAUDIO_UPDATEPARTICIPANTVOLUME_API_LATEST;o.LocalUserId=m_user;o.RoomName=m_roomName.c_str();o.ParticipantId=who;o.Volume=volume;
+   EOS_RTCAudio_UpdateParticipantVolume(m_audioApi,&o,nullptr,[](const EOS_RTCAudio_UpdateParticipantVolumeCallbackInfo*){});}
+ }
+ void onRoomConnection(const char* lobbyId,EOS_Bool connected,EOS_EResult why){
+  if(!lobbyId||m_lobbyId!=lobbyId)return;
+  ++m_roomChanges;
+  if(connected!=EOS_TRUE){g_log.line("voice: out of the room ("+resultName(why)+")");roomGone();return;}
+  char name[256]{};std::uint32_t length=sizeof name;
+  EOS_Lobby_GetRTCRoomNameOptions o{};o.ApiVersion=EOS_LOBBY_GETRTCROOMNAME_API_LATEST;o.LobbyId=m_lobbyId.c_str();o.LocalUserId=m_user;
+  if(EOS_Lobby_GetRTCRoomName(m_lobbyApi,&o,name,&length)!=EOS_EResult::EOS_Success){g_log.line("voice: the room has no name");return;}
+  roomGone();m_roomName=name;m_roomConnected=true;g_log.line("voice: in the room");
+  EOS_RTCAudio_AddNotifyParticipantUpdatedOptions pu{};pu.ApiVersion=EOS_RTCAUDIO_ADDNOTIFYPARTICIPANTUPDATED_API_LATEST;pu.LocalUserId=m_user;pu.RoomName=m_roomName.c_str();
+  m_participants=EOS_RTCAudio_AddNotifyParticipantUpdated(m_audioApi,&pu,nullptr,[](const EOS_RTCAudio_ParticipantUpdatedCallbackInfo* i){if(g_live)g_live->m_speaking[idText(i->ParticipantId)]=i->bSpeaking==EOS_TRUE;});
+  EOS_RTCAudio_AddNotifyAudioBeforeSendOptions bs{};bs.ApiVersion=EOS_RTCAUDIO_ADDNOTIFYAUDIOBEFORESEND_API_LATEST;bs.LocalUserId=m_user;bs.RoomName=m_roomName.c_str();
+  m_beforeSend=EOS_RTCAudio_AddNotifyAudioBeforeSend(m_audioApi,&bs,this,&EosSession::onBeforeSend);
+  EOS_RTCAudio_AddNotifyAudioInputStateOptions is{};is.ApiVersion=EOS_RTCAUDIO_ADDNOTIFYAUDIOINPUTSTATE_API_LATEST;is.LocalUserId=m_user;is.RoomName=m_roomName.c_str();
+  m_inputState=EOS_RTCAudio_AddNotifyAudioInputState(m_audioApi,&is,nullptr,[](const EOS_RTCAudio_AudioInputStateCallbackInfo* i){if(!g_live)return;
+   g_live->m_deviceReason=i->Status==EOS_ERTCAudioInputStatus::EOS_RTCAIS_Failed?"the microphone failed":i->Status==EOS_ERTCAudioInputStatus::EOS_RTCAIS_RecordingDisconnected?"the microphone is unplugged":"";});
+  m_appliedSending=-1;m_appliedReceiving=true;m_appliedSendVolume=m_appliedReceiveVolume=-1;m_appliedMuted.clear();m_appliedVolume.clear();
+  applyVoice();
+ }
+ void roomGone(){
+  if(m_audioApi){
+   if(m_participants!=EOS_INVALID_NOTIFICATIONID)EOS_RTCAudio_RemoveNotifyParticipantUpdated(m_audioApi,m_participants);
+   if(m_beforeSend!=EOS_INVALID_NOTIFICATIONID)EOS_RTCAudio_RemoveNotifyAudioBeforeSend(m_audioApi,m_beforeSend);
+   if(m_inputState!=EOS_INVALID_NOTIFICATIONID)EOS_RTCAudio_RemoveNotifyAudioInputState(m_audioApi,m_inputState);}
+  m_participants=m_beforeSend=m_inputState=EOS_INVALID_NOTIFICATIONID;
+  m_roomConnected=false;m_roomName.clear();m_speaking.clear();m_level=0;m_gateOpen=false;
+ }
 
  bool signingIn()const{return m_phase==Phase::DeviceId||m_phase==Phase::Login||m_phase==Phase::CreateUser;}
  void settle(){m_state=m_lobbyId.empty()?SessionState::Ready:SessionState::InLobby;}
@@ -454,11 +626,23 @@ private:
   EOS_Platform_Options p{};p.ApiVersion=EOS_PLATFORM_OPTIONS_API_LATEST;p.ProductId=RAWMETAL_EOS_PRODUCT_ID;p.SandboxId=RAWMETAL_EOS_SANDBOX_ID;p.DeploymentId=RAWMETAL_EOS_DEPLOYMENT_ID;
   p.ClientCredentials.ClientId=RAWMETAL_EOS_CLIENT_ID;p.ClientCredentials.ClientSecret=secret.c_str();p.bIsServer=EOS_FALSE;
   p.Flags=EOS_PF_DISABLE_OVERLAY;p.CacheDirectory=cacheText.c_str();
+  // Voice: RTC needs XAudio 2.9 (the packed redistributable); without it, or if the platform refuses RTC, the game
+  // plays on without voice and says why.
+  m_xaudio=findXAudio();
+  EOS_Windows_RTCOptions windowsRtc{};windowsRtc.ApiVersion=EOS_WINDOWS_RTCOPTIONS_API_LATEST;windowsRtc.XAudio29DllPath=m_xaudio.c_str();
+  EOS_Platform_RTCOptions rtc{};rtc.ApiVersion=EOS_PLATFORM_RTCOPTIONS_API_LATEST;rtc.PlatformSpecificOptions=&windowsRtc;rtc.BackgroundMode=EOS_ERTCBackgroundMode::EOS_RTCBM_LeaveRooms;
+  if(!m_xaudio.empty())p.RTCOptions=&rtc;
   const auto t0=Clock::now();
   m_platform=EOS_Platform_Create(&p);
+  if(!m_platform&&p.RTCOptions){g_log.line("the platform would not start with voice: trying without");p.RTCOptions=nullptr;m_rtcReason="Epic's voice would not start on this PC";m_platform=EOS_Platform_Create(&p);}
   SecureZeroMemory(secret.data(),secret.size());
   if(!m_platform){goOffline("Epic's platform would not start (are this copy's multiplayer keys right?)");return;}
-  g_log.line("platform created in "+std::to_string(int(std::chrono::duration<double,std::milli>(Clock::now()-t0).count()))+" ms");
+  g_log.line("platform created in "+std::to_string(int(std::chrono::duration<double,std::milli>(Clock::now()-t0).count()))+" ms"+(p.RTCOptions?" with voice (XAudio "+m_xaudio+")":" without voice"));
+  if(p.RTCOptions){m_rtcApi=EOS_Platform_GetRTCInterface(m_platform);m_audioApi=m_rtcApi?EOS_RTC_GetAudioInterface(m_rtcApi):nullptr;
+   if(!m_audioApi)m_rtcReason="Epic's voice did not start";
+   else{queryDevices();
+    EOS_RTCAudio_AddNotifyAudioDevicesChangedOptions dc{};dc.ApiVersion=EOS_RTCAUDIO_ADDNOTIFYAUDIODEVICESCHANGED_API_LATEST;
+    m_devicesChanged=EOS_RTCAudio_AddNotifyAudioDevicesChanged(m_audioApi,&dc,nullptr,[](const EOS_RTCAudio_AudioDevicesChangedCallbackInfo*){if(g_live){g_log.line("voice: the audio devices changed");g_live->queryDevices();}});}}
   m_connectApi=EOS_Platform_GetConnectInterface(m_platform);m_lobbyApi=EOS_Platform_GetLobbyInterface(m_platform);m_p2pApi=EOS_Platform_GetP2PInterface(m_platform);
   m_socket.ApiVersion=EOS_P2P_SOCKETID_API_LATEST;std::memcpy(m_socket.SocketName,"DepthWorks",sizeof "DepthWorks");
   EOS_P2P_SetRelayControlOptions relay{};relay.ApiVersion=EOS_P2P_SETRELAYCONTROL_API_LATEST;relay.RelayControl=EOS_ERelayControl::EOS_RC_AllowRelays;EOS_P2P_SetRelayControl(m_p2pApi,&relay);
@@ -512,6 +696,11 @@ private:
    EOS_Lobby_AddNotifyLobbyUpdateReceivedOptions lu{};lu.ApiVersion=EOS_LOBBY_ADDNOTIFYLOBBYUPDATERECEIVED_API_LATEST;
    m_lobbyUpdate=EOS_Lobby_AddNotifyLobbyUpdateReceived(m_lobbyApi,&lu,nullptr,[](const EOS_Lobby_LobbyUpdateReceivedCallbackInfo* i){if(g_live&&i->LobbyId&&g_live->m_lobbyId==i->LobbyId)g_live->refreshLobby();});
   }
+  if(m_audioApi&&m_roomConnection==EOS_INVALID_NOTIFICATIONID){
+   EOS_Lobby_AddNotifyRTCRoomConnectionChangedOptions rc{};rc.ApiVersion=EOS_LOBBY_ADDNOTIFYRTCROOMCONNECTIONCHANGED_API_LATEST;
+   m_roomConnection=EOS_Lobby_AddNotifyRTCRoomConnectionChanged(m_lobbyApi,&rc,nullptr,[](const EOS_Lobby_RTCRoomConnectionChangedCallbackInfo* i){if(g_live)g_live->onRoomConnection(i->LobbyId,i->bIsConnected,i->DisconnectReason);});
+  }
+  m_appliedInput=m_appliedOutput="\x01";applyVoice();
   if(m_connectionRequest!=EOS_INVALID_NOTIFICATIONID)EOS_P2P_RemoveNotifyPeerConnectionRequest(m_p2pApi,m_connectionRequest);
   EOS_P2P_AddNotifyPeerConnectionRequestOptions cr{};cr.ApiVersion=EOS_P2P_ADDNOTIFYPEERCONNECTIONREQUEST_API_LATEST;cr.LocalUserId=m_user;cr.SocketId=&m_socket;
   m_connectionRequest=EOS_P2P_AddNotifyPeerConnectionRequest(m_p2pApi,&cr,nullptr,[](const EOS_P2P_OnIncomingConnectionRequestInfo* i){if(g_live)g_live->onConnectionRequest(i->RemoteUserId);});
@@ -588,13 +777,20 @@ private:
   if(m_hostOptions.name.empty())m_hostOptions.name=m_name+"'s game";
   EOS_Lobby_CreateLobbyOptions o{};o.ApiVersion=EOS_LOBBY_CREATELOBBY_API_LATEST;o.LocalUserId=m_user;o.MaxLobbyMembers=std::uint32_t(m_hostOptions.maxPlayers);
   o.PermissionLevel=EOS_ELobbyPermissionLevel::EOS_LPL_PUBLICADVERTISED;   // private games too: their code must find them
-  o.bPresenceEnabled=EOS_FALSE;o.bAllowInvites=EOS_TRUE;o.BucketId=modeKey(m_hostOptions.mode);o.bDisableHostMigration=EOS_FALSE;o.bEnableRTCRoom=EOS_FALSE;
+  // The lobby's voice room: every member joins it on joining and leaves it on leaving.
+  m_lobbyRtcNow=m_lobbyRtc&&m_audioApi;
+  EOS_Lobby_LocalRTCOptions local{};local.ApiVersion=EOS_LOBBY_LOCALRTCOPTIONS_API_LATEST;local.Flags=0;local.bUseManualAudioInput=EOS_FALSE;local.bUseManualAudioOutput=EOS_FALSE;local.bLocalAudioDeviceInputStartsMuted=EOS_FALSE;
+  o.bPresenceEnabled=EOS_FALSE;o.bAllowInvites=EOS_TRUE;o.BucketId=modeKey(m_hostOptions.mode);o.bDisableHostMigration=EOS_FALSE;o.bEnableRTCRoom=m_lobbyRtcNow?EOS_TRUE:EOS_FALSE;
+  o.LocalRTCOptions=m_lobbyRtcNow?&local:nullptr;
   o.bEnableJoinById=EOS_TRUE;o.bRejoinAfterKickRequiresInvite=EOS_FALSE;o.bCrossplayOptOut=EOS_FALSE;o.RTCRoomJoinActionType=EOS_ELobbyRTCRoomJoinActionType::EOS_LRRJAT_AutomaticJoin;
   EOS_Lobby_CreateLobby(m_lobbyApi,&o,serialData(m_serial),[](const EOS_Lobby_CreateLobbyCallbackInfo* i){if(g_live)g_live->onCreated(serialOf(i->ClientData),i->ResultCode,i->LobbyId);});
  }
  void onCreated(std::uint64_t serial,EOS_EResult r,const char* lobbyId){
   const bool wanted=current(serial,Op::Host)||current(serial,Op::QuickMatch);
   if(!wanted){if(r==EOS_EResult::EOS_Success&&lobbyId)abandon(lobbyId,true);return;}
+  // A lobby with a voice room refused (a deployment without voice): host without one, and say why voice is off.
+  if((r!=EOS_EResult::EOS_Success||!lobbyId)&&m_lobbyRtcNow){g_log.line("a lobby with voice was refused ("+resultName(r)+"): hosting without voice");
+   m_lobbyRtc=false;m_rtcReason="Epic refused this game's voice rooms ("+resultName(r)+")";startHost(m_hostOptions);return;}
   if(r!=EOS_EResult::EOS_Success||!lobbyId){fail("could not host: "+plain(r));return;}
   m_lobbyId=lobbyId;m_publishedPlayers=1;
   const std::uint64_t seed=std::uint64_t(Clock::now().time_since_epoch().count())^std::hash<std::string>{}(m_lobbyId);
@@ -720,6 +916,7 @@ private:
  void dropLobby(){
   if(m_p2pApi&&m_user){EOS_P2P_CloseConnectionsOptions o{};o.ApiVersion=EOS_P2P_CLOSECONNECTIONS_API_LATEST;o.LocalUserId=m_user;o.SocketId=&m_socket;EOS_P2P_CloseConnections(m_p2pApi,&o);}
   m_lobbyId.clear();m_lobby=LobbyInfo{};m_members.clear();m_inbox.clear();m_reassembler.clear();m_publishedPlayers=-1;
+  roomGone();m_peerMuted.clear();m_peerVolume.clear();m_appliedMuted.clear();m_appliedVolume.clear();
  }
  void onMemberStatus(const char* lobbyId,EOS_ProductUserId target,EOS_ELobbyMemberStatus status){
   if(!lobbyId||m_lobbyId!=lobbyId)return;
@@ -781,6 +978,9 @@ private:
     while(m_leaving&&Clock::now()<until){EOS_Platform_Tick(m_platform);Sleep(10);}
    }
    releaseSearch();
+   roomGone();
+   if(m_roomConnection!=EOS_INVALID_NOTIFICATIONID)EOS_Lobby_RemoveNotifyRTCRoomConnectionChanged(m_lobbyApi,m_roomConnection);
+   if(m_audioApi&&m_devicesChanged!=EOS_INVALID_NOTIFICATIONID)EOS_RTCAudio_RemoveNotifyAudioDevicesChanged(m_audioApi,m_devicesChanged);
    if(m_connectionRequest!=EOS_INVALID_NOTIFICATIONID)EOS_P2P_RemoveNotifyPeerConnectionRequest(m_p2pApi,m_connectionRequest);
    if(m_memberStatus!=EOS_INVALID_NOTIFICATIONID)EOS_Lobby_RemoveNotifyLobbyMemberStatusReceived(m_lobbyApi,m_memberStatus);
    if(m_lobbyUpdate!=EOS_INVALID_NOTIFICATIONID)EOS_Lobby_RemoveNotifyLobbyUpdateReceived(m_lobbyApi,m_lobbyUpdate);
@@ -832,6 +1032,21 @@ bool testEos(std::ostream& report){
   if(!check(s.state()==SessionState::InLobby&&s.isHost()&&saw(seen,SessionEvent::Hosted)&&normaliseJoinCode(hosted.joinCode)==hosted.joinCode&&!hosted.joinCode.empty()&&hosted.map==map,
             "hosts a public deathmatch lobby with a join code"+(hosted.joinCode.empty()?": "+lastError(seen):" ("+hosted.joinCode+")")))return false;
   check(s.members().size()==1&&s.members()[0]==s.self()&&s.hostId()==s.self(),"the host is its lobby's only member and its host");
+  // Voice: the lobby's RTC room, joined on hosting; the machine's microphones and speakers.
+  {const VoiceStatus vs=s.voiceStatus();
+   report<<"     voice: "<<(vs.available?std::string("available"):"unavailable: "+vs.reason)<<", XAudio "<<(s.xaudioPath().empty()?std::string("none"):s.xaudioPath())<<'\n';
+   if(check(vs.available,"voice starts with the platform (RTC on XAudio 2.9)"+(vs.available?std::string():": "+vs.reason))){
+    waitFor(s,seen,20,[&]{return s.voiceRoomConnected();});
+    check(s.lobbyHasRtc()&&s.voiceRoomConnected()&&!s.voiceRoomName().empty(),"the lobby has a voice room and the host is in it"+(s.voiceRoomConnected()?std::string():std::string(" (no room after 20 s)")));
+    waitFor(s,seen,10,[&]{return s.devicesQueried();});
+    const auto ins=s.inputDevices(),outs=s.outputDevices();
+    for(const auto& d:ins)report<<"     microphone: "<<d.name<<(d.isDefault?" (default)":"")<<'\n';
+    for(const auto& d:outs)report<<"     speakers: "<<d.name<<(d.isDefault?" (default)":"")<<'\n';
+    check(s.devicesQueried(),ins.empty()&&outs.empty()?std::string("the device lists came back: this machine has no microphone or speakers"):
+          "the devices are listed: "+std::to_string(ins.size())+" microphones, "+std::to_string(outs.size())+" speakers");
+    VoiceSettings v;v.mode=VoiceMode::OpenMic;v.openMicThreshold=1.f;s.setVoice(v);s.setTalking(false);waitFor(s,seen,1,[]{return false;});
+    check(s.voiceStatus().inRoom&&!s.voiceStatus().transmitting,"open mic above the loudest level sends nothing");
+    v.mode=VoiceMode::PushToTalk;s.setVoice(v);}}
 
   SearchFilter f;f.anyMode=false;f.mode=Mode::Deathmatch;f.map=map;f.hideFull=true;
   const LobbyInfo* found=nullptr;
@@ -872,6 +1087,7 @@ bool testEos(std::ostream& report){
 
   s.leave();
   check(s.state()==SessionState::Ready&&s.lobby().id.empty()&&s.members().empty()&&!s.isHost(),"leaving returns the session to Ready");
+  check(!s.voiceRoomConnected()&&!s.voiceStatus().inRoom,"leaving the lobby leaves its voice room");
   bool gone=false;
   for(int attempt=0;attempt<8&&!gone;++attempt){
    waitFor(s,seen,attempt?2:1,[]{return false;});

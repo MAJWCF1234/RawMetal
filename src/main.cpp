@@ -1836,7 +1836,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         save("repair-sign.ppm",retro::Game::liftInspection(0,3));
         auto menu=retro::Game::liftInspection(retro::World::LiftRideComplete);menu.setSaveDirectory(L"inspection-empty-saves");retro::InputState input{};input.escape=true;menu.update(input,.01f);save("repair-pause.ppm",menu);
         auto click=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::MenuLayout::X+30;i.pointerY=retro::MenuLayout::RowTop+row*retro::MenuLayout::RowHeight+7;menu.update(i,.01f);};
-        click(10);save("repair-save.ppm",menu);click(3);click(11);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
+        auto pauseClick=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::PauseMenuLayout::X+40;i.pointerY=retro::PauseMenuLayout::rowY(row,false)+8;menu.update(i,.01f);};
+        pauseClick(retro::PauseSave);save("repair-save.ppm",menu);click(3);pauseClick(retro::PauseLoad);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
     }
     if(commandArguments().find(L"--console-test"))return retro::Game::testConsole()?0:34;
     if(commandArguments().find(L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
@@ -2094,9 +2095,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          auto outward=retro::Game::mapInspection({21.5f,22.8f},1.570796f,0,0,true);renderer.render(outward);saveFrame("chunk-seam-out.ppm");
          auto returning=retro::Game::mapInspection({3.5f,1.3f},-1.570796f,0,1,true);renderer.render(returning);saveFrame("chunk-seam-back.ppm");
         }
-        {auto menuGame=game;retro::InputState menuInput{};menuInput.escape=true;menuGame.update(menuInput,.02f);renderer.render(menuGame);saveFrame("settings-menu.ppm");
-         retro::InputState drag{};drag.fire=true;drag.pointerX=retro::MenuLayout::SliderX+15;drag.pointerY=retro::MenuLayout::RowTop+retro::MenuLayout::RowHeight+9;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-low.ppm");
-         drag.pointerX=retro::MenuLayout::SliderX+60;drag.pointerY+=50;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-high.ppm");
+        {auto menuGame=game;retro::InputState menuInput{};menuInput.escape=true;menuGame.update(menuInput,.02f);renderer.render(menuGame);saveFrame("pause-menu.ppm");
+         menuGame.openSettings(retro::SettingsTab::Audio);menuGame.update({},.02f);renderer.render(menuGame);saveFrame("settings-menu.ppm");
+         retro::InputState drag{};drag.fire=true;drag.pointerX=retro::SettingsLayout::SliderX+15;drag.pointerY=retro::SettingsLayout::rowY(0)+8;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-low.ppm");
+         drag.pointerX=retro::SettingsLayout::SliderX+60;drag.pointerY+=50;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-high.ppm");
         }
         {for(int mode:{1,2,3,4,5,6})for(int stage=0;stage<4;++stage){auto pose=retro::Game::weaponInspection(mode,mode==2||mode==4?stage*.028f:mode>=5?stage*.25f:stage==0?10.f:stage*.12f);renderer.render(pose);saveFrame(("weapon-pass-"+std::to_string(mode)+"-"+std::to_string(stage)+".ppm").c_str());}
          auto fists=retro::Game::weaponInspection(1,.16f);for(int angle=0;angle<4;++angle){renderer.inspectRig(fists,angle*1.570796f,.25f);saveFrame(("fist-rig-"+std::to_string(angle)+".ppm").c_str());}
@@ -2317,8 +2319,8 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
-        if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();window.setTalkKey(game.settings().pushToTalkKey);auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
+        if(((wasPaused&&!game.paused())||game.takeSettingsSave())&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
         titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | %ls %d | Monsters %d",game.player().health,game.activeFirearm()==retro::WeaponId::Handgun?L"9mm":L"Shells",game.firearmPool().total,game.enemiesRemaining());window.setCaption(t);}

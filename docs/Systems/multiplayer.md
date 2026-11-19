@@ -31,7 +31,7 @@ Nothing below Session knows about the game. Nothing in the game knows about EOS.
 |---|---|---|
 | 0 Control | hello, welcome, rules, goodbye | reliable |
 | 1 State | snapshots | unreliable, newest wins |
-| 2 Events | shots, hits, deaths, pickups | reliable |
+| 2 Events | shots, hits, deaths, pickups, chat | reliable |
 | 3 MapData | the .rmc file in chunks | reliable |
 
 ## Maps
@@ -56,7 +56,7 @@ Nothing below Session knows about the game. Nothing in the game knows about EOS.
 
 - `src/ThirdParty/EOS/eos_config.json` is gitignored, because the repository is public. It is baked into the exe at build time.
 - Without it, or when the SDK cannot load, the Session is Offline: the MULTIPLAYER menu says why, and the game plays on alone.
-- The EOS DLL is packed inside the exe and unpacked to `%LOCALAPPDATA%\RawMetal\eos\` on first use, so there is still one exe.
+- The EOS DLL (and XAudio 2.9 for voice, resource 5991) is packed inside the exe and unpacked to `%LOCALAPPDATA%\RawMetal\eos\` on first use, so there is still one exe.
   - Resource 5990: the asset packer's LZMS record (`RawMetalAssetPacker --pack-file`), 19.5 MB down to 5.7 MB. The folder is named after the record's hash, so a new SDK unpacks beside the old one.
   - The import library is delay-loaded; the session loads the unpacked DLL by full path before the first EOS call.
 - The EOS product version follows app.rc's ProductVersion. Lobbies carry it as `version`: the browser and quick match list only the same version, and a code for another version says so.
@@ -103,9 +103,72 @@ Nothing below Session knows about the game. Nothing in the game knows about EOS.
 - **The host leaves:** in deathmatch the new host carries on from its own state, and the others hello it again. In co-op the guests' match ends with the line "The host left the game".
 - **VR:** main hands the solved `AvatarPose` to `Game::setNetAvatar` each frame in a match.
 
+## Chat and voice (src/net/MatchChat.cpp, src/game/SettingsMenu.cpp, EosSession's voice section)
+
+- **Text chat:**
+  - T opens a chat line in a match (not in VR); Enter sends, Esc drops it. The world runs on while typing; the player stands still. `InputState::chat` is T, `InputState::textInput` carries the letters.
+  - A line goes to the host as `ChatSay` on Events (reliable). The host cleans it (printable ASCII, spaces folded, at most 120 characters) and holds each sender to an allowance: 4 lines at once, then one every 1.5 s (`Match::ChatBurst`, `ChatRefill`). The rest are dropped. The sender keeps the same count and is told "Too fast" without sending.
+  - The host relays every line as `ChatRelay` to everyone, the sender too, so every machine shows the same lines in the same order. An older game ignores both messages, so the protocol stays 1.
+  - Notices are made on each machine, with no traffic: "X joined the game" and "X left the game" from the roster, "X killed Y" and "The dark took Y" from the kill feed. A newcomer is not told about those already there.
+  - What the box shows follows this machine's settings (`MatchView::chat`, newest last): text chat off hides the players' lines and keeps the notices; the chat filter masks a small built-in word list with asterisks (whole words, and stems such as "fuck"; "Scunthorpe" is left alone); a muted player's lines are dropped.
+  - The box (FrontEnd.cpp `drawChat`) sits lower left above the HUD: four lines, each full for 8 s and gone by 10 s; while typing, the last six and the line under them with a count of what is left.
+  - VR: there is no typing. The newest line or notice (6 s) rides the VR caption strip when no subtitle, objective or alarm needs it (`Game::vrChatCaption`, read in SoftwareRenderer's VR card stamping).
+- **Voice (EOS RTC):**
+  - The platform starts with RTC options naming XAudio 2.9.
+    - Windows' own `System32\xaudio2_9.dll` does not work: the SDK delay-loads `XAudio2_9Redist.dll` by that name, and the process stops (exception 0xC06D007E) when no module of that name is loaded.
+    - So the SDK's `xaudio2_9redist.dll` is packed like the SDK DLL: resource 5991, an LZMS record of 383,838 bytes (847 KB unpacked). It is unpacked to `%LOCALAPPDATA%\RawMetal\eos\<hash>\xaudio2_9redist.dll` and handed to the platform by path.
+    - Without it, or if the platform will not start with RTC, the game starts without voice and says why.
+  - Every hosted lobby has an RTC room (`bEnableRTCRoom`); members join it on joining the lobby and leave it on leaving. If a deployment refuses lobbies with voice, the host hosts again without it and voice says why.
+  - The gate is in the audio thread's `AudioBeforeSend`. It measures the mic for the meter (peak on a 60 dB scale, `micLevelOf`) and sends silence unless push-to-talk is held or, in open mic, the level is over the threshold (with 350 ms of hangover). Voice off disables sending and receiving.
+  - Devices come from `EOS_RTCAudio_Query{Input,Output}DevicesInformation` and refresh when Windows' devices change. Settings keep them by name ("" the system default).
+  - Mic volume and voice volume go to `UpdateSendingVolume` and `UpdateReceivingVolume` (EOS 50 = as it comes, so the settings' 0-2 map to 0-100).
+  - Muted players go to `UpdateReceiving(participant, off)`. Proximity goes to `UpdateParticipantVolume`.
+  - Speaking comes from `AddNotifyParticipantUpdated`.
+  - Everything fails quietly to "voice off" with a reason: Offline, signing in, no XAudio, no microphone ("no microphone was found"), a microphone unplugged or failed. None of it blocks a frame.
+- **Session interface** (NetTypes.h, additive): `setVoice(VoiceSettings)`, `setTalking`, `voiceStatus()` (available, inRoom, transmitting, reason), `inputDevices`/`outputDevices`, `micLevel`, `peerSpeaking`, `setPeerMuted`, `setPeerVolume`.
+  - OfflineSession answers "multiplayer is offline (why)".
+  - LoopbackSession fakes it for tests: a member transmits while push-to-talk is held or `fakeMicLevel` is over the open-mic threshold; `fakeVoiceRoom`, `fakeInputs`/`fakeOutputs`; mutes and volumes are kept in `mutedPeers`/`peerVolumes`.
+- **The game's side:**
+  - `Game::updateVoice` hands the COMMUNICATION settings to the session whenever they change, and the push-to-talk key every frame (Win32Window reads `Settings::pushToTalkKey`; VR's push-to-talk sets `InputState::talk` too).
+  - `Match::publishComms`, every frame, fills `ScoreRow::speaking`/`muted` and `RemotePlayer::speaking`. Every 0.2 s it sets the session's mutes (by display name, from `Settings::mutedPlayers`) and, in co-op with proximity voice on, each voice's volume: full within 3 m, gone by 30 m (a 1.5 power), a wall between (Game::lineOfSight) keeps 35 %, a player not near here is silent. Deathmatch is always heard in full.
+  - Speaking shows as three small amber bars beside the name on the scoreboard and over the head (RemotePlayers.cpp). A muted player says MUTED in red on the scoreboard.
+  - With Tab held, the arrows pick a scoreboard row and Enter mutes or unmutes that player.
+- **TEST MY MIC** (the COMMUNICATION page) listens with Windows waveIn (`audio/MicMonitor`), only while it is on and the page is open, and shows the same meter. Nothing is recorded or sent.
+
+## The settings menu (src/game/SettingsMenu.cpp, drawn by renderer/FrontEnd.cpp)
+
+- **PAUSE** (Esc) is short, in the title's language (grouped rows, the lit red row, a line saying what it does):
+  - Out of a match: RESUME, SETTINGS | SAVE GAME, LOAD GAME | RESTART, QUIT TO TITLE. RESTART and QUIT ask for a second press.
+  - In a match: RESUME, SETTINGS | JOIN CODE (Enter copies it) | LEAVE MATCH.
+  - `PauseMenuLayout` and `PauseRow` name the rows for the pointer, the renderer and the tests.
+- **SETTINGS** (from PAUSE or the title) has a column of pages: AUDIO, VIDEO, CONTROLS, GAMEPLAY, COMMUNICATION, VR, then BACK.
+  - The column has the keys first: up and down turn the pages, right or Enter goes into the rows, Esc leaves.
+  - In the rows: left and right change a value, Enter toggles or acts, Esc goes back to the column.
+  - The mouse and the VR laser click pages, hover and click rows and drag sliders.
+  - The chosen row's one plain line sits at the foot. Every page ends with RESET TO DEFAULTS (a second press; muted players stay muted).
+  - Changes apply at once. Leaving SETTINGS asks main to save (`Game::takeSettingsSave`).
+- **What each page holds:**
+  - AUDIO: master, music, effects, voice chat volume.
+  - VIDEO: render scale (50/75/100 %, the console's `scale`), depth of field, lens effects, the frame-time readout.
+  - CONTROLS: mouse sensitivity, invert Y, and the keys (read-only).
+  - GAMEPLAY: pull highlight, character (Claire or the Limitator).
+  - COMMUNICATION: text chat, chat filter, voice chat (off / push to talk / open mic), the push-to-talk key (V, B, X, H, Caps Lock, Left Alt, Mouse 4, Mouse 5), open mic sensitivity with the live meter, microphone, speakers, mic volume, voice volume, proximity voice in co-op, muted players (a list to mute and unmute; the players in the match and everyone muted before), test my mic.
+  - VR: the comfort settings (turn speed, vignette, seated, recalibrate height, left-handed, render scale, frame-rate readout). Turning is smooth only.
+- **The settings file** stays append-only. After the character come text chat, filter, voice mode, push-to-talk key, open-mic threshold, mic volume, voice volume, proximity, render scale and frame-time readout. Then come named lines (`mic <name>`, `speakers <name>`, `muted <name>`) for what can hold spaces. An older file loads with the new defaults.
+
 ## Tests
 
 - `--net-loopback-test` / `engine.net-loopback`: the in-memory hub.
 - `--net-test` / `engine.net`: Games in one process play matches over the hub (deathmatch, co-op, map transfer, loss).
-- `--eos-test` / `engine.eos`: signs in to the Dev sandbox, hosts, finds, leaves. Needs the internet and the keys.
-- **Two machines:** the real test. See the playtest list at the end of this file once it exists.
+  - Chat: a guest's line reaches the host and the other guest; it is cut to 120 characters; the filter masks for whoever has it on; a muted sender's lines are hidden; text chat off hides lines; a burst of 10 is cut to 4 by the sender and again by the host; join, leave and kill notices.
+  - Voice: push-to-talk marks the speaker on the scoreboard and the name tag; voice off reaches the session; deathmatch voices are full; co-op proximity follows distance and the wall.
+- `--eos-test` / `engine.eos`: signs in to the Dev sandbox, hosts, finds, leaves. Voice too: the lobby's RTC room is joined, the microphones and speakers are listed (or it says the machine has none), open mic over the loudest level sends nothing, and leaving leaves the room. Needs the internet and the keys.
+- `engine.settings`: PAUSE and SETTINGS by pointer and keys, sliders, resets, restart and quit confirmations, the settings file round trip; it runs `Game::testSettingsMenu` (settings-menu-test.txt). VR's `--vr-test` runs `Game::testComfortMenu` (the VR page).
+- Lab tube `communication`: the chat box talking and typing, the speaking marks, PAUSE alone and in a match, and every SETTINGS page with a fake mic and device list (`.build/lab-out/communication-*.png`).
+- **Two machines:** the real test. For chat and voice:
+  - Each hears the other on push-to-talk and in open mic.
+  - Speaking marks show on the scoreboard and the name tag.
+  - Muting from the scoreboard silences voice and chat.
+  - Co-op proximity fades the voice with distance and walls.
+  - Changing the microphone and speakers mid-match works.
+  - Unplugging the mic says so on the COMMUNICATION page.

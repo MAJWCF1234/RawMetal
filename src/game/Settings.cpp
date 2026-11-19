@@ -70,101 +70,50 @@ void Game::updateTitle(const InputState& input){
   else if(m_titleSelection==TitleCustomMaps){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);m_customMapsOpen=true;m_customMenuOffset=0;m_titleSelection=0;}
   else if(m_titleSelection==TitleLoadGame){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
   else if(m_titleSelection==TitleMultiplayer){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);openTitlePage(TitlePage::Multiplayer);}
-  else if(m_titleSelection==TitleSettings){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
+  else if(m_titleSelection==TitleSettings){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;openSettings(m_vrInputActive?SettingsTab::Vr:SettingsTab::Audio);m_menuPrevious=input;}
   else if(m_titleSelection==TitleQuit)m_quitRequested=true;
  }
  m_titlePrevious=input;
 }
+// The pause menu's pages: PAUSE and SETTINGS (SettingsMenu.cpp), then the save and load slab and its confirmations.
 void Game::updateMenu(const InputState& input){
+ if(m_menuPage==MenuPage::Pause){updatePauseMenu(input);return;}
+ if(m_menuPage==MenuPage::Options){updateSettingsMenu(input);return;}
  auto pressed=[](bool now,bool previous){return now&&!previous;};
  int rows=menuRows();
  if(pressed(input.menuUp,m_menuPrevious.menuUp))m_menuSelection=(m_menuSelection+rows-1)%rows;
  if(pressed(input.menuDown,m_menuPrevious.menuDown))m_menuSelection=(m_menuSelection+1)%rows;
  bool inside=input.pointerX>=MenuLayout::X+12&&input.pointerX<MenuLayout::X+MenuLayout::Width-12&&input.pointerY>=MenuLayout::RowTop&&input.pointerY<MenuLayout::RowTop+rows*MenuLayout::RowHeight;
  bool click=pressed(input.fire,m_menuPrevious.fire);
- if(!input.fire)m_dragSlider=-1;
- if(m_dragSlider<0&&inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_menuSelection=(input.pointerY-MenuLayout::RowTop)/MenuLayout::RowHeight;
- if(m_menuPage==MenuPage::Settings&&click&&inside&&((m_menuSelection>=1&&m_menuSelection<=4)||m_menuSelection==6||m_menuSelection==7)&&input.pointerX>=MenuLayout::SliderX-5&&input.pointerX<=MenuLayout::SliderX+MenuLayout::SliderWidth+5)m_dragSlider=m_menuSelection;
- if(m_dragSlider>=0)m_menuSelection=m_dragSlider;
+ if(inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_menuSelection=(input.pointerY-MenuLayout::RowTop)/MenuLayout::RowHeight;
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
- int direction=int(pressed(input.menuRight,m_menuPrevious.menuRight))-int(pressed(input.menuLeft,m_menuPrevious.menuLeft));
  bool activate=pressed(input.menuAccept,m_menuPrevious.menuAccept)||(inside&&click);
- if(m_menuPage==MenuPage::Comfort){
-  // VR COMFORT: sliders for the turn speed (0.25-2, 30-240 degrees a second) and the vignette (0-1), toggles,
-  // the height recalibration, and the render scale stepping AUTO, 100, 90, 80, 70 %.
-  if(click&&inside&&(m_menuSelection==1||m_menuSelection==2)&&input.pointerX>=MenuLayout::SliderX-5&&input.pointerX<=MenuLayout::SliderX+MenuLayout::SliderWidth+5)m_dragSlider=m_menuSelection;
-  if(m_dragSlider>=0)m_menuSelection=m_dragSlider;
-  float* value=m_menuSelection==1?&m_settings.vrTurnSpeed:m_menuSelection==2?&m_settings.vrVignette:nullptr;
-  if(value){const float low=m_menuSelection==1?.25f:0.f,high=m_menuSelection==1?2.f:1.f;
-   if(direction)*value=std::clamp(*value+direction*(m_menuSelection==1?.125f:.1f),low,high);
-   if(m_dragSlider>=0)*value=low+(high-low)*std::clamp(float(input.pointerX-MenuLayout::SliderX)/MenuLayout::SliderWidth,0.f,1.f);}
-  const bool toggle=(activate&&m_dragSlider<0)||direction;
-  if(toggle&&m_menuSelection==3)m_settings.vrSeated=!m_settings.vrSeated;
-  if(activate&&m_menuSelection==4){m_vrRecalibrate=true;m_menuMessage="HEIGHT SET TO YOUR HEAD NOW";}
-  if(toggle&&m_menuSelection==5)m_settings.vrLeftHanded=!m_settings.vrLeftHanded;
-  if(toggle&&m_menuSelection==6){static constexpr float steps[]={0,1,.9f,.8f,.7f};int at=0;for(int i=0;i<5;++i)if(std::fabs(steps[i]-m_settings.vrRenderScale)<.01f)at=i;
-   m_settings.vrRenderScale=steps[(at+(direction<0?4:1))%5];}
-  if(toggle&&m_menuSelection==7)m_settings.vrFrameRate=!m_settings.vrFrameRate;
-  if(activate&&m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=5;m_dragSlider=-1;m_menuMessage.clear();}
-  m_menuPrevious=input;return;
- }
- if(m_menuPage!=MenuPage::Settings){
-  if(m_menuPage==MenuPage::ConfirmRestart){
-   if(activate){if(m_menuSelection==0){m_menuPage=MenuPage::Settings;m_menuSelection=9;}
-    else {restart();m_paused=false;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_suppressFire=true;}}
-   m_menuPrevious=input;return;
-  }
-  if(activate){
-   if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
-    bool saving=m_menuPage==MenuPage::Save;int backRow=saving?3:4;
-    if(m_menuSelection==backRow){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_menuPage=MenuPage::Settings;m_menuSelection=saving?10:11;m_menuMessage.clear();}}
-    else if(!saving&&m_menuSelection==3){m_menuMessage.clear();loadCheckpoint();}
-    else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
-     if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
-      if(exists){m_menuPage=MenuPage::Overwrite;m_menuSelection=0;}else saveSlot(m_pendingSlot);
-     }else {m_menuPage=MenuPage::ConfirmLoad;m_menuSelection=0;}
-    }
-   }else {bool saving=m_menuPage==MenuPage::Overwrite;
-    if(m_menuSelection==0){m_menuPage=saving?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
-    else if(saving){saveSlot(m_pendingSlot);m_menuPage=MenuPage::Save;m_menuSelection=m_pendingSlot;}
-    else if(!loadSlot(m_pendingSlot)){m_menuPage=MenuPage::Load;m_menuSelection=m_pendingSlot;}
+ if(activate){
+  if(m_menuPage==MenuPage::Save||m_menuPage==MenuPage::Load){
+   bool saving=m_menuPage==MenuPage::Save;int backRow=saving?3:4;
+   if(m_menuSelection==backRow){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_menuPage=MenuPage::Pause;m_menuSelection=saving?PauseSave:PauseLoad;m_menuMessage.clear();}}
+   else if(!saving&&m_menuSelection==3){m_menuMessage.clear();loadCheckpoint();}
+   else {m_pendingSlot=m_menuSelection;m_menuMessage.clear();
+    if(saving){std::error_code error;bool exists=!m_saveDirectory.empty()&&std::filesystem::exists(std::filesystem::path(m_saveDirectory)/("slot-"+std::to_string(m_pendingSlot+1)+".rms"),error);
+     if(exists){m_menuPage=MenuPage::Overwrite;m_menuSelection=0;}else saveSlot(m_pendingSlot);
+    }else {m_menuPage=MenuPage::ConfirmLoad;m_menuSelection=0;}
    }
-  }
-  m_menuPrevious=input;return;
- }
- // Sliders: volumes 0-1, sensitivity 0.2-3, depth of field and lens effects 0-2 (1 = default look).
- float* value=m_menuSelection==1?&m_settings.master:m_menuSelection==2?&m_settings.music:m_menuSelection==3?&m_settings.effects:m_menuSelection==4?&m_settings.sensitivity:m_menuSelection==6?&m_settings.depthOfField:m_menuSelection==7?&m_settings.lensEffects:nullptr;
- if(value){
-  const bool lens=m_menuSelection==6||m_menuSelection==7;
-  float low=m_menuSelection==4?.2f:0,high=m_menuSelection==4?3.f:lens?2.f:1.f;
-  if(direction)*value=std::clamp(*value+direction*(m_menuSelection==4||lens?.1f:.05f),low,high);
-  if(m_dragSlider>=0)*value=low+(high-low)*std::clamp(float(input.pointerX-MenuLayout::SliderX)/MenuLayout::SliderWidth,0.f,1.f);
-  if(direction||m_dragSlider>=0){
-   if(m_menuSelection==1)m_audioMuted=false;if(m_menuSelection==2)m_musicEnabled=true;
+  }else {bool saving=m_menuPage==MenuPage::Overwrite;
+   if(m_menuSelection==0){m_menuPage=saving?MenuPage::Save:MenuPage::Load;m_menuSelection=m_pendingSlot;}
+   else if(saving){saveSlot(m_pendingSlot);m_menuPage=MenuPage::Save;m_menuSelection=m_pendingSlot;}
+   else if(!loadSlot(m_pendingSlot)){m_menuPage=MenuPage::Load;m_menuSelection=m_pendingSlot;}
   }
  }
- // In VR the mouse row is VR COMFORT.
- if(m_menuSelection==5&&activate&&m_vrInputActive){m_menuPage=MenuPage::Comfort;m_menuSelection=1;m_dragSlider=-1;m_menuMessage.clear();m_menuPrevious=input;return;}
- if(m_menuSelection==5&&(activate||direction)&&!m_vrInputActive)m_settings.invertMouse=!m_settings.invertMouse;
- // The Physgloves target's outline: SUBTLE or NONE (the reticle still tightens on a prop either way).
- if(m_menuSelection==8&&(activate||direction))m_settings.pullHighlight=m_settings.pullHighlight?0:1;
- if(activate&&m_menuSelection==0){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_paused=false;m_suppressFire=true;}}
- // In a match there is nothing to restart, save or load: the rows are greyed, and the last row leaves the match.
- if(m_matchView.active&&activate&&m_menuSelection>=9&&m_menuSelection<=11){activate=false;m_menuMessage="NOT DURING A MATCH";}
- if(m_matchView.active&&activate&&m_menuSelection==12){leaveMatch();m_titlePrevious=input;m_menuPrevious=input;return;}
- if(activate&&m_menuSelection==9){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
- if(activate&&(m_menuSelection==10||m_menuSelection==11)){m_menuPage=m_menuSelection==10?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
- // Returning to the title hands it the input that chose it: a click or key
- // still held must not land on the title row under the pointer (QUIT GAME
- // closed the game outright).
- if(activate&&m_menuSelection==12){if(m_menuFromTitle)m_quitRequested=true;else {showTitleScreen();m_titlePrevious=input;}}
  m_menuPrevious=input;
 }
+// The settings file: whitespace-separated numbers, each later group appended so an older file still loads (its
+// missing groups keep their defaults), then named lines for what can hold spaces (device and player names).
 void Game::loadSettings(const std::wstring& path){
  std::ifstream file{std::filesystem::path(path)};Settings settings;int inverted=0;
  if(!(file>>settings.master>>settings.music>>settings.effects>>settings.sensitivity>>inverted))return;
  if(!std::isfinite(settings.master)||!std::isfinite(settings.music)||!std::isfinite(settings.effects)||!std::isfinite(settings.sensitivity))return;
  settings.master=std::clamp(settings.master,0.f,1.f);settings.music=std::clamp(settings.music,0.f,1.f);settings.effects=std::clamp(settings.effects,0.f,1.f);settings.sensitivity=std::clamp(settings.sensitivity,.2f,3.f);settings.invertMouse=inverted!=0;
+ float renderScale=1;bool showFps=false;
  // Lens settings came later: older files keep the default look.
  float dof=1,lens=1;if(file>>dof>>lens&&std::isfinite(dof)&&std::isfinite(lens)){settings.depthOfField=std::clamp(dof,0.f,2.f);settings.lensEffects=std::clamp(lens,0.f,2.f);
   int highlight=1;if(file>>highlight)settings.pullHighlight=highlight?1:0;}
@@ -173,32 +122,57 @@ void Game::loadSettings(const std::wstring& path){
  if(file>>turn>>vignette>>seated>>lefty>>rate>>scale&&std::isfinite(turn)&&std::isfinite(vignette)&&std::isfinite(scale)){
   settings.vrTurnSpeed=std::clamp(turn,.25f,2.f);settings.vrVignette=std::clamp(vignette,0.f,1.f);settings.vrSeated=seated!=0;settings.vrLeftHanded=lefty!=0;settings.vrFrameRate=rate!=0;
   settings.vrRenderScale=scale<.6f?0.f:std::clamp(scale,.6f,1.f);
-  // The multiplayer body came last (0 Claire, 1 the Limitator).
-  int character=0;if(file>>character)settings.character=std::clamp(character,0,1);}
- m_settings=settings;
+  // The multiplayer body came next (0 Claire, 1 the Limitator).
+  int character=0;if(file>>character){settings.character=std::clamp(character,0,1);
+   // Then chat and voice, the 3D render scale and the frame-time readout; then the named lines.
+   int chat=1,filter=1,mode=1,key=0x56,proximity=1,fps=0;float threshold=.25f,mic=1,voice=1,render=1;
+   if(file>>chat>>filter>>mode>>key>>threshold>>mic>>voice>>proximity>>render>>fps&&std::isfinite(threshold)&&std::isfinite(mic)&&std::isfinite(voice)&&std::isfinite(render)){
+    settings.textChat=chat!=0;settings.chatFilter=filter!=0;settings.voiceMode=std::clamp(mode,0,2);settings.pushToTalkKey=key>0&&key<256?key:0x56;
+    settings.openMicThreshold=std::clamp(threshold,0.f,1.f);settings.micVolume=std::clamp(mic,0.f,2.f);settings.voiceVolume=std::clamp(voice,0.f,2.f);settings.proximityVoice=proximity!=0;
+    renderScale=render<.6f?.5f:render<.9f?.75f:1.f;showFps=fps!=0;
+    for(std::string line;std::getline(file,line);){
+     if(!line.empty()&&line.back()=='\r')line.pop_back();
+     const auto space=line.find(' ');if(space==std::string::npos)continue;
+     const std::string tag=line.substr(0,space),value=line.substr(space+1);
+     if(tag=="mic")settings.micDevice=value;else if(tag=="speakers")settings.speakerDevice=value;
+     else if(tag=="muted"&&!value.empty()&&settings.mutedPlayers.size()<256&&!settings.muted(value))settings.mutedPlayers.push_back(value);
+    }}}}
+ m_settings=settings;m_renderScale=renderScale;m_showFps=showFps;
 }
 void Game::saveSettings(const std::wstring& path)const{
  std::error_code error;auto filePath=std::filesystem::path(path);std::filesystem::create_directories(filePath.parent_path(),error);if(error)return;
- std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<' '<<m_settings.depthOfField<<' '<<m_settings.lensEffects<<' '<<m_settings.pullHighlight
-  <<' '<<m_settings.vrTurnSpeed<<' '<<m_settings.vrVignette<<' '<<int(m_settings.vrSeated)<<' '<<int(m_settings.vrLeftHanded)<<' '<<int(m_settings.vrFrameRate)<<' '<<m_settings.vrRenderScale<<' '<<m_settings.character<<'\n';
+ const auto& s=m_settings;
+ std::ofstream file(filePath);file<<s.master<<' '<<s.music<<' '<<s.effects<<' '<<s.sensitivity<<' '<<int(s.invertMouse)<<' '<<s.depthOfField<<' '<<s.lensEffects<<' '<<s.pullHighlight
+  <<' '<<s.vrTurnSpeed<<' '<<s.vrVignette<<' '<<int(s.vrSeated)<<' '<<int(s.vrLeftHanded)<<' '<<int(s.vrFrameRate)<<' '<<s.vrRenderScale<<' '<<s.character
+  <<' '<<int(s.textChat)<<' '<<int(s.chatFilter)<<' '<<s.voiceMode<<' '<<s.pushToTalkKey<<' '<<s.openMicThreshold<<' '<<s.micVolume<<' '<<s.voiceVolume<<' '<<int(s.proximityVoice)
+  <<' '<<m_renderScale<<' '<<int(m_showFps)<<'\n';
+ auto oneLine=[](std::string v){for(auto& c:v)if(c=='\r'||c=='\n')c=' ';return v;};
+ if(!s.micDevice.empty())file<<"mic "<<oneLine(s.micDevice)<<'\n';
+ if(!s.speakerDevice.empty())file<<"speakers "<<oneLine(s.speakerDevice)<<'\n';
+ for(const auto& n:s.mutedPlayers)file<<"muted "<<oneLine(n)<<'\n';
 }
-// The VR COMFORT page: reached from the settings' row 5 in VR only, each row changes its setting, the values
-// survive a save and load, and an older settings file keeps the defaults.
+// The VR page of SETTINGS (VrRuntime's --vr-test runs this): in VR the pause menu's SETTINGS opens on it; each row
+// changes its setting, the values survive a save and load, an older settings file keeps the defaults, and Esc goes
+// back through the page column to PAUSE.
 bool Game::testComfortMenu(std::ostream& report){
  bool ok=true;auto check=[&](bool pass,const char* what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
- auto game=validationScene(Enemy::Kind::Huntsman);InputState escape{};escape.escape=true;game.update(escape,.02f);game.update({},.02f);
- auto pick=[&](int row){game.m_menuSelection=row;InputState accept{};accept.menuAccept=true;game.update(accept,.02f);game.update({},.02f);};
- pick(5);check(game.menuPage()==MenuPage::Settings&&game.settings().invertMouse,"desktop: row 5 is still INVERT MOUSE Y");
- game.m_settings.invertMouse=false;game.m_vrInputActive=true;pick(5);check(game.menuPage()==MenuPage::Comfort&&!game.settings().invertMouse,"VR: row 5 opens VR COMFORT");
- game.m_menuSelection=1;InputState right{};right.menuRight=true;game.update(right,.02f);game.update({},.02f);check(std::fabs(game.settings().vrTurnSpeed-1.125f)<.001f,"turn speed steps up");
- InputState click{};click.fire=true;click.pointerX=MenuLayout::SliderX;click.pointerY=MenuLayout::RowTop+2*MenuLayout::RowHeight+5;game.update(click,.02f);click.fire=false;game.update(click,.02f);
+ auto game=validationScene(Enemy::Kind::Huntsman);game.m_vrInputActive=true;InputState escape{};escape.escape=true;game.update(escape,.02f);game.update({},.02f);
+ auto key=[&](bool InputState::* k){InputState i{};i.*k=true;game.update(i,.02f);game.update({},.02f);};
+ game.m_menuSelection=PauseSettings;key(&InputState::menuAccept);
+ check(game.menuPage()==MenuPage::Options&&game.settingsTab()==SettingsTab::Vr,"VR: PAUSE's SETTINGS opens on the VR page");
+ key(&InputState::menuRight);
+ const auto rows=game.settingsRows();
+ auto pick=[&](int row){game.m_menuSelection=row;key(&InputState::menuAccept);};
+ check(rows.size()==8,"the VR page: turn speed, vignette, seated, height, left-handed, render scale, frame-rate readout, reset");
+ game.m_menuSelection=0;key(&InputState::menuRight);check(std::fabs(game.settings().vrTurnSpeed-1.125f)<.001f,"turn speed steps up");
+ {game.update({},.02f);InputState click{};click.fire=true;click.pointerX=SettingsLayout::SliderX;click.pointerY=SettingsLayout::rowY(1)+8;game.update(click,.02f);click.fire=false;game.update(click,.02f);}
  check(game.settings().vrVignette==0,"the vignette slider drags to off");
- pick(3);pick(5);pick(7);pick(6);pick(6);check(game.settings().vrSeated&&game.settings().vrLeftHanded&&game.settings().vrFrameRate&&std::fabs(game.settings().vrRenderScale-.9f)<.001f,"seated, left-handed, readout on, render scale AUTO -> 100 -> 90");
- pick(4);check(game.takeVrRecalibrate()&&!game.takeVrRecalibrate(),"recalibrate is taken once");
+ pick(2);pick(4);pick(6);pick(5);pick(5);check(game.settings().vrSeated&&game.settings().vrLeftHanded&&game.settings().vrFrameRate&&std::fabs(game.settings().vrRenderScale-.9f)<.001f,"seated, left-handed, readout on, render scale AUTO -> 100 -> 90");
+ pick(3);check(game.takeVrRecalibrate()&&!game.takeVrRecalibrate(),"recalibrate is taken once");
  {auto path=std::filesystem::temp_directory_path()/"rawmetal-comfort-test.txt";game.saveSettings(path.wstring());Game reloaded;reloaded.loadSettings(path.wstring());std::error_code error;std::filesystem::remove(path,error);
   const auto&r=reloaded.settings();check(r.vrSeated&&r.vrLeftHanded&&r.vrFrameRate&&r.vrVignette==0&&std::fabs(r.vrTurnSpeed-1.125f)<.001f&&std::fabs(r.vrRenderScale-.9f)<.001f,"comfort settings survive a save and load");
   std::ofstream(path)<<"1 .75 1 1 0 1 1\n";Game old;old.loadSettings(path.wstring());std::filesystem::remove(path,error);check(old.settings().vrTurnSpeed==1&&old.settings().vrVignette==.5f&&!old.settings().vrSeated,"an older settings file keeps the comfort defaults");}
- pick(0);check(game.menuPage()==MenuPage::Settings&&game.menuSelection()==5,"BACK returns to the settings on row 5");
+ key(&InputState::escape);key(&InputState::escape);check(game.menuPage()==MenuPage::Pause&&game.menuSelection()==PauseSettings,"Esc, Esc returns to PAUSE on SETTINGS");
  return ok;
 }
 bool Game::testSettings(){
@@ -220,27 +194,33 @@ bool Game::testSettings(){
   else if(!title.titleScreen()||title.customMapsOpen())return false;
  }
  auto game=validationScene(Enemy::Kind::Huntsman);InputState escape{};escape.escape=true;game.update(escape,.02f);
- if(!game.paused()||game.quitRequested())return false;
+ if(!game.paused()||game.quitRequested()||game.menuPage()!=MenuPage::Pause)return false;
  game.update(escape,.02f);if(!game.paused())return false;
  auto before=game.player();auto enemy=game.enemies()[0];float time=game.elapsed();
  InputState moving{};moving.forward=true;moving.fire=true;moving.mouseDx=100;
  for(int i=0;i<120;++i)game.update(moving,1.f/60.f);
  if(game.elapsed()!=time||game.player().pools!=before.pools||game.player().health!=before.health||game.player().angle!=before.angle||lengthSq(game.player().pos-before.pos)>0||lengthSq(game.enemies()[0].pos-enemy.pos)>0||!game.sounds().empty())return false;
- game.update({},.02f);InputState down{};down.menuDown=true;game.update(down,.02f);game.update({},.02f);
- InputState left{};left.menuLeft=true;game.update(left,.02f);if(std::fabs(game.settings().master-.95f)>.001f)return false;
- game.update({},.02f);game.update(escape,.02f);if(game.paused())return false;
+ // PAUSE -> SETTINGS (AUDIO) -> the rows: left lowers the master volume a step; Esc, Esc, Esc resumes.
+ auto key=[&](bool InputState::* k){InputState i{};i.*k=true;game.update(i,.02f);game.update({},.02f);};
+ game.update({},.02f);key(&InputState::menuDown);if(game.menuSelection()!=PauseSettings)return false;
+ key(&InputState::menuAccept);if(game.menuPage()!=MenuPage::Options)return false;
+ key(&InputState::menuRight);key(&InputState::menuLeft);if(std::fabs(game.settings().master-.95f)>.001f)return false;
+ key(&InputState::escape);key(&InputState::escape);if(game.menuPage()!=MenuPage::Pause||!game.paused())return false;
+ game.update(escape,.02f);if(game.paused())return false;
  moving.forward=false;moving.mouseDx=0;game.update(moving,.02f);if(game.player().pools!=before.pools)return false;
  game.update({},.02f);game.update(moving,.02f);if(game.player().pool(WeaponId::Shotgun).total!=before.pool(WeaponId::Shotgun).total-1)return false;
  game.update(escape,.02f);if(!game.paused())return false;game.update({},.02f);
- InputState click{};click.pointerX=MenuLayout::SliderX;click.pointerY=MenuLayout::RowTop+2*MenuLayout::RowHeight+5;click.fire=true;game.update(click,.02f);if(game.settings().music!=0)return false;
+ // Into SETTINGS by the pointer: the music slider pressed at its left end.
+ auto clickAt=[&](int x,int y){game.update({},.02f);InputState i{};i.pointerX=x;i.pointerY=y;i.fire=true;game.update(i,.02f);i.fire=false;game.update(i,.02f);};
+ clickAt(PauseMenuLayout::X+40,PauseMenuLayout::rowY(PauseSettings,false)+8);if(game.menuPage()!=MenuPage::Options||game.settingsTab()!=SettingsTab::Audio)return false;
+ InputState click{};click.pointerX=SettingsLayout::SliderX;click.pointerY=SettingsLayout::rowY(1)+8;click.fire=true;game.update(click,.02f);if(game.settings().music!=0)return false;
  auto settingsPath=(std::filesystem::current_path()/"settings-roundtrip.ini").wstring();game.saveSettings(settingsPath);Game restored;restored.loadSettings(settingsPath);
  if(std::fabs(restored.settings().master-.95f)>.001f||restored.settings().music!=0)return false;
  // Hold the handle, leave its row, then release: the original slider owns the drag.
- click.pointerX=MenuLayout::SliderX+MenuLayout::SliderWidth/2;click.pointerY=MenuLayout::RowTop+4*MenuLayout::RowHeight;game.update(click,.02f);
- if(std::fabs(game.settings().music-.493333f)>.02f||game.menuSelection()!=2)return false;
- click.pointerX=MenuLayout::SliderX+MenuLayout::SliderWidth+40;game.update(click,.02f);if(game.settings().music!=1)return false;
- click.fire=false;game.update(click,.02f);click.pointerX=MenuLayout::SliderX;game.update(click,.02f);if(game.settings().music!=1)return false;
- click.fire=true;
+ click.pointerX=SettingsLayout::SliderX+SettingsLayout::SliderWidth/2;click.pointerY=SettingsLayout::rowY(3)+4;game.update(click,.02f);
+ if(std::fabs(game.settings().music-.5f)>.02f||game.menuSelection()!=1)return false;
+ click.pointerX=SettingsLayout::SliderX+SettingsLayout::SliderWidth+40;game.update(click,.02f);if(game.settings().music!=1)return false;
+ click.fire=false;game.update(click,.02f);click.pointerX=SettingsLayout::SliderX;game.update(click,.02f);if(game.settings().music!=1)return false;
  // Mouse settings must change actual aiming, independent of frame rate.
  auto normal=validationScene(Enemy::Kind::Huntsman,3),inverted=normal;inverted.m_settings.sensitivity=2;inverted.m_settings.invertMouse=true;
  InputState aim{};aim.mouseDx=10;aim.mouseDy=10;normal.update(aim,.02f);inverted.update(aim,.02f);
@@ -252,38 +232,40 @@ bool Game::testSettings(){
  if(std::fabs(looking.player().pitch-210.f)>.001f)return false;
  aim.mouseDy=100000;looking.update(aim,.02f);
  if(std::fabs(looking.player().pitch+210.f)>.001f)return false;
- for(int row=1;row<=4;++row){game.update({},.02f);click.fire=true;click.pointerX=MenuLayout::SliderX+15;click.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+9;game.update(click,.02f);
-  click.pointerX=MenuLayout::SliderX+60;click.pointerY+=50;game.update(click,.02f);
-  float value=row==1?game.settings().master:row==2?game.settings().music:row==3?game.settings().effects:game.settings().sensitivity;
-  if(std::fabs(value-(row==4?2.44f:.8f))>.001f||game.menuSelection()!=row)return false;
-  click.fire=false;game.update(click,.02f);
- }
- // Lens sliders run 0-200 %: dragging 60 of 75 px sets 1.6x, and the value
- // survives a settings save and load.
- for(int row:{6,7}){game.update({},.02f);click.fire=true;click.pointerX=MenuLayout::SliderX+60;click.pointerY=MenuLayout::RowTop+row*MenuLayout::RowHeight+9;game.update(click,.02f);
-  float value=row==6?game.settings().depthOfField:game.settings().lensEffects;
-  if(std::fabs(value-1.6f)>.001f||game.menuSelection()!=row)return false;
-  click.fire=false;game.update(click,.02f);
- }
+ // Each slider dragged from 15 px to 60 px along: AUDIO's three volumes, then CONTROLS' sensitivity.
+ const float at60=60.f/SettingsLayout::SliderWidth;
+ auto drag=[&](int row){game.update({},.02f);InputState d{};d.fire=true;d.pointerX=SettingsLayout::SliderX+15;d.pointerY=SettingsLayout::rowY(row)+8;game.update(d,.02f);
+  d.pointerX=SettingsLayout::SliderX+60;d.pointerY+=50;game.update(d,.02f);const bool held=game.menuSelection()==row;d.fire=false;game.update(d,.02f);return held;};
+ for(int row=0;row<3;++row){if(!drag(row))return false;const float value=row==0?game.settings().master:row==1?game.settings().music:game.settings().effects;if(std::fabs(value-at60)>.001f)return false;}
+ clickAt(SettingsLayout::TabX+20,SettingsLayout::tabY(int(SettingsTab::Controls))+6);if(game.settingsTab()!=SettingsTab::Controls)return false;
+ if(!drag(0)||std::fabs(game.settings().sensitivity-(.2f+2.8f*at60))>.001f)return false;
+ // VIDEO's lens sliders run 0-200 %, and the values survive a settings save and load.
+ clickAt(SettingsLayout::TabX+20,SettingsLayout::tabY(int(SettingsTab::Video))+6);
+ for(int row:{1,2}){if(!drag(row))return false;const float value=row==1?game.settings().depthOfField:game.settings().lensEffects;if(std::fabs(value-2*at60)>.001f)return false;}
  {auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-test.txt";game.saveSettings(path.wstring());Game reloaded;reloaded.loadSettings(path.wstring());
   std::error_code error;std::filesystem::remove(path,error);
-  if(std::fabs(reloaded.settings().depthOfField-1.6f)>.001f||std::fabs(reloaded.settings().lensEffects-1.6f)>.001f)return false;}
- // The pull highlight row toggles SUBTLE / NONE on a click, and NONE survives a save and load.
- {game.update({},.02f);click.fire=true;click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+8*MenuLayout::RowHeight+5;game.update(click,.02f);
-  if(game.settings().pullHighlight!=0||game.menuSelection()!=8)return false;
+  if(std::fabs(reloaded.settings().depthOfField-2*at60)>.001f||std::fabs(reloaded.settings().lensEffects-2*at60)>.001f)return false;}
+ // GAMEPLAY: the pull highlight row toggles SUBTLE / NONE on a click, and NONE survives a save and load.
+ clickAt(SettingsLayout::TabX+20,SettingsLayout::tabY(int(SettingsTab::Gameplay))+6);
+ {clickAt(SettingsLayout::RowX+30,SettingsLayout::rowY(0)+6);
+  if(game.settings().pullHighlight!=0||game.menuSelection()!=0)return false;
   auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-highlight.txt";game.saveSettings(path.wstring());Game reloaded;reloaded.loadSettings(path.wstring());
   std::error_code error;std::filesystem::remove(path,error);if(reloaded.settings().pullHighlight!=0)return false;
-  click.fire=false;game.update(click,.02f);game.update({},.02f);click.fire=true;game.update(click,.02f);if(game.settings().pullHighlight!=1)return false;click.fire=false;game.update(click,.02f);}
- click.fire=true;
- game.update({},.02f);click.pointerX=MenuLayout::X+30;click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);
- if(game.menuPage()!=MenuPage::ConfirmRestart||!game.paused())return false;
- game.update({},.02f);click.pointerY=MenuLayout::RowTop+0*MenuLayout::RowHeight+5;game.update(click,.02f);if(game.menuPage()!=MenuPage::Settings)return false;
- game.update({},.02f);click.pointerY=MenuLayout::RowTop+9*MenuLayout::RowHeight+5;game.update(click,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+1*MenuLayout::RowHeight+5;game.update(click,.02f);
- if(game.paused()||game.player().health!=100)return false;
- InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+12*MenuLayout::RowHeight+5;game.update(click,.02f);
+  clickAt(SettingsLayout::RowX+30,SettingsLayout::rowY(0)+6);if(game.settings().pullHighlight!=1)return false;}
+ // BACK to PAUSE; RESTART asks twice, then the game starts over.
+ clickAt(SettingsLayout::TabX+20,SettingsLayout::tabY(int(SettingsTab::Count))+6);
+ if(game.menuPage()!=MenuPage::Pause||!game.paused()||!game.takeSettingsSave())return false;
+ game.m_player.health=40;
+ clickAt(PauseMenuLayout::X+40,PauseMenuLayout::rowY(PauseRestart,false)+8);if(!game.paused()||game.menuArmed()!=PauseRestart||game.player().health!=40)return false;
+ clickAt(PauseMenuLayout::X+40,PauseMenuLayout::rowY(PauseRestart,false)+8);if(game.paused()||game.player().health!=100)return false;
+ // QUIT TO TITLE asks twice too.
+ InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);
+ clickAt(PauseMenuLayout::X+40,PauseMenuLayout::rowY(PauseQuit,false)+8);if(game.titleScreen())return false;
+ clickAt(PauseMenuLayout::X+40,PauseMenuLayout::rowY(PauseQuit,false)+8);
  if(!game.titleScreen()||game.quitRequested())return false;
  game.update({},.02f);game.m_titleSelection=TitleQuit;InputState quit{};quit.menuAccept=true;game.update(quit,.02f);if(!game.quitRequested())return false;
- std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";
+ {std::ofstream menuReport("settings-menu-test.txt");if(!testSettingsMenu(menuReport))return false;}
+ std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, PAUSE and SETTINGS pages, restart and quit confirmations, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";
  return true;
 }
 }
