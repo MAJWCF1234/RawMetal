@@ -3,6 +3,22 @@
 #include <windowsx.h>
 #include "../core/PackedResource.h"
 namespace retro {
+namespace {
+// A controller through XInput, loaded at run time (no import library): the menus' D-pad and left stick, A to choose,
+// B back (in menus), Start for the pause menu, and back/view held for a match's scoreboard. A pad that is not there
+// is asked again once a second (XInputGetState on an empty port is slow).
+struct PadState{bool connected=false;unsigned short buttons=0;short lx=0,ly=0;};
+PadState readPad(){
+ using GetState=DWORD(WINAPI*)(DWORD,void*);
+ static GetState get=[]()->GetState{for(const wchar_t* name:{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"})if(HMODULE module=LoadLibraryW(name))if(FARPROC f=GetProcAddress(module,"XInputGetState"))return reinterpret_cast<GetState>(reinterpret_cast<void*>(f));return nullptr;}();
+ static DWORD nextTry=0;static bool present=false;
+ PadState pad;if(!get)return pad;
+ const DWORD now=GetTickCount();if(!present&&now<nextTry)return pad;
+ struct{DWORD packet;WORD buttons;BYTE leftTrigger,rightTrigger;SHORT lx,ly,rx,ry;}state{};
+ present=get(0,&state)==0;if(!present){nextTry=now+1000;return pad;}
+ pad.connected=true;pad.buttons=state.buttons;pad.lx=state.lx;pad.ly=state.ly;return pad;
+}
+}
 RECT Win32Window::viewport(int clientWidth,int clientHeight){
  float scale=std::min(float(clientWidth)/DisplayWidth,float(clientHeight)/DisplayHeight);
  if(scale>=1)scale=std::floor(scale);
@@ -49,7 +65,10 @@ InputState Win32Window::input(bool menuOpen){
  setMenu(menuOpen);InputState i{};i.textInput=std::move(m_textInput);m_textInput.clear();if(!focused()){i.textInput.clear();return i;}
  auto key=[](int value){return (GetAsyncKeyState(value)&0x8000)!=0;};
  i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.prone=key('Z');i.fire=key(VK_LBUTTON);i.reload=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');i.flashlight=key('F');i.subdue=key('Q');i.physglove=key('G');
- i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);
+ i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);i.scoreboard=key(VK_TAB);
+ {const PadState pad=readPad();if(pad.connected){const auto b=pad.buttons;const int dead=16000;
+  i.menuUp|=(b&0x0001)||pad.ly>dead;i.menuDown|=(b&0x0002)||pad.ly<-dead;i.menuLeft|=(b&0x0004)||pad.lx<-dead;i.menuRight|=(b&0x0008)||pad.lx>dead;
+  i.escape|=(b&0x0010)!=0||(menuOpen&&(b&0x2000));i.scoreboard|=(b&0x0020)!=0;i.menuAccept|=menuOpen&&(b&0x1000);}}
   i.guard=key(VK_RBUTTON);i.rotateProp=key(VK_MBUTTON);
  for(int digit=1;digit<=4;++digit)if(key('0'+digit))i.choice=digit;
  i.console=key(VK_OEM_3);

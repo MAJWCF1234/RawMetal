@@ -91,6 +91,7 @@ add_executable(RawMetal WIN32
     net/Match.cpp
     game/MultiplayerMenu.cpp
     renderer/RemotePlayers.cpp
+    renderer/FrontEnd.cpp
     game/VrHands.cpp
     game/Liquids.cpp
     game/physics/Vectra.cpp

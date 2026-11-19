@@ -1,0 +1,10 @@
+# Other players in the regression room, a match's HUD over them, and the title's multiplayer pages.
+# Tubes: multiplayer-ui.
+world room
+camera 12 6.4 -999 90 -8
+light 12 10.5 3.2 1.5 10
+light 9 8 3.2 0.9 8
+light 15 8 3.2 0.9 8
+hud on
+size 640 360
+frames 40

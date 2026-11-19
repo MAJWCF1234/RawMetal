@@ -43,6 +43,7 @@ void Game::loadCustomCampaignDirectory(std::wstring directory){
 }
 void Game::showTitleScreen(){
     m_titleScreen=true;m_titleSelection=0;m_customMenuOffset=0;m_titlePrevious={};m_menuFromTitle=false;m_customMapsOpen=false;
+    m_titlePage=TitlePage::Main;m_titleNotice.clear();
     m_paused=false;m_inventoryOpen=false;m_consoleOpen=false;m_menuPage=MenuPage::Settings;
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
@@ -475,6 +476,8 @@ void Game::update(const InputState& input, float dt) {
     if(m_pendingMainCampaign)startMainCampaign();
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
     bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
+    m_scoreboardHeld=input.scoreboard&&m_matchView.active&&!m_titleScreen;
+    drainSessionEvents();   // the menus own the session's events (MultiplayerMenu.cpp)
     if(m_titleScreen){updateTitle(input);return;}
     if(m_peaceful){m_enemies.clear();for(auto&chunk:m_chunks)chunk.enemies.clear();}
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;

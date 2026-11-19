@@ -30,7 +30,9 @@ void Game::startCustomCampaign(std::shared_ptr<const CustomCampaign> campaign){
 }
 void Game::updateTitle(const InputState& input){
  auto pressed=[](bool now,bool previous){return now&&!previous;};
- if(m_customMapsOpen&&pressed(input.escape,m_titlePrevious.escape)){m_customMapsOpen=false;m_titleSelection=1;m_titlePrevious=input;return;}
+ // The multiplayer pages have their own rows (MultiplayerMenu.cpp).
+ if(m_titlePage!=TitlePage::Main&&!m_customMapsOpen){updateMultiplayerMenu(input);m_titlePrevious=input;return;}
+ if(m_customMapsOpen&&pressed(input.escape,m_titlePrevious.escape)){m_customMapsOpen=false;m_titleSelection=TitleCustomMaps;m_titlePrevious=input;return;}
  int titleRowCount=titleRows();
  if(m_customMapsOpen){
   int total=customMenuItemCount();
@@ -49,22 +51,27 @@ void Game::updateTitle(const InputState& input){
   if(pressed(input.menuUp,m_titlePrevious.menuUp))m_titleSelection=(m_titleSelection+titleRowCount-1)%titleRowCount;
   if(pressed(input.menuDown,m_titlePrevious.menuDown))m_titleSelection=(m_titleSelection+1)%titleRowCount;
  }
- bool inside=input.pointerX>=TitleMenuLayout::X&&input.pointerX<TitleMenuLayout::X+TitleMenuLayout::Width&&
-             input.pointerY>=TitleMenuLayout::Y&&input.pointerY<TitleMenuLayout::Y+titleRowCount*TitleMenuLayout::RowHeight;
+ // The pointer: the archive's rows are evenly spaced; the main menu's come in groups (TitleMenuLayout::rowAt).
+ const bool across=input.pointerX>=TitleMenuLayout::X-14&&input.pointerX<TitleMenuLayout::X+TitleMenuLayout::Width;
+ int under=-1;
+ if(across&&m_customMapsOpen){if(input.pointerY>=TitleMenuLayout::Y&&input.pointerY<TitleMenuLayout::Y+titleRowCount*TitleMenuLayout::RowHeight)under=(input.pointerY-TitleMenuLayout::Y)/TitleMenuLayout::RowHeight;}
+ else if(across)under=TitleMenuLayout::rowAt(input.pointerY);
+ const bool inside=under>=0&&under<titleRowCount;
  bool click=pressed(input.fire,m_titlePrevious.fire);
- if(inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_titleSelection=(input.pointerY-TitleMenuLayout::Y)/TitleMenuLayout::RowHeight;
+ if(inside&&(input.pointerX!=m_pointerX||input.pointerY!=m_pointerY||click))m_titleSelection=under;
  m_pointerX=input.pointerX;m_pointerY=input.pointerY;
  bool activate=pressed(input.menuAccept,m_titlePrevious.menuAccept)||(inside&&click);
  if(activate&&m_customMapsOpen){
   int item=customMenuLogicalIndex(m_titleSelection);
   if(item>=0&&item<int(m_customCampaigns.size()))selectCustomCampaign(item);
-  else {m_customMapsOpen=false;m_customMenuOffset=0;m_titleSelection=1;}
+  else {m_customMapsOpen=false;m_customMenuOffset=0;m_titleSelection=TitleCustomMaps;}
  }else if(activate){
-  if(m_titleSelection==0)startNewGame();
-  else if(m_titleSelection==1){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);m_customMapsOpen=true;m_customMenuOffset=0;m_titleSelection=0;}
-  else if(m_titleSelection==2){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
-  else if(m_titleSelection==3){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
-  else if(m_titleSelection==4)m_quitRequested=true;
+  if(m_titleSelection==TitleNewGame)startNewGame();
+  else if(m_titleSelection==TitleCustomMaps){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);m_customMapsOpen=true;m_customMenuOffset=0;m_titleSelection=0;}
+  else if(m_titleSelection==TitleLoadGame){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Load;m_menuSelection=0;m_menuMessage.clear();refreshSaveSlots();m_menuPrevious=input;}
+  else if(m_titleSelection==TitleMultiplayer){if(!m_customMapDirectory.empty())loadCustomCampaignDirectory(m_customMapDirectory);openTitlePage(TitlePage::Multiplayer);}
+  else if(m_titleSelection==TitleSettings){m_titleScreen=false;m_menuFromTitle=true;m_paused=true;m_menuPage=MenuPage::Settings;m_menuSelection=1;m_menuMessage.clear();m_menuPrevious=input;}
+  else if(m_titleSelection==TitleQuit)m_quitRequested=true;
  }
  m_titlePrevious=input;
 }
@@ -142,6 +149,9 @@ void Game::updateMenu(const InputState& input){
  // The Physgloves target's outline: SUBTLE or NONE (the reticle still tightens on a prop either way).
  if(m_menuSelection==8&&(activate||direction))m_settings.pullHighlight=m_settings.pullHighlight?0:1;
  if(activate&&m_menuSelection==0){if(m_menuFromTitle){showTitleScreen();m_titlePrevious=input;}else {m_paused=false;m_suppressFire=true;}}
+ // In a match there is nothing to restart, save or load: the rows are greyed, and the last row leaves the match.
+ if(m_matchView.active&&activate&&m_menuSelection>=9&&m_menuSelection<=11){activate=false;m_menuMessage="NOT DURING A MATCH";}
+ if(m_matchView.active&&activate&&m_menuSelection==12){leaveMatch();m_titlePrevious=input;m_menuPrevious=input;return;}
  if(activate&&m_menuSelection==9){m_menuPage=MenuPage::ConfirmRestart;m_menuSelection=0;m_menuMessage.clear();}
  if(activate&&(m_menuSelection==10||m_menuSelection==11)){m_menuPage=m_menuSelection==10?MenuPage::Save:MenuPage::Load;m_menuSelection=0;m_dragSlider=-1;m_menuMessage.clear();refreshSaveSlots();}
  // Returning to the title hands it the input that chose it: a click or key
@@ -162,13 +172,15 @@ void Game::loadSettings(const std::wstring& path){
  float turn=1,vignette=.5f,scale=0;int seated=0,lefty=0,rate=0;
  if(file>>turn>>vignette>>seated>>lefty>>rate>>scale&&std::isfinite(turn)&&std::isfinite(vignette)&&std::isfinite(scale)){
   settings.vrTurnSpeed=std::clamp(turn,.25f,2.f);settings.vrVignette=std::clamp(vignette,0.f,1.f);settings.vrSeated=seated!=0;settings.vrLeftHanded=lefty!=0;settings.vrFrameRate=rate!=0;
-  settings.vrRenderScale=scale<.6f?0.f:std::clamp(scale,.6f,1.f);}
+  settings.vrRenderScale=scale<.6f?0.f:std::clamp(scale,.6f,1.f);
+  // The multiplayer body came last (0 Claire, 1 the Limitator).
+  int character=0;if(file>>character)settings.character=std::clamp(character,0,1);}
  m_settings=settings;
 }
 void Game::saveSettings(const std::wstring& path)const{
  std::error_code error;auto filePath=std::filesystem::path(path);std::filesystem::create_directories(filePath.parent_path(),error);if(error)return;
  std::ofstream file(filePath);file<<m_settings.master<<' '<<m_settings.music<<' '<<m_settings.effects<<' '<<m_settings.sensitivity<<' '<<int(m_settings.invertMouse)<<' '<<m_settings.depthOfField<<' '<<m_settings.lensEffects<<' '<<m_settings.pullHighlight
-  <<' '<<m_settings.vrTurnSpeed<<' '<<m_settings.vrVignette<<' '<<int(m_settings.vrSeated)<<' '<<int(m_settings.vrLeftHanded)<<' '<<int(m_settings.vrFrameRate)<<' '<<m_settings.vrRenderScale<<'\n';
+  <<' '<<m_settings.vrTurnSpeed<<' '<<m_settings.vrVignette<<' '<<int(m_settings.vrSeated)<<' '<<int(m_settings.vrLeftHanded)<<' '<<int(m_settings.vrFrameRate)<<' '<<m_settings.vrRenderScale<<' '<<m_settings.character<<'\n';
 }
 // The VR COMFORT page: reached from the settings' row 5 in VR only, each row changes its setting, the values
 // survive a save and load, and an older settings file keeps the defaults.
@@ -270,7 +282,7 @@ bool Game::testSettings(){
  if(game.paused()||game.player().health!=100)return false;
  InputState reopen{};reopen.escape=true;game.update(reopen,.02f);game.update({},.02f);click.pointerY=MenuLayout::RowTop+12*MenuLayout::RowHeight+5;game.update(click,.02f);
  if(!game.titleScreen()||game.quitRequested())return false;
- game.update({},.02f);game.m_titleSelection=4;InputState quit{};quit.menuAccept=true;game.update(quit,.02f);if(!game.quitRequested())return false;
+ game.update({},.02f);game.m_titleSelection=TitleQuit;InputState quit{};quit.menuAccept=true;game.update(quit,.02f);if(!game.quitRequested())return false;
  std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, restart confirmation, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";
  return true;
 }
