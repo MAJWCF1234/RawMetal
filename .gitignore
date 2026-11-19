@@ -66,3 +66,6 @@ selftest-*.txt
 # Paid skybox PNG masters (re-import via tools/library/register_skyboxes.py)
 src/assets/Skyboxes/Brutal/*.png
 
+
+# EOS credentials (the repo is public; baked into the exe at build time)
+src/ThirdParty/EOS/eos_config.json
