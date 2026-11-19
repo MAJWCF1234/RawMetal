@@ -9,6 +9,7 @@ Changelog of shipped updates. Newest first. Each section is one release.
 A small fix for something players said shone too brightly.
 
 - **No more orange.** What the Physgloves are about to pull no longer burns orange. A thin, cold line traces its edge and breathes slowly, and the crosshair draws in a little; nothing else around it lights up. Settings has a Pull Highlight row to make it subtle or turn it off.
+- **The headset is seen again.** Since 1.0.4 the game looked for Steam under a misspelled registry key, so it never saw SteamVR and never asked "Play on PC or in VR". Double-click the game with SteamVR running and the headset connected, and the choice is back. It now also finds SteamVR installed in a second Steam library, and every launch writes what it found, and why, to RawMetal-vr.txt.
 
 Verified with tools/release/ship.py and the feature lab's Physgloves and settings tubes.
 
