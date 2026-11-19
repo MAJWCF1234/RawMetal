@@ -71,7 +71,7 @@ Nothing below Session knows about the game. Nothing in the game knows about EOS.
 
 ## State kept network-friendly
 
-- `AvatarPose` is sent as it is for VR players. `solveAvatar` is pure, so a remote body poses the same as the local one.
+- `AvatarPose` is sent as it is for VR players. `solveAvatar` is pure, so a remote body poses the same as the local one. Its hand, back and hip slots (WeaponId+1, the MAC-11 is 4) take three bits each.
 - `RemotePlayer::character` picks the body: 0 Claire, 1 the Limitator.
 
 ## The Match (src/net/Match.cpp, MatchPlay.cpp)

@@ -33,8 +33,9 @@ void writePlayerState(wire::Writer& w,const NetPlayerState& s,Vec2 o,bool withHe
  const auto& p=s.pose;
  writeVec(w,p.head,4096);w.angle(p.headYaw).q16(p.headPitch,10000).angle(p.bodyYaw);writeVec(w,p.root,4096);
  w.u8(unsigned(std::clamp(int(std::lround(p.eye*100)),0,255))).u8(unsigned(std::lround(std::fmod(std::fabs(p.gait),kTwoPi)/kTwoPi*255)));
- w.u8((p.crouched?1u:0u)|(p.prone?2u:0u)|(p.grounded?4u:0u)|(p.support?8u:0u)|(p.gunSide?16u:0u)|(p.active?32u:0u));
- w.u8((p.inHand&3u)|((p.back&3u)<<2)|((p.hip&3u)<<4)).u8(unsigned(std::clamp(int(std::lround(p.pump*1000)),0,255))).unit8(p.reload);
+ // Slots hold WeaponId+1 (the MAC-11 is 4): three bits each, the hip's top bit in the flags byte.
+ w.u8((p.crouched?1u:0u)|(p.prone?2u:0u)|(p.grounded?4u:0u)|(p.support?8u:0u)|(p.gunSide?16u:0u)|(p.active?32u:0u)|((p.hip&4u)<<4));
+ w.u8((p.inHand&7u)|((p.back&7u)<<3)|((p.hip&3u)<<6)).u8(unsigned(std::clamp(int(std::lround(p.pump*1000)),0,255))).unit8(p.reload);
  for(const auto& h:p.hands){w.u8(h.tracked?1:0);writeVec(w,h.wrist,4096);writeUnit(w,h.forward);writeUnit(w,h.palm);for(float c:h.curls)w.unit8(c);}
 }
 bool readPlayerState(wire::Reader& r,NetPlayerState& s,bool withHealth){
@@ -49,7 +50,7 @@ bool readPlayerState(wire::Reader& r,NetPlayerState& s,bool withHealth){
   p.head=readVec(r,4096);p.headYaw=r.angle();p.headPitch=r.q16(10000);p.bodyYaw=r.angle();p.root=readVec(r,4096);
   p.eye=float(r.u8())/100.f;p.gait=float(r.u8())/255.f*kTwoPi;
   const unsigned bits=r.u8();p.crouched=bits&1;p.prone=bits&2;p.grounded=bits&4;p.support=bits&8;p.gunSide=std::uint8_t(bits&16?1:0);p.active=bits&32;
-  const unsigned slots=r.u8();p.inHand=std::uint8_t(slots&3);p.back=std::uint8_t(slots>>2&3);p.hip=std::uint8_t(slots>>4&3);p.pump=float(r.u8())/1000.f;p.reload=r.unit8();
+  const unsigned slots=r.u8();p.inHand=std::uint8_t(slots&7);p.back=std::uint8_t(slots>>3&7);p.hip=std::uint8_t((slots>>6&3)|(bits>>4&4));p.pump=float(r.u8())/1000.f;p.reload=r.unit8();
   for(auto& h:p.hands){h.tracked=r.u8()!=0;h.wrist=readVec(r,4096);h.forward=readUnit(r);h.palm=readUnit(r);for(float& c:h.curls)c=r.unit8();}
   p.velocity=s.velocity;
  }

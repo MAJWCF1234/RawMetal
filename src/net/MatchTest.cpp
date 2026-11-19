@@ -450,12 +450,12 @@ bool Match::selfTest(std::ostream& report){
  }
  // ===== A VR player's state survives the wire =====
  {NetPlayerState s;s.level=0;s.world={5.25f,7.5f,.25f};s.angle=1.f;s.pitch=-.3f;s.vr=true;s.weapon=2;s.shots=7;s.life=3;s.health=64;
-  s.pose.active=true;s.pose.head={.1f,-.05f,1.5f};s.pose.headYaw=1.1f;s.pose.headPitch=-.2f;s.pose.bodyYaw=.9f;s.pose.eye=1.48f;s.pose.inHand=3;s.pose.support=true;
+  s.pose.active=true;s.pose.head={.1f,-.05f,1.5f};s.pose.headYaw=1.1f;s.pose.headPitch=-.2f;s.pose.bodyYaw=.9f;s.pose.eye=1.48f;s.pose.inHand=4;s.pose.back=2;s.pose.hip=4;s.pose.support=true;
   s.pose.hands[1].tracked=true;s.pose.hands[1].wrist={.3f,-.2f,1.1f};s.pose.hands[1].forward={1,0,0};s.pose.hands[1].curls={0,.5f,1,1,1};
   wire::Writer w;writePlayerState(w,s,{},true);wire::Reader r(w.b);NetPlayerState t;const bool read=readPlayerState(r,t,true);
   auto near=[](Point3 a,Point3 b,float e){return std::fabs(a.x-b.x)<e&&std::fabs(a.y-b.y)<e&&std::fabs(a.z-b.z)<e;};
   check(read&&r.left()==0&&near(t.world,s.world,.005f)&&std::fabs(std::remainder(t.angle-s.angle,kTwoPi))<.001f&&t.vr&&t.weapon==2&&t.shots==7&&t.life==3&&t.health==64
-   &&near(t.pose.head,s.pose.head,.001f)&&t.pose.inHand==3&&t.pose.support&&t.pose.hands[1].tracked&&near(t.pose.hands[1].wrist,s.pose.hands[1].wrist,.001f)&&std::fabs(t.pose.hands[1].curls[1]-.5f)<.01f,
+   &&near(t.pose.head,s.pose.head,.001f)&&t.pose.inHand==4&&t.pose.back==2&&t.pose.hip==4&&t.pose.support&&t.pose.hands[1].tracked&&near(t.pose.hands[1].wrist,s.pose.hands[1].wrist,.001f)&&std::fabs(t.pose.hands[1].curls[1]-.5f)<.01f,
    "a VR player's state and avatar pose come through the wire ("+std::to_string(w.b.size())+" bytes)");}
  // ===== Sizes =====
  const auto snap8=snapshotBytes(8,false),snap8vr=snapshotBytes(8,true),up=guestStateBytes(false),upvr=guestStateBytes(true);
