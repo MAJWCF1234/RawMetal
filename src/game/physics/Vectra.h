@@ -316,7 +316,7 @@ struct Joint:Constraint {
  void prepare(Space&,float h)override;void warmStart(Space&)override;void solve(Space&,float h,bool useBias)override;
  void finish(Space&,float h)override;void project(Space&)override;Joint* joint()override{return this;}
  // Prepared each step.
- struct Prep {float mA=0,mB=0;M3 iA=M3::zero(),iB=M3::zero();M3 pointMass{};M3 turnMass{};float h=1.f/480;} prep;
+ struct Prep {float mA=0,mB=0;M3 iA=M3::zero(),iB=M3::zero();M3 turnMass{};float h=1.f/480;} prep;
 };
 // The mattress chain's springy hinge (the first joint), now a Joint: the two anchors held together, the turn
 // about every axis but the hinge held (soft, lockHertz), and about the hinge a spring of `hertz` (damping

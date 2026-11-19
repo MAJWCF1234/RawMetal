@@ -199,10 +199,18 @@ would cost more than it saved.
   They stay the first line; the sweeps below catch what passes them.
 - A body is **fast** when, in a step, its centre goes or its reach turns (angle times its bounding radius)
   more than half its smallest size (2 cm at least). A plank spinning in place is fast though its middle is
-  still. A body a joint holds (a bridge's plank, a corpse's section, a lamp on its chain) is never fast: put
-  back alone to where it met something it would open its joints by as far as it went, so it is left to its
-  joints and contacts. `RM_CCD=off` turns the whole pass off (to tell what it changes in a check).
+  still. `RM_CCD=off` turns the whole pass off (to tell what it changes in a check).
   `Space::continuous` runs `continuousCollision` (`Queries.cpp`) on each fast body, in index order:
+  - **Jointed islands.** Bodies joined by joints that hold (a corpse's sections, a door on its hinge, a lamp and its
+    chain, a bridge's planks) are swept as one island: the earliest time of impact over every fast body in it puts
+    all of its bodies back to that moment together, each along its own way through the step, so what joins them is as
+    it was then (one put back alone would open its joints by as far as it went). Against the world the one that struck
+    takes the blow; against another body a jointed one takes none there (its partners share it, which only the step's
+    solver knows: a 2 kg plank of a bridge struck alone took a 20 kg crate's landing as if it were loose), and the two,
+    put back a hair apart, meet by their contacts on the next step. A jointed body that strikes nothing at its edges
+    is not put back by its centre's sweep. A six-box ragdoll thrown at 15 m/s at a 3 cm wall, a 20 kg door slammed at
+    15 rad/s into a 3 cm post and a lamp whipped on its chain at 20 m/s at a 3 cm pole stay on their side with their
+    joints together (`vectra-ccd`, 60 and 120 steps a second); with `RM_CCD=off` the door and the lamp go through.
   - **Against the world.** Points along its edges (corners, every 2.5 cm along each edge, a cylinder's rims
     and side lines) are ray cast by `Space::sweep` through the step, in pieces of at most 0.15 rad of its turn.
     Trailing points and points that hardly move are skipped. A point that strikes a surface counts when it
@@ -224,7 +232,8 @@ would cost more than it saved.
 - Glass gets a look-ahead ray along the body's path: a pane it will meet this step is struck with the energy
   of the speed it will arrive at.
 - `vectra-ccd` checks it: a plank spinning at 60 rad/s beside a 3 cm post (the world's and a fixed body), two
-  thin boards and two crates thrown at each other at 25 m/s, a bottle at 30 m/s at a 3 cm wall.
+  thin boards and two crates thrown at each other at 25 m/s, a bottle at 30 m/s at a 3 cm wall, and the jointed
+  islands above.
 
 ## Queries
 
@@ -296,7 +305,9 @@ gives where `softSinkAt` says it does.
 `vectra::Joint` (Vectra.h, `src/game/physics/Joints.cpp`) joins two bodies, or a body and the world (`b = -1`). Its rows are solved
 in the same substeps as the contacts: before them, and once more after them, `Settings::jointIterations` (4) times each pass.
 Locked rows are springs of `jointHertz` (60) with damping ratio `jointDamping` (2), warm started, and relaxed without the bias as
-the contacts are. Limits are one-sided rows: a gap closes within the substep, a pass is pushed out softly.
+the contacts are. Limits are one-sided rows: a gap closes within the substep, a pass is pushed out softly. The anchors'
+row works its effective mass out from the arms as they are at each pass (taken from the step's first arms, a ragdoll's limb
+flung against a wall, turning half a radian in a step, overshot more each pass and blew the body apart).
 
 Each body carries the joint's frame: an anchor (from its centre of mass, unturned) and a turn whose z is the joint's axis.
 `attach` sets both from the bodies as they stand, so the pose they stand in then is the joint's rest.

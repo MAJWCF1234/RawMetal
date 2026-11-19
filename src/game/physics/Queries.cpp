@@ -310,18 +310,27 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
  // RM_CCD=off: none of it (a check's switch, to tell what continuous collision changes).
  static const bool off=[]{const char* v=std::getenv("RM_CCD");return v&&(std::strcmp(v,"off")==0||std::strcmp(v,"0")==0);}();
  if(off){for(auto& b:s.bodies)b.ccd=false;return;}
- // A body a joint holds (a bridge's plank, a corpse's section, a lamp on its chain) is its joints' and its contacts'
- // business, never swept: put back alone to where it met something, against the world or a body, it would open its
- // joints by as far as it went (a crate landing on a bridge pulled its planks 7 cm off their pins).
+ // Bodies joined by joints that hold are swept as one island (a corpse's sections, a door on its hinge, a lamp and its
+ // chain): the island's earliest time of impact, over every fast body in it, puts all of its bodies back to that moment
+ // together, and the blow lands on the one that struck. Put back alone, one body would open its joints by as far as it
+ // went (a crate landing on a bridge pulled its planks 7 cm off their pins); never swept, a thrown corpse or a slammed
+ // door went through a thin wall or post within one step.
  // Pairs the step itself keeps from meeting, or meets its own way, are not the pair pass's either: a time of impact
  // between them would bounce apart what holds them together. Ruled out by the Space's filter or joined by a joint
  // that holds, met by the caller's own contacts (Space::pairContacts: a corpse's skin against its other sections),
  // or soft (a padded prop, a prop going through a corpse: a spring by design, never a wall).
+ std::vector<int> root(static_cast<size_t>(n));for(int i=0;i<n;++i)root[size_t(i)]=i;
+ auto findRoot=[&](int i){while(root[size_t(i)]!=i){root[size_t(i)]=root[size_t(root[size_t(i)])];i=root[size_t(i)];}return i;};
  std::vector<char> held(size_t(n),0);std::vector<std::pair<int,int>> joined;
  for(auto* c:s.constraints){if(auto* j=c->joint();j&&j->broken)continue;const int a=c->bodyA(),b=c->bodyB();
   for(int k:{a,b})if(k>=0&&k<n)held[size_t(k)]=1;
-  if(a>=0&&b>=0&&a!=b)joined.push_back({std::min(a,b),std::max(a,b)});}
+  if(a>=0&&b>=0&&a<n&&b<n&&a!=b){joined.push_back({std::min(a,b),std::max(a,b)});const int ra=findRoot(a),rb=findRoot(b);if(ra!=rb)root[size_t(std::max(ra,rb))]=std::min(ra,rb);}}
  std::sort(joined.begin(),joined.end());
+ // Each island's bodies, in index order (a body no joint holds is an island of its own).
+ std::vector<int> islandStart(size_t(n)+1,0),islandBodies(static_cast<size_t>(n));
+ {for(int i=0;i<n;++i)++islandStart[size_t(findRoot(i))+1];for(int i=0;i<n;++i)islandStart[size_t(i)+1]+=islandStart[size_t(i)];
+  std::vector<int> fill(islandStart.begin(),islandStart.end()-1);for(int i=0;i<n;++i)islandBodies[size_t(fill[size_t(findRoot(i))]++)]=i;}
+ auto membersOf=[&](int i){const int r=findRoot(i);return std::pair<const int*,const int*>{islandBodies.data()+islandStart[size_t(r)],islandBodies.data()+islandStart[size_t(r)+1]};};
  std::vector<Manifold> scratch;
  auto apart=[&](int a,int b){if(a>b)std::swap(a,b);
   if(s.filter&&!s.filter(s,a,b))return true;
@@ -336,7 +345,7 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
   // Fast for its size: it could cross something thinner than itself within this step, by going or by turning
   // (a plank's end sweeps far while its middle hardly moves).
   float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto& part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box||part.kind==PartKind::Hull?std::min({part.half.x,part.half.y,part.half.z}):part.kind==PartKind::Capsule?part.half.x:std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
-  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;if(!b.movable()||held[size_t(i)])continue;
+  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;if(!b.movable())continue;
   b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
  const float target=2*s.settings.linearSlop;std::vector<V3> probes;std::vector<ProbeHit> hits;
  // Every body's swept box along x, sorted once: a fast body meets only those whose boxes reach its own (400 resting props
@@ -345,10 +354,10 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
  if(std::find(fast.begin(),fast.end(),char(1))!=fast.end())for(int j=0;j<n;++j){const Body& o=s.bodies[size_t(j)];if(!o.shape)continue;const Motion& mo=motion[size_t(j)];const float r=o.shape->bound;
   const float lo=std::min(mo.x0.x,mo.x1.x)-r,hi=std::max(mo.x0.x,mo.x1.x)+r;byX.push_back({lo,j});widest=std::max(widest,hi-lo);}
  std::sort(byX.begin(),byX.end());
- for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
-  Event best;
+ // What body i meets first this step: the world at its edges, then the other bodies (the time two moving, turning shapes
+ // first meet).
+ auto earliest=[&](int i,Event& best){Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
   if(s.sweep)worldProbes(s,i,m,probes,hits,best);
-  // Other bodies: the time two moving, turning shapes first meet.
   const float rb=b.shape->bound;
   const V3 sweptLo=V3{std::min(m.x0.x,m.x1.x),std::min(m.x0.y,m.x1.y),std::min(m.x0.z,m.x1.z)}-V3{rb,rb,rb},sweptHi=V3{std::max(m.x0.x,m.x1.x),std::max(m.x0.y,m.x1.y),std::max(m.x0.z,m.x1.z)}+V3{rb,rb,rb};
   near.clear();for(auto it=std::lower_bound(byX.begin(),byX.end(),std::make_pair(sweptLo.x-widest-.01f,-1));it!=byX.end()&&it->first<=sweptHi.x+.01f;++it)near.push_back(it->second);
@@ -363,37 +372,56 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
    // (Touching when the step began: the contacts' business. Stopped by its speculative contacts: met at the step's
    // very end, closing no more, and so left as it is.)
    float t;V3 point,normal;if(!timeOfImpact(b,m,o,mo,target,t,point,normal)||t>=best.t)continue;
-   best={t,2,j,point,normal};}
+   best={t,2,j,point,normal};}};
+ // Back to the moment t: every movable body of i's island together (each along its own way through the step, so what
+ // joins them is as it was then), moved on by `shift` (off what was struck). Each one's way now ends there (later
+ // bodies meet that).
+ auto rewind=[&](int i,float t,V3 shift){const auto [first,last]=membersOf(i);
+  for(const int* it=first;it!=last;++it){const int k=*it;Body& o=s.bodies[size_t(k)];if(!o.shape||!o.movable()||done[size_t(k)])continue;Motion& mo=motion[size_t(k)];
+   mo.at(t,o.x,o.q);o.updateInertia();o.x=o.x+shift;mo.x1=o.x;mo.q1=o.q;mo.begin();done[size_t(k)]=1;}};
+ auto finished=[&](int i){const auto [first,last]=membersOf(i);for(const int* it=first;it!=last;++it)done[size_t(*it)]=1;};
+ for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;
+  // The island's first impact over its fast bodies (a body alone: its own).
+  int si=i;Event best;
+  {const auto [first,last]=membersOf(i);
+   for(const int* it=first;it!=last;++it){const int k=*it;if(!fast[size_t(k)]||done[size_t(k)])continue;Event e;e.t=best.t;earliest(k,e);if(e.kind!=0&&e.t<best.t){best=e;si=k;}}}
+  Body& b=s.bodies[size_t(si)];Motion& m=motion[size_t(si)];
   if(best.kind==0){
    // Nothing at its edges: its centre's way still (as before the probes): back to where the centre meets a
-   // surface, resting its own reach off it, its way into it taken out.
+   // surface, resting its own reach off it, its way into it taken out. (A body a joint holds is left to its probes:
+   // its centre put back alone would open its joints.)
+   if(held[size_t(i)]){finished(i);continue;}
    if(!s.sweep||len(m.x1-m.x0)<=thresholds[size_t(i)])continue;V3 nn;const float t=s.sweep(s,i,m.x0,m.x1,nn);if(t>=1||t<=0)continue;   // (starting in something: the contacts' business)
    float extent=0;for(int p=0;p<b.shape->count;++p)extent=std::max(extent,dot(b.x-support(b,p,neg(nn)),nn));
    b.x=m.x0+(m.x1-m.x0)*t+nn*extent;const float vn=dot(b.v,nn);if(vn<0)b.v=b.v-nn*(vn*(1+b.material.restitution));
    m.x1=b.x;m.q1=b.q;m.begin();done[size_t(i)]=1;continue;}   // its way now ends where it was put (later bodies meet that)
   const float e=best.kind==1?b.material.restitution:Material::mix(b.material,s.bodies[size_t(best.other)].material).restitution;
-  ContactEvent ev;ev.a=i;ev.b=best.kind==1?-1:best.other;
+  ContactEvent ev;ev.a=si;ev.b=best.kind==1?-1:best.other;
   if(best.kind==1){
-   // Back to where the probe met the world, a millimetre off it; its way into it taken out at that point (a corner
-   // striking a post turns the body, not only stops it).
-   m.at(best.t,b.x,b.q);b.updateInertia();const V3 nn=best.normal;b.x=b.x+nn*.001f;
+   // Back to where the probe met the world, a millimetre off it (its island with it); its way into it taken out at that
+   // point (a corner striking a post turns the body, not only stops it).
+   const V3 nn=best.normal;rewind(si,best.t,nn*.001f);
    const V3 arm=b.q.rotate(best.point),at=b.x+arm;const float vn=dot(b.pointVelocity(at),nn),k=effective(b,arm,nn);float impulse=0;
    if(vn<0&&k>0){impulse=-(1+e)*vn/k;b.v=b.v+nn*(impulse*b.invMass);b.w=b.w+b.invInertia*cross(arm,nn*impulse);}
    ev.point=at;ev.normal=neg(nn);ev.approach=std::max(0.f,-vn);ev.impulse=impulse;ev.effectiveMass=k>0?1/k:0;}
   else{
-   // Both back to where they meet (the other too when it was itself fast; a slow one moved too little to
-   // matter), a hair apart, and the blow between them there.
+   // Both back to where they meet (the other too when it was itself fast, with its island; a slow one moved too little
+   // to matter), a hair apart, and the blow between them there.
    Body& o=s.bodies[size_t(best.other)];const V3 nn=best.normal;
-   m.at(best.t,b.x,b.q);b.updateInertia();b.x=b.x-nn*.0005f;
-   if(fast[size_t(best.other)]&&!done[size_t(best.other)]){Motion& mo=motion[size_t(best.other)];mo.at(best.t,o.x,o.q);o.updateInertia();o.x=o.x+nn*.0005f;mo.x1=o.x;mo.q1=o.q;mo.begin();done[size_t(best.other)]=1;}
+   rewind(si,best.t,nn*-.0005f);
+   if(fast[size_t(best.other)]&&!done[size_t(best.other)]){rewind(best.other,best.t,nn*.0005f);finished(best.other);}
    // (A body already done (best.other < i, or swept earlier) has had its way cut to end at its own hit: met here along
    // that shortened way, from where it began to where it was put, not along the path it truly took before its hit.)
+   // A body a joint holds takes no blow here: its partners share it, which only the step's solver knows (struck alone, a
+   // 2 kg plank of a bridge took a 20 kg crate's landing as if it were loose). Put back a hair apart, the two meet by their
+   // contacts on the next step, its joints in the same solve.
    const V3 armA=best.point-b.x,armB=best.point-o.x;const float vn=dot(o.pointVelocity(best.point)-b.pointVelocity(best.point),nn);
    const float k=effective(b,armA,nn)+(o.invMass>0?effective(o,armB,nn):0.f);float impulse=0;
-   if(vn<0&&k>0){impulse=-(1+e)*vn/k;const V3 P=nn*impulse;b.v=b.v-P*b.invMass;b.w=b.w-b.invInertia*cross(armA,P);
+   if(vn<0&&k>0&&!held[size_t(si)]&&!held[size_t(best.other)]){impulse=-(1+e)*vn/k;const V3 P=nn*impulse;b.v=b.v-P*b.invMass;b.w=b.w-b.invInertia*cross(armA,P);
     if(o.invMass>0){o.sleeping=false;o.sleepTime=0;o.v=o.v+P*o.invMass;o.w=o.w+o.invInertia*cross(armB,P);}}
    ev.point=best.point;ev.normal=nn;ev.approach=std::max(0.f,-vn);ev.impulse=impulse;ev.effectiveMass=k>0?1/k:0;}
-  m.x1=b.x;m.q1=b.q;m.begin();done[size_t(i)]=1;
+  // (The whole island is done: its fast bodies that struck nothing first were put back with it.)
+  finished(si);
   if(ev.approach>.3f)s.events.push_back(ev);}
 }
 }

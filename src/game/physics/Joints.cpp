@@ -71,10 +71,7 @@ float Joint::swing(const Space& s)const{const Pose p=poseOf(*this,bodyAt(s,a),bo
 
 void Joint::prepare(Space& s,float h){prep.h=h;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);
  const bool ma=A.movable(),mb=b>=0&&B.movable();prep.mA=ma?A.invMass:0;prep.mB=mb?B.invMass:0;prep.iA=ma?A.invInertia:M3::zero();prep.iB=mb?B.invInertia:M3::zero();
- const Pose p=poseOf(*this,A,B,b<0);
- const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const float m=prep.mA+prep.mB;
- prep.pointMass=(M3::diagonal({m,m,m})+sa*prep.iA*sa.transposed()+sb*prep.iB*sb.transposed()).inverse();
- prep.turnMass=(prep.iA+prep.iB).inverse();
+ prep.turnMass=(prep.iA+prep.iB).inverse();   // (the anchors' effective mass is worked out as they turn: solve's point)
  // Warm starting across rebuilt spaces.
  if(key){auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   if(it!=s.jointCache.end()&&it->first==key){const auto& c=it->second;linearImpulse=c.linear;angularImpulse=c.angular;lowerImpulse=c.lower;upperImpulse=c.upper;motorImpulse=c.motor;springImpulse=c.spring;axialImpulse=c.axial;coneImpulse=c.cone;twistLowerImpulse=c.twistLower;twistUpperImpulse=c.twistUpper;for(int k=0;k<4;++k)swingImpulse[k]=c.swing[k];frictionImpulse=c.friction;detentImpulse=c.detent;}}
@@ -108,9 +105,12 @@ void Joint::solve(Space& s,float h,bool useBias){if(broken)return;Body& A=bodyAt
  auto applyTurn=[&](V3 L){if(ma)A.w=A.w-iA*L;if(mb)B.w=B.w+iB*L;};
  auto relW=[&]{return B.w-A.w;};
  auto relV=[&](V3 rA,V3 rB){return (B.v+cross(B.w,rB))-(A.v+cross(A.w,rA));};
- // The anchors together (hinge, ball, weld).
+ // The anchors together (hinge, ball, weld). Its effective mass from the arms as they are now, as the impulse is applied
+ // at them: the step's first arms on a limb turning fast (a ragdoll's forearm flung against a wall turns half a radian in
+ // a step) made the row overshoot more each pass, and the body blew apart to infinity.
  auto point=[&]{const V3 C=p.pB-p.pA;const V3 dv=relV(p.rA,p.rB);V3 bias{};float ms=1,is=0;if(useBias){bias=C*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
-  const V3 P=(prep.pointMass*(dv+bias))*-ms-linearImpulse*is;linearImpulse=linearImpulse+P;applyAt(P,p.rA,p.rB);};
+  const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const float m=mA+mB;const M3 K=(M3::diagonal({m,m,m})+sa*iA*sa.transposed()+sb*iB*sb.transposed()).inverse();
+  const V3 P=(K*(dv+bias))*-ms-linearImpulse*is;linearImpulse=linearImpulse+P;applyAt(P,p.rA,p.rB);};
  // The whole turn held (weld, slider).
  auto turn=[&]{const V3 e=rotationOf(p.qB*p.qA.conj());V3 bias{};float ms=1,is=0;if(useBias){bias=e*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
   const V3 L=(prep.turnMass*(relW()+bias))*-ms-angularImpulse*is;angularImpulse=angularImpulse+L;applyTurn(L);};
