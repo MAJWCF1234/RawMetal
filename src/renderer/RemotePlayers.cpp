@@ -31,7 +31,9 @@ float wrap(float a){while(a>kPiF)a-=2*kPiF;while(a<-kPiF)a+=2*kPiF;return a;}
 // One body per character (its mesh, its faces' textures, which faces are arms and head), and per player slot the
 // pose state that carries from frame to frame.
 struct SoftwareRenderer::RemoteBodies {
- struct Character{std::unique_ptr<Mesh> mesh;std::vector<unsigned char> texture,arm,head;float headFraction=.93f;bool tried=false,ready=false;};
+ struct Character{std::unique_ptr<Mesh> mesh;std::vector<unsigned char> texture,arm,head;std::vector<const Texture*> faceTexture;float headFraction=.93f;bool tried=false,ready=false;};
+ // The Limitator's face textures (SoftwareRenderer::playerBody(1)); set by the renderer before his body is first asked for.
+ const std::vector<const Texture*>* limitatorTextures=nullptr;
  std::array<Character,2> characters;
  struct Body{ClaireOutside outside;int key=-1;float blendStart=-1,last=-1,gait=0,yaw=0,turned=0,health=100,hitStart=-1e9f;bool seen=false;const Mesh* mesh=nullptr;};
  std::array<Body,16> bodies;
@@ -39,9 +41,11 @@ struct SoftwareRenderer::RemoteBodies {
  Character& body(int character){
   auto& c=characters[size_t(std::clamp(character,0,1))];
   if(!c.tried){c.tried=true;
-   // 0 Claire (2300 on her clips 2301 and anchors 2312). 1 the Limitator: his resources go here once his body is
-   // built in; until then he is not ready and Claire stands in for him.
+   // 0 Claire (2300 on her clips 2301 and anchors 2312). 1 the Limitator (2290 on his clips 2291 and anchors 2292),
+   // a copy of his own so remote poses never fight the local body's; while he cannot load, Claire stands in for him.
    if(&c==&characters[0]){try{c.mesh=std::make_unique<Mesh>(2300,"",2301,2312);}catch(...){c.mesh.reset();}}
+   else if(limitatorTextures){try{c.mesh=std::make_unique<Mesh>(2290,"",2291,2292);if(c.mesh->triangles.size()!=limitatorTextures->size())c.mesh.reset();}catch(...){c.mesh.reset();}
+    if(c.mesh)c.faceTexture=*limitatorTextures;}
    if(c.mesh&&!c.mesh->triangles.empty()){
     // Classify once, on the bind pose: material, the arms (out past the shoulders) and the head (above the neck).
     const auto& bind=c.mesh->bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
@@ -62,7 +66,7 @@ SoftwareRenderer::RemoteBodies& SoftwareRenderer::remoteBodies(){if(!m_remote)m_
 const std::vector<SoftwareRenderer::RemoteBodyReport>& SoftwareRenderer::remoteBodyReports()const{static const std::vector<RemoteBodyReport> none;return m_remote?m_remote->reports:none;}
 bool SoftwareRenderer::characterBuilt(int character)const{
  if(character<=0)return true;
- if(!m_remote)return false;const auto& c=m_remote->characters[1];return c.tried&&c.ready;
+ return !m_limitatorFailed;   // he is in the build; only a body that failed to load is not
 }
 
 void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks& hooks){
@@ -78,6 +82,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
   b.last=now;
   // Dead: the Death clip plays out, the body lies a beat, then it is gone until they respawn.
   if(!r.alive&&r.deathAge>4.5f){b.key=-1;b.seen=false;all.reports.push_back(report);continue;}
+  if(r.character==1&&!all.characters[1].tried&&!all.limitatorTextures){PlayerBody& his=playerBody(1);if(his.character==1)all.limitatorTextures=&his.faceTexture;else all.characters[1].tried=true;}
   auto& character=all.body(r.character);
   if(!character.ready){all.reports.push_back(report);continue;}
   Mesh& mesh=*character.mesh;
@@ -183,7 +188,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
    {bool near=false;for(const auto& v:face.v){const Point3 d=v.p-eye;near=near||dot(d,d)<.3f*.3f;}if(near)continue;}
    const Point3 n=cross(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);const float len=std::sqrt(dot(n,n));
    hooks.face(n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
-   hooks.tri(face.v[0],face.v[1],face.v[2],m_claireTextures[f<character.texture.size()?character.texture[f]:0],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));}
+   hooks.tri(face.v[0],face.v[1],face.v[2],f<character.faceTexture.size()&&character.faceTexture[f]?*character.faceTexture[f]:m_claireTextures[f<character.texture.size()?character.texture[f]:0],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));}
   // A VR player's arms: the first-person arm rig on the solve's shoulders, wrists on their tracked hands.
   if(vr){const AvatarSolve solve=solveAvatar(r.pose,now);const Point3 shift=r.position-r.pose.root;
    const VrRig rig=poseVrArms(m_armsMesh,solve);

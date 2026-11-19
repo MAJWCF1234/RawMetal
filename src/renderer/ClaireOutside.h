@@ -41,7 +41,11 @@ public:
  bool gunFromRightHand(const Hand& right,Gun& gun)const;
  static Point3 place(const Gun& gun,Point3 socket,Point3 p){const Point3 q=(p-socket)*gun.scale;return gun.origin+gun.x*q.x+gun.y*q.y+gun.z*q.z;}
  // What one frame from outside measured (the third-person test reads it).
- struct Report{bool drawn=false;int weapon=0,lower=-1,layer=-1,headFaces=0;float supportGap=-1,supportAlong=0,aimError=-1,floorGap=0,handGap=-1,scale=0;bool blending=false;Point3 feet[2]{},gripRight{},gripLeft{};};
+ // character: the body drawn (0 Claire, 1 the Limitator); faces drawn, its
+ // lowest point (world z) and headAhead, the way its head faces (world, unit),
+ // are measured in first person too.
+ struct Report{bool drawn=false;int weapon=0,lower=-1,layer=-1,headFaces=0;float supportGap=-1,supportAlong=0,aimError=-1,floorGap=0,handGap=-1,scale=0;bool blending=false;Point3 feet[2]{},gripRight{},gripLeft{};
+  int character=0,faces=0;float lowest=0;Point3 headAhead{};};
  bool prepare(const Mesh& mesh);
  bool ready()const{return m_ready;}
  // Her mesh is not in metres: this many of its units make a metre when she

@@ -66,7 +66,7 @@ bool SoftwareRenderer::testThirdPerson(){
   Point3 lastFeet[2]{};bool haveFeet=false;const std::string name=take.name;
   run(game,d,start,take,[&](int i){const auto&r=d.claireOutsideReport();++frames;
    frameLog<<take.weapon<<' '<<take.name<<' '<<i<<" lower "<<r.lower<<" layer "<<r.layer<<" blend "<<r.blending<<" aimErr "<<r.aimError<<" along "<<r.supportAlong<<" gap "<<r.supportGap<<" hand "<<r.handGap
-    <<" feet "<<r.feet[0].x<<','<<r.feet[0].y<<' '<<r.feet[1].x<<','<<r.feet[1].y<<" head "<<r.headFaces<<" yaw "<<game.player().angle<<" aimBlend "<<game.aimBlend()<<'\n';if(!headFaces)for(auto h:d.m_claireHeadFace)headFaces+=h;if(!r.drawn)return;++drawn;
+    <<" feet "<<r.feet[0].x<<','<<r.feet[0].y<<' '<<r.feet[1].x<<','<<r.feet[1].y<<" head "<<r.headFaces<<" yaw "<<game.player().angle<<" aimBlend "<<game.aimBlend()<<'\n';if(!headFaces)for(auto h:d.playerBody(std::max(0,d.m_localCharacter)).headFace)headFaces+=h;if(!r.drawn)return;++drawn;
    if(r.headFaces*2<headFaces&&!game.player().prone)++headless;
    floorGap=std::min(floorGap,r.floorGap);
    const bool reloading=game.reloading()||name=="reload";

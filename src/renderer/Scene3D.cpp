@@ -205,6 +205,70 @@ MedicalCaseFrame medicalCaseFrame(Point3 actorBase,float yaw,float size){
  return {actorBase+(forward*.35f+up*.99f)*size,right,forward,up,size};
 }
 }
+SoftwareRenderer::PlayerBody& SoftwareRenderer::playerBody(int character){
+ // The Limitator is loaded the first time he is asked for; if his files are
+ // missing or do not load (or his bank is not the 40 clips), he is Claire.
+ if(character==1&&!m_limitatorMesh&&!m_limitatorFailed){
+  try{auto mesh=std::make_unique<Mesh>(2290,"",2291,2292);if(mesh->creatureClipCount()<unsigned(ClaireOutside::ClipCount)||!m_limitatorTexturesReady)throw std::runtime_error("incomplete");m_limitatorMesh=std::move(mesh);}
+  catch(const std::exception&){m_limitatorFailed=true;}
+  // The arms of the viewmodel and the VR avatar are Claire's in his clothes:
+  // her sleeve materials take his sleeve, and BOOTS (her arm skin and gloves)
+  // his glove, each the part of his body texture his forearm or hand faces use.
+  if(m_limitatorMesh){const Mesh& mesh=*m_limitatorMesh;const auto& bind=mesh.bindTriangles();const auto& index=mesh.creatureVertexIndices();const Texture& sheet=m_limitatorTextures[0];
+   auto crop=[&](std::initializer_list<const char*> bones){const auto weight=mesh.creatureBoneWeights(bones);std::vector<float> us,vs;
+    for(size_t f=0;f<bind.size();++f){float w=0,u=0,v=0;for(int c=0;c<3;++c){const size_t corner=f*3+size_t(c);if(corner<index.size()&&index[corner]<weight.size())w+=weight[index[corner]]/3.f;u+=bind[f].v[c].u/3.f;v+=bind[f].v[c].v/3.f;}
+     if(w>.6f){us.push_back(u-std::floor(u));vs.push_back(v-std::floor(v));}}
+    Texture t=sheet;if(us.size()<6)return t;
+    std::sort(us.begin(),us.end());std::sort(vs.begin(),vs.end());const size_t a=us.size()/10,b=us.size()-1-us.size()/10;
+    const int x0=int(us[a]*sheet.width),x1=int(us[b]*sheet.width),y0=int(vs[a]*sheet.height),y1=int(vs[b]*sheet.height);if(x1-x0<8||y1-y0<8)return t;
+    t=Texture{};t.width=x1-x0;t.height=y1-y0;t.pixels.resize(size_t(t.width)*size_t(t.height));
+    for(int y=0;y<t.height;++y)for(int x=0;x<t.width;++x)t.pixels[size_t(y)*size_t(t.width)+size_t(x)]=sheet.pixels[size_t(y0+y)*size_t(sheet.width)+size_t(x0+x)]|0xff000000u;
+    deriveSurfaceNormal(t,.3f);t.glossStrength=sheet.glossStrength;return t;};
+   const Texture sleeve=crop({"ForeArm_L","ForeArm_R"}),glove=crop({"Hand_L","Hand_R"});
+   for(size_t m=0;m<m_limitatorArmTextures.size();++m)m_limitatorArmTextures[m]=m==3?glove:sleeve;
+   // A material of hers cut out by its alpha (the belts' straps) keeps its
+   // cut, in his sleeve's colour: an opaque crop there showed a stray sliver.
+   double r=0,g=0,b=0;for(auto p:sleeve.pixels){r+=(p>>16)&255;g+=(p>>8)&255;b+=p&255;}const double n=std::max<size_t>(1,sleeve.pixels.size());
+   for(size_t m=0;m<m_claireTextures.size();++m){const Texture& hers=m_claireTextures[m];bool cut=false;for(auto p:hers.pixels)if((p>>24)<128){cut=true;break;}if(!cut)continue;
+    Texture t;t.width=hers.width;t.height=hers.height;t.pixels.resize(hers.pixels.size());
+    for(size_t i=0;i<hers.pixels.size();++i){const auto p=hers.pixels[i];const double y=(((p>>16)&255)*.3+((p>>8)&255)*.59+(p&255)*.11)/128.;
+     auto c=[&](double v){return std::uint32_t(std::clamp(v/n*y,0.,255.));};t.pixels[i]=(p&0xff000000u)|(c(r)<<16)|(c(g)<<8)|c(b);}
+    deriveSurfaceNormal(t,.3f);m_limitatorArmTextures[m]=std::move(t);}}}
+ if(character!=1||!m_limitatorMesh)character=0;
+ auto& body=m_playerBodies[size_t(character)];
+ if(!body.mesh){body.character=character;body.mesh=character?m_limitatorMesh.get():&m_claireMesh;body.armTextures=character?&m_limitatorArmTextures:&m_claireTextures;classifyPlayerBody(body);}
+ return body;
+}
+// Classified once, on the bind pose: each face's texture by material name, the
+// head (above the neck), the eyes (her facing), and what first person leaves
+// out (the head, and the arms, for which the viewmodel's arms stand in).
+void SoftwareRenderer::classifyPlayerBody(PlayerBody& body){
+ const Mesh& mesh=*body.mesh;const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
+ for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
+ const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
+ body.faceTexture.assign(bind.size(),nullptr);body.faceHidden.assign(bind.size(),0);body.headFace.assign(bind.size(),0);body.eyeFace.assign(bind.size(),0);
+ float headSum=0;int headSamples=0;
+ for(size_t f=0;f<bind.size();++f){bool head=true;for(const auto&v:bind[f].v)head=head&&(v.p.y-low.y)/height>.88f;body.headFace[f]=head;
+  if(head)for(const auto&v:bind[f].v){headSum+=(v.p.y-low.y)/height;++headSamples;}}
+ body.headHeight=headSamples?headSum/headSamples:.93f;
+ if(body.character==0){
+  for(size_t f=0;f<bind.size();++f){const int texture=std::max(0,claireMaterial(mesh,bind[f].part));body.faceTexture[f]=&m_claireTextures[size_t(texture)];bool hidden=texture>=7;
+   for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
+   body.faceHidden[f]=hidden;body.eyeFace[f]=texture==8;}
+  return;}
+ // The Limitator: his head material is the hood and mask; first person leaves
+ // it out with anything his arm bones carry (shoulder pads to gloves), as hers.
+ std::vector<float> arm=mesh.creatureBoneWeights({"Arm_L","Arm_R","ForeArm_L","ForeArm_R","Hand_L","Hand_R",
+  "Thumb1_L","Thumb2_L","Thumb3_L","Index1_L","Index2_L","Index3_L","Middle1_L","Middle2_L","Middle3_L","Ring1_L","Ring2_L","Ring3_L","Pinky1_L","Pinky2_L","Pinky3_L",
+  "Thumb1_R","Thumb2_R","Thumb3_R","Index1_R","Index2_R","Index3_R","Middle1_R","Middle2_R","Middle3_R","Ring1_R","Ring2_R","Ring3_R","Pinky1_R","Pinky2_R","Pinky3_R"});
+ const auto& index=mesh.creatureVertexIndices();float headFront=-1e9f,headBack=1e9f;
+ for(size_t f=0;f<bind.size();++f)if(body.headFace[f])for(const auto&v:bind[f].v){headFront=std::max(headFront,v.p.z);headBack=std::min(headBack,v.p.z);}
+ for(size_t f=0;f<bind.size();++f){const int part=bind[f].part;const bool headMaterial=part>=0&&size_t(part)<mesh.materialNames.size()&&mesh.materialNames[size_t(part)].find("Head")!=std::string::npos;
+  body.faceTexture[f]=&m_limitatorTextures[headMaterial?1:0];
+  float carried=0,y=0,z=0,side=0;for(int c=0;c<3;++c){const size_t corner=f*3+size_t(c);if(corner<index.size()&&index[corner]<arm.size())carried+=arm[index[corner]]/3.f;y=std::max(y,(bind[f].v[c].p.y-low.y)/height);side=std::max(side,std::fabs(bind[f].v[c].p.x-middle)/height);z+=bind[f].v[c].p.z/3.f;}
+  body.faceHidden[f]=headMaterial||y>.85f||carried>.5f||(side>.08f&&y>.66f);   // as hers: the shoulders past the chest
+  body.eyeFace[f]=body.headFace[f]&&z>headBack+(headFront-headBack)*.7f;}
+}
 bool SoftwareRenderer::validate3D(){
  if(!testNormalMapping())return false;
  {for(Mesh*cleanupMesh:cleanupMeshes()){const auto&rest=cleanupMesh->bindTriangles();
@@ -4001,21 +4065,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // silhouette throws the floor shadow under the nearest lamp. A replay or film
  // camera outside her draws her in clean captures too.
  if(level==game.level()&&!m_staticGeometryBuild&&!game.inspectionCamera()&&(!m_vrRendering||m_vrPoseReady)&&(!m_environmentInspection||m_bodyOutside)&&!game.titleScreen()&&(!game.dead()||m_bodyOutside)&&(m_bodyOutside||(game.hiddenLocker()<0&&!game.lockerViewLocked()))){
-  auto&mesh=m_claireMesh;const auto&state=game.player();
-  if(m_claireFaceTexture.size()!=mesh.triangles.size()){
-   // Classify once, on the bind pose: material by name, and the head (above
-   // the neck) and arms (out past the shoulders above the belt) to leave out.
-   const auto&bind=mesh.bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
-   for(const auto&t:bind)for(const auto&v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
-   const float height=high.y-low.y,middle=(low.x+high.x)*.5f;
-   m_claireFaceTexture.assign(bind.size(),0);m_claireFaceHidden.assign(bind.size(),0);m_claireHeadFace.assign(bind.size(),0);
-   for(size_t f=0;f<bind.size();++f){const unsigned char texture=static_cast<unsigned char>(std::max(0,claireMaterial(mesh,bind[f].part)));
-    m_claireFaceTexture[f]=texture;bool hidden=texture>=7;
-    for(const auto&v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;hidden=hidden||y>.85f||x>.118f||(x>.08f&&y>.66f);}
-    bool head=true;for(const auto&v:bind[f].v)head=head&&(v.p.y-low.y)/height>.88f;m_claireHeadFace[f]=head;
-    if(head)for(const auto&v:bind[f].v){m_claireHeadHeight+=(v.p.y-low.y)/height;++m_claireHeadSamples;}
-    m_claireFaceHidden[f]=hidden;}
-  }
+  // The body Settings::character chooses (playerBody: Claire, or the Limitator
+  // when his files load). A change of body starts its poser, turn measures and
+  // blends afresh: they hold the other mesh's vertices.
+  const PlayerBody& body=playerBody(game.settings().character);
+  if(body.character!=m_localCharacter){m_localCharacter=body.character;m_claireOutside=ClaireOutside{};m_turnYawReady=false;m_outsideKey=-1;m_bodyClip=-1;m_bodyBlendStart=-1;m_bodyFrom.clear();m_bodyTransitionClip=-1;}
+  auto&mesh=*body.mesh;const auto&state=game.player();
   // Which clip: 0 idle, 1-4 run forward/back/left/right, 5 sprint, 6 crouched
   // idle, 7-10 crouched walk forward/back/left/right, 11 falling, 13 walk.
   const Vec2 velocity=game.playerVelocity(),forward{std::cos(state.angle),std::sin(state.angle)},right{-forward.y,forward.x};
@@ -4055,7 +4110,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // Measure each turn clip's turn as drawn (the mirror included): her facing is
    // her eyes against her head, at the clip's first and last frame.
    auto facing=[&](int c,float ph){mesh.poseCreature(c,ph);Point3 eyes{},head{};int ne=0,nh=0;
-    for(size_t f=0;f<mesh.triangles.size()&&f<m_claireFaceTexture.size();++f){bool e=m_claireFaceTexture[f]==8,h=f<m_claireHeadFace.size()&&m_claireHeadFace[f];if(!e&&!h)continue;
+    for(size_t f=0;f<mesh.triangles.size()&&f<body.eyeFace.size();++f){bool e=body.eyeFace[f],h=body.headFace[f];if(!e&&!h)continue;
      for(const auto&v:mesh.triangles[f].v){if(e){eyes=eyes+v.p;++ne;}if(h){head=head+v.p;++nh;}}}
     if(!ne||!nh)return 0.f;const Point3 d=eyes*(1.f/ne)-head*(1.f/nh);return std::atan2(-d.x,d.z);};
    for(int i=0;i<4;++i){float a=facing(28+i,0),b=facing(28+i,1),d=b-a;while(d>kPi)d-=2*kPi;while(d<-kPi)d+=2*kPi;m_turnYaw[size_t(i)]=d;}
@@ -4184,14 +4239,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
   // First person scales her so her eyes are the camera's (her head's centre
   // sits about 4 cm above the eye line): at 1.7 m they would be 16 cm above it.
-  const float headFraction=m_claireHeadSamples?m_claireHeadHeight/m_claireHeadSamples:.93f;
+  const float headFraction=body.headHeight;
   const float scale=(m_bodyOutside?1.7f:(Player::StandingEye+.04f)/headFraction)/std::max(.01f,range.y),angle=bodyAngle;
   // In first person her animated head sits just behind the eye, wherever the
   // clip carries it (the rifle stance leans, a kneel sits back on the heel),
   // so her legs fall under and behind the view instead of out in front of it.
   // From outside she stands on the player's position itself.
   Vec2 at=outside?state.pos:state.pos-forward*.14f;const float feet=state.z;
-  if(!m_bodyOutside){Point3 head{};int count=0;for(size_t f=0;f<mesh.triangles.size()&&f<m_claireHeadFace.size();++f)if(m_claireHeadFace[f])for(const auto&v:mesh.triangles[f].v){head=head+v.p;++count;}
+  if(!m_bodyOutside){Point3 head{};int count=0;for(size_t f=0;f<mesh.triangles.size()&&f<body.headFace.size();++f)if(body.headFace[f])for(const auto&v:mesh.triangles[f].v){head=head+v.p;++count;}
    if(count){head=(head*(1.f/count)-center)*scale;const Vec2 side{std::sin(angle),-std::cos(angle)};const Vec2 ahead=vrBody?Vec2{std::cos(angle),std::sin(angle)}:forward;at=(vrBody?Vec2{m_vrPose.head.x,m_vrPose.head.y}:state.pos)-ahead*(.10f+head.z)-side*head.x;}}
   Point3 receiver{at.x,at.y,feet+.85f};
   const WorldLight* keyLight=nullptr;float keyDistance=36.f;
@@ -4206,9 +4261,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // First person also leaves out anything within reach of the eye (a crouch
   // puts the eye inside her torso).
   const Point3 eye=vrBody?m_vrPose.head:Point3{m_view.pos.x,m_view.pos.y,m_view.z+m_view.eye};
+  // What this frame of the body measured (ClaireOutside::Report; first person
+  // fills only the body's own numbers): its lowest point, faces drawn, and the
+  // way its head faces (the eyes, or the mask's front, from the head's middle).
+  if(!outside){m_outsideReport=ClaireOutside::Report{};m_outsideReport.lower=clip;}
+  m_drawnBodyFaces.clear();
+  m_outsideReport.character=body.character;m_outsideReport.lowest=1e9f;Point3 eyeSum{},headSum{};int eyeCount=0,headCount=0;
   for(size_t f=0;f<mesh.triangles.size();++f){auto face=mesh.triangles[f];
    for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
-    v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};}
+    v.p={at.x+localY*std::cos(angle)+p.x*std::sin(angle),at.y+localY*std::sin(angle)-p.x*std::cos(angle),feet+height+.01f};
+    m_outsideReport.lowest=std::min(m_outsideReport.lowest,v.p.z);
+    if(f<body.eyeFace.size()&&body.eyeFace[f]){eyeSum=eyeSum+v.p;++eyeCount;}
+    if(f<body.headFace.size()&&body.headFace[f]){headSum=headSum+v.p;++headCount;}}
    std::swap(face.v[1],face.v[2]);
    bool nearEye=false;if(!m_bodyOutside)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||(d.z>-.18f&&d.x*d.x+d.y*d.y<.25f*.25f)||(state.crouched&&d.z>-.12f);}
    // Third person pulled in against a wall: what is within reach of the lens is
@@ -4216,7 +4280,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(m_bodyOutside&&!nearEye)for(const auto&v:face.v){Point3 d=v.p-eye;nearEye=nearEye||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}
    // Crouched or prone, anything of hers up at the eye is left out; her whole
    // body, head included, still throws the one shadow.
-   const bool hiddenHere=((m_claireFaceHidden[f]||nearEye)&&!m_bodyOutside)||(m_bodyOutside&&nearEye);
+   const bool hiddenHere=((body.faceHidden[f]||nearEye)&&!m_bodyOutside)||(m_bodyOutside&&nearEye);
    // Only the faces turned to the lamp cast: a closed body then darkens each
    // floor pixel about once. Every face casting stacked the translucent
    // triangles into a faceted black mass, worst crouched over her shadow.
@@ -4229,11 +4293,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      cast[i]={{x,y,w.floorHeight(x,y)+.025f},0,0};}
     if(valid){for(auto&v:cast)v.p=cameraPoint(v.p,game);triangle3D(cast[0],cast[1],cast[2],shadowTexture,1.f);}}
    if(hiddenHere)continue;
-   if(outside&&f<m_claireHeadFace.size()&&m_claireHeadFace[f])++m_outsideReport.headFaces;
+   if(m_collectBodyFaces)m_drawnBodyFaces.push_back({f,{face.v[0].p,face.v[1].p,face.v[2].p}});
+   if(outside&&f<body.headFace.size()&&body.headFace[f])++m_outsideReport.headFaces;
    Point3 n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);float len=std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z);
    selectFaceLight(bodyLights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);
-   tri(face.v[0],face.v[1],face.v[2],m_claireTextures[m_claireFaceTexture[f]],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));
+   tri(face.v[0],face.v[1],face.v[2],*body.faceTexture[f],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));
+   ++m_outsideReport.faces;
   }
+  if(eyeCount&&headCount){const Point3 d=eyeSum*(1.f/float(eyeCount))-headSum*(1.f/float(headCount));const float l=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(l>1e-5f)m_outsideReport.headAhead=d*(1.f/l);}
   // From outside, the world gun is fitted to her hands as the skin has them
   // (ClaireOutside::fitLongGun, fitPistol): the shotgun's trigger socket in her
   // right fist and its pump in her left, the pistol in her right fist along
@@ -4472,6 +4539,7 @@ SoftwareRenderer::VrRig SoftwareRenderer::poseVrArms(Mesh& arms,const AvatarSolv
  return rig;
 }
 void SoftwareRenderer::drawTrackedHands(const Game&game){
+ const auto*armTextures=playerBody(game.settings().character).armTextures;   // her arms, or the Limitator's sleeves and gloves on them
  auto*runtime=VrRuntime::active();const auto origin=game.chunkOffset(game.level());const auto&hands=runtime->hands();
  auto local=[&](Point3 w){w.x-=origin.x;w.y-=origin.y;return w;};
  auto unit=[](Point3 v){const float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-6f?v*(1/l):Point3{};};
@@ -4486,7 +4554,7 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  if(m_vrPoseReady){
   const VrRig rig=poseVrArms(m_armsMesh,solve);
   for(const auto&face:m_armsMesh.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=cameraPoint(rigToWorld(rig,solve,face.v[i].p),game);}
-   const int claire=claireMaterial(m_armsMesh,face.part);triangle3D(v[0],v[1],v[2],claire>=0?m_claireTextures[size_t(claire)]:m_arms,.85f);}
+   const int claire=claireMaterial(m_armsMesh,face.part);triangle3D(v[0],v[1],v[2],claire>=0?(*armTextures)[size_t(claire)]:m_arms,.85f);}
   // The gun rides her drawn hand: where the arm put the wrist, against where the tracked wrist is.
   const int g=pose.gunSide&1;gunShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))-pose.hands[size_t(g)].wrist;
   if(!std::isfinite(gunShift.x)||!std::isfinite(gunShift.y)||!std::isfinite(gunShift.z)||std::sqrt(gunShift.x*gunShift.x+gunShift.y*gunShift.y+gunShift.z*gunShift.z)>.6f)gunShift={};
@@ -4786,6 +4854,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
 }
 void SoftwareRenderer::drawViewModel(const Game& game){
  perf::Scope viewProfile(perf::ViewModel);
+ const auto*armTextures=playerBody(game.settings().character).armTextures;   // her arms, or the Limitator's sleeves and gloves on them
  // The hands on a locker's leaves (Game::lockerHands) draw however the gun is.
  std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
  if(game.handsLowered()&&!game.holdingClutter()&&game.heldNpc()<0&&!locker)return; // Off duty: nothing in hand.
@@ -4974,12 +5043,12 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    }
    const int claire=arms?claireMaterial(m_armsMesh,face.part):-1;
    carrier=arms?fists:&mesh==&m_handgunMesh||(face.part!=2&&face.part!=3);   // the shotgun's receiver and stock, not its pump
-   shade(face,claire>=0?m_claireTextures[size_t(claire)]:texture);
+   shade(face,claire>=0?(*armTextures)[size_t(claire)]:texture);
   }
  };
  if(fpShotgun){
   for(auto face:m_fpShotgun.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
-   const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?m_claireTextures[size_t(claire)]:m_arms);}
+   const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?(*armTextures)[size_t(claire)]:m_arms);}
   for(auto face:m_weaponMesh.triangles){if(face.part==3&&(game.shotAge()<.09f||game.shotAge()>.45f))continue;
    for(auto&v:face.v)v.p=fpShotgunPoint(v.p,face.part==2);carrier=face.part!=2;shade(face,m_weaponTexture);}
  }else{draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);}

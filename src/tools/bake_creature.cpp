@@ -1,4 +1,5 @@
 #include "../ThirdParty/ufbx/ufbx.h"
+#include "../renderer/SkeletalBank.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -21,7 +22,12 @@
 // marked :loop, are crossfaded over their last fifth so they close on their
 // first frame. Beside OUT, OUT.anchors holds each sample's right and left hand
 // in the same grounded space (what a held weapon attaches to).
-static int bakeTakes(int argc,char**argv){
+// --skeletal-takes takes the same arguments and writes the bank as bones (RMS1,
+// src/renderer/SkeletalBank.h): each sample's skin-cluster transforms instead of
+// its vertices, skinned back into this RMA3 bank on load. It needs a model with
+// one skinned mesh, and fails unless the bank it loads back is within half a
+// millimetre of the vertex bank.
+static int bakeTakes(int argc,char**argv,bool skeletal=false){
  ufbx_load_opts options{};options.target_axes=ufbx_axes_right_handed_y_up;options.target_unit_meters=1;options.evaluate_skinning=true;
  auto target=ufbx_load_file(argv[2],&options,nullptr);if(!target)return 2;
  const char* bones[]={"Hips","Spine","Spine1","Spine2","Neck","Head","LeftUpLeg","RightUpLeg","LeftLeg","RightLeg","LeftFoot","RightFoot","LeftToeBase","RightToeBase","LeftShoulder","RightShoulder","LeftArm","RightArm","LeftForeArm","RightForeArm","LeftHand","RightHand"};
@@ -65,9 +71,14 @@ static int bakeTakes(int argc,char**argv){
  for(const char* side:{"Left","Right"})for(const char* finger:{"Thumb","Index","Middle","Ring","Pinky"})for(int joint=1;joint<=3;++joint){std::string lower=finger;lower[0]=char(std::tolower(lower[0]));
   mannequin[std::string(side)+"Hand"+finger+std::to_string(joint)]=lower+"_0"+std::to_string(joint)+(side[0]=='L'?"_l":"_r");}
  std::ofstream anchors(std::string(argv[3])+".anchors",std::ios::binary);
- std::ofstream out(argv[3],std::ios::binary);out.write("RMA3",4);uint32_t vertices=uint32_t(corners.size()),frames=0,clipCount=uint32_t(takes.size()),count=uint32_t(unique.size());
+ std::vector<unsigned char> bank;auto put=[&](const void* p,size_t n){const auto* b=static_cast<const unsigned char*>(p);bank.insert(bank.end(),b,b+n);};put("RMA3",4);uint32_t vertices=uint32_t(corners.size()),frames=0,clipCount=uint32_t(takes.size()),count=uint32_t(unique.size());
  for(auto s:samples)frames+=s;
- for(auto value:{vertices,frames,clipCount,count})out.write(reinterpret_cast<char*>(&value),4);out.write(reinterpret_cast<char*>(remap.data()),remap.size()*2);out.write(reinterpret_cast<char*>(samples.data()),samples.size()*4);
+ for(auto value:{vertices,frames,clipCount,count})put(&value,4);put(remap.data(),remap.size()*2);put(samples.data(),samples.size()*4);
+ // Skeletal: the one skinned mesh, and each sample's cluster transforms.
+ ufbx_node* skinNode=nullptr;
+ if(skeletal){for(auto n:target->nodes)if(n->mesh){if(skinNode||n->mesh->skin_deformers.count!=1){std::cerr<<"--skeletal-takes needs one mesh with one skin\n";return 11;}skinNode=n;}if(!skinNode)return 11;}
+ const size_t clusterCount=skinNode?skinNode->mesh->skin_deformers[0]->clusters.count:0;
+ std::vector<std::vector<std::vector<retro::skeletal::Bone>>> clusterBones(takes.size());std::vector<std::array<float,3>> clusterScale(clusterCount);bool scaleKnown=false;double scaleDrift=0;
  for(size_t c=0;c<takes.size();++c){const auto&take=takes[c];
   auto source=ufbx_load_file(take.file.c_str(),&options,nullptr);if(!source||source->anim_stacks.count==0)return 4;auto clip=source->anim_stacks[0];
   auto action=[&](const std::string& name){for(auto a:source->anim_stacks){std::string label=a->name.data;auto separator=label.rfind('|');if(label.substr(separator==std::string::npos?0:separator+1)==name)return a;}return (ufbx_anim_stack*)nullptr;};
@@ -123,21 +134,68 @@ static int bakeTakes(int argc,char**argv){
    for(auto&p:positions)p.y-=floor;
    for(const char* hand:{"RightHand","LeftHand"}){auto n=skinned->nodes[bone(hand)->typed_id];float xyz[]={float(n->node_to_world.m03),float(n->node_to_world.m13-floor),float(n->node_to_world.m23)};anchors.write(reinterpret_cast<char*>(xyz),sizeof(xyz));}
    clipFrames.push_back(std::move(positions));
+   if(skeletal){const auto* skin=skinned->nodes[skinNode->typed_id]->mesh->skin_deformers[0];std::vector<retro::skeletal::Bone> sample(clusterCount);
+    for(size_t k=0;k<clusterCount;++k){const auto x=skin->clusters[k]->geometry_to_world_transform;auto& b=sample[k];
+     b.t[0]=x.translation.x;b.t[1]=x.translation.y;b.t[2]=x.translation.z;b.q[0]=x.rotation.x;b.q[1]=x.rotation.y;b.q[2]=x.rotation.z;b.q[3]=x.rotation.w;
+     const float sc[3]={float(x.scale.x),float(x.scale.y),float(x.scale.z)};
+     if(!scaleKnown)for(int a=0;a<3;++a)clusterScale[k][size_t(a)]=sc[a];
+     for(int a=0;a<3;++a)scaleDrift=std::max(scaleDrift,double(std::fabs(sc[a]-clusterScale[k][size_t(a)])));}
+    scaleKnown=true;clusterBones[c].push_back(std::move(sample));}
    ufbx_free_scene(skinned);ufbx_free_anim(anim);ufbx_free_scene(pose);
   }
   if(take.loop){const auto first=clipFrames.front(),last=clipFrames.back();const double n=double(clipFrames.size()-1);
    for(size_t f=0;f<clipFrames.size();++f){const double w=std::clamp((double(f)-n*.8)/(n*.2),0.,1.);
     for(size_t i=0;i<first.size();++i){auto& p=clipFrames[f][i];p.x+=w*(first[i].x-last[i].x);p.y+=w*(first[i].y-last[i].y);p.z+=w*(first[i].z-last[i].z);}}}
-  for(const auto&frame:clipFrames)for(const auto&p:frame)for(double v:{p.x,p.y,p.z}){if(std::fabs(v)>32.7)return 8;int16_t q=int16_t(std::lround(v*1000));out.write(reinterpret_cast<char*>(&q),2);}
+  for(const auto&frame:clipFrames)for(const auto&p:frame)for(double v:{p.x,p.y,p.z}){if(std::fabs(v)>32.7)return 8;int16_t q=int16_t(std::lround(v*1000));put(&q,2);}
   std::cout<<take.file<<" "<<take.first<<"-"<<take.last<<": "<<samples[c]<<" skeletal samples, minimum arm direction dot "<<minimumArmAlignment<<'\n';if(minimumArmAlignment<.985)return 10;
   if(rest!=source)ufbx_free_scene(rest);ufbx_free_scene(source);
  }
- std::cout<<vertices/3<<" triangles; "<<count<<" skinned vertices; "<<clipCount<<" clips\n";ufbx_free_scene(target);return out?0:9;
+ std::cout<<vertices/3<<" triangles; "<<count<<" skinned vertices; "<<clipCount<<" clips\n";
+ if(skeletal){
+  // A bone's scale must hold still: it is kept once per cluster.
+  if(scaleDrift>1e-4){std::cerr<<"a cluster's scale changes by "<<scaleDrift<<"\n";return 12;}
+  std::vector<unsigned char> rms;auto add=[&](const void* p,size_t n){const auto* b=static_cast<const unsigned char*>(p);rms.insert(rms.end(),b,b+n);};
+  const uint32_t clusters=uint32_t(clusterCount);add("RMS1",4);for(uint32_t v:{vertices,frames,clipCount,count,clusters})add(&v,4);add(remap.data(),remap.size()*2);
+  for(auto [node,index]:unique){const uint32_t n=node;add(&n,4);}for(auto [node,index]:unique){const uint32_t v=target->nodes[node]->mesh->vertex_indices[index];add(&v,4);}
+  add(samples.data(),samples.size()*4);for(const auto& t:takes){const uint8_t loop=t.loop;add(&loop,1);}
+  for(const auto& s:clusterScale)add(s.data(),12);
+  // Each cluster's pivot: its bone's origin in mesh space, which moves only as the bone does.
+  std::vector<std::array<float,3>> pivot(clusterCount);
+  for(size_t k=0;k<clusterCount;++k){const auto* cluster=skinNode->mesh->skin_deformers[0]->clusters[k];const ufbx_matrix back=ufbx_matrix_invert(&cluster->geometry_to_bone);
+   const ufbx_vec3 p=ufbx_transform_position(&back,{0,0,0});pivot[k]={float(p.x),float(p.y),float(p.z)};add(pivot[k].data(),12);}
+  std::vector<int32_t> firstAt;std::vector<int16_t> stream;
+  for(size_t c=0;c<takes.size();++c){const auto& clip=clusterBones[c];
+   for(size_t k=0;k<clusterCount;++k){
+    // Where the pivot lands each sample (the decoder takes the rotation back off).
+    std::vector<std::array<double,3>> at(clip.size());
+    for(size_t s=0;s<clip.size();++s){const double zero[3]={0,0,0};const ufbx_matrix m=retro::skeletal::matrix(zero,clip[s][k].q,clusterScale[k].data(),pivot[k].data());
+     const ufbx_vec3 turned=ufbx_vec3{-m.cols[3].x,-m.cols[3].y,-m.cols[3].z};for(int a=0;a<3;++a)at[s][size_t(a)]=clip[s][k].t[a]+(&turned.x)[a];}
+    // Quaternions kept on one side, so each sample's change is small.
+    std::vector<std::array<double,4>> q(clip.size());for(size_t s=0;s<clip.size();++s){for(int a=0;a<4;++a)q[s][size_t(a)]=clip[s][k].q[a];
+     if(s){double d=0;for(int a=0;a<4;++a)d+=q[s][size_t(a)]*q[s-1][size_t(a)];if(d<0)for(auto& v:q[s])v=-v;}}
+    for(int a=0;a<4;++a){int last=0;for(size_t s=0;s<clip.size();++s){const int v=int(std::lround(std::clamp(q[s][size_t(a)],-1.,1.)*retro::skeletal::kQuat));stream.push_back(int16_t(v-last));last=v;}}
+    for(int a=0;a<3;++a){int32_t last=0;for(size_t s=0;s<clip.size();++s){const int32_t v=int32_t(std::llround(at[s][size_t(a)]*retro::skeletal::kMetre));
+     if(!s)firstAt.push_back(v);else{if(std::abs(v-last)>32767){std::cerr<<"a bone moves more than 3.2 m in a sample\n";return 15;}stream.push_back(int16_t(v-last));}last=v;}}}}
+  add(firstAt.data(),firstAt.size()*4);const uint32_t changes=uint32_t(stream.size());add(&changes,4);
+  std::vector<uint16_t> zig(stream.size());for(size_t i=0;i<stream.size();++i){const int v=stream[i];zig[i]=uint16_t((unsigned(v)<<1)^unsigned(v>>31));}
+  for(auto z:zig){const uint8_t b=uint8_t(z);add(&b,1);}for(auto z:zig){const uint8_t b=uint8_t(z>>8);add(&b,1);}
+  // Loaded back, it must be the vertex bank to within half a millimetre.
+  std::string error;const auto back=retro::skeletal::expand(target,rms,error);
+  if(back.size()!=bank.size()){std::cerr<<"skeletal bank does not load back: "<<error<<"\n";return 13;}
+  const size_t payload=20+size_t(vertices)*2+size_t(clipCount)*4;int worst=0;
+  if(std::memcmp(back.data(),bank.data(),payload)){std::cerr<<"skeletal bank header differs\n";return 13;}
+  for(size_t i=payload;i+1<bank.size();i+=2){int16_t a,b;std::memcpy(&a,bank.data()+i,2);std::memcpy(&b,back.data()+i,2);worst=std::max(worst,std::abs(int(a)-int(b)));}
+  std::cout<<"skeletal bank: "<<rms.size()<<" bytes for a "<<bank.size()<<"-byte vertex bank; worst vertex "<<worst<<" mm off\n";
+  if(worst>1){ufbx_free_scene(target);return 14;}
+  bank=std::move(rms);}
+ std::ofstream out(argv[3],std::ios::binary);out.write(reinterpret_cast<const char*>(bank.data()),std::streamsize(bank.size()));
+ ufbx_free_scene(target);return out?0:9;
 }
 // Offline skeletal retargeting. Bake skinned vertices in importer triangle order;
 // the runtime interpolates samples without evaluating an FBX scene per monster.
 int main(int argc,char**argv){
  if(argc>=9&&std::string(argv[1])=="--takes")return bakeTakes(argc,argv);
+ if(argc>=9&&std::string(argv[1])=="--skeletal-takes")return bakeTakes(argc,argv,true);
  if(argc==2){ufbx_load_opts o{};auto s=ufbx_load_file(argv[1],&o,nullptr);if(!s)return 2;for(auto a:s->anim_stacks)std::cout<<a->name.data<<' '<<(a->time_end-a->time_begin)*(s->settings.frames_per_second>0?s->settings.frames_per_second:30.)<<" frames\n";for(auto n:s->nodes)if(n->bone)std::cout<<"BONE "<<n->name.data<<'\n';ufbx_free_scene(s);return 0;}
  if(argc!=4&&argc!=5)return 1;
  ufbx_load_opts options{};options.target_axes=ufbx_axes_right_handed_y_up;options.target_unit_meters=1;options.evaluate_skinning=true;
