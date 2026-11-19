@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.6.1 - Every one of you (2026-11-19)
+
+The dark below learns that you did not come down alone. It now listens to all of you, and so do the others.
+
+- **The MAC-11.** A machine pistol for the hip: eighteen rounds a second, a climb you have to hold down, a spread that blooms while the trigger stays back and settles when it lets go. Its own .380 rounds, its own boxes to find, and the Builder can place both. A magazine with rounds left changes quickly; an empty one also wants the knob drawn back. Key 4, or the wheel.
+- **Brass that falls.** Every gun throws its spent cases now: the shotgun's shell when the pump works back, the pistols' brass to the right. They tumble, ring off the floor, and lie a while. The shell that used to hang beside the shotgun after a shot is gone.
+- **Guns in the hand, in VR.** The barrel points where the hand points and the sights meet the eye. Reloads are the hands' own work: B drops the magazine, the other hand takes a fresh one from the belt and seats it, an empty slide or knob is drawn back by hand; the shotgun takes its shells one at a time through the port, then the pump. The support hand wraps the fore-end without the wrist turning over, and the pump cycles every time. The kick is in the gun, never the view, and the controllers answer each shot, each magazine and each stroke. The MAC-11 rides the hip and fires as long as the finger holds. Hold the left stick down to speak.
+- **Co-op that sees everyone.** Creatures, guards and the people below choose among all of you: who they can see, who hurt them, who is near; a pack spreads itself across you, and nobody flips from one of you to another in a heartbeat. Pressure plates and triggers answer any of your steps, and a trigger can wait for all of you. A guest's lever is pulled on the host's world. Captions, sounds, states and objectives reach everyone. Alone, the world is as it was: one of you is simply the whole list.
+- **Apart, on purpose.** In co-op you can split up: each map with one of you on it stays awake and runs. Leaving a map no longer drags the others after you; COOPFOLLOW ON in the console brings back the old way. A player who ended up in a wall is let out instead of put back in it, spawns set in a wall step out onto the floor, UNSTUCK frees you, and the host can TP anyone beside anyone.
+- **The same crates for all.** Props are the host's: what one of you knocks over falls the same way for everyone, what you carry and throw lands where the host says it lands, and a bottle broken on one screen spills on all of them.
+- **Talk.** T opens a line of chat; voice through Epic with push-to-talk (V) or an open mic. In co-op the voices are where the bodies are: close by, clear; down the corridor and behind a wall, thin. The scoreboard marks who is speaking and mutes who you choose.
+- **A quieter pause.** RESUME, SETTINGS, SAVE, LOAD, RESTART and QUIT, nothing else; in a match, the code and LEAVE MATCH. SETTINGS is its own place now, in pages: AUDIO, VIDEO, CONTROLS with every key, GAMEPLAY, COMMUNICATION with your microphone, your speakers and a meter to test them, and VR. Each line says what it does; each page can go back to how it came.
+- **Still to try between two machines.** None of this has been played across two computers yet, and the VR changes want a headset. docs/Systems/vr-playtest.md says what to try.
+
+Verified with the match, session, Epic sign-in, chat and voice, menu, MAC-11, VR guns, VR, Limitator, saves, settings, scripting, AI, props, clutter, Physgloves, liquids, map format, kits and streaming tests, and tools/release/ship.py.
+
+---
+
 ## v1.6.0 - Not alone down here (2026-11-19)
 
 Others came down after you. Not all of them came to help.
