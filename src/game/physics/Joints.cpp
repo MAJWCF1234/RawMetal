@@ -71,10 +71,7 @@ float Joint::swing(const Space& s)const{const Pose p=poseOf(*this,bodyAt(s,a),bo
 
 void Joint::prepare(Space& s,float h){prep.h=h;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);
  const bool ma=A.movable(),mb=b>=0&&B.movable();prep.mA=ma?A.invMass:0;prep.mB=mb?B.invMass:0;prep.iA=ma?A.invInertia:M3::zero();prep.iB=mb?B.invInertia:M3::zero();
- const Pose p=poseOf(*this,A,B,b<0);
- const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const float m=prep.mA+prep.mB;
- prep.pointMass=(M3::diagonal({m,m,m})+sa*prep.iA*sa.transposed()+sb*prep.iB*sb.transposed()).inverse();
- prep.turnMass=(prep.iA+prep.iB).inverse();
+ prep.turnMass=(prep.iA+prep.iB).inverse();   // (the anchors' effective mass is worked out as they turn: solve's point)
  // Warm starting across rebuilt spaces.
  if(key){auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   if(it!=s.jointCache.end()&&it->first==key){const auto& c=it->second;linearImpulse=c.linear;angularImpulse=c.angular;lowerImpulse=c.lower;upperImpulse=c.upper;motorImpulse=c.motor;springImpulse=c.spring;axialImpulse=c.axial;coneImpulse=c.cone;twistLowerImpulse=c.twistLower;twistUpperImpulse=c.twistUpper;for(int k=0;k<4;++k)swingImpulse[k]=c.swing[k];frictionImpulse=c.friction;detentImpulse=c.detent;}}
@@ -108,9 +105,12 @@ void Joint::solve(Space& s,float h,bool useBias){if(broken)return;Body& A=bodyAt
  auto applyTurn=[&](V3 L){if(ma)A.w=A.w-iA*L;if(mb)B.w=B.w+iB*L;};
  auto relW=[&]{return B.w-A.w;};
  auto relV=[&](V3 rA,V3 rB){return (B.v+cross(B.w,rB))-(A.v+cross(A.w,rA));};
- // The anchors together (hinge, ball, weld).
+ // The anchors together (hinge, ball, weld). Its effective mass from the arms as they are now, as the impulse is applied
+ // at them: the step's first arms on a limb turning fast (a ragdoll's forearm flung against a wall turns half a radian in
+ // a step) made the row overshoot more each pass, and the body blew apart to infinity.
  auto point=[&]{const V3 C=p.pB-p.pA;const V3 dv=relV(p.rA,p.rB);V3 bias{};float ms=1,is=0;if(useBias){bias=C*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
-  const V3 P=(prep.pointMass*(dv+bias))*-ms-linearImpulse*is;linearImpulse=linearImpulse+P;applyAt(P,p.rA,p.rB);};
+  const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const float m=mA+mB;const M3 K=(M3::diagonal({m,m,m})+sa*iA*sa.transposed()+sb*iB*sb.transposed()).inverse();
+  const V3 P=(K*(dv+bias))*-ms-linearImpulse*is;linearImpulse=linearImpulse+P;applyAt(P,p.rA,p.rB);};
  // The whole turn held (weld, slider).
  auto turn=[&]{const V3 e=rotationOf(p.qB*p.qA.conj());V3 bias{};float ms=1,is=0;if(useBias){bias=e*lock.biasRate;ms=lock.massScale;is=lock.impulseScale;}
   const V3 L=(prep.turnMass*(relW()+bias))*-ms-angularImpulse*is;angularImpulse=angularImpulse+L;applyTurn(L);};
@@ -212,9 +212,49 @@ void Joint::finish(Space& s,float h){
   auto it=std::lower_bound(s.jointCache.begin(),s.jointCache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   if(it!=s.jointCache.end()&&it->first==key)it->second=c;else s.jointCache.insert(it,{key,c});}
 }
-// Position correction (a ball with `positionCorrection`): each part of the split past its limit turned back, then the anchors brought
-// together, each body moving by its share (its inverse mass and inertia). Velocities are left to the rows.
-void Joint::project(Space& s){if(!positionCorrection||broken||kind!=JointKind::Ball)return;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);const bool ma=A.movable(),mb=b>=0&&B.movable();if(!ma&&!mb)return;
+namespace {
+// Position correction for the kinds that hold an axis, a turn or a length (hinge, weld, slider, distance, rope): what the
+// substeps left open put back by moving the bodies, each by its share (its inverse mass and inertia), velocities left to
+// the rows. Each pass is held to Settings::projectMaxLinear and projectMaxAngular, so one wrenched far open closes over a
+// few steps rather than being thrown through what is beside it. A held (kinematic) partner is not corrected against: its
+// pull is the joint's rows' and the caller's (a prop dragged off its chain gives, joints.tear).
+void projectHeld(Joint& j,Space& s,Body& A,Body& B,bool ma,bool mb){
+ const float mA=ma?A.invMass:0,mB=mb?B.invMass:0;const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B.invInertia:M3::zero();
+ const float maxL=s.settings.projectMaxLinear,maxA=s.settings.projectMaxAngular,slack=s.settings.projectSlack;
+ auto capped=[](V3 v,float most){const float l=len(v);return l>most&&l>0?v*(most/l):v;};
+ // A turn L between them: A by -iA L, B by iB L (their frames' relative turn changes by (iA + iB) L).
+ auto turnBoth=[&](V3 L){if(ma)A.q=turned(A.q,iA*L*-1.f);if(mb)B.q=turned(B.q,iB*L);};
+ // A push P at the arms: A by -P, B by +P, each turned by its arm.
+ auto pushBoth=[&](V3 P,V3 rA,V3 rB){if(ma){A.x=A.x-P*mA;A.q=turned(A.q,iA*cross(rA,P)*-1.f);}if(mb){B.x=B.x+P*mB;B.q=turned(B.q,iB*cross(rB,P));}};
+ const bool world=j.b<0;
+ // The turn: the whole of it (weld, slider), or z of B on z of A (hinge), then the hinge's angle past its limits.
+ if(j.kind==JointKind::Weld||j.kind==JointKind::Slider){const Pose p=poseOf(j,A,B,world);const V3 e=capped(rotationOf(p.qB*p.qA.conj()),maxA);
+  if(lenSq(e)>1e-12f){const M3 K=iA+iB;float tr=K.m[0][0]+K.m[1][1]+K.m[2][2];if(tr>0){M3 Kr=K;for(int r=0;r<3;++r)Kr.m[r][r]+=1e-6f*tr;turnBoth(Kr.inverse()*e*-1.f);}}}
+ if(j.kind==JointKind::Hinge){const Pose p=poseOf(j,A,B,world);const V3 c=cross(p.zA,p.zB);const float sl=len(c);
+  if(sl>1e-7f){const V3 e=capped(c*(std::atan2(sl,dot(p.zA,p.zB))/sl),maxA);V3 t1,t2;basis(p.zA,t1,t2);const M3 K=iA+iB;
+   const float k11=dot(t1,K*t1),k12=dot(t1,K*t2),k22=dot(t2,K*t2),det=k11*k22-k12*k12;
+   if(det>1e-12f){const float b1=dot(e,t1),b2=dot(e,t2),x1=(k22*b1-k12*b2)/det,x2=(k11*b2-k12*b1)/det;turnBoth((t1*x1+t2*x2)*-1.f);}}
+  if(j.limited){const Pose q=poseOf(j,A,B,world);const float an=twistOf(q);const float over=an<j.lower-slack?an-(j.lower-slack):an>j.upper+slack?an-(j.upper+slack):0.f;
+   if(over!=0){const float m=angular(iA,iB,q.zA);if(m>0)turnBoth(q.zA*(-std::clamp(over,-maxA,maxA)*m));}}}
+ // The anchors: together (hinge, weld), B's on A's line and within its travel (slider), at the length (distance), no
+ // further than it (rope).
+ {const Pose p=poseOf(j,A,B,world);const V3 d=p.pB-p.pA;
+  if(j.kind==JointKind::Hinge||j.kind==JointKind::Weld){if(lenSq(d)<1e-10f)return;const V3 C=capped(d,maxL);
+   const M3 sa=skewOf(p.rA),sb=skewOf(p.rB);const M3 K=M3::diagonal({mA+mB,mA+mB,mA+mB})+sa*iA*sa.transposed()+sb*iB*sb.transposed();pushBoth(K.inverse()*neg(C),p.rA,p.rB);}
+  else if(j.kind==JointKind::Slider){const V3 n=p.zA;V3 t1,t2;basis(n,t1,t2);const V3 rA=p.rA+d;
+   for(int r=0;r<3;++r){const V3 u=r==0?t1:r==1?t2:n;float C=dot(d,u);
+    if(r==2){if(!j.limited)break;C=C<j.lower?C-j.lower:C>j.upper?C-j.upper:0.f;}
+    if(std::fabs(C)<1e-5f)continue;C=std::clamp(C,-maxL,maxL);const float m=effective(mA,iA,rA,mB,iB,p.rB,u);pushBoth(u*(-C*m),rA,p.rB);}}
+  else if(j.kind==JointKind::Distance||j.kind==JointKind::Rope){const float L=len(d);if(L<1e-6f)return;const V3 u=d*(1/L);
+   float C=L-j.length;if(j.kind==JointKind::Rope)C=std::max(0.f,C);if(std::fabs(C)<1e-5f)return;C=std::clamp(C,-maxL,maxL);
+   const float m=effective(mA,iA,p.rA,mB,iB,p.rB,u);pushBoth(u*(-C*m),p.rA,p.rB);}}}
+}
+// Position correction (`positionCorrection`). A ball: each part of the split past its limit turned back, then the anchors
+// brought together, each body moving by its share (its inverse mass and inertia). The others: projectHeld above. Velocities
+// are left to the rows. Never against a held (kinematic) partner (above).
+void Joint::project(Space& s){if(!positionCorrection||broken)return;Body& A=bodyAt(s,a);Body& B=bodyAt(s,b);const bool ma=A.movable(),mb=b>=0&&B.movable();if(!ma&&!mb)return;
+ if(A.kinematic||(b>=0&&B.kinematic))return;
+ if(kind!=JointKind::Ball){if(kind==JointKind::Spring||kind==JointKind::Pulley)return;projectHeld(*this,s,A,B,ma,mb);return;}
  const float mA=ma?A.invMass:0,mB=mb?B.invMass:0;const M3 iA=ma?A.invInertia:M3::zero(),iB=mb?B.invInertia:M3::zero();
  if(swingLimited){const float Slack=s.settings.projectSlack;
   // Each body turned about the joint's pivot, not its own middle, so the anchors stay together as the limit is put back

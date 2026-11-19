@@ -13,6 +13,8 @@
 //    rays through its box's corners past it miss; rays at a capsule hit its round ends where the hand-worked ball says.
 //  game: a traffic cone (a hull from its mesh) and a bottle (a capsule on a disc foot) knocked over in a room settle
 //    on the floor, the cone back on its base when set down upright.
+//  drums: a drum on its side rolled over a slab as its 12-sided prism and as the true round (Settings::roundCylinders),
+//    and stood on its end there; a sealed drum turning afloat on its side, its water cells round its axis and square.
 //  cost: 120 rock hulls dropped as a heap, ms a step.
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
@@ -24,6 +26,7 @@
 #include "world/GibSets.h"
 #include "world/ModelIds.h"
 #include "world/PropHulls.h"
+#include "core/Tune.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -33,6 +36,7 @@
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
 namespace retro::lab {
 namespace {
@@ -92,6 +96,7 @@ struct Roll {double vzVar=0,speedVar=0,speed0=0,speed1=0,wobble=0;};
 // A pipe 0.99 m long, 0.135 m round, 8 kg, lying along y and rolled along x at 2 m/s.
 Roll roll(bool capsule,bool onSlab){
  World w(!onSlab);if(onSlab)w.slab();Shape s;const float r=.135f,hx=.495f;const Quat along=Quat::axisAngle({1,0,0},kPi*.5f);
+ w.space.settings.roundCylinders=false;   // (the prism it was; Settings::roundCylinders makes it round: drums below)
  if(capsule)s.addCapsule({},r,hx-r,along);else s.add(PartKind::Cylinder,{},{r,r,hx},along);s.finish();
  const int p=w.add(s,{0,0,r},8);Body& b0=w.space.bodies[size_t(p)];b0.v={2,0,0};b0.w={0,2/r,0};
  std::vector<double> t,sp,vz;const float dt=1.f/120;
@@ -229,11 +234,54 @@ void cost(std::ostream& out,const Check& check){
   int sb=0;for(const auto& b:wb.space.bodies)sb+=b.sleeping;out<<"the same heap of boxes: "<<f3(tb/360,3)<<" ms a step, "<<sb<<" asleep at the end\n";}
  check(total/n<4,"cost: 120 hull rocks in a heap step in under 4 ms");}
 
+// A drum (0.29 m round, 0.88 m long, 35 kg) on its side rolled at 2 m/s over a static slab, as its 12-sided prism and as
+// the true round (Settings::roundCylinders); and stood on its end on the slab, leant 2 degrees.
+Roll rollDrum(bool round){
+ World w(false);w.space.settings.roundCylinders=round;w.slab();Shape s;const float r=.29f,hz=.44f;s.add(PartKind::Cylinder,{},{r,r,hz},Quat::axisAngle({1,0,0},kPi*.5f));s.finish();
+ const int p=w.add(s,{0,0,r},35);Body& b0=w.space.bodies[size_t(p)];b0.v={2,0,0};b0.w={0,2/r,0};
+ std::vector<double> t,sp,vz;const float dt=1.f/120;
+ for(int i=0;i<240;++i){w.space.step(dt);const Body& b=w.space.bodies[size_t(p)];if(i<30)continue;const double s2=std::sqrt(double(b.v.x)*b.v.x+double(b.v.y)*b.v.y);if(s2<.2)break;t.push_back(i*dt);sp.push_back(s2);vz.push_back(b.v.z);}
+ Roll out;if(t.size()<10)return out;
+ double mt=0,ms=0;for(size_t i=0;i<t.size();++i){mt+=t[i];ms+=sp[i];}mt/=double(t.size());ms/=double(t.size());
+ double sxy=0,sxx=0;for(size_t i=0;i<t.size();++i){sxy+=(t[i]-mt)*(sp[i]-ms);sxx+=(t[i]-mt)*(t[i]-mt);}const double k=sxx>0?sxy/sxx:0;
+ for(size_t i=0;i<t.size();++i){const double e=sp[i]-(ms+k*(t[i]-mt));out.speedVar+=e*e;out.vzVar+=vz[i]*vz[i];}
+ out.speedVar/=double(t.size());out.vzVar/=double(t.size());out.speed0=sp.front();out.speed1=sp.back();return out;}
+struct Stand {bool asleep=false;float tilt=9,drift=9,sink=9;};
+Stand standDrum(bool round){
+ World w(false);w.space.settings.roundCylinders=round;w.slab();Shape s;const float r=.29f,hz=.44f;s.add(PartKind::Cylinder,{},{r,r,hz});s.finish();
+ const Quat lean=Quat::axisAngle({1,0,0},2*kPi/180);const int p=w.add(s,{0,0,hz+.002f},35,lean);const V3 start=w.space.bodies[size_t(p)].x;
+ for(int i=0;i<360;++i)w.space.step(1.f/120);const Body& b=w.space.bodies[size_t(p)];Stand out;out.asleep=b.sleeping;
+ out.tilt=std::acos(std::clamp(b.q.rotate({0,0,1}).z,-1.f,1.f));out.drift=std::hypot(b.x.x-start.x,b.x.y-start.y);out.sink=std::max(0.f,-support(b,0,{0,0,-1}).z);return out;}
+void drums(std::ostream& out,const Check& check){
+ const Roll prism=rollDrum(false),round=rollDrum(true);
+ out<<"a drum on its side rolled at 2 m/s over a static slab: the prism's vertical-speed variance "<<f3(prism.vzVar*1e6,3)<<" e-6 m^2/s^2, speed variance "<<f3(prism.speedVar*1e6,3)<<" e-6 ("<<f3(prism.speed0,2)<<" to "<<f3(prism.speed1,2)<<" m/s); the round's "<<f3(round.vzVar*1e6,4)<<" e-6, "<<f3(round.speedVar*1e6,4)<<" e-6 ("<<f3(round.speed0,2)<<" to "<<f3(round.speed1,2)<<" m/s)\n";
+ check(round.vzVar<.05*prism.vzVar+1e-7&&round.speedVar<.05*prism.speedVar+1e-7&&round.speed1>.5,"rolling: a drum rolls over a prop as a true round, with a twentieth of its prism's speed variance or less");
+ const Stand up=standDrum(true),upPrism=standDrum(false);
+ out<<"a drum stood on its end on the slab, leant 2 degrees: "<<(up.asleep?"asleep":"awake")<<" after 3 s, "<<f3(up.tilt*57.3,3)<<" deg off upright, drifted "<<f3(up.drift*1000,2)<<" mm, "<<f3(up.sink*1000,2)<<" mm into the slab (the prism: "<<(upPrism.asleep?"asleep":"awake")<<", "<<f3(upPrism.tilt*57.3,3)<<" deg, "<<f3(upPrism.drift*1000,2)<<" mm)\n";
+ check(up.asleep&&up.tilt<.01f&&up.sink<.003f,"standing: a drum stood leant on its end on a prop settles flat and upright on it and sleeps");}
+// In the game's water (RigidClutter.cpp): a sealed drum floating on its side, turned about its own axis at 4 rad/s: how much
+// it bobs (its vertical-speed variance over a second) with its cells round its axis (water.round_cells 1) and in the old
+// square turned with it (0, from a tune file of this tube's own).
+double drumBob(bool roundCells){std::string saved;{auto& tf=TuneFile::instance();std::lock_guard<std::mutex> hold(tf.lock);saved=tf.path;}
+ if(!roundCells){std::ofstream("vectra-shapes-square-cells.txt")<<"water.round_cells 0\n";tuneFile("vectra-shapes-square-cells.txt");}
+ constexpr float Bed=-1.2f,Surface=-.05f;auto m=regression::room();m->definition.playerStart={2,2};m->waterVolumes.push_back({3,6,11,14,Bed,Surface});
+ forceLegacyProps(0);Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};
+ Clutter c;c.kind=7;c.model=model::ind_barrel;c.dims=Game::propTraits(c.model).size;c.pos={7,10};c.z=Surface-.3f;c.roll=kPi*.5f;c.sleeping=false;
+ {auto t=std::make_shared<EntityTraits>();t->density=220;t->floats=1;c.traits=t;}
+ LabAccess::clutter(g)={c};for(int i=0;i<300;++i)g.update({},1.f/60);
+ double var=0;int n=0;for(int i=0;i<60;++i){auto& d=LabAccess::clutter(g)[0];{Body b;toBody(d,b);setPropAngular(d,b.q.rotate({0,0,1})*4.f);}d.sleeping=false;g.update({},1.f/60);if(i>=10){var+=double(d.vz)*d.vz;++n;}}
+ forceLegacyProps(-1);if(!roundCells)tuneFile(saved);return var/std::max(1,n);}
+void drumWater(std::ostream& out,const Check& check){
+ const double round=drumBob(true),square=drumBob(false);
+ out<<"a sealed drum afloat on its side, turned about its axis at 4 rad/s: vertical-speed variance "<<f3(round*1e6,3)<<" e-6 m^2/s^2 with its water cells round its axis, "<<f3(square*1e6,3)<<" e-6 in the old square\n";
+ check(round<.5*square,"water: a drum turning afloat on its side bobs half as much or less with its cells round its axis");}
+
 const bool registered=add({.name="vectra-shapes",.summary="capsules and convex hulls: mass, a pipe rolling smoothly, a rock and gib shards resting on their true faces, rays on the true surface, cones and bottles in the game, the cost of a heap",.standalone=[]{
  std::ofstream out("vectra-shapes.txt");bool ok=true;
  auto check=[&](bool pass,const std::string& what){out<<(pass?"PASS ":"FAIL ")<<what<<'\n';out.flush();ok&=pass;};
  out<<"---- mass ----\n";mass(out,check);
  out<<"---- rolling ----\n";rolling(out,check);
+ out<<"---- drums ----\n";drums(out,check);drumWater(out,check);
  out<<"---- resting ----\n";resting(out,check);
  out<<"---- gibs ----\n";gibs(out,check);
  out<<"---- rays ----\n";rays(out,check);

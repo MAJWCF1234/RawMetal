@@ -385,6 +385,35 @@ int capsuleHull(const Body& A,int pa,const Body& B,int pb,const Hull& h,bool cap
     for(float x:{a0,a1}){const V3 p=s0+seg*x;const float si=dot(nf,p)-h.d[fb]-r;if(si<=margin)setPoint(m,A,B,p-nf*(r+si*.5f),si,0x3000000u|std::uint32_t(m.count));}
     if(m.count)return m.count;m.normal=capsuleA?neg(n):n;}}}
  setPoint(m,A,B,core-n*(r+sep*.5f),sep,0x3000000);return 1;}
+// A cylinder's round against a box or a hull (Settings::roundCylinders). The prisms' separating axis test finds the
+// contact, and a cap flat on a face keeps it (flat is flat). Where the round side is in it, the contact is worked again
+// from the true cylinder: lying against one of the other's faces, the cylinder's exact feature along that face's normal
+// (its side's line, or a rim point) clipped to the face's sides, as the world's floor meets it; against an edge or a
+// corner, each point's exact distance from the round. A drum rolled over a crate rolls as a round does, not over the
+// twelve corners of its prism.
+// (A cylinder against a box or a hull; two cylinders, or a cylinder and a capsule, still meet as their prisms.)
+bool roundAgainst(PartKind a,PartKind b){return (a==PartKind::Cylinder&&(b==PartKind::Box||b==PartKind::Hull))||(b==PartKind::Cylinder&&(a==PartKind::Box||a==PartKind::Hull));}
+int roundFix(const Body& A,int pa,const Body& B,int pb,const Hull& ha,const Hull& hb,float margin,Manifold& m){
+ if(m.count<=0)return m.count;
+ const bool cylA=A.shape->parts[size_t(pa)].kind==PartKind::Cylinder;const Body& C=cylA?A:B;const int pc=cylA?pa:pb;const Hull& P=cylA?hb:ha;
+ V3 cc;Quat ct;partFrame(C,pc,cc,ct);const V3 axis=ct.rotate({0,0,1});
+ const V3 nPC=cylA?neg(m.normal):m.normal;   // from the other into the cylinder
+ if(std::fabs(dot(nPC,axis))>.9f)return m.count;   // on a cap
+ // Against a face of the other: its exact feature, clipped to the face.
+ int f=-1;float most=.9f;for(int k=0;k<P.t->nf;++k){const float d=dot(P.n[k],nPC);if(d>most){most=d;f=k;}}
+ if(f>=0){const V3 n=P.n[f];std::array<V3,8> feat{};const int k=supportFeature(C,pc,neg(n),feat);const auto& F=P.t->f[f];Manifold out=m;out.count=0;
+  for(int i=0;i<k&&out.count<4;++i){const V3 p=feat[size_t(i)];bool in=true;
+   for(int e=0;e<F.n&&in;++e){const V3 a=P.v[F.idx[e]],b=P.v[F.idx[(e+1)%F.n]];in=dot(norm(cross(b-a,n)),p-a)<=.002f;}
+   const float s=dot(n,p)-P.d[f];if(!in||s>margin)continue;
+   setPoint(out,A,B,p-n*(s*.5f),s,0x4000000u|std::uint32_t(f<<8|i));}
+  if(out.count){out.normal=cylA?neg(n):n;m=out;return m.count;}}
+ // Against an edge or a corner: each of the other's points from the true round (its nearest place on the cylinder).
+ Manifold out=m;out.count=0;V3 sum{};
+ for(int i=0;i<m.count;++i){const auto& c=m.points[size_t(i)];const V3 onP=c.p-nPC*(c.separation*.5f);V3 surface,outward;float d;
+  nearestPoint(C,pc,onP,surface,outward,d);if(d>margin)continue;sum=sum+outward;setPoint(out,A,B,(onP+surface)*.5f,d,c.feature);}
+ if(!out.count){m.count=0;return 0;}
+ const V3 nC=norm(sum,neg(nPC));out.normal=cylA?nC:neg(nC);   // the normal from A to B: out of the cylinder when it is A
+ m=out;return m.count;}
 // A point's nearest place on a part (sphere centre against box or cylinder): the surface point and the
 // outward normal there, and whether the point is inside.
 bool nearestOnPart(const Body& b,int part,V3 point,V3& surface,V3& normal,float& distance){
@@ -501,7 +530,8 @@ int collideParts(const Body& A,int pa,const Body& B,int pb,float margin,Manifold
  if(a.kind==PartKind::Capsule&&b.kind==PartKind::Capsule)return roundRound(A,pa,B,pb,margin,m);
  if(a.kind==PartKind::Capsule){const Hull hb=hullOf(B,pb);return capsuleHull(A,pa,B,pb,hb,true,margin,m);}
  if(b.kind==PartKind::Capsule){const Hull ha=hullOf(A,pa);return capsuleHull(A,pa,B,pb,ha,false,margin,m);}
- const Hull ha=hullOf(A,pa),hb=hullOf(B,pb);return hullHull(A,B,ha,hb,margin,m);}
+ const Hull ha=hullOf(A,pa),hb=hullOf(B,pb);const int found=hullHull(A,B,ha,hb,margin,m);
+ return found&&roundAgainst(a.kind,b.kind)?roundFix(A,pa,B,pb,ha,hb,margin,m):found;}
 
 // ---- The solver -----------------------------------------------------------------------------------
 namespace {
@@ -561,7 +591,8 @@ void Space::collide(float dt){
    ++pairsTested;Manifold m;
    const PartKind ka=a.shape->parts[size_t(pa)].kind,kb=b.shape->parts[size_t(pb)].kind;
    int found;
-   if(polyhedral(ka)&&polyhedral(kb))found=collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m);
+   if(polyhedral(ka)&&polyhedral(kb)){found=collideBuilt(a,pa,hull(i,pa),b,pb,hull(j,pb),margin,m);
+    if(found&&settings.roundCylinders&&roundAgainst(ka,kb))found=roundFix(a,pa,b,pb,hull(i,pa),hull(j,pb),margin,m);}
    else if(ka==PartKind::Capsule&&polyhedral(kb)){m.count=0;m.partA=pa;m.partB=pb;found=capsuleHull(a,pa,b,pb,hull(j,pb),true,margin,m);}
    else if(kb==PartKind::Capsule&&polyhedral(ka)){m.count=0;m.partA=pa;m.partB=pb;found=capsuleHull(a,pa,b,pb,hull(i,pa),false,margin,m);}
    else found=collideParts(a,pa,b,pb,margin,m);
@@ -589,6 +620,15 @@ void Space::prepare(float h){
  // The bodies a joint holds: their contacts keep their true masses (a bridge's planks under a crate share its weight with
  // their pins by them; scaled, the joints and the contacts disagreed and the bridge never came to rest).
  std::vector<char> jointed;if(settings.shockNormal>0&&!constraints.empty()){jointed.assign(bodies.size(),0);for(auto*c:constraints){if(auto*j=c->joint();j&&j->broken)continue;for(int k:{c->bodyA(),c->bodyB()})if(k>=0&&k<int(bodies.size()))jointed[size_t(k)]=1;}}
+ // And only a body held up itself is scaled under another: one touching the world under it (within a centimetre), or a body
+ // that does not move (asleep, held), or one so held, up a stack from the bottom. Two falling together meet with their
+ // true masses: a 100 kg drum falling onto a 1 kg crate in the air took the crate as 100 kg and stopped as if on the floor.
+ std::vector<char> supported;
+ if(settings.shockNormal>0){supported.assign(bodies.size(),0);const float shock=settings.shockNormal;
+  auto touching=[](const Manifold& m){for(int k=0;k<m.count;++k)if(m.points[size_t(k)].separation<=.01f)return true;return false;};
+  auto stacked=[&](const Manifold& m,int& under,int& over){if(m.b<0||std::fabs(m.normal.z)<shock||!touching(m))return false;under=m.normal.z>0?m.a:m.b;over=m.normal.z>0?m.b:m.a;return true;};
+  for(const auto&m:manifolds){if(m.b<0){if(m.normal.z<=-shock&&touching(m))supported[size_t(m.a)]=1;continue;}int u,o;if(stacked(m,u,o)&&!bodies[size_t(u)].movable())supported[size_t(o)]=1;}
+  for(size_t pass=0;pass<bodies.size();++pass){bool more=false;for(const auto&m:manifolds){int u,o;if(stacked(m,u,o)&&supported[size_t(u)]&&!supported[size_t(o)]){supported[size_t(o)]=1;more=true;}}if(!more)break;}}
  // Warm start: the cache is sorted by key.
  for(auto&m:manifolds){
   const Body& A=bodies[size_t(m.a)];const Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;
@@ -601,9 +641,11 @@ void Space::prepare(float h){
   m.scaleA=m.scaleB=1;
   if(B&&settings.shockNormal>0&&std::fabs(m.normal.z)>=settings.shockNormal&&A.movable()&&B->movable()&&A.softHertz<=0&&B->softHertz<=0&&m.surface.hertz<=0){
    const bool aUnder=m.normal.z>0;const float under=aUnder?A.invMass:B->invMass,over=aUnder?B->invMass:A.invMass;
-   if(under>over&&under>0&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
+   if(under>over&&under>0&&supported[size_t(aUnder?m.a:m.b)]&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
   // Against the world: the surface's own material, where the caller gave one (a puddle is slick, carpet grips).
-  if(!B&&m.surface.gripped())m.material=Material::mix(A.material,m.surface.material());
+  // Its bounce is the two together (the product): a floor of its own give does not let a prop's restitution override it
+  // (a wooden crate on concrete, 0.3 and 0.3, bounces 0.09; rubber 0.25).
+  if(!B&&m.surface.gripped()){m.material=Material::mix(A.material,m.surface.material());m.material.restitution=A.material.restitution*m.surface.restitution;}
   basis(m.normal,m.t1,m.t2);
   const auto key=keyOf(m);auto it=std::lower_bound(cache.begin(),cache.end(),key,[](const auto& e,std::uint64_t k){return e.first<k;});
   const Cached* old=it!=cache.end()&&it->first==key?&it->second:nullptr;m.cold=old==nullptr;
@@ -717,6 +759,13 @@ void Space::restitution(){
   const V3 dv=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const float vn=dot(dv,m.normal);
   const float impulse=std::max(0.f,-(vn+m.material.restitution*approach)/k);if(impulse<=0)continue;
   const V3 P=m.normal*impulse;if(ma){A.v=A.v-P*(A.invMass*m.scaleA);A.w=A.w-A.invInertia*cross(rA,P)*m.scaleA;}if(mb){B->v=B->v+P*(B->invMass*m.scaleB);B->w=B->w+B->invInertia*cross(rB,P)*m.scaleB;}
+  // A bounce off the world takes friction as any blow does: against the sliding at that point, at most the dynamic friction
+  // times the bounce (left without, a crate thrown down onto concrete kept most of its sideways speed and skated on).
+  if(!B){const V3 dv2=velocityOf(B,rB,m.surface.velocity)-(A.v+cross(A.w,rA));const V3 vt=dv2-m.normal*dot(dv2,m.normal);const float sl=len(vt);
+   if(sl>1e-4f){const V3 t=vt*(1/sl);const V3 tA=cross(rA,t),tB=cross(rB,t);
+    const float kt=(ma?(A.invMass+dot(tA,A.invInertia*tA))*m.scaleA:0.f)+(mb?(B->invMass+dot(tB,B->invInertia*tB))*m.scaleB:0.f);
+    if(kt>0){const float jt=std::min(m.material.dynamicFriction*impulse,sl/kt);const V3 F=t*(-jt);
+     if(ma){A.v=A.v-F*(A.invMass*m.scaleA);A.w=A.w-A.invInertia*cross(rA,F)*m.scaleA;}if(mb){B->v=B->v+F*(B->invMass*m.scaleB);B->w=B->w+B->invInertia*cross(rB,F)*m.scaleB;}}}}
   for(int k2=0;k2<m.count;++k2){auto&c=m.points[size_t(k2)];c.normalImpulse+=impulse*(c.maxNormalImpulse/weight);c.maxNormalImpulse=std::max(c.maxNormalImpulse,c.normalImpulse);}}
 }
 void Space::storeImpulses(){
@@ -726,7 +775,7 @@ void Space::storeImpulses(){
  // woken by a shot then starts from the impulses it slept on, not from nothing.
  {std::vector<int> awake;for(int i=0;i<int(bodies.size());++i)if(!bodies[size_t(i)].sleeping)awake.push_back(idOf(i));std::sort(awake.begin(),awake.end());
   auto up=[&](int id){return id>=0&&std::binary_search(awake.begin(),awake.end(),id);};
-  for(const auto&e:cache){const int idA=int(e.first>>40),idB=int((e.first>>20)&0xfffff)-1;if(!up(idA)&&!up(idB))next.push_back(e);}}
+  for(const auto&e:cache){const int idA=Manifold::keyIdA(e.first),idB=Manifold::keyIdB(e.first);if(!up(idA)&&!up(idB))next.push_back(e);}}
  // (This step's sorted, then merged with what was kept, already in order: the kept for 600 sleepers were sorted again
  // every step. The merge puts a new entry before a kept one of the same key, as the stable sort did.)
  {const auto mid=next.begin()+std::ptrdiff_t(manifolds.size());std::stable_sort(next.begin(),mid,[](const auto& a,const auto& b){return a.first<b.first;});
@@ -785,7 +834,7 @@ void Space::drive(int i,V3 targetX,Quat targetQ,float linearHertz,float angularH
  b.updateInertia();const M3 I=b.q.matrix()*b.inertiaLocal*b.q.matrix().transposed();V3 L=I*dw;const float lc=maxTorque*dt,ll=len(L);
  if(ll>lc&&ll>0)L=L*(lc/ll);b.w=b.w+b.invInertia*L;}
 void Space::step(float dt){
- events.clear();jointEvents.clear();if(dt<=0||bodies.empty()){manifolds.clear();return;}
+ events.clear();jointEvents.clear();ccdSweeps=0;ccdMs=0;if(dt<=0||bodies.empty()){manifolds.clear();return;}
  // A joint does not hold a moving body to a sleeping one: what is joined to something awake wakes (through
  // the whole chain).
  for(bool woke=true;woke;){woke=false;for(auto*c:constraints){const int a=c->bodyA(),b=c->bodyB();if(a<0||b<0)continue;if(auto*j=c->joint();j&&j->broken)continue;
@@ -825,7 +874,7 @@ void Space::step(float dt){
   // A face landing flat brings the body's whole mass at the middle, not one corner's share.
   if(m.count>1&&m.midMass>mass)mass=m.midMass;
   if(approach>.3f)events.push_back({m.a,m.b,m.partA,m.partB,at,m.normal,approach,impulse,mass,m.surface});}
- continuous(dt,start);
+ {const auto c0=std::chrono::steady_clock::now();continuous(dt,start);ccdMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-c0).count();}
  // What the substeps left open of a joint that asks for it (a ragdoll's), put back by position.
  for(int it=0;it<settings.projectIterations;++it)for(auto*c:constraints)c->project(*this);
  islands(dt);

@@ -78,10 +78,14 @@ void edgeProbes(const Body& b,int part,float spacing,std::vector<V3>& out);
 // ---- Continuous collision ----
 // What Space::continuous runs after a step (`start`: each body's centre of mass when the step began; its turn
 // then is its dq undone). A body is fast for its size when its centre went, or its reach turned, more than
-// half its least thickness (2 cm at least); a body a joint holds never is (put back alone, it would open its joints).
-// RM_CCD=off turns it all off. For each fast body, in index order:
-//  - against the world: the points along its edges (corners, every 2.5 cm along edges, a cylinder's rims) ray
-//    cast through the step in pieces of at most 0.15 rad of its turn, by Space::sweep; a point that strikes
+// half its least thickness (2 cm at least). Bodies joined by joints that hold are one island: its earliest impact over
+// its fast bodies puts all of them back to that moment together (one put back alone would open its joints); a jointed
+// body takes no blow from another body here (the next step's solver shares it with its partners).
+// RM_CCD=off turns it all off. For each fast body (each island), in index order:
+//  - against the world: points on its edges (corners, edges' middles, and every 2.5 cm along the edges where the point
+//    leads and goes further than the body is thick; at most Settings::ccdProbes, and the step about ccdBudget sweeps,
+//    each fast body its share) ray cast through the step in pieces of its turn (as few as keep a point's chord within
+//    2 mm of its arc, at most 0.15 rad), by Space::sweep; a point that strikes
 //    something and went through it, or ends more than 2 cm into it, is a time of impact;
 //  - against other bodies (pruned by swept spheres; not pairs the Space's filter or groups rule out, a holding
 //    joint joins, the caller meets itself by pairContacts, with a soft body, or going together, the other moving in

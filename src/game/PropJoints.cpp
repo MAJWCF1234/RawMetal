@@ -67,6 +67,9 @@ void Game::addPropJoints(int level,std::vector<Clutter>& list,const std::vector<
     j.length=spec.length>0?spec.length:len(at-j.groundA)+spec.ratio*len(to-j.groundB);break;}
    default:j.attachEnds(ha,B,at,to,spec.length>0);if(spec.length>0)j.length=spec.length;break;}
   if(spec.kind==PropJointKind::Winch&&s.length>0)j.length=s.length;
+  // What a hard blow leaves open (a door's pin, a weld, a slider's rail, a chain's length) is put back by position after
+  // the step (Joint::positionCorrection), so a crate thrown into a hung door does not pull it visibly off its pin.
+  j.positionCorrection=spec.kind!=PropJointKind::Spring&&spec.kind!=PropJointKind::Pulley;
   j.limited=spec.limited;j.lower=spec.lower;j.upper=spec.upper;
   if(spec.kind==PropJointKind::Winch&&!spec.limited){j.limited=true;j.lower=.2f;j.upper=std::max(j.length,spec.length);}
   if(spec.kind==PropJointKind::Ball){const float d=kPi/180;if(spec.cone>=0){j.coneX=spec.cone*d;j.coneY=(spec.cone2>=0?spec.cone2:spec.cone)*d;}if(spec.twist>=0){j.twistLimited=true;j.twistLower=-spec.twist*d;j.twistUpper=spec.twist*d;}}

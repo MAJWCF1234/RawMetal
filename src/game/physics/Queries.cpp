@@ -265,29 +265,112 @@ namespace {
 constexpr float ProbeSpacing=.025f;  // edge probes this far apart: a 3 cm post cannot slip between two
 constexpr float TunnelDepth=.02f;    // a body ending this deep in what it struck is past what its contacts push out
 constexpr float SubTurn=.15f;        // a turn swept in pieces of at most this angle (a 0.6 m reach strays 1.7 mm from its arc)
+constexpr float ArcStray=.002f;      // how far a probe's piece of chord may stray from its arc (sets its own pieces)
 // What a fast body met first this step.
 struct Event {float t=1;int kind=0;int other=-1;V3 point{},normal{};};   // kind 1: the world at a probe (point: in the body's frame), 2: a body
 // A probe's way through the step in pieces (the body's poses at each piece's ends): the first piece that
 // strikes the world, if from there it went through, or ends deep in it.
 struct ProbeHit {float t,window;V3 r,n;};
-bool worldProbes(Space& s,int i,const Motion& m,std::vector<V3>& probes,std::vector<ProbeHit>& hits,Event& best){
- Body& b=s.bodies[size_t(i)];probes.clear();hits.clear();for(int p=0;p<b.shape->count;++p)edgeProbes(b,p,ProbeSpacing,probes);
- const int K=std::clamp(int(std::ceil(m.angle/SubTurn)),1,8);std::array<V3,9> xs{};std::array<Quat,9> qs{};
+// A body's edges for its probes (body frame, from the centre of mass): its corners with the outward normals of the faces
+// round them, and its edges between corners, straight or round a circle (a cylinder's rim, a capsule's ring), with their
+// faces' normals (a round edge's taken at each point along it).
+struct Corner {V3 p{};std::array<V3,3> n{};int count=0;};
+struct Edge {int a=0,b=0;V3 n0{},n1{};int count=2;
+ bool round=false;V3 centre{};Quat turn{};float radius=0,from=0,to=0,z=0,cap=0;   // round: the circle (part frame), its angles, its cap's side (+-1, 0 none)
+ float length(const std::vector<Corner>& c)const{return round?radius*std::fabs(to-from):len(c[size_t(b)].p-c[size_t(a)].p);}
+ // The point at t of the way along it, and its faces' normals there.
+ V3 at(const std::vector<Corner>& c,float t,std::array<V3,3>& n,int& nn)const{
+  if(!round){nn=count;n[0]=n0;n[1]=n1;return c[size_t(a)].p+(c[size_t(b)].p-c[size_t(a)].p)*t;}
+  const float g=from+(to-from)*t,cg=std::cos(g),sg=std::sin(g);n[0]=turn.rotate({cg,sg,0});nn=1;if(cap!=0){n[1]=turn.rotate({0,0,cap});nn=2;}
+  return centre+turn.rotate({cg*radius,sg*radius,z});}};
+void edgesOf(const Body& b,int part,std::vector<Corner>& corners,std::vector<Edge>& edges){
+ const auto& p=b.shape->parts[size_t(part)];const V3 base=p.centre-b.shape->com;
+ auto at=[&](V3 l){return base+p.turn.rotate(l);};auto dir=[&](V3 l){return p.turn.rotate(l);};
+ const int c0=int(corners.size());
+ auto corner=[&](V3 l,std::initializer_list<V3> normals){Corner c;c.p=at(l);for(V3 n:normals)if(c.count<3)c.n[size_t(c.count++)]=dir(n);corners.push_back(c);return int(corners.size())-1;};
+ auto line=[&](int a,int b2,V3 n0,V3 n1,int count){Edge e;e.a=a;e.b=b2;e.n0=dir(n0);e.n1=dir(n1);e.count=count;edges.push_back(e);};
+ if(p.kind==PartKind::Box){const V3 h=p.half;
+  for(int i=0;i<8;++i){const float sx=i&1?1.f:-1.f,sy=i&2?1.f:-1.f,sz=i&4?1.f:-1.f;corner({sx*h.x,sy*h.y,sz*h.z},{V3{sx,0,0},V3{0,sy,0},V3{0,0,sz}});}
+  for(int axis=0;axis<3;++axis){const int bit=1<<axis;for(int i=0;i<8;++i){if(i&bit)continue;const int o1=(axis+1)%3,o2=(axis+2)%3;
+    auto unit=[&](int ax,int corner2){V3 v{};const float s=corner2&(1<<ax)?1.f:-1.f;if(ax==0)v.x=s;else if(ax==1)v.y=s;else v.z=s;return v;};
+    line(c0+i,c0+(i|bit),unit(o1,i),unit(o2,i),2);}}
+  return;}
+ if(p.kind==PartKind::Cylinder||p.kind==PartKind::Capsule){const float r=p.half.x,hz=p.half.z;const bool cyl=p.kind==PartKind::Cylinder;constexpr int N=8;
+  int ring[2][N];
+  for(int s2=0;s2<2;++s2){const float z=s2?hz:-hz,cap=s2?1.f:-1.f;
+   for(int k=0;k<N;++k){const float g=2*kPi*float(k)/float(N),cg=std::cos(g),sg=std::sin(g);
+    ring[s2][k]=cyl?corner({cg*r,sg*r,z},{V3{cg,sg,0},V3{0,0,cap}}):corner({cg*r,sg*r,z},{V3{cg,sg,0}});}
+   for(int k=0;k<N;++k){Edge e;e.a=ring[s2][k];e.b=ring[s2][(k+1)%N];e.round=true;e.centre=base;e.turn=p.turn;e.radius=r;e.from=2*kPi*float(k)/float(N);e.to=2*kPi*float(k+1)/float(N);e.z=z;e.cap=cyl?cap:0.f;edges.push_back(e);}
+   if(cyl)corner({0,0,z},{V3{0,0,cap}});
+   else{for(int k=0;k<N;++k){const float g=2*kPi*float(k)/float(N);const V3 d=norm(V3{std::cos(g)*.7071f,std::sin(g)*.7071f,cap*.7071f});corner({d.x*r,d.y*r,z+d.z*r},{d});}corner({0,0,z+cap*r},{V3{0,0,cap}});}}
+  for(int k=0;k<N;++k){const float g=2*kPi*float(k)/float(N);line(ring[0][k],ring[1][k],{std::cos(g),std::sin(g),0},{},1);}
+  return;}
+ if(p.kind==PartKind::Hull&&p.hull){const auto& t=*p.hull;
+  for(int i=0;i<t.nv;++i){Corner c;c.p=at(t.v[i]);corners.push_back(c);}
+  for(int e=0;e<t.ne;++e){Edge E;E.a=c0+t.e[e][0];E.b=c0+t.e[e][1];E.count=0;
+   for(int side=0;side<2;++side){const int f=t.ef[e][side];if(f<0)continue;const V3 n=dir(t.f[f].normal);(E.count==0?E.n0:E.n1)=n;++E.count;
+    for(int v:{t.e[e][0],t.e[e][1]}){auto& c=corners[size_t(c0+v)];bool have=false;for(int k=0;k<c.count;++k)have|=dot(c.n[size_t(k)],n)>.999f;if(!have&&c.count<3)c.n[size_t(c.count++)]=n;}}
+   edges.push_back(E);}
+  return;}
+ const float r=p.half.x;for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k)if(i||j||k){const V3 d=norm(V3{float(i),float(j),float(k)});corner(d*r,{d});}}
+// The probes a fast body is swept by: its corners, and along each edge its middle, and every `fine` metres where the point
+// leads (it goes out of a face round it, not into the body) and goes further than the body is thick (a thin thing could
+// pass it whole; a nearer one would end inside it, the contacts' business). Points that lead nowhere or hardly move are
+// left out. Each probe's pieces of the turn: as few as keep its chord within ArcStray of its arc (a power of two, at most
+// K). Returns how many sweeps they ask (the sum of their pieces); `fineCount` and `fineCost` the share of those from `fine`.
+struct Probe {V3 r;int pieces;};
+int gatherProbes(const std::vector<Corner>& corners,const std::vector<Edge>& edges,const Motion& m,int K,float thick,float fine,std::vector<Probe>& out,int& fineCount,int& fineCost){
+ out.clear();fineCount=0;fineCost=0;int cost=0;const V3 lin=m.x1-m.x0,omega=m.axis*m.angle;Quat qm;V3 xm;m.at(.5f,xm,qm);
+ auto pieces=[&](V3 r){const float rr=std::max(len(r),1e-3f),most=std::sqrt(8*ArcStray/rr);int k=1;while(k<K&&float(k)*most<m.angle)k*=2;return k;};
+ auto consider=[&](V3 r,const std::array<V3,3>& n,int nn,bool isFine)->bool{
+  const V3 start=m.x0+m.q0.rotate(r),end=m.x1+m.q1.rotate(r);const float travel=len(end-start);
+  if(travel<TunnelDepth*.5f)return false;   // it hardly moved: its contacts hold it
+  if(isFine&&travel<=thick)return false;
+  // Leading: going out of one of its faces at the step's start, middle or end.
+  bool lead=nn==0;
+  const Quat* poses[3]={&m.q0,&qm,&m.q1};for(const Quat* q:poses){if(lead)break;const V3 arm=q->rotate(r),v=lin+cross(omega,arm);for(int k=0;k<nn&&!lead;++k)lead=dot(v,q->rotate(n[size_t(k)]))>0;}
+  if(!lead)return false;
+  const int p=pieces(r);out.push_back({r,p});cost+=p;if(isFine){++fineCount;fineCost+=p;}return true;};
+ for(const auto& c:corners)consider(c.p,c.n,c.count,false);
+ std::array<V3,3> n{};int nn=0;
+ for(const auto& e:edges){const float L=e.length(corners);
+  consider(e.at(corners,.5f,n,nn),n,nn,false);
+  if(fine<=0)continue;const int segs=int(std::ceil(L/fine));if(segs<2)continue;
+  for(int k=1;k<segs;++k){if(2*k==segs)continue;const V3 r=e.at(corners,float(k)/float(segs),n,nn);consider(r,n,nn,true);}}
+ return cost;}
+bool worldProbes(Space& s,int i,const Motion& m,float thick,int share,std::vector<Probe>& probes,std::vector<ProbeHit>& hits,Event& best){
+ Body& b=s.bodies[size_t(i)];probes.clear();hits.clear();
+ const int cap=s.settings.ccdProbes;
+ int K=std::clamp(int(std::ceil(m.angle/SubTurn)),1,8);
+ if(cap<=0){   // every 2.5 cm along every edge, each through every piece (as before the bound)
+  static thread_local std::vector<V3> all;all.clear();for(int p=0;p<b.shape->count;++p)edgeProbes(b,p,ProbeSpacing,all);for(const V3& r:all)probes.push_back({r,K});}
+ else{
+  {int k=1;while(k<K)k*=2;K=k;}   // (pieces by halves: a probe's own are every second, fourth... of the body's)
+  static thread_local std::vector<Corner> corners;static thread_local std::vector<Edge> edges;corners.clear();edges.clear();
+  for(int p=0;p<b.shape->count;++p)edgesOf(b,p,corners,edges);
+  // Along its leading edges every 2.5 cm, then wider to keep to `cap` probes, and to its share of the step's sweeps.
+  float fine=ProbeSpacing;int fines=0,fineCost=0;int cost=gatherProbes(corners,edges,m,K,thick,fine,probes,fines,fineCost);
+  for(int tries=0;tries<4&&fines>0;++tries){const int base=int(probes.size())-fines;
+   float grow=1;if(int(probes.size())>cap)grow=std::max(grow,float(fines)/float(std::max(1,cap-base)));
+   if(share>0&&cost>share)grow=std::max(grow,float(fineCost)/float(std::max(1,share-(cost-fineCost))));
+   if(grow<=1.001f)break;fine*=grow*1.05f;if(fine>2.f)fine=0;cost=gatherProbes(corners,edges,m,K,thick,fine,probes,fines,fineCost);}}
+ std::array<V3,9> xs{};std::array<Quat,9> qs{};
  for(int k=0;k<=K;++k)m.at(float(k)/float(K),xs[size_t(k)],qs[size_t(k)]);
+ auto sweep=[&](V3 a,V3 c,V3& n){++s.ccdSweeps;return s.sweep(s,i,a,c,n);};
  float first=best.t;
- for(const V3& r:probes){
+ for(const Probe& pr:probes){const V3 r=pr.r;const int stride=K/std::max(1,pr.pieces);
   const V3 start=xs[0]+qs[0].rotate(r),end=xs[size_t(K)]+qs[size_t(K)].rotate(r),way=end-start;const float travel=len(way);
   if(travel<TunnelDepth*.5f)continue;                                      // it hardly moved: its contacts hold it
   // A trailing point (a leading one meets things first): behind the body's way, when its going outruns its turn's
   // sweep there. (Its own chord is no guide: turned past 60 degrees a step, every point's chord points back.)
   {const V3 lin=xs[size_t(K)]-xs[0];const float l=len(lin);if(m.angle*len(r)<l&&dot(qs[0].rotate(r),lin)<-.5f*len(r)*l)continue;}
-  for(int k=0;k<K;++k){if(float(k)/float(K)>first+.05f)break;
-   const V3 a=xs[size_t(k)]+qs[size_t(k)].rotate(r),c=xs[size_t(k+1)]+qs[size_t(k+1)].rotate(r);V3 n;const float f=s.sweep(s,i,a,c,n);
+  for(int k=0;k<K;k+=stride){if(float(k)/float(K)>first+.05f)break;
+   const V3 a=xs[size_t(k)]+qs[size_t(k)].rotate(r),c=xs[size_t(k+stride)]+qs[size_t(k+stride)].rotate(r);V3 n;const float f=sweep(a,c,n);
    if(f>=1)continue;if(f<=0)break;                                         // it starts in something: the contacts' business
-   const float t=(float(k)+f)/float(K);
+   const float t=(float(k)+f*float(stride))/float(K);
    // From where it ends back to just off where it struck: something between, it went through; nothing, it
    // ends in what it struck, and only deep is it ours.
-   const V3 struck=a+(c-a)*f;V3 n2;const float back=s.sweep(s,i,end,struck+n*.002f,n2);
+   const V3 struck=a+(c-a)*f;V3 n2;const float back=sweep(end,struck+n*.002f,n2);
    const bool through=back>0&&back<.999f,deep=back<=0&&dot(struck-end,n)>TunnelDepth;
    if(through||deep){hits.push_back({t,.01f/travel,r,n});first=std::min(first,t);}
    break;}}
@@ -306,22 +389,31 @@ float relativeSweep(const Motion& a,const Motion& b,float reachB){
  const float s=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);return len(p1-p0)+2*std::atan2(s,d.w)*reachB;}
 }
 void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
- (void)dt;const int n=int(s.bodies.size());if(!n)return;
+ (void)dt;s.ccdSweeps=0;const int n=int(s.bodies.size());if(!n)return;
  // RM_CCD=off: none of it (a check's switch, to tell what continuous collision changes).
  static const bool off=[]{const char* v=std::getenv("RM_CCD");return v&&(std::strcmp(v,"off")==0||std::strcmp(v,"0")==0);}();
  if(off){for(auto& b:s.bodies)b.ccd=false;return;}
- // A body a joint holds (a bridge's plank, a corpse's section, a lamp on its chain) is its joints' and its contacts'
- // business, never swept: put back alone to where it met something, against the world or a body, it would open its
- // joints by as far as it went (a crate landing on a bridge pulled its planks 7 cm off their pins).
+ // Bodies joined by joints that hold are swept as one island (a corpse's sections, a door on its hinge, a lamp and its
+ // chain): the island's earliest time of impact, over every fast body in it, puts all of its bodies back to that moment
+ // together, and the blow lands on the one that struck. Put back alone, one body would open its joints by as far as it
+ // went (a crate landing on a bridge pulled its planks 7 cm off their pins); never swept, a thrown corpse or a slammed
+ // door went through a thin wall or post within one step.
  // Pairs the step itself keeps from meeting, or meets its own way, are not the pair pass's either: a time of impact
  // between them would bounce apart what holds them together. Ruled out by the Space's filter or joined by a joint
  // that holds, met by the caller's own contacts (Space::pairContacts: a corpse's skin against its other sections),
  // or soft (a padded prop, a prop going through a corpse: a spring by design, never a wall).
+ std::vector<int> root(static_cast<size_t>(n));for(int i=0;i<n;++i)root[size_t(i)]=i;
+ auto findRoot=[&](int i){while(root[size_t(i)]!=i){root[size_t(i)]=root[size_t(root[size_t(i)])];i=root[size_t(i)];}return i;};
  std::vector<char> held(size_t(n),0);std::vector<std::pair<int,int>> joined;
  for(auto* c:s.constraints){if(auto* j=c->joint();j&&j->broken)continue;const int a=c->bodyA(),b=c->bodyB();
   for(int k:{a,b})if(k>=0&&k<n)held[size_t(k)]=1;
-  if(a>=0&&b>=0&&a!=b)joined.push_back({std::min(a,b),std::max(a,b)});}
+  if(a>=0&&b>=0&&a<n&&b<n&&a!=b){joined.push_back({std::min(a,b),std::max(a,b)});const int ra=findRoot(a),rb=findRoot(b);if(ra!=rb)root[size_t(std::max(ra,rb))]=std::min(ra,rb);}}
  std::sort(joined.begin(),joined.end());
+ // Each island's bodies, in index order (a body no joint holds is an island of its own).
+ std::vector<int> islandStart(size_t(n)+1,0),islandBodies(static_cast<size_t>(n));
+ {for(int i=0;i<n;++i)++islandStart[size_t(findRoot(i))+1];for(int i=0;i<n;++i)islandStart[size_t(i)+1]+=islandStart[size_t(i)];
+  std::vector<int> fill(islandStart.begin(),islandStart.end()-1);for(int i=0;i<n;++i)islandBodies[size_t(fill[size_t(findRoot(i))]++)]=i;}
+ auto membersOf=[&](int i){const int r=findRoot(i);return std::pair<const int*,const int*>{islandBodies.data()+islandStart[size_t(r)],islandBodies.data()+islandStart[size_t(r)+1]};};
  std::vector<Manifold> scratch;
  auto apart=[&](int a,int b){if(a>b)std::swap(a,b);
   if(s.filter&&!s.filter(s,a,b))return true;
@@ -329,26 +421,30 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
   if(s.bodies[size_t(a)].softHertz>0||s.bodies[size_t(b)].softHertz>0)return true;
   if(s.pairContacts){scratch.clear();if(s.pairContacts(s,a,b,0.f,scratch))return true;}
   return false;};
- std::vector<Motion> motion(static_cast<size_t>(n));std::vector<char> fast(size_t(n),0),done(size_t(n),0);std::vector<float> thresholds(size_t(n),0.f);
+ std::vector<Motion> motion(static_cast<size_t>(n));std::vector<char> fast(size_t(n),0),done(size_t(n),0);std::vector<float> thresholds(size_t(n),0.f),thick(size_t(n),0.f);
  for(int i=0;i<n;++i){auto& b=s.bodies[size_t(i)];auto& m=motion[size_t(i)];m.x1=b.x;m.q1=b.q;m.x0=size_t(i)<start.size()?start[size_t(i)]:b.x;
   // Where it began the step: its turn since (dq) undone.
   m.q0=b.movable()?(b.dq.conj()*b.q).normalized():b.q;m.begin();b.ccd=false;if(!b.shape)continue;
   // Fast for its size: it could cross something thinner than itself within this step, by going or by turning
   // (a plank's end sweeps far while its middle hardly moves).
   float small=1e30f;for(int p=0;p<b.shape->count;++p){const auto& part=b.shape->parts[size_t(p)];small=std::min(small,part.kind==PartKind::Box||part.kind==PartKind::Hull?std::min({part.half.x,part.half.y,part.half.z}):part.kind==PartKind::Capsule?part.half.x:std::min(part.half.x,part.kind==PartKind::Cylinder?part.half.z:part.half.x));}
-  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;if(!b.movable()||held[size_t(i)])continue;
+  const float threshold=std::max(.02f,small*.5f);thresholds[size_t(i)]=threshold;thick[size_t(i)]=2*small;if(!b.movable())continue;
   b.ccd=len(m.x1-m.x0)>threshold||m.angle*b.shape->bound>threshold;fast[size_t(i)]=b.ccd;}
- const float target=2*s.settings.linearSlop;std::vector<V3> probes;std::vector<ProbeHit> hits;
+ const float target=2*s.settings.linearSlop;std::vector<Probe> probes;std::vector<ProbeHit> hits;
+ // The step's sweeps against the world (Settings::ccdBudget): each fast body's share of what is left, so a blast of many
+ // fast props thins each one's probes rather than the last ones' going without.
+ int fastLeft=int(std::count(fast.begin(),fast.end(),char(1)));
  // Every body's swept box along x, sorted once: a fast body meets only those whose boxes reach its own (400 resting props
  // and 20 shards: 20 searches, not 8,000 box tests). A body met and put back keeps its way inside its first box.
  std::vector<std::pair<float,int>> byX;float widest=0;std::vector<int> near;
  if(std::find(fast.begin(),fast.end(),char(1))!=fast.end())for(int j=0;j<n;++j){const Body& o=s.bodies[size_t(j)];if(!o.shape)continue;const Motion& mo=motion[size_t(j)];const float r=o.shape->bound;
   const float lo=std::min(mo.x0.x,mo.x1.x)-r,hi=std::max(mo.x0.x,mo.x1.x)+r;byX.push_back({lo,j});widest=std::max(widest,hi-lo);}
  std::sort(byX.begin(),byX.end());
- for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
-  Event best;
-  if(s.sweep)worldProbes(s,i,m,probes,hits,best);
-  // Other bodies: the time two moving, turning shapes first meet.
+ // What body i meets first this step: the world at its edges, then the other bodies (the time two moving, turning shapes
+ // first meet).
+ auto earliest=[&](int i,Event& best){Body& b=s.bodies[size_t(i)];Motion& m=motion[size_t(i)];
+  const int share=s.settings.ccdBudget>0?std::max(1,(s.settings.ccdBudget-s.ccdSweeps)/std::max(1,fastLeft)):0;--fastLeft;
+  if(s.sweep)worldProbes(s,i,m,thick[size_t(i)],share,probes,hits,best);
   const float rb=b.shape->bound;
   const V3 sweptLo=V3{std::min(m.x0.x,m.x1.x),std::min(m.x0.y,m.x1.y),std::min(m.x0.z,m.x1.z)}-V3{rb,rb,rb},sweptHi=V3{std::max(m.x0.x,m.x1.x),std::max(m.x0.y,m.x1.y),std::max(m.x0.z,m.x1.z)}+V3{rb,rb,rb};
   near.clear();for(auto it=std::lower_bound(byX.begin(),byX.end(),std::make_pair(sweptLo.x-widest-.01f,-1));it!=byX.end()&&it->first<=sweptHi.x+.01f;++it)near.push_back(it->second);
@@ -363,37 +459,56 @@ void continuousCollision(Space& s,float dt,const std::vector<V3>& start){
    // (Touching when the step began: the contacts' business. Stopped by its speculative contacts: met at the step's
    // very end, closing no more, and so left as it is.)
    float t;V3 point,normal;if(!timeOfImpact(b,m,o,mo,target,t,point,normal)||t>=best.t)continue;
-   best={t,2,j,point,normal};}
+   best={t,2,j,point,normal};}};
+ // Back to the moment t: every movable body of i's island together (each along its own way through the step, so what
+ // joins them is as it was then), moved on by `shift` (off what was struck). Each one's way now ends there (later
+ // bodies meet that).
+ auto rewind=[&](int i,float t,V3 shift){const auto [first,last]=membersOf(i);
+  for(const int* it=first;it!=last;++it){const int k=*it;Body& o=s.bodies[size_t(k)];if(!o.shape||!o.movable()||done[size_t(k)])continue;Motion& mo=motion[size_t(k)];
+   mo.at(t,o.x,o.q);o.updateInertia();o.x=o.x+shift;mo.x1=o.x;mo.q1=o.q;mo.begin();done[size_t(k)]=1;}};
+ auto finished=[&](int i){const auto [first,last]=membersOf(i);for(const int* it=first;it!=last;++it)done[size_t(*it)]=1;};
+ for(int i=0;i<n;++i){if(!fast[size_t(i)]||done[size_t(i)])continue;
+  // The island's first impact over its fast bodies (a body alone: its own).
+  int si=i;Event best;
+  {const auto [first,last]=membersOf(i);
+   for(const int* it=first;it!=last;++it){const int k=*it;if(!fast[size_t(k)]||done[size_t(k)])continue;Event e;e.t=best.t;earliest(k,e);if(e.kind!=0&&e.t<best.t){best=e;si=k;}}}
+  Body& b=s.bodies[size_t(si)];Motion& m=motion[size_t(si)];
   if(best.kind==0){
    // Nothing at its edges: its centre's way still (as before the probes): back to where the centre meets a
-   // surface, resting its own reach off it, its way into it taken out.
+   // surface, resting its own reach off it, its way into it taken out. (A body a joint holds is left to its probes:
+   // its centre put back alone would open its joints.)
+   if(held[size_t(i)]){finished(i);continue;}
    if(!s.sweep||len(m.x1-m.x0)<=thresholds[size_t(i)])continue;V3 nn;const float t=s.sweep(s,i,m.x0,m.x1,nn);if(t>=1||t<=0)continue;   // (starting in something: the contacts' business)
    float extent=0;for(int p=0;p<b.shape->count;++p)extent=std::max(extent,dot(b.x-support(b,p,neg(nn)),nn));
    b.x=m.x0+(m.x1-m.x0)*t+nn*extent;const float vn=dot(b.v,nn);if(vn<0)b.v=b.v-nn*(vn*(1+b.material.restitution));
    m.x1=b.x;m.q1=b.q;m.begin();done[size_t(i)]=1;continue;}   // its way now ends where it was put (later bodies meet that)
   const float e=best.kind==1?b.material.restitution:Material::mix(b.material,s.bodies[size_t(best.other)].material).restitution;
-  ContactEvent ev;ev.a=i;ev.b=best.kind==1?-1:best.other;
+  ContactEvent ev;ev.a=si;ev.b=best.kind==1?-1:best.other;
   if(best.kind==1){
-   // Back to where the probe met the world, a millimetre off it; its way into it taken out at that point (a corner
-   // striking a post turns the body, not only stops it).
-   m.at(best.t,b.x,b.q);b.updateInertia();const V3 nn=best.normal;b.x=b.x+nn*.001f;
+   // Back to where the probe met the world, a millimetre off it (its island with it); its way into it taken out at that
+   // point (a corner striking a post turns the body, not only stops it).
+   const V3 nn=best.normal;rewind(si,best.t,nn*.001f);
    const V3 arm=b.q.rotate(best.point),at=b.x+arm;const float vn=dot(b.pointVelocity(at),nn),k=effective(b,arm,nn);float impulse=0;
    if(vn<0&&k>0){impulse=-(1+e)*vn/k;b.v=b.v+nn*(impulse*b.invMass);b.w=b.w+b.invInertia*cross(arm,nn*impulse);}
    ev.point=at;ev.normal=neg(nn);ev.approach=std::max(0.f,-vn);ev.impulse=impulse;ev.effectiveMass=k>0?1/k:0;}
   else{
-   // Both back to where they meet (the other too when it was itself fast; a slow one moved too little to
-   // matter), a hair apart, and the blow between them there.
+   // Both back to where they meet (the other too when it was itself fast, with its island; a slow one moved too little
+   // to matter), a hair apart, and the blow between them there.
    Body& o=s.bodies[size_t(best.other)];const V3 nn=best.normal;
-   m.at(best.t,b.x,b.q);b.updateInertia();b.x=b.x-nn*.0005f;
-   if(fast[size_t(best.other)]&&!done[size_t(best.other)]){Motion& mo=motion[size_t(best.other)];mo.at(best.t,o.x,o.q);o.updateInertia();o.x=o.x+nn*.0005f;mo.x1=o.x;mo.q1=o.q;mo.begin();done[size_t(best.other)]=1;}
+   rewind(si,best.t,nn*-.0005f);
+   if(fast[size_t(best.other)]&&!done[size_t(best.other)]){rewind(best.other,best.t,nn*.0005f);finished(best.other);}
    // (A body already done (best.other < i, or swept earlier) has had its way cut to end at its own hit: met here along
    // that shortened way, from where it began to where it was put, not along the path it truly took before its hit.)
+   // A body a joint holds takes no blow here: its partners share it, which only the step's solver knows (struck alone, a
+   // 2 kg plank of a bridge took a 20 kg crate's landing as if it were loose). Put back a hair apart, the two meet by their
+   // contacts on the next step, its joints in the same solve.
    const V3 armA=best.point-b.x,armB=best.point-o.x;const float vn=dot(o.pointVelocity(best.point)-b.pointVelocity(best.point),nn);
    const float k=effective(b,armA,nn)+(o.invMass>0?effective(o,armB,nn):0.f);float impulse=0;
-   if(vn<0&&k>0){impulse=-(1+e)*vn/k;const V3 P=nn*impulse;b.v=b.v-P*b.invMass;b.w=b.w-b.invInertia*cross(armA,P);
+   if(vn<0&&k>0&&!held[size_t(si)]&&!held[size_t(best.other)]){impulse=-(1+e)*vn/k;const V3 P=nn*impulse;b.v=b.v-P*b.invMass;b.w=b.w-b.invInertia*cross(armA,P);
     if(o.invMass>0){o.sleeping=false;o.sleepTime=0;o.v=o.v+P*o.invMass;o.w=o.w+o.invInertia*cross(armB,P);}}
    ev.point=best.point;ev.normal=nn;ev.approach=std::max(0.f,-vn);ev.impulse=impulse;ev.effectiveMass=k>0?1/k:0;}
-  m.x1=b.x;m.q1=b.q;m.begin();done[size_t(i)]=1;
+  // (The whole island is done: its fast bodies that struck nothing first were put back with it.)
+  finished(si);
   if(ev.approach>.3f)s.events.push_back(ev);}
 }
 }

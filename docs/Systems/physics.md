@@ -82,6 +82,15 @@ Chair backs sit on the side `tools/dev/model_fronts.json` puts behind the seat.
   directions, preferring faces. A face contact clips the incident face to the reference face's sides, which
   gives up to four points (the deepest, then the widest spread). An edge contact uses the closest points of
   the two edges. A sphere meets a box, a cylinder or another sphere exactly.
+- **Round cylinders** (`Settings::roundCylinders`, Vectra.cpp `roundFix`). A cylinder against a box or a hull (a drum, a
+  barrel, a mug, a tyre, a jar against a crate, a table, a rock) is a true round: its prism finds the contact, and a cap
+  flat on a face keeps it (flat is flat); where its round side is in it, the contact is worked again from the cylinder
+  itself. Against one of the other's faces, the cylinder's exact feature along that face's normal (its side's line, or a
+  rim point) clipped to the face, as the world's floor meets it; against an edge or a corner, each point's exact distance
+  from the round. Two cylinders, and a cylinder and a capsule, still meet as their prisms. (The world met round parts
+  exactly already.) A drum rolled on its side at 2 m/s over a static slab: as the prism its vertical speed varied by
+  12,423 e-6 m^2/s^2 and its speed by 9,909 e-6 (it bumped to 0.2 m/s); as the round by 0.0000 e-6 and 0.57 e-6, still
+  rolling at 1.62 m/s. Stood leant 2 degrees on its end on the slab it settles flat and sleeps (`vectra-shapes`, drums).
 - **Hulls** use the same separating axis test. Their edge pairs are tested only where the two edges' arcs cross on the
   Gauss map (Gregorius; each arc's plane taken from its edge, so a glass shard's knife edge, whose faces' normals are nearly
   opposite, is still right), with each pair rejected by two dot products first. A hull's incident face is chosen among the
@@ -147,7 +156,12 @@ Restitution runs once per manifold at the end.
 - **New contacts** (nothing to warm start from: a stack just woken or set down whole) are iterated eight more
   times on the step's first substep, so the weight reaches the floor before anything moves. What a sleeping
   body's contacts held is kept while it sleeps, so a stack woken by a shot starts from its own impulses.
-  Warm starting matches contacts by the props' own indices, not their places in the step's body list.
+  Warm starting matches contacts by the props' own indices, not their places in the step's body list. A manifold's
+  key (`Manifold::key`) gives each its own field: the two bodies' ids (20 bits each), A's part (3) and B's part or the
+  world cluster the caller numbered (21: a cell or a point's number will do). They had been XORed over each other, so a
+  cluster of 256 or more under part 1 came out as cluster 0 under part 0, and one of the two lost its warm start each
+  step; the game's own clusters (RigidClutter's groups, under 48) never met it, a corpse's walls (numbered by point)
+  could.
 - Each impulse's turn on a body (its inverse inertia times r x axis) is worked out once a step, and each part's
   hull is built once a step however many pairs it is in.
 - **Speculative contacts** close a gap within the step and no more.
@@ -160,7 +174,11 @@ Restitution runs once per manifold at the end.
   (`Settings::shockNormal`, knob `props.shock`), meets it as if the one under were as heavy as itself, in that
   contact only (its prepare, warm start, solve and restitution alike). A 100 kg drum on a 1 kg crate sinks 1 mm into
   it instead of 5 (22 mm dropped 10 cm on it), and the crate 0.5 mm into the floor. A body a joint holds keeps its
-  true mass (a bridge's planks), and a ragdoll's sections are never scaled (`vectra-stack`).
+  true mass (a bridge's planks), and a ragdoll's sections are never scaled (`vectra-stack`). Only a body held up itself
+  is scaled under another: one touching the world under it (within a centimetre), or a body that does not move (asleep,
+  held), or one so held, up a stack from the bottom. Two falling together meet with their true masses (the crate in the
+  air had been taken as 100 kg): a 100 kg drum meeting a 1 kg crate in the air at 4 m/s slows by 0.05 m/s and knocks the
+  crate on by 5.2, as with no mass scaling at all (`vectra-stack`).
 - **Driving.** `Space::drive` pulls a body to a pose with a critically damped spring, applied as velocity so contacts
   still hold. The change in velocity is held to `maxForce` and the change in spin to `maxTorque` (by default `maxForce`
   times the body's reach), through its inertia: a 2 m plank driven into a doorframe's jamb rests against it at
@@ -199,13 +217,33 @@ would cost more than it saved.
   They stay the first line; the sweeps below catch what passes them.
 - A body is **fast** when, in a step, its centre goes or its reach turns (angle times its bounding radius)
   more than half its smallest size (2 cm at least). A plank spinning in place is fast though its middle is
-  still. A body a joint holds (a bridge's plank, a corpse's section, a lamp on its chain) is never fast: put
-  back alone to where it met something it would open its joints by as far as it went, so it is left to its
-  joints and contacts. `RM_CCD=off` turns the whole pass off (to tell what it changes in a check).
+  still. `RM_CCD=off` turns the whole pass off (to tell what it changes in a check).
   `Space::continuous` runs `continuousCollision` (`Queries.cpp`) on each fast body, in index order:
-  - **Against the world.** Points along its edges (corners, every 2.5 cm along each edge, a cylinder's rims
-    and side lines) are ray cast by `Space::sweep` through the step, in pieces of at most 0.15 rad of its turn.
-    Trailing points and points that hardly move are skipped. A point that strikes a surface counts when it
+  - **Jointed islands.** Bodies joined by joints that hold (a corpse's sections, a door on its hinge, a lamp and its
+    chain, a bridge's planks) are swept as one island: the earliest time of impact over every fast body in it puts
+    all of its bodies back to that moment together, each along its own way through the step, so what joins them is as
+    it was then (one put back alone would open its joints by as far as it went). Against the world the one that struck
+    takes the blow; against another body a jointed one takes none there (its partners share it, which only the step's
+    solver knows: a 2 kg plank of a bridge struck alone took a 20 kg crate's landing as if it were loose), and the two,
+    put back a hair apart, meet by their contacts on the next step. A jointed body that strikes nothing at its edges
+    is not put back by its centre's sweep. A six-box ragdoll thrown at 15 m/s at a 3 cm wall, a 20 kg door slammed at
+    15 rad/s into a 3 cm post and a lamp whipped on its chain at 20 m/s at a 3 cm pole stay on their side with their
+    joints together (`vectra-ccd`, 60 and 120 steps a second); with `RM_CCD=off` the door and the lamp go through.
+  - **Against the world.** Points on its edges are ray cast by `Space::sweep` through the step: its corners (a
+    cylinder's and a capsule's rings of eight), each edge's middle, and along each edge every 2.5 cm where the point
+    leads (it goes out of a face round it, not into the body) and goes further than the body is thick (a thin thing
+    could pass it whole there; nearer, it would end inside the body, which the contacts push out). Points that lead
+    nowhere or hardly move are left out. A body is held to `Settings::ccdProbes` (128) points, its leading edges' points
+    spaced wider to keep to it, and a step to about `ccdBudget` (4096) sweeps, each fast body its share of what is left
+    (its leading edges thinned first, its corners and middles always). Each point's way is swept in pieces of the turn,
+    as few as keep its chord within 2 mm of its arc (a power of two, at most the 0.15 rad pieces the body's reach asks):
+    a point near the middle of a turning body takes one. `ccdProbes 0` (knob `props.ccd_probes`, with
+    `props.ccd_budget`) is the old way, every 2.5 cm along every edge through every piece. Twenty crates of 0.3 to 1 m
+    launched by a blast in a pen of 3 cm walls ask 2,412 world sweeps over half a second (100 in the worst step) where
+    the old way asked 25,023 (1,130), 2.5 ms against 4.5 on the bare core; in the game, against the World, 2,706 against
+    28,572 and 3.9 ms against 18.8; none gets out either way. A 1 m crate thrown at 35 m/s turning at 10 rad/s asks 11
+    in its first step (304), the plank spinning at 60 rad/s by its 3 cm post 11,659 in a second (20,526), still never
+    through it (`vectra-ccd`). Trailing points are skipped as before. A point that strikes a surface counts when it
     went through what it struck (a ray back from where it ends finds a face between) or ends more than 2 cm
     into it; shallower is the contacts' business. The body goes back to that moment, 1 mm off the surface, and
     takes a blow at the middle of the points that struck that face together (so a plank's face hitting a post
@@ -224,7 +262,8 @@ would cost more than it saved.
 - Glass gets a look-ahead ray along the body's path: a pane it will meet this step is struck with the energy
   of the speed it will arrive at.
 - `vectra-ccd` checks it: a plank spinning at 60 rad/s beside a 3 cm post (the world's and a fixed body), two
-  thin boards and two crates thrown at each other at 25 m/s, a bottle at 30 m/s at a 3 cm wall.
+  thin boards and two crates thrown at each other at 25 m/s, a bottle at 30 m/s at a 3 cm wall, and the jointed
+  islands above.
 
 ## Queries
 
@@ -296,7 +335,9 @@ gives where `softSinkAt` says it does.
 `vectra::Joint` (Vectra.h, `src/game/physics/Joints.cpp`) joins two bodies, or a body and the world (`b = -1`). Its rows are solved
 in the same substeps as the contacts: before them, and once more after them, `Settings::jointIterations` (4) times each pass.
 Locked rows are springs of `jointHertz` (60) with damping ratio `jointDamping` (2), warm started, and relaxed without the bias as
-the contacts are. Limits are one-sided rows: a gap closes within the substep, a pass is pushed out softly.
+the contacts are. Limits are one-sided rows: a gap closes within the substep, a pass is pushed out softly. The anchors'
+row works its effective mass out from the arms as they are at each pass (taken from the step's first arms, a ragdoll's limb
+flung against a wall, turning half a radian in a step, overshot more each pass and blew the body apart).
 
 Each body carries the joint's frame: an anchor (from its centre of mass, unturned) and a turn whose z is the joint's axis.
 `attach` sets both from the bodies as they stand, so the pose they stand in then is the joint's rest.
@@ -328,6 +369,16 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
   doorway, a sign on a wall, a shelf's welded breakables are a `weld` (or a `ball`, one nail) with `breaks=` (the
   Connect tool's Nailed writes a weld at 600 N): a 2 kg box at 1 m/s pulls it with 11 N and it holds; a 30 kg crate
   at 6 m/s tears it off (tube `vectra-gaps`, breaking).
+- **Position correction** (`Joint::positionCorrection`, after the step, `Settings::projectIterations` passes): what the
+  substeps left open is put back by moving the bodies, each by its share of mass and inertia, velocities left to the rows.
+  A ball: its anchors and its swing-twist limits (a corpse's). A hinge: its anchors, its axis and its angle's limits. A
+  weld: its turn and anchors. A slider: its turn, B's anchor on A's line and within its travel. A distance: its length; a
+  rope: no longer than it. Not a spring or a pulley, nor against a held (kinematic) partner (a prop dragged off its
+  chain still gives). A hinge's to a rope's pass is held to `projectMaxLinear` (0.1 m) and `projectMaxAngular`
+  (0.3 rad), so one wrenched far open closes over a few steps rather than being thrown through what is beside it. The
+  game's prop joints all have it but springs and pulleys: a 40 kg door struck near its edge by a 30 kg crate at 12 m/s
+  opens its pin 1.3 mm uncorrected, 0.01 mm corrected; a welded pair struck end on by 60 kg at 15 m/s opens 6.9 mm and
+  turns 2.1 degrees uncorrected, 0.01 mm and 0.04 degrees corrected (tube `joints`, 60 steps a second).
 - **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
   the cache per level), so a joint built afresh each step starts from what it carried.
 - **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints. A held
@@ -467,7 +518,11 @@ Not the default yet. ragdoll-fall, 14 fixtures (lab, 2026-11-18):
   pours out by itself.
 - **Hand.** The held prop spins with the hand (its turn since the last frame), so a crate swung round carries
   what stands on it by friction and flings it off when jerked.
-- **Water.** Each part is 27 cells, each under the surface by its own share. The lift acts at the middle of
+- **Water.** Each part is 27 cells, each under the surface by its own share. A round part's (a cylinder's, a capsule's)
+  cells lie round its axis, one on it and eight on a ring (at 0.72 of its radius: each holds as much of its section), each
+  as tall as its disc stands, so a drum turning in the water rides on fewer corners: afloat on its side and turned about
+  its axis at 4 rad/s its vertical speed varies by 2,158 e-6 m^2/s^2, 6,864 e-6 with the square turned with it as before
+  (`water.round_cells` 0; `vectra-shapes`, drums). The lift acts at the middle of
   what is under, drawn toward the body's middle (`water.lever`: a prop's mass is in its walls), and the water
   rights a floater onto its nearest face it can float on: one whose waterplane's lever over the draft (BM) beats
   the drop from the middle of what is under to its own (BG, taken at `water.hollow` of a solid block's). A crate
@@ -540,6 +595,8 @@ A/B tubes (`rigid-ab`, `rigid`, `rigid-legacy`, `vectra-emergence`). Vectra's ow
 | `pad.hertz`, `pad.damping`, `pad.limit` | 2.5, 0.25, 1.5 | the mattress hinges |
 | `joints.tear` | 0.5 | how far a jointed prop is pulled from its joint before the joint gives (m) |
 | `props.sample_spacing` | 0.12 | spacing of the world contact samples |
+| `props.ccd_probes` | 128 | the most points a fast body is swept against the world by (0: every 2.5 cm along every edge) |
+| `props.ccd_budget` | 4096 | about the most world sweeps continuous collision asks in a step (0: no bound) |
 | `props.player_hertz` | 5 | the player body's contact stiffness |
 | `props.player_mass` | 20 | the player body's mass (kg) |
 | `props.pad_hertz` | 4 | padded props' contact stiffness |

@@ -29,31 +29,31 @@ constexpr float PaneTap=2,PaneRearm=.3f;
 float paneBreakEnergy(const Breakable& b){return b.material==17?(b.holds?450.f:150.f):b.material==22?40.f:300.f;}
 float paneLimit(const Breakable& b){return b.holds?180.f:b.health>0?b.health:b.material==17?20.f:b.material==22?8.f:35.f;}
 // The ground's material against a prop: a hard floor that takes no bounce of its own.
-const vectra::Material Ground{.6f,.5f,0.f,.004f};   // a floor is rough: what rolls on it comes to rest
+const vectra::Material Ground{.6f,.5f,.3f,.004f};   // a floor is rough: what rolls on it comes to rest; its bounce, times the prop's (Space::prepare)
 // The floor's own material where a prop stands on it (the World's surface materials), mixed with the prop's in
 // Space::prepare: painted ground on terrain (grass and mud give, gravel grips and drags what rolls), carpet, a metal
 // deck, the map's floor finish, and over any of them water: a wet patch, most of all a puddle, is slick.
 vectra::Material floorGrip(const World& w,float x,float y,float floor){
  vectra::Material m=Ground;
  const int finish=w.floorSurface();
- if(w.definition().floorMaterial==FloorMaterial::OfficeCarpet)m={.8f,.65f,0,.012f};
- else if(w.metalFloor(int(x),int(y))||finish==SurfaceCorrugated||finish==SurfacePressure)m={.45f,.35f,0,.002f};
- else if(finish==SurfaceClinicTile||finish==SurfaceLabPanel)m={.5f,.4f,0,.003f};
- else if(finish==SurfaceMineTimber)m={.62f,.5f,0,.004f};
- else if(finish==SurfaceRock||finish==SurfaceStone)m={.7f,.6f,0,.006f};
+ if(w.definition().floorMaterial==FloorMaterial::OfficeCarpet)m={.8f,.65f,.1f,.012f};
+ else if(w.metalFloor(int(x),int(y))||finish==SurfaceCorrugated||finish==SurfacePressure)m={.45f,.35f,.35f,.002f};
+ else if(finish==SurfaceClinicTile||finish==SurfaceLabPanel)m={.5f,.4f,.3f,.003f};
+ else if(finish==SurfaceMineTimber)m={.62f,.5f,.25f,.004f};
+ else if(finish==SurfaceRock||finish==SurfaceStone)m={.7f,.6f,.3f,.006f};
  if(w.hasTerrain()&&w.structureSupportBelow(x,y,.02f,floor+.05f)<floor-.03f){   // (not on a structure standing on it)
   const auto o=w.definition().origin;
   switch(w.groundKind(x+o.x,y+o.y)){
-   case GroundShortGrass:case GroundLeafyGrass:case GroundClover:case GroundWild:m={.55f,.45f,0,.03f};break;
-   case GroundDry:case GroundLitter:m={.65f,.55f,0,.012f};break;
-   case GroundGravel:m={.7f,.6f,0,.02f};break;
-   case GroundMud:m={.4f,.3f,0,.03f};break;
+   case GroundShortGrass:case GroundLeafyGrass:case GroundClover:case GroundWild:m={.55f,.45f,.1f,.03f};break;
+   case GroundDry:case GroundLitter:m={.65f,.55f,.15f,.012f};break;
+   case GroundGravel:m={.7f,.6f,.15f,.02f};break;
+   case GroundMud:m={.4f,.3f,.05f,.03f};break;
    default:break;}}
  float wet=0;for(const auto&p:w.wetPatches()){if(x<p.x1||x>p.x2||y<p.y1||y>p.y2)continue;
   if(p.round){const float cx=(p.x1+p.x2)*.5f,cy=(p.y1+p.y2)*.5f,rx=std::max(.01f,(p.x2-p.x1)*.5f),ry=std::max(.01f,(p.y2-p.y1)*.5f);if((x-cx)*(x-cx)/(rx*rx)+(y-cy)*(y-cy)/(ry*ry)>1)continue;}
   wet=std::max(wet,std::clamp(p.amount,0.f,1.f)*(p.puddle?1.f:.6f));}
  if(wet>0){const vectra::Material water{.22f,.15f,0,.002f};auto mixTo=[&](float a,float b){return a+(b-a)*wet;};
-  m={mixTo(m.staticFriction,water.staticFriction),mixTo(m.dynamicFriction,water.dynamicFriction),m.restitution,mixTo(m.rolling,water.rolling)};}
+  m={mixTo(m.staticFriction,water.staticFriction),mixTo(m.dynamicFriction,water.dynamicFriction),mixTo(m.restitution,.1f),mixTo(m.rolling,water.rolling)};}
  return m;}
 struct Hit {vectra::V3 p{},n{};float sep=0;int kind=0,part=0;};
 // Up to four of the hits: the deepest, the farthest from it, the largest triangle, the largest quad. (The deepest is the
@@ -74,7 +74,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  using namespace vectra;
  auto& rp=m_rigidProps[level];
  if(level==m_level)updateBodyKnocks(dt);   // the men and creatures props knocked, stumbling on (once a frame)
- if(level==m_level){m_rigidStats.steps=0;m_rigidStats.ms=m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=0;}
+ if(level==m_level){m_rigidStats.steps=0;m_rigidStats.ccdSweeps=0;m_rigidStats.ms=m_rigidStats.worldMs=m_rigidStats.pairMs=m_rigidStats.solveMs=m_rigidStats.buildMs=m_rigidStats.preMs=m_rigidStats.postMs=m_rigidStats.ccdMs=0;}
  const Vec2 shift=chunkOffset(level)-chunkOffset(m_level);
  // A point in this list's coordinates, in the world that holds it (p becomes that world's own coordinates).
  auto physicalWorld=[&](Vec2& p)->const World&{auto local=p-shift;if(local.x>=0&&local.x<24&&local.y>=0&&local.y<24){p=local;return level==m_level?m_world:m_chunks[level].world;}return worldAt(p);};
@@ -95,7 +95,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
  if(steps==RigidMaxSteps)rp.accumulator=std::min(rp.accumulator,RigidStep);
  if(!steps)return;
  const auto started=std::chrono::steady_clock::now();
- Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);
+ Space space;space.settings.substeps=int(tune("props.substeps",4.f));space.settings.contactHertz=tune("props.contact_hertz",space.settings.contactHertz);space.settings.linearSlop=tune("props.slop",space.settings.linearSlop);space.settings.sleepTime=tune("props.sleep_time",space.settings.sleepTime);space.settings.contactDampingRatio=tune("props.contact_damping",space.settings.contactDampingRatio);space.settings.pushout=tune("props.pushout",space.settings.pushout);space.settings.worldDampingRatio=tune("props.world_damping",space.settings.worldDampingRatio);space.settings.sleepLinear=tune("props.sleep_linear",space.settings.sleepLinear);space.settings.sleepAngular=tune("props.sleep_angular",space.settings.sleepAngular);space.settings.relaxIterations=int(tune("props.relax",1.f));space.settings.middleThreshold=tune("props.middle",1.f);space.settings.coldIterations=int(tune("props.cold",8.f));space.settings.shockNormal=tune("props.shock",space.settings.shockNormal);space.settings.ccdProbes=int(tune("props.ccd_probes",float(space.settings.ccdProbes)));space.settings.ccdBudget=int(tune("props.ccd_budget",float(space.settings.ccdBudget)));
  space.cache.swap(rp.cache);
  std::vector<V3> samples;std::vector<char> curved;std::vector<int> partOf;std::vector<Hit> hits;std::array<V3,8> feature{};
  struct WetCell {V3 r;float area;};std::vector<WetCell> wetCells;   // a body's cells under water this step (its arm to each, wet face area)
@@ -464,8 +464,15 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
      float under=0,all=0;V3 middle{};const M3 turn=b.q.matrix();wetCells.clear();
      for(int p=0;p<b.shape->count;++p){const auto&part=b.shape->parts[size_t(p)];V3 cellsAt,half;partVolumeBox(part,cellsAt,half);
       const float vol=half.x*half.y*half.z;const M3 r=turn*part.turn.matrix();
-      const float tall=(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
-      for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){const V3 l=cellsAt+part.turn.rotate(V3{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f});const V3 at=b.toWorld(l);
+      // A round part's (a drum's, a pipe's) cells lie round its axis: one on it and eight on the ring that halves its section's
+      // outer eight ninths, and a cell is as tall as its disc stands, so a drum rolling in the water rides on no corners (in a
+      // square turned with it, its lift rose and fell four times a turn). water.round_cells 0: the square.
+      const bool round=(part.kind==PartKind::Cylinder||part.kind==PartKind::Capsule)&&tune("water.round_cells",1.f)>.5f;const float ring=.722f*part.half.x;
+      const float tall=round?(half.x*std::sqrt(std::max(0.f,1-r.m[2][2]*r.m[2][2]))+std::fabs(r.m[2][2])*half.z)*2.f/3.f
+                            :(std::fabs(r.m[2][0])*half.x+std::fabs(r.m[2][1])*half.y+std::fabs(r.m[2][2])*half.z)*2.f/3.f;   // a cell's height, upright
+      for(int i=-1;i<=1;++i)for(int j=-1;j<=1;++j)for(int k=-1;k<=1;++k){
+       V3 o{half.x*float(i)*.667f,half.y*float(j)*.667f,half.z*float(k)*.667f};if(round){if(i||j){const float g=std::atan2(float(j),float(i));o.x=std::cos(g)*ring;o.y=std::sin(g)*ring;}else o.x=o.y=0;}
+       const V3 l=cellsAt+part.turn.rotate(o);const V3 at=b.toWorld(l);
        const float wet=std::clamp((surface-(at.z-tall*.5f))/std::max(1e-4f,tall),0.f,1.f);all+=vol;if(wet>0){under+=vol*wet;middle=middle+at*(vol*wet);wetCells.push_back({at-b.x,wet*std::pow(vol*8.f/27.f,2.f/3.f)});}}}
      const float f=all>0?under/all:0.f;
      if(f>0){middle=middle*(1/under);const float rho=buoyancy::density(c),k=buoyancy::drag(c)*tune("water.drag",1.f);const bool floater=rho<buoyancy::WaterDensity;
@@ -510,7 +517,7 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
     if(t<1&&trace.blocking>=0){const float closing=std::fabs(dot(arriving,n));const float keep=strike(index,paneLevel,trace.blocking,.5f*m*closing*closing,from+travel*t,delta*(1/distance));if(keep>0)b.v=b.v*keep;}}
   }
   // ---- The step ----
-  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(level==m_level&&m_vrInputActive){settleVrHands(space,held);m_vrHandStepped=true;}if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
+  m_rigidStats.preMs+=since(mark);space.step(RigidStep);mark=Clock::now();if(level==m_level&&m_vrInputActive){settleVrHands(space,held);m_vrHandStepped=true;}if(!propJoints.empty())afterPropJoints(level,list,space,propJoints,propJointOf);m_rigidStats.worldMs+=space.worldMs;if(level==m_level){m_rigidStats.ccdMs+=space.ccdMs;m_rigidStats.ccdSweeps+=space.ccdSweeps;}m_rigidStats.pairMs+=space.pairMs;m_rigidStats.solveMs+=space.solveMs;
   // ---- Back to the props ----
   for(const auto&rec:chains){bool still=true;for(int k:rec.body)still&=wasAsleep[size_t(k)]&&space.bodies[size_t(k)].sleeping;if(!still)writeChain(rec);}
   for(size_t bi=0;bi<space.bodies.size();++bi){const auto&b=space.bodies[bi];if(b.kinematic||b.user<0||chainBody[bi])continue;auto&c=list[size_t(b.user)];

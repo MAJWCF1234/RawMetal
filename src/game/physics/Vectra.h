@@ -8,7 +8,8 @@
 //    box, a barrel one cylinder, a chair a compound of boxes, an open crate a floor and four walls.
 //  - The narrow phase finds Manifolds (up to four points, one normal) between two bodies' parts: the
 //    separating axis test over faces and edge pairs of convex polyhedra (a cylinder is a 12-sided prism
-//    there), with the incident face clipped to the reference face for a full manifold; spheres exactly.
+//    there, its round side then worked again as a true round against a box or a hull: Settings::roundCylinders),
+//    with the incident face clipped to the reference face for a full manifold; spheres exactly.
 //    Contacts against the static world come from the caller (Space::worldContacts): the game asks its
 //    own World for them (RigidClutter.cpp), a lab tube asks a plane.
 //  - Space::step runs one fixed step: contacts are found once, then `substeps` soft substeps (TGS-soft,
@@ -197,8 +198,13 @@ struct Manifold {
  float slideSpeed=0,rollSpeed=0;
  float scaleA=1,scaleB=1;             // the mass scaling of each body in this contact (Settings::shockNormal)
  bool world()const{return b<0;}
- // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster.
- static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA))<<40)^(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<20)^(std::uint64_t(partA)<<8)^std::uint64_t(partB);}
+ // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster, each in a field
+ // of its own: A's id 20 bits, B's id (+1, the world 0) 20, A's part 3 (a shape's eight), B's part or cluster 21 (to two
+ // million: a caller may number world clusters by a point or a cell). (They were XORed over each other: a cluster of 256
+ // or more under part 1 came out as cluster 0 under part 0, one of the two lost its warm start each step.)
+ static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA)&0xfffff)<<44)|(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<24)|(std::uint64_t(std::uint32_t(partA)&7)<<21)|std::uint64_t(std::uint32_t(partB)&0x1fffff);}
+ static int keyIdA(std::uint64_t k){return int(k>>44);}
+ static int keyIdB(std::uint64_t k){return int((k>>24)&0xfffff)-1;}
 };
 
 // ---- Narrow phase ---------------------------------------------------------------------------------
@@ -281,7 +287,10 @@ struct Joint:Constraint {
  std::array<float,4> detents{};int detentCount=0;float detentRange=.12f,detentHertz=6,detentForce=0;
  // Position correction: after the step, the anchors and the limits put back by moving the bodies (as much as each one's
  // mass and inertia lets), Settings::projectIterations times. For chains of light bodies (a ragdoll's limbs) that must
- // never be seen past a limit or pulled open, whatever hits them.
+ // never be seen past a limit or pulled open, whatever hits them, and for a heavy door's pin, a weld, a slider's rail and a
+ // rope's or rod's length under a hard blow. Ball: its anchors and swing-twist limits. Hinge: its anchors, its axis and
+ // its angle's limits. Weld: its turn and anchors. Slider: its turn, B's anchor on A's line and within its travel.
+ // Distance: its length; rope: no longer than it. Not spring or pulley, nor against a held (kinematic) partner.
  bool positionCorrection=false;
  // A spring on the axis toward springTarget (hinge, slider), or on the length toward `length` (Spring). 0 Hz: none.
  float springHertz=0,springDamping=.7f,springTarget=0;
@@ -316,7 +325,7 @@ struct Joint:Constraint {
  void prepare(Space&,float h)override;void warmStart(Space&)override;void solve(Space&,float h,bool useBias)override;
  void finish(Space&,float h)override;void project(Space&)override;Joint* joint()override{return this;}
  // Prepared each step.
- struct Prep {float mA=0,mB=0;M3 iA=M3::zero(),iB=M3::zero();M3 pointMass{};M3 turnMass{};float h=1.f/480;} prep;
+ struct Prep {float mA=0,mB=0;M3 iA=M3::zero(),iB=M3::zero();M3 turnMass{};float h=1.f/480;} prep;
 };
 // The mattress chain's springy hinge (the first joint), now a Joint: the two anchors held together, the turn
 // about every axis but the hinge held (soft, lockHertz), and about the hinge a spring of `hertz` (damping
@@ -357,6 +366,17 @@ struct Settings {
  float jointHertz=60,jointDamping=2;int jointIterations=4;
  // Joints with `positionCorrection` set are put back by position this many times after each step.
  int projectIterations=3;float projectSlack=.002f;   // and only what is past a limit by more than projectSlack (rad)
+ // A hinge's, weld's, slider's, distance's or rope's correction is held to this much a pass (m, rad): one wrenched far open
+ // closes over a few steps, never thrown through what is beside it.
+ float projectMaxLinear=.1f,projectMaxAngular=.3f;
+ // Continuous collision against the world (Queries.cpp): a fast body is swept by at most ccdProbes points (its corners and
+ // edges' middles, and along its leading edges every 2.5 cm where a thin thing could pass it whole, wider to keep to the
+ // number), and a step asks the world at most about ccdBudget sweeps, each fast body its share of what is left (its leading
+ // edges' points thinned first). 0: no bound (every 2.5 cm along every edge, through every piece of the turn: the old way).
+ int ccdProbes=128,ccdBudget=4096;
+ // A cylinder meets a box or a hull as a true round (Vectra.cpp roundFix): its prism finds the contact, and where its side
+ // is in it the contact is worked again from the round. false: the 12-sided prism alone (as before).
+ bool roundCylinders=true;
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
 struct ContactEvent {int a=-1,b=-1,partA=0,partB=0;V3 point{},normal{};float approach=0,impulse=0,effectiveMass=0;Surface surface{};};
@@ -390,6 +410,7 @@ struct Space {
  // Stats.
  int pairsTested=0,worldManifolds=0,iterationsRun=0;
  double worldMs=0,pairMs=0,solveMs=0;   // where the last step's time went (collide's world and pair halves, the substeps)
+ double ccdMs=0;int ccdSweeps=0;        // the last step's continuous collision: its time, and the world sweeps it asked
  // One fixed step of dt.
  void step(float dt);
  // Islands: groups of touching, moving bodies (filled by step).

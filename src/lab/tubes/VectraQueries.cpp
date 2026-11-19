@@ -11,6 +11,11 @@
 // vectra-ccd: what fast bodies meet within one step.
 //  - the core: a plank spinning at 60 rad/s beside a 3 cm post (the post as the world, by Space::sweep, and as
 //    a fixed body) never turns through it; two thin boards flying at each other at 25 m/s each meet;
+//  - jointed islands (60 and 120 steps a second): a six-box ragdoll thrown at 15 m/s at a 3 cm wall, a door slammed
+//    at 15 rad/s into a 3 cm post (the world's and a fixed body), a lamp whipped on its chain at 20 m/s at a 3 cm pole:
+//    none goes through, and their joints stay together;
+//  - the probes' bound (Settings::ccdProbes, ccdBudget): a blast of twenty crates in a pen of 3 cm walls, on the core and
+//    in the game, and one fast 1 m crate, bounded and the old way: the world sweeps and their time, and none gets out;
 //  - the game: two crates thrown at each other at 25 m/s meet and neither passes the other; a bottle thrown
 //    at 30 m/s at a 3 cm wall never gets past it whole.
 #include "lab/Lab.h"
@@ -18,11 +23,13 @@
 #include "game/EngineRegressionScene.h"
 #include "game/physics/PropQueries.h"
 #include "core/Ray.h"
+#include "core/Tune.h"
 #include "world/CampaignKit.h"
 #include "world/ModelIds.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <fstream>
 #include <memory>
 namespace retro::lab {
@@ -106,15 +113,15 @@ const bool queries=add({.name="vectra-queries",.summary="rays, shape casts and o
 // 3 cm post 0.45 m out (0.5 rad a step: with its own 3 cm it would turn clean through the post within one step).
 // Watched from the plank: the post's middle in its frame. Within its length, the post going from one face's side
 // to the other's is a turn through it; nearer its middle plane than the two halves (3 cm) is a post in it.
-struct Spin {int through=0;float deepest=0;bool struck=false;V3 endV{},endW{};};
-Spin spin(bool world,float speed=60,float dt=1.f/120){
- Space space;space.settings.maxAngular=std::max(space.settings.maxAngular,speed*1.5f);Shape plank;plank.add(PartKind::Box,{},{.6f,.015f,.1f});plank.finish();Shape post;post.add(PartKind::Box,{},{.015f,.015f,.5f});post.finish();
+struct Spin {int through=0;float deepest=0;bool struck=false;V3 endV{},endW{};long long sweeps=0;};
+Spin spin(bool world,float speed=60,float dt=1.f/120,int probes=-1){
+ Space space;space.settings.maxAngular=std::max(space.settings.maxAngular,speed*1.5f);if(probes>=0){space.settings.ccdProbes=probes;space.settings.ccdBudget=probes?space.settings.ccdBudget:0;}Shape plank;plank.add(PartKind::Box,{},{.6f,.015f,.1f});plank.finish();Shape post;post.add(PartKind::Box,{},{.015f,.015f,.5f});post.finish();
  Body p;p.shape=&plank;p.material.restitution=.2f;p.linearDamping=p.angularDamping=0;p.gravity={};p.setMass(3);p.q=Quat::axisAngle({0,0,1},-.6f);p.w={0,0,speed};p.updateInertia();space.bodies.push_back(p);
  const V3 at{.45f,0,0},lo=at-V3{.015f,.015f,.5f},hi=at+V3{.015f,.015f,.5f};
  if(world)space.sweep=[&](Space&,int,V3 a,V3 b,V3& n)->float{return rayBoxFraction(a,b-a,lo,hi,&n);};
  else{Body s;s.shape=&post;s.kinematic=true;s.setMass(0);s.x=at;space.bodies.push_back(s);}
  Spin out;auto local=[&]{const auto& B=space.bodies[0];return B.q.unrotate(at-B.x);};V3 last=local();
- for(int i=0;i<int(1/dt+.5f);++i){space.step(dt);const V3 l=local();const auto& B=space.bodies[0];
+ for(int i=0;i<int(1/dt+.5f);++i){space.step(dt);out.sweeps+=space.ccdSweeps;const V3 l=local();const auto& B=space.bodies[0];
   if(std::fabs(l.x)<.585f&&std::fabs(last.x)<.585f&&(l.y>0)!=(last.y>0))++out.through;
   if(std::fabs(l.x)<.585f)out.deepest=std::max(out.deepest,.03f-std::fabs(l.y));
   out.struck|=B.w.z<speed*.5f;last=l;out.endV=B.v;out.endW=B.w;
@@ -127,6 +134,103 @@ bool boards(float& gapAfter,float& va,float& vb){
  for(int k=0;k<2;++k){Body b;b.shape=&board;b.gravity={};b.linearDamping=b.angularDamping=0;b.setMass(2);b.x={k?.17f:-.17f,0,1};b.v={k?-25.f:25.f,0,0};b.updateInertia();space.bodies.push_back(b);}
  bool crossed=false;for(int i=0;i<30;++i){space.step(1.f/120);crossed|=space.bodies[0].x.x>space.bodies[1].x.x;}
  gapAfter=space.bodies[1].x.x-space.bodies[0].x.x;va=space.bodies[0].v.x;vb=space.bodies[1].v.x;return !crossed;}
+// Jointed islands: a floor at z 0 and a thin box (wall or post) as the world, met as the game's World meets a fixture: its
+// face on the side a body's middle is on (a body through it is pushed on out of its far side), its upright corners against
+// the body's own shape (RigidClutter's corner test), and the sweep.
+struct Jointed {
+ // A box of the world. mode 1: a wall (its face and its corners); 2: a post (its corners).
+ struct Solid {V3 lo,hi;int mode;};
+ Space space;std::deque<Shape> shapes;std::vector<std::unique_ptr<Joint>> joints;std::vector<Solid> solids;
+ // mode 0: the floor alone (the box is swept, never met by contacts).
+ Jointed(V3 wallLo,V3 wallHi,int mode){solids.push_back({wallLo,wallHi,mode});
+  // (Bodies a joint joins do not meet, as a ragdoll's sections do not: a contact at the pivot fights the joint.)
+  space.filter=[this](const Space&,int a,int b){for(const auto& j:joints)if((j->a==a&&j->b==b)||(j->a==b&&j->b==a))return false;return true;};
+  space.sweep=[this](Space&,int,V3 a,V3 b,V3& n)->float{float best=1;for(const auto& s:solids){V3 nn;const float f=rayBoxFraction(a,b-a,s.lo,s.hi,&nn);if(f<best){best=f;n=nn;}}return best;};
+  space.worldContacts=[this](Space& sp,int i,float margin,std::vector<Manifold>& out){const Body& body=sp.bodies[size_t(i)];
+   for(int part=0;part<body.shape->count;++part){
+    auto emit=[&](V3 d,V3 normal,int partB,auto&& gap,auto&& inside){std::array<V3,8> f{};const int k=supportFeature(body,part,d,f);Manifold m;m.a=i;m.b=-1;m.partA=part;m.partB=partB;m.normal=normal;m.material=Material::mix(body.material,{.6f,.5f,0,.004f});
+     for(int j=0;j<k&&m.count<4;++j){const V3 p=f[size_t(j)];const float sep=gap(p);if(sep>margin||!inside(p))continue;auto& c=m.points[size_t(m.count++)];c=ContactPoint{};c.p=p;c.separation=sep;c.localA=body.q.unrotate(p-body.x);c.localB=p;c.feature=std::uint32_t(j);}
+     if(m.count)out.push_back(m);};
+    emit({0,0,-1},{0,0,-1},0,[](V3 p){return p.z;},[](V3){return true;});
+    for(int si=0;si<int(solids.size());++si){const Solid& s=solids[size_t(si)];if(s.mode==0)continue;const V3 lo=s.lo,hi=s.hi;
+     V3 plo,phi;partBounds(body,part,plo,phi);if(plo.x>hi.x+margin||phi.x<lo.x-margin||plo.y>hi.y+margin||phi.y<lo.y-margin)continue;
+     // Its face toward the body's middle (the axis the middle is furthest outside the box along).
+     const V3 mid=(lo+hi)*.5f,half=(hi-lo)*.5f;int axis=0;float most=-1e30f;for(int a=0;a<2;++a){const float o=std::fabs(comp(body.x-mid,a))-comp(half,a);if(o>most){most=o;axis=a;}}
+     const float side=comp(body.x-mid,axis)<0?-1.f:1.f;V3 d{};if(axis==0)d.x=-side;else d.y=-side;   // d: into the box from that side
+     auto within=[&](V3 p){for(int a=0;a<3;++a){if(a==axis)continue;if(comp(p,a)<comp(lo,a)-.01f||comp(p,a)>comp(hi,a)+.01f)return false;}return true;};
+     if(s.mode==1)emit(d,d,1+si*16+axis*2+(side>0),[&](V3 p){return side<0?comp(lo,axis)-comp(p,axis):comp(p,axis)-comp(hi,axis);},within);
+     // Its upright corners against the body's shape, at three heights over the body's own (as the game asks).
+     Manifold m;m.a=i;m.b=-1;m.partA=part;m.partB=8+si*16;m.material=Material::mix(body.material,{.6f,.5f,0,.004f});V3 sum{};
+     const float z0=std::max(lo.z,plo.z),z1=std::min(hi.z,phi.z);if(z1<z0)continue;
+     for(int c=0;c<4;++c)for(float z:{z0+.01f,(z0+z1)*.5f,z1-.01f}){const V3 p{c&1?hi.x:lo.x,c&2?hi.y:lo.y,z};V3 surface,normal;float dd;
+      if(!nearestPoint(body,part,p,surface,normal,dd)||dd>=margin||m.count>=4)continue;auto& k=m.points[size_t(m.count++)];k=ContactPoint{};k.p=p;k.separation=dd;k.localA=body.q.unrotate(p-body.x);k.localB=p;sum=sum+normal;}
+     if(m.count){m.normal=norm(sum);out.push_back(m);}}}};}
+ int box(V3 at,V3 half,float mass,Quat q={}){shapes.emplace_back();Shape& s=shapes.back();s.add(PartKind::Box,{},half);s.finish();Body b;b.shape=&s;b.q=q;b.x=at;b.setMass(mass);b.updateInertia();b.material={.6f,.5f,.2f,.002f};b.id=int(space.bodies.size());space.bodies.push_back(b);return int(space.bodies.size())-1;}
+ Joint& add(JointKind kind,int a,int b,V3 at,V3 axis={0,0,1}){joints.push_back(std::make_unique<Joint>());auto& j=*joints.back();j.kind=kind;j.a=a;j.b=b;space.constraints.push_back(&j);j.attach(space,at,axis);return j;}
+ float worstPin()const{float w=0;for(const auto& j:joints)w=std::max(w,len(j->worldA(space)-j->worldB(space)));return w;}
+};
+struct Through {bool passed=false;float worstPin=0,endPin=0;int events=0;};
+// RM_JOINTED_TRACE=1: each step's bodies and impacts to jointed-trace.txt.
+void trace(const char* what,const Jointed& w,int i,float dt){if(!std::getenv("RM_JOINTED_TRACE"))return;static std::ofstream tr("jointed-trace.txt");
+ tr<<what<<" "<<int(1/dt+.5f)<<" Hz step "<<i<<" pin "<<w.worstPin()<<"\n";for(const auto& b:w.space.bodies)tr<<"   x "<<b.x.x<<","<<b.x.y<<","<<b.x.z<<" v "<<len(b.v)<<" w "<<len(b.w)<<" ccd "<<b.ccd<<"\n";
+ for(const auto& e:w.space.events)tr<<"   event "<<e.a<<"-"<<e.b<<" at "<<e.point.x<<","<<e.point.y<<","<<e.point.z<<" n "<<e.normal.x<<","<<e.normal.y<<","<<e.normal.z<<" approach "<<e.approach<<" impulse "<<e.impulse<<"\n";tr.flush();}
+// A ragdoll of six boxes on ball joints (a 30 kg torso, head, arms, legs; 75 kg) thrown at 15 m/s, tumbling, at a 3 cm wall
+// 1.5 m off: through it is any section's middle past the wall's middle.
+Through ragdollAtWall(float dt){
+ Jointed w({1.5f,-3,0},{1.53f,3,3},1);
+ const int torso=w.box({0,0,1.1f},{.1f,.175f,.25f},30),head=w.box({0,0,1.5f},{.1f,.1f,.1f},5);
+ const int armL=w.box({0,.25f,1.1f},{.045f,.045f,.22f},4),armR=w.box({0,-.25f,1.1f},{.045f,.045f,.22f},4);
+ const int legL=w.box({0,.09f,.45f},{.06f,.06f,.38f},16),legR=w.box({0,-.09f,.45f},{.06f,.06f,.38f},16);
+ w.add(JointKind::Ball,head,torso,{0,0,1.38f});w.add(JointKind::Ball,armL,torso,{0,.22f,1.33f});w.add(JointKind::Ball,armR,torso,{0,-.22f,1.33f});
+ w.add(JointKind::Ball,legL,torso,{0,.09f,.85f});w.add(JointKind::Ball,legR,torso,{0,-.09f,.85f});
+ // (A corpse's settings, Carcass::stepVectra: eight substeps, six joint passes, its joints locked at 240 Hz, its sections damped.)
+ w.space.settings.substeps=8;w.space.settings.jointIterations=6;w.space.settings.shockNormal=0;for(auto& j:w.joints){j->lockHertz=240;j->lockDamping=1;}
+ for(auto& b:w.space.bodies){b.v={15,0,1};b.w={0,3,2};b.linearDamping=.1f;b.angularDamping=1;}
+ Through r;for(int i=0;i<int(1.5f/dt+.5f);++i){w.space.step(dt);r.events+=int(w.space.events.size());for(const auto& b:w.space.bodies)r.passed|=b.x.x>1.515f;r.worstPin=std::max(r.worstPin,w.worstPin());
+  trace("ragdoll",w,i,dt);}
+ r.endPin=w.worstPin();return r;}
+// A 20 kg door (1 x 2 m, 4 cm thick) on a hinge to the world, slammed at 15 rad/s (its edge at 15 m/s), a 3 cm post 0.8 m
+// out along its way: through it is the post's middle going from one face's side to the other's within the door's width.
+Through doorAtPost(float dt,bool postAsBody){
+ const V3 post{.8f*std::cos(.5f),.8f*std::sin(.5f),0};const V3 plo=post+V3{-.015f,-.015f,0},phi=post+V3{.015f,.015f,2.2f};
+ Jointed w(postAsBody?V3{50,50,0}:plo,postAsBody?V3{50.03f,50.03f,1}:phi,postAsBody?0:2);
+ const int door=w.box({.5f,0,1.05f},{.5f,.02f,1},20);auto& hinge=w.add(JointKind::Hinge,door,-1,{0,0,1.05f},{0,0,1});(void)hinge;
+ if(postAsBody){w.shapes.emplace_back();Shape& s=w.shapes.back();s.add(PartKind::Box,{},{.015f,.015f,1.1f});s.finish();Body b;b.shape=&s;b.kinematic=true;b.setMass(0);b.x=post+V3{0,0,1.1f};b.updateInertia();b.id=int(w.space.bodies.size());w.space.bodies.push_back(b);}
+ w.space.bodies[size_t(door)].w={0,0,15};w.space.settings.maxAngular=60;
+ Through r;auto local=[&]{const Body& d=w.space.bodies[size_t(door)];return d.q.unrotate(V3{post.x,post.y,1}-d.x);};V3 last=local();
+ for(int i=0;i<int(1.5f/dt+.5f);++i){w.space.step(dt);r.events+=int(w.space.events.size());const V3 l=local();
+  if(std::fabs(l.x)<.5f&&std::fabs(last.x)<.5f&&(l.y>0)!=(last.y>0))r.passed=true;last=l;r.worstPin=std::max(r.worstPin,w.worstPin());}
+ r.endPin=w.worstPin();return r;}
+// A 2 kg cage lamp (10 cm) on a chain of four 15 cm links (0.3 kg, 2 cm thick) from the ceiling, whipped at 20 m/s at a
+// 3 cm pole 0.35 m out (the world's, or a fixed body): through it is any of them past the pole's middle while in line with it.
+Through lampAtPole(float dt,bool poleAsBody){
+ const V3 plo{.335f,-.015f,.5f},phi{.365f,.015f,2.98f};Jointed w(poleAsBody?V3{50,50,0}:plo,poleAsBody?V3{50.03f,50.03f,1}:phi,poleAsBody?0:2);std::vector<int> chain;
+ for(int k=0;k<4;++k)chain.push_back(w.box({0,0,3-.075f-.15f*float(k)},{.01f,.01f,.075f},.3f));
+ const int lamp=w.box({0,0,2.32f},{.05f,.05f,.08f},2);
+ w.add(JointKind::Ball,chain[0],-1,{0,0,3});for(int k=1;k<4;++k)w.add(JointKind::Ball,chain[size_t(k)],chain[size_t(k-1)],{0,0,3-.15f*float(k)});w.add(JointKind::Ball,lamp,chain[3],{0,0,2.4f});
+ if(poleAsBody){w.shapes.emplace_back();Shape& s=w.shapes.back();s.add(PartKind::Box,{},{.015f,.015f,1.24f});s.finish();Body b;b.shape=&s;b.kinematic=true;b.setMass(0);b.x={.35f,0,1.74f};b.updateInertia();b.id=int(w.space.bodies.size());w.space.bodies.push_back(b);}
+ for(int k=0;k<4;++k)w.space.bodies[size_t(chain[size_t(k)])].v={20*float(k+1)/5,0,0};w.space.bodies[size_t(lamp)].v={20,0,0};
+ Through r;for(int i=0;i<int(1.5f/dt+.5f);++i){w.space.step(dt);r.events+=int(w.space.events.size());
+  for(int k=0;k<5;++k){const Body& b=w.space.bodies[size_t(k)];r.passed|=b.x.x>.35f&&std::fabs(b.x.y)<.04f;}r.worstPin=std::max(r.worstPin,w.worstPin());trace(poleAsBody?"lamp-body":"lamp-world",w,i,dt);}
+ r.endPin=w.worstPin();return r;}
+// The probes' bound (Settings::ccdProbes, ccdBudget; 0 and 0: the old way, every 2.5 cm through every piece of the turn).
+// A blast: twenty crates of 0.3 to 1 m launched out from the middle of a 10 m pen of 3 cm walls at 8 to 20 m/s, turning at
+// up to 15 rad/s, four 3 cm posts in their way, half a second at 120 steps a second. The world sweeps asked and their time.
+struct Blast {long long sweeps=0;int worst=0;double ms=0,worstMs=0;int escaped=0;};
+Blast blast(int probes,int budget){
+ const float in=5;Jointed w({-in-.03f,-in-.03f,0},{-in,in+.03f,3},1);
+ w.solids.push_back({{in,-in-.03f,0},{in+.03f,in+.03f,3},1});w.solids.push_back({{-in,-in-.03f,0},{in,-in,3},1});w.solids.push_back({{-in,in,0},{in,in+.03f,3},1});
+ for(V3 p:{V3{3.6f,1.2f,0},V3{-3.6f,-1.2f,0},V3{1.2f,-3.6f,0},V3{-1.2f,3.6f,0}})w.solids.push_back({p-V3{.015f,.015f,0},p+V3{.015f,.015f,2.5f},2});
+ w.space.settings.ccdProbes=probes;w.space.settings.ccdBudget=budget;
+ for(int k=0;k<20;++k){const float s=.3f+.7f*float(k%7)/6.f,x=-2.2f+1.1f*float(k%5),y=-1.65f+1.1f*float(k/5);const int c=w.box({x,y,s*.5f+.01f},{s*.5f,s*.5f,s*.5f},20*s*s*s+2);
+  Body& b=w.space.bodies[size_t(c)];const V3 out=norm(V3{x,y,0},{1,0,0});const float speed=8+12*float((k*7)%11)/10.f;b.v=out*speed+V3{0,0,2+float(k%3)};b.w={float(k%5)-2,float(k%3)*4-4,15*float((k*3)%5)/4.f-7.5f};}
+ Blast r;const float dt=1.f/120;
+ for(int i=0;i<60;++i){w.space.step(dt);r.sweeps+=w.space.ccdSweeps;r.worst=std::max(r.worst,w.space.ccdSweeps);r.ms+=w.space.ccdMs;r.worstMs=std::max(r.worstMs,w.space.ccdMs);}
+ for(const auto& b:w.space.bodies)r.escaped+=std::fabs(b.x.x)>in||std::fabs(b.x.y)>in;
+ return r;}
+// One 1 m crate thrown at 35 m/s, turning at 10 rad/s (fast for its size: a quarter of it a step), at a wall 2 m off: the sweeps of its first step.
+int oneCrate(int probes,int budget){Jointed w({2,-3,0},{2.03f,3,3},1);w.space.settings.ccdProbes=probes;w.space.settings.ccdBudget=budget;
+ const int c=w.box({0,0,.6f},{.5f,.5f,.5f},40);w.space.bodies[size_t(c)].v={35,0,0};w.space.bodies[size_t(c)].w={0,0,10};w.space.step(1.f/120);return w.space.ccdSweeps;}
 
 const bool ccd=add({.name="vectra-ccd",.summary="continuous collision: a spinning plank beside a 3 cm post, thin boards and crates thrown at each other at 25 m/s, a bottle at 30 m/s at a 3 cm wall",.standalone=[]{
  std::ofstream r("vectra-ccd.txt");bool ok=true;auto check=[&](bool pass,const std::string& what){r<<(pass?"PASS ":"FAIL ")<<what<<'\n';ok&=pass;r.flush();};
@@ -137,10 +241,46 @@ const bool ccd=add({.name="vectra-ccd",.summary="continuous collision: a spinnin
   check(b.struck&&b.through==0&&b.deepest<.005f,"ccd: a plank spinning at 60 rad/s does not turn through a 3 cm post (a fixed body)");
   // A quarter turn a step and no going at all (every point's way through the step then points behind it).
   const Spin q=spin(true,kPi*.5f*60,1.f/60);say("a quarter turn a step (94 rad/s at 60 Hz), the post as the world",q);
-  check(q.struck&&q.through==0&&q.deepest<.005f,"ccd: a plank turning a quarter turn a step, not going, is stopped by a 3 cm post");}
+  check(q.struck&&q.through==0&&q.deepest<.005f,"ccd: a plank turning a quarter turn a step, not going, is stopped by a 3 cm post");
+  const Spin wOld=spin(true,60,1.f/120,0),qOld=spin(true,kPi*.5f*60,1.f/60,0);
+  r<<"  world sweeps over the second: spinning at 60 rad/s "<<w.sweeps<<" (unbounded "<<wOld.sweeps<<"), a quarter turn a step "<<q.sweeps<<" (unbounded "<<qOld.sweeps<<")\n";}
+ // The probes' bound: a blast of twenty crates, and one 1 m crate.
+ {const Blast now=blast(vectra::Settings{}.ccdProbes,vectra::Settings{}.ccdBudget),old=blast(0,0);const int one=oneCrate(vectra::Settings{}.ccdProbes,vectra::Settings{}.ccdBudget),oneOld=oneCrate(0,0);
+  r<<"\nPROBES (Settings::ccdProbes "<<vectra::Settings{}.ccdProbes<<", ccdBudget "<<vectra::Settings{}.ccdBudget<<"; unbounded: every 2.5 cm along every edge, every piece of the turn)\n";
+  auto say=[&](const char* what,const Blast& b){r<<"  "<<what<<": "<<b.sweeps<<" world sweeps in 0.5 s (worst step "<<b.worst<<"), "<<f3(b.ms)<<" ms in all (worst step "<<f3(b.worstMs)<<" ms), "<<b.escaped<<" crates out of the pen\n";};
+  say("twenty crates launched by a blast, bounded",now);say("the same, unbounded",old);
+  r<<"  a 1 m crate thrown at 35 m/s turning at 10 rad/s: "<<one<<" sweeps in its first step (unbounded "<<oneOld<<")\n";
+  check(now.escaped==0&&old.escaped==0,"ccd: no crate of a blast gets out of a pen of 3 cm walls, bounded or not");
+  check(now.worst<=vectra::Settings{}.ccdBudget+vectra::Settings{}.ccdProbes*8&&now.sweeps*4<old.sweeps,"ccd: a blast's world sweeps keep to the step's budget, a quarter of the unbounded ones or fewer");
+  check(one*4<oneOld,"ccd: a fast 1 m crate asks a quarter of the unbounded sweeps or fewer");
+  // In the game: the same blast in the regression room against the World (its own sweeps), bounded and (the knobs
+  // props.ccd_probes 0, props.ccd_budget 0, from a tune file of this tube's own) unbounded.
+  struct GameBlast {long long sweeps=0;int worst=0;double ms=0,worstMs=0;int out=0;};
+  auto gameBlast=[&](bool unbounded){GameBlast b;std::string saved;{auto& tf=TuneFile::instance();std::lock_guard<std::mutex> hold(tf.lock);saved=tf.path;}
+   if(unbounded){std::ofstream("vectra-ccd-unbounded.txt")<<"props.ccd_probes 0\nprops.ccd_budget 0\n";tuneFile("vectra-ccd-unbounded.txt");}
+   forceLegacyProps(0);auto m=regression::room();m->definition.playerStart={2,2};kit::wall(*m,6,4,6.03f,14,0,3);kit::wall(*m,16,4,16.03f,14,0,3);kit::wall(*m,6,3.97f,16.03f,4,0,3);kit::wall(*m,6,14,16.03f,14.03f,0,3);
+   Game g(regression::campaign(m));LabAccess::player(g).pos={2,2};auto& list=LabAccess::clutter(g);list.clear();
+   for(int k=0;k<20;++k){const float s=.3f+.7f*float(k%7)/6.f,x=11-2.2f+1.1f*float(k%5),y=9-1.65f+1.1f*float(k/5);auto c=weighing(prop(model::wooden_crate,{x,y},0),20*s*s*s+2,-1);c.dims={s,s,s};
+    const float speed=8+12*float((k*7)%11)/10.f;const Point3 d=Point3{x-11,y-9,0}*(1/std::max(.01f,std::hypot(x-11,y-9)));c.velocity={d.x*speed,d.y*speed};c.vz=2+float(k%3);c.spin=15*float((k*3)%5)/4.f-7.5f;c.projectile=true;c.sleeping=false;list.push_back(c);}
+   for(int i=0;i<30;++i){g.update({},1.f/60);const auto& st=LabAccess::rigidStats(g);b.sweeps+=st.ccdSweeps;b.worst=std::max(b.worst,st.ccdSweeps);b.ms+=st.ccdMs;b.worstMs=std::max(b.worstMs,st.ccdMs);}
+   for(const auto& c:LabAccess::clutter(g))if(c.model>=0&&!c.broken)b.out+=c.pos.x<6||c.pos.x>16.03f||c.pos.y<3.97f||c.pos.y>14.03f;
+   forceLegacyProps(-1);if(unbounded)tuneFile(saved);return b;};
+  const GameBlast gNow=gameBlast(false),gOld=gameBlast(true);
+  auto sayG=[&](const char* what,const GameBlast& b){r<<"  "<<what<<": "<<b.sweeps<<" world sweeps in 0.5 s (worst frame "<<b.worst<<"), "<<f3(b.ms)<<" ms in all (worst frame "<<f3(b.worstMs)<<" ms), "<<b.out<<" crates out of the pen\n";};
+  sayG("in the game, twenty crates launched in a pen of 3 cm walls, bounded",gNow);sayG("the same, unbounded",gOld);
+  check(gNow.out==0&&gNow.sweeps*4<gOld.sweeps,"ccd: in the game a blast of twenty crates stays in its pen with a quarter of the unbounded sweeps or fewer");}
  {float gap,va,vb;const bool met=boards(gap,va,vb);
   r<<"  two 2 cm boards at 25 m/s each, 0.32 m apart: "<<(met?"meet":"cross")<<"; after, 0.25 s on: "<<f3(gap)<<" m apart, going "<<f3(va)<<" and "<<f3(vb)<<" m/s\n";
   check(met&&gap>0&&va<0&&vb>0,"ccd: two thin boards flying at each other at 25 m/s meet and go back apart");}
+ // Jointed islands: swept together, put back together (RM_CCD=off shows them go through).
+ {r<<"\nJOINTED ISLANDS (60 and 120 steps a second)\n";
+  auto say=[&](const std::string& what,const Through& t){r<<"  "<<what<<": "<<(t.passed?"WENT THROUGH":"held")<<", "<<t.events<<" impact events, the worst pin gap "<<f3(t.worstPin*1000)<<" mm, at the end "<<f3(t.endPin*1000)<<" mm\n";};
+  for(float hz:{60.f,120.f}){const std::string at=" @"+std::to_string(int(hz))+" Hz";
+   const Through rag=ragdollAtWall(1/hz),doorW=doorAtPost(1/hz,false),doorB=doorAtPost(1/hz,true),lamp=lampAtPole(1/hz,false),lampB=lampAtPole(1/hz,true);
+   say("a ragdoll thrown at 15 m/s at a 3 cm wall"+at,rag);say("a door slammed at 15 rad/s into a 3 cm post (the world's)"+at,doorW);say("the same door into a 3 cm post (a fixed body)"+at,doorB);say("a lamp on a chain whipped at 20 m/s at a 3 cm pole (the world's)"+at,lamp);say("the same lamp at a 3 cm pole (a fixed body)"+at,lampB);
+   check(!rag.passed&&rag.worstPin<.03f&&rag.endPin<.005f,"ccd: a ragdoll thrown at 15 m/s at a 3 cm wall stays on its side, its joints intact"+at);
+   check(!doorW.passed&&!doorB.passed&&doorW.worstPin<.01f&&doorB.worstPin<.01f,"ccd: a door slammed into a 3 cm post never turns through it, its hinge pin intact"+at);
+   check(!lamp.passed&&!lampB.passed&&lamp.worstPin<.03f&&lampB.worstPin<.03f&&lamp.endPin<.005f&&lampB.endPin<.005f,"ccd: a lamp whipped on its chain at a 3 cm pole never goes through it, the chain intact"+at);}}
  // The game: crates and a bottle (the door scene's 3 cm wall at x 15).
  {forceLegacyProps(0);auto m=regression::room();m->definition.playerStart={3,3};Game g(regression::campaign(m));LabAccess::player(g).pos={3,3};auto& list=LabAccess::clutter(g);list.clear();
   for(int k=0;k<2;++k){auto c=prop(model::wooden_crate,{k?11.5f:8.5f,8},.4f);c.dims={.3f,.3f,.3f};c.velocity={k?-25.f:25.f,0};c.vz=0;c.projectile=true;c.sleeping=false;list.push_back(c);}
