@@ -1702,6 +1702,10 @@ bool GpuRenderer::shadowsPending()const{
  return false;
 }
 void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
+// One slot's cache goes (its owner drew nothing there this frame): the shadow passes walk every cache, so a
+// cache left behind kept casting the shadow of what had gone.
+void GpuRenderer::dropStaticCache(int slot){if(m->capturing&&m->captureSlot==slot)return;auto found=m->staticCaches.find(slot);if(found==m->staticCaches.end())return;
+ auto&cache=found->second;if(cache.shadowIndices.handle)m->shadowDirtyBounds.push_back(cache.bounds);m->retire(cache.buffer);m->retire(cache.shadowIndices);m->staticCaches.erase(found);}
 std::uint64_t GpuRenderer::staticCacheHits()const{return m->cacheHits;}
 std::array<std::uint64_t,12> GpuRenderer::drawStatistics()const{return m->drawStats;}
 std::array<double,3> GpuRenderer::finishTimes()const{return m->finishMs;}

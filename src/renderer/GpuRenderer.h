@@ -34,6 +34,7 @@ public:
  bool beginStaticCache(int slot,std::uint64_t key);
  void endStaticCache();
  void clearStaticCaches();
+ void dropStaticCache(int slot);
  // Lamp shadow maps still queued: a changed lamp set redraws a bounded
  // number per frame, so a new view settles over several frames.
  bool shadowsPending()const;

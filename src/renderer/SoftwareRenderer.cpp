@@ -156,7 +156,9 @@ void SoftwareRenderer::warmChunks(const Game& game){
  for(int level=0;level<chunks;++level){
   if(level!=game.level()&&!game.chunkResident(level))continue;
   const World& w=game.chunkWorld(level);const auto& clutter=game.chunkClutter(level);
-  const std::uint64_t key=(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w))*1099511628211ull)^(std::uint64_t(w.fixtures().size())<<40)^(std::uint64_t(clutter.size())<<20)^std::uint64_t(level+1);
+  // The map by its serial, never its address (a later map can take a freed one's), and the models it holds.
+  std::uint64_t key=(w.definitionIdentity().serial*1099511628211ull)^(std::uint64_t(w.worldId())<<56)^std::uint64_t(level+1);
+  for(const auto& f:w.fixtures())key=(key^std::uint64_t(f.model+1))*1099511628211ull;for(const auto& c:clutter)key=(key^std::uint64_t(c.model+2))*1099511628211ull;
   if(m_warmKeys[size_t(level)]==key)continue;
   m_warmKeys[size_t(level)]=key;
   std::vector<int> models;
@@ -1548,11 +1550,11 @@ void SoftwareRenderer::render(const Game& game){
  m_cleanupReachError=m_cleanupFingerError=m_cleanupBarrelError=0;
  m_cleanupEdgeStretch=1;
  bool directPresentation=hardwarePresentsWindow();
- if(m_lightingGame!=&game||m_lightingWorld!=game.worldId()||m_lightingSession!=game.renderEpoch()){
+ if(m_lightingGame!=game.renderSerial()||m_lightingWorld!=game.worldId()||m_lightingSession!=game.renderEpoch()){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};
   if(m_gpu)m_gpu->clearStaticCaches();
   m_plants.clear();
-  m_lightingGame=&game;m_lightingWorld=game.worldId();m_lightingSession=game.renderEpoch();
+  m_lightingGame=game.renderSerial();m_lightingWorld=game.worldId();m_lightingSession=game.renderEpoch();
   for(int level=0;level<Game::MaxChunks;++level)m_chunkStaticSeen[size_t(level)]=game.staticRevision(level);
  }
  // One map's content changed (a live edit in the campaign builder): its baked

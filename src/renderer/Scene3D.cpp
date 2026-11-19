@@ -1391,7 +1391,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   std::uint64_t key=1469598103934665603ull;
   auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
-  hash(std::uint64_t(game.worldId()));hash(game.staticRevision(w.level()));hash(std::uint64_t(w.level()));hash(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  hash(std::uint64_t(game.worldId()));hash(game.staticRevision(w.level()));hash(std::uint64_t(w.level()));
+  // Which map, by its definition's serial, never the world's address: the builder's preview builds
+  // one game after another, a new one can sit where the last one was with the same tiles and the same
+  // edit count, and an address key then kept the old scene's fixtures in the picture, undeletable.
+  // What the bake draws is in the key too: every fixture, structure, prop and sign.
+  hash(w.definitionIdentity().serial);
+  for(const auto& f:w.fixtures()){hash(std::uint64_t(f.model+1)|std::uint64_t(f.visible)<<32);for(float v:{f.position.x,f.position.y,f.base,f.width,f.depth,f.height,f.yaw})hashFloat(v);}
+  for(const auto& s:w.structures()){hash(std::uint64_t(s.shape)|std::uint64_t(s.facing)<<8|std::uint64_t(s.material+1)<<16);for(float v:{s.x1,s.y1,s.x2,s.y2,s.bottom,s.top})hashFloat(v);}
+  for(const auto& p:w.props()){hash(std::uint64_t(p.kind+1));for(float v:{p.position.x,p.position.y,p.base,p.height,p.yaw})hashFloat(v);}
+  for(const auto& s:w.signs()){for(float v:{s.position.x,s.position.y,s.z,s.yaw,s.width,s.height})hashFloat(v);}
   // Revision: tile crates/barrels + authored props bake into the static VBO.
   hash(5);
   // Buried faces left out or drawn (setFaceCulling): a switch rebuilds the bake.
@@ -1536,7 +1545,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  passStarted=std::chrono::steady_clock::now();trianglesBefore=m_trianglesSubmitted;architectureDrawn=true;
  if(m_faceCulling){
   std::uint64_t key=1469598103934665603ull;auto mix=[&](std::uint64_t v){key=(key^v)*1099511628211ull;};auto mixf=[&](float v){mix(std::bit_cast<std::uint32_t>(v));};
-  mix(std::uint64_t(reinterpret_cast<std::uintptr_t>(&w)));
+  mix(w.definitionIdentity().serial);mix(std::uint64_t(w.worldId()));mix(std::uint64_t(w.level())); // the map, never its address
   for(const auto& b:surfaceBoxes){for(float v:{b.low.x,b.low.y,b.low.z,b.high.x,b.high.y,b.high.z})mixf(v);mix(std::uint64_t(b.owner));}
   for(const auto& st:w.structures()){for(float v:{st.x1,st.y1,st.x2,st.y2,st.bottom,st.top,st.skew})mixf(v);mix(std::uint64_t(st.shape)|std::uint64_t(st.facing)<<8|std::uint64_t(st.material+1)<<16|std::uint64_t(st.drape)<<40);}
   auto& cached=m_cullIndexes[&w];
@@ -2201,6 +2210,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    mounts.push_back({&light,mount});
    for(float value:{light.position.x,light.position.y,light.z,light.intensity,mount,float(light.fitting),light.yaw,light.kelvin,light.tint,light.gel.x,light.gel.y,light.gel.z})hash(std::bit_cast<std::uint32_t>(value));
   }
+  if(mounts.empty())m_gpu->dropStaticCache(2*Game::MaxChunks+w.level()); // none now: the last ones' cache goes (the shadow and reflection passes walk every cache)
   if(!mounts.empty()&&m_gpu->beginStaticCache(2*Game::MaxChunks+w.level(),key)){
    int previousBudget=shadowBudget;m_staticGeometryBuild=true;shadowBudget=400000;
    for(const auto&entry:mounts)ceilingLamp(*entry.light,entry.mount,1.f);
@@ -2221,6 +2231,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // on them moves (SoftPad::version) or wakes or sleeps, so undeformed they look exactly as they always did.
  {uint64_t key=geometryKey;bool any=false;auto mix=[&](std::uint64_t v){key^=v;key*=1099511628211ull;};
   for(int i=0;i<int(w.fixtures().size());++i){const auto&f=w.fixtures()[size_t(i)];if(!f.visible||w.fixtureHasParts(i)||!soft::isSoft(f.model))continue;any=true;mix(std::uint64_t(i)+1);if(const auto*p=game.softPad(level,i,-1))mix(0x9e3779b97f4a7c15ull+p->version);}
+  if(!any&&m_gpuFrame)m_gpu->dropStaticCache(44*Game::MaxChunks+level);
   if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(44*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;
    for(int i=0;i<int(w.fixtures().size());++i){const auto&f=w.fixtures()[size_t(i)];if(!f.visible||w.fixtureHasParts(i)||!soft::isSoft(f.model))continue;
     facilitySoft=game.softPad(level,i,-1);facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw);facilitySoft=nullptr;}
@@ -2231,6 +2242,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Fixture parts have a separate cache; a screen hit never rebuilds the chunk.
  {uint64_t key=geometryKey;bool any=false;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){any=true;key^=w.fixtureParts(i);key*=1099511628211ull;}
  for(int j=0;j<int(w.breakables().size());++j)if(w.breakables()[j].fixture>=0){key^=(j+1)*(w.breakableIntact(j)?1ull:2ull);key*=1099511628211ull;}
+ if(!any&&m_gpuFrame)m_gpu->dropStaticCache(40*Game::MaxChunks+level);
  if(any&&(!m_gpuFrame||m_gpu->beginStaticCache(40*Game::MaxChunks+level,key))){if(m_gpuFrame)m_staticGeometryBuild=true;for(int i=0;i<int(w.fixtures().size());++i)if(w.fixtureHasParts(i)){const auto&f=w.fixtures()[i];if(f.visible){facilityLook=f.traits.get();facility(f.model,f.position.x,f.position.y,w.floorHeight(f.position.x,f.position.y)+f.base,f.width,f.depth,f.height,f.yaw,w.fixtureParts(i),i);facilityLook=nullptr;}}if(m_gpuFrame){m_gpu->endStaticCache();m_staticGeometryBuild=false;}}}
  // Broken glass is the fracture GlassFracture.h works out for each pane: the
  // pieces fall from the hole outward and stay where they land; teeth stay in the frame.
@@ -2401,6 +2413,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // triangle of its fan carries the sheet's streaks or the shard glint along its own edges.
   auto uvOf=[&](int k){const Vec2 q=s.shape.p[size_t(k)];return te<=0?Vec2{q.x/f.width,q.y/f.height}:Vec2{.5f+(q.x-c.x)*1.5f,.5f+(q.y-c.y)*1.5f};};
   for(int k=1;k+1<s.shape.n;++k){const Vec2 a=uvOf(0),b=uvOf(k),e=uvOf(k+1);tri({pts[0],a.x,a.y},{pts[size_t(k)],b.x,b.y},{pts[size_t(k+1)],e.x,e.y},te<=0?paneSheet:shardTexture,1.05f);}};
+ if(w.breakables().empty()&&m_gpuFrame)m_gpu->dropStaticCache(3*Game::MaxChunks+level);
  if(!w.breakables().empty()){
   auto key=geometryKey;for(int i=0;i<int(w.breakables().size());++i){key^=std::uint64_t(!w.breakableIntact(i)+1)+(falling(i)?4u:0u);key*=1099511628211ull;
    if(auto p=w.paneGlass(i)){key^=std::uint64_t(p->revision)*977+std::uint64_t(w.breakableOpacity(i)*16)*13+std::uint64_t(p->missing)*7919;key*=1099511628211ull;}
@@ -2562,7 +2575,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  };
  std::array<std::vector<const Clutter*>,36> resting;
  for(const auto&c:game.chunkClutter(level)){if(c.model>=0&&c.sleeping&&!c.broken&&m_gpuFrame&&&c!=gloveTarget&&!c.liquid.holds()){int cell=std::clamp(int(c.pos.y/4),0,5)*6+std::clamp(int(c.pos.x/4),0,5);resting[cell].push_back(&c);}else drawClutter(c);}
- if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty())continue;float bottom=1000,top=-1000;for(const auto*c:resting[cell]){bottom=std::min(bottom,c->z);top=std::max(top,c->z+c->height());}if(!sphereVisible({(cell%6)*4.f+2,(cell/6)*4.f+2,(bottom+top)*.5f},3.f+(top-bottom)*.5f))continue;
+ if(m_gpuFrame)for(int cell=0;cell<36;++cell){if(resting[cell].empty()){m_gpu->dropStaticCache(4*Game::MaxChunks+level*36+cell);continue;} // nothing rests there now: its old props gofloat bottom=1000,top=-1000;for(const auto*c:resting[cell]){bottom=std::min(bottom,c->z);top=std::max(top,c->z+c->height());}if(!sphereVisible({(cell%6)*4.f+2,(cell/6)*4.f+2,(bottom+top)*.5f},3.f+(top-bottom)*.5f))continue;
   auto key=geometryKey;auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};for(const auto*c:resting[cell]){hash(c->model);for(float v:{c->pos.x,c->pos.y,c->z,c->yaw,c->pitch,c->roll,c->dims[0],c->dims[1],c->dims[2]})hash(std::uint64_t(std::llround(v*4096)));if(const auto*p=softPadOf(*c))hash(0x9e3779b97f4a7c15ull+p->version);}
   if(m_gpu->beginStaticCache(4*Game::MaxChunks+level*36+cell,key)){++m_propGeometryBuilds;m_staticGeometryBuild=true;for(const auto*c:resting[cell])drawClutter(*c);m_gpu->endStaticCache();m_staticGeometryBuild=false;}
  }
@@ -2763,6 +2776,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // probing physical normals and resampling light as the camera turns.
  const int pipeShadowBudget=shadowBudget;
  const bool cachePipes=m_gpuFrame&&m_cacheFixedServices&&!w.pipes().empty();
+ if(m_gpuFrame&&!cachePipes)m_gpu->dropStaticCache(Game::MaxChunks+w.level());
  const bool buildPipes=!cachePipes||m_gpu->beginStaticCache(Game::MaxChunks+w.level(),geometryKey);
  if(cachePipes&&buildPipes){m_staticGeometryBuild=true;shadowBudget=400000;}
  if(buildPipes)for(const auto& pipe:w.pipes()){
