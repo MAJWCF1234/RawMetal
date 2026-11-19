@@ -24,6 +24,8 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
    if(distance<hit.distance-.0001f)hit={kind,level,index,distance,distance,origin+ray*distance,n};
   };
   if(includePlayer&&!dead())body(ShotKind::Player,m_level,0,m_player.pos,m_player.z,m_player.hullHeight(),.2f);
+  // A match's players (Match lends them while it resolves a shot): Player index slot+1.
+  if(m_netBodies)for(const auto&b:*m_netBodies)body(ShotKind::Player,m_level,b.slot+1,b.pos,b.z,b.height,.25f);
   for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&track=npc.track();if(int(i)==ignoredNpc||!chunkResident(npc.level)||!autonomousActor(track)||(npc.pose.clip==4&&!npcIncapacitated(i))||(track.deadState&&state(track.deadState)))continue;
    if(ignoredEntity.kind==ShotKind::Npc&&ignoredEntity.index==int(i))continue;
    auto [low,high]=friendlyShotBounds(i);auto shift=chunkOffset(npc.level)-activeOrigin;Point3 offset{shift.x,shift.y,0},normal;float distance=rayBoxFraction(origin,ray*range,low+offset,high+offset,&normal)*range;
@@ -81,6 +83,7 @@ ShotHit Game::traceShot(Point3 origin,Point3 direction,float range,int ignoredNp
  }
  for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];const auto&t=npc.track();if(int(i)!=ignoredNpc&&chunkResident(npc.level)&&autonomousActor(t)&&t.health&&npc.pose.clip!=4&&(!t.deadState||!state(t.deadState)))candidate(npc.pose.position+chunkOffset(npc.level)-activeOrigin,npc.pose.z,friendlyHullHeight(i,t),.4f);}
  for(const auto&drone:engineerDrones())if(engineerDroneTarget(drone.slot,m_level).valid())candidate(Vec2{drone.position.x,drone.position.y}+chunkOffset(drone.level)-activeOrigin,drone.position.z,EngineerDroneHeight,EngineerDroneRadius);
+ if(m_netBodies)for(const auto&b:*m_netBodies)if(!(ignoredEntity.kind==ShotKind::Player&&ignoredEntity.index==b.slot+1))candidate(b.pos,b.z,b.height,.4f);
  return result;
 }
 // A scripted person the player shoots at flinches (clip 3) even when the story

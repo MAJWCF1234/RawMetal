@@ -409,6 +409,11 @@ public:
     const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
     const net::MatchView& matchView()const{return m_matchView;}
     bool inMatch()const{return m_matchView.active;}
+    // A VR player's avatar as VrRuntime solves it, sent to the others in a match (main sets it each frame).
+    void setNetAvatar(const AvatarPose& pose){m_netAvatar=pose;}
+    // Bodies of the players in a match, in the active chunk's frame: Match lends them to traceShot while it
+    // resolves a shot (they come back as ShotKind::Player with index slot+1); never seen by anything else.
+    struct NetBody {int slot=0;Vec2 pos{};float z=0,height=Player::StandingHeight;};
     void moveVrRoom(Vec2 delta){tryMove(delta);}
     void setVrAim(Point3 position,Point3 direction,bool valid,bool support=false){m_vrAimPosition=position;m_vrAimDirection=direction;m_vrAimValid=valid;m_vrSupportGrip=support&&valid;}
     // up: the hand's own up (the controller's, mapped to game space as its pointing is); left zero, the up nearest the
@@ -1738,6 +1743,13 @@ private:
     std::vector<net::RemotePlayer> m_remotePlayers;
     net::MatchView m_matchView;
     friend class net::Match;
+    // Multiplayer hooks the Match sets (Match.cpp): a guest's scripts and creature minds stay off (the host runs
+    // them and sends what happens), and the bodies a shot is traced against while the Match resolves it.
+    bool m_netScriptsOff=false,m_netCreaturesRemote=false;
+    const std::vector<NetBody>* m_netBodies=nullptr;
+    AvatarPose m_netAvatar{};
+    void updateNet();                              // the Session's frame: makes and drops the Match
+    void updateFrame(const InputState& input,float dt);
     std::vector<Enemy> m_enemies;
     std::vector<FriendlyActor> m_friendlyActors;
     std::vector<AiStimulus> m_guardShots;

@@ -2310,7 +2310,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
         if(wasPaused&&!game.paused()&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());

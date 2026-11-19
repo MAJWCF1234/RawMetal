@@ -56,6 +56,35 @@ Nothing below Session knows about the game. Nothing in the game knows about EOS.
 - `AvatarPose` is sent as it is for VR players. `solveAvatar` is pure, so a remote body poses the same as the local one.
 - `RemotePlayer::character` picks the body: 0 Claire, 1 the Limitator.
 
+## The Match (src/net/Match.cpp, MatchPlay.cpp)
+
+- **Game's frame:** `Game::update` ticks the Session, makes a Match when the Session is in a lobby, runs the game's own frame, then the Match. The Match reads the session's state, members and host (it never takes its events, which stay for the menus). It is dropped, and the title comes back, when the session leaves, the lobby closes or the match ends; quitting to the title from the pause menu leaves the lobby.
+- **In a match:** no saving or loading; the pause menu does not stop the world.
+- **Joining:**
+  - A guest sends hello (name, `Settings::character`, protocol version). The host answers welcome: slot, rules, the map's file name and content hash (`contentHash`, FNV-1a 64; `mapFileHash` for a file).
+  - A guest without that exact file asks for it. The host streams it on MapData in chunks of 1100 bytes, and the guest saves it as `custom maps/Downloaded/<name>.rmc`, loads it and starts.
+  - Deathmatch plays `multiplayer.deathmatchMap` (-1 the start map); co-op plays the start map.
+- **State:**
+  - Guests send their own state at 30 Hz; the host sends everyone's at 20 Hz. Both are unreliable, newest wins.
+  - A player is 19 bytes in a snapshot (79 in VR, with the avatar pose). A snapshot of 8 players is 162 bytes, and a guest's own state is 27. That is 3.2 KB/s down and 0.8 KB/s up per guest, and 22 KB/s out of the host to 7 guests. These are payload figures; EOS adds its own headers.
+  - Others are drawn 100 ms behind, in the host's clock.
+  - Movement is the guest's own. The host refuses a move too fast or through a wall, and sends a correction. Every respawn and correction bumps the player's `life`, so older reports are ignored.
+- **Shots:**
+  - The host traces every shot, its own included (`Game::shoot` hands it to `Match::localShot`), against the world and every player's stance hull.
+  - Players are rewound to the time the shooter saw (at most 0.3 s). They are lent to `traceShot` as `Game::NetBody` and come back as `ShotKind::Player`, index slot+1.
+  - Damage, hits, deaths and the shot's marks go to everyone.
+- **Deathmatch:**
+  - No creatures.
+  - Players spawn at the map's SPAWN records, or on open floor spread from the start. A respawn comes after 3 s, at the spawn farthest from living opponents, with full health and a fresh map's shotgun.
+  - The frag or time limit ends the round, and the host starts the next 10 s later.
+- **Co-op:**
+  - Guests' creature minds and scripts are off (`Game::m_netCreaturesRemote`, `m_netScriptsOff`). The host sends its map's creatures at 15 Hz and its doors at 5 Hz.
+  - Pickups taken and doors used go both ways.
+  - A guest far from a host who changed map is brought beside it.
+  - A downed player returns beside the host after 10 s. Friendly fire follows the map's setting.
+- **The host leaves:** in deathmatch the new host carries on from its own state, and the others hello it again. In co-op the guests' match ends with the line "The host left the game".
+- **VR:** main hands the solved `AvatarPose` to `Game::setNetAvatar` each frame in a match.
+
 ## Tests
 
 - `--net-loopback-test` / `engine.net-loopback`: the in-memory hub.

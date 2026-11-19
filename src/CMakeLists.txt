@@ -89,6 +89,8 @@ add_executable(RawMetal WIN32
     net/Loopback.cpp
     net/EosSession.cpp
     net/Match.cpp
+    net/MatchPlay.cpp
+    net/MatchTest.cpp
     game/MultiplayerMenu.cpp
     renderer/RemotePlayers.cpp
     game/VrHands.cpp

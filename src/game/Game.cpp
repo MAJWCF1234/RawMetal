@@ -2,6 +2,7 @@
 #include "Game.h"
 #include "physics/PropQueries.h"
 #include "../world/CustomCampaign.h"
+#include "../net/Match.h"
 
 #include <algorithm>
 #include <cmath>
@@ -351,6 +352,8 @@ void Game::shoot(){
  if(m_vrAimValid){origin=m_vrAimPosition;direction=m_vrAimDirection;}
  float size=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(size>.0001f)direction=direction*(1/size);
  m_sounds.push_back({gun.cycle.fireSound,{origin.x,origin.y},.95f,1,false,17,origin.z});
+ // In a match the host traces every shot, its own included (Match.cpp); the flash and recoil stay here.
+ if(m_match&&m_match->localShot(origin,direction,int(m_equippedWeapon)))return;
  auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);
  resolveShot(hit,origin,direction,gun.hitscan,true);
 }
@@ -469,7 +472,14 @@ bool Game::testPickups(){
  g.m_player.z=0;g.updatePickups();g.updatePickups();return g.m_player.pool(WeaponId::Shotgun).total==ammo+16&&!g.m_pickups[0].active;
 }
 
+// A frame: the multiplayer session first (it may make or drop the Match), then the game, then the Match,
+// which reads what the player did this frame and sends it, and writes what the others did.
 void Game::update(const InputState& input, float dt) {
+    updateNet();
+    updateFrame(input,dt);
+    if(m_match)m_match->update(input,dt);
+}
+void Game::updateFrame(const InputState& input, float dt) {
     m_sounds.clear();
     if(m_loadJob){if(loadReady())finishLoad();return;}
     if(m_pendingMainCampaign)startMainCampaign();
@@ -495,6 +505,8 @@ void Game::update(const InputState& input, float dt) {
      }else {m_paused=!m_paused;m_menuPage=MenuPage::Settings;m_menuSelection=0;m_menuMessage.clear();}
      m_dragSlider=-1;m_menuPrevious=input;m_suppressFire=true;return;
     }
+    // A match does not stop for the pause menu: the menu takes the keys while the world runs on without them.
+    if(m_paused&&m_match&&!m_menuFromTitle){updateMenu(input);if(m_paused&&!m_titleScreen){m_paused=false;InputState idle{};idle.escape=input.escape;idle.console=input.console;idle.inventory=input.inventory;idle.flashlight=input.flashlight;updateFrame(idle,dt);m_paused=true;m_suppressFire=true;}return;}
     if(m_paused){updateMenu(input);return;}
     if(inventoryPressed){m_inventoryOpen=!m_inventoryOpen;m_suppressFire=true;m_inventoryClick=input.fire;m_inventoryUse=input.use;return;}
     if(m_inventoryOpen){updateInventory(input);return;}

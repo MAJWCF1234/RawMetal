@@ -747,15 +747,17 @@ void Game::finishLoad(){
 }
 const std::string& Game::lastLoadFailure(){return t_loadFailure;}
 bool Game::saveSlot(int slot){
+ if(m_match){m_menuMessage="NO SAVING IN A MATCH";return false;}   // multiplayer: the host's world is the truth
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
  try {writeAtomic(slotPath(m_saveDirectory,slot),encodeSave());try{writeAtomic(labelPath(slotPath(m_saveDirectory,slot)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();m_menuMessage="GAME SAVED";return true;}catch(const std::exception&){m_menuMessage="SAVE FAILED / CHECK DISK AND FOLDER";return false;}
 }
-bool Game::saveCheckpoint(){if(m_saveDirectory.empty())return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());try{writeAtomic(labelPath(checkpointPath(m_saveDirectory)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
-bool Game::loadCheckpoint(){if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}
+bool Game::saveCheckpoint(){if(m_saveDirectory.empty()||m_match)return false;try{writeAtomic(checkpointPath(m_saveDirectory),encodeSave());try{writeAtomic(labelPath(checkpointPath(m_saveDirectory)),saveLabel(m_level,m_elapsed,m_player.health));}catch(const std::exception&){}refreshSaveSlots();return true;}catch(const std::exception&){return false;}}
+bool Game::loadCheckpoint(){if(m_match){m_menuMessage="NO LOADING IN A MATCH";return false;}if(m_saveDirectory.empty()){m_menuMessage="AUTOSAVE UNAVAILABLE";return false;}
  const auto path=checkpointPath(m_saveDirectory);std::string why;
  try{auto data=readFile(path);if(m_asyncLoads)return beginLoad(std::move(data),-1);if(decodeSave(data)){noteRefit(path,refitSaveFile(path,data));return true;}why=t_loadFailure;}catch(const std::exception& error){why=error.what();}
  logLoadFailure(path,why);m_menuMessage=loadFailureLine("AUTOSAVE FAILED",why);return false;}
 bool Game::loadSlot(int slot){
+ if(m_match){m_menuMessage="NO LOADING IN A MATCH";return false;}
  if(slot<0||slot>=3||m_saveDirectory.empty()){m_menuMessage="SAVE LOCATION UNAVAILABLE";return false;}
  const auto path=slotPath(m_saveDirectory,slot);std::string why;std::error_code missing;
  if(!std::filesystem::exists(path,missing)){m_menuMessage="LOAD FAILED / EMPTY SLOT";return false;}

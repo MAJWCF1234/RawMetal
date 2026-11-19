@@ -163,6 +163,8 @@ bool aiCellEdge(const World&w,int from,int to,float height,float stepHeight,bool
 }
 void Game::updateEnemies(float dt){
  perf::Scope frameProfile(perf::Enemies);
+ // A co-op guest: the host's creatures think; here they are only posed from its snapshots (Match).
+ if(m_netCreaturesRemote){for(auto&e:m_enemies)advanceCreatureAnimation(e,m_elapsed,dt);return;}
  if(dead()||m_won)return;
  ai::RouteCache::Owner routeOwner(m_world,m_world.m_mapData);
  auto stimuli=aiStimuli();hearPlayerNoise(stimuli);

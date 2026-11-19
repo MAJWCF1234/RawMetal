@@ -165,6 +165,7 @@ bool Game::scriptEventReady(const ScriptEvent& event)const{
  return m_player.pos.x>=event.x1&&m_player.pos.x<=event.x2&&m_player.pos.y>=event.y1&&m_player.pos.y<=event.y2&&m_player.z>=event.bottom&&m_player.z<=event.top;
 }
 void Game::updateScripts(float){
+ if(m_netScriptsOff)return;   // a multiplayer guest: scripted sequences run on the host alone
  updateReceivingBreach();
  for(const auto&event:m_scriptEvents){
   if(!event.id)continue;
