@@ -327,7 +327,9 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  // The compositor's timing of the last frame, and the render scale for the next (dynamic unless fixed).
  {vr::Compositor_FrameTiming t{};t.m_nSize=sizeof(t);if(m->compositor->GetFrameTiming(&t,0)){m->timing.gpuMs=t.m_flTotalRenderGpuMs;m->timing.frameMs=t.m_flClientFrameIntervalMs;m->timing.dropped=t.m_nNumDroppedFrames;m->timing.reprojected=t.m_nReprojectionFlags;}
   m->timing.hz=m->displayHz;
-  if(cfg.vrRenderScale>0)m->timing.scale=cfg.vrRenderScale;
+  // (--vr-inspection-test captures whole eye images: its inspection camera keeps the full size.)
+  if(game.inspectionCamera())m->timing.scale=1;
+  else if(cfg.vrRenderScale>0)m->timing.scale=cfg.vrRenderScale;
   else if(++m->timingFrames>=6){m->timingFrames=0;m->timing.scale=nextRenderScale(m->timing.scale,m->timing.gpuMs,1000.f/m->displayHz);}}
  return true;
 }
