@@ -8,6 +8,7 @@
 // its feet there; a player dead long enough is not drawn; name tags over the living; every row of the title and of
 // each page puts its words where Game::titleItems says it is, the chosen row lit red; Game::testMultiplayerMenu's
 // flow (hosting, browsing, a join code, leaving, the character saved) passes.
+#include <algorithm>
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
@@ -38,7 +39,7 @@ std::vector<net::RemotePlayer> cast(){
  {auto* r=add(1,"Ash",9.2f,11.f,-70);r->weapon=1;}                                                  // standing, the shotgun at rest
  {auto* r=add(2,"Vesna",10.3f,11.3f,0);r->weapon=2;r->velocity={3.4f,0};}                            // running across with the pistol
  {auto* r=add(3,"Rook",11.6f,11.f,-105);r->weapon=1;r->shotAge=1.f;r->pitch=.06f;}                   // aiming the shotgun
- {auto* r=add(4,"Okonkwo",12.8f,11.f,-125);r->weapon=2;r->crouched=true;r->character=1;}             // crouched with the pistol (the Limitator: Claire stands in)
+ {auto* r=add(4,"Okonkwo",12.8f,11.f,-125);r->weapon=2;r->crouched=true;r->character=1;}             // crouched with the pistol, as the Limitator
  {auto* r=add(5,"Tamsin",13.9f,11.4f,-80);r->weapon=1;r->alive=false;r->deathAge=1.6f;r->health=0;}  // falling dead
  {auto* r=add(6,"Halloran",14.8f,11.f,-95);r->vr=true;r->pose=vrPose(r->position,r->angle);r->weapon=2;} // in VR, the pistol in the right hand
  {auto* r=add(7,"Wren",12.9f,17.f,-90);r->alive=false;r->deathAge=7.f;r->health=0;}                // dead long ago: not drawn
@@ -90,7 +91,12 @@ const bool tube=add({
    float x0=1e9f,y0=1e9f,x1=-1e9f,y1=-1e9f;int seen=0;
    for(int c=0;c<8;++c){const Point3 q{c&1?hi.x:lo.x,c&2?hi.y:lo.y,c&4?hi.z:lo.z};const auto pr=project(s,q);if(!pr.visible)continue;++seen;x0=std::min(x0,pr.x);y0=std::min(y0,pr.y);x1=std::max(x1,pr.x);y1=std::max(y1,pr.y);}
    s.board[k+".moved"]=seen?moved(with,without,int(x0),int(y0),int(x1)+1,int(y1)+1):0;
-   if(rep&&rep->drawn){s.board[k+".offset"]=std::hypot((lo.x+hi.x)*.5f-p.position.x,(lo.y+hi.y)*.5f-p.position.y);s.board[k+".floor"]=lo.z-p.position.z;s.board[k+".height"]=hi.z-lo.z;}}
+   if(rep&&rep->drawn){s.board[k+".offset"]=std::hypot((lo.x+hi.x)*.5f-p.position.x,(lo.y+hi.y)*.5f-p.position.y);s.board[k+".floor"]=lo.z-p.position.z;s.board[k+".height"]=hi.z-lo.z;}
+   // A body that should not be drawn is measured against the same frame without only it: another body (the
+   // Limitator is broad) may stand inside its box on screen.
+   if(!p.alive&&p.deathAge>4.5f&&seen){auto others=players;others.erase(std::remove_if(others.begin(),others.end(),[&](const net::RemotePlayer& o){return o.slot==p.slot;}),others.end());
+    LabAccess::remotePlayers(g)=others;r.render(g);const Image minus=Image::of(r.pixels(),r.width(),r.height());LabAccess::remotePlayers(g)=players;
+    s.board[k+".moved"]=moved(with,minus,int(x0),int(y0),int(x1)+1,int(y1)+1);}}
   // The scoreboard while Tab is held; the respawn count; the pause menu in a match.
   LabAccess::holdScoreboard(g,true);r.render(g);s.shoot("scoreboard (Tab held)");
   {const Image im=Image::of(r.pixels(),r.width(),r.height());const int w=448,x=(im.width-w)/2;s.board["mp.scoreboard.words"]=light(im,x,52+56,x+w,52+56+8*17);s.board["mp.scoreboard.self_red"]=reddish(im,x+10,52+55,x+w-10,52+55+17);}
@@ -152,7 +158,7 @@ const bool tube=add({
  },
  .metrics=[](Scene& s,Report& r){
   auto b=[&](const std::string& k){return s.board.count(k)?s.board[k]:0.;};
-  static const char* doing[]={"","standing with the shotgun","running with the pistol","aiming the shotgun","crouched with the pistol (the Limitator's slot, Claire standing in)","falling dead","posed from VR"};
+  static const char* doing[]={"","standing with the shotgun","running with the pistol","aiming the shotgun","crouched with the pistol, as the Limitator","falling dead","posed from VR"};
   for(int slot=1;slot<=6;++slot){const std::string k="mp.body."+std::to_string(slot);
    r.metric("body"+std::to_string(slot)+".moved",b(k+".moved"),"share");
    r.check(std::string("a remote player is drawn ")+doing[slot],b(k+".drawn")>0);

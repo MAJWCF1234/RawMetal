@@ -1829,7 +1829,7 @@ private:
     // The title's multiplayer pages (MultiplayerMenu.cpp).
     TitlePage m_titlePage=TitlePage::Main;
     int m_browseMode=0,m_browseScroll=0;bool m_browseHideFull=true,m_browseSearched=false,m_quickSearching=false;int m_quickMode=0;
-    HostDraft m_hostDraft;std::string m_joinTyped,m_titleNotice;float m_joinCopied=0;
+    HostDraft m_hostDraft;std::string m_joinTyped;float m_joinCopied=0;   // m_titleNotice: the Builder's own, above
     bool m_scoreboardHeld=false;
     void updateMultiplayerMenu(const InputState& input);
     void drainSessionEvents();
