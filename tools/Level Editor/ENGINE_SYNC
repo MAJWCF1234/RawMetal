@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit f148017969a55e09126f41b3dcd5c57cbce5c677
-# 2026-11-19 14:12, release: v1.6.1, every one of you
+commit 438453b9d3ee5e72f79aacb73f3ca0b968830ab8
+# 2026-11-19 14:47, chore: Builder copy: a merge comment no longer swallows the rest of a line in guard Targets
