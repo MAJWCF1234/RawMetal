@@ -4,9 +4,13 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.5.6
+## v1.5.6 - A quieter hand (2026-11-18)
 
-- The Physgloves no longer wrap a targeted prop in an orange glow: a thin, faint, cool line traces its outline instead, breathing slowly, and the crosshair draws in a little; Settings > Pull Highlight turns the line off.
+A small fix for something players said shone too brightly.
+
+- **No more orange.** What the Physgloves are about to pull no longer burns orange. A thin, cold line traces its edge and breathes slowly, and the crosshair draws in a little; nothing else around it lights up. Settings has a Pull Highlight row to make it subtle or turn it off.
+
+Verified with tools/release/ship.py and the feature lab's Physgloves and settings tubes.
 
 ---
 
