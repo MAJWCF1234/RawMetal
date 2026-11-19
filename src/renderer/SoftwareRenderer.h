@@ -202,7 +202,21 @@ private:
     void drawTrackedHands(const Game& game);
     AvatarPose m_vrPose;AvatarSolve m_vrSolve;bool m_vrPoseReady=false;
     Point3 m_vrCardAnchor{};double m_vrCardClock=-1;float m_vrStatusTime=0;int m_vrStatusKey=-1;bool m_vrForeEndMeasured=false;
+    // m_vrScripted: renderVrScripted's frame (the VR drawing through the desktop camera). m_vrGunMeasured: the
+    // guns' working points have been measured from the meshes and handed to the game (VrGunDraw.cpp).
+    bool m_vrScripted=false,m_vrGunMeasured=false,m_vrViewSet=false;Player m_vrView;
  public:
+    // The VR drawing (her body, arms, the gun in the hand, a magazine or shell in the other) from the active
+    // VrRuntime, a scripted pose (VrRuntime::script) without a headset, drawn through the desktop camera, which
+    // the game has put at the scripted head: the lab's VR captures.
+    // view: another camera to look from (an onlooker beside her), the body still posed from the scripted head.
+    void renderVrScripted(const Game& game,const Player* view=nullptr);
+    // The Remington model point in the VR gun frame (right, up, back; the grip in the fist, the muzzle at -z).
+    static Point3 vrShotgunPoint(const Mesh& mesh,Point3 model);
+    // A gun mesh's working points in the VR gun frame (Game::VrGunGeometry), measured from its parts.
+    static Game::VrGunGeometry measureVrGun(const Mesh& mesh,bool pistol);
+    // --vr-test: the game's gun points agree with the meshes as the VR hands draw them; the sights over the bore.
+    static bool testVrGunGeometry(std::ostream& report);
     // The arm rig posed on a solve (shared by the drawing and --vr-test): its shoulders' middle in rig space and
     // the game metres per rig unit, for rigToWorld.
     struct VrRig {Point3 mid{};float scale=1;};

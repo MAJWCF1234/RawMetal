@@ -32,7 +32,7 @@ struct AvatarPose {
  std::array<AvatarHand,2> hands{};    // physical: [0] the left hand, [1] the right
  std::uint8_t gunSide=1;              // the hand a firearm is held in: 1 right, 0 left-handed
  std::uint8_t inHand=0,back=0,hip=0;  // what is drawn, what rides on the back, what on the hip
- bool support=false;                  // the other hand on the shotgun's fore-end
+ bool support=false;                  // the other hand on the gun: the shotgun's fore-end, or round the pistol's grip
  float pump=0,reload=0;               // the pump's travel back (m); the reload's progress (0 none)
 };
 struct AvatarSolve {
@@ -46,6 +46,7 @@ struct AvatarSolve {
  std::array<bool,2> reached{};        // the tracked wrist was within reach (else pulled in to the reach)
  int legsClip=0;float legsPhase=0;    // the locomotion clip (claire-animation.bin) and its phase
  Point3 backSlot{},hipSlot{};         // where the holsters ride
+ Point3 pouchSlot{};                  // the belt pouch on the other hand's hip: magazines and shells (VR reloads)
  // A game-space vector in the arm rig's frame (x her left, y up, z ahead: right-handed, as the rig and SteamVR's
  // tracking space are). Game space is a mirror image of that, so this map is a reflection too.
  Point3 rig(Point3 v)const{return {dot3(v,torsoLeft),dot3(v,torsoUp),dot3(v,torsoForward)};}
@@ -58,6 +59,9 @@ AvatarSolve solveAvatar(const AvatarPose& pose,float time);
 // The holsters: grip a hand near one to draw what it holds, let go near it to put the drawn thing back.
 // 1 the back (over either shoulder, behind the head), 2 the hip on the gun hand's side, 0 neither.
 int avatarSlotAt(const AvatarPose& pose,Point3 hand);
+// The belt pouch on the support hand's hip (the side away from the gun): a support-hand wrist within 20 cm of it.
+// Gripped there with a gun drawn, the hand takes a magazine (the handgun) or a shell (the shotgun): VrGuns.cpp.
+bool avatarPouchAt(const AvatarPose& pose,Point3 wrist);
 // --vr-test / engine.vr: the solve's frames, reach, slots, finger curls and the mirror chain, numerically.
 bool testAvatar(std::ostream& report);
 }
