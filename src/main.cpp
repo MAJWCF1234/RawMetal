@@ -2261,6 +2261,11 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     window.showLoading(0,L"LOADING");
     wchar_t settingsFolder[32768]{};DWORD settingsLength=GetEnvironmentVariableW(L"LOCALAPPDATA",settingsFolder,32768);
     std::wstring settingsPath=settingsLength>0&&settingsLength<32768?std::wstring(settingsFolder)+L"\\RawMetal\\settings.ini":L"";
+    // Multiplayer: the EOS session (Offline when this copy has no keys). Making it is cheap; its first tick starts
+    // the SDK unpack and sign-in in the background. The loading screen ticks it until the game exists; from then
+    // Game::update ticks it once a frame. Declared before the game, so the game (and any match over the session)
+    // goes first and the session then leaves its lobby and shuts EOS down.
+    std::unique_ptr<retro::net::Session> netSession=retro::net::makeEosSession();
     std::unique_ptr<retro::Game> gameStorage;std::unique_ptr<retro::SoftwareRenderer> rendererStorage;
     std::atomic<int> loadStage{0};std::atomic<bool> loadDone{false};std::exception_ptr loadFailure;
     std::thread loader([&]{
@@ -2298,6 +2303,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
       int stage=loadStage;if(stage!=shown){shown=stage;stageStart=std::chrono::steady_clock::now();}
       float t=std::chrono::duration<float>(std::chrono::steady_clock::now()-stageStart).count();
       if(!closed)window.showLoading(from[shown]+(to[shown]-from[shown])*(1-std::exp(-1.6f*t/expected[shown])),status[shown]);
+      netSession->tick();   // sign-in can start while the world loads (no Game yet to tick it)
       Sleep(16);
      }
      loader.join();if(loadFailure)std::rethrow_exception(loadFailure);
@@ -2305,6 +2311,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     }
     window.showLoading(1,L"STARTING THE RENDERER");
     auto& game=*gameStorage;auto& renderer=*rendererStorage;
+    game.setNetSession(netSession.get());
     retro::AudioEngine audio;
     std::ofstream("RawMetal-audio.txt")<<(audio.available()?"Stereo audio device opened. ":"No audio output device could be opened. ")<<int(retro::Sound::Count)<<" embedded samples loaded.";
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
