@@ -209,7 +209,10 @@ struct EosLog{
 };
 EosLog g_log;
 void EOS_CALL onEosLog(const EOS_LogMessage* m){
- if(!m)return;const char* level=m->Level<=EOS_ELogLevel::EOS_LOG_Error?"error":"warning";
+ if(!m)return;
+ // Every sign-in after the first: the SDK reports the existing device id as an error; the session expects it.
+ if(m->Message&&std::strstr(m->Message,"DeviceId access credentials already exist"))return;
+ const char* level=m->Level<=EOS_ELogLevel::EOS_LOG_Error?"error":"warning";
  g_log.line(std::string("[eos ")+level+" "+(m->Category?m->Category:"")+"] "+(m->Message?m->Message:""));
 }
 
@@ -308,6 +311,10 @@ public:
   if(!m_platform)return;
   EOS_Platform_Tick(m_platform);
   pumpPackets();
+  // Nothing here waits on events or packets being read (the Match never polls events; the menus may be shut).
+  // Unread ones are capped, oldest first, so a session nobody drains cannot grow without end.
+  while(m_events.size()>256)m_events.pop_front();
+  if(m_inbox.size()>8192){g_log.line("dropping "+std::to_string(m_inbox.size()-8192)+" unread packets");while(m_inbox.size()>8192)m_inbox.pop_front();}
   const auto now=Clock::now();
   if(signingIn()&&now-m_signInStarted>std::chrono::seconds(45))signInFailed("Epic's servers did not answer the sign-in");
   if(m_op!=Op::None&&now-m_opStarted>std::chrono::seconds(30)){++m_serial;fail("Epic's servers did not answer in time");}
@@ -453,7 +460,7 @@ private:
   if(!m_platform){goOffline("Epic's platform would not start (are this copy's multiplayer keys right?)");return;}
   g_log.line("platform created in "+std::to_string(int(std::chrono::duration<double,std::milli>(Clock::now()-t0).count()))+" ms");
   m_connectApi=EOS_Platform_GetConnectInterface(m_platform);m_lobbyApi=EOS_Platform_GetLobbyInterface(m_platform);m_p2pApi=EOS_Platform_GetP2PInterface(m_platform);
-  m_socket.ApiVersion=EOS_P2P_SOCKETID_API_LATEST;std::strncpy(m_socket.SocketName,"DepthWorks",EOS_P2P_SOCKETID_SOCKETNAME_SIZE-1);
+  m_socket.ApiVersion=EOS_P2P_SOCKETID_API_LATEST;std::memcpy(m_socket.SocketName,"DepthWorks",sizeof "DepthWorks");
   EOS_P2P_SetRelayControlOptions relay{};relay.ApiVersion=EOS_P2P_SETRELAYCONTROL_API_LATEST;relay.RelayControl=EOS_ERelayControl::EOS_RC_AllowRelays;EOS_P2P_SetRelayControl(m_p2pApi,&relay);
   EOS_Connect_AddNotifyAuthExpirationOptions ae{};ae.ApiVersion=EOS_CONNECT_ADDNOTIFYAUTHEXPIRATION_API_LATEST;
   m_authExpiry=EOS_Connect_AddNotifyAuthExpiration(m_connectApi,&ae,nullptr,[](const EOS_Connect_AuthExpirationCallbackInfo*){if(g_live)g_live->refreshLogin();});
