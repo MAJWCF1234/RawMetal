@@ -243,6 +243,21 @@ bool parsePropJointWord(std::string_view word,PropJointKind& out);
 // A joint as it plays (World::jointStates, saved in the physics section): snapped, the length a winch
 // has reeled to, what its motor is set to, and what it pulled with last (N, for sounds and the Builder).
 struct PropJointState {bool broken=false;float length=-1,target=0,speed=0;bool motorOn=true;float force=0;int hintA=-1,hintB=-1;float brokenAt=-1e9f;};
+// A curtain, a strap or a cable (CLOTH; game/Cloth.cpp): beads joined by soft ropes in Vectra, hanging from where the map
+// fixes them, pushed by the player, props and shots, and by the wind out under the sky. Absolute heights.
+//  curtain: hung from a rail from `at` to `to`, `drop` metres down (0: 1.6 m);
+//  strap: hung from `at`, `length` long (0: 1 m), `width` wide (0: 5 cm), turned across `to - at` (or along x);
+//  cable: from `at` to `to`, `length` long (0: 1.15 times the span between them); `loose`: its `to` end lies free.
+enum class ClothKind:std::uint8_t {Curtain,Strap,Cable};
+struct ClothSpec {
+ ClothKind kind=ClothKind::Curtain;Point3 at{},to{};
+ float drop=0,length=0,width=0,radius=0;   // metres; 0: the kind's own
+ float mass=0;                             // kg in all (0: a curtain 0.35 kg a square metre, a strap 0.25 kg, a cable 0.4 kg a metre)
+ float stiffness=0;                        // how firmly its links hold (Hz; 0: 30)
+ bool loose=false;
+};
+const char* clothWord(ClothKind kind);
+bool parseClothWord(std::string_view word,ClothKind& out);
 // An empty suit hung by its hood from a hook (absolute), its front toward `facing`. Game
 // hangs the hazmat ragdoll from it (Ragdoll::hang): limp, swaying when brushed or shot.
 struct HungSuit {Point3 hook{};float facing=0;};
@@ -575,6 +590,7 @@ struct AuthoredMapData {
     std::vector<Lead> leads;
     std::vector<HungSuit> hungSuits;
     std::vector<PropJoint> joints;
+    std::vector<ClothSpec> cloths;
     std::vector<WorldLight> lights;
     std::vector<CreatureSpawn> creatureSpawns;
     std::vector<PickupSpawn> pickupSpawns;
@@ -778,6 +794,8 @@ public:
     const std::vector<LeadRope>& leadRopes()const{return m_leadRopes;}
     const std::vector<PropJoint>& joints()const{static const std::vector<PropJoint> none;return m_mapData?m_mapData->joints:none;}
     const std::vector<PropJointState>& jointStates()const{return m_jointStates;}
+    const std::vector<ClothSpec>& cloths()const{static const std::vector<ClothSpec> none;return m_mapData?m_mapData->cloths:none;}
+    const AuthoredMapData* mapData()const{return m_mapData.get();}
     // Hang lead i's cable at rest from its anchor to `end` (its clip or fixed
     // end) and let it settle asleep; `body` is the prop it is clipped to (null:
     // none), which the cable hangs clear of. Limp (end null) it is only laid
