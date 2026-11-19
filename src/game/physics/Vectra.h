@@ -281,7 +281,10 @@ struct Joint:Constraint {
  std::array<float,4> detents{};int detentCount=0;float detentRange=.12f,detentHertz=6,detentForce=0;
  // Position correction: after the step, the anchors and the limits put back by moving the bodies (as much as each one's
  // mass and inertia lets), Settings::projectIterations times. For chains of light bodies (a ragdoll's limbs) that must
- // never be seen past a limit or pulled open, whatever hits them.
+ // never be seen past a limit or pulled open, whatever hits them, and for a heavy door's pin, a weld, a slider's rail and a
+ // rope's or rod's length under a hard blow. Ball: its anchors and swing-twist limits. Hinge: its anchors, its axis and
+ // its angle's limits. Weld: its turn and anchors. Slider: its turn, B's anchor on A's line and within its travel.
+ // Distance: its length; rope: no longer than it. Not spring or pulley, nor against a held (kinematic) partner.
  bool positionCorrection=false;
  // A spring on the axis toward springTarget (hinge, slider), or on the length toward `length` (Spring). 0 Hz: none.
  float springHertz=0,springDamping=.7f,springTarget=0;
@@ -357,6 +360,9 @@ struct Settings {
  float jointHertz=60,jointDamping=2;int jointIterations=4;
  // Joints with `positionCorrection` set are put back by position this many times after each step.
  int projectIterations=3;float projectSlack=.002f;   // and only what is past a limit by more than projectSlack (rad)
+ // A hinge's, weld's, slider's, distance's or rope's correction is held to this much a pass (m, rad): one wrenched far open
+ // closes over a few steps, never thrown through what is beside it.
+ float projectMaxLinear=.1f,projectMaxAngular=.3f;
 };
 // What a step reports back (for sounds, breaking, glass and AI hearing).
 struct ContactEvent {int a=-1,b=-1,partA=0,partB=0;V3 point{},normal{};float approach=0,impulse=0,effectiveMass=0;Surface surface{};};

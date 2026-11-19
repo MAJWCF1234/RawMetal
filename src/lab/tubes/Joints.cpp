@@ -11,6 +11,8 @@
 //  mass ratio: a 1 kg lamp on a 50 kg cabinet; a 50 kg weight under two 1 kg links: no stretch, no shake.
 //  heavy load: a bridge of eight planks takes five 20 kg crates dropped on it and holds.
 //  rebuilt: a joint built afresh each step and warm started by its key moves as one kept between steps.
+//  position correction: a 40 kg door struck near its edge by a 30 kg crate keeps its pin within a few mm; a welded pair
+//    struck end on by 60 kg at 15 m/s stays welded (each uncorrected, then corrected).
 #include "lab/Lab.h"
 #include "game/physics/Vectra.h"
 #include <cmath>
@@ -131,6 +133,21 @@ const bool registered=add({.name="joints",.summary="Vectra's joints on the bare 
    float rest=0,held=0;for(int i=0;i<r.steps(.5f);++i){w.space.step(r.dt);rest=std::max(rest,w.topSpeed());for(auto* j:js)held=std::max(held,len(j->worldA(w.space)-j->worldB(w.space)));}const float sag=before-w.space.bodies[size_t(planks[4])].x.z;
    out<<"bridge under five 20 kg crates: the worst pin gap "<<f3(gap*1000,2)<<" mm as they land, "<<f3(held*1000,2)<<" mm once they lie on it, the fastest anything went "<<f3(top,2)<<" m/s, the middle went down "<<f3(sag,3)<<" m, at the end nothing faster than "<<f3(rest,3)<<" m/s\n";
    check(gap<.06f&&held<.015f&&top<9&&rest<.2f,"heavy load: a plank bridge takes five dropped crates (ten times a plank's mass each) and holds without exploding"+at);}
+  // Position correction (Joint::positionCorrection) under a hard blow: a 40 kg door on one hinge struck near its edge by a
+  // 30 kg crate at 12 m/s; a welded pair of 10 kg boxes struck end on by a 60 kg box at 15 m/s. Off, then on.
+  {float doorGap[2]{},weldGap[2]{},weldTurn[2]{},doorTop[2]{};
+   for(int on=0;on<2;++on){
+    {World w;const int d=w.box({.5f,0,1.05f},{.5f,.02f,1},40);auto& j=w.add(JointKind::Hinge,d,-1);j.attach(w.space,{0,0,1.05f},{0,0,1});j.positionCorrection=on;
+     const int c=w.box({.85f,1.2f,1.4f},{.2f,.2f,.2f},30);w.space.bodies[size_t(c)].v={0,-12,0};w.space.bodies[size_t(c)].gravity={};
+     for(int i=0;i<r.steps(1);++i){w.space.step(r.dt);doorGap[on]=std::max(doorGap[on],len(j.worldA(w.space)-j.worldB(w.space)));doorTop[on]=std::max(doorTop[on],len(w.space.bodies[size_t(d)].w));}}
+    {World w;const int a=w.box({0,0,.15f},{.15f,.15f,.15f},10),b=w.box({.3f,0,.15f},{.15f,.15f,.15f},10);auto& j=w.add(JointKind::Weld,b,a);j.attach(w.space,{.15f,0,.15f});j.positionCorrection=on;
+     const int h=w.box({-1.2f,0,.2f},{.2f,.2f,.2f},60);w.space.bodies[size_t(h)].v={15,0,0};
+     for(int i=0;i<r.steps(1);++i){w.space.step(r.dt);weldGap[on]=std::max(weldGap[on],len(j.worldA(w.space)-j.worldB(w.space)));
+      const Quat rel=(w.space.bodies[size_t(b)].q*j.frameB)*(w.space.bodies[size_t(a)].q*j.frameA).conj();weldTurn[on]=std::max(weldTurn[on],2*std::acos(std::clamp(std::fabs(rel.w),0.f,1.f)));}}}
+   out<<"a 40 kg door struck near its edge by a 30 kg crate at 12 m/s: its pin opened "<<f3(doorGap[0]*1000,2)<<" mm uncorrected, "<<f3(doorGap[1]*1000,2)<<" mm corrected (spinning at most "<<f3(doorTop[0],2)<<" and "<<f3(doorTop[1],2)<<" rad/s)\n";
+   out<<"a welded pair struck end on by 60 kg at 15 m/s: the weld opened "<<f3(weldGap[0]*1000,2)<<" mm and turned "<<f3(weldTurn[0]*57.3,2)<<" deg uncorrected, "<<f3(weldGap[1]*1000,2)<<" mm and "<<f3(weldTurn[1]*57.3,2)<<" deg corrected\n";
+   check(doorGap[1]<.004f&&doorGap[1]<=doorGap[0]&&doorTop[1]<doorTop[0]*1.2f+.1f,"position correction: a heavy door struck hard keeps its pin together within a few mm"+at);
+   check(weldGap[1]<.004f&&weldTurn[1]<.02f&&weldGap[1]<=weldGap[0],"position correction: a welded pair struck hard stays welded"+at);}
   // Rebuilt each step and warm started by key, against kept: the same motion.
   {float end[2]{};for(int kept=0;kept<2;++kept){World w;const int p=w.box({.6f,0,2},{.1f,.1f,.1f},5);Joint keep;keep.kind=JointKind::Ball;keep.a=p;keep.b=-1;keep.attach(w.space,{0,0,2.6f});keep.key=7;
     for(int i=0;i<r.steps(2);++i){Joint fresh=keep;w.space.constraints={kept?&keep:&fresh};w.space.step(r.dt);}end[kept]=w.space.bodies[size_t(p)].x.x;}

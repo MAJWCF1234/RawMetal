@@ -339,6 +339,16 @@ Each body carries the joint's frame: an anchor (from its centre of mass, unturne
   doorway, a sign on a wall, a shelf's welded breakables are a `weld` (or a `ball`, one nail) with `breaks=` (the
   Connect tool's Nailed writes a weld at 600 N): a 2 kg box at 1 m/s pulls it with 11 N and it holds; a 30 kg crate
   at 6 m/s tears it off (tube `vectra-gaps`, breaking).
+- **Position correction** (`Joint::positionCorrection`, after the step, `Settings::projectIterations` passes): what the
+  substeps left open is put back by moving the bodies, each by its share of mass and inertia, velocities left to the rows.
+  A ball: its anchors and its swing-twist limits (a corpse's). A hinge: its anchors, its axis and its angle's limits. A
+  weld: its turn and anchors. A slider: its turn, B's anchor on A's line and within its travel. A distance: its length; a
+  rope: no longer than it. Not a spring or a pulley, nor against a held (kinematic) partner (a prop dragged off its
+  chain still gives). A hinge's to a rope's pass is held to `projectMaxLinear` (0.1 m) and `projectMaxAngular`
+  (0.3 rad), so one wrenched far open closes over a few steps rather than being thrown through what is beside it. The
+  game's prop joints all have it but springs and pulleys: a 40 kg door struck near its edge by a 30 kg crate at 12 m/s
+  opens its pin 1.3 mm uncorrected, 0.01 mm corrected; a welded pair struck end on by 60 kg at 15 m/s opens 6.9 mm and
+  turns 2.1 degrees uncorrected, 0.01 mm and 0.04 degrees corrected (tube `joints`, 60 steps a second).
 - **Warm starting across rebuilt spaces.** A joint with a `key` stores its impulses in `Space::jointCache` (the game keeps
   the cache per level), so a joint built afresh each step starts from what it carried.
 - **Waking.** A body joined to an awake one wakes with it, through the whole chain. Islands link through joints. A held
