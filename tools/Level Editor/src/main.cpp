@@ -1867,7 +1867,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         save("repair-sign.ppm",retro::Game::liftInspection(0,3));
         auto menu=retro::Game::liftInspection(retro::World::LiftRideComplete);menu.setSaveDirectory(L"inspection-empty-saves");retro::InputState input{};input.escape=true;menu.update(input,.01f);save("repair-pause.ppm",menu);
         auto click=[&](int row){menu.update({},.01f);retro::InputState i{};i.fire=true;i.pointerX=retro::MenuLayout::X+30;i.pointerY=retro::MenuLayout::RowTop+row*retro::MenuLayout::RowHeight+7;menu.update(i,.01f);};
-        click(7);save("repair-save.ppm",menu);click(3);click(8);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
+        click(10);save("repair-save.ppm",menu);click(3);click(11);save("repair-load.ppm",menu);click(0);save("repair-confirm.ppm",menu);return 0;
     }
     if(commandArguments().find(L"--console-test"))return retro::Game::testConsole()?0:34;
     if(commandArguments().find(L"--controls-test"))return retro::Game::testCombat()&&retro::Game::testSettings()?0:39;
