@@ -115,6 +115,8 @@ const std::vector<std::string_view>& knownNamedKeys(){
   "shape","rebar","rubble","seed","toward",
   // Finishes, read by the STAIR and LAYER parsers (CustomCampaign.cpp finishField).
   "tread","riser","stringer","deck","edge","railing","trim","trimwidth",
+  // Material turns (degrees), read by the STRUCT, PRIM, STAIR, LAYER and SURFACE parsers (CustomCampaign.cpp turnField).
+  "turn","treadturn","deckturn","wallturn","floorturn","ceilingturn",
   // Footings (Footing.h), read by the STRUCT parser.
   "footing","snap","raise","base","cap","capwidth","steps","terrace",
   "drape",

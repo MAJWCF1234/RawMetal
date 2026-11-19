@@ -34,7 +34,7 @@ void expandPrimitive(const Primitive& p,std::vector<Structure>& out){
  auto box=[&](float u0,float u1,float v0,float v1,float bottom,float top,int material,bool solid,bool rail=false,std::uint8_t shape=ShapeBox){
   if(u1<=u0||v1<=v0||top<=bottom)return;
   auto a=frame.at(u0,v0),b=frame.at(u1,v1);
-  out.push_back({std::min(a.x,b.x),std::min(a.y,b.y),std::max(a.x,b.x),std::max(a.y,b.y),bottom,top,rail,material,solid,shape,std::uint8_t(p.facing)});};
+  out.push_back({std::min(a.x,b.x),std::min(a.y,b.y),std::max(a.x,b.x),std::max(a.y,b.y),bottom,top,rail,material,solid,shape,std::uint8_t(p.facing)});out.back().turn=p.turn;};
  auto part=[&](float u0,float u1,float v0,float v1,float bottom,float top){box(u0,u1,v0,v1,bottom,top,p.material,p.solid);};
  auto proxy=[&](float u0,float u1,float v0,float v1,float bottom,float top){if(p.solid)box(u0,u1,v0,v1,bottom,top,CollisionProxyMaterial,true);};
  auto shape=[&](std::uint8_t s){box(-hw,hw,-hd,hd,z,z+h,p.material,false,false,s);};
@@ -232,7 +232,7 @@ void expandPrimitive(const Primitive& p,std::vector<Structure>& out){
 
 void addPrimitive(AuthoredMapData& map,const Primitive& p,bool solidWritten){
  const size_t first=map.structures.size();expandPrimitive(p,map.structures);
- map.primitives.push_back({std::string(p.kind),p.x,p.y,p.z,p.w,p.d,p.h,p.facing,p.material,p.solid,solidWritten,p.hand,p.rails,p.thick,first,map.structures.size()-first});
+ map.primitives.push_back({std::string(p.kind),p.x,p.y,p.z,p.w,p.d,p.h,p.facing,p.material,p.solid,solidWritten,p.hand,p.rails,p.thick,first,map.structures.size()-first,p.turn});
 }
 
 bool testPrimitives(){

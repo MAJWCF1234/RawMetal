@@ -33,7 +33,7 @@ inline float archClearance(const ArchOpening& a){
  return a.half<=PlayerRadius?0.f:a.spring+std::sqrt(a.half*a.half-PlayerRadius*PlayerRadius);}
 // Options (FORMAT|2 named fields on the PRIM): hand -1 winds a spiral stair clockwise; rails
 // (bits: 1 left, 2 right) a catwalk's guard rails; thick a curved wall's or culvert's thickness.
-struct Primitive {std::string_view kind;float x=0,y=0,z=0,w=0,d=0,h=0;int facing=0,material=40;bool solid=true;int hand=1,rails=3;float thick=0;};
+struct Primitive {std::string_view kind;float x=0,y=0,z=0,w=0,d=0,h=0;int facing=0,material=40;bool solid=true;int hand=1,rails=3;float thick=0;float turn=0;};
 // Appends the primitive's structures; throws std::runtime_error naming the
 // problem for an unknown kind, a facing outside 0-3 or a non-positive size.
 void expandPrimitive(const Primitive& primitive,std::vector<Structure>& out);

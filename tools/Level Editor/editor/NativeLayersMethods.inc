@@ -258,6 +258,7 @@
       for(unsigned mask:a.mask)out<<' '<<mask;out<<'\n';
     }
     auto guides=selectionGuides();auto hover=hoverGuides();guides.insert(guides.end(),hover.begin(),hover.end());
+    if(!playing)guides.insert(guides.end(),ghostGuideList.begin(),ghostGuideList.end()); // the placing tool's ghost (NativeGhost.inc)
     if(!playing){emitterGuides(guides);filmGuides(guides);} // the picked emitter's carry, the picked camera's view
     out<<guides.size()<<'\n';
     for(const auto& g:guides)out<<g.ax<<' '<<g.ay<<' '<<g.az<<' '<<g.bx<<' '<<g.by<<' '<<g.bz<<' '<<g.kind<<'\n';

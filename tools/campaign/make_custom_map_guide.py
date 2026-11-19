@@ -619,6 +619,13 @@ NAMED_FIELDS = [
     ('capwidth', 'Floor edge width (m)', '0.02 to 0.5', 'STRUCT with cap', 'How wide that band is. 0.1 if left out.'),
     ('steps', 'Steps at doors', '1 or 0', 'STRUCT with footing', '0: no steps from a door on a raised edge down to the ground outside (they come by themselves where the drop is over 0.25 m).'),
     ('terrace', 'Terrace length (m)', '1 to 12', 'STRUCT with footing=stepped', 'How long each terrace is along the footprint. 3 if left out.'),
+    # Material turns, read by the STRUCT, PRIM, STAIR, LAYER and SURFACE parsers (CustomCampaign.cpp turnField).
+    ('turn', 'Turn', '0 90 180 270 (any angle 0 to 360)', 'STRUCT, PRIM', "Turns the material's pattern on every face, so planks, tiles, brick courses, tread plate and grating run the other way. 0 if left out. The Builder's Paint tool turns it with R while painting, and the inspector's Turn picks it."),
+    ('treadturn', 'Step tops turn', '0 90 180 270 (any angle 0 to 360)', 'STAIR', "Turns the step tops' material: planks across the flight or along it. 0 if left out."),
+    ('deckturn', 'Balcony floor turn', '0 90 180 270 (any angle 0 to 360)', 'LAYER', "Turns the balconies' floor material on this storey. 0 if left out."),
+    ('wallturn', 'Walls turn', '0 90 180 270 (any angle 0 to 360)', 'SURFACE', "Turns the map's wall finish (above a painted dado band, the paint). 0 if left out."),
+    ('floorturn', 'Floors turn', '0 90 180 270 (any angle 0 to 360)', 'SURFACE', "Turns the map's floor finish on the walking face. 0 if left out."),
+    ('ceilingturn', 'Ceilings turn', '0 90 180 270 (any angle 0 to 360)', 'SURFACE', "Turns the map's ceiling finish. 0 if left out."),
     # PRIM options, read by the PRIM parser (CustomCampaign.cpp).
     ('hand', 'Winds', 'left or right', 'PRIM spiral', 'Which way a spiral stair winds as you climb it: right (if left out) turns anticlockwise on the plan, left the other way.'),
     ('rails', 'Guard rails', 'both left right none', 'PRIM catwalk', "Which sides of a catwalk have a 1.1 m guard rail, as you walk toward its facing: both if left out."),

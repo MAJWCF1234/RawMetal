@@ -15,7 +15,8 @@
     if(floorOnLand(x0,y0,x1,y1,material)){for(int y=std::max(0,int(std::ceil(y0)));y<std::min(24,int(std::floor(y1)));++y)for(int x=std::max(0,int(std::ceil(x0)));x<std::min(24,int(std::floor(x1)));++x)if(doc.tile(map,layer,x,y)=='_')doc.paint(map,layer,x,y,'.');return;}
     clearNativeFloor(x0,y0,x1,y1);
     float z=layerElevation(),bottom=layer>0?z-std::max(.02f,floorLayer(layer).thickness):z,top=layer>0?z:z+.02f;
-    doc.addOnLayer({"STRUCT",std::to_string(map),nativeNumber(x0),nativeNumber(y0),nativeNumber(x1),nativeNumber(y1),nativeNumber(bottom),nativeNumber(top),"0",std::to_string(material)},layer);
+    std::vector<std::string> slab{"STRUCT",std::to_string(map),nativeNumber(x0),nativeNumber(y0),nativeNumber(x1),nativeNumber(y1),nativeNumber(bottom),nativeNumber(top),"0",std::to_string(material)};
+    withLayTurn(slab);doc.addOnLayer(slab,layer);noteLaid(slab); // the paint's turn (NativeMaterialTurn.inc)
     // Full cells retain native deck/room semantics; a partial stripe remains
     // exactly the authored rectangle rather than growing a grating tile.
     for(int y=std::max(0,int(std::ceil(y0)));y<std::min(24,int(std::floor(y1)));++y)for(int x=std::max(0,int(std::ceil(x0)));x<std::min(24,int(std::floor(x1)));++x){char previous=doc.tile(map,layer,x,y);if(previous=='_'||previous=='.'||previous=='=')doc.paint(map,layer,x,y,layer>0?'=':'.');}

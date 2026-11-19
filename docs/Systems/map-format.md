@@ -56,6 +56,22 @@ A custom map or campaign override (`.rmc`) is a list of pipe-delimited records b
 - Inside a footing, `World::floorHeight` is its floor: walls stand on it and rise from it, and grounding (`settleExclusionFacilityOnTerrain`) stands what is inside (floor paint, stairs, storeys, furniture) on it. Footing pieces keep their heights (`Structure::fixedHeight`).
 - On the land a wall face reaches down to the lowest ground along it (Scene3D), so a face on a slope leaves no daylight under its low end.
 
+## Material turns
+Planks, tiles, brick courses, tread plate and grating have a direction. A turn says which way they run, in degrees (0 to 360; a quarter turn is 90). Absent, or 0 or 360, the texture runs as it always has.
+
+| Key | On | Turns |
+|---|---|---|
+| `turn` | STRUCT, PRIM | The record's material on every face of it (a shape: on every box it lays). |
+| `treadturn` | STAIR | The step tops (with `tread=`, the 4 cm walking face; without, the whole step). |
+| `deckturn` | LAYER | The storey's balcony floors (with a split deck, the walking face). |
+| `wallturn floorturn ceilingturn` | SURFACE | The map's wall finish (above a painted dado band, the paint), floor finish (the walking face) and ceiling finish. |
+
+- The parser (`turnField`, CustomCampaign.cpp) refuses a value that is not degrees or lies outside -360 to 360, naming the key, and keeps the rest in [0, 360) (`Structure::turn`, `topTurn` for a walking face split off by `World::splitFinishes`; `Staircase::treadTurn`; `MapLayer::deckTurn`; `AuthoredMapData::wallTurn floorTurn ceilingTurn`). An edge trim, a footing's base and cap keep their own way.
+- The renderer turns the texture about its origin on each face, in metres, so a tile keeps its size and shape (Scene3D `setTurn`: `emitQuad`, `emitQuadPiece` and the shapes' triangles). The GPU and software paths draw the same faces, and the game and the Builder's 3D view the same engine. No turn leaves the coordinates untouched: an older map draws exactly as before.
+- The exporter writes the turns back with the record's other named fields; a PRIM whose boxes still carry its turn goes back as the PRIM.
+- The Builder: the Paint tool lays its paint turned (R a quarter, Shift+R back; a stroke just painted turns with it), and so do the Floor and Flooring tools; the Turn box on the right turns a picked block, shape, stair or storey (any angle under Advanced).
+- Tests: `--each-test=map-format` (parse, refuse, export and load back), the lab tube `material-turn` (a plank floor turned a quarter runs the other way, GPU and `--software`), the Builder's `--turn-test`. The Starter Map's Hillside house has its planks turned (`turn=90`).
+
 ## Prefabs
 - `PREFAB|name` ... `PREFAB_END` holds records in metres from the prefab's origin, with `@` in their map field. A prefab must be defined above its first `PREFAB_PLACE`.
 - `PREFAB_PLACE|map|prefab|x|y|z|yaw[|prefix]` sets the prefab down:

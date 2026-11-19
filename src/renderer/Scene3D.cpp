@@ -996,7 +996,25 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float facing=std::max(0.f,-goreDot(n,v)),f0=.04f+.68f*t.metalness,fresnel=f0+(1.f-f0)*std::pow(1.f-facing,5.f);
   const auto mirrored=probes->sample(p,v-n*(2.f*goreDot(v,n)));
   return probeShoulder((mirrored[0]*.2126f+mirrored[1]*.7152f+mirrored[2]*.0722f)*ProbeGain)*fresnel*std::min(1.f,t.polish+t.metalness);};
+ // A material turn (Structure::turn; SURFACE wallturn=, floorturn=, ceilingturn=): the texture is
+ // turned about its origin on the face. aspect is the tile's metres along v over its metres along
+ // u, so a turned tile keeps its size and shape in metres. A quarter turn is exact; no turn (every
+ // map made before turns) leaves the coordinates untouched, so those maps draw as they always did.
+ float uvTurnC=1,uvTurnS=0;
+ auto setTurn=[&](float degrees){
+  degrees=std::fmod(degrees,360.f);if(degrees<0)degrees+=360.f;
+  if(degrees==0){uvTurnC=1;uvTurnS=0;}else if(degrees==90){uvTurnC=0;uvTurnS=1;}else if(degrees==180){uvTurnC=-1;uvTurnS=0;}else if(degrees==270){uvTurnC=0;uvTurnS=-1;}
+  else{const float r=degrees*(kPi/180.f);uvTurnC=std::cos(r);uvTurnS=std::sin(r);}};
+ auto turned=[&]{return uvTurnS!=0||uvTurnC!=1;};
+ auto turnUv=[&](float& u,float& v,float aspect){const float a=u*uvTurnC-v*uvTurnS*aspect,b=u*uvTurnS/aspect+v*uvTurnC;u=a;v=b;};
+ // A face's tile aspect from its corners and texture scale (metres per tile along v over along u).
+ auto faceAspect=[](Point3 a,Point3 b,Point3 d,Vec2 uvScale){
+  const auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
+  if(std::fabs(uvScale.x)<1e-6f||std::fabs(uvScale.y)<1e-6f)return 1.f;
+  const float mu=len(b-a)/std::fabs(uvScale.x),mv=len(d-a)/std::fabs(uvScale.y);
+  return mu>1e-6f&&mv>1e-6f&&std::isfinite(mv/mu)?mv/mu:1.f;};
  auto tri=[&](MeshVertex a,MeshVertex b,MeshVertex c,const Texture&t,float light){
+  if(turned()){turnUv(a.u,a.v,1.f);turnUv(b.u,b.v,1.f);turnUv(c.u,c.v,1.f);}
   perf::ActorTriangleScope profile;
   if(!m_staticGeometryBuild&&std::max({a.p.z,b.p.z,c.p.z})<dormantFloor)return;
   auto A=cameraPoint(a.p,game),B=cameraPoint(b.p,game),C=cameraPoint(c.p,game);if(outside(A)&outside(B)&outside(C))return;
@@ -1066,6 +1084,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(int y=0;y<=rows;++y)for(int x=0;x<=columns;++x){float u=float(x)/columns,v=float(y)/rows;auto p=a+(b-a)*u+(d-a)*v;
    vertices[size_t(y*(columns+1)+x)]={cameraPoint(p,game),u*uvScale.x+uvOffset.x,(1-v)*uvScale.y+uvOffset.y,-1.f};
   }
+  if(turned()){const float aspect=faceAspect(a,b,d,uvScale);for(int i=0;i<(rows+1)*(columns+1);++i)turnUv(vertices[size_t(i)].u,vertices[size_t(i)].v,aspect);}
   for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){int i=y*(columns+1)+x;auto &A=vertices[i],&B=vertices[i+1],&C=vertices[i+columns+2],&D=vertices[i+columns+1];
    if(outside(A.p)&outside(B.p)&outside(C.p)&outside(D.p))continue;
    auto illuminate=[&](MeshVertex&v,int ix,int iy){if(v.light<0){auto p=a+(b-a)*(float(ix)/columns)+(d-a)*(float(iy)/rows);v.light=light<1.5f?illumination(p,normal)+probeSheen(p,normal,t):1.f;if(light<1.5f)airs[size_t(&v-vertices.data())]=illuminationAir;
@@ -1107,7 +1126,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     const bool ain=keepAbove?pa>=bound:pa<=bound,bin=keepAbove?pb>=bound:pb<=bound;if(ain)out.push_back(A);
     if(ain!=bin){const float k=(bound-pa)/(pb-pa);out.push_back({A.p+(B.p-A.p)*k,A.a+(B.a-A.a)*k,A.b+(B.b-A.b)*k});}}
    poly.swap(out);};
-  std::vector<MeshVertex> vs;std::vector<float> airs;
+  std::vector<MeshVertex> vs;std::vector<float> airs;const bool turning=turned();const float aspect=turning?faceAspect(a,b,d,uvScale):1.f;
   for(int y=0;y<rows;++y)for(int x=0;x<columns;++x){
    const float s0=float(x)/columns,s1=float(x+1)/columns,t0=float(y)/rows,t1=float(y+1)/rows;
    NormalLighting lights;const NormalLighting* normalState=nullptr;bool lightsReady=false;
@@ -1120,7 +1139,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     if(piece.size()<3||cull::polygonArea(piece)<1e-8f)continue;
     if(!lightsReady&&(!t.normalLevels.empty()||t.glossStrength>0)){auto center=a+(b-a)*((x+.5f)/columns)+(d-a)*((y+.5f)/rows);lights=normalLightingAt(center);lights.surfaceNormal=surfaceNormal(center,normal);normalState=&lights;lightsReady=true;}
     vs.clear();airs.clear();
-    for(const auto& v:piece){const Point3 p=a+(b-a)*v.a+(d-a)*v.b;float air;const float l=lit(p,air);vs.push_back({cameraPoint(p,game),v.a*uvScale.x+uvOffset.x,(1-v.b)*uvScale.y+uvOffset.y,l});airs.push_back(air);}
+    for(const auto& v:piece){const Point3 p=a+(b-a)*v.a+(d-a)*v.b;float air;const float l=lit(p,air);vs.push_back({cameraPoint(p,game),v.a*uvScale.x+uvOffset.x,(1-v.b)*uvScale.y+uvOffset.y,l});if(turning)turnUv(vs.back().u,vs.back().v,aspect);airs.push_back(air);}
     for(size_t i=1;i+1<vs.size();++i){if(outside(vs[0].p)&outside(vs[i].p)&outside(vs[i+1].p))continue;m_triangleAir={airs[0],airs[i],airs[i+1]};triangle3D(vs[0],vs[i],vs[i+1],t,light,normalState);}}}
  };
  // Whose faces the culling cuts: the map's tiles and the solids it indexed (not glass, rails, or
@@ -1381,6 +1400,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // previous map's finishes, even when its tiles and lamps are identical.
   for(int surface:{w.wallSurface(),w.floorSurface(),w.ceilingSurface()})hash(std::uint64_t(surface+1));
   for(size_t i=0;i<w.structures().size();++i)if(!w.isBreakableStructure(int(i)))hash(std::uint64_t(w.structures()[i].material));
+  // Material turns: a turned floor bakes again (no turn adds nothing, so older maps keep their keys).
+  for(const auto& s:w.structures())if(s.turn!=0)hashFloat(s.turn);
+  for(float turn:{w.wallTurn(),w.floorTurn(),w.ceilingTurn()})if(turn!=0)hashFloat(turn);
   for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x)hash(static_cast<unsigned char>(w.tile(x,y)));
   for(const auto&door:w.doors()){for(float value:{door.left,door.right,door.y,door.z})hashFloat(value);hash(std::uint64_t(door.alongY)|std::uint64_t(door.hingeRight)<<1);}
   // Authored lamp power may change independently of the map/session. Use exact
@@ -1535,9 +1557,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // like collision does, while terrain worlds keep their existing mesh.
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f,h=w.floorHeight(ax+.25f,ay+.25f);
      // Maps 0-2 lay their area floor as 2 m tiles; grating and raised plate stay functional.
+     setTurn(w.floorTurn()); // SURFACE floorturn=: the walking face only
      if(floorFinish)finishQuad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},*floorFinish->floor,.95f,{floorFinish->floorRepeat,floorFinish->floorRepeat});
      else if(w.campaign()&&w.level()<3&&!w.metalFloor(x,y)&&!(w.level()==1&&h>0))quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},m_areaFloors[size_t(w.level())],.95f,{.25f,.25f},{ax*.5f,ay*.5f});
      else quad({ax,ay,h},{ax+.5f,ay,h},{ax+.5f,ay+.5f,h},{ax,ay+.5f,h},w.definition().floorMaterial==FloorMaterial::OfficeCarpet?m_officeCarpet:(w.campaign()&&w.level()>=4)?(w.metalFloor(x,y)?(serviceMap?m_serviceFloor:m_floor):m_pressureFloor):(w.metalFloor(x,y)?m_floor:m_concreteFloor),w.metalFloor(x,y)?.8f:.95f);
+     setTurn(0);
      float north=w.floorHeight(ax+.25f,ay-.25f),south=w.floorHeight(ax+.25f,ay+.75f),west=w.floorHeight(ax-.25f,ay+.25f),east=w.floorHeight(ax+.75f,ay+.25f);
      // Risers between floor heights: steel plate, or the floor's own finish.
      auto riser=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(floorFinish)finishQuad(a,b,c,d,*floorFinish->floor,.9f,{floorFinish->floorRepeat,floorFinish->floorRepeat});else quad(a,b,c,d,m_metal,.9f);};
@@ -1552,10 +1576,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     // not locked to the full 1 m map tile under overhead fixtures.
     const Texture&ceilingTexture=serviceMap?m_serviceCeiling:m_facilityTextures.at("ceiling_1");
     float ceilingLight=serviceMap?.82f:.6f;
+    setTurn(w.ceilingTurn()); // SURFACE ceilingturn=
     for(int sy=0;sy<2;++sy)for(int sx=0;sx<2;++sx){float ax=X+sx*.5f,ay=Y+sy*.5f;
      if(ceilingFinish)finishQuad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},*ceilingFinish->ceiling,.6f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});
      else quad({ax,ay+.5f,Z},{ax+.5f,ay+.5f,Z},{ax+.5f,ay,Z},{ax,ay,Z},ceilingTexture,ceilingLight);
     }
+    setTurn(0);
    // Close ceiling height changes instead of exposing the void between sectors.
    // A surface ceiling carries its finish down the step; legacy maps use plate.
    auto soffit=[&](Point3 a,Point3 b,Point3 c,Point3 d){if(ceilingFinish)finishQuad(a,b,c,d,*ceilingFinish->ceiling,.7f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad(a,b,c,d,m_metal,.7f);};
@@ -1579,8 +1605,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }else{
    float roof=Z;Z=w.wallHeight(x,y);
    if(Z<roof){
+    setTurn(w.wallTurn()); // SURFACE wallturn=
     if(wallFinish)finishQuad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},wallFinish->wall->above?*wallFinish->wall->above:*wallFinish->wall,.8f,wallFinish->wall->above?finishRepeat(*wallFinish->wall->above):wallFinish->wallRepeat);else quad({X,Y,Z},{X+1,Y,Z},{X+1,Y+1,Z},{X,Y+1,Z},m_metal,.8f);
+    setTurn(w.ceilingTurn());
     if(!w.outdoors()){if(ceilingFinish)finishQuad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},*ceilingFinish->ceiling,.43f,{ceilingFinish->ceilingRepeat,ceilingFinish->ceilingRepeat});else quad({X,Y+1,roof},{X+1,Y+1,roof},{X+1,Y,roof},{X,Y,roof},m_metal,.43f);}
+    setTurn(0);
    }
    auto wall=[&](float ax,float ay,float bx,float by,float light){
     float dx=bx-ax,dy=by-ay,yaw=-std::atan2(dy,dx),cx=(ax+bx)*.5f,cy=(ay+by)*.5f;
@@ -1596,8 +1625,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      // A painted wall: the dado band once from the floor, the paint above it.
      const auto& band=*wallFinish->wall;const float top=std::min(Z,wallBase+band.band),h=(top-wallBase)/band.band;
      quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,top},{ax,ay,top},band,1.f,{std::hypot(bx-ax,by-ay)/wallFinish->wallRepeat.x,h},{(dx!=0?ax:ay)*(dx<0||dy<0?-1.f:1.f)/wallFinish->wallRepeat.x,1-h});
+     setTurn(w.wallTurn()); // the paint above the band turns; the band runs along the floor
      if(Z>top)finishQuad({ax,ay,top},{bx,by,top},{bx,by,Z},{ax,ay,Z},*band.above,1.f,finishRepeat(*band.above));
-    }else if(wallFinish)finishQuad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},*wallFinish->wall,1.f,wallFinish->wallRepeat);
+     setTurn(0);
+    }else if(wallFinish){setTurn(w.wallTurn());finishQuad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},*wallFinish->wall,1.f,wallFinish->wallRepeat);setTurn(0);}
     else quad({ax,ay,wallBase},{bx,by,wallBase},{bx,by,Z},{ax,ay,Z},material,1.f,{.5f,(Z-wallBase)/3.f},{offset,0});
     if(w.campaign()&&!w.authored()&&(x*3+y)%9==0&&Z>=2.7f&&w.wallSpaceFree({cx,cy},{dx,dy},.68f,.65f,1.33f))facility(3,cx-dy*.018f,cy+dx*.018f,.65f,.68f,.034f,.68f,yaw);
     (void)light;
@@ -1642,9 +1673,10 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
     clip(0,s->x1,true);if(poly.size()>=3)clip(0,s->x2,false);if(poly.size()>=3)clip(1,s->y1,true);if(poly.size()>=3)clip(1,s->y2,false);
     if(poly.size()<3)continue;
     const Texture& texture=structureTexture(*s);Vec2 repeat=finishRepeat(texture);if(repeat.x<=0)repeat={2,2};
-    const auto o=w.definition().origin;
+    const auto o=w.definition().origin;setTurn(s->turn);
     auto vertex=[&](Point3 p){return MeshVertex{{p.x,p.y,p.z+.04f},(p.x+o.x)/repeat.x,(p.y+o.y)/repeat.y};};
     for(size_t i=1;i+1<poly.size();++i)tri(vertex(poly[0]),vertex(poly[i]),vertex(poly[i+1]),texture,1.f);
+    setTurn(0);
    }
   }
  }
@@ -1765,6 +1797,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  };
  for(auto&s:w.structures()){
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
+  // Its material's turn (STRUCT/PRIM turn=, a tread's or deck's); a storey's own floor or wall
+  // finish turns with the map's surface set too.
+  setTurn(s.turn+(s.layerSurface==1?w.wallTurn():s.layerSurface?w.floorTurn():0.f));
   if(s.x2<=s.x1||s.y2<=s.y1||s.top<=s.bottom)continue;
   if(s.drape&&w.hasTerrain())continue; // drawn over the land above
   if(w.isBreakableStructure(int(&s-w.structures().data())))continue;
@@ -1830,6 +1865,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    box({s.x1,s.y1,s.bottom},{s.x1+.055f,s.y1+.055f,s.top-.07f},railTex,.9f);
    box({s.x2-.055f,s.y2-.055f,s.bottom},{s.x2,s.y2,s.top-.07f},railTex,.9f);}
  }
+ setTurn(0);
  // The supplied tape is a straight strip. Lay one continuous strip across each
  // opening, preserving its aspect ratio instead of repeating corner decals per tile.
  }
