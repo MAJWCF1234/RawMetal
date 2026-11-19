@@ -943,8 +943,10 @@ void Carcass::stepVectra(const World& world){
    for(int k:pick){const auto&h=hits[size_t(k)];auto&c=m.points[size_t(m.count++)];c=ContactPoint{};c.p={h.p.x,h.p.y,h.p.z};c.separation=h.sep;c.localA=body.q.unrotate(c.p-body.x);c.localB=c.p;c.feature=std::uint32_t(h.particle);}
    out.push_back(m);};
   emit(floor,{0,0,-1},0);
-  // Each point in a wall meets that wall on its own (the risers of two steps, a bed's end and its side are not one face).
-  for(size_t h=0;h<wall.size();++h){std::vector<Hit> one{wall[h]};emit(one,{wallN[h].x,wallN[h].y,0},2+(wall[h].particle>=100000?1000+wall[h].particle-100000:wall[h].particle));}};
+  // Each point in a wall meets that wall on its own (the risers of two steps, a bed's end and its side are not one face),
+  // its cluster its own number (skin points from 100000, particles under it: skin point i was 1002 + i, the cluster of
+  // particle 1000 + i too, and one of the two lost its warm start).
+  for(size_t h=0;h<wall.size();++h){std::vector<Hit> one{wall[h]};emit(one,{wallN[h].x,wallN[h].y,0},2+wall[h].particle);}};
  space.step(Tick);
  space.pairContacts=nullptr;space.worldContacts=nullptr;space.filter=nullptr;
  // ---- Back to the sections and their points.

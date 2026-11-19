@@ -735,7 +735,7 @@ void Space::storeImpulses(){
  // woken by a shot then starts from the impulses it slept on, not from nothing.
  {std::vector<int> awake;for(int i=0;i<int(bodies.size());++i)if(!bodies[size_t(i)].sleeping)awake.push_back(idOf(i));std::sort(awake.begin(),awake.end());
   auto up=[&](int id){return id>=0&&std::binary_search(awake.begin(),awake.end(),id);};
-  for(const auto&e:cache){const int idA=int(e.first>>40),idB=int((e.first>>20)&0xfffff)-1;if(!up(idA)&&!up(idB))next.push_back(e);}}
+  for(const auto&e:cache){const int idA=Manifold::keyIdA(e.first),idB=Manifold::keyIdB(e.first);if(!up(idA)&&!up(idB))next.push_back(e);}}
  // (This step's sorted, then merged with what was kept, already in order: the kept for 600 sleepers were sorted again
  // every step. The merge puts a new entry before a kept one of the same key, as the stable sort did.)
  {const auto mid=next.begin()+std::ptrdiff_t(manifolds.size());std::stable_sort(next.begin(),mid,[](const auto& a,const auto& b){return a.first<b.first;});

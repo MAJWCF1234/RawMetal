@@ -197,8 +197,13 @@ struct Manifold {
  float slideSpeed=0,rollSpeed=0;
  float scaleA=1,scaleB=1;             // the mass scaling of each body in this contact (Settings::shockNormal)
  bool world()const{return b<0;}
- // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster.
- static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA))<<40)^(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<20)^(std::uint64_t(partA)<<8)^std::uint64_t(partB);}
+ // The warm-start key of the bodies (their lasting ids, Space::keyOf), parts and, for the world, the cluster, each in a field
+ // of its own: A's id 20 bits, B's id (+1, the world 0) 20, A's part 3 (a shape's eight), B's part or cluster 21 (to two
+ // million: a caller may number world clusters by a point or a cell). (They were XORed over each other: a cluster of 256
+ // or more under part 1 came out as cluster 0 under part 0, one of the two lost its warm start each step.)
+ static std::uint64_t key(int idA,int idB,int partA,int partB){return (std::uint64_t(std::uint32_t(idA)&0xfffff)<<44)|(std::uint64_t(std::uint32_t(idB+1)&0xfffff)<<24)|(std::uint64_t(std::uint32_t(partA)&7)<<21)|std::uint64_t(std::uint32_t(partB)&0x1fffff);}
+ static int keyIdA(std::uint64_t k){return int(k>>44);}
+ static int keyIdB(std::uint64_t k){return int((k>>24)&0xfffff)-1;}
 };
 
 // ---- Narrow phase ---------------------------------------------------------------------------------

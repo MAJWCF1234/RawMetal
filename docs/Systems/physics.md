@@ -147,7 +147,12 @@ Restitution runs once per manifold at the end.
 - **New contacts** (nothing to warm start from: a stack just woken or set down whole) are iterated eight more
   times on the step's first substep, so the weight reaches the floor before anything moves. What a sleeping
   body's contacts held is kept while it sleeps, so a stack woken by a shot starts from its own impulses.
-  Warm starting matches contacts by the props' own indices, not their places in the step's body list.
+  Warm starting matches contacts by the props' own indices, not their places in the step's body list. A manifold's
+  key (`Manifold::key`) gives each its own field: the two bodies' ids (20 bits each), A's part (3) and B's part or the
+  world cluster the caller numbered (21: a cell or a point's number will do). They had been XORed over each other, so a
+  cluster of 256 or more under part 1 came out as cluster 0 under part 0, and one of the two lost its warm start each
+  step; the game's own clusters (RigidClutter's groups, under 48) never met it, a corpse's walls (numbered by point)
+  could.
 - Each impulse's turn on a body (its inverse inertia times r x axis) is worked out once a step, and each part's
   hull is built once a step however many pairs it is in.
 - **Speculative contacts** close a gap within the step and no more.

@@ -8,7 +8,8 @@
 //  vectra-stack: a 100 kg drum set on a 1 kg crate, and dropped on it: with mass scaling on resting contacts
 //    (Settings::shockNormal) it stays put on the crate, neither sinking into it nor springing off it; without, the
 //    numbers it had. A drum and a crate meeting in the air meet with their true masses (the pass is for a body held
-//    up).
+//    up). A 4 m plank of two halves on five floor tiles numbered by 256 keeps every manifold's warm start
+//    (Manifold::key's fields kept apart).
 //  vectra-scale: 400 resting props and 20 fast shards through them: the cost of a step.
 //  vectra-scrape: a crate shoved across the floor raises its scrape level (Clutter::scrapeLevel, the AudioEngine's
 //    loop) while it slides, silent once it rests; a drum rolled along the floor raises its roll level instead.
@@ -115,6 +116,29 @@ Air inTheAir(float shock){World w;w.space.settings.shockNormal=shock;
  for(auto& b:w.space.bodies){b.gravity={};b.linearDamping=0;}
  for(int i=0;i<12;++i)w.space.step(1.f/120);
  Air r;r.drumDv=w.space.bodies[size_t(drum)].v.z-(-5.f);r.crateDv=w.space.bodies[size_t(crate)].v.z-(-1.f);return r;}
+// Warm starting across world clusters numbered by a cell (Manifold::key): a 4 m plank of two 2 m halves (parts 0 and 1)
+// lying on a floor of five tiles, each tile's contacts under each half a manifold of their own, the tiles numbered 0, 256,
+// 512, 768 and 1024. Kept awake for a second: how many of its manifolds start warm, and how many of their keys the old
+// packing (parts and clusters XORed over each other) made one.
+struct Warm {int manifolds=0,warm=0,oldClashes=0;float drift=0;};
+Warm plankOnTiles(){World w;w.space.settings.sleepTime=1e9f;
+ w.space.worldContacts=[](Space& sp,int i,float margin,std::vector<Manifold>& out){const Body& body=sp.bodies[size_t(i)];
+  for(int part=0;part<body.shape->count;++part){const Part& p=body.shape->parts[size_t(part)];Manifold byTile[5];int used[5]{};
+   for(int k=0;k<=20;++k)for(float y:{-1.f,1.f}){const V3 l=p.centre+V3{-p.half.x+2*p.half.x*float(k)/20.f,y*p.half.y,-p.half.z};const V3 at=body.toWorld(l);const float sep=at.z;if(sep>margin)continue;
+    const int t=std::clamp(int((at.x+2)/.8f),0,4);Manifold& m=byTile[t];if(!used[t]){m.a=i;m.b=-1;m.partA=part;m.partB=t*256;m.normal={0,0,-1};m.material=Material::mix(body.material,{.6f,.5f,0,.004f});used[t]=1;}
+    // (The two ends of the tile's run under it, both sides.)
+    auto put=[&](int slot){auto& c=m.points[size_t(slot)];c=ContactPoint{};c.p=at;c.separation=sep;c.localA=body.q.unrotate(at-body.x);c.localB=at;c.feature=std::uint32_t(slot);};
+    const int side=y<0?0:1;if(m.count==0){put(0);put(1);put(2);put(3);m.count=4;}
+    if(at.x<m.points[size_t(side*2)].p.x)put(side*2);if(at.x>m.points[size_t(side*2+1)].p.x)put(side*2+1);}
+   for(int t=0;t<5;++t)if(used[t])out.push_back(byTile[t]);}};
+ Shape s;s.add(PartKind::Box,{-1,0,0},{1,.1f,.025f});s.add(PartKind::Box,{1,0,0},{1,.1f,.025f});s.finish();w.shapes.push_back(s);
+ Body b;b.shape=&w.shapes.back();b.x={0,0,.025f};b.setMass(8);b.updateInertia();b.material={.62f,.45f,.3f,.002f};b.id=0;w.space.bodies.push_back(b);
+ Warm r;const V3 start=b.x;
+ for(int i=0;i<120;++i){w.space.step(1.f/120);if(i<10)continue;
+  std::vector<std::uint64_t> old;for(const auto& m:w.space.manifolds){++r.manifolds;r.warm+=!m.cold;old.push_back((std::uint64_t(std::uint32_t(m.a))<<40)^(std::uint64_t(std::uint32_t(m.b+1)&0xfffff)<<20)^(std::uint64_t(m.partA)<<8)^std::uint64_t(m.partB));}
+  std::sort(old.begin(),old.end());for(size_t k=1;k<old.size();++k)r.oldClashes+=old[k]==old[k-1];
+  r.drift=std::max(r.drift,len(w.space.bodies[0].x-start));}
+ return r;}
 const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg crate stays put (the shock pass: Settings::shockNormal), set down or dropped on it",.standalone=[]{
  Out out("vectra-stack.txt");Stack s[2][2];
  for(int shock=0;shock<2;++shock)for(int drop=0;drop<2;++drop){s[shock][drop]=drumOnCrate(shock?.7f:0.f,drop?.1f:0.f);const auto& r=s[shock][drop];
@@ -127,6 +151,10 @@ const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg
  {const Air gated=inTheAir(.7f),plain=inTheAir(0);
   out.file<<"a 100 kg drum meeting a 1 kg crate in the air at 4 m/s: the drum's speed changed "<<f3(gated.drumDv,3)<<" m/s, the crate's "<<f3(gated.crateDv,3)<<" (no shock pass: "<<f3(plain.drumDv,3)<<" and "<<f3(plain.crateDv,3)<<")\n";
   out.check(std::fabs(gated.drumDv)<.2f&&gated.crateDv<-4&&std::fabs(gated.drumDv-plain.drumDv)<.05f&&std::fabs(gated.crateDv-plain.crateDv)<.2f,"in the air, a drum and a crate meet with their true masses (the drum barely slows, the crate is knocked on)");}
+ // Warm starting across numbered world clusters (Manifold::key).
+ {const Warm p=plankOnTiles();
+  out.file<<"a 4 m plank of two halves on five floor tiles numbered by 256: "<<p.warm<<" of "<<p.manifolds<<" manifolds warm started over a second (the old key made "<<p.oldClashes<<" of them one with another), drifted "<<f3(p.drift*1000,3)<<" mm\n";
+  out.check(p.manifolds>0&&p.warm==p.manifolds&&p.drift<.001f,"a long plank across several numbered floor clusters keeps every manifold's warm start from step to step, and stays put");}
  return out.ok;}});
 
 // ---- 5. At scale ----
