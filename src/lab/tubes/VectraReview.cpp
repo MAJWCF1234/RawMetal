@@ -7,7 +7,8 @@
 //    materials, mixed with the prop's in Space::prepare): it slides furthest on the wet.
 //  vectra-stack: a 100 kg drum set on a 1 kg crate, and dropped on it: with mass scaling on resting contacts
 //    (Settings::shockNormal) it stays put on the crate, neither sinking into it nor springing off it; without, the
-//    numbers it had.
+//    numbers it had. A drum and a crate meeting in the air meet with their true masses (the pass is for a body held
+//    up).
 //  vectra-scale: 400 resting props and 20 fast shards through them: the cost of a step.
 //  vectra-scrape: a crate shoved across the floor raises its scrape level (Clutter::scrapeLevel, the AudioEngine's
 //    loop) while it slides, silent once it rests; a drum rolled along the floor raises its roll level instead.
@@ -16,6 +17,7 @@
 #include "game/EngineRegressionScene.h"
 #include "game/physics/Vectra.h"
 #include "world/ModelIds.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -23,6 +25,7 @@
 #include <deque>
 #include <fstream>
 #include <string>
+#include <vector>
 namespace retro::lab {
 namespace {
 using namespace vectra;
@@ -101,6 +104,17 @@ Stack drumOnCrate(float shock,float drop){
   if(std::getenv("RM_STACK_TRACE")&&drop>0&&i<60){static std::ofstream tr("vectra-stack-trace.txt");tr<<(shock>0?"shock ":"plain ")<<i<<" gap "<<f3(gap*1000,2)<<" drum vz "<<f3(d.v.z,3)<<" crate z "<<f3(c.x.z,4)<<" vz "<<f3(c.v.z,3)<<"\n";}
   r.floorSink=std::max(r.floorSink,w.into(crate,0));r.drift=std::max(r.drift,std::hypot(d.x.x,d.x.y));}
  r.asleep=w.space.bodies[size_t(drum)].sleeping;return r;}
+// A 100 kg drum and a 1 kg crate falling together high in the air, the drum 5 cm over the crate and going 4 m/s faster:
+// they meet with their true masses (the shock pass is for a body held up under another). The drum's change of speed, and
+// the crate's, against the same with the shock pass off.
+struct Air {float drumDv=0,crateDv=0;};
+Air inTheAir(float shock){World w;w.space.settings.shockNormal=shock;
+ const int crate=w.add(PartKind::Box,{0,0,20},{.2f,.2f,.2f},1,{},{.62f,.45f,.3f,.002f});
+ const int drum=w.add(PartKind::Cylinder,{0,0,20+.2f+.44f+.05f},{.29f,.29f,.44f},100,{},{.45f,.38f,.32f,.001f});
+ w.space.bodies[size_t(crate)].v={0,0,-1};w.space.bodies[size_t(drum)].v={0,0,-5};
+ for(auto& b:w.space.bodies){b.gravity={};b.linearDamping=0;}
+ for(int i=0;i<12;++i)w.space.step(1.f/120);
+ Air r;r.drumDv=w.space.bodies[size_t(drum)].v.z-(-5.f);r.crateDv=w.space.bodies[size_t(crate)].v.z-(-1.f);return r;}
 const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg crate stays put (the shock pass: Settings::shockNormal), set down or dropped on it",.standalone=[]{
  Out out("vectra-stack.txt");Stack s[2][2];
  for(int shock=0;shock<2;++shock)for(int drop=0;drop<2;++drop){s[shock][drop]=drumOnCrate(shock?.7f:0.f,drop?.1f:0.f);const auto& r=s[shock][drop];
@@ -109,6 +123,10 @@ const bool stackTube=add({.name="vectra-stack",.summary="a 100 kg drum on a 1 kg
   out.check(r.sink<.004f&&r.floorSink<.004f,"the drum does not squash the crate: under 4 mm into it or the floor"+how);
   // (Dropped, it may hop as its restitution says, a few millimetres: never spring off or walk away.)
   out.check(r.lift<.002f&&r.hop<(drop?.01f:.002f)&&r.drift<(drop?.01f:.005f)&&r.asleep,"and stays put on it: no spring off (a hop under "+std::string(drop?"1 cm":"2 mm")+"), no drift, asleep"+how);}
+ // In the air: true masses.
+ {const Air gated=inTheAir(.7f),plain=inTheAir(0);
+  out.file<<"a 100 kg drum meeting a 1 kg crate in the air at 4 m/s: the drum's speed changed "<<f3(gated.drumDv,3)<<" m/s, the crate's "<<f3(gated.crateDv,3)<<" (no shock pass: "<<f3(plain.drumDv,3)<<" and "<<f3(plain.crateDv,3)<<")\n";
+  out.check(std::fabs(gated.drumDv)<.2f&&gated.crateDv<-4&&std::fabs(gated.drumDv-plain.drumDv)<.05f&&std::fabs(gated.crateDv-plain.crateDv)<.2f,"in the air, a drum and a crate meet with their true masses (the drum barely slows, the crate is knocked on)");}
  return out.ok;}});
 
 // ---- 5. At scale ----

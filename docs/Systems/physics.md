@@ -160,7 +160,11 @@ Restitution runs once per manifold at the end.
   (`Settings::shockNormal`, knob `props.shock`), meets it as if the one under were as heavy as itself, in that
   contact only (its prepare, warm start, solve and restitution alike). A 100 kg drum on a 1 kg crate sinks 1 mm into
   it instead of 5 (22 mm dropped 10 cm on it), and the crate 0.5 mm into the floor. A body a joint holds keeps its
-  true mass (a bridge's planks), and a ragdoll's sections are never scaled (`vectra-stack`).
+  true mass (a bridge's planks), and a ragdoll's sections are never scaled (`vectra-stack`). Only a body held up itself
+  is scaled under another: one touching the world under it (within a centimetre), or a body that does not move (asleep,
+  held), or one so held, up a stack from the bottom. Two falling together meet with their true masses (the crate in the
+  air had been taken as 100 kg): a 100 kg drum meeting a 1 kg crate in the air at 4 m/s slows by 0.05 m/s and knocks the
+  crate on by 5.2, as with no mass scaling at all (`vectra-stack`).
 - **Driving.** `Space::drive` pulls a body to a pose with a critically damped spring, applied as velocity so contacts
   still hold. The change in velocity is held to `maxForce` and the change in spin to `maxTorque` (by default `maxForce`
   times the body's reach), through its inertia: a 2 m plank driven into a doorframe's jamb rests against it at

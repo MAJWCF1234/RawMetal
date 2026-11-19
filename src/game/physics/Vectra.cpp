@@ -589,6 +589,15 @@ void Space::prepare(float h){
  // The bodies a joint holds: their contacts keep their true masses (a bridge's planks under a crate share its weight with
  // their pins by them; scaled, the joints and the contacts disagreed and the bridge never came to rest).
  std::vector<char> jointed;if(settings.shockNormal>0&&!constraints.empty()){jointed.assign(bodies.size(),0);for(auto*c:constraints){if(auto*j=c->joint();j&&j->broken)continue;for(int k:{c->bodyA(),c->bodyB()})if(k>=0&&k<int(bodies.size()))jointed[size_t(k)]=1;}}
+ // And only a body held up itself is scaled under another: one touching the world under it (within a centimetre), or a body
+ // that does not move (asleep, held), or one so held, up a stack from the bottom. Two falling together meet with their
+ // true masses: a 100 kg drum falling onto a 1 kg crate in the air took the crate as 100 kg and stopped as if on the floor.
+ std::vector<char> supported;
+ if(settings.shockNormal>0){supported.assign(bodies.size(),0);const float shock=settings.shockNormal;
+  auto touching=[](const Manifold& m){for(int k=0;k<m.count;++k)if(m.points[size_t(k)].separation<=.01f)return true;return false;};
+  auto stacked=[&](const Manifold& m,int& under,int& over){if(m.b<0||std::fabs(m.normal.z)<shock||!touching(m))return false;under=m.normal.z>0?m.a:m.b;over=m.normal.z>0?m.b:m.a;return true;};
+  for(const auto&m:manifolds){if(m.b<0){if(m.normal.z<=-shock&&touching(m))supported[size_t(m.a)]=1;continue;}int u,o;if(stacked(m,u,o)&&!bodies[size_t(u)].movable())supported[size_t(o)]=1;}
+  for(size_t pass=0;pass<bodies.size();++pass){bool more=false;for(const auto&m:manifolds){int u,o;if(stacked(m,u,o)&&supported[size_t(u)]&&!supported[size_t(o)]){supported[size_t(o)]=1;more=true;}}if(!more)break;}}
  // Warm start: the cache is sorted by key.
  for(auto&m:manifolds){
   const Body& A=bodies[size_t(m.a)];const Body* B=m.b>=0?&bodies[size_t(m.b)]:nullptr;
@@ -601,7 +610,7 @@ void Space::prepare(float h){
   m.scaleA=m.scaleB=1;
   if(B&&settings.shockNormal>0&&std::fabs(m.normal.z)>=settings.shockNormal&&A.movable()&&B->movable()&&A.softHertz<=0&&B->softHertz<=0&&m.surface.hertz<=0){
    const bool aUnder=m.normal.z>0;const float under=aUnder?A.invMass:B->invMass,over=aUnder?B->invMass:A.invMass;
-   if(under>over&&under>0&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
+   if(under>over&&under>0&&supported[size_t(aUnder?m.a:m.b)]&&(jointed.empty()||!jointed[size_t(aUnder?m.a:m.b)])){const float s=over/under;if(aUnder){m.scaleA=s;mA*=s;iA=iA*s;}else{m.scaleB=s;mB*=s;iB=iB*s;}}}
   // Against the world: the surface's own material, where the caller gave one (a puddle is slick, carpet grips).
   if(!B&&m.surface.gripped())m.material=Material::mix(A.material,m.surface.material());
   basis(m.normal,m.t1,m.t2);
