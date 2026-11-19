@@ -141,6 +141,7 @@
         {"Hang cloth: a curtain", ClothTool, 18.f, 11.f, 21.f, 11.f, {}},
         {"Connect: a rope from a loose thing", ConnectTool, 6.f, 9.f, 6.5f, 10.5f, [&] { box(connectKindList, ConnectKindList, ConnectRope); }},
         {"Connect: a hanging lamp", ConnectTool, 9.f, 10.f, 9.f, 10.f, [&] { box(connectKindList, ConnectKindList, ConnectLamp); }},
+        {"Spawn, turned with R", SpawnTool, 8.5f, 10.8f, 8.5f, 10.8f, [&] { spawnTurn = 0; MSG r{plan, WM_KEYDOWN, 'R', 0}; shortcut(r); }},
     };
     for (const auto &c : cases) run(c);
     if (!bankSounds.empty()) run({"Sound", SoundTool, 12.f, 20.f, 12.f, 20.f, {}});

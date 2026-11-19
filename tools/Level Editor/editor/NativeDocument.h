@@ -81,8 +81,12 @@ struct NativeDocument {
         continue;
       // FORMAT and a PREFAB block's lines are no map's records: the tools leave them be.
       // (PREFAB_END has one field: it must still close the block.)
-      if (outsideMaps(kind, prefab) || !field(lines[i], 1, map))
-        continue; // fewer than two fields: never a record
+      if (outsideMaps(kind, prefab))
+        continue;
+      if (namedOnlyKeys(kind)) // SPAWN: its map is its map= field (empty when it has none)
+        map = namedOnlyMap(lines[i]);
+      else if (!field(lines[i], 1, map) || (namedField(map) && fields(lines[i]).size() < 2))
+        continue; // fewer than two fields (MULTIPLAYER has only named ones): no map's record
       next.byKind[std::string(kind)].push_back(i);
       next.byKindMap[key(kind, map)].push_back(i);
       next.byMap[std::string(map)].push_back(i);
@@ -157,16 +161,53 @@ struct NativeDocument {
       --n;
     return n;
   }
+  // ---- Records written in named fields only (docs/Systems/multiplayer.md) ----
+  // SPAWN|map=0|x=12.5|y=4|z=0|yaw=90|team=0 has no positional fields, but every tool reads a
+  // record by its field numbers (map in field 1, x and y by the schema). fields() gives such a
+  // record as positional fields in this order (a key left out reads empty), join() writes that
+  // view back as named fields in the same order (an empty one left out), and named() gives only
+  // the keys outside the view. A line nobody edits stays byte for byte as it was written.
+  static const std::vector<std::string> *namedOnlyKeys(std::string_view kind) {
+    static const std::vector<std::string> spawn{"map", "x", "y", "z", "yaw", "team"};
+    return kind == "SPAWN" ? &spawn : nullptr;
+  }
   static std::vector<std::string> fields(std::string line) {
     auto out = allFields(std::move(line));
+    if (auto *keys = namedOnlyKeys(out[0])) {
+      std::vector<std::string> view(keys->size() + 1);
+      view[0] = out[0];
+      for (size_t i = 1; i < out.size(); ++i)
+        if (auto eq = out[i].find('='); eq != std::string::npos && namedKey(std::string_view(out[i]).substr(0, eq))) {
+          auto at = std::find(keys->begin(), keys->end(), out[i].substr(0, eq));
+          if (at != keys->end())
+            view[size_t(at - keys->begin()) + 1] = out[i].substr(eq + 1);
+        }
+      return view;
+    }
     out.resize(positionalCount(out));
     return out;
+  }
+  // The map a named-only record is on (its map= value), or empty.
+  static std::string_view namedOnlyMap(std::string_view line) {
+    for (size_t at = line.find('|'); at != std::string_view::npos; at = line.find('|', at + 1))
+      if (line.substr(at + 1).starts_with("map=")) {
+        auto value = line.substr(at + 5);
+        return value.substr(0, std::min(value.find('|'), value.find('\r')));
+      }
+    return {};
   }
   using Named = std::vector<std::pair<std::string, std::string>>;
   // The named fields of a line, in order, values as written (percent-encoded).
   static Named named(const std::string &line) {
     auto f = allFields(line);
     Named out;
+    if (auto *keys = namedOnlyKeys(f[0])) {
+      for (size_t i = 1; i < f.size(); ++i)
+        if (auto eq = f[i].find('='); eq != std::string::npos && namedKey(std::string_view(f[i]).substr(0, eq)) &&
+                                      std::find(keys->begin(), keys->end(), f[i].substr(0, eq)) == keys->end())
+          out.emplace_back(f[i].substr(0, eq), f[i].substr(eq + 1));
+      return out;
+    }
     for (size_t i = positionalCount(f); i < f.size(); ++i) {
       auto eq = f[i].find('=');
       out.emplace_back(f[i].substr(0, eq), f[i].substr(eq + 1));
@@ -233,6 +274,15 @@ struct NativeDocument {
     return at;
   }
   static std::string join(const std::vector<std::string> &f) {
+    // A named-only record's positional view goes back as its named fields (fields() above).
+    if (auto *keys = f.empty() ? nullptr : namedOnlyKeys(f[0]);
+        keys && std::none_of(f.begin() + 1, f.end(), [](const std::string &v) { return namedField(v); })) {
+      std::string s = f[0];
+      for (size_t i = 1; i < f.size() && i <= keys->size(); ++i)
+        if (!f[i].empty())
+          s += "|" + (*keys)[i - 1] + "=" + f[i];
+      return s;
+    }
     std::string s;
     for (auto &v : f) {
       if (!s.empty())

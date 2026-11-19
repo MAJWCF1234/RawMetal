@@ -411,7 +411,14 @@ RECORDS = [
         ('GROUND|x1|y1|x2|y2|kind|edge', 'Paints the ground: 0 short grass, 1 leafy grass, 2 clover, 3 wild, 4 dry dirt, 5 forest litter, 6 gravel, 7 mud, 8 meadow. edge 0-8 metres of soft border.'),
         ('HORIZON|depth|spacing|rise|model,model,...', 'Woods past every closed outdoor edge: a band depth metres deep, one model every spacing metres, the land rising rise metres away from you.'),
         ('STORM|calmMs|warningMs|stormMs|damage|ash', 'An ash storm cycle for the whole campaign: calm, a warning, then a storm doing damage per second to anyone outside a SHELTER. ash 0-1 is the haze between storms.'),
-        ('SHELTER|map|x1|y1|x2|y2|bottom|top', 'Map metres. Under this box the storm does no harm. Heights are from the ground at its centre.')]),
+        ('SHELTER|map|x1|y1|x2|y2|bottom|top', 'Map metres. Under this box the storm does no harm. Heights are from the ground at its centre.'),
+        ('MULTIPLAYER|deathmatch=1|coop=1|dmmap=-1|maxplayers=8|fraglimit=20|timelimit=10|friendlyfire=0', 'Multiplayer for the whole campaign, in named fields only (needs <code>FORMAT|2</code>; one per file). '
+         'deathmatch and coop turn each mode on (1) or off (0); dmmap is the map a deathmatch plays on (-1 the start map); maxplayers 2-16; fraglimit 0-999 frags wins (0 none); '
+         'timelimit 0-120 minutes (0 none); friendlyfire 1 lets co-op players hurt each other. Leave a field out and its default (shown) stands. '
+         'With no MULTIPLAYER record every mode is on. The Campaign Builder\'s Multiplayer page writes it.'),
+        ('SPAWN|map=0|x=12|y=12|z=0|yaw=90|team=0', 'Where a match player starts, in named fields only: map, then x, y in that map\'s metres (0-24), z the floor they stand on (as the MAP spawn height), '
+         'yaw in degrees (0 east, 90 south) and team (0 any, 1-4). map, x and y are needed. At most 64. A deathmatch map with fewer than 4 finds more spots on open floor itself. '
+         'The Campaign Builder\'s Spawn tool places them.')]),
     ('Building', [
         ('STRUCT|map|x1|y1|x2|y2|bottom|top|rail|material[|solid|shape|facing]', 'A box: walls, floors, platforms, plinths. x1<x2, y1<y2 in map metres; bottom/top are heights. rail 1 draws it as a thin railing. solid 0 lets you walk through it. shape 0-7 draws a ramp, column, arch, vault, dome, strut or roundel in the box, 12-20 a roof wedge, spire, pyramid, spiral stair, culvert, buttress, bevelled block, eight-sided pillar or curved wall (usually written by PRIM), facing 0-3 its quarter turn. Material 53 is a light shaft: god rays falling on the slant through the box, from its top on the side away from facing down to the floor on the facing side, drawn as soft glowing cards; it is never solid and stops no light, sight or round (pick it in the Block tool, R turns it).'),
         ('PRIM|map|kind|x|y|z|w|d|h|facing|material[|solid]', 'A ready-made building part, centred at x,y and standing on z. w runs across it, d along its facing, h up; '

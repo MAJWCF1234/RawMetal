@@ -35,7 +35,7 @@
     k << tool << ' ' << map << ' ' << layer << ' ' << doc.version << ' ' << selectedModel() << ' ' << structureMaterial << ' ' << placeHeight << ' '
       << smartSnap << ' ' << snap << ' ' << primFacing << ' ' << doorTurn << ' ' << emitterPreset << ' ' << soundPick << ' ' << flooringLook << ' '
       << flooringTrim << ' ' << flooringLevel << ' ' << placeInCave << ' ' << connectPending << ' ' << connectFromX << ' ' << connectFromY << ' '
-      << paintTurn;
+      << paintTurn << ' ' << spawnTurn << ' ' << spawnTeam;
     for (HWND list : {primList, clutterList, creatureList, pickupList, hazardList, soundList, roleList, behaviourList, connectKindList, doorToolList})
       k << ' ' << (list ? SendMessageW(list, CB_GETCURSEL, 0, 0) : -1);
     for (const auto &group : {glazingControls(), breachControls(), clothControls()})
@@ -165,7 +165,9 @@
     }
     std::vector<retro::EditorGuide> guides;
     for (const auto &line : lines)
-      if (auto s = ghostShapeOf(line)) {
+      if (line.starts_with("SPAWN|")) // a spawn's ghost is its figure and the way it faces (NativeMultiplayer.inc)
+        spawnFigure(guides, NativeDocument::fields(line), 4);
+      else if (auto s = ghostShapeOf(line)) {
         const size_t n = s->points.size();
         for (size_t i = 0; i < n; ++i) {
           if (!s->closed && i + 1 == n) break;
@@ -272,6 +274,11 @@
     bool drawn = false;
     for (const auto &line : ghostLines) {
       auto f = NativeDocument::fields(line);
+      if (f[0] == "SPAWN") { // a dashed figure facing the way it will (NativeMultiplayer.inc)
+        drawSpawnFigure(dc, ox, oy, cell, f, colour, true);
+        drawn = true;
+        continue;
+      }
       if (f[0] == "PRIM" && f.size() > 9) {
         const auto s = primSize(f);
         drawPrimShape(dc, ox, oy, cell, f[2], number(f[3], 0), number(f[4], 0), int(number(f[9], 0)) & 3, s.w, s.d, colour,

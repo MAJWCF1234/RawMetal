@@ -12,6 +12,19 @@ META_CAMPAIGN_NAME: STARTER MAP
 FORMAT|2
 CAMPAIGN|STARTER MAP|45
 
+# ==== Multiplayer: the modes, the deathmatch map and where match players start ====
+# MULTIPLAYER|deathmatch|coop|dmmap|maxplayers|fraglimit (0 none)|timelimit (minutes, 0 none)|friendlyfire
+# SPAWN|map|x|y|z|yaw (degrees, 0 east, 90 south)|team (0 any). All named fields (docs/Systems/multiplayer.md).
+MULTIPLAYER|deathmatch=1|coop=1|dmmap=28|maxplayers=8|fraglimit=20|timelimit=10|friendlyfire=0
+SPAWN|map=28|x=5.5|y=12.5|z=0.5|yaw=0|team=0
+SPAWN|map=28|x=7.4|y=7.9|z=0.5|yaw=45|team=0
+SPAWN|map=28|x=12|y=6|z=0.5|yaw=90|team=0
+SPAWN|map=28|x=16.6|y=7.9|z=0.5|yaw=135|team=0
+SPAWN|map=28|x=18.5|y=12.5|z=0.5|yaw=180|team=0
+SPAWN|map=28|x=16.6|y=17.1|z=0.5|yaw=225|team=0
+SPAWN|map=28|x=12|y=19|z=0.5|yaw=270|team=0
+SPAWN|map=28|x=7.4|y=17.1|z=0.5|yaw=315|team=0
+
 # ==== Prefabs: the Campaign Builder's kits (tools/campaign/kits.py), in metres from their middle;
 # the Kits Gallery sets each down with a PREFAB_PLACE ====
 # Kit: Office (two desks, files, a cooler)

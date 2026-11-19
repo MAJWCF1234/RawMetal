@@ -183,7 +183,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
  const auto* campaignFields=!sources.empty()&&sources[0].map?&sources[0].map->recordFields:nullptr;
  auto named=[&](const Rec& r)->std::string{
   const auto bar=r.s.find('|');const std::string tag=r.s.substr(0,bar);
-  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="CAVE"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART";
+  const bool global=tag=="CAMPAIGN"||tag=="STORM"||tag=="TERRAIN"||tag=="TERRAIN_FLAT"||tag=="TERRAIN_SCULPT"||tag=="CAVE"||tag=="HORIZON"||tag=="GROUND"||tag=="SIGN_ART"||tag=="MULTIPLAYER"||tag=="SPAWN";
   const auto* table=global?campaignFields:fieldsOf;if(!table||table->empty())return {};
   std::string key;
   if(tag=="SIGN_ART"){const auto end=r.s.find('|',bar+1);key=recordFieldKey(tag,"*",0)+"/"+decodeField(r.s.substr(bar+1,end-bar-1));}
@@ -200,6 +200,9 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
  if(formatTwo)data<<"FORMAT|"<<MapFormatVersion<<'\n';
  line(Rec("CAMPAIGN").t(campaignName).i(startMap));
  if(storm.active())line(Rec("STORM").i(storm.calmMs).i(storm.warningMs).i(storm.stormMs).n(storm.damage).n(storm.ambientAsh));
+ // Multiplayer (docs/Systems/multiplayer.md): MULTIPLAYER and SPAWN are named fields only, kept on map 0
+ // as the parser read them, so they go back exactly as they were written.
+ if(campaignFields)for(const char* tag:{"MULTIPLAYER","SPAWN"})for(int k=0;campaignFields->count(recordFieldKey(tag,"*",k));++k)line(Rec(tag));
  // Terrain is campaign-wide: the first map that has it speaks for the file.
  for(const auto& source:sources)if(source.map&&source.map->terrain){const auto& t=*source.map->terrain;
   data<<"\n# ==== Campaign-wide terrain (world metres) ====\n";

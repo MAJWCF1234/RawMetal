@@ -109,6 +109,8 @@
     return kinds.count(k) != 0;
   }
   std::optional<creation::Box> worldBox(const std::vector<std::string> &f) const {
+    if (auto spawn = spawnBox(f)) // a match spawn: a person's height on its floor (NativeMultiplayer.inc)
+      return spawn;
     auto box = creationBox(f);
     if (!box || f.empty() || !onTerrain() || !groundRelativeKind(f[0]))
       return box;
