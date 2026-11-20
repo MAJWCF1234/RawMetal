@@ -38,3 +38,6 @@ RawIron/RawMetal package tooling uses a bounded ZIP-compatible reader for `.ripa
 
 ## Epic Online Services
 The repository has an optional EOS SDK slot under `src/ThirdParty/EOS`. Proprietary EOS SDK binaries and live credentials must not be committed. Any local EOS configuration containing client secrets remains outside source control.
+
+## Leon (Boykisser Custom Low Poly Avatar)
+Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Model)" by NEGATIVEMARE (https://skfb.ly/pO6ZD), licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/). Changes: the three meshes were joined and reduced, the rig was mapped onto the game's skeleton, the materials were reduced to flat colours, and it is animated with the game's character animations.

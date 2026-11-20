@@ -1,4 +1,4 @@
-// The Limitator, the second player body (Settings::character 1): the film
+// The Limitator, the second player body (Settings::character 1), and Leon, the third (2): the film
 // camera goes round him in each of his holds (fists, the shotgun held and
 // aimed, the pistol aimed, crouched, prone), then first person looks 60 degrees
 // down at his body under the camera standing, crouched and prone. Checks as
@@ -6,11 +6,14 @@
 // stands, his hands are on the gun, the gun and his head point where he looks,
 // every face wears a real texture (no 4x4 swatch), and looking down nothing of
 // his body covers the crosshair (within 15% of the frame's height of it).
-// lab/tune.txt `limitator.character 0` runs the same takes on Claire.
+// lab/tune.txt `limitator.character N` runs the same takes on body N (0 Claire, 1 the Limitator, 2 Leon);
+// the `leon` tube is the same tube on Leon.
+// Leon's materials are flat 8x8 colours, so his texture floor is 8 px; the others' is 64 (arms 16).
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
 #include "lab/LabImage.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -33,7 +36,7 @@ constexpr int HoldCount=int(sizeof(Holds)/sizeof(Holds[0]));
 constexpr float LookDown=-1.0472f*140.f;
 int holdAt(const Scene& s){return std::min(HoldCount-1,s.frame*HoldCount/std::max(1,s.frames));}
 int perHold(const Scene& s){return std::max(1,s.frames/HoldCount);}
-int wanted(){return tuned("limitator.character",1.f)>.5f?1:0;}
+int wanted(int fallback){return std::clamp(int(tuned("limitator.character",float(fallback))+.5f),0,2);}
 std::map<const Scene*,std::map<std::string,std::string>>& notes(){static std::map<const Scene*,std::map<std::string,std::string>> n;return n;}
 // The body faces drawn over the screen's middle: within radius (a share of the
 // frame's height) of the crosshair, sampled on a grid. Faces reaching behind
@@ -57,13 +60,13 @@ int centreCover(Scene& s,float radius,std::string& what){
   ++named[std::string(bones[best])+"/"+material];}
  what.clear();for(const auto& [n,c]:named)what+=(what.empty()?"":", ")+n+" "+std::to_string(c);
  return covering;}
-const bool limitator=add({
- .name="limitator",.summary="the Limitator (Settings::character 1) turned through his holds from outside, then first person 60 degrees down standing, crouched and prone",
+Feature tube(const char* name,const char* summary,int def){return Feature{
+ .name=name,.summary=summary,
  .friends={"claire"},.fixtures={"limitator-turn"},
- .setup=[](Scene& s){LabAccess::settings(s.g()).character=wanted();LabAccess::playerCamera(s.g());SoftwareRenderer::setThirdPerson(true);LabAccess::setGod(s.g(),true);LabAccess::equip(s.g(),Holds[0].weapon);
+ .setup=[def](Scene& s){LabAccess::settings(s.g()).character=wanted(def);LabAccess::playerCamera(s.g());SoftwareRenderer::setThirdPerson(true);LabAccess::setGod(s.g(),true);LabAccess::equip(s.g(),Holds[0].weapon);
   LabAccess::collectBodyFaces(*s.renderer,true);LabAccess::resetBody(*s.renderer);
   // Every texture his faces and arms wear, measured once: the smallest side.
-  auto& body=s.renderer->playerBody(wanted());int smallest=1<<30,arms=1<<30;size_t missing=0;
+  auto& body=s.renderer->playerBody(wanted(def));int smallest=1<<30,arms=1<<30;size_t missing=0;
   for(const auto* t:body.faceTexture){if(!t){++missing;continue;}smallest=std::min({smallest,t->width,t->height});}
   if(body.armTextures)for(const auto& t:*body.armTextures)arms=std::min({arms,t.width,t.height});
   s.board["limitator.body"]=body.character;s.board["limitator.faces"]=double(body.faceTexture.size());s.board["limitator.texture_min"]=smallest;s.board["limitator.arm_texture_min"]=arms;s.board["limitator.texture_missing"]=double(missing);
@@ -102,16 +105,16 @@ const bool limitator=add({
   if(rep.handGap>=0)s.board[k+".hand_gap"]=rep.handGap;
   if(rep.supportGap>=0)s.board[k+".support_gap"]=std::max(s.board.count(k+".support_gap")?s.board[k+".support_gap"]:0.,double(rep.supportGap));
   if(rep.aimError>=0&&at>=per/2)s.board[k+".aim_error"]=std::max(s.board.count(k+".aim_error")?s.board[k+".aim_error"]:0.,double(rep.aimError));},
- .metrics=[](Scene& s,Report& r){
-  const bool him=wanted()==1;const std::string who=him?"he":"she";
-  r.check(him?"the Limitator loads (40 clips, his textures)":"Claire is the body",s.board["limitator.body"]==wanted()&&s.board["limitator.clips"]>=40,
+ .metrics=[def](Scene& s,Report& r){
+  const int body=wanted(def);const bool him=body>0;const std::string who=him?"he":"she";const double floor=body==2?8:64,armFloor=body==2?8:16;
+  r.check(body==2?"Leon loads (40 clips, his flat materials)":him?"the Limitator loads (40 clips, his textures)":"Claire is the body",s.board["limitator.body"]==body&&s.board["limitator.clips"]>=40,
    "body "+std::to_string(int(s.board["limitator.body"]))+", "+std::to_string(int(s.board["limitator.clips"]))+" clips");
-  r.check("the local player is drawn as that body",s.board["limitator.drawn_as"]==wanted());
-  r.check("every face wears a real texture (no 4x4 swatch)",s.board["limitator.texture_missing"]==0&&s.board["limitator.texture_min"]>=64,
+  r.check("the local player is drawn as that body",s.board["limitator.drawn_as"]==body);
+  r.check("every face wears a real texture (no 4x4 swatch)",s.board["limitator.texture_missing"]==0&&s.board["limitator.texture_min"]>=floor,
    "smallest "+std::to_string(int(s.board["limitator.texture_min"]))+" px over "+std::to_string(int(s.board["limitator.faces"]))+" faces");
-  r.check("the viewmodel's arms wear real textures",s.board["limitator.arm_texture_min"]>=16,"smallest "+std::to_string(int(s.board["limitator.arm_texture_min"]))+" px");
+  r.check("the viewmodel's arms wear real textures",s.board["limitator.arm_texture_min"]>=armFloor,"smallest "+std::to_string(int(s.board["limitator.arm_texture_min"]))+" px");
   for(const auto& h:Holds){const std::string k=std::string("limitator.")+h.name;auto get=[&](const char* n,double fallback=-1){return s.board.count(k+n)?s.board[k+n]:fallback;};
-   r.check(who+" is drawn: "+h.name,get(".drawn",0)>0&&get(".character")==wanted(),std::to_string(int(get(".faces",0)))+" faces");
+   r.check(who+" is drawn: "+h.name,get(".drawn",0)>0&&get(".character")==body,std::to_string(int(get(".faces",0)))+" faces");
    if(h.crouch&&!h.prone){const int c=int(get(".lower"));r.check(who+" kneels: "+std::string(h.name),c==6||(c>=7&&c<=10)||c==25,"legs clip "+std::to_string(c));}
    if(h.prone){const int c=int(get(".lower"));r.check(who+" lies prone: "+std::string(h.name),c==14||c==15||c==19,"legs clip "+std::to_string(c));}
    if(h.firstPerson&&!h.crouch){const int c=int(get(".lower"));r.check(who+" stands: "+std::string(h.name),c==0||c==24||c==26||c==39,"legs clip "+std::to_string(c));}
@@ -137,6 +140,8 @@ const bool limitator=add({
   const Player& p=s.g().player();const Point3 feet{p.pos.x,p.pos.y,p.z},eye{p.pos.x,p.pos.y,p.z+p.stanceEye()};
   o.cross(feet,.15f,0x40ff60);o.line(eye,{eye.x+std::cos(p.angle)*3.f,eye.y+std::sin(p.angle)*3.f,eye.z},0xff4040);o.label(eye,std::string("HOLD ")+Holds[holdAt(s)].name,0xffff60);
   const auto& rep=LabAccess::claireReport(*s.renderer);if(rep.drawn){o.point(rep.gripRight,0xff40ff,3);o.point(rep.gripLeft,0x40c0ff,3);o.point(rep.feet[0],0x40ff60,3);o.point(rep.feet[1],0x40ff60,3);}},
- .teardown=[](Scene& s){SoftwareRenderer::setThirdPerson(false);s.renderer->setBodyOrbit(0,0);LabAccess::collectBodyFaces(*s.renderer,false);LabAccess::resetBody(*s.renderer);LabAccess::settings(s.g()).character=0;}});
+ .teardown=[](Scene& s){SoftwareRenderer::setThirdPerson(false);s.renderer->setBodyOrbit(0,0);LabAccess::collectBodyFaces(*s.renderer,false);LabAccess::resetBody(*s.renderer);LabAccess::settings(s.g()).character=0;}};}
+const bool limitator=add(tube("limitator","the Limitator (Settings::character 1) turned through his holds from outside, then first person 60 degrees down standing, crouched and prone",1));
+const bool leon=add(tube("leon","Leon (Settings::character 2) through the same holds from outside, then first person 60 degrees down standing, crouched and prone",2));
 }
 }

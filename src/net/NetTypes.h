@@ -156,7 +156,7 @@ struct RemotePlayer{
  float deathAge=0;            // seconds since they died (the death clip, then hidden until respawn)
  bool vr=false;AvatarPose pose{}; // a VR player: draw the avatar solve from pose instead of the clips
  int team=0;                  // 0 none (deathmatch); co-op players are all team 1
- int character=0;             // Settings::character of that player: 0 Claire, 1 the Limitator
+ int character=0;             // Settings::character of that player: 0 Claire, 1 the Limitator, 2 Leon (one byte on the wire; an older build clamps it to 1)
  int pingMs=-1;
  bool speaking=false;         // their voice is heard now (the name tag's mark)
 };

@@ -113,7 +113,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
   uiText(sx+(ok||word=="OFFLINE"?0:10),sy+24,word.c_str(),tone,0,15,1,2);
   int y=sy+46;for(const auto& line:wrapUiText(game.sessionReason(),size_t(34),size_t(4))){uiText(sx,y,line.c_str(),dim,1,12);y+=15;}
   y=std::max(y+8,sy+112);fill(sx,y,w,1,bone,.08f);
-  uiText(sx,y+7,"YOU ARE",dim,3,9,1,2);const char* who=game.settings().character==1?"THE LIMITATOR":"CLAIRE";uiText(sx+w-uiTextWidth(who,0,12,1),y+5,who,bone,0,12,1,1);
+  uiText(sx,y+7,"YOU ARE",dim,3,9,1,2);const char* who=game.settings().character==2?"LEON":game.settings().character==1?"THE LIMITATOR":"CLAIRE";uiText(sx+w-uiTextWidth(who,0,12,1),y+5,who,bone,0,12,1,1);
  }
  // Footer: what the keys and a controller do, and the build.
  fill(40,m_height-36,m_width-80,1,bone,.10f);
@@ -227,11 +227,11 @@ void SoftwareRenderer::drawTitleItems(const Game& game){
    else line(py+114,"FRIENDLY FIRE",rules->friendlyFire?"ON":"OFF");}
   if(game.hostableMaps(d.mode).empty()){int y=py+150;for(const auto& l:wrapUiText("No loaded campaign allows this mode. Its MULTIPLAYER record is set in the Campaign Builder.",size_t(36),size_t(3))){uiText(px,y,l.c_str(),amber,1,12);y+=15;}}
  }else if(page==Game::TitlePage::Character){
-  const int c=std::clamp(game.titleSelection(),0,1);const int px=m_width-266,py=150,pw=226;
-  uiText(px,py,c==1?"THE LIMITATOR":"CLAIRE",bone,0,18,1,2);fill(px,py+24,pw,1,bone,.14f);
-  const char* about=c==1?"A heavier tread on the stair. He came down to set limits on what climbs back up.":"Security, unauthorised. Marked for elimination by the people who signed her shift. She knows the vents.";
+  const int c=std::clamp(game.titleSelection(),0,2);const int px=m_width-266,py=150,pw=226;
+  uiText(px,py,c==2?"LEON":c==1?"THE LIMITATOR":"CLAIRE",bone,0,18,1,2);fill(px,py+24,pw,1,bone,.14f);
+  const char* about=c==2?"White fur, quiet paws and a bow at the throat. He does not say how he got past the guards.":c==1?"A heavier tread on the stair. He came down to set limits on what climbs back up.":"Security, unauthorised. Marked for elimination by the people who signed her shift. She knows the vents.";
   int y=py+32;for(const auto& l:wrapUiText(about,size_t(38),size_t(4))){uiText(px,y,l.c_str(),dim,1,13);y+=16;}
-  if(c==1&&!characterBuilt(1)){y+=6;for(const auto& l:wrapUiText("His body is still being made: until it is in this build, the others see Claire.",size_t(40),size_t(3))){uiText(px,y,l.c_str(),amber,1,12);y+=15;}}
+  if(c>=1&&!characterBuilt(c)){y+=6;for(const auto& l:wrapUiText(c==2?"His body is still being made: until it is in this build, the others see the Limitator.":"His body is still being made: until it is in this build, the others see Claire.",size_t(40),size_t(3))){uiText(px,y,l.c_str(),amber,1,12);y+=15;}}
  }
  // A failed request, in plain words, under the rows.
  if(const std::string notice=game.titleNotice();!notice.empty()&&page!=Game::TitlePage::Browse){

@@ -17,11 +17,11 @@ namespace retro {
 bool copyTextToClipboard(const std::string& text);
 namespace {
 enum Action:int{ActNone,ActQuick,ActBrowse,ActHost,ActJoin,ActCharacter,ActBack,ActQuickDeathmatch,ActQuickCoop,ActRefresh,ActMode,ActHideFull,
- ActLobby,ActHostMode,ActHostMap,ActHostPlayers,ActHostPrivate,ActHostName,ActHostGo,ActCopy,ActLeave,ActJoinField,ActJoinGo,ActClaire,ActLimitator};
+ ActLobby,ActHostMode,ActHostMap,ActHostPlayers,ActHostPrivate,ActHostName,ActHostGo,ActCopy,ActLeave,ActJoinField,ActJoinGo,ActClaire,ActLimitator,ActLeon};
 constexpr int BrowseTop=190,BrowseRow=18,BrowseRows=6;
 // Game::update ticks the session itself (Match.cpp updateNet).
 void tickUpdate(Game& g,const InputState& in,float dt){g.update(in,dt);}   // Game::update pumps the session itself
-const char* characterName(int c){return c==1?"THE LIMITATOR":"CLAIRE";}
+const char* characterName(int c){return c==2?"LEON":c==1?"THE LIMITATOR":"CLAIRE";}
 // The map's content hash for HostOptions::mapHash: FNV-1a 64 of the .rmc file's bytes as 16 hex digits, the same
 // as net::mapFileHash (Match.h), which a guest compares it with (switch to that one call once both are in one tree).
 // A campaign with no file (the embedded Exclusion Zone) hashes its key instead.
@@ -93,7 +93,7 @@ void Game::openTitlePage(TitlePage page){
   if(m_hostDraft.name.empty())m_hostDraft.name=m_netSession&&!m_netSession->displayName().empty()?m_netSession->displayName()+"'s game":"A game below";
   auto maps=hostableMaps(m_hostDraft.mode);if(std::find(maps.begin(),maps.end(),m_hostDraft.map)==maps.end())m_hostDraft.map=maps.empty()?-1:maps.front();}
  if(page==TitlePage::QuickMatch)m_quickSearching=false;
- if(page==TitlePage::Character)m_titleSelection=std::clamp(m_settings.character,0,1);
+ if(page==TitlePage::Character)m_titleSelection=std::clamp(m_settings.character,0,2);
  // The first row that can be used.
  const auto items=titleItems();
  if(page!=TitlePage::Character)for(size_t i=0;i<items.size();++i)if(items[i].enabled){m_titleSelection=int(i);break;}
@@ -154,7 +154,7 @@ std::vector<TitleItem> Game::titleItems()const{
    add(TitleItem::Field,X,Y,220,34,"CODE",m_joinTyped,true,ActJoinField);
    row(Y+46,busy?"JOINING":"JOIN",net::normaliseJoinCode(m_joinTyped).empty()?"":net::normaliseJoinCode(m_joinTyped),usable&&!net::normaliseJoinCode(m_joinTyped).empty(),ActJoinGo);back(Y+46+H+G);break;
   case TitlePage::Character:
-   row(Y,"CLAIRE",m_settings.character==0?"IN USE":"",true,ActClaire);row(Y+H,"THE LIMITATOR",m_settings.character==1?"IN USE":"",true,ActLimitator);back(Y+2*H+G);break;
+   row(Y,"CLAIRE",m_settings.character==0?"IN USE":"",true,ActClaire);row(Y+H,"THE LIMITATOR",m_settings.character==1?"IN USE":"",true,ActLimitator);row(Y+2*H,"LEON",m_settings.character==2?"IN USE":"",true,ActLeon);back(Y+3*H+G);break;
  }
  return items;
 }
@@ -246,6 +246,7 @@ void Game::updateMultiplayerMenu(const InputState& input){
   case ActJoinGo:{const auto code=net::normaliseJoinCode(m_joinTyped);if(!code.empty())m_netSession->joinCode(code);break;}
   case ActClaire:m_settings.character=0;break;
   case ActLimitator:m_settings.character=1;break;
+  case ActLeon:m_settings.character=2;break;
   default:break;
  }
 }
@@ -275,7 +276,12 @@ bool Game::testMultiplayerMenu(std::ostream& report){
   check(g.settings().character==1,"CHARACTER: THE LIMITATOR chosen");
   const auto path=std::filesystem::temp_directory_path()/"rawmetal-character-test.txt";g.saveSettings(path.wstring());Game h(campaign);h.loadSettings(path.wstring());std::error_code e;std::filesystem::remove(path,e);
   check(h.settings().character==1,"the character survives a settings save and load");
-  std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0\n";Game old(campaign);old.loadSettings(path.wstring());std::filesystem::remove(path,e);check(old.settings().character==0,"an older settings file keeps Claire");}
+  std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0\n";Game old(campaign);old.loadSettings(path.wstring());std::filesystem::remove(path,e);check(old.settings().character==0,"an older settings file keeps Claire");
+  // Leon is the third row: chosen, kept through a save and load (an unknown number is clamped to the last body).
+  Game l(campaign);l.showTitleScreen();l.openTitlePage(TitlePage::Character);key(l,&InputState::menuDown);key(l,&InputState::menuDown);key(l,&InputState::menuAccept);
+  check(l.titleItems().size()==4&&l.titleItems()[2].label=="LEON"&&l.settings().character==2,"CHARACTER: three bodies and BACK, LEON chosen");
+  l.saveSettings(path.wstring());Game m(campaign);m.loadSettings(path.wstring());check(m.settings().character==2,"Leon survives a settings save and load");
+  std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0 9\n";Game wild(campaign);wild.loadSettings(path.wstring());std::filesystem::remove(path,e);check(wild.settings().character==2,"a character number past the last is clamped to Leon");}
  // Online over a loopback hub: a host, and a guest who finds it.
  net::LoopbackHub hub;auto hostSession=hub.connect("Maddie");auto guestSession=hub.connect("Ash");
  Game host(campaign);host.m_customCampaigns={campaign,coopOnly};host.setNetSession(hostSession.get());host.showTitleScreen();

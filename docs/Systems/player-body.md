@@ -160,6 +160,91 @@ gitignored library at `src/assets/library/player/`:
   times 140, -146.6 by default). Kneeling at 60 degrees Claire's raised shin
   reaches the edge of that circle (3 faces); his does not.
 
+## Leon
+
+The third body: `Settings::character` 2, `RemotePlayer::character` 2, a normal
+third row on the CHARACTER page (and in SETTINGS, GAMEPLAY). A small white
+cat person with a bow at his throat and black stockings, drawn in first
+person, third person, VR and for other players, on the Limitator's pipeline.
+Made from a stylised avatar (three meshes, flat-colour materials, a 133-bone
+rig already in a T-pose, 24,742 triangles) into the gitignored library at
+`src/assets/library/player/`:
+
+| Resource | File |
+| --- | --- |
+| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 5,997 triangles, 3,581 vertices, 62 bones) |
+| 2271 | `leon-animation.bin` (the same 40 clips, RMS1: kept as bones) |
+| 2272 | `leon-animation.bin.anchors` |
+| 2273-2276 | `LeonFur.png`, `LeonInner.png`, `LeonBlack.png`, `LeonMetal.png` (8x8 solid colours, one a material) |
+
+Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Model)" by NEGATIVEMARE (https://skfb.ly/pO6ZD), licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/). Changes: the three meshes were joined and reduced, the rig was mapped onto the game's skeleton, the materials were reduced to flat colours, and it is animated with the game's character animations.
+
+- `build_leon.py` (`blender -b --python tools/player/build_leon.py -- SOURCE.fbx
+  src/assets/library/player/Leon.fbx src/assets/library/player`) bakes the
+  drawn pose, applies the scale and turn (+Z ahead, +X his left, 1.76 m with
+  his ears; like the others he is scaled to 1.7 m from outside and to the eye
+  in first person), names the bones Claire's way and merges every other bone's
+  weights (ears, tail, hair, eyes, jaw, butt) onto its nearest kept ancestor:
+  the tail follows the hips and the ears the head, so the tail is stiff.
+  The rig has one chest bone: its weights are split across Spine1-3 by height;
+  its finger weights (on the tip joints only) are spread over each finger's
+  three joints, and some of the chest and upper arm near the shoulder goes to
+  the shoulder bones, because `ClaireOutside` wants both. The toes are the
+  foot's weightless leaf bones.
+- The body's skin under the stockings is deleted (an outward ray meets the
+  stockings): a coarser skin poked through them. The meshes are joined and
+  collapsed in two passes, the body held while the head is cut to about 3,400
+  triangles, then the head held while the body (with the thighs' tops
+  protected) is cut to about 2,600. Four weights a vertex.
+- Four materials (`LeonFur`, `LeonInner` for the inner ears and paw pads,
+  `LeonBlack`, `LeonMetal`), each an 8x8 PNG of the material's base colour
+  (the engine finds a body's texture by material name). Gloss 0.05, as the
+  other cloth.
+- The clips are Claire's takes, the same 40 as the Limitator's, in one
+  `--skeletal-takes` bake. The rig has no toe joint, so the foot's leaf bone is
+  named `Toe_L`/`Toe_R`; nothing in `RawMetalCreatureBake` changed. The bake with
+  this command on `Limitator.fbx` is byte-identical to his shipped bank
+  (`P`, `Q`, `A`, `C`, `B`, `U` as above, `$S` is `source-assets`):
+
+  ```
+  RawMetalCreatureBake --skeletal-takes src/assets/library/player/Leon.fbx src/assets/library/player/leon-animation.bin \
+   "P/idle.fbx:1:64" "P/run forward.fbx:1:16" "P/run backward.fbx:1:16:loop" "P/run left.fbx:1:16:loop" "P/run right.fbx:1:16:loop" \
+   "P/sprint forward.fbx:1:16:loop" "P/idle crouching.fbx:1:64:loop" "P/walk crouching forward.fbx:1:31:loop" \
+   "P/walk crouching backward.fbx:1:31:loop" "P/walk crouching left.fbx:1:31:loop" "P/walk crouching right.fbx:1:31:loop" \
+   "P/jump loop.fbx:1:30:loop" "P/death from the front.fbx:1:104" "P/walk forward.fbx:1:31:loop" \
+   "Q/prone-idle-lying-down-prone-with-rifle.fbx:1:107:loop" "Q/prone-forward-moving-forward-while-in-prone-position.fbx:1:57:loop" \
+   "P/walk backward.fbx:1:30:loop" "P/walk left.fbx:1:31:loop" "P/walk right.fbx:1:31:loop" "A/crawl-backwards-in-prone.fbx:1:24:loop" \
+   "A/standing-to-crouched.fbx:1:16" "C/crouch to stand with rifle.fbx:1:89" \
+   "Q/crouch-to-prone-crouching-to-laying-prone-transition.fbx:1:44" "Q/prone-to-crouch-transition-transition-from-prone-to-crouch.fbx:1:44" \
+   "P/idle aiming.fbx:1:62:loop" "P/idle crouching aiming.fbx:1:58:loop" "B/firing rifle.fbx:1:6" "B/reloading.fbx:1:79" \
+   "P/turn 90 left.fbx:1:31:drift" "P/turn 90 right.fbx:1:31:drift" "P/crouching turn 90 left.fbx:1:39:drift" "P/crouching turn 90 right.fbx:1:38:drift" \
+   "U@Pistol_Idle_Loop:1:50:s25:loop" "U@Pistol_Aim_Neutral:1:5" "U@Pistol_Aim_Up:1:5" "U@Pistol_Aim_Down:1:5" "U@Pistol_Shoot:1:19" "U@Pistol_Reload:1:50" \
+   "B/hit reaction.fbx:1:13" "P/jump down.fbx:1:20"
+  ```
+
+  (Run it from a shell that does not rewrite `:` and `@` arguments as paths:
+  Git Bash needs `MSYS2_ARG_CONV_EXCL='*'`, and the prefixes written out in full.)
+- Packed, his seven files are 788,952 bytes (`Leon.fbx` 204,878, the bank
+  556,606, the anchors 27,022, four textures about 450 together); the Limitator's
+  pack to 771,782 without his textures.
+- He loads the first time he is asked for (`SoftwareRenderer::playerBody(2)`,
+  `RemoteBodies::body(2)`). Missing or broken files make him the Limitator,
+  and the Limitator Claire (the CHARACTER page says so). The wire carries the
+  character as one byte: 2 fits, and an older build, which clamps it to 1,
+  draws the Limitator.
+- First person leaves out the faces his head bone carries (ears, hair, the
+  bow) and anything his arm bones carry; his facing is the front of those
+  head faces from their middle. The viewmodel's and the VR avatar's arms are
+  still Claire's arms, every material of hers in his fur (a flat white, with
+  her belts' straps still cut out); another player's VR arms are dressed the
+  same way.
+- Lab: `python tools/dev/lab.py run --feature=leon` is the `limitator` tube
+  (fixture `limitator-turn`) on Leon: the same holds, hands on the gun, head
+  facing, feet planted, and nothing of his body over the crosshair looking
+  60 degrees down. His textures' floor is 8 px (they are flat colours).
+  `multiplayer-ui` draws one remote player as Leon and shows the third row;
+  `engine.net` has a guest play as Leon and checks the host sees character 2.
+
 ## Stances
 
 Three, as Metal Gear has them (`Player`, `Game::updateMovement`):

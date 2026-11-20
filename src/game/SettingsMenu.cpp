@@ -104,7 +104,7 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RSensitivity:{m.label="MOUSE SENSITIVITY";char b[16];std::snprintf(b,sizeof b,"%.1fX",s.sensitivity);m.value=b;m.help="How far a hand on the mouse turns your head.";break;}
    case RInvert:m.label="INVERT MOUSE Y";m.value=onOff(s.invertMouse);m.warn=s.invertMouse;m.help="Pushing the mouse forward looks down instead of up.";break;
    case RPull:m.kind=MenuItem::Choice;m.label="PULL HIGHLIGHT";m.value=s.pullHighlight?"SUBTLE":"NONE";m.help="The outline on what the Physgloves would pull. The reticle tightens either way.";break;
-   case RCharacter:m.kind=MenuItem::Choice;m.label="CHARACTER";m.value=s.character==1?"THE LIMITATOR":"CLAIRE";m.help="Who the others see in multiplayer. It takes hold the next time you join.";break;
+   case RCharacter:m.kind=MenuItem::Choice;m.label="CHARACTER";m.value=s.character==2?"LEON":s.character==1?"THE LIMITATOR":"CLAIRE";m.help="Who the others see in multiplayer. It takes hold the next time you join.";break;
    case RTextChat:m.label="TEXT CHAT";m.value=onOff(s.textChat);m.help="Press T in a match to type. Off hides the others' lines and keeps the notices.";break;
    case RChatFilter:m.label="CHAT FILTER";m.value=onOff(s.chatFilter);m.help="Masks a short list of foul words with asterisks in what you read.";break;
    case RVoiceMode:m.kind=MenuItem::Choice;m.label="VOICE CHAT";m.value=net::voiceModeName(net::VoiceMode(std::clamp(s.voiceMode,0,2)));m.warn=s.voiceMode==0;
@@ -199,7 +199,7 @@ void Game::settingsChange(int id,int direction,bool activate){
   case RFrameTime:m_showFps=!m_showFps;break;
   case RInvert:s.invertMouse=!s.invertMouse;break;
   case RPull:s.pullHighlight=s.pullHighlight?0:1;break;
-  case RCharacter:s.character=cycle(std::clamp(s.character,0,1),2);break;
+  case RCharacter:s.character=cycle(std::clamp(s.character,0,2),3);break;
   case RTextChat:s.textChat=!s.textChat;break;
   case RChatFilter:s.chatFilter=!s.chatFilter;break;
   case RVoiceMode:s.voiceMode=cycle(std::clamp(s.voiceMode,0,2),3);break;

@@ -37,7 +37,7 @@ std::vector<net::RemotePlayer> cast(){
  std::vector<net::RemotePlayer> out;
  auto add=[&](std::uint8_t slot,const char* name,float x,float y,float yaw){net::RemotePlayer r;r.slot=slot;r.name=name;r.position={x,y,0};r.angle=yaw*Deg;out.push_back(r);return &out.back();};
  {auto* r=add(1,"Ash",9.2f,11.f,-70);r->weapon=1;}                                                  // standing, the shotgun at rest
- {auto* r=add(2,"Vesna",10.3f,11.3f,0);r->weapon=2;r->velocity={3.4f,0};}                            // running across with the pistol
+ {auto* r=add(2,"Vesna",10.3f,11.3f,0);r->weapon=2;r->velocity={3.4f,0};r->character=2;}              // running across with the pistol, as Leon
  {auto* r=add(3,"Rook",11.6f,11.f,-105);r->weapon=1;r->shotAge=1.f;r->pitch=.06f;}                   // aiming the shotgun
  {auto* r=add(4,"Okonkwo",12.8f,11.f,-125);r->weapon=2;r->crouched=true;r->character=1;}             // crouched with the pistol, as the Limitator
  {auto* r=add(5,"Tamsin",13.9f,11.4f,-80);r->weapon=1;r->alive=false;r->deathAge=1.6f;r->health=0;}  // falling dead
@@ -137,6 +137,9 @@ const bool tube=add({
   rows(s,"join",shot(title,"JOIN BY CODE, typing"),title);
   title.openTitlePage(Game::TitlePage::Character);{InputState down{};down.menuDown=true;tickUpdate(title,down,1.f/60);tickUpdate(title,{},1.f/60);}
   rows(s,"character",shot(title,"CHARACTER: the Limitator selected"),title);
+  {InputState down{};down.menuDown=true;tickUpdate(title,down,1.f/60);tickUpdate(title,{},1.f/60);}
+  s.board["mp.character.leon"]=double(title.titleSelection()==2&&title.titleItems().size()==4&&title.titleItems()[2].label=="LEON"&&title.settings().character==0);
+  shot(title,"CHARACTER: Leon selected");
   Game host=title;host.setNetSession(hostSession.get());host.openTitlePage(Game::TitlePage::Host);
   rows(s,"host",shot(host,"HOST A GAME"),host);
   {LabAccess::titleSelection(host)=5;InputState accept{};accept.menuAccept=true;tickUpdate(host,accept,1.f/60);tickUpdate(host,{},1.f/60);tickUpdate(host,{},1.f/60);}
@@ -158,7 +161,7 @@ const bool tube=add({
  },
  .metrics=[](Scene& s,Report& r){
   auto b=[&](const std::string& k){return s.board.count(k)?s.board[k]:0.;};
-  static const char* doing[]={"","standing with the shotgun","running with the pistol","aiming the shotgun","crouched with the pistol, as the Limitator","falling dead","posed from VR"};
+  static const char* doing[]={"","standing with the shotgun","running with the pistol, as Leon","aiming the shotgun","crouched with the pistol, as the Limitator","falling dead","posed from VR"};
   for(int slot=1;slot<=6;++slot){const std::string k="mp.body."+std::to_string(slot);
    r.metric("body"+std::to_string(slot)+".moved",b(k+".moved"),"share");
    r.check(std::string("a remote player is drawn ")+doing[slot],b(k+".drawn")>0);
@@ -169,6 +172,7 @@ const bool tube=add({
    if(slot!=5)r.check(std::string("... with its name over its head: ")+doing[slot],b(k+".tag")>0);}
   r.check("a player dead longer than the death clip is not drawn",b("mp.body.7.drawn")==0&&b("mp.body.7.moved")<.01,fixed(b("mp.body.7.moved")*100,2)+"% of where it lay changes");
   r.check("the scoreboard draws its rows, yours lit",b("mp.scoreboard.words")>400&&b("mp.scoreboard.self_red")>200,fixed(b("mp.scoreboard.words"),0)+" lit pixels, "+fixed(b("mp.scoreboard.self_red"),0)+" red in your row");
+  r.check("the CHARACTER page offers three bodies (Claire, the Limitator, Leon) and BACK, the selection stepping onto LEON",b("mp.character.leon")>0);
   r.check("the title draws all six rows",b("mp.title.drawn")==6,fixed(b("mp.title.drawn"),0)+" of 6");
   r.check("the title's chosen row (MULTIPLAYER) is lit red, the others not",b("mp.title.chosen_red")>300&&b("mp.title.other_red")<40,fixed(b("mp.title.chosen_red"),0)+" red pixels vs "+fixed(b("mp.title.other_red"),0));
   r.check("accepting MULTIPLAYER opens its page",b("mp.page.multiplayer.open")>0);

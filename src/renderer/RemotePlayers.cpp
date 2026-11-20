@@ -11,7 +11,7 @@
 // skin's hands. A VR player is posed from their AvatarPose through solveAvatar, as the local VR body is: the legs and
 // lean from the solve, the IK arms on its shoulders, the gun in the hand that holds it. Each slot keeps its own
 // ClaireOutside (the blend it is in, the gun remembered in the right hand). The body comes through characterBody,
-// by Settings::character: Claire, or the Limitator once his body is built in (Claire stands in until then).
+// by Settings::character: Claire, the Limitator or Leon (the one before stands in while a body cannot load).
 namespace retro {
 namespace {
 std::uint32_t rgb(int r,int g,int b){return 0xff000000u|(std::uint32_t(r)<<16)|(std::uint32_t(g)<<8)|std::uint32_t(b);}
@@ -32,32 +32,45 @@ float wrap(float a){while(a>kPiF)a-=2*kPiF;while(a<-kPiF)a+=2*kPiF;return a;}
 // pose state that carries from frame to frame.
 struct SoftwareRenderer::RemoteBodies {
  struct Character{std::unique_ptr<Mesh> mesh;std::vector<unsigned char> texture,arm,head;std::vector<const Texture*> faceTexture;float headFraction=.93f;bool tried=false,ready=false;};
- // The Limitator's face textures (SoftwareRenderer::playerBody(1)); set by the renderer before his body is first asked for.
- const std::vector<const Texture*>* limitatorTextures=nullptr;
- std::array<Character,2> characters;
+ // The face textures of the Limitator (1) and Leon (2) (SoftwareRenderer::playerBody); set by the renderer before a body is first asked for.
+ std::array<const std::vector<const Texture*>*,3> bodyTextures{nullptr,nullptr,nullptr};
+ std::array<Character,3> characters;
  struct Body{ClaireOutside outside;int key=-1;float blendStart=-1,last=-1,gait=0,yaw=0,turned=0,health=100,hitStart=-1e9f;bool seen=false;const Mesh* mesh=nullptr;};
  std::array<Body,16> bodies;
  std::vector<RemoteBodyReport> reports;
  Character& body(int character){
-  auto& c=characters[size_t(std::clamp(character,0,1))];
+  auto& c=characters[size_t(std::clamp(character,0,2))];
   if(!c.tried){c.tried=true;
    // 0 Claire (2300 on her clips 2301 and anchors 2312). 1 the Limitator (2290 on his clips 2291 and anchors 2292),
    // a copy of his own so remote poses never fight the local body's; while he cannot load, Claire stands in for him.
    if(&c==&characters[0]){try{c.mesh=std::make_unique<Mesh>(2300,"",2301,2312);}catch(...){c.mesh.reset();}}
-   else if(limitatorTextures){try{c.mesh=std::make_unique<Mesh>(2290,"",2291,2292);if(c.mesh->triangles.size()!=limitatorTextures->size())c.mesh.reset();}catch(...){c.mesh.reset();}
-    if(c.mesh)c.faceTexture=*limitatorTextures;}
+   else{const size_t which=size_t(&c-characters.data());const auto* textures=bodyTextures[which];
+    // 2 Leon (2270 on 2271, anchors 2272): the same.
+    if(textures){try{c.mesh=which==2?std::make_unique<Mesh>(2270,"",2271,2272):std::make_unique<Mesh>(2290,"",2291,2292);if(c.mesh->triangles.size()!=textures->size())c.mesh.reset();}catch(...){c.mesh.reset();}
+     if(c.mesh)c.faceTexture=*textures;}}
    if(c.mesh&&!c.mesh->triangles.empty()){
     // Classify once, on the bind pose: material, the arms (out past the shoulders) and the head (above the neck).
     const auto& bind=c.mesh->bindTriangles();Point3 low{1e9f,1e9f,1e9f},high{-1e9f,-1e9f,-1e9f};
     for(const auto& t:bind)for(const auto& v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
     const float height=std::max(1e-4f,high.y-low.y),middle=(low.x+high.x)*.5f;double headSum=0;int headCount=0;
     c.texture.assign(bind.size(),0);c.arm.assign(bind.size(),0);c.head.assign(bind.size(),0);
-    for(size_t f=0;f<bind.size();++f){c.texture[f]=static_cast<unsigned char>(std::max(0,materialOf(*c.mesh,bind[f].part)));
+    if(&c==&characters[2]){
+     // Leon: the arms are what his arm and finger bones carry, the head what his head bone does (ears included).
+     static constexpr const char* armBones[]={"Arm_L","Arm_R","ForeArm_L","ForeArm_R","Hand_L","Hand_R"};
+     std::vector<std::string> names(std::begin(armBones),std::end(armBones));
+     for(const char* f:{"Thumb","Index","Middle","Ring","Pinky"})for(int j=1;j<=3;++j)for(const char* s:{"_L","_R"})names.push_back(std::string(f)+std::to_string(j)+s);
+     std::vector<float> armWeight;for(const auto& n:names){const auto w=c.mesh->creatureBoneWeights({n.c_str()});if(armWeight.size()<w.size())armWeight.resize(w.size(),0.f);for(size_t i=0;i<w.size();++i)armWeight[i]+=w[i];}
+     const auto headWeight=c.mesh->creatureBoneWeights({"Head"});
+     const auto& index=c.mesh->creatureVertexIndices();
+     auto carried=[&](const std::vector<float>& w,size_t f){float s=0;for(int k=0;k<3;++k){const size_t corner=f*3+size_t(k);if(corner<index.size()&&index[corner]<w.size())s+=w[index[corner]]/3.f;}return s;};
+     for(size_t f=0;f<bind.size();++f){c.arm[f]=carried(armWeight,f)>.5f;c.head[f]=carried(headWeight,f)>.5f;
+      if(c.head[f])for(const auto& v:bind[f].v){headSum+=(v.p.y-low.y)/height;++headCount;}}}
+    else for(size_t f=0;f<bind.size();++f){c.texture[f]=static_cast<unsigned char>(std::max(0,materialOf(*c.mesh,bind[f].part)));
      bool arm=false,head=true;for(const auto& v:bind[f].v){const float y=(v.p.y-low.y)/height,x=std::fabs(v.p.x-middle)/height;arm=arm||((x>.118f||(x>.08f&&y>.66f))&&y<.85f);head=head&&y>.88f;}
      c.arm[f]=arm;c.head[f]=head;if(head)for(const auto& v:bind[f].v){headSum+=(v.p.y-low.y)/height;++headCount;}}
     if(headCount)c.headFraction=float(headSum/headCount);
     c.ready=true;}}
-  if(!c.ready&&&c!=&characters[0])return body(0);
+  if(!c.ready&&&c!=&characters[0])return body(int(&c-characters.data())-1);   // Leon stands in for himself with the Limitator, and he with Claire
   return c;
  }
 };
@@ -66,7 +79,7 @@ SoftwareRenderer::RemoteBodies& SoftwareRenderer::remoteBodies(){if(!m_remote)m_
 const std::vector<SoftwareRenderer::RemoteBodyReport>& SoftwareRenderer::remoteBodyReports()const{static const std::vector<RemoteBodyReport> none;return m_remote?m_remote->reports:none;}
 bool SoftwareRenderer::characterBuilt(int character)const{
  if(character<=0)return true;
- return !m_limitatorFailed;   // he is in the build; only a body that failed to load is not
+ return character==2?!m_leonFailed:!m_limitatorFailed;   // each is in the build; only a body that failed to load is not
 }
 
 void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks& hooks){
@@ -82,7 +95,10 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
   b.last=now;
   // Dead: the Death clip plays out, the body lies a beat, then it is gone until they respawn.
   if(!r.alive&&r.deathAge>4.5f){b.key=-1;b.seen=false;all.reports.push_back(report);continue;}
-  if(r.character==1&&!all.characters[1].tried&&!all.limitatorTextures){PlayerBody& his=playerBody(1);if(his.character==1)all.limitatorTextures=&his.faceTexture;else all.characters[1].tried=true;}
+  // The body's face textures come from the renderer's own (playerBody); a Leon that will not load is the Limitator.
+  const auto offer=[&](int which){if(!all.characters[size_t(which)].tried&&!all.bodyTextures[size_t(which)]){PlayerBody& his=playerBody(which);if(his.character==which)all.bodyTextures[size_t(which)]=&his.faceTexture;else all.characters[size_t(which)].tried=true;}};
+  if(r.character==1)offer(1);
+  else if(r.character==2){offer(2);if(all.characters[2].tried&&!all.bodyTextures[2])offer(1);}
   auto& character=all.body(r.character);
   if(!character.ready){all.reports.push_back(report);continue;}
   Mesh& mesh=*character.mesh;
@@ -194,7 +210,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
    const VrRig rig=poseVrArms(m_armsMesh,solve);
    for(const auto& face:m_armsMesh.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=rigToWorld(rig,solve,face.v[i].p)+shift;}
     std::swap(v[1],v[2]);const Point3 n=cross(v[1].p-v[0].p,v[2].p-v[0].p);hooks.face(n,(v[0].p+v[1].p+v[2].p)*(1.f/3.f)-receiver);
-    const int m=materialOf(m_armsMesh,face.part);hooks.tri(v[0],v[1],v[2],m>=0?m_claireTextures[size_t(m)]:m_arms,.85f);}
+    const int m=materialOf(m_armsMesh,face.part);hooks.tri(v[0],v[1],v[2],m>=0?(&character==&all.characters[2]?m_leonArmTextures:m_claireTextures)[size_t(m)]:m_arms,.85f);}
    // The gun in the hand that holds it: the bore along the fingers, kept level about it.
    if(r.pose.inHand>=2&&r.pose.inHand<=4){const int g=r.pose.gunSide&1;const bool pistol=r.pose.inHand>=3,mac=r.pose.inHand==4;
     const Point3 wrist=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))+shift;

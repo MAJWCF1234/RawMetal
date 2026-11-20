@@ -122,8 +122,8 @@ void Game::loadSettings(const std::wstring& path){
  if(file>>turn>>vignette>>seated>>lefty>>rate>>scale&&std::isfinite(turn)&&std::isfinite(vignette)&&std::isfinite(scale)){
   settings.vrTurnSpeed=std::clamp(turn,.25f,2.f);settings.vrVignette=std::clamp(vignette,0.f,1.f);settings.vrSeated=seated!=0;settings.vrLeftHanded=lefty!=0;settings.vrFrameRate=rate!=0;
   settings.vrRenderScale=scale<.6f?0.f:std::clamp(scale,.6f,1.f);
-  // The multiplayer body came next (0 Claire, 1 the Limitator).
-  int character=0;if(file>>character){settings.character=std::clamp(character,0,1);
+  // The multiplayer body came next (0 Claire, 1 the Limitator, 2 Leon).
+  int character=0;if(file>>character){settings.character=std::clamp(character,0,2);
    // Then chat and voice, the 3D render scale and the frame-time readout; then the named lines.
    int chat=1,filter=1,mode=1,key=0x56,proximity=1,fps=0;float threshold=.25f,mic=1,voice=1,render=1;
    if(file>>chat>>filter>>mode>>key>>threshold>>mic>>voice>>proximity>>render>>fps&&std::isfinite(threshold)&&std::isfinite(mic)&&std::isfinite(voice)&&std::isfinite(render)){

@@ -206,6 +206,22 @@ MedicalCaseFrame medicalCaseFrame(Point3 actorBase,float yaw,float size){
 }
 }
 SoftwareRenderer::PlayerBody& SoftwareRenderer::playerBody(int character){
+ // Leon is loaded the first time he is asked for; if his files are missing or do
+ // not load (or his bank is not the 40 clips), he is the Limitator.
+ if(character==2&&!m_leonMesh&&!m_leonFailed){
+  try{auto mesh=std::make_unique<Mesh>(2270,"",2271,2272);if(mesh->creatureClipCount()<unsigned(ClaireOutside::ClipCount)||!m_leonTexturesReady)throw std::runtime_error("incomplete");m_leonMesh=std::move(mesh);}
+  catch(const std::exception&){m_leonFailed=true;}
+  // The arms of the viewmodel and the VR avatar are Claire's in his fur: every
+  // material of hers is his fur's flat white. A material of hers cut out by its
+  // alpha (the belts' straps) keeps its cut, in the same fur.
+  if(m_leonMesh){const Texture& fur=m_leonTextures[0];
+   double r=0,g=0,b=0;for(auto p:fur.pixels){r+=(p>>16)&255;g+=(p>>8)&255;b+=p&255;}const double n=std::max<size_t>(1,fur.pixels.size());
+   for(size_t m=0;m<m_leonArmTextures.size();++m){m_leonArmTextures[m]=fur;const Texture& hers=m_claireTextures[m];bool cut=false;for(auto p:hers.pixels)if((p>>24)<128){cut=true;break;}if(!cut)continue;
+    Texture t;t.width=hers.width;t.height=hers.height;t.pixels.resize(hers.pixels.size());
+    for(size_t i=0;i<hers.pixels.size();++i){const auto p=hers.pixels[i];const double y=(((p>>16)&255)*.3+((p>>8)&255)*.59+(p&255)*.11)/128.;
+     auto c=[&](double v){return std::uint32_t(std::clamp(v/n*y,0.,255.));};t.pixels[i]=(p&0xff000000u)|(c(r)<<16)|(c(g)<<8)|c(b);}
+    deriveSurfaceNormal(t,.3f);t.glossStrength=fur.glossStrength;m_leonArmTextures[m]=std::move(t);}}}
+ if(character==2&&!m_leonMesh)character=1;
  // The Limitator is loaded the first time he is asked for; if his files are
  // missing or do not load (or his bank is not the 40 clips), he is Claire.
  if(character==1&&!m_limitatorMesh&&!m_limitatorFailed){
@@ -234,9 +250,9 @@ SoftwareRenderer::PlayerBody& SoftwareRenderer::playerBody(int character){
     for(size_t i=0;i<hers.pixels.size();++i){const auto p=hers.pixels[i];const double y=(((p>>16)&255)*.3+((p>>8)&255)*.59+(p&255)*.11)/128.;
      auto c=[&](double v){return std::uint32_t(std::clamp(v/n*y,0.,255.));};t.pixels[i]=(p&0xff000000u)|(c(r)<<16)|(c(g)<<8)|c(b);}
     deriveSurfaceNormal(t,.3f);m_limitatorArmTextures[m]=std::move(t);}}}
- if(character!=1||!m_limitatorMesh)character=0;
+ if(character!=2&&(character!=1||!m_limitatorMesh))character=0;
  auto& body=m_playerBodies[size_t(character)];
- if(!body.mesh){body.character=character;body.mesh=character?m_limitatorMesh.get():&m_claireMesh;body.armTextures=character?&m_limitatorArmTextures:&m_claireTextures;classifyPlayerBody(body);}
+ if(!body.mesh){body.character=character;body.mesh=character==2?m_leonMesh.get():character?m_limitatorMesh.get():&m_claireMesh;body.armTextures=character==2?&m_leonArmTextures:character?&m_limitatorArmTextures:&m_claireTextures;classifyPlayerBody(body);}
  return body;
 }
 // Classified once, on the bind pose: each face's texture by material name, the
@@ -261,7 +277,25 @@ void SoftwareRenderer::classifyPlayerBody(PlayerBody& body){
  std::vector<float> arm=mesh.creatureBoneWeights({"Arm_L","Arm_R","ForeArm_L","ForeArm_R","Hand_L","Hand_R",
   "Thumb1_L","Thumb2_L","Thumb3_L","Index1_L","Index2_L","Index3_L","Middle1_L","Middle2_L","Middle3_L","Ring1_L","Ring2_L","Ring3_L","Pinky1_L","Pinky2_L","Pinky3_L",
   "Thumb1_R","Thumb2_R","Thumb3_R","Index1_R","Index2_R","Index3_R","Middle1_R","Middle2_R","Middle3_R","Ring1_R","Ring2_R","Ring3_R","Pinky1_R","Pinky2_R","Pinky3_R"});
- const auto& index=mesh.creatureVertexIndices();float headFront=-1e9f,headBack=1e9f;
+ const auto& index=mesh.creatureVertexIndices();
+ // Leon: a flat colour a material (by name), the head the faces his head bone carries (ears and all, so the
+ // head's middle and his facing are his head's, not the ears'), and first person leaves out the head and arms.
+ if(body.character==2){
+  const std::vector<float> headWeight=mesh.creatureBoneWeights({"Head"});
+  auto carried=[&](const std::vector<float>& w,size_t f){float s=0;for(int c=0;c<3;++c){const size_t corner=f*3+size_t(c);if(corner<index.size()&&index[corner]<w.size())s+=w[index[corner]]/3.f;}return s;};
+  float front=-1e9f,back=1e9f,sum=0;int samples=0;
+  for(size_t f=0;f<bind.size();++f){body.headFace[f]=carried(headWeight,f)>.5f;
+   if(body.headFace[f])for(const auto&v:bind[f].v){front=std::max(front,v.p.z);back=std::min(back,v.p.z);sum+=(v.p.y-low.y)/height;++samples;}}
+  body.headHeight=samples?sum/samples:.87f;
+  static constexpr const char* materials[]={"LeonFur","LeonInner","LeonBlack","LeonMetal"};
+  for(size_t f=0;f<bind.size();++f){const int part=bind[f].part;int texture=0;
+   if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<4;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos)texture=m;
+   body.faceTexture[f]=&m_leonTextures[size_t(texture)];
+   float y=0,z=0,side=0;for(int c=0;c<3;++c){y=std::max(y,(bind[f].v[c].p.y-low.y)/height);side=std::max(side,std::fabs(bind[f].v[c].p.x-middle)/height);z+=bind[f].v[c].p.z/3.f;}
+   body.faceHidden[f]=body.headFace[f]||y>.85f||carried(arm,f)>.5f||(side>.08f&&y>.66f);
+   body.eyeFace[f]=body.headFace[f]&&z>back+(front-back)*.7f;}
+  return;}
+ float headFront=-1e9f,headBack=1e9f;
  for(size_t f=0;f<bind.size();++f)if(body.headFace[f])for(const auto&v:bind[f].v){headFront=std::max(headFront,v.p.z);headBack=std::min(headBack,v.p.z);}
  for(size_t f=0;f<bind.size();++f){const int part=bind[f].part;const bool headMaterial=part>=0&&size_t(part)<mesh.materialNames.size()&&mesh.materialNames[size_t(part)].find("Head")!=std::string::npos;
   body.faceTexture[f]=&m_limitatorTextures[headMaterial?1:0];

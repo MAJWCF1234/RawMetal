@@ -113,6 +113,7 @@ bool Match::selfTest(std::ostream& report){
   LoopbackHub hub;auto sh=hub.connect("Hana"),sg=hub.connect("Gus"),st=hub.connect("Tam");
   auto host=makeHost(),guest=makeGuest(guestMaps,false),third=makeGuest(thirdMaps,true);
   host->setNetSession(sh.get());guest->setNetSession(sg.get());third->setNetSession(st.get());
+  guest->m_settings.character=2;   // the guest plays Leon (the wire's one byte carries 0 Claire, 1 the Limitator, 2 Leon)
   playing={host.get(),guest.get()};frames(1);
   HostOptions o;o.mode=Mode::Deathmatch;o.map=arenaFile;o.mapHash=mapFileHash(hostMaps/arenaFile);o.maxPlayers=8;sh->host(o);
   frames(1);
@@ -131,6 +132,7 @@ bool Match::selfTest(std::ostream& report){
   check(guest->m_enemies.empty(),"deathmatch: the guest has no creatures either");
   const int gs=slotOfGame(*guest);
   check(gs>0&&remote(*host,gs)&&remote(*guest,0)&&remote(*guest,0)->name=="Hana"&&remote(*host,gs)->name=="Gus","each sees the other, by name and slot");
+  check(remote(*host,gs)&&remote(*host,gs)->character==2&&remote(*guest,0)&&remote(*guest,0)->character==0,"the character rides the wire: the host sees the guest as Leon (2), the guest sees the host as Claire (0)");
   // Interpolation while both move, then at rest.
   host->m_player.pos={6.5f,6.5f};put(*host,*guest,{6.5f,9.5f});frames(30);
   float worstHost=0,worstGuest=0;

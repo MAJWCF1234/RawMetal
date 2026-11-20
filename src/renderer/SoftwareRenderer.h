@@ -438,13 +438,13 @@ private:
     Mesh m_claireMesh{2300,"",2301,2312};
     std::array<Texture,10> m_claireTextures;
 public:
-    // A player body (docs/Systems/player-body.md): 0 Claire, 1 the Limitator, as
+    // A player body (docs/Systems/player-body.md): 0 Claire, 1 the Limitator, 2 Leon, as
     // Settings::character and RemotePlayer::character choose. Its mesh is posed
     // by clips in ClaireOutside::Clip order (Mesh::poseCreature, or a ClaireOutside
     // of the caller's own: prepare, compose, publish) and drawn face by face with
     // faceTexture, mirrored as the local body is (+X is the body's left). The
     // viewmodel's and the VR avatar's arms take armTextures, by claireMaterial.
-    // A Limitator whose files are missing or do not load is Claire (character 0).
+    // A Leon whose files are missing or do not load is the Limitator, and a Limitator's is Claire (character 0).
     struct PlayerBody {
      int character=0;
      Mesh* mesh=nullptr;
@@ -461,7 +461,12 @@ private:
     // asked for; his arm textures dress the viewmodel's and the VR avatar's arms.
     std::unique_ptr<Mesh> m_limitatorMesh;bool m_limitatorFailed=false,m_limitatorTexturesReady=false;
     std::array<Texture,2> m_limitatorTextures;std::array<Texture,10> m_limitatorArmTextures;
-    std::array<PlayerBody,2> m_playerBodies;
+    // Leon (Settings::character 2): his FBX (2270) on his 40 clips (2271, anchors 2272) and his four flat
+    // materials (2273-2276: fur, inner ear and pads, black, metal). The viewmodel's and the VR avatar's arms are
+    // Claire's arms in his fur.
+    std::unique_ptr<Mesh> m_leonMesh;bool m_leonFailed=false,m_leonTexturesReady=false;
+    std::array<Texture,4> m_leonTextures;std::array<Texture,10> m_leonArmTextures;
+    std::array<PlayerBody,3> m_playerBodies;
     void classifyPlayerBody(PlayerBody& body);
     // The body the local player wore last frame: a change re-makes its outside
     // poser, turn measures and blends.
@@ -700,7 +705,7 @@ public:
     // What drawing the other players measured this frame, one per remote player (the multiplayer-ui lab tube).
     struct RemoteBodyReport{int slot=-1;bool drawn=false,vr=false,tag=false;int lower=-1,layer=-1,character=0,held=0;Point3 feet{},head{},low{},high{};float tagX=-1,tagY=-1;};
     const std::vector<RemoteBodyReport>& remoteBodyReports()const;
-    // A player's body by Settings::character: 0 Claire, 1 the Limitator (Claire stands in until his body is built in).
+    // A player's body by Settings::character: 0 Claire, 1 the Limitator, 2 Leon (the one before stands in while a body cannot load).
     bool characterBuilt(int character)const;
 private:
     void drawLoading(const Game& game);
