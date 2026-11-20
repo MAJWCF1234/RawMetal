@@ -4,6 +4,7 @@
 #include "Game.h"
 #include "../audio/SoundBank.h"
 #include "../world/CampaignExport.h"
+#include "../world/CampaignFieldRanges.h"
 #include "../world/CustomCampaign.h"
 #include "../world/ModelIds.h"
 #include <cmath>
@@ -54,6 +55,48 @@ bool Game::testMapFormat(){
   {const auto why=refused(room("FORMAT|2\n","FIXTURE|0|24|5|5|0|1.4|0.7|0.75|0|1|tint=red\n"),"tint=red");check(why.empty(),"a bad value for a known key names the key ("+why+")");}
   {const auto why=refused(room("FORMAT|2\n","PREFAB|wall\nSTRUCT|@|0|0|2|0.2|0|3|0|0\nPREFAB_END\nPREFAB_PLACE|0|wall|5|5|0|0.5\n"),"quarter turns");check(why.empty(),"a box record placed at a yaw that is not a quarter turn is refused ("+why+")");}
   {const auto why=refused(room("FORMAT|2\n","PREFAB|bad\nLEAD|@|1|1|1|2|2|1|2|0.01\nPREFAB_END\n"),"by number");check(why.empty(),"a prefab cannot hold a record that names others by number ("+why+")");}
+  // ---- The Campaign Builder's limits (CampaignFieldRanges.h): one table, the loader's own bounds ----
+  {
+   // "": the loader took it; otherwise its refusal.
+   // A record on the room's map 0 (a MAP record is the room's own: its sample stands in for it).
+   auto load=[&](const std::string& body){try{
+     if(body.rfind("MAP|",0)==0){std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nFORMAT|2\nCAMPAIGN|R|0\n"+body+"LAYER|0|0|Floor|0|0\n";for(int y=0;y<24;++y)t+="ROW|0|0|"+std::to_string(y)+"|"+std::string(24,'.')+"\n";loadCustomCampaignText(t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n","limits.rmc");}
+     else loadCustomCampaignText(room("FORMAT|2\n",body),"limits.rmc");
+     return std::string();}catch(const std::exception& e){return std::string(e.what());}};
+   // An event needs an action to be loaded.
+   auto eventTail=[](const std::string& line){return line.rfind("SCRIPT_EVENT|0|",0)==0?"\nSCRIPT_ACTION|0|"+line.substr(15,line.find('|',15)-15)+"|MESSAGE|hi|2":std::string();};
+   auto join=[](const std::vector<std::string>& v){std::string s;for(size_t i=0;i<v.size();++i)s+=(i?"|":"")+v[i];return s;};
+   auto split=[](const std::string& s){std::vector<std::string> v;size_t a=0;for(size_t i=0;i<=s.size();++i)if(i==s.size()||s[i]=='|'){v.push_back(s.substr(a,i-a));a=i+1;}return v;};
+   auto text=[](double v){char b[40];std::snprintf(b,sizeof b,"%.6g",v);return std::string(b);};
+   int rows=0;std::string wrong;
+   for(const auto& r:fieldRanges){
+    ++rows;
+    auto at=[&](double v){auto f=split(r.base);const auto t=text(v);
+     if(r.key)f.push_back(std::string(r.key)+"="+t);else{if(f.size()<=size_t(r.index))f.resize(size_t(r.index)+1);f[size_t(r.index)]=t;}
+     const auto line=join(f);return load(line+eventTail(line)+"\n");};
+    const double step=r.whole?1:(r.hi-r.lo)*.02;
+    auto note=[&](const char* what,double v,const std::string& why){wrong+=std::string(r.kind)+(r.key?std::string(".")+r.key:"["+std::to_string(r.index)+"]")+" "+what+" "+text(v)+(why.empty()?std::string(" was refused? no: it loaded"):": "+why)+"; ";};
+    for(double v:{r.lo,r.hi})if(const auto why=at(v);!why.empty())note("takes",v,why);
+    if(r.exact)for(double v:{r.lo-step,r.hi+step})if(at(v).empty())note("should refuse",v,"");}
+   check(wrong.empty(),"the Builder's field limits (CampaignFieldRanges.h, "+std::to_string(rows)+" rows) are the loader's: the ends load, a step beyond is refused"+(wrong.empty()?std::string():": "+wrong));
+   std::string words;
+   for(const auto& t:textRules){
+    auto with=[&](const std::string& v){auto f=split(t.base);if(f.size()<=size_t(t.index))f.resize(size_t(t.index)+1);f[size_t(t.index)]=v;const auto line=join(f);return load(line+eventTail(line)+"\n");};
+    const std::string where=std::string(t.kind)+"["+std::to_string(t.index)+"]";
+    if(const auto why=with(std::string(size_t(t.maxLen),'a'));!why.empty())words+=where+" "+std::to_string(t.maxLen)+" letters should load: "+why+"; ";
+    if(with(std::string(size_t(t.maxLen+1),'a')).empty())words+=where+" "+std::to_string(t.maxLen+1)+" letters should be refused; ";
+    if(t.mode==1&&with("bad name").empty())words+=where+" a name with a space should be refused; ";
+    if(t.mode==2&&with("caf\xC3\xA9").empty())words+=where+" non-ASCII text should be refused; ";
+    const auto fitted=fitText(t,t.mode==1?"two words":t.mode==2?"caf\xC3\xA9 au lait":(t.mode==3?"a|b%c ":"a b c ")+std::string(size_t(t.maxLen),'z'));
+    if(const auto why=with(fitted);!why.empty())words+=where+" the text the Builder writes ("+fitted+") should load: "+why+"; ";}
+   check(words.empty(),"the Builder's name rules (script names, printable text, lengths) are the loader's"+(words.empty()?std::string():": "+words));
+   std::string over;
+   for(const auto& c:recordCaps){
+    auto many=[&](int n){std::string body;for(int i=1;i<=n;++i){std::string line=c.sample;for(auto q=line.find("{n}");q!=std::string::npos;q=line.find("{n}"))line.replace(q,3,std::to_string(i));body+=line+eventTail(line)+"\n";}return load(body);};
+    if(const auto why=many(c.limit);!why.empty())over+=std::string(c.kind)+" "+std::to_string(c.limit)+" should load: "+why+"; ";
+    if(many(c.limit+1).empty())over+=std::string(c.kind)+" "+std::to_string(c.limit+1)+" should be refused; ";}
+   check(over.empty(),"the Builder's record caps (SPAWN 64, EMITTER 64, DARK 64, SCRIPT_EVENT 128, TERRAIN_FLAT 512, GROUND 1024) are the loader's"+(over.empty()?std::string():": "+over));
+  }
   {const auto why=refused(room("FORMAT|2\n","SCRIPT_EVENT|0|e|0|0|24|24|-10|10||1|0\nSCRIPT_REQUIRE|0|e|@ghost.key|=|1\nSCRIPT_ACTION|0|e|STATE|x|1\n"),"no record named ghost");check(why.empty(),"a script naming a record that is not there is refused ("+why+")");}
 
   // ---- The full room: parse ----

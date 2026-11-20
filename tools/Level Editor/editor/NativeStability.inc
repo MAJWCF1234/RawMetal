@@ -225,7 +225,7 @@
     auto isRecord = [&](size_t at) {
       if (at >= doc.lines.size()) return false;
       auto f = NativeDocument::fields(doc.lines[at]);
-      return f.size() > 1 && !f[0].empty() && f[0][0] != '#' && f[0] != "ROW";
+      return f.size() > 1 && !f[0].empty() && (f[0][0] != '#' || f[0] == FilmKind) && f[0] != "ROW"; // (a film camera is a record the Builder keeps: picked, it stays picked through an edit)
     };
     if (isRecord(size_t(record))) return;
     if (!pickedText.empty()) {
