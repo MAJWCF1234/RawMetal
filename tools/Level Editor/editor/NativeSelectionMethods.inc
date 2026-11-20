@@ -206,8 +206,12 @@
   void applyBodyElevation(float delta) {
     auto shift=[&](size_t at,const std::string& original){
       auto source=NativeDocument::fields(original);int schema=schemaFor(source);if(schema<0)return;
+      // A pickup with no height rests on whatever is underfoot: raised, it takes that floor's height first (the audit:
+      // Page Up did nothing to a health pack on the ground floor).
+      if(delta!=0&&source[0]=="PICKUP"){const auto& n=schemas[size_t(schema)].fields;size_t z=size_t(std::find(n.begin(),n.end(),"z")-n.begin());
+        if(z<n.size()){if(source.size()<=z)source.resize(z+1);if(source[z].empty())source[z]=nativeNumber(nudgeFloor(number(source[3],0),number(source[4],0)));}}
       auto elevated=source;shiftNativeElevation(elevated,schemas[size_t(schema)].fields,delta);
-      auto current=NativeDocument::fields(doc.lines[at]);
+      auto current=NativeDocument::fields(doc.lines[at]);if(current.size()<source.size())current.resize(source.size());
       for(size_t i=0;i<std::min(source.size(),elevated.size());++i)if(source[i]!=elevated[i])current[i]=elevated[i];
       // Zero delta after a previous drag must restore the original elevations too.
       const auto& names=schemas[size_t(schema)].fields;

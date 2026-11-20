@@ -8,6 +8,7 @@
 #include "../src/world/Footing.h" // footings planned as the engine plans them (NativeGroundMethods.inc)
 #include "../src/world/PrimitiveKinds.h" // the Shape tool's kinds, sizes and outlines (NativeShapeTool.inc)
 #include "../src/world/PrefabTransform.h" // a placed kit's pieces where the game puts them (NativeKitMethods.inc)
+#include "../src/world/CampaignFieldRanges.h" // the loader's limits on a field, in one table (apply, authorKind, NativeAuditRegression.inc)
 #include "NativeCommands.h"
 #include "NativeDocument.h"
 #include "NativeObjects.h"
@@ -873,6 +874,7 @@ static constexpr Friendly friendlyFields[] = {
     {"LIGHT", "intensity", L"Brightness"},
     {"LIGHT", "range", L"Reach (m)"},
     {"LIGHT", "kelvin", L"Warmth (2000 warm - 6500 cold)"},
+    {"LIGHT", "shadows", L"Casts shadows (1 yes, 0 no)"},
     {"AMBIENT", "sound", L"Sound (bank name)"},
     {"AMBIENT", "gain", L"Loudness"},
     {"AMBIENT", "radius", L"Heard within (m)"},
@@ -888,6 +890,8 @@ static constexpr Friendly friendlyFields[] = {
     {"TERMINAL", "line1", L"Line 1"},
     {"TERMINAL", "line2", L"Line 2"},
     {"TERMINAL", "activateState", L"Switch it flips (any name)"},
+    {"TERMINAL", "readable", L"Looks like (0 screen, 1 letter, 2 note, 3 sticky)"},
+    {"TERMINAL", "taped", L"Paper taped to its wall (1 yes)"},
     {"ZONE", "name", L"Place name"},
     {"ZONE", "title", L"Big title when you enter"},
     {"SCRIPT_EVENT", "id", L"Trigger name"},
@@ -1068,7 +1072,7 @@ struct Editor {
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
   bool connectTest = false, caveTest = false, kitTest = false;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false, auditTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1170,6 +1174,7 @@ struct Editor {
 #include "NativeTurnRegression.inc"
 #include "NativeMultiplayer.inc"           // the Multiplayer page and the Spawn tool
 #include "NativeMultiplayerRegression.inc" // --multiplayer-test
+#include "NativeAuditRegression.inc"       // --audit-test: the 2026-11-20 audit as checks
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -3378,7 +3383,28 @@ struct Editor {
     if (record < 0)
       return;
     auto f = NativeDocument::fields(doc.lines[size_t(record)]);
-    if (f[0] == "ACTOR_KEY" || f[0].starts_with("SCRIPT_") ||
+    if (f[0] == "SCRIPT_EVENT" && f.size() > 2) { // a trigger is copied with its gates, its firing and what it does (named <id>_copy_N)
+      std::vector<size_t> set{size_t(record)};
+      for (auto i : doc.onMap(map)) {
+        auto g = NativeDocument::fields(doc.lines[i]);
+        if (g.size() > 2 && g[2] == f[2] && (g[0] == "SCRIPT_REQUIRE" || g[0] == "SCRIPT_TRIGGER" || g[0] == "SCRIPT_ACTION"))
+          set.push_back(i);
+      }
+      editNativeSelection([&] {
+        auto copied = cloneNativeSet(set, snap > 0 ? snap : .25f, snap > 0 ? snap : .25f, 0);
+        selectedRecords.clear();
+        record = copied.empty() ? -1 : int(copied.front());
+        publish();
+        selectRecord(record);
+      });
+      return;
+    }
+    if (f[0] == "ACTOR_KEY") { // a person is copied whole: every pose, his guard post and the rest (as a picked group is)
+      selectedRecords.assign(1, record);
+      copyMultiple();
+      return;
+    }
+    if (f[0].starts_with("SCRIPT_") ||
         !translateNative(f, schemas[size_t(kind)].fields,
                          snap > 0 ? snap : .25f, snap > 0 ? snap : .25f)) {
       message(L"Copy supports placed objects; linked script and actor records "
@@ -3982,6 +4008,15 @@ struct Editor {
       glassWindow = false;
       return made;
     }
+    // The game takes only so many of some records (CampaignFieldRanges.h): past it the whole map is refused.
+    if (const auto *cap = recordCapFor(kindName); cap) {
+      const size_t have = cap->perMap ? doc.records(kindName, map).size() : doc.records(kindName).size();
+      if (have >= size_t(cap->limit)) {
+        if (!ghosting)
+          message(L"The game takes at most " + std::to_wstring(cap->limit) + (cap->perMap ? L" of these on one map." : L" of these in a campaign.") + L" Take one away first.");
+        return -1;
+      }
+    }
     bool model = kindName == "CLUTTER" && listIndex(clutterList) == 7;
     int si = schemaOf(kindName, model ? "7" : nullptr);
     if (si < 0)
@@ -4070,7 +4105,9 @@ struct Editor {
       set("x1", n(ax)), set("y1", n(ay)), set("x2", n(bx)), set("y2", n(by));
       // A click makes a riser from the floor up; a drag runs along the ceiling.
       bool riser = std::hypot(bx - ax, by - ay) < .01f;
-      set("z", n(riser ? floorZ : floorZ + 2.6f)), set("radius", "0.09"), set("endZ", n(floorZ + 2.6f)), set("material", "0");
+      // (A top floor made by Add floor has only 2.4 m of headroom: the run stays under its ceiling.)
+      const float run = std::min(floorZ + 2.6f, std::max(floorZ + .5f, creationCeiling() - .1f));
+      set("z", n(riser ? floorZ : run)), set("radius", "0.09"), set("endZ", n(run)), set("material", "0");
     } else if (k == "LEAD") {
       float length = std::max(.5f, std::hypot(bx - ax, by - ay) * 1.15f);
       set("ax", n(ax)), set("ay", n(ay)), set("az", n(floorZ + 1.3f));
@@ -4108,8 +4145,11 @@ struct Editor {
     } else if (k == "CLOTH") {
       if (!clothFields(f, s, ax, ay, bx, by, floorZ)) // a curtain, a strap or a cable (NativeClothTool.inc)
         return -1;
-    } else if (k == "DARK") {
     }
+    // A place name or a darkness left without heights covers every floor of its box. On the ground floor that is
+    // as it always was; upstairs it belongs to that floor alone (the audit: a darkness on floor 1 darkened floor 0).
+    if ((k == "DARK" || k == "ZONE") && layerElevation() > .01f)
+      set("bottom", n(floorZ)), set("top", n(creationCeiling()));
     while (f.size() > size_t(std::max(2, s.required)) && f.back().empty())
       f.pop_back();
     normalize(f);
@@ -4875,6 +4915,54 @@ struct Editor {
       return false;
     return true;
   }
+  // Fields that are numbers by their names (the loader reads them with number() or integer()), so a typo in an
+  // empty one is caught too, not only in one that already holds a number.
+  static bool numericFieldName(const std::string &name) {
+    static const std::set<std::string> numbers = {
+        "x", "y", "z", "x1", "y1", "x2", "y2", "z1", "z2", "ax", "ay", "az", "bx", "by", "bz", "left", "right", "bottom", "top",
+        "base", "bed", "surface", "raised", "width", "depth", "height", "w", "d", "h", "yaw", "pitch", "roll", "scale", "radius",
+        "range", "intensity", "kelvin", "tint", "gain", "damage", "health", "period", "onTime", "phase", "flicker", "rate",
+        "count", "growth", "rise", "steps", "length", "speed", "mount", "mode", "every", "spread", "seconds", "strength",
+        "driftX", "driftY", "endZ", "elevation", "thickness", "ceiling", "ambient", "model", "fitting", "swing", "maxOpen",
+        "open", "leaf", "lock", "wetness", "wet", "seconds", "turn", "team", "amount", "slope"};
+    return numbers.count(name) != 0;
+  }
+  // A number typed in a box: a non-number keeps `old`, and a number the loader would refuse is brought to
+  // the nearest the loader takes (CampaignFieldRanges.h), with a plain word about it.
+  std::string guardedNumber(std::string typed, const std::string &old, const FieldRange *range, HWND box) {
+    auto show = [&](const std::string &text) {
+      if (box)
+        setControlText(box, wide(text).c_str());
+    };
+    while (!typed.empty() && std::isspace((unsigned char)typed.back()))
+      typed.pop_back();
+    while (!typed.empty() && std::isspace((unsigned char)typed.front()))
+      typed.erase(typed.begin());
+    char *end = nullptr;
+    double value = std::strtod(typed.c_str(), &end);
+    const bool number = end == typed.c_str() + typed.size() && std::isfinite(value) && typed.find_first_of("xXnNiI") == std::string::npos;
+    if (!number) {
+      message(old.empty() ? L"That box takes a number." : L"That box takes a number; kept " + wide(old) + L".");
+      show(old);
+      return old;
+    }
+    // The loader refuses a decimal past 100000 (a whole number is its own affair: a sign's colour is 3968216).
+    double kept = typed.find_first_of(".eE") != std::string::npos ? std::clamp(value, -100000.0, 100000.0) : value;
+    if (range) {
+      kept = std::clamp(kept, range->lo, range->hi);
+      if (range->whole) kept = std::round(kept);
+    }
+    if (kept == value)
+      return typed;
+    char text[48];
+    std::snprintf(text, sizeof text, "%.6g", kept);
+    if (range)
+      message(L"That box takes " + wide(nativeNumber(float(range->lo)) + " to " + nativeNumber(float(range->hi))) + (range->whole ? L", a whole number" : L"") + L"; kept " + wide(text) + L".");
+    else
+      message(L"That number is too big; kept " + wide(text) + L".");
+    show(text);
+    return text;
+  }
   void apply(bool quiet = false) {
     if(record>=0&&!editableRecord(size_t(record))){message(L"Unlock and show this floor before editing its content.");return;}
     if(selectedRecords.size()>1){message(L"Pick one object to edit its individual fields. Move, Turn, Copy and Delete work on the selection.");return;}
@@ -4897,11 +4985,21 @@ struct Editor {
       auto text = utf8(label(fieldInputs[i]));
       if (i < positionalInputs || i - positionalInputs >= namedKeys.size()) {
         const size_t field = f.size();
-        if (field > 0 && field < before.size() && field < s.fields.size() && numeric(before[field]) && !text.empty() && !numeric(text) &&
-            std::none_of(std::begin(freeText), std::end(freeText), [&](const auto &word) { return s.fields[field].find(word) != std::string::npos; })) {
-          text = decoded(before[field]);
-          setControlText(fieldInputs[i], wide(text).c_str());
-          message(L"That box takes a number; kept " + wide(text) + L".");
+        const std::string fname = field < s.fields.size() ? s.fields[field] : std::string();
+        const auto *range = fieldRangeFor(s.kind, int(field));
+        const bool freeWord = std::any_of(std::begin(freeText), std::end(freeText), [&](const auto &word) { return fname.find(word) != std::string::npos; });
+        // A box that holds a number, or is a number by its name or by the loader's table (CampaignFieldRanges.h),
+        // keeps what it had when a non-number is typed (`1d`) and keeps a number the loader would refuse in range.
+        if (field > 0 && !text.empty() && (range || (!freeWord && ((field < before.size() && numeric(before[field])) || numericFieldName(fname)))))
+          text = guardedNumber(text, field < before.size() ? decoded(before[field]) : std::string(), range, fieldInputs[i]);
+        // Names and sentences the loader limits: spaces become _, forbidden characters go, the length is cut.
+        if (const auto *rule = textRuleFor(s.kind, int(field)); rule && !text.empty()) {
+          auto fit = fitText(*rule, text);
+          if (fit != text) {
+            text = fit;
+            setControlText(fieldInputs[i], wide(text).c_str());
+            message(L"The game takes " + std::wstring(rule->mode == 1 ? L"letters, numbers and _ - . / in a name" : L"plain text of up to " + std::to_wstring(rule->maxLen) + L" characters") + L"; wrote " + wide(text) + L".");
+          }
         }
         f.push_back(encoded(text));
         continue;
@@ -4921,9 +5019,21 @@ struct Editor {
           message(wide("The record already has " + k + "; edit its own row."));
           continue;
         }
-        named.emplace_back(k, encoded(text.substr(eq + 1)));
-      } else if (!text.empty())
+        auto value = text.substr(eq + 1);
+        if (const auto *range = fieldRangeFor(s.kind, -1, k); range && !value.empty())
+          value = guardedNumber(value, std::string(), range, nullptr);
+        named.emplace_back(k, encoded(value));
+      } else if (!text.empty()) {
+        // A named number the loader limits (a joint's friction, a cloth's mass) is kept in range.
+        if (const auto *range = fieldRangeFor(s.kind, -1, key)) {
+          std::string old;
+          if (record >= 0)
+            for (const auto &[nk, nv] : NativeDocument::named(doc.lines[size_t(record)]))
+              if (nk == key) old = decoded(nv);
+          text = guardedNumber(text, old, range, fieldInputs[i]);
+        }
         named.emplace_back(key, encoded(text));
+      }
     }
     if (s.kind == "SCRIPT_TRIGGER" && triggerAllPlayers &&
         SendMessageW(triggerAllPlayers, BM_GETCHECK, 0, 0) == BST_CHECKED) {
@@ -6488,6 +6598,7 @@ struct Editor {
     verifyMaterialTurns(false);  // NativeTurnRegression.inc: paint, turn, save and open again
     verifyNudges();              // NativeTurnRegression.inc: arrow keys and Page Up / Down
     verifyMultiplayer(false);    // NativeMultiplayerRegression.inc: the Multiplayer page and the Spawn tool
+    verifyAudit();               // NativeAuditRegression.inc: every placing tool on every floor, the inspector, the guards, malformed files
     std::ofstream(root / L"native-editor-editing-test.txt")
         << "PASS: actual hidden mouse drag, cross-type selection, snapping, "
            "nudge/rotate, copy/delete, exact undo/redo/cancel, save/reopen and "
@@ -10541,7 +10652,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
                         L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test", L"--kit-test",
-                        L"--ghost-test", L"--turn-test", L"--nudge-test", L"--multiplayer-test"})
+                        L"--ghost-test", L"--turn-test", L"--nudge-test", L"--multiplayer-test", L"--audit-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -10685,6 +10796,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     // The Multiplayer page and the Spawn tool alone (NativeMultiplayerRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--multiplayer-test")
       e.backgroundTest = e.multiplayerTest = true;
+    // The audit's sweeps alone (NativeAuditRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--audit-test")
+      e.backgroundTest = e.auditTest = true;
     // Pictures of the three tools on the Starter Map's atrium (NativeEditorPictures.inc).
     if (argc > 1 && std::wstring(argv[1]) == L"--atrium-pictures")
       e.backgroundTest = e.picturesTest = true;
@@ -11357,6 +11471,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.connectTest) {
       int code = 0;
       try { e.verifyConnectRegressions(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-connect-test.txt", std::ios::app) << "FAIL: " << error.what() << "\n"; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.auditTest) { // NativeAuditRegression.inc
+      int code = 0;
+      try { e.verifyAudit(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-audit-test.txt", std::ios::app) << "FAIL: " << error.what() << '\n'; code = 1; }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;
