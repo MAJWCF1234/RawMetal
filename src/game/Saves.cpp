@@ -213,7 +213,7 @@ template<class A> void Game::archiveChunk(A& a,int version,int index,unsigned pa
  if(parts&ChunkPickups)
   // The MAC-11's box and the gun itself came with the pickups section's version 2 (t_pickupSection); a positional
   // archive or a version 1 section holds at most the 9 mm box.
-  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(t_pickupSection>=2?int(PickupKind::MachinePistol):version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
+  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(t_pickupSection>=3?int(PickupKind::Shotgun):t_pickupSection>=2?int(PickupKind::MachinePistol):version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
  if(parts&ChunkProps){
   // A save older than version 17 had no physics props: one written in that form leaves them out.
   std::vector<Clutter> olderClutter;
@@ -343,8 +343,8 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   int count=std::decay_t<decltype(a)>::reading?0:g.chunkCount();a(count);if(count!=t_sectionChunks&&std::decay_t<decltype(a)>::reading)throw std::runtime_error("holds "+std::to_string(count)+" maps, the save "+std::to_string(t_sectionChunks));
   t_pickupSection=part==ChunkPickups?sectionVersion:0;struct Clear{~Clear(){t_pickupSection=0;}} clear;
   for(int index=0;index<count;++index)try{g.archiveChunk(a,SaveVersion,index,part);}catch(const std::exception& error){throw std::runtime_error("map "+std::to_string(index)+": "+error.what());}},version);};
- // The pickups' version 2: the MAC-11's .380 box and the MAC-11 itself (PickupKind 3 and 4).
- chunks("world",ChunkWorld);chunks("creatures",ChunkCreatures);chunks("pickups",ChunkPickups,2);chunks("props",ChunkProps);
+ // The pickups' version 2: the MAC-11's .380 box and the MAC-11 itself (PickupKind 3 and 4); version 3: the handgun and the shotgun (5 and 6).
+ chunks("world",ChunkWorld);chunks("creatures",ChunkCreatures);chunks("pickups",ChunkPickups,3);chunks("props",ChunkProps);
  // Runtime changes to entities' properties (the map's named entities and their `p.` properties).
  add("entities",false,[](Game& g,auto& a,int){auto&store=g.m_saveStore.entities;if constexpr(!std::decay_t<decltype(a)>::reading)if(store.empty())return; // an empty store is not written
   int count=int(store.size());a(count);

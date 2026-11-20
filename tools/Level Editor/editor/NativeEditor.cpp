@@ -4055,6 +4055,10 @@ struct Editor {
       set("kind", std::to_string(listIndex(creatureList))), set("z", n(floorZ));
     } else if (k == "PICKUP") {
       set("kind", std::to_string(listIndex(pickupList)));
+      // On an upper floor it rests on that floor (the record's own height, absolute); on the ground floor
+      // it is left empty and settles on whatever is underfoot, as before.
+      if (layerElevation() > .01f)
+        set("z", n(layerElevation()));
     } else if (k == "EMITTER") {
       // The preset picked in the Emitter tool's list, as its kit helper writes it (NativeEmitterTool.inc).
       f = emitterFields(emitterPresets[std::clamp(emitterPreset, 0, EmitterPresetCount - 1)], bx, by);
@@ -6802,7 +6806,7 @@ struct Editor {
         if (k == "CREATURE")
           choose(creatureList, CreatureList, std::clamp(std::stoi(f[2]), 0, 8));
         if (k == "PICKUP")
-          choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 4));
+          choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 6));
         if (k == "SURFACE") {
           ++tally.gestures;
           chooseData(surfaceList, SurfaceList, std::stoi(f[2]));
@@ -11104,7 +11108,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
       SendMessageW(*slider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 100));
     }
-    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets", L"MAC-11 bullets", L"MAC-11"});
+    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets", L"MAC-11 bullets", L"MAC-11", L"Handgun", L"Shotgun"});
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
     e.tileList = choices(TileList, {L"Crate", L"Barrel (explodes)", L"Tank"});

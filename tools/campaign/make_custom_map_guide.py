@@ -478,7 +478,7 @@ RECORDS = [
          'The Campaign Builder\'s Hang cloth tool (Decor) writes it: pick a curtain, a strap or a cable, and drag where it hangs from.'),
         ('CLUTTER|map|kind|x|y|z|yaw', 'A loose object that can be knocked about: kinds 0-6. z -999 drops it to the floor.'),
         ('CLUTTER|map|7|x|y|z|yaw|model|width|depth|height|pitch|roll|breakState', 'A loose model you can pick up and throw (see the Props room). breakState may be empty.'),
-        ('PICKUP|map|kind|x|y', 'Health (0), shotgun ammo (1) or handgun ammo (2).'),
+        ('PICKUP|map|kind|x|y[|z]', 'Health (0), shotgun ammo (1), handgun ammo (2), MAC-11 .380 ammo (3), the MAC-11 itself (4), the handgun itself (5) or the shotgun itself (6, a full box of shells). z is the height it rests at (empty: on the floor under it); the Campaign Builder writes it for a pickup placed on an upper floor.'),
         ('CREATURE|map|kind|x|y|z[|scale|health|wakeState|hunter|prey]', 'A creature: kind 0-8 (Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed, Machine; see the table below). scale 0.5-2, health 0 for the default. With a wakeState it sleeps (blind and deaf) until that state is set or it is hurt. With a hunter name it is a recurring animal: it cannot be killed, it runs when badly hurt and, out of sight and away, it is gone and the hunter state counts one more escape; every creature with the same hunter name is that animal, and when one wakes any other still about leaves. prey is an actor on this map (its ACTOR number) it comes out for first; a creature that bites (the Chimera) takes the head of a man its strike kills and stays down feeding on him a while.'),
         ('TERMINAL|map|x|y|z|control|title|line1|line2[|activateState|toggle|requireState|yaw]', 'A computer you read with E. control 1 sets activateState (toggle 1 flips it on and off) and can switch lights, doors and events.'),
         ('SIGN|map|x|y|z|width|height|yaw|title|subtitle|colour[|style|icon|ink|art]', 'A wall sign, its bottom edge at z, facing (sin yaw, cos yaw). colour is a 24-bit number (0x3c8cd8 = 3968216). Put it 0.05 m in front of a wall. style: 0 enamel plate, 1 hazard, 2 notice, 3 stencil painted on the wall, 4 route, 5 chalkboard, 6 picture. icon: 0 none, 1 warning, 2 electric, 3-6 arrow left/right/up/down, 7 no entry, 8 radiation, 9 fire, 10 exit. ink is the lettering colour (0 = the style\'s own). art names a SIGN_ART picture. The Campaign Builder\'s Sign designer writes all of these.'),
@@ -883,7 +883,7 @@ def main():
     o.append('<h3>Creatures, pickups, hazards, clutter</h3>')
     o.append(table(['value', 'CREATURE kind', 'PICKUP kind', 'HAZARD kind', 'CLUTTER kind'],
                    [(k, (starter.CREATURES[k] + (' (the cursed equipment: dormant until power, a worked terminal or a wound wakes it; live current kills it)' if starter.CREATURES[k] == 'Machine' else '')) if k < len(starter.CREATURES) else '',
-                     starter.PICKUPS[k] if k < 3 else '', starter.HAZARDS[k] if k < 8 else '',
+                     (starter.PICKUPS + ['MAC-11 .380 ammo', 'MAC-11', 'Handgun', 'Shotgun'])[k] if k < 7 else '', starter.HAZARDS[k] if k < 8 else '',
                      (starter.CLUTTER_KINDS + ['a model: see CLUTTER 7'])[k] if k < 8 else '') for k in range(max(8, len(starter.CREATURES)))]))
     o.append('<h3>ACTOR visuals</h3>' + table(['visual', 'body'], list(enumerate(starter.ACTORS))))
 
