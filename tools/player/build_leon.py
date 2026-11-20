@@ -11,11 +11,13 @@
 #    hips and the head. The rig has one chest bone: it is split into Spine1-3
 #    (the weights blend with height), and the torso's weight is then graded up Hips, Spine1, Spine2, Spine3 by
 #    height (leon_grade.py: the avatar's hips-to-chest weights jumped over a hand's breadth and the waist snapped),
-#  - joins the meshes and decimates them to MAX_TRIANGLES (11,800 by default, about 12,000 in the end): flat faces
-#    are merged first (planar), then the plain body (torso, arms, legs, stockings) is collapsed while the head
-#    (eyes, nose, ears, fur, the bow), the paws (hands, fingers, feet: found by their bone weights and place) and
-#    the thighs' tops are held, then the head and the paws each on their own to LEON_HEAD / LEON_PAWS (5,600 and
-#    3,000 triangles by default), all with the mesh's mirror symmetry kept,
+#  - joins the meshes and decimates them to MAX_TRIANGLES (11,800 by default, about 12,700 in the end): flat faces
+#    are merged first (planar, never on the arms), then the plain body (torso, legs, stockings) is collapsed while the
+#    head (eyes, nose, ears, fur, the bow), the paws (hands, fingers, feet: found by their bone weights and place), the
+#    arms (kept whole: their rings are what bends at the elbow) and the thighs' tops are held, then the head and the
+#    paws each on their own to LEON_HEAD / LEON_PAWS (5,600 and 3,000 triangles by default), all with the mesh's
+#    mirror symmetry kept,
+#  - moves the upper arm's joint out of the chest to where the skin turns from chest to arm (LEON_SHOULDER_X),
 #  - keeps at most four weights a vertex, names the materials LeonFur, LeonInner,
 #    LeonBlack, LeonMetal and writes one 8x8 solid-colour PNG for each
 #    (the engine finds a body's texture by material name),
@@ -164,12 +166,17 @@ neck_z=bones['Neck'].head_local.z
 gname={g.index:g.name for g in me.vertex_groups}
 HAND_G={n+str(i)+'_'+s for n in ('Thumb','Index','Middle','Ring','Pinky') for i in (1,2,3) for s in 'LR'}|{'Hand_L','Hand_R'}
 FOOT_G={'Foot_L','Foot_R','Toe_L','Toe_R'}
+ARM_G={'Arm_L','Arm_R','ForeArm_L','ForeArm_R'}
 vin=lambda v,names: sum(g.weight for g in v.groups if gname[g.group] in names)
 BAND=(float(os.environ.get('LEON_BAND_LO','0.55')),float(os.environ.get('LEON_BAND_HI','0.9')))
 HAND_X=float(os.environ.get('LEON_HAND_X','0.62')); FOOT_Z=float(os.environ.get('LEON_FOOT_Z','0.14'))   # the paws' reach in the T-pose
-region={}   # vertex index -> 'head' | 'paw' | 'band' | 'body'
+ARM_X=float(os.environ.get('LEON_ARM_X','0.14'))   # the arms leave the torso here in the T-pose
+region={}   # vertex index -> 'head' | 'paw' | 'arm' | 'band' | 'body'
 for v in me.data.vertices:
     if (vin(v,HAND_G)>=0.5 and abs(v.co.x)>=HAND_X) or (vin(v,FOOT_G)>=0.5 and v.co.z<=FOOT_Z): r='paw'
+    # The arms are a few rings of 16 (the source's): collapsed with the plain body they lost their forearm rings and
+    # their faces ran from the upper arm to the paw, flat sheets ("wings") once the elbow bent. They are kept whole.
+    elif vin(v,ARM_G)>=0.5 and abs(v.co.x)>=ARM_X and v.co.z<neck_z-0.02: r='arm'
     elif v.co.z>=neck_z-0.02: r='head'
     elif BAND[0]<=v.co.z<=BAND[1]: r='band'
     else: r='body'
@@ -187,13 +194,13 @@ if os.environ.get('LEON_DIAG'):
         fs={f for x in comp for f in x.link_faces}; rr=collections.Counter(region[x.index] for x in comp).most_common(1)[0][0]
         st_[rr].append(sum(len(f.verts)-2 for f in fs))
     for r,l in st_.items(): print('ISLANDS',r,len(l),sorted(l,reverse=True)[:14],'small(<=40)',sum(1 for t in l if t<=40),sum(t for t in l if t<=40))
-    for r in ('paw','head','band','body'):
+    for r in ('paw','arm','head','band','body'):
         pts=[me.data.vertices[i].co for i,k in region.items() if k==r]
         print('DIAG',r,len(pts),[round(min(p[a] for p in pts),2) for a in range(3)],[round(max(p[a] for p in pts),2) for a in range(3)])
 def group_of(name,regions):
     g=me.vertex_groups.new(name=name)
     for i,r in region.items(): g.add([i],1.0 if r in regions else 0.0,'REPLACE')
-for r in ('head','paw','band'): group_of('r_'+r,{r})
+for r in ('head','paw','arm','band'): group_of('r_'+r,{r})
 def count(r_in):
     # triangles whose corners all carry the region's mark (the marks follow the vertices through the collapses)
     idx=[me.vertex_groups['r_'+r].index for r in r_in]
@@ -202,32 +209,36 @@ def count(r_in):
 # 4a. Planar: faces that already lie in one plane (the same material) merge, so the budget goes where the shape is.
 PLANAR=float(os.environ.get('LEON_PLANAR','1.0'))
 if PLANAR>0:
-    bm=bmesh.new(); bm.from_mesh(me.data)
-    bmesh.ops.dissolve_limit(bm,angle_limit=math.radians(PLANAR),use_dissolve_boundaries=False,verts=bm.verts,edges=bm.edges,delimit={'MATERIAL'})
+    # never on the arms: a straight tube's sides are flat along its length, so its rings dissolved and the faces left
+    # spanned the elbow
+    bm=bmesh.new(); bm.from_mesh(me.data); bm.verts.ensure_lookup_table()
+    free=lambda v: region[v.index]!='arm'
+    bmesh.ops.dissolve_limit(bm,angle_limit=math.radians(PLANAR),use_dissolve_boundaries=False,verts=[v for v in bm.verts if free(v)],
+                             edges=[e for e in bm.edges if all(free(v) for v in e.verts)],delimit={'MATERIAL'})
     bmesh.ops.triangulate(bm,faces=bm.faces[:],quad_method='BEAUTY',ngon_method='BEAUTY')
     bm.to_mesh(me.data); bm.free(); me.data.update()
     print('PLANAR',PLANAR,'->',tris())
 HEAD=int(os.environ.get('LEON_HEAD','5600')); PAWS=int(os.environ.get('LEON_PAWS','3000'))
 def cut(invert,target,group):
     mod=me.modifiers.new('d','DECIMATE');mod.decimate_type='COLLAPSE';mod.use_collapse_triangulate=True
-    mod.vertex_group=group;mod.invert_vertex_group=invert
+    mod.vertex_group=group;mod.invert_vertex_group=invert;mod.vertex_group_factor=float(os.environ.get('LEON_HOLD','1000'))   # held is held
     mod.ratio=min(1.0,target/tris())
     if os.environ.get('LEON_SYM','1')=='1': mod.use_symmetry=True; mod.symmetry_axis='X'
     bpy.ops.object.modifier_apply(modifier=mod.name)
 def regions_tris():
-    d={k:count({k}) for k in ('head','paw','band')}; d['body']=tris()-sum(d.values()); return d
+    d={k:count({k}) for k in ('head','paw','arm','band')}; d['body']=tris()-sum(d.values()); return d
 print('REGIONS before',regions_tris(),'of',tris())
-group_of('hold',{'head','paw','band'}); group_of('keep',{'head'}); group_of('pawg',{'paw'})
+group_of('hold',{'head','paw','arm','band'}); group_of('keep',{'head'}); group_of('pawg',{'paw'})
 h=regions_tris()
 # the plain body is cut so that the whole mesh would hold LIMIT with the head and paws at their targets
-body_target=h['head']+h['paw']+h['band']+max(0,LIMIT-HEAD-PAWS-h['band'])
+body_target=h['head']+h['paw']+h['arm']+h['band']+max(0,LIMIT-HEAD-PAWS-h['arm']-h['band'])
 cut(True,min(tris(),body_target),'hold')
 print('BODY cut',tris(),regions_tris())
 cut(False,tris()-count({'head'})+HEAD,'keep')
 print('HEAD cut',tris(),regions_tris())
 cut(False,tris()-count({'paw'})+PAWS,'pawg')
 print("DECIMATED",tris(),regions_tris())
-for n in ('keep','hold','pawg','r_head','r_paw','r_band'): me.vertex_groups.remove(me.vertex_groups[n])
+for n in ('keep','hold','pawg','r_head','r_paw','r_arm','r_band'): me.vertex_groups.remove(me.vertex_groups[n])
 # 5. Four weights a vertex, normalized.
 bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL',limit=4)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL',lock_active=False)
@@ -254,6 +265,13 @@ s1.tail=s2.head; s2.tail=s3.head; s3.tail=eb['Neck'].head
 s2.parent=s1; s3.parent=s2
 for n in ('Neck','Shoulder_L','Shoulder_R'): eb[n].parent=s3
 for n in ('Neck','Shoulder_L','Shoulder_R'): eb[n].use_connect=False
+# The avatar's arm joint sits inside the chest (0.125 m out) while its skin turns from chest to arm at 0.15-0.18 m. The
+# takes set the arms' directions, so a pivot that far in hung his long arms from a narrow yoke: in Claire's rifle-ready
+# idle and walk his hands met in front of his crotch and the forearms crossed (hands 4-6% of his height apart, the
+# Limitator's 10-12%). The upper arm's joint goes out to where the skin turns (LEON_SHOULDER_X).
+SHOULDER_X=float(os.environ.get('LEON_SHOULDER_X','0.17'))
+for s,k in (('L',1),('R',-1)):
+    a=eb['Arm_'+s]; a.use_connect=False; a.head.x=k*SHOULDER_X; eb['Shoulder_'+s].tail=a.head.copy()
 for b in eb:
     b.roll=b.roll
 bpy.ops.object.mode_set(mode='OBJECT')
