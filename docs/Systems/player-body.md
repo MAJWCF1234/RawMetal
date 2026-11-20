@@ -172,7 +172,7 @@ rig already in a T-pose, 24,742 triangles) into the gitignored library at
 
 | Resource | File |
 | --- | --- |
-| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 11,973 triangles, 6,673 vertices, 62 bones) |
+| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 12,696 triangles, 7,034 vertices, 62 bones) |
 | 2271 | `leon-animation.bin` (the same 40 clips, RMS1: kept as bones) |
 | 2272 | `leon-animation.bin.anchors` |
 | 2273-2276 | `LeonFur.png`, `LeonInner.png`, `LeonBlack.png`, `LeonMetal.png` (8x8 solid colours, one a material) |
@@ -224,15 +224,46 @@ Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Mode
   flat faces, 1 degree, never across a material): the plain body (torso, arms,
   legs, stockings) first, with the head, the paws and the thighs' tops held; then
   the head to about 5,600 triangles (`LEON_HEAD`); then the paws to about 3,000
-  (`LEON_PAWS`). The paws are the hands with their fingers (weighted to the hand
+  (`LEON_PAWS`). The arms are held too and never cut (see below). The paws are the hands with their fingers (weighted to the hand
   and finger bones, 0.62 m out) and the feet (weighted to the foot bones, below
   0.14 m): they are 8,000 of the source's triangles (round fingers, the wrist
   fur), and a first cut to 6,000 triangles turned the fur tufts into slivers and
   the hands into shards, so they keep about 40%. The small fur tufts stay: held,
-  they read as fur. Result: 11,977 triangles, about 5,300 the head, 3,400 the
-  paws, 1,100 the thighs' tops and 2,000 the rest. The engine lights a body by
+  they read as fur. Result: 12,696 triangles, about 5,300 the head, 3,500 the
+  paws, 1,100 the arms, 1,200 the thighs' tops and 1,600 the rest. The engine lights a body by
   its faces (it ignores smoothing), so more triangles read as smoother skin.
   Four weights a vertex.
+- His arms (v1.6.6 fix for "your new guy has broken arms"). Two faults, both in
+  the build, none in the engine or the bake:
+  - The source's arms are tubes of 16-vertex rings (shoulder, 0.29 m, the elbow
+    at 0.42 m, 0.55 m, the wrist). They were collapsed with the plain body and
+    the planar merge dissolved rings along the straight tube, so triangles ran
+    from the upper arm (0.21 m out) across the elbow to the forearm and paw
+    (0.55-0.72 m): with the elbow bent they were flat sheets, a web from the
+    upper arm to the paw. The arms (vertices at least half on `Arm`/`ForeArm`,
+    0.14 m out and more, `LEON_ARM_X`) are now held in every cut and left out of
+    the planar merge: no face spans the elbow by more than the source's own
+    13 cm (it was 34 cm), at the cost of about 700 triangles.
+  - The avatar's upper-arm joint sat inside the chest, 0.125 m out, while its
+    skin turns from chest to arm at 0.15-0.18 m. The bake sets each arm
+    segment's direction from the takes (minimum direction dot 1 on every clip,
+    so the retarget was exact), and Claire's takes are the rifle pack's: even
+    unarmed her arms are held forward, as the Limitator's are. Hung from that
+    narrow yoke, his long arms (shoulder to wrist 30% of his height, the
+    Limitator's 21%) brought his hands together in front of his crotch and
+    crossed the forearms. The joint now sits at 0.17 m (`LEON_SHOULDER_X`).
+    Measured from the bank's hand anchors (wrists apart, share of his height):
+    idle 0.060 -> 0.076, walk 0.043 -> 0.080, crouched 0.048 -> 0.083, run
+    0.065 -> 0.081, the pistol held low -0.037 (crossed) -> 0.017; the
+    Limitator's 0.097, 0.122, 0.128, 0.109, 0.085.
+  - Still so: unarmed, all three bodies walk and stand in the rifle pack's
+    ready pose (no relaxed-arms takes), so his paws stay in front of his belly
+    rather than swinging at his sides; and in first person the arms seen are the
+    viewmodel's (Claire's arms in his flat fur, below), unchanged.
+  The shipped `Leon.fbx` is now built from the avatar's file by `build_leon.py`
+  (the spine's grade included) and the bank baked again with the command
+  below; the Limitator's bank still bakes byte for byte. `spine_pop.py` after:
+  shear on the spot 0.66, walking 0.45 (the Limitator 0.94, 0.41).
 - Four materials (`LeonFur`, `LeonInner` for the inner ears and paw pads,
   `LeonBlack`, `LeonMetal`), each an 8x8 PNG of the material's base colour
   (the engine finds a body's texture by material name). Gloss 0.05, as the
@@ -261,6 +292,9 @@ Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Mode
 
   (Run it from a shell that does not rewrite `:` and `@` arguments as paths:
   Git Bash needs `MSYS2_ARG_CONV_EXCL='*'`, and the prefixes written out in full.)
+- The arm fix adds about 12,700 bytes packed (LZMS of the three changed files:
+  `Leon.fbx` +14,228, the bank -202, the anchors -1,302; measured with plain
+  LZMS, not a package run).
 - Packed, his seven files are 950,982 bytes since the spine fix (`Leon.fbx`
   338,698, the bank 582,288, the anchors 29,550, four textures 446 together;
   v1.6.5's were 946,976: `Leon.fbx` 337,020, the bank 582,410, the anchors
