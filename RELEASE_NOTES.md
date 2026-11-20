@@ -4,6 +4,16 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.1 - Straight-backed (2026-11-20)
+
+Leon holds a pistol like he means it.
+
+- **Leon's spine, as it was.** The change in 1.7.0 that spread his turn up his back also bent him out of shape with the handgun and the MAC-11 in third person. It is withdrawn; his arms keep their 1.7.0 fixes.
+
+Verified with the Leon test and tools/release/ship.py.
+
+---
+
 ## v1.7.0 - Massive Structures (2026-11-20)
 
 Down here, some things were built to be seen from very far away.

@@ -141,7 +141,7 @@ for me in meshes:
                 else: t=(z-z_s2)/(z_s3-z_s2); parts={'Spine2':1-t,'Spine3':t}
                 for k,x in parts.items(): w[k]=w.get(k,0)+g.weight*x
             else: w[n]=w.get(n,0)+g.weight
-        spread(w,v.co); shoulder(w,v.co); leon_grade.grade(w,v.co,JOINTS,HIPS_Y)
+        spread(w,v.co); shoulder(w,v.co)   # leon_grade (the graded waist, 1.7.0) bent his spine in the pistol holds; withdrawn in 1.7.1
         rows.append(w)
     for g in list(me.vertex_groups): me.vertex_groups.remove(g)
     made={}
