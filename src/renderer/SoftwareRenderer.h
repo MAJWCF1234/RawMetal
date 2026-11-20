@@ -152,6 +152,8 @@ public:
     std::uint64_t staticGeometryBuilds()const{return m_staticGeometryBuilds;}
     // Milliseconds a frame may spend baking a far chunk's fixture cells (the nearest 20 m always bake at once); 0 no limit.
     void setBuildBudget(double ms){m_buildBudgetMs=ms;}
+    // The longest single bake since the last call: a near chunk's main cache, a far chunk, a fixture cell (ms).
+    std::array<double,3> takeBakeWorst(){auto w=m_bakeWorst;m_bakeWorst={};return w;}
     // Faces buried where solids overlap (ShapeCulling.h) are left out when the map's geometry is
     // built; off draws every face, as builds before it did (the lab compares the two).
     void setFaceCulling(bool on){m_faceCulling=on;}
@@ -237,7 +239,7 @@ private:
     bool m_environmentInspection=false;
     bool m_staticGeometryBuild=false;
     std::vector<char> m_chunkFar;
-    int m_buildWarm=12;
+    int m_buildWarm=12;std::array<double,3> m_bakeWorst{};
     double m_buildSpentMs=0,m_buildBudgetMs=8; // static-cache bake time this frame / what a frame may spend on cells far from the player (0: no limit)
     bool m_farChunk=false; // drawScene is drawing a chunk beyond Game::fullDetailRange(): its far LOD, no per-frame extras
     // Static caches bake ambient only; Vulkan adds lamps per pixel.

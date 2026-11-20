@@ -1544,7 +1544,7 @@ void SoftwareRenderer::render(const Game& game){
   try{
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
-   drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){m_farChunk=isFar(level);if(m_gpu){if(m_farChunk){m_gpu->dropStaticCache(level);for(int c=0;c<9;++c)m_gpu->dropStaticCache(FixtureCellCaches*Game::MaxChunks+level*9+c);}else m_gpu->dropStaticCache(FarChunkCaches*Game::MaxChunks+level);}drawScene(game,false,level);m_farChunk=false;m_renderedChunks.push_back(level);}
+   drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){m_farChunk=isFar(level);drawScene(game,false,level);m_farChunk=false;m_renderedChunks.push_back(level);}
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if((m_vrRendering||m_vrScripted)&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };

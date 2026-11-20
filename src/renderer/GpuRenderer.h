@@ -59,6 +59,8 @@ public:
  void setViewFade(float start,float end);
  // Would beginStaticCache(slot,key) rebuild (no cache there, or another key)? Reads nothing, changes nothing.
  bool staticCacheCurrent(int slot,std::uint64_t key)const;
+ // Draw an existing cache as it is (a stand-in while its replacement waits for a frame's bake budget); false if none.
+ bool drawCached(int slot);
  // 0 the default sky; 1 the open zone (broken overcast, sun shafts, ground steam).
  void setSkyStyle(int style);
  // An ash storm's strength (0-1): the open-zone sky closes over brown (lampGrid.flags.w).

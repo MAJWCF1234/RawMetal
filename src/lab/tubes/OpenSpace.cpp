@@ -17,11 +17,12 @@
 #include "renderer/GpuRenderer.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <map>
 #include <memory>
 namespace retro::lab {
 namespace {
-struct Rig {std::map<std::string,std::vector<double>> samples;std::vector<double> play;double coldRender=0,coldScene=0;bool hadPerf=false,hadLeaf=true;std::uint64_t builds0=0,builds1=0;};
+struct Rig {std::array<double,3> bake{};std::vector<double> upd;std::vector<std::string> top;std::map<std::string,std::vector<double>> samples;std::vector<double> play;double coldRender=0,coldScene=0;bool hadPerf=false,hadLeaf=true;std::uint64_t builds0=0,builds1=0;};
 std::map<const Scene*,std::unique_ptr<Rig>> rigs;
 Rig& rig(Scene& s){auto& r=rigs[&s];if(!r)r=std::make_unique<Rig>();return *r;}
 double median(std::vector<double> v){if(v.empty())return 0;std::sort(v.begin(),v.end());return v[v.size()/2];}
@@ -48,8 +49,9 @@ static const bool registered=add({
   auto add=[&](const std::string& k,double v){r.samples[k].push_back(v);};
   double readback=0;if(gpu)readback=gpu->finishTimes()[2];
   const double play=f.updateMs+f.renderMs-readback;
+  {const auto worst=R.takeBakeWorst();if(s.frame>=Warm)for(int k=0;k<3;++k)r.bake[size_t(k)]=std::max(r.bake[size_t(k)],worst[size_t(k)]);}
   if(s.frame<Warm)return;
-  r.play.push_back(play);add("play_ms",play);add("update_ms",f.updateMs);add("render_ms",f.renderMs);add("scene_ms",R.frameStages()[0]);add("submit_ms",R.frameStages()[1]);
+  r.play.push_back(play);r.upd.push_back(f.updateMs);{int top=0;for(int c=1;c<perf::Count;++c)if(c!=perf::Scene&&perf::costs[size_t(c)]>perf::costs[size_t(top)])top=c;char t[64];std::snprintf(t,sizeof t,"%s %.0f st%.0f/%.0f",perf::names[top],perf::costs[size_t(top)],R.frameStages()[0],R.frameStages()[1]);r.top.push_back(t);}add("play_ms",play);add("update_ms",f.updateMs);add("render_ms",f.renderMs);add("scene_ms",R.frameStages()[0]);add("submit_ms",R.frameStages()[1]);
   for(int c=0;c<perf::Count;++c)add(std::string("perf_")+perf::names[c]+"_ms",perf::costs[size_t(c)]);
   if(gpu){const auto d=gpu->drawStatistics();using G=GpuRenderer;
    add("draws",double(d[G::Draws]));add("caches_drawn",double(d[G::CachesDrawn]));add("cached_tris",double(d[G::CachedTriangles]));add("dynamic_tris",double(d[G::DynamicTriangles]));
@@ -60,10 +62,10 @@ static const bool registered=add({
  .metrics=[](Scene& s,Report& rep){Rig& r=rig(s);
   for(const auto& [k,v]:r.samples){const bool ms=k.size()>3&&k.compare(k.size()-3,3,"_ms")==0;rep.metric(k,median(v),ms?"ms":"");}
   rep.metric("cold_render_ms",r.coldRender,"ms");rep.metric("cold_scene_ms",r.coldScene,"ms");rep.metric("cache_builds_cold",double(r.builds1-r.builds0));
-  rep.metric("chunks",double(s.g().chunkCount()));
+  rep.metric("chunks",double(s.g().chunkCount()));rep.metric("bake_worst_main_ms",r.bake[0],"ms");rep.metric("bake_worst_far_ms",r.bake[1],"ms");rep.metric("bake_worst_cell_ms",r.bake[2],"ms");
   auto play=r.play;const double med=median(play);std::sort(play.begin(),play.end());
   if(!play.empty()){rep.metric("play_p95_ms",play[size_t(double(play.size()-1)*.95)],"ms");rep.metric("play_max_ms",play.back(),"ms");
-   int hitches=0,slow=0;std::string where;for(size_t k=0;k<r.play.size();++k){const double v=r.play[k];if(v>2*med){++hitches;if(where.size()<120)where+=" #"+std::to_string(k+Warm)+"="+std::to_string(int(v));}slow+=v>16.6;}rep.metric("hitch_frames",hitches);rep.metric("frames_over_16_6ms",slow);
+   int hitches=0,slow=0;std::string where;for(size_t k=0;k<r.play.size();++k){const double v=r.play[k];if(v>2*med){++hitches;if(where.size()<400)where+=" #"+std::to_string(k+Warm)+"="+std::to_string(int(v))+"("+r.top[k]+")";}slow+=v>16.6;}rep.metric("hitch_frames",hitches);rep.metric("frames_over_16_6ms",slow);
    if(s.fixture->number("walk",0)>0)rep.check("walking across chunk boundaries: no frame over twice the median",hitches==0,std::to_string(hitches)+where+" frames over "+std::to_string(2*med)+" ms, worst "+std::to_string(play.back())+" ms");}
   if(s.fixture->number("budget",0)>0)rep.check("the median frame holds the budget",med<=s.fixture->number("budget",0),std::to_string(med)+" ms against "+std::to_string(s.fixture->number("budget",0))+" ms");},
  .teardown=[](Scene& s){s.renderer->setBuildBudget(8);auto it=rigs.find(&s);if(it!=rigs.end()){perf::enabled=it->second->hadPerf;perf::leafTimers=it->second->hadLeaf;rigs.erase(it);}}});

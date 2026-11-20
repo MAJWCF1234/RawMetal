@@ -79,9 +79,15 @@ settle for 4 s first), so read the update column with care. The 13x13 stress wor
 What limits it now: the sun cascades (31,000 shadow draws, 6.5 ms GPU), which do not grow with distance.
 
 Walking at 7 m/s across chunk borders (`open-walk-8`): the worst frame went from 470-530 ms to about
-230 ms, but 8-15 frames are still over twice the median. The remaining spikes come from a chunk's main
-cache (terrain, probes) and far chunk bakes, which are not budgeted yet. The walk check fails on purpose
-until they are.
+180 ms, but about 10 frames are still over twice the median, so the walk check still fails.
+Every bake is now on the frame budget: a chunk's main cache waits for a frame with budget left (the
+other LOD's caches stand in meanwhile, so nothing blinks out), and so do far chunks and fixture cells.
+The tube reports the longest single bake: main cache about 3 ms, far chunk about 19 ms, fixture cell
+about 24 ms. The remaining spikes are therefore not bakes. Per-hitch breakdowns (the check's detail lists
+each one, with its top cost scope and stage times) show them outside the scene and submit stages. One is
+`warmChunks` decoding the new map's model textures on the main thread when the player crosses into
+it (115 ms). Others coincide with the sun cascades and lamp shadows being redrawn after caches change
+(GPU shadows 12-23 ms instead of 6). That is where to look next.
 
 ## How to build a big map
 

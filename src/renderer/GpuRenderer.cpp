@@ -1557,6 +1557,7 @@ void GpuRenderer::setTemporalAA(bool enabled){m->taaEnabled=enabled;if(!enabled)
 void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers,const std::array<Point3,4>& tones){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);for(size_t i=0;i<4;++i){m->vrProjection[28+i*4]=tones[i].x;m->vrProjection[29+i*4]=tones[i].y;m->vrProjection[30+i*4]=tones[i].z;}}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
 bool GpuRenderer::staticCacheCurrent(int slot,std::uint64_t key)const{auto found=m->staticCaches.find(slot);return found!=m->staticCaches.end()&&found->second.key==key;}
+bool GpuRenderer::drawCached(int slot){auto found=m->staticCaches.find(slot);if(found==m->staticCaches.end()||!found->second.buffer.handle||(m->capturing&&m->captureSlot==slot))return false;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return true;}
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
  auto found=m->staticCaches.find(slot);
  if(found!=m->staticCaches.end()&&found->second.key==key){++m->cacheHits;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return false;}

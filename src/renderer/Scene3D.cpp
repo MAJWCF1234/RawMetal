@@ -1483,6 +1483,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   guard(-.032f,.015f,.278f,.032f,.068f,.335f);
  };
  bool buildStaticGeometry=!m_gpuFrame;
+ auto mainBakeStart=std::chrono::steady_clock::now();
+ auto spendBake=[&]{const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-mainBakeStart).count();m_buildSpentMs+=ms;m_bakeWorst[m_farChunk?1:0]=std::max(m_bakeWorst[m_farChunk?1:0],ms);};
  int cacheSlot=m_farChunk?FarChunkCaches*Game::MaxChunks+w.level():w.level(); // a far chunk's whole bake is one cache of its own
  std::uint64_t geometryKey=0;
  if(m_gpuFrame){
@@ -1517,6 +1519,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   hash(fixedLightSourceKey);
   // A vertex-lit bake (no per-pixel lamps) carries the probes' fill in its vertices.
   if(!m_pixelLighting&&probes)hash(m_chunkProbes[size_t(level)].key);
+  // A chunk's bake (its main cache, or its far LOD) waits for a frame with budget left, unless it is the player's own
+  // map; meanwhile the other LOD's caches stand in, so it never blinks out. The other LOD goes once this one stands.
+  const int farSlot=FarChunkCaches*Game::MaxChunks+w.level();
+  if(!m_gpu->staticCacheCurrent(cacheSlot,key)&&level!=game.level()&&m_buildBudgetMs>0&&m_buildSpentMs>=m_buildBudgetMs){
+   if(m_farChunk){m_gpu->drawCached(w.level());for(int c=0;c<9;++c)m_gpu->drawCached(FixtureCellCaches*Game::MaxChunks+w.level()*9+c);}
+   else m_gpu->drawCached(farSlot);
+   return;}
+  if(m_farChunk){m_gpu->dropStaticCache(w.level());for(int c=0;c<9;++c)m_gpu->dropStaticCache(FixtureCellCaches*Game::MaxChunks+w.level()*9+c);}
+  mainBakeStart=std::chrono::steady_clock::now();
   buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
   geometryKey=key;
  }
@@ -2034,7 +2045,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  const bool splitFixtures=m_gpuFrame&&m_gpu&&!m_farChunk&&staticFixtures&&w.hasTerrain()&&w.fixtures().size()>=16;
  if(buildStaticGeometry&&staticFixtures&&!splitFixtures)for(const auto& fixture:w.fixtures())if(fixtureBakeable(fixture))bakeFixture(fixture);
  if(m_farChunk){ // a far chunk is its one cache: no lamps, doors, signs, props or per-frame extras
-  if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
+  if(m_gpuFrame&&buildStaticGeometry){m_gpu->endStaticCache();spendBake();}
   m_staticGeometryBuild=false;shadowBudget=m_shadowBudgetLimit;return;}
  if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
  // A swinging door's posts and head never move, so they bake with the wall they
@@ -2080,7 +2091,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};
   prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);
  }
- if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
+ if(m_gpuFrame&&buildStaticGeometry){m_gpu->endStaticCache();spendBake();}
  m_staticGeometryBuild=false;
 
  if(splitFixtures){
@@ -2099,9 +2110,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    m_staticGeometryBuild=true;++m_staticGeometryBuilds;shadowBudget=400000;
    for(int i:cells[size_t(c)])bakeFixture(all[size_t(i)]);
    m_gpu->endStaticCache();m_staticGeometryBuild=false;shadowBudget=m_shadowBudgetLimit;
-   m_buildSpentMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-bakeStart).count();
+   {const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-bakeStart).count();m_buildSpentMs+=ms;m_bakeWorst[2]=std::max(m_bakeWorst[2],ms);}
   }
+  // The far LOD stands in until every cell of the near one is baked, then goes.
+  bool cellsReady=true;for(int c=0;c<9;++c)if(!cells[size_t(c)].empty()&&!m_gpu->staticCacheCurrent(FixtureCellCaches*Game::MaxChunks+w.level()*9+c,(geometryKey^std::uint64_t(c+1)*0x9e3779b97f4a7c15ull)*1099511628211ull))cellsReady=false;
+  if(cellsReady)m_gpu->dropStaticCache(FarChunkCaches*Game::MaxChunks+w.level());else m_gpu->drawCached(FarChunkCaches*Game::MaxChunks+w.level());
  }
+ else if(m_gpuFrame&&m_gpu&&!m_farChunk)m_gpu->dropStaticCache(FarChunkCaches*Game::MaxChunks+w.level());
  for(size_t i=0;i<w.lights().size();++i)if(lampSwitchable[i]&&w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],2,lampPowers[i]);
  // The one-time static bake has its own large shadow-ray allowance. Dynamic
  // fixtures and objects still need their normal per-frame budget on that
