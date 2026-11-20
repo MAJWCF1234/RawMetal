@@ -1,4 +1,5 @@
 #include "lab/LabFixture.h"
+#include "lab/StressZone.h"
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -48,6 +49,8 @@ Fixture loadFixture(const std::string& path){
   else{std::string rest;for(size_t i=1;i<w.size();++i)rest+=(i>1?" ":"")+w[i];f.values[d]=rest;}
  }
  if(inCampaign)fail("begin-campaign without end-campaign");
+ // `world stress`: a generated open world (StressZone.cpp); keys stress-chunks (1..13) and stress-detail (1..4).
+ if(f.world=="stress"){f.world="text";f.campaignText=stressCampaign(int(f.number("stress-chunks",8)),int(f.number("stress-detail",4)));}
  return f;
 }
 std::vector<std::string> findFixtures(const std::string& pattern){

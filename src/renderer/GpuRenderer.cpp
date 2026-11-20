@@ -529,6 +529,18 @@ struct GpuRenderer::Impl {
   void flush(){if(!count)return;if(material!=bound){auto found=materials.find(material);if(found==materials.end()){count=0;return;}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,layout,0,1,&found->second.set,0,nullptr);bound=material;}vkCmdDrawIndexed(cmd,count,1,first,0,0);++shadowDrawCount;shadowIndexCount+=count;count=0;}
  };
  struct StaticCache {uint64_t key=0;Buffer buffer;std::vector<Vertex> vertices;std::vector<Batch> batches;Buffer shadowIndices;std::vector<ShadowRun> shadowRuns;std::array<float,6> bounds{};};
+ // Is a static cache's bounding sphere wholly outside the view (the camera in viewState: eye, yaw and pitch cos/sin)? Not in
+ // VR (the second eye replays the first eye's batches) and never when the bounds are unset. A margin keeps TAA's jitter and
+ // the depth of field from ever clipping an edge.
+ bool cacheOutsideView(const std::array<float,6>& b)const{
+  if(vrMode||b[0]>b[3]||height<=0)return false;
+  const float cx=(b[0]+b[3])*.5f-viewState[0],cy=(b[1]+b[4])*.5f-viewState[1],cz=(b[2]+b[5])*.5f-viewState[2];
+  const float r=std::sqrt((b[3]-b[0])*(b[3]-b[0])+(b[4]-b[1])*(b[4]-b[1])+(b[5]-b[2])*(b[5]-b[2]))*.5f*1.05f+1.f;
+  const float forward=cx*viewState[3]+cy*viewState[4],side=-cx*viewState[4]+cy*viewState[3];
+  const float depth=forward*viewState[5]+cz*viewState[6],up=cz*viewState[5]-forward*viewState[6];
+  const float hx=Projection::horizontal,hy=Projection::horizontal*float(width)/float(height);
+  return depth+r<0||depth+side*hx+r*std::sqrt(1+hx*hx)<0||depth-side*hx+r*std::sqrt(1+hx*hx)<0||depth+up*hy+r*std::sqrt(1+hy*hy)<0||depth-up*hy+r*std::sqrt(1+hy*hy)<0;
+ }
  // ── Per-pixel lamps ──────────────────────────────────────────────────────
  // Static lamps light the static world per pixel. Each lamp owns six faces of
  // a radial-depth shadow atlas, drawn from the static caches and reused until
@@ -547,7 +559,7 @@ struct GpuRenderer::Impl {
  // its world origin and height cell, then its atlas band and layer count. Each reflection probe: its
  // world position and atlas probe index, then its room box (lo, hi).
  static constexpr int ProbeCellsPerVolume=IrradianceVolume::Width*IrradianceVolume::Width;
- struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];float skyAmbient[4];
+ struct LampHeader {float origin[4];int32_t size[4];int32_t flags[4];float eye[4];float basis[4];float sun[4];float sunColor[4];float cascades[48];float flashes[16];float flashTones[16];float scatter[4];float skyAmbient[4];float viewFade[4];
   float probeInfo[4];float probeVolumes[ProbeSlots*8];float reflections[MaxReflections*12];
   // Each probe volume's 24 x 24 one-metre cells: the reflection probe (record + 1, 0 none) a point in the
   // cell reads, resolved here once per probe set so a pixel does one lookup (scene.frag probeAt).
@@ -566,7 +578,7 @@ struct GpuRenderer::Impl {
  // Sun cascades: three 2048x2048 D16 layers redrawn every frame from the
  // static caches (they follow the camera), sampled with hardware comparison.
  static constexpr uint32_t SunSize=2048;static constexpr int SunCascades=3;
- int skyStyle=0,storm=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};float skyAmbient[4]{1,1,1,0};float skyExposure=1;Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
+ int skyStyle=0,storm=0;const GpuRenderer::LodTag* lodTag=nullptr;std::array<float,56> sunData{};float skyAmbient[4]{1,1,1,0};float viewFade[4]{};float skyExposure=1;Image sunAtlas;std::array<VkImageView,3> sunViews{};std::array<VkFramebuffer,3> sunFrames{};VkPipeline sunPipeline=VK_NULL_HANDLE;VkPipelineLayout sunLayout=VK_NULL_HANDLE;bool sunLayoutReady=false;
  void renderSunShadows(VkCommandBuffer cmd){
   if(!sunPipeline||!sunAtlas.handle)return;
   if(!sunLayoutReady){
@@ -1544,6 +1556,8 @@ void GpuRenderer::setLens(float depthOfField,float lensEffects){m->lensDepthOfFi
 void GpuRenderer::setTemporalAA(bool enabled){m->taaEnabled=enabled;if(!enabled)m->taaHistoryValid=false;}
 void GpuRenderer::setFogLights(const std::array<float,16>& lights,const std::array<float,4>&powers,const std::array<Point3,4>& tones){std::copy(lights.begin(),lights.end(),m->viewState.begin()+12);std::copy(powers.begin(),powers.end(),m->vrProjection.begin()+20);for(size_t i=0;i<4;++i){m->vrProjection[28+i*4]=tones[i].x;m->vrProjection[29+i*4]=tones[i].y;m->vrProjection[30+i*4]=tones[i].z;}}
 void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy(atmosphere.begin(),atmosphere.end(),m->viewState.begin()+28);}
+bool GpuRenderer::staticCacheCurrent(int slot,std::uint64_t key)const{auto found=m->staticCaches.find(slot);return found!=m->staticCaches.end()&&found->second.key==key;}
+bool GpuRenderer::drawCached(int slot){auto found=m->staticCaches.find(slot);if(found==m->staticCaches.end()||!found->second.buffer.handle||(m->capturing&&m->captureSlot==slot))return false;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return true;}
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
  auto found=m->staticCaches.find(slot);
  if(found!=m->staticCaches.end()&&found->second.key==key){++m->cacheHits;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return false;}
@@ -1561,7 +1575,7 @@ void GpuRenderer::endStaticCache(){
   // lamp face draws only the runs inside its range.
   struct Caster {uint64_t cell,material;uint32_t first;};std::vector<Caster> casters;casters.reserve(cache.vertices.size()/3);
   std::array<float,6> bounds{1e30f,1e30f,1e30f,-1e30f,-1e30f,-1e30f};
-  for(const auto&batch:cache.batches){const auto*material=m->findMaterial(batch.material);if(!material)continue;const auto&mat=*material;bool casts=!mat.transparent&&!mat.additive;
+  for(const auto&batch:cache.batches){const auto*material=m->findMaterial(batch.material);if(!material)continue;const auto&mat=*material;bool casts=!mat.transparent&&!mat.additive&&slot/WorldChunkCapacity!=50; // 50: a far chunk (SoftwareRenderer::FarChunkCaches) casts no shadow
    for(uint32_t v=batch.start;v+2<batch.start+batch.count;v+=3){const Vertex*t=&cache.vertices[v];float center[3]{};
     for(int c=0;c<3;++c)for(int k=0;k<3;++k){float value=t[c].position[k];bounds[size_t(k)]=std::min(bounds[size_t(k)],value);bounds[size_t(k)+3]=std::max(bounds[size_t(k)+3],value);center[k]+=value/3.f;}
     if(!casts)continue;
@@ -1647,6 +1661,7 @@ void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::arra
 }
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
+void GpuRenderer::setViewFade(float start,float end){m->viewFade[0]=start;m->viewFade[1]=end;}
 void GpuRenderer::setSkyAmbient(float r,float g,float b,bool on,float exposure){m->skyAmbient[0]=r;m->skyAmbient[1]=g;m->skyAmbient[2]=b;m->skyAmbient[3]=on?1.f:0.f;m->skyExposure=std::clamp(exposure,.1f,1.f);}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
 void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}
@@ -1844,9 +1859,10 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
   // The shadow stage runs (and carries the shafts) exactly when compose does below.
   {auto torch=v[8]>.5f?WorldLight::tone(5600,0,{1,1,1}):Point3{};float scatter[4]={torch.x,torch.y,torch.z,m->postAvailable&&m->postEnabled&&m->composeStage.framebuffer?1.f:0.f};std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,scatter),scatter,sizeof(scatter));}
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,skyAmbient),m->skyAmbient,sizeof(m->skyAmbient));
+  std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,viewFade),m->viewFade,sizeof(m->viewFade));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+2*sizeof(int32_t),&m->skyStyle,sizeof(int32_t));
   std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+offsetof(Impl::LampHeader,flags)+3*sizeof(int32_t),&m->storm,sizeof(int32_t));}
- static_assert(sizeof(Impl::LampHeader)==16*(7+12+4+4+1+1+1+16+144+288),"scene.vert reads lampGrid.plants at this offset");
+ static_assert(sizeof(Impl::LampHeader)==16*(7+12+4+4+1+1+1+1+16+144+288),"scene.vert reads lampGrid.plants at this offset");
  if(!m->plantData.empty())std::memcpy(static_cast<uint8_t*>(m->lampBuffers[m->frameIndex].mapped)+Impl::LampBufferBytes,m->plantData.data(),m->plantData.size()*4);
  if(!m->actorLights.empty())std::memcpy(m->actorBuffers[m->frameIndex].mapped,m->actorLights.data(),m->actorLights.size()*sizeof(ActorLighting));
  // Complete atlas initialization before any descriptor is used by a draw.
@@ -1917,7 +1933,7 @@ void GpuRenderer::finish(std::vector<std::uint32_t>&pixels){
  auto flushTransparent=[&]{if(split&&!transparentDraws.empty())splitScene();for(const auto& draw:transparentDraws){if(currentBuffer!=draw.buffer){vkCmdBindVertexBuffers(cmd,0,1,&draw.buffer,&offset);currentBuffer=draw.buffer;++st[3];}auto pipeline=draw.additive?m->additive:draw.actor?m->actorTransparent:draw.liquid?m->liquid:m->transparent;if(previous!=pipeline){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&draw.material,0,nullptr);++st[0];++st[1];if(draw.actor){vkCmdDraw(cmd,3,draw.count,0,draw.start);st[6]+=draw.count;}else{vkCmdDraw(cmd,draw.count,1,draw.start,0);st[draw.cached?4:5]+=draw.count/3;}}transparentDraws.clear();};
  for(auto&batch:m->batches){
   if(batch.clear){flushTransparent();VkClearAttachment attachment{};attachment.aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;attachment.clearValue.depthStencil={1,0};VkClearRect rect{scissor,0,1};vkCmdClearAttachments(cmd,1,&attachment,1,&rect);continue;}
-  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle)continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}++st[7];for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid,true});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);++st[0];++st[1];st[4]+=cached.count/3;}continue;}
+  if(batch.cache){auto found=m->staticCaches.find(batch.cacheSlot);if(found==m->staticCaches.end()||!found->second.buffer.handle||m->cacheOutsideView(found->second.bounds))continue;auto buffer=found->second.buffer.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}++st[7];for(auto&cached:found->second.batches){auto*material=m->findMaterial(cached.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,cached.count,cached.start,false,mat.liquid,true});continue;}auto pipeline=mat.additive?m->additive:m->opaque;if(pipeline!=previous){vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);previous=pipeline;++st[2];}vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,m->pipelineLayout,0,1,&mat.set,0,nullptr);vkCmdDraw(cmd,cached.count,1,cached.start,0);++st[0];++st[1];st[4]+=cached.count/3;}continue;}
   auto buffer=batch.actor?ab.handle:vb.handle;if(currentBuffer!=buffer){vkCmdBindVertexBuffers(cmd,0,1,&buffer,&offset);currentBuffer=buffer;++st[3];}
   auto*material=m->findMaterial(batch.material);if(!material)continue;auto&mat=*material;if(mat.transparent){transparentDraws.push_back({buffer,mat.set,batch.count,batch.start,batch.actor,mat.liquid});continue;}
   // A soft light card (a light shaft's) reads the room's depth: drawn with the blended cards, after the split.

@@ -1,0 +1,7 @@
+# Open space (view 250 m): the Ashfall Exclusion Zone's pine forest (zone 0-0), the camera panning. Tubes: open-space.
+world custom "src/assets/campaigns/RawMetal-Ashfall-Exclusion-Zone.txt"
+map 7
+camera 12 12 -999 0 -3
+size 960 540
+frames 24
+view 250

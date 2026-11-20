@@ -8,7 +8,7 @@ layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fo
 // Per-pixel lamps: a world-space grid lists up to 16 lamps per cell. Lamp i is
 // lamps[2i] = position, range and lamps[2i+1] = intensity, shadow slot, tone.
 // scatter.w is 1 when the shadow stage carries the lamp shafts this frame.
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 viewFade;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[];} lampGrid;
 layout(set=1,binding=5) uniform sampler3D probeAtlas;
 layout(set=1,binding=6) uniform sampler2DArray reflectionAtlas;
 // Soft particles: the room's planar depth (the scene target's alpha) once the room is drawn.

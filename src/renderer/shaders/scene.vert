@@ -26,7 +26,7 @@ layout(set=1,binding=0) uniform StereoProjection {mat4 clip;vec4 enabled;vec4 fo
 struct ActorLighting {vec4 normalBrightness[6];vec4 light0[6];vec4 light1[6];vec4 surfaceNormal[6];vec4 originEye;};
 layout(std430,set=1,binding=1) readonly buffer ActorLights {ActorLighting actor[];} actors;
 // The whole lamp grid as scene.frag reads it, then the plant physbones after it (Foliage.h).
-layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[262144];vec4 plants[];} lampGrid;
+layout(std430,set=1,binding=2) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 viewFade;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];uvec4 probeCells[288];vec4 lamps[512];uint cells[262144];vec4 plants[];} lampGrid;
 
 layout(push_constant) uniform ViewState {
  vec4 eyeYaw;
