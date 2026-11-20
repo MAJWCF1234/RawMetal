@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.6.3 - Something to pick up (2026-11-19)
+
+Supplies and guns, on any floor.
+
+- **Upstairs, it stays upstairs.** A health box, a box of shells or a gun left on an upper floor in the Campaign Builder used to be saved without a height and turned up on the ground floor beneath it. It is saved with its floor's height now, and rests where it was set down.
+- **More to leave lying about.** The Health and ammo tool also offers the handgun and the shotgun, beside the MAC-11. The handgun comes with a magazine and is drawn if it is new to you. You always carry the shotgun, so its drop is a full box of shells, and the gun comes to hand if yours were empty. Each lies on the floor at its own length. Older saves load as they did.
+
+Verified with the map format, saves, settings and MAC-11 tests, the Campaign Builder's full editing test, and tools/release/ship.py.
+
+---
+
 ## v1.6.2 - A forgiving Builder (2026-11-19)
 
 The Builder should never be the reason a map is lost.
