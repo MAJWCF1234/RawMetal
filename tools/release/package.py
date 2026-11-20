@@ -41,6 +41,9 @@ def starter_kit():
     return [(f, 'custom maps/' + f.relative_to(CUSTOM_MAPS).as_posix()) for f in files]
 
 
+CREDITS = ROOT / 'docs' / 'Assets' / 'CREDITS.txt'
+
+
 def section(tag):
     """This version's section of RELEASE_NOTES.md (cp1252), without the '---' rule."""
     text = (ROOT / 'RELEASE_NOTES.md').read_bytes().decode('cp1252').replace('\r\n', '\n')
@@ -104,6 +107,8 @@ def package_editor(out, name, tag, game):
         % (name, tag))
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.writestr('README-EDITOR.txt', readme)
+        if CREDITS.is_file():
+            z.write(CREDITS, 'CREDITS.txt')
         if (EDITOR / 'EDITOR.md').is_file():
             z.write(EDITOR / 'EDITOR.md', 'EDITOR.md')
         z.writestr(*PUBLIC_MARKER)
@@ -157,13 +162,15 @@ def main():
         z.write(exe, exe.name)
         z.writestr(*PUBLIC_MARKER)
         z.write(out / ('RELEASE_NOTES_%s.md' % tag), 'RELEASE_NOTES_%s.md' % tag)
+        if CREDITS.is_file():
+            z.write(CREDITS, 'CREDITS.txt')   # CC BY material (Leon): the credit travels with every download
         guide = ROOT / 'docs' / 'windows-compatibility.md'
         if guide.is_file():
             z.write(guide, 'windows-compatibility.md')
         for source, entry in starter_kit():
             z.write(source, entry)
     contents = ('the game, these notes, the Windows guide' if guide.is_file() else 'the game, these notes') + \
-        ' and the custom maps folder (Starter Map and modding guide)'
+        (', the credits' if CREDITS.is_file() else '') + ' and the custom maps folder (Starter Map and modding guide)'
     editor_archive = None if args.no_editor else package_editor(out, name, tag, args.exe)
     checksums = out / ('%s-%s.sha256' % (name, tag))
     # LF endings: sha256sum -c on any platform reads them; Windows text mode would write CRLF.

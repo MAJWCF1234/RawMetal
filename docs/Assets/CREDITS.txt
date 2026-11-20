@@ -1,0 +1,16 @@
+DEPTHWORKS: CREDITS
+===================
+
+Material used under a licence that asks for credit.
+
+Leon (a player character)
+-------------------------
+Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Model)"
+by NEGATIVEMARE (https://skfb.ly/pO6ZD), licensed under CC BY 4.0
+(http://creativecommons.org/licenses/by/4.0/).
+
+Changes: the model's three meshes were joined and reduced, its rig was mapped
+onto the game's skeleton, its materials were reduced to flat colours, and it is
+animated with the game's own character animations.
+
+The author did not make, review or endorse DepthWorks.
