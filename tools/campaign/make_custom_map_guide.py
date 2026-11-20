@@ -389,14 +389,14 @@ RECORDS = [
         ('FORMAT|version', 'The map format, as the first record of the file: <code>FORMAT|2</code> turns on named fields, names, custom properties and prefabs (section 9). '
          'A file without it is version 1 and loads exactly as it always did. A build refuses a file whose version is newer than it reads.'),
         ('CAMPAIGN|name|startMap', 'Once per file. The name appears in the CUSTOM MAPS menu; startMap is the map you spawn in.'),
-        ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed|hazeR|hazeG|hazeB|hazeDensity|wetness]',
+        ('MAP|index|name|originX|originY|spawnX|spawnY|spawnZ|environment|ceiling|ambient|skybox|openN|openS|openW|openE|lift[|residency|floorMaterial|music|spawnYaw|spawnPitch|startUnarmed|hazeR|hazeG|hazeB|hazeDensity|wetness|view]',
          'One per map, numbered 0, 1, 2... with no gaps. origin places the 24 x 24 m map in the world: maps touch at multiples of 24. '
          'spawn is in map metres. environment 0 indoor, 1 outdoor. ceiling is the absolute ceiling height (indoors). ambient 0-1 is the base light (0.3 is a good start). '
          'skybox: industrial_night indoors; outdoors zone_overcast, brutal_wasteland or any sky in the Outdoors section\'s list, which also switches on the campaign TERRAIN. '
          'openN/S/W/E 1 lets you walk across that edge into the neighbouring map. lift 0. '
          'Optional tail: residency -1, floorMaterial 0 concrete / 1 carpet, music 0 (the original track; 1-10 the area scores; 11 Silence, no score at all), spawnYaw radians, spawnPitch, startUnarmed 0/1. '
          'haze R G B (0-1) and density (0-0.1) give the map its own air: 0.01 is enough for lamps to hang cones of light in it. '
-         'wetness 0-1 is how damp the floors are: a sheen and puddles that reflect the lamps (0.5 in the Lights hall); leave the haze fields empty to set only wetness.'),
+         'wetness 0-1 is how damp the floors are: a sheen and puddles that reflect the lamps (0.5 in the Lights hall); leave the haze fields empty to set only wetness. view is how far the map is seen, 20-1500 metres (empty: the engine default, 70 m; 110 m under the open sky): a megastructure across a gulf sets it long, and its haze is the darkness the distance fades into (see Brutalist City).'),
         ('SURFACE|map|wall|floor|ceiling', 'Wall, floor and ceiling finish for the whole map; -1 keeps the default. See the surface table.'),
         ('LAYER|map|layer|name|elevation|thickness', 'A floor level. Layer 0 is the ground (elevation 0, thickness 0). Upper layers use thickness > 0 and = tiles for walkable deck. Upper # cells form walls from that layer to the map ceiling; upper . and _ cells stay empty.'),
         ('ROW|map|layer|row|24 characters', 'One line of the tile grid, row 0 (north) to 23 (south). Exactly 24 characters: see the tile diagram.')]),

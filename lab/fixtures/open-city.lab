@@ -1,0 +1,7 @@
+# Open space underground: the generated Brutalist City (tools/campaign/make_brutalist_city.py), from the bridge
+# 60 m over the gulf looking east across it: dark haze tone, lit towers far off, the gulf's floor lost below. Tubes: open-space.
+world custom "custom maps/Brutalist City.rmc"
+map 75
+camera 20 12 60 0 -6
+size 960 540
+frames 24

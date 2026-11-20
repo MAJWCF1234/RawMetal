@@ -266,6 +266,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(map->definition.haze[3]<0||!validHaze(map->definition.haze))throw std::runtime_error("map haze channels must be 0 through 1 and density 0 through 0.1");}
    // |wetness: the floors' sheen and puddles, 0 dry through 1 flooded (empty for the default).
    if(f.size()>=28&&!f[27].empty()){map->definition.wetness=number(f,27,"wetness");if(!(map->definition.wetness>=0&&map->definition.wetness<=1))throw std::runtime_error("map wetness must be 0 through 1");}
+   // |view: how far the map is seen, metres (empty for the engine's own; 20 through 1500).
+   if(f.size()>=29&&!f[28].empty()){map->definition.viewDistance=number(f,28,"view distance");if(!(map->definition.viewDistance>=20&&map->definition.viewDistance<=1500))throw std::runtime_error("map view distance must be 20 through 1500 metres");}
   }else if(tag=="TERRAIN"){
    // TERRAIN|seed|base|amplitude|scale|roughness: the campaign's outdoor heightfield.
    if(f.size()!=6)throw std::runtime_error("malformed TERRAIN record");if(!terrain)terrain=std::make_shared<TerrainShape>();

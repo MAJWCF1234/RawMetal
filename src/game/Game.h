@@ -1046,6 +1046,15 @@ public:
     static constexpr float fullDetailRange(){return 48.f;}
     void setViewDistance(float metres){m_viewOverride=metres;}   // a fixed distance (the lab, a capture); 0 the map's own
     float viewFadeStart()const{const float v=viewDistance();return v>70.f?v*.62f:0.f;}
+    // The fade the frame uses (render-distance.md "Edges"): surfaces melt into the horizon (or the map's haze
+    // underground) between start and end metres; end 0 is no fade. Where an open map edge with nothing past it
+    // is nearer than the view distance in the view's direction, the fade ends before that edge, eased over a
+    // second, so the void never shows. voidTone: pixels with no surface take the haze colour (no sky to show).
+    struct ViewFade{float start=0,end=0;bool voidTone=false;};
+    ViewFade viewFade(Vec2 eye,float yaw,float halfFov)const;
+    // How far from eye (map space) real ground runs along dir before an open edge with nothing beyond it;
+    // a closed edge (a wall) or the far side of a HORIZON strip counts as reaching on. Capped at limit.
+    float edgeReach(Vec2 eye,Vec2 dir,float limit)const;
     static bool testConsole();
     static bool testSystems();
     int state(StateId id)const;
@@ -1606,6 +1615,7 @@ private:
     std::vector<std::string> m_consoleHistory;
     int m_consoleHistoryIndex=0;
     float m_renderScale=1.f,m_viewOverride=0;
+    mutable float m_edgeFadeEnd=-1,m_edgeFadeTime=0;   // the eased edge-limited fade end (viewFade), and when it was last eased
     std::vector<StateValue> m_states,m_objectives;
     std::vector<QuestItemStack> m_questItems;
     std::vector<StateId> m_firedEvents;

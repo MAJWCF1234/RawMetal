@@ -363,8 +363,13 @@ void main(){
  if(surface&&lampGrid.viewFade.y>0.0){
   vec3 dir=worldDirection(rayView);
   vec3 horizon=lampGrid.sun.w>0.0?proceduralSky(normalize(vec3(dir.xy,0.03))):p.haze.rgb;
-  color=mix(color,horizon,smoothstep(lampGrid.viewFade.x,lampGrid.viewFade.y,depth));
+  // Lit things (lamps, resonance glow, lit windows) stay visible past the fade: a far light in the dark
+  // is the look of a megastructure, so bright pixels keep their colour while unlit rock melts away.
+  float lit=smoothstep(1.2,4.0,dot(color,vec3(0.2126,0.7152,0.0722)));
+  color=mix(color,horizon,smoothstep(lampGrid.viewFade.x,lampGrid.viewFade.y,depth)*(1.0-lit));
  }
+ // No sky to show (underground, a map edge with nothing past it): the void is the air's own tone, never black.
+ if(!surface&&!viewModel&&lampGrid.viewFade.z>0.5&&lampGrid.sun.w<=0.0)color=p.haze.rgb;
  if(zoneSky()&&!viewModel&&lampGrid.sun.w>0.0){
   vec3 dir=worldDirection(rayView),sunDir=lampGrid.sun.xyz,sunCol=lampGrid.sunColor.rgb;
   float cosSun=max(dot(dir,sunDir),0.0);

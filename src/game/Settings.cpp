@@ -273,9 +273,43 @@ bool Game::testSettings(){
 }
 namespace retro {
 float Game::viewDistance()const{
- if(m_viewOverride>0)return std::clamp(m_viewOverride,20.f,400.f);
+ if(m_viewOverride>0)return std::clamp(m_viewOverride,20.f,1500.f);
  static constexpr float factor[4]={.7f,1.f,2.f,3.5f};
- float base=70.f;if(const auto* shape=m_world.terrainShape();shape&&shape->viewDistance>0)base=shape->viewDistance;else if(m_world.hasTerrain()&&m_world.zoneSky())base=110.f;
- return std::clamp(base*factor[std::clamp(m_settings.viewDistance,0,3)],20.f,400.f);
+ // A map that names its own distance (MAP view: a megastructure across a gulf) may reach 1500 m.
+ const float own=m_world.definition().viewDistance;
+ float base=70.f;if(own>0)base=own;else if(const auto* shape=m_world.terrainShape();shape&&shape->viewDistance>0)base=shape->viewDistance;else if(m_world.hasTerrain()&&m_world.zoneSky())base=110.f;
+ return std::clamp(base*factor[std::clamp(m_settings.viewDistance,0,3)],20.f,own>0?1500.f:400.f);
+}
+float Game::edgeReach(Vec2 eye,Vec2 dir,float limit)const{
+ // Custom campaigns only: their maps are 24 m chunks laid out by origin. Built-in chapters are closed worlds.
+ if(m_worldId!=WorldId::Custom||!m_customCampaign)return limit;
+ const Vec2 base=chunkOffset(m_level);const int chunks=chunkCount();
+ auto holder=[&](Vec2 p){for(int level=0;level<chunks;++level){if(level!=m_level&&!chunkResident(level))continue;const Vec2 o=chunkOffset(level);
+   if(p.x>=o.x&&p.x<o.x+24&&p.y>=o.y&&p.y<o.y+24)return level;}return -1;};
+ Vec2 p{base.x+eye.x,base.y+eye.y};int inside=holder(p);if(inside<0)return limit;
+ float beyond=0;if(const auto* shape=m_world.terrainShape())beyond=shape->horizonDepth;   // a HORIZON strip is land past the edge
+ for(float t=2;t<limit;t+=2){
+  const Vec2 q{p.x+dir.x*t,p.y+dir.y*t};const int next=holder(q);if(next>=0){inside=next;continue;}
+  // Out of the last map: through which side? A closed side is a wall, so the view stops there anyway.
+  const World& w=chunkWorld(inside);const Vec2 o=chunkOffset(inside);const float lx=q.x-o.x,ly=q.y-o.y;
+  const bool open=lx<0?w.openWestBoundary():lx>=24?w.openEastBoundary():ly<0?w.openNorthBoundary():w.openSouthBoundary();
+  if(!open)return limit;
+  return std::min(limit,t+beyond);
+ }
+ return limit;
+}
+Game::ViewFade Game::viewFade(Vec2 eye,float yaw,float halfFov)const{
+ const float view=viewDistance();ViewFade fade;
+ const bool own=m_world.definition().viewDistance>0;
+ if((m_world.outdoors()||own)&&view>70.f){fade.start=view*.62f;fade.end=view*.97f;}
+ // The nearest open edge with nothing past it across the view (five rays over the field of view).
+ float reach=view;for(int k=-2;k<=2;++k){const float a=yaw+halfFov*float(k)*.5f;reach=std::min(reach,edgeReach(eye,{std::cos(a),std::sin(a)},view));}
+ const float target=reach<view?std::max(12.f,reach):-1.f;
+ // Eased over about a second as the player turns or crosses into another map, so the fade never pops.
+ const float now=m_elapsed,dt=std::clamp(now-m_edgeFadeTime,0.f,.25f);m_edgeFadeTime=now;
+ const float goal=target>0?target:view;if(m_edgeFadeEnd<0)m_edgeFadeEnd=goal;else m_edgeFadeEnd+=(goal-m_edgeFadeEnd)*std::min(1.f,dt*3.f);
+ if(m_edgeFadeEnd<view*.96f){fade.end=m_edgeFadeEnd;fade.start=std::min(fade.start>0?fade.start:fade.end*.62f,fade.end*.62f);}
+ fade.voidTone=own||m_edgeFadeEnd<view*.96f;
+ return fade;
 }
 }

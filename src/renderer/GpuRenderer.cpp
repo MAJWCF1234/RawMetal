@@ -1661,7 +1661,7 @@ void GpuRenderer::setDarkness(float darkness,float muzzleFalloff,const std::arra
 }
 std::uint64_t GpuRenderer::shadowFacesDrawn()const{return m->shadowFacesDrawn;}
 void GpuRenderer::setSun(const std::array<float,56>&sun){m->sunData=sun;}
-void GpuRenderer::setViewFade(float start,float end){m->viewFade[0]=start;m->viewFade[1]=end;}
+void GpuRenderer::setViewFade(float start,float end,bool voidTone){m->viewFade[0]=start;m->viewFade[1]=end;m->viewFade[2]=voidTone?1.f:0.f;}
 void GpuRenderer::setSkyAmbient(float r,float g,float b,bool on,float exposure){m->skyAmbient[0]=r;m->skyAmbient[1]=g;m->skyAmbient[2]=b;m->skyAmbient[3]=on?1.f:0.f;m->skyExposure=std::clamp(exposure,.1f,1.f);}
 void GpuRenderer::setSkyStyle(int style){m->skyStyle=style;}
 void GpuRenderer::setStorm(float storm){m->storm=int(std::clamp(storm,0.f,1.f)*1000.f);}

@@ -899,7 +899,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
   }return false;
  };
- float farPlane=w.outdoors()?game.viewDistance():160.f;
+ float farPlane=w.outdoors()?game.viewDistance():std::max(160.f,w.definition().viewDistance>0?game.viewDistance():0.f);
  // VR headsets outrun the desktop frustum; keep sphere/edge culling but widen
  // the planes so peripheral geometry does not pop at the HMD borders.
  const Projection projection{float(m_width)/m_height};
@@ -2045,6 +2045,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  const bool splitFixtures=m_gpuFrame&&m_gpu&&!m_farChunk&&staticFixtures&&w.hasTerrain()&&w.fixtures().size()>=16;
  if(buildStaticGeometry&&staticFixtures&&!splitFixtures)for(const auto& fixture:w.fixtures())if(fixtureBakeable(fixture))bakeFixture(fixture);
  if(m_farChunk){ // a far chunk is its one cache: no lamps, doors, signs, props or per-frame extras
+  // ...but its lamps still glow: each is a self-lit fitting in the lamp's colour, so a lit district reads across
+  // a gulf in the dark (render-distance.md "Underground megastructures"); it lights nothing round it.
+  if(buildStaticGeometry){
+   static const Texture warm=[]{Texture t{1,1,{0xffffd9a0u}};t.emission={0xffffb060u};return t;}();
+   static const Texture cold=[]{Texture t{1,1,{0xffe8f0ffu}};t.emission={0xffd8e6ffu};return t;}();
+   const float previous=m_emissionScale;
+   for(const auto& light:w.lights()){if(light.intensity<=0)continue;const auto e=light.emitter();const float s=.45f;
+    m_emissionScale=std::max(2.f,light.intensity*3.f);box({e.x-s,e.y-s,e.z-s},{e.x+s,e.y+s,e.z+s},light.kelvin<4000?warm:cold,1.6f);}
+   m_emissionScale=previous;}
   if(m_gpuFrame&&buildStaticGeometry){m_gpu->endStaticCache();spendBake();}
   m_staticGeometryBuild=false;shadowBudget=m_shadowBudgetLimit;return;}
  if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);

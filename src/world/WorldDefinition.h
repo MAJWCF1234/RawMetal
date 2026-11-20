@@ -142,6 +142,9 @@ struct ChunkDefinition {
     // How wet the floors are (0 dry .. 1 flooded); negative leaves it to World::wetness.
     // A polished or damp floor carries the lamps down a hall as reflections.
     float wetness=-1;
+    // How far the map is meant to be seen, metres (0: the engine's own, Game::viewDistance). A megastructure
+    // (an underground city across a gulf) sets it long; its haze is then the darkness distance fades into.
+    float viewDistance=0;
 };
 inline constexpr int CampaignChunkCount=180;
 inline constexpr int AshfallChunkCount=15;

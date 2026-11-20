@@ -56,7 +56,7 @@ public:
  // exposure: the ceiling on auto exposure under this sky (1 as by day).
  void setSkyAmbient(float r,float g,float b,bool on,float exposure=1.f);
  // Surfaces fade into the haze between start and end metres of depth (post.frag); end 0: no fade.
- void setViewFade(float start,float end);
+ void setViewFade(float start,float end,bool voidTone=false);   // voidTone: pixels with no surface take the haze colour
  // Would beginStaticCache(slot,key) rebuild (no cache there, or another key)? Reads nothing, changes nothing.
  bool staticCacheCurrent(int slot,std::uint64_t key)const;
  // Draw an existing cache as it is (a stand-in while its replacement waits for a frame's bake budget); false if none.

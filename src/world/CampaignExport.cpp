@@ -231,7 +231,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   {Rec r("MAP");r.i(mi).t(m.name).n(d.origin.x).n(d.origin.y).n(d.playerStart.x).n(d.playerStart.y).n(d.spawnHeight).i(int(d.environment)).n(d.ceiling).n(d.ambient).t(m.skybox)
     .b(m.openNorth).b(m.openSouth).b(m.openWest).b(m.openEast).b(d.lift).i(d.residencyGroup).i(int(d.floorMaterial)).i(int(d.musicCue)).n(d.spawnYaw).n(d.spawnPitch).b(d.startUnarmed);
    if(d.haze[3]>=0)r.n(d.haze[0]).n(d.haze[1]).n(d.haze[2]).n(d.haze[3]);else r.f("").f("").f("").f("");
-   r.f(d.wetness>=0?num(d.wetness):"");line(r,17);}
+   r.f(d.wetness>=0?num(d.wetness):"");if(d.viewDistance>0)r.n(d.viewDistance);line(r,17);}
   for(int group:m.visibleResidencyGroups)line(Rec("VISIBLE_GROUP").i(mi).i(group));
   if(m.wallSurface!=SurfaceDefault||m.floorSurface!=SurfaceDefault||m.ceilingSurface!=SurfaceDefault)line(Rec("SURFACE").i(mi).i(m.wallSurface).i(m.floorSurface).i(m.ceilingSurface));
   if(m.layers.size()>32)note("only the first 32 of "+std::to_string(m.layers.size())+" floor layers fit the format");
@@ -489,7 +489,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  {const auto& p=a.definition;const auto& q=b.definition;d.eq("origin",p.origin,q.origin);d.eq("playerStart",p.playerStart,q.playerStart);d.eq("spawnHeight",p.spawnHeight,q.spawnHeight);d.eq("environment",p.environment,q.environment);
   d.eq("lift",p.lift,q.lift);d.eq("ceiling",p.ceiling,q.ceiling);d.eq("ambient",p.ambient,q.ambient);d.eq("residencyGroup",p.residencyGroup,q.residencyGroup);d.eq("floorMaterial",p.floorMaterial,q.floorMaterial);
   d.eq("musicCue",p.musicCue,q.musicCue);d.eq("spawnYaw",p.spawnYaw,q.spawnYaw);d.eq("spawnPitch",p.spawnPitch,q.spawnPitch);d.eq("startUnarmed",p.startUnarmed,q.startUnarmed);
-  for(int k=0;k<4;++k)d.eq("haze"+std::to_string(k),p.haze[size_t(k)],q.haze[size_t(k)]);d.eq("wetness",p.wetness,q.wetness);}
+  for(int k=0;k<4;++k)d.eq("haze"+std::to_string(k),p.haze[size_t(k)],q.haze[size_t(k)]);d.eq("wetness",p.wetness,q.wetness);d.eq("viewDistance",p.viewDistance,q.viewDistance);}
  d.eq("visibleResidencyGroups",a.visibleResidencyGroups==b.visibleResidencyGroups,true);
  d.eq("openNorth",a.openNorth,b.openNorth);d.eq("openSouth",a.openSouth,b.openSouth);d.eq("openWest",a.openWest,b.openWest);d.eq("openEast",a.openEast,b.openEast);
  d.eq("wallSurface",a.wallSurface,b.wallSurface);d.eq("floorSurface",a.floorSurface,b.floorSurface);d.eq("ceilingSurface",a.ceilingSurface,b.ceilingSurface);

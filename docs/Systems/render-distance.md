@@ -97,12 +97,47 @@ it (115 ms). Others coincide with the sun cascades and lamp shadows being redraw
 - Big buildings (6 m+) keep their mesh at every distance: few of them per chunk.
 - Keep props that move (CLUTTER) few; they cost only near the player once they rest.
 
+## Edges (Game::edgeReach, Game::viewFade)
+
+Each frame five rays across the view (custom campaigns) walk the maps' 24 m squares from the eye. A ray that
+leaves the last map through a closed side (a wall) reaches on; through an open side it stops there, plus a
+`HORIZON` strip's depth if the campaign has one. When the nearest such edge is nearer than the view distance,
+the fade ends at it (at least 12 m out), eased over about a second as the player turns or crosses maps, and
+pixels with nothing drawn take the haze colour instead of the clear colour (`viewFade.z`, `post.frag`). A
+neighbour map that is resident counts as ground, so a set of maps reads as one.
+
+## Underground megastructures
+
+- **MAP view** (field 28, 20-1500 m; `ChunkDefinition::viewDistance`): how far a map is seen. It replaces the
+  engine's 70 m; the VIEW DISTANCE choice still multiplies it, capped at 1500 m. Indoors it also lifts the
+  CPU far plane past 160 m and turns the fade on.
+- **The darkness tone** is the map's own haze (MAP hazeR/G/B/density): distance melts into it, and so does
+  the void. No sky is needed.
+- **Far lamps glow**: a far chunk bakes each lamp as a self-lit fitting in its colour (warm under 4000 K,
+  cold above), lighting nothing. In `post.frag` bright pixels (luminance 1.2-4 in HDR) keep their colour
+  through the fade, so a lit district reads across a gulf.
+- **Depth**: the GPU uses reverse infinite depth, so there is no far-plane precision limit. A test at 2-5 km
+  from the origin has not been run.
+- **Stress map**: `custom maps/Brutalist City.rmc` (`tools/campaign/make_brutalist_city.py`). It is 12 x 12
+  maps (288 m a side) of concrete towers up to 160 m, with sky bridges, scrap and 569 lamps. A gulf 96 m wide
+  runs down the middle, and one bridge crosses it 60 m up. MAP view is 600 m, and the east edge is open on
+  nothing. Lab fixtures: `open-city` (from the bridge), `open-city-edge` (the east edge).
+  - From the bridge, all 144 maps are drawn: 17.7 M cached triangles, 136 caches, 378 draws, 19.7 ms play.
+  - Towers stand dark against the blue-grey haze, with sodium and white lamps lit across the gulf.
+
+## Walking hitches, measured as play
+
+The walk check now draws play frames. Before, it measured inspection frames, which are drawn again until
+their shadows and probes settle, up to six times, so a crossing frame read 180-210 ms. As play, the worst
+crossing frame is about 78 ms against a 22 ms median. That time is spent in `GpuRenderer::begin`, waiting on
+the previous frame's GPU work (shadows over the newly near chunk's caches); `warmChunks` costs under 5 ms
+after the first frame. The check still fails: about 9 frames run over twice the median.
+
 ## Not done yet
 
 - Budgeting the main chunk cache and far chunk bakes (the remaining walk hitches).
 - Terrain LOD (far chunks keep the full terrain mesh; it is cheap next to the trees).
-- Edge analysis (closed map, open ground, neighbour, nothing per side, a per-direction distance eased
-  over a second), the cave darkness tone for underground maps, far emissive lights past the fog,
-  occlusion by enclosure, and the km-scale underground city (proxies, instancing of modular pieces,
-  thousands of lamps, depth precision at 2-5 km). These were asked for late and are not started.
+- Occlusion by enclosure (culling chambers behind rock), instancing of modular pieces, and a 2-5 km
+  origin test for the underground city. The edges, the darkness tone, far lamp glow and the stress map are done.
+- The last crossing hitches: the GPU frame after a chunk turns near (about 78 ms worst).
 - A `VIEW` campaign record (loader belongs to the Builder audit).

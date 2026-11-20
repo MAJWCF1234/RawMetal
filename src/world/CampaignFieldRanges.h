@@ -24,6 +24,7 @@ struct FieldRange {
 };
 inline constexpr FieldRange fieldRanges[] = {
     {"MAP", 27, nullptr, 0, 1, false, true, "MAP|0|R|0|0|4|12|0|0|4|0.6|industrial_night|0|0|0|0|0|-1|0|0|1.570796|0|0"},
+    {"MAP", 28, nullptr, 20, 1500, false, true, "MAP|0|R|0|0|4|12|0|0|4|0.6|industrial_night|0|0|0|0|0|-1|0|0|1.570796|0|0"},
     {"LIGHT", 5, nullptr, 0, 2, true, true, "LIGHT|0|5|5|3"},
     {"LIGHT", 9, nullptr, 1000, 12000, false, true, "LIGHT|0|5|5|3"},
     {"LIGHT", 10, nullptr, -1, 1, false, true, "LIGHT|0|5|5|3"},

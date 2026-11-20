@@ -38,6 +38,9 @@ static const bool registered=add({
   LabAccess::setGod(g,true);
   for(int i=0;i<240;++i)g.update({},1.f/60); // a world that has settled: props asleep, creatures where they stand
   if(s.fixture->number("walk",0)>0)LabAccess::playerCamera(g);
+  // A walk measures play: no inspection settling (an inspection frame is drawn again until its shadows and probes
+  // settle, up to six times, which play never does), so a hitch is what a player would feel.
+  if(s.fixture->number("walk",0)>0)s.renderer->setEnvironmentInspection(false);
   if(s.fixture->number("lift",0)>0)LabAccess::player(g).z+=s.fixture->number("lift",0); // a raised look across the world
   if(s.fixture->number("view",0)>0)g.setViewDistance(s.fixture->number("view",0));},
  .step=[](Scene& s,float dt){const float walk=s.fixture->number("walk",0);auto& p=LabAccess::player(s.g());
@@ -51,7 +54,7 @@ static const bool registered=add({
   const double play=f.updateMs+f.renderMs-readback;
   {const auto worst=R.takeBakeWorst();if(s.frame>=Warm)for(int k=0;k<3;++k)r.bake[size_t(k)]=std::max(r.bake[size_t(k)],worst[size_t(k)]);}
   if(s.frame<Warm)return;
-  r.play.push_back(play);r.upd.push_back(f.updateMs);{int top=0;for(int c=1;c<perf::Count;++c)if(c!=perf::Scene&&perf::costs[size_t(c)]>perf::costs[size_t(top)])top=c;char t[64];std::snprintf(t,sizeof t,"%s %.0f st%.0f/%.0f",perf::names[top],perf::costs[size_t(top)],R.frameStages()[0],R.frameStages()[1]);r.top.push_back(t);}add("play_ms",play);add("update_ms",f.updateMs);add("render_ms",f.renderMs);add("scene_ms",R.frameStages()[0]);add("submit_ms",R.frameStages()[1]);
+  r.play.push_back(play);r.upd.push_back(f.updateMs);{int top=0;for(int c=1;c<perf::Count;++c)if(c!=perf::Scene&&perf::costs[size_t(c)]>perf::costs[size_t(top)])top=c;char t[96];std::snprintf(t,sizeof t,"%s %.0f st%.0f/%.0f r%.0f rec%.0f w%.0f rb%.0f",perf::names[top],perf::costs[size_t(top)],R.frameStages()[0],R.frameStages()[1],f.renderMs,gpu?gpu->finishTimes()[0]:0.,gpu?gpu->finishTimes()[1]:0.,gpu?gpu->finishTimes()[2]:0.);r.top.push_back(t);}add("play_ms",play);add("update_ms",f.updateMs);add("render_ms",f.renderMs);add("scene_ms",R.frameStages()[0]);add("submit_ms",R.frameStages()[1]);
   for(int c=0;c<perf::Count;++c)add(std::string("perf_")+perf::names[c]+"_ms",perf::costs[size_t(c)]);
   if(gpu){const auto d=gpu->drawStatistics();using G=GpuRenderer;
    add("draws",double(d[G::Draws]));add("caches_drawn",double(d[G::CachesDrawn]));add("cached_tris",double(d[G::CachedTriangles]));add("dynamic_tris",double(d[G::DynamicTriangles]));

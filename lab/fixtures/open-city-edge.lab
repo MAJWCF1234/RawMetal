@@ -1,0 +1,7 @@
+# Open space, the edge check: the Brutalist City's east edge opens on nothing. From the last district looking
+# east, the fade must end before the edge and the void take the haze tone (no black, no clear colour). Tubes: open-space.
+world custom "custom maps/Brutalist City.rmc"
+map 83
+camera 4 12 -999 0 4
+size 960 540
+frames 24
