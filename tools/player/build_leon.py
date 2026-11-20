@@ -9,7 +9,8 @@
 #    other bone (ears, tail, hair, eyes, jaw, twist and helper bones), their
 #    weights going to the nearest kept ancestor: the tail and ears follow the
 #    hips and the head. The rig has one chest bone: it is split into Spine1-3
-#    (the weights blend with height),
+#    (the weights blend with height), and the torso's weight is then graded up Hips, Spine1, Spine2, Spine3 by
+#    height (leon_grade.py: the avatar's hips-to-chest weights jumped over a hand's breadth and the waist snapped),
 #  - joins the meshes and decimates them to MAX_TRIANGLES (11,800 by default, about 12,000 in the end): flat faces
 #    are merged first (planar), then the plain body (torso, arms, legs, stockings) is collapsed while the head
 #    (eyes, nose, ears, fur, the bow), the paws (hands, fingers, feet: found by their bone weights and place) and
@@ -20,6 +21,8 @@
 #    (the engine finds a body's texture by material name),
 #  - writes the FBX with +Z ahead and +X his left, its arrays undeflated.
 import bpy, bmesh, sys, os, zlib, struct, math
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+import leon_grade
 argv=sys.argv[sys.argv.index('--')+1:]
 src,out,texdir=argv[0],argv[1],argv[2]
 LIMIT=int(argv[3]) if len(argv)>3 else 11800
@@ -100,6 +103,7 @@ for s in 'LR':
         # the paw's finger geometry lies out near the tips: the joints sit at the 30th, 50th and 75th percentile of its extent
         xs.sort(); q=lambda t: xs[int(t*(len(xs)-1))]
         fingers.append(([n+str(i+1)+'_'+s for i in range(3)],hs[0],d,[q(.3),q(.5),q(.75)]))
+JOINTS=[bones['Hips'].head_local.z,z_s1,z_s2,z_s3]; HIPS_Y=bones['Hips'].head_local.y   # the spine's joints, for leon_grade
 shoulder_x={'L':bones['Shoulder_L'].head_local.x,'R':bones['Shoulder_R'].head_local.x}
 def spread(w,co):
     for names,h0,d,at in fingers:
@@ -135,7 +139,7 @@ for me in meshes:
                 else: t=(z-z_s2)/(z_s3-z_s2); parts={'Spine2':1-t,'Spine3':t}
                 for k,x in parts.items(): w[k]=w.get(k,0)+g.weight*x
             else: w[n]=w.get(n,0)+g.weight
-        spread(w,v.co); shoulder(w,v.co)
+        spread(w,v.co); shoulder(w,v.co); leon_grade.grade(w,v.co,JOINTS,HIPS_Y)
         rows.append(w)
     for g in list(me.vertex_groups): me.vertex_groups.remove(g)
     made={}
