@@ -1,0 +1,9 @@
+# Open space: running (7 m/s) across the chunk boundaries of a generated 8 x 8 chunk forest world. Tubes: open-space.
+world stress
+stress-chunks 8
+stress-detail 4
+map 36
+camera 6 12 -999 0 -3
+size 960 540
+frames 330
+walk 7

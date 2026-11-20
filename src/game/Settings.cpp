@@ -130,6 +130,8 @@ void Game::loadSettings(const std::wstring& path){
     settings.textChat=chat!=0;settings.chatFilter=filter!=0;settings.voiceMode=std::clamp(mode,0,2);settings.pushToTalkKey=key>0&&key<256?key:0x56;
     settings.openMicThreshold=std::clamp(threshold,0.f,1.f);settings.micVolume=std::clamp(mic,0.f,2.f);settings.voiceVolume=std::clamp(voice,0.f,2.f);settings.proximityVoice=proximity!=0;
     renderScale=render<.6f?.5f:render<.9f?.75f:1.f;showFps=fps!=0;
+    // The view distance came after (a number; the named lines that follow start with a letter).
+    file>>std::ws;if(file.peek()>='0'&&file.peek()<='9'){int view=1;if(file>>view)settings.viewDistance=std::clamp(view,0,3);}
     for(std::string line;std::getline(file,line);){
      if(!line.empty()&&line.back()=='\r')line.pop_back();
      const auto space=line.find(' ');if(space==std::string::npos)continue;
@@ -145,7 +147,7 @@ void Game::saveSettings(const std::wstring& path)const{
  std::ofstream file(filePath);file<<s.master<<' '<<s.music<<' '<<s.effects<<' '<<s.sensitivity<<' '<<int(s.invertMouse)<<' '<<s.depthOfField<<' '<<s.lensEffects<<' '<<s.pullHighlight
   <<' '<<s.vrTurnSpeed<<' '<<s.vrVignette<<' '<<int(s.vrSeated)<<' '<<int(s.vrLeftHanded)<<' '<<int(s.vrFrameRate)<<' '<<s.vrRenderScale<<' '<<s.character
   <<' '<<int(s.textChat)<<' '<<int(s.chatFilter)<<' '<<s.voiceMode<<' '<<s.pushToTalkKey<<' '<<s.openMicThreshold<<' '<<s.micVolume<<' '<<s.voiceVolume<<' '<<int(s.proximityVoice)
-  <<' '<<m_renderScale<<' '<<int(m_showFps)<<'\n';
+  <<' '<<m_renderScale<<' '<<int(m_showFps)<<' '<<s.viewDistance<<'\n';
  auto oneLine=[](std::string v){for(auto& c:v)if(c=='\r'||c=='\n')c=' ';return v;};
  if(!s.micDevice.empty())file<<"mic "<<oneLine(s.micDevice)<<'\n';
  if(!s.speakerDevice.empty())file<<"speakers "<<oneLine(s.speakerDevice)<<'\n';
@@ -267,5 +269,13 @@ bool Game::testSettings(){
  {std::ofstream menuReport("settings-menu-test.txt");if(!testSettingsMenu(menuReport))return false;}
  std::ofstream("settings-test.txt")<<"Title new-game reset; Escape toggling, frozen gameplay, PAUSE and SETTINGS pages, restart and quit confirmations, keyboard/mouse controls, resume fire suppression, aiming settings, persistence, quit to title and explicit quit: PASS\n";
  return true;
+}
+}
+namespace retro {
+float Game::viewDistance()const{
+ if(m_viewOverride>0)return std::clamp(m_viewOverride,20.f,400.f);
+ static constexpr float factor[4]={.7f,1.f,2.f,3.5f};
+ float base=70.f;if(const auto* shape=m_world.terrainShape();shape&&shape->viewDistance>0)base=shape->viewDistance;else if(m_world.hasTerrain()&&m_world.zoneSky())base=110.f;
+ return std::clamp(base*factor[std::clamp(m_settings.viewDistance,0,3)],20.f,400.f);
 }
 }

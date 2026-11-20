@@ -55,6 +55,10 @@ public:
  // The colour of the outdoor sky fill (World::skyAmbientTone); off keeps it white.
  // exposure: the ceiling on auto exposure under this sky (1 as by day).
  void setSkyAmbient(float r,float g,float b,bool on,float exposure=1.f);
+ // Surfaces fade into the haze between start and end metres of depth (post.frag); end 0: no fade.
+ void setViewFade(float start,float end);
+ // Would beginStaticCache(slot,key) rebuild (no cache there, or another key)? Reads nothing, changes nothing.
+ bool staticCacheCurrent(int slot,std::uint64_t key)const;
  // 0 the default sky; 1 the open zone (broken overcast, sun shafts, ground steam).
  void setSkyStyle(int style);
  // An ash storm's strength (0-1): the open-zone sky closes over brown (lampGrid.flags.w).

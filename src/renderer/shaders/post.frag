@@ -13,7 +13,7 @@ layout(set=0,binding=4) uniform sampler2D materialImage;
 layout(set=0,binding=5) uniform sampler2D bloomImage;
 // The room reflection probes (GpuRenderer captureReflections), the off-screen fallback for SSR.
 layout(set=0,binding=6) uniform sampler2DArray reflectionAtlas;
-layout(std430,set=0,binding=7) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];} lampGrid;
+layout(std430,set=0,binding=7) readonly buffer LampGrid {vec4 origin;ivec4 size;ivec4 flags;vec4 eye;vec4 basis;vec4 sun;vec4 sunColor;vec4 cascades[12];vec4 flashes[4];vec4 flashTones[4];vec4 scatter;vec4 skyAmbient;vec4 viewFade;vec4 probeInfo;vec4 probeVolumes[16];vec4 reflections[144];} lampGrid;
 // The look's values (LookTuning.h, GpuRenderer writeLook): the screen reflections' strength (LookA.x),
 // the screen march's roughest finish (LookB.x), a debug switch (LookC.y: 2 no screen march).
 #define LookA lampGrid.reflections[141]
@@ -357,6 +357,13 @@ void main(){
   // Continuous from the eye: a 2 m dead zone made the look jump when walking up to walls.
   float amount=1.0-exp(-depth*p.haze.w*0.8);
   color=mix(color,p.haze.rgb,amount*0.25);
+ }
+ // A long view distance (Game::viewDistance over 70 m): surfaces melt into the horizon's colour before
+ // the draw range ends, so the far edge is haze, never a cut. Off (end 0) at the intended 70 m.
+ if(surface&&lampGrid.viewFade.y>0.0){
+  vec3 dir=worldDirection(rayView);
+  vec3 horizon=lampGrid.sun.w>0.0?proceduralSky(normalize(vec3(dir.xy,0.03))):p.haze.rgb;
+  color=mix(color,horizon,smoothstep(lampGrid.viewFade.x,lampGrid.viewFade.y,depth));
  }
  if(zoneSky()&&!viewModel&&lampGrid.sun.w>0.0){
   vec3 dir=worldDirection(rayView),sunDir=lampGrid.sun.xyz,sunCol=lampGrid.sunColor.rgb;

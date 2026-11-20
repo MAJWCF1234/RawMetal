@@ -810,7 +810,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  // Light probes (LightProbes.h): this map's baked fill and crystal glow once its bake has landed
  // (the map in play waits for its first; one streaming in uses the flat room bounce until then).
- const ProbeBake* probeBake=chunkProbes(game,level,w,fixedLightSourceKey,level==game.level()||m_environmentInspection);
+ const ProbeBake* probeBake=m_farChunk?nullptr:chunkProbes(game,level,w,fixedLightSourceKey,level==game.level()||m_environmentInspection);
  const IrradianceVolume* probes=probeBake&&!probeBake->volume.empty()?&probeBake->volume:nullptr;
  if(m_gpuFrame&&m_gpu)m_gpu->useProbes(level,probeBake,m_chunkProbes[size_t(level)].key,game.chunkOffset(level));
  auto probeFill=[&](Point3 p,Point3 n){const auto s=probes->sample(p,n);return probeShoulder((s[0]*.2126f+s[1]*.7152f+s[2]*.0722f)*ProbeGain);};
@@ -899,7 +899,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
   }return false;
  };
- float farPlane=w.outdoors()?70.f:160.f;
+ float farPlane=w.outdoors()?game.viewDistance():160.f;
  // VR headsets outrun the desktop frustum; keep sphere/edge culling but widen
  // the planes so peripheral geometry does not pop at the HMD borders.
  const Projection projection{float(m_width)/m_height};
@@ -1483,13 +1483,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   guard(-.032f,.015f,.278f,.032f,.068f,.335f);
  };
  bool buildStaticGeometry=!m_gpuFrame;
- int cacheSlot=w.level();
+ int cacheSlot=m_farChunk?FarChunkCaches*Game::MaxChunks+w.level():w.level(); // a far chunk's whole bake is one cache of its own
  std::uint64_t geometryKey=0;
  if(m_gpuFrame){
   std::uint64_t key=1469598103934665603ull;
   auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
   auto hashFloat=[&](float value){hash(std::uint64_t(std::int64_t(std::llround(value*1024.f))));};
-  hash(std::uint64_t(game.worldId()));hash(game.staticRevision(w.level()));hash(std::uint64_t(w.level()));
+  hash(std::uint64_t(game.worldId()));hash(game.staticRevision(w.level()));hash(std::uint64_t(w.level()));if(m_farChunk)hash(0xfa5c0de);
   // Which map, by its definition's serial, never the world's address: the builder's preview builds
   // one game after another, a new one can sit where the last one was with the same tiles and the same
   // edit count, and an address key then kept the old scene's fixtures in the picture, undeletable.
@@ -1980,8 +1980,30 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  if(architectureDrawn){auto& stats=m_cullStats[&w];stats.clipMs=cullClipSeconds*1000;stats.facesCut=cullCut;stats.facesBuried=cullBuried;stats.triangles=(long long)(m_trianglesSubmitted-trianglesBefore);
  stats.passMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-passStarted).count();stats.pieces=m_faceCulling&&m_cullIndexes.count(&w)?int(m_cullIndexes[&w].second->pieces.size()):0;}
  const bool staticFixtures=!w.hasLift()&&w.cargoLift().upper<=w.cargoLift().lower;
- if(buildStaticGeometry&&staticFixtures)for(const auto& fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model)){
+ // A far chunk's fixture (m_farChunk): a tree is its impostor alone, a big building keeps its mesh, a rock, wall
+ // or wreck is a box in its first texture, a small prop is left out. The same rule on both renderers.
+ auto farFixture=[&](const Fixture& fixture,float base){
+  const float x=fixture.position.x,y=fixture.position.y,tall=fixture.height,span=std::max(fixture.width,fixture.depth);
+  const Impostor* impostor=m_gpuFrame&&m_gpu&&s_impostors&&!hangingPlant(fixture.model)?impostorFor(fixture.model):nullptr;
+  if(impostor){
+   if(tall<1.4f)return; // ground plants fold into the painted ground
+   const auto&mesh=m_facilityMeshes[size_t(fixture.model)];const float scale=tall/std::max(.001f,mesh.maximum.y-mesh.minimum.y);
+   GpuRenderer::LodTag tag;tag.impostor=true;tag.lod=1;tag.half=impostor->radius*scale;tag.yaw=fixture.yaw;tag.columns=ImpostorColumns;tag.rows=ImpostorRows;tag.z=base+tall*.5f;
+   const float z=tag.z;m_gpu->setLodTag(&tag);objectLighting=true;
+   MeshVertex a{{x-1,y,z-1},-1,-1},b{{x+1,y,z-1},1,-1},c{{x+1,y,z+1},1,1},d{{x-1,y,z+1},-1,1};
+   tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;m_gpu->setLodTag(nullptr);return;}
+  if(span>=6.f){facilityLook=fixture.traits.get();facility(fixture.model,x,y,base,fixture.width,fixture.depth,tall,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);facilityLook=nullptr;return;}
+  if(tall<1.2f&&span<2.5f)return;
+  const float c=std::cos(fixture.yaw),sn=std::sin(fixture.yaw),hw=fixture.width*.5f,hd=fixture.depth*.5f,z0=base,z1=base+tall;
+  auto corner=[&](float i,float j,float z){return Point3{x+c*hw*i-sn*hd*j,y+sn*hw*i+c*hd*j,z};};
+  const Texture& skin=facilityTexture(fixture.model,0);objectLighting=true;
+  quad(corner(-1,-1,z0),corner(1,-1,z0),corner(1,-1,z1),corner(-1,-1,z1),skin,.9f);quad(corner(1,1,z0),corner(-1,1,z0),corner(-1,1,z1),corner(1,1,z1),skin,.8f);
+  quad(corner(-1,1,z0),corner(-1,-1,z0),corner(-1,-1,z1),corner(-1,1,z1),skin,.85f);quad(corner(1,-1,z0),corner(1,1,z0),corner(1,1,z1),corner(1,-1,z1),skin,.85f);
+  quad(corner(-1,-1,z1),corner(1,-1,z1),corner(1,1,z1),corner(-1,1,z1),skin,1.f);objectLighting=false;
+ };
+  auto bakeFixture=[&](const Fixture& fixture){
   float base=w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base;
+  if(m_farChunk){farFixture(fixture,base);return;}
   // Painterly Horizon LOD (experimental, open-zone only): repeated foliage
   // carries its real mesh and a shared multi-view impostor in the static
   // cache; the shaders hand one to the other with distance. Ground plants
@@ -2004,7 +2026,16 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    objectLighting=true;tri(a,b,c,impostor->atlas,.92f);tri(a,c,d,impostor->atlas,.92f);objectLighting=false;
   }
   if(m_gpu){m_gpu->setLodTag(nullptr);m_gpu->setPlantTag(-1);}
- }
+ };
+ auto fixtureBakeable=[&](const Fixture& f){return f.visible&&!w.fixtureHasParts(int(&f-w.fixtures().data()))&&!soft::isSoft(f.model);};
+ // A terrain chunk with many fixtures bakes them in nine 8 m cells of their own (slot FixtureCellCaches, each its own
+ // cache): a cell is quick to bake (no hitch when a chunk comes into range), is drawn only while in view, and a
+ // frame bakes the cells far from the player only up to its budget (setBuildBudget).
+ const bool splitFixtures=m_gpuFrame&&m_gpu&&!m_farChunk&&staticFixtures&&w.hasTerrain()&&w.fixtures().size()>=16;
+ if(buildStaticGeometry&&staticFixtures&&!splitFixtures)for(const auto& fixture:w.fixtures())if(fixtureBakeable(fixture))bakeFixture(fixture);
+ if(m_farChunk){ // a far chunk is its one cache: no lamps, doors, signs, props or per-frame extras
+  if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
+  m_staticGeometryBuild=false;shadowBudget=m_shadowBudgetLimit;return;}
  if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
  // A swinging door's posts and head never move, so they bake with the wall they
  // stand in (per-pixel lamps on Vulkan): lit like that wall from the first frame,
@@ -2051,6 +2082,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  }
  if(m_gpuFrame&&buildStaticGeometry)m_gpu->endStaticCache();
  m_staticGeometryBuild=false;
+
+ if(splitFixtures){
+  std::array<std::vector<int>,9> cells;const auto& all=w.fixtures();
+  for(int i=0;i<int(all.size());++i)if(fixtureBakeable(all[size_t(i)]))cells[size_t(std::clamp(int(all[size_t(i)].position.x/8.f),0,2)+3*std::clamp(int(all[size_t(i)].position.y/8.f),0,2))].push_back(i);
+  for(int c=0;c<9;++c){
+   const int slot=FixtureCellCaches*Game::MaxChunks+w.level()*9+c;
+   if(cells[size_t(c)].empty()){m_gpu->dropStaticCache(slot);continue;}
+   const std::uint64_t cellKey=(geometryKey^std::uint64_t(c+1)*0x9e3779b97f4a7c15ull)*1099511628211ull;
+   if(!m_gpu->staticCacheCurrent(slot,cellKey)){
+    const float cx=4.f+8.f*float(c%3),cy=4.f+8.f*float(c/3),gx=std::max(std::fabs(eye.x-cx)-4.f,0.f),gy=std::max(std::fabs(eye.y-cy)-4.f,0.f);
+    if(m_buildBudgetMs>0&&m_buildSpentMs>=m_buildBudgetMs&&gx*gx+gy*gy>400.f)continue; // a later frame
+   }
+   const auto bakeStart=std::chrono::steady_clock::now();
+   if(!m_gpu->beginStaticCache(slot,cellKey))continue;
+   m_staticGeometryBuild=true;++m_staticGeometryBuilds;shadowBudget=400000;
+   for(int i:cells[size_t(c)])bakeFixture(all[size_t(i)]);
+   m_gpu->endStaticCache();m_staticGeometryBuild=false;shadowBudget=m_shadowBudgetLimit;
+   m_buildSpentMs+=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-bakeStart).count();
+  }
+ }
  for(size_t i=0;i<w.lights().size();++i)if(lampSwitchable[i]&&w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],2,lampPowers[i]);
  // The one-time static bake has its own large shadow-ray allowance. Dynamic
  // fixtures and objects still need their normal per-frame budget on that

@@ -43,6 +43,8 @@ struct TerrainShape {
     // over `depth` metres and wooded every `spacing` metres with these models
     // (drawn only as Painterly Horizon LOD impostors).
     float horizonDepth=0,horizonSpacing=6,horizonRise=0;std::vector<int> horizonModels;
+    // The distance the map is meant to be seen at, metres (0: the engine's own, Game::viewDistance).
+    float viewDistance=0;
     // CAVE records (CaveField.h), in the order written, and the field they leave in the
     // land (buildTerrainCaves, once the flats, pads and sculpts are all in).
     std::vector<CaveStroke> caves;

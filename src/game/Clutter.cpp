@@ -342,7 +342,13 @@ void Game::updateClutter(const InputState&input,float dt){
  m_previousVrTrigger=input.vrTrigger;
  m_propHalfStep=!m_propHalfStep;simulateClutter(m_clutter,m_level,dt,m_heldClutter);
  stepCloth(dt);   // curtains, straps and cables (Cloth.cpp), against the props as they now are
- for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))simulateClutter(m_chunks[level].clutter,level,dt,-1);
+ // A far chunk whose props all rest (nothing awake, no breakable shedding debris) costs nothing: it is
+ // simulated again when it wakes or the player comes within 80 m (docs/Systems/render-distance.md).
+ for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level)){
+  const Vec2 o=chunkOffset(level)-chunkOffset(m_level);
+  const float dx=std::max({o.x-m_player.pos.x,0.f,m_player.pos.x-o.x-24.f}),dy=std::max({o.y-m_player.pos.y,0.f,m_player.pos.y-o.y-24.f});
+  if(dx*dx+dy*dy>6400.f&&m_chunks[level].world.breakables().empty()&&std::all_of(m_chunks[level].clutter.begin(),m_chunks[level].clutter.end(),[](const Clutter& c){return c.sleeping||c.broken;}))continue;
+  simulateClutter(m_chunks[level].clutter,level,dt,-1);}
  updateLiquids(dt);followVrHands();
  for(const auto&[level,snapshot]:contents)containers::carry(level==m_level?m_clutter:m_chunks[level].clutter,snapshot,level==m_level?m_heldClutter:-1);
  updateSoftBodies(dt);

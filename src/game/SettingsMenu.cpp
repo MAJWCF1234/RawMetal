@@ -25,7 +25,7 @@ bool copyTextToClipboard(const std::string& text);   // MultiplayerMenu.cpp
 namespace {
 enum Row:int{RMaster=1,RMusic,REffects,RVoiceVolume,RRenderScale,RDepth,RLens,RFrameTime,RSensitivity,RInvert,RPull,RCharacter,
  RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RProximity,RMuted,RMicTest,
- RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RReset,RMutedBack,RMutedName=200};
+ RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RViewDistance,RReset,RMutedBack,RMutedName=200};
 constexpr int TabCount=int(SettingsTab::Count);   // the page column's rows; BACK is row TabCount
 struct TalkKey{int code;const char* name;};
 constexpr TalkKey TalkKeys[]={{0x56,"V"},{0x42,"B"},{0x58,"X"},{0x48,"H"},{0x14,"CAPS LOCK"},{0xA4,"LEFT ALT"},{0x05,"MOUSE 4"},{0x06,"MOUSE 5"}};
@@ -63,7 +63,7 @@ std::vector<int> Game::settingsRows()const{
  if(m_settingsMuted){std::vector<int> r{RMutedBack};const auto names=mutedListNames(*this);for(size_t i=0;i<names.size()&&i<12;++i)r.push_back(RMutedName+int(i));return r;}
  switch(m_settingsTab){
   case SettingsTab::Audio:return {RMaster,RMusic,REffects,RVoiceVolume,RReset};
-  case SettingsTab::Video:return {RRenderScale,RDepth,RLens,RFrameTime,RReset};
+  case SettingsTab::Video:return {RRenderScale,RDepth,RLens,RFrameTime,RViewDistance,RReset};
   case SettingsTab::Controls:return {RSensitivity,RInvert,RReset};
   case SettingsTab::Gameplay:return {RPull,RCharacter,RReset};
   case SettingsTab::Communication:return {RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RVoiceVolume,RProximity,RMuted,RMicTest,RReset};
@@ -100,6 +100,7 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RRenderScale:m.kind=MenuItem::Choice;m.label="RENDER SCALE";m.value=percent(m_renderScale);m.help="The 3D view's resolution. Lower is faster; the HUD stays sharp.";break;
    case RDepth:m.label="DEPTH OF FIELD";m.value=percent(s.depthOfField);m.help="How much the lens blurs what you are not looking at. 100% is the intended look.";break;
    case RLens:m.label="LENS EFFECTS";m.value=percent(s.lensEffects);m.help="Grain, glow and the edge of the lens. 100% is the intended look.";break;
+   case RViewDistance:{static constexpr const char* names[]={"NEAR","NORMAL","FAR","VERY FAR"};m.kind=MenuItem::Choice;m.label="VIEW DISTANCE";m.value=names[std::clamp(s.viewDistance,0,3)];m.help="How far outdoor maps are drawn. Farther looks grander and costs frames; NORMAL is the intended look.";break;}
    case RFrameTime:m.label="FRAME TIME READOUT";m.value=onOff(m_showFps);m.help="Shows how long each frame takes to draw, at the bottom left.";break;
    case RSensitivity:{m.label="MOUSE SENSITIVITY";char b[16];std::snprintf(b,sizeof b,"%.1fX",s.sensitivity);m.value=b;m.help="How far a hand on the mouse turns your head.";break;}
    case RInvert:m.label="INVERT MOUSE Y";m.value=onOff(s.invertMouse);m.warn=s.invertMouse;m.help="Pushing the mouse forward looks down instead of up.";break;
@@ -161,7 +162,7 @@ void Game::settingsReset(SettingsTab tab){
  const Settings d;auto& s=m_settings;
  switch(tab){
   case SettingsTab::Audio:s.master=d.master;s.music=d.music;s.effects=d.effects;s.voiceVolume=d.voiceVolume;m_audioMuted=false;m_musicEnabled=true;break;
-  case SettingsTab::Video:s.depthOfField=d.depthOfField;s.lensEffects=d.lensEffects;m_renderScale=1;m_showFps=false;break;
+  case SettingsTab::Video:s.depthOfField=d.depthOfField;s.lensEffects=d.lensEffects;s.viewDistance=d.viewDistance;m_renderScale=1;m_showFps=false;break;
   case SettingsTab::Controls:s.sensitivity=d.sensitivity;s.invertMouse=d.invertMouse;break;
   case SettingsTab::Gameplay:s.pullHighlight=d.pullHighlight;s.character=d.character;break;
   case SettingsTab::Communication:s.textChat=d.textChat;s.chatFilter=d.chatFilter;s.voiceMode=d.voiceMode;s.pushToTalkKey=d.pushToTalkKey;s.openMicThreshold=d.openMicThreshold;
@@ -196,6 +197,7 @@ void Game::settingsChange(int id,int direction,bool activate){
  auto cycle=[&](int at,int count){return ((at+step)%count+count)%count;};
  switch(id){
   case RRenderScale:{static constexpr float steps[]={.5f,.75f,1};int at=2;for(int i=0;i<3;++i)if(std::fabs(steps[i]-m_renderScale)<.01f)at=i;m_renderScale=steps[cycle(at,3)];break;}
+  case RViewDistance:s.viewDistance=cycle(s.viewDistance,4);break;
   case RFrameTime:m_showFps=!m_showFps;break;
   case RInvert:s.invertMouse=!s.invertMouse;break;
   case RPull:s.pullHighlight=s.pullHighlight?0:1;break;

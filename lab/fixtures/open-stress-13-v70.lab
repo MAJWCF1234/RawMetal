@@ -1,0 +1,10 @@
+# Open space (view 70 m): a generated 13 x 13 chunk forest world (312 m a side), the camera in the middle looking along +x. Tubes: open-space.
+world stress
+stress-chunks 13
+stress-detail 4
+map 84
+camera 12 12 -999 0 -3
+size 960 540
+frames 24
+view 70
+

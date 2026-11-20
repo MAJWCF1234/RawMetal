@@ -384,6 +384,7 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
+ int viewDistance=1;    // viewDistance: VIDEO > VIEW DISTANCE, 0 near (x0.7), 1 normal, 2 far (x2), 3 very far (x3.5)
  int character=0;       // character: the player's body, 0 Claire, 1 the Limitator, 2 Leon (SoftwareRenderer::playerBody)
  // Communication (the COMMUNICATION page; docs/Systems/multiplayer.md "Chat and voice"): text chat and its word
  // filter; voice 0 off, 1 push to talk, 2 open mic; the push-to-talk key (a Windows virtual-key code); open mic's
@@ -1038,6 +1039,13 @@ public:
     const std::vector<std::string>& consoleLog()const{return m_consoleLog;}
     bool showFps()const{return m_showFps;}
     float renderScale()const{return m_renderScale;}
+    // How far outdoor views reach, metres (docs/Systems/render-distance.md): the map's own distance (a
+    // VIEW record, else 70 m, 110 m under the open-zone sky) times the player's VIEW DISTANCE choice.
+    float viewDistance()const;
+    // Beyond fullDetailRange() a chunk is drawn as its far LOD (terrain, impostor trees, boxes), 48 m.
+    static constexpr float fullDetailRange(){return 48.f;}
+    void setViewDistance(float metres){m_viewOverride=metres;}   // a fixed distance (the lab, a capture); 0 the map's own
+    float viewFadeStart()const{const float v=viewDistance();return v>70.f?v*.62f:0.f;}
     static bool testConsole();
     static bool testSystems();
     int state(StateId id)const;
@@ -1597,7 +1605,7 @@ private:
     std::vector<std::string> m_consoleLog{"DEPTHWORKS DEVELOPER CONSOLE", "MAPS / MAP <NAME OR ID> / RELOAD / WHERE / FPS / CLEAR"};
     std::vector<std::string> m_consoleHistory;
     int m_consoleHistoryIndex=0;
-    float m_renderScale=1.f;
+    float m_renderScale=1.f,m_viewOverride=0;
     std::vector<StateValue> m_states,m_objectives;
     std::vector<QuestItemStack> m_questItems;
     std::vector<StateId> m_firedEvents;
