@@ -69,6 +69,9 @@ def size_headroom():
         size = os.path.getsize(os.path.join(ROOT, 'RawMetal.exe'))
     except (OSError, AttributeError, ValueError):
         return
+    if size < cap // 2:
+        say('no full build is on disk to compare with the ceiling yet (RawMetal.exe is a stub or partial)')
+        return
     room = cap - size
     say(f'the last built exe is {size:,} bytes; {room:,} under the {cap:,} ceiling' + ('  (LESS THAN 1 MiB: trim before adding anything)' if room < 1048576 else ''))
 
