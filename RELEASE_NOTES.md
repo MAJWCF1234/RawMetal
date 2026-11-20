@@ -4,6 +4,17 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.6.5 - Leon (2026-11-20)
+
+A third body to go down in.
+
+- **Leon.** A white cat in a black bow and black stockings, for anyone who would rather not be Claire or the Limitator. CHARACTER, on the multiplayer page and in settings, now holds three cards. He is who you are in first person, in third person and in VR, and who the others see in a match; a player on an older release sees the Limitator in his place. He runs, kneels, aims and falls on Claire's own animations.
+- **Credit where it is due.** Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Model)" by NEGATIVEMARE (https://skfb.ly/pO6ZD), licensed under CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/). The three meshes were joined and reduced, the rig was mapped onto the game's skeleton, the materials became flat colours, and he is animated with the game's own animations. The author did not make, review or endorse DepthWorks. The same credit is in CREDITS.txt in each zip.
+
+Verified with the match, character, settings, multiplayer menu and third-person tests, the Campaign Builder's full editing test, and tools/release/ship.py.
+
+---
+
 ## v1.6.4 - Bare hands (2026-11-19)
 
 Nobody comes down armed.
