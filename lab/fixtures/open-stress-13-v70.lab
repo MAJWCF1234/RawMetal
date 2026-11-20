@@ -3,7 +3,8 @@ world stress
 stress-chunks 13
 stress-detail 4
 map 84
-camera 12 12 -999 0 -3
+camera 12 12 -999 20 -12
+lift 14
 size 960 540
 frames 24
 view 70

@@ -30,6 +30,8 @@ std::string stressCampaign(int chunks,int detail){
   for(int r=0;r<24;++r){std::snprintf(b,sizeof b,"ROW|%d|0|%d|........................\n",i,r);t+=b;}
   Rng g{std::uint32_t(i*2654435761u+97u)};
   auto put=[&](const Model& m,float x,float y,float yaw,float scale,int solid){
+   // A clearing of 10 m in the middle chunk and a 6 m lane along +x through the middle row: places to stand and look.
+   if((cy==mid&&std::fabs(y-12.f)<3.f)||(cx==mid&&cy==mid&&std::hypot(x-12.f,y-12.f)<10.f))return;
    std::snprintf(b,sizeof b,"FIXTURE|%d|%d|%.2f|%.2f|0|%.3f|%.3f|%.3f|%.3f|%d|%.2f\n",i,m.slot,x,y,m.w*scale,m.d*scale,m.h*scale,yaw,solid,m.core);t+=b;};
   const bool ruin=(i%3)==0,yard=(i%11)==5;
   for(int n=0;n<42*detail+8;++n)put(trees[size_t(g.next()*8)%8],g.range(1.f,23.f),g.range(1.f,23.f),g.range(0,6.28f),g.range(.8f,1.3f),1);

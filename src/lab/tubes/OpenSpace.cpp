@@ -37,6 +37,7 @@ static const bool registered=add({
   LabAccess::setGod(g,true);
   for(int i=0;i<240;++i)g.update({},1.f/60); // a world that has settled: props asleep, creatures where they stand
   if(s.fixture->number("walk",0)>0)LabAccess::playerCamera(g);
+  if(s.fixture->number("lift",0)>0)LabAccess::player(g).z+=s.fixture->number("lift",0); // a raised look across the world
   if(s.fixture->number("view",0)>0)g.setViewDistance(s.fixture->number("view",0));},
  .step=[](Scene& s,float dt){const float walk=s.fixture->number("walk",0);auto& p=LabAccess::player(s.g());
   if(walk>0&&s.frame>0){p.pos.x+=std::cos(p.angle)*walk*dt;p.pos.y+=std::sin(p.angle)*walk*dt;}
