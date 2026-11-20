@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 743084535d550d38cab1e4e7bf9fb696c8deb863
-# 2026-11-19 21:19, release: v1.6.3, something to pick up
+commit 31bcbe65db486a564ca1962b0f60cbe9506a3f9f
+# 2026-11-19 22:03, Deathmatch: players start with fists only, guns are found on the map; deathmatch pickups are shared between players and come back 30 s after they are taken; the Builder warns when a deathmatch map has no gun drop
