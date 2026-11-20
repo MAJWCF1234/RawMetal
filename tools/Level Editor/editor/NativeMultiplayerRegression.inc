@@ -252,6 +252,15 @@
     }
     if (pictures)
       multiplayerPictures(report);
+    // A deathmatch starts with fists: the page says so until a gun (a MAC-11, handgun or shotgun drop) lies on its map.
+    {
+      require(multiplayerChoice().deathmatch && !gunWarning().empty(), "no warning for a deathmatch map with no gun lying on it");
+      doc.add({"PICKUP", "0", "0", "8", "8"});
+      require(!gunWarning().empty(), "a health box alone counts as a gun");
+      doc.add({"PICKUP", "0", "5", "9", "8"});
+      require(gunWarning().empty(), "a handgun drop on the map still warns that nobody has a gun");
+      pass("the Multiplayer page warns that a deathmatch starts with fists only until a MAC-11, handgun or shotgun drop is on its map");
+    }
     snap = savedSnap, smartSnap = savedSmart;
     multiplayerDock = false;
     spawnTurn = 0, spawnTeam = 0;

@@ -140,6 +140,7 @@ void Match::hostFrame(float dt){
    bool limit=m_timeLimit>0&&m_timeLeft<=0;for(const auto& s:m_slots)limit|=s.used&&m_fragLimit>0&&s.frags>=m_fragLimit;
    if(limit)roundOver();
   }else if((m_restartIn-=dt)<=0)newRound();
+  trackPickups();pickupRespawns(dt);   // the guns lie on the map: what one takes goes from every screen, and comes back
  }else{
   if((m_creatureTimer-=dt)<=0){m_creatureTimer=CreatureInterval;sendCreatures();}
   if((m_doorTimer-=dt)<=0){m_doorTimer=DoorInterval;sendDoors();}
@@ -309,11 +310,15 @@ void Match::placePlayer(int slot,int level,Point3 world){
  ++s.life;s.latest.world=world;s.latest.level=level;s.latest.life=s.life;s.acceptedAt=m_clock;s.correctCooldown=0;s.history.clear();s.history.push_back({m_clock,s.latest});
  const Vec2 o=origin(level);wire::Writer w;w.u8(Correct).u8(s.life).u8(unsigned(level)).f32(world.x-o.x).f32(world.y-o.y).f32(world.z);send(s.peer,Events,w,true);
 }
-// Full health and the default loadout (a fresh map's shotgun), standing, at the spawn.
+// Full health, standing, at the spawn. The loadout: a fresh map's shotgun in co-op; in a deathmatch nothing at all
+// (fists, no gun, no rounds): every gun is found lying on the map.
 void Match::applySpawn(int level,Point3 world,float yaw){
  Game& g=m_game;teleportLocal(level,world);auto& p=g.m_player;
- p.health=100;p.pools={AmmoPool{},AmmoPool{72,6},AmmoPool{}};p.angle=yaw;p.pitch=0;p.grounded=true;p.crouched=p.prone=false;p.eye=Player::StandingEye;
- g.m_reloadTimer=0;g.m_shotCooldown=0;g.m_damageFlash=0;g.m_won=false;g.m_handsLowered=false;g.equipWeapon(WeaponId::Shotgun);g.m_holster=0;g.m_suppressFire=true;
+ const bool bare=m_mode==Mode::Deathmatch;
+ p.health=100;p.pools=bare?decltype(p.pools){}:decltype(p.pools){AmmoPool{},AmmoPool{72,6},AmmoPool{}};p.angle=yaw;p.pitch=0;p.grounded=true;p.crouched=p.prone=false;p.eye=Player::StandingEye;
+ if(bare){while(g.hasQuestItem(Game::HandgunItem))g.takeQuestItem(Game::HandgunItem,1);while(g.hasQuestItem(Game::MachinePistolItem))g.takeQuestItem(Game::MachinePistolItem,1);}
+ g.m_shotgunOwned=!bare;
+ g.m_reloadTimer=0;g.m_shotCooldown=0;g.m_damageFlash=0;g.m_won=false;g.m_handsLowered=false;g.equipWeapon(bare?WeaponId::Fists:WeaponId::Shotgun);g.m_holster=0;g.m_suppressFire=true;
  m_selfRespawnIn=-1;
 }
 
@@ -448,7 +453,25 @@ void Match::trackPickups(){
  for(int level=0;level<g.chunkCount();++level){if(!g.chunkResident(level))continue;
   const auto& list=g.chunkPickups(level);auto& seen=m_pickupSeen[size_t(level)];
   if(seen.size()!=list.size()){seen.resize(list.size());for(size_t i=0;i<list.size();++i)seen[i]=list[i].active;continue;}
-  for(size_t i=0;i<list.size();++i){if(seen[i]&&!list[i].active){wire::Writer w;w.u8(PickupTaken).u8(unsigned(level)).u16(unsigned(i));broadcast(Events,w,true);}seen[i]=list[i].active;}
+  for(size_t i=0;i<list.size();++i){if(seen[i]&&!list[i].active){wire::Writer w;w.u8(PickupTaken).u8(unsigned(level)).u16(unsigned(i));broadcast(Events,w,true);if(m_host&&m_mode==Mode::Deathmatch)markPickupGone(level,int(i));}seen[i]=list[i].active;}
+ }
+}
+// Deathmatch: a pickup taken is back after PickupRespawn seconds, on the host's word (PickupBack to everyone).
+void Match::markPickupGone(int level,int index){
+ for(const auto& g:m_pickupGone)if(g.level==level&&g.index==index)return;
+ m_pickupGone.push_back({level,index,0.f});
+}
+void Match::pickupRespawns(float dt){
+ Game& g=m_game;m_pickupSeen.resize(size_t(g.chunkCount()));
+ for(size_t k=0;k<m_pickupGone.size();){
+  auto& gone=m_pickupGone[k];gone.age+=dt;
+  if(gone.age<PickupRespawn){++k;continue;}
+  if(gone.level>=0&&gone.level<g.chunkCount()&&g.chunkResident(gone.level)){
+   auto& list=gone.level==g.m_level?g.m_pickups:g.m_chunks[size_t(gone.level)].pickups;
+   if(gone.index>=0&&size_t(gone.index)<list.size()){list[size_t(gone.index)].active=true;auto& seen=m_pickupSeen[size_t(gone.level)];if(size_t(gone.index)<seen.size())seen[size_t(gone.index)]=1;
+    wire::Writer w;w.u8(PickupBack).u8(unsigned(gone.level)).u16(unsigned(gone.index));broadcast(Events,w,true);}
+  }
+  m_pickupGone.erase(m_pickupGone.begin()+std::ptrdiff_t(k));
  }
 }
 // A guest's own hand on a door: the host is asked to do the same.
@@ -470,7 +493,7 @@ void Match::guestFrame(float dt){
  if((m_stateTimer-=dt)<=0){m_stateTimer=std::max(0.f,m_stateTimer+GuestInterval);sendGuestState();}
  if(m_selfRespawnIn>0)m_selfRespawnIn=std::max(0.f,m_selfRespawnIn-dt);
  if(m_over&&m_restartIn>0)m_restartIn=std::max(0.f,m_restartIn-dt);
- if(m_mode==Mode::Coop){trackPickups();trackDoors(dt);smoothCreatures(dt);coopGuestFrame(dt);}else clearCreatures();
+ if(m_mode==Mode::Coop){trackPickups();trackDoors(dt);smoothCreatures(dt);coopGuestFrame(dt);}else{clearCreatures();trackPickups();}
  guestProps(dt);   // the host's props, posed; this hand's carry and throws, sent (MatchProps.cpp)
 }
 void Match::sendGuestState(){
@@ -565,7 +588,8 @@ void Match::handleEvent(const Packet& p){
  if(m_phase!=Phase::Playing)return;
  auto takePickup=[&](int level,int index){if(level<0||level>=g.chunkCount()||!g.chunkResident(level))return false;
   auto& list=level==g.m_level?g.m_pickups:g.m_chunks[size_t(level)].pickups;if(index<0||size_t(index)>=list.size())return false;
-  list[size_t(index)].active=false;m_pickupSeen.resize(size_t(g.chunkCount()));auto& seen=m_pickupSeen[size_t(level)];if(size_t(index)<seen.size())seen[size_t(index)]=0;return true;};
+  list[size_t(index)].active=false;m_pickupSeen.resize(size_t(g.chunkCount()));auto& seen=m_pickupSeen[size_t(level)];if(size_t(index)<seen.size())seen[size_t(index)]=0;
+  if(m_host&&m_mode==Mode::Deathmatch)markPickupGone(level,index);return true;};
  if(m_host){
   const int slot=slotOf(p.from);if(slot<0)return;
   if(handleCoopEvent(slot,type,r))return;   // a guest's hand on a terminal (MatchCoop.cpp)
@@ -625,6 +649,10 @@ void Match::handleEvent(const Packet& p){
   const std::uint8_t life=std::uint8_t(r.u8());const int level=int(r.u8());Point3 at;at.x=r.f32();at.y=r.f32();at.z=r.f32();if(r.bad||level>=g.chunkCount())return;
   const Vec2 o=origin(level);m_lifeLocal=life;teleportLocal(level,{at.x+o.x,at.y+o.y,at.z});break;}
  case PickupTaken:{const int level=int(r.u8());const int index=int(r.u16());if(!r.bad)takePickup(level,index);break;}
+ case PickupBack:{const int level=int(r.u8());const int index=int(r.u16());   // (deathmatch) a taken pickup is lying there again
+  if(!r.bad&&level>=0&&level<g.chunkCount()&&g.chunkResident(level)){auto& list=level==g.m_level?g.m_pickups:g.m_chunks[size_t(level)].pickups;
+   if(index>=0&&size_t(index)<list.size()){list[size_t(index)].active=true;m_pickupSeen.resize(size_t(g.chunkCount()));auto& seen=m_pickupSeen[size_t(level)];if(size_t(index)<seen.size())seen[size_t(index)]=1;}}
+  break;}
  case PickupsInit:{const int count=int(r.u16());for(int k=0;k<count&&!r.bad;++k){const int level=int(r.u8());const int index=int(r.u16());if(!r.bad)takePickup(level,index);}break;}
  case Travel:{
   const int level=int(r.u8());Point3 at;at.x=r.f32();at.y=r.f32();at.z=r.f32();const float angle=r.angle();const int left=int(r.u8());const bool follow=r.u8()!=0;

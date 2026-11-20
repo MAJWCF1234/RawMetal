@@ -13,7 +13,7 @@ namespace retro {
 // Match whose Session has left, whose lobby closed or which ended itself is dropped and the title comes back.
 // Quitting to the title from a match's pause menu leaves the lobby.
 void Game::updateNet(){
- if(!m_netSession){if(m_match){m_match.reset();m_remotePlayers.clear();m_matchView={};m_netScriptsOff=m_netCreaturesRemote=false;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();}return;}
+ if(!m_netSession){if(m_match){m_match.reset();m_remotePlayers.clear();m_matchView={};m_netScriptsOff=m_netCreaturesRemote=false;m_shotgunOwned=true;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();}return;}
  m_netSession->tick();
  auto inLobby=[&]{const auto s=m_netSession->state();return s==net::SessionState::InLobby||((s==net::SessionState::Busy||s==net::SessionState::Failed)&&!m_netSession->lobby().id.empty());};
  if(!m_match&&inLobby())m_match=std::make_shared<net::Match>(*this);
@@ -23,7 +23,7 @@ void Game::updateNet(){
  const bool started=m_match->played();
  std::string status=m_match->finished()?m_match->endStatus():std::string("You left the game");
  m_match.reset();m_remotePlayers.clear();m_matchView={};m_matchView.status=status;
- m_netScriptsOff=m_netCreaturesRemote=false;m_netBodies=nullptr;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();
+ m_netScriptsOff=m_netCreaturesRemote=false;m_shotgunOwned=true;m_netBodies=nullptr;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();
  if(inLobby())m_netSession->leave();
  if(started&&!m_titleScreen)showTitleScreen();
 }
@@ -131,7 +131,7 @@ void Match::becomeHost(){
  m_host=true;m_hostId=m_self;
  if(m_selfSlot>=0){auto& me=m_slots[size_t(m_selfSlot)];me.used=me.ready=me.spawned=me.host=true;me.peer=m_self;me.health=m_game.m_player.health;me.alive=!m_game.dead();me.latest=localState();me.haveState=true;me.acceptedAt=m_clock;me.life=m_lifeLocal;
   if(!me.alive&&me.respawnIn<0)me.respawnIn=std::max(0.f,m_selfRespawnIn);}
- m_game.m_netScriptsOff=false;m_game.m_netCreaturesRemote=false;m_game.m_netPropsRemote=false;m_game.m_netPropsHost=true;clearProps();
+ m_game.m_netScriptsOff=false;m_game.m_netCreaturesRemote=false;m_game.m_shotgunOwned=true;m_game.m_netPropsRemote=false;m_game.m_netPropsHost=true;clearProps();
  if(m_timeLimit>0&&m_timeLeft>=0)m_roundClock=m_timeLimit-m_timeLeft;
  const auto path=localMapFile(m_mapFile);if(path.empty()||!readBytes(path,m_mapBytes))m_mapBytes.clear();
  m_restartIn=m_over?10.f:-1.f;
@@ -195,12 +195,12 @@ void Match::handleControl(const Packet& p){
   }else if(type==Ready){
    const bool already=r.u8()!=0;const int slot=slotOf(p.from);if(slot<0||r.bad)return;
    auto& s=m_slots[size_t(slot)];s.ready=true;
-   if(m_mode==Mode::Coop){
-    // The pickups already taken, on every map.
+   {
+    // The pickups already taken, on every map (a deathmatch's guns too).
     wire::Writer w;w.u8(PickupsInit);std::vector<std::pair<int,int>> taken;
     for(int level=0;level<m_game.chunkCount();++level)if(m_game.chunkResident(level)){const auto& list=m_game.chunkPickups(level);for(size_t i=0;i<list.size();++i)if(!list[i].active)taken.push_back({level,int(i)});}
     w.u16(unsigned(taken.size()));for(auto [level,i]:taken)w.u8(unsigned(level)).u16(unsigned(i));send(p.from,Events,w,true);
-    sendStateSync(true,&p.from);   // the whole state store, as it stands (MatchCoop.cpp)
+    if(m_mode==Mode::Coop)sendStateSync(true,&p.from);   // the whole state store, as it stands (MatchCoop.cpp)
    }
    if(already&&s.haveState)s.spawned=true;else respawn(slot);
    if(m_over){wire::Writer w;w.u8(RoundOver).str(m_winner);send(p.from,Events,w,true);}

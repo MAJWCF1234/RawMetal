@@ -104,7 +104,8 @@ bool Match::selfTest(std::ostream& report){
   g.m_velocity={};};
  // The test sets players where it wants them: the host places itself; a guest is placed by the host (a correction).
  auto put=[&](Game& host,Game& g,Vec2 p){if(&g==&host)g.m_player.pos=p;else host.m_match->placePlayer(slotOfGame(g),g.m_level,{p.x,p.y,g.m_player.z});};
- auto killWith=[&](Game& shooter,Game& victim,int shots){shooter.m_player.pools[1]={72,6};
+ auto arm=[&](Game& g){g.m_shotgunOwned=true;g.m_player.pools[1]={72,6};g.equipWeapon(WeaponId::Shotgun);};
+ auto killWith=[&](Game& shooter,Game& victim,int shots){arm(shooter);
   for(int i=0;i<shots&&!victim.dead();++i){aim(shooter,{victim.m_player.pos.x,victim.m_player.pos.y,victim.m_player.z+1.f});shooter.shoot();frames(8);}};
 
  // ===== Deathmatch =====
@@ -156,7 +157,15 @@ bool Match::selfTest(std::ostream& report){
   {const auto& m=*host->m_match;float farthest=-1;for(const auto& s:m.m_spawns)farthest=std::max(farthest,std::hypot(s.world.x-guestAt.x,s.world.y-guestAt.y));
    const Vec2 o=host->chunkOffset(host->m_level);const float mine=std::hypot(host->m_player.pos.x+o.x-guestAt.x,host->m_player.pos.y+o.y-guestAt.y);
    check(!host->dead()&&host->m_player.health==100&&onSpawn(m,*host)&&std::fabs(mine-farthest)<.05f,"after 3 s the host respawns, full health, on the spawn farthest from the living guest");
-   check(host->m_player.pools[1].total==72&&host->m_player.pools[1].loaded==6,"respawn gives the default loadout");}
+   check(host->m_player.pools[1].total==0&&!host->ownsWeapon(WeaponId::Shotgun)&&!host->hasHandgun()&&!host->hasMachinePistol()&&host->unarmed(),"a deathmatch respawn gives nothing: fists, no gun, no rounds");}
+  // The guns lie on the map: one picked up arms its taker and leaves every screen, and is back 30 s later.
+  {const Point3 spot{host->m_player.pos.x,host->m_player.pos.y,0};const Vec2 home=host->m_player.pos;
+   host->m_pickups.assign(1,Pickup{{home.x+1.5f,home.y},Pickup::Kind::Shotgun,true,-999});guest->m_pickups=host->m_pickups;
+   host->m_player.pos={home.x+1.5f,home.y};frames(6);host->m_player.pos=home;
+   check(host->ownsWeapon(WeaponId::Shotgun)&&host->m_player.pool(WeaponId::Shotgun).loaded>0&&(host->m_switchTarget==WeaponId::Shotgun||host->m_equippedWeapon==WeaponId::Shotgun),"picking up the shotgun arms the player: the gun, loaded, in hand");
+   check(!host->m_pickups[0].active&&!guest->m_pickups[0].active,"the taken shotgun is gone from the other player's map too");
+   frames(int(20.f/dt));check(!host->m_pickups[0].active&&!guest->m_pickups[0].active,"20 s on it is still gone");
+   frames(int(12.f/dt));check(host->m_pickups[0].active&&guest->m_pickups[0].active,"30 s after it was taken the shotgun lies there again, on both machines");(void)spot;}
   // The frag limit (2) ends the round; it starts again 10 s later.
   host->m_player.pos={8.5f,5.5f};put(*host,*guest,{8.5f,8.5f});frames(30);
   killWith(*guest,*host,4);frames(20);
@@ -189,7 +198,7 @@ bool Match::selfTest(std::ostream& report){
   float worstThird=0;walk(*third,{0,-1},2.f,1.f,&worstThird,guest.get(),ts);frames(30);
   {const auto* v=remote(*guest,ts);check(v&&gap(v->position,here(*third))<.05f&&worstThird<.6f,"the new host follows the third player's moves (worst "+std::to_string(worstThird)+" m)");}
   guest->m_player.pos={12.5f,15.5f};put(*guest,*third,{12.5f,18.5f});frames(30);
-  third->m_player.pools[1]={72,6};aim(*third,{guest->m_player.pos.x,guest->m_player.pos.y,guest->m_player.z+1.f});third->shoot();frames(10);
+  arm(*third);aim(*third,{guest->m_player.pos.x,guest->m_player.pos.y,guest->m_player.z+1.f});third->shoot();frames(10);
   check(guest->m_player.health<100&&!guest->dead(),"the new host traces the third player's shot and takes the damage");
   playing.clear();
  }

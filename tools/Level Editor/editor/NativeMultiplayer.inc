@@ -131,6 +131,19 @@
            L" on its map. With fewer than 4 the game finds spots on open floor itself.";
   }
 
+  // A deathmatch starts with fists and nothing else: the guns lie on its map. None there (a MAC-11, handgun or
+  // shotgun pickup, kinds 4 to 6) and nobody can fight.
+  std::wstring gunWarning() const {
+    if (!multiplayerChoice().deathmatch)
+      return {};
+    for (auto i : doc.records("PICKUP", deathmatchMapIndex())) {
+      auto f = NativeDocument::fields(doc.lines[i]);
+      if (f.size() > 2 && number(f[2], 0) >= 4)
+        return {};
+    }
+    return L"Deathmatch starts with fists only. Place a Handgun, Shotgun or MAC-11 with the Health and ammo tool.";
+  }
+
   // ---- The page ----
   template <class Choices> void makeMultiplayerControls(Choices &&choices) {
     spawnTeamList = choices(SpawnTeamList, {L"Anyone", L"Team 1", L"Team 2", L"Team 3", L"Team 4"});
@@ -249,6 +262,13 @@
     y += 24;
     if (auto warning = multiplayerWarning(); !warning.empty()) {
       // Two lines: the count, then what the game does about it.
+      const auto split = warning.find(L". ");
+      caption(x, y, width, L"⚠ " + warning.substr(0, split + 1));
+      y += 20;
+      caption(x, y, width, warning.substr(split + 2));
+      y += 26;
+    }
+    if (auto warning = gunWarning(); !warning.empty()) {
       const auto split = warning.find(L". ");
       caption(x, y, width, L"⚠ " + warning.substr(0, split + 1));
       y += 20;

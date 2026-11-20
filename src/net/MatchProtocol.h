@@ -40,6 +40,7 @@ enum Message:std::uint8_t{
  Use=33,         // guest -> host (co-op): u8 level, u16 terminal (a switch, lever or lift call the host works for them)
  ScriptFx=34,    // host -> all (co-op): u8 action type, u32 id, i32 value, u16 sound, f32 amount, str text (a script's
                  //   sound, shake, caption, release, ending; or an item for the guest it is sent to)
+ PickupBack=36,   // host -> all (deathmatch): u8 level, u16 index (a taken pickup is lying there again)
  StateSync=35,   // host -> all (co-op): u8 full, u16 count {u32 id, i32 value}, u8 count {u32 objective, u8 status},
                  //   u16 count {u32 property, i32 value}; full replaces, otherwise only what changed
  ChatSay=50,     // guest -> host: str text (MatchChat.cpp: the host cleans it, rate-limits it and relays it)

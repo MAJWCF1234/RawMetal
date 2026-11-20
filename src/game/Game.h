@@ -1061,7 +1061,9 @@ public:
     // The MAC-11 too (a floor pickup, a script's GIVE, `give mac11`).
     static constexpr StateId MachinePistolItem=stateId("machine_pistol");
     bool hasMachinePistol()const{return hasQuestItem(MachinePistolItem);}
-    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||id==WeaponId::Shotgun||(id==WeaponId::Handgun&&hasHandgun())||(id==WeaponId::MachinePistol&&hasMachinePistol());}
+    // The shotgun is carried from the start everywhere but a deathmatch, where nobody has a gun until one is picked up.
+    bool m_shotgunOwned=true;
+    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||(id==WeaponId::Shotgun&&m_shotgunOwned)||(id==WeaponId::Handgun&&hasHandgun())||(id==WeaponId::MachinePistol&&hasMachinePistol());}
     // The MAC-11 with `rounds` more .380; a first one comes with them in its magazine.
     void grantMachinePistol(int rounds);
     // The hip holster's contents (AvatarPose::hip, WeaponId+1, 0 empty) with `inHand`

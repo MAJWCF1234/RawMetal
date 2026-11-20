@@ -20,8 +20,9 @@ namespace retro { class Game; struct InputState; struct CustomCampaign; class Wo
 namespace retro::net {
 namespace wire { struct Writer; struct Reader; }
 
-constexpr std::uint16_t ProtocolVersion=3;      // 2: a player state carries torch and locker; co-op scripts, state, people
+constexpr std::uint16_t ProtocolVersion=4;      // 2: a player state carries torch and locker; co-op scripts, state, people
                                                // 3: several maps at once (creatures, doors per map), props from the host
+                                               // 4: deathmatch starts bare, its pickups are shared and come back (PickupBack)
 constexpr int MaxSlots=16;
 constexpr std::size_t MapChunkBytes=1100;     // a MapData packet's file bytes at most
 
@@ -142,6 +143,12 @@ private:
  void sendCreatures();
  void sendDoors();
  void trackPickups();
+ // Deathmatch: what is taken from the map is back after PickupRespawn seconds, on the host's word.
+ static constexpr float PickupRespawn=30.f;
+ struct GonePickup{int level,index;float age;};
+ std::vector<GonePickup> m_pickupGone;
+ void markPickupGone(int level,int index);
+ void pickupRespawns(float dt);
  void trackDoors(float dt);
  void smoothCreatures(float dt);
  void clearCreatures();
