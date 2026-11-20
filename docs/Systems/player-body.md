@@ -172,7 +172,7 @@ rig already in a T-pose, 24,742 triangles) into the gitignored library at
 
 | Resource | File |
 | --- | --- |
-| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 5,997 triangles, 3,581 vertices, 62 bones) |
+| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 11,977 triangles, 6,673 vertices, 62 bones) |
 | 2271 | `leon-animation.bin` (the same 40 clips, RMS1: kept as bones) |
 | 2272 | `leon-animation.bin.anchors` |
 | 2273-2276 | `LeonFur.png`, `LeonInner.png`, `LeonBlack.png`, `LeonMetal.png` (8x8 solid colours, one a material) |
@@ -193,9 +193,19 @@ Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Mode
   foot's weightless leaf bones.
 - The body's skin under the stockings is deleted (an outward ray meets the
   stockings): a coarser skin poked through them. The meshes are joined and
-  collapsed in two passes, the body held while the head is cut to about 3,400
-  triangles, then the head held while the body (with the thighs' tops
-  protected) is cut to about 2,600. Four weights a vertex.
+  collapsed in three passes with the mesh's mirror symmetry kept (after merging
+  flat faces, 1 degree, never across a material): the plain body (torso, arms,
+  legs, stockings) first, with the head, the paws and the thighs' tops held; then
+  the head to about 5,600 triangles (`LEON_HEAD`); then the paws to about 3,000
+  (`LEON_PAWS`). The paws are the hands with their fingers (weighted to the hand
+  and finger bones, 0.62 m out) and the feet (weighted to the foot bones, below
+  0.14 m): they are 8,000 of the source's triangles (round fingers, the wrist
+  fur), and a first cut to 6,000 triangles turned the fur tufts into slivers and
+  the hands into shards, so they keep about 40%. The small fur tufts stay: held,
+  they read as fur. Result: 11,977 triangles, about 5,300 the head, 3,400 the
+  paws, 1,100 the thighs' tops and 2,000 the rest. The engine lights a body by
+  its faces (it ignores smoothing), so more triangles read as smoother skin.
+  Four weights a vertex.
 - Four materials (`LeonFur`, `LeonInner` for the inner ears and paw pads,
   `LeonBlack`, `LeonMetal`), each an 8x8 PNG of the material's base colour
   (the engine finds a body's texture by material name). Gloss 0.05, as the
@@ -224,9 +234,11 @@ Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Mode
 
   (Run it from a shell that does not rewrite `:` and `@` arguments as paths:
   Git Bash needs `MSYS2_ARG_CONV_EXCL='*'`, and the prefixes written out in full.)
-- Packed, his seven files are 788,952 bytes (`Leon.fbx` 204,878, the bank
-  556,606, the anchors 27,022, four textures about 450 together); the Limitator's
-  pack to 771,782 without his textures.
+- Packed, his seven files are 946,976 bytes (`Leon.fbx` 337,020, the bank
+  582,410, the anchors 27,100, four textures 446 together; the 5,997-triangle
+  first Leon packed to 788,952, so the heavier mesh costs 158,024 bytes more,
+  20%); the Limitator's pack to 771,782 without his textures. In the lab the
+  `leon` tube renders a frame in 14.4 ms against the `limitator` tube's 11.6.
 - He loads the first time he is asked for (`SoftwareRenderer::playerBody(2)`,
   `RemoteBodies::body(2)`). Missing or broken files make him the Limitator,
   and the Limitator Claire (the CHARACTER page says so). The wire carries the

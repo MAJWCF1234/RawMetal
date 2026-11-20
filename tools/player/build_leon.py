@@ -10,16 +10,19 @@
 #    weights going to the nearest kept ancestor: the tail and ears follow the
 #    hips and the head. The rig has one chest bone: it is split into Spine1-3
 #    (the weights blend with height),
-#  - joins the meshes and decimates them to MAX_TRIANGLES (6,000 by default),
-#    keeping triangles for the head (eyes, nose, ears) and the bow,
+#  - joins the meshes and decimates them to MAX_TRIANGLES (11,800 by default, about 12,000 in the end): flat faces
+#    are merged first (planar), then the plain body (torso, arms, legs, stockings) is collapsed while the head
+#    (eyes, nose, ears, fur, the bow), the paws (hands, fingers, feet: found by their bone weights and place) and
+#    the thighs' tops are held, then the head and the paws each on their own to LEON_HEAD / LEON_PAWS (5,600 and
+#    3,000 triangles by default), all with the mesh's mirror symmetry kept,
 #  - keeps at most four weights a vertex, names the materials LeonFur, LeonInner,
 #    LeonBlack, LeonMetal and writes one 8x8 solid-colour PNG for each
 #    (the engine finds a body's texture by material name),
 #  - writes the FBX with +Z ahead and +X his left, its arrays undeflated.
-import bpy, bmesh, sys, os, zlib, struct
+import bpy, bmesh, sys, os, zlib, struct, math
 argv=sys.argv[sys.argv.index('--')+1:]
 src,out,texdir=argv[0],argv[1],argv[2]
-LIMIT=int(argv[3]) if len(argv)>3 else 6000
+LIMIT=int(argv[3]) if len(argv)>3 else 11800
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.fbx(filepath=src)
 view=bpy.context.view_layer
@@ -149,29 +152,78 @@ me=view.objects.active; me.name='Leon'; me.data.name='Leon'
 for m in list(me.modifiers): me.modifiers.remove(m)
 def tris(): return sum(len(p.vertices)-2 for p in me.data.polygons)
 print("JOINED",tris())
-# Head vertices (above the neck bone) keep more; the bow sits on the neck.
+# The head (above the neck bone; the bow sits on the neck), the paws (hands, fingers, feet, toes) and the thighs'
+# tops (where the stockings end) are protected: the plain body (torso, arms, legs, stockings) is collapsed first
+# while they are held, then the head and the paws are cut gently on their own. A decimate ratio is of the whole
+# mesh's triangles, so every pass's target is the mesh's total.
 neck_z=bones['Neck'].head_local.z
-vg=me.vertex_groups.new(name='keep'); hold=me.vertex_groups.new(name='hold')
-BAND=(float(os.environ.get('LEON_BAND_LO','0.55')),float(os.environ.get('LEON_BAND_HI','0.9')))   # the thighs' tops, where the stockings end
+gname={g.index:g.name for g in me.vertex_groups}
+HAND_G={n+str(i)+'_'+s for n in ('Thumb','Index','Middle','Ring','Pinky') for i in (1,2,3) for s in 'LR'}|{'Hand_L','Hand_R'}
+FOOT_G={'Foot_L','Foot_R','Toe_L','Toe_R'}
+vin=lambda v,names: sum(g.weight for g in v.groups if gname[g.group] in names)
+BAND=(float(os.environ.get('LEON_BAND_LO','0.55')),float(os.environ.get('LEON_BAND_HI','0.9')))
+HAND_X=float(os.environ.get('LEON_HAND_X','0.62')); FOOT_Z=float(os.environ.get('LEON_FOOT_Z','0.14'))   # the paws' reach in the T-pose
+region={}   # vertex index -> 'head' | 'paw' | 'band' | 'body'
 for v in me.data.vertices:
-    head=v.co.z>=neck_z-0.02
-    vg.add([v.index],1.0 if head else 0.0,'REPLACE')
-    hold.add([v.index],1.0 if head or BAND[0]<=v.co.z<=BAND[1] else 0.0,'REPLACE')
-head_tris=lambda: sum(len(p.vertices)-2 for p in me.data.polygons if all(me.data.vertices[i].co.z>=neck_z-0.02 for i in p.vertices))
-# Two passes with the weights of 'keep' (1 on the head): the body is cut while the head is held, then the head
-# while the body is held. A decimate ratio is of the whole mesh's triangles.
-HEAD=int(os.environ.get('LEON_HEAD','3400')); BODY=LIMIT-HEAD
+    if (vin(v,HAND_G)>=0.5 and abs(v.co.x)>=HAND_X) or (vin(v,FOOT_G)>=0.5 and v.co.z<=FOOT_Z): r='paw'
+    elif v.co.z>=neck_z-0.02: r='head'
+    elif BAND[0]<=v.co.z<=BAND[1]: r='band'
+    else: r='body'
+    region[v.index]=r
+if os.environ.get('LEON_DIAG'):
+    bmd=bmesh.new(); bmd.from_mesh(me.data); bmd.verts.ensure_lookup_table(); seen=set(); import collections; st_=collections.defaultdict(list)
+    for v0 in bmd.verts:
+        if v0.index in seen: continue
+        stack=[v0]; seen.add(v0.index); comp=[v0]
+        while stack:
+            x=stack.pop()
+            for e in x.link_edges:
+                w=e.other_vert(x)
+                if w.index not in seen: seen.add(w.index); stack.append(w); comp.append(w)
+        fs={f for x in comp for f in x.link_faces}; rr=collections.Counter(region[x.index] for x in comp).most_common(1)[0][0]
+        st_[rr].append(sum(len(f.verts)-2 for f in fs))
+    for r,l in st_.items(): print('ISLANDS',r,len(l),sorted(l,reverse=True)[:14],'small(<=40)',sum(1 for t in l if t<=40),sum(t for t in l if t<=40))
+    for r in ('paw','head','band','body'):
+        pts=[me.data.vertices[i].co for i,k in region.items() if k==r]
+        print('DIAG',r,len(pts),[round(min(p[a] for p in pts),2) for a in range(3)],[round(max(p[a] for p in pts),2) for a in range(3)])
+def group_of(name,regions):
+    g=me.vertex_groups.new(name=name)
+    for i,r in region.items(): g.add([i],1.0 if r in regions else 0.0,'REPLACE')
+for r in ('head','paw','band'): group_of('r_'+r,{r})
+def count(r_in):
+    # triangles whose corners all carry the region's mark (the marks follow the vertices through the collapses)
+    idx=[me.vertex_groups['r_'+r].index for r in r_in]
+    w=[ {g.group for g in v.groups if g.group in idx and g.weight>0.5} for v in me.data.vertices]
+    return sum(len(p.vertices)-2 for p in me.data.polygons if all(w[i] for i in p.vertices))
+# 4a. Planar: faces that already lie in one plane (the same material) merge, so the budget goes where the shape is.
+PLANAR=float(os.environ.get('LEON_PLANAR','1.0'))
+if PLANAR>0:
+    bm=bmesh.new(); bm.from_mesh(me.data)
+    bmesh.ops.dissolve_limit(bm,angle_limit=math.radians(PLANAR),use_dissolve_boundaries=False,verts=bm.verts,edges=bm.edges,delimit={'MATERIAL'})
+    bmesh.ops.triangulate(bm,faces=bm.faces[:],quad_method='BEAUTY',ngon_method='BEAUTY')
+    bm.to_mesh(me.data); bm.free(); me.data.update()
+    print('PLANAR',PLANAR,'->',tris())
+HEAD=int(os.environ.get('LEON_HEAD','5600')); PAWS=int(os.environ.get('LEON_PAWS','3000'))
 def cut(invert,target,group):
     mod=me.modifiers.new('d','DECIMATE');mod.decimate_type='COLLAPSE';mod.use_collapse_triangulate=True
     mod.vertex_group=group;mod.invert_vertex_group=invert
     mod.ratio=min(1.0,target/tris())
+    if os.environ.get('LEON_SYM','1')=='1': mod.use_symmetry=True; mod.symmetry_axis='X'
     bpy.ops.object.modifier_apply(modifier=mod.name)
-h0=head_tris(); print('HEAD before',h0,'of',tris())
-cut(True,h0+BODY+int(os.environ.get('LEON_BANDTRIS','0')),'hold')
-print('BODY cut',tris(),'head',head_tris())
-cut(False,tris()-head_tris()+HEAD,'keep')
-print("DECIMATED",tris(),"head",head_tris())
-me.vertex_groups.remove(me.vertex_groups['keep']); me.vertex_groups.remove(me.vertex_groups['hold'])
+def regions_tris():
+    d={k:count({k}) for k in ('head','paw','band')}; d['body']=tris()-sum(d.values()); return d
+print('REGIONS before',regions_tris(),'of',tris())
+group_of('hold',{'head','paw','band'}); group_of('keep',{'head'}); group_of('pawg',{'paw'})
+h=regions_tris()
+# the plain body is cut so that the whole mesh would hold LIMIT with the head and paws at their targets
+body_target=h['head']+h['paw']+h['band']+max(0,LIMIT-HEAD-PAWS-h['band'])
+cut(True,min(tris(),body_target),'hold')
+print('BODY cut',tris(),regions_tris())
+cut(False,tris()-count({'head'})+HEAD,'keep')
+print('HEAD cut',tris(),regions_tris())
+cut(False,tris()-count({'paw'})+PAWS,'pawg')
+print("DECIMATED",tris(),regions_tris())
+for n in ('keep','hold','pawg','r_head','r_paw','r_band'): me.vertex_groups.remove(me.vertex_groups[n])
 # 5. Four weights a vertex, normalized.
 bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL',limit=4)
 bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL',lock_active=False)
