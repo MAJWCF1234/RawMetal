@@ -523,6 +523,17 @@ void Game::updatePickups() {
             grantMachinePistol(def.cycle.tubeCapacity);
             m_pickupNotice=std::string(fresh?"TOOK MAC-11 / .380 x ":"TOOK .380 x ")+std::to_string(def.cycle.tubeCapacity);
             if(fresh&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::MachinePistol);
+        } else if (p.kind == Pickup::Kind::Handgun) {
+            // The pistol itself, a magazine in it; drawn when it is new, otherwise its rounds.
+            const auto&def=playerWeaponDef(WeaponId::Handgun);const bool fresh=!hasHandgun();
+            grantHandgun(def.cycle.tubeCapacity);
+            m_pickupNotice=std::string(fresh?"TOOK HANDGUN / 9MM x ":"TOOK 9MM x ")+std::to_string(def.cycle.tubeCapacity);
+            if(fresh&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::Handgun);
+        } else if (p.kind == Pickup::Kind::Shotgun) {
+            // The shotgun is always owned: the drop is a full box of shells with it, drawn if the hands are bare.
+            const int rounds=playerWeaponDef(WeaponId::Shotgun).cycle.pickupAmount;m_player.pool(WeaponId::Shotgun).total+=rounds;
+            m_pickupNotice="TOOK SHOTGUN / "+std::to_string(rounds)+" SHELLS";
+            if(unarmed()&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::Shotgun);
         } else {
             // Each box feeds its own gun, whatever is in hand; 9 mm waits for the pistol, .380 for the MAC-11.
             const bool nine=p.kind==Pickup::Kind::HandgunAmmo,mac=p.kind==Pickup::Kind::MacAmmo;const auto&def=playerWeaponDef(nine?WeaponId::Handgun:mac?WeaponId::MachinePistol:WeaponId::Shotgun);
@@ -531,7 +542,7 @@ void Game::updatePickups() {
         }
         p.active = false;
         m_pickupNoticeTime=2.f;
-        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:p.kind==Pickup::Kind::MacAmmo?1.04f:p.kind==Pickup::Kind::MachinePistol?.9f:1.f);
+        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:p.kind==Pickup::Kind::MacAmmo?1.04f:p.kind==Pickup::Kind::MachinePistol?.9f:p.kind==Pickup::Kind::Handgun?.95f:p.kind==Pickup::Kind::Shotgun?.85f:1.f);
     }
 }
 const Pickup* Game::nearbyPickup()const{

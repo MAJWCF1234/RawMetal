@@ -4383,6 +4383,18 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(auto face:m_macMesh.triangles){for(auto&v:face.v){auto q=v.p;v.p=Point3{p.pos.x,p.pos.y,base}+forward*q.z+across*q.y+Point3{0,0,m_macMesh.maximum.x-q.x+.003f};}
     auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],m_macTexture,light);}
    objectLighting=false;objectNormalLighting=nullptr;}
+  else if(p.kind==Pickup::Kind::Handgun||p.kind==Pickup::Kind::Shotgun){
+   // The pistol or the shotgun lying on its left side (its +x, the left, down), the barrel along a fixed turn, scaled to its own length.
+   const bool shotgun=p.kind==Pickup::Kind::Shotgun;Mesh& gun=shotgun?m_weaponMesh:m_handgunMesh;const Texture& skin=shotgun?m_weaponTexture:m_handgunTexture;
+   const Point3 span=gun.maximum-gun.minimum,centre=(gun.minimum+gun.maximum)*.5f;const float scale=(shotgun?.95f:.2f)/std::max({span.x,span.y,span.z,.001f});
+   perf::Scope propProfile(perf::Prop);const float yaw=-.6f+.37f*float(int(p.pos.x*7+p.pos.y*13)%5);Point3 receiver{p.pos.x,p.pos.y,base+.03f};
+   if(!sphereVisible(receiver,shotgun?.7f:.3f)||hidden({p.pos.x-.5f,p.pos.y-.5f,base},{p.pos.x+.5f,p.pos.y+.5f,base+.1f}))continue;
+   const Point3 forward{std::cos(yaw),std::sin(yaw),0},across{-std::sin(yaw),std::cos(yaw),0};
+   objectLighting=true;auto lights=exteriorLight(receiver,shotgun?.9f:.25f,.25f,.06f,yaw,skin.glossStrength>0);
+   for(auto face:gun.triangles){if(shotgun&&face.part==3)continue;   // (the Remington's spent shell is part 3)
+    for(auto&v:face.v){auto q=v.p;v.p=Point3{p.pos.x,p.pos.y,base}+forward*((q.z-centre.z)*scale)+across*((q.y-centre.y)*scale)+Point3{0,0,(gun.maximum.x-q.x)*scale+.003f};}
+    auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],skin,light);}
+   objectLighting=false;objectNormalLighting=nullptr;}
   else prop(m_shellsMesh,m_shellsTexture,p.pos.x,p.pos.y,.36f,-.3f,.48f,base);
  }
  // Spent cases (Game::casings, the active chunk's): the shotgun's shell is the

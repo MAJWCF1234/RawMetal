@@ -1140,7 +1140,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(game.pickupNoticeTime()>0&&!shut)promptPanel(offVents(m_height-65,23),game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=shut?nullptr:game.nearbyPickup()){
-  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":pickup->kind==Pickup::Kind::MacAmmo?".380 / 32 ROUNDS":pickup->kind==Pickup::Kind::MachinePistol?"MAC-11 / .380 x 32":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
+  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":pickup->kind==Pickup::Kind::MacAmmo?".380 / 32 ROUNDS":pickup->kind==Pickup::Kind::MachinePistol?"MAC-11 / .380 x 32":pickup->kind==Pickup::Kind::Handgun?"HANDGUN / 9MM":pickup->kind==Pickup::Kind::Shotgun?"SHOTGUN / 12 GA":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   promptPanel(m_height-65,message,amber);
  }
  // Shut in, the hint sits low on the steel under the vent band, off the

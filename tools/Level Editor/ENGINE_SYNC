@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 3c014ecf4fb52dd92ef2caf3bf6b79a88ae686b9
-# 2026-11-19 19:28, tests: a neutral file name in the Builder copy too
+commit 1519ef56c479ac328df8d93b65d9235636413a31
+# 2026-11-19 20:55, Pickups: the Builder puts an upper-floor pickup on its floor (z), and the handgun and the shotgun can be placed as drops (kinds 5 and 6; pickups save section v3)
