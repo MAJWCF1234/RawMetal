@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit cea7972d0ef1f2b1e3889d4498b8d6c5e507e074
-# 2026-11-20 03:12, release: v1.6.5, leon
+commit bf67201a853a0e16411d434d2da3760e94592a2e
+# 2026-11-20 11:09, Render distance: map edge check, MAP view distance up to 1500 m, darkness tone for the void, far lamps glow, the Brutalist City stress map; walk check measures play frames

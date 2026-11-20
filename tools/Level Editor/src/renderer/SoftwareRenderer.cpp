@@ -1510,7 +1510,7 @@ void SoftwareRenderer::render(const Game& game){
   m_chunkLighting={};m_chunkNormalLighting={};m_chunkLightCells={};m_chunkLightCounts={};m_chunkLightSourceKeys={};
   if(m_gpu)m_gpu->clearStaticCaches();
   m_plants.clear();
-  m_lightingGame=game.renderSerial();m_lightingWorld=game.worldId();m_lightingSession=game.renderEpoch();
+  m_lightingGame=game.renderSerial();m_lightingWorld=game.worldId();m_lightingSession=game.renderEpoch();m_buildWarm=12;
   for(int level=0;level<Game::MaxChunks;++level)m_chunkStaticSeen[size_t(level)]=game.staticRevision(level);
  }
  // One map's content changed (a live edit in the campaign builder): its baked
@@ -1527,17 +1527,24 @@ void SoftwareRenderer::render(const Game& game){
  bool scaled=!nativeTarget&&game.renderScale()<1;
  int sceneWidth=m_width,sceneHeight=m_height;m_editorAspect=float(sceneHeight)/std::max(1,sceneWidth);
  if(scaled){m_width=int(fullWidth*game.renderScale());m_height=int(fullHeight*game.renderScale());m_scenePixels.resize(size_t(m_width*m_height));m_sceneZ.resize(size_t(m_width*m_height));m_pixels.swap(m_scenePixels);m_zbuffer.swap(m_sceneZ);}
- m_renderedChunks.clear();
- auto nearby=[&](int level){if(level==game.level())return true;if(!game.chunkResident(level))return false;if(game.worldId()!=WorldId::Custom)return true;
-  auto here=game.chunkOffset(game.level())+m_view.pos,other=game.chunkOffset(level);
-  float dx=std::max({other.x-here.x,0.f,here.x-other.x-24}),dy=std::max({other.y-here.y,0.f,here.y-other.y-24});return dx*dx+dy*dy<=48.f*48.f;};
+ m_renderedChunks.clear();m_buildSpentMs=m_buildWarm>0?(--m_buildWarm,-1e12):0; // a fresh scene bakes all at once for its first frames
+ // Chunks drawn: within the full-detail range (48 m) as always; a longer view distance adds the chunks out to it
+ // as far LODs (m_farChunk, Scene3D drawScene), lamps and per-pixel lighting stay with the near ones.
+ const float viewReach=std::max(Game::fullDetailRange(),game.viewDistance()-22.f);
+ auto chunkGap=[&](int level){auto here=game.chunkOffset(game.level())+m_view.pos,other=game.chunkOffset(level);
+  float dx=std::max({other.x-here.x,0.f,here.x-other.x-24}),dy=std::max({other.y-here.y,0.f,here.y-other.y-24});return std::sqrt(dx*dx+dy*dy);};
+ auto nearbyFull=[&](int level){if(level==game.level())return true;if(!game.chunkResident(level))return false;if(game.worldId()!=WorldId::Custom)return true;return chunkGap(level)<=Game::fullDetailRange();};
+ // A chunk turns far past the range and near again 4 m inside it, so one on the line does not rebuild each frame.
+ if(m_chunkFar.size()<size_t(Game::MaxChunks))m_chunkFar.assign(size_t(Game::MaxChunks),0);
+ auto isFar=[&](int level){char& state=m_chunkFar[size_t(level)];const float gap=chunkGap(level);state=gap>Game::fullDetailRange()-(state?4.f:0.f);return state!=0;};
+ auto nearby=[&](int level){if(level==game.level())return true;if(!game.chunkResident(level))return false;if(game.worldId()!=WorldId::Custom)return true;return chunkGap(level)<=viewReach;};
  warmChunks(game);
  auto scene=[&]{bool parallel=!m_vrRendering&&!m_vrScripted&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
-   drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){drawScene(game,false,level);m_renderedChunks.push_back(level);}
+   drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){m_farChunk=isFar(level);drawScene(game,false,level);m_farChunk=false;m_renderedChunks.push_back(level);}
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if((m_vrRendering||m_vrScripted)&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };
@@ -1565,7 +1572,7 @@ void SoftwareRenderer::render(const Game& game){
   // of power/state so switching never invalidates geometry or shadows.
   bool pixelLighting=g_pixelLighting;
   for(int level=0;level<game.chunkCount()&&!pixelLighting;++level){
-   if(!nearby(level))continue;
+   if(!nearbyFull(level))continue;
    const auto&chunk=game.chunkWorld(level);
    pixelLighting=!chunk.darkZones().empty()||std::any_of(chunk.lights().begin(),chunk.lights().end(),[](const WorldLight&light){return light.switchable();});
   }
@@ -1573,7 +1580,7 @@ void SoftwareRenderer::render(const Game& game){
   // Switchable lamps keep their full intensity in the list (a stable key and
   // shadow maps) and their power goes in per frame beside it.
   {std::vector<std::array<float,16>> lamps;std::vector<float> powers;
-   for(int level=0;level<game.chunkCount();++level){if(!nearby(level))continue;
+   for(int level=0;level<game.chunkCount();++level){if(!nearbyFull(level))continue;
     const auto&chunk=game.chunkWorld(level);auto offset=game.chunkOffset(level);
     for(const auto&lamp:chunk.lights()){if((chunk.hasLift()&&&lamp==&chunk.lights().back())||lamp.intensity<=0)continue;auto e=lamp.emitter();game.hungLampAt(lamp,e);lamps.push_back({e.x+offset.x,e.y+offset.y,e.z,lamp.range,lamp.intensity,lamp.kelvin,lamp.tint,(lamp.shadows?1.f:-1.f)*(lamp.beamCode()+(lamp.switchable()?16.f:0.f)),lamp.fittingWidth*.5f,lamp.fittingDepth*.5f,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z)-lamp.fittingHeight,chunk.clearanceAbove(lamp.position.x,lamp.position.y,lamp.z),lamp.yaw,lamp.gel.x,lamp.gel.y,lamp.gel.z});powers.push_back(game.lampPower(lamp));}
    }
@@ -1614,7 +1621,7 @@ void SoftwareRenderer::render(const Game& game){
   const float darkness=game.darkness();for(int c=0;c<3;++c)atmosphere[size_t(c)]*=1.f-darkness;
   const float gloom=std::min(1.f,darkness+game.stormIntensity()*.5f);
   m_gpu->setDarkness(gloom,.045f-.033f*gloom,game.weaponFlashes());
-  m_gpu->setAtmosphere(atmosphere);m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();if(!m_vrReuseScene)scene();if(!m_vrReuseScene)updatePlants(game);m_gpu->setPlants(m_plants.gpu().data(),m_plants.gpu().size());auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
+  m_gpu->setAtmosphere(atmosphere);{const auto fade=game.viewFade(m_view.pos,m_view.angle,.9f);m_gpu->setViewFade(fade.start,fade.end,fade.voidTone);}m_gpu->setActorEmitCaching(m_actorEmitCaching);m_gpuFrame=true;auto a=std::chrono::steady_clock::now();perf::costs[perf::RenderSetup]+=std::chrono::duration<double,std::milli>(a-start).count();if(!m_vrReuseScene)scene();if(!m_vrReuseScene)updatePlants(game);m_gpu->setPlants(m_plants.gpu().data(),m_plants.gpu().size());auto b=std::chrono::steady_clock::now();m_gpu->finish(m_pixels);auto c=std::chrono::steady_clock::now();afterSubmission=c;m_sceneMs=std::chrono::duration<double,std::milli>(b-a).count();m_submitMs=std::chrono::duration<double,std::milli>(c-b).count();m_gpuFrame=false;}
   catch(const std::exception&e){if(m_vrRendering)throw;m_gpuFrame=false;m_gpu.reset();m_gpuName="Software fallback: "+std::string(e.what());std::ofstream("RawMetal-renderer.txt")<<m_gpuName<<'\n';
    // Mid-session fallbacks are rare and look like a sudden quality drop; keep an appended record for diagnosis.
    std::ofstream("RawMetal-renderer-events.txt",std::ios::app)<<"Vulkan frame failed, falling back to software: "<<e.what()<<" (map "<<game.level()<<" at "<<game.player().pos.x<<','<<game.player().pos.y<<")\n";m_width=logicalWidth;m_height=logicalHeight;m_pixels.resize(size_t(m_width*m_height));m_zbuffer.resize(size_t(m_width*m_height));directPresentation=false;nativeTarget=false;scene();}}

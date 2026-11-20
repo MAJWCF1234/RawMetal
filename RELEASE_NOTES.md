@@ -4,6 +4,24 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.0 - Massive Structures (2026-11-20)
+
+Down here, some things were built to be seen from very far away.
+
+- **See further.** VIDEO now has VIEW DISTANCE: NEAR, NORMAL, FAR and VERY FAR. Custom maps no longer stop at 48 metres; at FAR and beyond, a big outdoor map draws out to 250 metres. Distant land is drawn cheaply, as low trees, plain blocks and no small props, and it melts into the haze before the draw ends, so there is no wall at the edge of sight. Props far away sleep until you come back.
+- **No holes in the world.** Where a map's open side gives onto nothing, the view now ends in air before that edge and turns with you, easing in over a second. With no sky to show, the void takes the colour of the air around it, never black.
+- **Made to be seen across the dark.** A map can now say how far it is meant to be seen, up to 1,500 metres (the MAP record's new view field). Underground, its haze becomes the darkness that distance falls into, and lamps far off keep burning through it, so a lit district shows across a gulf like a city at night.
+- **Brutalist City.** A new map in your custom maps folder, built to be looked at: a city that was not built by people, raised in the Dark Below. Concrete towers stand 160 metres tall around a gulf 96 metres wide, crossed by one bridge sixty metres up. Walk out onto it and look.
+- **Crossing over.** Walking from one map to the next stutters far less than it did, though not yet never.
+- **A Builder that keeps what you meant.** The Campaign Builder no longer quietly drops settings the game reads. Darkness and place names drawn upstairs stay on their own floor, and a ceiling pipe stays under a top floor's ceiling. A stray letter, an out-of-range number or a name with a space can no longer break a map: the Builder corrects it or tells you why. Crates, chains, hung suits and nav hints can now be picked and deleted, Page Up lifts a ground-floor supply box, and Ctrl+D copies triggers and people whole. A picked film camera stays picked.
+- **Leon stands straighter.** He no longer snaps at the waist when he turns. His arms are round again instead of flat sheets, and they no longer cross in front of him. He has been rebuilt from his original model.
+
+Not yet: Leon's arms in first person are still Claire's, painted white. His own are being made.
+
+Verified with the open-space, map format, Leon, Limitator and Claire tests, the Campaign Builder's audit and full editing tests on the Builder branch, and tools/release/ship.py.
+
+---
+
 ## v1.6.5 - Leon (2026-11-20)
 
 A third body to go down in.
