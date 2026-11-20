@@ -172,7 +172,7 @@ rig already in a T-pose, 24,742 triangles) into the gitignored library at
 
 | Resource | File |
 | --- | --- |
-| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 11,977 triangles, 6,673 vertices, 62 bones) |
+| 2270 | `Leon.fbx` (`tools/player/build_leon.py`; 11,973 triangles, 6,673 vertices, 62 bones) |
 | 2271 | `leon-animation.bin` (the same 40 clips, RMS1: kept as bones) |
 | 2272 | `leon-animation.bin.anchors` |
 | 2273-2276 | `LeonFur.png`, `LeonInner.png`, `LeonBlack.png`, `LeonMetal.png` (8x8 solid colours, one a material) |
@@ -191,6 +191,33 @@ Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Mode
   three joints, and some of the chest and upper arm near the shoulder goes to
   the shoulder bones, because `ClaireOutside` wants both. The toes are the
   foot's weightless leaf bones.
+- The torso's weights are graded up the spine (`tools/player/leon_grade.py`,
+  v1.6.6 fix for "his spine snaps when turning"). The takes turn the chest
+  almost wholly through Spine3 (Spine1 and Spine2 bend, they hardly twist:
+  measured in the lab, Spine1 and Spine2 turn with the hips, Spine3 23 degrees
+  past them in a turn on the spot). The avatar's torso was all Hips up to
+  1.09 m and its chest weights were cut at the joints, which sit 7.5 cm apart,
+  so the whole twist landed in 10 cm of his belly and the waist snapped there;
+  the Limitator spreads the same twist over 30 cm. Now a vertex's torso share
+  (Hips + Spine1-3) goes to Spine3 in a smooth step from 0.90 m to 1.33 m
+  (from 0.1 below to 1.3 of the way from the Hips joint, 0.933 m, to the
+  Spine3 joint, 1.238 m), and the rest goes Hips to Spine1 (0.89-1.01 m) to
+  Spine2 (to 1.12 m); vertices far behind the hips (the tail) keep their
+  weights. Still four weights a vertex. `build_leon.py` applies it while it
+  merges the weights; `tools/player/regrade_leon.py IN.fbx OUT.fbx` applies
+  the same function to a built `Leon.fbx` (the shipped one was made that way,
+  without the avatar's source file on hand; Blender's round trip drops four
+  zero-area triangles, 11,973 now). The bank was baked again with the command
+  below (the same command still reproduces the Limitator's bank byte for byte).
+- Lab: the `spineturn` tube (fixture `spineturn`, `lab/tune.txt`
+  `spineturn.character N`) turns a body 100 degrees on the spot and back, then
+  turns while walking, and dumps the drawn faces; `python tools/dev/spine_pop.py`
+  measures the rotation of each 5 cm band of the torso a frame. Shear (the
+  largest difference between neighbouring bands, degrees a frame) turning on
+  the spot: Leon 1.54 before, 0.68 after, the Limitator 0.94; the largest share
+  of the twist on two neighbouring bands 0.56 before, 0.24 after (Limitator
+  0.26). Walking: 0.69 before, 0.58 after (Limitator 0.41). Claire's many
+  meshes do not measure cleanly with it.
 - The body's skin under the stockings is deleted (an outward ray meets the
   stockings): a coarser skin poked through them. The meshes are joined and
   collapsed in three passes with the mesh's mirror symmetry kept (after merging
@@ -234,8 +261,10 @@ Credit: Leon's model is based on "Boykisser Custom Low Poly Avatar (Scratch Mode
 
   (Run it from a shell that does not rewrite `:` and `@` arguments as paths:
   Git Bash needs `MSYS2_ARG_CONV_EXCL='*'`, and the prefixes written out in full.)
-- Packed, his seven files are 946,976 bytes (`Leon.fbx` 337,020, the bank
-  582,410, the anchors 27,100, four textures 446 together; the 5,997-triangle
+- Packed, his seven files are 950,982 bytes since the spine fix (`Leon.fbx`
+  338,698, the bank 582,288, the anchors 29,550, four textures 446 together;
+  v1.6.5's were 946,976: `Leon.fbx` 337,020, the bank 582,410, the anchors
+  27,100; the 5,997-triangle
   first Leon packed to 788,952, so the heavier mesh costs 158,024 bytes more,
   20%); the Limitator's pack to 771,782 without his textures. In the lab the
   `leon` tube renders a frame in 14.4 ms against the `limitator` tube's 11.6.
