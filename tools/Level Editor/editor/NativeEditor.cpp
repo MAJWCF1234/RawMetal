@@ -780,7 +780,8 @@ enum {
   // Material turns (NativeMaterialTurn.inc).
   TurnList=2660,TurnFineBox,
   // The Multiplayer page and the Spawn tool (NativeMultiplayer.inc).
-  MultiplayerTab=2670,SpawnTeamList,MpDeathmatch,MpCoop,MpMapList,MpPlayersList,MpFragList,MpTimeList,MpFriendlyFire,MpPlaceSpawns
+  MultiplayerTab=2670,SpawnTeamList,MpDeathmatch,MpCoop,MpMapList,MpPlayersList,MpFragList,MpTimeList,MpFriendlyFire,MpPlaceSpawns,
+  TriggerAllPlayers=2680
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -901,6 +902,7 @@ static constexpr Friendly friendlyFields[] = {
     {"SCRIPT_TRIGGER", "where", L"Where (box, map, campaign)"},
     {"SCRIPT_TRIGGER", "match", L"Needs (all, any)"},
     {"SCRIPT_TRIGGER", "repeat", L"Again and again (1 yes)"},
+    {"SCRIPT_TRIGGER", "players", L"All players (co-op)"},
     {"DOOR", "state", L"Opens when switch..."},
     {"DOOR", "value", L"...is set to"},
     {"DOOR", "leaf", L"Leaf (0 standard, 1 grille, 2 panel)"},
@@ -1030,6 +1032,7 @@ struct Editor {
   // fields (namedKeys[i], "+" for the add row); labels come from the guide's named-field table.
   size_t positionalInputs = 0;
   std::vector<std::string> namedKeys;
+  HWND triggerAllPlayers = nullptr; // SCRIPT_TRIGGER players=all (co-op: every player)
   std::map<std::string, std::string> namedLabels;
   std::wstring namedLabel(const std::string &key) const {
     auto it = namedLabels.find(key);
@@ -2721,6 +2724,14 @@ struct Editor {
       placeControl(fieldInputs[i], 10, y + 27, std::max(50L, r.right - 36), 26,
                  TRUE);
     }
+    const bool trigger = !schemas.empty() && schemas[size_t(kind)].kind == "SCRIPT_TRIGGER" && record >= 0;
+    if (triggerAllPlayers) {
+      showControl(triggerAllPlayers, trigger);
+      if (trigger) {
+        int y = row++ * 54 - formScroll;
+        placeControl(triggerAllPlayers, 10, y + 10, std::max(50L, r.right - 36), 28, TRUE);
+      }
+    }
     SCROLLINFO s{sizeof(s),
                  SIF_RANGE | SIF_PAGE | SIF_POS,
                  0,
@@ -2805,6 +2816,8 @@ struct Editor {
       auto named = NativeDocument::named(doc.lines[size_t(record)]);
       named.emplace_back("+", "");
       for (auto &[key, value] : named) {
+        // players=all has its own checkbox on SCRIPT_TRIGGER; keep it off the key=value rows.
+        if (s.kind == "SCRIPT_TRIGGER" && key == "players") continue;
         size_t slot = fieldInputs.size();
         if (slot >= poolInputs.size()) {
           poolLabels.push_back(controlWindow(L"STATIC", L"", 0, 0, form));
@@ -2817,6 +2830,14 @@ struct Editor {
         fieldShown.push_back(true);
         namedKeys.push_back(key);
       }
+    }
+    if (triggerAllPlayers) {
+      bool all = false;
+      if (!fresh && record >= 0 && s.kind == "SCRIPT_TRIGGER") {
+        for (const auto &[key, value] : NativeDocument::named(doc.lines[size_t(record)]))
+          if (key == "players") all = decoded(value) == "all";
+      }
+      SendMessageW(triggerAllPlayers, BM_SETCHECK, all ? BST_CHECKED : BST_UNCHECKED, 0);
     }
     laps.lap("fields_texts");
     for (size_t i = fieldInputs.size(); i < poolInputs.size(); ++i)
@@ -4860,9 +4881,24 @@ struct Editor {
     if (s.scoped)
       f.push_back(std::to_string(map));
     NativeDocument::Named named;
+    const auto before = record >= 0 ? NativeDocument::fields(doc.lines[size_t(record)]) : std::vector<std::string>{};
+    auto numeric = [](const std::string &value) {
+      if (value.empty()) return false;
+      char *end = nullptr;
+      std::strtod(value.c_str(), &end);
+      return end == value.c_str() + value.size();
+    };
+    const std::string freeText[] = {"state", "name", "label", "text", "line", "speaker", "voice", "key", "code", "sound", "faction", "material", "style", "symbol", "title", "sky", "script", "event", "node", "target", "value", "kind", "prop", "socket", "terminal"};
     for (size_t i = 0; i < fieldInputs.size(); ++i) {
       auto text = utf8(label(fieldInputs[i]));
       if (i < positionalInputs || i - positionalInputs >= namedKeys.size()) {
+        const size_t field = f.size();
+        if (field > 0 && field < before.size() && field < s.fields.size() && numeric(before[field]) && !text.empty() && !numeric(text) &&
+            std::none_of(std::begin(freeText), std::end(freeText), [&](const auto &word) { return s.fields[field].find(word) != std::string::npos; })) {
+          text = decoded(before[field]);
+          setControlText(fieldInputs[i], wide(text).c_str());
+          message(L"That box takes a number; kept " + wide(text) + L".");
+        }
         f.push_back(encoded(text));
         continue;
       }
@@ -4885,12 +4921,21 @@ struct Editor {
       } else if (!text.empty())
         named.emplace_back(key, encoded(text));
     }
+    if (s.kind == "SCRIPT_TRIGGER" && triggerAllPlayers &&
+        SendMessageW(triggerAllPlayers, BM_GETCHECK, 0, 0) == BST_CHECKED) {
+      named.erase(std::remove_if(named.begin(), named.end(),
+                                 [](const auto &n) { return n.first == "players"; }),
+                  named.end());
+      named.emplace_back("players", "all");
+    } else if (s.kind == "SCRIPT_TRIGGER") {
+      named.erase(std::remove_if(named.begin(), named.end(),
+                                 [](const auto &n) { return n.first == "players"; }),
+                  named.end());
+    }
     while (f.size() > size_t(s.required) && f.back().empty())
       f.pop_back();
     normalize(f);
-    std::vector<std::string> before;
     if (record >= 0) {
-      before = NativeDocument::fields(doc.lines[size_t(record)]);
       if (before == f && NativeDocument::named(doc.lines[size_t(record)]) == named)
         return; // leaving a field unchanged is not an edit
     }
@@ -5871,6 +5916,26 @@ struct Editor {
     require(doc.records("SCRIPT_REQUIRE", 0).size() == 1 && doc.records("SCRIPT_TRIGGER", 0).size() == 1 &&
                 NativeDocument::fields(doc.lines[doc.records("SCRIPT_TRIGGER", 0).front()])[3] == "map",
             "it waits for the switch and then fires anywhere on the map");
+    {
+      auto triggers = doc.records("SCRIPT_TRIGGER", 0);
+      selectRecord(int(triggers.front()));
+      require(triggerAllPlayers && IsWindowVisible(triggerAllPlayers), "the All players checkbox shows on a SCRIPT_TRIGGER");
+      SendMessageW(triggerAllPlayers, BM_SETCHECK, BST_CHECKED, 0);
+      apply(true);
+      auto named = NativeDocument::named(doc.lines[size_t(triggers.front())]);
+      bool wrote = std::any_of(named.begin(), named.end(), [](const auto &n) { return n.first == "players" && n.second == "all"; });
+      require(wrote, "All players writes players=all on the trigger");
+      auto kept = doc.text();
+      NativeDocument again;
+      again.loadText(kept);
+      auto againNamed = NativeDocument::named(again.lines[again.records("SCRIPT_TRIGGER", 0).front()]);
+      bool reopened = std::any_of(againNamed.begin(), againNamed.end(),
+                                  [](const auto &n) { return n.first == "players" && n.second == "all"; });
+      require(reopened, "players=all survives save and reopen");
+      doc = std::move(again);
+      selectRecord(int(doc.records("SCRIPT_TRIGGER", 0).front()));
+      require(SendMessageW(triggerAllPlayers, BM_GETCHECK, 0, 0) == BST_CHECKED, "the checkbox is checked after reopen");
+    }
     tool = 17;
     auto countRecords=[&]{size_t count=0;for(auto i:doc.onMap(map)){auto f=NativeDocument::fields(doc.lines[i]);if(!f.empty()&&!f[0].starts_with("#"))++count;}return count;};
     size_t recordsBefore=countRecords();
@@ -7011,6 +7076,31 @@ struct Editor {
     message(L"Saved " + file.filename().wstring() + L".");
     if (!quiet())
       sfx::play(sfx::Save, .8f, .02f);
+    try {
+#ifdef RAWMETAL_UNIFIED
+      publish(false);
+      retro::validateEditorCampaignText(doc.text());
+#else
+      std::string reason;
+      if (!validateDocument(true, &reason)) throw std::runtime_error(reason);
+#endif
+    } catch (const std::exception &error) {
+      const std::string reason = error.what();
+      message(L"Saved, but the game will refuse this map: " + wide(reason));
+      if (!quiet()) sfx::play(sfx::Error, .7f, .02f);
+      const auto line = reason.find("line ");
+      if (line != std::string::npos) {
+        const char *start = reason.c_str() + line + 5;
+        char *end = nullptr;
+        const unsigned long number = std::strtoul(start, &end, 10);
+        if (number > 0 && end && *end == ' ' && end[1] == '(') {
+          const auto close = reason.find(')', size_t(end - reason.c_str()) + 2);
+          if (close != std::string::npos && number <= doc.lines.size() &&
+              NativeDocument::fields(doc.lines[number - 1]).front() == reason.substr(size_t(end - reason.c_str()) + 2, close - size_t(end - reason.c_str()) - 2))
+            selectRecord(int(number - 1));
+        }
+      }
+    }
   }
   void saveNow() {
     if (!path.empty() && !isExample())
@@ -7858,23 +7948,25 @@ struct Editor {
         message(L"People from the old editor were missing their clock or guard post. Both are back; save to keep them.");
     }
   }
-  bool validateDocument() {
+  bool validateDocument(bool silent = false, std::string *reason = nullptr) {
     publish(false);
 #ifdef RAWMETAL_UNIFIED
     try {
       retro::validateEditorCampaignText(doc.text());
     } catch (const std::exception &error) {
-      message(L"Engine validation: " + wide(error.what()));
-      if (!quiet())
+      if (reason) *reason = error.what();
+      if (!silent) message(L"Engine validation: " + wide(error.what()));
+      if (!silent && !quiet())
         sfx::play(sfx::Error, .7f, .02f);
       return false;
     }
-    message(L"Check passed.");
+    if (!silent) message(L"Check passed.");
     return true;
 #else
     auto report = session / L"validation.txt";
+    // Path as its own argument so spaces in the map or session folder (PVP Map.rmc) are not split.
     std::wstring args = L"\"" + engineExecutable().wstring() +
-                        L"\" --editor-validate=\"" + pack.wstring() + L"\"";
+                        L"\" --editor-validate \"" + pack.wstring() + L"\"";
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};
     HANDLE log =
         CreateFileW(report.c_str(), GENERIC_WRITE, FILE_SHARE_READ, &sa,
@@ -7903,10 +7995,11 @@ struct Editor {
     if (code) {
       std::ifstream in(report);
       std::string error(std::istreambuf_iterator<char>(in), {});
-      message(L"Engine validation: " + wide(error));
+      if (reason) *reason = error;
+      if (!silent) message(L"Engine validation: " + wide(error));
       return false;
     }
-    message(L"Check passed.");
+    if (!silent) message(L"Check passed.");
     return true;
 #endif
   }
@@ -9434,6 +9527,15 @@ static LRESULT CALLBACK formProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     } catch (const std::exception &error) {
       e->message(wide(error.what()));
   }
+  if (e && m == WM_COMMAND && LOWORD(w) == TriggerAllPlayers && HIWORD(w) == BN_CLICKED && e->record >= 0)
+    try {
+      e->apply(true);
+      e->message(SendMessageW(e->triggerAllPlayers, BM_GETCHECK, 0, 0) == BST_CHECKED
+                     ? L"All players: every co-op player must be ready before this fires."
+                     : L"Any player: fires for whichever player is ready (the default).");
+    } catch (const std::exception &error) {
+      e->message(wide(error.what()));
+    }
   return DefWindowProcW(h, m, w, l);
 }
 static LRESULT CALLBACK shelfProc(HWND h, UINT m, WPARAM w, LPARAM l) {
@@ -11023,6 +11125,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
         CreateWindowExW(0, L"RawMetalNativeForm", L"",
                         WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN, 0,
                         0, 10, 10, e.window, nullptr, instance, &e);
+    e.triggerAllPlayers = CreateWindowExW(0, L"BUTTON", L"All players (co-op)",
+                                          WS_CHILD | BS_AUTOCHECKBOX | WS_TABSTOP, 0, 0, 10, 10, e.form,
+                                          reinterpret_cast<HMENU>(INT_PTR(TriggerAllPlayers)), instance, nullptr);
+    SendMessageW(e.triggerAllPlayers, WM_SETFONT, reinterpret_cast<WPARAM>(e.font), TRUE);
     e.plan =
         CreateWindowExW(0, L"RawMetalNativePlan", L"", WS_CHILD | WS_VISIBLE, 0,
                         0, 10, 10, e.window, nullptr, instance, &e);

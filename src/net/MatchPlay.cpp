@@ -2,6 +2,7 @@
 #include "MatchProtocol.h"
 #include "Wire.h"
 #include "../game/Game.h"
+#include "../game/Combat.h"
 #include "../game/CreatureAnimation.h"
 #include "../world/CustomCampaign.h"
 #include <algorithm>
@@ -211,11 +212,12 @@ void Match::acceptGuestState(int slot,const NetPlayerState& s){
 
 // Every shot of the match, the host's own included: traced in the host's world against every player as the
 // shooter saw them (rewound to the time their view showed, at most 0.3 s), then its damage and its marks.
+// Weapon 0 is fists: the same host path, at melee range, so punches hurt other players in deathmatch and co-op.
 void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direction,float viewTime){
  Game& g=m_game;
- if(m_over||weapon<1||weapon>3||shooter<0||shooter>=MaxSlots)return;
+ if(m_over||weapon<0||weapon>3||shooter<0||shooter>=MaxSlots)return;
  auto& sh=m_slots[size_t(shooter)];if(!sh.used||!sh.alive)return;
- const auto& gun=playerWeaponDef(WeaponId(weapon));
+ const bool melee=weapon==0;const auto& gun=playerWeaponDef(WeaponId(std::max(weapon,1)));const auto& fists=kUnarmedMelee;
  // A shot on another map is traced in that map's frame (it swapped in as the active chunk for the while).
  std::optional<Game::ChunkFrame> frame;if(level!=g.m_level&&level>=0&&level<g.chunkCount()&&g.chunkResident(level)&&!g.stitchedTo(level,g.m_level))frame.emplace(g,level);
  const Vec2 lo=origin(level),ao=origin(g.m_level);const Point3 o{at.x+lo.x-ao.x,at.y+lo.y-ao.y,at.z};
@@ -223,23 +225,31 @@ void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direct
  if(!std::isfinite(size)||size<.0001f||!std::isfinite(o.x)||!std::isfinite(o.y)||!std::isfinite(o.z))return;
  direction=direction*(1/size);
  if(shooter!=m_selfSlot&&sh.haveState){const Point3 feet=sh.latest.world;const float dz=o.z-feet.z;
-  if(distance2({o.x+ao.x,o.y+ao.y,o.z},feet)>3.f||dz<-1.f||dz>3.5f)return;}   // a shot from where they are not
+  if(distance2({o.x+ao.x,o.y+ao.y,o.z},feet)>(melee?2.5f:3.f)||dz<-1.f||dz>3.5f)return;}   // a shot from where they are not
  const float t=shooter==m_selfSlot?m_clock:std::clamp(viewTime,m_clock-MaxRewind,m_clock);
  std::vector<Game::NetBody> bodies;
  if(m_mode==Mode::Deathmatch||m_friendlyFire)
   for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i==shooter||!s.used||!s.ready||!s.spawned||!s.alive||!s.haveState)continue;
    NetPlayerState st;if(!sampleAt(s,t,st))continue;bodies.push_back({i,{st.world.x-ao.x,st.world.y-ao.y},st.world.z,stanceHeight(st)});}
- g.m_netBodies=&bodies;const ShotHit hit=g.traceShot(o,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);g.m_netBodies=nullptr;
+ const float range=melee?fists.range:gun.hitscan.maxRange;
+ g.m_netBodies=&bodies;const ShotHit hit=g.traceShot(o,direction,range,-1,false,melee?nullptr:&gun.hitscan);g.m_netBodies=nullptr;
  const bool player=hit.kind==ShotKind::Player&&hit.index>=1;
  const bool flesh=player||hit.kind==ShotKind::Enemy||hit.kind==ShotKind::Npc||hit.kind==ShotKind::Actor;
- const Point3 end=hit.kind==ShotKind::None?o+direction*gun.hitscan.maxRange:hit.point;
+ const Point3 end=hit.kind==ShotKind::None?o+direction*range:hit.point;
  {wire::Writer w;w.u8(ShotFx).u8(unsigned(shooter)).u8(unsigned(weapon)).u8(unsigned(g.m_level)).f32(o.x).f32(o.y).f32(o.z).f32(end.x).f32(end.y).f32(end.z)
    .u8(flesh?1:hit.kind==ShotKind::None?2:0);writeUnit(w,hit.normal);broadcast(Events,w,true);}
- if(shooter!=m_selfSlot)g.m_sounds.push_back({gun.cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});
+ if(shooter!=m_selfSlot&&!melee)g.m_sounds.push_back({gun.cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});
  if(player){
-  g.m_shotRays.push_back({o,direction,hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
-  g.hitBurst(g.m_level,hit.point,direction,ImpactMaterial::Flesh,-1,.9f,false);
-  damage(hit.index-1,shooter,hitscanDamageAt(gun.hitscan,hit.damageDistance),weapon);
+  if(!melee){g.m_shotRays.push_back({o,direction,hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());}
+  g.hitBurst(g.m_level,hit.point,direction,ImpactMaterial::Flesh,-1,melee?.45f:.9f,false);
+  if(melee&&shooter==m_selfSlot)g.sound(Sound::PunchHit,.65f);
+  damage(hit.index-1,shooter,melee?fists.damage:hitscanDamageAt(gun.hitscan,hit.damageDistance),weapon);
+ }else if(melee){   // fists on creatures, glass and props: the same path punchImpact uses alone
+  HitscanDef blow{};blow.maxRange=fists.range;blow.dmgNear=blow.dmgMid=blow.dmgFar=fists.damage;blow.actorDamage=fists.damage;blow.propImpulse=fists.propImpulse;
+  const float flash=g.m_hitFlash;g.m_shooter=shooter==m_selfSlot?0:shooter;
+  if(hit.kind==ShotKind::Enemy||hit.kind==ShotKind::Npc||hit.kind==ShotKind::Actor||hit.kind==ShotKind::Prop||hit.breakable>=0)
+   g.resolveShot(hit,o,direction,blow,true);
+  g.m_shooter=0;if(shooter!=m_selfSlot)g.m_hitFlash=flash;
  }else{   // creatures, glass, props, the wall's mark: a player's shot, whoever fired it (Game::m_shooter)
   const float flash=g.m_hitFlash;g.m_shooter=shooter==m_selfSlot?0:shooter;
   g.resolveShot(hit,o,direction,gun.hitscan,true);g.m_shooter=0;
@@ -476,9 +486,9 @@ bool Match::localShot(Point3 o,Point3 direction,int weapon){
  wire::Writer w;w.u8(Shot).u8(unsigned(std::clamp(weapon,0,255))).u8(unsigned(g.m_level)).f32(o.x).f32(o.y).f32(o.z).q16(direction.x,32767).q16(direction.y,32767).q16(direction.z,32767)
   .u32((std::uint32_t(m_stateSeq)<<16)^m_shotCounter).u32(millis(renderTime()));
  send(m_hostId,Events,w,true);
- // The tracer at once; the mark it leaves comes back from the host.
- const auto& gun=playerWeaponDef(WeaponId(std::clamp(weapon,1,3)));const auto hit=g.traceShot(o,direction,gun.hitscan.maxRange);
- g.m_shotRays.push_back({o,direction,hit.kind==ShotKind::None?gun.hitscan.maxRange:hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
+ // Guns: the tracer at once; the mark it leaves comes back from the host. Fists: no tracer.
+ if(weapon>=1&&weapon<=3){const auto& gun=playerWeaponDef(WeaponId(weapon));const auto hit=g.traceShot(o,direction,gun.hitscan.maxRange);
+  g.m_shotRays.push_back({o,direction,hit.kind==ShotKind::None?gun.hitscan.maxRange:hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());}
  return true;
 }
 
@@ -581,12 +591,13 @@ void Match::handleEvent(const Packet& p){
   const Vec2 shift=origin(level)-origin(g.m_level);o.x+=shift.x;o.y+=shift.y;e.x+=shift.x;e.y+=shift.y;
   Point3 d=e-o;const float range=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);if(range<.001f)return;d=d*(1/range);
   if(shooter!=m_selfSlot){
-   g.m_shotRays.push_back({o,d,range,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
-   g.m_sounds.push_back({playerWeaponDef(WeaponId(std::clamp(weapon,1,3))).cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});}
+   if(weapon!=0){g.m_shotRays.push_back({o,d,range,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());
+    g.m_sounds.push_back({playerWeaponDef(WeaponId(std::clamp(weapon,1,3))).cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});}
+   else g.sound(Sound::PunchSwing,.35f);}
   if(kind==2)return;
   const Vec2 aw=origin(g.m_level);const int at=levelAt({e.x+aw.x,e.y+aw.y},level);const World* w=worldOf(at);if(!w)return;
   const Vec2 back=origin(g.m_level)-origin(at);const Point3 local{e.x+back.x,e.y+back.y,e.z};
-  if(kind==1){g.hitBurst(at,local,d,ImpactMaterial::Flesh,-1,.9f,false);return;}
+  if(kind==1){g.hitBurst(at,local,d,ImpactMaterial::Flesh,-1,weapon==0?.45f:.9f,false);return;}
   const Point3 struck=local+n*.004f;const auto material=w->impactMaterial(struck,n);
   g.m_bulletImpacts.push_back({{struck.x,struck.y},struck.z,{n.x,n.y},g.m_elapsed,at,false,0,n.z,int(material)});if(g.m_bulletImpacts.size()>96)g.m_bulletImpacts.erase(g.m_bulletImpacts.begin());
   if(material!=ImpactMaterial::Metal)g.hitBurst(at,struck,n,material,-1,.8f,false);

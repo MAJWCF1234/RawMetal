@@ -57,6 +57,15 @@ struct CommandArguments {
   for(const auto& value:values)if(value==flag||(flag.back()==L'='?value.starts_with(flag):(value.starts_with(flag)&&value.size()>flag.size()&&value[flag.size()]==L'=')))return value.c_str();
   return nullptr;
  }
+ // Value of `flag=` (quotes around the path stripped), or the argument after a bare `flag`.
+ // Paths with spaces need either "--flag=path with spaces" or --flag "path with spaces".
+ std::wstring valueOf(std::wstring_view flag)const{
+  auto strip=[](std::wstring v){if(v.size()>=2&&((v.front()==L'"'&&v.back()==L'"')||(v.front()==L'\''&&v.back()==L'\'')))v=v.substr(1,v.size()-2);return v;};
+  if(!flag.empty()&&flag.back()==L'='){if(auto p=find(flag))return strip(p+flag.size());
+   const std::wstring bare(flag.substr(0,flag.size()-1));for(size_t i=0;i+1<values.size();++i)if(values[i]==bare)return strip(values[i+1]);}
+  else if(auto p=find(flag)){const std::wstring v=p;const auto eq=v.find(L'=');if(eq!=std::wstring::npos)return strip(v.substr(eq+1));}
+  return {};
+ }
  bool automated()const{for(const auto& value:values){auto flag=value.substr(0,value.find(L'='));for(auto marker:{L"test",L"shot",L"audit",L"inspection",L"video",L"dump",L"performance",L"benchmark",L"profile",L"--map-",L"--residency",L"--editor-",L"smoke"})if(flag.find(marker)!=std::wstring::npos)return true;}return false;}
 };
 static const CommandArguments& commandArguments(){static const CommandArguments args;return args;}
@@ -796,6 +805,13 @@ static bool commandArgumentsTest(){
  check(args.find(L"--each-test=")&&std::wstring(args.find(L"--each-test=")+12)==L"movement","value consumes one argument");
  check(args.find(L"--nopost")&&args.find(L"--nopixel"),"switches anywhere");
  check(!args.find(L"--map-shot=")&&!args.find(L"--pixel"),"exact flag boundaries");
+ // --editor-validate with spaces: whole flag=value quoted, value quoted, or path as the next argument (Builder).
+ CommandArguments whole(L"RawMetal.exe \"--editor-validate=custom maps/PVP Map.rmc\"");
+ CommandArguments value(L"RawMetal.exe --editor-validate=\"custom maps/PVP Map.rmc\"");
+ CommandArguments next(L"RawMetal.exe --editor-validate \"custom maps/PVP Map.rmc\"");
+ check(whole.valueOf(L"--editor-validate=")==L"custom maps/PVP Map.rmc","editor-validate whole-arg path with spaces");
+ check(value.valueOf(L"--editor-validate=")==L"custom maps/PVP Map.rmc","editor-validate quoted-value path with spaces");
+ check(next.valueOf(L"--editor-validate=")==L"custom maps/PVP Map.rmc","editor-validate following-arg path with spaces");
  for(auto flag:{L"--zone-shots=a",L"--creature-video=1",L"--vr-hand-dump",L"--map-shots=a",L"--map-shot=0",L"--map-audit=0"}){CommandArguments automation((std::wstring(L"RawMetal.exe ")+flag).c_str());check(automation.automated(),"automation suppresses dialog");}
  check(!CommandArguments(L"RawMetal.exe --vulkan --vr").automated(),"interactive startup retains error dialog");
  return ok;
@@ -866,7 +882,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(auto path=commandArguments().find(L"--campaign-export-test="))return retro::testCampaignEditingExport(path+23);
     if(auto path=commandArguments().find(L"--layer-export-test="))return retro::testLayerEditingExport(path+20);
     if(auto path=commandArguments().find(L"--corridor-export-test="))return retro::testCorridorEditingExport(path+23);
-    if(auto path=commandArguments().find(L"--editor-validate="))return retro::validateEditorCampaign(path+18);
+    if(auto path=commandArguments().valueOf(L"--editor-validate=");!path.empty())return retro::validateEditorCampaign(path);
     // A custom campaign as the Custom Maps menu loads it (the folder report too), then played headless.
     if(auto path=commandArguments().find(L"--custom-map-smoke=")){retro::Game menu;menu.loadCustomCampaignDirectory(customMapsFolder());std::ofstream report("RawMetal-custom-map-smoke.txt");return retro::Game::customMapSmoke(path+19,report)?0:21;}
     // Campaign maps as .rmc: --dev-campaign, --export-rmc, --campaign-map-list, --campaign-overrides

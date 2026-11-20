@@ -470,6 +470,7 @@ public:
     int titleRows()const;
     std::string customMenuLabel(int row)const;
     int customCampaignCount()const{return int(m_customCampaigns.size());}
+    const std::vector<std::string>& customCampaignErrors()const{return m_customCampaignErrors;}
     void loadCustomCampaignDirectory(std::wstring directory);
     bool menuFromTitle()const{return m_menuFromTitle;}
 
@@ -1497,6 +1498,7 @@ private:
     WorldId m_worldId=WorldId::Campaign;
     std::shared_ptr<const CustomCampaign> m_customCampaign;
     std::vector<std::shared_ptr<const CustomCampaign>> m_customCampaigns;
+    std::vector<std::string> m_customCampaignErrors;
     std::wstring m_customMapDirectory;
     std::uint64_t m_customCampaignKey=0;
     bool m_titleScreen=false,m_menuFromTitle=false,m_customMapsOpen=false;
@@ -1768,7 +1770,10 @@ private:
     void cutJointsByShot(Point3 origin,Point3 end);
     // One frame of the curtains, straps and cables (Cloth.cpp): built afresh when the level or its map changes.
     void stepCloth(float dt);
+    void stashClothPoses(int level);     // copy live beads into m_clothPoses for a map (before rebuild or on save)
+    void applyClothPoses(int level);     // put saved beads back onto m_cloths after they are built
     std::vector<std::shared_ptr<ClothRun>> m_cloths;const void* m_clothMap=nullptr;int m_clothLevel=-1;Point3 m_clothPlayerAt{};bool m_clothPlayerSeen=false;
+    std::vector<ClothPose> m_clothPoses;  // physics layout 5: curtains/straps/cables across maps
     // What the last rigid step did (the lab's perf and debug views).
     struct RigidStats {int bodies=0,awake=0,manifolds=0,worldManifolds=0,steps=0,ccdSweeps=0;double ms=0,worldMs=0,pairMs=0,solveMs=0,buildMs=0,preMs=0,postMs=0,ccdMs=0;std::vector<vectra::ContactEvent> events;std::vector<vectra::Manifold> manifoldsSeen;} m_rigidStats;
     void updateSoftBodies(float dt);

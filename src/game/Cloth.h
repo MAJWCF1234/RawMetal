@@ -12,7 +12,7 @@
 //    sways when walked through and a cable drapes over a crate;
 //  - a round through it knocks the beads it passes, and out under the sky the breeze the plants bend in pushes it;
 //  - it sleeps when it settles, and costs nothing asleep unless something moving comes near.
-// Not saved: a loaded game hangs it afresh from where the map fixes it.
+// Saved in the physics section (layout 5): each bead's place and velocity, so a curtain shoved aside loads hanging as it was.
 #include "physics/Vectra.h"
 #include "../world/World.h"
 #include <deque>

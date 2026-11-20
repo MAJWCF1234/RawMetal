@@ -194,7 +194,10 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    if(tag.rfind("ACTOR_",0)==0||tag=="SEQUENCE_SIGHT"){const auto a=r.s.find('|',bar+1),b=r.s.find('|',a+1);p=r.s.substr(a+1,b-a-1);}
    key=recordFieldKey(tag,p,ordinal[tag+"/"+p]++);}
   auto it=table->find(key);if(it==table->end())return {};
-  written.insert((global?"*":"")+key);std::string out;for(const auto& f:it->second){out+='|';out+=f.key;out+='=';out+=f.value;}return out;};
+  written.insert((global?"*":"")+key);std::string out;for(const auto& f:it->second){
+   // Fields already written from the struct onto the record (JOINT friction=, SCRIPT_TRIGGER players=all, …) are not repeated.
+   if(r.s.find("|"+f.key+"=")!=std::string::npos)continue;
+   out+='|';out+=f.key;out+='=';out+=f.value;}return out;};
  // keep: how many fields (tag included) the record always has; 0 writes every field.
  auto line=[&](const Rec& r,size_t keep=0){data<<(keep?r.trimmed(keep):r.s)<<named(r)<<'\n';};
  if(formatTwo)data<<"FORMAT|"<<MapFormatVersion<<'\n';
@@ -325,8 +328,15 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   // Window walls are written as their records (their named fields ride with them), never as the boxes and panes they make.
   for(const auto& g:m.glazings)line(Rec("GLAZING").i(mi).n(g.x1).n(g.y1).n(g.x2).n(g.y2).n(g.bottom).n(g.top));
   for(const auto& b:m.breaches)line(Rec("BREACH").i(mi).n(b.x1).n(b.y1).n(b.x2).n(b.y2).n(b.bottom).n(b.top));
-  // Joints: the record's own fields (its options ride as its named fields, kept as written).
-  for(const auto& j:m.joints){Rec r("JOINT");r.i(mi).f(propJointWord(j.kind)).i(j.propA).i(j.propB).n(j.at.x).n(j.at.y).n(j.at.z);if(j.rope())r.n(j.to.x).n(j.to.y).n(j.to.z);line(r);}
+  // Joints: positional fields, then hinge/drawer options from the PropJoint itself (friction, detent, catch, latch),
+  // then any other named fields kept on the record. Degrees for a hinge, metres for a slider — as the parser wrote them.
+  for(const auto& j:m.joints){Rec r("JOINT");r.i(mi).f(propJointWord(j.kind)).i(j.propA).i(j.propB).n(j.at.x).n(j.at.y).n(j.at.z);if(j.rope())r.n(j.to.x).n(j.to.y).n(j.to.z);
+   const bool angular=j.kind==PropJointKind::Hinge;const float toAuthored=angular?(180.f/kPi):1.f;
+   if(j.friction>0)r.f("friction="+num(j.friction));
+   if(j.detentCount>0){std::string d;for(int i=0;i<j.detentCount;++i){if(i)d+=',';d+=num(j.detents[size_t(i)]*toAuthored);}r.f("detent="+d);}
+   if(j.catchRange>0)r.f("catch="+num(j.catchRange*toAuthored));
+   if(j.latch>0)r.f("latch="+num(j.latch));
+   line(r);}
   // Curtains, straps and cables likewise (a strap hung from a point alone writes its one end).
   for(const auto& c:m.cloths){Rec r("CLOTH");r.i(mi).f(clothWord(c.kind)).n(c.at.x).n(c.at.y).n(c.at.z);if(c.kind!=ClothKind::Strap||c.to.x!=c.at.x||c.to.y!=c.at.y||c.to.z!=c.at.z)r.n(c.to.x).n(c.to.y).n(c.to.z);line(r);}
   for(const auto& p:m.pipes)line(Rec("PIPE").i(mi).n(p.start.x).n(p.start.y).n(p.end.x).n(p.end.y).n(p.z).n(p.radius).n(p.endZ).i(p.material));
@@ -368,8 +378,9 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
    for(const auto& c:e.conditions){const char* source=c.source==S::Kills?"@kills":c.source==S::Remaining?"@remaining":c.source==S::Health?"@health":c.source==S::Map?"@map":nullptr;
     const char* op=c.op==O::Equal?"=":c.op==O::NotEqual?"!=":c.op==O::Less?"<":c.op==O::LessEqual?"<=":c.op==O::Greater?">":">=";
     line(Rec("SCRIPT_REQUIRE").i(mi).sth(e.id).f(source?source:stateReference(c.id)).f(op).i(c.value));}
-   if(e.scope!=ScriptEvent::Scope::Box||e.matchAny||e.rearm||e.once!=!e.rearm){Rec r("SCRIPT_TRIGGER");
-    r.i(mi).sth(e.id).f(e.scope==ScriptEvent::Scope::Map?"map":e.scope==ScriptEvent::Scope::Campaign?"campaign":"box").f(e.matchAny?"any":"all").b(e.rearm);if(e.once!=!e.rearm)r.b(e.once);line(r);}
+   if(e.scope!=ScriptEvent::Scope::Box||e.matchAny||e.rearm||e.once!=!e.rearm||e.allPlayers){Rec r("SCRIPT_TRIGGER");
+    r.i(mi).sth(e.id).f(e.scope==ScriptEvent::Scope::Map?"map":e.scope==ScriptEvent::Scope::Campaign?"campaign":"box").f(e.matchAny?"any":"all").b(e.rearm);if(e.once!=!e.rearm)r.b(e.once);
+    if(e.allPlayers)r.f("players=all");line(r);}
    using T=ScriptAction::Type;
    for(const auto& a:e.actions){const ScriptAction plain{};
     // The named kinds carry only some fields; anything else rides a RAW record.
@@ -578,7 +589,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  d.count("scriptEvents",a.scriptEvents.size(),b.scriptEvents.size());
  for(size_t i=0;i<std::min(a.scriptEvents.size(),b.scriptEvents.size());++i){const auto&p=a.scriptEvents[i];const auto&q=b.scriptEvents[i];auto w=at("event",i);d.eq(w+".id",p.id,q.id);if(compareEventLevels)d.eq(w+".level",p.level,q.level);
   d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);d.eq(w+".requireState",p.requireState,q.requireState);d.eq(w+".requireValue",p.requireValue,q.requireValue);
-  d.eq(w+".requireEnemiesClear",p.requireEnemiesClear,q.requireEnemiesClear);d.eq(w+".once",p.once,q.once);d.eq(w+".scope",p.scope,q.scope);d.eq(w+".matchAny",p.matchAny,q.matchAny);d.eq(w+".rearm",p.rearm,q.rearm);
+  d.eq(w+".requireEnemiesClear",p.requireEnemiesClear,q.requireEnemiesClear);d.eq(w+".once",p.once,q.once);d.eq(w+".scope",p.scope,q.scope);d.eq(w+".matchAny",p.matchAny,q.matchAny);d.eq(w+".rearm",p.rearm,q.rearm);d.eq(w+".allPlayers",p.allPlayers,q.allPlayers);
   d.count(w+".conditions",p.conditions.size(),q.conditions.size());for(size_t k=0;k<std::min(p.conditions.size(),q.conditions.size());++k){const auto&r=p.conditions[k];const auto&s=q.conditions[k];auto v=w+".condition["+std::to_string(k)+"]";d.eq(v+".source",r.source,s.source);d.eq(v+".id",r.id,s.id);d.eq(v+".op",r.op,s.op);d.eq(v+".value",r.value,s.value);}
   d.count(w+".actions",p.actions.size(),q.actions.size());for(size_t k=0;k<std::min(p.actions.size(),q.actions.size());++k){const auto&r=p.actions[k];const auto&s=q.actions[k];auto v=w+".action["+std::to_string(k)+"]";
    d.eq(v+".type",r.type,s.type);d.eq(v+".id",r.id,s.id);d.eq(v+".value",r.value,s.value);d.eq(v+".index",r.index,s.index);d.eq(v+".creature",r.enemyKind,s.enemyKind);d.eq(v+".position",r.position,s.position);d.eq(v+".z",r.z,s.z);d.eq(v+".amount",r.amount,s.amount);d.eq(v+".sound",r.sound,s.sound);d.eq(v+".text",r.text,s.text);}}
@@ -588,6 +599,11 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
  for(size_t i=0;i<std::min(a.navHints.size(),b.navHints.size());++i){d.eq(at("navHint",i)+".position",a.navHints[i].position,b.navHints[i].position);d.eq(at("navHint",i)+".z",a.navHints[i].z,b.navHints[i].z);d.eq(at("navHint",i)+".hint",a.navHints[i].hint,b.navHints[i].hint);}
  d.count("zones",a.zones.size(),b.zones.size());
  for(size_t i=0;i<std::min(a.zones.size(),b.zones.size());++i){const auto&p=a.zones[i];const auto&q=b.zones[i];auto w=at("zone",i);d.eq(w+".name",p.name,q.name);d.eq(w+".title",p.title,q.title);d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);for(int k=0;k<4;++k)d.eq(w+".haze"+std::to_string(k),p.haze[size_t(k)],q.haze[size_t(k)]);}
+ d.count("joints",a.joints.size(),b.joints.size());
+ for(size_t i=0;i<std::min(a.joints.size(),b.joints.size());++i){const auto&p=a.joints[i];const auto&q=b.joints[i];auto w=at("joint",i);
+  d.eq(w+".kind",int(p.kind),int(q.kind));d.eq(w+".propA",p.propA,q.propA);d.eq(w+".propB",p.propB,q.propB);d.eq(w+".at",p.at,q.at);d.eq(w+".to",p.to,q.to);
+  d.eq(w+".friction",p.friction,q.friction);d.eq(w+".detentCount",p.detentCount,q.detentCount);d.eq(w+".catchRange",p.catchRange,q.catchRange);d.eq(w+".latch",p.latch,q.latch);
+  for(int k=0;k<p.detentCount&&k<q.detentCount&&k<4;++k)d.eq(w+".detent"+std::to_string(k),p.detents[size_t(k)],q.detents[size_t(k)]);}
  d.count("pushCrates",a.pushCrates.size(),b.pushCrates.size());
  for(size_t i=0;i<std::min(a.pushCrates.size(),b.pushCrates.size());++i){d.eq(at("crate",i)+".position",a.pushCrates[i].position,b.pushCrates[i].position);d.eq(at("crate",i)+".z",a.pushCrates[i].z,b.pushCrates[i].z);d.eq(at("crate",i)+".size",a.pushCrates[i].size,b.pushCrates[i].size);}
  d.count("cratePlates",a.cratePlates.size(),b.cratePlates.size());

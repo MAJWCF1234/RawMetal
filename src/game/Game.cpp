@@ -37,6 +37,7 @@ void Game::loadCustomCampaignDirectory(std::wstring directory){
  // The Exclusion Zone ships inside the exe: list it whenever no copy is installed beside it.
  if(std::none_of(m_customCampaigns.begin(),m_customCampaigns.end(),[](const auto&c){return c&&c->sourceFile=="RawMetal-Ashfall-Exclusion-Zone.txt";}))
   try{m_customCampaigns.push_back(loadEmbeddedExclusionZoneCampaign());}catch(const std::exception&e){errors.push_back(std::string("embedded Exclusion Zone: ")+e.what());}
+ m_customCampaignErrors=errors;
  std::ofstream report(std::filesystem::path(m_customMapDirectory).parent_path()/"RawMetal-custom-maps.txt",std::ios::trunc);
  report<<"Loaded "<<m_customCampaigns.size()<<" custom campaign pack(s).\n";
  for(const auto& campaign:m_customCampaigns)report<<"OK "<<campaign->sourceFile<<" / "<<campaign->name<<" / "<<campaign->maps.size()<<" map(s)\n";
@@ -49,7 +50,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1,4};m_lastSidearm=WeaponId::Handgun;m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_cloths.clear();m_clothPoses.clear();m_clothMap=nullptr;m_clothLevel=-1;m_clothPlayerSeen=false;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1,4};m_lastSidearm=WeaponId::Handgun;m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -758,7 +759,12 @@ void Game::updateWeaponMotion(const InputState& input,float dt){
  m_weaponMotion.sprint+=((running?1.f:0.f)-m_weaponMotion.sprint)*std::min(1.f,dt*(running?7.f:11.f));
 }
 void Game::punchImpact(){
- const auto&melee=kUnarmedMelee;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};Enemy* hitEnemy=nullptr;int hitNpc=-1;float nearest=melee.range;
+ const auto&melee=kUnarmedMelee;Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)};
+ // In a match, fists go through the host like gunshots so they can hurt other players (deathmatch / friendly fire).
+ if(m_match){Point3 origin{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye};
+  Point3 direction{forward.x*std::cos(m_player.pitch/140.f),forward.y*std::cos(m_player.pitch/140.f),std::sin(m_player.pitch/140.f)};
+  if(m_match->localShot(origin,direction,int(WeaponId::Fists)))return;}
+ Enemy* hitEnemy=nullptr;int hitNpc=-1;float nearest=melee.range;
  for(auto&e:m_enemies){auto delta=e.pos-m_player.pos;float range=length(delta);
   float height=m_player.z+m_player.eye+range*std::tan(m_player.pitch/140.f);
   if(e.alive&&range<nearest&&dot(normalized(delta),forward)>melee.facingDot&&height>=e.bodyBottom()-.1f&&height<=e.bodyTop()&&m_world.rayClear(m_player.pos,m_player.z+m_player.eye,e.pos,height)){hitEnemy=&e;hitNpc=-1;nearest=range;}
@@ -800,6 +806,7 @@ void Game::updateVrMelee(const InputState&input,float dt){
   auto sweep=end-start;float distance=std::sqrt(sweep.x*sweep.x+sweep.y*sweep.y+sweep.z*sweep.z);auto velocity=m_vrHandVelocity[hand];float speed=std::sqrt(velocity.x*velocity.x+velocity.y*velocity.y+velocity.z*velocity.z);
   if(distance<.008f||distance>.65f||std::max(speed,distance/std::max(.001f,dt))<melee.vrMinSpeed)continue;
   if(!m_world.lightRayClear({start.x,start.y},start.z,{end.x,end.y},end.z))continue;
+  if(m_match){auto direction=sweep*(1/distance);if(m_match->localShot(start,direction,int(WeaponId::Fists))){m_vrFistCooldown[hand]=melee.vrCooldown;m_punchLeft=hand==0;sound(Sound::PunchSwing,.35f);continue;}}
   Enemy* hitEnemy=nullptr;int hitNpc=-1;float nearest=2.f;
   for(auto&e:m_enemies)if(e.alive){float horizontal=sweep.x*sweep.x+sweep.y*sweep.y;float t=horizontal>.000001f?std::clamp(((e.pos.x-start.x)*sweep.x+(e.pos.y-start.y)*sweep.y)/horizontal,0.f,1.f):1.f;auto contact=start+sweep*t;
    if(lengthSq(Vec2{contact.x-e.pos.x,contact.y-e.pos.y})>.38f*.38f||contact.z<e.bodyBottom()-.10f||contact.z>e.bodyTop()+.10f||t>=nearest)continue;

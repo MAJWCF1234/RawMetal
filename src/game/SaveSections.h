@@ -173,4 +173,12 @@ struct CorpsePose {
  std::array<float,4> laid{};bool loaded=false;
  bool samePose(const CorpsePose& o)const{return level==o.level&&slot==o.slot&&signature==o.signature&&creature==o.creature&&age==o.age&&asleep==o.asleep&&shoved==o.shoved&&cut==o.cut&&sections==o.sections&&laid==o.laid;}
 };
+// A curtain, strap or cable as the "physics" section keeps it from its layout 5: map, its place in the map's CLOTH
+// list, then each bead's position and velocity (x y z vx vy vz). Curtains that were shoved or draped load hanging
+// as they were, instead of resetting to the map's rail.
+struct ClothPose {
+ std::int32_t level=0,index=0;
+ std::vector<std::array<float,6>> beads;
+ bool operator==(const ClothPose&)const=default;
+};
 }

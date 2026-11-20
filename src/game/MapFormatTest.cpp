@@ -246,6 +246,19 @@ bool Game::testMapFormat(){
     check(faces==8&&met==8,"on a hill every step top sits exactly on its step ("+std::to_string(met)+" of "+std::to_string(faces)+")");}
   }
 
+  // ---- Joint hinge/drawer options: friction, detent, catch, latch round-trip through export ----
+  {const std::string body="CLUTTER|0|7|8|8|0|0|17|0.6|0.6|0.6|0|0|#0\nCLUTTER|0|7|9.2|8|0|0|17|0.6|0.6|0.6|0|0|#0\n"
+    "JOINT|0|hinge|0|1|8.6|8|0.3|axis=z|min=-10|max=95|friction=12|detent=0,90|catch=6|latch=40\n"
+    "SCRIPT_EVENT|0|gather|2|2|6|6|-10|10||1|0\nSCRIPT_TRIGGER|0|gather|box|all|0|players=all\nSCRIPT_ACTION|0|gather|STATE|gathered|1\n";
+   auto c=loadCustomCampaignText(room("FORMAT|2\n",body),"joints.rmc");const auto& j=c->maps[0]->joints.at(0);const auto& ev=c->maps[0]->scriptEvents.at(0);
+   check(j.kind==PropJointKind::Hinge&&j.friction==12&&j.detentCount==2&&j.latch==40&&ev.allPlayers,"JOINT friction/detent/latch and SCRIPT_TRIGGER players=all parse");
+   const auto text=exportRmc("Joints",{{c->maps[0],-1}}).text;
+   check(text.find("friction=12")!=std::string::npos&&text.find("detent=")!=std::string::npos&&text.find("catch=")!=std::string::npos&&text.find("latch=40")!=std::string::npos&&text.find("players=all")!=std::string::npos,
+    "the exporter writes JOINT friction/detent/catch/latch and SCRIPT_TRIGGER players=all back");
+   auto again=loadCustomCampaignText(text,"joints-again.rmc");const auto diffs=compareAuthoredMaps(*c->maps[0],*again->maps[0],false);
+   check(diffs.empty()&&again->maps[0]->joints.at(0).friction==12&&again->maps[0]->joints.at(0).detentCount==2&&again->maps[0]->scriptEvents.at(0).allPlayers,
+    "a jointed map exports and loads back the same"+(diffs.empty()?std::string():": "+diffs.front()));}
+
   // ---- Multiplayer: MULTIPLAYER and SPAWN (docs/Systems/multiplayer.md), named fields only ----
   {for(const char* head:{"","FORMAT|2\n"}){auto plain=loadCustomCampaignText(room(head,""),"plain.rmc");const auto& mp=plain->multiplayer;const auto text=exportRmc(plain->name,{{plain->maps[0],-1}},0).text;
     check(mp.deathmatch&&mp.coop&&mp.deathmatchMap==-1&&mp.maxPlayers==8&&mp.fragLimit==20&&mp.timeLimitMinutes==10&&!mp.friendlyFire&&mp.spawns.empty()&&

@@ -71,6 +71,13 @@ void SoftwareRenderer::drawTitle(const Game& game){
    uiText(TitleMenuLayout::X,y+6,index,selected?bone:dim,3,10,selected?1.f:.55f);
    uiText(TitleMenuLayout::X+24+(selected?3:0),y+1,label.c_str(),selected?bone:dim,0,17,selected?1.f:.8f,1);
    if(selected)uiText(TitleMenuLayout::X+TitleMenuLayout::Width-16,y+1,">",bone,0,17,.8f);}
+  const auto& errors=game.customCampaignErrors();
+  if(!errors.empty()){
+   std::string notice=std::to_string(errors.size())+(errors.size()==1?" map could not open: ":" maps could not open: ")+errors.front()+" See RawMetal-custom-maps.txt.";
+   const int width=m_width-80;
+   while(notice.size()>3&&uiTextWidth(notice.c_str(),1,11)>width)notice.resize(notice.size()-1);
+   uiText(40,m_height-61,notice.c_str(),dim,1,11);
+  }
  }else if(main){
   // Three groups: the campaign, MULTIPLAYER, then settings and quit, smaller. The chosen row is lit red from its
   // left edge, nudged right, and named again at the foot of the menu.

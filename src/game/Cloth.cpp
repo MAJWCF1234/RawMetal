@@ -60,9 +60,25 @@ const Shape& personShape(float radius,float height){static std::deque<std::pair<
  for(auto& [k,s]:cache)if(k==key)return s;cache.push_back({key,{}});Shape& s=cache.back().second;s.addCapsule({},radius,std::max(0.f,height*.5f-radius));s.finish();return s;}
 }
 
+void Game::stashClothPoses(int level){
+ if(level<0||m_cloths.empty())return;
+ m_clothPoses.erase(std::remove_if(m_clothPoses.begin(),m_clothPoses.end(),[&](const ClothPose& c){return c.level==level;}),m_clothPoses.end());
+ for(size_t i=0;i<m_cloths.size();++i){const ClothRun& r=*m_cloths[i];ClothPose pose;pose.level=level;pose.index=int(i);pose.beads.resize(size_t(r.beads));
+  for(int b=0;b<r.beads;++b){const auto& body=r.space.bodies[size_t(b)];pose.beads[size_t(b)]={body.x.x,body.x.y,body.x.z,body.v.x,body.v.y,body.v.z};}
+  m_clothPoses.push_back(std::move(pose));}}
+void Game::applyClothPoses(int level){
+ for(const auto& pose:m_clothPoses){if(pose.level!=level||pose.index<0||pose.index>=int(m_cloths.size()))continue;
+  ClothRun& r=*m_cloths[size_t(pose.index)];if(int(pose.beads.size())!=r.beads)continue;
+  for(int b=0;b<r.beads;++b){auto& body=r.space.bodies[size_t(b)];const auto& p=pose.beads[size_t(b)];
+   if(!std::isfinite(p[0])||!std::isfinite(p[1])||!std::isfinite(p[2]))continue;
+   body.x={p[0],p[1],p[2]};body.v={p[3],p[4],p[5]};body.sleeping=false;body.sleepTime=0;
+   if(size_t(b)<r.safe.size())r.safe[size_t(b)]={p[0],p[1],p[2]};}}}
 void Game::stepCloth(float dt){
  const AuthoredMapData* data=m_world.mapData();
- if(data!=m_clothMap||m_level!=m_clothLevel){m_cloths.clear();m_clothMap=data;m_clothLevel=m_level;m_clothPlayerSeen=false;for(const auto& c:m_world.cloths())m_cloths.push_back(buildCloth(c));}
+ if(data!=m_clothMap||m_level!=m_clothLevel){
+  if(m_clothLevel>=0&&!m_cloths.empty())stashClothPoses(m_clothLevel);
+  m_cloths.clear();m_clothMap=data;m_clothLevel=m_level;m_clothPlayerSeen=false;for(const auto& c:m_world.cloths())m_cloths.push_back(buildCloth(c));
+  applyClothPoses(m_level);}
  if(m_cloths.empty()||dt<=0)return;
  // The player's own velocity (as the frames move him), for what he walks through.
  const Point3 feet{m_player.pos.x,m_player.pos.y,m_player.z};Point3 moved{};

@@ -1,6 +1,7 @@
 #include <optional>
 #include <thread>
 #include <chrono>
+#include <algorithm>
 #include "Game.h"
 #include "EngineRegressionScene.h"
 #include "../world/CustomCampaign.h"
@@ -398,7 +399,9 @@ std::vector<SaveSection> Game::builtInSaveSections(){
     for(size_t i=0;i<props.size();++i){PropBody b;if(hooks.capture(props[i],b))bodies.push_back({int(i),b});ChainPose c;if(version>=2&&hooks.captureChain&&hooks.captureChain(props[i],c))poses.push_back({int(i),c});}
     if(!bodies.empty())captured.push_back({level,std::move(bodies)});if(!poses.empty())chains.push_back({level,std::move(poses)});}
    bool joints=false;for(int level=0;level<g.chunkCount();++level)joints|=!g.m_chunks[size_t(level)].world.jointStates().empty();
-   if(captured.empty()&&chains.empty()&&!joints&&!(version>=4&&!g.m_corpsePoses.empty()))return;
+   if(version>=5)g.stashClothPoses(g.m_level);
+   const bool cloth=version>=5&&std::any_of(g.m_clothPoses.begin(),g.m_clothPoses.end(),[&](const ClothPose& c){return c.level>=0&&c.level<g.chunkCount()&&!c.beads.empty();});
+   if(captured.empty()&&chains.empty()&&!joints&&!(version>=4&&!g.m_corpsePoses.empty())&&!cloth)return;
    {int count=int(captured.size());a(count);for(auto& [level,bodies]:captured){int l=level,n=int(bodies.size());a(l,n);for(auto& [index,b]:bodies){int i=index;a(i);body(b);}}}
    if(version>=2){int count=int(chains.size());a(count);for(auto& [level,poses]:chains){int l=level,n=int(poses.size());a(l,n);for(auto& [index,c]:poses){int i=index;a(i);chain(c);}}}}
   // Layout 3: the joints between props (World.h PropJointState), after the chains and only when a map has
@@ -406,10 +409,12 @@ std::vector<SaveSection> Game::builtInSaveSections(){
   // (-1 as authored), the motor's target and speed. A save from a map whose joints have since changed in
   // number keeps the map's.
   // Layout 4: the dead bodies' poses (SaveSections.h CorpsePose), after the joints (a joint chunk count of 0 when no
-  // map has joints): their count, then each body's map, slot, signature, a creature's or not, its clock, asleep,
-  // shoved, its joints' cuts (count, then each a flag), its sections (count, then 16 numbers each) and where it was laid
-  // (x, y, z, yaw). Written only
-  // when there are any; a section of layout 1-3 loads with every body made again by its death, as before.
+ // map has joints): their count, then each body's map, slot, signature, a creature's or not, its clock, asleep,
+ // shoved, its joints' cuts (count, then each a flag), its sections (count, then 16 numbers each) and where it was laid
+ // (x, y, z, yaw). Written only
+ // when there are any; a section of layout 1-3 loads with every body made again by its death, as before.
+ // Layout 5: curtains, straps and cables (SaveSections.h ClothPose) after the bodies: count, then each cloth's map,
+ // index in that map's CLOTH list, bead count, and each bead's x y z vx vy vz. Layout 1-4 loads hang cloth afresh.
   auto corpse=[&](CorpsePose& c){a(c.level,c.slot,c.signature,c.creature,c.age,c.asleep,c.shoved);int joints=int(c.cut.size());a(joints);
    if constexpr(std::decay_t<decltype(a)>::reading){if(c.level<0||c.level>=t_sectionChunks||joints<0||joints>256||!(c.age>=0&&c.age<1e7f))throw std::runtime_error("invalid body");c.cut.resize(size_t(joints));}
    for(auto&k:c.cut){bool cutThere=k!=0;a(cutThere);k=cutThere?1:0;}
@@ -418,18 +423,27 @@ std::vector<SaveSection> Game::builtInSaveSections(){
    for(auto&part:c.sections)for(auto&v:part)a(v);
    for(auto&v:c.laid)a(v);
    if constexpr(std::decay_t<decltype(a)>::reading)for(const auto&part:c.sections){const float n=part[3]*part[3]+part[4]*part[4]+part[5]*part[5]+part[6]*part[6];if(!(n>.81f&&n<1.21f))throw std::runtime_error("invalid body section turn");}};
+  auto cloth=[&](ClothPose& c){a(c.level,c.index);int beads=int(c.beads.size());a(beads);
+   if constexpr(std::decay_t<decltype(a)>::reading){if(c.level<0||c.level>=t_sectionChunks||c.index<0||c.index>4096||beads<1||beads>512)throw std::runtime_error("invalid cloth");c.beads.resize(size_t(beads));}
+   for(auto&b:c.beads){for(auto&v:b)a(v);
+    if constexpr(std::decay_t<decltype(a)>::reading)if(!std::all_of(b.begin(),b.end(),[](float v){return std::isfinite(v)&&std::fabs(v)<1e6f;}))throw std::runtime_error("invalid cloth bead");}};
   if constexpr(std::decay_t<decltype(a)>::reading){if(version<3||!a.left())return;int chunks=0;a(chunks);if(chunks<0||chunks>t_sectionChunks)throw std::runtime_error("invalid joint chunk count");int last=-1;
    for(int i=0;i<chunks;++i){int level=0,count=0;a(level,count);if(level<=last||level>=t_sectionChunks||count<1||count>4096)throw std::runtime_error("invalid joint chunk");last=level;
     std::vector<PropJointState> read(static_cast<size_t>(count));for(auto& j:read){a(j.broken,j.motorOn,j.length,j.target,j.speed);
      if(!std::isfinite(j.length)||j.length<-1||j.length>100||!std::isfinite(j.target)||std::fabs(j.target)>1000||!std::isfinite(j.speed)||std::fabs(j.speed)>1000)throw std::runtime_error("map "+std::to_string(level)+": invalid joint");}
     auto& states=g.m_chunks[size_t(level)].world.m_jointStates;if(states.size()==read.size())states=std::move(read);}
    if(version<4||!a.left())return;int bodies=0;a(bodies);if(bodies<0||bodies>4096)throw std::runtime_error("invalid body count");
-   for(int i=0;i<bodies;++i){CorpsePose c;corpse(c);c.loaded=true;const auto key=std::make_tuple(c.creature,int(c.level),c.slot);if(!g.m_corpsePoses.emplace(key,std::move(c)).second)throw std::runtime_error("body saved twice");}}
+   for(int i=0;i<bodies;++i){CorpsePose c;corpse(c);c.loaded=true;const auto key=std::make_tuple(c.creature,int(c.level),c.slot);if(!g.m_corpsePoses.emplace(key,std::move(c)).second)throw std::runtime_error("body saved twice");}
+   if(version<5||!a.left())return;int cloths=0;a(cloths);if(cloths<0||cloths>4096)throw std::runtime_error("invalid cloth count");
+   g.m_clothPoses.clear();for(int i=0;i<cloths;++i){ClothPose c;cloth(c);g.m_clothPoses.push_back(std::move(c));}
+   g.applyClothPoses(g.m_level);}
   else{std::vector<int> levels;for(int level=0;level<g.chunkCount();++level)if(!g.m_chunks[size_t(level)].world.jointStates().empty())levels.push_back(level);
    std::vector<CorpsePose> bodies;if(version>=4)for(const auto& [key,c]:g.m_corpsePoses)if(c.level>=0&&c.level<g.chunkCount()&&!c.sections.empty())bodies.push_back(c);
-   if(levels.empty()&&bodies.empty())return;int chunks=int(levels.size());a(chunks);for(int level:levels){auto states=g.m_chunks[size_t(level)].world.jointStates();int l=level,count=int(states.size());a(l,count);
+   std::vector<ClothPose> cloths;if(version>=5)for(const auto& c:g.m_clothPoses)if(c.level>=0&&c.level<g.chunkCount()&&!c.beads.empty())cloths.push_back(c);
+   if(levels.empty()&&bodies.empty()&&cloths.empty())return;int chunks=int(levels.size());a(chunks);for(int level:levels){auto states=g.m_chunks[size_t(level)].world.jointStates();int l=level,count=int(states.size());a(l,count);
     for(auto& j:states){bool broken=j.broken,on=j.motorOn;float length=std::clamp(j.length,-1.f,100.f),target=j.target,speed=j.speed;a(broken,on,length,target,speed);}}
-   if(!bodies.empty()){int n=int(bodies.size());a(n);for(auto&c:bodies)corpse(c);}}},4);
+   if(version>=4){int n=int(bodies.size());a(n);for(auto&c:bodies)corpse(c);}
+   if(version>=5){int n=int(cloths.size());a(n);for(auto&c:cloths)cloth(c);}}},5);
  return list;
 }
 // ---- The stores the "entities" and "variables" sections keep ----
@@ -1323,6 +1337,17 @@ bool Game::testSaveFormat(std::ostream& report,int parts){
    check(unhooked,"Without the solver's hooks a saved physics section is read, checked and dropped");
    {physicsSaveHooks()={nullptr,[](Clutter&,const PropBody& b){restored.push_back(b);}};restored.clear();Game old(props);const bool oldOk=old.decodeSave(wrap(rebuild(bytes,[](std::string& name,int& version,std::uint16_t&,std::string& b){if(name=="physics"){version=1;b.pop_back();}return true;}) /* layout 1: the bodies alone, without layout 2's chained-prop count (here none, one byte) */));physicsSaveHooks()=keptHooks;
     check(oldOk&&restored.size()==1,"A physics section from before joints (version 1) still loads",oldOk?std::to_string(restored.size())+" bodies":lastLoadFailure());}}
+  // Layout 5: a curtain's beads keep their place through a save (not reset to the rail).
+  {auto map=regression::room();ClothSpec curtain;curtain.kind=ClothKind::Curtain;curtain.at={6,8,2.5f};curtain.to={10,8,2.5f};curtain.drop=1.6f;map->cloths.push_back(curtain);
+   auto camp=regression::campaign(map);Game cloth(camp);cloth.stepCloth(1.f/60);
+   std::vector<Point3> before,shoved,after;int cols=0,rows=0;float bead=0;
+   const bool built=cloth.clothCount()>=1&&cloth.clothBeads(0,before,cols,rows,bead)&&!before.empty();
+   if(built){cloth.shootCloth({8,8,2.2f},{8,8,.4f});for(int i=0;i<30;++i)cloth.stepCloth(1.f/60);cloth.clothBeads(0,shoved,cols,rows,bead);}
+   float drift=0;if(built&&shoved.size()==before.size())for(size_t i=0;i<before.size();++i){const auto d=shoved[i]-before[i];drift=std::max(drift,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}
+   const auto bytes=built?encode(cloth):std::string();Game back(camp);const bool ok=built&&back.decodeSave(bytes);if(ok){back.stepCloth(0);back.clothBeads(0,after,cols,rows,bead);}
+   float err=1e9f;if(ok&&after.size()==shoved.size()){err=0;for(size_t i=0;i<after.size();++i){const auto d=after[i]-shoved[i];err=std::max(err,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}}
+   check(built&&drift>.05f&&ok&&err<.02f,"A shoved curtain's beads round-trip through the physics section (layout 5)",
+    "drift "+std::to_string(drift)+" err "+std::to_string(err)+(ok?"":lastLoadFailure()));}
  }
 
  // ---- 7. The save folder 1.0.4-1.5.0 wrote by mistake is adopted, in a temp folder ----
