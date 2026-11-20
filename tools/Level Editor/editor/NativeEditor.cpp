@@ -7964,7 +7964,7 @@ struct Editor {
     return true;
 #else
     auto report = session / L"validation.txt";
-    // Path as its own argument so spaces in the map or session folder (PVP Map.rmc) are not split.
+    // Path as its own argument so spaces in the map or session folder (Space Test.rmc) are not split.
     std::wstring args = L"\"" + engineExecutable().wstring() +
                         L"\" --editor-validate \"" + pack.wstring() + L"\"";
     SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, TRUE};

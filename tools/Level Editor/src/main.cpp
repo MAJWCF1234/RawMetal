@@ -808,12 +808,12 @@ static bool commandArgumentsTest(){
  check(args.find(L"--nopost")&&args.find(L"--nopixel"),"switches anywhere");
  check(!args.find(L"--map-shot=")&&!args.find(L"--pixel"),"exact flag boundaries");
  // --editor-validate with spaces: whole flag=value quoted, value quoted, or path as the next argument (Builder).
- CommandArguments whole(L"RawMetal.exe \"--editor-validate=custom maps/PVP Map.rmc\"");
- CommandArguments value(L"RawMetal.exe --editor-validate=\"custom maps/PVP Map.rmc\"");
- CommandArguments next(L"RawMetal.exe --editor-validate \"custom maps/PVP Map.rmc\"");
- check(whole.valueOf(L"--editor-validate=")==L"custom maps/PVP Map.rmc","editor-validate whole-arg path with spaces");
- check(value.valueOf(L"--editor-validate=")==L"custom maps/PVP Map.rmc","editor-validate quoted-value path with spaces");
- check(next.valueOf(L"--editor-validate=")==L"custom maps/PVP Map.rmc","editor-validate following-arg path with spaces");
+ CommandArguments whole(L"RawMetal.exe \"--editor-validate=custom maps/Space Test.rmc\"");
+ CommandArguments value(L"RawMetal.exe --editor-validate=\"custom maps/Space Test.rmc\"");
+ CommandArguments next(L"RawMetal.exe --editor-validate \"custom maps/Space Test.rmc\"");
+ check(whole.valueOf(L"--editor-validate=")==L"custom maps/Space Test.rmc","editor-validate whole-arg path with spaces");
+ check(value.valueOf(L"--editor-validate=")==L"custom maps/Space Test.rmc","editor-validate quoted-value path with spaces");
+ check(next.valueOf(L"--editor-validate=")==L"custom maps/Space Test.rmc","editor-validate following-arg path with spaces");
  for(auto flag:{L"--zone-shots=a",L"--creature-video=1",L"--vr-hand-dump",L"--map-shots=a",L"--map-shot=0",L"--map-audit=0"}){CommandArguments automation((std::wstring(L"RawMetal.exe ")+flag).c_str());check(automation.automated(),"automation suppresses dialog");}
  check(!CommandArguments(L"RawMetal.exe --vulkan --vr").automated(),"interactive startup retains error dialog");
  return ok;

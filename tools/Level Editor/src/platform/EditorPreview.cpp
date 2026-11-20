@@ -36,7 +36,7 @@ std::vector<std::array<float,6>> resolveEditorLeadEndpoints(const std::string& t
  return result;
 }
 int validateEditorCampaign(const std::filesystem::path& path){
- // Paths with spaces (PVP Map.rmc) must open: the Builder and --editor-validate pass them quoted or as a following arg.
+ // Paths with spaces (Space Test.rmc) must open: the Builder and --editor-validate pass them quoted or as a following arg.
  auto campaign=loadCustomCampaignFile(path);
  for(size_t i=0;i<campaign->maps.size();++i){World validated(int(i),campaign->maps[i]);}
  std::cout<<"OK "<<campaign->maps.size()<<'\n';return 0;
