@@ -15,8 +15,10 @@ A map should never be lost to one wrong key.
 - **Joints keep their manners.** A hinge's friction, a drawer's catch and a latch's hold now survive the Builder's export.
 - **Fists count.** In a match, a punch lands on another player the way a shot does, judged by the host.
 - **Cloth remembers.** Curtains, straps and cables keep how they hang across a save.
+- **A stiff hinge opens.** A hinge or slider set stiffer than 4 made the whole map refuse to load, because its friction was read as a prop's. It is read as its own now, up to 5000.
+- **More things hold their shape.** Thirty-six of the newer props, rocks and dressing among them, now collide as the shapes they are and not as fat boxes.
 
-Verified with the map format, settings, multiplayer, match, saves, cloth and campaign map tests, the Campaign Builder's full editing test, and tools/release/ship.py.
+Verified with the map format, settings, multiplayer, match, saves, cloth, props, shapes, Physgloves and campaign map tests, the Campaign Builder's full editing test, and tools/release/ship.py.
 
 ---
 
