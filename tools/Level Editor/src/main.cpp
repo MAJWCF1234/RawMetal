@@ -889,8 +889,6 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(auto path=commandArguments().find(L"--corridor-export-test="))return retro::testCorridorEditingExport(path+23);
     if(auto path=commandArguments().valueOf(L"--editor-validate=");!path.empty())return retro::validateEditorCampaign(path);
     if(auto path=commandArguments().valueOf(L"--editor-export=");!path.empty())return retro::exportEditorCampaign(path);
-    // A custom campaign as the Custom Maps menu loads it (the folder report too), then played headless.
-    if(auto path=commandArguments().find(L"--custom-map-smoke=")){retro::Game menu;menu.loadCustomCampaignDirectory(customMapsFolder());std::ofstream report("RawMetal-custom-map-smoke.txt");return retro::Game::customMapSmoke(path+19,report)?0:21;}
     // Open from campaign: the builder asks this engine for the game's levels (--campaign-map-list,
     // --export-rmc; world/CampaignExport.cpp). -1: neither was asked for.
     if(const int code=retro::campaignRmcCommands(commandArguments().values);code>=0)return code;
