@@ -4,6 +4,20 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.6.4 - Bare hands (2026-11-19)
+
+Nobody comes down armed.
+
+- **Deathmatch begins with fists.** A player starts, and starts again after a fall, with no gun, no rounds and nothing left from an earlier life. Every gun is found lying on the map: the handgun, the shotgun or the MAC-11, as the map's maker has set them down. In co-op you still carry the shotgun, as before.
+- **A gun picked up is a gun in the hand.** The shotgun comes loaded with a box of shells, the handgun with a magazine, and either is drawn as it is taken.
+- **What is taken is taken for everyone, and comes back.** In a deathmatch a pickup one player takes leaves every player's map, and it lies there again thirty seconds later, so the guns never run out.
+- **The Builder says so.** The Multiplayer page warns when a deathmatch map has no gun on it, so a map is never quietly fists only.
+- **One release for all.** The way players talk to each other changed; everyone in a match needs this release.
+
+Verified with the match, map format and multiplayer menu tests, the Campaign Builder's full editing test, and tools/release/ship.py.
+
+---
+
 ## v1.6.3 - Something to pick up (2026-11-19)
 
 Supplies and guns, on any floor.
