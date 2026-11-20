@@ -4,14 +4,14 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
-## v1.6.2 - A slip of the hand (2026-11-19)
+## v1.6.2 - A forgiving Builder (2026-11-19)
 
-A map should never be lost to one wrong key.
+The Builder should never be the reason a map is lost.
 
-- **Numbers stay numbers.** In the Campaign Builder, a box that takes a number keeps its last good value if a stray letter finds its way in, and says so. One mistyped key once left a whole map unable to open.
+- **Numbers stay numbers.** In the Campaign Builder, a box that takes a number now keeps its last good value if something that is not a number is typed, and says so. Before, the Builder would accept it and save it, and the game would then refuse the whole map. The Builder is what let that through, and it does not any more.
 - **Saved, then checked.** Saving always saves. Then the Builder asks the game whether it can open the map, and if it can't, says why in plain words and picks out the piece at fault.
 - **The archive names what it cannot open.** A map in custom maps that will not load is listed with its reason, instead of simply being absent.
-- **Names with spaces.** A map called "PVP Map" opens and checks like any other.
+- **Names with spaces.** A map whose file name has a space in it opens and checks like any other.
 - **Joints keep their manners.** A hinge's friction, a drawer's catch and a latch's hold now survive the Builder's export.
 - **Fists count.** In a match, a punch lands on another player the way a shot does, judged by the host.
 - **Cloth remembers.** Curtains, straps and cables keep how they hang across a save.
