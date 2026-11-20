@@ -142,7 +142,7 @@ EntityTraits parseEntityTraits(std::string_view tag,const NamedFields& fields){
   else if(k=="breakable")t.breakable=flag(f);
   else if(k=="density")t.density=number(f,10,20000);
   else if(k=="floats")t.floats=flag(f);
-  else if(k=="friction")t.friction=number(f,0,4);
+  else if(k=="friction")t.friction=tag=="JOINT"?number(f,0,5000):number(f,0,4);   // a joint's is N m (N on a slider), the JOINT parser's own 0 to 5000; a prop's surface is 0 to 4
   else if(k=="restitution")t.restitution=number(f,0,1);
   else if(k=="frozen")t.frozen=flag(f);
   else if(k=="volume")t.volume=number(f,0,5000);

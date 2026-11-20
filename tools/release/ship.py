@@ -45,9 +45,32 @@ def run(cmd, log, cwd=ROOT, check=True, env=None):
     with open(path, 'w', encoding='utf-8', errors='replace') as out:
         result = subprocess.run(cmd, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, shell=isinstance(cmd, str), env=env)
     if check and result.returncode != 0:
-        tail = open(path, encoding='utf-8', errors='replace').read()[-1500:]
-        sys.exit(f'ship: FAILED at {log} (exit {result.returncode}). Last lines:\n{tail}\nFull log: {path}')
+        text = open(path, encoding='utf-8', errors='replace').read()
+        # The cause is rarely in the last lines (the build prints its summary after it): lead with the
+        # lines that name it (compiler errors, the size ceiling), then the tail.
+        picked, seen = [], set()
+        for line in text.splitlines():
+            if ' error ' in line or 'error C' in line or 'must stay below' in line or 'FATAL' in line:
+                key = line.split(': ', 1)[-1][:120]
+                if key not in seen:
+                    seen.add(key)
+                    picked.append(line.strip()[:300])
+            if len(picked) == 8:
+                break
+        head = ('Cause:\n  ' + '\n  '.join(picked) + '\n') if picked else ''
+        sys.exit(f'ship: FAILED at {log} (exit {result.returncode}).\n{head}Last lines:\n{text[-1500:]}\nFull log: {path}')
     return result.returncode
+
+
+def size_headroom():
+    # The last built exe against the ceiling, before a long build starts: a release near the cap says so now.
+    try:
+        cap = int(re.search(r'GREATER_EQUAL (\d+)', open(os.path.join(ROOT, 'src', 'tools', 'check_size.cmake'), encoding='utf-8').read()).group(1))
+        size = os.path.getsize(os.path.join(ROOT, 'RawMetal.exe'))
+    except (OSError, AttributeError, ValueError):
+        return
+    room = cap - size
+    say(f'the last built exe is {size:,} bytes; {room:,} under the {cap:,} ceiling' + ('  (LESS THAN 1 MiB: trim before adding anything)' if room < 1048576 else ''))
 
 
 def cmd_build(script):
@@ -157,6 +180,7 @@ def main():
     if version:
         title = notes_title(version)
         say(f'v{version} "{title}"')
+        size_headroom()
         set_version(version)
         run(['git', 'add', 'src/app.rc', 'src/renderer/SoftwareRenderer.cpp', 'RELEASE_NOTES.md'], 'git-add.txt')
         if subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT).returncode != 0:
