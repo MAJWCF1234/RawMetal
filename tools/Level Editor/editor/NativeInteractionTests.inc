@@ -34,7 +34,11 @@
     mouse(WM_LBUTTONDOWN,corners[2].first,corners[2].second);mouse(WM_MOUSEMOVE,corners[2].first+1,corners[2].second+.5f);mouse(WM_LBUTTONUP,corners[2].first+1,corners[2].second+.5f);
     auto resized=NativeDocument::fields(doc.lines[size_t(record)]);auto afterCorners=nativeCorners(schemas[size_t(kind)].fields,resized);
     require(std::hypot(afterCorners[0].first-fixed.first,afterCorners[0].second-fixed.second)<.02f,"Corner resize moved the fixed opposite corner");
-    require(number(resized[6],0)>number(f[6],0)+.9f&&resized[2]==f[2]&&resized[8]==f[8]&&resized[11]==f[11],"Corner resize damaged model identity, height or native flags");
+    // A model scales whole: width, depth and height by one factor (NativeManipulation.h resizeNative).
+    const float grown=number(resized[6],0)/std::max(.001f,number(f[6],0));
+    require(grown>1.1f&&std::abs(number(resized[7],0)/std::max(.001f,number(f[7],0))-grown)<.01f&&std::abs(number(resized[8],0)/std::max(.001f,number(f[8],0))-grown)<.01f,
+            "Corner resize did not scale the model whole (width, depth and height by one factor)");
+    require(resized[2]==f[2]&&resized[11]==f[11],"Corner resize damaged model identity or native flags");
     before=doc.text();historyCount=history.size();auto handle=*handleFor(size_t(record));
     mouse(WM_LBUTTONDOWN,handle.x,handle.y);mouse(WM_MOUSEMOVE,handle.x+1,handle.y+1);finishDrag(true);drag=false;
     require(doc.text()==before&&history.size()==historyCount,"Cancel did not restore transforms and layer ownership");

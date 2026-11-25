@@ -59,8 +59,8 @@ inline bool resizeNative(std::vector<std::string>& f,const std::vector<std::stri
     const float h0=std::max(.0001f,std::stof(f[hi]));
     // The drag's reach along the corner's diagonal: the mean of the two stretches, held so no side passes the limits.
     float k=.5f*(std::max(0.f,(dx*c-dy*s)*signs[corner][0])/h->width+std::max(0.f,(dx*s+dy*c)*signs[corner][1])/h->depth);
-    const float big=std::max({h->width,h->depth,h0}),small=std::min({h->width,h->depth,h0});
-    k=std::clamp(k,.01f/small,maximum/big);
+    const float largest=std::max({h->width,h->depth,h0}),smallest=std::min({h->width,h->depth,h0});   // not big/small: rpcndr.h defines small
+    k=std::clamp(k,.01f/smallest,maximum/largest);
     w=h->width*k;d=h->depth*k;f[hi]=nativeNumber(h0*k);
   }
   float localX=w*signs[corner][0],localY=d*signs[corner][1];

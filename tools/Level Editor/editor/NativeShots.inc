@@ -6,6 +6,9 @@
   //   film X Y EYE YAW PITCH   put the 3D view's camera there (degrees)
   //   view N               0 plan and 3D, 1 plan, 2 3D        wait MS
   //   shot OUT.bmp         the whole window, as on screen      quit
+  //   pad BUTTONS LX LY RX RY LT RT FRAMES   feed the controller that state for FRAMES frames (NativePad.inc; BUTTONS
+  //                        as XInput's hex bits, sticks -32767..32767), then one released frame
+  //   padat X Y            put the controller's cursor on the plan at X Y
   std::vector<std::string> shotScript;
   size_t shotLine = 0;
   ULONGLONG shotWaitUntil = 0;
@@ -70,6 +73,21 @@
         in >> v;
         SendMessageW(window, WM_COMMAND, std::array<int, 3>{Dual, PlanOnly, ViewOnly}[size_t(std::clamp(v, 0, 2))], 0);
         shotWaitUntil = GetTickCount64() + 800;
+      } else if (verb == "pad") {
+        PadSample s;
+        unsigned buttons = 0;
+        int lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0, frames = 1;
+        in >> std::hex >> buttons >> std::dec >> lx >> ly >> rx >> ry >> lt >> rt >> frames;
+        s.buttons = WORD(buttons), s.lx = SHORT(lx), s.ly = SHORT(ly), s.rx = SHORT(rx), s.ry = SHORT(ry), s.lt = BYTE(lt), s.rt = BYTE(rt);
+        for (int i = 0; i < std::max(1, frames); ++i) padStep(s, 1.f / 60.f);
+        padStep(PadSample{}, 1.f / 60.f);
+        shotWaitUntil = GetTickCount64() + 600;
+      } else if (verb == "padat") {
+        in >> padX >> padY;
+        padCursorShown = true;
+        setInputDevice(true);
+        padStep(PadSample{}, 1.f / 60.f);
+        padRepaint();
       } else if (verb == "wait") {
         int ms = 0;
         in >> ms;
@@ -89,6 +107,7 @@
         HBITMAP bitmap = CreateCompatibleBitmap(screen, w, h);
         auto old = SelectObject(dc, bitmap);
         PrintWindow(window, dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT);
+        padPaintPopups(dc);   // the controller's menu and focus ring (NativePad.inc) are popups over the window
         SelectObject(dc, old);
         BITMAPINFO info{};
         info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER), info.bmiHeader.biWidth = w, info.bmiHeader.biHeight = -h;
