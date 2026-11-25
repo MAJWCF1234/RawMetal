@@ -1,0 +1,7 @@
+# The shower kit in the Starter Map's Kits Gallery (tube editor-kit-photos).
+world custom "custom maps/Starter Map.rmc"
+map 128
+camera 16.4 6.4 -999 -108 -20
+size 960 540
+frames 90
+hud on

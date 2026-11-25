@@ -461,6 +461,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
    {model::bld_stairs_concrete,true,2.f,4.08f,3.2f,0,0},{model::bld_stairs_wood,true,2.f,4.04f,3.2f,0,0},{model::bld_stairs_short,true,4.f,2.08f,1.7f,0,0},
    {model::bld_wall_doorway,false,4.f,.42f,3.f,.5f,2.36f},{model::bld_doorway_frame,false,4.08f,.2f,3.f,.5f,2.36f},{model::bld_doorway_wide,false,4.f,.42f,3.f,.8f,2.36f},   // (opened to the swinging leaf's height: tools/library/open_doorways.py)
    {model::bld_wall_tunnel_mouth,false,4.06f,.16f,3.f,.8f,2.38f},
+   {model::blast_door_frame,false,2.997f,.56f,2.47f,1.f,2.05f},   // (the ring alone: tools/library/open_blast_frame.py)
    {model::bld_doorway_double,false,4.09f,.2f,3.f,1.5f,2.18f,.5f},                       // two 1 m openings either side of a centre post
    {model::cave_oldcity_gateway,false,3.f,1.11f,3.f,.7f,2.2f},   // (the 1.8 m arch is lower than a walker: it stays a solid block)
    {model::bld_ramp,true,1.4f,4.f,1.f,0,0,0,2.f}};   // a 2 m slope up to a 2 m flat top
@@ -483,6 +484,26 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
    box(-s->openHalf,s->openHalf,-hd,hd,s->openHeight,s->height);                           // the lintel over the opening
    if(s->pier>0)box(-s->pier,s->pier,-hd,hd,0,s->openHeight);                              // the post between a double opening
   }
+  layShape(f,boxes);f.solid=false;f.shaped=true;
+ }
+ // The mine entrance: a tunnel whose earth floor climbs 1.5 m from its mouth, rock either side and over it.
+ // The shower stall: two walls and a door side (its leaf ajar inward), the fourth side open to walk in by.
+ for(auto&f:m_fixtures){
+  if(!f.solid||!f.visible)continue;
+  std::vector<LocalBox> boxes;
+  if(f.model==model::mine_entrance){
+   const float sx=f.width/3.86f,sy=f.depth/8.276f,sz=f.height/4.82f;
+   constexpr int Steps=10;const float run=8.276f/Steps;
+   for(int i=0;i<Steps;++i){const float v0=-4.138f+float(i)*run,v1=v0+run,climb=1.55f*(float(i)+.5f)/Steps;
+    boxes.push_back({-1.58f*sx,1.58f*sx,v0*sy,v1*sy,0,(.04f+climb)*sz});          // the floor: .155 m a step, walked up
+    boxes.push_back({-1.58f*sx,1.58f*sx,v0*sy,v1*sy,(3.f+climb)*sz,4.82f*sz});}   // the roof
+   for(float side:{-1.f,1.f})boxes.push_back({std::min(side*1.58f,side*1.93f)*sx,std::max(side*1.58f,side*1.93f)*sx,-4.138f*sy,4.138f*sy,0,4.82f*sz});
+  }else if(f.model==model::bath_stall_open){
+   const float sx=f.width/2.13f,sy=f.depth/1.542f,sz=f.height/2.4f;
+   auto box=[&](float x0,float x1,float v0,float v1){boxes.push_back({x0*sx,x1*sx,v0*sy,v1*sy,0,2.4f*sz});};
+   box(-1.065f,-1.01f,-.771f,.771f);box(-1.065f,1.065f,-.771f,-.71f);box(-1.065f,1.065f,.70f,.771f);
+   box(-.31f,1.05f,.55f,.70f);   // the leaf, standing ajar
+  }else continue;
   layShape(f,boxes);f.solid=false;f.shaped=true;
  }
  // Every other model that is not a cube (an arch, a culvert, a pipe, a tunnel piece, a staircase, a frame, a bed or a

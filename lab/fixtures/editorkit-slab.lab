@@ -1,0 +1,7 @@
+# The slab kit in the Starter Map's Kits Gallery (tube editor-kit-photos).
+world custom "custom maps/Starter Map.rmc"
+map 128
+camera 18.6 13.2 -999 -105 -12
+size 960 540
+frames 90
+hud on

@@ -419,18 +419,19 @@ def build(catalog):
     k.terminal(1.62, 0, 1.2, 'AIRLOCK', 'ONE HATCH AT A TIME', 'E: CYCLE THE LOCK', 'airlock_cycle', True, -HALF)
     k.lamp(0, 0, 2.8, .9, 5.0, 1700)                              # a red-amber cycle lamp
 
-    k = kit('kit_shower', 'Shower stall', 2.2, 1.6, 'a tiled stall, a drain, a riser and a head')
+    k = kit('kit_shower', 'Shower stall', 1.6, 2.2, 'a walk-in stall: tiled floor, a drain, a riser and a head')
     k.fx('bath_floor_tile', 0, 0, .005, 0, solid=0)
-    k.fx('bath_stall_open', 0, 0, 0, PI)                          # the pack's stall opens north at yaw 0
+    k.fx('bath_stall_open', 0, 0, 0, -HALF)                         # its open side faces the front (south)
     k.fx('bath_drain', 0, .1, .012, solid=0)
-    k.fx('bath_pipe', -.5, -.68, 1.2, 0, k=4.0)                     # the riser up the back wall
-    k.pipe(-.5, -.7, -.5, -.35, 2.05, .02, 2.05, STEEL)              # the arm out to the head
-    k.prim('box', -.5, -.32, 1.98, .16, .16, .05, 0, STEEL)           # the head
-    k.lamp(0, 0, 2.3, .6, 3.5, 5200)
+    k.box(.23, -1.0, .27, -.96, 1.0, 2.07, STEEL)                     # the riser up the back wall
+    k.box(.2, -.99, .3, -.93, 1.15, 1.25, DARK_STEEL)                 # the valve
+    k.pipe(.25, -.99, .25, -.62, 2.05, .02, 2.05, STEEL)            # the arm out to the head
+    k.prim('box', .25, -.58, 1.98, .16, .16, .05, 0, STEEL)         # the head
+    k.lamp(0, .2, 2.3, .6, 3.5, 5200)
 
     k = kit('kit_rebar', 'Loose rebar', 3, 3, 'rebar mats and a cracked block, loose to kick about')
-    k.loose('rebar_bars_a', -.2, -.4, .03, .3, pitch=HALF)
-    k.loose('rebar_bars_b', .4, .5, .08, -.5, pitch=HALF)
+    k.loose('rebar_bars_a', -.2, -.4, .03, .3, roll=HALF)
+    k.loose('rebar_bars_b', .4, .5, .08, -.5, roll=HALF)
     k.fx('concrete_block_cracked', 1.0, -.8, 0, .4)
     k.fx('out_debris_bricks', -1.0, .9, 0, 1.2)
 

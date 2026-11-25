@@ -1,0 +1,7 @@
+# The rebar kit in the Starter Map's Kits Gallery (tube editor-kit-photos).
+world custom "custom maps/Starter Map.rmc"
+map 128
+camera 20.2 6.6 -999 -93 -45
+size 960 540
+frames 90
+hud on

@@ -334,17 +334,18 @@ static constexpr KitDef kitDefs[] = {
      "DOOR|@|-1.3|1.3|2.2|0|0|0|0|0|-1|airlock_cycle|0||||||0|OUTER HATCH||||||1\n"
      "TERMINAL|@|1.62|0|1.2|1|AIRLOCK|ONE HATCH AT A TIME|E: CYCLE THE LOCK|airlock_cycle|1||-1.571\n"
      "LIGHT|@|0|0|2.8|0|0|0.9|5|1700\n"},
-    {"kit_shower", L"Shower stall", L"a tiled stall, a drain, a riser and a head", 2.20f, 1.60f,
+    {"kit_shower", L"Shower stall", L"a walk-in stall: tiled floor, a drain, a riser and a head", 1.60f, 2.20f,
      "FIXTURE|@|$bath_floor_tile|0|0|0.005|2|2|0.01|0|0\n"
-     "FIXTURE|@|$bath_stall_open|0|0|0|2.13|1.542|2.4|3.142|1\n"
+     "FIXTURE|@|$bath_stall_open|0|0|0|2.13|1.542|2.4|-1.571|1\n"
      "FIXTURE|@|$bath_drain|0|0.1|0.012|0.5|0.5|0.01|0|0\n"
-     "FIXTURE|@|$bath_pipe|-0.5|-0.68|1.2|0.496|2|0.496|0|1\n"
-     "PIPE|@|-0.5|-0.7|-0.5|-0.35|2.05|0.02|2.05|2\n"
-     "PRIM|@|box|-0.5|-0.32|1.98|0.16|0.16|0.05|0|2\n"
-     "LIGHT|@|0|0|2.3|0|0|0.6|3.5|5200\n"},
+     "STRUCT|@|0.23|-1|0.27|-0.96|1|2.07|0|2\n"
+     "STRUCT|@|0.2|-0.99|0.3|-0.93|1.15|1.25|0|8\n"
+     "PIPE|@|0.25|-0.99|0.25|-0.62|2.05|0.02|2.05|2\n"
+     "PRIM|@|box|0.25|-0.58|1.98|0.16|0.16|0.05|0|2\n"
+     "LIGHT|@|0|0.2|2.3|0|0|0.6|3.5|5200\n"},
     {"kit_rebar", L"Loose rebar", L"rebar mats and a cracked block, loose to kick about", 3.00f, 3.00f,
-     "CLUTTER|@|7|-0.2|-0.4|0.03|0.3|$rebar_bars_a|2.5|0.04|2.4|1.571|0|\n"
-     "CLUTTER|@|7|0.4|0.5|0.08|-0.5|$rebar_bars_b|2.5|0.04|2.4|1.571|0|\n"
+     "CLUTTER|@|7|-0.2|-0.4|0.03|0.3|$rebar_bars_a|2.5|0.04|2.4|0|1.571|\n"
+     "CLUTTER|@|7|0.4|0.5|0.08|-0.5|$rebar_bars_b|2.5|0.04|2.4|0|1.571|\n"
      "FIXTURE|@|$concrete_block_cracked|1|-0.8|0|0.6|2.2|1.101|0.4|1\n"
      "FIXTURE|@|$out_debris_bricks|-1|0.9|0|2.333|2.002|0.065|1.2|1\n"},
     {"kit_cracked_slab", L"Cracked slab", L"broken concrete panels, bare rebar, rubble", 6.00f, 2.00f,

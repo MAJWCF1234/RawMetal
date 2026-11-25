@@ -1,0 +1,12 @@
+# The shower stall, blast-door frame and mine entrance, walked into (tube editor-pieces).
+world room
+camera 5 11 -999 -90 0
+light 5 10 3.0 1.4 9
+light 11.5 10 3.0 1.4 9
+light 11.5 6 3.0 1.2 9
+light 18 3 3.4 1.4 9
+light 18 9 3.0 1.2 8
+light 18 15 3.4 1.2 9
+size 960 540
+frames 720
+hud on

@@ -401,20 +401,21 @@ DOOR|@|-1.3|1.3|2.2|0|0|0|0|0|-1|airlock_cycle|0||||||0|OUTER HATCH||||||1
 TERMINAL|@|1.62|0|1.2|1|AIRLOCK|ONE HATCH AT A TIME|E: CYCLE THE LOCK|airlock_cycle|1||-1.571
 LIGHT|@|0|0|2.8|0|0|0.9|5|1700
 PREFAB_END
-# Kit: Shower stall (a tiled stall, a drain, a riser and a head)
+# Kit: Shower stall (a walk-in stall: tiled floor, a drain, a riser and a head)
 PREFAB|kit_shower
 FIXTURE|@|617|0|0|0.005|2|2|0.01|0|0
-FIXTURE|@|613|0|0|0|2.13|1.542|2.4|3.142|1
+FIXTURE|@|613|0|0|0|2.13|1.542|2.4|-1.571|1
 FIXTURE|@|614|0|0.1|0.012|0.5|0.5|0.01|0|0
-FIXTURE|@|615|-0.5|-0.68|1.2|0.496|2|0.496|0|1
-PIPE|@|-0.5|-0.7|-0.5|-0.35|2.05|0.02|2.05|2
-PRIM|@|box|-0.5|-0.32|1.98|0.16|0.16|0.05|0|2
-LIGHT|@|0|0|2.3|0|0|0.6|3.5|5200
+STRUCT|@|0.23|-1|0.27|-0.96|1|2.07|0|2
+STRUCT|@|0.2|-0.99|0.3|-0.93|1.15|1.25|0|8
+PIPE|@|0.25|-0.99|0.25|-0.62|2.05|0.02|2.05|2
+PRIM|@|box|0.25|-0.58|1.98|0.16|0.16|0.05|0|2
+LIGHT|@|0|0.2|2.3|0|0|0.6|3.5|5200
 PREFAB_END
 # Kit: Loose rebar (rebar mats and a cracked block, loose to kick about)
 PREFAB|kit_rebar
-CLUTTER|@|7|-0.2|-0.4|0.03|0.3|610|2.5|0.04|2.4|1.571|0|
-CLUTTER|@|7|0.4|0.5|0.08|-0.5|611|2.5|0.04|2.4|1.571|0|
+CLUTTER|@|7|-0.2|-0.4|0.03|0.3|610|2.5|0.04|2.4|0|1.571|
+CLUTTER|@|7|0.4|0.5|0.08|-0.5|611|2.5|0.04|2.4|0|1.571|
 FIXTURE|@|609|1|-0.8|0|0.6|2.2|1.101|0.4|1
 FIXTURE|@|589|-1|0.9|0|2.333|2.002|0.065|1.2|1
 PREFAB_END
@@ -15098,7 +15099,7 @@ ZONE|128|2.9|2.5|5.1|11.5|KIT / Escalator|||
 PREFAB_PLACE|128|kit_airlock|10.5|5.5|0|0
 ZONE|128|8.5|2.3|12.5|8.7|KIT / Airlock|||
 PREFAB_PLACE|128|kit_shower|15.5|3.5|0|0
-ZONE|128|14.4|2.7|16.6|4.3|KIT / Shower stall|||
+ZONE|128|14.7|2.4|16.3|4.6|KIT / Shower stall|||
 PREFAB_PLACE|128|kit_rebar|20|4|0|0
 ZONE|128|18.5|2.5|21.5|5.5|KIT / Loose rebar|||
 PREFAB_PLACE|128|kit_cracked_slab|17.5|9.5|0|0
