@@ -51,7 +51,7 @@ RouteCache::Owner::Owner(const World&world,const std::shared_ptr<const AuthoredM
  if(ownerCount<int(owners.size())){owners[size_t(ownerCount++)]={&world,&map};m_pushed=true;}
 }
 RouteCache::Owner::~Owner(){if(m_pushed)--ownerCount;}
-RouteCache::Deck* RouteCache::deck(const World&world,float height,bool&fresh,float radius){auto*slot=find(world,DeckKey,height,0,false,fresh,radius);return slot?slot->deck.get():nullptr;}
+RouteCache::Deck* RouteCache::deck(const World&world,float height,bool&fresh,float radius,float rise){auto*slot=find(world,DeckKey,height,rise,false,fresh,radius);return slot?slot->deck.get():nullptr;}
 RouteCache::Grid* RouteCache::grid(const World&world,float height,float step,bool sweep,bool&fresh,float radius){auto*slot=find(world,GridKey,height,step,sweep,fresh,radius);return slot?slot->grid.get():nullptr;}
 bool RouteCache::verify(){
  static const bool on=[]{
