@@ -1,0 +1,8 @@
+# Arches, culverts and stairs by their mesh shape at any turn (tube walk-shapes).
+world room
+camera 12 12 -999 0 0
+light 8 8 3.2 1.4 10
+light 16 12 3.2 1.4 10
+size 960 540
+frames 900
+hud on
