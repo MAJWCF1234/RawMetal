@@ -14,7 +14,6 @@
 // (stripSummons), so a load or a map change has none of them; they last the
 // session on the map they were summoned on.
 #include "Game.h"
-#include "EngineRegressionScene.h"
 #include "ai/Navigation.h"
 #include "ai/Perception.h"
 #include <algorithm>
@@ -26,10 +25,9 @@
 #include "../world/CustomCampaign.h"
 namespace retro {
 namespace {
-struct SummonKind {const char* word;bool creature;CreatureKind creatureKind;ActorVisual visual;GuardSquadRole role;ActorAiMode mode;bool hunter;const char* label;bool babyHuntsman=false;};
+struct SummonKind {const char* word;bool creature;CreatureKind creatureKind;ActorVisual visual;GuardSquadRole role;ActorAiMode mode;bool hunter;const char* label;};
 constexpr SummonKind SummonKinds[]={
  {"huntsman",true,CreatureKind::Huntsman,{},{},{},false,"HUNTSMAN"},
- {"baby_huntsman",true,CreatureKind::Huntsman,{},{},{},false,"BABY HUNTSMAN",true},
  {"wasp",true,CreatureKind::Wasp,{},{},{},false,"XENOWASP"},{"xenowasp",true,CreatureKind::Wasp,{},{},{},false,"XENOWASP"},
  {"brute",true,CreatureKind::Brute,{},{},{},false,"SCISSOR FIEND"},{"fiend",true,CreatureKind::Brute,{},{},{},false,"SCISSOR FIEND"},
  {"warden",true,CreatureKind::Warden,{},{},{},false,"REACTOR STALKER"},{"stalker",true,CreatureKind::Warden,{},{},{},false,"REACTOR STALKER"},
@@ -54,7 +52,6 @@ constexpr SummonKind SummonKinds[]={
 const SummonKind* summonKind(const std::string& word){
  std::string w=word;if(w.size()>3&&w.back()=='s'&&w!="heavy")w.pop_back(); // "guards", "huntsmen" stays as typed
  if(w=="huntsmen")w="huntsman";
- if(w=="baby-huntsman"||w=="baby_huntsmen"||w=="baby-huntsmen")w="baby_huntsman";
  for(const auto&k:SummonKinds)if(w==k.word)return &k;return nullptr;}
 // The words are the map format's too (world/EntityTraits.h): an authored body takes the same traits.
 const char* factionName(AiFaction f){return factionWord(f);}
@@ -89,8 +86,8 @@ bool Game::summonSpot(Vec2& at,float& z,float hull,float radius,const std::vecto
 int Game::summon(const std::string& word,int count,const std::string& options,std::string& error){
  const SummonKind* kind=summonKind(word);if(!kind){error="UNKNOWN KIND "+upper(word)+". HELP SUMMON LISTS THEM.";return 0;}
  AiFaction faction=kind->creature?AiFaction::Creature:kind->mode==ActorAiMode::Civilian?AiFaction::Neutral:AiFaction::Raider;
- SummonOrder order=(kind->hunter||kind->babyHuntsman)?SummonOrder::Hunt:kind->mode==ActorAiMode::Guard?SummonOrder::Guard:SummonOrder::Idle;
- float hp=0,scale=kind->babyHuntsman?.35f:1.f;int weapon=-1;std::string name;
+ SummonOrder order=kind->hunter?SummonOrder::Hunt:kind->mode==ActorAiMode::Guard?SummonOrder::Guard:SummonOrder::Idle;
+ float hp=0,scale=1;int weapon=-1;std::string name;
  std::istringstream in(options);std::string token;
  while(in>>token){const auto eq=token.find('=');const std::string key=token.substr(0,eq),value=eq==std::string::npos?"":token.substr(eq+1);
   if(eq==std::string::npos){if(!parseFaction(token,kind->creature,faction)){error="UNKNOWN OPTION "+upper(token)+".";return 0;}continue;}
@@ -110,7 +107,7 @@ int Game::summon(const std::string& word,int count,const std::string& options,st
   SummonRecord record;record.serial=serial;record.kind=kind->label;record.creature=kind->creature;record.order=order;record.level=m_level;
   record.name=name.empty()?std::string(kind->label)+" "+std::to_string(serial):upper(name)+(count>1?" "+std::to_string(n+1):"");
   float hull=Player::StandingHeight*scale,radius=.3f*scale;
-  if(kind->creature){const auto&t=creatureTraits(kind->creatureKind);hull=t.hull*scale;radius=kind->babyHuntsman?t.radius*scale:std::max(t.radius*scale,.25f);}
+  if(kind->creature){const auto&t=creatureTraits(kind->creatureKind);hull=t.hull*scale;radius=std::max(t.radius*scale,.25f);}
   Vec2 at;float z;if(!summonSpot(at,z,hull,radius,taken)){if(!made)error="NO CLEAR SPOT IN FRONT OF YOU. FACE OPEN FLOOR.";break;}
   taken.push_back(at);record.anchor=at;record.anchorZ=z;
   // Where a patrol order walks to and back: the farthest clear point ahead, up to 7 m.
@@ -120,10 +117,7 @@ int Game::summon(const std::string& word,int count,const std::string& options,st
   const float faceYawToPlayer=std::atan2(m_player.pos.y-at.y,m_player.pos.x-at.x);
   if(kind->creature){
    CreatureSpawn s{kind->creatureKind,at,z};s.scale=scale;s.health=hp;if(kind->hunter){s.hunter=stateId("summon/"+std::to_string(serial)+"/hunter");m_summonKeys.emplace(s.hunter,0);}
-   if(kind->babyHuntsman){
-    auto traits=std::make_shared<EntityTraits>();traits->display=kind->label;s.traits=traits;
-   }
-   spawnCreature(s,0,true);auto&e=m_enemies.back();e.babyHuntsman=kind->babyHuntsman;
+   spawnCreature(s,0,true);auto&e=m_enemies.back();
    e.summon=serial;e.faction=faction;e.order=std::uint8_t(order);e.anchor=at;e.anchorZ=z;e.patrolTo=record.patrolTo;e.patrolToZ=record.patrolToZ;
    e.wakeState=0; // the cursed equipment comes up awake
    e.heading=faceYawToPlayer;
@@ -288,7 +282,7 @@ bool Game::consoleSummonCommand(const std::string& command){
  auto killNpc=[&](size_t i){const auto&t=m_friendlyActors[i].track();if(!t.health||(t.deadState&&state(t.deadState))||m_friendlyActors[i].pose.clip==4)return false;damageFriendly(i,1e6f,m_friendlyActors[i].pose.position);return true;};
  if(verb=="help"){in>>arg;if(arg!="summon"&&arg!="summons")return false;
   for(const char* l:{"SUMMON <KIND> [COUNT] [ALLY|ENEMY|NEUTRAL|FACTION=NAME] [AI=ORDER] [HP=N] [SCALE=N] [WEAPON=RIFLE|HANDGUN|NONE] [NAME=X]",
-   "KINDS: HUNTSMAN BABY_HUNTSMAN (PACK OF 12 BY DEFAULT) WASP BRUTE WARDEN MUTANT SNATCHER CHIMERA TRANSFORMED MACHINE HUNTER (R-117'S KIND)",
+   "KINDS: HUNTSMAN WASP BRUTE WARDEN MUTANT SNATCHER CHIMERA TRANSFORMED MACHINE HUNTER (R-117'S KIND)",
    "       GUARD SOLDIER ENGINEER SHARPSHOOTER HEAVY MEDIC RUSHER / CIVILIAN SCIENTIST DOCTOR LABTECH",
    "SIDES: ALLY FIGHTS CREATURES AND ENEMIES; ENEMY FIGHTS YOU AND YOUR ALLIES; CREATURES AND GUARDS FIGHT EACH OTHER; NEUTRAL RUNS.",
    "AI: IDLE (STAND), PATROL (TO A POINT AHEAD AND BACK), WANDER, GUARD (HOLD THE SPOT, 8 M), HUNT (GO AFTER THE NEAREST FOE), FOLLOW (YOU).",
@@ -297,7 +291,7 @@ bool Game::consoleSummonCommand(const std::string& command){
    "FREEZE [ALL|OFF]: HOLD WHAT YOU AIM AT (ALL: EVERY SUMMON).  AI ON|OFF: EVERY CREATURE AND MAN.  LIST: THE SUMMONS AND WHO IS HERE."})m_consoleLog.push_back(l);
   return true;}
  if(verb=="summon"||verb=="spawn"){std::string kind;in>>kind;if(kind.empty()){say("USE SUMMON <KIND> [COUNT] [OPTIONS]. HELP SUMMON FOR MORE.");return true;}
-  std::string options=rest();const auto* preset=summonKind(kind);int count=preset&&preset->babyHuntsman?12:1;{std::istringstream o(options);std::string first;o>>first;int n=0;auto r=std::from_chars(first.data(),first.data()+first.size(),n);
+  std::string options=rest();int count=1;{std::istringstream o(options);std::string first;o>>first;int n=0;auto r=std::from_chars(first.data(),first.data()+first.size(),n);
    if(!first.empty()&&r.ec==std::errc{}&&r.ptr==first.data()+first.size()){if(n<1||n>16){say("COUNT IS 1 TO 16.");return true;}count=n;std::getline(o,options);}}
   std::string error;const int made=summon(kind,count,options,error);
   if(!made){say(error);return true;}
@@ -323,7 +317,7 @@ bool Game::consoleSummonCommand(const std::string& command){
   if(!arg.empty()&&arg!="summons"&&arg!="all"&&!only){say("UNKNOWN KIND "+arg+".");return true;}
   const bool summonsOnly=arg=="summons";int creatures=0,men=0;
   for(int level=0;level<chunkCount();++level)if(level==m_level||chunkResident(level))for(auto&e:level==m_level?m_enemies:m_chunks[size_t(level)].enemies){
-   if(summonsOnly&&!e.summon)continue;if(only&&(!only->creature||e.kind!=only->creatureKind||e.babyHuntsman!=only->babyHuntsman))continue;creatures+=killEnemy(e,level);}
+   if(summonsOnly&&!e.summon)continue;if(only&&(!only->creature||e.kind!=only->creatureKind))continue;creatures+=killEnemy(e,level);}
   for(size_t i=0;i<m_friendlyActors.size();++i){const auto&n=m_friendlyActors[i];const auto&t=n.track();
    if(only){if(only->creature||t.visual!=only->visual||(t.ai.mode==ActorAiMode::Guard)!=(only->mode==ActorAiMode::Guard)||n.level!=m_level)continue;}
    else if(!n.summon)continue; // killall alone spares the authored men; killall guard does not
@@ -364,77 +358,6 @@ bool Game::testSummon(std::ostream& report){
  auto fresh=[&]{Game g(room());g.m_god=true;g.m_player.pos={4.5f,12.f};g.m_player.z=0;g.m_player.angle=0;g.m_player.pitch=0;g.update({},1.f/60);return g;};
  auto type=[](Game& g,const std::string& line){g.executeConsole(line);};
  auto has=[](const Game& g,const std::string& text){for(const auto&l:g.m_consoleLog)if(l.find(text)!=std::string::npos)return true;return false;};
- {Game g=fresh();type(g,"summon baby_huntsman");
-  const bool baby=g.m_enemies.size()==12&&std::all_of(g.m_enemies.begin(),g.m_enemies.end(),[](const Enemy& e){
-   return e.kind==Enemy::Kind::Huntsman&&std::string_view(e.name())=="BABY HUNTSMAN"&&
-          e.scale==.35f&&e.order==int(SummonOrder::Hunt);
-  });
-  check(baby,"Baby Huntsman defaults to a 12-creature hunting pack at 35% adult size");
- }
- {
-  // Place both groups using the console, then move their quarry to the far
-  // side. The 48 cm wide, 64 cm high vent is off the navigation cell centre.
-  const auto chaseThroughPartition=[&](const char* command,bool fitsVent,int expected){
-   auto map=regression::room();
-   map->definition.playerStart={4.5f,10.5f};
-   constexpr float north=9.87f,south=10.35f;
-   map->structures={{11.4f,0,11.6f,north,0,8},{11.4f,south,11.6f,15,0,8},
-                    {11.4f,18,11.6f,24,0,8},{11.4f,north,11.6f,south,.64f,8}};
-   Game g(regression::campaign(map));g.m_god=true;g.m_player.angle=0;
-   type(g,command);
-   g.m_player.pos={16.5f,10.5f};
-   std::vector<float> crossings(g.m_enemies.size(),-1.f);
-   for(int frame=0;frame<2400;++frame){
-    g.updateSummons(.01f);g.updateEnemies(.01f);
-    for(size_t i=0;i<g.m_enemies.size();++i)
-     if(crossings[i]<0.f&&g.m_enemies[i].pos.x>=11.5f)crossings[i]=g.m_enemies[i].pos.y;
-    if(std::all_of(g.m_enemies.begin(),g.m_enemies.end(),[](const Enemy& e){return e.pos.x>=13.f;}))break;
-   }
-   int vent=0,bypass=0,reached=0;
-   for(size_t i=0;i<crossings.size();++i){
-    const float y=crossings[i];
-    vent+=y>north&&y<south;bypass+=y>15.f&&y<18.f;reached+=g.m_enemies[i].pos.x>=13.f;
-   }
-   check(reached==expected&&(fitsVent?vent:bypass)==expected,
-         std::string(command)+" / vent "+std::to_string(vent)+" / bypass "+std::to_string(bypass)+
-         " / reached "+std::to_string(reached)+" of "+std::to_string(g.m_enemies.size()));
-   for(size_t i=0;i<crossings.size();++i){
-    const auto& e=g.m_enemies[i];
-    report<<"  creature "<<i+1<<" crossed at y="<<crossings[i]<<" and finished at "<<e.pos.x<<','<<e.pos.y<<'\n';
-   }
-  };
-  chaseThroughPartition("summon baby_huntsman 12 enemy",true,12);
-  chaseThroughPartition("summon huntsman 1 enemy ai=hunt",false,1);
- }
- {
-  // Measure each inherited locomotion mode with the same heading and quarry.
-  const auto speeds=[&](const char* command){
-   Game g=fresh();type(g,command);
-   std::array<float,3> distance{};
-   if(g.m_enemies.empty())return distance;
-   auto& e=g.m_enemies[0];e.pos={9.f,12.f};e.z=0;e.heading=0;
-   g.m_player.pos={20.f,12.f};
-   e.awareness=60.f;e.lastKnown=g.m_player.pos;e.state=Enemy::State::Investigate;
-   for(int i=0;i<10;++i)g.updateEnemies(.01f);
-   distance[0]=e.pos.x-9.f;
-   e.surfaceMode=1;e.surfaceNormal={0,1};
-   for(int i=0;i<10;++i)g.updateEnemies(.01f);
-   distance[1]=e.z;
-   for(int i=0;i<600&&e.surfaceMode==1;++i)g.updateEnemies(.01f);
-   if(e.surfaceMode==2){
-    const auto start=e.pos;
-    for(int i=0;i<10;++i)g.updateEnemies(.01f);
-    if(e.surfaceMode==2)distance[2]=length(e.pos-start);
-   }
-   return distance;
-  };
-  const auto adult=speeds("summon huntsman 1 enemy ai=hunt");
-  const auto baby=speeds("summon baby_huntsman 1 enemy");
-  for(int i=0;i<3;++i)
-   check(adult[i]>0&&baby[i]>adult[i]*1.7f,
-         std::string(i==0?"floor":i==1?"wall":"ceiling")+" adult "+std::to_string(adult[i]*10.f)+
-         " m/s, baby "+std::to_string(baby[i]*10.f)+" m/s");
- }
  {Game g=fresh();type(g,"help");check(has(g,"SUMMON"),"help names SUMMON");type(g,"help summon");check(has(g,"KINDS:")&&has(g,"TRANSIENT"),"help summon lists kinds and says summons are transient");
   type(g,"summon dragon");check(has(g,"UNKNOWN KIND")&&g.m_summons.empty(),"an unknown kind is refused");
   type(g,"summon huntsman 3 ally ai=wander hp=50 scale=1.2 name=rex");

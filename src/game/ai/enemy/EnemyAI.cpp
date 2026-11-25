@@ -31,31 +31,6 @@ static bool navCellPoint(const World&w,int x,int y,float floor,float height,floa
   if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius))return true;
  }return false;
 }
-// A jamb can cover the centre of a cell while leaving a usable opening
-// beside it. Keep normal deck nodes and recover the authored floor only
-// when no ground node was found. Every candidate still uses the real hull.
-template<class Add>
-static void navDeckCell(const World&w,int x,int y,float height,float radius,const Add&add){
- const bool wall=w.tile(x,y)=='#';
- const float floor=w.floorHeight(x+.5f,y+.5f);
- bool foundFloor=false;
- for(auto span:w.spansAt(x,y)){
-  if(span.ceiling-span.floor<height||(wall&&span.floor<2.99f))continue;
-  Vec2 p;float z;
-  if(!navCellPoint(w,x,y,span.floor,height,radius,p,z))continue;
-  add(p,z);
-  foundFloor|=std::fabs(z-floor)<.24f;
- }
- if(wall||foundFloor)return;
- for(float dx:{0.f,-.25f,.25f,-.375f,.375f})for(float dy:{0.f,-.25f,.25f,-.375f,.375f}){
-  const Vec2 p{x+.5f+dx,y+.5f+dy};
-  const float z=navSupport(w,p,floor+.215f,radius);
-  if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius)){
-   add(p,z);
-   return;
-  }
- }
-}
 static float roughStep(Enemy::Kind kind){
  return creatureTraits(kind).step;
 }
@@ -78,9 +53,9 @@ static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float heigh
 static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f){
  perf::Scope stackedProfile(perf::StackedWaypoint);perf::count(perf::StackedCalls);
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
- for(int y=1;y<23;++y)for(int x=1;x<23;++x)navDeckCell(w,x,y,height,radius,[&](Vec2 p,float floor){
-  cells[y*24+x].push_back(int(nodes.size()));nodes.push_back({p,floor});
- });
+ for(int y=1;y<23;++y)for(int x=1;x<23;++x)for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
+  Vec2 p;float floor;if(!navCellPoint(w,x,y,span.floor,height,radius,p,floor))continue;
+  cells[y*24+x].push_back(int(nodes.size()));nodes.push_back({p,floor});}
  perf::count(perf::StackedNodes,nodes.size());
  int origin=-1,target=-1;float a=1e9f,b=1e9f;
  for(int i=0;i<int(nodes.size());++i){auto&n=nodes[i];float da=lengthSq(n.p-start)+std::fabs(n.z-startZ)*8,db=lengthSq(n.p-goal)+std::fabs(n.z-goalZ)*8;if(da<a){a=da;origin=i;}if(db<b){b=db;target=i;}}
@@ -114,11 +89,9 @@ template<class Probe> static auto uncounted(const Probe&probe){auto counts=perf:
 static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fresh,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human,float radius){
  auto&nodes=deck.nodes;auto&cells=deck.cells;
  if(fresh){
-  for(int y=1;y<23;++y)for(int x=1;x<23;++x){
-   auto& cell=cells[y*24+x];cell.begin=int(nodes.size());
-   navDeckCell(w,x,y,height,radius,[&](Vec2 p,float floor){nodes.push_back({p,floor});});
-   cell.end=int(nodes.size());
-  }
+  for(int y=1;y<23;++y)for(int x=1;x<23;++x){cells[y*24+x].begin=int(nodes.size());for(auto span:w.spansAt(x,y))if(span.ceiling-span.floor>=height&&(w.tile(x,y)!='#'||span.floor>=2.99f)){
+   Vec2 p;float floor;if(!navCellPoint(w,x,y,span.floor,height,radius,p,floor))continue;
+   nodes.push_back({p,floor});}cells[y*24+x].end=int(nodes.size());}
   deck.edges.assign(nodes.size()*4,{});
  }
  perf::count(perf::StackedNodes,nodes.size());
@@ -227,8 +200,6 @@ void Game::updateEnemies(float dt){
  const int dx[]={1,-1,0,0},dy[]={0,0,1,-1};
  for(auto&e:m_enemies){
   perf::CreatureScope creatureProfile(int(e.kind));
-  const float speedScale=e.babyHuntsman?1.8f:1.f;
-  const float senseHeight=e.babyHuntsman?.7f*e.scale:.7f;
   if(dormantEntity(e.z))continue;
   struct Animate {Enemy&e;float time,dt;~Animate(){advanceCreatureAnimation(e,time,dt);}} animate{e,m_elapsed,dt};
   // An authored spawn/saved foot starts at the centre's terrain height. Seat
@@ -283,7 +254,7 @@ void Game::updateEnemies(float dt){
   auto leashed=[&](Vec2 p){return !posted||lengthSq(p-e.anchor)<64.f;};
   auto to=target-e.pos;float dist=length(to);Vec2 facing{std::cos(e.heading),std::sin(e.heading)};
   // Shut in a locker the player is out of sight of anything that hunts by eye.
-  const bool seen=huntsPlayer&&leashed(P.pos)&&!playerHidden(prey)&&aiCanSee(m_world,e.pos,e.z+senseHeight,facing,target,targetFeet+targetEye,traits.sightRange,traits.sightDot,2.5f);
+  const bool seen=huntsPlayer&&leashed(P.pos)&&!playerHidden(prey)&&aiCanSee(m_world,e.pos,e.z+.7f,facing,target,targetFeet+targetEye,traits.sightRange,traits.sightDot,2.5f);
   // Making the player out, as a guard does (aiRecognitionRate) at its own
   // notice time and need of light. Inside 2.5 m it knows them at once, and a
   // wound the player dealt fills it where it was dealt (Hitscan, the punch, a
@@ -303,7 +274,7 @@ void Game::updateEnemies(float dt){
   if(const int quarry=hunterPrey(e);quarry>=0){const auto&npc=m_friendlyActors[size_t(quarry)];target=npc.pose.position;targetFeet=npc.pose.z;targetHull=npc.track().scale;targetEye=npc.track().scale*.65f;friendly=quarry;nearest=dist=length(target-e.pos);visible=true;glimpsed=false;to=target-e.pos;}
   else for(size_t i=0;i<m_friendlyActors.size();++i){const auto&npc=m_friendlyActors[i];if(npc.level!=m_level)continue;const auto&track=npc.track();const auto&pose=npc.pose;
    if(npcIncapacitated(i)||track.ai.mode==ActorAiMode::Scripted||!track.health||state(track.deadState)||pose.clip==4||(track.ai.enableState&&!state(track.ai.enableState))||!factionsHostile(e.faction,npcFaction(track))||!leashed(pose.position))continue;
-   float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+senseHeight,facing,pose.position,pose.z+track.scale*.65f,traits.sightRange,traits.sightDot,2.5f)){
+   float distance=length(pose.position-e.pos);if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,pose.position,pose.z+track.scale*.65f,traits.sightRange,traits.sightDot,2.5f)){
     target=pose.position;targetFeet=pose.z;targetHull=track.scale;targetEye=track.scale*.65f;friendly=int(i);nearest=dist=distance;visible=true;glimpsed=false;to=target-e.pos;
    }
   }
@@ -312,7 +283,7 @@ void Game::updateEnemies(float dt){
   if(hunterPrey(e)<0)for(size_t i=0;i<m_enemies.size();++i){const auto&o=m_enemies[i];
    if(&o==&e||!o.alive||o.sleeping()||!factionsHostile(e.faction,o.faction)||!leashed(o.pos))continue;
    const float distance=length(o.pos-e.pos),mid=(o.bodyBottom()+o.bodyTop())*.5f;
-   if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+senseHeight,facing,o.pos,mid,traits.sightRange,traits.sightDot,2.5f)){
+   if(distance<nearest&&aiCanSee(m_world,e.pos,e.z+.7f,facing,o.pos,mid,traits.sightRange,traits.sightDot,2.5f)){
     target=o.pos;targetFeet=o.bodyBottom();targetHull=o.bodyTop()-o.bodyBottom();targetEye=targetHull*.65f;friendly=-1;rival=int(i);nearest=dist=distance;visible=true;glimpsed=false;to=target-e.pos;}
   }
   // Whatever it is striking now: the player, a man (friendly) or a creature (rival).
@@ -360,17 +331,14 @@ void Game::updateEnemies(float dt){
    float floor=m_world.floorHeight(e.pos.x,e.pos.y),ceiling=std::min(m_world.clearanceHeight(e.pos.x,e.pos.y),m_world.clearanceAbove(e.pos.x,e.pos.y,std::max(e.z,floor)+.05f));
    if(e.awareness<=0||m_world.outdoors()||ceiling-floor<2.15f||dist<2.2f){e.surfaceMode=0;e.verticalVelocity=0;}
    else if(e.surfaceMode==1){
-    const float surfaceHeight=e.babyHuntsman?e.hull():1.05f;
-    e.z=std::min(ceiling-surfaceHeight,e.z+dt*2.1f*speedScale);e.moving=true;e.gait+=dt*9.f*speedScale;
-    if(e.z>=ceiling-surfaceHeight-.01f)e.surfaceMode=2;
+    e.z=std::min(ceiling-1.05f,e.z+dt*2.1f);e.moving=true;e.gait+=dt*9.f;
+    if(e.z>=ceiling-1.06f)e.surfaceMode=2;
     continue;
    }else{
-    const float surfaceHeight=e.babyHuntsman?e.hull():1.05f;
-    const float surfaceRadius=e.babyHuntsman?e.radius():.2f;
-    Vec2 toward=normalized(e.lastKnown-e.pos),next=e.pos+toward*(dt*1.6f*speedScale);
-    float roof=std::min(m_world.clearanceHeight(next.x,next.y),m_world.clearanceAbove(next.x,next.y,e.z+.05f)),nextZ=roof-surfaceHeight;
-    if(roof-m_world.floorHeight(next.x,next.y)>2.15f&&std::fabs(nextZ-e.z)<.4f&&navFits(m_world,next,nextZ,surfaceHeight,surfaceRadius)){
-     e.pos=next;e.z=nextZ;e.heading=std::atan2(toward.y,toward.x);e.moving=true;e.gait+=dt*9.f*speedScale;
+    Vec2 toward=normalized(e.lastKnown-e.pos),next=e.pos+toward*(dt*1.6f);
+    float roof=std::min(m_world.clearanceHeight(next.x,next.y),m_world.clearanceAbove(next.x,next.y,e.z+.05f)),nextZ=roof-1.05f;
+    if(roof-m_world.floorHeight(next.x,next.y)>2.15f&&std::fabs(nextZ-e.z)<.4f&&navFits(m_world,next,nextZ,1.05f)){
+     e.pos=next;e.z=nextZ;e.heading=std::atan2(toward.y,toward.x);e.moving=true;e.gait+=dt*9.f;
     }else e.surfaceMode=0;
     continue;
    }
@@ -740,9 +708,7 @@ void Game::updateEnemies(float dt){
   perf::Scope moveProfile(perf::EnemyMove);
   Vec2 direction=normalized(destination-e.pos);
    if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&std::fabs(targetFeet-e.z)<.22f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
-  Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);
-   const float spacing=e.babyHuntsman?radius+other.radius()+.15f:.85f;
-   if(d>.001f&&d<spacing)separation+=away*((spacing-d)/d);}
+  Vec2 separation{};for(auto&other:m_enemies)if(&other!=&e&&other.alive&&other.bodyBottom()<e.bodyTop()&&other.bodyTop()>e.bodyBottom()){auto away=e.pos-other.pos;float d=length(away);if(d>.001f&&d<.85f)separation+=away*( (.85f-d)/d);}
   direction=normalized(direction+separation*2.f);
   // Unaware, or creeping up on something it has only glimpsed, at half pace.
   float speed=fleeing?std::max(traits.speed,traits.rushSpeed*.75f):stalker?stalkSpeed:traits.speed;if(e.awareness==0||glimpsed)speed*=.5f;
@@ -760,7 +726,7 @@ void Game::updateEnemies(float dt){
    };
    // A full swept step first preserves diagonal speed. Short substeps cannot
    // tunnel through a jamb, a closed leaf or the player's body on a slow frame.
-   float travel=std::min(speed*speedScale*dt,length(destination-e.pos));int steps=std::max(1,int(std::ceil(travel/.08f)));Vec2 delta=direction*(travel/steps);
+   float travel=std::min(speed*dt,length(destination-e.pos));int steps=std::max(1,int(std::ceil(travel/.08f)));Vec2 delta=direction*(travel/steps);
    for(int i=0;i<steps;++i)if(!move(e.pos+delta)){move(e.pos+Vec2{delta.x,0});move(e.pos+Vec2{0,delta.y});}
   float moved=length(e.pos-old);e.moving=moved>.0001f;e.gait+=moved*creatureTraits(e.kind).gaitPerMetre;
    if(e.moving){auto actual=e.pos-old;e.heading+=std::clamp(wrapAngle(std::atan2(actual.y,actual.x)-e.heading),-dt*6.f,dt*6.f);}
@@ -768,11 +734,8 @@ void Game::updateEnemies(float dt){
   if(e.kind==Enemy::Kind::Huntsman&&!m_world.outdoors()&&e.awareness>0&&e.searchTime>.22f){
    float roof=m_world.clearanceHeight(e.pos.x,e.pos.y),floor=m_world.floorHeight(e.pos.x,e.pos.y);
    if(roof-floor>2.15f)for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){
-    const float wallProbe=e.babyHuntsman?radius+.22f:.42f;
-    const float wallWidth=e.babyHuntsman?.8f*e.scale:.8f;
-    const float wallHeight=e.babyHuntsman?hull:1.05f;
-    auto probe=e.pos+d*wallProbe;
-    if(m_world.solid(probe.x,probe.y)&&m_world.wallSpaceFree(e.pos,Vec2{-d.y,d.x},wallWidth,e.z,e.z+wallHeight)){
+    auto probe=e.pos+d*.42f;
+    if(m_world.solid(probe.x,probe.y)&&m_world.wallSpaceFree(e.pos,Vec2{-d.y,d.x},.8f,e.z,e.z+1.05f)){
      e.surfaceNormal=d*-1.f;e.surfaceMode=1;e.verticalVelocity=0;break;
     }
    }

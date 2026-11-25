@@ -26,38 +26,17 @@ float damageTaken(const Side& s){return s.maxHp-s.hp;}
 }
 const bool summonTube=add({
  .name="summon",.summary="console summons with allegiances: allies fight hostiles, creatures and guards fight each other, neutrals run (Summon.cpp)",
- .fixtures={"summon-allies","summon-guards","summon-raiders","summon-neutral","baby-huntsman-vent"},
- .author=[](Scene& s,AuthoredMapData& map){
-  if(s.fixture->value("summon-scene")!="baby-vent")return;
-  constexpr float north=9.87f,south=10.35f;
-  const Structure partitions[]={{11.4f,0,11.6f,north,0,8},{11.4f,south,11.6f,15,0,8},
-                                      {11.4f,18,11.6f,24,0,8},{11.4f,north,11.6f,south,.64f,8}};
-  map.structures.insert(map.structures.end(),std::begin(partitions),std::end(partitions));
- },
+ .fixtures={"summon-allies","summon-guards","summon-raiders","summon-neutral"},
  .setup=[](Scene& s){
   Game& g=s.g();LabAccess::playerCamera(g);LabAccess::setGod(g,true);const std::string scene=s.fixture->value("summon-scene");
   if(scene=="allies"){typeAt(g,0,"summon chimera ally ai=guard");typeAt(g,40,"summon huntsman enemy ai=hunt");typeAt(g,-40,"summon snatcher enemy ai=hunt");}
   else if(scene=="guards"){typeAt(g,-30,"summon soldier 2 ally");typeAt(g,30,"summon chimera enemy ai=hunt");}
   else if(scene=="raiders"){typeAt(g,-35,"summon guard 2 enemy");typeAt(g,35,"summon mutant 2 enemy ai=hunt");}
   else if(scene=="neutral"){typeAt(g,0,"summon civilian neutral");typeAt(g,-45,"summon wasp neutral");typeAt(g,45,"summon brute enemy ai=hunt");}
-  else if(scene=="baby-vent"){
-   auto& player=LabAccess::player(g);
-   player.pos={4.5f,10.5f};
-   typeAt(g,0,"summon baby_huntsman 12 enemy");
-   player.pos={16.5f,10.15f};player.angle=kPi;player.pitch=-20.f;
-  }
   s.board["summon.made"]=double(LabAccess::summons(g).size());s.board["summon.player_hp0"]=g.player().health;
   for(const auto& line:LabAccess::consoleLog(g))if(line.find("SUMMONED")!=std::string::npos||line.find("NO CLEAR")!=std::string::npos)std::printf("  [summon] %s\n",line.c_str());},
- .step=[](Scene& s,float){if(s.fixture->value("summon-scene")=="baby-vent")s.input.crouch=true;},
  .capture=[](Scene& s,const Frame&){
   Game& g=s.g();const std::string scene=s.fixture->value("summon-scene");
-  if(scene=="baby-vent"){
-   if(s.frame%2==0)s.shoot("baby-vent-"+std::to_string(1000+s.frame));
-   for(const auto& e:LabAccess::enemies(g)){
-    if(e.babyHuntsman&&e.pos.x>=11.5f&&e.pos.y>9.87f&&e.pos.y<10.35f)
-     s.board["summon.vent."+std::to_string(e.summon)]=1.;
-   }
-  }
   auto note=[&](const char* key,bool happened){if(happened&&!s.board.count(key))s.board[key]=s.time;};
   if(scene=="allies"){note("summon.ally_struck_s",damageTaken(creatures(g,AiFaction::Creature))>0);note("summon.ally_hurt_s",damageTaken(creatures(g,AiFaction::Facility))>0);}
   if(scene=="guards"){note("summon.chimera_shot_s",damageTaken(creatures(g,AiFaction::Creature))>0);note("summon.men_hurt_s",damageTaken(men(g,AiFaction::Facility))>0);}
@@ -71,16 +50,6 @@ const bool summonTube=add({
   Game& g=s.g();const std::string scene=s.fixture->value("summon-scene");
   auto t=[&](const char* key){return s.board.count(key)?s.board[key]:-1.0;};
   r.metric("summoned",s.board["summon.made"]);
-  if(scene=="baby-vent"){
-   int vent=0,reached=0;
-   for(const auto& e:LabAccess::enemies(g))if(e.babyHuntsman){
-    vent+=s.board.contains("summon.vent."+std::to_string(e.summon));
-    reached+=e.pos.x>=13.f;
-   }
-   r.metric("vent_crossings",vent);r.metric("reached",reached);
-   r.check("all 12 Baby Huntsmen cross the vent and keep pursuing",vent==12&&reached==12,
-           std::to_string(vent)+" crossed, "+std::to_string(reached)+" reached");
-  }
   auto sideMetrics=[&](const std::string& tag,const Side& v){r.metric(tag+"_alive",v.alive);r.metric(tag+"_count",v.count);r.metric(tag+"_hp",v.hp);};
   if(scene=="allies"){const auto ally=creatures(g,AiFaction::Facility),foe=creatures(g,AiFaction::Creature);sideMetrics("ally",ally);sideMetrics("hostile",foe);
    r.metric("first_blow_on_hostiles_s",t("summon.ally_struck_s"),"s");r.metric("ally_first_hurt_s",t("summon.ally_hurt_s"),"s");
