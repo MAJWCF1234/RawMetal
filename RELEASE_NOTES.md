@@ -4,6 +4,19 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.2 - Under, through and round (2026-11-25)
+
+The works got harder to walk past.
+
+- A shotgun that throws real pellets, and a sniper rifle with its own brass and rounds.
+- Arches, culverts, pipes and many stairs now collide by their true shape, at any turn, tilt or size. Walk, crouch or crawl through them.
+- Doors carry their blood, bullet holes and textures with them when they swing. New heavy, mesh and ticket doors.
+- Lamps sit on their own faces, one housing to a lamp, and lamp shadows are redrawn a few at a time.
+- In multiplayer you can hear the other players walk.
+- Controller: rumble, aim assist, pad prompts, steadier menus.
+- Campaign Builder: the whole 3D editor works from an Xbox-style pad, with smooth rotation, whole-model corner scaling, turn steps (Ctrl+R), an escalator and megastructure facade pieces.
+- Campaign Builder: a placeable Director for a map zone, with lights, noise and delayed-event script blocks.
+
 ## v1.7.1 - Straight-backed (2026-11-20)
 
 Leon holds a pistol like he means it.
