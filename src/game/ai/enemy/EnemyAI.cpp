@@ -113,6 +113,18 @@ static Vec2 lineUp(const World&w,Vec2 start,float startZ,Vec2 next,float height,
   if(lengthSq(corner-start)>.0025f&&roughSegment(w,start,startZ,corner,height,rise+.025f,&feet,true,radius)&&roughSegment(w,corner,feet,next,height,rise+.025f,nullptr,true,radius))return corner;}
  return next;
 }
+// The heading for a walker whose next hop is `next`, starting from the node
+// `origin`. When the straight line to it clips a corner: the square corner that
+// lines it up; failing that, back to the origin node, straight or by its own
+// corner. The corner comes before the origin: a walker that left the origin by
+// the corner must not be sent back to it (a crowd would shuffle there for ever).
+static Vec2 walkerHeading(const World&w,Vec2 start,float startZ,Vec2 origin,Vec2 next,float height,float radius,float rise){
+ const Vec2 heading=lineUp(w,start,startZ,next,height,radius,rise);
+ if(lengthSq(heading-next)>.000001f||roughSegment(w,start,startZ,next,height,rise+.025f,nullptr,true,radius)||lengthSq(origin-start)<=.0025f)return heading;
+ if(roughSegment(w,start,startZ,origin,height,rise+.025f,nullptr,true,radius))return origin;
+ const Vec2 back=lineUp(w,start,startZ,origin,height,radius,rise);
+ return lengthSq(back-origin)>.000001f?back:next;
+}
 // The deck planner as it probes with nothing kept: the reference the route
 // cache must match, and the planner wherever nothing may be kept.
 static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f,float rise=.215f){
@@ -136,8 +148,7 @@ static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,
  // The actor can enter a navigation cell near an obstacle corner. Its next
  // cell-to-cell edge is safe from the cell centre, but the diagonal from the
  // actor's actual feet may clip that corner. Reach the origin centre first.
- if(human&&lengthSq(nodes[origin].p-start)>.0025f&&!roughSegment(w,start,startZ,nodes[next].p,height,rise+.025f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,rise+.025f,nullptr,true,radius))return nodes[origin].p;
- return human?lineUp(w,start,startZ,nodes[next].p,height,radius,rise):nodes[next].p;
+ return human?walkerHeading(w,start,startZ,nodes[origin].p,nodes[next].p,height,radius,rise):nodes[next].p;
 }
 static bool sameBits(Vec2 a,Vec2 b){return std::bit_cast<uint32_t>(a.x)==std::bit_cast<uint32_t>(b.x)&&std::bit_cast<uint32_t>(a.y)==std::bit_cast<uint32_t>(b.y);}
 // A verify-mode shadow probe leaves the frame's query and decision counters as
@@ -187,8 +198,7 @@ static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fre
   }
  }
  if(parent[size_t(target)]<0){perf::count(perf::StackedNoRoute);return start;}int next=target;while(parent[size_t(next)]!=origin&&next!=origin)next=parent[size_t(next)];
- if(human&&lengthSq(nodes[origin].p-start)>.0025f&&!roughSegment(w,start,startZ,nodes[next].p,height,rise+.025f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,rise+.025f,nullptr,true,radius))return nodes[origin].p;
- return human?lineUp(w,start,startZ,nodes[next].p,height,radius,rise):nodes[next].p;
+ return human?walkerHeading(w,start,startZ,nodes[origin].p,nodes[next].p,height,radius,rise):nodes[next].p;
 }
 static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f,float rise=.215f){
  Vec2 result;
@@ -260,7 +270,7 @@ static bool partialDeckRoute(const World&w,Vec2 start,float startZ,Vec2 goal,flo
  if(hold==origin&&lengthSq(nodes[size_t(hold)].p-start)<.1225f){holding=true;return true;}
  int step=hold;while(parent[size_t(step)]!=origin&&step!=origin)step=parent[size_t(step)];
  // The corner rule the planner keeps: reach the origin node first when the diagonal from its feet would clip a jamb.
- next=lengthSq(nodes[size_t(origin)].p-start)>.0025f&&!roughSegment(w,start,startZ,nodes[size_t(step)].p,height,rise+.025f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[size_t(origin)].p,height,rise+.025f,nullptr,true,radius)?nodes[size_t(origin)].p:lineUp(w,start,startZ,nodes[size_t(step)].p,height,radius,rise);
+ next=walkerHeading(w,start,startZ,nodes[size_t(origin)].p,nodes[size_t(step)].p,height,radius,rise);
  return true;
 }
 // One terrain cell-grid edge: the walk from cell a's centre, standing on its
