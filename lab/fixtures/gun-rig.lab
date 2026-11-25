@@ -1,0 +1,10 @@
+# The gun rig: a fixed mount at the firing line and a row of standard targets (a thin pole, the end of a wall, a plinth, a ledge's lip),
+# in the plain room. It fires a weapon at each from a set distance and looks at the marks. Tubes: gun-rig.
+world room
+camera 12.0 3.0 -999 90 0
+light 12 6 3 1.4 14
+light 6 6 3 1.0 10
+light 18 6 3 1.0 10
+size 960 540
+frames 330
+hud on

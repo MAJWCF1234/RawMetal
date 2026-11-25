@@ -33,7 +33,7 @@ import os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OX, OY = 169, 696
 FIRST = 34
-TRAILING_CHUNKS = 1
+TRAILING_CHUNKS = 3
 
 # Music cues. The new chapter cues fall back to existing loops until their
 # tracks are wired into AudioEngine (see NEW_CUES).
@@ -736,8 +736,8 @@ def write_definitions():
     p = os.path.join(ROOT, 'src', 'world', 'WorldDefinition.h')
     s = open(p, newline='').read(); nl = '\r\n' if '\r\n' in s else '\n'
     rows, names = gen_definitions()
-    # Chunks authored outside the plan follow its last one (179: the Security
-    # Office prologue, written by hand in WorldDefinition.h after the markers).
+    # Hand-authored chunks after the markers: the Security Office prologue
+    # and the two optional Chapter 2 Engineering maps.
     count = FIRST + len(CHUNKS) + TRAILING_CHUNKS
     s = re.sub(r'inline constexpr int CampaignChunkCount=\d+;', 'inline constexpr int CampaignChunkCount=%d;' % count, s)
     s = re.sub(r'inline constexpr int WorldChunkCapacity=\d+;', 'inline constexpr int WorldChunkCapacity=%d;' % count, s)

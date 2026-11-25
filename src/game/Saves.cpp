@@ -213,7 +213,7 @@ template<class A> void Game::archiveChunk(A& a,int version,int index,unsigned pa
  if(parts&ChunkPickups)
   // The MAC-11's box and the gun itself came with the pickups section's version 2 (t_pickupSection); a positional
   // archive or a version 1 section holds at most the 9 mm box.
-  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(t_pickupSection>=3?int(PickupKind::Shotgun):t_pickupSection>=2?int(PickupKind::MachinePistol):version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
+  list(c.pickups,[&](Pickup&v){vec(v.pos);a(v.kind,v.active);if(int(v.kind)>(t_pickupSection>=3?int(PickupKind::SniperAmmo):t_pickupSection>=2?int(PickupKind::MachinePistol):version>=19?int(PickupKind::HandgunAmmo):int(PickupKind::Ammo)))throw std::runtime_error("invalid pickup");});
  if(parts&ChunkProps){
   // A save older than version 17 had no physics props: one written in that form leaves them out.
   std::vector<Clutter> olderClutter;
@@ -318,10 +318,11 @@ std::vector<SaveSection> Game::builtInSaveSections(){
  add("inventory",true,[](Game& g,auto& a,int version){
   a(g.m_medkits);for(auto id:{WeaponId::Shotgun,WeaponId::Handgun}){auto&rounds=g.m_player.pool(id);a(rounds.total,rounds.loaded);}
   if(version>=2){auto&rounds=g.m_player.pool(WeaponId::MachinePistol);a(rounds.total,rounds.loaded);}
+  if(version>=3){auto&rounds=g.m_player.pool(WeaponId::Sniper);a(rounds.total,rounds.loaded);}   // version 3: the sniper rifle's .308
   for(int i=0;i<(version>=2?5:4);++i)a(g.m_itemCells[size_t(i)]);
-  archiveList(a,g.m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});},2);
+  archiveList(a,g.m_questItems,[&](QuestItemStack&v){a(v.id,v.count);if(v.id==0||v.count<=0||v.count>99)throw std::runtime_error("invalid quest item");});},3);
  // An older inventory had no .380: the pool empty, its cell the first clear of the others.
- list.back().upgrade=[](Game& g,int){g.m_player.pool(WeaponId::MachinePistol)={};placeMachinePistolCell(g);};
+ list.back().upgrade=[](Game& g,int from){g.m_player.pool(WeaponId::Sniper)={};if(from<2){g.m_player.pool(WeaponId::MachinePistol)={};placeMachinePistolCell(g);}};
  // The hung hazmat suit's simulation.
  add("hazmat",true,[](Game& g,auto& a,int){auto&h=g.m_hazmat;a(h.initialized,h.sleeping,h.quiet,h.accumulator);
   for(auto&points:{&h.p,&h.previous})for(auto&p:*points){a(p.x,p.y,p.z);if(p.x<0||p.x>24||p.y<0||p.y>24||p.z<-12||p.z>20)throw std::runtime_error("Invalid hazmat pose");}
@@ -644,7 +645,7 @@ bool Game::prepareLoad(const std::string& data,Game& next)const{
   }
   auto&p=next.m_player;
   // Each firearm's pool against its own magazine; the handgun's only when it is owned or its 9 mm waits for it.
-  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun,WeaponId::MachinePistol}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return refuse("invalid ammunition pool");}
+  for(auto id:{WeaponId::Shotgun,WeaponId::Handgun,WeaponId::MachinePistol,WeaponId::Sniper}){const auto&rounds=p.pool(id);if(rounds.total<0||rounds.total>9999||rounds.loaded<0||rounds.loaded>playerWeaponDef(id).cycle.tubeCapacity||rounds.loaded>rounds.total)return refuse("invalid ammunition pool");}
   if(p.pool(WeaponId::Fists)!=AmmoPool{}||(p.pool(WeaponId::Handgun).loaded>0&&!next.hasHandgun())||(p.pool(WeaponId::MachinePistol).loaded>0&&!next.hasMachinePistol())||!next.ownsWeapon(next.m_equippedWeapon)||!next.ownsWeapon(next.m_switchTarget)||next.m_reloadLength<0||next.m_reloadLength>2||next.m_reloadTimer>next.m_reloadLength+.001f)return refuse("invalid weapon or reload state");
   // A body saved somewhere no body can be (past the map's edge, far above or below it, as a
   // noclip flight or a glitch leaves it) is set back on the map's own start rather than refusing

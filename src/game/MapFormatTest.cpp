@@ -306,8 +306,8 @@ bool Game::testMapFormat(){
   {const std::string body="PICKUP|0|5|8|8\nPICKUP|0|6|9|8|3.5\nPICKUP|0|0|10|8|3.5\n";
    auto c=loadCustomCampaignText(room("FORMAT|2\n",body),"drops.rmc");const auto& p=c->maps[0]->pickupSpawns;
    check(p.size()==3&&p[0].kind==PickupKind::Handgun&&p[1].kind==PickupKind::Shotgun&&p[1].z==3.5f&&p[0].z<-900&&p[2].z==3.5f,"PICKUP kinds 5 (the handgun) and 6 (the shotgun) load, and an optional z puts one on an upper floor");
-   bool refused=false;try{loadCustomCampaignText(room("FORMAT|2\n","PICKUP|0|7|8|8\n"),"drops-bad.rmc");}catch(const std::exception&){refused=true;}
-   check(refused,"a pickup kind past the shotgun is refused");
+   bool refused=false;try{loadCustomCampaignText(room("FORMAT|2\n","PICKUP|0|9|8|8\n"),"drops-bad.rmc");}catch(const std::exception&){refused=true;}
+   check(refused,"a pickup kind past the .308 box is refused");
    const auto text=exportRmc("Drops",{{c->maps[0],-1}}).text;auto again=loadCustomCampaignText(text,"drops-again.rmc");const auto& q=again->maps[0]->pickupSpawns;
    check(q.size()==3&&q[0].kind==PickupKind::Handgun&&q[1].kind==PickupKind::Shotgun&&q[1].z==3.5f,"weapon drops and their heights export and load back the same");}
 

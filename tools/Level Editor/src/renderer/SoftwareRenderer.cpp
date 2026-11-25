@@ -1,5 +1,6 @@
 #include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
+#include "DebugLayer.h"
 #include "Materials.h"
 #include "Wetness.h"
 #include "Projection.h"
@@ -233,7 +234,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})queue(*texture);
   for(const auto&texture:m_staffTextures)queue(texture);
   if(!m_logo.pixels.empty())queue(m_logo);
-  queue(m_droneTexture);queue(m_handgunTexture);queue(m_macTexture);queue(m_macAmmoTexture);queue(m_brassTexture);
+  queue(m_droneTexture);queue(m_handgunTexture);queue(m_macTexture);queue(m_sniperTexture);queue(m_macAmmoTexture);queue(m_rifleAmmoTexture);queue(m_brassTexture);
   for(const auto&texture:m_paperProps)queue(texture);
   for(const auto&role:m_cleanupTextures)for(const auto&texture:role)queue(texture);
   for(const auto&texture:m_clutterTextures)queue(texture);for(const auto&[name,unused]:m_facilityOrder){
@@ -283,7 +284,8 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  m_handgunTexture=loadTexture(338);deriveSurfaceNormal(m_handgunTexture,.3f);m_handgunTexture.glossStrength=.25f;
  // Parkerized black: a little sheen, no relief taken from the sheet's noise (it sparkled grey).
  m_macTexture=loadTexture(3354);m_macTexture.glossStrength=.08f;
- m_macAmmoTexture=loadTexture(3356);m_brassTexture=loadTexture(3358);m_brassTexture.glossStrength=.35f;
+ m_sniperTexture=loadTexture(3391);m_sniperTexture.glossStrength=.3f;
+ m_macAmmoTexture=loadTexture(3356);m_rifleAmmoTexture=loadTexture(3395);m_brassTexture=loadTexture(3358);m_brassTexture.glossStrength=.35f;
  m_droneTexture=loadTexture(335);deriveSurfaceNormal(m_droneTexture,.3f);m_droneTexture.glossStrength=.2f;
  {auto emission=loadTexture(336);if(emission.width!=m_droneTexture.width||emission.height!=m_droneTexture.height)throw std::runtime_error("Drone emission dimensions mismatch");m_droneTexture.emission=std::move(emission.pixels);}
  {Texture missing{64,64,std::vector<std::uint32_t>(64*64)};for(int y=0;y<64;++y)for(int x=0;x<64;++x)missing.pixels[size_t(y*64+x)]=((x/8+y/8)&1)?0xff000000u:0xffff00ffu;prepareDecal(missing,false);m_missingTexture=std::move(missing);}
@@ -1077,7 +1079,24 @@ void SoftwareRenderer::drawHud(const Game& game){
   if(depth>.1f){cx=std::clamp(int(m_width*.5f+(d.x*right.x+d.y*right.y+d.z*right.z)/depth*focal),8,m_width-8);cy=std::clamp(int(m_height*.5f-(d.x*up.x+d.y*up.y+d.z*up.z)/depth*focal),8,m_height-8);}}
  // On a prop the Physgloves can pull, the cross draws in a little and cools to the outline's steel grey (Scene3D).
  const bool pullable=game.physgloves().target>=0&&game.hitFlash()<=0;const int gap=pullable?5:7;if(pullable)cross=rgb(196,210,224);
- if(!locker){fill(cx-gap,cy,4,1,cross,.85f);fill(cx+gap-3,cy,4,1,cross,.85f);fill(cx,cy-gap,1,4,cross,.85f);fill(cx,cy+gap-3,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
+  // The scope: a ring closes in on the picture, a fine cross and a mil dot mark the aim; a head hit reads HEAD.
+ if(const float scope=game.scopeBlend();scope>.2f&&!locker){
+  // Down the tube: black outside the circle, a soft dark falloff over its outer sixth, a duplex reticle (a hair cross opening at the middle,
+  // heavier posts out to the rim) and a small red centre dot. The picture inside is the narrowed lens (render: Projection::horizontal).
+  const float a=std::clamp((scope-.2f)/.45f,0.f,1.f);const int radius=int(m_height*.47f);const float edge=.84f;
+  for(int y=0;y<m_height;++y){const int dy=y-cy;const int inside=std::abs(dy)<radius?int(std::sqrt(float(radius*radius-dy*dy))):0;
+   fill(0,y,std::max(0,cx-inside),1,0xff000000u,a);fill(std::min(m_width,cx+inside),y,std::max(0,m_width-(cx+inside)),1,0xff000000u,a);
+   if(inside<=0)continue;
+   const float ey=float(radius)*edge;const int innerHalf=std::abs(dy)<ey?int(std::sqrt(ey*ey-float(dy*dy))):0;
+   auto shade=[&](int x){const float dx=float(x-cx),r=std::sqrt(dx*dx+float(dy*dy))/float(radius);if(r<=edge||r>1.f)return;const float t=(r-edge)/(1.f-edge);blend(x,y,0xff000000u,t*t*.75f*a);};
+   for(int x=cx-inside;x<cx-innerHalf;++x)shade(x);for(int x=cx+innerHalf+1;x<=cx+inside;++x)shade(x);}
+  const auto line=rgb(8,8,8);const int gapR=std::max(3,radius/20),hair=int(radius*.55f),post=int(radius*.93f);
+  fill(cx+gapR,cy,hair-gapR,1,line,.8f*a);fill(cx-hair,cy,hair-gapR,1,line,.8f*a);fill(cx,cy-hair,1,hair-gapR,line,.8f*a);fill(cx,cy+gapR,1,hair-gapR,line,.8f*a);
+  fill(cx+hair,cy-1,post-hair,3,line,.9f*a);fill(cx-post,cy-1,post-hair,3,line,.9f*a);fill(cx-1,cy-post,3,post-hair,line,.9f*a);fill(cx-1,cy+hair,3,post-hair,line,.9f*a);
+  fill(cx-1,cy-1,3,3,rgb(214,32,26),.9f*a);
+ }
+ if(game.critFlash()>0)uiText(cx-uiTextWidth("HEAD",0,13,2)/2,cy+30,"HEAD",rgb(214,32,26),0,13,std::min(1.f,game.critFlash()),2);
+ if(!locker&&game.scopeBlend()<=.2f){fill(cx-gap,cy,4,1,cross,.85f);fill(cx+gap-3,cy,4,1,cross,.85f);fill(cx,cy-gap,1,4,cross,.85f);fill(cx,cy+gap-3,1,4,cross,.85f);blend(cx,cy,cross,.6f);}
  if(auto target=shut?nullptr:game.targetEnemy()){
   int x=m_width/2-65,y=m_height-60;
   uiText(x,y-6,target->name(),paper,0,11,1,1);
@@ -1143,7 +1162,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  if(game.pickupNoticeTime()>0&&!shut)promptPanel(offVents(m_height-65,23),game.pickupNotice().c_str(),paper);
  if(auto caption=game.actorCaption();!caption.empty()&&game.logTime()<=0)promptPanel(m_height-112,std::string(caption).c_str(),paper);
  else if(auto pickup=shut?nullptr:game.nearbyPickup()){
-  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":pickup->kind==Pickup::Kind::MacAmmo?".380 / 32 ROUNDS":pickup->kind==Pickup::Kind::MachinePistol?"MAC-11 / .380 x 32":pickup->kind==Pickup::Kind::Handgun?"HANDGUN / 9MM":pickup->kind==Pickup::Kind::Shotgun?"SHOTGUN / 12 GA":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
+  const char* message=pickup->kind==Pickup::Kind::Ammo?"12 GA / 16 SHELLS":pickup->kind==Pickup::Kind::HandgunAmmo?"9MM / 12 ROUNDS":pickup->kind==Pickup::Kind::MacAmmo?".380 / 32 ROUNDS":pickup->kind==Pickup::Kind::MachinePistol?"MAC-11 / .380 x 32":pickup->kind==Pickup::Kind::Handgun?"HANDGUN / 9MM":pickup->kind==Pickup::Kind::Shotgun?"SHOTGUN / 12 GA":pickup->kind==Pickup::Kind::Sniper?"SNIPER RIFLE / .308":pickup->kind==Pickup::Kind::SniperAmmo?".308 / 10 ROUNDS":p.health>=100?"FIRST AID / HEALTH FULL":"FIRST AID / 35 HEALTH";
   promptPanel(m_height-65,message,amber);
  }
  // Shut in, the hint sits low on the steel under the vent band, off the
@@ -1422,8 +1441,11 @@ void SoftwareRenderer::drawInventory(const Game& game){
   }
  };
  const bool shotgunOut=game.equippedWeapon()==WeaponId::Shotgun,pistolOut=game.equippedWeapon()==WeaponId::Handgun;
- if(shotgunOut)icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
- label(76,123,shotgunOut?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);
+ const bool rifleOut=game.equippedWeapon()==WeaponId::Sniper;
+ // The primary weapon's panel holds whichever long gun is drawn: the rifle (with its rounds) or the shotgun.
+ if(rifleOut){icon(m_sniperMesh,m_sniperTexture,76,84,228,34,true);char l[48];std::snprintf(l,sizeof l,"SNIPER RIFLE / .308 x %d",game.player().pool(WeaponId::Sniper).total);label(76,123,l,paper);}
+ else{if(shotgunOut)icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
+ label(76,123,shotgunOut?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);}
  // Secondary: the sidearms once owned (each drawn from its own mesh; with both, the
  // handgun on the left half and the MAC-11 on the right), else the fists.
  const bool macOut=game.equippedWeapon()==WeaponId::MachinePistol;
@@ -1433,8 +1455,9 @@ void SoftwareRenderer::drawInventory(const Game& game){
  else if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW",paper);}
  else label(76,173,"FISTS / CLICK TO HOLSTER",paper);
  label(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
+ if(game.hasSniper()&&!rifleOut){char l[48];std::snprintf(l,sizeof l,"SNIPER RIFLE / .308 x %d / KEY 5",game.player().pool(WeaponId::Sniper).total);label(76,243,l,paper);}   // carried, not drawn: one line in the equipment panel
  label(76,258,"ARMOR: EMPTY",muted);
- int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem||item.id==Game::MachinePistolItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
+ int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem||item.id==Game::MachinePistolItem||item.id==Game::SniperItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
  if(keys>shown){std::string more="+ "+std::to_string(keys-shown)+" MORE KEY ITEMS";label(76,keyY+shown*11,more.c_str(),muted);}
  for(int row=0;row<5;++row)for(int col=0;col<6;++col){fill(350+col*34,94+row*29,31,26,rgb(236,228,214),.05f);frame(350+col*34,94+row*29,31,26,rgb(236,228,214),.10f);}
  // Items 0 shotgun, 1 shells, 2 first aid, 3 9 mm (a stack waits for the pistol), 4 .380 (for the MAC-11).
@@ -1464,6 +1487,9 @@ void SoftwareRenderer::updatePlants(const Game& game){
  for(auto&[key,remains]:m_remains){if(!remains.carcass.built())continue;const Point3 c=remains.carcass.centre();bodies.push_back({int(key>>32),{c.x,c.y,c.z-.25f},std::min(.8f,remains.carcass.radius()*.45f),.5f,{}});}
  m_plants.update(game,bodies,game.elapsed());}
 void SoftwareRenderer::render(const Game& game){
+ // The sniper rifle's scope narrows the lens while it is at the eye; the game's own lens comes back after the frame.
+ struct LensRestore{float was=Projection::horizontal;~LensRestore(){Projection::horizontal=was;}} lensRestore;
+ if(!m_vrRendering&&game.scopeBlend()>0){const float k=game.scopeBlend();Projection::horizontal=Projection::gameHorizontal*(1.f+(kSniperZoom-1.f)*k*k*(3.f-2.f*k));}
  // An inspection frame on Vulkan (a test, a shot) is drawn once the light it is drawn with has
  // settled: lamp shadows that were still being drawn, reflection probes not yet captured and probe
  // bakes taken in during a frame change the next one, so it is drawn again until a frame changes
@@ -1645,6 +1671,7 @@ void SoftwareRenderer::render(const Game& game){
   for(int y=0;y<m_height;++y)for(int x=0;x<m_width;++x)m_pixels[size_t(y*m_width+x)]=m_scenePixels[size_t((y*scaledHeight/m_height)*scaledWidth+x*scaledWidth/m_width)];}
  if(nativeTarget){m_width=logicalWidth;m_height=logicalHeight;}
  if(directPresentation)std::fill(m_pixels.begin(),m_pixels.end(),0u);
+#include "DebugLayer.inc"
  if(!m_environmentInspection){if(game.titleScreen())drawTitle(game);else {if(m_vrRendering){std::fill(m_pixels.begin(),m_pixels.end(),0xff000000u);drawTerminal(game);}else if(!(game.paused()&&(game.menuPage()==Game::MenuPage::Pause||game.menuPage()==Game::MenuPage::Options))){if(!game.remotePlayers().empty())drawNameTags(game);drawHud(game);if(game.inMatch())drawMatchHud(game);}if(game.consoleOpen())drawConsole(game);else if(game.paused())drawSettings(game);else if(game.inventoryOpen())drawInventory(game);else if(game.talking())drawDialogue(game);}if(game.loading())drawLoading(game);}
  if(!m_editorGuides.empty())drawEditorGuides(game);
  if(m_vrRendering){auto [x,y]=VrRuntime::active()->pointer();if(x>=0&&y>=0){rect(x-4,y-4,9,9,0xff101010u);rect(x-3,y-1,7,3,0xfff4f4f0u);rect(x-1,y-3,3,7,0xfff4f4f0u);}}

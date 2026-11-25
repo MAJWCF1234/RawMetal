@@ -1123,6 +1123,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  for(auto [x1,y1,x2,y2]:{std::tuple{0.f,0.f,24.f,y1s},{0.f,y2s,24.f,24.f},{0.f,y1s,x1s,y2s},{x2s,y1s,24.f,y2s}}){wall(m,x1,y1,x2,y2,sb,f-.35f,26);wall(m,x1,y1,x2,y2,f-.35f,f,15);}
  openEdge(m,{'N',10.f,14.f,f,true,0});                                        // door 0: in from the core hall
  openEdge(m,{'S',9.f,15.f,f,false,0});
+ openEdge(m,{'W',14.f,15.f,f,false,0});                                      // optional Engineering branch
  const char* clock="dr_acc_clock";machineryClock(m,clock,60000);
  // --- Plan -------------------------------------------------------------------------------------
  // the shaft rail: a steel parapet at the lip, the hall open over it, closed to the body above
@@ -1155,7 +1156,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  floorLine(m,9.4f,17.9f,14.6f,18.1f,f,13);
  m.lights.push_back(drBeacon({9.f,17.f},f+2.8f,lE,0));
  // the hall and its rooms are painted block to the rail, bare concrete over it
- for(auto [x1,y1,x2,y2]:{std::tuple{1.f,1.f,10.f,1.03f},{14.f,1.f,16.f,1.03f},{1.f,1.f,1.03f,14.97f},{1.f,14.97f,3.f,15.f},{4.2f,14.97f,9.f,15.f},
+ for(auto [x1,y1,x2,y2]:{std::tuple{1.f,1.f,10.f,1.03f},{14.f,1.f,16.f,1.03f},{1.f,1.f,1.03f,14.f},{1.f,14.97f,3.f,15.f},{4.2f,14.97f,9.f,15.f},
                          {1.f,15.2f,1.03f,23.f},{1.f,22.97f,8.8f,23.f},{15.2f,22.97f,23.f,23.f},{22.97f,13.1f,23.f,23.f},{9.f,15.25f,9.03f,17.6f},{14.97f,15.25f,15.f,17.6f}})drDado(m,x1,y1,x2,y2,f);
  // --- The queue hall: the lamp and dosimeter lockers in an island facing the door, the suits for ---
  // below, the queue rails to the readers, and by the shaft rail what was boxed for the hoist
@@ -1335,6 +1336,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  zone(m,"DEEP ACCESS CONTROL / READY ROOM",15.2f,13.1f,23.f,23.f);
  zone(m,"DEEP ACCESS CONTROL / BLAST DOOR",9.f,15.2f,15.f,24.f);
  zone(m,"DEEP ACCESS CONTROL",0,0,24,24,-1000,1000,LabAir);
+ wallSign(m,1.04f,14.5f,f+2.25f,"ENGINEERING","SERVICE ACCESS / RETURN VIA THIS DOOR",1.35f,drE);
  return p;
 }
 
@@ -1603,6 +1605,65 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  zone(m,"EXTRACTION INTERFACE",0,0,24,24,-1000,1000,DustAir);
  return p;
 }
+
+std::shared_ptr<const Map> makeEngineering(int chunk){
+ auto map=std::make_shared<Map>();auto& m=*map;
+ m.name=CampaignMapNames[size_t(chunk)];m.definition=CampaignChunks[size_t(chunk)];
+ m.wallSurface=SurfaceConcrete;m.floorSurface=SurfaceConcrete;m.ceilingSurface=SurfaceConcrete;
+ const float f=m.definition.spawnHeight,R=m.definition.ceiling;
+ const bool service=chunk==EngineeringServiceChunk;
+ m.layers.push_back(floorLayer(m.name.c_str(),f));
+ openEdge(m,{'E',14.f,15.f,f,false,0});
+ if(service)openEdge(m,{'W',14.f,15.f,f,false,0});
+
+ // Both rooms keep the crossing at 14.5 m clear. The side bays are floor-level,
+ // so the machinery is readable without putting a step in the return route.
+ for(float x:{4.f,9.f,15.f,20.f}){
+  m.lights.push_back(drTube(x,14.5f,R,.64f,6.f,4200));
+  floorLine(m,x-.32f,12.7f,x+.32f,12.78f,f,13);
+ }
+ for(float x:{4.f,20.f}){
+  wall(m,x-.14f,1.f,x+.14f,10.5f,f,R,3);
+  wall(m,x-.14f,18.3f,x+.14f,23.f,f,R,3);
+ }
+ wallSign(m,22.9f,16.1f,f+1.65f,service?"DEEP ACCESS CONTROL":"SERVICE SPINE","RETURN EAST",1.7f,drW);
+ if(service){
+  wallSign(m,1.1f,16.1f,f+1.65f,"FEED ISOLATION","WEST / ENGINEERING ONLY",1.95f,drE);
+  drCounter(m,6.f,2.f,13.4f,3.05f,f);
+  drModel(m,model::store_toolbox,8.1f,2.5f,f+.9f,drS,false);
+  drModel(m,model::pwr_control_cabinet,15.5f,2.2f,f,drS,true);
+  for(float x:{6.5f,10.f,13.5f}){
+   drModel(m,model::pwr_circulation_pump,x,20.05f,f,drN,true,1.7f);
+   m.pipes.push_back({{x,20.2f},{x,21.2f},f+1.1f,.10f,f+1.3f,6});
+  }
+  m.pipes.push_back({{5.7f,21.2f},{18.2f,21.2f},f+1.1f,.14f,f+1.4f,6});
+  drModel(m,model::pwr_gate_valve,16.2f,21.2f,f+1.13f,drN,false);
+  m.lights.push_back(drTube(9.f,5.f,R,.72f,6.5f,3700));
+  m.lights.push_back(drTube(10.f,19.f,R,.70f,6.f,3700));
+  terminal(m,{14.1f,5.3f},"ENGINEERING / SHIFT HANDOVER",
+    "CORE ISOLATION DROPPED THE RESEARCH LOAD. LEFT THE EXTRACTION COOLANT ON THE BACKUP FEED.",
+    "SPARE DOSIMETERS ARE AT FEED ISOLATION. RETURN TO DEEP ACCESS CONTROL BY THIS PASSAGE.",0.f);
+  zone(m,"ENGINEERING / PUMP BAY",4.2f,17.8f,19.8f,23.f);
+ }else{
+  wallSign(m,5.1f,3.f,f+1.7f,"EXTRACTION BACKUP FEED","ISOLATE AT THE CORE BEFORE SERVICING",2.8f,drE);
+  for(float x:{6.f,9.f,12.f,15.f,18.f}){
+   drModel(m,model::pwr_switchgear_cabinet,x,4.f,f,drS,true);
+   m.lights.push_back(drTube(x,6.f,R,.68f,5.5f,4700));
+  }
+  drModel(m,model::mach_generator,9.5f,19.5f,f,drN,true);
+  drModel(m,model::pwr_step_transformer,14.f,19.6f,f,drN,true,1.35f);
+  drModel(m,model::store_shelf_metal,18.5f,21.4f,f,drN,true);
+  drGlow({10.5f,18.f},f+1.6f,.43f,4.5f,{1.f,.55f,.24f},3400);
+  terminal(m,{6.2f,8.5f},"FEED ISOLATION / OPERATIONS LOG",
+    "THE HEAD STILL NEEDS COOLANT AFTER THE CORE GOES DARK. KEEP THE BACKUP LOOP RUNNING.",
+    "LAST WALKDOWN: THE INVESTIGATOR TOOK THE HOIST. SENT THE CREW BACK THROUGH ACCESS CONTROL.",0.f);
+  m.pickupSpawns.push_back({{17.7f,19.1f},PickupKind::Ammo,f});
+  m.pickupSpawns.push_back({{17.9f,20.4f},PickupKind::Health,f});
+  zone(m,"ENGINEERING / STANDBY GENERATION",4.2f,17.8f,19.8f,23.f);
+ }
+ zone(m,m.name.c_str(),0,0,24,24,-1000,1000,LabAir);
+ return map;
+}
 }
 void buildChapterDeepResearch(CampaignMapTable& maps){
  maps[104]=makeDeepMaterialsLab();
@@ -1611,5 +1672,7 @@ void buildChapterDeepResearch(CampaignMapTable& maps){
  maps[107]=makeEnergyCoreResearch();
  maps[108]=makeDeepAccessControl();
  maps[109]=makeExtractionInterface();
+ maps[EngineeringServiceChunk]=makeEngineering(EngineeringServiceChunk);
+ maps[EngineeringIsolationChunk]=makeEngineering(EngineeringIsolationChunk);
 }
 }

@@ -56,7 +56,7 @@ void rebakeLight() {
 void setThirdPersonPlay(bool on) {
   thirdPersonPlay = on;
   writeLook();
-  message(on ? L"Play walks Claire with the camera over her shoulder. F5 to play."
+  message(on ? (controllerHints ? L"Over-the-shoulder view. Press Start to play." : L"Over-the-shoulder view. Press F5 to play.")
              : L"Play is first person again.");
 }
 // The menu under the Light button.

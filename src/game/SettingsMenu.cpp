@@ -25,7 +25,8 @@ bool copyTextToClipboard(const std::string& text);   // MultiplayerMenu.cpp
 namespace {
 enum Row:int{RMaster=1,RMusic,REffects,RVoiceVolume,RRenderScale,RDepth,RLens,RFrameTime,RSensitivity,RInvert,RPull,RCharacter,
  RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RProximity,RMuted,RMicTest,
- RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RViewDistance,RReset,RMutedBack,RMutedName=200};
+ RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RViewDistance,
+ RPadLook,RPadDead,RPadSteady,RPadFilter,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RReset,RMutedBack,RMutedName=200};
 constexpr int TabCount=int(SettingsTab::Count);   // the page column's rows; BACK is row TabCount
 struct TalkKey{int code;const char* name;};
 constexpr TalkKey TalkKeys[]={{0x56,"V"},{0x42,"B"},{0x58,"X"},{0x48,"H"},{0x14,"CAPS LOCK"},{0xA4,"LEFT ALT"},{0x05,"MOUSE 4"},{0x06,"MOUSE 5"}};
@@ -47,7 +48,7 @@ std::string hundred(float v){char b[16];std::snprintf(b,sizeof b,"%d",int(std::l
 }
 
 const char* Game::settingsTabName(SettingsTab tab){
- switch(tab){case SettingsTab::Audio:return "AUDIO";case SettingsTab::Video:return "VIDEO";case SettingsTab::Controls:return "CONTROLS";
+ switch(tab){case SettingsTab::Audio:return "AUDIO";case SettingsTab::Video:return "VIDEO";case SettingsTab::Controls:return "CONTROLS";case SettingsTab::Controller:return "CONTROLLER";
   case SettingsTab::Gameplay:return "GAMEPLAY";case SettingsTab::Communication:return "COMMUNICATION";case SettingsTab::Vr:return "VR";default:return "BACK";}
 }
 
@@ -65,6 +66,7 @@ std::vector<int> Game::settingsRows()const{
   case SettingsTab::Audio:return {RMaster,RMusic,REffects,RVoiceVolume,RReset};
   case SettingsTab::Video:return {RRenderScale,RDepth,RLens,RFrameTime,RViewDistance,RReset};
   case SettingsTab::Controls:return {RSensitivity,RInvert,RReset};
+  case SettingsTab::Controller:return {RPadLook,RPadDead,RPadSteady,RPadFilter,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RReset};
   case SettingsTab::Gameplay:return {RPull,RCharacter,RReset};
   case SettingsTab::Communication:return {RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RVoiceVolume,RProximity,RMuted,RMicTest,RReset};
   case SettingsTab::Vr:return {RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RReset};
@@ -77,6 +79,7 @@ std::vector<MenuItem> Game::settingsItems()const{
  for(int t=0;t<=TabCount;++t){MenuItem m;m.kind=t<TabCount?MenuItem::Tab:MenuItem::Back;m.x=SettingsLayout::TabX;m.y=SettingsLayout::tabY(t);m.w=SettingsLayout::TabWidth;m.h=SettingsLayout::TabHeight;
   m.label=settingsTabName(SettingsTab(t));m.current=t==int(m_settingsTab);m.id=1000+t;
   static const char* tabHelp[]={"How loud the dark is: the world, the music, the others' voices.","What the lens does to what you see.","Your hands on the mouse, and the keys.",
+   "A game controller for hands that shake, tire or tire quickly: speed, steadiness, toggles and button layout.",
    "Small aids, and who the others see.","Text chat and voice with the others in a match.","Comfort in a headset: turning, the vignette, seated play.",
    m_menuFromTitle?"Back to the title. Changes are kept.":"Back to the pause menu. Changes are kept."};
   m.help=tabHelp[t];items.push_back(m);}
@@ -104,6 +107,15 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RFrameTime:m.label="FRAME TIME READOUT";m.value=onOff(m_showFps);m.help="Shows how long each frame takes to draw, at the bottom left.";break;
    case RSensitivity:{m.label="MOUSE SENSITIVITY";char b[16];std::snprintf(b,sizeof b,"%.1fX",s.sensitivity);m.value=b;m.help="How far a hand on the mouse turns your head.";break;}
    case RInvert:m.label="INVERT MOUSE Y";m.value=onOff(s.invertMouse);m.warn=s.invertMouse;m.help="Pushing the mouse forward looks down instead of up.";break;
+   case RPadLook:{static constexpr const char* n[]={"VERY SLOW","SLOW","GENTLE","STANDARD","QUICK","FAST","VERY FAST"};m.kind=MenuItem::Choice;m.label="CONTROLLER LOOK SPEED";m.value=n[std::clamp(s.pad.look,0,6)];m.help="How fast the right stick turns your head. Slower is easier to place exactly.";break;}
+   case RPadDead:{static constexpr const char* n[]={"STANDARD","WIDE","WIDER","WIDEST"};m.kind=MenuItem::Choice;m.label="STICK DEAD ZONE";m.value=n[std::clamp(s.pad.dead,0,3)];m.help="How far a stick must move before it counts. Wider ignores a resting, shaking thumb.";break;}
+   case RPadSteady:{static constexpr const char* n[]={"OFF","LIGHT","MEDIUM","STRONG"};m.kind=MenuItem::Choice;m.label="STEADY STICKS";m.value=n[std::clamp(s.pad.steady,0,3)];m.help="Smooths out shake and sudden jerks in both sticks. Stronger is steadier but a little slower to answer.";break;}
+   case RPadFilter:{static constexpr const char* n[]={"OFF","SHORT","MEDIUM","LONG"};m.kind=MenuItem::Choice;m.label="ACCIDENTAL PRESS FILTER";m.value=n[std::clamp(s.pad.filter,0,3)];m.help="A button or trigger must be held this long before it counts, so a brush or a twitch does nothing.";break;}
+   case RPadAim:m.label="AIM: HOLD OR TOGGLE";m.value=s.pad.toggleAim?"TOGGLE":"HOLD";m.help="Toggle: press the aim trigger once to aim, again to stop, so you need not hold it down.";break;
+   case RPadSprint:m.label="SPRINT: HOLD OR TOGGLE";m.value=s.pad.toggleSprint?"TOGGLE":"HOLD";m.help="Toggle: click the left stick once to run until you stop moving.";break;
+   case RPadCrouch:m.label="CROUCH: HOLD OR TOGGLE";m.value=s.pad.toggleCrouch?"TOGGLE":"HOLD";m.help="Toggle: press B once to crouch, again to stand.";break;
+   case RPadBumpers:m.label="FIRE AND AIM ON";m.value=s.pad.bumpers?"BUMPERS":"TRIGGERS";m.help="Bumpers: fire and aim on the shoulder buttons; use and the Physgloves move to the triggers.";break;
+   case RPadSwap:m.label="STICKS";m.value=s.pad.swapSticks?"SWAPPED":"STANDARD";m.help="Swapped: the left stick looks and the right stick walks, for the other hand.";break;
    case RPull:m.kind=MenuItem::Choice;m.label="PULL HIGHLIGHT";m.value=s.pullHighlight?"SUBTLE":"NONE";m.help="The outline on what the Physgloves would pull. The reticle tightens either way.";break;
    case RCharacter:m.kind=MenuItem::Choice;m.label="CHARACTER";m.value=s.character==2?"LEON":s.character==1?"THE LIMITATOR":"CLAIRE";m.help="Who the others see in multiplayer. It takes hold the next time you join.";break;
    case RTextChat:m.label="TEXT CHAT";m.value=onOff(s.textChat);m.help="Press T in a match to type. Off hides the others' lines and keeps the notices.";break;
@@ -164,6 +176,7 @@ void Game::settingsReset(SettingsTab tab){
   case SettingsTab::Audio:s.master=d.master;s.music=d.music;s.effects=d.effects;s.voiceVolume=d.voiceVolume;m_audioMuted=false;m_musicEnabled=true;break;
   case SettingsTab::Video:s.depthOfField=d.depthOfField;s.lensEffects=d.lensEffects;s.viewDistance=d.viewDistance;m_renderScale=1;m_showFps=false;break;
   case SettingsTab::Controls:s.sensitivity=d.sensitivity;s.invertMouse=d.invertMouse;break;
+  case SettingsTab::Controller:s.pad=d.pad;break;
   case SettingsTab::Gameplay:s.pullHighlight=d.pullHighlight;s.character=d.character;break;
   case SettingsTab::Communication:s.textChat=d.textChat;s.chatFilter=d.chatFilter;s.voiceMode=d.voiceMode;s.pushToTalkKey=d.pushToTalkKey;s.openMicThreshold=d.openMicThreshold;
    s.micDevice=d.micDevice;s.speakerDevice=d.speakerDevice;s.micVolume=d.micVolume;s.voiceVolume=d.voiceVolume;s.proximityVoice=d.proximityVoice;break;
@@ -200,6 +213,15 @@ void Game::settingsChange(int id,int direction,bool activate){
   case RViewDistance:s.viewDistance=cycle(s.viewDistance,4);break;
   case RFrameTime:m_showFps=!m_showFps;break;
   case RInvert:s.invertMouse=!s.invertMouse;break;
+  case RPadLook:s.pad.look=cycle(std::clamp(s.pad.look,0,6),7);break;
+  case RPadDead:s.pad.dead=cycle(std::clamp(s.pad.dead,0,3),4);break;
+  case RPadSteady:s.pad.steady=cycle(std::clamp(s.pad.steady,0,3),4);break;
+  case RPadFilter:s.pad.filter=cycle(std::clamp(s.pad.filter,0,3),4);break;
+  case RPadAim:s.pad.toggleAim=!s.pad.toggleAim;break;
+  case RPadSprint:s.pad.toggleSprint=!s.pad.toggleSprint;break;
+  case RPadCrouch:s.pad.toggleCrouch=!s.pad.toggleCrouch;break;
+  case RPadBumpers:s.pad.bumpers=!s.pad.bumpers;break;
+  case RPadSwap:s.pad.swapSticks=!s.pad.swapSticks;break;
   case RPull:s.pullHighlight=s.pullHighlight?0:1;break;
   case RCharacter:s.character=cycle(std::clamp(s.character,0,2),3);break;
   case RTextChat:s.textChat=!s.textChat;break;
@@ -385,6 +407,18 @@ bool Game::testSettingsMenu(std::ostream& report){
  // Every page draws its rows where SettingsLayout says and each row has its own plain line.
  {bool lines=true;for(int t=0;t<TabCount;++t){game.m_settingsTab=SettingsTab(t);for(const auto& m:game.settingsItems())lines&=!m.help.empty()&&!m.label.empty();}
   check(lines,"every tab and row on every page has a label and a line saying what it does");game.m_settingsTab=SettingsTab::Audio;}
+ // CONTROLS: the controller options each change their setting, survive a save and load, and reset with the page.
+ {game.openSettings(SettingsTab::Controller);key(game,&InputState::menuRight);auto rows=game.settingsRows();auto at=[&](int id){return int(std::find(rows.begin(),rows.end(),id)-rows.begin());};
+  const auto step=[&](int id){game.m_menuSelection=at(id);key(game,&InputState::menuRight);};
+  step(RPadLook);step(RPadDead);step(RPadSteady);step(RPadFilter);step(RPadAim);step(RPadSprint);step(RPadCrouch);step(RPadBumpers);step(RPadSwap);
+  const auto& p=game.settings().pad;
+  check(p.look==4&&p.dead==1&&p.steady==1&&p.filter==1&&p.toggleAim&&p.toggleSprint&&p.toggleCrouch&&p.bumpers&&p.swapSticks,"CONTROLLER: every option steps once from its default");
+  const auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-pad.txt";game.saveSettings(path.wstring());game.m_settings.pad=PadOptions{};game.loadSettings(path.wstring());std::filesystem::remove(path);
+  const auto& q=game.settings().pad;
+  check(q.look==4&&q.dead==1&&q.steady==1&&q.filter==1&&q.toggleAim&&q.toggleSprint&&q.toggleCrouch&&q.bumpers&&q.swapSticks,"the controller options survive a save and load");
+  game.settingsReset(SettingsTab::Controller);const auto& r=game.settings().pad;
+  check(r.look==3&&r.dead==0&&r.steady==0&&r.filter==0&&!r.toggleAim&&!r.bumpers&&!r.swapSticks,"CONTROLLER reset puts the options back");
+  game.m_settingsTab=SettingsTab::Audio;game.m_settingsOnTabs=true;}
  // Esc: rows -> column -> PAUSE, and leaving asks for a save.
  game.m_settingsOnTabs=false;key(game,&InputState::escape);check(game.menuPage()==MenuPage::Options&&game.settingsOnTabs(),"Esc in the rows returns to the column");
  key(game,&InputState::escape);check(game.menuPage()==MenuPage::Pause&&game.menuSelection()==PauseSettings&&game.takeSettingsSave(),"Esc in the column goes back to PAUSE on SETTINGS and asks main to save");

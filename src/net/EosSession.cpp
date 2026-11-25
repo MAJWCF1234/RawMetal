@@ -308,9 +308,8 @@ public:
   if(m_phase==Phase::Dead)return;
   if(m_phase==Phase::Start){
    if(m_name.empty()){
-   wchar_t user[257]{};DWORD n=257;std::wstring name=GetUserNameW(user,&n)?std::wstring(user):std::wstring(L"Player");
-   if(name.empty())name=L"Player";
-   m_name=utf8(name);while(m_name.size()>EOS_CONNECT_USERLOGININFO_DISPLAYNAME_MAX_LENGTH&&!name.empty()){name.pop_back();m_name=utf8(name);}
+   // No name chosen: "Diver" and four digits, never the Windows account name (players did not want theirs shown).
+   m_name="Diver-"+std::to_string(1000+int((GetTickCount64()^GetCurrentProcessId())%9000));
    }
    g_log.open();g_log.line("DepthWorks " RAWMETAL_EOS_PRODUCT_VERSION ": multiplayer starting; display name '"+m_name+"'");
    if(g_eosShutDown){goOffline("multiplayer was shut down in this run; restart the game to play online");return;}
@@ -342,6 +341,8 @@ public:
  std::string reason()const override{return m_reason;}
  PeerId self()const override{return m_user?m_selfId:PeerId{};}
  std::string displayName()const override{return m_name;}
+ // The player's own name (MULTIPLAYER > NAME), used from the next sign-in on and in every hello and lobby from now.
+ void setDisplayName(const std::string& name)override{if(!name.empty())m_name=name.substr(0,std::min<size_t>(24,EOS_CONNECT_USERLOGININFO_DISPLAYNAME_MAX_LENGTH));}
 
  void host(const HostOptions& options)override{
   if(!ready())return;

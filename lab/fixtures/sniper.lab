@@ -1,0 +1,8 @@
+# The sniper rifle at the hip and through its scope, down a 20 m room (tube sniper).
+world room
+camera 8 22 -999 -90 0
+light 8 6 3 1.4 12
+light 8 16 3 1.2 12
+size 960 540
+frames 260
+hud on

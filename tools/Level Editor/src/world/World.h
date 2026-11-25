@@ -55,6 +55,9 @@ struct Door {
  // The lock it shows: 0 none drawn, 1 a keycard reader, 2 a key cylinder,
  // 3 a powered release; a reader's lamp is red while the door is locked.
  int lock=0;
+ // follow (DOOR field 25): the door is open exactly while its state holds its value, opening once every other
+ // follower on that state has shut (an airlock's two hatches on one cycle state: never both open). Game::followDoors.
+ bool follow=false;
  bool breakable()const{return swinging&&strength>0&&!entry&&!transfer;}
  // The door's own frame, the one place its orientation is read: `along` runs
  // the span (left..right), `across` through the wall (the wall line is y;
@@ -993,6 +996,7 @@ public:
     bool openDoor(int index);
     bool toggleDoor(int index);
     void restoreDoors(const std::vector<Door>& doors){m_doors=doors;}
+    void driveDoor(int index,bool opening){auto&d=m_doors.at(index);d.opening=opening;d.rest=-1;}   // a follower's hand (Game::followDoors)
     void setDoor(int index,float open,bool opening){auto&d=m_doors.at(index);d.open=open;d.opening=opening;d.rest=-1;d.velocity=0;d.coasting=false;}
     // Leave a swinging leaf where it stands (a hand let go of it mid-swing), or
     // (-1) let it follow `opening` again.

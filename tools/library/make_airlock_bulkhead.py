@@ -1,0 +1,106 @@
+"""Writes the library model airlock_bulkhead: the plate an airlock's blast-door frame is sealed into.
+
+A steel bulkhead 4 m wide, 3.2 m tall and as deep as the frame (0.56 m), with an opening cut to the frame's
+own outline (the convex hull of blast_door_frame.obj seen face on, 1 cm inside it so the two overlap), so the
+frame sits in it with no gap and no stepped edge. Textured with the frame's own plate metal, 1 m to a repeat.
+Then:  python tools/library/register.py airlock_bulkhead   (once)   and   python tools/campaign/model_ids.py
+
+  python tools/library/make_airlock_bulkhead.py
+"""
+import json, math, os, shutil
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LIB = os.path.join(ROOT, 'src', 'assets', 'library')
+NAME = 'airlock_bulkhead'
+W, H, D = 4.0, 3.2, .56          # metres: width (x), height (y), depth (z)
+REPEAT = 1.0                     # metres a texture repeat
+
+
+def hull(points):
+    p = sorted(set(points))
+    def cross(o, a, b): return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, up = [], []
+    for q in p:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], q) <= 0: lo.pop()
+        lo.append(q)
+    for q in reversed(p):
+        while len(up) >= 2 and cross(up[-2], up[-1], q) <= 0: up.pop()
+        up.append(q)
+    return lo[:-1] + up[:-1]           # counter-clockwise
+
+
+def ray_rect(cx, cy, a):
+    """Where a ray from (cx, cy) at angle a leaves the plate's rectangle."""
+    dx, dy = math.cos(a), math.sin(a)
+    ts = []
+    if dx: ts += [t for t in ((-W / 2 - cx) / dx, (W / 2 - cx) / dx) if t > 0]
+    if dy: ts += [t for t in ((0 - cy) / dy, (H - cy) / dy) if t > 0]
+    t = min(tt for tt in ts if -W / 2 - 1e-6 <= cx + dx * tt <= W / 2 + 1e-6 and -1e-6 <= cy + dy * tt <= H + 1e-6)
+    return cx + dx * t, cy + dy * t
+
+
+def ray_poly(cx, cy, a, poly):
+    """Where a ray from inside the convex outline meets it."""
+    dx, dy = math.cos(a), math.sin(a)
+    best = None
+    for i in range(len(poly)):
+        (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % len(poly)]
+        ex, ey = x2 - x1, y2 - y1
+        den = dx * ey - dy * ex
+        if abs(den) < 1e-12: continue
+        t = ((x1 - cx) * ey - (y1 - cy) * ex) / den
+        s = ((x1 - cx) * dy - (y1 - cy) * dx) / den
+        if t > 0 and -1e-9 <= s <= 1 + 1e-9 and (best is None or t < best): best = t
+    return cx + dx * best, cy + dy * best
+
+
+def main():
+    frame = [tuple(map(float, l.split()[1:4])) for l in open(os.path.join(LIB, 'blast_door_frame.obj')) if l.startswith('v ')]
+    outline = hull([(round(v[0], 4), round(v[1], 4)) for v in frame])
+    cx = sum(p[0] for p in outline) / len(outline)
+    cy = sum(p[1] for p in outline) / len(outline)
+    outline = [(cx + (x - cx) * .99, cy + (y - cy) * .99) for x, y in outline]   # 1 cm under the frame's edge
+    # Every outline point and every plate corner, by angle round the opening's middle: quads between each
+    # pair join the opening to the plate's edge.
+    angles = {math.atan2(y - cy, x - cx) for x, y in outline}
+    angles |= {math.atan2(y - cy, x - cx) for x, y in ((-W / 2, 0), (W / 2, 0), (W / 2, H), (-W / 2, H))}
+    ring = [(ray_poly(cx, cy, a, outline), ray_rect(cx, cy, a)) for a in sorted(angles)]
+
+    v, vt, f = [], [], []
+    def vert(x, y, z):
+        v.append((x, y, z)); vt.append((x / REPEAT, y / REPEAT)); return len(v)
+    def quad(a, b, c, d):
+        f.append((a, b, c)); f.append((a, c, d))
+    for z, front in ((D / 2, True), (-D / 2, False)):
+        for i in range(len(ring)):
+            (h1, r1), (h2, r2) = ring[i], ring[(i + 1) % len(ring)]
+            area = abs((r1[0] - h1[0]) * (h2[1] - h1[1]) - (r1[1] - h1[1]) * (h2[0] - h1[0])) + abs((r2[0] - h2[0]) * (r1[1] - h2[1]) - (r2[1] - h2[1]) * (r1[0] - h2[0]))
+            if area < 1e-6: continue                                   # along the floor, where the opening meets it
+            a, b, c, d = vert(*h1, z), vert(*r1, z), vert(*r2, z), vert(*h2, z)
+            quad(a, b, c, d) if front else quad(a, d, c, b)          # counter-clockwise faces its viewer (OBJ)
+    # The opening's rim and the plate's outer edges, front to back.
+    def band(path):
+        for i in range(len(path) - 1):
+            (x1, y1), (x2, y2) = path[i], path[i + 1]
+            a, b = vert(x1, y1, D / 2), vert(x2, y2, D / 2)
+            c, d = vert(x2, y2, -D / 2), vert(x1, y1, -D / 2)
+            quad(a, b, c, d)                                         # faces the left of the path: into the opening, out of the plate
+    band([p for p, _ in ring] + [ring[0][0]])                         # counter-clockwise: faces into the opening
+    band([(-W / 2, 0), (-W / 2, H), (W / 2, H), (W / 2, 0)])          # clockwise: faces out
+
+    tex = NAME + '_plate.png'
+    shutil.copyfile(os.path.join(LIB, 'blast_door_frame_metal_floor_2.png'), os.path.join(LIB, tex))
+    with open(os.path.join(LIB, NAME + '.obj'), 'w', newline='\n') as o:
+        o.write('# Generated by tools/library/make_airlock_bulkhead.py\no %s\n' % NAME)
+        for x, y, z in v: o.write('v %.5f %.5f %.5f\n' % (x, y, z))
+        for s, t in vt: o.write('vt %.5f %.5f\n' % (s, t))
+        o.write('usemtl %s_plate\n' % NAME)
+        for a, b, c in f: o.write('f %d/%d %d/%d %d/%d\n' % (a, a, b, b, c, c))
+    json.dump({'name': NAME, 'source': 'generated: tools/library/make_airlock_bulkhead.py (blast_door_frame outline)',
+               'width': W, 'depth': D, 'height': H, 'triangles': len(f), 'materials': {NAME + '_plate': tex}},
+              open(os.path.join(LIB, NAME + '.json'), 'w'), indent=1)
+    print('%s: %d triangles, opening of %d points' % (NAME, len(f), len(outline)))
+
+
+if __name__ == '__main__':
+    main()

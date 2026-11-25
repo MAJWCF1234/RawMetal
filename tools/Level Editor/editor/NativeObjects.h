@@ -7,6 +7,13 @@
 
 // Plan handles describe native record coordinates only. They do not build a
 // renderable scene; the engine remains the only owner of world geometry.
+inline bool nativeLooseModel(const std::vector<std::string>& fields) {
+  return fields.size() >= 14 && fields[0] == "CLUTTER" && fields[2] == "7";
+}
+inline bool nativeSizedModel(const std::vector<std::string>& fields) {
+  return (fields.size() >= 11 && fields[0] == "FIXTURE") || nativeLooseModel(fields);
+}
+
 struct NativeHandle {
   float x = 0, y = 0, width = .5f, depth = .5f;
   std::vector<std::pair<size_t, size_t>> points;
@@ -198,8 +205,9 @@ nativeHandle(const std::vector<std::string> &names,
     handle.width = std::max(.35f, maxX - minX);
     handle.depth = std::max(.35f, maxY - minY);
     if (handle.points.size() == 1) {
-      handle.width = std::max(.35f, number("width", number("w", .5f)));
-      handle.depth = std::max(.35f, number("depth", number("d", .5f)));
+      const float minimum = nativeSizedModel(fields) ? .0001f : .35f;
+      handle.width = std::max(minimum, number("width", number("w", .5f)));
+      handle.depth = std::max(minimum, number("depth", number("d", .5f)));
       // A shape's 0 sizes are its kind's usual ones (PrimitiveKinds.h), not a stub.
       if (fields[0] == "PRIM" && fields.size() > 8) {
         auto s = retro::prim::resolve(fields[2], number("w", 0), number("d", 0), number("h", 0));

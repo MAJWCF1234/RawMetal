@@ -594,6 +594,28 @@
       note(std::string("12 maps of one name with 32 floors on the first: the engine ") + (loads ? "loads it" : "refuses it: " + reason));
       pass("12 maps of the same name and 32 floors: the floor limit speaks, and the map is as the engine takes it");
     }
+    { // Smooth turning (R held, the mouse moved): a free angle written to the piece's yaw, Shift's 15-degree snap
+      // aside; a shape that turns by quarters (facing) or a stair is left to the quarter turn.
+      NativeDocument turning;
+      turning.newCampaign("Turning");
+      turning.addRoom("Yard");
+      adoptDocument(std::move(turning), {}, true);
+      changeMap(0);
+      layer = 0;
+      tool = 0;
+      doc.add({"FIXTURE", "0", "47", "8", "8", "0", "3.46", "11.94", "2.5", "0", "1"});
+      publish();
+      selectRecord(int(doc.records("FIXTURE", 0).back()));
+      require(spinTurnable(), "a placed container cannot be turned smoothly (record " + std::to_string(record) + " of " + std::to_string(doc.lines.size()) + ", kind " + std::to_string(kind) + " " + (kind >= 0 ? schemas[size_t(kind)].kind : std::string()) + ", selected " + std::to_string(selectedRecords.size()) + ", editable " + std::to_string(record >= 0 && editableRecord(size_t(record))) + ")");
+      spinRecord = record;
+      spinTo(.7f);
+      auto f = NativeDocument::fields(doc.lines[size_t(spinRecord)]);
+      require(f.size() > spinYawIndex && std::fabs(std::stof(f[spinYawIndex]) - .7f) < .001f, "the smooth turn did not write a yaw of 0.7: " + doc.lines[size_t(spinRecord)]);
+      spinTo(7.f);
+      f = NativeDocument::fields(doc.lines[size_t(spinRecord)]);
+      require(std::fabs(std::stof(f[spinYawIndex]) - std::remainder(7.f, 6.28318530718f)) < .001f, "a smooth turn past a full round is not brought back into one round");
+      pass("a held R turns a piece to any angle, kept within one round; quarter-turn shapes and stairs keep their quarter turns");
+    }
     snap = savedSnap;
     smartSnap = savedSmart;
     autoDressingEnabled = savedAuto;

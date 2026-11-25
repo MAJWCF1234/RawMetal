@@ -322,6 +322,11 @@ def in_gallery(name):
 # they furnish the Kits Gallery's kits, and stay out of the museum rows and the Parts Gallery.
 PARTS_156 = {n for job in json.load(open(os.path.join(ROOT, 'tools', 'library', 'batches', 'parts-1.5.6.json')))
              for n in (job['pick'] if 'pick' in job else [job['name']])}
+# The 2026-11-23 structure parts (the user's packs: slabs, rebar, the blast-door frame, the bathroom set, facade
+# modules) furnish the Kits Gallery's third yard, like the 1.5.6 parts; flat ones have no height to show alone.
+PARTS_156 |= {'slab_broken', 'slab_chipped', 'slab_full', 'concrete_block_cracked', 'rebar_bars_a', 'rebar_bars_b', 'blast_door_frame',
+              'bath_stall_open', 'bath_drain', 'bath_pipe', 'bath_wall_tile', 'bath_floor_tile', 'facade_stucco_window',
+              'facade_concrete', 'facade_brick_window', 'airlock_bulkhead'}
 
 
 def models():
@@ -343,6 +348,9 @@ def models():
 
 def build():
     s = Starter()
+    allm = models()
+    slot = {n: i for i, n, *_ in allm}
+    catalogue = {n: (w, d, h) for _, n, w, d, h, _ in allm}
     blue = ACCENT['WELCOME']
 
     # ---- WELCOME -----------------------------------------------------------------------------
@@ -403,6 +411,12 @@ def build():
         s.rec(m, 'PICKUP', 0, k, x, 15.5)
         s.post_sign(m, x, 14.6, 'PICKUP %d' % k, name, blue, 1.1)
         s.zone(m, x - .6, 13.4, x + .6, 16.4, 'PICKUP kind %d / %s' % (k, name))
+    # The sniper rifle (kind 7), set down at the row's end; no sign (a map keeps to three).
+    s.rec(m, 'PICKUP', 0, 7, 23.3, 15.5)
+    s.zone(m, 22.7, 13.4, 23.9, 16.4, 'PICKUP kind 7 / Sniper rifle')
+    # A box of .308 rifle rounds (kind 8) at the row's other end (the map is 24 m wide: nothing past x 23.9).
+    s.rec(m, 'PICKUP', 0, 8, 18.2, 15.5)
+    s.zone(m, 17.6, 13.4, 18.8, 16.4, 'PICKUP kind 8 / .308 rifle rounds')
     # Doors: a short block wall with a sliding and a swinging door into a closet.
     for x in range(13, 24):
         if x not in (15, 16, 19, 20): m['walls'].add((x, 20))
@@ -454,6 +468,19 @@ def build():
     # The hall: a row of warm downlights, each a pool on the floor and a cone in the haze.
     for x in (3.5, 8, 12.5, 17, 21.5):
         s.rec(m, 'LIGHT', 1, x, 12, 3.45, 0, 0, .9, 7, 3000)
+    # Ceiling fittings in the aisle, clear of the colour and switch demonstrations.
+    fittings = (
+        (5.5, 'bld_lamp_cage', 'INDUSTRIAL CAGE LIGHT', 0),
+        (9.5, 'clinic_ceiling_lamp_2', 'CAGED FLUORESCENT BANK', HALF),
+        (13.5, 'lamp_ceiling_tube', 'FLUSH TWIN-TUBE FLUORESCENT', 0),
+        (17.5, 'lamp_suspended_twin_tube', 'SHORT-MOUNTED TWIN-TUBE', 0),
+    )
+    for x, symbol, title, yaw in fittings:
+        w, d, h = catalogue[symbol]
+        s.rec(m, 'LIGHT', 1, x, 9.5, m['ceiling'] - .06 - h, 0, yaw, .85, 3.6, 4200,
+              '', '', '', '', '', '', '', '', slot[symbol], w, d, h)
+        s.zone(m, x - 1.5, 8.5, x + 1.5, 10.5, 'FITTING / ' + title)
+        s.index.append({'map': 1, 'section': 'LIGHTS', 'x': x, 'y': 9.5, 'title': title, 'name': symbol})
     m['haze'] = (.05, .055, .065, .012)
     m['wetness'] = .5  # a damp floor: the lamp row runs down the hall in its sheen and puddles
 
@@ -553,9 +580,6 @@ def build():
 
     # ---- PROPS (carryable) and MODELS -----------------------------------------------------------
     physics = json.load(open(os.path.join(ROOT, 'tools', 'campaign', 'prop_physics.json')))
-    allm = models()
-    slot = {n: i for i, n, *_ in allm}
-    catalogue = {n: (w, d, h) for _, n, w, d, h, _ in allm}
     # Things to throw at the HAZARDS glass: each punches a hole its size and goes on through.
     hz = next(mm for mm in s.maps if mm['name'] == 'Hazards')
     for name, x, y in (('wooden_crate', 8.6, 10.35), ('crt_monitor', 7.5, 10.3), ('mug', 5.0, 10.4), ('wooden_chair', 6.7, 10.2)):
@@ -617,7 +641,7 @@ def build():
     for gi, (title, _) in enumerate(SECTIONS):
         items = []
         for sl, name, w, d, h, yaw in groups[title]:
-            scale = min(1.0, 7.5 / max(w, d), 12.4 / h)
+            scale = min(1.0, 7.5 / max(w, d, .01), 12.4 / max(h, .01))
             sw, sd, sh = w * scale, d * scale, h * scale
             if yaw in (HALF, -HALF): fw, fd = sd, sw
             else: fw, fd = sw, sd
@@ -1999,7 +2023,7 @@ def parts_gallery(s, slot, catalogue, yards, names=None, version='1.5.3', tabs='
     yard, x, y, row_d = 0, 1.6, 3.2, 0.0
     for n in names:
         w, d, h = catalogue[n]
-        k = min(1.0, 2.9 / max(w, d), 3.4 / h)
+        k = min(1.0, 2.9 / max(w, d, .01), 3.4 / max(h, .01))
         sw, sd, sh = w * k, d * k, h * k
         yaw = yaw_of.get(n, PI)
         fw, fd = (sd, sw) if yaw in (HALF, -HALF) else (sw, sd)
@@ -2390,9 +2414,9 @@ def building(s, slot, catalogue):
         s.absolute = [e for e in s.absolute if e[0] is not mine[0]]
         underground(s, slot, catalogue, mine[0], mine[1], mine[2], mine[3])
     # The Kits Gallery: east of the Hillside past one more stand of forest, on the forest's maps there.
-    yards = [cells.get((OX + 5 + k, 1 + len(SECTIONS) + 1 + OY)) for k in (0, 1)]
+    yards = [cells.get((OX + 5 + k, 1 + len(SECTIONS) + 1 + OY)) for k in (0, 1, 2)]
     if all(y is not None and y in forest for y in yards):
-        for yard, name in zip(yards, ('Kits Gallery', 'Kits Gallery 2')):
+        for yard, name in zip(yards, ('Kits Gallery', 'Kits Gallery 2', 'Kits Gallery 3')):
             yard['name'], yard['records'] = name, []
             s.raised = [e for e in s.raised if e[0] is not yard]
             s.absolute = [e for e in s.absolute if e[0] is not yard]
@@ -2409,7 +2433,10 @@ KIT_SPOTS = {
     'kit_loading_dock': (1, 5.5, 4.5, 0), 'kit_stairwell': (1, 12.5, 4.5, 0), 'kit_ruin_corner': (1, 19.5, 4.5, 0),
     'kit_corridor': (1, 3.5, 12, 0), 'kit_corridor_cross': (1, 3.5, 16.5, 0), 'kit_corridor_tee': (1, 6.5, 16.5, 0),
     'kit_corridor_corner': (1, 9.5, 16.5, 1), 'kit_catwalk': (1, 17, 10.5, 0), 'kit_doorway': (1, 14.5, 14.5, 0),
-    'kit_doorway_wide': (1, 19.5, 14.5, 0), 'kit_campsite': (1, 19, 20, 0), 'kit_yard_fence': (1, 8, 22.4, 0)}
+    'kit_doorway_wide': (1, 19.5, 14.5, 0), 'kit_doorway_double': (1, 14.5, 17.5, 0), 'kit_campsite': (1, 19, 20, 0), 'kit_yard_fence': (1, 8, 22.4, 0),
+    'kit_escalator': (2, 4, 7, 0), 'kit_airlock': (2, 10.5, 5.5, 0), 'kit_shower': (2, 15.5, 3.5, 0), 'kit_rebar': (2, 20, 4, 0),
+    'kit_cracked_slab': (2, 17.5, 9.5, 0), 'kit_curtain_wall': (2, 6, 18, 0), 'kit_megafacade': (2, 17, 19, 0),
+    'kit_fluorescent_bank': (2, 12, 14, 0), 'kit_heavy_door': (2, 6, 13, 0), 'kit_mesh_door': (2, 21.5, 14.5, 0), 'kit_ticket_gate': (2, 12, 21.5, 0)}
 
 
 def kits_gallery(s, slot, yards):
@@ -2438,6 +2465,7 @@ def kits_gallery(s, slot, yards):
         s.zone(m, x - w / 2, y - d / 2, x + w / 2, y + d / 2, ('KIT / %s' % k.title)[:40])
     s.post_sign(yards[0], 8.25, 8.2, 'KITS GALLERY', 'rooms: the Builder\'s Kits tab', 0x70b0c8, 2.0)
     s.post_sign(yards[1], 9, 12.6, 'KITS GALLERY', 'corridors, stairs, docks, outdoors', 0x70b0c8, 2.0)
+    s.post_sign(yards[2], 12, 12.6, 'KITS GALLERY', 'escalator, airlock, shower, ruins, facades', 0x70b0c8, 2.0)
     for m in yards:
         s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': 12, 'y': 12, 'title': 'KITS GALLERY',
                         'name': '%d kits from the Builder' % len(built)})

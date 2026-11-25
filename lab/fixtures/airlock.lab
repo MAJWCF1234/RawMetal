@@ -1,0 +1,6 @@
+# The Airlock kit in the Starter Map's Kits Gallery (map 128): its hatches cycled (tube airlock).
+world custom "custom maps/Starter Map.rmc"
+map 128
+camera 10.5 12.5 -999 -90 -4
+size 960 540
+frames 420

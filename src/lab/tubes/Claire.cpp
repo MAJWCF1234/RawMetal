@@ -12,32 +12,32 @@ namespace retro::lab {
 namespace {
 std::string fixed(float v,int d=3){char b[32];std::snprintf(b,sizeof b,"%.*f",d,double(v));return b;}
 struct Hold {const char* name;WeaponId weapon;bool crouch,aim;};
-constexpr Hold Holds[]={{"fists",WeaponId::Fists,false,false},{"shotgun",WeaponId::Shotgun,false,false},{"pistol-crouched",WeaponId::Handgun,true,false},{"pistol-aimed",WeaponId::Handgun,false,true}};
+constexpr Hold Holds[]={{"fists",WeaponId::Fists,false,false},{"shotgun",WeaponId::Shotgun,false,false},{"pistol-crouched",WeaponId::Handgun,true,false},{"pistol-aimed",WeaponId::Handgun,false,true},{"sniper",WeaponId::Sniper,false,false}};
 // How much of the frame is her: the frame against the same moment with her body hidden (environment
 // inspection), over the middle of the frame (the HUD's bands at the top and bottom left out).
 double cover(Scene& s,const Image& with){auto& r=*s.renderer;r.setEnvironmentInspection(true);r.render(s.g());Image without=Image::of(r.pixels(),r.width(),r.height());r.setEnvironmentInspection(false);r.render(s.g());
  size_t moved=0,n=0;for(int y=with.height*15/100;y<with.height*75/100;++y)for(int x=0;x<with.width;++x){auto a=with.pixels[size_t(y)*with.width+x],b=without.pixels[size_t(y)*with.width+x];int m=0;for(int k=0;k<24;k+=8)m=std::max(m,std::abs(int((a>>k)&255)-int((b>>k)&255)));moved+=m>30;++n;}
  return n?double(moved)/double(n):0;}
-int holdAt(const Scene& s){return std::min(3,s.frame*4/std::max(1,s.frames));}
+int holdAt(const Scene& s){return std::min(4,s.frame*5/std::max(1,s.frames));}
 const bool claire=add({
  .name="claire",.summary="third-person Claire turning through her holds (fists, shotgun, pistol, crouched) over her shoulder",
  .friends={},.fixtures={"claire-turn"},
- .setup=[](Scene& s){LabAccess::playerCamera(s.g());SoftwareRenderer::setThirdPerson(true);LabAccess::setGod(s.g(),true);LabAccess::equip(s.g(),Holds[0].weapon);},
+ .setup=[](Scene& s){LabAccess::playerCamera(s.g());SoftwareRenderer::setThirdPerson(true);LabAccess::setGod(s.g(),true);s.g().grantSniper(5);LabAccess::equip(s.g(),Holds[0].weapon);},
  .step=[](Scene& s,float dt){
   Game& g=s.g();const int hold=holdAt(s);if(hold!=int(s.board["claire.hold"])||s.frame==0){s.board["claire.hold"]=hold;LabAccess::equip(g,Holds[hold].weapon);}
   // The pistol comes up to the eye when it fires (and stays up 1.5 s): one shot early in the aimed hold.
-  LabAccess::player(g).crouched=Holds[hold].crouch;s.input.guard=Holds[hold].aim;s.input.fire=Holds[hold].aim&&s.frame%std::max(1,s.frames/4)==2;
+  LabAccess::player(g).crouched=Holds[hold].crouch;s.input.guard=Holds[hold].aim;s.input.fire=Holds[hold].aim&&s.frame%std::max(1,s.frames/5)==2;
   #ifdef RAWMETAL_LAB_HAS_CLAIRE_OUTSIDE
   // A turnaround: the camera goes once round her in each hold, 2.6 m off (SoftwareRenderer::setBodyOrbit).
-  const int per=std::max(1,s.frames/4);s.renderer->setBodyOrbit(tuned("claire.orbit",2.6f),6.2832f*float(s.frame%per)/float(per));(void)dt;
+  const int per=std::max(1,s.frames/5);s.renderer->setBodyOrbit(tuned("claire.orbit",2.6f),6.2832f*float(s.frame%per)/float(per));(void)dt;
   #else
   // Without the film camera she turns instead: the room wheels behind her and the light comes round.
-  LabAccess::player(g).angle+=dt*6.2832f*4.f/std::max(1.f,float(s.frames)*dt);
+  LabAccess::player(g).angle+=dt*6.2832f*5.f/std::max(1.f,float(s.frames)*dt);
   #endif
   },
  .capture=[](Scene& s,const Frame& f){
   // At the middle of each hold: how much of the frame is her (the same moment drawn first person).
-  const int per=std::max(1,s.frames/4),hold=holdAt(s);if(s.frame%per!=per/2)return;
+  const int per=std::max(1,s.frames/5),hold=holdAt(s);if(s.frame%per!=per/2)return;
   s.shoot(std::string("hold ")+Holds[hold].name);(void)f;
   #ifdef RAWMETAL_LAB_HAS_CLAIRE_OUTSIDE
   const auto& rep=LabAccess::claireReport(*s.renderer);const std::string k=std::string("claire.")+Holds[hold].name;

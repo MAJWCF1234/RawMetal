@@ -1,22 +1,50 @@
 #include "Win32Window.h"
 #ifdef _WIN32
 #include <windowsx.h>
+#include <Xinput.h>
 #include "../core/PackedResource.h"
 namespace retro {
 namespace {
-// A controller through XInput, loaded at run time (no import library): the menus' D-pad and left stick, A to choose,
-// B back (in menus), Start for the pause menu, and back/view held for a match's scoreboard. A pad that is not there
-// is asked again once a second (XInputGetState on an empty port is slow).
-struct PadState{bool connected=false;unsigned short buttons=0;short lx=0,ly=0;};
-PadState readPad(){
- using GetState=DWORD(WINAPI*)(DWORD,void*);
- static GetState get=[]()->GetState{for(const wchar_t* name:{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"})if(HMODULE module=LoadLibraryW(name))if(FARPROC f=GetProcAddress(module,"XInputGetState"))return reinterpret_cast<GetState>(reinterpret_cast<void*>(f));return nullptr;}();
- static DWORD nextTry=0;static bool present=false;
- PadState pad;if(!get)return pad;
- const DWORD now=GetTickCount();if(!present&&now<nextTry)return pad;
- struct{DWORD packet;WORD buttons;BYTE leftTrigger,rightTrigger;SHORT lx,ly,rx,ry;}state{};
- present=get(0,&state)==0;if(!present){nextTry=now+1000;return pad;}
- pad.connected=true;pad.buttons=state.buttons;pad.lx=state.lx;pad.ly=state.ly;return pad;
+// Resolve XInput at runtime so older Windows installs can use their available version.
+bool readPad(XINPUT_GAMEPAD& pad){
+ using GetState=DWORD(WINAPI*)(DWORD,XINPUT_STATE*);
+ static const GetState get=[]()->GetState{
+  for(const wchar_t* name:{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"})
+   if(HMODULE module=LoadLibraryW(name))
+    if(FARPROC proc=GetProcAddress(module,"XInputGetState"))
+     return reinterpret_cast<GetState>(reinterpret_cast<void*>(proc));
+  return nullptr;
+ }();
+ if(!get)return false;
+
+ static DWORD lastScan=0;
+ static DWORD slot=XUSER_MAX_COUNT;
+ static bool scanned=false;
+ XINPUT_STATE state{};
+ if(slot<XUSER_MAX_COUNT){
+  if(get(slot,&state)==ERROR_SUCCESS){pad=state.Gamepad;return true;}
+  slot=XUSER_MAX_COUNT;
+  scanned=false;
+ }
+ const DWORD now=GetTickCount();
+ if(scanned&&now-lastScan<1000)return false;
+ lastScan=now;
+ scanned=true;
+ for(DWORD candidate=0;candidate<XUSER_MAX_COUNT;++candidate){
+  if(get(candidate,&state)!=ERROR_SUCCESS)continue;
+  slot=candidate;
+  pad=state.Gamepad;
+  return true;
+ }
+ return false;
+}
+
+Vec2 padStick(SHORT x,SHORT y,float deadzone){
+ const Vec2 stick{float(x),float(y)};
+ const float magnitude=length(stick);
+ if(magnitude<=deadzone)return {};
+ const float strength=(std::min(magnitude,32767.f)-deadzone)/(32767.f-deadzone);
+ return stick*(strength/magnitude);
 }
 }
 RECT Win32Window::viewport(int clientWidth,int clientHeight){
@@ -61,23 +89,118 @@ void Win32Window::setMenu(bool open){
  bool free=open||!focused();if(free!=m_cursorVisible){ShowCursor(free?TRUE:FALSE);m_cursorVisible=free;}
  if(free||open!=m_menuOpen)m_mouseCaptured=false;m_menuOpen=open;
 }
-InputState Win32Window::input(bool menuOpen){
+InputState Win32Window::input(bool menuOpen,float inventoryCursorDt){
  setMenu(menuOpen);InputState i{};i.textInput=std::move(m_textInput);m_textInput.clear();if(!focused()){i.textInput.clear();return i;}
  auto key=[](int value){return (GetAsyncKeyState(value)&0x8000)!=0;};
  i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.prone=key('Z');i.fire=key(VK_LBUTTON);i.reload=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');i.flashlight=key('F');i.subdue=key('Q');i.physglove=key('G');
  i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);i.scoreboard=key(VK_TAB);i.chat=key('T');i.talk=m_talkKey>0&&key(m_talkKey);
- {const PadState pad=readPad();if(pad.connected){const auto b=pad.buttons;const int dead=16000;
-  i.menuUp|=(b&0x0001)||pad.ly>dead;i.menuDown|=(b&0x0002)||pad.ly<-dead;i.menuLeft|=(b&0x0004)||pad.lx<-dead;i.menuRight|=(b&0x0008)||pad.lx>dead;
-  i.escape|=(b&0x0010)!=0||(menuOpen&&(b&0x2000));i.scoreboard|=(b&0x0020)!=0;i.menuAccept|=menuOpen&&(b&0x1000);}}
-  i.guard=key(VK_RBUTTON);i.rotateProp=key(VK_MBUTTON);
- for(int digit=1;digit<=4;++digit)if(key('0'+digit))i.choice=digit;
+ i.guard=key(VK_RBUTTON);i.rotateProp=key(VK_MBUTTON);
+ XINPUT_GAMEPAD pad{};
+const bool connected=readPad(pad);
+ // Controller options. The tables are the menu's choices (index 3 of the look speeds is the stock feel).
+ static constexpr float lookSpeeds[]={.4f,.6f,.8f,1.f,1.3f,1.6f,2.2f},deadScales[]={1.f,1.5f,2.f,2.6f},steadyTau[]={0.f,.08f,.18f,.35f},pressFilter[]={0.f,.12f,.25f,.45f};
+ const float tickNow=float(GetTickCount64()%100000000ull)/1000.f;float tickDt=std::clamp(tickNow-m_padLastTick,0.f,.1f);m_padLastTick=tickNow;
+ const PadOptions opt=m_pad;
+ if(connected){
+  if(opt.swapSticks){std::swap(pad.sThumbLX,pad.sThumbRX);std::swap(pad.sThumbLY,pad.sThumbRY);}
+  if(opt.bumpers){   // fire and aim on the bumpers; use and the Physgloves move to the triggers
+   const bool rb=(pad.wButtons&XINPUT_GAMEPAD_RIGHT_SHOULDER)!=0,lb=(pad.wButtons&XINPUT_GAMEPAD_LEFT_SHOULDER)!=0;
+   const bool rt=pad.bRightTrigger>XINPUT_GAMEPAD_TRIGGER_THRESHOLD,lt=pad.bLeftTrigger>XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+   pad.wButtons=WORD((pad.wButtons&~(XINPUT_GAMEPAD_RIGHT_SHOULDER|XINPUT_GAMEPAD_LEFT_SHOULDER))|(rt?XINPUT_GAMEPAD_RIGHT_SHOULDER:0)|(lt?XINPUT_GAMEPAD_LEFT_SHOULDER:0));
+   pad.bRightTrigger=rb?255:0;pad.bLeftTrigger=lb?255:0;
+  }
+  if(opt.filter>0){   // a press counts once held long enough; a tremor's brush does not
+   const float need=pressFilter[std::clamp(opt.filter,0,3)];
+   static constexpr WORD bits[6]={XINPUT_GAMEPAD_A,XINPUT_GAMEPAD_B,XINPUT_GAMEPAD_X,XINPUT_GAMEPAD_Y,XINPUT_GAMEPAD_RIGHT_SHOULDER,XINPUT_GAMEPAD_LEFT_SHOULDER};
+   for(int b=0;b<6;++b){const bool down=(pad.wButtons&bits[b])!=0;m_padHold[b]=down?m_padHold[b]+tickDt:0;if(down&&m_padHold[b]<need)pad.wButtons=WORD(pad.wButtons&~bits[b]);}
+   {const bool rt=pad.bRightTrigger>XINPUT_GAMEPAD_TRIGGER_THRESHOLD;m_padHold[6]=rt?m_padHold[6]+tickDt:0;if(rt&&m_padHold[6]<need)pad.bRightTrigger=0;}
+   {const bool lt=pad.bLeftTrigger>XINPUT_GAMEPAD_TRIGGER_THRESHOLD;m_padHold[7]=lt?m_padHold[7]+tickDt:0;if(lt&&m_padHold[7]<need)pad.bLeftTrigger=0;}
+  }
+ }
+ const WORD buttons=pad.wButtons;
+ const WORD pressedButtons=buttons&~m_padButtons;
+ m_padButtons=buttons;
+ const bool triggerFire=pad.bRightTrigger>XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+ const bool triggerAim=pad.bLeftTrigger>XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
+ auto steadied=[&](Vec2 raw,Vec2& state){const float tau=steadyTau[std::clamp(opt.steady,0,3)];if(tau<=0)return state=raw;state=state+(raw-state)*(1.f-std::exp(-tickDt/tau));return state;};
+ const Vec2 look=steadied(padStick(pad.sThumbRX,pad.sThumbRY,std::min(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE*deadScale,30000.f)),m_padLookSmooth);
+ bool inventoryClick=false;
+ if(menuOpen){
+  // Actions held in a menu must be released before they can act in the world.
+  m_padHeldInMenu=buttons;
+  if(inventoryCursorDt<=0||!triggerFire)m_padFireHeldInMenu=triggerFire;
+  inventoryClick=inventoryCursorDt>0&&triggerFire&&!m_padFireHeldInMenu;
+  if(inventoryClick)m_padFireHeldInMenu=true;
+  m_padAimHeldInMenu=triggerAim;
+ }else{
+  m_padHeldInMenu&=buttons;
+  m_padFireHeldInMenu&=triggerFire;
+  m_padAimHeldInMenu&=triggerAim;
+ }
+ if(menuOpen){m_aimOn=m_sprintOn=m_crouchOn=false;}
+ if(connected){
+  constexpr int menuDeadzone=16000;
+  i.menuUp|=(buttons&XINPUT_GAMEPAD_DPAD_UP)||pad.sThumbLY>menuDeadzone;
+  i.menuDown|=(buttons&XINPUT_GAMEPAD_DPAD_DOWN)||pad.sThumbLY<-menuDeadzone;
+  i.menuLeft|=(buttons&XINPUT_GAMEPAD_DPAD_LEFT)||pad.sThumbLX<-menuDeadzone;
+  i.menuRight|=(buttons&XINPUT_GAMEPAD_DPAD_RIGHT)||pad.sThumbLX>menuDeadzone;
+  i.escape|=(buttons&XINPUT_GAMEPAD_START)||(menuOpen&&(buttons&XINPUT_GAMEPAD_B));
+  const bool browsingScoreboard=(buttons&XINPUT_GAMEPAD_BACK)!=0;
+  i.scoreboard|=browsingScoreboard;
+  i.menuAccept|=(menuOpen||browsingScoreboard)&&(buttons&XINPUT_GAMEPAD_A);
+  if(!menuOpen){
+   const WORD gameplay=buttons&~m_padHeldInMenu;
+   const bool aimRaw=triggerAim&&!m_padAimHeldInMenu;
+   if(opt.toggleAim&&aimRaw&&!m_prevAimRaw)m_aimOn=!m_aimOn;
+   m_prevAimRaw=aimRaw;
+   const bool aiming=opt.toggleAim?m_aimOn:aimRaw;
+   i.controllerMove=steadied(padStick(pad.sThumbLX,pad.sThumbLY,std::min(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE*deadScale,30000.f)),m_padMoveSmooth);
+   i.controllerLook=look*(length(look)*(aiming?.45f:1.f));
+   i.controllerLook.x*=2.8f*lookSpeeds[std::clamp(opt.look,0,6)];
+   i.controllerLook.y*=1.8f*lookSpeeds[std::clamp(opt.look,0,6)];
+   if(opt.toggleSprint){if(pressedButtons&XINPUT_GAMEPAD_LEFT_THUMB)m_sprintOn=!m_sprintOn;if(lengthSq(i.controllerMove)<.01f)m_sprintOn=false;i.sprint|=m_sprintOn;}
+   else i.sprint|=(gameplay&XINPUT_GAMEPAD_LEFT_THUMB)!=0;
+   i.flashlight|=(gameplay&XINPUT_GAMEPAD_RIGHT_THUMB)!=0;
+   i.jump|=!browsingScoreboard&&(gameplay&XINPUT_GAMEPAD_A);
+   if(opt.toggleCrouch){if(pressedButtons&XINPUT_GAMEPAD_B)m_crouchOn=!m_crouchOn;i.crouch|=m_crouchOn;}
+   else i.crouch|=(gameplay&XINPUT_GAMEPAD_B)!=0;
+   i.reload|=(gameplay&XINPUT_GAMEPAD_X)!=0;
+   i.subdue|=(gameplay&XINPUT_GAMEPAD_Y)!=0;
+   i.use|=(gameplay&XINPUT_GAMEPAD_RIGHT_SHOULDER)!=0;
+   i.physglove|=(gameplay&XINPUT_GAMEPAD_LEFT_SHOULDER)!=0;
+   i.inventory|=!browsingScoreboard&&(gameplay&XINPUT_GAMEPAD_DPAD_DOWN);
+   i.talk|=!browsingScoreboard&&(gameplay&XINPUT_GAMEPAD_DPAD_UP);
+   i.fire|=triggerFire&&!m_padFireHeldInMenu;
+   i.guard|=aiming;
+   if(!browsingScoreboard){
+    if(pressedButtons&XINPUT_GAMEPAD_DPAD_RIGHT)i.weaponScroll=1;
+    if(pressedButtons&XINPUT_GAMEPAD_DPAD_LEFT)i.weaponScroll=-1;
+   }
+  }
+ }
+ for(int digit=1;digit<=5;++digit)if(key('0'+digit))i.choice=digit;
  i.console=key(VK_OEM_3);
  RECT rc{};GetClientRect(m_hwnd,&rc);POINT pointer{};GetCursorPos(&pointer);
  if(menuOpen){m_scrollDelta=0;ScreenToClient(m_hwnd,&pointer);auto view=viewport(rc.right,rc.bottom);
   if(i.fire&&GetCapture()!=m_hwnd)SetCapture(m_hwnd);else if(!i.fire&&GetCapture()==m_hwnd)ReleaseCapture();
+  if(inventoryCursorDt>0&&lengthSq(look)>0){
+   const float step=700.f*std::min(inventoryCursorDt,.05f);
+   m_padCursorRemainder+=Vec2{look.x,-look.y}*step;
+   const LONG dx=LONG(m_padCursorRemainder.x),dy=LONG(m_padCursorRemainder.y);
+   m_padCursorRemainder=m_padCursorRemainder-Vec2{float(dx),float(dy)};
+   if(dx||dy){
+    pointer.x=std::clamp(pointer.x+dx,view.left,view.right-1);
+    pointer.y=std::clamp(pointer.y+dy,view.top,view.bottom-1);
+    POINT screen=pointer;ClientToScreen(m_hwnd,&screen);SetCursorPos(screen.x,screen.y);
+   }
+  }else m_padCursorRemainder={};
+  i.fire|=inventoryClick;
   i.pointerX=(pointer.x-view.left)*DisplayWidth/std::max(1L,view.right-view.left);i.pointerY=(pointer.y-view.top)*DisplayHeight/std::max(1L,view.bottom-view.top);return i;
  }
- i.weaponScroll=m_scrollDelta>0?1:m_scrollDelta<0?-1:0;m_scrollDelta=0;
+ m_padCursorRemainder={};
+ if(m_scrollDelta)i.weaponScroll=m_scrollDelta>0?1:-1;
+ m_scrollDelta=0;
  if(GetCapture()==m_hwnd)ReleaseCapture();
  POINT center{rc.right/2,rc.bottom/2};ClientToScreen(m_hwnd,&center);
  if(m_mouseCaptured){i.mouseDx=float(pointer.x-center.x);i.mouseDy=float(pointer.y-center.y);}m_mouseCaptured=true;SetCursorPos(center.x,center.y);return i;

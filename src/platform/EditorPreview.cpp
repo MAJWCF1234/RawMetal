@@ -71,7 +71,7 @@ int runEditorPreview(const EditorPreviewOptions& options){
   auto now=std::chrono::steady_clock::now();float dt=std::min(.05f,std::chrono::duration<float>(now-last).count());last=now;
   playing=play!=0&&valid;
   if(scene){
-   if(playing){bool menu=scene->paused()||scene->inventoryOpen()||scene->talking()||scene->consoleOpen();auto input=window.input(menu);if(input.escape){playing=false;input={};window.setMenu(true);{std::ofstream control(options.control);control<<revision<<' '<<selected<<" 0 0 "<<audition<<'\n';}if(options.parent)PostMessageW(GetAncestor(options.parent,GA_ROOT),WM_APP+31,0,0);}else scene->update(input,dt);}
+   if(playing){bool menu=scene->paused()||scene->inventoryOpen()||scene->talking()||scene->consoleOpen();auto input=window.input(menu,scene->inventoryOpen()?dt:0.f);if(input.escape&&(!menu||(GetAsyncKeyState(VK_ESCAPE)&0x8000))){playing=false;input={};window.setMenu(true);{std::ofstream control(options.control);control<<revision<<' '<<selected<<" 0 0 "<<audition<<'\n';}if(options.parent)PostMessageW(GetAncestor(options.parent,GA_ROOT),WM_APP+31,0,0);}else scene->update(input,dt);}
    else window.setMenu(true);
    const bool hostFocused=options.parent&&GetForegroundWindow()==GetAncestor(options.parent,GA_ROOT);
    const bool audible=!options.hidden&&((playing&&window.focused())||(audition&&hostFocused));

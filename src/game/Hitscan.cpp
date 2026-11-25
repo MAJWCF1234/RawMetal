@@ -1,5 +1,6 @@
 #include "../core/FrameProfile.h"
 #include "Game.h"
+#include <cstdlib>
 #include "../core/Ray.h"
 #include "physics/PropQueries.h"
 namespace retro {
@@ -125,7 +126,12 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  if(hit.kind==ShotKind::Prop){prop(hit.level,hit.index,hit.point,hit.distance);return;}
  definition.dmgNear*=attenuation;definition.dmgMid*=attenuation;definition.dmgFar*=attenuation;definition.actorDamage*=attenuation;if(damageOverride>0)damageOverride*=attenuation;
  auto source=Vec2{origin.x,origin.y};auto shift=chunkOffset(m_level)-chunkOffset(hit.level);auto&world=friendlyWorld(hit.level);
- if(hit.kind==ShotKind::Player){if(const auto* p=playerById(hit.index))hurtPlayer(*p,damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance),source,false);return;}
+ if(hit.kind==ShotKind::Player){if(const auto* p=playerById(hit.index)){
+   // Deathmatch: a round into the head (above the shoulders of the standing body, 0.82 of the eye height over the feet) takes the gun's
+   // head multiplier, as a creature's does (the sniper rifle: the reward for its slow handling).
+   const bool head=p->body&&definition.headMultiplier>1.f&&hit.point.z>p->body->z+p->body->eye*.82f;
+   if(head&&playerFired)m_critFlash=1.2f;
+   hurtPlayer(*p,(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance))*(head?definition.headMultiplier:1.f),source,false);}return;}
  if(hit.kind==ShotKind::Drone){damageEngineerDrone(hit.index,damageOverride>0?damageOverride:definition.actorDamage,attacker);if(playerFired)m_hitFlash=1;return;}
  if(hit.kind==ShotKind::Npc){if(playerFired)attacker={ShotKind::Player,m_level,m_shooter};damageFriendly(size_t(hit.index),damageOverride>0?damageOverride:definition.actorDamage,source+shift,attacker);if(playerFired)m_hitFlash=1;hitBurst(hit.level,hit.point+Point3{shift.x,shift.y,0},direction,ImpactMaterial::Flesh,-1,.8f,false);return;}
  if(hit.kind==ShotKind::Actor){const auto&actor=world.actorTracks().at(size_t(hit.index));if(!actor.health)return;const auto&pose=world.actorPose(size_t(hit.index));int previous=std::clamp(state(actor.damageState),0,actor.health);int damage=previous+std::min(actor.health-previous,int(std::ceil(std::min(damageOverride>0?damageOverride:definition.actorDamage,float(actor.health)))));setState(actor.damageState,damage);if(playerFired)m_hitFlash=1;
@@ -140,7 +146,9 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
   if(playerFired&&enemy.alive){const Player& by=*(playerById(m_shooter)?playerById(m_shooter):&players().front())->body;enemy.aggro=m_shooter;enemy.aggroTime=m_elapsed;enemy.recognition=1;enemy.lastKnown=by.pos+chunkOffset(m_level)-chunkOffset(hit.level);enemy.lastKnownZ=by.z;enemy.awareness=std::max(enemy.awareness,8.f);if(enemy.state==Enemy::State::Idle||enemy.state==Enemy::State::Search)enemy.state=Enemy::State::Investigate;}
   // A hide (the cursed equipment's steel) turns most of a round; a blast is not a round.
   const float armour=m_blastShot?1.f:creatureTraits(enemy.kind).armour;
-  const float dealt=(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance))*armour;const Point3 local{shift.x,shift.y,0};const bool living=enemy.alive;
+  const bool head=definition.headMultiplier>1.f&&enemy.alive&&hit.point.z>enemy.bodyBottom()+(enemy.bodyTop()-enemy.bodyBottom())*.78f;
+  const float dealt=(damageOverride>0?damageOverride:hitscanDamageAt(definition,hit.damageDistance))*armour*(head?definition.headMultiplier:1.f);const Point3 local{shift.x,shift.y,0};const bool living=enemy.alive;
+  if(head&&playerFired)m_critFlash=1.2f;
   if(living)enemy.wound(origin+local,direction);
   const float flinch=enemy.painFlash;
   bool killed=applyEnemyDamage(enemy,dealt,playerFired,playerFired&&m_shooter==0&&hit.damageDistance<definition.closeHitStop,hit.level);   // the hit-stop is the local shooter's
@@ -161,7 +169,18 @@ void Game::resolveShot(const ShotHit& hit,Point3 origin,Point3 direction,const H
  // What it struck decides the mark it leaves and what it throws: sparks off metal, dust and chips off
  // masonry, splinters off timber, clods off earth.
  const Point3 struck{impact.x+shift.x,impact.y+shift.y,impact.z};const auto material=world.impactMaterial(struck,hit.normal);
- m_bulletImpacts.push_back({{struck.x,struck.y},struck.z,{hit.normal.x,hit.normal.y},m_elapsed,hit.level,false,0,hit.normal.z,int(material)});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());
+ // A hole is a flat quad: near an edge it would hang over empty air (a pole's side, a ledge's lip). Round the hit, eight points on a ring are
+ // checked for surface just under them; the widest ring all of them find is how big the hole may be (BulletImpact::size, a share of its
+ // usual size), and with none the hole is not laid.
+ float fit=1.f;
+ static const bool fitHoles=!std::getenv("RAWMETAL_NO_DECAL_FIT");   // off for the gun rig's control run
+ if(fitHoles){const Point3 n=hit.normal;Point3 t1=std::fabs(n.z)<.9f?Point3{-n.y,n.x,0}:Point3{1,0,0};const float l1=std::sqrt(t1.x*t1.x+t1.y*t1.y+t1.z*t1.z);t1=l1>1e-5f?t1*(1/l1):Point3{1,0,0};
+  const Point3 t2{n.y*t1.z-n.z*t1.y,n.z*t1.x-n.x*t1.z,n.x*t1.y-n.y*t1.x};fit=0.f;
+  for(float share:{1.f,.62f,.36f,.2f,.1f}){const float r=.14f*share;bool whole=true;
+   for(int k=0;k<8&&whole;++k){const float a=float(k)*.7853982f;const Point3 at=hit.point+n*.04f+(t1*std::cos(a)+t2*std::sin(a))*r;
+    const auto probe=traceShot(at,n*-1.f,.075f,-1,false,nullptr);whole=probe.kind!=ShotKind::None&&probe.distance<=.07f;}
+   if(whole){fit=share;break;}}}
+ if(fit>0.f){BulletImpact mark{{struck.x,struck.y},struck.z,{hit.normal.x,hit.normal.y},m_elapsed,hit.level,false,0,hit.normal.z,int(material)};mark.size=fit;m_bulletImpacts.push_back(mark);pinToDoor(m_bulletImpacts.back());if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());}
  if(material!=ImpactMaterial::Metal)hitBurst(hit.level,struck,hit.normal,material,-1,std::clamp(hitscanDamageAt(definition,hit.damageDistance)/34.f,.5f,1.6f),false);
 }
 void Game::hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial material,int species,float power,bool kill){
@@ -174,6 +193,40 @@ void Game::hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial mater
  m_hitBursts.push_back(burst);if(m_hitBursts.size()>48)m_hitBursts.erase(m_hitBursts.begin());
  // A round through flesh paints the wall behind it.
  if(material==ImpactMaterial::Flesh&&fraction<1&&std::fabs(normal.z)<.5f&&power>=.7f){auto at=from+(to-from)*fraction;unsigned seed=unsigned(m_bulletImpacts.size())*2654435761u^unsigned(m_elapsed*977.f);
-  m_bulletImpacts.push_back({{at.x,at.y},at.z,{normal.x,normal.y},m_elapsed,level,true,species<0?int(CreatureKind::Mutant):species,0,int(ImpactMaterial::Flesh),(.11f+.05f*float(seed>>24&255u)/255.f)*std::min(1.5f,power)*(1.15f-.25f*fraction)});if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());}
+  m_bulletImpacts.push_back({{at.x,at.y},at.z,{normal.x,normal.y},m_elapsed,level,true,species<0?int(CreatureKind::Mutant):species,0,int(ImpactMaterial::Flesh),(.11f+.05f*float(seed>>24&255u)/255.f)*std::min(1.5f,power)*(1.15f-.25f*fraction)});pinToDoor(m_bulletImpacts.back());if(m_bulletImpacts.size()>96)m_bulletImpacts.erase(m_bulletImpacts.begin());}
+}
+}
+namespace retro {
+// A lifting door's leaf (a bulkhead, a grille: not a swinging one) rises 2.65 m fully open from its floor. A mark
+// struck on the leaf, within its thickness and height where it stood, is pinned to that door and how far open it
+// was, and the renderer lifts it by however far the leaf has risen since (Scene3D, the marks).
+void Game::pinToDoor(BulletImpact& mark)const{
+ if(mark.level<0||mark.level>=chunkCount()||!chunkResident(mark.level))return;
+ const World& w=chunkWorld(mark.level);const auto& doors=w.doors();
+ for(size_t i=0;i<doors.size();++i){const Door& d=doors[i];if(d.swinging)continue;
+  const float along=d.alongY?mark.pos.y:mark.pos.x,across=d.alongY?mark.pos.x:mark.pos.y;
+  if(along<d.left-.02f||along>d.right+.02f||std::fabs(across-d.y)>.14f)continue;
+  const float bottom=w.floorHeight(d.alongY?d.y:(d.left+d.right)*.5f,d.alongY?(d.left+d.right)*.5f:d.y)+d.z+d.open*2.65f;
+  if(mark.z<bottom-.02f||mark.z>bottom+2.5f)continue;
+  mark.door=int(i);mark.doorOpen=d.open;return;}
+}
+}
+namespace retro {
+// splitmix32-style: a pellet's two uniform numbers from (seed, pellet), never from play order.
+static float pelletUnit(std::uint32_t seed,int pellet,int which){
+ std::uint32_t x=seed^(std::uint32_t(pellet)*0x9e3779b9u)^(std::uint32_t(which)*0x85ebca6bu);
+ x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return float(x>>8)/16777216.f;
+}
+// A ray inside a 0.055 rad cone round the aim, evenly over its disc (28 cm across at 5 m).
+Point3 Game::pelletDirection(Point3 aim,std::uint32_t seed,int pellet){
+ constexpr float Cone=.055f;
+ Point3 side{-aim.y,aim.x,0};float l=std::sqrt(side.x*side.x+side.y*side.y);side=l>1e-4f?side*(1/l):Point3{1,0,0};
+ const Point3 up{aim.y*side.z-aim.z*side.y,aim.z*side.x-aim.x*side.z,aim.x*side.y-aim.y*side.x};
+ const float r=Cone*std::sqrt(pelletUnit(seed,pellet,0)),turn=6.28318530718f*pelletUnit(seed,pellet,1);
+ Point3 d=aim+side*(std::cos(turn)*r)+up*(std::sin(turn)*r);const float n=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);return n>1e-6f?d*(1/n):aim;
+}
+HitscanDef Game::pelletDef(const HitscanDef& shot){
+ HitscanDef p=shot;const float share=1.f/float(ShotgunPellets);   // eight pellets share one shot's damage: all of them in is what a single round dealt before
+ p.dmgNear*=share;p.dmgMid*=share;p.dmgFar*=share;p.actorDamage*=share;p.ragdollImpulse*=.4f;p.propImpulse*=.4f;p.closeHitStop*=.4f;return p;
 }
 }

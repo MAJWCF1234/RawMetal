@@ -199,6 +199,15 @@ bool Match::selfTest(std::ostream& report){
   check(frags(*guest,"Gus")==1&&frags(*third,"Gus")==1&&frags(*guest,"Hana")==-99,"the scores carry over and the old host is gone from them");
   float worstThird=0;walk(*third,{0,-1},2.f,1.f,&worstThird,guest.get(),ts);frames(30);
   {const auto* v=remote(*guest,ts);check(v&&gap(v->position,here(*third))<.05f&&worstThird<.6f,"the new host follows the third player's moves (worst "+std::to_string(worstThird)+" m)");}
+  // Other players' footsteps are heard: a player walking on another machine's map is heard stepping there, once a
+  // stride, and a player standing still is not.
+  {int heard=0;const auto count=[&](Game& g,Vec2 near){for(const auto& s:g.m_sounds)if((s.position.x-near.x)*(s.position.x-near.x)+(s.position.y-near.y)*(s.position.y-near.y)<4.f)++heard;};
+   // The third player walks by real input (forward, facing north), as a player does: the game works out the velocity it sends.
+   put(*guest,*third,{4.5f,12.5f});frames(20);third->m_player.angle=0;   // in open floor, facing east
+   const int n=int(1.5f/dt);for(int i=0;i<n;++i){for(auto* g:playing){InputState in{};if(g==third.get())in.forward=true;g->update(in,dt);}count(*guest,Vec2{here(*third).x,here(*third).y});}
+   const int walking=heard;heard=0;for(int i=0;i<int(1.f/dt);++i){frames(1);count(*guest,Vec2{here(*third).x,here(*third).y});}
+   check(walking>=2,"another player's footsteps are heard as they walk ("+std::to_string(walking)+" in 1.5 s)");
+   check(heard==0,"and none while they stand still ("+std::to_string(heard)+")");}
   guest->m_player.pos={12.5f,15.5f};put(*guest,*third,{12.5f,18.5f});frames(30);
   arm(*third);aim(*third,{guest->m_player.pos.x,guest->m_player.pos.y,guest->m_player.z+1.f});third->shoot();frames(10);
   check(guest->m_player.health<100&&!guest->dead(),"the new host traces the third player's shot and takes the damage");
@@ -231,6 +240,14 @@ bool Match::selfTest(std::ostream& report){
   check(!said(*third,"Gus","hello down there")&&said(*host,"Gus","hello down there"),"a muted sender's lines are hidden from the one who muted them, not from the others");
   check(st->mutedPeers.count(sg->self())&&st->mutedPeers[sg->self()],"muting by name mutes the player's voice in the session too");
   third->setPlayerMuted("Gus",false);frames(15);check(said(*third,"Gus","hello down there")&&!st->mutedPeers[sg->self()],"unmuting shows the lines again and lets the voice through");
+  // Typing takes the keys: a chat line full of I and F neither opens the inventory nor works the flashlight.
+  {Game& g=*third;const bool light=g.flashlightOn();
+   InputState open{};open.chat=true;g.update(open,dt);g.update({},dt);
+   check(g.chatOpen(),"T opens the chat line in a match");
+   for(int i=0;i<4;++i){InputState typed{};typed.textInput="fi";typed.inventory=true;typed.flashlight=true;g.update(typed,dt);g.update({},dt);}
+   check(g.chatOpen()&&!g.m_inventoryOpen&&g.flashlightOn()==light,"typing I and F into the chat line opens no inventory and leaves the flashlight be");
+   InputState shut{};shut.escape=true;g.update(shut,dt);g.update({},dt);
+   check(!g.chatOpen()&&!g.m_inventoryOpen,"Escape closes the chat line, the inventory still shut");}
   {third->m_settings.textChat=false;frames(2);int lines=0;for(const auto& c:third->m_matchView.chat)lines+=!c.notice;
    check(lines==0,"text chat off hides the players' lines");third->m_settings.textChat=true;}
   // The allowance: a burst of ten from a guest, by the guest's own count and then past it straight to the host.
@@ -257,6 +274,29 @@ bool Match::selfTest(std::ostream& report){
   st->leave();frames(10);
   check(told(*host,"Tam left the game")&&told(*guest,"Tam left the game"),"a leave notice appears");
   playing.clear();
+ }
+ // ===== Deathmatch: the sniper rifle (a head hit takes the head multiplier on a player too; a body hit leaves 5 of 100) =====
+ {
+  LoopbackHub hub;auto sh=hub.connect("Hana"),sg=hub.connect("Gus");
+  auto host=makeHost(),guest=makeGuest(guestMaps,false);
+  host->setNetSession(sh.get());guest->setNetSession(sg.get());
+  playing={host.get(),guest.get()};frames(1);
+  HostOptions o;o.mode=Mode::Deathmatch;o.map=arenaFile;o.mapHash=mapFileHash(hostMaps/arenaFile);o.maxPlayers=8;sh->host(o);frames(1);
+  sg->joinCode(sh->lobby().joinCode);
+  until(240,[&]{return guest->m_match&&guest->m_match->started();});frames(30);
+  check(guest->m_match&&guest->m_match->started(),"sniper test: the guest joins the host's deathmatch");
+  host->m_player.pos={8.5f,5.5f};put(*host,*guest,{8.5f,10.5f});frames(30);
+  guest->grantSniper(5);guest->selectWeapon(WeaponId::Sniper);frames(90);check(guest->equippedWeapon()==WeaponId::Sniper,"the guest has the rifle drawn");
+  // A round into the head: one is enough (100 health against 95 x 3).
+  aim(*guest,{host->m_player.pos.x,host->m_player.pos.y,host->m_player.z+host->m_player.eye*.97f});guest->shoot();frames(10);
+  check(host->dead(),"deathmatch: one sniper round into the head kills a full-health player (traced by the host)");
+  frames(int(3.4f/dt));
+  check(!host->dead()&&host->m_player.health==100,"the host respawns at full health");
+  // A round into the body: 95 of 100.
+  put(*host,*guest,{8.5f,10.5f});host->m_player.pos={8.5f,5.5f};frames(30);guest->m_aimBlend=1.f;
+  aim(*guest,{host->m_player.pos.x,host->m_player.pos.y,host->m_player.z+host->m_player.eye*.5f});guest->shoot();frames(10);
+  check(!host->dead()&&host->m_player.health>0&&host->m_player.health<=10,"a sniper round into the body leaves the player on "+std::to_string(int(host->m_player.health))+" of 100");
+  sh->leave();frames(10);playing.clear();
  }
  // ===== Co-op =====
  {

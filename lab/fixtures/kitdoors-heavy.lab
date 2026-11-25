@@ -1,0 +1,5 @@
+world custom "custom maps/Starter Map.rmc"
+map 128
+camera 6 9.6 -999 90 0
+size 960 540
+frames 260

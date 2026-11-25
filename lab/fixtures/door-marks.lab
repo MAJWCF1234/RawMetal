@@ -1,0 +1,7 @@
+# A lifting door shot, then opened: its marks rise with the leaf (tube door-marks).
+world room
+camera 8.5 11 -999 -90 0
+light 8.5 9.5 3 1.4 8
+size 960 540
+frames 380
+hud on

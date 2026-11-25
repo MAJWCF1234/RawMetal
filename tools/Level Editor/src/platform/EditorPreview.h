@@ -9,6 +9,8 @@
 namespace retro {
 struct CustomCampaign;
 class Win32Window;
+inline constexpr UINT EditorControllerMessage=WM_APP+54;
+enum class EditorControllerCommand:WPARAM { CatalogTab, CatalogItem, Select, Rotate, Play, InputDevice, CycleView };
 struct EditorPreviewOptions {
  std::filesystem::path pack,control,status,capture;
  // --perf-trace: reload costs and frame times, appended here (empty: off).

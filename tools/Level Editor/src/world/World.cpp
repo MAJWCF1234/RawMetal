@@ -392,6 +392,67 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
  for(auto&f:m_fixtures)if((f.model==model::office_chair||f.model==model::wooden_chair||f.model==model::lab_boardroom_chair)&&f.visible&&!f.anchored&&f.base<.05f){
   m_clutterSpawns.push_back({ClutterModelKind,f.position,-999,-f.yaw,f.model,f.width,f.depth,f.height});m_clutterSpawns.back().traits=f.traits;f.visible=false;f.solid=false;}
  m_waterVolumes=m_mapData->waterVolumes;m_hazards=m_mapData->hazards;m_particleEmitters=m_mapData->emitters;m_compactors=m_mapData->compactors;m_structures=m_mapData->structures;
+ // An open shipping container is a room you walk into: its one solid box gives way to unseen walls in the
+ // model's own shape (two sides, the back, the roof and a low floor), its mouth left open. Only a container
+ // turned in quarter steps (the walls are axis-aligned boxes); one at another angle keeps its box.
+ for(auto&f:m_fixtures){
+  if(f.model!=model::container_open||!f.solid||!f.visible)continue;
+  const float q=f.yaw/(kPi*.5f),k=std::round(q);if(std::fabs(q-k)>.02f)continue;
+  // The body in the model's own metres (container-open.obj: x -1.25..1.25, z -5.4..5.4, y 0..2.5; its swung
+  // doors make the mesh's box x -1.51..1.95, z -5.4..6.54, so the fixture's box centres on 0.219, 0.568).
+  auto lx=[&](float ox){return (ox-.2186f)/3.4616f*f.width;};auto ly=[&](float oz){return (oz-.5675f)/11.935f*f.depth;};
+  const float base=floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),s=std::sin(f.yaw);
+  auto box=[&](float x0,float x1,float y0,float y1,float z0,float z1){
+   float ax=1e9f,ay=1e9f,bx=-1e9f,by=-1e9f;
+   for(float u:{x0,x1})for(float v:{y0,y1}){const float wx=f.position.x+u*c+v*s,wy=f.position.y-u*s+v*c;ax=std::min(ax,wx);bx=std::max(bx,wx);ay=std::min(ay,wy);by=std::max(by,wy);}
+   Structure st{ax,ay,bx,by,base+z0,base+z1};st.material=CollisionProxyMaterial;st.solid=true;m_structures.push_back(st);};
+  const float h=f.height/2.5f;
+  box(lx(-1.25f),lx(-1.18f),ly(-5.4f),ly(5.4f),0,f.height);            // the sides
+  box(lx(1.18f),lx(1.25f),ly(-5.4f),ly(5.4f),0,f.height);
+  box(lx(-1.25f),lx(1.25f),ly(-5.4f),ly(-5.3f),0,f.height);            // the back
+  box(lx(-1.25f),lx(1.25f),ly(-5.4f),ly(5.4f),2.35f*h,f.height);       // the roof
+  box(lx(-1.18f),lx(1.18f),ly(-5.3f),ly(5.4f),0,.15f*h);               // the floor, a step up
+  f.solid=false;
+ }
+ // Stairs and openings that are not a cube. A staircase or a wall with a doorway placed as a fixture is one solid box,
+ // so a walker met a wall where the steps were and could not pass under an arch. Their one box gives way to unseen
+ // shapes in the model's own proportions: a flight of steps (a body that climbs 0.2 m a step, high end at the model's
+ // -z), or two piers and a lintel round a clear opening. Quarter turns only, like the container above.
+ for(auto&f:m_fixtures){
+  if(!f.solid||!f.visible)continue;
+  struct Shape{int model;bool steps;float width,depth,height,openHalf,openHeight;float pier=0,plateau=0;};   // the model's own metres; pier: a centre post between two openings; plateau: a ramp's flat top (depth)
+  static const Shape shapes[]={
+   {model::bld_stairs_concrete,true,2.f,4.08f,3.2f,0,0},{model::bld_stairs_wood,true,2.f,4.04f,3.2f,0,0},{model::bld_stairs_short,true,4.f,2.08f,1.7f,0,0},
+   {model::bld_wall_doorway,false,4.f,.42f,3.f,.5f,2.2f},{model::bld_doorway_frame,false,4.08f,.2f,3.f,.5f,2.2f},{model::bld_doorway_wide,false,4.f,.42f,3.f,.8f,2.5f},
+   {model::bld_wall_tunnel_mouth,false,4.06f,.16f,3.f,.8f,2.38f},
+   {model::bld_doorway_double,false,4.09f,.2f,3.f,1.5f,2.18f,.5f},                       // two 1 m openings either side of a centre post
+   {model::cave_oldcity_gateway,false,3.f,1.11f,3.f,.7f,2.2f},   // (the 1.8 m arch is lower than a walker: it stays a solid block)
+   {model::bld_ramp,true,1.4f,4.f,1.f,0,0,0,2.f}};   // a 2 m slope up to a 2 m flat top
+  const Shape* s=nullptr;for(const auto& candidate:shapes)if(candidate.model==f.model)s=&candidate;if(!s)continue;
+  const float q=f.yaw/(kPi*.5f),k=std::round(q);if(std::fabs(q-k)>.02f)continue;
+  const float base=floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),sn=std::sin(f.yaw);
+  const float sx=f.width/s->width,sy=f.depth/s->depth,sz=f.height/s->height;
+  auto box=[&](float x0,float x1,float v0,float v1,float z0,float z1){   // x across, v along the depth, in the model's metres
+   float ax=1e9f,ay=1e9f,bx=-1e9f,by=-1e9f;
+   for(float u:{x0*sx,x1*sx})for(float v:{v0*sy,v1*sy}){const float wx=f.position.x+u*c+v*sn,wy=f.position.y-u*sn+v*c;ax=std::min(ax,wx);bx=std::max(bx,wx);ay=std::min(ay,wy);by=std::max(by,wy);}
+   Structure st{ax,ay,bx,by,base+z0*sz,base+z1*sz};st.material=CollisionProxyMaterial;st.solid=true;m_structures.push_back(st);};
+  if(s->steps){
+   if(s->plateau>0){   // a ramp: the slope over the front part of the depth, then the flat top
+    const float slope=s->depth-s->plateau;const int n=std::max(3,int(std::lround(s->height/.2f)));const float run=slope/float(n);
+    for(int i=0;i<n;++i){const float v1=s->depth*.5f-float(i)*run;box(-s->width*.5f,s->width*.5f,v1-run,v1,0,s->height*float(i+1)/float(n));}
+    box(-s->width*.5f,s->width*.5f,-s->depth*.5f,-s->depth*.5f+s->plateau,0,s->height);
+   }else{
+   const int steps=std::max(3,int(std::lround(s->height/.2f)));const float run=s->depth/float(steps);
+   for(int i=0;i<steps;++i){const float v1=s->depth*.5f-float(i)*run;box(-s->width*.5f,s->width*.5f,v1-run,v1,0,s->height*float(i+1)/float(steps));}   // the low end at +v (i = 0), the high end at -v
+   }
+  }else{
+   const float hw=s->width*.5f,hd=s->depth*.5f;
+   box(-hw,-s->openHalf,-hd,hd,0,s->height);box(s->openHalf,hw,-hd,hd,0,s->height);        // the piers either side
+   box(-s->openHalf,s->openHalf,-hd,hd,s->openHeight,s->height);                           // the lintel over the opening
+   if(s->pier>0)box(-s->pier,s->pier,-hd,hd,0,s->openHeight);                              // the post between a double opening
+  }
+  f.solid=false;
+ }
  m_scriptEvents=m_mapData->scriptEvents;
  m_pushCrates=m_mapData->pushCrates;m_cratePlates=m_mapData->cratePlates;
  for(auto& crate:m_pushCrates){crate.home=crate.position;crate.z=m_mapData->layers.empty()?crate.z:m_mapData->layers.front().elevation+crate.z;}
@@ -1441,8 +1502,15 @@ void World::buildLayers(std::span<const Staircase> stairs){
    float y2=stair.alongY?stair.y1+(stair.y2-stair.y1)*hi:stair.y2;
    // stringer= finishes the side guards; without it, as before.
    const int side=stair.stringer>=0?stair.stringer:2;const bool finished=stair.stringer>=0;
-   if(stair.alongY){m_structures.push_back({x1,y1,x1+.07f,y2,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});m_structures.push_back({x2-.07f,y1,x2,y2,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});}
-   else{m_structures.push_back({x1,y1,x2,y1+.07f,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});m_structures.push_back({x1,y2-.07f,x2,y2,top,top+1.05f,true,side,true,ShapeBox,0,0,finished});}
+   // The guards as drawn are not what a walker meets: each step's piece started at that step's height, so
+   // climbing near the edge a body met the next step's piece as a ledge too high to step and had to jump.
+   // Unseen guards in their place reach two metres below each tread (never under the stair's foot), a smooth
+   // wall up the flight with nothing to catch on, and the space under a tall open stair stays clear.
+   auto guard=[&](float gx1,float gy1,float gx2,float gy2){
+    m_structures.push_back({gx1,gy1,gx2,gy2,top,top+1.05f,true,side,false,ShapeBox,0,0,finished});
+    Structure wall{gx1,gy1,gx2,gy2,std::max(stair.bottom,top-2.f),top+1.05f};wall.material=CollisionProxyMaterial;wall.solid=true;m_structures.push_back(wall);};
+   if(stair.alongY){guard(x1,y1,x1+.07f,y2);guard(x2-.07f,y1,x2,y2);}
+   else{guard(x1,y1,x2,y1+.07f);guard(x1,y2-.07f,x2,y2);}
   }
  }
   // End guardrails at real walls/columns. Keep original structure indices:

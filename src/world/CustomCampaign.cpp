@@ -476,7 +476,9 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    // (blank, never); the lock it shows (0 none, 1 keycard, 2 key, 3 power).
    if(given(23))d.strength=number(f,23,"door strength");
    if(given(24))d.lock=integer(f,24,"door lock");
-   if(f.size()>25||!(d.strength>=0&&d.strength<=10000)||d.lock<0||d.lock>3||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1||d.leaf<0||d.leaf>2||d.label.size()>24||d.locked.size()>40)throw std::runtime_error("malformed DOOR record");
+   // |follow: 1 the door is open exactly while its state (fields 11-12) holds; it needs that state.
+   if(given(25)){d.follow=boolean(f,25,"door follow");if(d.follow&&!d.requireState)throw std::runtime_error("a following DOOR needs a state to follow (field 11)");}
+   if(f.size()>26||!(d.strength>=0&&d.strength<=10000)||d.lock<0||d.lock>3||d.maxOpen<=0||d.maxOpen>1||d.open<0||d.open>1||d.leaf<0||d.leaf>2||d.label.size()>24||d.locked.size()>40)throw std::runtime_error("malformed DOOR record");
    map->doors.push_back(d);
   }else if(tag=="STRUCT"){
    if(f.size()<10)throw std::runtime_error("malformed STRUCT record");auto map=mapAt(maps,f);map->structures.push_back({
@@ -781,7 +783,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()>11||spawn.scale<.5f||spawn.scale>2||spawn.health<0||spawn.health>5000||spawn.prey<-1||spawn.prey>4096)throw std::runtime_error("creature parameters out of range");
    map->creatureSpawns.push_back(spawn);
   }else if(tag=="PICKUP"){
-   if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::Shotgun))throw std::runtime_error("invalid pickup kind");
+   if(f.size()<5)throw std::runtime_error("malformed PICKUP record");auto map=mapAt(maps,f);int kind=integer(f,2,"pickup kind");if(kind<0||kind>int(PickupKind::SniperAmmo))throw std::runtime_error("invalid pickup kind");
    map->pickupSpawns.push_back({{number(f,3,"pickup x"),number(f,4,"pickup y")},PickupKind(kind)});
    if(given(5))map->pickupSpawns.back().z=number(f,5,"pickup z"); // absolute height (empty: on the floor)
   }else if(tag=="CLUTTER"){

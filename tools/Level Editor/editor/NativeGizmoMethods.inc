@@ -60,7 +60,7 @@
     return true;
   }
   void applyHeightDelta(float delta) {
-    delta=snap>0?std::round(delta/snap)*snap:delta;
+    if(snap>0&&!nativeSizedModel(objectFields))delta=std::round(delta/snap)*snap;
     if(footingHeightDelta(delta))return; // a footing's handle is its Raise (NativeGroundMethods.inc)
     if(std::abs(delta)<.000001f){if(objectMoved)doc.loadText(dragDocument);objectMoved=false;updateInspector();return;}
     auto f=objectFields;int schema=schemaFor(f);if(schema<0)return;
@@ -81,7 +81,12 @@
         if(top!=size_t(-1)&&number(objectFields[top],0)-number(objectFields[bottom],0)<=.5f){set(bottom,value);set(top,number(objectFields[top],0)+number(f[bottom],0)-number(objectFields[bottom],0));}
         else set(bottom,std::min(value,top==size_t(-1)?value:number(f[top],0)-.05f));
       }else if(top!=size_t(-1))set(top,std::max(bottom==size_t(-1)?.05f:number(f[bottom],0)+.05f,number(objectFields[top],0)+delta));
-      else if(height!=size_t(-1))set(height,std::max(.05f,number(objectFields[height],1)+delta));
+      else if(height!=size_t(-1)){
+        const float original=number(objectFields[height],1);
+        const float minimum=nativeSizedModel(f)?std::min(.01f,original):.05f;
+        const float maximum=nativeLooseModel(f)?3.f:100000.f;
+        set(height,std::clamp(original+delta,minimum,maximum));
+      }
       else return;
       if(top!=size_t(-1)&&number(f[top],0)>ceilingHeight()&&number(objectFields[top],0)>=heightOriginalCeiling-.5f){
         for(auto i:doc.records("MAP",map)){auto m=NativeDocument::fields(doc.lines[i]);m[9]=nativeNumber(std::max(heightOriginalCeiling,number(f[top],0)));doc.replace(i,m);}

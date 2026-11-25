@@ -123,9 +123,10 @@ void Game::updateMovement(const InputState& input,float dt){
  }
  if(input.vrTracked)m_player.eye=input.vrEye;else m_player.eye+=(m_player.stanceEye()-m_player.eye)*std::min(1.f,dt*16.f);
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x},wish{};
- if(input.forward)wish+=forward;if(input.back)wish+=forward*-1;if(input.right)wish+=right;if(input.left)wish+=right*-1;
- if(input.vrTracked)wish=forward*input.vrMoveForward+right*input.vrMoveRight;
- if(lengthSq(wish)>1||(!input.vrTracked&&lengthSq(wish)>0))wish=normalized(wish);
+ const float moveForward=input.controllerMove.y+float(int(input.forward)-int(input.back));
+ const float moveRight=input.controllerMove.x+float(int(input.right)-int(input.left));
+ wish=input.vrTracked?forward*input.vrMoveForward+right*input.vrMoveRight:forward*moveForward+right*moveRight;
+ if(lengthSq(wish)>1)wish=normalized(wish);
  // A kneel walking into a passage it cannot fit goes down onto its belly.
  if(m_player.crouched&&!m_player.prone&&m_player.grounded&&lengthSq(wish)>.01f){const Vec2 ahead=m_player.pos+normalized(wish)*.3f;const float ground=groundHeight(ahead);
   if(std::fabs(ground-m_player.z)<.25f&&!hullFits(ahead,ground,Player::CrouchedHeight)&&hullFits(ahead,ground,Player::ProneHeight))m_player.prone=true;}
@@ -178,8 +179,10 @@ void Game::updateMovement(const InputState& input,float dt){
   }
  }
  // Stuck: trying to walk, not moving, and the body does not fit where it is.
- m_propPushAttempt=input.forward||input.back||input.left||input.right||input.vrMoveForward!=0||input.vrMoveRight!=0;
- const bool trying=input.forward||input.back||input.left||input.right||(input.vrTracked&&(input.vrMoveForward!=0||input.vrMoveRight!=0));
+ const bool desktopMove=input.forward||input.back||input.left||input.right||lengthSq(input.controllerMove)>0;
+ const bool vrMove=input.vrMoveForward!=0||input.vrMoveRight!=0;
+ m_propPushAttempt=desktopMove||vrMove;
+ const bool trying=desktopMove||(input.vrTracked&&vrMove);
  if(trying&&lengthSq(m_player.pos-startPosition)<1e-6f&&!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_stuckTime+=dt;else m_stuckTime=0;
 }
 // The console's noclip: fly where the camera looks, through walls, floors and
@@ -189,10 +192,16 @@ void Game::updateNoclip(const InputState& input,float dt){
  const float pitch=m_player.pitch/140.f,speed=input.sprint?18.f:6.f;
  const Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x};
  Vec2 flat{};float up=0;
- if(input.forward){flat+=forward*std::cos(pitch);up+=std::sin(pitch);}
- if(input.back){flat+=forward*-std::cos(pitch);up-=std::sin(pitch);}
- if(input.right)flat+=right;if(input.left)flat+=right*-1;
- if(input.vrTracked){flat=forward*input.vrMoveForward+right*input.vrMoveRight;}
+ const float moveForward=float(int(input.forward)-int(input.back));
+ const float moveRight=float(int(input.right)-int(input.left));
+ if(input.vrTracked){
+  flat=forward*input.vrMoveForward+right*input.vrMoveRight;
+  up=moveForward*std::sin(pitch);
+ }else{
+  const float travel=moveForward+input.controllerMove.y;
+  flat=forward*(travel*std::cos(pitch))+right*(moveRight+input.controllerMove.x);
+  up=travel*std::sin(pitch);
+ }
  if(input.jump)up+=1;if(input.crouch||input.prone)up-=1;
  const float n=std::sqrt(lengthSq(flat)+up*up);
  if(n>1e-4f){const float k=speed*dt/std::max(1.f,n);const Vec2 next=m_player.pos+flat*k;
@@ -416,6 +425,17 @@ bool Game::testMovement(){
   InputState up{};up.jump=true;size.update(up,.02f);up.jump=false;for(int i=0;i<120;++i)size.update(up,1.f/120.f);
   debug<<"up "<<size.player().crouched<<' '<<size.player().prone<<"\n";
   if(size.player().crouched||size.player().prone)return false;}
+ // A partially tilted stick moves more slowly, while full tilt matches W.
+ auto travel=[&](float tilt){
+  auto game=clean();const Vec2 start=game.player().pos;
+  InputState move{};
+  if(tilt<0)move.forward=true;else move.controllerMove.y=tilt;
+  for(int tick=0;tick<24;++tick)game.update(move,1.f/120.f);
+  return length(game.player().pos-start);
+ };
+ const float keyboard=travel(-1),fullStick=travel(1),halfStick=travel(.5f);
+ debug<<"controller travel "<<keyboard<<' '<<fullStick<<' '<<halfStick<<'\n';
+ if(std::fabs(fullStick-keyboard)>.001f||halfStick<=.02f||halfStick>=fullStick*.85f)return false;
  // Wall slide along the Foundry's bare west wall.
  {auto slide=clean();slide.m_player.pos={1.3f,9.5f};slide.m_velocity={-4,2};slide.tryMove({-.6f,.1f});
   if(slide.player().pos.x<1.199f||slide.player().pos.x>1.21f||std::fabs(slide.player().pos.y-9.6f)>.001f||slide.m_velocity.x!=0||slide.m_velocity.y!=2)return false;

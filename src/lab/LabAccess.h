@@ -72,6 +72,10 @@ struct LabAccess {
  static float& aimBlend(Game& g){return g.m_aimBlend;}
  static void stepCasings(Game& g,float dt){g.updateCasings(dt);}
  static std::vector<Pickup>& pickups(Game& g){return g.m_pickups;}
+ static void inventory(Game& g,bool open){g.m_inventoryOpen=open;}
+ // The gun rig: one round from the equipped weapon, the bolt or pump taken as already worked, a weapon owned and loaded.
+ static void fire(Game& g){g.m_shotCooldown=0;g.shoot();}
+ static void own(Game& g,WeaponId id,int loaded){if(id==WeaponId::Shotgun)g.m_shotgunOwned=true;g.m_player.pool(id).loaded=loaded;}
  static void updatePickups(Game& g){g.updatePickups();}
  // A console line, as typed (Summon.cpp and the rest), and what it printed.
  static void console(Game& g,const std::string& line){g.executeConsole(line);}

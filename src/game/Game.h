@@ -83,6 +83,8 @@ struct InputState {
     // A direct weapon pick from the VR shoulder slot: 1 fists, 2 shotgun, 3 handgun.
     int weaponSlot=0;
     int pointerX=-1,pointerY=-1;
+    Vec2 controllerMove{};  // Right and forward, normalized together.
+    Vec2 controllerLook{};  // Yaw and pitch in radians per second.
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
     bool vrTracked=false;
@@ -229,7 +231,8 @@ struct FriendlyActor {
 struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state=GuardState::Patrol;size_t actor=0;};
 // material: an ImpactMaterial, or -1 for marks made before shots knew what they struck. size: a
 // blood mark's half-width (0 for the usual).
-struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;int material=-1;float size=0;};
+struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;int material=-1;float size=0;
+ int door=-1;float doorOpen=0;};   // a mark on a lifting door's leaf: that door, and how far open it was then (it rides up with the leaf)
 // Every shot fired, for the bodies it passes through: a ray in the frame of `level` (the active
 // chunk when it was fired), as far as it flew.
 struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impulse=0;int level=0;};
@@ -362,7 +365,7 @@ struct Player {
     float pitch = 0.0f;
     float health = 100.0f;
     // Rounds per firearm, indexed by WeaponId (Fists holds none).
-    std::array<AmmoPool,4> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{},AmmoPool{}};
+    std::array<AmmoPool,5> pools{AmmoPool{},AmmoPool{36,6},AmmoPool{},AmmoPool{},AmmoPool{}};
     AmmoPool& pool(WeaponId id){return pools[size_t(id)];}
     const AmmoPool& pool(WeaponId id)const{return pools[size_t(id)];}
     float z = 0.0f;
@@ -381,10 +384,15 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // VR comfort (the VR COMFORT page; VrRuntime reads them): turn speed (1 = 120 degrees a second; turning is smooth
 // only), the vignette's strength while moving or turning (0 off), seated play, a left-handed avatar (gun hand, hip
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
-struct Settings {float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
+// Controller options (SETTINGS > CONTROLS, docs/Systems/accessibility.md): for hands that shake, tire or cannot hold a
+// trigger. Indexes into the tables in Win32Window.cpp: look speed, stick dead zone, steady aim (a low-pass on the
+// sticks), and the press filter (a button must be held that long before it counts).
+struct PadOptions {int look=3,dead=0,steady=0,filter=0;bool toggleAim=false,toggleSprint=false,toggleCrouch=false,bumpers=false,swapSticks=false;};
+struct Settings {PadOptions pad;float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
  int viewDistance=1;    // viewDistance: VIDEO > VIEW DISTANCE, 0 near (x0.7), 1 normal, 2 far (x2), 3 very far (x3.5)
+ std::string playerName; // playerName: MULTIPLAYER > NAME, what others see; empty uses the Windows user name
  int character=0;       // character: the player's body, 0 Claire, 1 the Limitator, 2 Leon (SoftwareRenderer::playerBody)
  // Communication (the COMMUNICATION page; docs/Systems/multiplayer.md "Chat and voice"): text chat and its word
  // filter; voice 0 off, 1 push to talk, 2 open mic; the push-to-talk key (a Windows virtual-key code); open mic's
@@ -408,7 +416,7 @@ struct PauseMenuLayout {
 };
 // SETTINGS (SettingsMenu.cpp; drawn by renderer/FrontEnd.cpp): the column of pages on the left (BACK under them),
 // the open page's rows on the right, the chosen row's one plain line at HelpY. Sliders run from SliderX.
-enum class SettingsTab:std::uint8_t{Audio,Video,Controls,Gameplay,Communication,Vr,Count};
+enum class SettingsTab:std::uint8_t{Audio,Video,Controls,Controller,Gameplay,Communication,Vr,Count};
 struct SettingsLayout {
  static constexpr int TabX=40,TabY=72,TabWidth=140,TabHeight=19,BackGap=10;
  static constexpr int RowX=206,RowY=72,RowWidth=394,RowHeight=17,SliderX=RowX+214,SliderWidth=104,HelpY=306;
@@ -478,7 +486,7 @@ public:
     void update(const InputState& input, float dt);
     // Multiplayer (src/net, docs/Systems/multiplayer.md). main owns the Session (EOS, or none); the Match is
     // the game over it and fills remotePlayers and matchView, which the menus, HUD and renderer read.
-    void setNetSession(net::Session* session){m_netSession=session;}
+    void setNetSession(net::Session* session){m_netSession=session;if(session&&!m_settings.playerName.empty())session->setDisplayName(m_settings.playerName);}
     net::Session* netSession()const{return m_netSession;}
     net::Match* match()const{return m_match.get();}
     const std::vector<net::RemotePlayer>& remotePlayers()const{return m_remotePlayers;}
@@ -547,9 +555,10 @@ public:
     int operateTerminal(int terminal,int player);
     // The multiplayer pages on the title (MultiplayerMenu.cpp, docs/Systems/multiplayer.md). They call the Session
     // directly and pump it while open; once the session is InLobby the Match takes over.
-    enum class TitlePage:std::uint8_t{Main,Multiplayer,QuickMatch,Browse,Host,Lobby,JoinCode,Character};
+    enum class TitlePage:std::uint8_t{Main,Multiplayer,QuickMatch,Browse,Host,Lobby,JoinCode,Character,PlayerName};
     TitlePage titlePage()const{return m_titlePage;}
     void openTitlePage(TitlePage page);
+    const std::string& playerNameDraft()const{return m_nameDraft;}
     std::vector<TitleItem> titleItems()const;          // the current multiplayer page's rows (Main: none)
     // The session in a word ("SIGNED IN", "OFFLINE", "SIGNING IN", ...) and why, in plain words; usable: it can
     // host, search and join now.
@@ -699,6 +708,8 @@ public:
     NpcDeath npcDeath(size_t actor)const;
     static bool testChimeraHunt();
     static bool testDoorAxis();
+    static bool testSniper();      // --each-test=sniper: the bolt-action rifle, a head hit, the bolt, the reload and the scope
+    static bool testWalkIn();      // --each-test=walk-in: into an open container, up stairs, along a balcony rail
     static bool testMapFormat();   // MapFormatTest.cpp: map format 2
     static bool testDoors();
     static bool testMachine();
@@ -728,6 +739,7 @@ public:
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
+    void pinToDoor(BulletImpact& mark)const;   // a mark landing on a lifting door's leaf rides with it (Hitscan.cpp)
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
     // Dead bodies' poses (SaveSections.h CorpsePose) by (creature, level, slot): the renderer keeps each body's current
     // pose here as it moves, the physics save section writes and reads them, and a body made again after a load takes
@@ -853,6 +865,9 @@ public:
     int enemiesRemaining() const;
     int enemiesRemaining(int level)const{return hostilesRemaining(level);}
     float hitFlash()const{return m_hitFlash;}
+    float critFlash()const{return m_critFlash;}   // a head hit with the sniper rifle: the cross reads HEAD
+    // The scope: how far the rifle is at the eye (0 hip, 1 looking through it). The view narrows and a ring closes round it.
+    float scopeBlend()const{return m_weaponEquipped&&m_equippedWeapon==WeaponId::Sniper&&!unarmed()?m_scopeBlend:0.f;}   // the rifle shoulders over its iron sights first (aimBlend); held there, the view closes down the scope
     const Enemy* targetEnemy()const;
     static bool testCombat();
     static bool testWeaponMotion();
@@ -1024,6 +1039,7 @@ public:
     static bool testReactor();
     const char* interactionHint()const;
     bool doorLocked(const Door& door)const;
+    void followDoors();   // doors with follow set open and shut with their state, one at a time (World.h Door::follow)
     int activeLog()const{return m_activeLog;}
     float logTime()const{return m_logTime;}
     const Pickup* nearbyPickup()const;
@@ -1078,11 +1094,16 @@ public:
     // The MAC-11 too (a floor pickup, a script's GIVE, `give mac11`).
     static constexpr StateId MachinePistolItem=stateId("machine_pistol");
     bool hasMachinePistol()const{return hasQuestItem(MachinePistolItem);}
+    // And the sniper rifle (a floor pickup, a script's GIVE, `give sniper`).
+    static constexpr StateId SniperItem=stateId("sniper_rifle");
+    bool hasSniper()const{return hasQuestItem(SniperItem);}
     // The shotgun is carried from the start everywhere but a deathmatch, where nobody has a gun until one is picked up.
     bool m_shotgunOwned=true;
-    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||(id==WeaponId::Shotgun&&m_shotgunOwned)||(id==WeaponId::Handgun&&hasHandgun())||(id==WeaponId::MachinePistol&&hasMachinePistol());}
+    bool ownsWeapon(WeaponId id)const{return id==WeaponId::Fists||(id==WeaponId::Shotgun&&m_shotgunOwned)||(id==WeaponId::Handgun&&hasHandgun())||(id==WeaponId::MachinePistol&&hasMachinePistol())||(id==WeaponId::Sniper&&hasSniper());}
     // The MAC-11 with `rounds` more .380; a first one comes with them in its magazine.
     void grantMachinePistol(int rounds);
+    // The sniper rifle with `rounds` more .308; a first one comes with them in its magazine.
+    void grantSniper(int rounds);
     // The hip holster's contents (AvatarPose::hip, WeaponId+1, 0 empty) with `inHand`
     // drawn: one sidearm rides there, the one not in hand. With both owned and
     // neither drawn it is the one drawn last (the MAC-11 when it was the last
@@ -1521,7 +1542,7 @@ private:
     std::wstring m_customMapDirectory;
     std::uint64_t m_customCampaignKey=0;
     bool m_titleScreen=false,m_menuFromTitle=false,m_customMapsOpen=false;
-    float m_aimBlend=0;
+    float m_aimBlend=0,m_scopeBlend=0,m_scopeWait=0;
     int m_titleSelection=0,m_customMenuOffset=0;
     InputState m_titlePrevious;
     void updateTitle(const InputState& input);
@@ -2036,10 +2057,14 @@ private:
     net::MatchView m_matchView;
     // The title's multiplayer pages (MultiplayerMenu.cpp).
     TitlePage m_titlePage=TitlePage::Main;
+    std::string m_nameDraft;
+    bool m_nameUpper=false;
     int m_browseMode=0,m_browseScroll=0;bool m_browseHideFull=true,m_browseSearched=false,m_quickSearching=false;int m_quickMode=0;
     HostDraft m_hostDraft;std::string m_joinTyped,m_titleNotice;float m_joinCopied=0;
     bool m_scoreboardHeld=false;
     void updateMultiplayerMenu(const InputState& input);
+    void updatePlayerNameKeyboard(const InputState& input);
+    void savePlayerName(std::string name);
     void drainSessionEvents();
     void browseRefresh();
     friend class net::Match;
@@ -2165,6 +2190,14 @@ private:
     // Full auto (the MAC-11): the spread's bloom, the view's climb still to give
     // back, and the seed of the spread's own generator. Not saved.
     float m_spread=0,m_recoilDebt=0;unsigned m_spreadSeed=0x2545f491u;float nextSpreadRandom();
+public:
+    // The shotgun is eight pellets (docs/Systems/weapons.md): each its own ray inside a cone, from one seed, so a
+    // client can lay out the same spread the host traced. A pellet carries about a third of a shot's damage and push,
+    // and does not pull toward a target the way the single aimed ray does.
+    static constexpr int ShotgunPellets=8;
+    static Point3 pelletDirection(Point3 aim,std::uint32_t seed,int pellet);   // deterministic: same seed and pellet, same ray
+    static HitscanDef pelletDef(const HitscanDef& shot);
+private:
     // The sidearm drawn last: the one the hip holster keeps while neither is out.
     WeaponId m_lastSidearm=WeaponId::Handgun;
     std::vector<Casing> m_casings;unsigned m_casingSeed=0x9e3779b9u;float m_casingClink=-1;
@@ -2187,7 +2220,7 @@ private:
     bool m_won = false;
     bool m_pendingMainCampaign = false;
     bool m_handsLowered = false;
-    float m_hitFlash=0;
+    float m_hitFlash=0,m_critFlash=0;
     // When a lead last shocked the hand on its prop: a pair torn together shocks once. Not saved.
     float m_leadShockAt=-10;
     WeaponMotion m_weaponMotion;

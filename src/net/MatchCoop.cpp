@@ -86,15 +86,30 @@ void Match::syncBodies(float dt){
   b.prone=st.prone;b.crouched=st.crouched||st.prone;b.grounded=st.grounded;b.eye=b.stanceEye();b.health=s.alive?std::max(s.health,.01f):0.f;
   rb.velocity=st.velocity;rb.hidden=st.hidden;rb.torch=st.torch;rb.pushing=st.pushing;
   if((rb.litTimer-=dt)<=0){rb.litTimer=.1f;rb.lit=rb.hidden?0.f:g.lightAt(b.pos,b.z+b.hullHeight()*.6f,rb.torch);}
-  // Their footsteps, heard by the minds (and the host) as the local player's are: a stride of the gait, at the
-  // floor's and the gait's reach (Game::stepHeard).
-  const float speed=length(rb.velocity);const bool sprint=speed>4.2f&&!b.crouched;
-  if(s.alive&&b.grounded&&!rb.hidden&&speed>.2f&&g.inPlayerFrame(rb.level)){rb.stride+=speed*dt;const float stride=b.prone?.6f:b.crouched?.85f:sprint?1.45f:1.22f;
-   if(rb.stride>stride){rb.stride=0;const Sound base=Game::stepSoundAt(g.chunkWorld(std::clamp(rb.level,0,std::max(0,g.chunkCount()-1))),b.pos);
-    SoundEvent step{base,b.pos,b.crouched?.045f:sprint?.65f:.48f,.97f,true,17,b.z+.04f};step.aiRadius=Game::stepHeard(base,b.crouched,sprint);g.m_sounds.push_back(step);}}
+  if(s.alive)remoteFootstep(st,dt,rb.stride,true);
   next.push_back(rb);
  }
  bodies=std::move(next);
+}
+
+void Match::remoteFootstep(const NetPlayerState& state,float dt,float& stride,bool heardByAi){
+ Game& g=m_game;
+ if(!state.alive||!state.grounded||state.hidden||!g.inPlayerFrame(state.level))return;
+ const float speed=length(state.velocity);
+ if(speed<=.2f)return;
+ const bool crouched=state.crouched||state.prone;
+ const bool sprint=speed>4.2f&&!crouched;
+ const float stepLength=state.prone?.6f:crouched?.85f:sprint?1.45f:1.22f;
+ stride+=speed*dt;
+ if(stride<=stepLength)return;
+ stride=0;
+ const World* world=worldOf(state.level);
+ if(!world)return;
+ const Vec2 feet{state.world.x,state.world.y};
+ const Sound base=Game::stepSoundAt(*world,feet-origin(state.level));
+ SoundEvent step{base,feet-origin(g.m_level),crouched?.045f:sprint?.65f:.48f,.97f,true,17,state.world.z+.04f};
+ step.aiRadius=heardByAi?Game::stepHeard(base,crouched,sprint):-1.f;
+ g.m_sounds.push_back(step);
 }
 
 void Match::sendScriptFx(){

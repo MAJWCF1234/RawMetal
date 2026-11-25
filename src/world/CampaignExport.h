@@ -25,6 +25,7 @@ inline constexpr int FirstSealedChunk=68;      // Chapter 2's first level
 inline constexpr int FirstChapter3Chunk=110;   // Chapter 3's first level
 inline bool campaignChunkSealed(int chunk){
  if(chunk<FirstSealedChunk||chunk>=CampaignChunkCount||chunk==PrologueChunk)return false;
+ if(chunk==EngineeringServiceChunk||chunk==EngineeringIsolationChunk)return !Chapter2Released;
  return chunk>=FirstChapter3Chunk?!(Chapter2Released&&Chapter3Released):!Chapter2Released;
 }
 // The source workspace the exe runs from (src/world/CampaignChapters.cpp in its folder or
@@ -39,7 +40,9 @@ bool publicRelease();
 bool devCampaignTools();
 void setDevCampaignTools(bool on);
 // "CHAPTER 2" and "RESEARCH FRONT" for a chunk; every chunk in play order (prologue first).
-struct CampaignChunkLabel {int chapter=1;const char* district="";};
+inline constexpr char CampaignEngineeringSection[]="ENGINEERING";
+inline constexpr int CampaignEngineeringEntry=EngineeringServiceChunk;
+struct CampaignChunkLabel {int chapter=1;const char* district="";const char* section="";};
 CampaignChunkLabel campaignChunkLabel(int chunk);
 std::vector<int> campaignChunksInPlayOrder();
 

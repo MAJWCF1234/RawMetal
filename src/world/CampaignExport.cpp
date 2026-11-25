@@ -28,13 +28,15 @@ namespace {
 std::atomic<bool> devCampaign{false};
 
 // ---- Chapters and districts (tools/campaign/plan.py; 0-33 predate the plan) ----
-struct District {int first,last,chapter;const char* title;};
+struct District {int first,last,chapter;const char* title;const char* section="";};
 constexpr District Districts[]={
  {179,179,1,"PROLOGUE"},{0,9,1,"THE PLANT"},{32,33,1,"THE PLANT"},{10,31,1,"FREIGHT DISTRICT"},
  {34,40,1,"POWER DISTRIBUTION"},{41,46,1,"MACHINE HALL AND AIR"},{47,52,1,"WATER AND COOLING"},{53,56,1,"MAINTENANCE DISTRICT"},
  {57,67,1,"THE RESTRICTED PERIMETER"},
  {68,70,2,"RESEARCH FRONT"},{71,78,2,"DEPTHWORKS MEDICAL"},{79,84,2,"ANALYSIS LABORATORIES"},{85,93,2,"ENERGY TEST COMPLEX"},
- {94,103,2,"CONTAINMENT"},{104,109,2,"DEEP RESEARCH"},
+ {94,103,2,"CONTAINMENT"},{104,108,2,"DEEP RESEARCH"},
+ {EngineeringServiceChunk,EngineeringIsolationChunk,2,"DEEP RESEARCH SERVICES",CampaignEngineeringSection},
+ {109,109,2,"DEEP RESEARCH"},
  {110,112,3,"MINEHEAD"},{113,120,3,"UPPER MINE"},{121,127,3,"LOWER MINE"},{128,133,3,"DEEP BORE"},
  {134,143,4,"THE WILD CAVERNS"},{144,148,4,"THE SCRAP FIELDS"},{149,161,4,"THE SCRAP CITY"},{162,178,4,"THE DEEP"}};
 
@@ -148,7 +150,7 @@ bool publicRelease(){
 bool devCampaignTools(){return !publicRelease()||!admin::unlocked().empty();}
 void setDevCampaignTools(bool on){devCampaign=on;}
 CampaignChunkLabel campaignChunkLabel(int chunk){
- for(const auto& d:Districts)if(chunk>=d.first&&chunk<=d.last)return {d.chapter,d.title};
+ for(const auto& d:Districts)if(chunk>=d.first&&chunk<=d.last)return {d.chapter,d.title,d.section};
  return {1,""};
 }
 std::vector<int> campaignChunksInPlayOrder(){
@@ -242,7 +244,7 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
   for(const auto& door:m.doors){Rec r("DOOR");r.i(mi).n(door.left).n(door.right).n(door.y).n(door.z).b(door.entry).b(door.transfer).b(door.swinging).b(door.requireEnemiesClear).i(door.sign).st(door.requireState).i(door.requireValue);
    r.f(door.requireControl?"1":"").f(door.swing!=1?num(door.swing):"").f(door.maxOpen!=1?num(door.maxOpen):"").f(door.open!=0?num(door.open):"").f(door.opening?"1":"");
    r.f(door.leaf?std::to_string(door.leaf):"").f(door.label.empty()?"":encode(door.label)).f(door.locked.empty()?"":encode(door.locked));
-   r.f(door.alongY?"1":"").f(door.hingeRight?"1":"").f(door.strength>0?num(door.strength):"").f(door.lock?std::to_string(door.lock):"");line(r,13);}
+   r.f(door.alongY?"1":"").f(door.hingeRight?"1":"").f(door.strength>0?num(door.strength):"").f(door.lock?std::to_string(door.lock):"");if(door.follow)r.f("1");line(r,13);}
   {// A PRIM goes back as the PRIM it was (its named fields riding on it), where its first box
    // stood among the STRUCTs, so the boxes come back in the same order. One whose boxes were
    // changed after it was laid (or that no longer expands the same) is written as its boxes.
@@ -501,7 +503,7 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
   d.eq(w+".left",p.left,q.left);d.eq(w+".right",p.right,q.right);d.eq(w+".y",p.y,q.y);d.eq(w+".z",p.z,q.z);d.eq(w+".open",p.open,q.open);d.eq(w+".opening",p.opening,q.opening);d.eq(w+".transfer",p.transfer,q.transfer);d.eq(w+".entry",p.entry,q.entry);
   d.eq(w+".requireEnemiesClear",p.requireEnemiesClear,q.requireEnemiesClear);d.eq(w+".requireControl",p.requireControl,q.requireControl);d.eq(w+".requireState",p.requireState,q.requireState);d.eq(w+".requireValue",p.requireValue,q.requireValue);
   d.eq(w+".swinging",p.swinging,q.swinging);d.eq(w+".swing",p.swing,q.swing);d.eq(w+".sign",p.sign,q.sign);d.eq(w+".maxOpen",p.maxOpen,q.maxOpen);
-  d.eq(w+".leaf",p.leaf,q.leaf);d.eq(w+".label",p.label,q.label);d.eq(w+".locked",p.locked,q.locked);d.eq(w+".alongY",p.alongY,q.alongY);d.eq(w+".hingeRight",p.hingeRight,q.hingeRight);d.eq(w+".strength",p.strength,q.strength);d.eq(w+".lock",p.lock,q.lock);}
+  d.eq(w+".leaf",p.leaf,q.leaf);d.eq(w+".label",p.label,q.label);d.eq(w+".locked",p.locked,q.locked);d.eq(w+".alongY",p.alongY,q.alongY);d.eq(w+".hingeRight",p.hingeRight,q.hingeRight);d.eq(w+".strength",p.strength,q.strength);d.eq(w+".lock",p.lock,q.lock);d.eq(w+".follow",p.follow,q.follow);}
  d.count("props",a.props.size(),b.props.size());
  for(size_t i=0;i<std::min(a.props.size(),b.props.size());++i){const auto&p=a.props[i];const auto&q=b.props[i];auto w=at("prop",i);d.eq(w+".kind",p.kind,q.kind);d.eq(w+".position",p.position,q.position);d.eq(w+".height",p.height,q.height);d.eq(w+".footprint",p.footprint,q.footprint);d.eq(w+".yaw",p.yaw,q.yaw);d.eq(w+".halfSize",p.halfSize,q.halfSize);d.eq(w+".base",p.base,q.base);}
  d.count("fixtures",a.fixtures.size(),b.fixtures.size());
@@ -860,9 +862,9 @@ int campaignRmcCommands(const std::vector<std::wstring>& arguments){
   }
   if(find(L"--campaign-map-list")){
    auto out=value(L"--out=");if(out.empty())out="campaign-maps.txt";if(out.has_parent_path())std::filesystem::create_directories(out.parent_path());
-   std::ofstream list(out);list<<"# chunk|chapter|district|name|sealed|override (RawMetal.exe --campaign-map-list)\n";
+   std::ofstream list(out);list<<"# chunk|chapter|district|name|sealed|override|section (RawMetal.exe --campaign-map-list)\n";
    for(int c:campaignChunksInPlayOrder()){if(campaignChunkSealed(c)&&!devCampaignTools())continue;const auto label=campaignChunkLabel(c);
-    list<<c<<'|'<<label.chapter<<'|'<<label.district<<'|'<<CampaignMapNames[size_t(c)]<<'|'<<campaignChunkSealed(c)<<'|'<<(campaignOverride(c)?1:0)<<'\n';}
+    list<<c<<'|'<<label.chapter<<'|'<<label.district<<'|'<<CampaignMapNames[size_t(c)]<<'|'<<campaignChunkSealed(c)<<'|'<<(campaignOverride(c)?1:0)<<'|'<<label.section<<'\n';}
    return list?0:5;
   }
   if(find(L"--canonical-rmc=")){

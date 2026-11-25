@@ -7,7 +7,9 @@ namespace retro {
 // expand firearms; fists stay a MeleeDef so holster/stow does not need a gun stub.
 // MachinePistol: the MAC-11, a full-auto sidearm worn at the hip (docs/Systems/weapons.md): its own .380 pool,
 // box and pickup, key 4 and the wheel after the handgun.
-enum class WeaponId : std::uint8_t { Fists=0, Shotgun=1, Handgun=2, MachinePistol=3 };
+// Sniper: the bolt-action rifle (docs/Systems/weapons.md): five rounds of .308, one hit for most things, a head hit doubly so,
+// a slow bolt and a slower reload, a scope on the aim. Key 5.
+enum class WeaponId : std::uint8_t { Fists=0, Shotgun=1, Handgun=2, MachinePistol=3, Sniper=4 };
 
 struct HitscanDef {
  float maxRange=18.f;
@@ -19,6 +21,7 @@ struct HitscanDef {
  float closeHitStop=2.5f;
  float ragdollImpulse=2.5f;
  float propImpulse=6.f;
+ float headMultiplier=1.f;   // a hit in the top fifth of a creature's body deals this times the damage (the sniper rifle)
 };
 
 struct GunCycleDef {
@@ -93,11 +96,19 @@ inline constexpr WeaponDef kWeapons[]={
   {.2f,1.5f,.06f,0.f,0.f,0.f,.42f,.05f,12,12,Sound::PistolShot,Sound::Pump,Sound::PistolDry,
    true,1.9f,.14f,.58f,.84f,Sound::PistolMagOut,Sound::PistolMagIn,Sound::PistolRack,"9MM"}},
  {WeaponId::MachinePistol,"MAC-11",
-  {20.f,.12f,.006f,13.f,9.f,5.f,4.f,10.f,11.f,0.f,.8f,1.6f},
+  {20.f,.12f,.006f,10.f,7.f,4.f,4.f,10.f,9.f,0.f,.8f,1.6f},
   {1/18.f,1.35f,.10f,0.f,0.f,.05f,.42f,.05f,32,32,Sound::MacShot,Sound::Pump,Sound::MacDry,
    false,1.9f,.30f,.765f,.824f,Sound::MacMagOut,Sound::MacMagIn,Sound::MacRack,".380",
    true,1.05f,.0045f,.6f,.006f,.007f,.075f,.16f,.45f}},
+ {WeaponId::Sniper,"SNIPER RIFLE",
+  {100.f,.01f,.0003f,95.f,95.f,85.f,30.f,80.f,95.f,0.f,3.f,9.f,3.f},
+  {1.7f,3.1f,.5f,.55f,.5f,1.1f,.6f,.05f,5,10,Sound::Shot,Sound::Pump,Sound::Empty,
+   true,3.6f,.12f,.45f,.82f,Sound::Pump,Sound::PistolMagIn,Sound::Pump,".308"}},
 };
+// A head hit with the sniper rifle: damage times this, and the hit is marked.
+inline constexpr float kSniperHeadMultiplier=3.f;
+// The scope: the view's field of view divided by this while the rifle is at the eye.
+inline constexpr float kSniperZoom=4.f;
 
 inline constexpr int weaponCount(){return int(sizeof(kWeapons)/sizeof(kWeapons[0]));}
 // NPC sidearm uses the same first-hit ballistics, with a compact magazine and
@@ -117,7 +128,7 @@ inline const WeaponDef& playerWeaponDef(WeaponId id){
  for(const auto&def:kWeapons)if(def.id==id)return def;
  return kWeapons[0];
 }
-constexpr bool playerFirearm(WeaponId id){return id==WeaponId::Shotgun||id==WeaponId::Handgun||id==WeaponId::MachinePistol;}
+constexpr bool playerFirearm(WeaponId id){return id==WeaponId::Shotgun||id==WeaponId::Handgun||id==WeaponId::MachinePistol||id==WeaponId::Sniper;}
 // The sidearms: carried at the hip, drawn one-handed from the holster.
 constexpr bool sidearm(WeaponId id){return id==WeaponId::Handgun||id==WeaponId::MachinePistol;}
 

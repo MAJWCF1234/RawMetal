@@ -54,7 +54,9 @@
   void applyCornerDrag(float x,float y) {
     if(floorTransformSelection){resizeFloorLayout(x,y);return;}
     auto f=objectFields;int schema=schemaFor(f);
-    if(schema<0||!resizeNative(f,schemas[size_t(schema)].fields,resizeHandle,x,y,snap))return;
+    const float resizeSnap=nativeSizedModel(f)?0.f:snap;
+    const bool free=!backgroundTest&&(GetKeyState(VK_MENU)&0x8000);   // Alt: stretch width and depth alone
+    if(schema<0||!resizeNative(f,schemas[size_t(schema)].fields,resizeHandle,x,y,resizeSnap,free))return;
     doc.replace(size_t(record),f);objectMoved=f!=objectFields;updateInspector();
   }
   // A rejected group operation must preserve the Redo branch and the oldest

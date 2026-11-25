@@ -10,14 +10,19 @@ public:
  Win32Window(int w,int h,const wchar_t* title,HWND parent=nullptr,bool visible=true); ~Win32Window();
  bool focused()const{return GetForegroundWindow()==m_hwnd||(m_parent&&GetAncestor(m_hwnd,GA_ROOT)==GetForegroundWindow()&&GetFocus()==m_hwnd);}
  static RECT viewport(int clientWidth,int clientHeight);
- bool valid()const{return m_hwnd!=nullptr;} bool pump(); InputState input(bool menuOpen=false); void setMenu(bool open); void present(const std::uint32_t* pixels,int w,int h); void setCaption(const std::wstring& s);
+ bool valid()const{return m_hwnd!=nullptr;} bool pump(); InputState input(bool menuOpen=false,float inventoryCursorDt=0); void setMenu(bool open); void present(const std::uint32_t* pixels,int w,int h); void setCaption(const std::wstring& s);
  HWND handle()const{return m_hwnd;}
+ void setPadOptions(const PadOptions& o){m_pad=o;}   // Settings::pad
  void setTalkKey(int virtualKey){m_talkKey=virtualKey;}   // the push-to-talk key (Settings::pushToTalkKey) -> InputState::talk
  // The loading screen painted with GDI before the renderer exists: the name,
  // a status line and a bar (progress 0-1), so the window never sits blank or frozen.
  void showLoading(float progress,const wchar_t* status);
 private:
  std::string m_textInput; int m_scrollDelta=0; int m_talkKey=0x56;
+ PadOptions m_pad;float m_padHold[8]={},m_padLastTick=0;bool m_aimOn=false,m_sprintOn=false,m_crouchOn=false,m_prevAimRaw=false;Vec2 m_padLookSmooth{},m_padMoveSmooth{};
+ unsigned short m_padButtons=0,m_padHeldInMenu=0;
+ bool m_padFireHeldInMenu=false,m_padAimHeldInMenu=false;
+ Vec2 m_padCursorRemainder{};
  static LRESULT CALLBACK wndProc(HWND,UINT,WPARAM,LPARAM); HWND m_hwnd=nullptr,m_parent=nullptr; BITMAPINFO m_bmi{}; bool m_quit=false; bool m_mouseCaptured=false,m_menuOpen=false,m_cursorVisible=false; POINT m_center{};
 };
 }

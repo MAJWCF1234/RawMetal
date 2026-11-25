@@ -267,7 +267,7 @@ void Game::loadLevel(int level,bool carry) {
     m_waterSplashes.clear();m_waterFeet=-1e9f;m_wakeWay=0;m_waterSoundsSeen=0;m_waterNpcDown.clear();m_waterDeaths.clear();
     m_kills = 0;
     m_won = false;
-    m_hitFlash=0;
+    m_hitFlash=0;m_critFlash=0;
     m_weaponMotion={};m_sway={};m_swayVelocity={};m_elbowVelocity=0;m_shotAge=10;
     if(!carry){m_switchTarget=WeaponId::Fists;m_switchRaise=false;}
     if(m_switchTarget!=WeaponId::Fists){m_equippedWeapon=m_switchTarget;m_switchTarget=WeaponId::Fists;}m_switchRaise=false;
@@ -323,7 +323,7 @@ bool Game::testCombat(){
  }
  Game g;g.m_enemies.resize(1);g.m_player.pos={3.5f,4.5f};g.m_player.angle=0;g.m_player.pitch=-35;g.m_enemies[0].pos={5.5f,4.5f};
  auto scar=validationScene(Enemy::Kind::Huntsman);scar.m_enemies.clear();scar.m_player.pos={1.5f,1.5f};scar.m_player.angle=kPi;
- scar.shoot();if(scar.bulletImpacts().empty()||scar.bulletImpacts().size()>6)return false;
+ scar.shoot();if(scar.bulletImpacts().empty()||int(scar.bulletImpacts().size())>ShotgunPellets)return false;   // one mark at most for each of the eight pellets
  auto barrel=barrelInspection(.06f);if(barrel.world().tile(12,2)!='.'||barrel.barrelExplosions().size()!=1||barrel.barrelExplosions()[0].level!=0)return false;
  g.shoot();if(!g.m_enemies[0].alive||g.m_enemies[0].hp>=110)return false;
  g.shoot();g.shoot();if(!g.m_enemies[0].alive)return false;g.shoot();
@@ -424,6 +424,12 @@ void Game::shoot(){
  if(sidearm(m_equippedWeapon)&&!(m_vrAimValid&&vrMagazineGun(m_equippedWeapon)))ejectCasing(m_equippedWeapon==WeaponId::Handgun?1:2,ejectionPort(m_equippedWeapon),ejectionVelocity(m_equippedWeapon));
  // In a match the host traces every shot, its own included (Match.cpp); the flash and recoil stay here.
  if(m_match&&m_match->localShot(origin,direction,int(m_equippedWeapon)))return;
+ if(m_equippedWeapon==WeaponId::Shotgun){
+  // Eight independent rays from one seed (the same spread a match client re-creates from the host's).
+  const std::uint32_t seed=std::uint32_t(nextSpreadRandom()*16777215.f)*2654435761u^std::uint32_t(m_elapsed*1000.f);
+  const HitscanDef pellet=pelletDef(gun.hitscan);
+  for(int p=0;p<ShotgunPellets;++p){const Point3 d=pelletDirection(direction,seed,p);const auto hit=traceShot(origin,d,pellet.maxRange);resolveShot(hit,origin,d,pellet,true);}
+  return;}
  auto hit=traceShot(origin,direction,gun.hitscan.maxRange,-1,false,&gun.hitscan);
  resolveShot(hit,origin,direction,gun.hitscan,true);
 }
@@ -529,12 +535,22 @@ void Game::updatePickups() {
             grantHandgun(def.cycle.tubeCapacity);
             m_pickupNotice=std::string(fresh?"TOOK HANDGUN / 9MM x ":"TOOK 9MM x ")+std::to_string(def.cycle.tubeCapacity);
             if(fresh&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::Handgun);
+        } else if (p.kind == Pickup::Kind::Sniper) {
+            // The rifle itself, a magazine in it (the five-round pickup size twice over once it is carried); drawn when it is new.
+            const auto&def=playerWeaponDef(WeaponId::Sniper);const bool fresh=!hasSniper();
+            grantSniper(fresh?def.cycle.tubeCapacity:def.cycle.pickupAmount);
+            m_pickupNotice=std::string(fresh?"TOOK SNIPER RIFLE / .308 x ":"TOOK .308 x ")+std::to_string(fresh?def.cycle.tubeCapacity:def.cycle.pickupAmount);
+            if(fresh&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::Sniper);
         } else if (p.kind == Pickup::Kind::Shotgun) {
             // The drop is the gun with a box of shells (a new gun comes loaded); drawn when it is new or the hands are bare.
             const auto&def=playerWeaponDef(WeaponId::Shotgun);const bool fresh=!m_shotgunOwned;m_shotgunOwned=true;
             AmmoPool& shells=m_player.pool(WeaponId::Shotgun);shells.total+=def.cycle.pickupAmount;if(fresh)shells.loaded=std::min(shells.total,def.cycle.tubeCapacity);
             m_pickupNotice="TOOK SHOTGUN / "+std::to_string(def.cycle.pickupAmount)+" SHELLS";
             if((fresh||unarmed())&&heldNpc()<0&&!takedownActive()&&!holdingClutter())selectWeapon(WeaponId::Shotgun);
+        } else if (p.kind == Pickup::Kind::SniperAmmo) {
+            // A box of .308: it feeds the rifle (and waits for it, like the pistol's 9 mm).
+            const int rounds=playerWeaponDef(WeaponId::Sniper).cycle.pickupAmount;m_player.pool(WeaponId::Sniper).total+=rounds;
+            m_pickupNotice="COLLECTED "+std::to_string(rounds)+" ROUNDS .308";
         } else {
             // Each box feeds its own gun, whatever is in hand; 9 mm waits for the pistol, .380 for the MAC-11.
             const bool nine=p.kind==Pickup::Kind::HandgunAmmo,mac=p.kind==Pickup::Kind::MacAmmo;const auto&def=playerWeaponDef(nine?WeaponId::Handgun:mac?WeaponId::MachinePistol:WeaponId::Shotgun);
@@ -543,7 +559,7 @@ void Game::updatePickups() {
         }
         p.active = false;
         m_pickupNoticeTime=2.f;
-        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:p.kind==Pickup::Kind::MacAmmo?1.04f:p.kind==Pickup::Kind::MachinePistol?.9f:p.kind==Pickup::Kind::Handgun?.95f:p.kind==Pickup::Kind::Shotgun?.85f:1.f);
+        sound(Sound::Pickup,.6f,p.kind==Pickup::Kind::Health?1.15f:p.kind==Pickup::Kind::HandgunAmmo?1.08f:p.kind==Pickup::Kind::MacAmmo?1.04f:p.kind==Pickup::Kind::MachinePistol?.9f:p.kind==Pickup::Kind::Handgun?.95f:p.kind==Pickup::Kind::Shotgun?.85f:p.kind==Pickup::Kind::Sniper?.8f:p.kind==Pickup::Kind::SniperAmmo?.92f:1.f);
     }
 }
 const Pickup* Game::nearbyPickup()const{
@@ -567,7 +583,8 @@ void Game::update(const InputState& input, float dt) {
     updateVoice(input);
     updateFrame(input,dt);
     if(!m_netForeign.empty())updateForeignChunks(dt);   // a co-op host's other occupied maps (ForeignChunks.cpp)
-    if(m_match)m_match->update(input,dt);
+    // The match reads what the player did; while they type a chat line they did nothing but type.
+    if(m_match){if(m_chatOpen){InputState idle{};idle.escape=input.escape;idle.chat=input.chat;idle.scoreboard=input.scoreboard;m_match->update(idle,dt);}else m_match->update(input,dt);}
 }
 void Game::updateFrame(const InputState& input, float dt) {
     m_sounds.clear();
@@ -575,13 +592,15 @@ void Game::updateFrame(const InputState& input, float dt) {
     // Simulate never hands the builder's copy over to the main campaign.
     if(m_pendingMainCampaign){if(m_editorObserver)m_pendingMainCampaign=false;else startMainCampaign();}
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}
-    bool flashlightPressed=input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
+    // While the chat line is open its keys are letters, never gameplay: F, I, Tab and the rest do nothing.
+    bool flashlightPressed=!m_chatOpen&&input.flashlight&&!m_previousFlashlight;m_previousFlashlight=input.flashlight;
     m_scoreboardHeld=input.scoreboard&&m_matchView.active&&!m_titleScreen;
     if(m_scoreboardHeld&&!m_chatOpen)updateScoreboardPick(input);else if(!m_scoreboardHeld)m_scoreboardPick=-1;
     m_boardPrevious=input;
     drainSessionEvents();   // the menus own the session's events (MultiplayerMenu.cpp)
     if(m_titleScreen){updateTitle(input);return;}
     if(m_peaceful){m_enemies.clear();for(auto&chunk:m_chunks)chunk.enemies.clear();}
+    followDoors();
     bool consolePressed=input.console&&!m_previousConsole;m_previousConsole=input.console;
     if(consolePressed&&!m_chatOpen){m_consoleOpen=!m_consoleOpen;m_suppressFire=true;return;}
     if(m_consoleOpen){updateConsole(input);return;}
@@ -592,7 +611,7 @@ void Game::updateFrame(const InputState& input, float dt) {
      m_chatFeeding=true;updateFrame(idle,dt);m_chatFeeding=false;m_suppressFire=true;return;
     }
     bool escapePressed=input.escape&&!m_previousEscape;m_previousEscape=input.escape;
-    bool inventoryPressed=input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
+    bool inventoryPressed=!m_chatFeeding&&!m_chatOpen&&input.inventory&&!m_previousInventory;m_previousInventory=input.inventory;
     if(m_inventoryOpen&&escapePressed){m_inventoryOpen=false;m_suppressFire=true;return;}
     if(talking()&&escapePressed){closeDialogue();return;}
     if(escapePressed){
@@ -647,10 +666,10 @@ void Game::updateFrame(const InputState& input, float dt) {
     const bool handsBusy=hiddenLocker()>=0||lockerViewLocked()||heldNpc()>=0||takedownActive()||captured();
     if(input.weaponScroll&&!handsBusy&&!holdingClutter()){selectWeapon(wheelWeapon(input.weaponScroll));m_suppressFire=true;}
     // 1/2/3/4 pick a weapon directly (fists, shotgun, handgun, MAC-11), but in a conversation the digits are replies.
-    {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=4?input.choice:0;m_previousChoice=input.choice;
-     if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=4&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
+    {int key=!wasTalking&&!talking()&&input.choice!=m_previousChoice&&input.choice>=1&&input.choice<=5?input.choice:0;m_previousChoice=input.choice;
+     if(int pick=input.weaponSlot?input.weaponSlot:key;pick>=1&&pick<=5&&!handsBusy){selectWeapon(WeaponId(pick-1));m_suppressFire=true;}}
     for(auto&e:m_enemies)if(!e.alive)e.deathTime+=dt;
-    m_hitFlash=std::max(0.f,m_hitFlash-dt*5.f);
+    m_hitFlash=std::max(0.f,m_hitFlash-dt*5.f);m_critFlash=std::max(0.f,m_critFlash-dt);
 
     if (!dead() && !m_won) {
         m_elapsed += dt;
@@ -661,10 +680,13 @@ void Game::updateFrame(const InputState& input, float dt) {
         if(!choreographed&&!talking()){
         if((input.vrTracked||!input.rotateProp||!holdingClutter())&&!(m_physglove.locked&&!input.vrTracked)){   // (the Physgloves hold the look on their target while the middle button is down)
          const float invDt=1.f/std::max(dt,.001f),sens=m_settings.sensitivity,invert=m_settings.invertMouse?-1.f:1.f;
-         m_lookYawRate=input.mouseDx*.0022f*sens*invDt;
-         m_lookPitchRate=-input.mouseDy*.308f*sens*invert*invDt;
-         m_player.angle = input.vrTracked?input.vrYaw:wrapAngle(m_player.angle + input.mouseDx * 0.0022f*sens);
-         m_player.pitch = input.vrTracked?input.vrPitch:clamp(m_player.pitch - input.mouseDy * 0.308f*sens*invert, -210.0f, 210.0f);
+         const Vec2 stickLook=input.vrTracked?Vec2{}:input.controllerLook;
+         const float yaw=input.mouseDx*.0022f*sens+stickLook.x*dt;
+         const float pitch=-input.mouseDy*.308f*sens*invert+stickLook.y*(140.f*dt);
+         m_lookYawRate=input.mouseDx*.0022f*sens*invDt+stickLook.x;
+         m_lookPitchRate=-input.mouseDy*.308f*sens*invert*invDt+stickLook.y*140.f;
+         m_player.angle=input.vrTracked?input.vrYaw:wrapAngle(m_player.angle+yaw);
+         m_player.pitch=input.vrTracked?input.vrPitch:clamp(m_player.pitch+pitch,-210.f,210.f);
         }else m_lookYawRate=m_lookPitchRate=0;
         }else{m_velocity={};m_suppressFire=true;m_lookYawRate=m_lookPitchRate=0;}
         // Talking, the view settles on the speaker's face.
@@ -727,8 +749,12 @@ void Game::updateFrame(const InputState& input, float dt) {
         m_guarding=heldNpc()<0&&!takedownActive()&&input.guard&&unarmed();if(m_guarding)m_punchAge=10;
         // Right mouse with the shotgun up brings it to the eye (not sprinting,
         // reloading, switching or holding someone); about a fifth of a second.
-        {const bool aim=input.guard&&!unarmed()&&(m_equippedWeapon==WeaponId::Shotgun||m_equippedWeapon==WeaponId::MachinePistol)&&m_holster<.05f&&!reloading()&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
-         m_aimBlend=std::clamp(m_aimBlend+(aim?dt:-dt)*6.f,0.f,1.f);}
+        {const bool riflePose=m_equippedWeapon==WeaponId::Sniper&&!unarmed()&&(reloading()||m_shotCooldown>0);   // the bolt and the reload are worked at the shoulder
+         const bool aim=(input.guard||riflePose)&&!unarmed()&&(m_equippedWeapon==WeaponId::Shotgun||m_equippedWeapon==WeaponId::MachinePistol||m_equippedWeapon==WeaponId::Sniper)&&m_holster<.05f&&(!reloading()||m_equippedWeapon==WeaponId::Sniper)&&!m_bodySprint&&heldNpc()<0&&!takedownActive();
+         m_aimBlend=std::clamp(m_aimBlend+(aim?dt:-dt)*6.f,0.f,1.f);
+         // The sniper rifle: up at the eye the iron sights show for a beat, then the view settles down the scope on its own.
+         if(aim&&input.guard&&m_aimBlend>.5f&&m_equippedWeapon==WeaponId::Sniper&&m_shotCooldown<=0&&!reloading()){m_scopeWait=0;m_scopeBlend=std::min(1.f,m_scopeBlend+dt*6.f);}   // at the shoulder the view goes down the tube at once
+         else{m_scopeWait=0;m_scopeBlend=std::max(0.f,m_scopeBlend-dt*(aim?4.f:9.f));}}
         float oldPunch=m_punchAge;m_punchAge+=dt;if(!input.vrTracked&&!takedownActive()&&oldPunch<melee.impactAt&&m_punchAge>=melee.impactAt)punchImpact();if(input.vrTracked)updateVrMelee(input,dt);
         // Put away it stays down even straight after a shot (only an emptied gun
         // waits out the last shot before lowering), or it would rise unequipped.
@@ -743,8 +769,9 @@ void Game::updateFrame(const InputState& input, float dt) {
         if(input.fire&&!m_suppressFire&&shellReload()&&rounds.loaded>0&&reloadElapsed()>=ShellStart){m_reloadTimer=0;m_shotCooldown=0;}
         if (input.fire&&!m_suppressFire&&!carryingAtStart && m_shotCooldown<=0.f && m_reloadTimer<=0.f && !(input.vrTracked&&!vrGunReady())) {
             // Semi-automatic: one round per press, the trigger released before the next.
+            // The sniper rifle fires only shouldered (aimBlend up): it cannot be fired from the hip.
             const bool raised=m_weaponEquipped&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists,press=!cycle.semiAuto||m_triggerReset;
-            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press){shoot();m_shotCooldown=(cycle.fullAuto?std::min(0.f,m_shotCooldown):0.f)+cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked)vrShotFired();}
+            if(rounds.total>0&&rounds.loaded>0&&m_holster<cycle.raiseHolster&&m_switchTarget==WeaponId::Fists&&press&&(m_equippedWeapon!=WeaponId::Sniper||m_aimBlend>=.9f||input.vrTracked)){shoot();m_shotCooldown=(cycle.fullAuto?std::min(0.f,m_shotCooldown):0.f)+cycle.fireCooldown;m_triggerReset=false;if(input.vrTracked)vrShotFired();}
             // Dry: one click a press (a full-auto gun clicks once, not on and on while held).
             else if((cycle.semiAuto||cycle.fullAuto)&&raised&&m_triggerReset&&rounds.loaded<=0){sound(cycle.emptySound,.55f);m_triggerReset=false;m_shotCooldown=std::max(cycle.fireCooldown,.2f);}
             else if(!input.vrTracked&&unarmed()&&!m_guarding){m_handsLowered=false;m_punchAge=0;m_punchLeft=!m_punchLeft;m_shotCooldown=melee.swingCooldown;sound(Sound::PunchSwing,.55f,m_punchLeft?.95f:1.05f);}
@@ -786,6 +813,8 @@ void Game::updateWeaponMotion(const InputState& input,float dt){
  if(!m_vrAimValid&&m_shotAge<cycle.pumpSoundAt&&m_shotAge+dt>=cycle.pumpSoundAt){sound(cycle.pumpSound,.65f);   // (VR pumps by hand: VrGuns.cpp)
   // The pump worked back throws the spent shell out of the port (in VR the hand's own stroke does).
   if(m_equippedWeapon==WeaponId::Shotgun&&!dead())ejectCasing(0,ejectionPort(WeaponId::Shotgun),ejectionVelocity(WeaponId::Shotgun));}
+ // The rifle's bolt drawn back (the bolt clip's frame 14 of 28, half a second into the shot and then some) throws the spent case out of the open action.
+ if(m_equippedWeapon==WeaponId::Sniper&&!m_vrAimValid&&!dead()&&m_shotAge<1.08f&&m_shotAge+dt>=1.08f&&m_shotAge<2.f)ejectCasing(3,ejectionPort(WeaponId::Sniper),ejectionVelocity(WeaponId::Sniper));
  m_shotAge+=dt;
  // Full auto: let go (or between bursts) the climb comes back by its share and the spread settles.
  if(cycle.fullAuto||m_spread>0||m_recoilDebt>0){const bool firing=input.fire&&m_shotAge<cycle.fireCooldown*1.6f;
@@ -794,6 +823,7 @@ void Game::updateWeaponMotion(const InputState& input,float dt){
   if(!cycle.fullAuto){m_spread=0;m_recoilDebt=0;}}
  float yawRate=input.mouseDx*.0022f*m_settings.sensitivity/std::max(dt,.001f);
  float pitchRate=input.mouseDy*.308f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);
+ if(!input.vrTracked){yawRate+=input.controllerLook.x;pitchRate-=input.controllerLook.y;}
  Vec2 target{std::clamp(-yawRate*.042f,-.19f,.19f),std::clamp(pitchRate*.035f,-.15f,.15f)};
  // Damped springs are integrated with bounded substeps, independent of render rate.
  int steps=std::max(1,int(std::ceil(dt/.008f)));float step=dt/steps;
@@ -1000,6 +1030,15 @@ bool Game::testWeaponMotion(){
  auto a=run(60),b=run(120);
  auto turn=[](int rate){auto g=validationScene(Enemy::Kind::Huntsman,3);float peak=0;for(int i=0;i<rate;++i){InputState input{};input.mouseDx=i<rate/2?1800.f/rate:0;g.update(input,1.f/rate);peak=std::max(peak,std::fabs(g.weaponMotion().yaw));}return peak;};
  float fast60=turn(60),fast120=turn(120);if(fast60<.08f||std::fabs(fast60-fast120)>.012f)return false;
+ auto stickTurn=[](int rate){
+  auto g=validationScene(Enemy::Kind::Huntsman,3);g.m_enemies.clear();
+  const float yaw=g.player().angle,pitch=g.player().pitch;
+  InputState input{};input.controllerLook={1.2f,.6f};
+  for(int tick=0;tick<rate/2;++tick)g.update(input,1.f/rate);
+  return Vec2{wrapAngle(g.player().angle-yaw),g.player().pitch-pitch};
+ };
+ const Vec2 stick60=stickTurn(60),stick120=stickTurn(120);
+ if(length(stick60-stick120)>.001f||std::fabs(stick60.x-.6f)>.001f||std::fabs(stick60.y-42.f)>.001f)return false;
  std::ofstream("weapon-physics-test.txt")<<"Fast-turn yaw lag: "<<fast60<<" / "<<fast120<<" radians at 60/120 Hz; recoil and secondary motion settle.\n";
  return std::fabs(a.elbow)<.002f&&std::fabs(b.elbow)<.002f&&std::fabs(a.yaw)<.001f&&std::fabs(a.pitch)<.001f&&std::fabs(a.elbow-b.elbow)<.002f;
 }
@@ -1031,4 +1070,20 @@ bool Game::testAudioEvents(){
  return true;
 }
 
+}
+namespace retro {
+// Following doors (Door::follow): each is driven open while its state holds its value and shut when it does not,
+// in the map in play and every resident one. One opens only once every other follower on the same state is shut,
+// so an airlock's two hatches on one cycle state are never open together: cycling shuts one, then opens the other.
+void Game::followDoors(){
+ auto drive=[&](World& w){const auto& doors=w.doors();
+  for(size_t i=0;i<doors.size();++i){const Door& d=doors[i];if(!d.follow||!d.requireState)continue;
+   const bool want=state(d.requireState)==d.requireValue;
+   if(!want){if(d.opening)w.driveDoor(int(i),false);continue;}
+   if(d.opening)continue;
+   bool clear=true;for(size_t j=0;j<doors.size()&&clear;++j){const Door& o=doors[j];if(j!=i&&o.follow&&o.requireState==d.requireState&&o.open>.02f)clear=false;}
+   if(clear)w.driveDoor(int(i),true);}};
+ drive(m_world);
+ for(int level=0;level<chunkCount();++level)if(level!=m_level&&chunkResident(level))drive(m_chunks[size_t(level)].world);
+}
 }

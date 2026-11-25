@@ -27,7 +27,7 @@ Point3 readUnit(wire::Reader& r){Point3 p;p.x=r.q8(127);p.y=r.q8(127);p.z=r.q8(1
 void writePlayerState(wire::Writer& w,const NetPlayerState& s,Vec2 o,bool withHealth){
  w.u8(unsigned(std::clamp(s.level,0,255))).q16(s.world.x-o.x,256).q16(s.world.y-o.y,256).q16(s.world.z,256).angle(s.angle).q16(s.pitch,10000)
   .q8(s.velocity.x,16).q8(s.velocity.y,16)
-  .u8((s.crouched?1u:0u)|(s.prone?2u:0u)|(s.grounded?4u:0u)|(s.vr?8u:0u)|(s.alive?16u:0u)|(unsigned(std::clamp(s.weapon,0,3))<<5))
+  .u8((s.crouched?1u:0u)|(s.prone?2u:0u)|(s.grounded?4u:0u)|(s.vr?8u:0u)|(s.alive?16u:0u)|(unsigned(std::clamp(s.weapon,0,4))<<5))
   .u8(s.shots).u8(s.reloadAge>=25?255u:unsigned(std::lround(std::max(0.f,s.reloadAge)*10))).u8(s.life).u8((s.torch?1u:0u)|(s.hidden?2u:0u)|(s.pushing?4u:0u));
  if(withHealth)w.u8(unsigned(std::clamp(int(std::ceil(s.health)),0,255)));
  if(!s.vr)return;
@@ -42,7 +42,7 @@ void writePlayerState(wire::Writer& w,const NetPlayerState& s,Vec2 o,bool withHe
 bool readPlayerState(wire::Reader& r,NetPlayerState& s,bool withHealth){
  s.level=int(r.u8());s.world.x=r.q16(256);s.world.y=r.q16(256);s.world.z=r.q16(256);s.angle=r.angle();s.pitch=r.q16(10000);
  s.velocity.x=r.q8(16);s.velocity.y=r.q8(16);
- const unsigned flags=r.u8();s.crouched=flags&1;s.prone=flags&2;s.grounded=flags&4;s.vr=flags&8;s.alive=flags&16;s.weapon=int(flags>>5&3);
+ const unsigned flags=r.u8();s.crouched=flags&1;s.prone=flags&2;s.grounded=flags&4;s.vr=flags&8;s.alive=flags&16;s.weapon=int(flags>>5&7);
  s.shots=std::uint8_t(r.u8());const unsigned reload=r.u8();s.reloadAge=reload==255?99.f:float(reload)/10.f;s.life=std::uint8_t(r.u8());
  {const unsigned extra=r.u8();s.torch=extra&1;s.hidden=(extra&2)!=0;s.pushing=(extra&4)!=0;}
  if(withHealth)s.health=float(r.u8());
@@ -93,12 +93,14 @@ NetPlayerState Match::localState()const{
  if(s.vr){s.pose=g.m_netAvatar;const Point3 feet{p.pos.x,p.pos.y,p.z};s.pose.head=s.pose.head-feet;s.pose.root=s.pose.root-feet;for(auto& h:s.pose.hands)h.wrist=h.wrist-feet;}
  return s;
 }
+namespace { constexpr float MaxExtrapolation=.2f; }
+
 // A player as they stood at host time t: between the two samples around it (a jump of more than 4 m is a
 // respawn or a correction, not a walk), or carried on by their velocity for at most 0.2 s past the newest.
 bool Match::sampleAt(const Slot& slot,float t,NetPlayerState& out)const{
  const auto& h=slot.history;if(h.empty())return false;
  if(t<=h.front().t){out=h.front().s;return true;}
- if(t>=h.back().t){out=h.back().s;if(out.alive){const float ahead=std::min(t-h.back().t,.2f);out.world.x+=out.velocity.x*ahead;out.world.y+=out.velocity.y*ahead;}return true;}
+ if(t>=h.back().t){out=h.back().s;if(out.alive){const float ahead=std::min(t-h.back().t,MaxExtrapolation);out.world.x+=out.velocity.x*ahead;out.world.y+=out.velocity.y*ahead;}return true;}
  size_t i=0;while(i+2<h.size()&&h[i+1].t<=t)++i;
  const auto& a=h[i];const auto& b=h[i+1];const float f=b.t>a.t?std::clamp((t-a.t)/(b.t-a.t),0.f,1.f):1.f;
  out=f<.5f?a.s:b.s;
@@ -214,9 +216,17 @@ void Match::acceptGuestState(int slot,const NetPlayerState& s){
 // Every shot of the match, the host's own included: traced in the host's world against every player as the
 // shooter saw them (rewound to the time their view showed, at most 0.3 s), then its damage and its marks.
 // Weapon 0 is fists: the same host path, at melee range, so punches hurt other players in deathmatch and co-op.
-void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direction,float viewTime){
+// A shot: one ray, or for the shotgun eight pellets laid out from the one seed the shooter sent (Game::pelletDirection,
+// so a client that knows the seed lays out the same spread). Damage and pushes are the host's alone.
+void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direction,float viewTime,std::uint32_t seed){
+ if(weapon!=int(WeaponId::Shotgun)){resolveRay(shooter,weapon,level,at,direction,viewTime,-1);return;}
+ const float n=std::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);if(!std::isfinite(n)||n<.0001f)return;
+ direction=direction*(1/n);
+ for(int p=0;p<Game::ShotgunPellets;++p)resolveRay(shooter,weapon,level,at,Game::pelletDirection(direction,seed,p),viewTime,p);
+}
+void Match::resolveRay(int shooter,int weapon,int level,Point3 at,Point3 direction,float viewTime,int pellet){
  Game& g=m_game;
- if(m_over||weapon<0||weapon>3||shooter<0||shooter>=MaxSlots)return;
+ if(m_over||weapon<0||weapon>4||shooter<0||shooter>=MaxSlots)return;
  auto& sh=m_slots[size_t(shooter)];if(!sh.used||!sh.alive)return;
  const bool melee=weapon==0;const auto& gun=playerWeaponDef(WeaponId(std::max(weapon,1)));const auto& fists=kUnarmedMelee;
  // A shot on another map is traced in that map's frame (it swapped in as the active chunk for the while).
@@ -232,19 +242,23 @@ void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direct
  if(m_mode==Mode::Deathmatch||m_friendlyFire)
   for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i==shooter||!s.used||!s.ready||!s.spawned||!s.alive||!s.haveState)continue;
    NetPlayerState st;if(!sampleAt(s,t,st))continue;bodies.push_back({i,{st.world.x-ao.x,st.world.y-ao.y},st.world.z,stanceHeight(st)});}
- const float range=melee?fists.range:gun.hitscan.maxRange;
- g.m_netBodies=&bodies;const ShotHit hit=g.traceShot(o,direction,range,-1,false,melee?nullptr:&gun.hitscan);g.m_netBodies=nullptr;
+ const HitscanDef pelletHit=Game::pelletDef(gun.hitscan);const HitscanDef& def=pellet>=0?pelletHit:gun.hitscan;
+ const float range=melee?fists.range:def.maxRange;
+ g.m_netBodies=&bodies;const ShotHit hit=g.traceShot(o,direction,range,-1,false,melee||pellet>=0?nullptr:&def);g.m_netBodies=nullptr;
  const bool player=hit.kind==ShotKind::Player&&hit.index>=1;
  const bool flesh=player||hit.kind==ShotKind::Enemy||hit.kind==ShotKind::Npc||hit.kind==ShotKind::Actor;
  const Point3 end=hit.kind==ShotKind::None?o+direction*range:hit.point;
  {wire::Writer w;w.u8(ShotFx).u8(unsigned(shooter)).u8(unsigned(weapon)).u8(unsigned(g.m_level)).f32(o.x).f32(o.y).f32(o.z).f32(end.x).f32(end.y).f32(end.z)
    .u8(flesh?1:hit.kind==ShotKind::None?2:0);writeUnit(w,hit.normal);broadcast(Events,w,true);}
- if(shooter!=m_selfSlot&&!melee)g.m_sounds.push_back({gun.cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});
+ if(shooter!=m_selfSlot&&!melee&&pellet<=0)g.m_sounds.push_back({gun.cycle.fireSound,{o.x,o.y},.9f,1,true,17,o.z});
  if(player){
   if(!melee){g.m_shotRays.push_back({o,direction,hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());}
   g.hitBurst(g.m_level,hit.point,direction,ImpactMaterial::Flesh,-1,melee?.45f:.9f,false);
   if(melee&&shooter==m_selfSlot)g.sound(Sound::PunchHit,.65f);
-  damage(hit.index-1,shooter,melee?fists.damage:hitscanDamageAt(gun.hitscan,hit.damageDistance),weapon);
+  float dealt=melee?fists.damage:hitscanDamageAt(def,hit.damageDistance);
+  // A round into the head (above 0.82 of the standing or crouched body) takes the gun's head multiplier (the sniper rifle's 3).
+  if(!melee&&def.headMultiplier>1.f)for(const auto& b:bodies)if(b.slot==hit.index-1){if(hit.point.z>b.z+b.height*.82f){dealt*=def.headMultiplier;if(shooter==m_selfSlot)g.m_critFlash=1.2f;}break;}
+  damage(hit.index-1,shooter,dealt,weapon);
  }else if(melee){   // fists on creatures, glass and props: the same path punchImpact uses alone
   HitscanDef blow{};blow.maxRange=fists.range;blow.dmgNear=blow.dmgMid=blow.dmgFar=fists.damage;blow.actorDamage=fists.damage;blow.propImpulse=fists.propImpulse;
   const float flash=g.m_hitFlash;g.m_shooter=shooter==m_selfSlot?0:shooter;
@@ -253,7 +267,7 @@ void Match::resolveShot(int shooter,int weapon,int level,Point3 at,Point3 direct
   g.m_shooter=0;if(shooter!=m_selfSlot)g.m_hitFlash=flash;
  }else{   // creatures, glass, props, the wall's mark: a player's shot, whoever fired it (Game::m_shooter)
   const float flash=g.m_hitFlash;g.m_shooter=shooter==m_selfSlot?0:shooter;
-  g.resolveShot(hit,o,direction,gun.hitscan,true);g.m_shooter=0;
+  g.resolveShot(hit,o,direction,def,true);g.m_shooter=0;
   if(shooter!=m_selfSlot)g.m_hitFlash=flash;}   // the hit marker is the shooter's own
 }
 
@@ -505,12 +519,17 @@ void Match::sendGuestState(){
 bool Match::localShot(Point3 o,Point3 direction,int weapon){
  Game& g=m_game;if(m_phase!=Phase::Playing)return true;
  ++m_shotCounter;
- if(m_host){resolveShot(m_selfSlot,weapon,g.m_level,o,direction,m_clock);return true;}
+ const std::uint32_t seed=(std::uint32_t(m_stateSeq)<<16)^m_shotCounter;
+ if(m_host){resolveShot(m_selfSlot,weapon,g.m_level,o,direction,m_clock,seed);return true;}
  wire::Writer w;w.u8(Shot).u8(unsigned(std::clamp(weapon,0,255))).u8(unsigned(g.m_level)).f32(o.x).f32(o.y).f32(o.z).q16(direction.x,32767).q16(direction.y,32767).q16(direction.z,32767)
-  .u32((std::uint32_t(m_stateSeq)<<16)^m_shotCounter).u32(millis(renderTime()));
+  .u32(seed).u32(millis(renderTime()));
  send(m_hostId,Events,w,true);
  // Guns: the tracer at once; the mark it leaves comes back from the host. Fists: no tracer.
- if(weapon>=1&&weapon<=3){const auto& gun=playerWeaponDef(WeaponId(weapon));const auto hit=g.traceShot(o,direction,gun.hitscan.maxRange);
+ if(weapon==int(WeaponId::Shotgun)){   // the same eight rays the host lays out from the seed
+  const auto pellet=Game::pelletDef(playerWeaponDef(WeaponId::Shotgun).hitscan);
+  for(int p=0;p<Game::ShotgunPellets;++p){const Point3 d=Game::pelletDirection(direction,seed,p);const auto hit=g.traceShot(o,d,pellet.maxRange);
+   g.m_shotRays.push_back({o,d,hit.kind==ShotKind::None?pellet.maxRange:hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());}}
+ else if(weapon>=1&&weapon<=4){const auto& gun=playerWeaponDef(WeaponId(weapon));const auto hit=g.traceShot(o,direction,gun.hitscan.maxRange);
   g.m_shotRays.push_back({o,direction,hit.kind==ShotKind::None?gun.hitscan.maxRange:hit.distance,g.m_elapsed,0,0,g.m_level});if(g.m_shotRays.size()>24)g.m_shotRays.erase(g.m_shotRays.begin());}
  return true;
 }
@@ -595,8 +614,8 @@ void Match::handleEvent(const Packet& p){
   if(handleCoopEvent(slot,type,r))return;   // a guest's hand on a terminal (MatchCoop.cpp)
   if(handlePropEvent(slot,type,r))return;   // a guest's hand, fist or throw on a prop (MatchProps.cpp)
   if(type==Shot){
-   const int weapon=int(r.u8());const int level=int(r.u8());Point3 o;o.x=r.f32();o.y=r.f32();o.z=r.f32();const Point3 d=readVec(r,32767);r.u32();const std::uint32_t view=r.u32();
-   if(r.bad||level>=g.chunkCount())return;resolveShot(slot,weapon,level,o,d,float(view)/1000.f);
+   const int weapon=int(r.u8());const int level=int(r.u8());Point3 o;o.x=r.f32();o.y=r.f32();o.z=r.f32();const Point3 d=readVec(r,32767);const std::uint32_t seed=r.u32();const std::uint32_t view=r.u32();
+   if(r.bad||level>=g.chunkCount())return;resolveShot(slot,weapon,level,o,d,float(view)/1000.f,seed);
   }else if(type==PickupTaken){
    const int level=int(r.u8());const int index=int(r.u16());
    if(!r.bad&&takePickup(level,index)){wire::Writer w;w.u8(PickupTaken).u8(unsigned(level)).u16(unsigned(index));broadcast(Events,w,true,slot);}
@@ -675,11 +694,14 @@ void Match::publish(float dt){
  if(m_noticeTime>0)m_noticeTime-=dt;
  if(m_phase==Phase::Playing){
   const float t=renderTime();const Vec2 here=origin(g.m_level);
-  for(int i=0;i<MaxSlots;++i){const auto& s=m_slots[size_t(i)];if(i==m_selfSlot||!s.used||!s.haveState||!s.spawned)continue;
+  for(int i=0;i<MaxSlots;++i){auto& s=m_slots[size_t(i)];if(i==m_selfSlot||!s.used||!s.haveState||!s.spawned)continue;
    NetPlayerState st;if(!sampleAt(s,t,st))continue;
    // Only someone on this map, or on a stitched neighbour of it (its own place on the grid): a player left on
    // another map of a custom campaign would otherwise be drawn at their coordinates there, inside these walls.
    if(!g.inPlayerFrame(st.level))continue;
+   // The co-op host already emits footsteps in syncBodies, including the AI hearing radius.
+   if((!m_host||m_mode!=Mode::Coop)&&t-s.history.back().t<=MaxExtrapolation)
+    remoteFootstep(st,dt,s.footstepStride,false);
    RemotePlayer rp;rp.slot=std::uint8_t(i);rp.name=s.name;rp.position={st.world.x-here.x,st.world.y-here.y,st.world.z};
    rp.angle=st.angle;rp.pitch=st.pitch;rp.velocity=st.velocity;rp.crouched=st.crouched;rp.prone=st.prone;rp.grounded=st.grounded;rp.weapon=st.weapon;
    rp.shotAge=std::max(0.f,t-s.lastShotAt);rp.reloadAge=st.reloadAge;rp.health=st.health;rp.alive=st.alive;

@@ -2,6 +2,7 @@
 #include "../world/CustomCampaign.h"
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <cmath>
 namespace retro {
 int Game::titleRows()const{
@@ -136,7 +137,10 @@ void Game::loadSettings(const std::wstring& path){
      if(!line.empty()&&line.back()=='\r')line.pop_back();
      const auto space=line.find(' ');if(space==std::string::npos)continue;
      const std::string tag=line.substr(0,space),value=line.substr(space+1);
-     if(tag=="mic")settings.micDevice=value;else if(tag=="speakers")settings.speakerDevice=value;
+     if(tag=="name")settings.playerName=value.substr(0,24);
+     else if(tag=="pad"){int v[9]={3,0,0,0,0,0,0,0,0};std::istringstream in(value);for(int& x:v)if(!(in>>x))break;
+      settings.pad={std::clamp(v[0],0,6),std::clamp(v[1],0,3),std::clamp(v[2],0,3),std::clamp(v[3],0,3),v[4]!=0,v[5]!=0,v[6]!=0,v[7]!=0,v[8]!=0};}
+     else if(tag=="mic")settings.micDevice=value;else if(tag=="speakers")settings.speakerDevice=value;
      else if(tag=="muted"&&!value.empty()&&settings.mutedPlayers.size()<256&&!settings.muted(value))settings.mutedPlayers.push_back(value);
     }}}}
  m_settings=settings;m_renderScale=renderScale;m_showFps=showFps;
@@ -149,6 +153,8 @@ void Game::saveSettings(const std::wstring& path)const{
   <<' '<<int(s.textChat)<<' '<<int(s.chatFilter)<<' '<<s.voiceMode<<' '<<s.pushToTalkKey<<' '<<s.openMicThreshold<<' '<<s.micVolume<<' '<<s.voiceVolume<<' '<<int(s.proximityVoice)
   <<' '<<m_renderScale<<' '<<int(m_showFps)<<' '<<s.viewDistance<<'\n';
  auto oneLine=[](std::string v){for(auto& c:v)if(c=='\r'||c=='\n')c=' ';return v;};
+ file<<"pad "<<s.pad.look<<' '<<s.pad.dead<<' '<<s.pad.steady<<' '<<s.pad.filter<<' '<<int(s.pad.toggleAim)<<' '<<int(s.pad.toggleSprint)<<' '<<int(s.pad.toggleCrouch)<<' '<<int(s.pad.bumpers)<<' '<<int(s.pad.swapSticks)<<'\n';
+ if(!s.playerName.empty())file<<"name "<<oneLine(s.playerName)<<'\n';
  if(!s.micDevice.empty())file<<"mic "<<oneLine(s.micDevice)<<'\n';
  if(!s.speakerDevice.empty())file<<"speakers "<<oneLine(s.speakerDevice)<<'\n';
  for(const auto& n:s.mutedPlayers)file<<"muted "<<oneLine(n)<<'\n';
@@ -303,7 +309,9 @@ Game::ViewFade Game::viewFade(Vec2 eye,float yaw,float halfFov)const{
  const bool own=m_world.definition().viewDistance>0;
  if((m_world.outdoors()||own)&&view>70.f){fade.start=view*.62f;fade.end=view*.97f;}
  // The nearest open edge with nothing past it across the view (five rays over the field of view).
- float reach=view;for(int k=-2;k<=2;++k){const float a=yaw+halfFov*float(k)*.5f;reach=std::min(reach,edgeReach(eye,{std::cos(a),std::sin(a)},view));}
+ // Only where there is no sky to show past the edge (indoors, underground, or a map that names its own view):
+ // under an open sky the land simply ends against the sky, and fading near walls of a small yard looked like fog.
+ float reach=view;if(!m_world.outdoors()||own)for(int k=-2;k<=2;++k){const float a=yaw+halfFov*float(k)*.5f;reach=std::min(reach,edgeReach(eye,{std::cos(a),std::sin(a)},view));}
  const float target=reach<view?std::max(12.f,reach):-1.f;
  // Eased over about a second as the player turns or crosses into another map, so the fade never pops.
  const float now=m_elapsed,dt=std::clamp(now-m_edgeFadeTime,0.f,.25f);m_edgeFadeTime=now;

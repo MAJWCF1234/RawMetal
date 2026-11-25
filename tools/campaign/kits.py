@@ -76,6 +76,30 @@ class Kit:
     def lamp(self, x, y, z, intensity=1.0, rng=6.0, kelvin=3400, mount=0, yaw=0.0):
         self.lines.append('LIGHT|@|%s|%s|%s|%d|%s|%s|%s|%d' % (num(x), num(y), num(z), mount, num(yaw), num(intensity), num(rng), kelvin))
 
+    def fx_sized(self, name, x, y, z, w, d, h, yaw=0.0, solid=1):
+        self.lines.append('FIXTURE|@|$%s|%s|%s|%s|%s|%s|%s|%s|%d' % (name, num(x), num(y), num(z), num(w), num(d), num(h), num(yaw), solid))
+
+    def door(self, left, right, y, state='', value=0, follow=False, label='', leaf=0, swinging=False):
+        """A lifting DOOR along X in a wall from y to y+1 (fields 2-25; Door.h). follow: open exactly while its state
+        holds value, after every other follower on that state has shut (World.h Door::follow)."""
+        f = ['DOOR', '@', num(left), num(right), num(y), '0', '0', '0', '1' if swinging else '0', '0', '-1', state, str(value) if state else '',
+             '', '', '', '', '', str(leaf), label, '', '', '', '', '', '1' if follow else '']
+        while f[-1] == '':
+            f.pop()
+        self.lines.append('|'.join(f))
+
+    def terminal(self, x, y, z, title, line1, line2, state, toggle=True, yaw=0.0):
+        self.lines.append('TERMINAL|@|%s|%s|%s|1|%s|%s|%s|%s|%d||%s' % (num(x), num(y), num(z), title, line1, line2, state, int(toggle), num(yaw)))
+
+    def pipe(self, x1, y1, x2, y2, z, radius, end_z, material):
+        self.lines.append('PIPE|@|%s|%s|%s|%s|%s|%s|%s|%d' % (num(x1), num(y1), num(x2), num(y2), num(z), num(radius), num(end_z), material))
+
+    def loose(self, name, x, y, z, yaw=0.0, pitch=0.0, roll=0.0, k=1.0):
+        """A loose prop (CLUTTER kind 7, the library model): it can lie tilted and be knocked about."""
+        w, d, h = self.size(name)
+        self.lines.append('CLUTTER|@|7|%s|%s|%s|%s|$%s|%s|%s|%s|%s|%s|' % (num(x), num(y), num(z), num(yaw), name, num(w * k),
+                                                                       num(max(d * k, .01)), num(h * k), num(pitch), num(roll)))
+
     def emitter(self, x, y, z, fields):
         self.lines.append('EMITTER|@|%s|%s|%s|%s' % (num(x), num(y), num(z), '|'.join(num(v) if isinstance(v, float) else str(v) for v in fields)))
 
@@ -107,10 +131,15 @@ class Kit:
             else:
                 self.box(x1, y1, x2, y2, 0, h, material)
 
-    def ceiling_lamp(self, model, x, y, kelvin=4000, rng=6.0, yaw=0.0, intensity=1.0, top=H):
+    def ceiling_lamp(self, model, x, y, kelvin=4000, rng=6.0, yaw=0.0, intensity=1.0, top=H, flicker=None):
+        """A ceiling lamp that IS its fitting: one LIGHT carrying the model as its fitting (fields 18-21), so the
+        engine draws the fitting flush under whatever is above it and its glow dims, flickers and switches with
+        the light (its state, period, flicker), never a separate model that stays lit while the room goes dark."""
         w, d, h = self.size(model)
-        self.fx(model, x, y, top - h - .02, yaw, solid=0)
-        self.lamp(x, y, top - h - .1, intensity, rng, kelvin)
+        # Blank between kelvin and flicker: tint, state, value, invert, period, on time and phase (fields 10-16).
+        self.lines.append('LIGHT|@|%s|%s|%s|0|%s|%s|%s|%d||||||||%s|$%s|%s|%s|%s' % (
+            num(x), num(y), num(top - h - .1), num(yaw), num(intensity), num(rng), kelvin,
+            '' if flicker is None else num(flicker), model, num(w), num(d), num(h)))
 
 
 def build(catalog):
@@ -280,13 +309,16 @@ def build(catalog):
 
     k = kit('kit_doorway', 'Doorway', 4, 1, 'a wall with a framed door and a lamp over it')
     k.fx('bld_doorway_frame', 0, 0)
-    k.fx('lamp_bulkhead', 0, .2, 2.45, solid=0)
     k.lamp(0, .3, 2.5, .8, 4.0, 3400, mount=1, yaw=HALF)
 
     k = kit('kit_doorway_wide', 'Wide doorway', 4, 1, 'a wall with a wide opening and a lamp over it')
     k.fx('bld_doorway_wide', 0, 0)
-    k.fx('lamp_bulkhead', 0, .3, 2.75, solid=0)
     k.lamp(0, .4, 2.8, .8, 4.0, 3400, mount=1, yaw=HALF)
+
+    k = kit('kit_doorway_double', 'Double doorway', 4, 1, 'a wall with two openings round a centre post, and a lamp over each')
+    k.fx('bld_doorway_double', 0, 0)
+    for x in (-1, 1):
+        k.lamp(x, .3, 2.5, .8, 4.0, 3400, mount=1, yaw=HALF)
 
     k = kit('kit_catwalk', 'Catwalk run', 8, 2, 'an 8 m grating walk 2.5 m up, posts and a ladder')
     k.box(-4, -.7, 4, .7, 2.4, 2.5, GRATING)
@@ -312,9 +344,7 @@ def build(catalog):
     k.fx('mine_depot_forklift', -.6, 1.4, 0, HALF)
     for x in (-3.4, -1.4):
         k.fx('urb_bollard', x, .1)
-    k.fx('lamp_gooseneck', -2, -2.75, 2.6, solid=0)
     k.lamp(-2, -2.4, 2.8, 1.0, 7.0, 3000, mount=1, yaw=HALF)
-    k.fx('lamp_gooseneck', 2, -2.75, 2.6, solid=0)
     k.lamp(2, -2.4, 2.8, 1.0, 7.0, 3000, mount=1, yaw=HALF)
     k.box(-4, -3.2, 4, -3.0, 0, 3.4, BRICK)                         # the back wall the lamps hang on
 
@@ -353,6 +383,106 @@ def build(catalog):
     k.fx('scrap_lantern', -.2, -1.1)
     k.fx('mine_petrol_can', -2.3, .2)
     k.fx('dress_bucket', -2.2, .8)
+
+    # ---------------------------------------------------------------- structures (2026-11-23, the user's packs)
+    k = kit('kit_escalator', 'Escalator', 2.2, 9, 'a stopped escalator: steps, glass sides, handrails, landing plates')
+    k.box(-1.1, 3.6, 1.1, 4.5, 0, .06, STEEL)                    # the bottom landing plate (south, the front)
+    k.prim('stairs', 0, -.1, 0, 1.4, 7.4, 4.42, 2, TREAD)          # 26 steps rising north
+    k.box(-1.1, -4.5, 1.1, -3.8, 4.36, 4.42, STEEL)               # the top landing plate
+    for side in (-1, 1):
+        x = side * .8
+        for i in range(8):                                        # each side steps up the flight:
+            y0 = 3.6 - i * .925
+            z = 4.42 * ((i + .5) / 8)
+            k.box(x - .05, y0 - .925, x + .05, y0, 0, z + .9, DARK_STEEL)  # a steel balustrade a step at a time
+        k.pipe(x, 4.2, x, -4.2, 1.0, .035, 4.42 + 1.0, DARK_STEEL)  # the handrail, sloping with the flight
+
+    k = kit('kit_airlock', 'Airlock', 4, 6.4, 'two lifting hatches on one cycle: the terminal inside shuts one, then opens the other')
+    k.floor(GRATING, -2, -3.2, 2, 3.2)
+    for side in ('W', 'E'):
+        x1 = -2 if side == 'W' else 1.8
+        k.box(x1, -2.7, x1 + .2, 2.7, 0, 3.2, DARK_STEEL)
+    k.box(-2, -2.7, 2, 2.7, 3.0, 3.2, DARK_STEEL)                  # the ceiling: sealed
+    for yc, yaw, value, label in ((-3.2, 0.0, 1, 'INNER HATCH'), (2.2, PI, 0, 'OUTER HATCH')):
+        # The plate is cut to a blast-door frame's outline (tools/library/make_airlock_bulkhead.py), 1 m deep like any
+        # wall a door stands in; unseen walls give it its collision round the opening, and the hatch is a real lifting
+        # DOOR that follows the cycle state (outer while it is 0, inner while it is 1).
+        k.fx_sized('airlock_bulkhead', 0, yc + .5, 0, 4, 1, 3.2, yaw, solid=0)
+        for x1, x2, z0 in ((-2, -1.3, 0), (1.3, 2, 0), (-1.3, 1.3, 2.48)):
+            k.box(x1, yc, x2, yc + 1, z0, 3.2, 30)                    # 30: collision only, never drawn
+        k.door(-1.3, 1.3, yc, 'airlock_cycle', value, follow=True, label=label)
+    k.terminal(1.62, 0, 1.2, 'AIRLOCK', 'ONE HATCH AT A TIME', 'E: CYCLE THE LOCK', 'airlock_cycle', True, -HALF)
+    k.lamp(0, 0, 2.8, .9, 5.0, 1700)                              # a red-amber cycle lamp
+
+    k = kit('kit_shower', 'Shower stall', 2.2, 1.6, 'a tiled stall, a drain, a riser and a head')
+    k.fx('bath_floor_tile', 0, 0, .005, 0, solid=0)
+    k.fx('bath_stall_open', 0, 0, 0, PI)                          # the pack's stall opens north at yaw 0
+    k.fx('bath_drain', 0, .1, .012, solid=0)
+    k.fx('bath_pipe', -.5, -.68, 1.2, 0, k=4.0)                     # the riser up the back wall
+    k.pipe(-.5, -.7, -.5, -.35, 2.05, .02, 2.05, STEEL)              # the arm out to the head
+    k.prim('box', -.5, -.32, 1.98, .16, .16, .05, 0, STEEL)           # the head
+    k.lamp(0, 0, 2.3, .6, 3.5, 5200)
+
+    k = kit('kit_rebar', 'Loose rebar', 3, 3, 'rebar mats and a cracked block, loose to kick about')
+    k.loose('rebar_bars_a', -.2, -.4, .03, .3, pitch=HALF)
+    k.loose('rebar_bars_b', .4, .5, .08, -.5, pitch=HALF)
+    k.fx('concrete_block_cracked', 1.0, -.8, 0, .4)
+    k.fx('out_debris_bricks', -1.0, .9, 0, 1.2)
+
+    k = kit('kit_cracked_slab', 'Cracked slab', 6, 2, 'broken concrete panels, bare rebar, rubble')
+    k.fx('slab_full', -1.5, 0)
+    k.fx('slab_broken', 1.5, 0)
+    k.fx('rebar_bars_b', 1.5, -.04, .7, k=.6, solid=0)              # the bars left standing out of the break
+    k.fx('slab_chipped', 1.7, .7, 0, .25)
+    k.fx('concrete_block_cracked', -1.8, .7, 0, HALF)
+    k.fx('bld_brick_rubble', .4, .7, 0, .9)
+
+    k = kit('kit_heavy_door', 'Heavy door', 4.4, 1.2, 'a bulkhead door in a steel wall, worked from the terminal beside it')
+    for x1, x2 in ((-2.2, -1.1), (1.1, 2.2)):
+        k.box(x1, -.5, x2, .5, 0, 3.2, DARK_STEEL)
+    k.box(-1.1, -.5, 1.1, .5, 2.6, 3.2, DARK_STEEL)                    # the head over the leaf
+    k.door(-1.1, 1.1, -.5, 'heavy_door', 1, follow=True, label='HEAVY DOOR')
+    k.terminal(1.45, .5, 1.25, 'HEAVY DOOR', 'THE LEAF RISES', 'E: OPEN / SHUT', 'heavy_door', True, .001)   # on the south face
+    k.terminal(-1.45, -.5, 1.25, 'HEAVY DOOR', 'THE LEAF RISES', 'E: OPEN / SHUT', 'heavy_door', True, PI)   # and the north
+
+    k = kit('kit_mesh_door', 'Mesh door', 3.4, 1.0, 'a steel grille gate that rises, in a frame of piers')
+    for x1, x2 in ((-1.7, -1.2), (1.2, 1.7)):
+        k.box(x1, -.45, x2, .45, 0, 2.9, STEEL)
+    k.box(-1.2, -.45, 1.2, .45, 2.55, 2.9, STEEL)
+    k.door(-1.2, 1.2, -.5, 'mesh_door', 1, follow=True, label='GATE', leaf=1)
+    k.terminal(1.45, .5, 1.25, 'GATE', 'A STEEL GRILLE', 'E: RAISE / LOWER', 'mesh_door', True, .001)
+
+    k = kit('kit_ticket_gate', 'Ticket gate', 3.0, 1.0, 'two pedestals and a flap; the ticket machine lets you through')
+    for x1, x2 in ((-1.5, -.55), (.55, 1.5)):
+        k.box(x1, -.45, x2, .45, 0, 1.05, DARK_STEEL)                   # the pedestals
+        k.box(x1 + .05, -.4, x2 - .05, .4, 1.05, 1.1, STEEL)
+    k.door(-.55, .55, -.5, 'ticket_paid', 1, follow=True, label='TICKET GATE', leaf=2, swinging=True)
+    k.terminal(-1.05, .5, 1.1, 'TICKET MACHINE', 'FARE: ONE TOKEN', 'E: PAY', 'ticket_paid', True, .001)
+
+    k = kit('kit_fluorescent_bank', 'Fluorescent bank', 7.4, .6, 'a 7 m run of twin-tube fittings on one channel, hung at ceiling height')
+    k.box(-3.7, -.06, 3.7, .06, H - .1, H - .04, DARK_STEEL)          # the carrier channel under the ceiling
+    for i in range(6):                                                # each fitting its own light: one can die alone
+        k.ceiling_lamp('lamp_suspended_twin_tube', -3.0 + i * 1.2, 0, 4600, rng=5.0, intensity=.8, top=H - .1,
+                       flicker=.35 if i == 4 else None)                # the fifth tube is going
+
+    k = kit('kit_curtain_wall', 'Curtain wall', 6, .4, 'two storeys of glass in a steel grid')
+    for x in (-1.5, 1.5):                                          # the glazing: the engine's window shape, glass and all
+        for z in (.05, 3.05):
+            k.prim('window', x, 0, z, 2.9, .2, 2.9, 0, DARK_STEEL)
+    for x in (-3, 0, 3):                                           # mullions
+        k.box(x - .05, -.12, x + .05, .12, 0, 6, DARK_STEEL)
+    for z in (0, 3, 6):                                            # transoms at each floor
+        k.box(-3.05, -.12, 3.05, .12, z - .06 if z else 0, z + .06 if z < 6 else 6.06, DARK_STEEL)
+
+    k = kit('kit_megafacade', 'Megastructure facade', 6, 1, 'three storeys of window modules between concrete piers')
+    for x in (-1.5, 1.5):
+        k.fx('facade_concrete', x, 0, 0, HALF)
+        for z, name in ((1, 'facade_stucco_window'), (4, 'facade_brick_window'), (7, 'facade_stucco_window')):
+            k.fx(name, x, 0, z, HALF)
+    for x in (-3, 0, 3):                                            # the piers that carry it
+        k.box(x - .25, -.45, x + .25, .3, 0, 10.4, CONCRETE)
+    for z in (4, 7, 10):                                            # ledge bands between storeys
+        k.box(-3.2, -.3, 3.2, .2, z - .12, z + .06, CONCRETE)
     return kits
 
 

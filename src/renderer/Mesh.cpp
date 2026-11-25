@@ -40,9 +40,9 @@ bool validLayerPose(const CreatureLayerPose&pose){
 }
 }
 std::atomic<long long> g_meshLoadMicros{0};
-// The MAC-11 (3353) and the brass (3357) keep their parts by node name (MacMagazine 8, MacBolt 9),
+// The MAC-11 (3353), the brass (3357) and the .308 case and round (3396, 3397) keep their parts by node name (MacMagazine 8, MacBolt 9),
 // not by material, though they come after 359.
-static bool machinePistolModel(int id){return id==3353||id==3357;}
+static bool machinePistolModel(int id){return id==3353||id==3357||id==3392||id==3396||id==3397;}
 Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResource):m_materialParts((id>=163&&id<200)||(id>=257&&id<=265)||(id>=284&&id<=294)||id==111||id==142||id==277||id==303||id==308||id==313||id==318||id==323||id==328||(id>=359&&!machinePistolModel(id))),m_nodeFilter(nodeFilter){
  m_source={id,nodeFilter?nodeFilter:"",animationResource,anchorResource};if(deferring())return;
  struct LoadTimer{std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();~LoadTimer(){g_meshLoadMicros+=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-t).count();}} loadTimer;
@@ -173,7 +173,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);grip();extract(m_scene);
   description+="Arm opening rings: "+std::to_string(openRings.size())+"\n";
  }
- if(id==2313||id==3359){   // Claire's arms on the pack's animated shotgun (2313) or pistol (3359, the MAC-11) rig: clips are posed by name
+ if(id==2313||id==3359||id==3393){   // Claire's arms on the pack's animated shotgun (2313) or pistol (3359, the MAC-11) rig: clips are posed by name
   for(auto*skin:m_scene->skin_deformers)for(auto&vertex:skin->vertices)vertex.dq_weight=1;
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);}
 }

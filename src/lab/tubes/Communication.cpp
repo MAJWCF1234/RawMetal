@@ -90,7 +90,7 @@ const bool tube=add({
    for(int row=0;row<4;++row){const int y=PauseMenuLayout::rowY(row,true);drawn+=light(im,PauseMenuLayout::X,y,PauseMenuLayout::X+PauseMenuLayout::Width,y+PauseMenuLayout::RowHeight,90)>=10;}
    s.board["pause_match.drawn"]=drawn;}
   // Every SETTINGS page; COMMUNICATION on its sensitivity row (the meter), then its muted list.
-  static const char* keys[]={"audio","video","controls","gameplay","communication","vr"};
+  static const char* keys[]={"audio","video","controls","controller","gameplay","communication","vr"};
   for(int t=0;t<int(SettingsTab::Count);++t){const auto tab=SettingsTab(t);
    LabAccess::settings(menu,tab,tab==SettingsTab::Communication?4:t==0?-1:0);
    const std::string label=std::string("SETTINGS: ")+Game::settingsTabName(tab)+(t==0?" (the page column chosen)":tab==SettingsTab::Communication?" (open mic, the meter at 62% over the mark)":"");
@@ -122,7 +122,7 @@ const bool tube=add({
   r.check("the speaking player's name tag carries the bars",b("tag.seen")>0&&b("tag.amber")>=6,fixed(b("tag.amber"))+" amber pixels");
   r.check("PAUSE draws its six rows, RESUME lit",b("pause.drawn")==6&&b("pause.chosen_red")>300,fixed(b("pause.drawn"))+" rows, "+fixed(b("pause.chosen_red"))+" red");
   r.check("PAUSE in a match draws its four rows",b("pause_match.drawn")==4);
-  for(const char* page:{"audio","video","controls","gameplay","communication","vr","muted","reset"}){const std::string k=std::string("settings.")+page;
+  for(const char* page:{"audio","video","controls","controller","gameplay","communication","vr","muted","reset"}){const std::string k=std::string("settings.")+page;
    r.check(std::string("SETTINGS ")+page+": every tab and row has its words",b(k+".items")>0&&b(k+".drawn")==b(k+".items"),fixed(b(k+".drawn"))+" of "+fixed(b(k+".items")));
    r.check(std::string("SETTINGS ")+page+": every value is drawn",b(k+".valued")==b(k+".values"),fixed(b(k+".valued"))+" of "+fixed(b(k+".values")));
    r.check(std::string("SETTINGS ")+page+": the chosen row is lit red",b(k+".chosen_red")>150,fixed(b(k+".chosen_red"))+" red");

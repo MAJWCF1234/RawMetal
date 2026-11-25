@@ -21,7 +21,7 @@ std::vector<std::string> wrapUiText(std::string remaining,size_t columns,size_t 
  if(!remaining.empty()&&!lines.empty()&&columns>=3){auto& last=lines.back();last.resize(std::min(last.size(),columns-3));last+="...";}
  return lines;
 }
-const char* weaponWord(int weapon){return weapon==1?"SHOTGUN":weapon==2?"9MM":weapon==3?"MAC-11":"HANDS";}
+const char* weaponWord(int weapon){return weapon==1?"SHOTGUN":weapon==2?"9MM":weapon==3?"MAC-11":weapon==4?"SNIPER":"HANDS";}
 std::string upper(std::string s){for(auto& c:s)c=char(std::toupper(static_cast<unsigned char>(c)));return s;}
 }
 
@@ -57,6 +57,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
   case Game::TitlePage::Host:heading={"HOST A GAME","Your map, your rules. They come down on your word."};break;
   case Game::TitlePage::Lobby:heading={"IN THE LOBBY","Give them the code. Then wait for footsteps."};break;
   case Game::TitlePage::JoinCode:heading={"JOIN BY CODE","Six characters, given in confidence."};break;
+  case Game::TitlePage::PlayerName:heading={"PLAYER NAME","Use 2 to 24 characters. Select DONE to save."};break;
   case Game::TitlePage::Character:heading={"CHARACTER","Who the others see coming down the stair."};break;
   default:break;
  }
@@ -129,6 +130,12 @@ void SoftwareRenderer::drawTitleItems(const Game& game){
  const auto bone=rgb(236,228,214),dim=rgb(146,138,128),red=rgb(214,32,26),black=rgb(0,0,0),amber=rgb(232,160,60),ink=rgb(10,8,8);
  const auto page=game.titlePage();const auto items=game.titleItems();const int selected=game.titleSelection();
  const net::Session* session=game.netSession();
+ if(page==Game::TitlePage::PlayerName){
+  std::string name=game.playerNameDraft();
+  if(name.empty())name="ENTER A NAME";
+  else if(caret&&name.size()<24)name+='_';
+  uiText(TitleMenuLayout::X,148,name.c_str(),bone,1,20,1,1);
+ }
  int number=0;
  for(size_t i=0;i<items.size();++i){const auto& t=items[i];const bool on=int(i)==selected&&t.enabled;const float a=t.enabled?1.f:.4f;
   switch(t.kind){
@@ -425,6 +432,7 @@ void SoftwareRenderer::drawSettingsMenu(const Game& game){
   case SettingsTab::Audio:line="What reaches you down here, and how loud.";break;
   case SettingsTab::Video:line="How the lens sees the dark.";break;
   case SettingsTab::Controls:line="Your hands, and what they answer to.";break;
+  case SettingsTab::Controller:line="For hands that shake, tire or cannot hold a trigger.";break;
   case SettingsTab::Gameplay:line="Small mercies, and the face the others see.";break;
   case SettingsTab::Communication:{const net::Session* s=game.netSession();const auto st=s?s->voiceStatus():net::VoiceStatus{false,false,false,"voice needs the online service"};
    if(game.settings().voiceMode==0)line="Voice is off. You neither speak nor hear the others.";

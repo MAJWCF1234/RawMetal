@@ -25,7 +25,10 @@ constexpr Hold Holds[]={
  {"fists",WeaponId::Fists,false,false,false,false,false},
  {"shotgun",WeaponId::Shotgun,false,false,false,false,false},
  {"shotgun-aimed",WeaponId::Shotgun,false,false,true,false,false},
+ {"pistol",WeaponId::Handgun,false,false,false,false,false},
  {"pistol-aimed",WeaponId::Handgun,false,false,true,true,false},
+ {"mac",WeaponId::MachinePistol,false,false,false,false,false},
+ {"mac-aimed",WeaponId::MachinePistol,false,false,true,true,false},
  {"crouched",WeaponId::Handgun,true,false,false,false,false},
  {"prone",WeaponId::Shotgun,true,true,false,false,false},
  {"fp-stand",WeaponId::Shotgun,false,false,false,false,true},
@@ -97,9 +100,11 @@ Feature tube(const char* name,const char* summary,int def){return Feature{
    s.board[k+".head_off"]=std::max(s.board[k+".head_off"],double(std::fabs(d)*57.2958f));s.board[k+".head_seen"]=1;}
   // Looking down, over the last third of the hold (the stance settled): nothing of the body over the crosshair.
   if(h.firstPerson&&at>=per*2/3){std::string what;const int n=centreCover(s,.15f,what);if(n>=s.board[k+".centre"]){s.board[k+".centre"]=n;notes()[&s][k]=what;}}
+  // The stance is judged where it has settled: the transitions into a kneel or prone take up to 0.95 s.
+  if(at==per-2)s.board[k+".lower"]=rep.lower;
   const bool shot=h.firstPerson?(at==per-2):(at==per/4||at==per/2||at==per*3/4);if(!shot)return;
   s.shoot(std::string(h.name)+(h.firstPerson?" down":at==per/4?" a":at==per/2?" b":" c"));(void)f;
-  s.board[k+".lower"]=rep.lower;
+  if(at<per-2)s.board[k+".lower"]=rep.lower;
   s.board[k+".drawn"]=h.firstPerson?double(rep.faces>0):double(rep.drawn);s.board[k+".character"]=rep.character;s.board[k+".layer"]=rep.layer;s.board[k+".faces"]=rep.faces;
   s.board[k+".floor_gap"]=h.firstPerson?double(rep.lowest-p.z):double(rep.floorGap);
   if(rep.handGap>=0)s.board[k+".hand_gap"]=rep.handGap;

@@ -20,7 +20,7 @@ namespace retro { class Game; struct InputState; struct CustomCampaign; class Wo
 namespace retro::net {
 namespace wire { struct Writer; struct Reader; }
 
-constexpr std::uint16_t ProtocolVersion=4;      // 2: a player state carries torch and locker; co-op scripts, state, people
+constexpr std::uint16_t ProtocolVersion=6;      // 2: a player state carries torch and locker; co-op scripts, state, people
                                                // 3: several maps at once (creatures, doors per map), props from the host
                                                // 4: deathmatch starts bare, its pickups are shared and come back (PickupBack)
 constexpr int MaxSlots=16;
@@ -86,6 +86,7 @@ private:
   NetPlayerState latest;bool haveState=false;
   float health=100;bool alive=true;float respawnIn=-1,deathAt=-1;std::uint8_t life=0;
   float acceptedAt=-1,correctCooldown=0,spawnGrace=0,lastShotAt=-99;std::uint8_t lastShots=0;
+  float footstepStride=0;
   std::uint16_t seq=0;bool seqSeen=false;
   std::uint32_t carryId=0;float carryAt=-1;   // the prop their hand carries (the host poses it from their reports)
  };
@@ -119,7 +120,8 @@ private:
  void handleEvent(const Packet& p);
  NetPlayerState localState()const;
  void acceptGuestState(int slot,const NetPlayerState& s);
- void resolveShot(int shooter,int weapon,int level,Point3 origin,Point3 direction,float viewTime);
+ void resolveShot(int shooter,int weapon,int level,Point3 origin,Point3 direction,float viewTime,std::uint32_t seed=0);   // a shotgun: eight pellets from the seed
+ void resolveRay(int shooter,int weapon,int level,Point3 origin,Point3 direction,float viewTime,int pellet);        // one ray (pellet -1: not a pellet)
  void damage(int victim,int attacker,float amount,int weapon);
  void registerDeath(int victim,int killer,int weapon);
  void respawn(int slot);
@@ -165,6 +167,7 @@ private:
  void coopHostFrame(float dt);
  void coopGuestFrame(float dt);
  void syncBodies(float dt);
+ void remoteFootstep(const NetPlayerState& state,float dt,float& stride,bool heardByAi);
  void sendStateSync(bool full,const PeerId* to);
  void sendScriptFx();
  void sendActors();

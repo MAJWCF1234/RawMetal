@@ -131,7 +131,7 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
   Point3 aim{0,0,1};
   if(vr){const AvatarSolve solve=solveAvatar(r.pose,now);lower=solve.legsClip;lowerPhase=solve.legsPhase;pitch=-solve.lean;yaw=-solve.twist;}
   else{
-   held=!r.alive?0:r.weapon==1?1:r.weapon==2?2:r.weapon==3?3:0;   // 3: the MAC-11, held as the pistol
+   held=!r.alive?0:r.weapon==1||r.weapon==4?1:r.weapon==2?2:r.weapon==3?3:0;   // 3: the MAC-11, held as the pistol
    const bool upright=r.alive&&r.grounded&&!r.prone;
    const float shot=r.shotAge,look=std::clamp(r.pitch,-1.2f,1.2f);
    const bool recent=shot<3.f;    // a player who fired lately holds the gun up on their aim
@@ -221,8 +221,8 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
     else{const auto c=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,rr=m_weaponMesh.maximum-m_weaponMesh.minimum;const float s=.85f/std::max({rr.x,rr.y,rr.z});
      for(auto face:m_weaponMesh.triangles){if(face.part==3)continue;for(auto& v:face.v){const auto p=(v.p-c)*s;v.p=place({-p.x,p.y,p.z-.13f});}std::swap(face.v[1],face.v[2]);
       hooks.face(cross(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p),face.v[0].p-receiver);hooks.tri(face.v[0],face.v[1],face.v[2],m_weaponTexture,.8f);}}}}
-  else if(held){const bool pistol=held>=2;const auto& gunMesh=held==3?m_macMesh:pistol?m_handgunMesh:m_weaponMesh;const auto& gunTexture=held==3?m_macTexture:pistol?m_handgunTexture:m_weaponTexture;
-   for(auto face:gunMesh.bindTriangles()){if(!pistol&&face.part==3)continue;
+  else if(held){const bool pistol=held>=2,rifle=held==1&&r.weapon==4;const auto& gunMesh=held==3?m_macMesh:pistol?m_handgunMesh:rifle?m_sniperMesh:m_weaponMesh;const auto& gunTexture=held==3?m_macTexture:pistol?m_handgunTexture:rifle?m_sniperTexture:m_weaponTexture;
+   for(auto face:gunMesh.bindTriangles()){if(!pistol&&!rifle&&face.part==3)continue;
     for(auto& v:face.v)v.p=world(ClaireOutside::place(heldGun,socket,v.p));std::swap(face.v[1],face.v[2]);
     {bool near=false;for(const auto& v:face.v){const Point3 d=v.p-eye;near=near||dot(d,d)<.3f*.3f;}if(near)continue;}
     const Point3 n=cross(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);const float len=std::sqrt(dot(n,n));

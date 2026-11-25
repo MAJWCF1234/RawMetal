@@ -38,7 +38,7 @@ inline constexpr FieldRange fieldRanges[] = {
     {"CREATURE", 6, nullptr, .5, 2, false, true, "CREATURE|0|0|4|20|0"},
     {"CREATURE", 7, nullptr, 0, 5000, false, true, "CREATURE|0|0|4|20|0"},
     {"CREATURE", 10, nullptr, -1, 4096, true, true, "CREATURE|0|0|4|20|0"},
-    {"PICKUP", 2, nullptr, 0, 6, true, true, "PICKUP|0|0|5|5"},
+    {"PICKUP", 2, nullptr, 0, 8, true, true, "PICKUP|0|0|5|5"},
     {"HAZARD", 2, nullptr, 0, 7, true, true, "HAZARD|0|0|2|2|4|4|0|3|2"},
     {"SIGN", 11, nullptr, 0, 6, true, true, "SIGN|0|5|5|1.5|1|0.5|0|T|S|3968216"},
     {"SIGN", 12, nullptr, 0, 10, true, true, "SIGN|0|5|5|1.5|1|0.5|0|T|S|3968216"},

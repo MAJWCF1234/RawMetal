@@ -27,6 +27,7 @@
 #include "world/CampaignExport.h"
 #pragma comment(lib,"shell32.lib")
 #include "renderer/SoftwareRenderer.h"
+#include "renderer/DebugLayer.h"
 #include "renderer/Carcass.h"
 #include "renderer/Particles.h"
 #include "platform/Win32Window.h"
@@ -1945,11 +1946,44 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
         // The smoke chain's game tests, every one run independently: a failure
         // early in the chain must not hide the result of everything after it.
         const std::pair<const char*,bool(*)()> tests[]={
+         {"debug-layer",[](){
+          using namespace retro;
+          using namespace debuglayer;
+          auto game=std::make_unique<Game>(Game::mapInspection({3.5f,4.5f},0.f));
+          InputState input{};input.console=true;game->update(input,.01f);
+          bool passed=game->consoleOpen()&&visible==0;
+          auto command=[&](const char* text,unsigned expected){
+           InputState typed{};typed.textInput=std::string(text)+"\r";game->update(typed,.01f);
+           passed&=visible==expected;
+          };
+          command("debuglayer",All);
+          command("debuglayer colliders",Colliders);
+          command("debuglayer lights",Lights);
+          command("debuglayer chunks",Chunks);
+          command("debuglayer hazards",Hazards);
+          command("debuglayer stats",Stats);
+          command("debuglayer off extra",Stats);
+          command("debuglayer off",0);
+          command("debug_layer all",All);
+          command("debuglayer",0);
+          command("debuglayer colliders",Colliders);
+          InputState close{};close.escape=true;game->update(close,.01f);
+          auto renderer=std::make_unique<SoftwareRenderer>(320,180);
+          renderer->render(*game);
+          const auto* pixels=renderer->pixels();
+          passed&=std::find(pixels,pixels+320*180,Stroke)!=pixels+320*180;
+          visible=0;
+          renderer->render(*game);
+          pixels=renderer->pixels();
+          passed&=std::find(pixels,pixels+320*180,Stroke)==pixels+320*180;
+          return passed;
+         }},
          {"projection",retro::SoftwareRenderer::testProjection},{"command-arguments",commandArgumentsTest},{"content-integrity",contentIntegrityTest},{"load-validation",loadValidationTest},
          {"skyboxes",retro::testSkyboxes},
          {"hazmat",retro::Game::testHazmat},{"creature-animation",retro::SoftwareRenderer::testCreatureAnimation},{"cleanup-tank-aim",retro::Mesh::testCleanupTankAim},
          {"combat",retro::Game::testCombat},{"weapon-motion",retro::Game::testWeaponMotion},{"audio-events",retro::Game::testAudioEvents},
          {"settings",retro::Game::testSettings},{"inventory",retro::Game::testInventory},{"flashlight",retro::Game::testFlashlight},
+         {"multiplayer-menu",[](){std::ofstream report("multiplayer-menu-test.txt");return retro::Game::testMultiplayerMenu(report);}},
          {"radar",retro::Game::testRadar},
          {"pickups",retro::Game::testPickups},{"movement",retro::Game::testMovement},{"progression",retro::Game::testProgression},
          {"ai",retro::Game::testAI},{"creature-behaviour",retro::Game::testCreatureBehaviour},{"chimera-hunt",retro::Game::testChimeraHunt},{"machine",retro::Game::testMachine},{"gantry",retro::Game::testGantry},{"lift",retro::Game::testLift},{"reactor",retro::Game::testReactor},
@@ -1962,7 +1996,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
-         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"map-format",retro::Game::testMapFormat},{"doors",retro::Game::testDoors},
+         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"walk-in",retro::Game::testWalkIn},{"sniper",retro::Game::testSniper},{"map-format",retro::Game::testMapFormat},{"doors",retro::Game::testDoors},
          {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
@@ -2112,7 +2146,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          auto returning=retro::Game::mapInspection({3.5f,1.3f},-1.570796f,0,1,true);renderer.render(returning);saveFrame("chunk-seam-back.ppm");
         }
         {auto menuGame=game;retro::InputState menuInput{};menuInput.escape=true;menuGame.update(menuInput,.02f);renderer.render(menuGame);saveFrame("pause-menu.ppm");
-         menuGame.openSettings(retro::SettingsTab::Audio);menuGame.update({},.02f);renderer.render(menuGame);saveFrame("settings-menu.ppm");
+         menuGame.openSettings(retro::SettingsTab::Audio);menuGame.update({},.02f);renderer.render(menuGame);saveFrame("settings-menu.ppm");menuGame.openSettings(retro::SettingsTab::Controller);menuGame.update({},.02f);renderer.render(menuGame);saveFrame("settings-controls.ppm");
          retro::InputState drag{};drag.fire=true;drag.pointerX=retro::SettingsLayout::SliderX+15;drag.pointerY=retro::SettingsLayout::rowY(0)+8;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-low.ppm");
          drag.pointerX=retro::SettingsLayout::SliderX+60;drag.pointerY+=50;menuGame.update(drag,.02f);renderer.render(menuGame);saveFrame("slider-high.ppm");
         }
@@ -2335,7 +2369,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     using clock=std::chrono::steady_clock; auto last=clock::now(); float titleTimer=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();window.setTalkKey(game.settings().pushToTalkKey);auto input=window.input(menuOpen||vrMode);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();window.setTalkKey(game.settings().pushToTalkKey);window.setPadOptions(game.settings().pad);auto input=window.input(menuOpen||vrMode,!vrMode&&game.inventoryOpen()?dt:0.f);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
         if(((wasPaused&&!game.paused())||game.takeSettingsSave())&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(game.quitRequested())break;
         audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());

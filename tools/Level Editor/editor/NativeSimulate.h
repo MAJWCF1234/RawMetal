@@ -135,7 +135,7 @@ inline void poll(Editor &e) {
     return;
   // An edit, another map or play ends it; the engine has already put the scene back.
   if (state.on && (e.revision != state.revision || e.map != state.map || e.playing))
-    set(e, false, e.playing ? L"Playing. Escape comes back to building."
+    set(e, false, e.playing ? e.playingHint()
                             : L"Simulation stopped for your change. Press F6 to watch again.");
   std::string text = e.channelText(statusFile(e));
   if (text != state.seen && !text.empty()) {

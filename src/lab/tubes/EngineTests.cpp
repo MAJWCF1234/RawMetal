@@ -29,6 +29,7 @@ const bool registered=[]{
  engine("scene-reuse","a game built where the last one was (same address, tiles and edit count) draws only its own content",+[]{std::ofstream r("scene-reuse.txt");return SoftwareRenderer::testSceneReuse(r);});
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
+ engine("walk-in","--each-test=walk-in: into an open container, up stairs onto a balcony, along its rail",&Game::testWalkIn);
  engine("map-format","--each-test=map-format: named fields, names, overrides, prefabs, properties, FORMAT 2",&Game::testMapFormat);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
  engine("primitives","--each-test=primitives: every PRIM kind expands, scaled to the player; the new shapes walked",&testPrimitives);

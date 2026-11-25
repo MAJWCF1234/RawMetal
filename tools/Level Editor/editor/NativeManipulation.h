@@ -16,7 +16,9 @@ inline std::vector<std::pair<float,float>> nativeCorners(const std::vector<std::
     out.emplace_back(h->x+c*dx*h->width*.5f+s*dy*h->depth*.5f,h->y-s*dx*h->width*.5f+c*dy*h->depth*.5f);
   return out;
 }
-inline bool resizeNative(std::vector<std::string>& f,const std::vector<std::string>& names,int corner,float x,float y,float snap) {
+// A model (a fixture or a loose prop) scales whole from a corner: width, depth and height by one factor, so it
+// keeps its proportions (free stretches width and depth alone, the old way; the editor holds Alt for it).
+inline bool resizeNative(std::vector<std::string>& f,const std::vector<std::string>& names,int corner,float x,float y,float snap,bool free=false) {
   auto h=nativeHandle(names,f);if(!h)return false;
   auto quantize=[&](float v){return snap>0?std::round(v/snap)*snap:v;};
   auto originalCorners=nativeCorners(names,f);
@@ -46,7 +48,21 @@ inline bool resizeNative(std::vector<std::string>& f,const std::vector<std::stri
   if(wi==size_t(-1)||di==size_t(-1))return false;
   float yaw=0;auto angle=nativeField(names,f,"yaw");if(angle!=size_t(-1))yaw=std::stof(f[angle]);else{angle=nativeField(names,f,"facing");if(angle!=size_t(-1))yaw=std::stof(f[angle])*1.57079632679f;}
   float c=std::cos(yaw),s=std::sin(yaw),dx=x-fixed.first,dy=y-fixed.second;
-  float w=std::max(.25f,(dx*c-dy*s)*signs[corner][0]),d=std::max(.25f,(dx*s+dy*c)*signs[corner][1]);
+  const bool model=nativeSizedModel(f);
+  const float maximum=nativeLooseModel(f)?3.f:100000.f;
+  const float minWidth=model?std::min(.01f,h->width):.25f;
+  const float minDepth=model?std::min(.01f,h->depth):.25f;
+  float w=std::clamp((dx*c-dy*s)*signs[corner][0],minWidth,maximum);
+  float d=std::clamp((dx*s+dy*c)*signs[corner][1],minDepth,maximum);
+  size_t hi=nativeField(names,f,"height");if(hi==size_t(-1))hi=nativeField(names,f,"h");
+  if(model&&!free&&hi!=size_t(-1)&&h->width>0&&h->depth>0){
+    const float h0=std::max(.0001f,std::stof(f[hi]));
+    // The drag's reach along the corner's diagonal: the mean of the two stretches, held so no side passes the limits.
+    float k=.5f*(std::max(0.f,(dx*c-dy*s)*signs[corner][0])/h->width+std::max(0.f,(dx*s+dy*c)*signs[corner][1])/h->depth);
+    const float big=std::max({h->width,h->depth,h0}),small=std::min({h->width,h->depth,h0});
+    k=std::clamp(k,.01f/small,maximum/big);
+    w=h->width*k;d=h->depth*k;f[hi]=nativeNumber(h0*k);
+  }
   float localX=w*signs[corner][0],localY=d*signs[corner][1];
   auto [xi,yi]=h->points[0];f[xi]=nativeNumber(fixed.first+(c*localX+s*localY)*.5f);
   f[yi]=nativeNumber(fixed.second+(-s*localX+c*localY)*.5f);f[wi]=nativeNumber(w);f[di]=nativeNumber(d);return true;

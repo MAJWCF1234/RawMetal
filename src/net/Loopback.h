@@ -37,6 +37,7 @@ public:
  std::string reason()const override{return m_reason;}
  PeerId self()const override{return m_signedIn?m_id:PeerId{};}
  std::string displayName()const override{return m_name;}
+ void setDisplayName(const std::string& name)override{if(!name.empty())m_name=name;}
  void host(const HostOptions& options)override;
  void search(const SearchFilter& filter)override;
  const std::vector<LobbyInfo>& results()const override{return m_results;}

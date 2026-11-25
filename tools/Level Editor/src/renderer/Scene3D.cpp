@@ -1,3 +1,4 @@
+#include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include "BoxSurfaces.h"
@@ -2372,7 +2373,12 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Retain the reference path for software rendering and cache comparisons.
  // A lamp in a freight cab's shaft sits flush: the cab's roof above it is no
  // mounting surface, and rods to it would run up through the cab floor.
- auto lampMount=[&](const WorldLight&light){return w.campaign()&&(w.level()>=7||w.authored())&&!w.insideCargoLift(light.position.x,light.position.y)?w.clearanceAbove(light.position.x,light.position.y,light.z):light.z+.13f;};
+ // A lamp hangs flush under what is above it. A fitted lamp (its fitting is the model drawn flush under that surface) with
+ // more than 1.5 m clear above its fitting (a kit set down under open sky, a roofless room) keeps its fitting just over
+ // its light: without this the fitting is hung at the top of the map, 128 m up, and the lamp seems not to be there.
+ auto lampMount=[&](const WorldLight&light){if(!(w.campaign()&&(w.level()>=7||w.authored())&&!w.insideCargoLift(light.position.x,light.position.y)))return light.z+.13f;
+  const float above=w.clearanceAbove(light.position.x,light.position.y,light.z);
+  return light.fitting>=0&&above>light.z+.1f+light.fittingHeight+1.5f?light.z+.1f+light.fittingHeight:above;};
  movingGeometry=false;
  const bool cacheCeilingLamps=m_gpuFrame&&m_cacheFixedServices;
  if(cacheCeilingLamps){
@@ -3384,7 +3390,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    float a=std::clamp((edge-r)*3.2f,0.f,1.f)*(.55f+.45f*std::clamp(1.f-r*1.1f,0.f,1.f))*(.75f+noise*.25f);
    t.pixels[size_t(y*n+x)]=(unsigned(a*200.f)<<24)|0x00060505u;
   }return t;}();
- for(const auto&mark:game.bulletImpacts())if(mark.level==level){
+ for(const auto&raw:game.bulletImpacts())if(raw.level==level){
+  // A mark pinned to a lifting door rides up with its leaf (Game::pinToDoor).
+  BulletImpact mark=raw;if(raw.door>=0&&size_t(raw.door)<w.doors().size()&&!w.doors()[size_t(raw.door)].swinging)mark.z+=(w.doors()[size_t(raw.door)].open-raw.doorOpen)*2.65f;
   if(mark.tint==-3){
    // Each hit's own spider-web, its rays reaching further as the pane weakens.
    const int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);if(pane<0||w.paneGlass(pane))continue;const auto&b=w.breakables()[size_t(pane)];const auto f=paneFrame(b);
@@ -3436,8 +3444,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
   // What it was fired into decides the mark: how wide the scar is, and whether there is a pit in it.
   static constexpr float ringSize[]={.11f,.05f,.1f,.085f,.08f,.13f,.14f,.08f,.05f,.035f},pitSize[]={.042f,0,0,0,.036f,.034f,.05f,0,0,0};
-  if(mark.material<0||mark.material>=int(ImpactMaterial::Count)){hole(p+impactNormal*.003f,.1f,impact,.9f);hole(p+impactNormal*.005f,.042f,crater,.9f);}
-  else{const size_t m=size_t(mark.material);hole(p+impactNormal*.003f,ringSize[m],scars[m],.9f);if(pitSize[m]>0)hole(p+impactNormal*.005f,pitSize[m],crater,.9f);}
+  const float fit=mark.size>0?std::min(1.f,mark.size):1.f;   // how much of its usual size the surface under it allows (Game::resolveShot)
+  if(mark.material<0||mark.material>=int(ImpactMaterial::Count)){hole(p+impactNormal*.003f,.1f*fit,impact,.9f);hole(p+impactNormal*.005f,.042f*fit,crater,.9f);}
+  else{const size_t m=size_t(mark.material);hole(p+impactNormal*.003f,ringSize[m]*fit,scars[m],.9f);if(pitSize[m]>0)hole(p+impactNormal*.005f,pitSize[m]*fit,crater,.9f);}
   // Its sparks are drawn with all the electricity (ElectricFx).
  }
  // The flash: an additive core that the bloom pass spreads across the hall.
@@ -4255,7 +4264,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   using ClaireClip=ClaireOutside::Clip;
   const bool outside=m_bodyOutside&&m_claireOutside.prepare(mesh)&&m_claireOutside.hasClip(ClaireClip::Land);
   // 1 the shotgun, 2 the handgun, 3 the MAC-11 (held as the pistol: the same clips and fit, its own mesh).
-  const int held=!outside||game.dead()||game.unarmed()?0:game.equippedWeapon()==WeaponId::Handgun?2:game.equippedWeapon()==WeaponId::MachinePistol?3:game.equippedWeapon()==WeaponId::Shotgun?1:0;
+  const int held=!outside||game.dead()||game.unarmed()?0:game.equippedWeapon()==WeaponId::Handgun?2:game.equippedWeapon()==WeaponId::MachinePistol?3:(game.equippedWeapon()==WeaponId::Shotgun||game.equippedWeapon()==WeaponId::Sniper)?1:0;
   Point3 outsideAim{0,0,1};float outsideAimed=0;int layerClip=-1;ClaireOutside::Gun heldGun{};Point3 heldSocket{};
   if(outside){
    int lower=clip;float lowerPhase=phase;
@@ -4432,8 +4441,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
      if(pistol){const Point3 g=model-socket;report.handGap=std::sqrt(g.x*g.x+g.y*g.y+g.z*g.z)*gun.scale*scale;}
      else{const Point3 support=shotgunSocket(true);report.supportGap=std::hypot(model.x-support.x,model.y-support.y)*gun.scale*scale;report.supportAlong=model.z;}}
     if(outsideAimed>0){const float c=gun.bore.x*outsideAim.x+gun.bore.y*outsideAim.y+gun.bore.z*outsideAim.z;report.aimError=std::acos(std::clamp(c,-1.f,1.f))*180.f/kPi;}
-    const auto&gunMesh=held==3?m_macMesh:pistol?m_handgunMesh:m_weaponMesh;const auto&gunTexture=held==3?m_macTexture:pistol?m_handgunTexture:m_weaponTexture;
-    for(auto face:gunMesh.bindTriangles()){if(!pistol&&face.part==3)continue;
+    const bool rifleHeld=held==1&&game.equippedWeapon()==WeaponId::Sniper;   // the sniper rifle rides the shotgun hold, in the Remington's frame
+    const auto&gunMesh=held==3?m_macMesh:pistol?m_handgunMesh:rifleHeld?m_sniperMesh:m_weaponMesh;const auto&gunTexture=held==3?m_macTexture:pistol?m_handgunTexture:rifleHeld?m_sniperTexture:m_weaponTexture;
+    for(auto face:gunMesh.bindTriangles()){if(!pistol&&!rifleHeld&&face.part==3)continue;
      for(auto&v:face.v)v.p=world(ClaireOutside::place(gun,socket,v.p));
      std::swap(face.v[1],face.v[2]);
      {bool near=false;for(const auto&v:face.v){Point3 d=v.p-eye;near=near||d.x*d.x+d.y*d.y+d.z*d.z<.42f*.42f;}if(near)continue;}   // as her body, past the lens
@@ -4458,7 +4468,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    auto unit=[](Point3 v){float l=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return l>1e-5f?v*(1/l):Point3{1,0,0};};
    Point3 gunForward=unit(support-grip);if(std::sqrt((support-grip).x*(support-grip).x+(support-grip).y*(support-grip).y)<.08f)gunForward={std::cos(angle),std::sin(angle),0};
    const Point3 gunRight=unit({gunForward.y,-gunForward.x,0}),gunUp=unit(cross3(gunRight,gunForward));
-   const bool handgun=sidearm(game.equippedWeapon()),mac=game.equippedWeapon()==WeaponId::MachinePistol;const auto&gunMesh=mac?m_macMesh:handgun?m_handgunMesh:m_weaponMesh;const auto&gunTexture=mac?m_macTexture:handgun?m_handgunTexture:m_weaponTexture;
+   const bool handgun=sidearm(game.equippedWeapon()),mac=game.equippedWeapon()==WeaponId::MachinePistol,rifle=game.equippedWeapon()==WeaponId::Sniper;const auto&gunMesh=mac?m_macMesh:handgun?m_handgunMesh:rifle?m_sniperMesh:m_weaponMesh;const auto&gunTexture=mac?m_macTexture:handgun?m_handgunTexture:rifle?m_sniperTexture:m_weaponTexture;
    const float gunScale=handgun?1.f:.75f/(m_weaponMesh.maximum.z-m_weaponMesh.minimum.z);
    for(auto face:gunMesh.bindTriangles()){if(!handgun&&face.part==3)continue;
     for(auto&v:face.v){auto p=v.p;if(handgun)v.p=grip+(gunRight*p.x+gunUp*p.y+gunForward*p.z)*gunScale;else{p=(p-Point3{.02f,.70f,1.10f})*gunScale;v.p=grip+gunRight*p.x+gunUp*p.y-gunForward*p.z;}}
@@ -4483,6 +4493,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   if(p.kind==Pickup::Kind::Health)prop(m_medkitMesh,m_medkitTexture,p.pos.x,p.pos.y,.4f,-.3f,.65f,base);
   else if(p.kind==Pickup::Kind::HandgunAmmo)prop(m_nineMesh,m_nineTexture,p.pos.x,p.pos.y,.12f,-.3f,.34f,base);
   else if(p.kind==Pickup::Kind::MacAmmo)prop(m_macAmmoMesh,m_macAmmoTexture,p.pos.x,p.pos.y,.11f,-.3f,.24f,base);
+  else if(p.kind==Pickup::Kind::SniperAmmo)prop(m_rifleAmmoMesh,m_rifleAmmoTexture,p.pos.x,p.pos.y,.09f,.5f,.3f,base);
   else if(p.kind==Pickup::Kind::MachinePistol){
    // The MAC-11 itself lying on its left side (its +x, the left, down), the muzzle along a fixed turn, magazine in.
    perf::Scope propProfile(perf::Prop);const float yaw=-.6f+.37f*float(int(p.pos.x*7+p.pos.y*13)%5);Point3 receiver{p.pos.x,p.pos.y,base+.03f};
@@ -4492,15 +4503,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    for(auto face:m_macMesh.triangles){for(auto&v:face.v){auto q=v.p;v.p=Point3{p.pos.x,p.pos.y,base}+forward*q.z+across*q.y+Point3{0,0,m_macMesh.maximum.x-q.x+.003f};}
     auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],m_macTexture,light);}
    objectLighting=false;objectNormalLighting=nullptr;}
-  else if(p.kind==Pickup::Kind::Handgun||p.kind==Pickup::Kind::Shotgun){
+  else if(p.kind==Pickup::Kind::Handgun||p.kind==Pickup::Kind::Shotgun||p.kind==Pickup::Kind::Sniper){
    // The pistol or the shotgun lying on its left side (its +x, the left, down), the barrel along a fixed turn, scaled to its own length.
-   const bool shotgun=p.kind==Pickup::Kind::Shotgun;Mesh& gun=shotgun?m_weaponMesh:m_handgunMesh;const Texture& skin=shotgun?m_weaponTexture:m_handgunTexture;
+   const bool rifle=p.kind==Pickup::Kind::Sniper,shotgun=p.kind==Pickup::Kind::Shotgun||rifle;Mesh& gun=rifle?m_sniperMesh:shotgun?m_weaponMesh:m_handgunMesh;const Texture& skin=rifle?m_sniperTexture:shotgun?m_weaponTexture:m_handgunTexture;
    const Point3 span=gun.maximum-gun.minimum,centre=(gun.minimum+gun.maximum)*.5f;const float scale=(shotgun?.95f:.2f)/std::max({span.x,span.y,span.z,.001f});
    perf::Scope propProfile(perf::Prop);const float yaw=-.6f+.37f*float(int(p.pos.x*7+p.pos.y*13)%5);Point3 receiver{p.pos.x,p.pos.y,base+.03f};
    if(!sphereVisible(receiver,shotgun?.7f:.3f)||hidden({p.pos.x-.5f,p.pos.y-.5f,base},{p.pos.x+.5f,p.pos.y+.5f,base+.1f}))continue;
    const Point3 forward{std::cos(yaw),std::sin(yaw),0},across{-std::sin(yaw),std::cos(yaw),0};
    objectLighting=true;auto lights=exteriorLight(receiver,shotgun?.9f:.25f,.25f,.06f,yaw,skin.glossStrength>0);
-   for(auto face:gun.triangles){if(shotgun&&face.part==3)continue;   // (the Remington's spent shell is part 3)
+   for(auto face:gun.triangles){if(shotgun&&!rifle&&face.part==3)continue;   // (the Remington's spent shell is part 3)
     for(auto&v:face.v){auto q=v.p;v.p=Point3{p.pos.x,p.pos.y,base}+forward*((q.z-centre.z)*scale)+across*((q.y-centre.y)*scale)+Point3{0,0,(gun.maximum.x-q.x)*scale+.003f};}
     auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-receiver);float light=.72f+.3f*std::fabs(n.z)/std::max(.001f,std::sqrt(n.x*n.x+n.y*n.y+n.z*n.z));tri(face.v[0],face.v[1],face.v[2],skin,light);}
    objectLighting=false;objectNormalLighting=nullptr;}
@@ -4527,7 +4538,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(c.kind==0){for(auto face:m_weaponMesh.triangles){if(face.part!=3)continue;
      for(auto&v:face.v){Point3 q=(v.p-shell.centre)*shell.scale;q=shell.axis==0?Point3{q.y,q.z,q.x}:shell.axis==1?Point3{q.z,q.x,q.y}:q;v.p=place(q);}
      auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-c.position);tri(face.v[0],face.v[1],face.v[2],m_weaponTexture,.8f);}}
-   else{const float k=c.kind==2?.9f:1.f;for(auto face:m_brassMesh.triangles){for(auto&v:face.v)v.p=place(v.p*k);
+   else{const float k=c.kind==2?.9f:c.kind==3?1.7f:1.f;for(auto face:m_brassMesh.triangles){for(auto&v:face.v)v.p=place(v.p*k);
      auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-c.position);tri(face.v[0],face.v[1],face.v[2],m_brassTexture,.95f);}}
   }
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
@@ -4979,6 +4990,11 @@ SoftwareRenderer::FpClip SoftwareRenderer::fpShotgunClip(const Game& game)const{
  auto loop=[&](const char*name,float frames){return FpClip{name,std::fmod(game.elapsed()*24.f/frames,1.f)};};
  const bool aimed=game.aimBlend()>.5f;const float speed=length(game.playerVelocity());
  if(game.holster()>.01f)return FpClip{"draw",std::clamp(1-game.holster(),0.f,1.f)};
+// The rifle loads its five rounds one by one over the shotgun clips: the start, five steps, the end, by the share of the reload.
+ if(game.reloading()&&game.activeFirearm()==WeaponId::Sniper){const float p=std::clamp(game.reloadProgress(),0.f,1.f);
+  if(p<.12f)return FpClip{"reload_start",p/.12f};
+  if(p>.74f)return FpClip{"reload_end",std::clamp((p-.74f)/.26f,0.f,1.f)};
+  return FpClip{"reload_step",std::fmod((p-.12f)/.62f*5.f,1.f)};}
  if(game.reloading()){const float t=game.reloadElapsed(),inserts=game.reloadShells()*Game::ShellInsert;   // each clip at its own pace
   if(t<Game::ShellStart)return FpClip{"reload_start",t/Game::ShellStart};
   if(t<Game::ShellStart+inserts)return FpClip{"reload_step",std::fmod((t-Game::ShellStart)/Game::ShellInsert,1.f)};
@@ -5016,9 +5032,27 @@ SoftwareRenderer::FpClip SoftwareRenderer::fpMacClip(const Game& game)const{
  if(speed>.3f)return loop("walk",30);
  return loop("idle",200);
 }
+// The sniper rifle on the pack's rifle clips (24 fps): the aim is the pack's own start and end (the sights rise to the eye),
+// a shot its fire clip, the reload the pack's 83-frame magazine change laid over the game's reload.
+SoftwareRenderer::FpClip SoftwareRenderer::fpRifleClip(const Game& game)const{
+ auto loop=[&](const char*name,float frames){return FpClip{name,std::fmod(game.elapsed()*24.f/frames,1.f)};};
+ const float blend=game.aimBlend();const bool rising=blend>=m_fpAimPrev;m_fpAimPrev=blend;const float speed=length(game.playerVelocity());
+ if(game.holster()>.01f)return FpClip{"draw",std::clamp(1-game.holster(),0.f,1.f)};
+ // The reload and the bolt are worked at the shoulder (Game raises the rifle for them): up first, then the clip.
+ if(game.reloading()){if(blend<.999f)return FpClip{"aim_start",blend};const float p=std::clamp(game.reloadProgress(),0.f,1.f);return FpClip{"reload",std::clamp((p-.06f)/.94f,0.f,1.f)};}
+ const bool aimed=blend>.5f||game.shotAge()<1.7f;
+ // A shot: the recoil clip, then the bolt worked (the hand to the handle, up, back, forward, down; tools/player/build_claire_fp_remington.py).
+ const float fireLength=aimed?14/24.f:12/24.f;if(game.shotAge()<fireLength)return FpClip{aimed?"fire_aim":"fire",game.shotAge()/fireLength};
+ constexpr float boltStart=.5f,boltLength=28/24.f;if(game.shotAge()>=boltStart&&game.shotAge()<boltStart+boltLength&&game.shotAge()<5.f)return FpClip{"bolt",(game.shotAge()-boltStart)/boltLength};
+ if(blend>.002f&&blend<.998f)return rising?FpClip{"aim_start",blend}:FpClip{"aim_end",1-blend};
+ if(aimed)return speed>.3f?loop("walk_aim",30):loop("aim",120);
+ if(game.bodySprinting()&&speed>4.f)return loop("run",20);
+ if(speed>.3f)return loop("walk",30);
+ return loop("idle",120);
+}
 Point3 SoftwareRenderer::fpMacPoint(Point3 e,int part)const{
  static const char* const names[3][4]={{"gun_o","gun_x","gun_y","gun_z"},{"mag_o","mag_x","mag_y","mag_z"},{"knob_o","knob_x","knob_y","knob_z"}};const auto&n=names[std::clamp(part,0,2)];
- auto at=[&](const char*name){return m_fpMac.bonePosition(name);};
+ auto at=[&](const char*name){return fpRig().bonePosition(name);};
  const Point3 origin=at(n[0]),x=at(n[1])-origin,y=at(n[2])-origin,z=at(n[3])-origin;
  const Point3 p=origin+x*e.x+y*e.y+z*e.z;return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};
 }
@@ -5031,8 +5065,9 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  }
  if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
  // The MAC-11: the pack's pistol clips on her arms (fpMacClip).
- if(game.activeFirearm()==WeaponId::MachinePistol){m_fpShotgunPosed=false;m_fpMacPosed=false;
-  if(m_fpMac.bones){const auto clip=fpMacClip(game);m_fpMacPosed=m_fpMac.poseAction(clip.name,clip.phase);}return;}
+ if(game.activeFirearm()==WeaponId::MachinePistol||game.activeFirearm()==WeaponId::Sniper){m_fpShotgunPosed=false;m_fpMacPosed=false;
+  const bool rifle=game.activeFirearm()==WeaponId::Sniper;m_fpRifleActive=rifle;Mesh& rig=rifle?m_fpRifle:m_fpMac;
+  if(rig.bones){const auto clip=rifle?fpRifleClip(game):fpMacClip(game);m_fpMacPosed=rig.poseAction(clip.name,clip.phase);}return;}
  if(game.activeFirearm()==WeaponId::Handgun){
   // The pistol: both hands on the grip from pistolHold, frames and all (the
   // rig is the view mirrored in x), with the pistol's finger set.
@@ -5076,6 +5111,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
 }
 void SoftwareRenderer::drawViewModel(const Game& game){
  perf::Scope viewProfile(perf::ViewModel);
+ if(game.scopeBlend()>.2f)return;   // looking through the scope: the rifle and arms are out of the picture
  const auto*armTextures=playerBody(game.settings().character).armTextures;   // her arms, or the Limitator's sleeves and gloves on them
  // The hands on a locker's leaves (Game::lockerHands) draw however the gun is.
  std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
@@ -5104,7 +5140,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  // The pistol has its own frame, parts and wrist targets (pistolHold).
  const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;
  // The MAC-11: its own rig (m_fpMac); none of the shotgun's or the pistol's hold applies to it.
- const bool macGun=!fists&&heldActor<0&&!game.takedownActive()&&!locker&&game.activeFirearm()==WeaponId::MachinePistol;
+ const bool rifleRig=game.activeFirearm()==WeaponId::Sniper;m_fpRifleActive=rifleRig;
+ const bool macGun=!fists&&heldActor<0&&!game.takedownActive()&&!locker&&(game.activeFirearm()==WeaponId::MachinePistol||rifleRig);
  PistolHold hold;if(pistol){hold=pistolHold(game);rightWrist=hold.wrist[0];leftWrist=hold.wrist[1];}
  Point3 armCenter=kArmsRigCenter,armOffset=fists?Point3{0,-.22f,.30f}:pistol?pistolArmOffset():shotgun.arms;
  const float armScale=kViewModelScale*(fists||pistol?1.f:shotgun.scale);auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*armScale;p.x=-p.x;return p+armOffset;};
@@ -5122,24 +5159,25 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   // The MAC-11's aimed clip holds its front sight 12 mm over the line of sight (the bake's AIM line): lower it onto it.
   // Its receiver and folded stock reach 11 cm behind the grip, where the pack's pistol ends at 3: the whole
   // assembly goes out along the view so the gun sits at the pistol's distance (mac11.hip_push, mac11.aim_push).
-  if(macGun){const float hip=tune("mac11.hip_push",.07f),aim=tune("mac11.aim_push",.09f);m_fpPush=hip+(aim-hip)*k;m_fpDrop=tune("mac11.aim_drop",.012f)*k;}}
+  if(macGun){const float hip=rifleRig?tune("sniper.hip_push",0.f):tune("mac11.hip_push",.07f),aim=rifleRig?tune("sniper.aim_push",0.f):tune("mac11.aim_push",.09f);m_fpPush=hip+(aim-hip)*k;m_fpDrop=(rifleRig?tune("sniper.aim_drop",-.0016f):tune("mac11.aim_drop",.012f))*k;}}
  if(!fists&&!pistol&&!fpShotgun&&!macGun){rightWrist=m_shotgunTarget[0];leftWrist=m_shotgunTarget[1];}   // fitted this frame
  // The MAC-11 in the hands: the clip's pose, and over it each round's kick (a
  // sharp muzzle rise about the grip, a short shove back), the burst's creep up as
  // the spread blooms, and the mouse's sway (Game::updateWeaponMotion), all about
  // the grip. The clips carry the bob, the run and the aim.
  Point3 macPivot{};float macPitch=0,macYaw=0,macRoll=0,macBack=0,macRise=0,macLeft=0;
- if(fpMac){macPivot=fpMacPoint({0,-.04f,0},0);
+ if(fpMac){macPivot=rifleRig?fpMacPoint({0,-.08f,-.06f},0):fpMacPoint({0,-.04f,0},0);
   const float age=game.shotAge(),kick=game.weaponKick();const bool shot=kick>0&&kick+3.f*age>.97f&&!game.reloading();
   float rise=0;if(shot)rise=age<.018f?age/.018f:std::exp(-(age-.018f)/.045f);
-  const float aimK=1-.45f*game.aimBlend(),bloom=game.spreadBloom();
-  macPitch=-(.075f*rise+bloom*1.4f)*aimK;macBack=(.022f*rise+bloom*.25f)*aimK;macRise=bloom*.35f*aimK;
+  const float aimK=1-.45f*game.aimBlend(),bloom=rifleRig?0.f:game.spreadBloom();   // a bolt-action does not bloom: its recoil is the clip's
+  const float heavy=rifleRig?.55f:1.f;macPitch=-(.075f*rise+bloom*1.4f)*aimK*heavy;macBack=(.022f*rise+bloom*.25f)*aimK*heavy;macRise=bloom*.35f*aimK;
   macRoll=(std::fmod(std::floor(age<1?game.elapsed()*18.f:0.f),2.f)<1?.012f:-.012f)*rise;
   const float swayK=1-.6f*game.aimBlend();macYaw=motion.yaw*swayK;macPitch+=(motion.pitch-kick*.065f)*swayK;
   // A reload is worked higher and nearer the middle than the pack's pistol: the MAC-11's long magazine
   // otherwise leaves and comes back below the bottom of the frame (mac11.reload_lift).
-  if(game.reloading()){const float p=game.reloadProgress(),in=std::clamp(p/.12f,0.f,1.f),out=std::clamp((1-p)/.12f,0.f,1.f),e=in*in*(3-2*in)*out*out*(3-2*out);
-   macRise+=tune("mac11.reload_lift",.025f)*e;macLeft=tune("mac11.reload_in",.04f)*e;}}
+  if(game.reloading()&&!rifleRig){const float p=game.reloadProgress(),in=std::clamp(p/.12f,0.f,1.f),out=std::clamp((1-p)/.12f,0.f,1.f),e=in*in*(3-2*in)*out*out*(3-2*out);
+   macRise+=tune("mac11.reload_lift",.025f)*e;macLeft=tune("mac11.reload_in",.04f)*e;}
+  }
  auto macMotion=[&](Point3 p){p=p-macPivot;
   float y=p.y*std::cos(macPitch)+p.z*std::sin(macPitch),z=-p.y*std::sin(macPitch)+p.z*std::cos(macPitch);p={p.x,y,z};
   const float x=p.x*std::cos(macYaw)+p.z*std::sin(macYaw);z=-p.x*std::sin(macYaw)+p.z*std::cos(macYaw);p={x,p.y,z};
@@ -5218,7 +5256,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   else if(macGun){
    // The MAC-11 the same: under the barrel's shroud ahead of the trigger guard.
    const Point3 o=fpMacPoint({0,0,0},0);torchAxis=unit(fpMacPoint({0,0,1},0)-o);torchSide=unit(fpMacPoint({0,-1,0},0)-o);torchUp=unit(cross3(torchAxis,torchSide));
-   torchMount=fpMacPoint({0.f,-.004f,.118f},0);torchScale=.42f;}
+   torchMount=rifleRig?fpMacPoint({0.f,-.085f,.42f},0):fpMacPoint({0.f,-.004f,.118f},0);torchScale=.42f;}
   else if(fists){
    auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
    torchAxis=unit(wrist-elbow);torchSide=unit(cross3(std::fabs(torchAxis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},torchAxis));torchUp=unit(cross3(torchAxis,torchSide));
@@ -5304,8 +5342,10 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  if(fpShotgun){
   for(auto face:m_fpShotgun.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
    const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?(*armTextures)[size_t(claire)]:m_arms);}
-  for(auto face:m_weaponMesh.triangles){if(face.part==3)continue;   // the spent shell flies as a real case (Casings.cpp)
-   for(auto&v:face.v)v.p=fpShotgunPoint(v.p,face.part==2);carrier=face.part!=2;shade(face,m_weaponTexture);}
+  // The sniper rifle rides the same baked points as the Remington (its model is fitted into the Remington's frame).
+  const bool rifle=game.activeFirearm()==WeaponId::Sniper;const Mesh& longGun=rifle?m_sniperMesh:m_weaponMesh;
+  for(auto face:longGun.triangles){if(!rifle&&face.part==3)continue;   // the spent shell flies as a real case (Casings.cpp)
+   for(auto&v:face.v)v.p=fpShotgunPoint(v.p,!rifle&&face.part==2);carrier=rifle||face.part!=2;shade(face,rifle?m_sniperTexture:m_weaponTexture);}
  }else if(macGun){
   // The MAC-11: her arms on the clip, the gun on its baked frame. The magazine
   // rides the pack's magazine in a reload; the knob (part 9) is the pack's slide
@@ -5313,24 +5353,49 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   // and held back on an empty magazine.
   m_macReport={};
   if(fpMac){
-   const bool reloading=game.reloading(),empty=reloading&&game.emptyReload();
+   const Mesh& gunMesh=rifleRig?m_sniperFpMesh:m_macMesh;const Texture& gunSkin=rifleRig?m_sniperTexture:m_macTexture;
+   // The scope's lens: a coated disc, dark blue-violet, nearly opaque and mirror-finished (Material::Glass at full gloss), so the GPU's probes
+   // reflect the room in it as the crossbow's lens in Half-Life 2 does. A thin dark rim, a little brighter at the centre. No reticle here: the
+   // reticle is the tube view's (SoftwareRenderer, shouldered).
+   static const Texture scopeLens=[]{constexpr int N=64;Texture t{N,N,std::vector<std::uint32_t>(N*N)};
+    for(int y=0;y<N;++y)for(int x=0;x<N;++x){const float fx=(x+.5f)/N*2-1,fy=(y+.5f)/N*2-1,r=std::sqrt(fx*fx+fy*fy);
+     const float centre=std::clamp(1.f-r,0.f,1.f);   // a little lighter toward the middle
+     const unsigned cr=unsigned(26+22*centre),cg=unsigned(34+28*centre),cb=unsigned(64+46*centre);
+     unsigned a=240;if(r>.86f){const float k=std::clamp((r-.86f)/.12f,0.f,1.f);a=unsigned(240+15*k);}   // the rim, near black
+     const unsigned rr=r>.9f?10u:cr,gg=r>.9f?10u:cg,bb=r>.9f?14u:cb;
+     t.pixels[size_t(y)*N+size_t(x)]=(a<<24)|(rr<<16)|(gg<<8)|bb;}
+    t.transparent=true;SoftwareRenderer::applyMaterial(t,int(Material::Glass),"scope lens");t.glossStrength=.3f;return t;}();
+   const bool reloading=game.reloading(),empty=reloading&&game.emptyReload(),boltOnClip=reloading&&(empty||rifleRig);
    const float age=game.shotAge(),kick=game.weaponKick();const bool shot=kick>0&&kick+3.f*age>.97f&&!reloading;
    float knob=0;if(shot&&age<.05f)knob=age<.018f?age/.018f:1-(age-.018f)/.032f;
    if(game.slideLocked()&&!reloading)knob=1;
-   const float knobTravel=.04f*std::clamp(knob,0.f,1.f);
+   const float knobTravel=.04f*std::clamp(knob,0.f,1.f);   // (the rifle's bolt is the clip's own: its knob points carry the lift and the pull)
    // The pack's hand cups its pistol magazine's base; the MAC-11's is 10 cm longer below the grip. Out of the
    // well it slides up through the hand so the hand holds its base, and back as it goes home.
-   const float magOut=reloading?dist3(fpMacPoint({0,0,0},1),fpMacPoint({0,0,0},0)):0.f,magSlide=.10f*std::clamp((magOut-.02f)/.12f,0.f,1.f);
+   const float magOut=reloading?dist3(fpMacPoint({0,0,0},1),fpMacPoint({0,0,0},0)):0.f,magSlide=rifleRig?0.f:.10f*std::clamp((magOut-.02f)/.12f,0.f,1.f);
    auto magPoint=[&](Point3 q){return fpMacPoint(Point3{q.x,q.y+magSlide,q.z},reloading?1:0);};
-   for(auto face:m_fpMac.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
-    const int claire=claireMaterial(m_fpMac,face.part);shade(face,claire>=0?(*armTextures)[size_t(claire)]:m_arms);}
-   for(auto face:m_macMesh.triangles){
+   for(auto face:fpRig().triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
+    const int claire=claireMaterial(fpRig(),face.part);shade(face,claire>=0?(*armTextures)[size_t(claire)]:m_arms);}
+   for(auto face:gunMesh.triangles){
+    // The scope's flat lens caps (eyepiece and objective: faces square to the bore, in the scope's tube) are glass in every pose: a faint
+    // tint over a fine, faint reticle, so the view reads through the scope and the disc is never a black plate.
+    const bool lens=rifleRig&&face.part==0&&std::fabs(face.v[0].p.z-face.v[1].p.z)<1e-4f&&std::fabs(face.v[1].p.z-face.v[2].p.z)<1e-4f&&face.v[0].p.z>-.02f&&face.v[0].p.z<.30f&&face.v[0].p.y>-.03f&&face.v[1].p.y>-.03f&&face.v[2].p.y>-.03f;
+    if(lens){const float R=(face.v[0].p.z<.15f?.0165f:.0215f)*2.f/.96f;for(auto&v:face.v){v.u=.5f+v.p.x/R;v.v=.5f+v.p.y/R;}}   // the cap's own mapping: the lens (eyepiece 16.5 mm, objective 21.5 mm) fills the texture's disc
     for(auto&v:face.v){auto q=v.p;
-     if(face.part==9){if(empty)v.p=fpMacPoint(q,2);else{q.z-=knobTravel;v.p=fpMacPoint(q,0);}}
+     if(face.part==9){if(boltOnClip||rifleRig)v.p=fpMacPoint(q,2);else{q.z-=knobTravel;v.p=fpMacPoint(q,0);}}
      else v.p=face.part==8?magPoint(q):fpMacPoint(q,0);}
-    carrier=face.part!=8;shade(face,m_macTexture);}
+    carrier=face.part!=8;shade(face,lens?scopeLens:gunSkin);}
+   // The rifle's reload: the round the right hand brings to the open action, pinched between thumb and finger, from the pouch up to the port
+   // (the clip's frames 17-61, five trips). It lies along the bore, drawn from the brass case scaled to a .308's length.
+   if(rifleRig&&reloading){const auto clip=fpRifleClip(game);
+    if(!std::strcmp(clip.name,"reload")){const float k=clip.phase*85.f;
+     if(k>=17.f&&k<61.f&&std::fmod(k-17.f,11.f)<5.8f){
+      auto rig=[&](const char*n){auto q=fpRig().bonePosition(n);return Point3{q.x,q.y-m_fpDrop,-q.z+m_fpPush};};
+      const Point3 centre=(rig("thumb_03_r")+rig("index_03_r"))*.5f,o=fpMacPoint({0,0,0},0);
+      const Point3 ax=unit(fpMacPoint({1,0,0},0)-o),ay=unit(fpMacPoint({0,1,0},0)-o),az=unit(fpMacPoint({0,0,1},0)-o);
+      for(auto face:m_brassMesh.triangles){for(auto&v:face.v){const Point3 q=v.p*5.0f;v.p=centre+ax*q.x+ay*q.y+az*q.z;}carrier=true;shade(face,m_brassTexture);}}}}
    // What it drew, for the lab: the magazine's middle and the grip's, the knob, the hands.
-   auto view=[&](const char*n){auto q=m_fpMac.bonePosition(n);return macMotion(Point3{q.x,q.y-m_fpDrop,-q.z+m_fpPush});};
+   auto view=[&](const char*n){auto q=fpRig().bonePosition(n);return macMotion(Point3{q.x,q.y-m_fpDrop,-q.z+m_fpPush});};
    auto len=[](Point3 d){return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);};
    auto fromLine=[&](Point3 q,Point3 a,Point3 b){Point3 ab=b-a,d=q-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);return len(d-ab*t);};
    const Point3 magTop=macMotion(magPoint({0,.0196f,0})),magBottom=macMotion(magPoint({0,-.189f,0}));
@@ -5423,7 +5488,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  if(game.shotAge()<.10f&&game.muzzleFlash()>0&&!fists&&!m_inspectRig){
   Point3 tip{};int count=0;float flashScale=1;
   if(pistol){tip=hold.point(kPistolMuzzle+Point3{0,0,.012f});count=1;flashScale=.35f;}
-  else if(macGun){if(fpMac){tip=fpMacPoint({0,.031f,.178f},0);count=1;flashScale=.30f;}}
+  else if(macGun){if(fpMac){tip=rifleRig?fpMacPoint({0,-.03f,.71f},0):fpMacPoint({0,.031f,.178f},0);count=1;flashScale=rifleRig?.5f:.30f;}}
   else for(auto&t:m_weaponMesh.triangles)for(auto&v:t.v)if(v.p.z<m_weaponMesh.minimum.z+gunRange.z*.015f){tip=tip+v.p;++count;}
   if(count){auto center=assembly(pistol||macGun?tip:fpShotgun?fpShotgunPoint(tip*(1.f/count),false):animated(gunLocal(tip*(1.f/count))));float age=game.shotAge(),size=(.13f+std::sin(std::min(1.f,age/.07f)*kPi)*.15f)*flashScale;
    float rotation=std::floor(age*60)*1.7f;Point3 right{std::cos(rotation)*size,std::sin(rotation)*size,0},up{-std::sin(rotation)*size,std::cos(rotation)*size,0};

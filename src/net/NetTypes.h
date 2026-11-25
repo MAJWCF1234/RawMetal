@@ -101,6 +101,7 @@ public:
  virtual std::string reason()const=0;                     // why Offline or Failed, in plain words
  virtual PeerId self()const=0;                            // empty until signed in
  virtual std::string displayName()const=0;
+ virtual void setDisplayName(const std::string&){}           // the player's chosen name (MULTIPLAYER > NAME); "" keeps the default
 
  virtual void host(const HostOptions& options)=0;         // -> Hosted (then InLobby, isHost) or Error
  virtual void search(const SearchFilter& filter)=0;       // -> SearchDone; results() holds them
@@ -148,7 +149,7 @@ struct RemotePlayer{
  float angle=0,pitch=0;       // facing (radians, the map angle) and look pitch (radians, up positive)
  Vec2 velocity{};             // m/s, for the legs' clip and phase
  bool crouched=false,prone=false,grounded=true;
- int weapon=0;                // WeaponId: 0 fists, 1 shotgun, 2 handgun, 3 the MAC-11 (two bits on the wire)
+ int weapon=0;                // WeaponId: 0 fists, 1 shotgun, 2 handgun, 3 the MAC-11, 4 the sniper rifle (three bits on the wire)
  float shotAge=99;            // seconds since their last shot (muzzle flash, recoil)
  float reloadAge=99;          // seconds since a reload began (99 none)
  float health=100;

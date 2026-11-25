@@ -13,11 +13,16 @@ float len3(Point3 p){return std::sqrt(p.x*p.x+p.y*p.y+p.z*p.z);}
 Point3 cross(Point3 a,Point3 b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
 // Each kind's size (the half-length of its axis, metres) and how lively it bounces.
 struct CaseKind{float half,radius,restitution,friction;Sound clink;};
-constexpr CaseKind kCaseKinds[]={{.0325f,.0105f,.32f,.55f,Sound::CasingShell},{.0095f,.0048f,.45f,.62f,Sound::CasingBrass},{.0085f,.0043f,.45f,.62f,Sound::CasingBrass}};
+constexpr CaseKind kCaseKinds[]={{.0325f,.0105f,.32f,.55f,Sound::CasingShell},{.0095f,.0048f,.45f,.62f,Sound::CasingBrass},{.0085f,.0043f,.45f,.62f,Sound::CasingBrass},{.0256f,.006f,.4f,.6f,Sound::CasingBrass}};   // shotgun, 9 mm, .380, .308 (51 mm)
 }
 float Game::casingRandom(){m_casingSeed=m_casingSeed*1664525u+1013904223u;return float(m_casingSeed>>8)*(1.f/16777216.f);}
 float Game::nextSpreadRandom(){m_spreadSeed^=m_spreadSeed<<13;m_spreadSeed^=m_spreadSeed>>17;m_spreadSeed^=m_spreadSeed<<5;return float(m_spreadSeed>>8)*(1.f/16777216.f);}
 
+void Game::grantSniper(int rounds){
+ auto&pool=m_player.pool(WeaponId::Sniper);rounds=std::max(0,rounds);
+ if(!hasSniper()){giveQuestItem(SniperItem);pool.loaded=std::min(rounds,playerWeaponDef(WeaponId::Sniper).cycle.tubeCapacity);}
+ pool.total+=rounds;
+}
 void Game::grantMachinePistol(int rounds){
  auto&pool=m_player.pool(WeaponId::MachinePistol);rounds=std::max(0,rounds);
  if(!hasMachinePistol()){giveQuestItem(MachinePistolItem);pool.loaded=std::min(rounds,playerWeaponDef(WeaponId::MachinePistol).cycle.tubeCapacity);}
@@ -45,7 +50,7 @@ Point3 Game::ejectionPort(WeaponId gun)const{
  const Point3 f{std::cos(a)*std::cos(p),std::sin(a)*std::cos(p),std::sin(p)},right{-std::sin(a),std::cos(a),0},up=cross(f,right),eye{m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye};
  // The port's place in the view as each gun is held (right, up, ahead; metres),
  // drawn in toward the line of sight down the sights.
- Point3 at=gun==WeaponId::Shotgun?Point3{.15f,-.13f,.50f}:gun==WeaponId::Handgun?Point3{.13f,-.09f,.55f}:Point3{.11f,-.10f,.40f};
+ Point3 at=gun==WeaponId::Shotgun?Point3{.15f,-.13f,.50f}:gun==WeaponId::Handgun?Point3{.13f,-.09f,.55f}:gun==WeaponId::Sniper?Point3{.07f,-.07f,.24f}:Point3{.11f,-.10f,.40f};
  const float aim=m_aimBlend;at.x+=(.03f-at.x)*aim;at.y+=(-.04f-at.y)*aim;
  return eye+right*at.x+up*at.y+f*at.z;
 }
@@ -62,7 +67,7 @@ Point3 Game::ejectionVelocity(WeaponId gun){
 }
 
 void Game::ejectCasing(int kind,Point3 position,Point3 velocity){
- if(kind<0||kind>2||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||!std::isfinite(velocity.x)||!std::isfinite(velocity.y)||!std::isfinite(velocity.z))return;
+ if(kind<0||kind>3||!std::isfinite(position.x)||!std::isfinite(position.y)||!std::isfinite(position.z)||!std::isfinite(velocity.x)||!std::isfinite(velocity.y)||!std::isfinite(velocity.z))return;
  if(int(m_casings.size())>=MaxCasings)m_casings.erase(m_casings.begin());   // the oldest goes
  Casing c;c.kind=kind;c.position=position;c.velocity=velocity;
  // It leaves the port end over end: a fast roll about its own axis and a tumble.
@@ -77,7 +82,7 @@ void Game::updateCasings(float dt){
  for(auto&c:m_casings){
   c.age+=dt;
   if(c.resting){c.still+=dt;continue;}
-  const auto&kind=kCaseKinds[size_t(std::clamp(c.kind,0,2))];
+  const auto&kind=kCaseKinds[size_t(std::clamp(c.kind,0,3))];
   // Short steps: a case is small and fast, and must not pass through a floor or a wall.
   const int steps=std::clamp(int(std::ceil(len3(c.velocity)*dt/.02f)),1,8);const float h=dt/float(steps);
   for(int s=0;s<steps&&!c.resting;++s){

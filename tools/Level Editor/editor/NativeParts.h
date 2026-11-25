@@ -85,6 +85,10 @@ inline bool has(const std::string &name, std::initializer_list<const char *> wor
   return false;
 }
 inline std::wstring nice(std::string name) {
+  if (name == "clinic_ceiling_lamp_2") return L"Caged fluorescent bank";
+  if (name == "bld_lamp_cage") return L"Industrial cage light";
+  if (name == "lamp_ceiling_tube") return L"Flush twin-tube fluorescent";
+  if (name == "lamp_suspended_twin_tube") return L"Short-mounted twin-tube fluorescent";
   // res_crystal_l..res_rock_low (slots 374-380): resonance crystals and bedrock outcrops.
   if (name.rfind("res_crystal_", 0) == 0 || name.rfind("res_rock_", 0) == 0) {
     bool crystal = name.rfind("res_crystal_", 0) == 0;

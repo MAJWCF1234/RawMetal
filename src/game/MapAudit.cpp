@@ -143,7 +143,7 @@ bool Game::auditMapScene(Game& game,int level){
  for(size_t i=0;i<w.structures().size();++i){const auto& v=w.structures()[i];if(v.x1<-.15f||v.y1<-.15f||v.x2>24.15f||v.y2>24.15f)fail("OUTSIDE CHUNK structure["+std::to_string(i)+"] bounds "+at({v.x1,v.y1})+".."+at({v.x2,v.y2})+" bottom/top "+std::to_string(v.bottom)+"/"+std::to_string(v.top));}
  // Tile decks occupy exactly one cell inside the fixed 24 by 24 layer; their
  // parser/load checks already reject rows of any other width.
- for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":s.kind==PickupKind::HandgunAmmo?"9mm":s.kind==PickupKind::MacAmmo?".380":s.kind==PickupKind::MachinePistol?"mac-11":s.kind==PickupKind::Handgun?"handgun":s.kind==PickupKind::Shotgun?"shotgun":"health")+" at "+at(s.position);
+ for(const auto& s:w.pickupSpawns()){float z=s.z>-900?s.z:-999;std::string name=std::string(s.kind==PickupKind::Ammo?"ammo":s.kind==PickupKind::HandgunAmmo?"9mm":s.kind==PickupKind::MacAmmo?".380":s.kind==PickupKind::MachinePistol?"mac-11":s.kind==PickupKind::Handgun?"handgun":s.kind==PickupKind::Shotgun?"shotgun":s.kind==PickupKind::Sniper?"sniper":s.kind==PickupKind::SniperAmmo?".308":"health")+" at "+at(s.position);
   check(reachable(s.position,z,.6f),name);
   if(!w.fits(s.position.x,s.position.y,(s.z>-900?s.z:w.supportBelow(s.position.x,s.position.y,w.floorHeight(s.position.x,s.position.y)+.5f))+.03f,.3f,false))fail("STUCK "+name);}
  for(const auto& c:w.clutterSpawns())if(c.kind!=ClutterModelKind&&!w.fits(c.position.x,c.position.y,(c.z>-900?c.z:w.supportBelow(c.position.x,c.position.y,w.floorHeight(c.position.x,c.position.y)+.5f))+.03f,.2f,false))fail("STUCK clutter at "+at(c.position));
@@ -701,7 +701,7 @@ bool Game::auditMapScene(Game& game,int level){
    const float* own=model::size[f.model];const float given[]={f.width,f.depth,f.height};float sum=0;int n=0;for(int a=0;a<3;++a)if(own[a]>=.1f){sum+=given[a]/own[a];++n;}
    if(!n)continue;const float r=sum/n;if(r>2.2f||r<.45f){char text[32];std::snprintf(text,sizeof text," at x%.2f its own size",r);fail("SCALE "+fname(i)+text);}}
   // J: WALK-THROUGH: a big piece standing on the floor with no collision where a player walks.
-  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||f.solid||frame(f.model)||f.height<1.2f||f.width*f.depth<.6f)continue;const float base=fbase(f);
+  for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||f.solid||f.shaped||frame(f.model)||f.height<1.2f||f.width*f.depth<.6f)continue;const float base=fbase(f);
    int walked=0;for(float u:{-.25f,0.f,.25f})for(float v:{-.25f,0.f,.25f}){const Vec2 p=toWorld(f,u*f.width,v*f.depth);if(reachableIn(standing,p,base,.1f)&&game.hullFits(p,base+.02f,Player::StandingHeight,.2f,false))++walked;}
    if(walked>=3){char text[40];std::snprintf(text,sizeof text," (%d/9 of its footprint walked)",walked);fail("WALK-THROUGH "+fname(i)+text);}}
   // K: STRAP OFF MATTRESS: a strap, rail or bar (a structure no wider than 15 cm) over a bed, fixture

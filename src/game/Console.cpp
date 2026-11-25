@@ -1,6 +1,8 @@
 #include "Game.h"
 #include "../renderer/SoftwareRenderer.h"
+#include "../renderer/DebugLayer.h"
 #include "../world/CustomCampaign.h"
+#include "../world/CampaignExport.h"
 #include "../lab/LabAccess.h"
 #include "../net/Match.h"
 #include <sstream>
@@ -17,12 +19,33 @@ void Game::executeConsole(std::string command){
  std::istringstream stream(command);std::string verb,arg,extra;stream>>verb>>arg>>extra;
  // summon, ally/enemy/neutral, kill, killall, freeze, ai, list, help summon (Summon.cpp).
  if(consoleSummonCommand(command)){}
+ else if(verb=="maps"&&arg=="engineering"&&extra.empty()){
+  m_consoleLog.push_back("CHAPTER "+std::to_string(campaignChunkLabel(CampaignEngineeringEntry).chapter)+" / ENGINEERING");
+  int first=-1,last=-1;
+  std::string_view district;
+  auto printDistrict=[&](){
+   if(first>=0)m_consoleLog.push_back(std::to_string(first)+"-"+std::to_string(last)+" "+std::string(district));
+  };
+  for(int chunk:campaignChunksInPlayOrder()){
+   const auto label=campaignChunkLabel(chunk);
+   if(std::string_view(label.section)!=CampaignEngineeringSection)continue;
+   if(district!=label.district){
+    printDistrict();
+    district=label.district;first=chunk;
+   }
+   last=chunk;
+  }
+  printDistrict();
+  m_consoleLog.push_back("MAP ENGINEERING OPENS SERVICE SPINE (180), WEST OF DEEP ACCESS CONTROL.");
+ }
  else if(verb=="help"||verb=="maps"){
   m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST / MAP EXCLUSION");
   for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
+  m_consoleLog.push_back("MAPS ENGINEERING LISTS THE ENGINEERING DISTRICTS. MAP ENGINEERING OPENS SERVICE SPINE.");
   m_consoleLog.push_back("RELOAD / WHERE / GOD / NOCLIP / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("NOCLIP: FLY THROUGH WALLS WHERE YOU LOOK. JUMP RISES, CROUCH SINKS, SPRINT IS FASTER. NOT SAVED.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
+  m_consoleLog.push_back("DEBUGLAYER: TOGGLE COLLIDERS, LIGHTS, CHUNKS, HAZARDS AND STATS.");
   m_consoleLog.push_back("GIVE 12 GA / 12GA / SHELLS: ADDS 16 SHOTGUN SHELLS.");
   m_consoleLog.push_back("SUMMON <KIND> [N] [ALLY|ENEMY|NEUTRAL] [AI=..] / ALLY / ENEMY / KILL / KILLALL / FREEZE / AI ON|OFF / LIST. HELP SUMMON.");
  }else if(verb=="clear")m_consoleLog.clear();
@@ -52,6 +75,8 @@ void Game::executeConsole(std::string command){
  else if(verb=="give"&&arg=="handgun"&&extra.empty()){grantHandgun(playerWeaponDef(WeaponId::Handgun).cycle.tubeCapacity);m_consoleLog.push_back("HANDGUN ADDED. 3 OR THE WHEEL TO DRAW.");}
  else if(verb=="give"&&arg=="9mm"&&extra.empty()){m_player.pool(WeaponId::Handgun).total+=24;m_consoleLog.push_back("24 ROUNDS 9MM ADDED.");}
  // The MAC-11 with one magazine in it (another if already carried), and a box of .380.
+ else if(verb=="give"&&(arg=="sniper"||arg=="rifle")&&extra.empty()){grantSniper(playerWeaponDef(WeaponId::Sniper).cycle.tubeCapacity);m_consoleLog.push_back("SNIPER RIFLE ADDED. 5 OR THE WHEEL TO DRAW.");}
+ else if(verb=="give"&&(arg=="308"||arg==".308")&&extra.empty()){m_player.pool(WeaponId::Sniper).total+=playerWeaponDef(WeaponId::Sniper).cycle.pickupAmount;m_consoleLog.push_back("10 ROUNDS .308 ADDED.");}
  else if(verb=="give"&&(arg=="mac11"||arg=="mac-11"||arg=="mac")&&extra.empty()){grantMachinePistol(playerWeaponDef(WeaponId::MachinePistol).cycle.tubeCapacity);m_consoleLog.push_back("MAC-11 ADDED. 4 OR THE WHEEL TO DRAW.");}
  else if(verb=="give"&&(arg=="380"||arg==".380")&&extra.empty()){m_player.pool(WeaponId::MachinePistol).total+=playerWeaponDef(WeaponId::MachinePistol).cycle.pickupAmount;m_consoleLog.push_back("32 ROUNDS .380 ADDED.");}
   else if(verb=="give"&&((arg=="12"&&(extra=="ga"||extra=="gauge")&&(stream>>std::ws).eof())||((arg=="12ga"||arg=="shells")&&extra.empty()))){m_player.pool(WeaponId::Shotgun).total+=16;m_consoleLog.push_back("16 SHELLS 12 GA ADDED.");}
@@ -71,6 +96,22 @@ void Game::executeConsole(std::string command){
    m_consoleLog.push_back(m_match->followHost()?"COOPFOLLOW ON: GUESTS ON THE MAP YOU LEAVE COME WITH YOU.":"COOPFOLLOW OFF: EVERYONE STAYS ON THEIR OWN MAP.");}}
  else if(verb=="unstuck"){m_stuckTime=1;if(!hullFits(m_player.pos,m_player.z,m_player.hullHeight()))m_consoleLog.push_back(unstickPlayer()?"MOVED TO OPEN FLOOR.":"NO OPEN FLOOR NEARBY. ASK THE HOST TO TP YOU.");
   else m_consoleLog.push_back("YOU ARE NOT STUCK.");m_stuckTime=0;}
+ else if(verb=="debuglayer"||verb=="debug_layer"){
+  using namespace debuglayer;
+  int selected=-1;
+  if(extra.empty()){
+   if(arg.empty())selected=visible?0:All;
+   else if(arg=="off")selected=0;
+   else if(arg=="on"||arg=="all")selected=All;
+   else for(const auto& [name,layer]:{std::pair{"colliders",Colliders},{"lights",Lights},{"chunks",Chunks},{"hazards",Hazards},{"stats",Stats}})
+    if(arg==name){selected=layer;break;}
+  }
+  if(selected<0)m_consoleLog.push_back("USE DEBUGLAYER [ON|OFF|COLLIDERS|LIGHTS|CHUNKS|HAZARDS|STATS].");
+  else{
+   visible=unsigned(selected);
+   m_consoleLog.push_back(visible?"DEBUG LAYER ON. CLOSE THE CONSOLE TO INSPECT.":"DEBUG LAYER OFF.");
+  }
+ }
  else if(verb=="fps"){m_showFps=!m_showFps;m_consoleLog.push_back(m_showFps?"FRAME-TIME DISPLAY ON":"FRAME-TIME DISPLAY OFF");}
  else if(verb=="r_scale"){
   if(arg=="50"||arg=="75"||arg=="100"){m_renderScale=arg=="50"?.5f:arg=="75"?.75f:1.f;m_consoleLog.push_back("3D RENDER SCALE "+arg+" PERCENT. HUD STAYS FULL RESOLUTION.");}
@@ -132,6 +173,7 @@ void Game::executeConsole(std::string command){
   else if(arg=="platform")level=25;
   else if(arg=="depot")level=27;
   else if(arg=="tunnels")level=30;
+  else if(arg=="engineering")level=CampaignEngineeringEntry;
   else if(!arg.empty()){
    int candidate=-1;auto result=std::from_chars(arg.data(),arg.data()+arg.size(),candidate);
    if(result.ec==std::errc{}&&result.ptr==arg.data()+arg.size()&&candidate>=0&&candidate<CampaignChunkCount)level=candidate;
@@ -212,6 +254,27 @@ bool Game::testConsole(){
  typeGive("give handgun");checkGive(game.hasHandgun()&&game.player().pool(WeaponId::Handgun)==AmmoPool{47,3},"give handgun still adds one magazine when owned");
  typeGive("help");bool shellHelp=false;for(const auto& line:game.m_consoleLog)shellHelp|=line.find("GIVE 12 GA")!=std::string::npos;
  checkGive(shellHelp,"help lists the displayed 12 GA caliber command");
+ typeGive("maps engineering");
+ const std::array<std::string_view,2> engineeringRows={
+  "CHAPTER 2 / ENGINEERING","180-181 DEEP RESEARCH SERVICES"};
+ for(auto row:engineeringRows)
+  checkGive(std::find(game.m_consoleLog.begin(),game.m_consoleLog.end(),row)!=game.m_consoleLog.end(),std::string(row));
+ typeGive("map engineering");
+ checkGive(game.level()==EngineeringServiceChunk&&game.world().campaign(),"MAP ENGINEERING opens the new service spine");
+ auto walkSeam=[&](int from,Vec2 start,Vec2 direction,int to){
+  game.m_level=from;game.restart();game.m_player.pos=start;game.m_player.z=-15.f;
+  game.updateStreaming(.02f);
+  for(int step=0;step<28&&game.level()==from;++step){
+   game.tryMove(direction*.1f);
+   game.crossChunkBoundary();
+  }
+  return game.level()==to;
+ };
+ checkGive(walkSeam(108,{1.5f,14.5f},{-1,0},EngineeringServiceChunk),"Deep Access Control opens west to the service spine");
+ checkGive(walkSeam(EngineeringServiceChunk,{22.5f,14.5f},{1,0},108),"Engineering returns east to Deep Access Control");
+ checkGive(walkSeam(EngineeringServiceChunk,{1.5f,14.5f},{-1,0},EngineeringIsolationChunk),"Service Spine connects west to Feed Isolation");
+ checkGive(walkSeam(EngineeringIsolationChunk,{22.5f,14.5f},{1,0},EngineeringServiceChunk),"Feed Isolation returns east to Service Spine");
+ checkGive(walkSeam(108,{12.f,22.5f},{0,1},109),"Deep Access Control still continues south to Extraction Interface");
  if(!givePassed)return false;
  for(int level=0;level<ChunkCount;level+=level<34?1:(level+7<ChunkCount?7:std::max(1,ChunkCount-1-level))){input={};input.textInput="map "+std::to_string(level)+"\r";game.update(input,.02f);if(game.level()!=level||!game.consoleOpen()||!game.world().fits(game.player().pos.x,game.player().pos.y,game.player().z,1))return fail(__LINE__);}
  for(const auto& alias:std::array<std::pair<const char*,int>,8>{{{"freight",10},{"receiving",13},{"warehouse",16},{"manifest",20},{"yard",22},{"platform",25},{"depot",27},{"tunnels",30}}}){

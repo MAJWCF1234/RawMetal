@@ -30,7 +30,7 @@ enum class Environment { Interior, Outdoor };
 enum class FloorMaterial { Industrial, OfficeCarpet };
 // 24-38: OFFICE pack furniture and computers (assets/office, OFFICE-SOURCE.md).
 // 39-46: Mega Pack industrial set pieces (assets/facility/industrial).
-inline constexpr int FacilityModelCount=605;
+inline constexpr int FacilityModelCount=622;
 enum class CreatureKind { Huntsman, Wasp, Brute, Warden, Mutant, Snatcher, Chimera, Transformed, Machine };
 inline constexpr int CreatureKindCount=int(CreatureKind::Machine)+1;
 // One record per creature kind: what it is called, how much it takes, the
@@ -115,7 +115,7 @@ inline constexpr float TransformedLeap=.4f,TransformedHold=2.f,TransformedStumbl
 // The area score a map plays; stitched maps share one so the loop carries on.
 // Silence: the map plays no score at all (held quiet for effect; its ambience carries it).
 enum class MusicCue { Default, Freight, Undercover, Subliminal, PitchBlack, Heat, Darkness, LastChapter, DeathClose, Research, Clinic, Silence, Count };
-enum class PickupKind { Health, Ammo, HandgunAmmo, MacAmmo, MachinePistol, Handgun, Shotgun }; // Values retain the existing save format (HandgunAmmo from version 19; the handgun and the shotgun themselves from its version 3; the MAC-11's box and the gun itself from the pickups section's version 2).
+enum class PickupKind { Health, Ammo, HandgunAmmo, MacAmmo, MachinePistol, Handgun, Shotgun, Sniper, SniperAmmo }; // Values retain the existing save format (HandgunAmmo from version 19; the handgun and the shotgun themselves from its version 3; the MAC-11's box and the gun itself from the pickups section's version 2).
 // The air of a map or zone: linear RGB haze colour (0-1) and density per metre
 // (0-.1). A negative density leaves it to the environment, today's look:
 // interior .11,.15,.18 at .008, outdoors by sky (World::haze). Density also
@@ -146,9 +146,9 @@ struct ChunkDefinition {
     // (an underground city across a gulf) sets it long; its haze is then the darkness distance fades into.
     float viewDistance=0;
 };
-inline constexpr int CampaignChunkCount=180;
+inline constexpr int CampaignChunkCount=182;
 inline constexpr int AshfallChunkCount=15;
-inline constexpr int WorldChunkCapacity=180;
+inline constexpr int WorldChunkCapacity=182;
 // Chunks 34 on are the descent chapters (power plant to the Dark Below),
 // generated from tools/campaign/plan.py; their builders live in the
 // CampaignChapter*.cpp files.
@@ -157,9 +157,10 @@ inline constexpr int WorldChunkCapacity=180;
 // they sit wherever their origin places them in the world.
 inline constexpr int FreightDistrictEnd=32;
 inline constexpr int ReactorCoreChunk=32,CoolantLoopChunk=33;
-// The Security Office prologue, where New Game starts: the last chunk, stood
+// The Security Office prologue, where New Game starts, stands
 // on the grid north of the Foundry with its lift shaft opening into it.
 inline constexpr int PrologueChunk=179;
+inline constexpr int EngineeringServiceChunk=180,EngineeringIsolationChunk=181;
 static_assert(CampaignChunkCount<=WorldChunkCapacity&&AshfallChunkCount<=WorldChunkCapacity,"World storage must cover every authored chunk");
 inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     // Maps 0-2: brighter fill for their darker brick, rust panel and green steel finishes.
@@ -349,6 +350,9 @@ inline constexpr std::array<ChunkDefinition,CampaignChunkCount> CampaignChunks{{
     // PLAN:CHUNKS END
     // 179: the Security Office (authored as a custom-format map, resource 398).
     {{0,-24},{4.6f,5.75f},9,Environment::Interior,false,12.f,.3f,96,FloorMaterial::OfficeCarpet,MusicCue::Default,-1.5707963f,-14.f,true},
+    // 180-181: the optional Chapter 2 service branch, immediately west of 108.
+    {{169,1416},{21.5f,14.5f},-15.f,Environment::Interior,false,-11.2f,.26f,97,FloorMaterial::Industrial,MusicCue::Research,3.14159265f},
+    {{145,1416},{21.5f,14.5f},-15.f,Environment::Interior,false,-10.5f,.25f,97,FloorMaterial::Industrial,MusicCue::Research,3.14159265f},
 }};
 inline constexpr std::array<const char*,CampaignChunkCount> CampaignMapNames{{
  "FOUNDRY","PRESSURE WORKS","TURBINE GANTRY","REACTOR COMPLEX","SERVICE GALLERY","COOLANT RETURN","CABLE VAULTS","PUMP ANNEX","UTILITY JUNCTION","WASTE HANDLING",
@@ -384,7 +388,7 @@ inline constexpr std::array<const char*,CampaignChunkCount> CampaignMapNames{{
  "BOSS ARENA II / FLOOR","LOWER DEPTHS","OLD CITY / CAUSEWAY","OLD CITY / TEMPLE","THE DEEP GATE","DEEP GATE / APPROACH",
  "THE DARK HEART",
     // PLAN:NAMES END
- "SECURITY OFFICE",
+ "SECURITY OFFICE","ENGINEERING / SERVICE SPINE","ENGINEERING / FEED ISOLATION",
 }};
 // The campaign chunk whose 24 m square contains a world-space point, or -1.
 inline int campaignChunkAt(Vec2 global){

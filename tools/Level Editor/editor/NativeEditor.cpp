@@ -49,9 +49,7 @@
 #include <fstream>
 #include <atomic>
 #include <intrin.h>
-#ifdef RAWMETAL_UNIFIED
 #include "../src/platform/EditorPreview.h"
-#endif
 #include "../src/core/CampaignAdmin.h" // Open from campaign: admin unlock
 #include "../src/platform/EditorChannel.h"  // the picture's control and status, in memory when it runs in this process
 #include "../src/renderer/SignArt.h"        // sign plates: the Sign designer previews the engine's own pixels
@@ -153,8 +151,9 @@ static void textAt(HDC dc, int x, int y, const wchar_t *text) {
 // The look: a 90s plan (black, crisp grid, bright colours by kind) inside a
 // warm, soft frame of cream, sand, sage and terracotta.
 namespace ui {
-// Frame and panels.
-constexpr COLORREF Frame = RGB(0xF2, 0xEA, 0xDB),     // warm cream behind everything
+// Frame and panels. Variables, not constants: the warm cream look below is the default, and a theme file picks the dark one
+// (useDarkTheme, from the Monochrome KDE scheme: grey panels, one blue accent, orange for Play) before any window is made.
+inline COLORREF Frame = RGB(0xF2, 0xEA, 0xDB),     // warm cream behind everything
     Header = RGB(0xE7, 0xDA, 0xC2),                     // sand band along the top
     HeaderLine = RGB(0xD5, 0xC3, 0xA4),
     Paper = RGB(0xFB, 0xF7, 0xEF),                      // cards: left tools, right inspector
@@ -181,6 +180,15 @@ constexpr COLORREF Frame = RGB(0xF2, 0xEA, 0xDB),     // warm cream behind every
     PeachLip = RGB(0xE0, 0xAE, 0x92),
     Glow = RGB(0xEE, 0xB8, 0x5C),                       // soft honey hover ring
     Bezel = RGB(0x3A, 0x32, 0x2B);                      // warm frame around the black plan
+inline void useDarkTheme() {
+  Frame = RGB(24, 24, 26), Header = RGB(36, 36, 38), HeaderLine = RGB(58, 58, 60), Paper = RGB(30, 30, 32),
+  PaperEdge = RGB(52, 52, 54), Field = RGB(20, 20, 22), FieldEdge = RGB(80, 80, 82), Ink = RGB(218, 218, 220),
+  InkSoft = RGB(150, 150, 152), InkFaint = RGB(98, 98, 100), Sand = RGB(44, 44, 46), SandEdge = RGB(80, 80, 82),
+  SandLip = RGB(64, 64, 66), Sage = RGB(114, 114, 116), SageEdge = RGB(61, 174, 233), SageLip = RGB(110, 110, 112),
+  SageInk = RGB(252, 252, 252), SageWash = RGB(56, 56, 58), Terracotta = RGB(246, 116, 0), TerracottaEdge = RGB(190, 88, 0),
+  TerracottaLip = RGB(200, 96, 0), Brick = RGB(218, 68, 83), Peach = RGB(70, 70, 72), PeachEdge = RGB(100, 100, 102),
+  PeachLip = RGB(84, 84, 86), Glow = RGB(61, 174, 233), Bezel = RGB(14, 14, 16);
+}
 // Icon chips on the tool tiles, one tint per page.
 constexpr COLORREF PageTint[] = {RGB(0xF3, 0xC9, 0xB3), RGB(0xF4, 0xDF, 0xA8), RGB(0xCD, 0xE2, 0xC2),
                                  RGB(0xDD, 0xCE, 0xEC), RGB(0xC6, 0xDF, 0xEB)};
@@ -434,7 +442,12 @@ struct Pcm {
   int rate = 16000;
 };
 inline Pcm bank[Count];
-inline bool muted = false, enabled = false;
+inline bool muted = true, enabled = false;
+inline bool readMuted(const std::filesystem::path &file) {
+  std::ifstream preference(file);
+  int mutedValue = 1;
+  return !(preference >> mutedValue) || mutedValue != 0;
+}
 inline unsigned rng = 0x9e3779b9u;
 inline float random01() {
   rng ^= rng << 13, rng ^= rng >> 17, rng ^= rng << 5;
@@ -468,15 +481,15 @@ inline void load(const std::filesystem::path &folder) {
 }
 // pitch and gain spread around 1; the clip is resampled into a fresh WAV.
 inline void play(Clip clip, float gain = 1.f, float spread = .07f) {
-  if (!enabled || muted || bank[clip].samples.empty())
+  if (!enabled || muted || clip == Slider || bank[clip].samples.empty())
     return;
   edperf::Scope perfScope("sound");
   static std::vector<char> ring[4];
   static int next = 0;
   auto &out = ring[next++ % 4];
   const auto &in = bank[clip].samples;
-  float pitch = 1.f + (random01() * 2 - 1) * spread;
-  float level = gain * (.78f + .22f * random01()) * .8f;
+  float pitch = 1.f + (random01() * 2 - 1) * std::min(spread, .025f);
+  float level = gain * .25f;
   size_t frames = size_t(in.size() / pitch);
   out.assign(44 + frames * 2, 0);
   auto put32 = [&](size_t at, uint32_t v) { memcpy(out.data() + at, &v, 4); };
@@ -849,7 +862,7 @@ static constexpr ToolInfo toolInfo[] = {
     {L"Hang cloth", L"≋", L"Hang a curtain, a strap or a cable (pick on the right). Curtain: drag along where its top hangs. Strap: click where it hangs from. Cable: drag from one end to the other; a loose cable from the wall to where its end lies. It sways when walked through and drapes over things.", 1, "CLOTH", 'l'},
     {L"Spawn", L"⚑", L"Click where a player starts in a multiplayer match. R turns the way they face. Pick one to turn it, give it a team or nudge it. The Multiplayer page has the rest.", 2, "SPAWN", 'p'},
 };
-static constexpr int ToolCount = int(std::size(toolInfo)), WindowTool = 27,
+static constexpr int ToolCount = int(std::size(toolInfo)), LampTool = 6, WindowTool = 27,
                      CrateTool = 36, CreatureTool = 37, PaintTool = 38, ShapeDrawTool = 39, CorridorTool = 40,
                      HeightTool = 41, SoundTool = 42, DoorTool = 21, EmitterTool = 32, FilmTool = 43,
                      TerrainTool = 44, NatureTool = 45, WaterTool = 11, FlooringTool = 46,
@@ -919,6 +932,12 @@ static constexpr Friendly friendlyFields[] = {
     {"STRUCT", "top", L"Top (m)"},
     {"STRUCT", "bottom", L"Bottom (m)"},
     {"FIXTURE", "base", L"Lift off the floor (m)"},
+    {"FIXTURE", "width", L"Width (m)"},
+    {"FIXTURE", "depth", L"Depth (m)"},
+    {"FIXTURE", "height", L"Height (m)"},
+    {"CLUTTER", "width", L"Width (m)"},
+    {"CLUTTER", "depth", L"Depth (m)"},
+    {"CLUTTER", "height", L"Height (m)"},
     {"ACTOR", "height", L"Size"},
     {"ACTOR_KEY", "yaw", L"Facing"},
     {"STAIR", "top", L"Top (m)"},
@@ -1028,7 +1047,9 @@ struct Editor {
        heightList = nullptr,
        musicList = nullptr, mapSkyList = nullptr,
        snapList = nullptr, modelSearch = nullptr, mapSearch = nullptr,
-       statusText = nullptr;
+       statusText = nullptr, inputGuide = nullptr;
+  bool controllerHints = false, desktopPointerKnown = false;
+  POINT desktopPointer{};
   std::vector<std::string> musicNames;
   bool auditionMusic = false;
   std::vector<HWND> fieldInputs, fieldLabels, buttons, tools;
@@ -1049,6 +1070,7 @@ struct Editor {
   std::vector<bool> fieldShown;
   std::vector<Schema> schemas;
   std::vector<std::pair<int, std::string>> models;
+  int lampFitting = -1;
   std::vector<std::pair<int, std::string>> structureMaterials;
   HFONT font = nullptr, titleFont = nullptr, buttonFont = nullptr, playFont = nullptr,
         headingFont = nullptr, chipFont = nullptr;
@@ -1092,7 +1114,7 @@ struct Editor {
   NativeStamp regionStamp;
   int rotation = 0, mirror = 0;
   std::wstring notice =
-      L"Drag on the plan or the picture to draw a room. Right mouse looks. WASD moves.";
+      L"Ready to build.";
   // Friendly state: which palette page, brush shape, hover/ghost, autosave, play.
   // The Sound tool's bank (src/audio/SoundBank.h, read like the model list): name, label, loop, gain, radius.
   struct BankRow { std::string name; std::wstring label; bool loop; std::string gain, radius; };
@@ -1744,6 +1766,7 @@ struct Editor {
   parts::Grid partsGrid, paintGrid;
   std::vector<HWND> partTabButtons;
   int partTab = parts::Furniture, browserTool = -1;
+  std::string controllerCatalogKey;
   bool paintShown = false;
   std::set<std::string> savedParts;
   parts::Item paintChoice{"mat-5", L"Concrete", 5, parts::Concrete};
@@ -1772,14 +1795,17 @@ struct Editor {
       out.push_back({std::string("kit-") + kitDefs[k].key, kitDefs[k].title, k, parts::Kits});
     return out;
   }
-  bool browsing() const { return tool == 8 || tool == 9 || (tool == 14 && listIndex(clutterList) == 7); }
+  bool browsing() const {
+    return tool == 8 || tool == 9 || (tool == LampTool && lampFitting >= 0) ||
+           (tool == 14 && listIndex(clutterList) == 7);
+  }
   void refreshParts() {
     if (!partsGrid.hwnd)
       return;
     auto query = lowered(modelSearch ? utf8(label(modelSearch)) : std::string{});
     std::string current = tool == 9               ? "prim-" + std::to_string(listIndex(primList))
                           : tool == 8 && kitInHand >= 0 ? std::string("kit-") + kitDefs[kitInHand].key
-                                                        : "model-" + std::to_string(selectedModel());
+                                                        : "model-" + std::to_string(tool == LampTool ? lampFitting : selectedModel());
     std::vector<parts::Item> shown;
     int pick = -1;
     for (auto &item : allParts()) {
@@ -1801,6 +1827,65 @@ struct Editor {
     partsGrid.set(std::move(shown), pick);
     for (HWND b : partTabButtons)
       InvalidateRect(b, nullptr, FALSE);
+  }
+  void useController(retro::EditorControllerCommand command, int direction) {
+    using Command = retro::EditorControllerCommand;
+    if (command == Command::InputDevice) {
+      if (GetForegroundWindow() == window)
+        setInputDevice(direction == 1);
+      return;
+    }
+    if (playing || GetForegroundWindow() != window)
+      return;
+    if (command == Command::CycleView) {
+      cycleControllerView();
+      return;
+    }
+    if (!IsWindowVisible(viewport))
+      return;
+    switch (command) {
+    case Command::InputDevice: case Command::CycleView: break;
+    case Command::Play:
+      startPlay(0);
+      break;
+    case Command::Select:
+      SendMessageW(window, WM_COMMAND, ToolBase, 0);
+      break;
+    case Command::Rotate:
+      rotateFromShortcut(false);
+      break;
+    case Command::CatalogTab: {
+      if (!browsing()) SendMessageW(window, WM_COMMAND, ToolBase + 8, 0);
+      const int tab = (partTab + std::clamp(direction, -1, 1) + parts::TabCount) % parts::TabCount;
+      controllerCatalogKey.clear();
+      SendMessageW(window, WM_COMMAND, PartTabBase + tab, 0);
+      message(std::wstring(parts::partTabs[tab]) + L". D-pad up/down chooses a tile.");
+      break;
+    }
+    case Command::CatalogItem: {
+      if (!browsing()) SendMessageW(window, WM_COMMAND, ToolBase + 8, 0);
+      const int count = int(partsGrid.items.size());
+      if (!count) {
+        message(L"No matching parts. D-pad left/right changes catalogue tabs.");
+        break;
+      }
+      int selected = partsGrid.selected;
+      if (selected < 0 && !controllerCatalogKey.empty()) {
+        const auto tile = std::find_if(partsGrid.items.begin(), partsGrid.items.end(),
+            [&](const auto &item) { return item.key == controllerCatalogKey; });
+        if (tile != partsGrid.items.end()) selected = int(tile - partsGrid.items.begin());
+      }
+      const int step = std::clamp(direction, -1, 1);
+      const int next = selected < 0 ? (step < 0 ? count - 1 : 0) : (selected + step + count) % count;
+      controllerCatalogKey = partsGrid.items[size_t(next)].key;
+      pickPart(next, false);
+      break;
+    }
+    }
+  }
+  void cycleControllerView() {
+    constexpr int nextView[] = {PlanOnly, ViewOnly, Dual};
+    SendMessageW(window, WM_COMMAND, nextView[viewMode], 0);
   }
   void saveSavedParts() {
     std::error_code ec;
@@ -1834,6 +1919,18 @@ struct Editor {
         SendMessageW(window, WM_COMMAND, ToolBase + 17, 0);
         message(item.name + L": click where it should go. Turn copy and Flip copy work on it too.");
       }
+      return;
+    }
+    if (item.group == parts::Lights &&
+        (item.value == retro::model::clinic_ceiling_lamp_2 || item.value == retro::model::bld_lamp_cage ||
+         item.value == retro::model::lamp_ceiling_tube ||
+         item.value == retro::model::lamp_suspended_twin_tube)) {
+      SendMessageW(window, WM_COMMAND, ToolBase + LampTool, 0);
+      lampFitting = item.value;
+      relayout();
+      refreshParts();
+      refreshGhost();
+      message(item.name + L": click to mount it on the ceiling.");
       return;
     }
     kitInHand = -1; // a part or shape tile puts down a held kit
@@ -2409,6 +2506,118 @@ struct Editor {
   HBITMAP planLayer = nullptr;
   PlanLayerKey planLayerKey;
   ULONGLONG noticeUntil=0;
+  const wchar_t *toolHint(int index) const {
+    const auto &info = toolInfo[std::clamp(index, 0, ToolCount - 1)];
+    if (!controllerHints)
+      return info.hint;
+    switch (info.shape) {
+    case 's': return L"A or RT selects. Hold RT and aim to move. Y rotates.";
+    case 'R': return L"Aim at the floor. Hold RT, aim at the opposite corner, then release.";
+    case 'c': return L"Hold RT at one corner, aim at the opposite corner, then release to copy.";
+    case 'v': return L"Aim where the copy should go and tap RT.";
+    case 't':
+      if (brush == 1) return L"Hold RT at one corner, aim at the opposite corner, then release.";
+      if (brush == 2) return L"Aim and tap RT to fill.";
+      return L"Hold RT and aim to paint.";
+    case 'F': case 'H': case 'T': case 'N': case 'G': return L"Hold RT and aim to brush the ground.";
+    case 'w': case 'P': case 'K': return L"Hold RT to start, aim to size or stretch, then release.";
+    case 'r': case 'l': case 'd': return L"Hold RT to start, aim to size or stretch, then release.";
+    case 'p': case 'g': return L"Aim the crosshair and press A or RT to place.";
+    default: return info.hint;
+    }
+  }
+  const wchar_t *walkHint() const {
+    return controllerHints ? L"Start plays from the 3D camera. Press Start again to return to building."
+                           : L"Walk your map. Escape returns to building. Over the plan, F5 starts at the pointer.";
+  }
+  // How far a tap of R (or Turn) turns a model: a quarter, an eighth, 15 or 5 degrees. Shift+R steps through them;
+  // holding R and moving the mouse turns it smoothly at any angle (Shift snaps that to 15 degrees).
+  static constexpr float TurnSteps[4] = {1.57079632679f, .785398163f, .261799388f, .0872664626f};
+  int turnStepIndex = 0;
+  const wchar_t *turnHint() const {
+    return controllerHints ? L"Y turns the selected object."
+                           : L"Turn the selected object. Tap R to turn, hold R and move the mouse to turn smoothly, Shift+R for a finer step.";
+  }
+  void nextTurnStep() {
+    turnStepIndex = (turnStepIndex + 1) % 4;
+    static const wchar_t *names[4] = {L"Turn step: a quarter (90 degrees).", L"Turn step: an eighth (45 degrees).", L"Turn step: 15 degrees.", L"Turn step: 5 degrees."};
+    message(names[turnStepIndex]);
+  }
+  const wchar_t *playingHint() const {
+    return controllerHints ? L"Playing. Press Start to return to building."
+                           : L"Playing. Press Escape to return to building.";
+  }
+  void refreshInputGuide() {
+    if (!inputGuide)
+      return;
+    const wchar_t *text;
+    if (playing)
+      text = controllerHints
+        ? L"CONTROLLER   Left stick move   |   Right stick look   |   Start return to Builder\r\nA jump   |   B crouch   |   RB interact   |   LT aim   |   RT attack   |   X reload\r\nD-pad Left fists   |   Right draw or switch guns   |   Down inventory"
+        : L"KEYBOARD + MOUSE   WASD move   |   Mouse look   |   Escape return to Builder\r\nSpace jump   |   C crouch   |   E interact   |   Right mouse aim   |   Left mouse attack   |   R reload";
+    else if (viewMode == 1)
+      text = controllerHints
+        ? L"CONTROLLER   Press View (two squares) to switch to 3D edit.\r\nIn 3D, use the sticks to move and aim. Press A or RT to edit."
+        : L"KEYBOARD + MOUSE   Left-drag to edit   |   Wheel zoom   |   Middle-drag to pan\r\nF5 play   |   Using a controller? Move a stick to see its guide.";
+    else
+      text = controllerHints
+        ? L"CONTROLLER   View (two squares) changes view   |   Start plays\r\nSticks move/aim   |   LB/RB lower/raise   |   A or RT select/place   |   B cancel   |   Y rotate\r\nD-pad Left/Right catalogue tabs   |   Up/Down items"
+        : L"KEYBOARD + MOUSE   WASD move   |   Hold right mouse to look   |   Left click edit\r\nR rotate   |   F5 play   |   Using a controller? Move a stick to see its guide.";
+    SetWindowTextW(inputGuide, text);
+  }
+  void setInputDevice(bool controller) {
+    if (controllerHints == controller)
+      return;
+    const bool showingToolHint = notice == toolHint(tool);
+    controllerHints = controller;
+    refreshInputGuide();
+    if (plan)
+      InvalidateRect(plan, nullptr, FALSE);
+    if (tooltip) {
+      auto updateTip = [&](HWND control, const wchar_t *text) {
+        if (!control) return;
+        TOOLINFOW tip{sizeof(tip)};
+        tip.uFlags = TTF_IDISHWND;
+        tip.hwnd = GetParent(control);
+        tip.uId = reinterpret_cast<UINT_PTR>(control);
+        tip.lpszText = const_cast<wchar_t *>(text);
+        SendMessageW(tooltip, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&tip));
+      };
+      for (int index = 0; index < int(tools.size()); ++index)
+        updateTip(tools[size_t(index)], toolHint(index));
+      updateTip(GetDlgItem(window, Walk), walkHint());
+      updateTip(GetDlgItem(window, TurnSelected), turnHint());
+    }
+    if (playing)
+      message(playingHint());
+    else if (showingToolHint) {
+      notice = toolHint(tool);
+      if (statusText)
+        SetWindowTextW(statusText, notice.c_str());
+    }
+  }
+  void observeDesktopInput(const MSG &msg) {
+    if (!msg.hwnd || (msg.hwnd != window && !IsChild(window, msg.hwnd)))
+      return;
+    switch (msg.message) {
+    case WM_MOUSEMOVE:
+      // Play recentres the cursor. Its preview reports actual movement.
+      if (!playing && desktopPointerKnown &&
+          (std::abs(msg.pt.x - desktopPointer.x) > 2 || std::abs(msg.pt.y - desktopPointer.y) > 2)) {
+        desktopPointer = msg.pt;
+        setInputDevice(false);
+      } else if (!desktopPointerKnown) {
+        desktopPointer = msg.pt;
+        desktopPointerKnown = true;
+      }
+      break;
+    case WM_KEYDOWN: case WM_SYSKEYDOWN:
+    case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN:
+    case WM_MOUSEWHEEL: case WM_MOUSEHWHEEL:
+      setInputDevice(false);
+      break;
+    }
+  }
   void message(std::wstring s,bool engineUpdate=false) {
     if(ghosting)return;
     if(engineUpdate&&GetTickCount64()<noticeUntil)return;
@@ -2799,6 +3008,8 @@ struct Editor {
                              ? s.fields[size_t(i)]
                              : "Engine field " + std::to_string(i);
       auto *nice = friendlyLabel(s.kind, name);
+      if (s.kind == "CLUTTER" && !nativeLooseModel(f))
+        nice = nullptr;
       fieldShown.push_back(advanced || (nice && record >= 0));
       auto value = i < int(f.size()) ? decoded(f[size_t(i)])
                    : fresh           ? initial(s, i)
@@ -3317,6 +3528,91 @@ struct Editor {
     publish();
     selectRecord(record);
   }
+  // Smooth turning: hold R and move the mouse sideways to spin the picked piece freely (Shift snaps to 15
+  // degrees); a tap of R still gives the quarter turn. One undo step for the whole spin.
+  bool spinArmed = false, spinMoving = false;
+  int spinRecord = -1, spinStartX = 0;
+  float spinStartYaw = 0;
+  size_t spinYawIndex = 0;
+  bool spinTurnable() {
+    if (record < 0 || selectedRecords.size() > 1 || !editableRecord(size_t(record)) || emitterPicked() || filmPicked() || spawnPicked())
+      return false;
+    if (tool == 8 || tool == DoorTool || tool == FilmTool || tool == SpawnTool || tool == 9 || tool == PaintTool || tool == FlooringTool || tool == 2)
+      return false;
+    auto &names = schemas[size_t(kind)].fields;
+    auto yaw = std::find(names.begin(), names.end(), "yaw");
+    if (yaw == names.end() || std::find(names.begin(), names.end(), "facing") != names.end())
+      return false;
+    spinYawIndex = size_t(yaw - names.begin());
+    return true;
+  }
+  void spinTo(float angle) {
+    auto f = NativeDocument::fields(doc.lines[size_t(spinRecord)]);
+    if (f.size() <= spinYawIndex)
+      f.resize(spinYawIndex + 1);
+    f[spinYawIndex] = nativeNumber(std::remainder(angle, 6.28318530718f));
+    normalize(f);
+    auto before = NativeDocument::fields(doc.lines[size_t(spinRecord)]);
+    doc.replace(size_t(spinRecord), f);
+    relink(before, f);
+    publish();
+    selectRecord(spinRecord);
+  }
+  // Seen before the key filter: R's press, its repeats, mouse moves while it is held, and its release.
+  bool spinMessage(const MSG &msg) {
+    const bool rKey = msg.wParam == 'R' && !(GetKeyState(VK_CONTROL) & 0x8000);
+    if (msg.message == WM_KEYDOWN && rKey && !spinArmed && (GetKeyState(VK_SHIFT) & 0x8000) &&
+        !(GetFocus() && GetParent(GetFocus()) == form) && spinTurnable()) {
+      nextTurnStep(); // Shift+R: a finer (or back to the quarter) step for a tap
+      return true;
+    }
+    if (msg.message == WM_KEYDOWN && rKey) {
+      if (spinArmed)
+        return true; // the key's repeats while held
+      if (GetFocus() && GetParent(GetFocus()) == form)
+        return false; // typing in a field
+      if (!spinTurnable())
+        return false;
+      POINT p;
+      GetCursorPos(&p);
+      auto f = NativeDocument::fields(doc.lines[size_t(record)]);
+      spinArmed = true, spinMoving = false, spinRecord = record, spinStartX = p.x;
+      spinStartYaw = f.size() > spinYawIndex && !f[spinYawIndex].empty() ? std::stof(f[spinYawIndex]) : 0.f;
+      message(L"Move the mouse sideways to turn it. Shift snaps to 15 degrees.");
+      return true;
+    }
+    if (!spinArmed)
+      return false;
+    if (msg.message == WM_MOUSEMOVE) {
+      POINT p;
+      GetCursorPos(&p);
+      const int dx = p.x - spinStartX;
+      if (!spinMoving && std::abs(dx) < 4)
+        return false;
+      if (!spinMoving) {
+        spinMoving = true;
+        remember();
+      }
+      float angle = spinStartYaw + float(dx) * .012f;
+      if (GetKeyState(VK_SHIFT) & 0x8000)
+        angle = std::round(angle / .261799388f) * .261799388f;
+      spinTo(angle);
+      return false;
+    }
+    if (msg.message == WM_KEYUP && rKey) {
+      spinArmed = false;
+      if (spinMoving) {
+        spinMoving = false;
+        refreshGhost();
+        message(L"Turned. Ctrl+Z takes it back.");
+      } else {
+        rotateSelected();
+        refreshGhost();
+      }
+      return true;
+    }
+    return false;
+  }
   void rotateSelected() {
     if(record>=0&&!editableRecord(size_t(record))){message(L"Unlock and show this floor before editing its content.");return;}
     if(selectedRecords.size()>1){rotateMultiple();return;}
@@ -3367,7 +3663,7 @@ struct Editor {
       f.resize(index + 1);
     float angle = f[index].empty() ? 0 : std::stof(f[index]);
     f[index] =
-        nativeNumber(std::remainder(angle + 1.57079632679f, 6.28318530718f));
+        nativeNumber(std::remainder(angle + TurnSteps[turnStepIndex], 6.28318530718f));
     normalize(f);
     int selected = record;
     remember();
@@ -4064,6 +4360,16 @@ struct Editor {
     if (k == "LIGHT") {
       float z = std::max(floorZ + .1f, std::min(floorZ + 3.2f, creationCeiling() - .2f));
       set("z", n(z)), set("mount", "0"), set("yaw", "0"), set("intensity", "1"), set("range", "8"), set("kelvin", "3200");
+      if (tool == LampTool && lampFitting >= 0) {
+        const auto &size = retro::model::size[lampFitting];
+        set("z", n(std::max(floorZ + .1f, creationCeiling() - size[2] - .06f)));
+        set("fitting", std::to_string(lampFitting));
+        set("w", n(size[0]));
+        set("d", n(size[1]));
+        set("h", n(size[2]));
+        if (lampFitting != retro::model::bld_lamp_cage)
+          set("kelvin", "4200");
+      }
     } else if (k == "AMBIENT") {
       // The sound picked in the Sound tool's list, with its own loudness and reach: a bed loops, the rest play now and then.
       if (bankSounds.empty())
@@ -4751,6 +5057,26 @@ struct Editor {
     dragMates.clear();dragSelection.clear();resizeHandle=-1;
     InvalidateRect(plan, nullptr, FALSE);
   }
+  void rotateFromShortcut(bool reverse) {
+    if (tool == 8 && kitInHand >= 0)
+      turnKitInHand(); // the kit about to be set down
+    else if (tool == DoorTool)
+      turnDoorGhost(); // the Door tool turns the door it is about to fit
+    else if (tool == FilmTool && !filmPicked())
+      turnFilm(); // the Film camera tool turns the camera it is about to place
+    else if (tool == SpawnTool && !spawnPicked())
+      turnSpawn(reverse ? -45.f : 45.f); // the Spawn tool turns the spawn it is about to place
+    else if (tool == 9) { // the Shape tool turns the shape it is about to place
+      primFacing = (primFacing + 1) & 3;
+      message(L"The next shape faces " + wide(retro::prim::facingWord(primFacing)) + L".");
+      InvalidateRect(plan, nullptr, FALSE);
+    }
+    else if (tool == PaintTool || tool == FlooringTool || tool == 2)
+      turnPaint(reverse ? -90.f : 90.f); // the paint turns (NativeMaterialTurn.inc)
+    else
+    rotateSelected();
+    refreshGhost();
+  }
   bool shortcut(const MSG &msg) {
     // Keys typed in the Sign designer belong to it (Tab moves between its boxes), except F5 play.
     if (signDesigner && (msg.hwnd == signDesigner || IsChild(signDesigner, msg.hwnd)) &&
@@ -4765,6 +5091,8 @@ struct Editor {
     }
     // Alt+click picks paint up; Alt alone must not wake the window menu.
     if ((msg.message == WM_SYSKEYDOWN || msg.message == WM_SYSKEYUP) && msg.wParam == VK_MENU && tool == PaintTool)
+      return true;
+    if (spinMessage(msg)) // R held: smooth turning
       return true;
     if (msg.message != WM_KEYDOWN)
       return false;
@@ -4848,7 +5176,7 @@ struct Editor {
       if (!busy && tool != 0) {
         tool = 0;
         repaintTools();
-        message(toolInfo[0].hint);
+        message(toolHint(0));
       } else if (!busy)
         selectRecord(-1);
       return true;
@@ -4858,24 +5186,7 @@ struct Editor {
       return true;
     }
     if (msg.wParam == 'R') {
-      if (tool == 8 && kitInHand >= 0)
-        turnKitInHand(); // the kit about to be set down
-      else if (tool == DoorTool)
-        turnDoorGhost(); // the Door tool turns the door it is about to fit
-      else if (tool == FilmTool && !filmPicked())
-        turnFilm(); // the Film camera tool turns the camera it is about to place
-      else if (tool == SpawnTool && !spawnPicked())
-        turnSpawn(shift ? -45.f : 45.f); // the Spawn tool turns the spawn it is about to place
-      else if (tool == 9) { // the Shape tool turns the shape it is about to place
-        primFacing = (primFacing + 1) & 3;
-        message(L"The next shape faces " + wide(retro::prim::facingWord(primFacing)) + L".");
-        InvalidateRect(plan, nullptr, FALSE);
-      }
-      else if (tool == PaintTool || tool == FlooringTool || tool == 2)
-        turnPaint(shift ? -90.f : 90.f); // the paint turns (NativeMaterialTurn.inc)
-      else
-      rotateSelected();
-      refreshGhost();
+      rotateFromShortcut(shift);
       return true;
     }
     if (msg.wParam == 'V' && !ctrl) {
@@ -4888,6 +5199,32 @@ struct Editor {
     }
     if ((msg.wParam == VK_OEM_4 || msg.wParam == VK_OEM_6) && record >= 0 && record < int(doc.lines.size())) {
       auto f = NativeDocument::fields(doc.lines[size_t(record)]);
+      if (nativeSizedModel(f)) {
+        if (selectedRecords.size() > 1 || !editableRecord(size_t(record))) {
+          message(L"Pick one model on an editable floor to resize it.");
+          return true;
+        }
+        const size_t width = nativeLooseModel(f) ? 8 : 6;
+        const float w = number(f[width], 0), d = number(f[width+1], 0), h = number(f[width+2], 0);
+        const float smallest = std::min({w, d, h}), largest = std::max({w, d, h});
+        if (smallest <= 0)
+          return true;
+        const float limit = nativeLooseModel(f) ? 3.f : 100000.f;
+        const float requested = msg.wParam == VK_OEM_6 ? 1.15f : 1.f / 1.15f;
+        const float factor = std::clamp(requested, std::min(1.f, .01f/smallest), std::max(1.f, limit/largest));
+        if (factor == 1.f)
+          return true;
+        const auto before = f;
+        f[width] = nativeNumber(std::min(limit, w*factor));
+        f[width+1] = nativeNumber(std::min(limit, d*factor));
+        f[width+2] = nativeNumber(std::min(limit, h*factor));
+        remember();
+        doc.replace(size_t(record), f);
+        relink(before, f);
+        publish();
+        selectRecord(record);
+        return true;
+      }
       if (f[0] == "PRIM" && f.size() > 8) {
         float k = msg.wParam == VK_OEM_6 ? 1.15f : 1 / 1.15f;
         remember();
@@ -5358,10 +5695,12 @@ struct Editor {
     int middle = std::max(200, w - 344 - px), pw = viewMode == 2   ? 0
                                               : viewMode == 1 ? middle
                                                               : (middle - 12) / 2;
-    placeControl(plan, px, top, pw, std::max(80, h - top - 52), TRUE);
+    placeControl(plan, px, top, pw, std::max(80, h - top - 104), TRUE);
     ShowWindow(plan, pw ? SW_SHOW : SW_HIDE);
     placeControl(viewport, px + pw + (pw ? 12 : 0), top, middle - pw - (pw ? 12 : 0),
-               std::max(80, h - top - 52), TRUE);
+               std::max(80, h - top - 104), TRUE);
+    placeControl(inputGuide, px + 4, h - 102, middle - 8, 50, TRUE);
+    refreshInputGuide();
     ShowWindow(viewport, viewMode == 1 ? SW_HIDE : SW_SHOW);
     laps.lap("layout_tools_plan");
     // Right column: what the tool will do, then what is selected. Nothing else.
@@ -5749,7 +6088,9 @@ struct Editor {
         layout();
         RECT client{};
         GetClientRect(window, &client);
-        auto p = bounds(plan), v = bounds(viewport), f = bounds(form);
+        auto p = bounds(plan), v = bounds(viewport), f = bounds(form), guide = bounds(inputGuide);
+        if (guide.top < p.bottom || guide.top < v.bottom || guide.bottom > client.bottom - 42)
+          throw std::runtime_error("Input guide overlaps the editing panes or status bar");
         if (f.left < 0 || f.right > client.right ||
             f.bottom > client.bottom - 80)
           throw std::runtime_error("Inspector extends outside its pane");
@@ -5765,6 +6106,35 @@ struct Editor {
           throw std::runtime_error("View mode visibility is inconsistent");
       }
     }
+    auto guideText = [&] {
+      wchar_t text[512]{};
+      GetWindowTextW(inputGuide, text, int(std::size(text)));
+      return std::wstring(text);
+    };
+    viewMode = 0;
+    setInputDevice(true);
+    if (guideText().find(L"D-pad") == std::wstring::npos || std::wstring(toolHint(0)).find(L"A or RT selects") == std::wstring::npos)
+      throw std::runtime_error("Controller instructions are missing from the editor");
+    cycleControllerView();
+    if (viewMode != 1 || guideText().find(L"Press View") == std::wstring::npos)
+      throw std::runtime_error("Controller cannot switch from split view to 2D");
+    cycleControllerView();
+    if (viewMode != 2 || guideText().find(L"A or RT") == std::wstring::npos)
+      throw std::runtime_error("Controller cannot return from 2D to 3D");
+    cycleControllerView();
+    if (viewMode != 0)
+      throw std::runtime_error("Controller cannot return to split view");
+    playing = true;
+    refreshInputGuide();
+    if (guideText().find(L"Start return") == std::wstring::npos)
+      throw std::runtime_error("Controller return instruction is missing in Play");
+    playing = false;
+    MSG desktop{};
+    desktop.hwnd = window;
+    desktop.message = WM_KEYDOWN;
+    observeDesktopInput(desktop);
+    if (guideText().find(L"WASD") == std::wstring::npos || std::wstring(toolHint(0)).find(L"Click") == std::wstring::npos)
+      throw std::runtime_error("Keyboard instructions did not return on desktop input");
     layersDock=true;refreshLayerDock();
     for(auto size:{POINT{1280,720},POINT{1920,1080}}){SetWindowPos(window,nullptr,0,0,size.x,size.y,SWP_NOACTIVATE|SWP_NOZORDER);layout();RECT client{};GetClientRect(window,&client);
       for(HWND child:{layerStack,layerPreview,layerName,layerElevationInput,layerThicknessInput,layerOpacity,layerGroupList,GetDlgItem(window,LayerCommit),GetDlgItem(window,LayerReferences)}){auto r=bounds(child);if(r.left<0||r.right>client.right||r.bottom>client.bottom-80)throw std::runtime_error("Layer dock extends outside its pane");}}
@@ -5890,6 +6260,43 @@ struct Editor {
     pickPart(bench, true);
     require(savedParts.count("model-" + std::to_string(retro::model::lab_clean_bench)) == 1, "right-click saves a part");
     pickPart(bench, true);
+    partTab = parts::Lights;
+    refreshParts();
+    const std::array lightModels{retro::model::clinic_ceiling_lamp_2, retro::model::bld_lamp_cage,
+                                 retro::model::lamp_ceiling_tube, retro::model::lamp_suspended_twin_tube};
+    const size_t firstFitting = doc.records("LIGHT", 0).size();
+    for (size_t i = 0; i < lightModels.size(); ++i) {
+      const int id = lightModels[i];
+      const std::string key = "model-" + std::to_string(id);
+      const auto tile = std::find_if(partsGrid.items.begin(), partsGrid.items.end(),
+                                     [&](const auto &item) { return item.key == key; });
+      require(tile != partsGrid.items.end(), "each fluorescent or cage fixture appears in the Lights catalog");
+      pickPart(int(tile - partsGrid.items.begin()), false);
+      require(tool == LampTool && lampFitting == id, "a Lights catalog tile picks the correct ceiling fitting");
+      float x = 5.5f + float(i), y = 8.5f;
+      gesture(x, y, x, y);
+    }
+    auto checkFittings = [&](const NativeDocument &campaign) {
+      const auto lights = campaign.records("LIGHT", 0);
+      require(lights.size() == firstFitting + lightModels.size(), "placing the tiles creates four light records");
+      for (size_t i = 0; i < lightModels.size(); ++i) {
+        const int id = lightModels[i];
+        const auto f = NativeDocument::fields(campaign.lines[lights[firstFitting + i]]);
+        require(f.size() >= 22 && f[5] == "0" && f[18] == std::to_string(id),
+                "each placed record keeps its ceiling mount and model ID");
+        for (size_t axis = 0; axis < 3; ++axis)
+          require(std::abs(number(f[19 + axis], 0) - retro::model::size[id][axis]) < .001f,
+                  "each placed fitting keeps its original dimensions");
+      }
+    };
+    checkFittings(doc);
+    const auto catalogMap = root / L".build" / L"light-catalog-check.rmc";
+    doc.save(catalogMap);
+    NativeDocument reopenedLights;
+    reopenedLights.open(catalogMap);
+    checkFittings(reopenedLights);
+    require(validateDocument(), "the preview engine loads the four catalog fittings");
+    passed.push_back("four Lights catalog fixtures placed, saved, reopened and validated");
     // 4. Shapes are a tab of their own and paintable.
     partTab = parts::Shapes;
     refreshParts();
@@ -6917,7 +7324,7 @@ struct Editor {
         if (k == "CREATURE")
           choose(creatureList, CreatureList, std::clamp(std::stoi(f[2]), 0, 8));
         if (k == "PICKUP")
-          choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 6));
+          choose(pickupList, PickupList, std::clamp(std::stoi(f[2]), 0, 8));   // the list ends at ".308 rifle rounds" (8)
         if (k == "SURFACE") {
           ++tally.gestures;
           chooseData(surfaceList, SurfaceList, std::stoi(f[2]));
@@ -7156,7 +7563,7 @@ struct Editor {
       setCreatureField(9, "the_chimera");
     }
     group = toolInfo[tool].group;
-    message(toolInfo[tool].hint);
+    message(toolHint(tool));
     repaintTools();
   }
   // The bundled example is never overwritten; saving it asks for a new name.
@@ -7319,7 +7726,8 @@ struct Editor {
       sfx::play(sfx::Play, .7f, .02f);
     writeControl();
     focusEngine();
-    message(spot == 1 ? L"Playing from the start. Escape comes back." : L"Playing. Escape comes back.");
+    refreshInputGuide();
+    message(playingHint());
   }
   void stopPlay() {
     playing = false;
@@ -7330,6 +7738,7 @@ struct Editor {
     }
     playView = -1;
     SetFocus(viewMode == 2 ? window : plan);
+    refreshInputGuide();
     message(L"Back to building. Everything is where you left it.");
   }
   bool confirmSave() {
@@ -7357,7 +7766,7 @@ struct Editor {
   // put back to its original; Save as still writes an ordinary custom map.
   struct CampaignEntry {
     int chunk = -1, chapter = 1;
-    std::wstring district, name;
+    std::wstring district, name, section;
     bool sealed = false;
   };
   struct CampaignPicker {
@@ -7460,6 +7869,7 @@ struct Editor {
       entry.district = wide(f[2]);
       entry.name = wide(f[3]);
       entry.sealed = f[4] == "1";
+      if (f.size() > 6) entry.section = wide(f[6]);
       maps.push_back(std::move(entry));
     }
     if (maps.empty())
@@ -7567,7 +7977,8 @@ struct Editor {
   static std::wstring campaignRow(const CampaignEntry &m) {
     wchar_t number[8]{};
     swprintf_s(number, L"%03d", m.chunk);
-    return L"Chapter " + std::to_wstring(m.chapter) + L"  ·  " + m.district + L"     " + number + L"  " + m.name;
+    const auto &group = m.section.empty() ? m.district : m.section;
+    return L"Chapter " + std::to_wstring(m.chapter) + L"  ·  " + group + L"     " + number + L"  " + m.name;
   }
   static void fillCampaignPicker(CampaignPicker &p) {
     wchar_t text[256]{};
@@ -7579,7 +7990,7 @@ struct Editor {
     p.shown.clear();
     for (int i = 0; i < int(p.maps->size()); ++i) {
       auto row = campaignRow((*p.maps)[size_t(i)]);
-      auto folded = row;
+      auto folded = row + L"  " + (*p.maps)[size_t(i)].district;
       for (auto &c : folded)
         c = wchar_t(towlower(c));
       if (!needle.empty() && folded.find(needle) == std::wstring::npos)
@@ -7615,6 +8026,12 @@ struct Editor {
         if (HIWORD(w) == EN_CHANGE)
           fillCampaignPicker(*p);
         return 0;
+      case 13: { // Engineering filter
+        wchar_t filter[256]{};
+        GetWindowTextW(p->search, filter, int(std::size(filter)));
+        SetWindowTextW(p->search, _wcsicmp(filter, L"Engineering") == 0 ? L"" : L"Engineering");
+        return 0;
+      }
       case 3: // Admin
         p->adminRow = true;
         showCampaignAdmin(*p);
@@ -7708,8 +8125,9 @@ struct Editor {
     };
     child(L"STATIC", L"Pick one of the game's levels. It opens as a new map; nothing is saved until you choose to.", 0, -1, 16, 14,
           c.right - 32, 40);
-    p.search = child(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 11, 16, 56, c.right - 32, 28);
-    SendMessageW(p.search, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Find by name, number or chapter"));
+    p.search = child(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 11, 16, 56, c.right - 168, 28);
+    SendMessageW(p.search, EM_SETCUEBANNER, TRUE, reinterpret_cast<LPARAM>(L"Find by name, number, chapter or section"));
+    child(L"BUTTON", L"Engineering", WS_TABSTOP, 13, c.right - 144, 55, 128, 30);
     p.list = child(L"LISTBOX", L"", WS_BORDER | WS_VSCROLL | LBS_NOTIFY | LBS_NOINTEGRALHEIGHT | WS_TABSTOP, 12, 16, 94, c.right - 32,
                    c.bottom - 94 - 132);
     // The unlock row, hidden until Admin (or Ctrl+Shift+A) asks for it.
@@ -9244,18 +9662,21 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     SelectObject(dc, e->font);
     SetTextColor(dc, RGB(0xA8, 0xA2, 0x96));
     RECT rest{40 + named.cx, 6, r.right - 8, 28};
-    DrawTextW(dc, info.hint, -1, &rest, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
+    DrawTextW(dc, e->toolHint(e->tool), -1, &rest, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
   }
   {
     // How to look around, always in sight at the foot of the plan.
-    static constexpr wchar_t help[] = L"Wheel: zoom     Middle-drag or Space-drag: move     Home: fit";
+    const wchar_t *help = e->controllerHints
+      ? L"Press View (two squares) to change views."
+      : L"Wheel: zoom     Middle-drag or Space-drag: move     Home: fit";
     SelectObject(dc, e->smallFont);
     SIZE size{};
-    GetTextExtentPoint32W(dc, help, int(std::size(help)) - 1, &size);
+    GetTextExtentPoint32W(dc, help, int(wcslen(help)), &size);
     RECT foot{0, r.bottom - size.cy - 8, r.right, r.bottom};
     FillRect(dc, &foot, e->planBrush);
     SetTextColor(dc, RGB(0x8A, 0x84, 0x78));
-    textAt(dc, 12, r.bottom - size.cy - 5, help);
+    RECT line{12, r.bottom - size.cy - 5, r.right - 8, r.bottom};
+    DrawTextW(dc, help, -1, &line, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS | DT_NOPREFIX);
     SelectObject(dc, e->font);
   }
 }
@@ -9327,7 +9748,7 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       if (e->tool != 0) {
         e->tool = 0;
         e->repaintTools();
-        e->message(toolInfo[0].hint);
+        e->message(e->toolHint(0));
       }
       InvalidateRect(h, nullptr, FALSE);
       return 0;
@@ -10012,10 +10433,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             DestroyWindow(h);
             return 0;
           }
-          e->message(e->playing        ? L"Playing. Escape comes back to building."
-                     : e->viewMode == 1 ? toolInfo[std::clamp(e->tool, 0, ToolCount - 1)].hint
-                                        : L"3D view: hold right mouse to look, WASD to fly, left click builds. F5 plays.",
-                     true);
+          e->message(e->playing ? e->playingHint() : e->toolHint(e->tool), true);
         }
       }
       return 0;
@@ -10033,6 +10451,9 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         e->publish(), e->lightPending = false;
       if (e->livePending && e->renderedRevision == e->revision && (e->drag || e->brushing || e->objectDrag || e->viewDrag))
         e->publish(), e->lastDragPublish = GetTickCount64();
+      return 0;
+    case retro::EditorControllerMessage:
+      e->useController(static_cast<retro::EditorControllerCommand>(w), static_cast<int>(l));
       return 0;
     case WM_APP + 52:
       // A film render finished (NativeFilmTool.inc): frames made, the folder to open.
@@ -10316,6 +10737,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         } else {
           e->cancelPlacement(); // a held drag or preview of the last tool goes (NativeGhost.inc)
           e->tool = selected;
+          e->lampFitting = -1;
           e->kitInHand = -1; // a tool picked anew puts down a held kit
           if (*toolInfo[selected].kind)
             e->chooseKind(toolInfo[selected].kind);
@@ -10326,7 +10748,7 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             e->closeSignDesigner();
           if (selected == 8 || (selected == 14 && e->listIndex(e->clutterList) == 7))
             e->useModelSelection();
-          e->message(toolInfo[selected].hint);
+          e->message(e->toolHint(selected));
           e->refreshGhost();
         }
         e->group = toolInfo[e->tool].group;
@@ -10437,12 +10859,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         break;
       case SoundToggle: {
         sfx::muted = !sfx::muted;
-        std::error_code ec;
         auto flag = e->root / L".build" / L"editor-sound-muted";
+        std::ofstream(flag) << int(sfx::muted) << '\n';
         if (sfx::muted)
-          std::ofstream(flag) << "1\n";
-        else
-          fs::remove(flag, ec);
+          PlaySoundW(nullptr, nullptr, 0);
         e->relayout();
         InvalidateRect(GetDlgItem(h, SoundToggle), nullptr, FALSE);
         break;
@@ -11222,7 +11642,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       *slider = e.controlWindow(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | WS_TABSTOP, id);
       SendMessageW(*slider, TBM_SETRANGE, FALSE, MAKELPARAM(0, 100));
     }
-    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets", L"MAC-11 bullets", L"MAC-11", L"Handgun", L"Shotgun"});
+    e.pickupList =choices(PickupList, {L"Health", L"Shotgun shells", L"Handgun bullets", L"MAC-11 bullets", L"MAC-11", L"Handgun", L"Shotgun", L"Sniper rifle", L".308 rifle rounds"});
     e.creatureList = choices(CreatureList, {L"Huntsman", L"Wasp", L"Brute", L"Warden", L"Mutant", L"Snatcher", L"Chimera", L"Transformed", L"Cursed equipment"});
     e.upperFloorTiles=choices(UpperFloorTiles,{L"Floor",L"Open space"});
     e.tileList = choices(TileList, {L"Crate", L"Barrel (explodes)", L"Tank"});
@@ -11252,6 +11672,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                         0, 10, 10, e.window, nullptr, instance, &e);
     e.viewport = e.controlWindow(L"STATIC", L"", WS_CLIPCHILDREN, 0);
     e.statusText = e.controlWindow(L"STATIC", e.notice.c_str(), SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS, 0);
+    e.inputGuide = e.controlWindow(L"STATIC", L"", SS_LEFT | SS_NOPREFIX, 0);
+    e.refreshInputGuide();
     for (int i = 0; i < ToolCount; i++) {
       auto tool = e.controlWindow(L"BUTTON", toolInfo[i].name,
                                   BS_OWNERDRAW | WS_TABSTOP, ToolBase + i,
@@ -11310,7 +11732,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     for (size_t i = 0; i < std::size(Editor::gels); ++i)
       e.swatches.push_back(e.button(Editor::gels[i].name, SwatchBase + int(i)));
     e.button(L"Flicker: off", FlickerToggle);
-    e.button(L"Sound: on", SoundToggle);
+    e.button(L"Sound: off", SoundToggle);
     e.button(L"\u2600 Light: lit \u25BE", LightViewButton);
     e.button(L"Play: first person", ThirdPersonToggle);
     e.button(L"Write film list", FilmWrite);
@@ -11351,14 +11773,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       ShowWindow(c, SW_HIDE);
     if (!e.backgroundTest && !e.demoMode) {
       sfx::load(e.root / L".build" / L"sounds");
-      std::error_code ec;
-      sfx::muted = fs::exists(e.root / L".build" / L"editor-sound-muted", ec);
+      sfx::muted = sfx::readMuted(e.root / L".build" / L"editor-sound-muted");
       ui::clickSound = [] { sfx::play(sfx::Click, .6f, .05f); };
-      ui::hoverSound = [](HWND h) {
-        int id = GetDlgCtrlID(h);
-        if ((id >= ToolBase && id < ToolBase + ToolCount) || (id >= GroupBase && id < GroupBase + 5))
-          sfx::play(sfx::Hover, .5f, .08f);
-      };
     }
     e.tooltip = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
                                 CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, e.window, nullptr, instance, nullptr);
@@ -11372,7 +11788,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     };
     if (e.tooltip) {
       for (int i = 0; i < ToolCount; ++i)
-        tip(e.tools[size_t(i)], toolInfo[i].hint);
+        tip(e.tools[size_t(i)], e.toolHint(i));
       for (auto [id, text] : std::initializer_list<std::pair<int, const wchar_t *>>{
                {New, L"Start a new, empty map."}, {Open, L"Open a map you made before."},
                {FromCampaign, L"Open one of the game's own levels to change it."},
@@ -11380,14 +11796,14 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                {BackToOriginal, L"Make the game play this level's original again."},
                {ExportChanges, L"Put every campaign level you changed in one file to send. Ctrl+Shift+E."},
                {Save, L"Keep your work. Ctrl+S does the same."}, {Undo, L"Take back the last change. Ctrl+Z."},
-               {Redo, L"Put it back again. Ctrl+Y."}, {Walk, L"Walk your map right now. Escape comes back. Over the plan, F5 starts at the pointer."},
+               {Redo, L"Put it back again. Ctrl+Y."}, {Walk, e.walkHint()},
                {PlayStart, L"Play from where the player begins. Shift+F5."}, {PlanOnly, L"Paint on the map from above."},
                {Dual, L"Paint from above and see it in 3D."}, {ViewOnly, L"Build straight in the 3D picture."},
                {Starter, L"Open the finished example to look around."}, {Export, L"Save under a new name."}, {FullGame, L"Leave the builder and play this map in the real game. The game's menu brings you back here."},
                {AddMap, L"Choose the edge to join a new map. Occupied edges are disabled."}, {AddFloor, L"Add a floor above this one."},
                {Furnish, L"Hang lamps over every open floor and sign each door."}, {Outdoors, L"Open the sky and grow land around this map."},
                {Remove, L"Delete what is picked. Delete key."}, {Duplicate, L"Copy what is picked. Ctrl+D."},
-               {TurnSelected, L"Turn what is picked a quarter. R key."}, {Advanced, L"Show every number the game reads."},
+               {TurnSelected, e.turnHint()}, {Advanced, L"Show every number the game reads."},
                {TakeApart, L"Free a placed kit's pieces to move, change or remove one by one. Ctrl+Z puts it back."},
                {ListenMusic, L"Hear this map's music."}, {AutoDetail, L"Click to switch."}})
         if (HWND control = GetDlgItem(e.window, id))
@@ -11640,6 +12056,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     MSG message{};
     while (!e.quitLoop && GetMessageW(&message, nullptr, 0, 0) > 0) {
       try {
+        e.observeDesktopInput(message);
         if (e.shortcut(message))
           continue;
       } catch (const std::exception &error) {
@@ -11878,6 +12295,14 @@ static int frontDoor(HINSTANCE instance, const fs::path &root, EditorDoor &out) 
 }
 
 int runNativeEditor(HINSTANCE instance) {
+  {  // theme.txt beside the editor: "dark" for the Monochrome look; anything else (or no file) is the warm cream default
+    wchar_t exe[32768]{};
+    GetModuleFileNameW(nullptr, exe, 32768);
+    std::ifstream themeFile(fs::path(exe).parent_path() / L"theme.txt");
+    std::string word;
+    if (themeFile >> word && (word == "dark" || word == "Dark"))
+      ui::useDarkTheme();
+  }
   int argc = 0;
   auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
   bool interactive = argv && argc <= 1;

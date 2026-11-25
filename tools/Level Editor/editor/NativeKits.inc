@@ -31,10 +31,8 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$water_cooler|2.555|1.6|0|0.378|0.449|1.396|1.571|1\n"
      "FIXTURE|@|$office_bookcase|-2.58|0.9|0|1.62|0.4|2|-1.571|1\n"
      "FIXTURE|@|$dress_plant|2.45|1.95|0|0.81|0.649|0.802|0|1\n"
-     "FIXTURE|@|$lamp_ceiling_tube|-1.45|0.2|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|-1.45|0.2|2.8|0|0|1|6|4200\n"
-     "FIXTURE|@|$lamp_ceiling_tube|1.45|0.2|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|1.45|0.2|2.8|0|0|1|6|4200\n"},
+     "LIGHT|@|-1.45|0.2|2.8|0|0|1|6|4200|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
+     "LIGHT|@|1.45|0.2|2.8|0|0|1|6|4200|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_ward", L"Ward room", L"two beds, monitors, supplies", 6.00f, 5.00f,
      "STRUCT|@|-3|-2.5|3|2.5|0|0.04|0|50\n"
      "STRUCT|@|-3|-2.5|3|-2.3|0|3|0|36\n"
@@ -52,10 +50,8 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$med_supply_cabinet|-2.558|1.2|0|1.1|0.444|1.7|-1.571|1\n"
      "FIXTURE|@|$med_wheelchair|1.9|1.5|0|0.482|0.9|0.787|-0.785|1\n"
      "FIXTURE|@|$med_first_aid_kit|-2.55|1.2|1.7|0.4|0.22|0.08|0|1\n"
-     "FIXTURE|@|$clinic_ceiling_lamp_1|-1.5|0.3|2.82|1.05|1.04|0.16|0|0\n"
-     "LIGHT|@|-1.5|0.3|2.74|0|0|1|6|4800\n"
-     "FIXTURE|@|$clinic_ceiling_lamp_1|1.5|0.3|2.82|1.05|1.04|0.16|0|0\n"
-     "LIGHT|@|1.5|0.3|2.74|0|0|1|6|4800\n"},
+     "LIGHT|@|-1.5|0.3|2.74|0|0|1|6|4800|||||||||$clinic_ceiling_lamp_1|1.05|1.04|0.16\n"
+     "LIGHT|@|1.5|0.3|2.74|0|0|1|6|4800|||||||||$clinic_ceiling_lamp_1|1.05|1.04|0.16\n"},
     {"kit_lab", L"Lab", L"benches, a microscope, specimen store", 6.00f, 5.00f,
      "STRUCT|@|-3|-2.5|3|2.5|0|0.04|0|24\n"
      "STRUCT|@|-3|-2.5|3|-2.3|0|3|0|28\n"
@@ -74,10 +70,8 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$test_machine|-1.2|1|0|1.33|1.7|1.76|0|1\n"
      "FIXTURE|@|$med_syringe|-0.25|-2|0.81|0.055|0.202|0.024|0|1\n"
      "FIXTURE|@|$office_chair|-1|-1.3|0|0.94|0.862|1.096|0|1\n"
-     "FIXTURE|@|$lamp_ceiling_tube|-1.4|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|-1.4|0|2.8|0|0|1|6|5200\n"
-     "FIXTURE|@|$lamp_ceiling_tube|1.4|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|1.4|0|2.8|0|0|1|6|5200\n"},
+     "LIGHT|@|-1.4|0|2.8|0|0|1|6|5200|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
+     "LIGHT|@|1.4|0|2.8|0|0|1|6|5200|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_bathroom", L"Bathroom", L"two toilets, two sinks, a mirror", 5.00f, 4.00f,
      "STRUCT|@|-2.5|-2|2.5|2|0|0.04|0|50\n"
      "STRUCT|@|-2.5|-2|2.5|-1.8|0|3|0|27\n"
@@ -95,8 +89,7 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$med_washroom_mirror|2.262|0|1.25|1.35|0.036|0.9|1.571|0\n"
      "FIXTURE|@|$home_hand_dryer|-2.108|1|1.1|0.46|0.344|0.366|-1.571|0\n"
      "FIXTURE|@|$home_soap_dispenser|2.204|-1.1|1|0.2|0.151|0.333|1.571|0\n"
-     "FIXTURE|@|$med_fluoro_light|0|0|2.853|0.11|1.2|0.127|1.571|0\n"
-     "LIGHT|@|0|0|2.773|0|0|1|6|5600\n"},
+     "LIGHT|@|0|0|2.773|0|1.571|1|6|5600|||||||||$med_fluoro_light|0.11|1.2|0.127\n"},
     {"kit_storage", L"Storage room", L"shelves, crates, barrels", 5.00f, 4.00f,
      "STRUCT|@|-2.5|-2|2.5|2|0|0.04|0|5\n"
      "STRUCT|@|-2.5|-2|2.5|-1.8|0|3|0|5\n"
@@ -134,10 +127,8 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$office_chair|-1.2|-0.6|0|0.94|0.862|1.096|0|1\n"
      "FIXTURE|@|$office_chair|0.5|-0.45|0|0.94|0.862|1.096|0|1\n"
      "FIXTURE|@|$crt_monitor|0.1|-1.5|0.8|0.482|0.426|0.454|0|1\n"
-     "FIXTURE|@|$lamp_ceiling_tube|-1.4|0.4|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|-1.4|0.4|2.8|0|0|0.85|6|6000\n"
-     "FIXTURE|@|$lamp_ceiling_tube|1.4|0.4|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|1.4|0.4|2.8|0|0|0.85|6|6000\n"},
+     "LIGHT|@|-1.4|0.4|2.8|0|0|0.85|6|6000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
+     "LIGHT|@|1.4|0.4|2.8|0|0|0.85|6|6000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_server_room", L"Server room", L"racks, a terminal, cold light", 5.00f, 4.00f,
      "STRUCT|@|-2.5|-2|2.5|2|0|0.04|0|11\n"
      "STRUCT|@|-2.5|-2|2.5|-1.8|0|3|0|8\n"
@@ -154,8 +145,7 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$bld_cable_run|-0.5|-1.29|2.3|4.1|0.08|0.447|0|0\n"
      "FIXTURE|@|$lab_data_terminal|-1|1.2|0|0.889|0.812|0.478|3.142|1\n"
      "FIXTURE|@|$mach_wall_box|-2.157|0.8|0.9|0.491|0.245|0.666|-1.571|0\n"
-     "FIXTURE|@|$lamp_ceiling_tube|0|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|0|0|2.8|0|0|0.8|6|7500\n"},
+     "LIGHT|@|0|0|2.8|0|0|0.8|6|7500|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_kitchen", L"Kitchen", L"range, fryer, fridge, prep table", 6.00f, 5.00f,
      "STRUCT|@|-3|-2.5|3|2.5|0|0.04|0|50\n"
      "STRUCT|@|-3|-2.5|3|-2.3|0|3|0|3\n"
@@ -172,18 +162,14 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$home_microwave|0.4|0.5|0.92|0.363|0.549|0.314|0|1\n"
      "FIXTURE|@|$store_shelf_metal|-2.532|0.4|0|1.44|0.495|1.62|-1.571|1\n"
      "FIXTURE|@|$home_trash_can|2.3|1.7|0|0.819|0.842|1.022|0|1\n"
-     "FIXTURE|@|$lamp_ceiling_tube|-1.4|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|-1.4|0|2.8|0|0|1|6|4400\n"
-     "FIXTURE|@|$lamp_ceiling_tube|1.4|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|1.4|0|2.8|0|0|1|6|4400\n"},
+     "LIGHT|@|-1.4|0|2.8|0|0|1|6|4400|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
+     "LIGHT|@|1.4|0|2.8|0|0|1|6|4400|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_corridor", L"Corridor", L"a 6 m run, two lamps", 3.00f, 6.00f,
      "STRUCT|@|-1.5|-3|1.5|3|0|0.04|0|42\n"
      "STRUCT|@|-1.5|-3|-1.3|3|0|3|0|5\n"
      "STRUCT|@|1.3|-3|1.5|3|0|3|0|5\n"
-     "FIXTURE|@|$lamp_ceiling_tube|0|-1.5|2.88|1.2|0.3|0.1|1.571|0\n"
-     "LIGHT|@|0|-1.5|2.8|0|0|1|5|4000\n"
-     "FIXTURE|@|$lamp_ceiling_tube|0|1.5|2.88|1.2|0.3|0.1|1.571|0\n"
-     "LIGHT|@|0|1.5|2.8|0|0|1|5|4000\n"
+     "LIGHT|@|0|-1.5|2.8|0|1.571|1|5|4000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
+     "LIGHT|@|0|1.5|2.8|0|1.571|1|5|4000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
      "FIXTURE|@|$radiator_panel|-1.16|0.5|0.1|1.23|0.24|0.91|-1.571|1\n"
      "FIXTURE|@|$bld_pipe_run|0.96|0|2.2|0.676|4|0.676|0|0\n"},
     {"kit_corridor_corner", L"Corridor corner", L"turns from south to east", 3.00f, 3.00f,
@@ -191,23 +177,20 @@ static constexpr KitDef kitDefs[] = {
      "STRUCT|@|-1.5|-1.5|1.5|-1.3|0|3|0|5\n"
      "STRUCT|@|-1.5|-1.3|-1.3|1.5|0|3|0|5\n"
      "STRUCT|@|1.3|1.3|1.5|1.5|0|3|0|5\n"
-     "FIXTURE|@|$lamp_ceiling_tube|0|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|0|0|2.8|0|0|1|5|4000\n"},
+     "LIGHT|@|0|0|2.8|0|0|1|5|4000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_corridor_tee", L"Corridor T", L"open south, east and west", 3.00f, 3.00f,
      "STRUCT|@|-1.5|-1.5|1.5|1.5|0|0.04|0|42\n"
      "STRUCT|@|-1.5|-1.5|1.5|-1.3|0|3|0|5\n"
      "STRUCT|@|-1.5|1.3|-1.3|1.5|0|3|0|5\n"
      "STRUCT|@|1.3|1.3|1.5|1.5|0|3|0|5\n"
-     "FIXTURE|@|$lamp_ceiling_tube|0|0|2.88|1.2|0.3|0.1|1.571|0\n"
-     "LIGHT|@|0|0|2.8|0|0|1|5|4000\n"},
+     "LIGHT|@|0|0|2.8|0|1.571|1|5|4000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"},
     {"kit_corridor_cross", L"Corridor crossing", L"open every way", 3.00f, 3.00f,
      "STRUCT|@|-1.5|-1.5|1.5|1.5|0|0.04|0|42\n"
      "STRUCT|@|-1.5|-1.5|-1.3|-1.3|0|3|0|5\n"
      "STRUCT|@|1.3|-1.5|1.5|-1.3|0|3|0|5\n"
      "STRUCT|@|-1.5|1.3|-1.3|1.5|0|3|0|5\n"
      "STRUCT|@|1.3|1.3|1.5|1.5|0|3|0|5\n"
-     "FIXTURE|@|$lamp_ceiling_tube|0|0|2.88|1.2|0.3|0.1|0|0\n"
-     "LIGHT|@|0|0|2.8|0|0|1|5|4000\n"
+     "LIGHT|@|0|0|2.8|0|0|1|5|4000|||||||||$lamp_ceiling_tube|1.2|0.3|0.1\n"
      "FIXTURE|@|$med_floor_drain|0|0|0.04|0.5|0.5|0.01|0|0\n"},
     {"kit_stairwell", L"Stairwell", L"a flight up to a landing 3 m high", 4.00f, 6.00f,
      "STRUCT|@|-2|-3|2|3|0|0.04|0|5\n"
@@ -235,18 +218,18 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$out_bench|-2.4|0.6|0|0.4|2|0.762|0|1\n"
      "FIXTURE|@|$dress_plant|2.4|-1.7|0|0.81|0.649|0.802|0|1\n"
      "FIXTURE|@|$dress_carpet|0|0.3|0.04|2.26|1.428|0.01|0|0\n"
-     "FIXTURE|@|$lamp_ceiling_bar|-1.2|0|2.637|0.753|0.132|0.343|1.571|0\n"
-     "LIGHT|@|-1.2|0|2.557|0|0|1|6|4200\n"
-     "FIXTURE|@|$lamp_ceiling_bar|1.2|0|2.637|0.753|0.132|0.343|1.571|0\n"
-     "LIGHT|@|1.2|0|2.557|0|0|1|6|4200\n"},
+     "LIGHT|@|-1.2|0|2.557|0|1.571|1|6|4200|||||||||$lamp_ceiling_bar|0.753|0.132|0.343\n"
+     "LIGHT|@|1.2|0|2.557|0|1.571|1|6|4200|||||||||$lamp_ceiling_bar|0.753|0.132|0.343\n"},
     {"kit_doorway", L"Doorway", L"a wall with a framed door and a lamp over it", 4.00f, 1.00f,
      "FIXTURE|@|$bld_doorway_frame|0|0|0|4.09|0.2|3|0|1\n"
-     "FIXTURE|@|$lamp_bulkhead|0|0.2|2.45|0.36|0.119|0.176|0|0\n"
      "LIGHT|@|0|0.3|2.5|1|1.571|0.8|4|3400\n"},
     {"kit_doorway_wide", L"Wide doorway", L"a wall with a wide opening and a lamp over it", 4.00f, 1.00f,
      "FIXTURE|@|$bld_doorway_wide|0|0|0|4|0.42|3|0|1\n"
-     "FIXTURE|@|$lamp_bulkhead|0|0.3|2.75|0.36|0.119|0.176|0|0\n"
      "LIGHT|@|0|0.4|2.8|1|1.571|0.8|4|3400\n"},
+    {"kit_doorway_double", L"Double doorway", L"a wall with two openings round a centre post, and a lamp over each", 4.00f, 1.00f,
+     "FIXTURE|@|$bld_doorway_double|0|0|0|4.09|0.2|3|0|1\n"
+     "LIGHT|@|-1|0.3|2.5|1|1.571|0.8|4|3400\n"
+     "LIGHT|@|1|0.3|2.5|1|1.571|0.8|4|3400\n"},
     {"kit_catwalk", L"Catwalk run", L"an 8 m grating walk 2.5 m up, posts and a ladder", 8.00f, 2.00f,
      "STRUCT|@|-4|-0.7|4|0.7|2.4|2.5|0|7\n"
      "STRUCT|@|-4|-0.75|4|-0.7|2.5|3.5|1|2\n"
@@ -274,9 +257,7 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$mine_depot_forklift|-0.6|1.4|0|1.2|3.731|2.267|1.571|1\n"
      "FIXTURE|@|$urb_bollard|-3.4|0.1|0|0.429|0.429|1.297|0|1\n"
      "FIXTURE|@|$urb_bollard|-1.4|0.1|0|0.429|0.429|1.297|0|1\n"
-     "FIXTURE|@|$lamp_gooseneck|-2|-2.75|2.6|0.51|0.84|0.556|0|0\n"
      "LIGHT|@|-2|-2.4|2.8|1|1.571|1|7|3000\n"
-     "FIXTURE|@|$lamp_gooseneck|2|-2.75|2.6|0.51|0.84|0.556|0|0\n"
      "LIGHT|@|2|-2.4|2.8|1|1.571|1|7|3000\n"
      "STRUCT|@|-4|-3.2|4|-3|0|3.4|0|10\n"},
     {"kit_yard_fence", L"Yard fence", L"three panels of fence, posts, a gate", 12.00f, 1.00f,
@@ -312,5 +293,118 @@ static constexpr KitDef kitDefs[] = {
      "FIXTURE|@|$scrap_lantern|-0.2|-1.1|0|0.262|0.31|0.772|0|1\n"
      "FIXTURE|@|$mine_petrol_can|-2.3|0.2|0|0.136|0.414|0.579|0|1\n"
      "FIXTURE|@|$dress_bucket|-2.2|0.8|0|0.43|0.436|0.465|0|1\n"},
+    {"kit_escalator", L"Escalator", L"a stopped escalator: steps, glass sides, handrails, landing plates", 2.20f, 9.00f,
+     "STRUCT|@|-1.1|3.6|1.1|4.5|0|0.06|0|2\n"
+     "PRIM|@|stairs|0|-0.1|0|1.4|7.4|4.42|2|11\n"
+     "STRUCT|@|-1.1|-4.5|1.1|-3.8|4.36|4.42|0|2\n"
+     "STRUCT|@|-0.85|2.675|-0.75|3.6|0|1.176|0|8\n"
+     "STRUCT|@|-0.85|1.75|-0.75|2.675|0|1.729|0|8\n"
+     "STRUCT|@|-0.85|0.825|-0.75|1.75|0|2.281|0|8\n"
+     "STRUCT|@|-0.85|-0.1|-0.75|0.825|0|2.834|0|8\n"
+     "STRUCT|@|-0.85|-1.025|-0.75|-0.1|0|3.386|0|8\n"
+     "STRUCT|@|-0.85|-1.95|-0.75|-1.025|0|3.939|0|8\n"
+     "STRUCT|@|-0.85|-2.875|-0.75|-1.95|0|4.491|0|8\n"
+     "STRUCT|@|-0.85|-3.8|-0.75|-2.875|0|5.044|0|8\n"
+     "PIPE|@|-0.8|4.2|-0.8|-4.2|1|0.035|5.42|8\n"
+     "STRUCT|@|0.75|2.675|0.85|3.6|0|1.176|0|8\n"
+     "STRUCT|@|0.75|1.75|0.85|2.675|0|1.729|0|8\n"
+     "STRUCT|@|0.75|0.825|0.85|1.75|0|2.281|0|8\n"
+     "STRUCT|@|0.75|-0.1|0.85|0.825|0|2.834|0|8\n"
+     "STRUCT|@|0.75|-1.025|0.85|-0.1|0|3.386|0|8\n"
+     "STRUCT|@|0.75|-1.95|0.85|-1.025|0|3.939|0|8\n"
+     "STRUCT|@|0.75|-2.875|0.85|-1.95|0|4.491|0|8\n"
+     "STRUCT|@|0.75|-3.8|0.85|-2.875|0|5.044|0|8\n"
+     "PIPE|@|0.8|4.2|0.8|-4.2|1|0.035|5.42|8\n"},
+    {"kit_airlock", L"Airlock", L"two lifting hatches on one cycle: the terminal inside shuts one, then opens the other", 4.00f, 6.40f,
+     "STRUCT|@|-2|-3.2|2|3.2|0|0.04|0|7\n"
+     "STRUCT|@|-2|-2.7|-1.8|2.7|0|3.2|0|8\n"
+     "STRUCT|@|1.8|-2.7|2|2.7|0|3.2|0|8\n"
+     "STRUCT|@|-2|-2.7|2|2.7|3|3.2|0|8\n"
+     "FIXTURE|@|$airlock_bulkhead|0|-2.7|0|4|1|3.2|0|0\n"
+     "STRUCT|@|-2|-3.2|-1.3|-2.2|0|3.2|0|30\n"
+     "STRUCT|@|1.3|-3.2|2|-2.2|0|3.2|0|30\n"
+     "STRUCT|@|-1.3|-3.2|1.3|-2.2|2.48|3.2|0|30\n"
+     "DOOR|@|-1.3|1.3|-3.2|0|0|0|0|0|-1|airlock_cycle|1||||||0|INNER HATCH||||||1\n"
+     "FIXTURE|@|$airlock_bulkhead|0|2.7|0|4|1|3.2|3.142|0\n"
+     "STRUCT|@|-2|2.2|-1.3|3.2|0|3.2|0|30\n"
+     "STRUCT|@|1.3|2.2|2|3.2|0|3.2|0|30\n"
+     "STRUCT|@|-1.3|2.2|1.3|3.2|2.48|3.2|0|30\n"
+     "DOOR|@|-1.3|1.3|2.2|0|0|0|0|0|-1|airlock_cycle|0||||||0|OUTER HATCH||||||1\n"
+     "TERMINAL|@|1.62|0|1.2|1|AIRLOCK|ONE HATCH AT A TIME|E: CYCLE THE LOCK|airlock_cycle|1||-1.571\n"
+     "LIGHT|@|0|0|2.8|0|0|0.9|5|1700\n"},
+    {"kit_shower", L"Shower stall", L"a tiled stall, a drain, a riser and a head", 2.20f, 1.60f,
+     "FIXTURE|@|$bath_floor_tile|0|0|0.005|2|2|0.01|0|0\n"
+     "FIXTURE|@|$bath_stall_open|0|0|0|2.13|1.542|2.4|3.142|1\n"
+     "FIXTURE|@|$bath_drain|0|0.1|0.012|0.5|0.5|0.01|0|0\n"
+     "FIXTURE|@|$bath_pipe|-0.5|-0.68|1.2|0.496|2|0.496|0|1\n"
+     "PIPE|@|-0.5|-0.7|-0.5|-0.35|2.05|0.02|2.05|2\n"
+     "PRIM|@|box|-0.5|-0.32|1.98|0.16|0.16|0.05|0|2\n"
+     "LIGHT|@|0|0|2.3|0|0|0.6|3.5|5200\n"},
+    {"kit_rebar", L"Loose rebar", L"rebar mats and a cracked block, loose to kick about", 3.00f, 3.00f,
+     "CLUTTER|@|7|-0.2|-0.4|0.03|0.3|$rebar_bars_a|2.5|0.04|2.4|1.571|0|\n"
+     "CLUTTER|@|7|0.4|0.5|0.08|-0.5|$rebar_bars_b|2.5|0.04|2.4|1.571|0|\n"
+     "FIXTURE|@|$concrete_block_cracked|1|-0.8|0|0.6|2.2|1.101|0.4|1\n"
+     "FIXTURE|@|$out_debris_bricks|-1|0.9|0|2.333|2.002|0.065|1.2|1\n"},
+    {"kit_cracked_slab", L"Cracked slab", L"broken concrete panels, bare rebar, rubble", 6.00f, 2.00f,
+     "FIXTURE|@|$slab_full|-1.5|0|0|2.9|0.1|2.433|0|1\n"
+     "FIXTURE|@|$slab_broken|1.5|0|0|2.901|0.1|0.8|0|1\n"
+     "FIXTURE|@|$rebar_bars_b|1.5|-0.04|0.7|1.5|0.024|1.44|0|0\n"
+     "FIXTURE|@|$slab_chipped|1.7|0.7|0|2.9|0.1|0.8|0.25|1\n"
+     "FIXTURE|@|$concrete_block_cracked|-1.8|0.7|0|0.6|2.2|1.101|1.571|1\n"
+     "FIXTURE|@|$bld_brick_rubble|0.4|0.7|0|2.307|2.158|0.065|0.9|1\n"},
+    {"kit_heavy_door", L"Heavy door", L"a bulkhead door in a steel wall, worked from the terminal beside it", 4.40f, 1.20f,
+     "STRUCT|@|-2.2|-0.5|-1.1|0.5|0|3.2|0|8\n"
+     "STRUCT|@|1.1|-0.5|2.2|0.5|0|3.2|0|8\n"
+     "STRUCT|@|-1.1|-0.5|1.1|0.5|2.6|3.2|0|8\n"
+     "DOOR|@|-1.1|1.1|-0.5|0|0|0|0|0|-1|heavy_door|1||||||0|HEAVY DOOR||||||1\n"
+     "TERMINAL|@|1.45|0.5|1.25|1|HEAVY DOOR|THE LEAF RISES|E: OPEN / SHUT|heavy_door|1||0.001\n"
+     "TERMINAL|@|-1.45|-0.5|1.25|1|HEAVY DOOR|THE LEAF RISES|E: OPEN / SHUT|heavy_door|1||3.142\n"},
+    {"kit_mesh_door", L"Mesh door", L"a steel grille gate that rises, in a frame of piers", 3.40f, 1.00f,
+     "STRUCT|@|-1.7|-0.45|-1.2|0.45|0|2.9|0|2\n"
+     "STRUCT|@|1.2|-0.45|1.7|0.45|0|2.9|0|2\n"
+     "STRUCT|@|-1.2|-0.45|1.2|0.45|2.55|2.9|0|2\n"
+     "DOOR|@|-1.2|1.2|-0.5|0|0|0|0|0|-1|mesh_door|1||||||1|GATE||||||1\n"
+     "TERMINAL|@|1.45|0.5|1.25|1|GATE|A STEEL GRILLE|E: RAISE / LOWER|mesh_door|1||0.001\n"},
+    {"kit_ticket_gate", L"Ticket gate", L"two pedestals and a flap; the ticket machine lets you through", 3.00f, 1.00f,
+     "STRUCT|@|-1.5|-0.45|-0.55|0.45|0|1.05|0|8\n"
+     "STRUCT|@|-1.45|-0.4|-0.6|0.4|1.05|1.1|0|2\n"
+     "STRUCT|@|0.55|-0.45|1.5|0.45|0|1.05|0|8\n"
+     "STRUCT|@|0.6|-0.4|1.45|0.4|1.05|1.1|0|2\n"
+     "DOOR|@|-0.55|0.55|-0.5|0|0|0|1|0|-1|ticket_paid|1||||||2|TICKET GATE||||||1\n"
+     "TERMINAL|@|-1.05|0.5|1.1|1|TICKET MACHINE|FARE: ONE TOKEN|E: PAY|ticket_paid|1||0.001\n"},
+    {"kit_fluorescent_bank", L"Fluorescent bank", L"a 7 m run of twin-tube fittings on one channel, hung at ceiling height", 7.40f, 0.60f,
+     "STRUCT|@|-3.7|-0.06|3.7|0.06|2.9|2.96|0|8\n"
+     "LIGHT|@|-3|0|2.59|0|0|0.8|5|4600|||||||||$lamp_suspended_twin_tube|1.2|0.3|0.21\n"
+     "LIGHT|@|-1.8|0|2.59|0|0|0.8|5|4600|||||||||$lamp_suspended_twin_tube|1.2|0.3|0.21\n"
+     "LIGHT|@|-0.6|0|2.59|0|0|0.8|5|4600|||||||||$lamp_suspended_twin_tube|1.2|0.3|0.21\n"
+     "LIGHT|@|0.6|0|2.59|0|0|0.8|5|4600|||||||||$lamp_suspended_twin_tube|1.2|0.3|0.21\n"
+     "LIGHT|@|1.8|0|2.59|0|0|0.8|5|4600||||||||0.35|$lamp_suspended_twin_tube|1.2|0.3|0.21\n"
+     "LIGHT|@|3|0|2.59|0|0|0.8|5|4600|||||||||$lamp_suspended_twin_tube|1.2|0.3|0.21\n"},
+    {"kit_curtain_wall", L"Curtain wall", L"two storeys of glass in a steel grid", 6.00f, 0.40f,
+     "PRIM|@|window|-1.5|0|0.05|2.9|0.2|2.9|0|8\n"
+     "PRIM|@|window|-1.5|0|3.05|2.9|0.2|2.9|0|8\n"
+     "PRIM|@|window|1.5|0|0.05|2.9|0.2|2.9|0|8\n"
+     "PRIM|@|window|1.5|0|3.05|2.9|0.2|2.9|0|8\n"
+     "STRUCT|@|-3.05|-0.12|-2.95|0.12|0|6|0|8\n"
+     "STRUCT|@|-0.05|-0.12|0.05|0.12|0|6|0|8\n"
+     "STRUCT|@|2.95|-0.12|3.05|0.12|0|6|0|8\n"
+     "STRUCT|@|-3.05|-0.12|3.05|0.12|0|0.06|0|8\n"
+     "STRUCT|@|-3.05|-0.12|3.05|0.12|2.94|3.06|0|8\n"
+     "STRUCT|@|-3.05|-0.12|3.05|0.12|5.94|6.06|0|8\n"},
+    {"kit_megafacade", L"Megastructure facade", L"three storeys of window modules between concrete piers", 6.00f, 1.00f,
+     "FIXTURE|@|$facade_concrete|-1.5|0|0|0.01|3|1|1.571|1\n"
+     "FIXTURE|@|$facade_stucco_window|-1.5|0|1|0.01|3|3|1.571|1\n"
+     "FIXTURE|@|$facade_brick_window|-1.5|0|4|0.01|3|3|1.571|1\n"
+     "FIXTURE|@|$facade_stucco_window|-1.5|0|7|0.01|3|3|1.571|1\n"
+     "FIXTURE|@|$facade_concrete|1.5|0|0|0.01|3|1|1.571|1\n"
+     "FIXTURE|@|$facade_stucco_window|1.5|0|1|0.01|3|3|1.571|1\n"
+     "FIXTURE|@|$facade_brick_window|1.5|0|4|0.01|3|3|1.571|1\n"
+     "FIXTURE|@|$facade_stucco_window|1.5|0|7|0.01|3|3|1.571|1\n"
+     "STRUCT|@|-3.25|-0.45|-2.75|0.3|0|10.4|0|5\n"
+     "STRUCT|@|-0.25|-0.45|0.25|0.3|0|10.4|0|5\n"
+     "STRUCT|@|2.75|-0.45|3.25|0.3|0|10.4|0|5\n"
+     "STRUCT|@|-3.2|-0.3|3.2|0.2|3.88|4.06|0|5\n"
+     "STRUCT|@|-3.2|-0.3|3.2|0.2|6.88|7.06|0|5\n"
+     "STRUCT|@|-3.2|-0.3|3.2|0.2|9.88|10.06|0|5\n"},
 };
 static constexpr int KitCount = int(std::size(kitDefs));

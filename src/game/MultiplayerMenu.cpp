@@ -16,9 +16,20 @@
 namespace retro {
 bool copyTextToClipboard(const std::string& text);
 namespace {
-enum Action:int{ActNone,ActQuick,ActBrowse,ActHost,ActJoin,ActCharacter,ActBack,ActQuickDeathmatch,ActQuickCoop,ActRefresh,ActMode,ActHideFull,
- ActLobby,ActHostMode,ActHostMap,ActHostPlayers,ActHostPrivate,ActHostName,ActHostGo,ActCopy,ActLeave,ActJoinField,ActJoinGo,ActClaire,ActLimitator,ActLeon};
+enum Action:int{ActNone,ActQuick,ActBrowse,ActHost,ActJoin,ActCharacter,ActPlayerName,ActBack,ActQuickDeathmatch,ActQuickCoop,ActRefresh,ActMode,ActHideFull,
+ ActLobby,ActHostMode,ActHostMap,ActHostPlayers,ActHostPrivate,ActHostName,ActHostGo,ActCopy,ActLeave,ActJoinField,ActJoinGo,ActClaire,ActLimitator,ActLeon,ActNameKey};
 constexpr int BrowseTop=190,BrowseRow=18,BrowseRows=6;
+constexpr int NameColumns=10,NameRows=4;
+constexpr std::string_view NameLetters="1234567890abcdefghijklmnopqrstuvwxyz";
+constexpr int NameSpace=int(NameLetters.size()),NameShift=NameSpace+1,NameDelete=NameSpace+2,NameDone=NameSpace+3;
+static_assert(NameDone+1==NameColumns*NameRows);
+
+void editName(std::string& name,std::string_view text){
+ for(char c:text){
+  if(c=='\b'){if(!name.empty())name.pop_back();continue;}
+  if(c>=32&&c<127&&c!='|'&&name.size()<24)name+=c;
+ }
+}
 // Game::update ticks the session itself (Match.cpp updateNet).
 void tickUpdate(Game& g,const InputState& in,float dt){g.update(in,dt);}   // Game::update pumps the session itself
 const char* characterName(int c){return c==2?"LEON":c==1?"THE LIMITATOR":"CLAIRE";}
@@ -121,7 +132,21 @@ std::vector<TitleItem> Game::titleItems()const{
   case TitlePage::Main:break;
   case TitlePage::Multiplayer:
    row(Y,"QUICK MATCH","",usable,ActQuick);row(Y+H,"BROWSE GAMES","",usable,ActBrowse);row(Y+2*H,"HOST A GAME","",usable,ActHost);row(Y+3*H,"JOIN BY CODE","",usable,ActJoin);
-   row(Y+4*H+G,"CHARACTER",characterName(m_settings.character),true,ActCharacter);back(Y+5*H+2*G);break;
+   row(Y+4*H+G,"NAME",m_settings.playerName.empty()?(m_netSession?m_netSession->displayName():std::string()):m_settings.playerName+(m_titleSelection==4?"_":""),true,ActPlayerName);
+   row(Y+5*H+G,"CHARACTER",characterName(m_settings.character),true,ActCharacter);back(Y+6*H+2*G);break;
+  case TitlePage::PlayerName:
+   for(int key=0;key<=NameDone;++key){
+    std::string label;
+    if(key<NameSpace){
+     const char c=NameLetters[size_t(key)];
+     label=m_nameUpper?char(std::toupper(static_cast<unsigned char>(c))):c;
+    }else if(key==NameSpace)label="SPACE";
+    else if(key==NameShift)label=m_nameUpper?"ABC":"abc";
+    else if(key==NameDelete)label="DEL";
+    else label="DONE";
+    add(TitleItem::Chip,X+key%NameColumns*54,180+key/NameColumns*30,50,25,std::move(label),"",key!=NameDone||m_nameDraft.size()>=2,ActNameKey);
+   }
+   break;
   case TitlePage::QuickMatch:
    row(Y,"DEATHMATCH",busy&&m_quickSearching&&m_quickMode==1?"SEARCHING":"",usable,ActQuickDeathmatch);
    row(Y+H,"CO-OP",busy&&m_quickSearching&&m_quickMode==2?"SEARCHING":"",usable,ActQuickCoop);back(Y+2*H+G);break;
@@ -159,6 +184,46 @@ std::vector<TitleItem> Game::titleItems()const{
  return items;
 }
 
+void Game::savePlayerName(std::string name){
+ m_settings.playerName=std::move(name);
+ if(m_netSession&&m_settings.playerName.size()>=2)m_netSession->setDisplayName(m_settings.playerName);
+ m_settingsSaveDue=true;
+}
+
+void Game::updatePlayerNameKeyboard(const InputState& input){
+ const auto pressed=[](bool now,bool previous){return now&&!previous;};
+ auto close=[&](){openTitlePage(TitlePage::Multiplayer);m_titleSelection=4;};
+ if(pressed(input.escape,m_titlePrevious.escape)){close();return;}
+ editName(m_nameDraft,input.textInput);
+ int row=m_titleSelection/NameColumns+int(pressed(input.menuDown,m_titlePrevious.menuDown))-int(pressed(input.menuUp,m_titlePrevious.menuUp));
+ int column=m_titleSelection%NameColumns+int(pressed(input.menuRight,m_titlePrevious.menuRight))-int(pressed(input.menuLeft,m_titlePrevious.menuLeft));
+ m_titleSelection=((row+NameRows)%NameRows)*NameColumns+(column+NameColumns)%NameColumns;
+
+ const bool click=pressed(input.fire,m_titlePrevious.fire);
+ int clicked=-1;
+ if(click){
+  const auto keys=titleItems();
+  for(int i=0;i<int(keys.size());++i){
+   const auto& key=keys[size_t(i)];
+   if(input.pointerX>=key.x&&input.pointerX<key.x+key.w&&input.pointerY>=key.y&&input.pointerY<key.y+key.h){clicked=i;break;}
+  }
+  if(clicked>=0)m_titleSelection=clicked;
+ }
+ if(clicked<0&&!pressed(input.menuAccept,m_titlePrevious.menuAccept))return;
+
+ const int key=m_titleSelection;
+ if(key==NameDone){
+  if(m_nameDraft.size()>=2){savePlayerName(m_nameDraft);close();}
+ }else if(key==NameShift)m_nameUpper=!m_nameUpper;
+ else if(key==NameDelete)editName(m_nameDraft,"\b");
+ else if(key==NameSpace)editName(m_nameDraft," ");
+ else{
+  char c=NameLetters[size_t(key)];
+  if(m_nameUpper)c=char(std::toupper(static_cast<unsigned char>(c)));
+  editName(m_nameDraft,std::string_view(&c,1));
+ }
+}
+
 void Game::updateMultiplayerMenu(const InputState& input){
  auto pressed=[&](bool now,bool previous){return now&&!previous;};
  // Game::update pumps the session (the Match layer) and drains its events into the notice; the menus read its state.
@@ -169,6 +234,7 @@ void Game::updateMultiplayerMenu(const InputState& input){
  if(state==net::SessionState::InLobby&&m_titlePage!=TitlePage::Lobby){m_titleNotice.clear();openTitlePage(TitlePage::Lobby);}
  else if(m_titlePage==TitlePage::Lobby&&state!=net::SessionState::InLobby&&state!=net::SessionState::Busy)openTitlePage(TitlePage::Multiplayer);
  if(m_quickSearching&&state!=net::SessionState::Busy)m_quickSearching=false;
+ if(m_titlePage==TitlePage::PlayerName){updatePlayerNameKeyboard(input);return;}
  auto items=titleItems();const int count=int(items.size());
  if(!count){openTitlePage(TitlePage::Multiplayer);return;}
  m_titleSelection=std::clamp(m_titleSelection,0,count-1);
@@ -178,7 +244,7 @@ void Game::updateMultiplayerMenu(const InputState& input){
   if(m_titlePage==TitlePage::Lobby){for(int i=0;i<count;++i)if(items[size_t(i)].action==ActLeave)m_titleSelection=i;return;}
   if(m_titlePage==TitlePage::Multiplayer){m_titlePage=TitlePage::Main;m_titleSelection=TitleMultiplayer;return;}
   const TitlePage from=m_titlePage;openTitlePage(TitlePage::Multiplayer);
-  m_titleSelection=from==TitlePage::QuickMatch?0:from==TitlePage::Browse?1:from==TitlePage::Host?2:from==TitlePage::JoinCode?3:4;return;}
+  m_titleSelection=from==TitlePage::QuickMatch?0:from==TitlePage::Browse?1:from==TitlePage::Host?2:from==TitlePage::JoinCode?3:5;return;}
  // The browser's list scrolls with the selection past its last shown row.
  if(m_titlePage==TitlePage::Browse&&m_netSession){
   int listed=0;for(const auto& l:m_netSession->results()){if(m_browseMode&&int(l.mode)!=m_browseMode)continue;if(l.players>=l.maxPlayers&&m_browseHideFull)continue;++listed;}
@@ -206,6 +272,9 @@ void Game::updateMultiplayerMenu(const InputState& input){
    for(char c:input.textInput){if(c=='\b'){if(!m_joinTyped.empty())m_joinTyped.pop_back();continue;}
     c=char(std::toupper(static_cast<unsigned char>(c)));
     if(m_joinTyped.size()<6&&std::string_view("ABCDEFGHJKMNPQRSTUVWXYZ23456789").find(c)!=std::string_view::npos)m_joinTyped+=c;}}
+  else if(m_titlePage==TitlePage::Multiplayer&&item.action==ActPlayerName){
+   // The name others see: letters, digits, spaces and plain punctuation, 2-24 characters; saved at once.
+   auto name=m_settings.playerName;editName(name,input.textInput);savePlayerName(std::move(name));}
   else if(m_titlePage==TitlePage::Host&&item.action==ActHostName){
    for(char c:input.textInput){if(c=='\b'){if(!m_hostDraft.name.empty())m_hostDraft.name.pop_back();continue;}
     if(c>=32&&c<127&&m_hostDraft.name.size()<24)m_hostDraft.name+=c;}}
@@ -232,6 +301,11 @@ void Game::updateMultiplayerMenu(const InputState& input){
   case ActHost:openTitlePage(TitlePage::Host);break;
   case ActJoin:openTitlePage(TitlePage::JoinCode);break;
   case ActCharacter:openTitlePage(TitlePage::Character);break;
+  case ActPlayerName:
+   m_nameDraft=m_settings.playerName;
+   m_nameUpper=false;
+   openTitlePage(TitlePage::PlayerName);
+   break;
   case ActBack:if(m_titlePage==TitlePage::Multiplayer){m_titlePage=TitlePage::Main;m_titleSelection=TitleMultiplayer;}
    else{const TitlePage from=m_titlePage;openTitlePage(TitlePage::Multiplayer);m_titleSelection=from==TitlePage::QuickMatch?0:from==TitlePage::Browse?1:from==TitlePage::Host?2:from==TitlePage::JoinCode?3:4;}break;
   case ActQuickDeathmatch:case ActQuickCoop:{const auto mode=item.action==ActQuickCoop?net::Mode::Coop:net::Mode::Deathmatch;
@@ -244,9 +318,9 @@ void Game::updateMultiplayerMenu(const InputState& input){
   case ActCopy:if(m_netSession&&m_netSession->state()==net::SessionState::InLobby){copyTextToClipboard(m_netSession->lobby().joinCode);m_joinCopied=2.5f;}break;
   case ActLeave:if(m_netSession)m_netSession->leave();openTitlePage(TitlePage::Multiplayer);break;
   case ActJoinGo:{const auto code=net::normaliseJoinCode(m_joinTyped);if(!code.empty())m_netSession->joinCode(code);break;}
-  case ActClaire:m_settings.character=0;break;
-  case ActLimitator:m_settings.character=1;break;
-  case ActLeon:m_settings.character=2;break;
+  case ActClaire:m_settings.character=0;m_settingsSaveDue=true;break;
+  case ActLimitator:m_settings.character=1;m_settingsSaveDue=true;break;
+  case ActLeon:m_settings.character=2;m_settingsSaveDue=true;break;
   default:break;
  }
 }
@@ -266,7 +340,7 @@ bool Game::testMultiplayerMenu(std::ostream& report){
   check(g.titleSelection()==TitleMultiplayer,"MULTIPLAYER is the fourth row, between the campaign and SETTINGS");
   key(g,&InputState::menuAccept);check(g.titlePage()==TitlePage::Multiplayer,"accepting MULTIPLAYER opens its page");
   const auto items=g.titleItems();int usable=0;for(const auto& t:items)usable+=t.enabled;
-  check(items.size()==6&&!items[0].enabled&&!items[3].enabled&&items[4].enabled&&items[5].enabled,"offline: QUICK MATCH to JOIN BY CODE greyed, CHARACTER and BACK usable");
+  check(items.size()==7&&!items[0].enabled&&!items[3].enabled&&items[4].enabled&&items[4].label=="NAME"&&items[5].enabled&&items[6].enabled,"offline: QUICK MATCH to JOIN BY CODE greyed, NAME, CHARACTER and BACK usable");
   check(g.titleSelection()==4,"offline: the selection starts on the first usable row (CHARACTER)");
   check(g.sessionWord()=="OFFLINE"&&!g.sessionReason().empty(),"offline: the page says so and why");
   key(g,&InputState::escape);check(g.titlePage()==TitlePage::Main&&g.titleSelection()==TitleMultiplayer,"escape returns to the title on MULTIPLAYER");
@@ -282,6 +356,40 @@ bool Game::testMultiplayerMenu(std::ostream& report){
   check(l.titleItems().size()==4&&l.titleItems()[2].label=="LEON"&&l.settings().character==2,"CHARACTER: three bodies and BACK, LEON chosen");
   l.saveSettings(path.wstring());Game m(campaign);m.loadSettings(path.wstring());check(m.settings().character==2,"Leon survives a settings save and load");
   std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0 9\n";Game wild(campaign);wild.loadSettings(path.wstring());std::filesystem::remove(path,e);check(wild.settings().character==2,"a character number past the last is clamped to Leon");}
+ // MULTIPLAYER > NAME: typed on the page, used by the session at once, kept through a save and load; never the
+ // Windows account name, which players did not want shown.
+ {net::LoopbackHub names;auto session=names.connect("Diver-1234");Game g(campaign);g.setNetSession(session.get());g.showTitleScreen();g.openTitlePage(TitlePage::Multiplayer);
+  check(g.titleItems().size()>4&&g.titleItems()[4].label=="NAME","MULTIPLAYER: a NAME row");
+  g.m_titleSelection=4;{InputState typed{};typed.textInput="Nyx|Rider";tickUpdate(g,typed,1.f/60);tickUpdate(g,{},1.f/60);}
+  check(g.settings().playerName=="NyxRider"&&session->displayName()=="NyxRider","NAME: typed (no | allowed) and used by the session ("+session->displayName()+")");
+  {InputState typed{};typed.textInput="\b\b\b\b\bRider of Gloom";tickUpdate(g,typed,1.f/60);tickUpdate(g,{},1.f/60);}
+  check(g.settings().playerName=="NyxRider of Gloom","NAME: backspace and spaces ("+g.settings().playerName+")");
+  auto pressName=[&](bool InputState::*button){InputState input{};input.*button=true;tickUpdate(g,input,1.f/60);tickUpdate(g,{},1.f/60);};
+  pressName(&InputState::menuAccept);
+  check(g.titlePage()==TitlePage::PlayerName,"NAME: A opens the on-screen keyboard");
+  pressName(&InputState::menuAccept);
+  pressName(&InputState::escape);
+  check(g.settings().playerName=="NyxRider of Gloom","NAME: B cancels changes");
+  pressName(&InputState::menuAccept);
+  pressName(&InputState::menuAccept);
+  pressName(&InputState::menuUp);
+  for(int step=0;step<3;++step)pressName(&InputState::menuLeft);
+  pressName(&InputState::menuAccept); // Shift
+  pressName(&InputState::menuRight);
+  pressName(&InputState::menuAccept); // Delete the digit
+  pressName(&InputState::menuDown);
+  pressName(&InputState::menuDown);
+  pressName(&InputState::menuRight);
+  pressName(&InputState::menuAccept); // J
+  pressName(&InputState::menuUp);
+  pressName(&InputState::menuUp);
+  pressName(&InputState::menuAccept); // Done
+  check(g.titlePage()==TitlePage::Multiplayer&&g.settings().playerName=="NyxRider of GloomJ"&&session->displayName()==g.settings().playerName,"NAME: keyboard keys and Done update the session");
+  g.savePlayerName("NyxRider of Gloom");
+  tickUpdate(g,{},1.f/60);
+  const auto path=std::filesystem::temp_directory_path()/"rawmetal-name-test.txt";g.saveSettings(path.wstring());Game h(campaign);h.loadSettings(path.wstring());std::error_code e;std::filesystem::remove(path,e);
+  auto later=names.connect("Diver-5678");h.setNetSession(later.get());
+  check(h.settings().playerName=="NyxRider of Gloom"&&later->displayName()=="NyxRider of Gloom","the name survives a save and load and is handed to the next session");}
  // Online over a loopback hub: a host, and a guest who finds it.
  net::LoopbackHub hub;auto hostSession=hub.connect("Maddie");auto guestSession=hub.connect("Ash");
  Game host(campaign);host.m_customCampaigns={campaign,coopOnly};host.setNetSession(hostSession.get());host.showTitleScreen();
