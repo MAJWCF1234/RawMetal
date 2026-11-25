@@ -2938,6 +2938,15 @@ struct Editor {
       placeControl(fieldInputs[i], 10, y + 27, std::max(50L, r.right - 36), 26,
                  TRUE);
     }
+    if (modelScaleBox) {
+      showControl(modelScaleLabel, modelScaleShown);
+      showControl(modelScaleBox, modelScaleShown);
+      if (modelScaleShown) {
+        int y = row++ * 54 - formScroll;
+        placeControl(modelScaleLabel, 10, y + 6, std::max(50L, r.right - 36), 20, TRUE);
+        placeControl(modelScaleBox, 10, y + 27, std::max(50L, r.right - 36), 26, TRUE);
+      }
+    }
     const bool trigger = !schemas.empty() && schemas[size_t(kind)].kind == "SCRIPT_TRIGGER" && record >= 0;
     if (triggerAllPlayers) {
       showControl(triggerAllPlayers, trigger);
@@ -2984,6 +2993,8 @@ struct Editor {
   // Field boxes are pooled: an edit control costs milliseconds to create, and
   // picking things must feel instant.
   std::vector<HWND> poolLabels, poolInputs;
+  HWND modelScaleLabel = nullptr, modelScaleBox = nullptr;
+  bool modelScaleShown = false;
   void fillFields(bool fresh) {
     edperf::Scope perfScope("ui_fillFields");
     edperf::Laps laps;
@@ -2992,10 +3003,13 @@ struct Editor {
     fieldInputs.clear();
     fieldLabels.clear();
     fieldShown.clear();
+    modelScaleShown = false;
     formScroll = 0;
     if (schemas.empty()) {
       for (size_t i = 0; i < poolInputs.size(); ++i)
         ShowWindow(poolLabels[i], SW_HIDE), ShowWindow(poolInputs[i], SW_HIDE);
+      if (modelScaleBox)
+        ShowWindow(modelScaleLabel, SW_HIDE), ShowWindow(modelScaleBox, SW_HIDE);
       return;
     }
     auto &s = schemas[size_t(kind)];
@@ -3055,6 +3069,13 @@ struct Editor {
       }
       SendMessageW(triggerAllPlayers, BM_SETCHECK, all ? BST_CHECKED : BST_UNCHECKED, 0);
     }
+    modelScaleShown = nativeSizedModel(f);
+    if (modelScaleShown && !modelScaleBox) {
+      modelScaleLabel = controlWindow(L"STATIC", L"Scale by factor (1 = current size)", 0, 0, form);
+      modelScaleBox = controlWindow(L"EDIT", L"1", WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP, 0, form);
+    }
+    if (modelScaleShown)
+      setControlText(modelScaleBox, L"1");
     laps.lap("fields_texts");
     for (size_t i = fieldInputs.size(); i < poolInputs.size(); ++i)
       showControl(poolLabels[i], false), showControl(poolInputs[i], false);
@@ -3391,7 +3412,7 @@ struct Editor {
         if (!name.empty() &&
             std::all_of(name.begin(), name.end(),
                         [](unsigned char c) { return std::isdigit(c); })) {
-          if (name != fields[j]) {
+          if (name != fields[j] && !(j == 2 && name == "7" && nativeLooseModel(fields))) {
             matches = false;
             break;
           }
@@ -4974,7 +4995,15 @@ struct Editor {
     if(held&&primHandle>=0&&objectDrag){applyPrimHandle3D(ox,oy,oz,dx,dy,dz);if(objectMoved&&liveTurn()){publish();lastDragPublish=GetTickCount64();}return;}
     if(held&&bodyDragging&&objectDrag){applyBodyDrag3D(ox,oy,oz,dx,dy,dz);if(objectMoved&&liveTurn()){publish();lastDragPublish=GetTickCount64();}return;}
     if(held&&verticalDragging&&objectDrag){float z;if(verticalRay(ox,oy,oz,dx,dy,dz,z)){applyHeightDelta(z-verticalStart);if(objectMoved&&liveTurn())publish();}return;}
-    if(held&&viewDrag&&objectDrag&&resizeHandle>=0){float fx,fy;if(floorPoint(ox,oy,oz,dx,dy,dz,resizePlane,fx,fy)){applyCornerDrag(fx-viewGrabX,fy-viewGrabY);if(objectMoved&&liveTurn())publish();}return;}
+    if(held&&viewDrag&&objectDrag&&resizeHandle>=0){
+      float fx,fy;
+      if(floorPoint(ox,oy,oz,dx,dy,dz,resizePlane,fx,fy)){
+        const bool wasResized=objectMoved;
+        applyCornerDrag(fx-viewGrabX,fy-viewGrabY);
+        if((wasResized&&!objectMoved)||(objectMoved&&liveTurn()))publish();
+      }
+      return;
+    }
     if (held && viewDrag && objectDrag) {
       float fx, fy;
       if (!pointOnFloor(ox, oy, oz, dx, dy, dz, 0, fx, fy))
@@ -5204,20 +5233,9 @@ struct Editor {
           message(L"Pick one model on an editable floor to resize it.");
           return true;
         }
-        const size_t width = nativeLooseModel(f) ? 8 : 6;
-        const float w = number(f[width], 0), d = number(f[width+1], 0), h = number(f[width+2], 0);
-        const float smallest = std::min({w, d, h}), largest = std::max({w, d, h});
-        if (smallest <= 0)
-          return true;
-        const float limit = nativeLooseModel(f) ? 3.f : 100000.f;
-        const float requested = msg.wParam == VK_OEM_6 ? 1.15f : 1.f / 1.15f;
-        const float factor = std::clamp(requested, std::min(1.f, .01f/smallest), std::max(1.f, limit/largest));
-        if (factor == 1.f)
-          return true;
         const auto before = f;
-        f[width] = nativeNumber(std::min(limit, w*factor));
-        f[width+1] = nativeNumber(std::min(limit, d*factor));
-        f[width+2] = nativeNumber(std::min(limit, h*factor));
+        if (!scaleNativeModel(f, msg.wParam == VK_OEM_6 ? 1.15f : 1.f / 1.15f))
+          return true;
         remember();
         doc.replace(size_t(record), f);
         relink(before, f);
@@ -5277,7 +5295,8 @@ struct Editor {
       typed.erase(typed.begin());
     char *end = nullptr;
     double value = std::strtod(typed.c_str(), &end);
-    const bool number = end == typed.c_str() + typed.size() && std::isfinite(value) && typed.find_first_of("xXnNiI") == std::string::npos;
+    const bool number = !typed.empty() && end == typed.c_str() + typed.size() && std::isfinite(value) &&
+                        typed.find_first_of("xXnNiI") == std::string::npos;
     if (!number) {
       message(old.empty() ? L"That box takes a number." : L"That box takes a number; kept " + wide(old) + L".");
       show(old);
@@ -5311,6 +5330,9 @@ struct Editor {
       f.push_back(std::to_string(map));
     NativeDocument::Named named;
     const auto before = record >= 0 ? NativeDocument::fields(doc.lines[size_t(record)]) : std::vector<std::string>{};
+    const bool sizedModel = nativeSizedModel(before);
+    const size_t modelWidth = sizedModel ? nativeModelWidth(before) : size_t(-1);
+    float modelScale = 1.f;
     auto numeric = [](const std::string &value) {
       if (value.empty()) return false;
       char *end = nullptr;
@@ -5318,6 +5340,12 @@ struct Editor {
       return end == value.c_str() + value.size();
     };
     const std::string freeText[] = {"state", "name", "label", "text", "line", "speaker", "voice", "key", "code", "sound", "faction", "material", "style", "symbol", "title", "sky", "script", "event", "node", "target", "value", "kind", "prop", "socket", "terminal"};
+    if (sizedModel && modelScaleShown) {
+      modelScale = number(guardedNumber(utf8(label(modelScaleBox)), "1", nullptr, modelScaleBox), 1.f);
+      if (modelScale <= 0.f)
+        message(L"Scale needs a positive factor.");
+      setControlText(modelScaleBox, L"1");
+    }
     for (size_t i = 0; i < fieldInputs.size(); ++i) {
       auto text = utf8(label(fieldInputs[i]));
       if (i < positionalInputs || i - positionalInputs >= namedKeys.size()) {
@@ -5327,7 +5355,14 @@ struct Editor {
         const bool freeWord = std::any_of(std::begin(freeText), std::end(freeText), [&](const auto &word) { return fname.find(word) != std::string::npos; });
         // A box that holds a number, or is a number by its name or by the loader's table (CampaignFieldRanges.h),
         // keeps what it had when a non-number is typed (`1d`) and keeps a number the loader would refuse in range.
-        if (field > 0 && !text.empty() && (range || (!freeWord && ((field < before.size() && numeric(before[field])) || numericFieldName(fname)))))
+        if (sizedModel && field >= modelWidth && field < modelWidth + 3) {
+          const float oldSize = number(before[field], .01f);
+          const float minimum = std::isfinite(oldSize) && oldSize > 0.f ? std::min(.01f, oldSize) : .01f;
+          const FieldRange dimensions{s.kind.c_str(), int(field), nullptr, minimum,
+                                      nativeModelLimit(before), false, false, nullptr};
+          text = guardedNumber(text.empty() ? decoded(before[field]) : text, decoded(before[field]), &dimensions, fieldInputs[i]);
+          setControlText(fieldInputs[i], wide(text).c_str());
+        } else if (field > 0 && !text.empty() && (range || (!freeWord && ((field < before.size() && numeric(before[field])) || numericFieldName(fname)))))
           text = guardedNumber(text, field < before.size() ? decoded(before[field]) : std::string(), range, fieldInputs[i]);
         // Names and sentences the loader limits: spaces become _, forbidden characters go, the length is cut.
         if (const auto *rule = textRuleFor(s.kind, int(field)); rule && !text.empty()) {
@@ -5386,6 +5421,7 @@ struct Editor {
     while (f.size() > size_t(s.required) && f.back().empty())
       f.pop_back();
     normalize(f);
+    const bool scaledModel = scaleNativeModel(f, modelScale);
     if (record >= 0) {
       if (before == f && NativeDocument::named(doc.lines[size_t(record)]) == named)
         return; // leaving a field unchanged is not an edit
@@ -5411,6 +5447,8 @@ struct Editor {
     selected = record;
     if (quiet && selected >= 0) {
       // Leaving a field must not rebuild the fields under the next click.
+      if (scaledModel)
+        updateInspector();
       if (s.kind == "MAP" || s.kind == "CAMPAIGN")
         refreshMaps();
       if (s.kind == "MAP")
@@ -9836,13 +9874,14 @@ static LRESULT CALLBACK planProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if (e->drag && e->objectDrag) {
         try {
+          const bool wasResized=e->resizeHandle>=0&&e->objectMoved;
           if(e->resizeHandle>=0)e->applyCornerDrag(x,y);
           else {auto original=nativeHandle(e->schemas[size_t(e->kind)].fields,e->objectFields);if(!original)return 0;
             float dx=x-e->dragX,dy=y-e->dragY;
             if(e->snap>0){dx=std::round(dx/e->snap)*e->snap;dy=std::round(dy/e->snap)*e->snap;}
             e->applyDragDelta(dx,dy);}
 
-          if (e->objectMoved && e->liveTurn()) {
+          if ((wasResized&&!e->objectMoved)||(e->objectMoved&&e->liveTurn())) {
           e->publish();
           e->lastDragPublish = GetTickCount64();
         }

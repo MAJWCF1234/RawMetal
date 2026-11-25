@@ -544,7 +544,7 @@ public:
     bool hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable=true,bool shieldable=true);
     // A co-op guest's body as the host keeps it (the Match fills it each frame; empty everywhere else).
     // pushing: they lean into something (walking keys held while stopped): a prop is shoved their way.
-    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false,pushing=false;float lit=1,litTimer=0,stride=0;};
+    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false,pushing=false;float lit=1,litTimer=0;};
     // The light on a point (a body's chest): the lamps, the room's ambient and darkness, a torch.
     float lightAt(Vec2 at,float chest,bool torch)const;
     // Script effects a co-op host sends on (the Match drains it after the frame; cleared at each script pass):
@@ -709,6 +709,7 @@ public:
     static bool testChimeraHunt();
     static bool testDoorAxis();
     static bool testSniper();      // --each-test=sniper: the bolt-action rifle, a head hit, the bolt, the reload and the scope
+    static bool testAiDirector();  // --each-test=ai-director: an AI over a zone, its beat, the LIGHTS, NOISE and LATER blocks
     static bool testWalkIn();      // --each-test=walk-in: into an open container, up stairs, along a balcony rail
     static bool testMapFormat();   // MapFormatTest.cpp: map format 2
     static bool testDoors();
@@ -1373,6 +1374,7 @@ public:
     // the state gate alone; lampPower adds the timed window and flicker (0..1).
     bool lampSwitchedOn(const WorldLight& lamp)const;
     float lampPower(const WorldLight& lamp)const;
+    float lampPowerAuthored(const WorldLight& lamp)const;   // as authored: switching, timing, flicker, hung lamps, live leads
     // A lamp riding a prop that hangs on a joint (a swinging lamp): where its light is now (map coordinates), lit
     // while its prop is whole. False for any other lamp.
     bool hungLampAt(const WorldLight& lamp,Point3& at,bool* lit=nullptr)const;
@@ -1641,6 +1643,19 @@ private:
     std::vector<QuestItemStack> m_questItems;
     std::vector<StateId> m_firedEvents;
     std::vector<ScriptEvent> m_scriptEvents;
+    // ---- The AIs over map zones (AI records, AiAgents.cpp) and the AI blocks they are wired with ----
+    // Every AI keeps what it decides in states (saved with the rest); these are only the fractions a state's
+    // whole number cannot hold, rebuilt from the states after a load.
+    std::vector<AiAgent> m_aiAgents;
+    struct AiMind {float tension=0,quiet=0;bool seeded=false;};std::vector<AiMind> m_aiMinds;
+    // The Lights block: per AI, a mode (0 as authored, 1 flicker, 2 dark, 3 red) and the tenths of a second left
+    // (0 until changed), in states AI_lights and AI_lights_left; the Later block: a state per Later action
+    // counting tenths down (Game::laterKey).
+    float m_aiTick=0;
+    void seedAiAgents();
+    void updateAiAgents(float dt);
+    float aiLampScale(const WorldLight& lamp,int level,Point3* tint=nullptr)const;
+    static StateId laterKey(StateId event,size_t action){return stateId("later:"+std::to_string(event)+":"+std::to_string(action));}
     float m_hazardSoundTimer=0;
     // Darkness ramp and torch jam; runtime only, re-settled after any load.
     float m_darkness=0,m_flashlightJam=0;bool m_darknessSettled=false;
@@ -2081,6 +2096,8 @@ private:
     std::vector<ScriptFx> m_scriptFx;
     struct NetUse {int level=0,terminal=0;};
     std::vector<NetUse> m_netUses;
+    // Match publishes the remote footfalls after the game update. The next update feeds them to hearing and audio.
+    std::vector<SoundEvent> m_netSounds;
     int m_scriptPlayer=0;       // the player whose step or hand fires the script running now
     int m_shooter=0;            // the player whose shot is being resolved (a co-op host resolving a guest's)
     // ----- Several maps at once (ForeignChunks.cpp; docs/Systems/multiplayer.md "Several maps") -----

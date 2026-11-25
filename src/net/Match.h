@@ -86,7 +86,8 @@ private:
   NetPlayerState latest;bool haveState=false;
   float health=100;bool alive=true;float respawnIn=-1,deathAt=-1;std::uint8_t life=0;
   float acceptedAt=-1,correctCooldown=0,spawnGrace=0,lastShotAt=-99;std::uint8_t lastShots=0;
-  float footstepStride=0;
+  // Their feet as this machine hears them (remoteFootstep), from the drawn state: no packet per step.
+  struct Feet{bool have=false,grounded=true;Point3 last{};float stride=0,air=0;unsigned take=0;std::uint8_t life=0;} feet;
   std::uint16_t seq=0;bool seqSeen=false;
   std::uint32_t carryId=0;float carryAt=-1;   // the prop their hand carries (the host poses it from their reports)
  };
@@ -167,7 +168,7 @@ private:
  void coopHostFrame(float dt);
  void coopGuestFrame(float dt);
  void syncBodies(float dt);
- void remoteFootstep(const NetPlayerState& state,float dt,float& stride,bool heardByAi);
+ void remoteFootstep(Slot& slot,const NetPlayerState& drawn,float dt,bool heardByAi);   // their steps and landings heard
  void sendStateSync(bool full,const PeerId* to);
  void sendScriptFx();
  void sendActors();

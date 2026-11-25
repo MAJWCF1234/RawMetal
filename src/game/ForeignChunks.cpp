@@ -79,6 +79,6 @@ void Game::enterChunk(int level){
  ensureChunk(level);storeChunk();auto& chunk=m_chunks[size_t(level)];
  m_world=chunk.world;m_levelNav=std::move(chunk.nav);m_levelNavReady=chunk.navReady;chunk.nav={};chunk.navReady=false;
  m_enemies=chunk.enemies;m_pickups=chunk.pickups;m_clutter=chunk.clutter;m_kills=chunk.kills;m_level=level;
- m_casings.clear();m_sounds.clear();m_liquidDrops.clear();m_puddles.clear();m_activeLog=-1;m_logTime=0;m_capture={};
+ m_casings.clear();m_sounds.clear();m_netSounds.clear();m_liquidDrops.clear();m_puddles.clear();m_activeLog=-1;m_logTime=0;m_capture={};
 }
 }

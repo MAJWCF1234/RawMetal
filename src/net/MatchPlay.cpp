@@ -694,14 +694,14 @@ void Match::publish(float dt){
  if(m_noticeTime>0)m_noticeTime-=dt;
  if(m_phase==Phase::Playing){
   const float t=renderTime();const Vec2 here=origin(g.m_level);
-  for(int i=0;i<MaxSlots;++i){auto& s=m_slots[size_t(i)];if(i==m_selfSlot||!s.used||!s.haveState||!s.spawned)continue;
-   NetPlayerState st;if(!sampleAt(s,t,st))continue;
+  for(int i=0;i<MaxSlots;++i){auto& s=m_slots[size_t(i)];if(i==m_selfSlot||!s.used||!s.haveState||!s.spawned){s.feet={};continue;}
+   NetPlayerState st;if(!sampleAt(s,t,st)){s.feet={};continue;}
    // Only someone on this map, or on a stitched neighbour of it (its own place on the grid): a player left on
    // another map of a custom campaign would otherwise be drawn at their coordinates there, inside these walls.
-   if(!g.inPlayerFrame(st.level))continue;
-   // The co-op host already emits footsteps in syncBodies, including the AI hearing radius.
-   if((!m_host||m_mode!=Mode::Coop)&&t-s.history.back().t<=MaxExtrapolation)
-    remoteFootstep(st,dt,s.footstepStride,false);
+   if(!g.inPlayerFrame(st.level)){s.feet={};continue;}
+   // Their footsteps, as they are drawn (a co-op host's minds hear them too).
+   if(t-s.history.back().t<=MaxExtrapolation)remoteFootstep(s,st,dt,m_host&&m_mode==Mode::Coop);
+   else s.feet={};
    RemotePlayer rp;rp.slot=std::uint8_t(i);rp.name=s.name;rp.position={st.world.x-here.x,st.world.y-here.y,st.world.z};
    rp.angle=st.angle;rp.pitch=st.pitch;rp.velocity=st.velocity;rp.crouched=st.crouched;rp.prone=st.prone;rp.grounded=st.grounded;rp.weapon=st.weapon;
    rp.shotAge=std::max(0.f,t-s.lastShotAt);rp.reloadAge=st.reloadAge;rp.health=st.health;rp.alive=st.alive;

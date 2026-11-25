@@ -7,6 +7,26 @@ inline size_t nativeField(const std::vector<std::string>& names,const std::vecto
   return i==names.end()||size_t(i-names.begin())>=fields.size()?size_t(-1):size_t(i-names.begin());
 }
 inline bool nativeLineKind(const std::string& kind) {return kind=="PIPE"||kind=="LEAD"||kind=="DOOR";}
+inline size_t nativeModelWidth(const std::vector<std::string>& fields) {
+  return nativeLooseModel(fields) ? 8 : 6;
+}
+inline float nativeModelLimit(const std::vector<std::string>& fields) {
+  return nativeLooseModel(fields) ? 3.f : 100000.f;
+}
+inline bool scaleNativeModel(std::vector<std::string>& fields,float requested) {
+  if(!nativeSizedModel(fields)||!std::isfinite(requested)||requested<=0.f||requested==1.f)return false;
+  const size_t width=nativeModelWidth(fields);
+  const std::array<float,3> dimensions={std::stof(fields[width]),std::stof(fields[width+1]),std::stof(fields[width+2])};
+  const auto [smallest,largest]=std::minmax_element(dimensions.begin(),dimensions.end());
+  if(!std::isfinite(*largest)||*smallest<=0.f)return false;
+  const float limit=nativeModelLimit(fields);
+  // Preserve the aspect ratio of older models even when a dimension starts below the editor minimum.
+  const float factor=std::clamp(requested,std::min(1.f,.01f / *smallest),std::max(1.f,limit / *largest));
+  if(factor==1.f)return false;
+  for(size_t i=0;i<dimensions.size();++i)
+    fields[width+i]=nativeNumber(std::min(limit,dimensions[i]*factor));
+  return true;
+}
 inline std::vector<std::pair<float,float>> nativeCorners(const std::vector<std::string>& names,const std::vector<std::string>& f) {
   auto h=nativeHandle(names,f);if(!h)return {};
   if(nativeLineKind(f[0])){std::vector<std::pair<float,float>> out;for(auto [x,y]:h->points)out.emplace_back(std::stof(f[x]),std::stof(f[y]));return out;}
@@ -49,19 +69,17 @@ inline bool resizeNative(std::vector<std::string>& f,const std::vector<std::stri
   float yaw=0;auto angle=nativeField(names,f,"yaw");if(angle!=size_t(-1))yaw=std::stof(f[angle]);else{angle=nativeField(names,f,"facing");if(angle!=size_t(-1))yaw=std::stof(f[angle])*1.57079632679f;}
   float c=std::cos(yaw),s=std::sin(yaw),dx=x-fixed.first,dy=y-fixed.second;
   const bool model=nativeSizedModel(f);
-  const float maximum=nativeLooseModel(f)?3.f:100000.f;
+  const float maximum=nativeModelLimit(f);
   const float minWidth=model?std::min(.01f,h->width):.25f;
   const float minDepth=model?std::min(.01f,h->depth):.25f;
   float w=std::clamp((dx*c-dy*s)*signs[corner][0],minWidth,maximum);
   float d=std::clamp((dx*s+dy*c)*signs[corner][1],minDepth,maximum);
-  size_t hi=nativeField(names,f,"height");if(hi==size_t(-1))hi=nativeField(names,f,"h");
-  if(model&&!free&&hi!=size_t(-1)&&h->width>0&&h->depth>0){
-    const float h0=std::max(.0001f,std::stof(f[hi]));
-    // The drag's reach along the corner's diagonal: the mean of the two stretches, held so no side passes the limits.
-    float k=.5f*(std::max(0.f,(dx*c-dy*s)*signs[corner][0])/h->width+std::max(0.f,(dx*s+dy*c)*signs[corner][1])/h->depth);
-    const float longest=std::max({h->width,h->depth,h0}),shortest=std::min({h->width,h->depth,h0});
-    k=std::clamp(k,.01f/shortest,maximum/longest);
-    w=h->width*k;d=h->depth*k;f[hi]=nativeNumber(h0*k);
+  if(model&&!free&&h->width>0&&h->depth>0){
+    // Project the pointer onto the model diagonal so the handle follows the closest proportional corner.
+    const float localW=(dx*c-dy*s)*signs[corner][0],localD=(dx*s+dy*c)*signs[corner][1];
+    const float factor=std::max(.000001f,(localW*h->width+localD*h->depth)/(h->width*h->width+h->depth*h->depth));
+    if(!scaleNativeModel(f,factor))return true;
+    w=std::stof(f[wi]);d=std::stof(f[di]);
   }
   float localX=w*signs[corner][0],localY=d*signs[corner][1];
   auto [xi,yi]=h->points[0];f[xi]=nativeNumber(fixed.first+(c*localX+s*localY)*.5f);

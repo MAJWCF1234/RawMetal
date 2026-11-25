@@ -396,9 +396,18 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
     else if(a.type==T::ShowMessage&&!a.text.empty()&&a.text.size()<=96&&a.amount>=.5f&&a.amount<=15&&only(false,false,true,true))r.t("MESSAGE").t(a.text).n(a.amount);
     else if((a.type==T::Checkpoint||a.type==T::CompleteCampaign||a.type==T::EnterMainCampaign)&&only(false,false,false,false))r.f(a.type==T::Checkpoint?"CHECKPOINT":a.type==T::CompleteCampaign?"COMPLETE":"ENTER_CAMPAIGN");
     else if(a.type==T::Shake&&a.amount>0&&a.amount<=3&&only(false,false,false,true))r.f("SHAKE").n(a.amount);
+    else if(a.type==T::Lights&&a.id&&a.value>=0&&a.value<=3&&a.amount>=0&&a.amount<=600&&only(true,true,false,true))r.f("LIGHTS").sth(a.id).f(a.value==0?"normal":a.value==1?"flicker":a.value==2?"dark":"red").n(a.amount);
+    else if(a.type==T::Noise&&bankSound(a.sound)&&(a.index==0||a.index==1)&&a.amount>0&&a.amount<=4&&a.value>=0&&a.value<=60&&a.id==plain.id&&a.enemyKind==plain.enemyKind&&a.position.x==plain.position.x&&a.position.y==plain.position.y&&a.z==plain.z&&a.text.empty())
+     r.f("NOISE").f(bankSound(a.sound)->name).n(a.amount).f(a.index==0?"behind":"ahead").i(a.value);
+    else if(a.type==T::Later&&a.id&&a.value>=-100000&&a.value<=100000&&a.amount>=.1f&&a.amount<=3600&&only(true,true,false,true))r.f("LATER").sth(a.id).i(a.value).n(a.amount);
     else r.f("RAW").i(int(a.type)).st(a.id).i(a.value).i(a.index).i(int(a.enemyKind)).n(a.position.x).n(a.position.y).n(a.z).n(a.amount).i(int(a.sound)).t(a.text);
     line(r);}
   }
+  // The AIs over the map's zones, their knobs as named fields when they differ from the defaults.
+  parent.clear();
+  for(const auto& ai:m.aiAgents){Rec r("AI");r.i(mi).f(ai.name).f("director").n(ai.x1).n(ai.y1).n(ai.x2).n(ai.y2).n(ai.bottom).n(ai.top);const AiAgent plain{};
+   auto knob=[&](const char* key,float v,float d){if(v!=d){std::ostringstream o;o<<key<<'='<<v;r.f(o.str());}};
+   knob("pressure",ai.pressure,plain.pressure);knob("calm",ai.calm,plain.calm);knob("peak",ai.peak,plain.peak);if(!ai.lights)r.f("lights=0");line(r);}
   // Named fields on records the exporter writes another way (a prefab as the records it placed, a
   // PRIM whose boxes were changed after it was laid as those boxes) cannot follow them.
   for(const auto& [key,value]:m.recordFields)if(!written.count(key)&&key.find("/*/")==std::string::npos){std::string text;for(const auto& f:value)text+=(text.empty()?"":"|")+f.key+"="+f.value;note("the named fields of "+key+" ("+text+") have no record to ride on and are left out");}
@@ -589,6 +598,10 @@ std::vector<std::string> compareAuthoredMaps(const AuthoredMapData& a,const Auth
   d.count(w+".replies",p.replies.size(),q.replies.size());for(size_t k=0;k<std::min(p.replies.size(),q.replies.size());++k){const auto&r=p.replies[k];const auto&s=q.replies[k];auto v=w+".reply["+std::to_string(k)+"]";
    d.eq(v+".text",r.text,s.text);d.eq(v+".next",r.next,s.next);d.eq(v+".require",r.require,s.require);d.eq(v+".requireValue",r.requireValue,s.requireValue);d.eq(v+".hide",r.hide,s.hide);d.eq(v+".sets",r.sets==s.sets,true);d.eq(v+".stance",r.stance,s.stance);}}
  d.count("scriptEvents",a.scriptEvents.size(),b.scriptEvents.size());
+ d.count("aiAgents",a.aiAgents.size(),b.aiAgents.size());
+ for(size_t i=0;i<std::min(a.aiAgents.size(),b.aiAgents.size());++i){const auto& p=a.aiAgents[i];const auto& q=b.aiAgents[i];auto w=at("ai",i);
+  d.eq(w+".id",p.id,q.id);d.eq(w+".x1",p.x1,q.x1);d.eq(w+".y1",p.y1,q.y1);d.eq(w+".x2",p.x2,q.x2);d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);
+  d.eq(w+".pressure",p.pressure,q.pressure);d.eq(w+".calm",p.calm,q.calm);d.eq(w+".peak",p.peak,q.peak);d.eq(w+".lights",p.lights,q.lights);}
  for(size_t i=0;i<std::min(a.scriptEvents.size(),b.scriptEvents.size());++i){const auto&p=a.scriptEvents[i];const auto&q=b.scriptEvents[i];auto w=at("event",i);d.eq(w+".id",p.id,q.id);if(compareEventLevels)d.eq(w+".level",p.level,q.level);
   d.eq(w+".box",Point3{p.x1,p.y1,p.x2},Point3{q.x1,q.y1,q.x2});d.eq(w+".y2",p.y2,q.y2);d.eq(w+".bottom",p.bottom,q.bottom);d.eq(w+".top",p.top,q.top);d.eq(w+".requireState",p.requireState,q.requireState);d.eq(w+".requireValue",p.requireValue,q.requireValue);
   d.eq(w+".requireEnemiesClear",p.requireEnemiesClear,q.requireEnemiesClear);d.eq(w+".once",p.once,q.once);d.eq(w+".scope",p.scope,q.scope);d.eq(w+".matchAny",p.matchAny,q.matchAny);d.eq(w+".rearm",p.rearm,q.rearm);d.eq(w+".allPlayers",p.allPlayers,q.allPlayers);
@@ -666,6 +679,7 @@ std::shared_ptr<const AuthoredMapData> campaignOverrideFromText(int chunk,std::s
  // Where it stands is the campaign's: streaming, seams and saves place chunks by the table.
  map->definition.origin=CampaignChunks[size_t(chunk)].origin;
  for(auto& event:map->scriptEvents)event.level=chunk;
+ for(auto& ai:map->aiAgents)ai.level=chunk;
  return map;
 }
 std::shared_ptr<const AuthoredMapData> campaignOverride(int chunk){

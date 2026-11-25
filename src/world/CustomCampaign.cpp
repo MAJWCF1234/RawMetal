@@ -330,6 +330,22 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    map->wallSurface=wall;map->floorSurface=floor;map->ceilingSurface=ceiling;
    // wallturn= floorturn= ceilingturn=: each set's texture turned (planks across the room).
    map->wallTurn=turnField(namedFields,"wallturn");map->floorTurn=turnField(namedFields,"floorturn");map->ceilingTurn=turnField(namedFields,"ceilingturn");
+  }else if(tag=="AI"){
+   // AI|map|name|kind|x1|y1|x2|y2|bottom|top: an AI over a zone of the map (ScriptDefinition.h AiAgent). kind:
+   // director. Named fields: pressure= (0-1, how hard it pushes), calm= (seconds it leaves between beats),
+   // peak= (seconds after which it calls a beat whatever it reads), lights= (1: it drives the zone's lamps).
+   if(f.size()!=10)throw std::runtime_error("malformed AI record");auto map=mapAt(maps,f);AiAgent ai;
+   ai.name=decode(f[2]);ai.id=scriptName(f,2,"AI name");ai.level=integer(f,1,"map index");
+   for(const auto& other:maps)if(other)for(const auto& previous:other->aiAgents)if(previous.id==ai.id)throw std::runtime_error("duplicate AI name "+ai.name);
+   if(decode(f[3])!="director")throw std::runtime_error("unknown AI kind "+decode(f[3])+"; use director");
+   ai.x1=number(f,4,"AI x1");ai.y1=number(f,5,"AI y1");ai.x2=number(f,6,"AI x2");ai.y2=number(f,7,"AI y2");ai.bottom=number(f,8,"AI bottom");ai.top=number(f,9,"AI top");
+   if(ai.x1<0||ai.y1<0||ai.x2>World::Width||ai.y2>World::Height||ai.x1>=ai.x2||ai.y1>=ai.y2||ai.bottom>=ai.top)throw std::runtime_error("AI "+ai.name+": its zone is outside the map or empty");
+   auto knob=[&](const char* key,float& value,float lo,float hi){if(const auto* field=findNamedField(namedFields,key)){float v=0;const auto& t=field->value;const auto r=std::from_chars(t.data(),t.data()+t.size(),v);
+    if(t.empty()||r.ec!=std::errc{}||r.ptr!=t.data()+t.size()||!(v>=lo&&v<=hi))throw std::runtime_error("AI "+ai.name+": "+key+"="+t+" must be "+std::to_string(lo)+" to "+std::to_string(hi));value=v;}};
+   knob("pressure",ai.pressure,0,1);knob("calm",ai.calm,2,600);knob("peak",ai.peak,5,1800);float lights=1;knob("lights",lights,0,1);ai.lights=lights>=.5f;
+   if(ai.peak<ai.calm)throw std::runtime_error("AI "+ai.name+": peak= must be at least calm=");
+   ai.tension=stateId(ai.name+"_tension");ai.inside=stateId(ai.name+"_inside");ai.beat=stateId(ai.name+"_beat");ai.quiet=stateId(ai.name+"_quiet");
+   if(map->aiAgents.size()>=16)throw std::runtime_error("too many AIs on one map (16 at most)");map->aiAgents.push_back(std::move(ai));
   }else if(tag=="OBJECTIVE_TEXT"){
    if(f.size()!=4)throw std::runtime_error("malformed OBJECTIVE_TEXT record");auto map=mapAt(maps,f);auto id=scriptName(f,2,"objective name");auto label=decode(f[3]);
    if(label.empty()||label.size()>80||!std::all_of(label.begin(),label.end(),[](unsigned char c){return c>=32&&c<=126;})||std::all_of(label.begin(),label.end(),[](char c){return c==' ';}))throw std::runtime_error("invalid objective text; use 1 to 80 printable ASCII characters");
@@ -393,6 +409,23 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(action.text.empty()||action.text.size()>96||action.amount<.5f||action.amount>15)throw std::runtime_error("invalid MESSAGE; use 1-96 characters for 0.5-15 seconds");
    }else if(kind=="CHECKPOINT"||kind=="COMPLETE"||kind=="ENTER_CAMPAIGN"){
     if(f.size()!=4)throw std::runtime_error("malformed terminal SCRIPT_ACTION record");action.type=kind=="CHECKPOINT"?ScriptAction::Type::Checkpoint:kind=="COMPLETE"?ScriptAction::Type::CompleteCampaign:ScriptAction::Type::EnterMainCampaign;
+   }else if(kind=="LIGHTS"){
+    // LIGHTS|ai|mode|seconds: the lamps in that AI's zone: normal, flicker, dark or red, for the seconds (0: until changed).
+    if(f.size()!=7)throw std::runtime_error("malformed LIGHTS SCRIPT_ACTION record");action.type=ScriptAction::Type::Lights;action.id=scriptName(f,4,"LIGHTS AI");
+    const auto mode=decode(f[5]);action.value=mode=="normal"?0:mode=="flicker"?1:mode=="dark"?2:mode=="red"?3:-1;
+    if(action.value<0)throw std::runtime_error("invalid LIGHTS mode; use normal, flicker, dark or red");action.amount=number(f,6,"LIGHTS seconds");
+    if(action.amount<0||action.amount>600)throw std::runtime_error("invalid LIGHTS seconds; use 0 (until changed) to 600");
+   }else if(kind=="NOISE"){
+    // NOISE|sound|gain|where|heard: a bank sound near the player (behind, ahead) that monsters within heard metres hear.
+    if(f.size()!=8)throw std::runtime_error("malformed NOISE SCRIPT_ACTION record");action.type=ScriptAction::Type::Noise;
+    const auto* row=bankSound(decode(f[4]));if(!row)throw std::runtime_error("unknown NOISE sound "+decode(f[4]));action.sound=row->sound;
+    action.amount=number(f,5,"NOISE gain");const auto where=decode(f[6]);action.index=where=="behind"?0:where=="ahead"?1:-1;action.value=integer(f,7,"NOISE heard metres");
+    if(action.index<0||action.amount<=0||action.amount>4||action.value<0||action.value>60)throw std::runtime_error("invalid NOISE; gain 0-4, where behind or ahead, heard 0-60 m");
+   }else if(kind=="LATER"){
+    // LATER|state|value|seconds: sets the state to the value that many seconds after the event fires.
+    if(f.size()!=7)throw std::runtime_error("malformed LATER SCRIPT_ACTION record");action.type=ScriptAction::Type::Later;action.id=scriptName(f,4,"LATER state");
+    action.value=integer(f,5,"LATER value");action.amount=number(f,6,"LATER seconds");
+    if(action.value< -100000||action.value>100000||action.amount<.1f||action.amount>3600)throw std::runtime_error("invalid LATER; seconds 0.1-3600");
    }else if(kind=="SHAKE"){
     if(f.size()!=5)throw std::runtime_error("malformed SHAKE SCRIPT_ACTION record");action.type=ScriptAction::Type::Shake;action.amount=number(f,4,"shake amount");
     if(action.amount<=0||action.amount>3)throw std::runtime_error("invalid shake amount; use more than 0 up to 3");
@@ -400,7 +433,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     // RAW|type|state|value|index|creature|x|y|z|amount|sound|text: any action exactly as the
     // engine holds it (ScriptAction), for what the kinds above can not say (doors, sounds, spawns).
     if(f.size()!=15)throw std::runtime_error("malformed RAW SCRIPT_ACTION record");int type=integer(f,4,"action type");
-    if(type<0||type>int(ScriptAction::Type::ShowMessage))throw std::runtime_error("invalid RAW action type");action.type=ScriptAction::Type(type);
+    if(type<0||type>ScriptAction::LastType)throw std::runtime_error("invalid RAW action type");action.type=ScriptAction::Type(type);
     if(given(5))action.id=stateField(f[5]);action.value=integer(f,6,"action value");action.index=integer(f,7,"action index");
     int creature=integer(f,8,"action creature");if(creature<0||creature>=CreatureKindCount)throw std::runtime_error("invalid RAW action creature");action.enemyKind=CreatureKind(creature);
     action.position={number(f,9,"action x"),number(f,10,"action y")};action.z=number(f,11,"action z");action.amount=number(f,12,"action amount");

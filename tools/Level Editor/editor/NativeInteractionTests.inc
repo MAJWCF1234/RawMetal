@@ -44,6 +44,26 @@
     require(doc.text()==before&&history.size()==historyCount,"Cancel did not restore transforms and layer ownership");
     passed.push_back("real corner resizing, fixed anchor, native field preservation and cancel");
 
+    before=doc.text();
+    historyCount=history.size();
+    require(modelScaleShown&&modelScaleBox,"A model is missing its scale field");
+    SetWindowTextW(modelScaleBox,L"0.5");
+    SendMessageW(window,WM_COMMAND,Apply,0);
+    auto scaled=NativeDocument::fields(doc.lines[size_t(record)]);
+    for(size_t axis=6;axis<=8;++axis)
+      require(std::abs(number(scaled[axis],0)-number(resized[axis],0)*.5f)<.001f,"Numeric factor did not resize every axis");
+    require(scaled[3]==resized[3]&&scaled[4]==resized[4]&&scaled[5]==resized[5],"Numeric scale moved the model origin");
+    require(label(fieldInputs[4])==wide(scaled[6])&&label(modelScaleBox)==L"1","Scale and dimensions did not synchronize");
+    const auto scaledPath=session/L"scaled-prop.rmc";
+    doc.save(scaledPath);
+    NativeDocument reopenedScale;
+    reopenedScale.open(scaledPath);
+    require(reopenedScale.text()==doc.text(),"Saved prop dimensions did not round-trip");
+    require(history.size()==historyCount+1,"Numeric scale did not use one Undo step");
+    SendMessageW(window,WM_COMMAND,Undo,0);
+    require(doc.text()==before,"Undo did not restore the pre-scale model");
+    passed.push_back("numeric and handle scaling share dimensions, save/reopen and support one-step Undo");
+
     auto locked=floorLayer(0);locked.locked=true;storeLayerView(locked);before=doc.text();tool=3;gestureNow(4,4,4,4);
     require(doc.text()==before,"A locked floor accepted a wall edit");locked.locked=false;storeLayerView(locked);
     layer=1;layersDock=true;refresh();refreshLayerDock();
@@ -214,6 +234,27 @@
     NativeDocument roundtrip;roundtrip.open(path);require(roundtrip.text()==doc.text(),"The saved export differs from the editable document");
     std::ofstream(exportFolder/L"latest-export.txt")<<utf8(path.wstring())<<'\n';
     passed.push_back("new-floor headroom, actual 3D edge drag, unchanged deck, player start and native export/reopen");
+    reset();
+    doc.addOnLayer({"CLUTTER","0","+7","8","8","0","0","17","1.2","0.8","0.6","0","0","#0"},0);
+    const auto loose=doc.records("CLUTTER",0).front();
+    selectRecord(int(loose));
+    auto leaveField=[&](HWND input,const wchar_t* value){
+      SetWindowTextW(input,value);
+      SendMessageW(form,WM_COMMAND,MAKEWPARAM(GetDlgCtrlID(input),EN_KILLFOCUS),reinterpret_cast<LPARAM>(input));
+    };
+    require(modelScaleShown&&modelScaleBox,"Legacy loose prop is missing its scale field");
+    leaveField(fieldInputs.at(6),L"2.25");
+    require(NativeDocument::fields(doc.lines[loose])[8]=="2.25","Exact loose prop width did not apply on focus loss");
+    const auto exact=doc.text();
+    leaveField(fieldInputs.at(6),L"   ");
+    require(doc.text()==exact,"Blank prop width changed the model");
+    leaveField(modelScaleBox,L"0.5");
+    const auto looseScaled=NativeDocument::fields(doc.lines[loose]);
+    require(number(looseScaled[8],0)==1.125f&&std::abs(number(looseScaled[9],0)-.4f)<.001f&&
+            std::abs(number(looseScaled[10],0)-.3f)<.001f,"Loose prop factor did not update the authored dimensions");
+    require(validateDocument(true),"The engine refused the scaled loose prop");
+    passed.push_back("exact loose-prop dimensions, whitespace recovery and scale on focus loss through engine validation");
+
     verifyDoorRotation(passed,mouse,reset);
     verifyAirLightFilm(passed,mouse,reset);
     verifyFilmmaker(passed,reset); // NativeFilmmaker.inc

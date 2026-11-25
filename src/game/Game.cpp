@@ -537,13 +537,14 @@ bool Game::testPickups(){
 void Game::update(const InputState& input, float dt) {
     updateNet();
     updateVoice(input);
+    m_sounds.clear();
+    m_sounds.swap(m_netSounds);
     updateFrame(input,dt);
     if(!m_netForeign.empty())updateForeignChunks(dt);   // a co-op host's other occupied maps (ForeignChunks.cpp)
     // The match reads what the player did; while they type a chat line they did nothing but type.
     if(m_match){if(m_chatOpen){InputState idle{};idle.escape=input.escape;idle.chat=input.chat;idle.scoreboard=input.scoreboard;m_match->update(idle,dt);}else m_match->update(input,dt);}
 }
 void Game::updateFrame(const InputState& input, float dt) {
-    m_sounds.clear();
     if(m_loadJob){if(loadReady())finishLoad();return;}
     if(m_pendingMainCampaign)startMainCampaign();
     if(m_hitStopRemaining>0.f){m_hitStopRemaining=std::max(0.f,m_hitStopRemaining-std::clamp(dt,0.f,.05f));return;}

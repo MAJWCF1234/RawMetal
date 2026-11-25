@@ -30,6 +30,7 @@ const bool registered=[]{
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
  engine("walk-in","--each-test=walk-in: into an open container, up stairs onto a balcony, along its rail",&Game::testWalkIn);
+ engine("ai-director","--each-test=ai-director: an AI over a zone, its menace and beat, the LIGHTS, NOISE and LATER blocks",&Game::testAiDirector);
  engine("map-format","--each-test=map-format: named fields, names, overrides, prefabs, properties, FORMAT 2",&Game::testMapFormat);
  engine("door-leaf","--each-test=door-leaf: gate leaves",&testDoorLeaves);
  engine("primitives","--each-test=primitives: every PRIM kind expands, scaled to the player; the new shapes walked",&testPrimitives);

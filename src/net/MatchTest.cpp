@@ -4,12 +4,17 @@
 #include "Wire.h"
 #include "../game/Game.h"
 #include "../game/physics/PropBodies.h"
+#include "../lab/LabAccess.h"
 #include "../world/CustomCampaign.h"
 #include "../world/CampaignExport.h"
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <ostream>
+
+// The audio test includes Windows headers, whose legacy qualifiers collide with distance names below.
+#undef near
+#undef far
 namespace retro::net {
 // --net-test: Games in one process play over one LoopbackHub. The maps are written to a temp folder here (no
 // untracked map is needed): a walled arena with a wall across its middle, two sleeping creatures and a box of
@@ -63,6 +68,22 @@ std::string lobbyText(){
  std::string t="--- CUSTOM_CAMPAIGN_DATA_START ---\nCAMPAIGN|Lobby|0\nMAP|0|Lobby|0|0|3.5|3.5|0|0|3.4|0.3|industrial_night|0|0|0|0|0\nLAYER|0|0|Floor|0|0\n";
  for(int row=0;row<24;++row)t+="ROW|0|0|"+std::to_string(row)+"|"+(row==0||row==23?std::string(24,'#'):"#......................#")+"\n";
  return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
+}
+
+bool writeFootstepPreview(const std::vector<int16_t>& closeGuest,const std::vector<int16_t>& distantGuest,const std::vector<int16_t>& closeHost){
+ std::ofstream wav("net-footsteps-preview.wav",std::ios::binary);
+ const auto bytes=uint32_t((closeGuest.size()+distantGuest.size()+closeHost.size())*sizeof(int16_t));
+ if(!wav||!bytes)return false;
+ auto number=[&](auto value){wav.write(reinterpret_cast<const char*>(&value),sizeof(value));};
+ wav.write("RIFF",4);number(uint32_t(bytes+36));
+ wav.write("WAVEfmt ",8);number(uint32_t(16));
+ number(uint16_t(1));number(uint16_t(2));number(uint32_t(44100));
+ number(uint32_t(44100*4));number(uint16_t(4));number(uint16_t(16));
+ wav.write("data",4);number(bytes);
+ for(const auto* clip:{&closeGuest,&distantGuest,&closeHost})
+  wav.write(reinterpret_cast<const char*>(clip->data()),std::streamsize(clip->size()*sizeof(int16_t)));
+ wav.close();
+ return bool(wav);
 }
 }
 
@@ -143,6 +164,71 @@ bool Match::selfTest(std::ostream& report){
   check(worstHost<.6f&&worstGuest<.6f,"moving at 2.5 m/s each is drawn within 0.6 m of where they are (worst "+std::to_string(worstHost)+" / "+std::to_string(worstGuest)+" m)");
   check(restHost<.05f&&restGuest<.05f,"at rest each is drawn where they stand (error "+std::to_string(restHost)+" / "+std::to_string(restGuest)+" m)");
   check(hv&&std::fabs(std::remainder(hv->angle-host->m_player.angle,kTwoPi))<.01f,"the host's facing arrives");
+  // Footsteps: a remote walker is heard on the listener's machine, made from the replicated state (no packet per
+  // step): one per stride, at the walker's feet, on the floor's sound, loud near and fading with distance (the
+  // AudioEngine's spatial curve, gain*(1-d/radius)^2), quieter crouched and prone, louder sprinting, none at rest
+  // and none echoed on the walker's own machine.
+  {struct Heard{int steps=0,lands=0,echoes=0,offFloor=0,misplaced=0,pcmPeak=0;float level=0,peak=0;std::vector<int16_t> pcm;};
+   AudioEngine audio(false);
+   auto audible=[](const SoundEvent& e,const Game& ear){const float dx=e.position.x-ear.m_player.pos.x,dy=e.position.y-ear.m_player.pos.y,dz=e.z-(ear.m_player.z+ear.m_player.eye);
+    const float d=std::sqrt(dx*dx+dy*dy+dz*dz);return e.gain*std::pow(std::max(0.f,1-d/e.radius),2.f);};
+   // The walker walks (its own movement, the keys held) along dir for seconds in a stance (0 standing, 1 crouched,
+   // 2 prone, 3 sprinting); the listener counts what it hears.
+   auto stroll=[&](Game& walker,Game& ear,int walkerSlot,Vec2 dir,float seconds,int stance){
+    Heard h;InputState in{};in.forward=true;in.crouch=stance==1||stance==2;in.sprint=stance==3;walker.m_player.angle=std::atan2(dir.y,dir.x);
+    if(stance==2){InputState z{};z.prone=true;walker.update(z,dt);}   // the prone toggle (Z), then held low
+    for(int i=0;i<int(seconds/dt);++i){
+     for(auto* g:playing)g->update(g==&walker?in:InputState{},dt);
+     for(const auto& e:walker.m_sounds)if(e.spatial&&(footstepSound(e.sound)||e.sound==Sound::Land))++h.echoes;
+     const RemotePlayer* r=remote(ear,walkerSlot);
+     for(const auto& e:ear.m_sounds){if(!e.spatial||!(footstepSound(e.sound)||e.sound==Sound::Land))continue;
+      if(e.sound==Sound::Land){++h.lands;continue;}
+      ++h.steps;const int base=int(Game::stepSoundAt(ear.m_world,e.position));h.offFloor+=int(e.sound)<base||int(e.sound)>base+3;
+      h.misplaced+=!r||std::hypot(e.position.x-r->position.x,e.position.y-r->position.y)>.3f||std::fabs(e.z-(r->position.z+.04f))>.05f;
+      if(h.steps==1){audio.update(ear);LabAccess::onlySound(audio,e.sound);LabAccess::mix(audio,h.pcm,44100);
+       for(int16_t sample:h.pcm)h.pcmPeak=std::max(h.pcmPeak,std::abs(int(sample)));}
+      const float a=audible(e,ear);h.level+=a;h.peak=std::max(h.peak,a);}}
+    if(stance==2){InputState z{};z.prone=true;walker.update(z,dt);}
+    frames(30);if(h.steps)h.level/=float(h.steps);return h;};
+   auto line=[](const char* what,const Heard& h){return std::string(what)+" "+std::to_string(h.steps)+" steps, mean level "+std::to_string(h.level)+", peak "+std::to_string(h.peak)+", first step PCM peak "+std::to_string(h.pcmPeak);};
+   host->m_player.pos={3.5f,5.5f};put(*host,*guest,{3.5f,7.5f});frames(40);
+   const Heard near=stroll(*host,*guest,0,{1,0},2.5f,0);
+   report<<"  "<<line("near walk (2-9 m):",near)<<'\n';
+   check(near.steps>=6&&near.steps<=8,"the guest hears the host's walk: 2.5 s at 3.6 m/s (~8.5 m, a stride of 1.22 m) is "+std::to_string(near.steps)+" steps (6-8)");
+   check(!near.misplaced&&!near.offFloor,"every remote step sounds at the walker's drawn feet, on the floor's own step sounds");
+   check(!near.echoes,"the walker's own machine does not hear its steps again as a remote player's");
+   {int quiet=0;for(int i=0;i<60;++i){frames(1);for(const auto& e:guest->m_sounds)quiet+=e.spatial&&footstepSound(e.sound);}
+    check(!quiet,"a remote player standing still makes no footsteps");}
+   host->m_player.pos={3.5f,20.5f};put(*host,*guest,{3.5f,5.5f});frames(40);
+   const Heard far=stroll(*host,*guest,0,{1,0},2.5f,0);
+   report<<"  "<<line("far walk (15-17 m):",far)<<'\n';
+   check(far.steps==near.steps||std::abs(far.steps-near.steps)<=1,"a far walk makes as many steps (the stride does not depend on the listener)");
+   check(near.level>.05f&&far.level<near.level*.1f,"the steps fade with distance: mean level "+std::to_string(near.level)+" at 2-9 m, "+std::to_string(far.level)+" at 15-17 m");
+   host->m_player.pos={3.5f,5.5f};put(*host,*guest,{3.5f,7.5f});frames(40);
+   const Heard crouched=stroll(*host,*guest,0,{1,0},3.f,1);
+   report<<"  "<<line("crouched walk:",crouched)<<'\n';
+   check(crouched.steps>=4&&crouched.level<near.level*.25f,"a crouched walk is heard in shorter strides and far quieter ("+std::to_string(crouched.level)+" against "+std::to_string(near.level)+")");
+   host->m_player.pos={3.5f,5.5f};put(*host,*guest,{3.5f,7.5f});frames(40);
+   const Heard prone=stroll(*host,*guest,0,{1,0},3.f,2);
+   report<<"  "<<line("prone crawl:",prone)<<'\n';
+   check(prone.steps>=3&&prone.peak<crouched.peak,"a crawl is quieter still");
+   host->m_player.pos={3.5f,5.5f};put(*host,*guest,{3.5f,7.5f});frames(40);
+   const Heard sprint=stroll(*host,*guest,0,{1,0},1.6f,3);
+   report<<"  "<<line("sprint:",sprint)<<'\n';
+   check(sprint.steps>=4&&sprint.level>near.level,"a sprint is heard louder than a walk");
+   // The other way: the host hears the guest (the guest's own report, through the host).
+   host->m_player.pos={3.5f,7.5f};put(*host,*guest,{3.5f,5.5f});frames(40);
+   const Heard back=stroll(*guest,*host,gs,{1,0},2.5f,0);
+   report<<"  "<<line("guest walking, host listening:",back)<<'\n';
+   check(back.steps>=6&&back.steps<=8&&!back.misplaced&&!back.echoes,"the host hears the guest's steps the same way");
+   check(near.pcmPeak>0&&back.pcmPeak>0&&far.pcmPeak<near.pcmPeak,"the embedded footstep samples produce positional PCM for both listeners and fade at distance");
+   if(writeFootstepPreview(near.pcm,far.pcm,back.pcm))
+    report<<"INFO net-footsteps-preview.wav: guest hears host close, guest hears host far, host hears guest close (one second each)\n";
+   // A jump: up in the air, then down. The landing thumps on the listener's machine.
+   {host->m_player.pos={3.5f,5.5f};put(*host,*guest,{3.5f,7.5f});frames(40);int lands=0;InputState j{};j.jump=true;
+    for(int i=0;i<90;++i){for(auto* g:playing)g->update(g==host.get()&&i<3?j:InputState{},dt);for(const auto& e:guest->m_sounds)lands+=e.spatial&&e.sound==Sound::Land;}
+    check(lands==1,"a remote player's landing after a jump is heard once ("+std::to_string(lands)+")");}
+  }
   // A guest who jumps through the wall across the middle is put back.
   {put(*host,*guest,{11.5f,11.4f});frames(20);const Point3 before=here(*guest);guest->m_player.pos={11.5f,13.6f};frames(30);
    const auto* v=remote(*host,gs);
@@ -324,6 +410,30 @@ bool Match::selfTest(std::ostream& report){
    host->m_god=true;check(host->m_player.health==100,"friendly fire off: the guest's round does not hurt the host");}
   {put(*host,*guest,{4.5f,19.5f});frames(20);
    check(!host->m_pickups.empty()&&!host->m_pickups[0].active&&!guest->m_pickups[0].active,"a pickup the guest takes is gone on the host too");}
+  // Footsteps in co-op: the guest walking is heard on the host with its floor-and-gait reach for the minds (they hear
+  // it as the local player's step: Game::aiStimuli), and the host walking is heard on the guest (no minds there).
+  {host->m_player.pos={3.5f,13.5f};put(*host,*guest,{3.5f,15.5f});frames(30);
+   // Only steps at the walker (the map's creatures walk too).
+   auto walkBy=[&](Game& walker,Game& ear,int& steps,int& forMinds,int& stimuli){walker.m_player.angle=0;InputState in{};in.forward=true;const Point3 from=here(walker);
+    for(int i=0;i<int(2.f/dt);++i){for(auto* g:playing)g->update(g==&walker?in:InputState{},dt);
+     const Point3 at=here(walker);auto near=[&](Vec2 p){return std::hypot(p.x-at.x,p.y-at.y)<1.5f;};
+     for(const auto& e:ear.m_sounds)if(e.spatial&&footstepSound(e.sound)&&near(e.position)){++steps;forMinds+=e.aiRadius>0;}
+     for(const auto& a:ear.aiStimuli())stimuli+=a.step&&near(a.source);}
+    report<<"  co-op walk: "<<gap(from,here(walker))<<" m walked, "<<steps<<" steps heard, "<<stimuli<<" step stimuli\n";
+    frames(30);};
+   int steps=0,forMinds=0,stimuli=0;walkBy(*guest,*host,steps,forMinds,stimuli);
+   check(steps>=4&&forMinds==steps&&stimuli>=steps,"co-op: the host hears the guest's "+std::to_string(steps)+" steps, every one with its reach for the minds ("+std::to_string(stimuli)+" step stimuli)");
+   int back=0,backMinds=0,backStimuli=0;host->m_player.pos={3.5f,15.5f};put(*host,*guest,{3.5f,13.5f});frames(30);walkBy(*host,*guest,back,backMinds,backStimuli);
+   check(back>=3&&backMinds==0,"co-op: the guest hears the host's "+std::to_string(back)+" steps (for the ears only: the guest has no minds)");
+   host->m_player.pos={3.5f,13.5f};put(*host,*guest,{3.5f,15.5f});frames(30);
+   InputState forward{};forward.forward=true;guest->m_player.angle=0;
+   for(int i=0;i<30;++i){host->update({},dt);guest->update(forward,dt);}
+   hub.unreliableLossPercent=100;
+   int staleSteps=0;
+   for(int i=0;i<90;++i){host->update({},dt);guest->update(forward,dt);
+    if(i>=30)for(const auto& e:host->m_sounds)staleSteps+=footstepSound(e.sound)&&e.aiRadius>0;}
+   hub.unreliableLossPercent=0;frames(30);
+   check(staleSteps==0,"co-op: a guest's frozen network position falls silent when movement reports stop");}
   // Proximity voice: each voice's volume follows the distance and the wall across the middle.
   {auto volume=[&]{frames(20);return sh->peerVolumes.count(sg->self())?sh->peerVolumes[sg->self()]:-1.f;};
    host->m_player.pos={12.5f,6.5f};put(*host,*guest,{13.5f,6.5f});const float near=volume();

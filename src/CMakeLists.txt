@@ -107,6 +107,7 @@ add_executable(RawMetal WIN32
     game/physics/Queries.cpp
     game/physics/PropQueries.cpp
     game/Script.cpp
+    game/AiAgents.cpp
     game/Settings.cpp
     game/SettingsMenu.cpp
     game/Saves.cpp
@@ -115,6 +116,7 @@ add_executable(RawMetal WIN32
     game/Movement.cpp
     game/DoorAxisTest.cpp
     game/WalkInTest.cpp
+    game/AiDirectorTest.cpp
     game/SniperTest.cpp
     game/DoorPlay.cpp
     game/GantryTest.cpp

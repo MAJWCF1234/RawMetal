@@ -135,9 +135,11 @@ struct WorldLight {
  // size, turned by yaw (a clinic's recessed fluorescent, say).
  int fitting=-1;float fittingWidth=0,fittingDepth=0,fittingHeight=0;
   bool shadows=true;int prop=-1,propLevel=-1;bool cargoLift=false;
+ // The AI on this map whose zone holds the lamp and drives it (AiAgent::lights, the Lights block); -1, none.
+ int directed=-1,directedLevel=-1;
  // Power can change while the map runs (Game::lampPower), so renderers keep
  // this lamp out of their baked caches and apply its power every frame.
-  bool switchable()const{return enabledState||invert||period>0||flicker>0||prop>=0||cargoLift;}
+  bool switchable()const{return enabledState||invert||period>0||flicker>0||prop>=0||cargoLift||directed>=0;}
  Point3 emitter()const{
   if(mount==WorldLightMount::Wall)return {position.x+std::cos(yaw)*.16f,position.y+std::sin(yaw)*.16f,z};
   return {position.x,position.y,z};
@@ -630,6 +632,8 @@ struct AuthoredMapData {
     // Conversations the actors here open with E (ActorTrack::talk).
     std::vector<DialogueNode> dialogue;
     std::vector<ScriptEvent> scriptEvents;
+    // The AIs placed over zones of this map (AI records; ScriptDefinition.h AiAgent).
+    std::vector<AiAgent> aiAgents;
     std::vector<ObjectiveText> objectiveTexts;
     std::vector<AuthoredNavHint> navHints;
     std::vector<AuthoredZone> zones;
@@ -814,6 +818,7 @@ public:
     const std::vector<ParticleEmitter>& particleEmitters()const{return m_particleEmitters;}
     const std::vector<Shelter>& shelters()const{static const std::vector<Shelter> none;return m_mapData?m_mapData->shelters:none;}
     const std::vector<ScriptEvent>& scriptEvents()const{return m_scriptEvents;}
+    const std::vector<AiAgent>& aiAgents()const{return m_aiAgents;}
     const std::vector<Hazard>& hazards()const{return m_hazards;}
     const std::vector<Compactor>& compactors()const{return m_compactors;}
     const std::vector<Breakable>& breakables()const{static const std::vector<Breakable> none;return m_mapData?m_mapData->breakables:none;}
@@ -1055,6 +1060,7 @@ private:
     void buildPopulation();
     std::vector<ParticleEmitter> m_particleEmitters;
     std::vector<ScriptEvent> m_scriptEvents;
+    std::vector<AiAgent> m_aiAgents;
     std::vector<Hazard> m_hazards;
     void buildLights(int startX=2,int startY=1);
     std::vector<Door> m_doors;

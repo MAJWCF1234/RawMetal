@@ -13,7 +13,7 @@ namespace retro {
 // Match whose Session has left, whose lobby closed or which ended itself is dropped and the title comes back.
 // Quitting to the title from a match's pause menu leaves the lobby.
 void Game::updateNet(){
- if(!m_netSession){if(m_match){m_match.reset();m_remotePlayers.clear();m_matchView={};m_netScriptsOff=m_netCreaturesRemote=false;m_shotgunOwned=true;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();}return;}
+ if(!m_netSession){if(m_match){m_match.reset();m_remotePlayers.clear();m_netSounds.clear();m_matchView={};m_netScriptsOff=m_netCreaturesRemote=false;m_shotgunOwned=true;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();}return;}
  m_netSession->tick();
  auto inLobby=[&]{const auto s=m_netSession->state();return s==net::SessionState::InLobby||((s==net::SessionState::Busy||s==net::SessionState::Failed)&&!m_netSession->lobby().id.empty());};
  if(!m_match&&inLobby())m_match=std::make_shared<net::Match>(*this);
@@ -22,7 +22,7 @@ void Game::updateNet(){
  if(inLobby()&&!m_match->finished())return;
  const bool started=m_match->played();
  std::string status=m_match->finished()?m_match->endStatus():std::string("You left the game");
- m_match.reset();m_remotePlayers.clear();m_matchView={};m_matchView.status=status;
+ m_match.reset();m_remotePlayers.clear();m_netSounds.clear();m_matchView={};m_matchView.status=status;
  m_netScriptsOff=m_netCreaturesRemote=false;m_shotgunOwned=true;m_netBodies=nullptr;m_netPropsRemote=m_netPropsHost=false;m_netForeign.clear();m_netKeep.clear();
  if(inLobby())m_netSession->leave();
  if(started&&!m_titleScreen)showTitleScreen();

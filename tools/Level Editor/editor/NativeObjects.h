@@ -3,12 +3,16 @@
 #include "../src/world/PrimitiveKinds.h"
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <optional>
 
 // Plan handles describe native record coordinates only. They do not build a
 // renderable scene; the engine remains the only owner of world geometry.
 inline bool nativeLooseModel(const std::vector<std::string>& fields) {
-  return fields.size() >= 14 && fields[0] == "CLUTTER" && fields[2] == "7";
+  if(fields.size()<14||fields[0]!="CLUTTER")return false;
+  char* end=nullptr;
+  const auto& kind=fields[2];
+  return std::strtol(kind.c_str(),&end,10)==7&&end==kind.c_str()+kind.size();
 }
 inline bool nativeSizedModel(const std::vector<std::string>& fields) {
   return (fields.size() >= 11 && fields[0] == "FIXTURE") || nativeLooseModel(fields);

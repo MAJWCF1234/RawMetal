@@ -58,6 +58,7 @@ void Game::seedScripts(){
   event.level=chunk;m_scriptEvents.push_back(std::move(event));
  }
  seedEntityProperties();
+ seedAiAgents();
 }
 void Game::spawnScriptEnemy(const ScriptAction& action){
  // id names the recurring hunter it is (CreatureSpawn::hunter) and value-1 the actor it comes for.
@@ -108,6 +109,15 @@ void Game::executeScriptAction(const ScriptAction& action){
   // (Only a custom world hands off: the prologue is a campaign chunk now.)
   case ScriptAction::Type::EnterMainCampaign:if(m_worldId==WorldId::Custom)m_pendingMainCampaign=true;break;
   case ScriptAction::Type::AddState:if(isEntityProperty(action.id))setEntityPropertyInt(action.id,entityPropertyInt(action.id)+action.value);else setState(action.id,std::clamp(state(action.id)+action.value,-100000,100000));break;
+  case ScriptAction::Type::Lights:   // the lamps of that AI's zone (AiAgents.cpp aiLampScale)
+   for(const auto& ai:m_aiAgents)if(ai.id==action.id){setState(stateId(ai.name+"_lights"),action.value);
+    setState(stateId(ai.name+"_lights_left"),action.amount>0?int(std::lround(action.amount*10.f))+1:0);}
+   break;
+  case ScriptAction::Type::Noise:{   // a sound near the player it fired for: behind them or ahead, heard by monsters within value metres
+   const PlayerView* who=playerById(m_scriptPlayer);const Player& p=who&&who->body?*who->body:m_player;
+   const float d=action.index==0?-3.5f:4.5f;const Vec2 at=p.pos+Vec2{std::cos(p.angle),std::sin(p.angle)}*d;
+   SoundEvent e{action.sound,at,action.amount,1,true,22,p.z+1.2f};e.aiRadius=action.value>0?float(action.value):-1.f;m_sounds.push_back(e);break;}
+  case ScriptAction::Type::Later:setState(action.id,action.value);break;   // outside an event (no count to keep), at once
   case ScriptAction::Type::ShowMessage:{
    std::string text;
    for(size_t i=0;i<action.text.size();){
@@ -186,10 +196,11 @@ bool Game::scriptEventReady(const ScriptEvent& event,int* who)const{
  if(who)*who=first<0?0:first;
  return event.allPlayers?all&&first>=0:any;
 }
-void Game::updateScripts(float){
+void Game::updateScripts(float dt){
  if(!m_foreignFrame)m_scriptFx.clear();   // (another map's frame adds to what the host's own frame queued)
  if(m_netScriptsOff)return;   // a multiplayer guest: scripted sequences run on the host alone
  if(!m_foreignFrame)updateReceivingBreach();
+ if(!m_foreignFrame)updateAiAgents(dt);
  for(const auto&event:m_scriptEvents){
   if(!event.id)continue;
   // A co-op host with players on several maps: a map's events run in that map's frame (ForeignChunks.cpp).
@@ -207,7 +218,10 @@ void Game::updateScripts(float){
   // listed: a save taken first would latch a once-event with its states unset,
   // and loading it would lose what the event does (76's blackout did that).
   bool checkpoint=false;m_scriptPlayer=who;
-  for(const auto&action:event.actions){if(action.type==ScriptAction::Type::Checkpoint){checkpoint=true;continue;}executeScriptAction(action);}
+  for(size_t i=0;i<event.actions.size();++i){const auto& action=event.actions[i];if(action.type==ScriptAction::Type::Checkpoint){checkpoint=true;continue;}
+   // A Later block starts its count (tenths of a second, plus one: 1 is due) in its own saved state; AiAgents.cpp counts it down.
+   if(action.type==ScriptAction::Type::Later){setState(laterKey(event.id,i),int(std::lround(action.amount*10.f))+1);continue;}
+   executeScriptAction(action);}
   m_scriptPlayer=0;
   if(checkpoint)saveCheckpoint();
  }

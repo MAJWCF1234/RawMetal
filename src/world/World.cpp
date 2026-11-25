@@ -507,6 +507,10 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   layShape(f,boxes);f.solid=false;f.shaped=true;
  }
  m_scriptEvents=m_mapData->scriptEvents;
+ // An AI that drives its zone's lamps: each lamp in the zone answers to it (the first AI whose zone holds it).
+ m_aiAgents=m_mapData->aiAgents;
+ for(auto& lamp:m_lights)for(size_t a=0;a<m_aiAgents.size()&&lamp.directed<0;++a){const auto& ai=m_aiAgents[a];const auto at=lamp.emitter();
+  if(ai.lights&&ai.contains(at.x,at.y,at.z)){lamp.directed=int(a);lamp.directedLevel=level();}}
  m_pushCrates=m_mapData->pushCrates;m_cratePlates=m_mapData->cratePlates;
  for(auto& crate:m_pushCrates){crate.home=crate.position;crate.z=m_mapData->layers.empty()?crate.z:m_mapData->layers.front().elevation+crate.z;}
  m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;

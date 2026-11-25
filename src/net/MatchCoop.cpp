@@ -86,30 +86,52 @@ void Match::syncBodies(float dt){
   b.prone=st.prone;b.crouched=st.crouched||st.prone;b.grounded=st.grounded;b.eye=b.stanceEye();b.health=s.alive?std::max(s.health,.01f):0.f;
   rb.velocity=st.velocity;rb.hidden=st.hidden;rb.torch=st.torch;rb.pushing=st.pushing;
   if((rb.litTimer-=dt)<=0){rb.litTimer=.1f;rb.lit=rb.hidden?0.f:g.lightAt(b.pos,b.z+b.hullHeight()*.6f,rb.torch);}
-  if(s.alive)remoteFootstep(st,dt,rb.stride,true);
   next.push_back(rb);
  }
  bodies=std::move(next);
 }
 
-void Match::remoteFootstep(const NetPlayerState& state,float dt,float& stride,bool heardByAi){
- Game& g=m_game;
- if(!state.alive||!state.grounded||state.hidden||!g.inPlayerFrame(state.level))return;
- const float speed=length(state.velocity);
- if(speed<=.2f)return;
- const bool crouched=state.crouched||state.prone;
- const bool sprint=speed>4.2f&&!crouched;
- const float stepLength=state.prone?.6f:crouched?.85f:sprint?1.45f:1.22f;
- stride+=speed*dt;
- if(stride<=stepLength)return;
- stride=0;
+// Count the rendered body's travel so room-scale movement produces steps and pushing against a wall stays quiet.
+void Match::remoteFootstep(Slot& slot,const NetPlayerState& state,float dt,bool heardByAi){
+ auto& f=slot.feet;
  const World* world=worldOf(state.level);
- if(!world)return;
- const Vec2 feet{state.world.x,state.world.y};
+ if(!state.alive||state.hidden||!world){f={};return;}
+ const float walked=std::hypot(state.world.x-f.last.x,state.world.y-f.last.y);
+ if(!f.have||f.life!=state.life||walked>2.f||std::fabs(state.world.z-f.last.z)>3.f){
+  f={true,state.grounded,state.world,0.f,0.f,0,state.life};
+  return;
+ }
+ f.last=state.world;
+ const Vec2 feet{state.world.x,state.world.y},here=feet-origin(m_game.m_level);
+ auto emit=[&](Sound sound,float gain,float pitch,float radius,float heard){
+  SoundEvent e{sound,here,gain,pitch,true,radius,state.world.z+.04f};
+  e.aiRadius=heardByAi?heard:-1.f;
+  m_game.m_netSounds.push_back(e);
+ };
+ if(!state.grounded){
+  f.air+=dt;
+  f.grounded=false;
+  return;
+ }
+ if(!f.grounded){
+  if(f.air>.2f)emit(Sound::Land,std::clamp(.2f+f.air*.5f,.2f,.7f),.94f,17.f,0.f);
+  f.grounded=true;
+  f.air=0;
+  f.stride=0;
+  return;
+ }
+
+ const bool low=state.crouched||state.prone;
+ const bool sprint=!low&&length(state.velocity)>4.2f;
+ const float stride=state.prone?.6f:low?.85f:sprint?1.45f:1.22f;
+ f.stride+=walked;
+ if(f.stride<=stride)return;
+ f.stride=0;
+ const unsigned take=(f.take++*3)%4;
  const Sound base=Game::stepSoundAt(*world,feet-origin(state.level));
- SoundEvent step{base,feet-origin(g.m_level),crouched?.045f:sprint?.65f:.48f,.97f,true,17,state.world.z+.04f};
- step.aiRadius=heardByAi?Game::stepHeard(base,crouched,sprint):-1.f;
- g.m_sounds.push_back(step);
+ const float gain=state.prone?.07f:low?.1f:sprint?.65f:.48f;
+ const float radius=state.prone?6.f:low?8.f:sprint?22.f:17.f;
+ emit(Sound(int(base)+int(take)),gain,.95f+float(take)*.035f,radius,Game::stepHeard(base,low,sprint));
 }
 
 void Match::sendScriptFx(){

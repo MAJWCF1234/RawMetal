@@ -159,7 +159,14 @@ inline StateId actorAiState(int level,size_t actor,StateId timer,std::string_vie
 ActorPose sampleActor(const ActorTrack& track,int ageMs);
 ActorPose sampleActorKeys(const std::vector<ActorKey>& keys,int ageMs,bool loop=false);
 struct ScriptAction {
- enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign,EnterMainCampaign,AddState,ShowMessage};
+ // Lights, Noise and Later are the AI blocks (AiAgent below): Lights drives the lamps in an AI's zone (id the AI,
+ // value 0 as authored, 1 flicker, 2 dark, 3 emergency red; amount seconds, 0 until changed again); Noise plays a
+ // sound near the player (index 0 behind, 1 ahead, 2 at position; amount gain; value metres the AI hears it, 0 not
+ // at all), the way a director hints a monster toward someone or scares them; Later sets state id to value after
+ // amount seconds (a delay block).
+ enum class Type {SetState,SetObjective,GiveItem,TakeItem,OpenDoor,CloseDoor,ReleaseControl,PlaySound,SpawnEnemy,Shake,Checkpoint,CompleteCampaign,EnterMainCampaign,AddState,ShowMessage,
+  Lights,Noise,Later};
+ static constexpr int LastType=int(Type::Later);
  Type type=Type::SetState;StateId id=0;int value=0,index=0;CreatureKind enemyKind=CreatureKind::Huntsman;Vec2 position{};float z=-999,amount=0;Sound sound=Sound::Exit;
  std::string text; // ShowMessage: {name} is replaced by that state's value when it fires.
  // SpawnEnemy: amount is its awareness; id, when set, makes it a recurring hunter under that name
@@ -170,6 +177,21 @@ struct ScriptCondition {
  enum class Source {State,Kills,Remaining,Health,Map};   // Kills and Remaining count the event's own map.
  enum class Op {Equal,NotEqual,Less,LessEqual,Greater,GreaterEqual};
  Source source=Source::State;StateId id=0;Op op=Op::Equal;int value=1;
+};
+// An AI placed over a zone of its map (the AI record): it reads the players and writes what it decides as states, so the
+// blocks (script events) wire it to everything else; nothing it does is special to a map. Kind 0, the Director, keeps
+// a menace gauge (0-100) that climbs while someone is in its zone (by pressure, faster when they are noisy) and falls
+// when they leave, and calls a beat (adds 1 to its beat state) after calm seconds once the gauge is high, or after
+// peak seconds whatever it reads; a beat lets the menace down by a third. Its states, by its name N: N_tension,
+// N_inside (players in the zone), N_beat (beats so far), N_quiet (seconds since the last beat). lights: the lamps in
+// its zone answer the Lights block.
+struct AiAgent {
+ enum class Kind {Director};
+ StateId id=0;std::string name;Kind kind=Kind::Director;int level=0;
+ float x1=0,y1=0,x2=0,y2=0,bottom=-100,top=100;
+ float pressure=.5f,calm=25,peak=90;bool lights=true;
+ StateId tension=0,inside=0,beat=0,quiet=0;
+ bool contains(float x,float y,float z)const{return x>=x1&&x<=x2&&y>=y1&&y<=y2&&z>=bottom&&z<=top;}
 };
 struct ScriptEvent {
  // Box fires inside its volume on its own map; Map anywhere on its own map; Campaign on whatever map the player is on.

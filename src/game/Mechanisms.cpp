@@ -12,7 +12,12 @@ float lightNoise(std::uint32_t h){h^=h>>16;h*=0x7feb352du;h^=h>>15;h*=0x846ca68b
 std::uint32_t timeSlot(double t,double rate){double slot=std::fmod(std::floor(t*rate),4294967296.0);if(slot<0)slot+=4294967296.0;return std::uint32_t(slot);}
 }
 bool Game::lampSwitchedOn(const WorldLight& lamp)const{bool on=!lamp.enabledState||state(lamp.enabledState)==lamp.enabledValue;return lamp.invert?!on:on;}
+// A lamp's power with what an AI in its zone does to it (the Lights block: flicker, dark, red) on top.
 float Game::lampPower(const WorldLight& lamp)const{
+ const float authored=lampPowerAuthored(lamp);
+ return lamp.directed>=0?authored*aiLampScale(lamp,lamp.directedLevel):authored;
+}
+float Game::lampPowerAuthored(const WorldLight& lamp)const{
  // A lamp on a hung prop (a swinging lamp) moves with it and burns while it is whole (PropJoints.cpp).
  bool hungLit=true;Point3 hungAt;const bool hung=lamp.prop>=0&&hungLampAt(lamp,hungAt,&hungLit);if(hung&&!hungLit)return 0;
  if(lamp.prop>=0&&!hung){if(lamp.propLevel<0||lamp.propLevel>=chunkCount())return 0;const auto&spawns=chunkWorld(lamp.propLevel).clutterSpawns();if(lamp.prop>=int(spawns.size()))return 0;const auto&spawn=spawns[lamp.prop];auto home=spawn.position+chunkOffset(lamp.propLevel);bool present=false;
