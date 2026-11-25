@@ -15,7 +15,9 @@ static float navSupport(const World&w,Vec2 p,float feet,float radius=.20f){float
 static bool navFits(const World&w,Vec2 p,float z,float height,float radius=.20f){perf::count(perf::NavFits);if(w.structureBlocksHull(p.x,p.y,radius,z,height))return false;for(float x:{-radius,0.f,radius})for(float y:{-radius,0.f,radius})if(!w.fits(p.x+x,p.y+y,z,height)||w.doorBlocks(p.x+x,p.y+y,z,height))return false;return true;}
 // Openings need not be centred on the metre grid. Retain a clear point
 // inside each span's cell, nudging away from a jamb when necessary.
-static bool navCellPoint(const World&w,int x,int y,float floor,float height,float radius,Vec2&p,float&z){
+// rise: the step the walker takes (the deck's .215 m; a creature's own interior
+// step), so a node may stand on a raised floor it climbs: a culvert's or duct's.
+static bool navCellPoint(const World&w,int x,int y,float floor,float height,float radius,Vec2&p,float&z,float rise=.215f){
  // Prefer the aperture centre on both sides of a door. Merely finding a safe
  // point farther from its wall can leave adjacent grid nodes on the jamb side
  // of a narrow opening, with no edge that actually passes through it.
@@ -23,26 +25,26 @@ static bool navCellPoint(const World&w,int x,int y,float floor,float height,floa
   // In the door's frame: the cell its centre's span falls in, across the wall.
   const Vec2 cell{x+.5f,y+.5f},mid=door.centre();const float center=(door.left+door.right)*.5f,cellAlong=door.along(cell),cellAcross=door.across(cell),base=w.floorHeight(mid.x,mid.y)+door.z;
   if(center<cellAlong-.5f||center>=cellAlong+.5f||std::fabs(cellAcross-door.y)>1.25f||std::fabs(floor-base)>.24f)continue;
-  p=door.world(center,cellAcross);z=navSupport(w,p,floor+.215f,radius);
-  if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius))return true;
+  p=door.world(center,cellAcross);z=navSupport(w,p,floor+rise,radius);
+  if(std::fabs(z-floor)<rise+.025f&&navFits(w,p,z,height,radius))return true;
  }
  for(float dx:{0.f,-.25f,.25f})for(float dy:{0.f,-.25f,.25f}){
-  p={x+.5f+dx,y+.5f+dy};z=navSupport(w,p,floor+.215f,radius);
-  if(std::fabs(z-floor)<.24f&&navFits(w,p,z,height,radius))return true;
+  p={x+.5f+dx,y+.5f+dy};z=navSupport(w,p,floor+rise,radius);
+  if(std::fabs(z-floor)<rise+.025f&&navFits(w,p,z,height,radius))return true;
  }return false;
 }
 // A jamb can cover the centre of a cell while leaving a usable opening
 // beside it. Keep normal deck nodes and recover the authored floor only
 // when no ground node was found. Every candidate still uses the real hull.
 template<class Add>
-static void navDeckCell(const World&w,int x,int y,float height,float radius,const Add&add){
+static void navDeckCell(const World&w,int x,int y,float height,float radius,float rise,const Add&add){
  const bool wall=w.tile(x,y)=='#';
  const float floor=w.floorHeight(x+.5f,y+.5f);
  bool foundFloor=false;
  for(auto span:w.spansAt(x,y)){
   if(span.ceiling-span.floor<height||(wall&&span.floor<2.99f))continue;
   Vec2 p;float z;
-  if(!navCellPoint(w,x,y,span.floor,height,radius,p,z))continue;
+  if(!navCellPoint(w,x,y,span.floor,height,radius,p,z,rise))continue;
   add(p,z);
   foundFloor|=std::fabs(z-floor)<.24f;
  }
@@ -73,12 +75,50 @@ static bool roughSegment(const World&w,Vec2 from,float fromZ,Vec2 to,float heigh
  }
  if(endZ)*endZ=z;return true;
 }
+// One deck edge: four samples from a node toward a neighbour node, each a step
+// of at most `rise` up or down that the hull fits; `feet` ends where it lands.
+// Two nodes off each other's line (one in a duct, nudged off its jamb, one in
+// the room before its mouth) may also join by the square corner between them:
+// along the room, then straight in, as a walker lines up on an opening.
+static bool deckLeg(const World&w,Vec2 from,Vec2 to,float height,float radius,float rise,float&feet){
+ for(int sample=1;sample<=4;++sample){Vec2 p=from+(to-from)*(sample/4.f);float ground=navSupport(w,p,feet+rise,radius);
+  if(std::fabs(ground-feet)>rise+.025f||!navFits(w,p,ground,height,radius))return false;feet=ground;}
+ return true;
+}
+// A point under a roof close over the hull's head (within .6 m): inside a duct,
+// culvert or crawlway rather than out in a room.
+static bool inPassage(const World&w,Vec2 p,float feet,float height,float radius,float rise){
+ const float floor=navSupport(w,p,feet+rise,radius);return w.structureBlocksHull(p.x,p.y,radius,floor,height+.6f);
+}
+static bool deckStep(const World&w,Vec2 from,float fromZ,Vec2 to,float height,float radius,float rise,float&feet){
+ feet=fromZ;if(deckLeg(w,from,to,height,radius,rise,feet))return true;
+ // The bend is for passages only: out in a room the straight edge is the walk.
+ if(std::fabs(from.x-to.x)<.01f||std::fabs(from.y-to.y)<.01f||!(inPassage(w,to,fromZ,height,radius,rise)||inPassage(w,from,fromZ,height,radius,rise)))return false;
+ for(Vec2 corner:{Vec2{to.x,from.y},Vec2{from.x,to.y}}){feet=fromZ;if(deckLeg(w,from,corner,height,radius,rise,feet)&&deckLeg(w,corner,to,height,radius,rise,feet))return true;}
+ return false;
+}
+// A waypoint the walker can head straight for: the next node, or when the line
+// from its feet clips a jamb or a duct's rim, the square corner that lines it up
+// on the node first (the bend deckStep allows).
+// A walker stepping up into a raised passage (a duct's or culvert's floor) also
+// lines up first, entering square-on: a slanting entry scrapes the rim where the
+// planner's coarser samples slip past it.
+static Vec2 lineUp(const World&w,Vec2 start,float startZ,Vec2 next,float height,float radius,float rise){
+ const bool entering=std::fabs(navSupport(w,next,startZ+rise,radius)-startZ)>.1f&&inPassage(w,next,startZ,height,radius,rise);
+ if(!entering&&roughSegment(w,start,startZ,next,height,rise+.025f,nullptr,true,radius))return next;
+ // The corner that leaves the longer last leg first: the square entry.
+ Vec2 corners[2]={Vec2{next.x,start.y},Vec2{start.x,next.y}};
+ if(std::fabs(next.y-start.y)<std::fabs(next.x-start.x))std::swap(corners[0],corners[1]);
+ for(Vec2 corner:corners){float feet=startZ;
+  if(lengthSq(corner-start)>.0025f&&roughSegment(w,start,startZ,corner,height,rise+.025f,&feet,true,radius)&&roughSegment(w,corner,feet,next,height,rise+.025f,nullptr,true,radius))return corner;}
+ return next;
+}
 // The deck planner as it probes with nothing kept: the reference the route
 // cache must match, and the planner wherever nothing may be kept.
-static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f){
+static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f,float rise=.215f){
  perf::Scope stackedProfile(perf::StackedWaypoint);perf::count(perf::StackedCalls);
  struct Node{Vec2 p;float z;int parent=-1;};std::vector<Node> nodes;std::array<std::vector<int>,24*24> cells;
- for(int y=1;y<23;++y)for(int x=1;x<23;++x)navDeckCell(w,x,y,height,radius,[&](Vec2 p,float floor){
+ for(int y=1;y<23;++y)for(int x=1;x<23;++x)navDeckCell(w,x,y,height,radius,rise,[&](Vec2 p,float floor){
   cells[y*24+x].push_back(int(nodes.size()));nodes.push_back({p,floor});
  });
  perf::count(perf::StackedNodes,nodes.size());
@@ -87,9 +127,7 @@ static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,
  if(origin<0||target<0){perf::count(perf::StackedNoRoute);return start;}std::queue<int> queue;queue.push(origin);nodes[origin].parent=origin;
  while(!queue.empty()&&nodes[target].parent<0){int current=queue.front();queue.pop();auto n=nodes[current];int x=int(n.p.x),y=int(n.p.y);
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
-   for(int next:cells[ny*24+nx]){if(nodes[next].parent>=0)continue;perf::count(perf::StackedEdges);float feet=n.z;bool clear=true;
-    for(int sample=1;sample<=4;++sample){Vec2 p=n.p+(nodes[next].p-n.p)*(sample/4.f);float ground=navSupport(w,p,feet+.215f,radius);
-     if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height,radius)){clear=false;break;}feet=ground;}
+   for(int next:cells[ny*24+nx]){if(nodes[next].parent>=0)continue;perf::count(perf::StackedEdges);float feet=n.z;const bool clear=deckStep(w,n.p,n.z,nodes[next].p,height,radius,rise,feet);
     if(clear&&std::fabs(feet-nodes[next].z)<.03f){nodes[next].parent=current;queue.push(next);}
    }
   }
@@ -98,57 +136,132 @@ static Vec2 liveStackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,
  // The actor can enter a navigation cell near an obstacle corner. Its next
  // cell-to-cell edge is safe from the cell centre, but the diagonal from the
  // actor's actual feet may clip that corner. Reach the origin centre first.
- if(human&&!roughSegment(w,start,startZ,nodes[next].p,height,.24f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,.24f,nullptr,true,radius))return nodes[origin].p;
- return nodes[next].p;
+ if(human&&lengthSq(nodes[origin].p-start)>.0025f&&!roughSegment(w,start,startZ,nodes[next].p,height,rise+.025f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,rise+.025f,nullptr,true,radius))return nodes[origin].p;
+ return human?lineUp(w,start,startZ,nodes[next].p,height,radius,rise):nodes[next].p;
 }
 static bool sameBits(Vec2 a,Vec2 b){return std::bit_cast<uint32_t>(a.x)==std::bit_cast<uint32_t>(b.x)&&std::bit_cast<uint32_t>(a.y)==std::bit_cast<uint32_t>(b.y);}
 // A verify-mode shadow probe leaves the frame's query and decision counters as
 // the kept answer left them (only its time shows).
 template<class Probe> static auto uncounted(const Probe&probe){auto counts=perf::counts;auto result=probe();perf::counts=counts;return result;}
-// The same planner over the deck graph kept for this collision state and hull:
-// a fresh deck takes its nodes and cell lists exactly as liveStackedWaypoint
-// builds them, and an edge first asked is probed exactly as it probes one (the
-// walk from a node toward a neighbour cell does not depend on which node there
-// it reaches). Origin and target choice, search order, early stop and the
-// corner rule are unchanged, so the waypoint is the live planner's to the bit.
-static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fresh,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human,float radius){
+// The deck graph's own pieces, which the kept planner and a creature's partial
+// route share. A fresh deck takes its nodes and cell lists exactly as
+// liveStackedWaypoint builds them; its edges start unknown.
+static void fillDeck(const World&w,ai::RouteCache::Deck&deck,float height,float radius,float rise=.215f){
  auto&nodes=deck.nodes;auto&cells=deck.cells;
- if(fresh){
-  for(int y=1;y<23;++y)for(int x=1;x<23;++x){
-   auto& cell=cells[y*24+x];cell.begin=int(nodes.size());
-   navDeckCell(w,x,y,height,radius,[&](Vec2 p,float floor){nodes.push_back({p,floor});});
-   cell.end=int(nodes.size());
-  }
-  deck.edges.assign(nodes.size()*4,{});
+ for(int y=1;y<23;++y)for(int x=1;x<23;++x){
+  auto& cell=cells[y*24+x];cell.begin=int(nodes.size());
+  navDeckCell(w,x,y,height,radius,rise,[&](Vec2 p,float floor){nodes.push_back({p,floor});});
+  cell.end=int(nodes.size());
  }
+ deck.edges.assign(nodes.size()*4,{});
+}
+// The step from node `current` toward its neighbour cell in `direction` (+x, -x,
+// +y, -y), ending on node `next` there: probed on first need exactly as
+// liveStackedWaypoint probes it (the walk does not depend on which node of the
+// next cell it reaches), then kept.
+static bool deckEdge(const World&w,ai::RouteCache::Deck&deck,int current,int direction,int next,float height,float radius,float rise=.215f){
+ const auto&nodes=deck.nodes;const auto n=nodes[size_t(current)];auto&edge=deck.edges[size_t(current*4+direction)];
+ if(edge.state==ai::RouteCache::Unknown||lengthSq(edge.goal-nodes[size_t(next)].p)>.000001f){float feet=n.z;const bool clear=deckStep(w,n.p,n.z,nodes[size_t(next)].p,height,radius,rise,feet);
+  edge={feet,clear?ai::RouteCache::Clear:ai::RouteCache::Blocked,nodes[size_t(next)].p};}
+ return edge.state==ai::RouteCache::Clear&&std::fabs(edge.feet-nodes[size_t(next)].z)<.03f;
+}
+// The node nearest a point, a metre of height weighed as eight square metres of floor; -1 on an empty deck.
+static int nearestDeckNode(const ai::RouteCache::Deck&deck,Vec2 p,float z){
+ int best=-1;float score=1e9f;for(int i=0;i<int(deck.nodes.size());++i){const auto&n=deck.nodes[size_t(i)];float d=lengthSq(n.p-p)+std::fabs(n.z-z)*8;if(d<score){score=d;best=i;}}return best;
+}
+// The same planner over the deck graph kept for this collision state and hull.
+// Origin and target choice, search order, early stop and the corner rule are
+// unchanged, so the waypoint is the live planner's to the bit.
+static Vec2 keptStackedWaypoint(const World&w,ai::RouteCache::Deck&deck,bool fresh,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human,float radius,float rise){
+ auto&nodes=deck.nodes;auto&cells=deck.cells;
+ if(fresh)fillDeck(w,deck,height,radius,rise);
  perf::count(perf::StackedNodes,nodes.size());
- int origin=-1,target=-1;float a=1e9f,b=1e9f;
- for(int i=0;i<int(nodes.size());++i){auto&n=nodes[i];float da=lengthSq(n.p-start)+std::fabs(n.z-startZ)*8,db=lengthSq(n.p-goal)+std::fabs(n.z-goalZ)*8;if(da<a){a=da;origin=i;}if(db<b){b=db;target=i;}}
+ const int origin=nearestDeckNode(deck,start,startZ),target=nearestDeckNode(deck,goal,goalZ);
  if(origin<0||target<0){perf::count(perf::StackedNoRoute);return start;}
  thread_local std::vector<int> parent;parent.assign(nodes.size(),-1);std::queue<int> queue;queue.push(origin);parent[size_t(origin)]=origin;
  while(!queue.empty()&&parent[size_t(target)]<0){int current=queue.front();queue.pop();auto n=nodes[current];int x=int(n.p.x),y=int(n.p.y),direction=-1;
   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){++direction;int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
    for(int next=cells[ny*24+nx].begin;next<cells[ny*24+nx].end;++next){if(parent[size_t(next)]>=0)continue;perf::count(perf::StackedEdges);
-    auto&edge=deck.edges[size_t(current*4+direction)];
-    if(edge.state==ai::RouteCache::Unknown||lengthSq(edge.goal-nodes[next].p)>.000001f){float feet=n.z;bool clear=true;
-     for(int sample=1;sample<=4;++sample){Vec2 p=n.p+(nodes[next].p-n.p)*(sample/4.f);float ground=navSupport(w,p,feet+.215f,radius);
-      if(std::fabs(ground-feet)>.24f||!navFits(w,p,ground,height,radius)){clear=false;break;}feet=ground;}
-     edge={feet,clear?ai::RouteCache::Clear:ai::RouteCache::Blocked,nodes[next].p};}
-    if(edge.state==ai::RouteCache::Clear&&std::fabs(edge.feet-nodes[next].z)<.03f){parent[size_t(next)]=current;queue.push(next);}
+    if(deckEdge(w,deck,current,direction,next,height,radius,rise)){parent[size_t(next)]=current;queue.push(next);}
    }
   }
  }
  if(parent[size_t(target)]<0){perf::count(perf::StackedNoRoute);return start;}int next=target;while(parent[size_t(next)]!=origin&&next!=origin)next=parent[size_t(next)];
- if(human&&!roughSegment(w,start,startZ,nodes[next].p,height,.24f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,.24f,nullptr,true,radius))return nodes[origin].p;
- return nodes[next].p;
+ if(human&&lengthSq(nodes[origin].p-start)>.0025f&&!roughSegment(w,start,startZ,nodes[next].p,height,rise+.025f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[origin].p,height,rise+.025f,nullptr,true,radius))return nodes[origin].p;
+ return human?lineUp(w,start,startZ,nodes[next].p,height,radius,rise):nodes[next].p;
 }
-static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f){
+static Vec2 stackedWaypoint(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,bool human=false,float radius=.20f,float rise=.215f){
  Vec2 result;
- {perf::Scope stackedProfile(perf::StackedWaypoint);bool fresh=false;auto*deck=ai::RouteCache::deck(w,height,fresh,radius);
-  if(!deck){stackedProfile.stop();return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human,radius);}
-  perf::count(perf::StackedCalls);result=keptStackedWaypoint(w,*deck,fresh,start,startZ,goal,goalZ,height,human,radius);}
- if(ai::RouteCache::verify()&&!sameBits(result,uncounted([&]{return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human,radius);})))perf::count(perf::RouteCacheMismatches);
+ {perf::Scope stackedProfile(perf::StackedWaypoint);bool fresh=false;auto*deck=ai::RouteCache::deck(w,height,fresh,radius,rise);
+  if(!deck){stackedProfile.stop();return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human,radius,rise);}
+  perf::count(perf::StackedCalls);result=keptStackedWaypoint(w,*deck,fresh,start,startZ,goal,goalZ,height,human,radius,rise);}
+ if(ai::RouteCache::verify()&&!sameBits(result,uncounted([&]{return liveStackedWaypoint(w,start,startZ,goal,goalZ,height,human,radius,rise);})))perf::count(perf::RouteCacheMismatches);
  return result;
+}
+// Where a creature goes when no route on the decks fits its body to the goal
+// (the player crawled into a duct it is too big for), or when it already stands
+// at the node nearest the goal: never shoving at the opening or ambling off.
+// It floods every node it can reach. Then it takes the prey's own way to the
+// goal, walked by the smallest body that moves (a prone player), and finds
+// where that way leaves the places the creature fits: the duct's mouth. It
+// goes to the last of its own nodes there and holds, facing in, until the goal
+// moves somewhere it can reach. Sets `next` (its next hop, or its own position
+// when holding) and `holding`. False when the prey's way leaves no mouth to
+// wait at (no way for the prey either, or a deck too coarse for the body to
+// find one): the caller's amble then works it round what holds it.
+static bool partialDeckRoute(const World&w,Vec2 start,float startZ,Vec2 goal,float goalZ,float height,float radius,float rise,Vec2&next,bool&holding){
+ // The prey clambers: a lip or duct floor half a metre up is in its way, not a wall.
+ constexpr float PreyHeight=Player::ProneHeight,PreyRadius=.20f,PreyRise=.5f;
+ holding=false;next=start;
+ // The deck pointer lives until the next lookup: copy what the flood found before the prey's deck is asked for.
+ std::vector<ai::RouteCache::Deck::Node> nodes;std::array<ai::RouteCache::Deck::Range,24*24> cells{};std::vector<int> parent;int origin=-1,target=-1;
+ {ai::RouteCache::Deck local;bool fresh=false;auto*deck=ai::RouteCache::deck(w,height,fresh,radius,rise);if(!deck){deck=&local;fresh=true;}
+  if(fresh)fillDeck(w,*deck,height,radius,rise);
+  origin=nearestDeckNode(*deck,start,startZ);target=nearestDeckNode(*deck,goal,goalZ);if(origin<0||target<0)return false;
+  parent.assign(deck->nodes.size(),-1);std::queue<int> queue;queue.push(origin);parent[size_t(origin)]=origin;
+  while(!queue.empty()){int current=queue.front();queue.pop();const auto n=deck->nodes[size_t(current)];int x=int(n.p.x),y=int(n.p.y),direction=-1;
+   for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){++direction;int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
+    for(int k=deck->cells[size_t(ny*24+nx)].begin;k<deck->cells[size_t(ny*24+nx)].end;++k)if(parent[size_t(k)]<0&&deckEdge(w,*deck,current,direction,k,height,radius,rise)){parent[size_t(k)]=current;queue.push(k);}}}
+  nodes=deck->nodes;cells=deck->cells;}
+ // Its own reachable node in a cell, on the floor near z.
+ auto reachableIn=[&](Vec2 p,float z){const int c=std::clamp(int(p.y),0,23)*24+std::clamp(int(p.x),0,23);
+  for(int k=cells[size_t(c)].begin;k<cells[size_t(c)].end;++k)if(parent[size_t(k)]>=0&&std::fabs(nodes[size_t(k)].z-z)<.3f)return k;return -1;};
+ int hold=-1;
+ if(parent[size_t(target)]>=0)hold=target;   // as near as the decks come: it stands there
+ else{
+  ai::RouteCache::Deck local;bool fresh=false;auto*prey=ai::RouteCache::deck(w,PreyHeight,fresh,PreyRadius,PreyRise);if(!prey){prey=&local;fresh=true;}
+  if(fresh)fillDeck(w,*prey,PreyHeight,PreyRadius,PreyRise);
+  const int from=nearestDeckNode(*prey,start,startZ),to=nearestDeckNode(*prey,goal,goalZ);
+  if(from>=0&&to>=0){std::vector<int> way(prey->nodes.size(),-1);std::queue<int> queue;queue.push(from);way[size_t(from)]=from;
+   while(!queue.empty()&&way[size_t(to)]<0){int current=queue.front();queue.pop();const auto n=prey->nodes[size_t(current)];int x=int(n.p.x),y=int(n.p.y),direction=-1;
+    for(auto d:{Vec2{1,0},Vec2{-1,0},Vec2{0,1},Vec2{0,-1}}){++direction;int nx=x+int(d.x),ny=y+int(d.y);if(nx<1||ny<1||nx>22||ny>22)continue;
+     for(int k=prey->cells[size_t(ny*24+nx)].begin;k<prey->cells[size_t(ny*24+nx)].end;++k)if(way[size_t(k)]<0&&deckEdge(w,*prey,current,direction,k,PreyHeight,PreyRadius,PreyRise)){way[size_t(k)]=current;queue.push(k);}}}
+   if(way[size_t(to)]>=0){std::vector<int> path;for(int k=to;;k=way[size_t(k)]){path.push_back(k);if(k==from)break;}
+    // From the creature's end: the last of the prey's steps it can still stand on.
+    bool mouth=false;
+    for(auto it=path.rbegin();it!=path.rend();++it){const auto&n=prey->nodes[size_t(*it)];const int own=reachableIn(n.p,n.z);if(own<0){mouth=hold>=0;break;}hold=own;}
+    // An ambusher waits beside the mouth, not in it, so smaller things that fit
+    // still get by. The mouth: its own nodes within 1.25 m of a place on the
+    // prey's deck it cannot reach. It holds at the reachable node off the mouth
+    // (within 3 m of it) nearest the mouth's middle; that choice depends only on
+    // the decks, so it does not shift as the creature walks.
+    if(mouth){const auto at=nodes[size_t(hold)];std::vector<Vec2> beyond;
+     for(const auto&q:prey->nodes)if(lengthSq(q.p-at.p)<16.f&&reachableIn(q.p,q.z)<0)beyond.push_back(q.p);
+     auto nearBeyond=[&](Vec2 p){for(const auto&u:beyond)if(lengthSq(u-p)<1.5625f)return true;return false;};
+     Vec2 middle{};int count=0;std::vector<int> near;
+     for(int k=0;k<int(nodes.size());++k){const auto&q=nodes[size_t(k)];if(parent[size_t(k)]<0||std::fabs(q.z-at.z)>.3f||lengthSq(q.p-at.p)>9.f)continue;
+      if(nearBeyond(q.p)){middle+=q.p;++count;}else near.push_back(k);}
+     if(count){middle=middle*(1.f/float(count));int beside=-1;float best=1e9f;
+      for(int k:near){const float d=lengthSq(nodes[size_t(k)].p-middle);if(d<best-1e-4f){best=d;beside=k;}}
+      if(beside>=0)hold=beside;}}
+    if(!mouth)hold=-1;}}
+ }
+ if(hold<0)return false;
+ if(hold==origin&&lengthSq(nodes[size_t(hold)].p-start)<.1225f){holding=true;return true;}
+ int step=hold;while(parent[size_t(step)]!=origin&&step!=origin)step=parent[size_t(step)];
+ // The corner rule the planner keeps: reach the origin node first when the diagonal from its feet would clip a jamb.
+ next=lengthSq(nodes[size_t(origin)].p-start)>.0025f&&!roughSegment(w,start,startZ,nodes[size_t(step)].p,height,rise+.025f,nullptr,true,radius)&&roughSegment(w,start,startZ,nodes[size_t(origin)].p,height,rise+.025f,nullptr,true,radius)?nodes[size_t(origin)].p:lineUp(w,start,startZ,nodes[size_t(step)].p,height,radius,rise);
+ return true;
 }
 // One terrain cell-grid edge: the walk from cell a's centre, standing on its
 // support, to neighbour b's centre. With a kept grid each edge is probed once
@@ -699,12 +812,17 @@ void Game::updateEnemies(float dt){
    if(any)doorPlan.emplace(m_world,operable);}
   // A fast mover reaches a one-metre waypoint before the repath clock runs out.
   if(keepWaypoint)destination=e.waypoint;
-   else if(!direct&&!m_world.hasTerrain()){perf::Scope stackedProfile(perf::EnemyStacked);destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull,true,radius);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
-   // No route through the decks: amble a step the way it faces (or turn) and
-   // ask again later; rebuilding the deck graph every frame stalls the game.
-   if(lengthSq(destination-e.pos)<.0001f){e.lostPath=true;e.repathTimer=1.6f;
-    for(int turn=0;turn<4;++turn){float a=e.heading+float(turn)*kPi*.5f*((int(e.gait*3)&1)?1.f:-1.f);Vec2 step=e.pos+Vec2{std::cos(a),std::sin(a)}*.9f;
-     if(roughSegment(m_world,e.pos,e.z,step,hull,stepHeight,nullptr,true,radius)){destination=step;break;}}
+   else if(!direct&&!m_world.hasTerrain()){perf::Scope stackedProfile(perf::EnemyStacked);destination=stackedWaypoint(m_world,e.pos,e.z,goal,goalZ,hull,true,radius,stepHeight);e.waypoint=destination;e.repathTimer=.35f;e.lostPath=false;
+   // No route through the decks that fits its body: it goes to where the
+   // prey's way leaves the places it fits (a duct's mouth) and waits there
+   // (partialDeckRoute). With no deck at all it ambles a step the way it
+   // faces (or turns) and asks again later; rebuilding the deck graph every
+   // frame stalls the game.
+   if(lengthSq(destination-e.pos)<.0001f){bool holding=false;Vec2 next;
+    if(partialDeckRoute(m_world,e.pos,e.z,goal,goalZ,hull,radius,stepHeight,next,holding)){destination=holding?e.pos:next;e.lostPath=holding;e.repathTimer=holding?.5f:.35f;}
+    else{e.lostPath=true;e.repathTimer=1.6f;
+     for(int turn=0;turn<4;++turn){float a=e.heading+float(turn)*kPi*.5f*((int(e.gait*3)&1)?1.f:-1.f);Vec2 step=e.pos+Vec2{std::cos(a),std::sin(a)}*.9f;
+      if(roughSegment(m_world,e.pos,e.z,step,hull,stepHeight,nullptr,true,radius)){destination=step;break;}}}
     e.waypoint=destination;}}
   else if(!direct){
    perf::Scope repathProfile(perf::EnemyRepath);perf::count(perf::FloodFills);
@@ -737,6 +855,8 @@ void Game::updateEnemies(float dt){
     destination=pick<0?e.pos:Vec2{x+dx[pick]+.5f,y+dy[pick]+.5f};e.waypoint=destination;e.repathTimer=1.6f;e.lostPath=true;}
   }
   doorPlan.reset();
+  // Nowhere nearer to go (it holds at a mouth it does not fit): it stands and faces its goal.
+  if(lengthSq(destination-e.pos)<.0001f){const Vec2 toward=goal-e.pos;if(lengthSq(toward)>.01f)e.heading+=wrapAngle(std::atan2(toward.y,toward.x)-e.heading)*std::min(1.f,dt*4.f);continue;}
   perf::Scope moveProfile(perf::EnemyMove);
   Vec2 direction=normalized(destination-e.pos);
    if(e.kind==Enemy::Kind::Wasp&&visible&&dist>1.8f&&dist<3.8f&&std::fabs(targetFeet-e.z)<.22f&&direct){float side=int(e.home.x)%2?1.f:-1.f;direction=normalized(direction*.5f+Vec2{-direction.y,direction.x}*side*.7f);}
