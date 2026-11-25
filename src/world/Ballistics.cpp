@@ -82,8 +82,10 @@ float World::shotFraction(Point3 from,Point3 to,Point3& normal,ShotTrace* trace)
   else oriented(t.position,.54f,.36f,base,base+.95f,t.yaw);
  }
  for(const auto&door:m_doors){const Vec2 centre=door.centre();float base=floorHeight(centre.x,centre.y)+door.z;
-  if(door.swinging){const Vec2 axis=door.leafAxis(door.open),hinge=door.hinge();const float width=door.width();oriented(hinge+axis*(width*.5f),width,.30f,base+.015f,base+2.35f,-std::atan2(axis.y,axis.x));}
-  else{Vec2 lo,hi;door.box(door.left,door.right,door.y-.13f,door.y+.13f,lo,hi);box({lo.x,lo.y,base+door.open*2.65f+.015f},{hi.x,hi.y,base+door.open*2.65f+2.48f});}
+  // A round stops on the leaf's own faces (Door::SwingFace, SlabFace), where it is drawn: struck 15 cm out in
+  // the air, a swinging leaf's holes hung off its enamel, and turned away from it as it swung.
+  if(door.swinging){const Vec2 axis=door.leafAxis(door.open),hinge=door.hinge();const float width=door.width();oriented(hinge+axis*(width*.5f),width,Door::SwingFace*2,base+.015f,base+Door::SwingHeight,-std::atan2(axis.y,axis.x));}
+  else{Vec2 lo,hi;door.box(door.left,door.right,door.y-Door::SlabFace,door.y+Door::SlabFace,lo,hi);const float bottom=base+door.open*Door::LiftHeight;box({lo.x,lo.y,bottom+.015f},{hi.x,hi.y,bottom+Door::SlabHeight});}
   if(shapedGround){Vec2 lo,hi;door.box(door.left,door.right,door.y-.1f,door.y+.1f,lo,hi);box({lo.x,lo.y,base+2.5f},{hi.x,hi.y,ceilingHeight(centre.x,centre.y)});}
  }
  for(size_t i=0;i<actorTracks().size();++i)if(actorTracks()[i].platform){const auto&t=actorTracks()[i];const auto&p=m_actorPoses[i];box({p.position.x-t.footprint.x*.5f,p.position.y-t.footprint.y*.5f,p.z-t.thickness},{p.position.x+t.footprint.x*.5f,p.position.y+t.footprint.y*.5f,p.z});}

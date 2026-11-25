@@ -651,7 +651,8 @@ bool Game::auditMapScene(Game& game,int level){
    // Where a point is: 1 the opening, 2 the swing, 3 an approach; 0 clear.
    auto where=[&](Vec2 p,float face=.12f)->int{const Vec2 l=d.local(p);const float a=l.x,c=l.y-d.y;
     if(a>d.left+.05f&&a<d.right-.05f&&std::fabs(c)<face)return 1;
-    if(d.swinging&&c*d.swing>0&&(a-hinge)*away>=-.02f&&std::hypot(a-hinge,c)<span-.05f)return 2;
+    // (past the hinge jamb: the wall the leaf hangs on is not in its swing; it was, and every hinged door's own wall was reported)
+    if(d.swinging&&c*d.swing>0&&(a-hinge)*away>.04f&&std::hypot(a-hinge,c)<span-.05f)return 2;
     if(a>d.left+.15f&&a<d.right-.15f&&std::fabs(c)>=face&&std::fabs(c)<1.2f)return 3;
     return 0;};
    const char* what[]={"","IN DOORWAY","IN DOOR SWING","BLOCKS DOOR APPROACH"};
@@ -676,6 +677,60 @@ bool Game::auditMapScene(Game& game,int level){
    if(lengthSq(a.position-b.position)+(a.z-b.z)*(a.z-b.z)<.25f*.25f){char text[96];std::snprintf(text,sizeof text,"LAMPS STACKED lights %zu and %zu at %.2f,%.2f z %.2f",i,j,a.position.x,a.position.y,a.z);fail(text);}}
   for(size_t i=0;i<fixtures.size();++i)for(size_t j=i+1;j<fixtures.size();++j){const auto& a=fixtures[i];const auto& b=fixtures[j];
    if(a.model==b.model&&a.model>=0&&lengthSq(a.position-b.position)<.1f*.1f&&std::fabs(fbase(a)-fbase(b))<.1f)fail("DUPLICATE "+fname(i)+" and fixture["+std::to_string(j)+"]");}
+  // L: LAMPS. A light glows from its lamp's face. Every LIGHT draws its own housing unless it is Bare: a wall
+  // lamp its plate and guard, a ceiling lamp its square housing or its fitting, hung where the renderer hangs
+  // it (lampMount below is the renderer's). Found: a LIGHT that draws a housing inside a lamp model set as a
+  // FIXTURE (two lamps, one inside the other: the fixture's light must be Bare, at its face); a Bare light off
+  // the lamp it sits by; a fitted lamp whose light glows away from its fitting's face; two housings that
+  // intersect; a light buried inside another lamp's housing. Hard failures, not warnings: a lamp is the
+  // first thing a player looks at in a dark room.
+  {auto lampFail=[&](const std::string& what){report<<"FAIL "<<what<<'\n';++problems;};
+   auto lampModel=[&](int m){static const int list[]={ceiling_lamp,pendant_lamp,lab_desk_lamp,med_fluoro_light,mine_cage_lamp,scrap_lantern,scrap_shade_lamp,clinic_ceiling_lamp_1,clinic_ceiling_lamp_2,
+    bld_lamp_cage,bld_lamp_hood,bld_ceiling_lamp,mine_lantern,lamp_strip,lamp_ceiling_tube,lamp_ceiling_bar,lamp_bulkhead,lamp_wall,lamp_gooseneck,lamp_pendant,lamp_suspended_twin_tube};
+    return std::find(std::begin(list),std::end(list),m)!=std::end(list);};
+   const auto& lights=w.lights();
+   auto lampMount=[&](const WorldLight& l){return w.lampMount(l);};
+   // A housing as an oriented box: centre, half sizes along its own x and y (turned by c, s), its foot and head.
+   struct Housing{Vec2 c;float hx,hy,cs,sn,z0,z1;bool any=false;};
+   auto housing=[&](const WorldLight& l)->Housing{
+    if(l.mount==WorldLightMount::Bare)return {};
+    if(l.mount==WorldLightMount::Wall){const Vec2 n{std::cos(l.yaw),std::sin(l.yaw)};return {l.position+n*.065f,.065f,.17f,n.x,n.y,l.z-.285f,l.z+.285f,true};}
+    if(l.fitting<0)return {l.position,.4f,.4f,1,0,l.z+.04f,l.z+.13f,true};
+    const float mount=lampMount(l);return {l.position,l.fittingWidth*.5f,l.fittingDepth*.5f,std::cos(l.yaw),-std::sin(l.yaw),mount-l.fittingHeight,mount,true};};
+   auto inside=[](const Housing& h,Point3 p,float margin){if(!h.any||p.z<h.z0+margin||p.z>h.z1-margin)return false;const float dx=p.x-h.c.x,dy=p.y-h.c.y;
+    return std::fabs(dx*h.cs+dy*h.sn)<h.hx-margin&&std::fabs(-dx*h.sn+dy*h.cs)<h.hy-margin;};
+   // Two oriented boxes intersect (separating axes in plan, then height), each shrunk by `margin`.
+   auto meet=[](const Housing& a,const Housing& b,float margin){if(!a.any||!b.any||a.z1-margin<=b.z0||b.z1-margin<=a.z0)return false;
+    const Vec2 ax[4]={{a.cs,a.sn},{-a.sn,a.cs},{b.cs,b.sn},{-b.sn,b.cs}};const Vec2 d=b.c-a.c;
+    for(const Vec2& u:ax){auto r=[&](const Housing& h){return std::fabs(h.cs*u.x+h.sn*u.y)*(h.hx-margin)+std::fabs(-h.sn*u.x+h.cs*u.y)*(h.hy-margin);};if(std::fabs(dot(d,u))>=r(a)+r(b))return false;}
+    return true;};
+   auto lname=[&](size_t i){const auto& l=lights[i];char text[128];std::snprintf(text,sizeof text,"light[%zu] %s at %.2f,%.2f z %.2f",i,l.mount==WorldLightMount::Wall?"wall":l.mount==WorldLightMount::Bare?"bare":l.fitting>=0?"fitted":"ceiling",l.position.x,l.position.y,l.z);return std::string(text);};
+   const size_t count=lights.size()-(w.hasLift()&&!lights.empty()?1:0);   // the cab lamp rides the lift
+   // A lamp model's box, grown by `grow`, holds p.
+   auto inLamp=[&](const Fixture& f,Point3 p,float grow){const float b=fbase(f);return p.z>b-grow&&p.z<b+f.height+grow&&inRect(f,{p.x,p.y},-grow);};
+   for(size_t fi=0;fi<fixtures.size();++fi){const auto& f=fixtures[fi];if(!f.visible||!lampModel(f.model)||f.width<=0||f.depth<=0)continue;
+    float nearest=1e9f;size_t near=0;
+    for(size_t i=0;i<count;++i){const auto& l=lights[i];const Point3 e=l.emitter();
+     const Housing h=housing(l);
+     // A housing drawn over or inside the model: two lamps in one place.
+     Housing box{toWorld(f,0,0),f.width*.5f,f.depth*.5f,std::cos(f.yaw),-std::sin(f.yaw),fbase(f),fbase(f)+f.height,true};
+     if(h.any&&meet(h,box,.01f)){lampFail("LAMP IN LAMP "+lname(i)+" draws its own housing over "+fname(fi)+" (make it Bare, at the lamp's face)");continue;}
+     if(l.mount!=WorldLightMount::Bare)continue;
+     const float d=std::sqrt(lengthSq(Vec2{e.x,e.y}-f.position)+std::pow(e.z-(fbase(f)+f.height*.5f),2.f));if(d<nearest){nearest=d;near=i;}}
+    // The Bare light it sits by: inside its model, or within 12 cm of its skin (a bulb under a shade, a lamp's
+    // glow set just off its cage or diffuser so the lamp's own model does not shadow it).
+    if(nearest<std::max({f.width,f.depth,f.height})*.5f+.6f&&!inLamp(f,lights[near].emitter(),.12f)){char gap[48];std::snprintf(gap,sizeof gap," (%.2f m from its middle)",nearest);lampFail("LIGHT OFF ITS LAMP "+lname(near)+" by "+fname(fi)+gap);}
+   }
+   for(size_t i=0;i<count;++i){const auto& l=lights[i];
+    // A fitted ceiling lamp glows at its fitting's face: no more than 25 cm under it, never up in it.
+    if(l.mount==WorldLightMount::Ceiling&&l.fitting>=0){const float face=lampMount(l)-l.fittingHeight;
+     if(l.z>face+.02f||l.z<face-.25f){char text[96];std::snprintf(text,sizeof text," glows %.2f m %s its fitting's face (z %.2f)",std::fabs(l.z-face),l.z>face?"up inside":"under",face);lampFail("LIGHT OFF ITS FITTING "+lname(i)+text);}}
+    const Housing a=housing(l);
+    for(size_t j=i+1;j<count;++j){const auto& m=lights[j];const Housing b=housing(m);
+     if(meet(a,b,.01f)){lampFail("LAMPS STACKED "+lname(i)+" and "+lname(j)+": their housings intersect");continue;}
+     if(!a.any&&inside(b,l.emitter(),.005f))lampFail("LIGHT IN LAMP "+lname(i)+" inside the housing of "+lname(j));
+     if(!b.any&&inside(a,m.emitter(),.005f))lampFail("LIGHT IN LAMP "+lname(j)+" inside the housing of "+lname(i));}}
+  }
   // F: SCREEN FACES WALL: a screen turned to a wall less than 0.4 m off its face.
   for(size_t i=0;i<fixtures.size();++i){const auto& f=fixtures[i];if(!counted(f)||!screen(f.model))continue;const Vec2 n=frontOf(f);const float z=fbase(f)+f.height*.6f;
    for(float dd:{.05f,.15f,.25f,.38f}){const Vec2 p=f.position+n*(f.depth*.5f+dd);if(wallAt(p,z)){char text[48];std::snprintf(text,sizeof text," (wall %.2f m off its face)",dd);fail("SCREEN FACES WALL "+fname(i)+text);break;}}}

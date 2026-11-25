@@ -289,10 +289,13 @@ def build(catalog):
     k.prim('stairs', -.9, .5, 0, 1.6, 0, 3.0, 2, CONCRETE)      # climbs north: 18 risers over 5 m, from the open end to the landing
     k.box(-1.8, -2.8, 1.8, -1.95, 2.9, 3.0, CONCRETE)              # the landing
     k.box(0, -1.98, 1.8, -1.95, 3.0, 4.0, STEEL, rail=1)           # a rail along the landing's open edge
+    # Each lamp model's light is bare, at its own face: a wall lamp (mount 1) draws a backing, diffuser and guard
+    # of its own, and set on these it drew a lamp inside the arm lamp and one hung in the air 35 cm off the wall
+    # before the bulkhead (map audit, LAMP IN LAMP).
     k.wall_fx('lamp_wall', 'N', 1.0, 4.4, solid=0)
-    k.lamp(1.0, -2.3, 4.6, .9, 6.0, 3600, mount=1, yaw=HALF)
+    k.lamp(1.0, -2.15, 4.5, .9, 6.0, 3600, mount=2)                 # under the arm lamp's shade, at its outer end
     k.wall_fx('lamp_bulkhead', 'E', 1.5, 2.2, solid=0)
-    k.lamp(1.45, 1.5, 2.3, .8, 5.0, 3600, mount=1, yaw=PI)
+    k.lamp(1.62, 1.5, 2.29, .8, 5.0, 3600, mount=2)                 # just off the bulkhead's lens
 
     k = kit('kit_lift_lobby', 'Lift lobby', 6, 5, 'lift doors, call button, a bench')
     k.floor(OFFICE_TILE)
@@ -330,7 +333,7 @@ def build(catalog):
     k.fx('bld_ladder', 4.15, 0, 0, -HALF, k=.4)
     for x in (-2, 2):
         k.fx('bld_lamp_cage', x, 0, 2.15, solid=0, k=1.4)
-        k.lamp(x, 0, 2.1, .9, 6.0, 3200)
+        k.lamp(x, 0, 2.3, .9, 6.0, 3200, mount=2)                    # the bulb in its cage (a ceiling lamp drew its own housing in it)
 
     k = kit('kit_loading_dock', 'Loading dock', 8, 6, 'a raised dock, steps, pallets and a forklift')
     k.box(-4, -3, 4, -.5, 0, 1.2, CONCRETE)                         # the dock

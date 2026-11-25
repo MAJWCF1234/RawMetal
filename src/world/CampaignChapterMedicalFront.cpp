@@ -1578,9 +1578,11 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  m.signs.push_back({{4.1f,3.612f},f+2.59f,.96f,.37f,0,"TIME LOCK","KEY THE PAD / RELEASES IN 20 S"});
  {auto& s=m.signs.back();s.style=2;s.accent=0xffb23a2eu;}
  {const StateId keyed=stateId("medf_cage_keyed"),running=stateId("medf_cage_running"),open=stateId("medf_cage_open");
-  auto held=lamp({4.75f,3.55f},f+2.3f,.5f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{1,.1f,.06f});held.enabledState=keyed;held.invert=true;m.lights.push_back(held);
-  auto wink=held;wink.enabledState=running;wink.invert=false;wink.period=1.f;wink.onTime=.5f;m.lights.push_back(wink);
-  auto go=lamp({4.75f,3.55f},f+2.02f,.55f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{.15f,1,.3f});go.enabledState=open;m.lights.push_back(go);}
+  // Two housings one over the other, clear of each other (they were set 28 cm apart, each 57 cm tall, one
+  // through the other); the wink is the red lamp's own lens, bare, not a third housing on top of it.
+  auto held=lamp({4.75f,3.55f},f+2.38f,.5f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{1,.1f,.06f});held.enabledState=keyed;held.invert=true;m.lights.push_back(held);
+  auto wink=held;wink.position.y+=.16f;wink.mount=WorldLightMount::Bare;wink.enabledState=running;wink.invert=false;wink.period=1.f;wink.onTime=.5f;m.lights.push_back(wink);
+  auto go=lamp({4.75f,3.55f},f+1.78f,.55f,3.2f,3400,0,WorldLightMount::Wall,kPi*.5f,false,{.15f,1,.3f});go.enabledState=open;m.lights.push_back(go);}
  // The walk-in cold room: built into the dispensary's corner and painted with it, its door shut, a
  // small window on the dark.
  wall(m,10.f,1.f,10.1f,3.5f,f,roof,3);

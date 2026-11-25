@@ -572,7 +572,9 @@ std::shared_ptr<const Map> makeIsolationWing(){
  for(auto [x,y,i,fl]:{std::tuple{4.f,5.f,.6f,.4f},{21.f,4.6f,.45f,0.f},{10.f,5.f,.4f,.2f},{4.f,18.3f,.55f,0.f},{16.f,18.3f,.5f,.3f},{21.f,18.3f,.45f,.15f}})
   m.lights.push_back(cbTube(x,y,roof,i,6.f,4600,.08f,fl));
  for(auto [x,i,fl]:{std::tuple{1.9f,.55f,0.f},{13.f,.5f,.3f},{18.8f,.55f,0.f},{22.f,.5f,.1f}})m.lights.push_back(cbTube(x,11.5f,roof,i,6.5f,5600,.05f,fl));
- cbDeadTube(m,7.f,11.5f,roof);m.lights.push_back(cbGlow({22.6f,11.5f},f+1.3f,.35f,3.f,8000,{.6f,.8f,1.f},.08f));
+ // 7,11.5: the dead tube is the lamp that comes on with the wing's maintenance supply (below), dark in its own
+ // fitting until then; a dead-tube fixture here as well hung two lamps one inside the other.
+ m.lights.push_back(cbGlow({22.6f,11.5f},f+1.3f,.35f,3.f,8000,{.6f,.8f,1.f},.08f));
  for(auto [x,y,yaw]:{std::tuple{3.2f,12.9f,.3f},{8.2f,10.1f,2.4f},{12.6f,12.9f,-.5f},{16.f,10.1f,1.8f},{16.f,7.6f,.9f},{14.4f,3.2f,2.8f}}){
   const int lampProp=int(m.clutterSpawns.size());kit::prop(m,model::lab_desk_lamp,x,y,f,.18f,.4f,.52f,yaw);
   auto l=cbGlow({x,y},f+.45f,.4f,3.8f,2700);l.prop=lampProp;m.lights.push_back(l);}

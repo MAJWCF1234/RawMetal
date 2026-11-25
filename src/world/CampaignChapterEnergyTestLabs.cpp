@@ -26,6 +26,11 @@ void etHighBay(Map& m,Vec2 p,float roof,float z,float intensity,float range,floa
 // A wall lamp on its face (heading: east 0, south pi/2, west pi, north -pi/2).
 WorldLight etWall(Vec2 p,float z,float heading,float intensity,float range,float kelvin,float flicker=0,Point3 gel={1,1,1}){
  auto l=lamp(p,z,intensity,range,kelvin,0,WorldLightMount::Wall,heading,true,gel);l.flicker=flicker;return l;}
+// A caged lamp's own bulb: a bare light at the cage's face, where a wall lamp's glow would be (heading as etWall).
+// The cage is the lamp; a wall lamp set on it drew its own backing, diffuser and guard over the cage, a lamp
+// inside a lamp (map audit, LAMP IN LAMP).
+WorldLight etBulb(Vec2 p,float z,float heading,float intensity,float range,float kelvin,float flicker=0){
+ auto l=lamp(p+Vec2{std::cos(heading),std::sin(heading)}*.16f,z,intensity,range,kelvin,0,WorldLightMount::Bare,0,true);l.flicker=flicker;return l;}
 // A red beacon that blinks while `state` is unset and dies when it is set (amber: a cycle never finished).
 WorldLight etBeacon(Vec2 p,float z,float heading,float phase,StateId state,bool amber=false){
  auto l=lamp(p,z,amber?.36f:.32f,amber?3.6f:4.f,3000,0,WorldLightMount::Wall,heading,true,amber?Point3{1.f,.5f,.06f}:Point3{1.f,.12f,.06f});
@@ -166,7 +171,7 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  m.lights.push_back(etTube(12.f,1.6f,roof,.25f,4.f,4000,.02f,.4f));
  // the passage's own lamps at the seal, either side, so its walls read past the bulkhead
  for(auto [x,h,yaw]:{std::tuple{10.02f,0.f,anE},{13.98f,kPi,anW}}){anFix(m,model::mine_cage_lamp,x+(h>1?-.1f:.1f),1.9f,f+2.2f,.21f,.2f,.36f,yaw,false);
-  m.lights.push_back(etWall({x,1.9f},f+2.35f,h,.55f,5.f,4200));}
+  m.lights.push_back(etBulb({x,1.9f},f+2.35f,h,.55f,5.f,4200));}
  // the passage's mouth on the lab: steel posts and a head
  for(float x:{9.92f,14.f})doorTrim(m,x,6.88f,x+.08f,7.12f,f,f+2.8f);
  wall(m,10.f,6.9f,14.f,7.1f,f+2.8f,roof,3);
@@ -385,8 +390,8 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
  m.stairs.push_back({15.f,4.96f,17.f,17.f,f,g,43,true,true});
  // lit from the side as it goes down: caged lamps on the gallery's face over the flight, and one at its foot
  for(auto [y,z]:{std::pair{7.2f,f+4.25f},{12.4f,f+7.2f}}){anFix(m,model::mine_cage_lamp,16.88f,y,z,.21f,.2f,.36f,anW,false);
-  m.lights.push_back(etWall({16.96f,y},z+.15f,kPi,.75f,7.f,4200));}
- anFix(m,model::mine_cage_lamp,16.88f,4.3f,f+2.3f,.21f,.2f,.36f,anW,false);m.lights.push_back(etWall({16.96f,4.3f},f+2.45f,kPi,.6f,6.f,4200));
+  m.lights.push_back(etBulb({16.96f,y},z+.15f,kPi,.75f,7.f,4200));}
+ anFix(m,model::mine_cage_lamp,16.88f,4.3f,f+2.3f,.21f,.2f,.36f,anW,false);m.lights.push_back(etBulb({16.96f,4.3f},f+2.45f,kPi,.6f,6.f,4200));
  // --- The control room (east gallery, north): glass onto the bay --------------------------------
  const float c=g+3.2f;
  glazing(m,17.f,1.2f,17.2f,7.8f,g,c,3,.95f,2.4f,true);wall(m,17.f,1.f,17.2f,1.2f,g,c,3);wall(m,17.f,7.8f,17.2f,8.f,g,c,3);
@@ -575,7 +580,7 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  // detail stood at the bulkhead to look at them by, raking along the lead from the west so every edge of
  // every man throws its own shadow; the fourth man has his own, past bulkhead 2
  anFix(m,model::mine_cage_lamp,16.3f,13.8f,f+2.25f,.21f,.2f,.36f,kPi,false);wall(m,16.2f,13.92f,16.4f,13.94f,f+2.2f,f+2.7f,12);
- {auto l=lamp({16.3f,13.9f},f+2.4f,.4f,6.f,3600,.25f,WorldLightMount::Wall,-kPi*.5f,true,{.85f,1.f,.5f});l.flicker=.06f;m.lights.push_back(l);}
+ {auto l=lamp({16.3f,13.92f},f+2.43f,.4f,6.f,3600,.25f,WorldLightMount::Bare,0,true,{.85f,1.f,.5f});l.flicker=.06f;m.lights.push_back(l);}   // the cage's bulb, not a wall lamp over the cage
  for(auto [x,y,heading,power,reach]:{std::tuple{13.35f,9.42f,0.f,2.4f,8.f},{22.62f,9.42f,kPi,1.3f,4.5f}}){
   wall(m,x-.025f,y-.025f,x+.025f,y+.025f,f,f+1.42f,12);wall(m,x-.2f,y-.2f,x+.2f,y+.2f,f,f+.03f,8);                 // the stand, its foot
   for(float d:{-.16f,.16f})wall(m,x+d-.012f,y-.012f,x+d+.012f,y+.012f,f,f+.9f,12);
@@ -608,7 +613,8 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  taped(m,{14.25f,17.6f},f+1.5f,anN,Readable::Note,"BLAST DOOR / 02:25","SHUT FROM THE POST BOARD. NOTHING FROM THE RING GOES WEST. NOTHING FROM THE WEST GOES EAST.",
   "THE STORE HAS THE REPEATER AND THE STORE IS HARRIS'S. NOBODY GOES IN THE STORE.");
  m.lights.push_back(etBeacon({12.f,17.58f},f+2.75f,-kPi*.5f,.3f,stateId("et_shield_blast")));
- {auto l=etWall({12.f,17.58f},f+2.75f,-kPi*.5f,.3f,4.f,4000,0,etGreen);l.enabledState=stateId("et_shield_blast");m.lights.push_back(l);}
+ {auto l=etWall({12.f,17.58f},f+2.75f,-kPi*.5f,.3f,4.f,4000,0,etGreen);l.position=Vec2{12.f,17.42f};l.mount=WorldLightMount::Bare;   // the beacon's lens, gone green: one housing
+  l.enabledState=stateId("et_shield_blast");m.lights.push_back(l);}
  m.ambients.push_back({Sound::OneMetalBang,{12.f,18.f},f+1.6f,.6f,18.f,AmbientEmitter::OnState,8,8,stateId("et_shield_blast"),1});
  m.ambients.push_back({Sound::OneMetalFall,{12.f,18.f},f+2.f,.55f,14.f,AmbientEmitter::OnState,8,8,stateId("et_shield_blast"),1});
  m.objectiveTexts.push_back({stateId("et_obj_blast"),"THE BLAST DOOR IS HELD FROM THE POST. ITS BOARD IS IN THE DOSIMETRY POST, WITH THE DETAIL."});
@@ -676,8 +682,8 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  m.creatureSpawns.push_back({CreatureKind::Transformed,{4.05f,20.7f},-999,1,0,stateId("et_store_harris")});   // the fitter, still in his apron: quiet while Kemp talks to him
  m.lights.push_back(etTube(5.4f,18.4f,roof,.7f,6.f,4000,.03f,.12f));
  anFix(m,model::mine_cage_lamp,2.06f,18.8f,f+2.2f,.21f,.2f,.36f,kPi*.5f,false);
- m.lights.push_back(etWall({2.04f,18.8f},f+2.35f,0,.45f,5.f,3000,.05f));
- anFix(m,model::mine_cage_lamp,8.7f,20.4f,f+2.2f,.21f,.2f,.36f,anW,false);m.lights.push_back(etWall({8.78f,20.4f},f+2.35f,kPi,.5f,6.f,4500));
+ m.lights.push_back(etBulb({2.04f,18.8f},f+2.35f,0,.45f,5.f,3000,.05f));
+ anFix(m,model::mine_cage_lamp,8.7f,20.4f,f+2.2f,.21f,.2f,.36f,anW,false);m.lights.push_back(etBulb({8.78f,20.4f},f+2.35f,kPi,.5f,6.f,4500));
  // --- The corridor's lamps: a caged lamp at each bulkhead, dark between ------------------------
  m.lights.push_back(etWall({21.5f,13.92f},f+2.4f,-kPi*.5f,.42f,5.5f,5200));
  m.lights.push_back(etWall({9.02f,11.5f},f+2.4f,0,.6f,6.5f,5200,.2f));
@@ -686,8 +692,8 @@ std::shared_ptr<const Map> makeShieldingCorridor(){
  // the west face of each bulkhead for the men coming from the ring to see what they are walking into
  for(float x:{10.f,14.4f,21.f}){m.pipes.push_back({{x,11.5f},{x,11.5f},f+2.95f,.012f,roof-.3f,6});anFix(m,model::mine_cage_lamp,x,11.5f,f+2.6f,.21f,.2f,.36f,0,false);
   m.lights.push_back(lamp({x,11.5f},f+2.55f,.75f,7.f,4800,0,WorldLightMount::Bare,0,true));}
- for(float x:{18.6f,12.2f}){anFix(m,model::mine_cage_lamp,x-.1f,9.55f,f+2.15f,.21f,.2f,.36f,anW,false);m.lights.push_back(etWall({x-.02f,9.55f},f+2.3f,kPi,.5f,5.5f,4500));}
- for(float y:{15.8f,21.f}){anFix(m,model::mine_cage_lamp,9.16f,y,f+2.2f,.21f,.2f,.36f,anE,false);m.lights.push_back(etWall({9.08f,y},f+2.35f,0,.75f,7.5f,4500));}
+ for(float x:{18.6f,12.2f}){anFix(m,model::mine_cage_lamp,x-.1f,9.55f,f+2.15f,.21f,.2f,.36f,anW,false);m.lights.push_back(etBulb({x-.02f,9.55f},f+2.3f,kPi,.5f,5.5f,4500));}
+ for(float y:{15.8f,21.f}){anFix(m,model::mine_cage_lamp,9.16f,y,f+2.2f,.21f,.2f,.36f,anE,false);m.lights.push_back(etBulb({9.08f,y},f+2.35f,0,.75f,7.5f,4500));}
  // what the detail brought down to hold it: lead brick on a cart, a spare stand flood, the monitor they
  // read the wall by; a pallet of brick at the blast door nobody got round to stacking
  handCart(m,20.4f,13.05f,f);for(int c=0;c<3;++c)wall(m,20.06f,12.6f+c*.02f,20.74f,13.5f-c*.02f,f+.29f+c*.09f,f+.375f+c*.09f,20);
@@ -774,7 +780,7 @@ std::shared_ptr<const Map> makeExperimentalPower(){
  guardRail(m,6.f,1.f,6.1f,6.f,g);guardRail(m,17.9f,1.f,18.f,6.f,g);guardRail(m,6.f,5.9f,10.f,6.f,g);guardRail(m,14.f,5.9f,18.f,6.f,g);
  m.stairs.push_back({10.f,6.f,14.f,12.16f,f,g,22,true,false});
  // the flight lit from both sides off the landing's face, cold, so its treads and stringers read from the hall
- for(float x:{9.3f,14.7f}){anFix(m,model::mine_cage_lamp,x,6.12f,f+2.3f,.21f,.2f,.36f,anS,false);m.lights.push_back(etWall({x,6.04f},f+2.45f,kPi*.5f,.7f,7.f,4300));}
+ for(float x:{9.3f,14.7f}){anFix(m,model::mine_cage_lamp,x,6.12f,f+2.3f,.21f,.2f,.36f,anS,false);m.lights.push_back(etBulb({x,6.04f},f+2.45f,kPi*.5f,.7f,7.f,4300));}
  etHighBay(m,{12.f,8.4f},roof,f+6.6f,.8f,8.f,4300);                                                       // and one hung over the flight
  // a stand flood parked under it against the landing, aimed up, so the flight's underside is steel and not a hole
  wall(m,11.975f,6.575f,12.025f,6.625f,f,f+1.12f,12);wall(m,11.8f,6.4f,12.2f,6.8f,f,f+.03f,8);
@@ -867,7 +873,7 @@ std::shared_ptr<const Map> makeExperimentalPower(){
  wallSign(m,12.f,22.26f,f+4.6f,"11 KV PLANT BUS","BANKS LIVE. FEED NOT ISOLATED",2.2f,anN);
  // the wall's own light: floods on the frame head looking down the banks
  for(float x:{4.f,8.6f,15.6f,20.2f}){anFix(m,model::mine_cage_lamp,x,22.1f,f+9.4f,.21f,.2f,.36f,0,false);
-  m.lights.push_back(lamp({x,21.8f},f+9.f,.9f,10.f,3600,0,WorldLightMount::Bare));}
+  m.lights.push_back(lamp({x,21.97f},f+9.58f,.9f,10.f,3600,0,WorldLightMount::Bare));}   // its bulb at the cage's face (it glowed 40 cm under and in front of it)
  // --- The wet corner (northeast): the cracked main, the pool, the cable in it -----------------
  m.pipes.push_back({{17.9f,1.12f},{22.95f,1.12f},f+3.2f,.12f,f+3.2f,3});
  for(float x:{19.4f,21.6f})m.pipes.push_back({{x,1.12f},{x,1.12f},f+3.3f,.02f,roof,6});
@@ -939,7 +945,7 @@ std::shared_ptr<const Map> makeConversionLab(){
  for(float z=f+1.5f;z<g-.3f;z+=1.5f)wall(m,15.96f,1.f,16.f,9.f,z,z+.06f,12);
  m.stairs.push_back({16.f,9.f,18.f,15.16f,f,g,22,true,false});
  // the flight lit from the side: a caged lamp on the mezzanine's face, a work lamp hung over its west side
- anFix(m,model::mine_cage_lamp,18.35f,9.12f,f+2.4f,.21f,.2f,.36f,anS,false);m.lights.push_back(etWall({18.35f,9.04f},f+2.55f,kPi*.5f,.7f,7.f,4300));
+ anFix(m,model::mine_cage_lamp,18.35f,9.12f,f+2.4f,.21f,.2f,.36f,anS,false);m.lights.push_back(etBulb({18.35f,9.04f},f+2.55f,kPi*.5f,.7f,7.f,4300));
  etHighBay(m,{15.2f,12.4f},roof,f+3.4f,.6f,6.5f,4300);etHighBay(m,{17.f,12.6f},roof,f+6.6f,.7f,7.f,4300);
  const float c=g+3.2f;
  glazing(m,16.f,1.2f,16.2f,8.8f,g,c,3,.95f,2.4f,true);wall(m,16.f,1.f,16.2f,1.2f,g,c,3);
@@ -1079,7 +1085,7 @@ std::shared_ptr<const Map> makeConversionLab(){
  anFix(m,model::pallet,22.1f,15.6f,f,1.2f,1.15f,.16f,.3f,true);
  kit::prop(m,model::anl_cell_spent,22.f,15.5f,f+.16f,.7f);propPose(m,model::anl_cell_spent,18.9f,19.8f,f,2.1f,kPi*.5f,0);
  anFix(m,model::mine_cage_lamp,22.94f,19.f,f+2.5f,.21f,.2f,.36f,kPi*.5f,false);
- m.lights.push_back(etWall({22.96f,19.f},f+2.65f,kPi,.5f,6.5f,2300));
+ m.lights.push_back(etBulb({22.96f,19.f},f+2.65f,kPi,.5f,6.5f,2300));
  // --- The suit rail by the door, the crew's things -------------------------------------------
  etSuitRail(m,1.8f,6.4f,1.f,f,kPi*.5f,1);
  handCart(m,13.f,4.f,f);for(auto [x,y]:{std::pair{12.9f,3.8f},{13.15f,4.25f}})kit::prop(m,model::anl_cell_charged,x,y,f+.29f,x+y);

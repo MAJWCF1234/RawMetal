@@ -81,6 +81,28 @@ struct Door {
  // when `open` (0 shut, 1 a quarter turn toward the swing side).
  Vec2 hinge()const{return world(hingeRight?right:left,y);}
  Vec2 leafAxis(float opened)const{float a=opened*kPi*.5f*swing;return world((hingeRight?-1.f:1.f)*std::cos(a),std::sin(a));}
+ // The leaf as it is built, one size for all that touches it (drawn, struck, carrying marks): a
+ // swinging leaf stands SwingHeight from its sill, its faces SwingFace off its middle; a lifting
+ // slab stands SlabHeight, its outer faces (the hazard band) SlabFace off the wall line, and it
+ // rises LiftHeight fully open.
+ static constexpr float SwingHeight=2.35f,SwingFace=.046f,SlabHeight=2.48f,SlabFace=.116f,LiftHeight=2.65f;
+ // The one transform of the leaf: a point on it at `from` open, carried to where it is at `to`
+ // open (a swinging leaf turns about its hinge, a lifting one rises). Whatever rides the leaf (a
+ // bullet hole, blood, their facing) is carried by this and nothing else.
+ Point3 carry(Point3 p,float from,float to)const{
+  if(!swinging)return {p.x,p.y,p.z+(to-from)*LiftHeight};
+  const Vec2 h=hinge(),d=carryDirection(Vec2{p.x-h.x,p.y-h.y},from,to);return {h.x+d.x,h.y+d.y,p.z};}
+ Vec2 carryDirection(Vec2 v,float from,float to)const{
+  if(!swinging)return v;
+  const Vec2 a=leafAxis(from),b=leafAxis(to);const float c=a.x*b.x+a.y*b.y,s=a.x*b.y-a.y*b.x;
+  return {v.x*c-v.y*s,v.x*s+v.y*c};}
+ // Whether p lies on the leaf at `opened` (base: the sill's height), within `slack` of its faces,
+ // edges, foot and head.
+ bool onLeaf(Point3 p,float base,float opened,float slack=.02f)const{
+  if(swinging){const Vec2 h=hinge(),axis=leafAxis(opened),d{p.x-h.x,p.y-h.y};const float a=d.x*axis.x+d.y*axis.y,off=d.y*axis.x-d.x*axis.y;
+   return a>-slack&&a<width()+slack&&std::fabs(off)<SwingFace+slack&&p.z>base-slack&&p.z<base+SwingHeight+slack;}
+  const float bottom=base+opened*LiftHeight,a=along({p.x,p.y});
+  return a>left-slack&&a<right+slack&&std::fabs(across({p.x,p.y})-y)<SlabFace+slack&&p.z>bottom-slack&&p.z<bottom+SlabHeight+slack;}
  // The world box spanning along [a0,a1] and across [c0,c1] (either order).
  void box(float a0,float a1,float c0,float c1,Vec2& lo,Vec2& hi)const{Vec2 p=world(a0,c0),q=world(a1,c1);lo={std::min(p.x,q.x),std::min(p.y,q.y)};hi={std::max(p.x,q.x),std::max(p.y,q.y)};}
 };
@@ -897,6 +919,9 @@ public:
     float supportBelow(float x,float y,float feet,bool cavities=false)const;
     float structureSupportBelow(float x,float y,float radius,float feet)const;
     float clearanceAbove(float x,float y,float feet,bool cavities=false)const;
+    // Where a ceiling lamp's housing hangs from (the top of its fitting, or of its rods): the one rule the
+    // renderer draws by and the map audit checks by (World.cpp).
+    float lampMount(const WorldLight& light)const;
     float fixtureSurface(const Fixture& f,float x,float y,float feet,bool ceiling)const;
     bool fits(float x,float y,float feet,float height,bool dynamic=true,bool shelfCavities=false)const;
     // A heavy crate's box overlaps this column (skipping crate `except`).

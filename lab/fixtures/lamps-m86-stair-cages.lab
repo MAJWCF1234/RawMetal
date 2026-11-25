@@ -1,0 +1,10 @@
+# Map 86, High-Energy Test Bay: the caged lamp at the gallery stair's foot, its bulb in its cage. Tube: lamp-views.
+world campaign
+map 86
+camera 14.4 4.3 -999 0 0
+aim-x 16.85
+aim-y 4.3
+aim-z -17.52
+open-doors
+size 960 540
+frames 30

@@ -201,9 +201,9 @@ static constexpr KitDef kitDefs[] = {
      "STRUCT|@|-1.8|-2.8|1.8|-1.95|2.9|3|0|5\n"
      "STRUCT|@|0|-1.98|1.8|-1.95|3|4|1|2\n"
      "FIXTURE|@|$lamp_wall|1|-2.425|4.4|0.51|0.71|0.418|0|0\n"
-     "LIGHT|@|1|-2.3|4.6|1|1.571|0.9|6|3600\n"
+     "LIGHT|@|1|-2.15|4.5|2|0|0.9|6|3600\n"
      "FIXTURE|@|$lamp_bulkhead|1.72|1.5|2.2|0.36|0.119|0.176|1.571|0\n"
-     "LIGHT|@|1.45|1.5|2.3|1|3.142|0.8|5|3600\n"},
+     "LIGHT|@|1.62|1.5|2.29|2|0|0.8|5|3600\n"},
     {"kit_lift_lobby", L"Lift lobby", L"lift doors, call button, a bench", 6.00f, 5.00f,
      "STRUCT|@|-3|-2.5|3|2.5|0|0.04|0|24\n"
      "FIXTURE|@|$bld_lift_doors|0|-2.36|0|4.09|0.29|3|0|1\n"
@@ -242,9 +242,9 @@ static constexpr KitDef kitDefs[] = {
      "STRUCT|@|3.54|0.69|3.66|0.81|0|2.4|0|2\n"
      "FIXTURE|@|$bld_ladder|4.15|0|0|0.336|0.084|3.24|-1.571|1\n"
      "FIXTURE|@|$bld_lamp_cage|-2|0|2.15|0.263|0.353|0.329|0|0\n"
-     "LIGHT|@|-2|0|2.1|0|0|0.9|6|3200\n"
+     "LIGHT|@|-2|0|2.3|2|0|0.9|6|3200\n"
      "FIXTURE|@|$bld_lamp_cage|2|0|2.15|0.263|0.353|0.329|0|0\n"
-     "LIGHT|@|2|0|2.1|0|0|0.9|6|3200\n"},
+     "LIGHT|@|2|0|2.3|2|0|0.9|6|3200\n"},
     {"kit_loading_dock", L"Loading dock", L"a raised dock, steps, pallets and a forklift", 8.00f, 6.00f,
      "STRUCT|@|-4|-3|4|-0.5|0|1.2|0|5\n"
      "STRUCT|@|-4|-0.55|4|-0.5|0.9|1.2|0|13\n"

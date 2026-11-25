@@ -11,6 +11,8 @@
 #include "world/CampaignExport.h"
 #include "world/CampaignMaps.h"
 #include "world/Primitives.h"
+#include "world/CustomCampaign.h"
+#include "lab/LabFixture.h"
 #include <algorithm>
 namespace retro {bool testDoorLeaves();} // game/Movement.cpp
 namespace retro {bool testSkyboxes();}
@@ -65,6 +67,20 @@ const bool registered=[]{
   bool all=true;std::ofstream sum("map-audit-summary.txt");
   for(int level=std::max(0,first);level<=last&&level<CampaignChunkCount;++level){bool ok=false;try{ok=Game::auditMap(level);}catch(const std::exception& e){sum<<"map "<<level<<" threw "<<e.what()<<'\n';}all&=ok;sum<<"map "<<level<<(ok?" PASS":" FAIL")<<'\n';sum.flush();}
   return all;});
+ // The same audit over the custom maps (the Starter Map and the others in "custom maps", or the .rmc files
+ // RM_AUDIT_CUSTOM=a.rmc;b.rmc names): each campaign in a folder of its own, map-audit-N.txt for each map.
+ engine("map-audit-custom","--map-audit over every map of the custom campaigns in \"custom maps\" (RM_AUDIT_CUSTOM=file;file narrows)",+[]{
+  std::vector<std::filesystem::path> files;const auto dir=std::filesystem::path(labRoot())/"custom maps";
+  if(const char* only=std::getenv("RM_AUDIT_CUSTOM")){std::string list=only;for(size_t a=0;a<=list.size();){size_t b=list.find(';',a);if(b==std::string::npos)b=list.size();if(b>a)files.push_back(dir/list.substr(a,b-a));a=b+1;}}
+  else{std::error_code e;for(const auto& f:std::filesystem::directory_iterator(dir,e))if(f.path().extension()==".rmc")files.push_back(f.path());std::sort(files.begin(),files.end());}
+  const auto home=std::filesystem::current_path();bool all=true;std::ofstream sum("map-audit-summary.txt");
+  for(const auto& file:files){std::string name=file.stem().string();for(auto& c:name)if(c==' ')c='-';
+   std::filesystem::create_directories(home/name);std::filesystem::current_path(home/name);
+   try{auto campaign=loadCustomCampaignFile(file);Game g(campaign);
+    for(int level=0;level<g.chunkCount();++level){LabAccess::loadLevel(g,level);const bool ok=Game::auditMapScene(g,level);all&=ok;sum<<file.filename().string()<<" map "<<level<<" '"<<campaign->maps[size_t(level)]->name<<"'"<<(ok?" PASS":" FAIL")<<'\n';sum.flush();}}
+   catch(const std::exception& e){all=false;sum<<file.filename().string()<<" threw "<<e.what()<<'\n';}
+   std::filesystem::current_path(home);}
+  return all&&!files.empty();});
  // Map 95's hit engineer flinched at every round and never died: any Cleanup man on a keyed track can.
  engine("cleanup-die","every Cleanup man on a keyed track has health and a dead state; 95's sitting engineer is shot dead",+[]{
   std::ofstream r("cleanup-die.txt");bool ok=true;int armed=0;
