@@ -85,6 +85,7 @@ struct InputState {
     int pointerX=-1,pointerY=-1;
     Vec2 controllerMove{};  // Right and forward, normalized together.
     Vec2 controllerLook{};  // Yaw and pitch in radians per second.
+    bool padActive=false;   // the controller was the last thing touched (its button names in the prompts, aim assist)
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
     bool vrTracked=false;
@@ -386,8 +387,11 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
 // Controller options (SETTINGS > CONTROLS, docs/Systems/accessibility.md): for hands that shake, tire or cannot hold a
 // trigger. Indexes into the tables in Win32Window.cpp: look speed, stick dead zone, steady aim (a low-pass on the
-// sticks), and the press filter (a button must be held that long before it counts).
-struct PadOptions {int look=3,dead=0,steady=0,filter=0;bool toggleAim=false,toggleSprint=false,toggleCrouch=false,bumpers=false,swapSticks=false;};
+// sticks), and the press filter (a button must be held that long before it counts). curve: how the look stick's
+// travel becomes speed (0 linear, 1 standard, 2 precise: slower near the middle); assist: aim help on the pad
+// (0 off, 1 light, 2 strong: the view slows over a target and drifts with it); rumble: 0 off, 1 light, 2 standard.
+// All provisional: a player with cerebral palsy is trying them.
+struct PadOptions {int look=3,dead=0,steady=0,filter=0;bool toggleAim=false,toggleSprint=false,toggleCrouch=false,bumpers=false,swapSticks=false;int curve=1,assist=1,rumble=2;};
 struct Settings {PadOptions pad;float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
@@ -865,6 +869,14 @@ public:
     int enemiesRemaining() const;
     int enemiesRemaining(int level)const{return hostilesRemaining(level);}
     float hitFlash()const{return m_hitFlash;}
+    // The controller (Controller.cpp): the motors' strengths now (x the heavy low motor, y the light high one, 0-1,
+    // the RUMBLE setting applied); a prompt with its keys named as the pad's buttons while the pad is in use; aim
+    // assist on the look stick (yaw and pitch rates, radians and pitch units a second, in and out).
+    Vec2 padRumble()const;
+    std::string padPrompt(const char* text)const;
+    bool padPrompts()const{return m_padPrompts;}
+    Vec2 aimAssist(Vec2 stickLook,float dt)const;
+    static bool testController(std::ostream& report);
     float critFlash()const{return m_critFlash;}   // a head hit with the sniper rifle: the cross reads HEAD
     // The scope: how far the rifle is at the eye (0 hip, 1 looking through it). The view narrows and a ring closes round it.
     float scopeBlend()const{return m_weaponEquipped&&m_equippedWeapon==WeaponId::Sniper&&!unarmed()?m_scopeBlend:0.f;}   // the rifle shoulders over its iron sights first (aimBlend); held there, the view closes down the scope
@@ -2081,6 +2093,10 @@ private:
     std::vector<ScriptFx> m_scriptFx;
     struct NetUse {int level=0,terminal=0;};
     std::vector<NetUse> m_netUses;
+    // Other players' footsteps the Match made after this frame (Match::remoteFootstep): put into the next frame's
+    // m_sounds as it starts, so the minds hear them as they hear the local player's step, and the ears one frame on.
+    std::vector<SoundEvent> m_netSounds;
+    bool m_padPrompts=false;   // the pad was the last thing touched (InputState::padActive)
     int m_scriptPlayer=0;       // the player whose step or hand fires the script running now
     int m_shooter=0;            // the player whose shot is being resolved (a co-op host resolving a guest's)
     // ----- Several maps at once (ForeignChunks.cpp; docs/Systems/multiplayer.md "Several maps") -----

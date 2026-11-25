@@ -26,7 +26,7 @@ namespace {
 enum Row:int{RMaster=1,RMusic,REffects,RVoiceVolume,RRenderScale,RDepth,RLens,RFrameTime,RSensitivity,RInvert,RPull,RCharacter,
  RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RProximity,RMuted,RMicTest,
  RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RViewDistance,
- RPadLook,RPadDead,RPadSteady,RPadFilter,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RReset,RMutedBack,RMutedName=200};
+ RPadLook,RPadDead,RPadSteady,RPadFilter,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RPadCurve,RPadAssist,RPadRumble,RReset,RMutedBack,RMutedName=200};
 constexpr int TabCount=int(SettingsTab::Count);   // the page column's rows; BACK is row TabCount
 struct TalkKey{int code;const char* name;};
 constexpr TalkKey TalkKeys[]={{0x56,"V"},{0x42,"B"},{0x58,"X"},{0x48,"H"},{0x14,"CAPS LOCK"},{0xA4,"LEFT ALT"},{0x05,"MOUSE 4"},{0x06,"MOUSE 5"}};
@@ -66,7 +66,7 @@ std::vector<int> Game::settingsRows()const{
   case SettingsTab::Audio:return {RMaster,RMusic,REffects,RVoiceVolume,RReset};
   case SettingsTab::Video:return {RRenderScale,RDepth,RLens,RFrameTime,RViewDistance,RReset};
   case SettingsTab::Controls:return {RSensitivity,RInvert,RReset};
-  case SettingsTab::Controller:return {RPadLook,RPadDead,RPadSteady,RPadFilter,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RReset};
+  case SettingsTab::Controller:return {RPadLook,RPadCurve,RPadDead,RPadSteady,RPadFilter,RPadAssist,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RPadRumble,RReset};
   case SettingsTab::Gameplay:return {RPull,RCharacter,RReset};
   case SettingsTab::Communication:return {RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RVoiceVolume,RProximity,RMuted,RMicTest,RReset};
   case SettingsTab::Vr:return {RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RReset};
@@ -106,7 +106,7 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RViewDistance:{static constexpr const char* names[]={"NEAR","NORMAL","FAR","VERY FAR"};m.kind=MenuItem::Choice;m.label="VIEW DISTANCE";m.value=names[std::clamp(s.viewDistance,0,3)];m.help="How far outdoor maps are drawn. Farther looks grander and costs frames; NORMAL is the intended look.";break;}
    case RFrameTime:m.label="FRAME TIME READOUT";m.value=onOff(m_showFps);m.help="Shows how long each frame takes to draw, at the bottom left.";break;
    case RSensitivity:{m.label="MOUSE SENSITIVITY";char b[16];std::snprintf(b,sizeof b,"%.1fX",s.sensitivity);m.value=b;m.help="How far a hand on the mouse turns your head.";break;}
-   case RInvert:m.label="INVERT MOUSE Y";m.value=onOff(s.invertMouse);m.warn=s.invertMouse;m.help="Pushing the mouse forward looks down instead of up.";break;
+   case RInvert:m.label="INVERT LOOK Y";m.value=onOff(s.invertMouse);m.warn=s.invertMouse;m.help="Pushing the mouse or the controller's look stick forward looks down instead of up.";break;
    case RPadLook:{static constexpr const char* n[]={"VERY SLOW","SLOW","GENTLE","STANDARD","QUICK","FAST","VERY FAST"};m.kind=MenuItem::Choice;m.label="CONTROLLER LOOK SPEED";m.value=n[std::clamp(s.pad.look,0,6)];m.help="How fast the right stick turns your head. Slower is easier to place exactly.";break;}
    case RPadDead:{static constexpr const char* n[]={"STANDARD","WIDE","WIDER","WIDEST"};m.kind=MenuItem::Choice;m.label="STICK DEAD ZONE";m.value=n[std::clamp(s.pad.dead,0,3)];m.help="How far a stick must move before it counts. Wider ignores a resting, shaking thumb.";break;}
    case RPadSteady:{static constexpr const char* n[]={"OFF","LIGHT","MEDIUM","STRONG"};m.kind=MenuItem::Choice;m.label="STEADY STICKS";m.value=n[std::clamp(s.pad.steady,0,3)];m.help="Smooths out shake and sudden jerks in both sticks. Stronger is steadier but a little slower to answer.";break;}
@@ -115,6 +115,9 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RPadSprint:m.label="SPRINT: HOLD OR TOGGLE";m.value=s.pad.toggleSprint?"TOGGLE":"HOLD";m.help="Toggle: click the left stick once to run until you stop moving.";break;
    case RPadCrouch:m.label="CROUCH: HOLD OR TOGGLE";m.value=s.pad.toggleCrouch?"TOGGLE":"HOLD";m.help="Toggle: press B once to crouch, again to stand.";break;
    case RPadBumpers:m.label="FIRE AND AIM ON";m.value=s.pad.bumpers?"BUMPERS":"TRIGGERS";m.help="Bumpers: fire and aim on the shoulder buttons; use and the Physgloves move to the triggers.";break;
+   case RPadCurve:{static constexpr const char* n[]={"LINEAR","STANDARD","PRECISE"};m.kind=MenuItem::Choice;m.label="LOOK RESPONSE";m.value=n[std::clamp(s.pad.curve,0,2)];m.help="How the look stick's travel becomes speed. PRECISE is slower near the middle for small aims; LINEAR answers evenly.";break;}
+   case RPadAssist:{static constexpr const char* n[]={"OFF","LIGHT","STRONG"};m.kind=MenuItem::Choice;m.label="AIM ASSIST";m.value=n[std::clamp(s.pad.assist,0,2)];m.help="On the controller only: the view slows over an enemy and drifts with it while you steer. It never aims on its own.";break;}
+   case RPadRumble:{static constexpr const char* n[]={"OFF","LIGHT","STANDARD"};m.kind=MenuItem::Choice;m.label="RUMBLE";m.value=n[std::clamp(s.pad.rumble,0,2)];m.help="The controller shakes when you fire and when you are hurt.";break;}
    case RPadSwap:m.label="STICKS";m.value=s.pad.swapSticks?"SWAPPED":"STANDARD";m.help="Swapped: the left stick looks and the right stick walks, for the other hand.";break;
    case RPull:m.kind=MenuItem::Choice;m.label="PULL HIGHLIGHT";m.value=s.pullHighlight?"SUBTLE":"NONE";m.help="The outline on what the Physgloves would pull. The reticle tightens either way.";break;
    case RCharacter:m.kind=MenuItem::Choice;m.label="CHARACTER";m.value=s.character==2?"LEON":s.character==1?"THE LIMITATOR":"CLAIRE";m.help="Who the others see in multiplayer. It takes hold the next time you join.";break;
@@ -222,6 +225,9 @@ void Game::settingsChange(int id,int direction,bool activate){
   case RPadCrouch:s.pad.toggleCrouch=!s.pad.toggleCrouch;break;
   case RPadBumpers:s.pad.bumpers=!s.pad.bumpers;break;
   case RPadSwap:s.pad.swapSticks=!s.pad.swapSticks;break;
+  case RPadCurve:s.pad.curve=cycle(std::clamp(s.pad.curve,0,2),3);break;
+  case RPadAssist:s.pad.assist=cycle(std::clamp(s.pad.assist,0,2),3);break;
+  case RPadRumble:s.pad.rumble=cycle(std::clamp(s.pad.rumble,0,2),3);break;
   case RPull:s.pullHighlight=s.pullHighlight?0:1;break;
   case RCharacter:s.character=cycle(std::clamp(s.character,0,2),3);break;
   case RTextChat:s.textChat=!s.textChat;break;
@@ -410,14 +416,15 @@ bool Game::testSettingsMenu(std::ostream& report){
  // CONTROLS: the controller options each change their setting, survive a save and load, and reset with the page.
  {game.openSettings(SettingsTab::Controller);key(game,&InputState::menuRight);auto rows=game.settingsRows();auto at=[&](int id){return int(std::find(rows.begin(),rows.end(),id)-rows.begin());};
   const auto step=[&](int id){game.m_menuSelection=at(id);key(game,&InputState::menuRight);};
-  step(RPadLook);step(RPadDead);step(RPadSteady);step(RPadFilter);step(RPadAim);step(RPadSprint);step(RPadCrouch);step(RPadBumpers);step(RPadSwap);
+  step(RPadLook);step(RPadDead);step(RPadSteady);step(RPadFilter);step(RPadAim);step(RPadSprint);step(RPadCrouch);step(RPadBumpers);step(RPadSwap);step(RPadCurve);step(RPadAssist);step(RPadRumble);
   const auto& p=game.settings().pad;
-  check(p.look==4&&p.dead==1&&p.steady==1&&p.filter==1&&p.toggleAim&&p.toggleSprint&&p.toggleCrouch&&p.bumpers&&p.swapSticks,"CONTROLLER: every option steps once from its default");
+  check(p.look==4&&p.dead==1&&p.steady==1&&p.filter==1&&p.toggleAim&&p.toggleSprint&&p.toggleCrouch&&p.bumpers&&p.swapSticks&&p.curve==2&&p.assist==2&&p.rumble==0,"CONTROLLER: every option steps once from its default");
+  check(int(rows.size())<=13,"CONTROLLER's rows fit the page ("+std::to_string(rows.size())+" of 13)");
   const auto path=std::filesystem::temp_directory_path()/"rawmetal-settings-pad.txt";game.saveSettings(path.wstring());game.m_settings.pad=PadOptions{};game.loadSettings(path.wstring());std::filesystem::remove(path);
   const auto& q=game.settings().pad;
-  check(q.look==4&&q.dead==1&&q.steady==1&&q.filter==1&&q.toggleAim&&q.toggleSprint&&q.toggleCrouch&&q.bumpers&&q.swapSticks,"the controller options survive a save and load");
+  check(q.look==4&&q.dead==1&&q.steady==1&&q.filter==1&&q.toggleAim&&q.toggleSprint&&q.toggleCrouch&&q.bumpers&&q.swapSticks&&q.curve==2&&q.assist==2&&q.rumble==0,"the controller options survive a save and load");
   game.settingsReset(SettingsTab::Controller);const auto& r=game.settings().pad;
-  check(r.look==3&&r.dead==0&&r.steady==0&&r.filter==0&&!r.toggleAim&&!r.bumpers&&!r.swapSticks,"CONTROLLER reset puts the options back");
+  check(r.look==3&&r.dead==0&&r.steady==0&&r.filter==0&&!r.toggleAim&&!r.bumpers&&!r.swapSticks&&r.curve==1&&r.assist==1&&r.rumble==2,"CONTROLLER reset puts the options back");
   game.m_settingsTab=SettingsTab::Audio;game.m_settingsOnTabs=true;}
  // Esc: rows -> column -> PAUSE, and leaving asks for a save.
  game.m_settingsOnTabs=false;key(game,&InputState::escape);check(game.menuPage()==MenuPage::Options&&game.settingsOnTabs(),"Esc in the rows returns to the column");

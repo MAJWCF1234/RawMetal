@@ -138,8 +138,8 @@ void Game::loadSettings(const std::wstring& path){
      const auto space=line.find(' ');if(space==std::string::npos)continue;
      const std::string tag=line.substr(0,space),value=line.substr(space+1);
      if(tag=="name")settings.playerName=value.substr(0,24);
-     else if(tag=="pad"){int v[9]={3,0,0,0,0,0,0,0,0};std::istringstream in(value);for(int& x:v)if(!(in>>x))break;
-      settings.pad={std::clamp(v[0],0,6),std::clamp(v[1],0,3),std::clamp(v[2],0,3),std::clamp(v[3],0,3),v[4]!=0,v[5]!=0,v[6]!=0,v[7]!=0,v[8]!=0};}
+     else if(tag=="pad"){int v[12]={3,0,0,0,0,0,0,0,0,1,1,2};std::istringstream in(value);for(int& x:v)if(!(in>>x))break;   // an older file stops at 9: the rest keep their defaults
+      settings.pad={std::clamp(v[0],0,6),std::clamp(v[1],0,3),std::clamp(v[2],0,3),std::clamp(v[3],0,3),v[4]!=0,v[5]!=0,v[6]!=0,v[7]!=0,v[8]!=0,std::clamp(v[9],0,2),std::clamp(v[10],0,2),std::clamp(v[11],0,2)};}
      else if(tag=="mic")settings.micDevice=value;else if(tag=="speakers")settings.speakerDevice=value;
      else if(tag=="muted"&&!value.empty()&&settings.mutedPlayers.size()<256&&!settings.muted(value))settings.mutedPlayers.push_back(value);
     }}}}
@@ -153,7 +153,7 @@ void Game::saveSettings(const std::wstring& path)const{
   <<' '<<int(s.textChat)<<' '<<int(s.chatFilter)<<' '<<s.voiceMode<<' '<<s.pushToTalkKey<<' '<<s.openMicThreshold<<' '<<s.micVolume<<' '<<s.voiceVolume<<' '<<int(s.proximityVoice)
   <<' '<<m_renderScale<<' '<<int(m_showFps)<<' '<<s.viewDistance<<'\n';
  auto oneLine=[](std::string v){for(auto& c:v)if(c=='\r'||c=='\n')c=' ';return v;};
- file<<"pad "<<s.pad.look<<' '<<s.pad.dead<<' '<<s.pad.steady<<' '<<s.pad.filter<<' '<<int(s.pad.toggleAim)<<' '<<int(s.pad.toggleSprint)<<' '<<int(s.pad.toggleCrouch)<<' '<<int(s.pad.bumpers)<<' '<<int(s.pad.swapSticks)<<'\n';
+ file<<"pad "<<s.pad.look<<' '<<s.pad.dead<<' '<<s.pad.steady<<' '<<s.pad.filter<<' '<<int(s.pad.toggleAim)<<' '<<int(s.pad.toggleSprint)<<' '<<int(s.pad.toggleCrouch)<<' '<<int(s.pad.bumpers)<<' '<<int(s.pad.swapSticks)<<' '<<s.pad.curve<<' '<<s.pad.assist<<' '<<s.pad.rumble<<'\n';
  if(!s.playerName.empty())file<<"name "<<oneLine(s.playerName)<<'\n';
  if(!s.micDevice.empty())file<<"mic "<<oneLine(s.micDevice)<<'\n';
  if(!s.speakerDevice.empty())file<<"speakers "<<oneLine(s.speakerDevice)<<'\n';

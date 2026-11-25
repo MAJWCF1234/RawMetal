@@ -86,30 +86,38 @@ void Match::syncBodies(float dt){
   b.prone=st.prone;b.crouched=st.crouched||st.prone;b.grounded=st.grounded;b.eye=b.stanceEye();b.health=s.alive?std::max(s.health,.01f):0.f;
   rb.velocity=st.velocity;rb.hidden=st.hidden;rb.torch=st.torch;rb.pushing=st.pushing;
   if((rb.litTimer-=dt)<=0){rb.litTimer=.1f;rb.lit=rb.hidden?0.f:g.lightAt(b.pos,b.z+b.hullHeight()*.6f,rb.torch);}
-  if(s.alive)remoteFootstep(st,dt,rb.stride,true);
+  // Their footsteps: made where every machine draws them (Match::publish -> remoteFootstep), heard by the minds here.
   next.push_back(rb);
  }
  bodies=std::move(next);
 }
 
-void Match::remoteFootstep(const NetPlayerState& state,float dt,float& stride,bool heardByAi){
- Game& g=m_game;
- if(!state.alive||!state.grounded||state.hidden||!g.inPlayerFrame(state.level))return;
- const float speed=length(state.velocity);
- if(speed<=.2f)return;
- const bool crouched=state.crouched||state.prone;
- const bool sprint=speed>4.2f&&!crouched;
- const float stepLength=state.prone?.6f:crouched?.85f:sprint?1.45f:1.22f;
- stride+=speed*dt;
- if(stride<=stepLength)return;
- stride=0;
- const World* world=worldOf(state.level);
- if(!world)return;
- const Vec2 feet{state.world.x,state.world.y};
- const Sound base=Game::stepSoundAt(*world,feet-origin(state.level));
- SoundEvent step{base,feet-origin(g.m_level),crouched?.045f:sprint?.65f:.48f,.97f,true,17,state.world.z+.04f};
- step.aiRadius=heardByAi?Game::stepHeard(base,crouched,sprint):-1.f;
- g.m_sounds.push_back(step);
+// Another player's footsteps, on every machine and in every mode, from what already comes over the wire: where they
+// are drawn, how fast they go, their stance and whether their feet are down (no packet per step). The stride is the
+// local player's (Movement.cpp: prone .6, crouched .85, walking 1.22, sprinting 1.45 m) and is walked off by the drawn
+// body's own travel, so a VR player walking in their room steps too and one pushing at a wall does not. The sound is
+// the floor's under their feet (Game::stepSoundAt, its four takes in turn), at their feet, carried as far as the gait
+// lets it: a crawl or a crouch is heard only close by, a sprint across a hall. A landing after a fall or a jump
+// thumps. They go to Game::m_netSounds, the next frame's sounds, so on a co-op host the minds hear them as they hear
+// the local player's step (heardByAi: its floor-and-gait reach, Game::stepHeard).
+void Match::remoteFootstep(Slot& slot,const NetPlayerState& state,float dt,bool heardByAi){
+ Game& g=m_game;auto& f=slot.feet;
+ if(!state.alive||state.hidden||!g.inPlayerFrame(state.level)){f={};return;}
+ if(!f.have){f.have=true;f.last=state.world;f.grounded=state.grounded;return;}
+ const float dx=state.world.x-f.last.x,dy=state.world.y-f.last.y,walked=std::sqrt(dx*dx+dy*dy);f.last=state.world;
+ if(walked>2.f){f.stride=0;f.air=0;f.grounded=state.grounded;return;}   // a respawn, a correction, a teleport: not a walk
+ const World* world=worldOf(state.level);if(!world)return;
+ const Vec2 feet{state.world.x,state.world.y},here=feet-origin(g.m_level);
+ const bool low=state.crouched||state.prone,sprint=!low&&std::max(length(state.velocity),walked/std::max(dt,1e-3f))>4.2f;
+ auto emit=[&](Sound sound,float gain,float pitch,float radius,float heard){
+  SoundEvent e{sound,here,gain,pitch,true,radius,state.world.z+.04f};e.aiRadius=heardByAi?heard:-1.f;g.m_netSounds.push_back(e);};
+ if(!state.grounded){f.air+=dt;f.grounded=false;return;}
+ if(!f.grounded){f.grounded=true;if(f.air>.2f)emit(Sound::Land,std::clamp(.2f+f.air*.5f,.2f,.7f),.94f,17.f,0.f);f.air=0;f.stride=0;return;}
+ f.air=0;f.stride+=walked;
+ const float stride=state.prone?.6f:low?.85f:sprint?1.45f:1.22f;
+ if(f.stride<=stride)return;
+ f.stride=0;const unsigned take=(f.take++*3)%4;const Sound base=Game::stepSoundAt(*world,feet-origin(state.level));
+ emit(Sound(int(base)+int(take)),state.prone?.07f:low?.1f:sprint?.65f:.48f,.95f+float(take)*.035f,state.prone?6.f:low?8.f:sprint?22.f:17.f,Game::stepHeard(base,low,sprint));
 }
 
 void Match::sendScriptFx(){

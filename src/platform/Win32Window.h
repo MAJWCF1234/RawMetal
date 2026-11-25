@@ -14,6 +14,7 @@ public:
  HWND handle()const{return m_hwnd;}
  void setPadOptions(const PadOptions& o){m_pad=o;}   // Settings::pad
  void setTalkKey(int virtualKey){m_talkKey=virtualKey;}   // the push-to-talk key (Settings::pushToTalkKey) -> InputState::talk
+ void setRumble(Vec2 motors);   // the pad's motors, heavy and light, 0-1 (Game::padRumble); stopped unfocused
  // The loading screen painted with GDI before the renderer exists: the name,
  // a status line and a bar (progress 0-1), so the window never sits blank or frozen.
  void showLoading(float progress,const wchar_t* status);
@@ -23,6 +24,7 @@ private:
  unsigned short m_padButtons=0,m_padHeldInMenu=0;
  bool m_padFireHeldInMenu=false,m_padAimHeldInMenu=false;
  Vec2 m_padCursorRemainder{};
+ bool m_padActive=false,m_menuStick[4]={};float m_menuHold[4]={},m_menuNext[4]={.5f,.5f,.5f,.5f},m_padProneHold=0;Vec2 m_rumble{};
  static LRESULT CALLBACK wndProc(HWND,UINT,WPARAM,LPARAM); HWND m_hwnd=nullptr,m_parent=nullptr; BITMAPINFO m_bmi{}; bool m_quit=false; bool m_mouseCaptured=false,m_menuOpen=false,m_cursorVisible=false; POINT m_center{};
 };
 }

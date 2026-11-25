@@ -113,6 +113,7 @@ add_executable(RawMetal WIN32
     game/Inventory.cpp
     game/Handgun.cpp
     game/Movement.cpp
+    game/Controller.cpp
     game/DoorAxisTest.cpp
     game/WalkInTest.cpp
     game/SniperTest.cpp
