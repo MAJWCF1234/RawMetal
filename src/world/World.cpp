@@ -498,6 +498,9 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
    model::med_crash_cart,model::med_wheelchair,model::metal_shelf,model::office_bookcase,model::office_chair,model::office_file_cabinet_open,model::platform_chair,model::wooden_chair,model::wooden_table};
   if(std::find(std::begin(handMade),std::end(handMade),f.model)!=std::end(handMade))continue;
   const auto* e=walkshapes::find(f.model);if(!e)continue;
+  // Set down smaller than a body's way through (a cabinet made a bench), it is furniture again: its box holds what stands on it.
+  const bool steps=f.model==model::bld_stairs_short||f.model==model::bld_stairs_concrete||f.model==model::bld_stairs_wood||f.model==model::bld_stairs_landing;
+  if(f.height<1.2f&&!steps)continue;
   std::vector<LocalBox> boxes;boxes.reserve(size_t(e->count));
   for(int b=e->first;b<e->first+e->count;++b){const auto& bx=walkshapes::boxes[b];
    boxes.push_back({walkshapes::at(bx.x0)*f.width,walkshapes::at(bx.x1)*f.width,walkshapes::at(bx.y0)*f.depth,walkshapes::at(bx.y1)*f.depth,(walkshapes::at(bx.z0)+.5f)*f.height,(walkshapes::at(bx.z1)+.5f)*f.height});}

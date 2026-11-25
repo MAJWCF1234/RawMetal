@@ -13,7 +13,9 @@ the box is -0.5..0.5) and finds the space a body can really use:
    swept by the probe again, and carried down to the surface under it, they are the space a body can occupy. Everything else inside the box is solid, so
    cracks, the hollow inside of a closed shell and gaps narrower than a body all stay solid.
 4. A staircase (a name with stair or step) gets a 45 degree ramp over its treads, as a clip ramp over steps.
-5. A model whose usable space is at least MIN_SPACE of its box, and is at least 1 m in some direction, gets that
+5. Only passages (named as one, PASSAGES; space under the model that opens on two sides, at least PASSAGE_HEIGHT tall) and
+   staircases are kept: furniture, rocks and the like stay boxes, so what was set on them stays put.
+6. A model whose usable space is at least MIN_SPACE of its box, and is at least 1 m in some direction, gets that
    solid as at most MAX_BOXES boxes (greedy merge; coarser across and along if need be), written to src/world/WalkShapes.h. World.cpp places them for every fixture
    of the model that has no hand-made shape (quarter turns, flat ground; others stay one box).
 Do not edit the header by hand.
@@ -30,7 +32,11 @@ MIN_SPACE = 0.06              # share of the box a body can use, for the model t
 MIN_SIZE = 1.0                # metres: smaller things stay a box
 MAX_BOXES = 128
 RISER = 0.6                   # metres: the highest step a staircase ramp spans
-RAMPED = ('stair', 'step')    # models whose name says they are climbed get ramps over their treads
+RAMPED = ('stair', 'step')
+STEEP = 0.35                  # metres: a rise this high within this reach is steeper than 45 degrees
+PASSAGES = ('_arch', 'gateway', 'gate', 'doorway', 'door_frame', 'culvert', 'tunnel', 'pipe_riser', 'pipe_arch', 'vent', 'grate',
+            'bulkhead', 'shelter', 'cage', 'leanto', 'lift_car', 'lift_doors', 'headframe', 'mine_lift')   # a way through by name: machines stay boxes
+PASSAGE_HEIGHT = 1.4            # metres: a model lower than this is furniture, not a way through    # models whose name says they are climbed get ramps over their treads
 MAX_CELLS = 160               # per axis; a bigger model is voxelised coarser
 
 def obj_triangles(path):
@@ -90,6 +96,20 @@ def ramp(solid, dims, cells):
     out |= (z < best[:, :, None]) & (z >= top[:, :, None]) & (best > top)[:, :, None]
     return out
 
+def unclimb(solid, dims, cells):
+    """No walking up a face steeper than 45 degrees. Voxels turn a rock's flank or a pipe's crown into 4 cm terraces a
+    walker steps up one by one; a column within STEEP metres of a column more than that much higher is raised to it,
+    so the face is a wall (higher than a step) and the top is reached only where the mesh is gentle."""
+    dz = dims[2] / cells[2]; cx, cy = dims[0] / cells[0], dims[1] / cells[1]; nz = cells[2]
+    has = solid.any(2)
+    top = np.where(has, nz - np.argmax(solid[:, :, ::-1], axis=2), 0)
+    rx, ry = int(np.ceil(STEEP / cx)), int(np.ceil(STEEP / cy))
+    high = ndimage.maximum_filter(top, size=(2 * rx + 1, 2 * ry + 1), mode='nearest')
+    raise_to = np.where((high - top) * dz > STEEP, high, top)
+    out = solid.copy(); z = np.arange(nz)[None, None, :]
+    out |= (z < raise_to[:, :, None]) & (z >= top[:, :, None])
+    return out
+
 def boxes_of(solid):
     """Greedy merge of a boolean grid into boxes (x0, y0, z0, x1, y1, z1), end exclusive."""
     left = solid.copy(); out = []
@@ -140,8 +160,17 @@ def shape(path, size, cell, ramped=False):
         inside_space[:, :, z] |= inside_space[:, :, z + 1] & ~surface[:, :, z]
     share = inside_space.mean()
     solid = ~inside_space
-    if ramped: solid = ramp(solid, dims, cells)
-    return dict(cells=cells, share=share, solid=solid, dims=dims, probe=probe)
+    solid = ramp(solid, dims, cells) if ramped else unclimb(solid, dims, cells)
+    # A passage: space a body can use with the model over it (under an arch's lintel, a pipe's crown, a tunnel's
+    # roof), joined into one piece that opens on two of the box's sides, so it leads through.
+    covered = inside_space & np.concatenate([(np.flip(np.cumsum(np.flip(solid[:, :, 1:], 2), 2), 2) > 0), np.zeros(cells[:2] + (1,), dtype=bool)], 2)
+    labels, count = ndimage.label(covered)
+    through = False
+    for l in range(1, count + 1):
+        part = labels == l
+        sides = sum(bool(x) for x in (part[0].any(), part[-1].any(), part[:, 0].any(), part[:, -1].any()))
+        if sides >= 2: through = True; break
+    return dict(cells=cells, share=share, solid=solid, dims=dims, probe=probe, through=through)
 
 def main():
     args = sys.argv[1:]
@@ -156,6 +185,9 @@ def main():
         except Exception as e:
             print('skip', name, e); continue
         if s is None or max(s['dims']) < MIN_SIZE or s['share'] < MIN_SPACE or not s['solid'].any(): continue
+        # Only what a body goes through or climbs: a passage at least PASSAGE_HEIGHT tall (a table, a bench or a
+        # rock keeps its box, so what stands on it stays put), or a staircase.
+        if not (any(w in name for w in RAMPED) or (s['through'] and s['dims'][2] >= PASSAGE_HEIGHT and any(w in name for w in PASSAGES))): continue
         b = boxes_of(s['solid'])
         c = s['cells']
         if len(b) > MAX_BOXES:

@@ -2530,13 +2530,13 @@ struct Editor {
     return controllerHints ? L"Start plays from the 3D camera. Press Start again to return to building."
                            : L"Walk your map. Escape returns to building. Over the plan, F5 starts at the pointer.";
   }
-  // How far a tap of R (or Turn) turns a model: a quarter, an eighth, 15 or 5 degrees. Shift+R steps through them;
+  // How far a tap of R (or Turn) turns a model: a quarter, an eighth, 15 or 5 degrees. Ctrl+R steps through them;
   // holding R and moving the mouse turns it smoothly at any angle (Shift snaps that to 15 degrees).
   static constexpr float TurnSteps[4] = {1.57079632679f, .785398163f, .261799388f, .0872664626f};
   int turnStepIndex = 0;
   const wchar_t *turnHint() const {
     return controllerHints ? L"Y turns the selected object."
-                           : L"Turn the selected object. Tap R to turn, hold R and move the mouse to turn smoothly, Shift+R for a finer step.";
+                           : L"Turn the selected object. Tap R to turn, hold R and move the mouse to turn smoothly, Ctrl+R for a finer step.";
   }
   void nextTurnStep() {
     turnStepIndex = (turnStepIndex + 1) % 4;
@@ -3561,9 +3561,9 @@ struct Editor {
   // Seen before the key filter: R's press, its repeats, mouse moves while it is held, and its release.
   bool spinMessage(const MSG &msg) {
     const bool rKey = msg.wParam == 'R' && !(GetKeyState(VK_CONTROL) & 0x8000);
-    if (msg.message == WM_KEYDOWN && rKey && !spinArmed && (GetKeyState(VK_SHIFT) & 0x8000) &&
+    if (msg.message == WM_KEYDOWN && msg.wParam == 'R' && (GetKeyState(VK_CONTROL) & 0x8000) && !spinArmed &&
         !(GetFocus() && GetParent(GetFocus()) == form) && spinTurnable()) {
-      nextTurnStep(); // Shift+R: a finer (or back to the quarter) step for a tap
+      nextTurnStep(); // Ctrl+R: a finer (or back to the quarter) step for a tap (Shift+R turns the other way)
       return true;
     }
     if (msg.message == WM_KEYDOWN && rKey) {

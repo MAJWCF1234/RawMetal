@@ -22,13 +22,13 @@
     // leaves its height; a loose prop stops at 3 m on its longest side; a fixture goes past it.
     {std::vector<std::string> f{"FIXTURE","0","6","8","8","0","2","1","0.99","0.6","1"};const int schema=schemaFor(f);require(schema>=0,"No FIXTURE schema");
      const auto& names=schemas[size_t(schema)].fields;auto corners=nativeCorners(names,f);
-     auto far=corners[2],fixed=corners[0];auto pulled=[&](float k){return std::pair<float,float>{fixed.first+(far.first-fixed.first)*k,fixed.second+(far.second-fixed.second)*k};};
+     auto outer=corners[2],fixed=corners[0];auto pulled=[&](float k){return std::pair<float,float>{fixed.first+(outer.first-fixed.first)*k,fixed.second+(outer.second-fixed.second)*k};};
      auto whole=f;auto [x2,y2]=pulled(2.f);require(resizeNative(whole,names,2,x2,y2,0),"A model's corner drag was refused");
      require(std::abs(number(whole[6],0)-4)<.01f&&std::abs(number(whole[7],0)-2)<.01f&&std::abs(number(whole[8],0)-1.98f)<.01f,"A model's corner drag did not scale width, depth and height together");
      auto again=nativeCorners(names,whole);require(std::hypot(again[0].first-fixed.first,again[0].second-fixed.second)<.01f,"A model's opposite corner moved while scaling");
-     auto small=f;auto [x5,y5]=pulled(.5f);resizeNative(small,names,2,x5,y5,0);require(std::abs(number(small[8],0)-.495f)<.01f,"A model did not scale down whole");
+     auto shrunk=f;auto [x5,y5]=pulled(.5f);resizeNative(shrunk,names,2,x5,y5,0);require(std::abs(number(shrunk[8],0)-.495f)<.01f,"A model did not scale down whole");
      auto stretched=f;resizeNative(stretched,names,2,x2,y2,0,true);require(stretched[8]=="0.99"&&number(stretched[6],0)>3.9f,"Alt's free stretch changed the height or did not stretch");
-     auto huge=f;auto [x9,y9]=pulled(9.f);resizeNative(huge,names,2,x9,y9,0);require(number(huge[6],0)>17.9f,"A fixture stopped short when scaled up");}
+     auto huge=f;auto [x4,y4]=pulled(4.f);resizeNative(huge,names,2,x4,y4,0);require(number(huge[6],0)>7.9f&&number(huge[8],0)>3.9f,"A fixture stopped short when scaled up past 3 m");}
     report<<"PASS: a model's corner drag scales it whole (any turn, up and down), Alt stretches it, a fixture scales past 3 m\n";
 
     reset();int first=fixture(6,6,2,1),second=fixture(12,10,1,3);selectRecord(first);selectionPick(second,true);

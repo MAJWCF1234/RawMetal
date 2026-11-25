@@ -347,7 +347,7 @@ bool Game::auditMapScene(Game& game,int level){
    // A drum or vessel standing wholly on a solid prop (a pallet, a skid)
    // occupies ground the player cannot stand on anyway.
    if(through&&isVertical){float bottom=std::min(p.z,z1);
-    for(const auto& f:w.fixtures()){if(!f.solid)continue;float fb=w.floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),sn=std::sin(f.yaw),dx=p.start.x-f.position.x,dy=p.start.y-f.position.y;
+    for(const auto& f:w.fixtures()){if(!f.solid&&!f.shaped)continue;float fb=w.floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),sn=std::sin(f.yaw),dx=p.start.x-f.position.x,dy=p.start.y-f.position.y;
      if(std::fabs(bottom-(fb+f.height))<.03f&&std::fabs(dx*c-dy*sn)+radius<=f.width*.5f+.02f&&std::fabs(dx*sn+dy*c)+radius<=f.depth*.5f+.02f){through=false;break;}}}
    if(through)fail("PIPE THROUGH WALKWAY "+name);
    if(slab)fail("PIPE THROUGH DECK "+name);
