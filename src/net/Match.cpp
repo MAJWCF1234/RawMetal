@@ -47,7 +47,7 @@ static bool sameMapName(const std::string& a,const std::string& b){
 }
 
 Match::Match(Game& game):m_game(game),m_session(game.m_netSession){}
-Match::~Match(){m_game.m_remoteBodies.clear();m_game.m_netHurts.clear();m_game.m_netUses.clear();m_game.m_scriptFx.clear();m_game.m_netPropIntents.clear();m_game.m_netPropEvents.clear();m_game.m_netForeign.clear();m_game.m_netKeep.clear();}
+Match::~Match(){m_game.m_remoteBodies.clear();m_game.m_netSounds.clear();m_game.m_netHurts.clear();m_game.m_netUses.clear();m_game.m_scriptFx.clear();m_game.m_netPropIntents.clear();m_game.m_netPropEvents.clear();m_game.m_netForeign.clear();m_game.m_netKeep.clear();}
 
 void Match::send(const PeerId& to,std::uint8_t channel,const wire::Writer& w,bool reliable){
  if(!m_session||to.empty()||to==m_self)return;

@@ -1094,7 +1094,7 @@ struct Editor {
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
   bool connectTest = false, caveTest = false, kitTest = false;
-  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false, auditTest = false;
+  bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false, auditTest = false, padTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
   int testStage = 0;
@@ -1197,6 +1197,8 @@ struct Editor {
 #include "NativeMultiplayer.inc"           // the Multiplayer page and the Spawn tool
 #include "NativeMultiplayerRegression.inc" // --multiplayer-test
 #include "NativeAuditRegression.inc"       // --audit-test: the 2026-11-20 audit as checks
+#include "NativePad.inc"                   // the Xbox-style controller drives the whole Builder
+#include "NativePadRegression.inc"         // --pad-test
   // Furniture dropped near a wall backs onto it and faces the room.
   int snapToWall(int index) {
     auto f = NativeDocument::fields(doc.lines[size_t(index)]);
@@ -1843,8 +1845,14 @@ struct Editor {
     }
     if (!IsWindowVisible(viewport))
       return;
+    controllerAction(command, direction);
+  }
+  // What a controller command does, past the checks above (the pad's own reader, NativePad.inc, comes here too).
+  void controllerAction(retro::EditorControllerCommand command, int direction) {
+    using Command = retro::EditorControllerCommand;
     switch (command) {
-    case Command::InputDevice: case Command::CycleView: break;
+    case Command::InputDevice: break;
+    case Command::CycleView: cycleControllerView(); break;
     case Command::Play:
       startPlay(0);
       break;
@@ -2511,18 +2519,18 @@ struct Editor {
     if (!controllerHints)
       return info.hint;
     switch (info.shape) {
-    case 's': return L"A or RT selects. Hold RT and aim to move. Y rotates.";
-    case 'R': return L"Aim at the floor. Hold RT, aim at the opposite corner, then release.";
-    case 'c': return L"Hold RT at one corner, aim at the opposite corner, then release to copy.";
-    case 'v': return L"Aim where the copy should go and tap RT.";
+    case 's': return L"A picks. X grabs it (move the stick, X again drops). Y turns, RT/LT size, LB undo.";
+    case 'R': return L"Press X at one corner, move the cursor to the opposite corner, press X again.";
+    case 'c': return L"Press X at one corner, move to the opposite corner, press X again to copy.";
+    case 'v': return L"Move the cursor where the copy should go and press A.";
     case 't':
-      if (brush == 1) return L"Hold RT at one corner, aim at the opposite corner, then release.";
-      if (brush == 2) return L"Aim and tap RT to fill.";
-      return L"Hold RT and aim to paint.";
-    case 'F': case 'H': case 'T': case 'N': case 'G': return L"Hold RT and aim to brush the ground.";
-    case 'w': case 'P': case 'K': return L"Hold RT to start, aim to size or stretch, then release.";
-    case 'r': case 'l': case 'd': return L"Hold RT to start, aim to size or stretch, then release.";
-    case 'p': case 'g': return L"Aim the crosshair and press A or RT to place.";
+      if (brush == 1) return L"Press X at one corner, move to the opposite corner, press X again.";
+      if (brush == 2) return L"Move the cursor there and press A to fill.";
+      return L"Press X to start painting, move the cursor, press X again to stop.";
+    case 'F': case 'H': case 'T': case 'N': case 'G': return L"Press X to start brushing, move the cursor, press X again to stop.";
+    case 'w': case 'P': case 'K': return L"Press X to start, move to size or stretch it, press X again.";
+    case 'r': case 'l': case 'd': return L"Press X to start, move to size or stretch it, press X again.";
+    case 'p': case 'g': return L"Move the cursor there and press A to place. Y turns it first.";
     default: return info.hint;
     }
   }
@@ -2535,7 +2543,7 @@ struct Editor {
   static constexpr float TurnSteps[4] = {1.57079632679f, .785398163f, .261799388f, .0872664626f};
   int turnStepIndex = 0;
   const wchar_t *turnHint() const {
-    return controllerHints ? L"Y turns the selected object."
+    return controllerHints ? L"Y turns the picked thing by the turn step (View menu: Turn step); the right stick turns it smoothly."
                            : L"Turn the selected object. Tap R to turn, hold R and move the mouse to turn smoothly, Ctrl+R for a finer step.";
   }
   void nextTurnStep() {
@@ -2557,11 +2565,11 @@ struct Editor {
         : L"KEYBOARD + MOUSE   WASD move   |   Mouse look   |   Escape return to Builder\r\nSpace jump   |   C crouch   |   E interact   |   Right mouse aim   |   Left mouse attack   |   R reload";
     else if (viewMode == 1)
       text = controllerHints
-        ? L"CONTROLLER   Press View (two squares) to switch to 3D edit.\r\nIn 3D, use the sticks to move and aim. Press A or RT to edit."
+        ? L"CONTROLLER   Left stick cursor  |  A pick / place  |  X grab / drop  |  B cancel  |  Y turn  |  LB undo  RB redo  |  Start play\r\nRight stick turn, raise  |  LT/RT size  |  D-pad catalogue  |  View the controller menu"
         : L"KEYBOARD + MOUSE   Left-drag to edit   |   Wheel zoom   |   Middle-drag to pan\r\nF5 play   |   Using a controller? Move a stick to see its guide.";
     else
       text = controllerHints
-        ? L"CONTROLLER   View (two squares) changes view   |   Start plays\r\nSticks move/aim   |   LB/RB lower/raise   |   A or RT select/place   |   B cancel   |   Y rotate\r\nD-pad Left/Right catalogue tabs   |   Up/Down items"
+        ? L"CONTROLLER   Left stick cursor  |  A pick / place  |  X grab / drop  |  B cancel  |  Y turn  |  LB undo  RB redo  |  Start play\r\nRight stick turn, raise  |  LT/RT size  |  D-pad catalogue  |  View: the menu (panels, views, turn step, precise, stick speed)"
         : L"KEYBOARD + MOUSE   WASD move   |   Hold right mouse to look   |   Left click edit\r\nR rotate   |   F5 play   |   Using a controller? Move a stick to see its guide.";
     SetWindowTextW(inputGuide, text);
   }
@@ -6151,13 +6159,13 @@ struct Editor {
     };
     viewMode = 0;
     setInputDevice(true);
-    if (guideText().find(L"D-pad") == std::wstring::npos || std::wstring(toolHint(0)).find(L"A or RT selects") == std::wstring::npos)
+    if (guideText().find(L"D-pad") == std::wstring::npos || std::wstring(toolHint(0)).find(L"A picks") == std::wstring::npos)
       throw std::runtime_error("Controller instructions are missing from the editor");
     cycleControllerView();
-    if (viewMode != 1 || guideText().find(L"Press View") == std::wstring::npos)
+    if (viewMode != 1 || guideText().find(L"View the controller menu") == std::wstring::npos)
       throw std::runtime_error("Controller cannot switch from split view to 2D");
     cycleControllerView();
-    if (viewMode != 2 || guideText().find(L"A or RT") == std::wstring::npos)
+    if (viewMode != 2 || guideText().find(L"X grab") == std::wstring::npos)
       throw std::runtime_error("Controller cannot return from 2D to 3D");
     cycleControllerView();
     if (viewMode != 0)
@@ -7042,6 +7050,7 @@ struct Editor {
     verifyGhosts(false);         // NativeGhostRegression.inc: every placing tool's ghost is what it places
     verifyMaterialTurns(false);  // NativeTurnRegression.inc: paint, turn, save and open again
     verifyNudges();              // NativeTurnRegression.inc: arrow keys and Page Up / Down
+    verifyPad();                 // NativePadRegression.inc: the whole Builder from a controller
     verifyMultiplayer(false);    // NativeMultiplayerRegression.inc: the Multiplayer page and the Spawn tool
     verifyAudit();               // NativeAuditRegression.inc: every placing tool on every floor, the inspector, the guards, malformed files
     std::ofstream(root / L"native-editor-editing-test.txt")
@@ -9684,6 +9693,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
     SelectObject(dc, o);
     DeleteObject(p);
   }
+  e->drawPadCursor(dc, ox, oy, cell); // the controller's cursor (NativePad.inc)
   SelectClipRgn(dc, nullptr);
   {
     RECT strip{0, 0, r.right, 28};
@@ -9705,7 +9715,7 @@ static void drawPlan(Editor *e, HDC target, const RECT &r) {
   {
     // How to look around, always in sight at the foot of the plan.
     const wchar_t *help = e->controllerHints
-      ? L"Press View (two squares) to change views."
+      ? L"View (two squares): the controller menu (panels, views, turn step, precise mode, stick speed)."
       : L"Wheel: zoom     Middle-drag or Space-drag: move     Home: fit";
     SelectObject(dc, e->smallFont);
     SIZE size{};
@@ -10345,6 +10355,10 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       }
       if (w == 2) {
         e->autosave();
+        return 0;
+      }
+      if (w == Editor::PadTimer) {
+        e->padTimer(); // the controller, sixty times a second (NativePad.inc)
         return 0;
       }
       if (w == 9) {
@@ -11111,7 +11125,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
                         L"--fun-test", L"--skybox-test", L"--simulate-test", L"--script", L"--outdoor-test", L"--format-test",
                         L"--finish-test", L"--ground-test", L"--soak-test", L"--flooring-test",
                         L"--glazing-test", L"--breach-test", L"--growth-test", L"--connect-test", L"--shape-test", L"--cave-test", L"--kit-test",
-                        L"--ghost-test", L"--turn-test", L"--nudge-test", L"--multiplayer-test", L"--audit-test"})
+                        L"--ghost-test", L"--turn-test", L"--nudge-test", L"--multiplayer-test", L"--audit-test", L"--pad-test"})
         if (std::wstring(argv[1]) == mode)
           NativeDocument::verify = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--selftest") {
@@ -11252,6 +11266,9 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       e.backgroundTest = e.turnTest = true;
     if (argc > 1 && std::wstring(argv[1]) == L"--nudge-test")
       e.backgroundTest = e.nudgeTest = true;
+    // The controller alone (NativePadRegression.inc; --editing-test runs it too).
+    if (argc > 1 && std::wstring(argv[1]) == L"--pad-test")
+      e.backgroundTest = e.padTest = true;
     // The Multiplayer page and the Spawn tool alone (NativeMultiplayerRegression.inc; --editing-test runs it too).
     if (argc > 1 && std::wstring(argv[1]) == L"--multiplayer-test")
       e.backgroundTest = e.multiplayerTest = true;
@@ -11944,6 +11961,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
       DestroyWindow(e.window);
       return code;
     }
+    if (e.padTest) { // NativePadRegression.inc
+      int code = 0;
+      try { e.verifyPad(); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-pad-test.txt", std::ios::app) << "FAIL: " << error.what() << '\n'; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
     if (e.ghostTest || e.turnTest || e.nudgeTest) {
       int code = 0;
       const wchar_t *file = e.ghostTest ? L"native-editor-ghost-test.txt" : e.turnTest ? L"native-editor-turn-test.txt" : L"native-editor-nudge-test.txt";
@@ -12089,6 +12113,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     SetTimer(e.window, 1, 50, nullptr);
     e.statusTimer = true;
     SetTimer(e.window, 2, 15000, nullptr);
+    e.padLoadSettings();
+    SetTimer(e.window, Editor::PadTimer, 16, nullptr); // the controller (NativePad.inc)
     if (e.menuTest)
       SetTimer(e.window, 9, 15000, nullptr);
     trace("message loop");

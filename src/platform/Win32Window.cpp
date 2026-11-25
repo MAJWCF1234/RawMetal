@@ -5,20 +5,23 @@
 #include "../core/PackedResource.h"
 namespace retro {
 namespace {
-// Resolve XInput at runtime so older Windows installs can use their available version.
+// Resolve XInput at runtime so older Windows installs can use their available version. The pad in use (slot) is
+// shared by reading and the motors.
+struct XInputApi{
+ using GetState=DWORD(WINAPI*)(DWORD,XINPUT_STATE*);using SetState=DWORD(WINAPI*)(DWORD,XINPUT_VIBRATION*);
+ GetState get=nullptr;SetState set=nullptr;
+ XInputApi(){for(const wchar_t* name:{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"})if(HMODULE module=LoadLibraryW(name)){
+   if(FARPROC g=GetProcAddress(module,"XInputGetState")){get=reinterpret_cast<GetState>(reinterpret_cast<void*>(g));
+    if(FARPROC s=GetProcAddress(module,"XInputSetState"))set=reinterpret_cast<SetState>(reinterpret_cast<void*>(s));return;}}}
+};
+XInputApi& xinput(){static XInputApi api;return api;}
+DWORD padSlot=XUSER_MAX_COUNT;
 bool readPad(XINPUT_GAMEPAD& pad){
- using GetState=DWORD(WINAPI*)(DWORD,XINPUT_STATE*);
- static const GetState get=[]()->GetState{
-  for(const wchar_t* name:{L"xinput1_4.dll",L"xinput1_3.dll",L"xinput9_1_0.dll"})
-   if(HMODULE module=LoadLibraryW(name))
-    if(FARPROC proc=GetProcAddress(module,"XInputGetState"))
-     return reinterpret_cast<GetState>(reinterpret_cast<void*>(proc));
-  return nullptr;
- }();
+ const auto get=xinput().get;
  if(!get)return false;
 
  static DWORD lastScan=0;
- static DWORD slot=XUSER_MAX_COUNT;
+ DWORD& slot=padSlot;
  static bool scanned=false;
  XINPUT_STATE state{};
  if(slot<XUSER_MAX_COUNT){
@@ -83,7 +86,16 @@ void Win32Window::showLoading(float progress,const wchar_t* status){
  HBRUSH dim=CreateSolidBrush(RGB(28,34,31)),lit=CreateSolidBrush(RGB(59,178,103));FillRect(mem,&track,dim);FillRect(mem,&done,lit);DeleteObject(dim);DeleteObject(lit);
  BitBlt(dc,0,0,w,h,mem,0,0,SRCCOPY);SelectObject(mem,old);DeleteObject(statusFont);DeleteObject(bitmap);DeleteDC(mem);ReleaseDC(m_hwnd,dc);
 }
-Win32Window::~Win32Window(){if(!m_cursorVisible)ShowCursor(TRUE);if(m_hwnd)DestroyWindow(m_hwnd);} 
+Win32Window::~Win32Window(){setRumble({});if(!m_cursorVisible)ShowCursor(TRUE);if(m_hwnd)DestroyWindow(m_hwnd);}
+// The motors (Game::padRumble): sent to the pad in use when they change by more than a hair, and stopped when the
+// window loses the keys or closes (a pad left buzzing on the desk is the worst bug a tester can find).
+void Win32Window::setRumble(Vec2 motors){
+ if(!focused())motors={};
+ const auto set=xinput().set;if(!set||padSlot>=XUSER_MAX_COUNT){m_rumble={};return;}
+ motors={std::clamp(motors.x,0.f,1.f),std::clamp(motors.y,0.f,1.f)};
+ if(std::fabs(motors.x-m_rumble.x)<.02f&&std::fabs(motors.y-m_rumble.y)<.02f&&!(motors.x==0&&motors.y==0&&(m_rumble.x!=0||m_rumble.y!=0)))return;
+ XINPUT_VIBRATION v{WORD(motors.x*65535.f),WORD(motors.y*65535.f)};set(padSlot,&v);m_rumble=motors;
+}
 bool Win32Window::pump(){MSG msg{};while(PeekMessageW(&msg,nullptr,0,0,PM_REMOVE)){if(msg.message==WM_QUIT)m_quit=true;TranslateMessage(&msg);DispatchMessageW(&msg);}return !m_quit;}
 void Win32Window::setMenu(bool open){
  bool free=open||!focused();if(free!=m_cursorVisible){ShowCursor(free?TRUE:FALSE);m_cursorVisible=free;}
@@ -95,8 +107,11 @@ InputState Win32Window::input(bool menuOpen,float inventoryCursorDt){
  i.forward=key('W');i.back=key('S');i.left=key('A');i.right=key('D');i.sprint=key(VK_SHIFT);i.jump=key(VK_SPACE);i.crouch=key('C')||key(VK_CONTROL);i.prone=key('Z');i.fire=key(VK_LBUTTON);i.reload=key('R');i.mute=key('M');i.music=key('N');i.use=key('E');i.flashlight=key('F');i.subdue=key('Q');i.physglove=key('G');
  i.escape=key(VK_ESCAPE);i.inventory=key('I');i.menuUp=key(VK_UP);i.menuDown=key(VK_DOWN);i.menuLeft=key(VK_LEFT);i.menuRight=key(VK_RIGHT);i.menuAccept=key(VK_RETURN);i.scoreboard=key(VK_TAB);i.chat=key('T');i.talk=m_talkKey>0&&key(m_talkKey);
  i.guard=key(VK_RBUTTON);i.rotateProp=key(VK_MBUTTON);
+ // The keyboard or the mouse touched: the prompts go back to their keys (the pad below takes them again).
+ const bool keyboardUsed=i.forward||i.back||i.left||i.right||i.sprint||i.jump||i.crouch||i.prone||i.fire||i.reload||i.use||i.flashlight||i.subdue||i.physglove||i.escape||i.inventory||
+  i.menuUp||i.menuDown||i.menuLeft||i.menuRight||i.menuAccept||i.guard;
  XINPUT_GAMEPAD pad{};
-const bool connected=readPad(pad);
+ const bool connected=readPad(pad);
  // Controller options. The tables are the menu's choices (index 3 of the look speeds is the stock feel).
  static constexpr float lookSpeeds[]={.4f,.6f,.8f,1.f,1.3f,1.6f,2.2f},deadScales[]={1.f,1.5f,2.f,2.6f},steadyTau[]={0.f,.08f,.18f,.35f},pressFilter[]={0.f,.12f,.25f,.45f};
  const float tickNow=float(GetTickCount64()%100000000ull)/1000.f;float tickDt=std::clamp(tickNow-m_padLastTick,0.f,.1f);m_padLastTick=tickNow;
@@ -125,6 +140,9 @@ const bool connected=readPad(pad);
 const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
  auto steadied=[&](Vec2 raw,Vec2& state){const float tau=steadyTau[std::clamp(opt.steady,0,3)];if(tau<=0)return state=raw;state=state+(raw-state)*(1.f-std::exp(-tickDt/tau));return state;};
  const Vec2 look=steadied(padStick(pad.sThumbRX,pad.sThumbRY,std::min(XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE*deadScale,30000.f)),m_padLookSmooth);
+ // The pad touched: a button, a trigger, or a stick past its dead zone.
+ if(connected&&(buttons||triggerFire||triggerAim||lengthSq(look)>0||std::abs(int(pad.sThumbLX))>XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE*deadScale||std::abs(int(pad.sThumbLY))>XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE*deadScale))m_padActive=true;
+ else if(keyboardUsed)m_padActive=false;
  bool inventoryClick=false;
  if(menuOpen){
   // Actions held in a menu must be released before they can act in the world.
@@ -140,11 +158,18 @@ const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
  }
  if(menuOpen){m_aimOn=m_sprintOn=m_crouchOn=false;}
  if(connected){
-  constexpr int menuDeadzone=16000;
-  i.menuUp|=(buttons&XINPUT_GAMEPAD_DPAD_UP)||pad.sThumbLY>menuDeadzone;
-  i.menuDown|=(buttons&XINPUT_GAMEPAD_DPAD_DOWN)||pad.sThumbLY<-menuDeadzone;
-  i.menuLeft|=(buttons&XINPUT_GAMEPAD_DPAD_LEFT)||pad.sThumbLX<-menuDeadzone;
-  i.menuRight|=(buttons&XINPUT_GAMEPAD_DPAD_RIGHT)||pad.sThumbLX>menuDeadzone;
+  // The menus by the D-pad or the left stick. The stick is a switch with two edges (on past half, off under a
+  // third, wider with the dead zone setting) so a shaking thumb near the edge does not step twice; a direction held
+  // repeats after half a second, eight a second, so a slider or a long list need not be pressed twenty times.
+  const float on=std::min(16000.f*std::max(1.f,deadScale*.8f),28000.f),off=on*.6f;
+  const std::array<float,4> along{float(pad.sThumbLY),-float(pad.sThumbLY),-float(pad.sThumbLX),float(pad.sThumbLX)};
+  const std::array<WORD,4> dpad{XINPUT_GAMEPAD_DPAD_UP,XINPUT_GAMEPAD_DPAD_DOWN,XINPUT_GAMEPAD_DPAD_LEFT,XINPUT_GAMEPAD_DPAD_RIGHT};
+  std::array<bool,4> dir{};
+  for(int d=0;d<4;++d){m_menuStick[d]=m_menuStick[d]?along[size_t(d)]>off:along[size_t(d)]>on;const bool held=m_menuStick[d]||(buttons&dpad[size_t(d)]);
+   if(!held){m_menuHold[d]=0;m_menuNext[d]=.5f;continue;}
+   m_menuHold[d]+=tickDt;bool out=true;if(m_menuHold[d]>=m_menuNext[d]){out=false;m_menuNext[d]+=.125f;}   // one frame up: the menus see a fresh press
+   dir[size_t(d)]=out;}
+  i.menuUp|=dir[0];i.menuDown|=dir[1];i.menuLeft|=dir[2];i.menuRight|=dir[3];
   i.escape|=(buttons&XINPUT_GAMEPAD_START)||(menuOpen&&(buttons&XINPUT_GAMEPAD_B));
   const bool browsingScoreboard=(buttons&XINPUT_GAMEPAD_BACK)!=0;
   i.scoreboard|=browsingScoreboard;
@@ -156,7 +181,9 @@ const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
    m_prevAimRaw=aimRaw;
    const bool aiming=opt.toggleAim?m_aimOn:aimRaw;
    i.controllerMove=steadied(padStick(pad.sThumbLX,pad.sThumbLY,std::min(XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE*deadScale,30000.f)),m_padMoveSmooth);
-   i.controllerLook=look*(length(look)*(aiming?.45f:1.f));
+   // LOOK RESPONSE: linear, standard (the travel squared) or precise (cubed: slow near the middle for small aims).
+   const float travel=length(look),curve=opt.curve<=0?1.f:opt.curve==1?travel:travel*travel;
+   i.controllerLook=look*(curve*(aiming?.45f:1.f));
    i.controllerLook.x*=2.8f*lookSpeeds[std::clamp(opt.look,0,6)];
    i.controllerLook.y*=1.8f*lookSpeeds[std::clamp(opt.look,0,6)];
    if(opt.toggleSprint){if(pressedButtons&XINPUT_GAMEPAD_LEFT_THUMB)m_sprintOn=!m_sprintOn;if(lengthSq(i.controllerMove)<.01f)m_sprintOn=false;i.sprint|=m_sprintOn;}
@@ -165,6 +192,8 @@ const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
    i.jump|=!browsingScoreboard&&(gameplay&XINPUT_GAMEPAD_A);
    if(opt.toggleCrouch){if(pressedButtons&XINPUT_GAMEPAD_B)m_crouchOn=!m_crouchOn;i.crouch|=m_crouchOn;}
    else i.crouch|=(gameplay&XINPUT_GAMEPAD_B)!=0;
+   // Prone (Z on the keys): B held for half a second goes down flat, held again comes back up (A or sprint also rise).
+   m_padProneHold=(gameplay&XINPUT_GAMEPAD_B)?m_padProneHold+tickDt:0.f;i.prone|=m_padProneHold>=.55f;
    i.reload|=(gameplay&XINPUT_GAMEPAD_X)!=0;
    i.subdue|=(gameplay&XINPUT_GAMEPAD_Y)!=0;
    i.use|=(gameplay&XINPUT_GAMEPAD_RIGHT_SHOULDER)!=0;
@@ -179,6 +208,7 @@ const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
    }
   }
  }
+ i.padActive=m_padActive&&connected;
  for(int digit=1;digit<=5;++digit)if(key('0'+digit))i.choice=digit;
  i.console=key(VK_OEM_3);
  RECT rc{};GetClientRect(m_hwnd,&rc);POINT pointer{};GetCursorPos(&pointer);
@@ -203,7 +233,9 @@ const float deadScale=deadScales[std::clamp(opt.dead,0,3)];
  m_scrollDelta=0;
  if(GetCapture()==m_hwnd)ReleaseCapture();
  POINT center{rc.right/2,rc.bottom/2};ClientToScreen(m_hwnd,&center);
- if(m_mouseCaptured){i.mouseDx=float(pointer.x-center.x);i.mouseDy=float(pointer.y-center.y);}m_mouseCaptured=true;SetCursorPos(center.x,center.y);return i;
+ if(m_mouseCaptured){i.mouseDx=float(pointer.x-center.x);i.mouseDy=float(pointer.y-center.y);}m_mouseCaptured=true;SetCursorPos(center.x,center.y);
+ if(std::fabs(i.mouseDx)+std::fabs(i.mouseDy)>3.f){m_padActive=false;i.padActive=false;}   // the mouse moved: its prompts
+ return i;
 }
 void Win32Window::present(const std::uint32_t*p,int w,int h){if(!m_hwnd)return;HDC dc=GetDC(m_hwnd);RECT r{};GetClientRect(m_hwnd,&r);auto view=viewport(r.right,r.bottom);
  RECT bars[]={{0,0,r.right,view.top},{0,view.bottom,r.right,r.bottom},{0,view.top,view.left,view.bottom},{view.right,view.top,r.right,view.bottom}};

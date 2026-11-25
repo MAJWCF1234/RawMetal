@@ -26,6 +26,7 @@ const bool registered=[]{
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);
  engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
  engine("settings","--each-test=settings: the pause menu's rows (sliders, toggles, pull highlight), their persistence, restart and quit",&Game::testSettings);
+ engine("controller","--each-test=controller: the pad's motors, its button names in the prompts and aim assist on the look stick",+[]{std::ofstream r("controller-test.txt");return Game::testController(r);});
  engine("scene-reuse","a game built where the last one was (same address, tiles and edit count) draws only its own content",+[]{std::ofstream r("scene-reuse.txt");return SoftwareRenderer::testSceneReuse(r);});
  engine("skyboxes","all 47 purchased skies decode, preserve terrain and switch on the native renderer",&testSkyboxes);
  engine("door-axis","--each-test=door-axis: doors along Y",&Game::testDoorAxis);
