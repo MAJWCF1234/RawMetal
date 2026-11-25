@@ -358,7 +358,9 @@ bool Game::testCampaignMaps(){
   {Game g;fresh(g,74);const auto& w=g.world();
    bool blackout=!w.darkZones().empty()||!w.creatureSpawns().empty();for(const auto& l:w.lights())blackout|=l.enabledState==dark;
    for(const auto& e:w.scriptEvents()){blackout|=e.requireState==dark||setsState(e,dark,1);}
-   bool fittings=w.lights().size()<=30;for(const auto& l:w.lights())if(l.mount==WorldLightMount::Bare&&l.prop<0){bool held=false;for(const auto& f:w.fixtures())held|=length(f.position-l.position)<.25f;fittings&=held;if(!held)out<<"  74 bare lamp at "<<l.position.x<<','<<l.position.y<<" has no fitting\n";}
+   bool fittings=w.lights().size()<=30;for(const auto& l:w.lights())if(l.mount==WorldLightMount::Bare&&l.prop<0){bool held=false;for(const auto& f:w.fixtures())held|=length(f.position-l.position)<.25f;
+    // A bare lens on a wall lamp's own housing (the time lock's wink) has its fitting too.
+    for(const auto& h:w.lights())held|=h.mount==WorldLightMount::Wall&&length(h.position-l.position)<.25f&&std::fabs(h.z-l.z)<.05f;fittings&=held;if(!held)out<<"  74 bare lamp at "<<l.position.x<<','<<l.position.y<<" has no fitting\n";}
    check(!blackout&&fittings,"Pharmacy: no dark zone, creature, blackout lamp or blackout script; every bare lamp has its fitting");
    const int staff=doorAt(g,7.6f,8.5f,8.9f),office=doorAt(g,11.9f,12.8f,6.9f),gate=doorAt(g,3.6f,4.6f,3.5f);
    check(w.doors().size()==3&&staff>=0&&gate>=0&&office>=0&&w.doors()[size_t(staff)].requireState==stateId("medf_staff_door")&&w.doors()[size_t(gate)].requireState==stateId("medf_cage_open")&&
