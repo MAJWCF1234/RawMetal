@@ -4,6 +4,7 @@
 #include "lab/Lab.h"
 #include "lab/LabAccess.h"
 #include "renderer/Carcass.h"
+#include "renderer/GpuRenderer.h"
 #include "vr/VrRuntime.h"
 #include "net/Loopback.h"
 #include "net/Match.h"
@@ -20,6 +21,40 @@ namespace retro::lab {
 namespace {
 bool engine(const char* name,const char* summary,bool(*run)()){return add({.name=std::string("engine.")+name,.summary=summary,.standalone=run});}
 const bool registered=[]{
+ engine("lamp-shadow-budget","Vulkan lamp shadow work stays bounded when streaming grows the atlas",+[]{
+  std::ofstream report("lamp-shadow-budget.txt");
+  GpuRenderer gpu;
+  gpu.setPostProcessing(false);
+  std::vector<std::array<float,16>> lamps;
+  std::vector<std::uint32_t> pixels;
+  auto frame=[&](int count){
+   for(int i=int(lamps.size());i<count;++i)
+    lamps.push_back({float(i%8)*2.f,float(i/8)*2.f,3.f,8.f,1.f,3000.f,0.f,1.f,0.f,0.f,0.f,0.f,0.f,1.f,1.f,1.f});
+   const auto before=gpu.shadowFacesDrawn();
+   gpu.begin(128,72);
+   gpu.setView(0,0,1.5f,0,0,128.f/72.f,false,0.f);
+   gpu.setLamps(lamps,true);
+   gpu.finish(pixels);
+   return gpu.shadowFacesDrawn()-before;
+  };
+  const auto initial=frame(16);
+  const auto growth=frame(37);
+  unsigned frames=1;
+  auto total=growth;
+  auto peak=growth;
+  while(gpu.shadowsPending()&&frames<8){
+   const auto faces=frame(37);
+   total+=faces;
+   peak=std::max(peak,faces);
+   ++frames;
+  }
+  const auto settled=frame(37);
+  const bool ok=initial==96&&peak<=72&&total==222&&frames==4&&settled==0&&!gpu.shadowsPending();
+  report<<"Initial faces: "<<initial<<"\nAtlas-growth frame faces: "<<growth
+        <<"\nPeak after growth: "<<peak<<" faces/frame\nTotal redrawn: "<<total<<" faces in "<<frames
+        <<" frames\nSettled frame faces: "<<settled<<'\n'<<(ok?"PASS":"FAIL")<<'\n';
+  return ok;
+ });
  engine("net-loopback","--net-loopback-test: the in-memory session hub: lobbies, codes, quick match, host hand-over, packets",+[]{std::ofstream r("net-loopback-test.txt");return net::testLoopback(r);});
  engine("net","--net-test: matches over the loopback hub: several Games in one process play deathmatch and co-op",+[]{std::ofstream r("net-test.txt");return net::testMatch(r);});
  engine("eos","--eos-test: signs in to Epic's Dev sandbox, hosts a lobby, finds it, leaves (needs the internet and baked keys)",+[]{std::ofstream r("eos-test.txt");return net::testEos(r);});

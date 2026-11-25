@@ -1213,6 +1213,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--guard-roles-test"))return retro::Game::testGuardRoles()?0:21;
     if(commandArguments().find(L"--guard-table-test"))return retro::Game::testGuardTable()?0:21;
     if(commandArguments().find(L"--nav-graph-test"))return retro::Game::testNavGraph()?0:21;
+    if(commandArguments().find(L"--summon-test")){
+        std::ofstream report("summon-test.txt");
+        return retro::Game::testSummon(report)?0:21;
+    }
     if(commandArguments().find(L"--creature-behaviour-test"))return retro::Game::testCreatureBehaviour()?0:21;
     if(commandArguments().find(L"--engine-regression-test"))return retro::Game::testEngineRegression()?0:21;
     if(commandArguments().find(L"--gameplay-fixes-test"))return retro::Game::testGameplayFixes()?0:21;

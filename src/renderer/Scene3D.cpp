@@ -582,6 +582,8 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
  float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
  float angle=e.heading,wind=!corpse&&e.windup>0?std::sin(e.windup*5.f)*.12f:0;int surface=corpse?e.deathSurface:e.surfaceMode;
  out=mesh.triangles;
+ const float wallAnchor=e.babyHuntsman?.5f*e.scale:.5f;
+ const float ceilingAnchor=e.babyHuntsman?e.hull():1.05f;
  for(auto&face:out)for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
   if(!baked){
    if(wasp){height+=.60f;if(!corpse){height+=.065f*std::sin(elapsed*4.f+e.pos.x);if(face.part==1)height+=std::sin(elapsed*36.f)*std::fabs(p.x)*.9f;}}
@@ -594,8 +596,8 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
    }
    if(!corpse){height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;localY-=e.painFlash*.035f;}
   }
-  if(e.kind==Enemy::Kind::Huntsman&&surface==1)v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};
-  else if(e.kind==Enemy::Kind::Huntsman&&surface==2)v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+1.05f-height};
+  if(e.kind==Enemy::Kind::Huntsman&&surface==1)v.p={e.pos.x+e.surfaceNormal.x*(height-wallAnchor)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-wallAnchor)+p.x*std::cos(angle),e.z+localY+wallAnchor};
+  else if(e.kind==Enemy::Kind::Huntsman&&surface==2)v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+ceilingAnchor-height};
   else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
  }
  return {range,scale};

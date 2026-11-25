@@ -21,6 +21,41 @@ bool Game::testCreatureBehaviour(){
  auto check=[&](bool ok,const char*name,const std::string&values){report<<(ok?"PASS ":"FAIL ")<<name<<": "<<values<<'\n';report.flush();passed&=ok;};
  auto near=[](float a,float b){return std::fabs(a-b)<.0001f;};
  constexpr float dt=.01f;
+ // Two routes through the same partition. The vent is deliberately off the
+ // metre-cell centre, so a clear route requires a subcell waypoint.
+ for(bool narrow:{false,true}){
+  auto map=regression::room();
+  const float south=narrow?10.35f:10.425f;
+  const float north=narrow?9.87f:9.825f;
+  map->definition.playerStart={16.5f,10.5f};
+  map->structures.push_back({11.4f,0,11.6f,north,0,8});
+  map->structures.push_back({11.4f,south,11.6f,15,0,8});
+  map->structures.push_back({11.4f,18,11.6f,24,0,8});
+  map->structures.push_back({11.4f,north,11.6f,south,narrow?2.4f:1.18f,8});
+  struct Runner {Enemy::Kind kind;float scale;bool vent;};
+  const Runner runners[]={{Enemy::Kind::Huntsman,narrow?.65f:1.f,true},{Enemy::Kind::Brute,1.f,false},
+                          {Enemy::Kind::Machine,.5f,true},{Enemy::Kind::Machine,1.f,false}};
+  for(const auto& runner:runners){
+   const auto [kind,scale,small]=runner;
+   if(narrow&&kind==Enemy::Kind::Machine)continue;
+   Game g(regression::campaign(map));
+   CreatureSpawn spawn{kind,{7.5f,10.5f},0};
+   spawn.scale=scale;
+   g.spawnCreature(spawn,0,false);
+   auto& e=g.m_enemies[0];
+   e.wakeState=0;e.heading=0;e.awareness=60.f;e.recognition=1.f;e.state=Enemy::State::Investigate;
+   e.lastKnown=g.m_player.pos;e.lastKnownZ=g.m_player.z;
+   float crossing=-1.f;
+   for(int i=0;i<2600&&e.pos.x<14.f;++i){
+    g.updateEnemies(dt);
+    if(crossing<0.f&&e.pos.x>=11.5f)crossing=e.pos.y;
+   }
+   const bool correct=small?(crossing>north&&crossing<south):(crossing>15.f&&crossing<18.f);
+   std::ostringstream values;values<<creatureTraits(kind).name<<" scale "<<scale<<" height "<<e.hull()
+     <<" radius "<<e.radius()<<" crossed at y="<<crossing<<" final x="<<e.pos.x;
+   check(correct&&e.pos.x>=14.f,narrow?"width clearance selects vent or bypass":"height clearance selects vent or bypass",values.str());
+  }
+ }
  // Use the existing validation room's open intake aisle; updateEnemies isolates
  // creature decisions from player input, scripts and unrelated simulation.
  auto scene=[](Enemy::Kind kind,float distance){auto g=validationScene(kind);

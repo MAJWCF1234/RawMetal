@@ -509,7 +509,7 @@ struct GpuRenderer::Impl {
   vkDeviceWaitIdle(device);
   for(auto&entry:materials){destroy(entry.second.color);destroy(entry.second.normal);destroy(entry.second.emission);destroy(entry.second.relief);}
   materials.clear();lastPixels=nullptr;lastGeneration=0;lastMaterial=0;lastSort=0;sortCount=0;keptSlots=false;
-  for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}staticCaches.clear();std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));shadowAtlasFresh=true;
+  for(auto&entry:staticCaches){destroy(entry.second.buffer);destroy(entry.second.shadowIndices);}staticCaches.clear();std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));
   // Replayed actor batches carry material keys; stale keys would throw at draw.
   actorEmitCaches.clear();actorEmitHits=0;
   if(descriptors)vkResetDescriptorPool(device,descriptors,0);
@@ -624,7 +624,7 @@ struct GpuRenderer::Impl {
  float darkness=0;std::array<float,32> weaponFlashes{};
  // lampDirty: 0 current, 1 stale (geometry nearby rebuilt), 2 never drawn.
  std::vector<std::array<float,16>> lamps;std::vector<uint8_t> lampDirty;std::vector<std::array<float,6>> shadowDirtyBounds;
- Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false,shadowAtlasFresh=true;
+ Image shadowAtlas;std::vector<VkImageView> shadowLayerViews;std::vector<VkFramebuffer> shadowFrames;int shadowCapacity=0;bool shadowLayoutReady=false,firstLampShadowFrame=true;
  VkRenderPass shadowPass=VK_NULL_HANDLE;VkPipeline shadowPipeline=VK_NULL_HANDLE;VkPipelineLayout shadowLayout=VK_NULL_HANDLE;VkSampler shadowSampler=VK_NULL_HANDLE;
  std::uint64_t shadowFacesDrawn=0;
  // Light probe images: the irradiance atlas and the reflection atlas, cleared and left
@@ -836,7 +836,7 @@ struct GpuRenderer::Impl {
  void createShadowAtlas(int capacity){
   vkDeviceWaitIdle(device);destroyShadowAtlas();
   uint32_t layers=uint32_t(capacity)*6;
-  VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};info.imageType=VK_IMAGE_TYPE_2D;info.format=VK_FORMAT_D16_UNORM;info.extent={ShadowSize,ShadowSize,1};info.mipLevels=1;info.arrayLayers=layers;info.samples=VK_SAMPLE_COUNT_1_BIT;info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
+  VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};info.imageType=VK_IMAGE_TYPE_2D;info.format=VK_FORMAT_D16_UNORM;info.extent={ShadowSize,ShadowSize,1};info.mipLevels=1;info.arrayLayers=layers;info.samples=VK_SAMPLE_COUNT_1_BIT;info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
   check(vkCreateImage(device,&info,nullptr,&shadowAtlas.handle),"Create lamp shadow atlas");
   VkMemoryRequirements req;vkGetImageMemoryRequirements(device,shadowAtlas.handle,&req);VkMemoryAllocateInfo alloc{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};alloc.allocationSize=req.size;alloc.memoryTypeIndex=memoryType(req.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
   check(vkAllocateMemory(device,&alloc,nullptr,&shadowAtlas.memory),"Allocate lamp shadow atlas");check(vkBindImageMemory(device,shadowAtlas.handle,shadowAtlas.memory,0),"Bind lamp shadow atlas");
@@ -846,7 +846,7 @@ struct GpuRenderer::Impl {
    view.viewType=VK_IMAGE_VIEW_TYPE_2D;view.subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,layer,1};VkImageView face=VK_NULL_HANDLE;check(vkCreateImageView(device,&view,nullptr,&face),"Create lamp shadow face");shadowLayerViews.push_back(face);
    VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};fb.renderPass=shadowPass;fb.attachmentCount=1;fb.pAttachments=&face;fb.width=fb.height=ShadowSize;fb.layers=1;VkFramebuffer frame=VK_NULL_HANDLE;check(vkCreateFramebuffer(device,&fb,nullptr,&frame),"Create lamp shadow framebuffer");shadowFrames.push_back(frame);
   }
-  shadowCapacity=capacity;shadowLayoutReady=false;shadowAtlasFresh=true;std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));
+  shadowCapacity=capacity;shadowLayoutReady=false;std::fill(lampDirty.begin(),lampDirty.end(),uint8_t(2));
   VkDescriptorImageInfo image{shadowSampler,shadowAtlas.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   for(auto set:projectionSets){VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};write.dstSet=set;write.dstBinding=3;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&image;vkUpdateDescriptorSets(device,1,&write,0,nullptr);}
  }
@@ -871,14 +871,13 @@ struct GpuRenderer::Impl {
   // A streamed chunk can bring dozens of lamps at once; six faces each in
   // one frame spiked the lift fall past 50 ms. Draw the nearest dirty lamps
   // first, a bounded number per frame; undrawn faces read as unblocked.
-  // A cold start (nothing drawn yet) takes the whole set in one frame, so the
-  // first frame of a map is complete; the budget covers lamps streamed in later.
-  // Cold start: nothing has been drawn into this atlas yet (map load). A lamp
-  // set that changes later, as chunks stream, takes the per-frame budget.
-  const bool coldStart=shadowAtlasFresh;shadowAtlasFresh=false;
-  const int budget=coldStart?int(lamps.size()):12;std::vector<std::pair<float,size_t>> queue;
+  std::vector<std::pair<float,size_t>> queue;
   for(size_t i=0;i<std::min(lamps.size(),size_t(shadowCapacity));++i)if(lampDirty[i]&&lamps[i][7]>0){float dx=lamps[i][0]-viewState[0],dy=lamps[i][1]-viewState[1],dz=lamps[i][2]-viewState[2];queue.push_back({dx*dx+dy*dy+dz*dz,i});}
   if(queue.empty())return;
+  // A fresh renderer draws its first lamp set in full. Atlas growth and material
+  // resets during play must keep the same budget as any other shadow update.
+  const int budget=firstLampShadowFrame?int(queue.size()):12;
+  firstLampShadowFrame=false;
   if(int(queue.size())>budget){std::nth_element(queue.begin(),queue.begin()+budget,queue.end());queue.resize(size_t(budget));}
   VkViewport viewport{0,0,float(ShadowSize),float(ShadowSize),0,1};VkRect2D scissor{{0,0},{ShadowSize,ShadowSize}};
   VkClearValue clear{};clear.depthStencil={1,0};
