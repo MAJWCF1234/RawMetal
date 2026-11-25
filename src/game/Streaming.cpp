@@ -8,6 +8,9 @@ void Game::ensureChunk(int level){
  auto&chunk=m_chunks[level];if(chunk.resident)return;auto doors=chunk.world.doors();bool control=chunk.world.controlReleased();
  auto saved=chunk.world;chunk.world=makeWorld(level);chunk.world.restoreDynamic(saved);chunk.world.restoreDoors(doors);if(control)chunk.world.releaseControl();restoreCrates(chunk.world,level);chunk.resident=true;
 }
+World Game::previewChunkWorld(int level)const{
+ const auto&saved=m_chunks[size_t(level)].world;World world=makeWorld(level);world.restoreDynamic(saved);world.restoreDoors(saved.doors());if(saved.controlReleased())world.releaseControl();restoreCrates(world,level);return world;
+}
 int Game::boundaryPartner(int level,const Door& door)const{
  // An entry door on the north edge pairs with a transfer door on the
  // neighbour's south edge and vice versa. Several doors may share an edge, so

@@ -32,7 +32,16 @@ public:
  static void setReferenceDisplay(bool enabled);
  void setAtmosphere(const std::array<float,4>& atmosphere);
  bool beginStaticCache(int slot,std::uint64_t key);
- void endStaticCache();
+ void endStaticCache(bool draw=true);
+    // A capture set down part-built, out of sight of drawing and shadow passes; beginStaticCache with the same
+    // slot and key takes it up again (cachePending says so beforehand).
+    void pauseStaticCache();
+    // The finished capture sorted on a worker; pollStaticCache uploads it once that is done (true then).
+    // beginStaticCache for the same slot and key waits for it instead.
+    void endStaticCacheLater();
+    bool cacheFinishing(int slot,std::uint64_t key)const;
+    bool pollStaticCache(int slot);
+    bool cachePending(int slot,std::uint64_t key)const;
  void clearStaticCaches();
  void dropStaticCache(int slot);
  // Lamp shadow maps still queued: a changed lamp set redraws a bounded

@@ -670,6 +670,8 @@ public:
     int chunkCount()const{return m_worldId==WorldId::Custom&&m_customCampaign?int(m_customCampaign->maps.size()):worldChunkCount(m_worldId);}
     Vec2 chunkOffset(int level)const{return m_worldId==WorldId::Custom&&m_customCampaign?m_customCampaign->maps.at(size_t(level))->definition.origin:chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
+    // The World ensureChunk would make now, as a copy: the renderer builds geometry ahead from it.
+    World previewChunkWorld(int level)const;
     const World& chunkWorld(int level)const{return level==m_level?m_world:m_chunks.at(size_t(level)).world;}
     const std::vector<Enemy>& chunkEnemies(int level)const{return level==m_level?m_enemies:m_chunks.at(size_t(level)).enemies;}
     const std::vector<Pickup>& chunkPickups(int level)const{return level==m_level?m_pickups:m_chunks.at(size_t(level)).pickups;}

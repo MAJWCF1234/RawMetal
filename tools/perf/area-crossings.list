@@ -1,0 +1,5 @@
+# name level x y feet yaw pitch frames
+seam-5to4 5 12 8 -9 -90 0 360 still walk
+seam-4to5 4 12 16 -9 90 0 360 still walk
+seam-39to38 39 12 12 - -90 0 420 still walk
+door-0to1 0 21.5 17 - 90 0 360 still walk open

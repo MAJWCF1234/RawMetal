@@ -628,6 +628,15 @@ private:
     const Texture* mapSky(int resource);
     void drawSky(const Game& game);
     void drawScene(const Game& game,bool clearDepth=true,int level=-1);
+    // Loading ahead: the map next door to a resident one has its static geometry built before play reaches it,
+    // a few milliseconds a frame, from a World of the renderer's own (the Game is never touched).
+    void prepareAhead(const Game& game);
+    struct AheadBuild {const World* world=nullptr;double sliceMs=0;bool done=false;std::uint64_t key=0;};
+    struct AheadDone {std::uint64_t stamp=0,key=0;};
+    AheadBuild* m_ahead=nullptr; // set while drawScene builds a map ahead: it bakes a slice and draws nothing
+    std::unique_ptr<World> m_aheadWorld;int m_aheadLevel=-1;std::uint64_t m_aheadStamp=0;
+    std::map<int,AheadDone> m_aheadDone;
+    std::map<int,std::pair<std::uint64_t,int>> m_stages; // part-built cache slot: its key and the next unit to bake
     void drawViewModel(const Game& game);
     void prepareViewModel(const Game& game);
     // The player's pistol in hand (Scene3D.cpp), one source for the arm pose
