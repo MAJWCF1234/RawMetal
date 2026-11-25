@@ -48,6 +48,16 @@ active schedule phase. Civilians/escorts run Idle/Follow/Flee/Hold/Recovery
 through `friendly/Schedule.cpp`; scripted actors hand Flee Escape to that
 catalog while fear lasts, then return to timeline control.
 
+Creature routes are sized to the body. The deck planner (`stackedWaypoint`)
+keys its kept deck on hull height, radius and the creature's own step, so a
+duct, culvert or arch (mesh-shaped structures, `WalkShapes.h`) is a route only
+for bodies that fit and can climb onto its floor. Nodes off each other's line
+join by a square corner (`deckStep`) and the walker lines up before stepping
+into a passage (`lineUp`). With no route that fits, `partialDeckRoute` takes the
+prey's own way (a prone player's deck), finds where it leaves the places the
+creature fits, and holds beside that mouth facing the prey, leaving it clear
+for smaller things. `lab.py run --feature=vent-routes` shows it from above.
+
 `Nodes.cpp` builds a retained cover/path lattice beside solid structures and
 merges authored `NAV_HINT` Path/Cover markers from custom maps. FIND_*_COVER
 catalogue helpers (`findLateralCover`, `findCoverFromEnemy`, near/far/origin/

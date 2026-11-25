@@ -47,7 +47,8 @@ public:
  // nothing may be kept (caching off, or an authored map without an Owner).
  // `fresh` is set when the caller must fill it; edges start unknown. The
  // pointer lives until the next lookup on this thread.
-  static Deck* deck(const World&world,float height,bool&fresh,float radius=.20f);
+  // rise: the step the planner lets the hull take (a creature's own; .215 m the deck's default), part of the key.
+  static Deck* deck(const World&world,float height,bool&fresh,float radius=.20f,float rise=.215f);
   static Grid* grid(const World&world,float height,float step,bool sweep,bool&fresh,float radius=.20f);
  // Off: every planner probes live (the differential test's reference).
  inline static thread_local bool enabled=true;

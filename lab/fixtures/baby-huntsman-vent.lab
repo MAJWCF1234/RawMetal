@@ -1,0 +1,10 @@
+# Capture of the Baby Huntsman swarm pursuing through the regression vent.
+world room
+camera 16.5 10.15 0 180 -20
+light 12.4 10.15 1.0 2.0 8
+light 8.5 10.15 2.5 1.8 9
+light 15 9 2.5 1.4 8
+summon-scene baby-vent
+size 480 270
+frames 540
+step 0.016666667
