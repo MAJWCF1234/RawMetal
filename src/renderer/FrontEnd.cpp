@@ -121,7 +121,7 @@ void SoftwareRenderer::drawTitle(const Game& game){
  int kx=40;auto cap=[&](const char*key,const char*what){int w=uiTextWidth(key,3,10)+10;frame(kx,m_height-27,w,15,bone,.35f);uiText(kx+5,m_height-26,key,bone,3,10);kx+=w+6;kx+=uiText(kx,m_height-27,what,dim,0,11,1,1)+14;};
  cap("ENTER / A","SELECT");cap("ESC / B","BACK");cap("ARROWS / D-PAD","MOVE");
  if(page==Game::TitlePage::Host||page==Game::TitlePage::Browse)cap("< >","CHANGE");
- const char* build="V1.7.1  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
+ const char* build="V1.7.2  CHAPTER 1";uiText(m_width-40-uiTextWidth(build,0,11,2),m_height-27,build,red,0,11,1,2);
 }
 
 // The multiplayer pages: Game::titleItems' rows where the game hit-tests them, and around them what each page shows.
