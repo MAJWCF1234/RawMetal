@@ -211,7 +211,7 @@ std::shared_ptr<const Map> makePowerDistribution(){
  pwrRed(m,{8.22f,6.58f},base+2.f,.8f,5.f,WorldLightMount::Wall,0);
  pwrRed(m,{2.8f,4.6f},room-.15f,.7f,4.5f);
  for(float x:{8.7f,15.3f})pwrRed(m,{x,22.18f},base+2.6f,1.1f,6.f,WorldLightMount::Wall,-kPi*.5f);
- pwrRed(m,{19.f,4.4f},roof-.5f,.9f,7.f);
+ pwrRed(m,{18.5f,4.4f},roof-.5f,.9f,7.f);   // a housing's width clear of the work lamp at 19.5,4
  pwrRed(m,{4.5f,12.f},roof-.5f,.7f,6.f);
  pwrRed(m,{12.f,11.f},roof-.5f,.7f,7.f);
  for(Vec2 l:{Vec2{4.5f,10.5f},Vec2{12.f,8.f},Vec2{12.f,16.5f},Vec2{4.8f,18.5f},Vec2{19.5f,4.f},Vec2{19.5f,19.8f}})pwrWork(m,l,roof-.45f,2.2f,12.f,5000,.1f);
@@ -599,7 +599,7 @@ std::shared_ptr<const Map> makeEmergencyGeneration(){
  // --- Services and light -------------------------------------------------------------------------
  for(float y:{4.f,12.f})wall(m,1.f,y-.15f,23.f,y+.15f,roof-.5f,roof,12);
  cableTray(m,{6.f,1.4f},{18.f,1.4f},base+3.f);
- for(Vec2 l:{Vec2{13.f,6.f},Vec2{5.f,10.f},Vec2{13.f,20.f},Vec2{20.f,15.f}})pwrRed(m,l,roof-.5f,1.f,8.f);
+ for(Vec2 l:{Vec2{13.f,6.f},Vec2{5.f,10.f},Vec2{14.f,20.f},Vec2{20.f,15.f}})pwrRed(m,l,roof-.5f,1.f,8.f);   // 14,20: clear of the work lamp at 13,20.5
  // The gallery deck shades the ceiling reds off the west walls: two low reds
  // under it, so the walls read before the sets are running.
  for(Vec2 l:{Vec2{1.6f,6.f},Vec2{3.2f,12.6f}})pwrRed(m,l,deckZ-.4f,.7f,5.f);
@@ -680,7 +680,9 @@ std::shared_ptr<const Map> makeLoadControl(){
  ceilingGrid(m,1.f,4.1f,23.f,22.3f,roof);
  for(Vec2 l:{Vec2{6.f,2.f},Vec2{18.f,2.f}})m.lights.push_back(lamp(l,roof-.1f,1.f,6.f,3800));
  for(Vec2 l:{Vec2{4.f,7.f},Vec2{12.f,7.f},Vec2{4.f,13.f},Vec2{12.f,13.f},Vec2{20.f,13.f},Vec2{4.f,19.f},Vec2{12.f,19.f},Vec2{20.f,19.f}}){
-  pwrRed(m,l,roof-.1f,.6f,5.f);pwrWork(m,l,roof-.1f,1.5f,8.f,4300,.3f,WorldLightMount::Ceiling,0,PwrLcMains,.05f);}
+  // The red is the fitting's own emergency ballast, bare under its housing: a second housing at the same
+  // place drew two lamps one inside the other (map audit, LAMPS STACKED).
+  pwrRed(m,l,roof-.12f,.6f,5.f,WorldLightMount::Bare);pwrWork(m,l,roof-.1f,1.5f,8.f,4300,.3f,WorldLightMount::Ceiling,0,PwrLcMains,.05f);}
  zone(m,"LOAD CONTROL / SUPERVISOR",15,4,23,9);
  zone(m,"LOAD CONTROL",0,0,24,24);
  freightFinish(m,-1);

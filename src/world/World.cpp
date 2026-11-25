@@ -1215,13 +1215,27 @@ bool World::doorBlocks(float x,float y,float feet,float height,bool sight)const{
    float along=std::clamp(dot(delta,axis),0.f,width);
    Vec2 nearest=hinge+axis*along;
    if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f){const Vec2 c=door.centre();float base=floorHeight(c.x,c.y)+door.z;
-    if(feet+height>base+.015f&&feet<base+2.35f)return true;
+    if(feet+height>base+.015f&&feet<base+Door::SwingHeight)return true;
    }
   }else if(door.spans({x,y})&&std::fabs(door.across({x,y})-door.y)<.13f){const Vec2 c=door.centre();float base=floorHeight(c.x,c.y)+door.z;
-   if(feet+height>base+open*2.65f+.015f&&feet<base+open*2.65f+2.48f)return true;
+   const float bottom=base+open*Door::LiftHeight;if(feet+height>bottom+.015f&&feet<bottom+Door::SlabHeight)return true;
   }
  }
  return false;
+}
+// A lamp hangs flush under what is above it: the next slab or roof is its mounting surface, and a plain
+// housing hangs from it on rods. A lamp in a freight cab's shaft sits flush (the cab's roof above it is no
+// mounting surface, and rods to it would run up through the cab floor). A fitted lamp with more than 1.5 m
+// clear above its fitting (a kit set down under open sky, a roofless room) keeps its fitting just over its
+// light, and so does a plain housing in a custom map under open sky: hung from the top of the map, 128 m
+// up, the lamp seems not to be there. Custom maps hang their lamps as the campaign's authored maps do:
+// before, every one of them drew its fitting 13 cm over its light wherever the ceiling was (a kit's tube
+// 7 cm under the slab, a clinic lamp 13, a twin tube 18, the glow up inside the fitting).
+float World::lampMount(const WorldLight& light)const{
+ if(!((campaign()&&(level()>=7||authored()))||custom())||insideCargoLift(light.position.x,light.position.y))return light.z+.13f;
+ const float above=clearanceAbove(light.position.x,light.position.y,light.z);
+ if(light.fitting>=0)return above>light.z+.1f+light.fittingHeight+1.5f?light.z+.1f+light.fittingHeight:above;
+ return custom()&&above>light.z+12.f?light.z+.13f:above;
 }
 float World::clearanceHeight(float x,float y,float feet)const{
  float height=ceilingHeight(x,y);for(auto&door:m_doors)if(door.spans({x,y})&&std::fabs(door.across({x,y})-door.y)<.62f){

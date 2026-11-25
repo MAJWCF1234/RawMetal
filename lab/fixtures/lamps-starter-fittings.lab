@@ -1,0 +1,10 @@
+# Starter Map / Lights: the ceiling fittings flush under the ceiling (custom maps hung every fitting 13 cm over its light, under nothing). Tube: lamp-views.
+world custom "custom maps/Starter Map.rmc"
+map 1
+camera 11.0 12.9 -999 0 0
+aim-x 13.5
+aim-y 9.5
+aim-z 3.4
+open-doors
+size 960 540
+frames 30

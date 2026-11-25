@@ -428,7 +428,7 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
   // the detail's work light on a stand by their post, turned up the east aisle: where he falls is lit
   wall(m,19.97f,9.17f,20.03f,9.23f,f,f+2.f,8);wall(m,19.82f,9.02f,20.18f,9.38f,f,f+.03f,8);
   drFix(m,model::mine_cage_lamp,20.f,9.2f,f+2.f,.206f,.201f,.362f,-kPi*.75f,false);
-  m.lights.push_back(lamp({19.8f,9.5f},f+2.05f,1.1f,6.5f,4300,0,WorldLightMount::Bare,0,true));
+  m.lights.push_back(lamp({19.9f,9.3f},f+2.18f,1.1f,6.5f,4300,0,WorldLightMount::Bare,0,true));   // at the cage's face (it glowed 25 cm off it)
   // the corridor's mouth lit, so it reads down the lab from the door: a cage lamp on the south wall
   drFix(m,model::mine_cage_lamp,14.85f,16.75f,f+2.5f,.206f,.201f,.362f,kPi,false);
   m.lights.push_back(lamp({14.7f,16.55f},f+2.45f,1.f,5.5f,3600,0,WorldLightMount::Bare,0,true));}
@@ -481,7 +481,7 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  // the instrument stands and the two men are modelled and not cut out
  for(auto [x,y,face]:{std::tuple{1.06f,12.6f,drE},{1.06f,15.4f,drE},{22.94f,9.6f,drW},{22.94f,14.8f,drW}}){
   drFix(m,model::med_fluoro_light,x,y,f+1.55f,.11f,1.2f,.127f,0,false);
-  m.lights.push_back(lamp({x+(x<12?.3f:-.3f),y},f+1.5f,.55f,8.f,5600,.03f,WorldLightMount::Bare,0,false));}
+  m.lights.push_back(lamp({x+(x<12?.12f:-.12f),y},f+1.6f,.55f,8.f,5600,.03f,WorldLightMount::Bare,0,false));}   // at the strip's face, not 30 cm out from it
  recessedFittings(m);
  m.pickupSpawns.push_back({{22.f,13.6f},PickupKind::HandgunAmmo,f});
  zone(m,"DEEP MATERIALS LAB / HOT CELL",8.5f,8.6f,15.5f,13.4f,-1000,1000,CellAir);
@@ -1171,7 +1171,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  for(float y:{6.49f,11.73f})doorTrim(m,1.f,y,1.74f,y+.08f,f,f+2.5f);
  doorTrim(m,1.f,6.49f,1.74f,11.81f,f+2.42f,f+2.5f);
  drFix(m,model::med_fluoro_light,1.07f,9.15f,f+2.62f,.11f,1.2f,.127f,0,false);
- m.lights.push_back(lamp({1.9f,9.15f},f+2.5f,.75f,6.f,4300,.03f,WorldLightMount::Bare,0,false));
+ m.lights.push_back(lamp({1.19f,9.15f},f+2.6f,.75f,6.f,4300,.03f,WorldLightMount::Bare,0,false));   // at the tube on the wall (it glowed 83 cm out in the room)
  drPendant(m,{11.6f,4.45f},R,f+2.85f,.75f,5.f,3600);
  bench(m,11.6f,4.25f,f);
  kit::prop(m,model::mine_hard_hat,11.25f,4.25f,f+.51f,.279f,.351f,.153f,0);kit::prop(m,model::item_dosimeter,12.3f,4.25f,f+.51f,2.4f);
@@ -1244,7 +1244,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  m.lights.push_back(lamp({19.f,2.9f},R-.8f,.8f,8.f,4600,0,WorldLightMount::Bare,0,false));      // the work light on the headgear
  m.lights.push_back(lamp({18.2f,5.2f},f+2.7f,1.2f,5.f,3400,0,WorldLightMount::Bare,0,false));   // the landing
  for(float x:{x1s+.1f,x2s-.1f}){drFix(m,model::mine_cage_lamp,x,1.36f,f+2.5f,.206f,.201f,.362f,drS,false);
-  m.lights.push_back(drGlow({x,1.6f},f+2.65f,.45f,5.5f,{1.f,.6f,.2f},2400));}
+  m.lights.push_back(drGlow({x,1.5f},f+2.68f,.45f,5.5f,{1.f,.6f,.2f},2400));}   // at the cage's face
  // the control pedestal in the hall, turned to the cage
  // (set back by the back wall, so the diagonal from the door to the booth glass stays open)
  drCounter(m,15.f,2.f,15.8f,3.4f,f,1.05f,20);
@@ -1422,7 +1422,7 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  // whoever came through last, the cable torn out of it still live.
  drModel(m,model::mine_shield_ring,14.4f,9.6f,f,drS,true);
  for(float x:{12.6f,15.f}){drFix(m,model::mine_cage_lamp,x,7.86f,f+2.3f,.206f,.201f,.362f,0,false);m.pipes.push_back({{x,7.86f},{x,8.05f},f+2.62f,.012f,f+2.9f,6});
-  m.lights.push_back(lamp({x,7.6f},f+2.25f,3.f,4.2f,3400,0,WorldLightMount::Bare,0,false));}
+  m.lights.push_back(lamp({x,7.72f},f+2.42f,3.f,4.2f,3400,0,WorldLightMount::Bare,0,false));}   // at the cage's face (26 cm off it, under it)
  m.lights.push_back(lamp({14.4f,7.75f},f+2.8f,1.2f,4.2f,4200,0,WorldLightMount::Bare,0,false));          // on the bore's mouth
  looseLead(m,{13.4f,7.99f,f+2.99f},{14.f,7.4f,f},2.6f,7,true,.018f);
  {Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=13.f;h.x2=14.6f;h.y1=7.f;h.y2=8.2f;h.bottom=f;h.top=f+2.2f;h.damagePerSecond=25;h.period=2.4f;h.onTime=.6f;m.hazards.push_back(h);}
@@ -1513,7 +1513,7 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  drFix(m,model::mine_rail_straight,12.f,20.3f,f,1.5f,6.2f,.12f,0,false);
  wall(m,11.1f,17.15f,12.9f,17.4f,f,f+.45f,32);for(float x:{11.2f,12.6f})wall(m,x,17.4f,x+.2f,17.7f,f,f+.6f,12);   // the buffer at the rim
  for(float x:{11.f,13.f}){drFix(m,model::mine_cage_lamp,x,22.55f,f+2.85f,.206f,.201f,.362f,0,false);
-  m.lights.push_back(drSwitched(lamp({x,22.5f},f+2.7f,2.2f,7.5f,2500,0,WorldLightMount::Bare,0,false),sealed,true));}
+  m.lights.push_back(drSwitched(lamp({x,22.42f},f+2.98f,2.2f,7.5f,2500,0,WorldLightMount::Bare,0,false),sealed,true));}   // at the cage's face, not under it
  m.lights.push_back(lamp({12.f,20.5f},f+2.45f,1.3f,5.5f,4200,0,WorldLightMount::Bare,0,true));           // the lamp under the header
  drFix(m,model::mine_cage_lamp,12.f,20.62f,f+2.29f,.206f,.201f,.362f,0,false);
  for(auto [x,ph]:{std::pair{9.5f,0.f},{14.5f,.7f}}){auto l=lamp({x,20.8f},f+2.2f,1.1f,5.f,3000,0,WorldLightMount::Wall,lN,true,{1.f,.12f,.06f});

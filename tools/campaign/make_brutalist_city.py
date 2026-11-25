@@ -44,6 +44,7 @@ def main():
             for r in range(24):
                 lines.append('ROW|%d|0|%d|%s' % (m, r, '.' * 24))
             s = []
+            lamps = []
             gulf = col in GULF
             if not gulf:
                 # Towers: two to four slabs, some carrying a wider block higher up (the cantilever).
@@ -56,11 +57,17 @@ def main():
                         b = rnd.uniform(h * 0.4, h * 0.8)
                         ex = rnd.uniform(1, 4)
                         s.append((max(0, x - ex), max(0, y - ex), min(24, x + w + ex), min(24, y + d + ex), b, b + rnd.uniform(6, 14)))
-                    # Lamps up the face: sodium, cold work light, or the red-violet of resonance.
+                    # Lamps up the face: sodium, cold work light, or the red-violet of resonance. Wall lamps on the
+                    # tower's north face, looking out (they were ceiling lamps 30 cm off it, their housings hung in
+                    # the air under nothing), never two housings through each other.
+                    face = []
                     for _ in range(rnd.randint(1, 3)):
                         z = rnd.uniform(4, h - 2)
                         k = rnd.choice([1900, 2100, 6500, 9000])
-                        lines.append('LIGHT|%d|%s|%s|%s|0|0|1.6|22|%d' % (m, g(x + w / 2), g(y - 0.3), g(z), k))
+                        if any(abs(z - other) < .6 for other in face):
+                            continue
+                        face.append(z)
+                        lamps.append((x + w / 2, y, z, k))
                 # Scrap at the foot: slabs fallen together.
                 for _ in range(rnd.randint(1, 3)):
                     x, y = rnd.uniform(1, 20), rnd.uniform(1, 20)
@@ -80,6 +87,10 @@ def main():
                 if col in GULF:
                     s.append((11, 11, 13, 13, 0, DECK - 1.2))       # a pier down into the dark
                     lines.append('LIGHT|%d|12|10.4|%s|0|0|1.2|14|2100' % (m, g(DECK + 2)))
+            # A lamp whose face is inside another slab (a cantilever, a neighbour) is not hung: it would be buried.
+            for x, y, z, k in lamps:
+                if not any(x1 <= x <= x2 and y1 <= y - .15 <= y2 and b <= z <= t for x1, y1, x2, y2, b, t in s):
+                    lines.append('LIGHT|%d|%s|%s|%s|1|-1.571|1.6|22|%d' % (m, g(x), g(y), g(z), k))
             for x1, y1, x2, y2, b, t in s:
                 lines.append('STRUCT|%d|%s|%s|%s|%s|%s|%s|0|%d' % (m, g(x1), g(y1), g(x2), g(y2), g(b), g(t), CONCRETE))
     lines.append('--- CUSTOM_CAMPAIGN_DATA_END ---')

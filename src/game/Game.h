@@ -233,7 +233,7 @@ struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state
 // material: an ImpactMaterial, or -1 for marks made before shots knew what they struck. size: a
 // blood mark's half-width (0 for the usual).
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;int material=-1;float size=0;
- int door=-1;float doorOpen=0;};   // a mark on a lifting door's leaf: that door, and how far open it was then (it rides up with the leaf)
+ int door=-1;float doorOpen=0;};   // a mark on a door's leaf: that door, and how far open it was then (it rides the leaf: Door::carry)
 // Every shot fired, for the bodies it passes through: a ray in the frame of `level` (the active
 // chunk when it was fired), as far as it flew.
 struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impulse=0;int level=0;};
@@ -744,7 +744,7 @@ public:
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
-    void pinToDoor(BulletImpact& mark)const;   // a mark landing on a lifting door's leaf rides with it (Hitscan.cpp)
+    void pinToDoor(BulletImpact& mark)const;   // a mark landing on a door's leaf rides with it (Hitscan.cpp)
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
     // Dead bodies' poses (SaveSections.h CorpsePose) by (creature, level, slot): the renderer keeps each body's current
     // pose here as it moves, the physics save section writes and reads them, and a body made again after a load takes

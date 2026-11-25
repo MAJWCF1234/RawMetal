@@ -376,7 +376,7 @@ std::shared_ptr<const Map> makeObservationRingNorthWest(){
  {const Vec2 pod{12.2f+(22.85f-12.2f)*.55f,8.2f+(22.85f-8.2f)*.55f};
   auto l=lamp(pod,-8.7f,2.2f,22.f,6800,0,WorldLightMount::Bare,0,true);l.enabledState=floods;m.lights.push_back(l);}
  anFix(m,model::mine_cage_lamp,16.12f,20.f,-18.f,.21f,.2f,.36f,anE,false);
- {auto l=lamp({16.4f,20.f},-18.f,1.4f,13.f,6800,0,WorldLightMount::Bare,0,true);l.enabledState=floods;m.lights.push_back(l);}
+ {auto l=lamp({16.25f,20.f},-17.82f,1.4f,13.f,6800,0,WorldLightMount::Bare,0,true);l.enabledState=floods;m.lights.push_back(l);}   // at the cage's face (it glowed 18 cm out in the air)
  // what the field does about it: the electrodes' strike carried up to the rim, a metre in from the rail
  for(auto [x1,y1,x2,y2]:{std::tuple{14.9f,14.9f,16.3f,24.f},{16.3f,14.9f,24.f,16.3f}}){
   Hazard h;h.kind=Hazard::Kind::Electricity;h.x1=x1;h.y1=y1;h.x2=x2;h.y2=y2;h.bottom=G-.6f;h.top=G+2.2f;h.damagePerSecond=30;
@@ -637,7 +637,7 @@ std::shared_ptr<const Map> makeObservationRingSouthEast(){
  kit::prop(m,model::prop_cardboard_box_open,4.7f,14.75f,G+.81f,.4f,.4f,.4f,.5f);kit::prop(m,model::prop_cardboard_box,5.6f,13.9f,G,.5f,.495f,.252f,.7f);
  // Nine's side: the flood on its pole, looking west across the ground; a crate of what they have left
  wall(m,8.f,8.78f,8.2f,8.98f,G,G+2.5f,12);anFix(m,model::mine_cage_lamp,7.9f,8.88f,G+2.2f,.21f,.2f,.36f,-kPi*.5f,false);
- m.lights.push_back(lamp({7.96f,8.88f},G+2.3f,1.1f,11.f,4300,0,WorldLightMount::Wall,kPi,true));
+ m.lights.push_back(lamp({7.78f,8.88f},G+2.38f,1.1f,11.f,4300,0,WorldLightMount::Bare,0,true));   // the cage's bulb, not a wall lamp drawn over the cage
  anModel(m,model::lab_specimen_crate,8.7f,14.9f,G,.2f,true,.8f);
  // the survivors' side: two bedrolls, a lantern, the people
  for(float y:{9.4f,14.7f})anModel(m,model::scrap_bedroll,.75f,y,G,.05f,false);

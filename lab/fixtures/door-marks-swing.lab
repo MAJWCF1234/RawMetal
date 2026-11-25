@@ -1,0 +1,8 @@
+# A swinging door shot and bloodied, then swung open: its marks turn with the leaf (tube door-marks-swing).
+world door-room
+camera 7.6 10.6 -999 -90 0
+light 8.5 10.2 3 1.3 8
+light 8.5 5.5 3 1.1 8
+size 960 540
+frames 420
+hud on

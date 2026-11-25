@@ -1,0 +1,10 @@
+# Map 74, Medical Pharmacy: the cage's time lock, a red lamp over a green, clear of each other (three housings through each other before). Tube: lamp-views.
+world campaign
+map 74
+camera 5.9 6.3 -999 0 0
+aim-x 4.75
+aim-y 3.6
+aim-z -10.0
+open-doors
+size 960 540
+frames 30

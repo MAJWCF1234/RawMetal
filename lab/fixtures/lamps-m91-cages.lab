@@ -1,0 +1,10 @@
+# Map 91, Shielding Corridor: a caged lamp on the wall, its own bulb (it carried a wall lamp's backing and guard over the cage). Tube: lamp-views.
+world campaign
+map 91
+camera 4.2 18.8 -999 0 0
+aim-x 2.1
+aim-y 18.8
+aim-z -9.62
+open-doors
+size 960 540
+frames 30

@@ -1,0 +1,10 @@
+# Starter Map / Kits Gallery 2: the stairwell kit's bulkhead and arm lamp, each lit at its own face (a wall lamp was drawn 35 cm off the wall by one, and inside the other). Tube: lamp-views.
+world custom "custom maps/Starter Map.rmc"
+map 127
+camera 12.2 6.6 -999 0 0
+aim-x 14.0
+aim-y 4.0
+aim-z 3.2
+open-doors
+size 960 540
+frames 30

@@ -197,17 +197,16 @@ void Game::hitBurst(int level,Point3 point,Point3 direction,ImpactMaterial mater
 }
 }
 namespace retro {
-// A lifting door's leaf (a bulkhead, a grille: not a swinging one) rises 2.65 m fully open from its floor. A mark
-// struck on the leaf, within its thickness and height where it stood, is pinned to that door and how far open it
-// was, and the renderer lifts it by however far the leaf has risen since (Scene3D, the marks).
+// A mark struck on a door's leaf (a bulkhead or grille that lifts, or a swinging leaf), within its faces, edges, foot
+// and head where it stood (Door::onLeaf), is pinned to that door and how far open it was; the renderer carries it
+// by the leaf's one transform (Door::carry) to wherever the leaf has gone since (Scene3D, the marks). A pool or a
+// splat on the floor under a leaf stays on the floor.
 void Game::pinToDoor(BulletImpact& mark)const{
  if(mark.level<0||mark.level>=chunkCount()||!chunkResident(mark.level))return;
+ if(std::fabs(mark.normalZ)>.5f||std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f)return;
  const World& w=chunkWorld(mark.level);const auto& doors=w.doors();
- for(size_t i=0;i<doors.size();++i){const Door& d=doors[i];if(d.swinging)continue;
-  const float along=d.alongY?mark.pos.y:mark.pos.x,across=d.alongY?mark.pos.x:mark.pos.y;
-  if(along<d.left-.02f||along>d.right+.02f||std::fabs(across-d.y)>.14f)continue;
-  const float bottom=w.floorHeight(d.alongY?d.y:(d.left+d.right)*.5f,d.alongY?(d.left+d.right)*.5f:d.y)+d.z+d.open*2.65f;
-  if(mark.z<bottom-.02f||mark.z>bottom+2.5f)continue;
+ for(size_t i=0;i<doors.size();++i){const Door& d=doors[i];if(d.broken)continue;const Vec2 c=d.centre();
+  if(!d.onLeaf({mark.pos.x,mark.pos.y,mark.z},w.floorHeight(c.x,c.y)+d.z,d.open))continue;
   mark.door=int(i);mark.doorOpen=d.open;return;}
 }
 }
