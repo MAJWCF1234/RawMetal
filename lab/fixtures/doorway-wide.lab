@@ -1,0 +1,9 @@
+# The Starter Map wide Doorway kit (tube doorway-kits).
+world custom "custom maps/Starter Map.rmc"
+map 127
+camera 19.5 12.6 -999 90 0
+door-x 19.5
+door-y 14.5
+size 960 540
+frames 420
+hud on

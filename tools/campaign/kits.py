@@ -312,10 +312,12 @@ def build(catalog):
 
     k = kit('kit_doorway', 'Doorway', 4, 1, 'a wall with a framed door and a lamp over it')
     k.fx('bld_doorway_frame', 0, 0)
-    k.lamp(0, .3, 2.5, .8, 4.0, 3400, mount=1, yaw=HALF)
+    k.door(-.5, .5, 0, label='DOOR', swinging=True)             # the part's opening (tools/library/open_doorways.py)
+    k.lamp(0, .3, 2.82, .8, 4.0, 3400, mount=1, yaw=HALF)
 
     k = kit('kit_doorway_wide', 'Wide doorway', 4, 1, 'a wall with a wide opening and a lamp over it')
     k.fx('bld_doorway_wide', 0, 0)
+    k.door(-.8, .8, 0, label='DOOR', swinging=True)
     k.lamp(0, .4, 2.8, .8, 4.0, 3400, mount=1, yaw=HALF)
 
     k = kit('kit_doorway_double', 'Double doorway', 4, 1, 'a wall with two openings round a centre post, and a lamp over each')

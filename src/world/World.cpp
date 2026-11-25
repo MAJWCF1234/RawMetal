@@ -459,7 +459,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   struct Shape{int model;bool steps;float width,depth,height,openHalf,openHeight;float pier=0,plateau=0;};   // the model's own metres; pier: a centre post between two openings; plateau: a ramp's flat top (depth)
   static const Shape shapes[]={
    {model::bld_stairs_concrete,true,2.f,4.08f,3.2f,0,0},{model::bld_stairs_wood,true,2.f,4.04f,3.2f,0,0},{model::bld_stairs_short,true,4.f,2.08f,1.7f,0,0},
-   {model::bld_wall_doorway,false,4.f,.42f,3.f,.5f,2.2f},{model::bld_doorway_frame,false,4.08f,.2f,3.f,.5f,2.2f},{model::bld_doorway_wide,false,4.f,.42f,3.f,.8f,2.5f},
+   {model::bld_wall_doorway,false,4.f,.42f,3.f,.5f,2.36f},{model::bld_doorway_frame,false,4.08f,.2f,3.f,.5f,2.36f},{model::bld_doorway_wide,false,4.f,.42f,3.f,.8f,2.36f},   // (opened to the swinging leaf's height: tools/library/open_doorways.py)
    {model::bld_wall_tunnel_mouth,false,4.06f,.16f,3.f,.8f,2.38f},
    {model::bld_doorway_double,false,4.09f,.2f,3.f,1.5f,2.18f,.5f},                       // two 1 m openings either side of a centre post
    {model::cave_oldcity_gateway,false,3.f,1.11f,3.f,.7f,2.2f},   // (the 1.8 m arch is lower than a walker: it stays a solid block)

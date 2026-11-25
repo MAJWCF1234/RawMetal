@@ -459,7 +459,7 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   struct Shape{int model;bool steps;float width,depth,height,openHalf,openHeight;float pier=0,plateau=0;};   // the model's own metres; pier: a centre post between two openings; plateau: a ramp's flat top (depth)
   static const Shape shapes[]={
    {model::bld_stairs_concrete,true,2.f,4.08f,3.2f,0,0},{model::bld_stairs_wood,true,2.f,4.04f,3.2f,0,0},{model::bld_stairs_short,true,4.f,2.08f,1.7f,0,0},
-   {model::bld_wall_doorway,false,4.f,.42f,3.f,.5f,2.2f},{model::bld_doorway_frame,false,4.08f,.2f,3.f,.5f,2.2f},{model::bld_doorway_wide,false,4.f,.42f,3.f,.8f,2.5f},
+   {model::bld_wall_doorway,false,4.f,.42f,3.f,.5f,2.36f},{model::bld_doorway_frame,false,4.08f,.2f,3.f,.5f,2.36f},{model::bld_doorway_wide,false,4.f,.42f,3.f,.8f,2.36f},   // (opened to the swinging leaf's height: tools/library/open_doorways.py)
    {model::bld_wall_tunnel_mouth,false,4.06f,.16f,3.f,.8f,2.38f},
    {model::bld_doorway_double,false,4.09f,.2f,3.f,1.5f,2.18f,.5f},                       // two 1 m openings either side of a centre post
    {model::cave_oldcity_gateway,false,3.f,1.11f,3.f,.7f,2.2f},   // (the 1.8 m arch is lower than a walker: it stays a solid block)
@@ -500,7 +500,9 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   const auto* e=walkshapes::find(f.model);if(!e)continue;
   // Set down smaller than a body's way through (a cabinet made a bench), it is furniture again: its box holds what stands on it.
   const bool steps=f.model==model::bld_stairs_short||f.model==model::bld_stairs_concrete||f.model==model::bld_stairs_wood||f.model==model::bld_stairs_landing;
-  if(f.height<1.2f&&!steps)continue;
+  // A culvert stays a way through while its mouth (.78 of its height inside) still takes a prone body (.58 m).
+  const bool crawlway=f.model==model::bld_culvert&&f.height*.78f>=.62f;
+  if(f.height<1.2f&&!steps&&!crawlway)continue;
   std::vector<LocalBox> boxes;boxes.reserve(size_t(e->count));
   for(int b=e->first;b<e->first+e->count;++b){const auto& bx=walkshapes::boxes[b];
    boxes.push_back({walkshapes::at(bx.x0)*f.width,walkshapes::at(bx.x1)*f.width,walkshapes::at(bx.y0)*f.depth,walkshapes::at(bx.y1)*f.depth,(walkshapes::at(bx.z0)+.5f)*f.height,(walkshapes::at(bx.z1)+.5f)*f.height});}

@@ -222,9 +222,11 @@ static constexpr KitDef kitDefs[] = {
      "LIGHT|@|1.2|0|2.557|0|1.571|1|6|4200|||||||||$lamp_ceiling_bar|0.753|0.132|0.343\n"},
     {"kit_doorway", L"Doorway", L"a wall with a framed door and a lamp over it", 4.00f, 1.00f,
      "FIXTURE|@|$bld_doorway_frame|0|0|0|4.09|0.2|3|0|1\n"
-     "LIGHT|@|0|0.3|2.5|1|1.571|0.8|4|3400\n"},
+     "DOOR|@|-0.5|0.5|0|0|0|0|1|0|-1||||||||0|DOOR\n"
+     "LIGHT|@|0|0.3|2.82|1|1.571|0.8|4|3400\n"},
     {"kit_doorway_wide", L"Wide doorway", L"a wall with a wide opening and a lamp over it", 4.00f, 1.00f,
      "FIXTURE|@|$bld_doorway_wide|0|0|0|4|0.42|3|0|1\n"
+     "DOOR|@|-0.8|0.8|0|0|0|0|1|0|-1||||||||0|DOOR\n"
      "LIGHT|@|0|0.4|2.8|1|1.571|0.8|4|3400\n"},
     {"kit_doorway_double", L"Double doorway", L"a wall with two openings round a centre post, and a lamp over each", 4.00f, 1.00f,
      "FIXTURE|@|$bld_doorway_double|0|0|0|4.09|0.2|3|0|1\n"
