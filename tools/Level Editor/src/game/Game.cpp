@@ -581,13 +581,15 @@ bool Game::testPickups(){
 void Game::update(const InputState& input, float dt) {
     updateNet();
     updateVoice(input);
+    m_sounds.clear();
+    m_sounds.swap(m_netSounds);
     updateFrame(input,dt);
     if(!m_netForeign.empty())updateForeignChunks(dt);   // a co-op host's other occupied maps (ForeignChunks.cpp)
     // The match reads what the player did; while they type a chat line they did nothing but type.
     if(m_match){if(m_chatOpen){InputState idle{};idle.escape=input.escape;idle.chat=input.chat;idle.scoreboard=input.scoreboard;m_match->update(idle,dt);}else m_match->update(input,dt);}
 }
 void Game::updateFrame(const InputState& input, float dt) {
-    m_sounds.clear();
+    if(!input.vrTracked)m_padPrompts=input.padActive;   // the prompts name the pad's buttons while it is the hands' choice
     if(m_loadJob){if(loadReady())finishLoad();return;}
     // Simulate never hands the builder's copy over to the main campaign.
     if(m_pendingMainCampaign){if(m_editorObserver)m_pendingMainCampaign=false;else startMainCampaign();}
@@ -680,7 +682,9 @@ void Game::updateFrame(const InputState& input, float dt) {
         if(!choreographed&&!talking()){
         if((input.vrTracked||!input.rotateProp||!holdingClutter())&&!(m_physglove.locked&&!input.vrTracked)){   // (the Physgloves hold the look on their target while the middle button is down)
          const float invDt=1.f/std::max(dt,.001f),sens=m_settings.sensitivity,invert=m_settings.invertMouse?-1.f:1.f;
-         const Vec2 stickLook=input.vrTracked?Vec2{}:input.controllerLook;
+         // The look stick: INVERT LOOK Y turns it over as it does the mouse; aim assist (Controller.cpp) on the pad only.
+         Vec2 stickLook=input.vrTracked?Vec2{}:Vec2{input.controllerLook.x,input.controllerLook.y*invert};
+         if(input.padActive&&!input.vrTracked)stickLook=aimAssist(stickLook,dt);
          const float yaw=input.mouseDx*.0022f*sens+stickLook.x*dt;
          const float pitch=-input.mouseDy*.308f*sens*invert+stickLook.y*(140.f*dt);
          m_lookYawRate=input.mouseDx*.0022f*sens*invDt+stickLook.x;
@@ -823,7 +827,7 @@ void Game::updateWeaponMotion(const InputState& input,float dt){
   if(!cycle.fullAuto){m_spread=0;m_recoilDebt=0;}}
  float yawRate=input.mouseDx*.0022f*m_settings.sensitivity/std::max(dt,.001f);
  float pitchRate=input.mouseDy*.308f/140.f*m_settings.sensitivity*(m_settings.invertMouse?-1.f:1.f)/std::max(dt,.001f);
- if(!input.vrTracked){yawRate+=input.controllerLook.x;pitchRate-=input.controllerLook.y;}
+ if(!input.vrTracked){yawRate+=input.controllerLook.x;pitchRate-=input.controllerLook.y*(m_settings.invertMouse?-1.f:1.f);}
  Vec2 target{std::clamp(-yawRate*.042f,-.19f,.19f),std::clamp(pitchRate*.035f,-.15f,.15f)};
  // Damped springs are integrated with bounded substeps, independent of render rate.
  int steps=std::max(1,int(std::ceil(dt/.008f)));float step=dt/steps;

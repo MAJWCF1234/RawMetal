@@ -533,7 +533,7 @@ private:
     // The MAC-11 (its model: metres, the grip's top at the origin, +z the muzzle,
     // +x its left; MacMagazine part 8, MacBolt the knob part 9), its .380 box and
     // the brass both pistols throw (tools/player/import_mac11.py).
-    Mesh m_macMesh{3353},m_macAmmoMesh{3355},m_brassMesh{3357},m_rifleAmmoMesh{3394};
+    Mesh m_macMesh{3353},m_macAmmoMesh{3355},m_brassMesh{3357},m_rifleAmmoMesh{3394},m_rifleCaseMesh{3396},m_rifleRoundMesh{3397};   // the .308 case and round share brass.png
     Mesh m_sniperMesh{3390};Texture m_sniperTexture;   // the rifle (tools/player/import_sniper.py), in the Remington's frame so the shotgun clips carry it
     Texture m_macTexture,m_macAmmoTexture,m_brassTexture,m_rifleAmmoTexture;
     std::array<std::array<Texture,2>,kCleanupBodies> m_cleanupTextures;

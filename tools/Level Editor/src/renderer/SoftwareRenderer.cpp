@@ -1131,7 +1131,7 @@ void SoftwareRenderer::drawHud(const Game& game){
   uiText(x+1,y+2,title,black,1,size,a*.45f,track);uiText(x,y,title,rgb(250,248,242),1,size,a,track);}
  if(game.dead()||game.won()){fill(0,0,m_width,m_height,black,game.dead()?.55f:.35f);gradient(0,cy-50,m_width,50,black,0.f,.8f,false);gradient(0,cy,m_width,50,black,.8f,0.f,false);
   const char* headline=game.won()?"SECTOR CLEARED":"YOU DIED";int w=uiTextWidth(headline,2,64,4);uiText(cx-w/2+3,cy-40,headline,black,2,64,.8f,4);uiText(cx-w/2,cy-42,headline,game.won()?amber:red,2,64,1,4);
-  const char* hint="PRESS ESC TO RESTART";uiText(cx-uiTextWidth(hint,0,11,3)/2,cy+30,hint,paper,0,11,.85f,3);}
+  const std::string restart=game.padPrompt("PRESS ESC TO RESTART");const char* hint=restart.c_str();uiText(cx-uiTextWidth(hint,0,11,3)/2,cy+30,hint,paper,0,11,.85f,3);}
  if(game.damageFlash()>0){auto tint=rgb(150,37,25);rect(0,0,m_width,2,tint);rect(0,0,2,m_height,tint);rect(m_width-2,0,2,m_height,tint);}
  if(shut){}
  else if(game.audioMuted())uiText(22,54,"AUDIO MUTED  [M]",muted,0,10,1,1);
@@ -1167,7 +1167,7 @@ void SoftwareRenderer::drawHud(const Game& game){
  }
  // Shut in, the hint sits low on the steel under the vent band, off the
  // holes and the floor in front of the doors that they show.
- if(auto hint=game.interactionHint();hint&&game.logTime()<=0)promptPanel(shut&&locker?m_height-10:m_height-88,hint,paper);
+ if(auto hint=game.interactionHint();hint&&game.logTime()<=0)promptPanel(shut&&locker?m_height-10:m_height-88,game.padPrompt(hint).c_str(),paper);   // the pad's buttons while it is in use
  // Held (LockerCapture.cpp): the struggle, a bar under the prompt that each press fills.
  if(const float struggle=game.captureStruggle();struggle>=0&&game.interactionHint()){const int w=188,x=cx-w/2,y=std::min((shut&&locker?m_height-10:m_height-88)+4,m_height-10); // under the prompt, clear of a caption above it
   fill(x,y,w,8,rgb(6,5,5),.78f);fill(x+1,y+1,int(std::round((w-2)*std::clamp(struggle,0.f,1.f))),6,struggle>.75f?amber:red,1);frame(x,y,w,8,rgb(236,228,214),.22f);}
@@ -1313,7 +1313,7 @@ void SoftwareRenderer::drawVrStatus(const Game&game){
  {const auto&rounds=game.firearmPool();const bool nine=game.activeFirearm()==WeaponId::Handgun,mac=game.activeFirearm()==WeaponId::MachinePistol;std::snprintf(data,sizeof(data),"%s %02d / %02d",nine?"9MM":mac?".380":"SHELLS",rounds.loaded,std::max(0,rounds.total-rounds.loaded));text(24,142,data,green,4);}
  std::snprintf(data,sizeof(data),"CONTACTS %02d / PURGED %02d",game.enemiesRemaining(),game.kills());text(24,185,data,green,3);
  text(24,222,game.world().custom()?game.world().customMapName():game.world().campaign()?CampaignMapNames[game.level()]:"ASHFALL EXCLUSION ZONE",green,2);text(24,245,game.equippedWeapon()==WeaponId::Handgun?"HANDGUN EQUIPPED":game.equippedWeapon()==WeaponId::MachinePistol?"MAC-11 EQUIPPED":game.equippedWeapon()==WeaponId::Shotgun?"SHOTGUN EQUIPPED":"EMPTY HANDS",green,2);
- if(auto hint=game.interactionHint())text(24,272,hint,green);if(game.pickupNoticeTime()>0)text(290,245,game.pickupNotice().c_str(),green);if(auto caption=game.actorCaption();!caption.empty())text(24,260,std::string(caption).c_str(),green);
+ if(auto hint=game.interactionHint())text(24,272,game.padPrompt(hint).c_str(),green);if(game.pickupNoticeTime()>0)text(290,245,game.pickupNotice().c_str(),green);if(auto caption=game.actorCaption();!caption.empty())text(24,260,std::string(caption).c_str(),green);
  // Map and contacts remain available on the device, never across the headset view.
  for(int y=0;y<24;++y)for(int x=0;x<24;++x)if(game.world().solid(x+.5f,y+.5f))rect(530+x*3,180+y*3,3,3,0xff0b3417u);const auto&p=game.player();rect(530+int(p.pos.x*3),180+int(p.pos.y*3),3,3,green);for(const auto&e:game.enemies())if(e.alive&&lengthSq(e.pos-p.pos)<36)rect(530+int(e.pos.x*3),180+int(e.pos.y*3),3,3,green);auto exit=game.world().exitPoint();rect(530+int(exit.x*3),180+int(exit.y*3),4,4,green);
  rect(24,292,266,50,0xff082510u);text(42,307,"INVENTORY",green,3);rect(334,292,282,50,0xff082510u);text(354,307,"MENU / SAVE",green,3);
@@ -1393,8 +1393,8 @@ void SoftwareRenderer::drawSettings(const Game& game){
  }
  uiText(x+16,y+150,game.menuMessage().c_str(),red,0,11,1,1);if(page==Game::MenuPage::Overwrite)uiText(x+16,y+172,"The previous slot will be replaced.",dim,1,12);if(page==Game::MenuPage::ConfirmLoad)uiText(x+16,y+172,"Unsaved progress will be lost.",dim,1,12);
  fill(x+10,y+MenuLayout::Height-28,MenuLayout::Width-20,1,bone,.10f);
- uiText(x+16,y+MenuLayout::Height-22,"CLICK / ARROWS / ENTER",dim,0,10,1,1);
- const char* back="ESC  BACK";uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
+ uiText(x+16,y+MenuLayout::Height-22,game.padPrompt("CLICK / ARROWS / ENTER").c_str(),dim,0,10,1,1);
+ const std::string backText=game.padPrompt("ESC  BACK");const char* back=backText.c_str();uiText(x+MenuLayout::Width-16-uiTextWidth(back,0,10,1),y+MenuLayout::Height-22,back,red,0,10,1,1);
  (void)black;
 }
 // A conversation: the speaker's line over the bottom of the view, the
@@ -1445,16 +1445,16 @@ void SoftwareRenderer::drawInventory(const Game& game){
  // The primary weapon's panel holds whichever long gun is drawn: the rifle (with its rounds) or the shotgun.
  if(rifleOut){icon(m_sniperMesh,m_sniperTexture,76,84,228,34,true);char l[48];std::snprintf(l,sizeof l,"SNIPER RIFLE / .308 x %d",game.player().pool(WeaponId::Sniper).total);label(76,123,l,paper);}
  else{if(shotgunOut)icon(m_weaponMesh,m_weaponTexture,76,84,228,34,true);
- label(76,123,shotgunOut?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN",paper);}
+ label(76,123,game.padPrompt(shotgunOut?"SHOTGUN / CLICK TO SELECT":"EMPTY / CLICK TO EQUIP SHOTGUN").c_str(),paper);}
  // Secondary: the sidearms once owned (each drawn from its own mesh; with both, the
  // handgun on the left half and the MAC-11 on the right), else the fists.
  const bool macOut=game.equippedWeapon()==WeaponId::MachinePistol;
  if(game.hasHandgun()&&game.hasMachinePistol()){icon(m_handgunMesh,m_handgunTexture,76,152,100,30,true);icon(m_macMesh,m_macTexture,206,150,90,34,true);
   label(76,173,pistolOut?"HANDGUN / HOLSTER":"HANDGUN / DRAW",paper);label(206,173,macOut?"MAC-11 / HOLSTER":"MAC-11 / DRAW",paper);}
- else if(game.hasMachinePistol()){icon(m_macMesh,m_macTexture,76,150,110,34,true);label(76,173,macOut?"MAC-11 / CLICK TO HOLSTER":"MAC-11 / CLICK TO DRAW",paper);}
- else if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW",paper);}
- else label(76,173,"FISTS / CLICK TO HOLSTER",paper);
- label(76,192,"RIGHT CLICK IN WORLD TO GUARD",muted);
+ else if(game.hasMachinePistol()){icon(m_macMesh,m_macTexture,76,150,110,34,true);label(76,173,game.padPrompt(macOut?"MAC-11 / CLICK TO HOLSTER":"MAC-11 / CLICK TO DRAW").c_str(),paper);}
+ else if(game.hasHandgun()){icon(m_handgunMesh,m_handgunTexture,76,152,110,30,true);label(76,173,game.padPrompt(pistolOut?"HANDGUN / CLICK TO HOLSTER":"HANDGUN / CLICK TO DRAW").c_str(),paper);}
+ else label(76,173,game.padPrompt("FISTS / CLICK TO HOLSTER").c_str(),paper);
+ label(76,192,game.padPrompt("RIGHT CLICK IN WORLD TO GUARD").c_str(),muted);
  if(game.hasSniper()&&!rifleOut){char l[48];std::snprintf(l,sizeof l,"SNIPER RIFLE / .308 x %d / KEY 5",game.player().pool(WeaponId::Sniper).total);label(76,243,l,paper);}   // carried, not drawn: one line in the equipment panel
  label(76,258,"ARMOR: EMPTY",muted);
  int keyY=273,shown=0,keys=0;for(const auto&item:game.questItems()){if(item.id==Game::HandgunItem||item.id==Game::MachinePistolItem||item.id==Game::SniperItem)continue;++keys;if(shown>=2)continue;std::string name=std::string(Game::questItemName(item.id))+(item.count>1?" X"+std::to_string(item.count):"");label(76,keyY+shown*11,name.c_str(),paper);++shown;}
@@ -1469,9 +1469,9 @@ void SoftwareRenderer::drawInventory(const Game& game){
   char count[20];std::snprintf(count,sizeof(count),"%d",item==0?1:item==1?shells:item==3?nine:item==4?acp:game.medkits());label(ix+5,iy+45,count,paper);
  }
  char status[40];std::snprintf(status,sizeof(status),"%d / 30 CELLS  HP %d",occupied,int(game.player().health));label(350,250,status,muted);
- const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2","9MM ROUNDS / 1 X 2",".380 ROUNDS / 1 X 2"};label(350,267,game.selectedItem()<0?"CLICK AN ITEM TO SELECT":names[game.selectedItem()],paper);
- fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?"E / ENTER: EQUIP OR STOW":game.selectedItem()==2?"E / ENTER: HEAL 35 HP":game.selectedItem()==3?"9MM IS USED BY THE HANDGUN":game.selectedItem()==4?".380 IS USED BY THE MAC-11":"AMMO IS USED BY THE SHOTGUN",amber);
- label(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);label(64,316,"I / ESC CLOSE   CLICK PRIMARY TO EQUIP",amber);
+ const char* names[]={"SHOTGUN / 4 X 2","12 GA SHELLS / 1 X 2","FIRST AID / 2 X 2","9MM ROUNDS / 1 X 2",".380 ROUNDS / 1 X 2"};label(350,267,game.selectedItem()<0?game.padPrompt("CLICK AN ITEM TO SELECT").c_str():names[game.selectedItem()],paper);
+ fill(350,280,224,28,rgb(214,32,26),.18f);label(358,291,game.selectedItem()==0?(game.padPrompts()?"A: EQUIP OR STOW":"E / ENTER: EQUIP OR STOW"):game.selectedItem()==2?(game.padPrompts()?"A: HEAL 35 HP":"E / ENTER: HEAL 35 HP"):game.selectedItem()==3?"9MM IS USED BY THE HANDGUN":game.selectedItem()==4?".380 IS USED BY THE MAC-11":"AMMO IS USED BY THE SHOTGUN",amber);
+ label(64,301,"SELECT ITEM THEN EMPTY CELL TO MOVE",muted);label(64,316,game.padPrompt("I / ESC CLOSE   CLICK PRIMARY TO EQUIP").c_str(),amber);
 }
 void SoftwareRenderer::drawConsole(const Game& game){
  rect(0,0,m_width,152,rgb(10,14,16));rect(0,150,m_width,2,rgb(202,150,67));

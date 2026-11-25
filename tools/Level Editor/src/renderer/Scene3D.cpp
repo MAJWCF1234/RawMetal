@@ -582,8 +582,6 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
  float scale=e.scale*(baked?(creatureTraits(e.kind).top-.05f)/std::max(.01f,range.y):(wasp?1.35f:brute?2.25f:1.5f)/std::max({range.x,range.y,range.z}));
  float angle=e.heading,wind=!corpse&&e.windup>0?std::sin(e.windup*5.f)*.12f:0;int surface=corpse?e.deathSurface:e.surfaceMode;
  out=mesh.triangles;
- const float wallAnchor=e.babyHuntsman?.5f*e.scale:.5f;
- const float ceilingAnchor=e.babyHuntsman?e.hull():1.05f;
  for(auto&face:out)for(auto&v:face.v){Point3 p=(v.p-center)*scale;float localY=p.z,height=p.y+range.y*scale*.5f;
   if(!baked){
    if(wasp){height+=.60f;if(!corpse){height+=.065f*std::sin(elapsed*4.f+e.pos.x);if(face.part==1)height+=std::sin(elapsed*36.f)*std::fabs(p.x)*.9f;}}
@@ -596,8 +594,8 @@ SoftwareRenderer::CreatureStance SoftwareRenderer::poseCreatureMesh(const Enemy&
    }
    if(!corpse){height+=wind*(1-std::min(1.f,std::fabs(p.x)));localY+=e.strike*.22f;localY-=e.painFlash*.035f;}
   }
-  if(e.kind==Enemy::Kind::Huntsman&&surface==1)v.p={e.pos.x+e.surfaceNormal.x*(height-wallAnchor)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-wallAnchor)+p.x*std::cos(angle),e.z+localY+wallAnchor};
-  else if(e.kind==Enemy::Kind::Huntsman&&surface==2)v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+ceilingAnchor-height};
+  if(e.kind==Enemy::Kind::Huntsman&&surface==1)v.p={e.pos.x+e.surfaceNormal.x*(height-.5f)-p.x*std::sin(angle),e.pos.y+e.surfaceNormal.y*(height-.5f)+p.x*std::cos(angle),e.z+localY+.5f};
+  else if(e.kind==Enemy::Kind::Huntsman&&surface==2)v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+1.05f-height};
   else v.p={e.pos.x+localY*std::cos(angle)-p.x*std::sin(angle),e.pos.y+localY*std::sin(angle)+p.x*std::cos(angle),e.z+height+.015f};
  }
  return {range,scale};
@@ -2313,7 +2311,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    }
    doorBox(door,x-half,x+half,y,y+1.f,headerTop,headerTop+.02f,m_metal,.8f);
   }
-  float bottom=base+door.open*2.65f;
+  float bottom=base+door.open*Door::LiftHeight;
   if(door.leaf==1){
    // A steel grille gate: a flat-bar frame with rails at the foot, the lock and
    // the head, and round bars every 12 cm. It rises like a bulkhead; sight and
@@ -2359,7 +2357,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   m_emissionScale=light.intensity*power*6.f;const Point3 tone=light.tone();fittingTone=&tone;
   if(light.fitting>=0){facility(light.fitting,light.position.x,light.position.y,mount-light.fittingHeight,light.fittingWidth,light.fittingDepth,light.fittingHeight,light.yaw);fittingTone=nullptr;return;}
   facility(4,light.position.x,light.position.y,light.z+.04f,.8f,.8f,.09f,0);fittingTone=nullptr;
-  if(w.campaign()&&(w.level()>=7||w.authored())){
+  if((w.campaign()&&(w.level()>=7||w.authored()))||w.custom()){
    // The next slab or roof above this lamp is its actual mounting surface.
    // Low bay lamps in tall rooms need visible suspension, rather than floating.
    float top=light.z+.13f;
@@ -2373,14 +2371,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // Fixed lamps and suspension rods use the same world-space shader lighting
  // as cached architecture. The moving reactor lift lamp remains per-frame.
  // Retain the reference path for software rendering and cache comparisons.
- // A lamp in a freight cab's shaft sits flush: the cab's roof above it is no
- // mounting surface, and rods to it would run up through the cab floor.
- // A lamp hangs flush under what is above it. A fitted lamp (its fitting is the model drawn flush under that surface) with
- // more than 1.5 m clear above its fitting (a kit set down under open sky, a roofless room) keeps its fitting just over
- // its light: without this the fitting is hung at the top of the map, 128 m up, and the lamp seems not to be there.
- auto lampMount=[&](const WorldLight&light){if(!(w.campaign()&&(w.level()>=7||w.authored())&&!w.insideCargoLift(light.position.x,light.position.y)))return light.z+.13f;
-  const float above=w.clearanceAbove(light.position.x,light.position.y,light.z);
-  return light.fitting>=0&&above>light.z+.1f+light.fittingHeight+1.5f?light.z+.1f+light.fittingHeight:above;};
+ // Where a lamp hangs from: World::lampMount, the rule the map audit checks by.
+ auto lampMount=[&](const WorldLight&light){return w.lampMount(light);};
  movingGeometry=false;
  const bool cacheCeilingLamps=m_gpuFrame&&m_cacheFixedServices;
  if(cacheCeilingLamps){
@@ -3393,8 +3385,13 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    t.pixels[size_t(y*n+x)]=(unsigned(a*200.f)<<24)|0x00060505u;
   }return t;}();
  for(const auto&raw:game.bulletImpacts())if(raw.level==level){
-  // A mark pinned to a lifting door rides up with its leaf (Game::pinToDoor).
-  BulletImpact mark=raw;if(raw.door>=0&&size_t(raw.door)<w.doors().size()&&!w.doors()[size_t(raw.door)].swinging)mark.z+=(w.doors()[size_t(raw.door)].open-raw.doorOpen)*2.65f;
+  // A mark pinned to a door rides its leaf (Game::pinToDoor), carried by the leaf's one transform (Door::carry):
+  // up with a lifting slab, round the hinge with a swinging leaf, its facing turned with it. Its turn and its
+  // spatter are rolled from where it was struck (raw), so a riding mark keeps its own look. Under a raised
+  // slab its run stops at the leaf's foot, not in the air below it.
+  BulletImpact mark=raw;const Door* leaf=raw.door>=0&&size_t(raw.door)<w.doors().size()?&w.doors()[size_t(raw.door)]:nullptr;float leafFoot=-1e9f;
+  if(leaf){const Point3 p=leaf->carry({raw.pos.x,raw.pos.y,raw.z},raw.doorOpen,leaf->open);mark.pos={p.x,p.y};mark.z=p.z;mark.normal=leaf->carryDirection(raw.normal,raw.doorOpen,leaf->open);
+   const Vec2 c=leaf->centre();leafFoot=w.floorHeight(c.x,c.y)+leaf->z+(leaf->swinging?0.f:leaf->open*Door::LiftHeight);}
   if(mark.tint==-3){
    // Each hit's own spider-web, its rays reaching further as the pane weakens.
    const int pane=w.breakableAt(mark.pos.x,mark.pos.y,mark.z,.04f);if(pane<0||w.paneGlass(pane))continue;const auto&b=w.breakables()[size_t(pane)];const auto f=paneFrame(b);
@@ -3417,7 +3414,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    // The pack's spatters (m_bloodDecals), each mark its own: which cell and which way it lies come from
    // where it is, so no two marks are stamped from one die. Tinted by the creature's fluid.
    const int species=std::clamp(mark.tint,0,int(creatureVisuals.size())-1);const auto&visual=creatureVisuals[size_t(species)];const float tint=visual.bloodLight;
-   unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)*2654435761u^unsigned(std::fabs(mark.pos.y)*613.f)*2246822519u^unsigned(std::fabs(mark.z)*977.f);seed^=seed>>15;seed*=2654435761u;
+   unsigned seed=unsigned(std::fabs(raw.pos.x)*331.f)*2654435761u^unsigned(std::fabs(raw.pos.y)*613.f)*2246822519u^unsigned(std::fabs(raw.z)*977.f);seed^=seed>>15;seed*=2654435761u;
    const float spin=float(seed%628u)*.01f,cs=std::cos(spin),sn=std::sin(spin);
    if(std::fabs(mark.normal.x)+std::fabs(mark.normal.y)<.01f){
     // On the floor it lies on (a deck or a raised floor as much as the ground): a pool under a body, a splat where a gout lands.
@@ -3430,7 +3427,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    const Point3 along{-mark.normal.y,mark.normal.x,0},up{0,0,1};const float size=mark.size>0?mark.size:.045f;
    const Point3 p{mark.pos.x+mark.normal.x*.012f,mark.pos.y+mark.normal.y*.012f,mark.z};
    {const float half=size*2.6f;const Point3 u=(along*cs+up*sn)*half,v=(up*cs-along*sn)*half;lay(p-u-v,p+u-v,p+u+v,p-u+v,bloodDecal(visual.fluid,BloodJob::Burst,seed>>8),tint,Point3{mark.normal.x,mark.normal.y,0});}
-   if(seed%3u){const float age=std::max(0.f,game.elapsed()-mark.time),run=std::pow(std::clamp(age/2.5f,0.f,1.f),.6f),floorZ=w.floorHeight(mark.pos.x,mark.pos.y)+.03f;
+   if(seed%3u){const float age=std::max(0.f,game.elapsed()-mark.time),run=std::pow(std::clamp(age/2.5f,0.f,1.f),.6f),floorZ=std::max(w.floorHeight(mark.pos.x,mark.pos.y),leafFoot)+.03f;
     const float top=p.z-size*.2f,length=std::min(size*(4.f+float((seed>>4)%5u)),top-floorZ)*run,width=size*.55f;
     if(length>.01f){const Point3 q{p.x+mark.normal.x*.002f,p.y+mark.normal.y*.002f,top};const Point3 side=along*width;
      lay(q-side-up*length,q+side-up*length,q+side,q-side,bloodDecal(visual.fluid,BloodJob::Drip,seed>>12),tint,Point3{mark.normal.x,mark.normal.y,0});}}
@@ -3441,7 +3438,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   Point3 p{mark.pos.x,mark.pos.y,mark.z};
   Point3 impactNormal{mark.normal.x,mark.normal.y,mark.normalZ};
   // Each hole turns by its own angle so no two look stamped from one die.
-  unsigned seed=unsigned(std::fabs(mark.pos.x)*331.f)^unsigned(std::fabs(mark.pos.y)*613.f)^unsigned(std::fabs(mark.z)*977.f);float spin=float(seed%360u)*kPi/180.f;
+  unsigned seed=unsigned(std::fabs(raw.pos.x)*331.f)^unsigned(std::fabs(raw.pos.y)*613.f)^unsigned(std::fabs(raw.z)*977.f);float spin=float(seed%360u)*kPi/180.f;
   Point3 a,b;if(std::fabs(mark.normalZ)>.5f){p.z+=mark.normalZ*.012f;a={1,0,0};b={0,mark.normalZ>0?1.f:-1.f,0};}else{a={tangentX,tangentY,0};b={0,0,1};}
   auto hole=[&](Point3 c,float size,const Texture&t,float light){float cs=std::cos(spin),sn=std::sin(spin);Point3 u=(a*cs+b*sn)*size,v=(a*-sn+b*cs)*size;quad(c-u-v,c+u-v,c+u+v,c-u+v,t,light);};
   // What it was fired into decides the mark: how wide the scar is, and whether there is a pit in it.
@@ -4520,7 +4517,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   else prop(m_shellsMesh,m_shellsTexture,p.pos.x,p.pos.y,.36f,-.3f,.48f,base);
  }
  // Spent cases (Game::casings, the active chunk's): the shotgun's shell is the
- // Remington's own (part 3), the pistols' brass the pack's 9 mm case, each turned
+ // Remington's own (part 3), the pistols' brass the pack's 9 mm case, the sniper's a .308 (the pack's 5.56 drawn out), each turned
  // by its tumble; drawn each frame, never into the static cache.
  if(level==game.level()&&!m_staticGeometryBuild&&!game.casings().empty()){
   // The shell part's middle, its longest extent as its axis, and the scale to 65 mm; once.
@@ -4540,7 +4537,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    if(c.kind==0){for(auto face:m_weaponMesh.triangles){if(face.part!=3)continue;
      for(auto&v:face.v){Point3 q=(v.p-shell.centre)*shell.scale;q=shell.axis==0?Point3{q.y,q.z,q.x}:shell.axis==1?Point3{q.z,q.x,q.y}:q;v.p=place(q);}
      auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-c.position);tri(face.v[0],face.v[1],face.v[2],m_weaponTexture,.8f);}}
-   else{const float k=c.kind==2?.9f:c.kind==3?1.7f:1.f;for(auto face:m_brassMesh.triangles){for(auto&v:face.v)v.p=place(v.p*k);
+   else{const bool rifle=c.kind==3;const float k=c.kind==2?.9f:1.f;for(auto face:(rifle?m_rifleCaseMesh:m_brassMesh).triangles){for(auto&v:face.v)v.p=place(v.p*k);
      auto n=cross3(face.v[1].p-face.v[0].p,face.v[2].p-face.v[0].p);selectFaceLight(lights,n,(face.v[0].p+face.v[1].p+face.v[2].p)*(1.f/3.f)-c.position);tri(face.v[0],face.v[1],face.v[2],m_brassTexture,.95f);}}
   }
   objectLighting=false;objectNormalLighting=nullptr;movingGeometry=false;
@@ -5388,14 +5385,14 @@ void SoftwareRenderer::drawViewModel(const Game& game){
      else v.p=face.part==8?magPoint(q):fpMacPoint(q,0);}
     carrier=face.part!=8;shade(face,lens?scopeLens:gunSkin);}
    // The rifle's reload: the round the right hand brings to the open action, pinched between thumb and finger, from the pouch up to the port
-   // (the clip's frames 17-61, five trips). It lies along the bore, drawn from the brass case scaled to a .308's length.
+   // (the clip's frames 17-61, five trips). It lies along the bore: the .308 round (3397), at the length the view model's frame gives it.
    if(rifleRig&&reloading){const auto clip=fpRifleClip(game);
     if(!std::strcmp(clip.name,"reload")){const float k=clip.phase*85.f;
      if(k>=17.f&&k<61.f&&std::fmod(k-17.f,11.f)<5.8f){
       auto rig=[&](const char*n){auto q=fpRig().bonePosition(n);return Point3{q.x,q.y-m_fpDrop,-q.z+m_fpPush};};
       const Point3 centre=(rig("thumb_03_r")+rig("index_03_r"))*.5f,o=fpMacPoint({0,0,0},0);
       const Point3 ax=unit(fpMacPoint({1,0,0},0)-o),ay=unit(fpMacPoint({0,1,0},0)-o),az=unit(fpMacPoint({0,0,1},0)-o);
-      for(auto face:m_brassMesh.triangles){for(auto&v:face.v){const Point3 q=v.p*5.0f;v.p=centre+ax*q.x+ay*q.y+az*q.z;}carrier=true;shade(face,m_brassTexture);}}}}
+      for(auto face:m_rifleRoundMesh.triangles){for(auto&v:face.v){const Point3 q=v.p*1.336f;v.p=centre+ax*q.x+ay*q.y+az*q.z;}carrier=true;shade(face,m_brassTexture);}}}}
    // What it drew, for the lab: the magazine's middle and the grip's, the knob, the hands.
    auto view=[&](const char*n){auto q=fpRig().bonePosition(n);return macMotion(Point3{q.x,q.y-m_fpDrop,-q.z+m_fpPush});};
    auto len=[](Point3 d){return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);};

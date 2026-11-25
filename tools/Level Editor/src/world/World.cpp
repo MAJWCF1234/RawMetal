@@ -1,6 +1,7 @@
 #include "../core/FrameProfile.h"
 #include "World.h"
 #include "ModelIds.h"
+#include "WalkShapes.h"
 #include "CollisionQueryBatch.h"
 #include "TerrainSurfaceCache.h"
 #include "../core/Ray.h"
@@ -414,10 +415,45 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
   box(lx(-1.18f),lx(1.18f),ly(-5.3f),ly(5.4f),0,.15f*h);               // the floor, a step up
   f.solid=false;
  }
+ // A fixture's collision as boxes in its own frame (metres: u across, v along the depth from its middle, z up from
+ // its base), placed in the world. A quarter turn on flat ground keeps each box one structure. Any other turn, or a
+ // fixture tilted with the ground under it, is laid on a 10 cm grid of upright columns: a column holds every height
+ // span of every box its square touches (tested on the box's axes and the world's, so a thin wall at a slant is
+ // never missed), raised with the ground's tilt at its middle; runs of equal columns along x join into one
+ // structure per span. So stairs, arches and pipes stay walkable at any turn, size and tilt.
+ struct LocalBox{float u0,u1,v0,v1,z0,z1;};
+ auto layShape=[&](const Fixture& f,const std::vector<LocalBox>& boxes){
+  const float base=floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),sn=std::sin(f.yaw);
+  const float q=f.yaw/(kPi*.5f),k=std::round(q);
+  auto corners=[&](const LocalBox& bx,float& ax,float& ay,float& ex,float& ey){ax=ay=1e9f;ex=ey=-1e9f;
+   for(float u:{bx.u0,bx.u1})for(float v:{bx.v0,bx.v1}){const float wx=f.position.x+u*c+v*sn,wy=f.position.y-u*sn+v*c;ax=std::min(ax,wx);ex=std::max(ex,wx);ay=std::min(ay,wy);ey=std::max(ey,wy);}};
+  if(std::fabs(q-k)<=.02f&&f.slopeX==0&&f.slopeY==0){
+   for(const auto& bx:boxes){float ax,ay,ex,ey;corners(bx,ax,ay,ex,ey);Structure st{ax,ay,ex,ey,base+bx.z0,base+bx.z1};st.material=CollisionProxyMaterial;st.solid=true;m_structures.push_back(st);}
+   return;}
+  constexpr float G=.1f;
+  const float hx=(std::fabs(c)*f.width+std::fabs(sn)*f.depth)*.5f,hy=(std::fabs(sn)*f.width+std::fabs(c)*f.depth)*.5f;
+  const int nx=std::max(1,int(std::ceil(2*hx/G))),ny=std::max(1,int(std::ceil(2*hy/G)));const float ox=f.position.x-nx*G*.5f,oy=f.position.y-ny*G*.5f;
+  std::vector<std::array<float,4>> world(boxes.size());for(size_t i=0;i<boxes.size();++i)corners(boxes[i],world[i][0],world[i][1],world[i][2],world[i][3]);
+  using Spans=std::vector<std::pair<float,float>>;
+  auto column=[&](int ix,int iy){Spans out;const float cx=ox+(ix+.5f)*G,cy=oy+(iy+.5f)*G,dx=cx-f.position.x,dy=cy-f.position.y;
+   const float lu=dx*c-dy*sn,lv=dx*sn+dy*c,r=(std::fabs(c)+std::fabs(sn))*G*.5f,lift=dx*f.slopeX+dy*f.slopeY;
+   for(size_t i=0;i<boxes.size();++i){const auto& bx=boxes[i];const auto& w=world[i];
+    if(lu+r<=bx.u0||lu-r>=bx.u1||lv+r<=bx.v0||lv-r>=bx.v1)continue;
+    if(w[2]<=cx-G*.5f||w[0]>=cx+G*.5f||w[3]<=cy-G*.5f||w[1]>=cy+G*.5f)continue;
+    out.push_back({base+lift+bx.z0,base+lift+bx.z1});}
+   std::sort(out.begin(),out.end());Spans merged;
+   for(const auto& sp:out){if(!merged.empty()&&sp.first<=merged.back().second+.001f)merged.back().second=std::max(merged.back().second,sp.second);else merged.push_back(sp);}
+   for(auto& sp:merged){sp.first=std::round(sp.first*100.f)/100.f;sp.second=std::round(sp.second*100.f)/100.f;}   // to the centimetre (never up a step: a 0.2 m riser must stay under the 0.215 m step), so neighbours on a tilt still join
+   return merged;};
+  for(int iy=0;iy<ny;++iy){int start=0;Spans run=column(0,iy);
+   for(int ix=1;ix<=nx;++ix){Spans next=ix<nx?column(ix,iy):Spans{};
+    if(ix<nx&&next==run)continue;
+    for(const auto& sp:run){Structure st{ox+start*G,oy+iy*G,ox+ix*G,oy+(iy+1)*G,sp.first,sp.second};st.material=CollisionProxyMaterial;st.solid=true;m_structures.push_back(st);}
+    start=ix;run=std::move(next);}}};
  // Stairs and openings that are not a cube. A staircase or a wall with a doorway placed as a fixture is one solid box,
  // so a walker met a wall where the steps were and could not pass under an arch. Their one box gives way to unseen
  // shapes in the model's own proportions: a flight of steps (a body that climbs 0.2 m a step, high end at the model's
- // -z), or two piers and a lintel round a clear opening. Quarter turns only, like the container above.
+ // -z), or two piers and a lintel round a clear opening.
  for(auto&f:m_fixtures){
   if(!f.solid||!f.visible)continue;
   struct Shape{int model;bool steps;float width,depth,height,openHalf,openHeight;float pier=0,plateau=0;};   // the model's own metres; pier: a centre post between two openings; plateau: a ramp's flat top (depth)
@@ -429,13 +465,9 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
    {model::cave_oldcity_gateway,false,3.f,1.11f,3.f,.7f,2.2f},   // (the 1.8 m arch is lower than a walker: it stays a solid block)
    {model::bld_ramp,true,1.4f,4.f,1.f,0,0,0,2.f}};   // a 2 m slope up to a 2 m flat top
   const Shape* s=nullptr;for(const auto& candidate:shapes)if(candidate.model==f.model)s=&candidate;if(!s)continue;
-  const float q=f.yaw/(kPi*.5f),k=std::round(q);if(std::fabs(q-k)>.02f)continue;
-  const float base=floorHeight(f.position.x,f.position.y)+f.base,c=std::cos(f.yaw),sn=std::sin(f.yaw);
   const float sx=f.width/s->width,sy=f.depth/s->depth,sz=f.height/s->height;
-  auto box=[&](float x0,float x1,float v0,float v1,float z0,float z1){   // x across, v along the depth, in the model's metres
-   float ax=1e9f,ay=1e9f,bx=-1e9f,by=-1e9f;
-   for(float u:{x0*sx,x1*sx})for(float v:{v0*sy,v1*sy}){const float wx=f.position.x+u*c+v*sn,wy=f.position.y-u*sn+v*c;ax=std::min(ax,wx);bx=std::max(bx,wx);ay=std::min(ay,wy);by=std::max(by,wy);}
-   Structure st{ax,ay,bx,by,base+z0*sz,base+z1*sz};st.material=CollisionProxyMaterial;st.solid=true;m_structures.push_back(st);};
+  std::vector<LocalBox> boxes;
+  auto box=[&](float x0,float x1,float v0,float v1,float z0,float z1){boxes.push_back({x0*sx,x1*sx,v0*sy,v1*sy,z0*sz,z1*sz});};   // x across, v along the depth, in the model's metres
   if(s->steps){
    if(s->plateau>0){   // a ramp: the slope over the front part of the depth, then the flat top
     const float slope=s->depth-s->plateau;const int n=std::max(3,int(std::lround(s->height/.2f)));const float run=slope/float(n);
@@ -451,9 +483,34 @@ void World::loadAuthoredMap(std::shared_ptr<const AuthoredMapData> map){
    box(-s->openHalf,s->openHalf,-hd,hd,s->openHeight,s->height);                           // the lintel over the opening
    if(s->pier>0)box(-s->pier,s->pier,-hd,hd,0,s->openHeight);                              // the post between a double opening
   }
-  f.solid=false;
+  layShape(f,boxes);f.solid=false;f.shaped=true;
+ }
+ // Every other model that is not a cube (an arch, a culvert, a pipe, a tunnel piece, a staircase, a frame, a bed or a
+ // table to get under) collides as its mesh's solid part (WalkShapes.h, generated from the space a prone body can
+ // reach in it), so a walker passes under, crouches or crawls through, and climbs it as drawn; a fixture with
+ // breakable parts or a soft pad keeps its box (their own code reads it).
+ static const bool walkShapesOff=std::getenv("RM_NO_WALK_SHAPES")!=nullptr;   // A/B against the old boxes (tests)
+ for(int i=0;i<int(m_fixtures.size());++i){auto&f=m_fixtures[size_t(i)];
+  if(walkShapesOff||!f.solid||!f.visible||f.core<1||fixtureHasParts(i))continue;
+  if(f.model>=0&&f.model<int(std::size(model::soft))&&model::soft[f.model][1]>0)continue;
+  // The models fixtureSurface shapes by hand (shelves, bookcases, desks, chairs, carts, cells) keep that.
+  static constexpr int handMade[]={model::anl_cell_cap,model::anl_cell_charged,model::anl_cell_spent,model::bookcase,model::desk,model::desk_corner,model::lab_boardroom_chair,model::lab_field_meter,
+   model::med_crash_cart,model::med_wheelchair,model::metal_shelf,model::office_bookcase,model::office_chair,model::office_file_cabinet_open,model::platform_chair,model::wooden_chair,model::wooden_table};
+  if(std::find(std::begin(handMade),std::end(handMade),f.model)!=std::end(handMade))continue;
+  const auto* e=walkshapes::find(f.model);if(!e)continue;
+  // Set down smaller than a body's way through (a cabinet made a bench), it is furniture again: its box holds what stands on it.
+  const bool steps=f.model==model::bld_stairs_short||f.model==model::bld_stairs_concrete||f.model==model::bld_stairs_wood||f.model==model::bld_stairs_landing;
+  if(f.height<1.2f&&!steps)continue;
+  std::vector<LocalBox> boxes;boxes.reserve(size_t(e->count));
+  for(int b=e->first;b<e->first+e->count;++b){const auto& bx=walkshapes::boxes[b];
+   boxes.push_back({walkshapes::at(bx.x0)*f.width,walkshapes::at(bx.x1)*f.width,walkshapes::at(bx.y0)*f.depth,walkshapes::at(bx.y1)*f.depth,(walkshapes::at(bx.z0)+.5f)*f.height,(walkshapes::at(bx.z1)+.5f)*f.height});}
+  layShape(f,boxes);f.solid=false;f.shaped=true;
  }
  m_scriptEvents=m_mapData->scriptEvents;
+ // An AI that drives its zone's lamps: each lamp in the zone answers to it (the first AI whose zone holds it).
+ m_aiAgents=m_mapData->aiAgents;
+ for(auto& lamp:m_lights)for(size_t a=0;a<m_aiAgents.size()&&lamp.directed<0;++a){const auto& ai=m_aiAgents[a];const auto at=lamp.emitter();
+  if(ai.lights&&ai.contains(at.x,at.y,at.z)){lamp.directed=int(a);lamp.directedLevel=level();}}
  m_pushCrates=m_mapData->pushCrates;m_cratePlates=m_mapData->cratePlates;
  for(auto& crate:m_pushCrates){crate.home=crate.position;crate.z=m_mapData->layers.empty()?crate.z:m_mapData->layers.front().elevation+crate.z;}
  m_cargoLift=m_mapData->cargoLift;m_cargoLiftHeight=m_cargoLift.lower;
@@ -1158,13 +1215,27 @@ bool World::doorBlocks(float x,float y,float feet,float height,bool sight)const{
    float along=std::clamp(dot(delta,axis),0.f,width);
    Vec2 nearest=hinge+axis*along;
    if(lengthSq(Vec2{x,y}-nearest)<.15f*.15f){const Vec2 c=door.centre();float base=floorHeight(c.x,c.y)+door.z;
-    if(feet+height>base+.015f&&feet<base+2.35f)return true;
+    if(feet+height>base+.015f&&feet<base+Door::SwingHeight)return true;
    }
   }else if(door.spans({x,y})&&std::fabs(door.across({x,y})-door.y)<.13f){const Vec2 c=door.centre();float base=floorHeight(c.x,c.y)+door.z;
-   if(feet+height>base+open*2.65f+.015f&&feet<base+open*2.65f+2.48f)return true;
+   const float bottom=base+open*Door::LiftHeight;if(feet+height>bottom+.015f&&feet<bottom+Door::SlabHeight)return true;
   }
  }
  return false;
+}
+// A lamp hangs flush under what is above it: the next slab or roof is its mounting surface, and a plain
+// housing hangs from it on rods. A lamp in a freight cab's shaft sits flush (the cab's roof above it is no
+// mounting surface, and rods to it would run up through the cab floor). A fitted lamp with more than 1.5 m
+// clear above its fitting (a kit set down under open sky, a roofless room) keeps its fitting just over its
+// light, and so does a plain housing in a custom map under open sky: hung from the top of the map, 128 m
+// up, the lamp seems not to be there. Custom maps hang their lamps as the campaign's authored maps do:
+// before, every one of them drew its fitting 13 cm over its light wherever the ceiling was (a kit's tube
+// 7 cm under the slab, a clinic lamp 13, a twin tube 18, the glow up inside the fitting).
+float World::lampMount(const WorldLight& light)const{
+ if(!((campaign()&&(level()>=7||authored()))||custom())||insideCargoLift(light.position.x,light.position.y))return light.z+.13f;
+ const float above=clearanceAbove(light.position.x,light.position.y,light.z);
+ if(light.fitting>=0)return above>light.z+.1f+light.fittingHeight+1.5f?light.z+.1f+light.fittingHeight:above;
+ return custom()&&above>light.z+12.f?light.z+.13f:above;
 }
 float World::clearanceHeight(float x,float y,float feet)const{
  float height=ceilingHeight(x,y);for(auto&door:m_doors)if(door.spans({x,y})&&std::fabs(door.across({x,y})-door.y)<.62f){

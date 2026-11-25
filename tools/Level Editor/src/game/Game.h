@@ -86,6 +86,7 @@ struct InputState {
     int pointerX=-1,pointerY=-1;
     Vec2 controllerMove{};  // Right and forward, normalized together.
     Vec2 controllerLook{};  // Yaw and pitch in radians per second.
+    bool padActive=false;   // the controller was the last thing touched (its button names in the prompts, aim assist)
     float mouseDx = 0.0f;
     float mouseDy = 0.0f;
     bool vrTracked=false;
@@ -233,7 +234,7 @@ struct RadarContact {Vec2 position{};float yaw=0,range=0,cone=0;GuardState state
 // material: an ImpactMaterial, or -1 for marks made before shots knew what they struck. size: a
 // blood mark's half-width (0 for the usual).
 struct BulletImpact {Vec2 pos{};float z=0;Vec2 normal{};float time=0;int level=0;bool blood=false;int tint=0;float normalZ=0;int material=-1;float size=0;
- int door=-1;float doorOpen=0;};   // a mark on a lifting door's leaf: that door, and how far open it was then (it rides up with the leaf)
+ int door=-1;float doorOpen=0;};   // a mark on a door's leaf: that door, and how far open it was then (it rides the leaf: Door::carry)
 // Every shot fired, for the bodies it passes through: a ray in the frame of `level` (the active
 // chunk when it was fired), as far as it flew.
 struct ShotRay {Point3 origin{},direction{};float range=0,time=0,damage=0,impulse=0;int level=0;};
@@ -387,8 +388,11 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 // holster and sticks swapped), the frame-rate readout, and the render scale (0 automatic, else 0.6-1 fixed).
 // Controller options (SETTINGS > CONTROLS, docs/Systems/accessibility.md): for hands that shake, tire or cannot hold a
 // trigger. Indexes into the tables in Win32Window.cpp: look speed, stick dead zone, steady aim (a low-pass on the
-// sticks), and the press filter (a button must be held that long before it counts).
-struct PadOptions {int look=3,dead=0,steady=0,filter=0;bool toggleAim=false,toggleSprint=false,toggleCrouch=false,bumpers=false,swapSticks=false;};
+// sticks), and the press filter (a button must be held that long before it counts). curve: how the look stick's
+// travel becomes speed (0 linear, 1 standard, 2 precise: slower near the middle); assist: aim help on the pad
+// (0 off, 1 light, 2 strong: the view slows over a target and drifts with it); rumble: 0 off, 1 light, 2 standard.
+// All provisional: a player with cerebral palsy is trying them.
+struct PadOptions {int look=3,dead=0,steady=0,filter=0;bool toggleAim=false,toggleSprint=false,toggleCrouch=false,bumpers=false,swapSticks=false;int curve=1,assist=1,rumble=2;};
 struct Settings {PadOptions pad;float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
@@ -551,7 +555,7 @@ public:
     bool hurtPlayer(const PlayerView& p,float amount,Vec2 source,bool blockable=true,bool shieldable=true);
     // A co-op guest's body as the host keeps it (the Match fills it each frame; empty everywhere else).
     // pushing: they lean into something (walking keys held while stopped): a prop is shoved their way.
-    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false,pushing=false;float lit=1,litTimer=0,stride=0;};
+    struct RemoteBody {int id=0,level=0;Player body;Vec2 velocity{};bool hidden=false,torch=false,pushing=false;float lit=1,litTimer=0;};
     // The light on a point (a body's chest): the lamps, the room's ambient and darkness, a torch.
     float lightAt(Vec2 at,float chest,bool torch)const;
     // Script effects a co-op host sends on (the Match drains it after the frame; cleared at each script pass):
@@ -739,6 +743,7 @@ public:
     static bool testChimeraHunt();
     static bool testDoorAxis();
     static bool testSniper();      // --each-test=sniper: the bolt-action rifle, a head hit, the bolt, the reload and the scope
+    static bool testAiDirector();  // --each-test=ai-director: an AI over a zone, its beat, the LIGHTS, NOISE and LATER blocks
     static bool testWalkIn();      // --each-test=walk-in: into an open container, up stairs, along a balcony rail
     static bool testMapFormat();   // MapFormatTest.cpp: map format 2
     static bool testDoors();
@@ -769,7 +774,7 @@ public:
     float pickupHeight(const Pickup& pickup)const{return pickup.z>-999?pickup.z:m_world.floorHeight(pickup.pos.x,pickup.pos.y);}
     const std::vector<Clutter>& clutter()const{return m_clutter;}
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
-    void pinToDoor(BulletImpact& mark)const;   // a mark landing on a lifting door's leaf rides with it (Hitscan.cpp)
+    void pinToDoor(BulletImpact& mark)const;   // a mark landing on a door's leaf rides with it (Hitscan.cpp)
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
     // Dead bodies' poses (SaveSections.h CorpsePose) by (creature, level, slot): the renderer keeps each body's current
     // pose here as it moves, the physics save section writes and reads them, and a body made again after a load takes
@@ -895,6 +900,14 @@ public:
     int enemiesRemaining() const;
     int enemiesRemaining(int level)const{return hostilesRemaining(level);}
     float hitFlash()const{return m_hitFlash;}
+    // The controller (Controller.cpp): the motors' strengths now (x the heavy low motor, y the light high one, 0-1,
+    // the RUMBLE setting applied); a prompt with its keys named as the pad's buttons while the pad is in use; aim
+    // assist on the look stick (yaw and pitch rates, radians and pitch units a second, in and out).
+    Vec2 padRumble()const;
+    std::string padPrompt(const char* text)const;
+    bool padPrompts()const{return m_padPrompts;}
+    Vec2 aimAssist(Vec2 stickLook,float dt)const;
+    static bool testController(std::ostream& report);
     float critFlash()const{return m_critFlash;}   // a head hit with the sniper rifle: the cross reads HEAD
     // The scope: how far the rifle is at the eye (0 hip, 1 looking through it). The view narrows and a ring closes round it.
     float scopeBlend()const{return m_weaponEquipped&&m_equippedWeapon==WeaponId::Sniper&&!unarmed()?m_scopeBlend:0.f;}   // the rifle shoulders over its iron sights first (aimBlend); held there, the view closes down the scope
@@ -1403,6 +1416,7 @@ public:
     // the state gate alone; lampPower adds the timed window and flicker (0..1).
     bool lampSwitchedOn(const WorldLight& lamp)const;
     float lampPower(const WorldLight& lamp)const;
+    float lampPowerAuthored(const WorldLight& lamp)const;   // as authored: switching, timing, flicker, hung lamps, live leads
     // A lamp riding a prop that hangs on a joint (a swinging lamp): where its light is now (map coordinates), lit
     // while its prop is whole. False for any other lamp.
     bool hungLampAt(const WorldLight& lamp,Point3& at,bool* lit=nullptr)const;
@@ -1675,6 +1689,19 @@ private:
     std::vector<QuestItemStack> m_questItems;
     std::vector<StateId> m_firedEvents;
     std::vector<ScriptEvent> m_scriptEvents;
+    // ---- The AIs over map zones (AI records, AiAgents.cpp) and the AI blocks they are wired with ----
+    // Every AI keeps what it decides in states (saved with the rest); these are only the fractions a state's
+    // whole number cannot hold, rebuilt from the states after a load.
+    std::vector<AiAgent> m_aiAgents;
+    struct AiMind {float tension=0,quiet=0;bool seeded=false;};std::vector<AiMind> m_aiMinds;
+    // The Lights block: per AI, a mode (0 as authored, 1 flicker, 2 dark, 3 red) and the tenths of a second left
+    // (0 until changed), in states AI_lights and AI_lights_left; the Later block: a state per Later action
+    // counting tenths down (Game::laterKey).
+    float m_aiTick=0;
+    void seedAiAgents();
+    void updateAiAgents(float dt);
+    float aiLampScale(const WorldLight& lamp,int level,Point3* tint=nullptr)const;
+    static StateId laterKey(StateId event,size_t action){return stateId("later:"+std::to_string(event)+":"+std::to_string(action));}
     float m_hazardSoundTimer=0;
     // Darkness ramp and torch jam; runtime only, re-settled after any load.
     float m_darkness=0,m_flashlightJam=0;bool m_darknessSettled=false;
@@ -2117,6 +2144,9 @@ private:
     std::vector<ScriptFx> m_scriptFx;
     struct NetUse {int level=0,terminal=0;};
     std::vector<NetUse> m_netUses;
+    // Match publishes the remote footfalls after the game update. The next update feeds them to hearing and audio.
+    std::vector<SoundEvent> m_netSounds;
+    bool m_padPrompts=false;   // the pad was the last thing touched (InputState::padActive)
     int m_scriptPlayer=0;       // the player whose step or hand fires the script running now
     int m_shooter=0;            // the player whose shot is being resolved (a co-op host resolving a guest's)
     // ----- Several maps at once (ForeignChunks.cpp; docs/Systems/multiplayer.md "Several maps") -----

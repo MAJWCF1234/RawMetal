@@ -2034,7 +2034,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
          {"lockers",retro::Game::testLockers},
          {"locker-guards",retro::Game::testLockerGuards},
          {"locker-capture",retro::Game::testLockerCapture},
-         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"walk-in",retro::Game::testWalkIn},{"sniper",retro::Game::testSniper},{"map-format",retro::Game::testMapFormat},{"doors",retro::Game::testDoors},
+         {"door-leaf",retro::testDoorLeaves},{"door-axis",retro::Game::testDoorAxis},{"walk-in",retro::Game::testWalkIn},{"ai-director",retro::Game::testAiDirector},{"sniper",retro::Game::testSniper},{"map-format",retro::Game::testMapFormat},{"doors",retro::Game::testDoors},
          {"ambience",retro::Game::testAmbience},{"reverb",retro::AudioEngine::testReverb},
          {"alarm",retro::Game::testAlarm},
          {"alert-music",retro::AudioEngine::testAlertMusic},
@@ -2425,7 +2425,7 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
     int menuTestFrames=0;
     while(window.pump()){
         auto now=clock::now(); float dt=std::chrono::duration<float>(now-last).count(); last=now;
-        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();window.setTalkKey(game.settings().pushToTalkKey);window.setPadOptions(game.settings().pad);auto input=window.input(menuOpen||vrMode,!vrMode&&game.inventoryOpen()?dt:0.f);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
+        bool wasPaused=game.paused();bool menuOpen=game.titleScreen()||wasPaused||game.inventoryOpen()||game.talking()||game.consoleOpen();window.setTalkKey(game.settings().pushToTalkKey);window.setPadOptions(game.settings().pad);auto input=window.input(menuOpen||vrMode,!vrMode&&game.inventoryOpen()?dt:0.f);if(vrRuntime&&!vrRuntime->update(game,input,dt))break;if(vrRuntime&&!vrRuntime->trackingValid())continue;if(vrRuntime&&game.match())game.setNetAvatar(vrRuntime->avatar(game));game.update(input,dt);window.setRumble(vrMode?retro::Vec2{}:game.padRumble());window.setMenu(game.titleScreen()||game.paused()||game.inventoryOpen()||game.talking()||game.consoleOpen());
         if(((wasPaused&&!game.paused())||game.takeSettingsSave())&&!settingsPath.empty())game.saveSettings(settingsPath);
         if(handoff&&!game.editorRequested()&&commandArguments().find(L"--menu-editor-test")&&++menuTestFrames>90){handoff->edit=true;handoff->fresh=true;handoff->project.clear();break;}
         if(handoff&&game.editorRequested()){handoff->edit=true;handoff->fresh=game.editorStartsFresh();handoff->project=game.editorProject();break;}
