@@ -185,6 +185,7 @@ struct Enemy {
     // where that order is anchored, and whether the console holds it still. None
     // of this is saved: a save leaves summons out (they are transient).
     AiFaction faction=AiFaction::Creature;std::uint32_t summon=0;std::uint8_t order=0;bool frozen=false;
+    bool babyHuntsman=false; // Transient summon variant of the adult species.
     // An authored creature given an order (CREATURE ai=): it keeps it as a summon does.
     bool ordered=false;
     // What a fresh spawn of the same record knows that a save does not keep (traits, side, order).
