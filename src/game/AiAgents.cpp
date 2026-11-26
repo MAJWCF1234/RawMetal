@@ -41,7 +41,7 @@ void Game::updateAiAgents(float dt){
  while(m_aiTick>=.1f){m_aiTick-=.1f;
   for(const auto& ai:m_aiAgents){const int left=state(lightsLeft(ai));if(left>1)setState(lightsLeft(ai),left-1);else if(left==1){setState(lightsLeft(ai),0);setState(lightsMode(ai),0);}}
   for(const auto& event:m_scriptEvents)for(size_t a=0;a<event.actions.size();++a){const auto& action=event.actions[a];if(action.type!=ScriptAction::Type::Later)continue;
-   const StateId key=laterKey(event.id,a);const int left=state(key);if(left>1)setState(key,left-1);else if(left==1){setState(key,0);setState(action.id,action.value);}}
+   const StateId key=laterKey(event.id,a);const int left=state(key);if(left>1)setState(key,left-1);else if(left==1){setState(key,0);setState(action.id,action.value);if(m_scriptTrace)m_scriptTrace(event.id,int(a));}}
  }
 }
 // A lamp in a zone its AI drives: 1 as authored, 0 dark, a stutter when flickering; tint, when asked, is the gel

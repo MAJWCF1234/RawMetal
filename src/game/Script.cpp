@@ -214,6 +214,7 @@ void Game::updateScripts(float dt){
   if(event.rearm&&latched&&!ready){m_firedEvents.erase(std::find(m_firedEvents.begin(),m_firedEvents.end(),event.id));continue;}
   if(!ready||latched)continue;
   if(event.once||event.rearm)m_firedEvents.push_back(event.id);
+  if(m_scriptTrace)m_scriptTrace(event.id,-1);
   // A checkpoint is written after the event's other actions, wherever it is
   // listed: a save taken first would latch a once-event with its states unset,
   // and loading it would lose what the event does (76's blackout did that).
@@ -221,7 +222,7 @@ void Game::updateScripts(float dt){
   for(size_t i=0;i<event.actions.size();++i){const auto& action=event.actions[i];if(action.type==ScriptAction::Type::Checkpoint){checkpoint=true;continue;}
    // A Later block starts its count (tenths of a second, plus one: 1 is due) in its own saved state; AiAgents.cpp counts it down.
    if(action.type==ScriptAction::Type::Later){setState(laterKey(event.id,i),int(std::lround(action.amount*10.f))+1);continue;}
-   executeScriptAction(action);}
+   executeScriptAction(action);if(m_scriptTrace)m_scriptTrace(event.id,int(i));}
   m_scriptPlayer=0;
   if(checkpoint)saveCheckpoint();
  }

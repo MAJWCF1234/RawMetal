@@ -1697,6 +1697,11 @@ private:
     // Props held by anchored= or frozen= (Clutter::pinned), refreshed each physics step.
     void refreshPinnedClutter();
     void updateScripts(float dt);
+public:
+    // Preview-only observer. An index of -1 marks the trigger and its gates.
+    void setScriptTrace(std::function<void(StateId, int)> trace) { m_scriptTrace = std::move(trace); }
+private:
+    std::function<void(StateId, int)> m_scriptTrace;
     // @health and @map read the player tested (players()); the rest are the world's.
     int scriptValue(const ScriptEvent& event,const ScriptCondition& condition,const PlayerView& player)const;
     // Ready for one player (on its map, its gates, inside its box), and over the players: any of them, or every
