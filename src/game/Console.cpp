@@ -39,8 +39,22 @@ void Game::executeConsole(std::string command){
   m_consoleLog.push_back("MAP ENGINEERING OPENS SERVICE SPINE (180), WEST OF DEEP ACCESS CONTROL.");
  }
  else if(verb=="help"||verb=="maps"){
-  m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST / MAP EXCLUSION");
-  for(int map=0;map<CampaignChunkCount;++map)m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
+  auto listMaps=[&](){
+   m_consoleLog.push_back("ASHFALL: MAP WASTELAND / MAP COAST / MAP EXCLUSION");
+   std::string_view section;
+   for(int map=0;map<CampaignChunkCount;++map){
+    // A district with its own section (Engineering) gets a heading line above its maps.
+    const auto label=campaignChunkLabel(map);
+    if(section!=label.section){
+     section=label.section;
+     if(!section.empty())m_consoleLog.push_back("-- CHAPTER "+std::to_string(label.chapter)+" / "+std::string(section)+" --");
+    }
+    m_consoleLog.push_back(std::to_string(map)+" "+CampaignMapNames[map]);
+   }
+  };
+  // The console shows only its last lines: HELP ends on the commands, MAPS on the
+  // maps, so the Engineering section is on screen after typing MAPS.
+  if(verb=="help")listMaps();
   m_consoleLog.push_back("MAP <ID> / FREIGHT / RECEIVING / WAREHOUSE / MANIFEST / YARD / PLATFORM / DEPOT / TUNNELS.");
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("MAPS ENGINEERING LISTS THE ENGINEERING DISTRICTS. MAP ENGINEERING OPENS SERVICE SPINE.");
@@ -48,6 +62,7 @@ void Game::executeConsole(std::string command){
   m_consoleLog.push_back("DEBUGLAYER: TOGGLE COLLIDERS, LIGHTS, CHUNKS, HAZARDS AND STATS.");
   m_consoleLog.push_back("GIVE 12 GA / 12GA / SHELLS: ADDS 16 SHOTGUN SHELLS.");
   m_consoleLog.push_back("SUMMON <KIND> [N] [ALLY|ENEMY|NEUTRAL] [AI=..] / ALLY / ENEMY / KILL / KILLALL / FREEZE / AI ON|OFF / LIST. HELP SUMMON.");
+  if(verb=="maps")listMaps();
  }else if(verb=="clear")m_consoleLog.clear();
  else if(verb=="unlock"){
   // Unlock what the player is looking at for good, by setting the state it
@@ -254,6 +269,10 @@ bool Game::testConsole(){
  typeGive("give handgun");checkGive(game.hasHandgun()&&game.player().pool(WeaponId::Handgun)==AmmoPool{47,3},"give handgun still adds one magazine when owned");
  typeGive("help");bool shellHelp=false;for(const auto& line:game.m_consoleLog)shellHelp|=line.find("GIVE 12 GA")!=std::string::npos;
  checkGive(shellHelp,"help lists the displayed 12 GA caliber command");
+ {typeGive("clear");typeGive("maps");
+  const auto heading=std::find(game.m_consoleLog.begin(),game.m_consoleLog.end(),std::string("-- CHAPTER 2 / ENGINEERING --"));
+  checkGive(heading!=game.m_consoleLog.end()&&heading+1!=game.m_consoleLog.end()&&*(heading+1)=="180 ENGINEERING / SERVICE SPINE","MAPS shows an Engineering heading above Service Spine");
+  checkGive(heading!=game.m_consoleLog.end()&&game.m_consoleLog.end()-heading<=9,"the Engineering heading is in the console's nine visible lines");}
  typeGive("maps engineering");
  const std::array<std::string_view,2> engineeringRows={
   "CHAPTER 2 / ENGINEERING","180-181 DEEP RESEARCH SERVICES"};
