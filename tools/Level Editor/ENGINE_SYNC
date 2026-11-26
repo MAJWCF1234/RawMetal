@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 173b83731a6420de3ffd0f00e0863d950dcfd753
-# 2026-11-26 02:08, fix: the test runner reads the whole test list again; the zone test counts both built-in maps
+commit a8415029b90359c694183e856bd81ca22142a096
+# 2026-11-26 07:34, release: v1.7.4, still water
