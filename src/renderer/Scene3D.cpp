@@ -4576,10 +4576,48 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // Where something met the water (game.waterSplashes()) its rings run out over it (WaterRipples.cpp):
   // there the surface is cut fine, lifted by the rings' height and tilted by their slope.
   const auto rings=ripples::gather(game.waterSplashes(),level,game.elapsed());const float ringTilt=tune("water.ripple_tilt",2.5f),ringShade=tune("water.ripple_shade",22.f);
+  // Films of water on the floor: the water's own surface, cut to the one outline they share (Wetness.h shapeFilms).
+  // Rows of whole cells are drawn as one strip each; a cell the waterline crosses is cut along it.
+  {static std::map<std::uint64_t,std::vector<FilmShape>> shaped;
+   std::uint64_t key=1469598103934665603ull;auto mix=[&](float v){key=(key^std::uint64_t(std::uint32_t(std::lround(v*1000.f))))*1099511628211ull;};
+   mix(float(w.level()));mix(float(w.structures().size()));for(const auto& v:w.waterVolumes()){mix(v.x1);mix(v.y1);mix(v.x2);mix(v.y2);mix(v.bed);mix(v.surface);}
+   for(const auto& b:w.structures()){mix(b.x1);mix(b.y1);mix(b.x2);mix(b.y2);mix(b.top);}
+   auto found=shaped.find(key);if(found==shaped.end()){if(shaped.size()>=64)shaped.clear();found=shaped.emplace(key,shapeFilms(w)).first;}
+   const float now=game.elapsed(),floorZ=w.layers().front().elevation;const Point3 up{0,0,1};
+   for(const auto& film:found->second){
+    constexpr float C=FilmShape::Cell;const float z=film.surface+.004f;
+    // The map's murk darkens and greys it, as it does a pool.
+    const auto&sheet=film.murk>0?m_murkWater:m_water;const float shade=1.05f*(1-.55f*film.murk);
+    auto pooled=[&](float x,float y){for(const auto& o:w.waterVolumes())if(!waterFilm(o,floorZ)&&std::fabs(o.surface-film.surface)<.03f&&x>o.x1&&x<o.x2&&y>o.y1&&y<o.y2)return true;return false;};
+    auto piece=[&](const Point3* p,int n){
+     if(n<3)return;Point3 mid{};for(int k=0;k<n;++k)mid=mid+p[k]*(1.f/float(n));
+     std::array<MeshVertex,8> v;for(int k=0;k<n;++k)v[size_t(k)]={cameraPoint(p[k],game),p[k].x*.45f+now*.014f,-p[k].y*.45f-now*.008f,illumination(p[k],up)+probeSheen(p[k],up,sheet)};
+     NormalLighting cell=normalLightingAt(mid);cell.surfaceNormal=cameraPoint(mid+up,game)-cameraPoint(mid,game);
+     for(int k=1;k+1<n;++k)triangle3D(v[0],v[size_t(k)],v[size_t(k+1)],sheet,shade,&cell);};
+    auto value=[&](int i,int j){return film.inside[size_t(j*film.width+i)];};
+    auto place=[&](float i,float j){return Point3{film.x0+(i+.5f)*C,film.y0+(j+.5f)*C,z};};
+    for(int j=0;j+1<film.height;++j){
+     int run=-1;auto flush=[&](int end){if(run<0)return;const Point3 q[4]={place(float(run),float(j)),place(float(end),float(j)),place(float(end),float(j+1)),place(float(run),float(j+1))};piece(q,4);run=-1;};
+     for(int i=0;i+1<film.width;++i){
+      const float s[4]={value(i,j),value(i+1,j),value(i+1,j+1),value(i,j+1)};const int wetCorners=int(s[0]>0)+int(s[1]>0)+int(s[2]>0)+int(s[3]>0);
+      if(!wetCorners){flush(i);continue;}
+      const Point3 centre=place(i+.5f,j+.5f);
+      if(pooled(centre.x,centre.y)||hidden({centre.x-C,centre.y-C,z-.01f},{centre.x+C,centre.y+C,z+.01f})){flush(i);continue;}
+      if(wetCorners==4){if(run<0)run=i;if(i+1-run>=6)flush(i+1);continue;}   // short strips keep the vertex light even
+      flush(i);
+      const Point3 corner[4]={place(float(i),float(j)),place(float(i+1),float(j)),place(float(i+1),float(j+1)),place(float(i),float(j+1))};
+      Point3 cut[8];int n=0;
+      for(int k=0;k<4;++k){const int m=(k+1)&3;if(s[k]>0)cut[n++]=corner[k];if((s[k]>0)!=(s[m]>0)){const float t=s[k]/(s[k]-s[m]);cut[n++]=corner[k]+(corner[m]-corner[k])*t;}}
+      piece(cut,n);}
+     flush(film.width-1);}}}
   for(const auto& basin:w.waterVolumes()){
    float bank=w.layers().front().elevation;
+   if(waterFilm(basin,bank))continue;   // a puddle: the floor's wetness shows it (Wetness.cpp)
    float inset=w.coast()?0.f:.85f*std::clamp((bank-basin.surface)/std::max(.001f,bank-basin.bed),0.f,1.f);
-   float left=basin.x1+inset,right=basin.x2-inset,near=basin.y1+inset,far=basin.y2-inset;
+   // A side that runs into more water at the same level has no bank there: the two are one sheet.
+   auto joins=[&](float x,float y){for(const auto& o:w.waterVolumes())if(&o!=&basin&&std::fabs(o.surface-basin.surface)<.01f&&x>=o.x1&&x<=o.x2&&y>=o.y1&&y<=o.y2)return true;return false;};
+   const float mx=(basin.x1+basin.x2)*.5f,my=(basin.y1+basin.y2)*.5f,over=.02f;
+   float left=basin.x1+(joins(basin.x1-over,my)?0.f:inset),right=basin.x2-(joins(basin.x2+over,my)?0.f:inset),near=basin.y1+(joins(mx,basin.y1-over)?0.f:inset),far=basin.y2-(joins(mx,basin.y2+over)?0.f:inset);
    float z=basin.surface+.004f;
    // Standing water darkens and greys with its murk; the ripples still move on it.
    const auto&sheet=basin.murk>0?m_murkWater:water;const float shade=1.05f*(1-.55f*basin.murk),now=game.elapsed();

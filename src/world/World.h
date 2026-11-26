@@ -361,6 +361,9 @@ struct ClutterSpawn {int kind;Vec2 position;float z=-999,yaw=0;int model=-1;floa
 // murk: 0 the plant's clear coolant, up to 1 for standing water in the dark (a
 // pool in a cold store reads as still and black, not as a lit swimming bath).
 struct WaterVolume {float x1,y1,x2,y2,bed,surface;float murk=0;};
+// A film of water lying on the floor (5 cm deep or less, its surface at or above `ground`, the map's ground floor): no
+// basin to give it an edge, so the renderers draw it as a puddle in the floor's wetness, never as a flat sheet.
+inline bool waterFilm(const WaterVolume& v,float ground){return v.surface>ground-.02f&&v.surface-v.bed<=.05f;}
 // An authored wet patch (WET record, kit::wet): the floor in it is wet by `amount` (0-1), with
 // puddles in its low spots when `puddle`; `round` takes the circle inside the box. The renderers'
 // wetness mask (renderer/Wetness.h) adds it to the wet the map's water and leaks leave.

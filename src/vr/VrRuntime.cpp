@@ -861,8 +861,15 @@ bool VrRuntime::testGuns(std::ostream& report){
   const float cone=playerWeaponDef(gun).cycle.fullAuto?game.shotSpread():0.f;
   pose.trigger[size_t(gunHand)]=true;runtime.script(game,input,pose,1.f/60);game.update(input,1.f/60);pose.trigger[size_t(gunHand)]=false;
   const bool fired=!game.shotRays().empty();const ShotRay ray=fired?game.shotRays().back():ShotRay{};
-  const float atTarget=fired?offLine(targetAt,ray.origin,ray.direction):1.f;
-  check(fired&&len3(ray.origin-at(g.muzzle))<.002f&&angle(ray.direction,bore)<sightTolerance+cone&&atTarget<.025f+10.f*cone,name+": the shot leaves from the muzzle along the bore and passes "+std::to_string(int(atTarget*1000+.5f))+" mm from the point the sights were on at 10 m");
+  // The shotgun throws its pellets over a cone (Game::pelletDirection, .055 rad), so one pellet says nothing about the
+  // sights: its aim line (vrShotLine, d) is what must meet the target, and every pellet must leave the muzzle inside the cone.
+  const bool pellets=gun==WeaponId::Shotgun;
+  bool shot=fired&&len3(ray.origin-at(g.muzzle))<.002f&&angle(ray.direction,bore)<sightTolerance+cone;
+  float widest=0;
+  if(pellets){const auto&rays=game.shotRays();shot=int(rays.size())>=Game::ShotgunPellets;
+   for(int k=0;shot&&k<Game::ShotgunPellets;++k){const ShotRay&r=rays[rays.size()-1-size_t(k)];widest=std::max(widest,angle(r.direction,d));shot=len3(r.origin-at(g.muzzle))<.002f&&widest<.056f;}}
+  const float atTarget=!fired?1.f:pellets?offLine(targetAt,o,d):offLine(targetAt,ray.origin,ray.direction);
+  check(shot&&atTarget<.025f+10.f*cone,name+": the shot leaves from the muzzle along the bore and passes "+std::to_string(int(atTarget*1000+.5f))+" mm from the point the sights were on at 10 m"+(pellets?" (the widest of its pellets "+deg(widest)+" degrees off that line)":std::string()));
   // The recoil turns the gun in the hand, not the view; the view's yaw and pitch are the head's.
   for(int k=0;k<3;++k){runtime.script(game,input,pose,1.f/60);game.update(input,1.f/60);}
   const auto&k2=runtime.hands()[1];check(game.vrRecoil().rise>.02f&&angle(k2.gunBasis[2]*-1.f,bore)>.02f&&std::fabs(game.player().pitch-input.vrPitch)<1e-4f,name+": the kick lifts the gun in the hand while the view stays on the head");}

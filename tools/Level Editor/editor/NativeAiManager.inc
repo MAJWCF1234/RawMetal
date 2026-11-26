@@ -8,6 +8,7 @@
   int aiChipLine = -1, aiChipField = -1;
   int aiPadChip = 0;
   std::vector<std::string> aiChipOptions;
+  bool aiChipListed = false;   // the setting open now is picked from a fixed list (aiChoices)
   unsigned long long aiTraceSerial = 0;
   std::uint32_t aiTraceEvent = 0;
   std::map<int, ULONGLONG> aiFlashUntil;
@@ -87,6 +88,29 @@
     return hash ? hash : 1u;
   }
   void aiReadTrace() { aiConsumeTrace(channelText(status)); }
+  // Test it starts a fresh run, where nothing a rule waits for has happened yet. This is what must be set for
+  // the rule to run: each switch it requires, to a value that meets it. "id value" lines for the preview, and the
+  // same in words for the play log.
+  std::pair<std::string, std::wstring> aiTestSetup(const std::string &event) const {
+    std::string states;
+    std::wstring words;
+    for (auto line : doc.records("SCRIPT_REQUIRE", map)) {
+      const auto f = NativeDocument::fields(doc.lines[line]);
+      if (f.size() < 6 || f[2] != event || f[3].empty() || f[3][0] == '@') continue;   // @health, @kills: the game's own
+      const auto name = decoded(f[3]);
+      const int want = int(number(f[5], 0));
+      const auto &op = f[4];
+      const int value = op == "!=" || op == ">" ? want + 1 : op == "<" ? want - 1 : want;
+      const std::uint32_t id = name[0] == '#' ? std::uint32_t(std::strtoul(name.c_str() + 1, nullptr, 10)) : aiScriptId(name);
+      states += std::to_string(id) + ' ' + std::to_string(value) + '\n';
+      std::wstring label = name.ends_with("_beat") ? L"Director beat"
+                           : name.starts_with("eng_breaker_") ? L"Breaker " + wide(name.substr(12))
+                                                              : aiStateName(f[3]);
+      words += (words.empty() ? L"" : L", ") + label + L" = " +
+               (value == 1 && !name.ends_with("_beat") ? std::wstring(L"On") : std::to_wstring(value));
+    }
+    return {states, words};
+  }
   void aiConsumeTrace(const std::string &snapshot) {
     std::istringstream input(snapshot);
     std::string line;
@@ -113,7 +137,7 @@
           if (isAction||fields[0]=="SCRIPT_EVENT") {
             auto caption=aiRowText(AiSteps,row);
             const auto target=aiNamed(at,"editortarget");
-            if(!target.empty())caption+=L" — "+wide(target);
+            if(!target.empty())caption+=L": "+wide(target);
             aiLog+=caption+L"\r\n";
             if(aiLog.size()>3000)aiLog.erase(0,aiLog.find(L"\n")+1);
           }
@@ -429,6 +453,28 @@
     std::replace(name.begin(), name.end(), L'_', L' ');
     return name;
   }
+  // The settings that can only be one of a known set are picked, never typed: what a lamp does, which
+  // sound plays (the bank's one-off sounds; a loop would never end) and where it comes from.
+  using AiChoice = std::pair<std::string, std::wstring>;   // what the record holds, what the list says
+  std::vector<AiChoice> aiChoices(const std::vector<std::string> &f, int field) const {
+    if (f.size() < 7 || f[0] != "SCRIPT_ACTION") return {};
+    if (f[3] == "LIGHTS" && field == 5)
+      return {{"normal", L"Normal"}, {"flicker", L"Flicker"}, {"dark", L"Dark"}, {"red", L"Emergency red"}};
+    if (f[3] == "NOISE" && field == 6) return {{"behind", L"Behind the player"}, {"ahead", L"Ahead of the player"}};
+    if (f[3] == "NOISE" && field == 4) {
+      std::vector<AiChoice> sounds;
+      const auto current = decoded(f[4]);
+      for (const auto &row : bankSounds)
+        if (!row.loop || row.name == current) sounds.push_back({row.name, row.label});
+      return sounds;
+    }
+    return {};
+  }
+  std::wstring aiChoiceLabel(const std::vector<std::string> &f, int field) const {
+    for (const auto &[value, label] : aiChoices(f, field))
+      if (value == decoded(f[size_t(field)])) return label;
+    return wide(decoded(f[size_t(field)]));
+  }
   std::vector<AiChip> aiChips(size_t line) const {
     const auto f = NativeDocument::fields(doc.lines[line]);
     if (f.empty()) return {};
@@ -445,11 +491,12 @@
       return {{-4,aiStateName(f[3])},{-4,f[4]=="="&&f[5]=="1"?L"is On":wide(f[4]+" "+f[5])}};
     }
     if (f.size() < 6 || f[0] != "SCRIPT_ACTION") return {};
+    if (f[3] == "NOISE" && f.size() > 6) return {{4, aiChoiceLabel(f, 4)}, {6, aiChoiceLabel(f, 6)}};
     if (!target.empty()) {
       const int field = aiTargetKind(f,target) ? -3 : -4;
       if (f[3]=="LATER"&&f.size()>6) return {{field,wide(target)},{6,wide(f[6])+L" s"}};
       if (f[3]=="STATE"&&target!="Vent fans") return {{field,wide(target)},{5,f[5]=="1"?L"On":L"Off"}};
-      if (f[3]=="LIGHTS") return {{field,wide(target)},{5,wide(f[5])}};
+      if (f[3]=="LIGHTS"&&f.size()>6) return {{field,wide(target)},{5,aiChoiceLabel(f,5)}};
       return {{field,wide(target)}};
     }
     if (f[3] == "STATE") {
@@ -459,8 +506,7 @@
     }
     if (f[3] == "MESSAGE") return {{4, wide(decoded(f[4]))}, {5, wide(f[5]) + L" s"}};
     if (f[3] == "LATER" && f.size() > 6) return {{6, wide(f[6]) + L" s"}};
-    if (f[3] == "LIGHTS") return {{5, wide(f[5])}};
-    if (f[3] == "NOISE" && f.size() > 6) return {{6, wide(f[6])}};
+    if (f[3] == "LIGHTS" && f.size() > 6) return {{5, aiChoiceLabel(f, 5)}};
     return {};
   }
   // Chips sit on the block's one line, straight after its sentence; drawing and clicking share these.
@@ -492,9 +538,27 @@
     const auto &chip = chips[size_t(std::clamp(column, 0, int(chips.size()) - 1))];
     aiChipLine = line;
     aiChipField = chip.field;
+    aiChipListed = false;
     const auto fields = NativeDocument::fields(doc.lines[size_t(line)]);
     if (chip.field == -4) { aiManagerCommand(AiEdit,0);return; }
     ShowWindow(aiControl(AiChipApply),SW_SHOW);
+    if (const auto choices = chip.field >= 0 ? aiChoices(fields, chip.field) : std::vector<AiChoice>{}; !choices.empty()) {
+      HWND combo = aiControl(AiTarget);
+      SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+      aiChipOptions.clear();
+      int selected = 0;
+      for (const auto &[value, label] : choices) {
+        if (value == decoded(fields[size_t(chip.field)])) selected = int(aiChipOptions.size());
+        aiChipOptions.push_back(value);
+        SendMessageW(combo, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label.c_str()));
+      }
+      SendMessageW(combo, CB_SETCURSEL, selected, 0);
+      aiChipListed = true;
+      ShowWindow(aiControl(AiChipValue), SW_HIDE);
+      ShowWindow(combo, SW_SHOW);
+      SetFocus(combo);
+      return;
+    }
     if (chip.field == -3) {
       const auto* kind=aiTargetKind(fields,aiNamed(size_t(line),"editortarget"));
       HWND combo=aiControl(AiTarget);
@@ -531,6 +595,18 @@
   }
   void aiApplyChip() {
     if (aiChipLine < 0 || size_t(aiChipLine) >= doc.lines.size()) return;
+    if (aiChipListed) {
+      const auto index = SendMessageW(aiControl(AiTarget), CB_GETCURSEL, 0, 0);
+      if (index < 0 || size_t(index) >= aiChipOptions.size()) return;
+      auto fields = NativeDocument::fields(doc.lines[size_t(aiChipLine)]);
+      const auto &value = aiChipOptions[size_t(index)];
+      if (size_t(aiChipField) >= fields.size() || fields[size_t(aiChipField)] == value) return;
+      fields[size_t(aiChipField)] = value;
+      remember();
+      doc.replace(size_t(aiChipLine), fields);
+      aiManagerChanged();
+      return;
+    }
     if (aiChipField==-3) {
       auto combo=aiControl(AiTarget);
       const auto index=SendMessageW(combo,CB_GETCURSEL,0,0);
@@ -695,7 +771,10 @@
       aiReadTrace(); // ignore anything the previous play session already reported
       aiFlashUntil.clear();
       aiLog.clear();
-      SetWindowTextW(aiControl(AiPlayLog), L"Waiting for this rule to run...");
+      const auto [setup, words] = aiTestSetup(fields[2]);
+      channelPut(control.parent_path() / L"testrule.txt", setup);
+      if (!words.empty()) aiLog = L"Set first, so this rule can run: " + words + L"\r\n";
+      SetWindowTextW(aiControl(AiPlayLog), words.empty() ? L"Waiting for this rule to run..." : aiLog.c_str());
       ShowWindow(aiControl(AiPlayLog), SW_SHOW);
       SetTimer(aiManagerWindow, 1, 60, nullptr);
       SetWindowPos(aiManagerWindow, HWND_TOPMOST, 20, 70, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
@@ -1108,9 +1187,9 @@
       SendMessageW(aiControl(AiRuleTitle),EM_LIMITTEXT,80,0);
       child(AiSearch, L"EDIT", L"", WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL, 870, 34, 264, 25);
       SetWindowSubclass(aiControl(AiSearch), aiSearchProc, 1, reinterpret_cast<DWORD_PTR>(this));
-      child(AiUsedBy, L"STATIC", L"Used by: None", SS_NOPREFIX, 870, 468, 264, 52);
+      child(AiUsedBy, L"STATIC", L"Used by: None", SS_NOPREFIX, 870, 456, 264, 34);
       child(AiLinkedDirector,L"BUTTON",L"Open Service Spine Director",WS_TABSTOP,14,301,212,28);
-      child(AiPlayLog, L"EDIT", L"", WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_READONLY, 870, 524, 264, 62);
+      child(AiPlayLog, L"EDIT", L"", WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_READONLY, 870, 494, 264, 138);
       child(AiChipValue, L"EDIT", L"", WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL, 238, 538, 462, 27);
       child(AiTarget, L"COMBOBOX", L"", WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST, 238, 538, 462, 260);
       SendMessageW(aiControl(AiChipValue), EM_SETCUEBANNER, TRUE, LPARAM(L"Select a setting to edit"));
@@ -1216,6 +1295,122 @@
     if (doc.text() != empty) throw std::runtime_error("Undo did not restore the original map");
     for (int i = 0; i < 8; ++i) aiManagerCommand(AiRedo, 0);
     if (doc.text() != built) throw std::runtime_error("Redo did not restore the graph");
+    verifyAiPickLists(folder);
+  }
+  // The lamp and sound settings are picked from lists: every choice a list offers is one the engine loads.
+  void verifyAiPickLists(const fs::path &folder) {
+    const auto before = doc.text();
+    const std::string event = NativeDocument::fields(doc.lines[doc.records("SCRIPT_EVENT", 0).front()])[2];
+    const std::string director = NativeDocument::fields(doc.lines[doc.records("AI", 0).front()])[2];
+    doc.add({"SCRIPT_ACTION", "0", event, "LIGHTS", director, "flicker", "2"});
+    doc.add({"SCRIPT_ACTION", "0", event, "NOISE", "metal_drag", "1", "behind", "10"});
+    aiManagerChanged();
+    struct Pick { const char *kind; int field; const wchar_t *choose; const char *wrote; const wchar_t *shot; };
+    const Pick picks[] = {{"LIGHTS", 5, L"Emergency red", "red", L"pick-lamp.bmp"},
+                          {"NOISE", 4, nullptr, nullptr, L"pick-sound.bmp"},
+                          {"NOISE", 6, L"Ahead of the player", "ahead", L"pick-where.bmp"}};
+    for (const auto &pick : picks) {
+      size_t line = 0;
+      for (auto record : doc.records("SCRIPT_ACTION", 0))
+        if (NativeDocument::fields(doc.lines[record])[3] == pick.kind) line = record;
+      auto selectRow = [&] {
+        const int rows = int(SendMessageW(aiControl(AiSteps), LB_GETCOUNT, 0, 0));
+        for (int row = 0; row < rows; ++row) {
+          SendMessageW(aiControl(AiSteps), LB_SETCURSEL, row, 0);
+          if (aiListRecord(AiSteps) == int(line)) return;
+        }
+        throw std::runtime_error(std::string("No graph row for the block ") + pick.kind);
+      };
+      selectRow();
+      const auto chips = aiChips(line);
+      int column = -1;
+      for (int i = 0; i < int(chips.size()); ++i) if (chips[size_t(i)].field == pick.field) column = i;
+      if (column < 0) throw std::runtime_error(std::string("No setting to pick on ") + pick.kind);
+      aiBeginChip(column);
+      HWND combo = aiControl(AiTarget);
+      const int count = int(SendMessageW(combo, CB_GETCOUNT, 0, 0));
+      if (!aiChipListed || !IsWindowVisible(combo) || IsWindowVisible(aiControl(AiChipValue)) || count < 2)
+        throw std::runtime_error(std::string("No pick list for ") + pick.kind);
+      // Each choice the list offers must give a map the engine accepts.
+      for (const auto &value : std::vector<std::string>(aiChipOptions)) {
+        const auto kept = doc.text();
+        auto fields = NativeDocument::fields(doc.lines[line]);
+        fields[size_t(pick.field)] = value;
+        doc.replace(line, fields);
+        const bool loads = validateDocument();
+        doc.loadText(kept);
+        if (!loads) throw std::runtime_error("The engine refused the choice " + value);
+      }
+      refreshAiManager();
+      selectRow();
+      aiBeginChip(column);
+      int choose = pick.choose ? int(SendMessageW(combo, CB_FINDSTRINGEXACT, WPARAM(-1), reinterpret_cast<LPARAM>(pick.choose)))
+                               : (int(SendMessageW(combo, CB_GETCURSEL, 0, 0)) + 1) % count;
+      if (choose < 0) throw std::runtime_error(std::string("A choice is missing for ") + pick.kind);
+      SendMessageW(combo, CB_SETCURSEL, choose, 0);
+      const std::string expected = pick.wrote ? std::string(pick.wrote) : aiChipOptions[size_t(choose)];
+      captureEditorWindow(folder / pick.shot, aiManagerWindow);
+      // The list itself, dropped open, for the same choice.
+      SendMessageW(combo, CB_SHOWDROPDOWN, TRUE, 0);
+      if (COMBOBOXINFO info{sizeof(info)}; GetComboBoxInfo(combo, &info) && info.hwndList)
+        captureEditorWindow(folder / (std::wstring(L"list-") + pick.shot), info.hwndList);
+      SendMessageW(combo, CB_SHOWDROPDOWN, FALSE, 0);
+      SendMessageW(combo, CB_SETCURSEL, choose, 0);
+      const auto unchanged = doc.text();
+      aiApplyChip();
+      if (doc.text() == unchanged || NativeDocument::fields(doc.lines[line])[size_t(pick.field)] != expected)
+        throw std::runtime_error("Picking did not write " + expected);
+      std::ofstream(folder / L"pick-lists.txt", std::ios::app)
+          << pick.kind << " field " << pick.field << ": " << count << " choices, every one loads; picked " << expected << '\n';
+      aiManagerCommand(AiUndo, 0);
+      if (doc.text() != unchanged) throw std::runtime_error("Undo did not restore the setting");
+    }
+    doc.loadText(before);
+    refreshAiManager();
+  }
+  // --ai-live-test: Test it pressed for real on every Engineering rule group, with the engine playing behind the
+  // window. Each rule's own trace lines say whether it ran; a picture of the manager is kept after each.
+  void verifyAiLive(const fs::path &folder) {
+    const CampaignEntry entry{180, 2, L"Deep Research Services", L"Engineering / Service Spine", L"Engineering", true};
+    std::wstring why;
+    if (!openCampaignMap(entry, why)) throw std::runtime_error(utf8(why));
+    startEngine();
+    auto pump = [&](int ms, auto done) {
+      const auto until = GetTickCount64() + ULONGLONG(ms);
+      while (GetTickCount64() < until) {
+        MSG msg{};
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) { TranslateMessage(&msg); DispatchMessageW(&msg); }
+        if (done()) return true;
+        Sleep(15);
+      }
+      return false;
+    };
+    auto engineReady = [&] { return channelText(status).starts_with("READY " + std::to_string(revision) + " "); };
+    if (!pump(60000, engineReady)) throw std::runtime_error("The engine never showed the map");
+    openAiManager();
+    aiRestoreRow(AiOwners, int(doc.records("AI", map).front()));
+    refreshAiManager();
+    std::ofstream out(folder / L"live-rules.txt");
+    const int count = int(SendMessageW(aiControl(AiRules), LB_GETCOUNT, 0, 0));
+    int ran = 0;
+    for (int row = 0; row < count; ++row) {
+      SendMessageW(aiControl(AiRules), LB_SETCURSEL, row, 0);
+      refreshAiSteps();
+      const auto title = utf8(aiText(aiControl(AiRuleTitle)));
+      aiManagerCommand(AiTest, BN_CLICKED);
+      const auto before = aiLog;   // what Test it set up, if anything
+      const bool fired = pump(20000, [&] { aiReadTrace(); return aiLog != before; });
+      pump(1500, [&] { aiReadTrace(); return false; });
+      out << (fired ? "RAN     " : "SILENT  ") << title << '\n';
+      if (fired) { ++ran; std::istringstream lines(utf8(aiLog)); for (std::string l; std::getline(lines, l);) { while (!l.empty() && l.back() == '\r') l.pop_back(); out << "          " << l << '\n'; } }
+      out.flush();
+      captureEditorWindow(folder / (L"live-" + std::to_wstring(row + 1) + L".bmp"), aiManagerWindow);
+      if (playing) stopPlay();
+      KillTimer(aiManagerWindow, 1);
+      pump(800, [] { return false; });
+    }
+    out << ran << " of " << count << " rule groups ran when tested\n";
+    if (ran != count) throw std::runtime_error(std::to_string(count - ran) + " rule groups never ran under Test it");
   }
   void verifyEngineeringManager(const fs::path& folder) {
     const CampaignEntry entry{180,2,L"Deep Research Services",L"Engineering / Service Spine",L"Engineering",true};

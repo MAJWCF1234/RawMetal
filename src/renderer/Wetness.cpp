@@ -23,6 +23,49 @@ float WetnessMask::floorWet(float x,float y,float z)const{
 float outdoorRain(const World& w){
  if(!w.outdoors())return 0;return rainOverride()>=0?std::clamp(rainOverride(),0.f,1.f):std::clamp(w.wetness(),0.f,1.f);}
 
+float FilmShape::at(float x,float y)const{
+ const float u=(x-x0)/Cell-.5f,v=(y-y0)/Cell-.5f;const int i=int(std::floor(u)),j=int(std::floor(v));if(i<0||j<0||i+1>=width||j+1>=height)return -1.f;
+ const float fx=u-i,fy=v-j;auto s=[&](int a,int b){return inside[size_t(b*width+a)];};
+ return (s(i,j)*(1-fx)+s(i+1,j)*fx)*(1-fy)+(s(i,j+1)*(1-fx)+s(i+1,j+1)*fx)*fy;}
+std::vector<FilmShape> shapeFilms(const World& w){
+ std::vector<FilmShape> out;if(w.waterVolumes().empty())return out;
+ constexpr float C=FilmShape::Cell,Reach=.6f;const float ground=w.layers().front().elevation;
+ // Smooth noise over the floor, the same on every bake: the waterline wanders by it.
+ auto wander=[](float x,float y){const int xi=int(std::floor(x)),yi=int(std::floor(y));const float fx=smooth(x-xi),fy=smooth(y-yi);
+  auto at=[](int a,int b){return float(hashOf(std::uint32_t(a)*2654435761u^std::uint32_t(b)*40503u)&1023u)/1023.f*2.f-1.f;};
+  return (at(xi,yi)*(1-fx)+at(xi+1,yi)*fx)*(1-fy)+(at(xi,yi+1)*(1-fx)+at(xi+1,yi+1)*fx)*fy;};
+ std::vector<float> levels;
+ for(const auto& v:w.waterVolumes())if(waterFilm(v,ground)){bool known=false;for(float z:levels)known|=std::fabs(z-v.surface)<.03f;if(!known)levels.push_back(v.surface);}
+ for(float level:levels){
+  auto here=[&](const WaterVolume& v){return std::fabs(v.surface-level)<.03f;};
+  float ax=1e9f,ay=1e9f,bx=-1e9f,by=-1e9f;
+  for(const auto& v:w.waterVolumes())if(here(v)&&waterFilm(v,ground)){ax=std::min(ax,v.x1-Reach);ay=std::min(ay,v.y1-Reach);bx=std::max(bx,v.x2+Reach);by=std::max(by,v.y2+Reach);}
+  float murk=0;for(const auto& v:w.waterVolumes())if(here(v)&&waterFilm(v,ground))murk=std::max(murk,v.murk);
+  FilmShape film;film.murk=murk;film.surface=level;film.x0=std::floor(ax/C)*C;film.y0=std::floor(ay/C)*C;
+  const int W=std::max(2,int(std::ceil((bx-film.x0)/C))),H=std::max(2,int(std::ceil((by-film.y0)/C)));film.width=W;film.height=H;
+  std::vector<float> cover(size_t(W*H),0.f);
+  auto fill=[&](float x1,float y1,float x2,float y2){
+   for(int j=std::max(0,int((y1-film.y0)/C));j<H&&film.y0+(j+.5f)*C<y2;++j)for(int i=std::max(0,int((x1-film.x0)/C));i<W&&film.x0+(i+.5f)*C<x2;++i)
+    if(film.x0+(i+.5f)*C>=x1&&film.y0+(j+.5f)*C>=y1)cover[size_t(j*W+i)]=1.f;};
+  for(const auto& v:w.waterVolumes())if(here(v))fill(v.x1,v.y1,v.x2,v.y2);
+  // What stands out of the water next to a film counts as water, so the waterline runs into it and not short of it.
+  for(const auto& v:w.waterVolumes()){if(!here(v)||!waterFilm(v,ground))continue;
+   for(const auto& b:w.structures())if(b.bottom<=level&&b.top>level+.05f){const float x1=std::max(b.x1,v.x1-.2f),y1=std::max(b.y1,v.y1-.2f),x2=std::min(b.x2,v.x2+.2f),y2=std::min(b.y2,v.y2+.2f);if(x1<x2&&y1<y2)fill(x1,y1,x2,y2);}
+   for(int ty=int(std::floor(v.y1-.2f));ty<=int(std::floor(v.y2+.2f));++ty)for(int tx=int(std::floor(v.x1-.2f));tx<=int(std::floor(v.x2+.2f));++tx)
+    if(tx>=0&&ty>=0&&tx<World::Width&&ty<World::Height&&w.tile(tx,ty)=='#')fill(std::max(float(tx),v.x1-.2f),std::max(float(ty),v.y1-.2f),std::min(tx+1.f,v.x2+.2f),std::min(ty+1.f,v.y2+.2f));}
+  auto blur=[&](const std::vector<float>& in,int r){std::vector<float> mid(in.size()),res(in.size());
+   for(int j=0;j<H;++j)for(int i=0;i<W;++i){float sum=0;for(int d=-r;d<=r;++d)sum+=in[size_t(j*W+std::clamp(i+d,0,W-1))];mid[size_t(j*W+i)]=sum/float(2*r+1);}
+   for(int j=0;j<H;++j)for(int i=0;i<W;++i){float sum=0;for(int d=-r;d<=r;++d)sum+=mid[size_t(std::clamp(j+d,0,H-1)*W+i)];res[size_t(j*W+i)]=sum/float(2*r+1);}
+   return res;};
+  const auto shape=blur(blur(cover,2),2);   // corners round off, seams between patches vanish
+  film.inside.resize(size_t(W*H));
+  for(int j=0;j<H;++j)for(int i=0;i<W;++i){const float px=film.x0+(i+.5f)*C,py=film.y0+(j+.5f)*C,f=shape[size_t(j*W+i)];
+   // The waterline wanders where the field is between wet and dry; well inside and well outside it cannot.
+   const float ragged=(.7f*wander(px*3.3f,py*3.3f)+.3f*wander(px*8.7f+11.f,py*8.7f+5.f))*.5f*4.f*f*(1-f);
+   film.inside[size_t(j*W+i)]=(i==0||j==0||i==W-1||j==H-1)?-1.f:f+ragged-.5f;}
+  out.push_back(std::move(film));}
+ return out;
+}
 WetnessMask bakeWetness(const World& w,float originZ){
  constexpr int N=WetnessMask::Size;constexpr float T=WetnessMask::Texel;
  WetnessMask mask;mask.originZ=originZ;
@@ -40,7 +83,16 @@ WetnessMask bakeWetness(const World& w,float originZ){
   for(int y=y0;y<=y1;++y)for(int x=x0;x<=x1;++x){const float d=std::hypot((x+.5f)*T-cx,(y+.5f)*T-cy);if(d>=radius)continue;const float f=smooth(1-d/radius);const size_t i=size_t(y*N+x);
    wet[i]=std::max(wet[i],amount*f);puddle[i]=std::max(puddle[i],pud*f*f);streak[i]=std::max(streak[i],str*f);}};
  // Water: the floor round a pool is splashed and tracked through; under it is the water itself.
- for(const auto& v:w.waterVolumes()){const float r=.9f*reach;
+ const float ground=w.layers().front().elevation;
+ // A film of water: its own shape is wet and glossy, with a damp rim round it.
+ for(const auto& film:shapeFilms(w))
+  for(int y=0;y<N;++y)for(int x=0;x<N;++x){const float px=(x+.5f)*T,py=(y+.5f)*T;
+   if(px<film.x0||py<film.y0||px>film.x0+film.width*FilmShape::Cell||py>film.y0+film.height*FilmShape::Cell)continue;
+   float rim=0;for(float dx:{-.3f,0.f,.3f})for(float dy:{-.3f,0.f,.3f})rim+=film.at(px+dx,py+dy)>0?1.f/9.f:0.f;
+   const bool water=film.at(px,py)>0;const size_t i=size_t(y*N+x);wet[i]=std::max(wet[i],water?1.f:.75f*smooth(rim*2.f));if(water)puddle[i]=1.f;}
+ for(const auto& v:w.waterVolumes()){
+  if(waterFilm(v,ground))continue;
+  const float r=.9f*reach;
   const int x0=std::max(0,int((v.x1-r)/T)),x1=std::min(N-1,int((v.x2+r)/T)),y0=std::max(0,int((v.y1-r)/T)),y1=std::min(N-1,int((v.y2+r)/T));
   for(int y=y0;y<=y1;++y)for(int x=x0;x<=x1;++x){const float px=(x+.5f)*T,py=(y+.5f)*T;const float dx=std::max({v.x1-px,0.f,px-v.x2}),dy=std::max({v.y1-py,0.f,py-v.y2}),d=std::hypot(dx,dy);
    if(d>=r)continue;const float f=smooth(1-d/r);const size_t i=size_t(y*N+x);wet[i]=std::max(wet[i],f);puddle[i]=std::max(puddle[i],.7f*f*f);}}

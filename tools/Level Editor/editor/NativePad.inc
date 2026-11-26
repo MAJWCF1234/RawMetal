@@ -116,7 +116,7 @@
     const bool up = padRepeat(0, s.buttons & PadUp, dt), down = padRepeat(1, s.buttons & PadDown, dt);
     const bool leftPress = padRepeat(2, s.buttons & PadLeft, dt), rightPress = padRepeat(3, s.buttons & PadRight, dt);
     if (aiManagerWindow && IsWindowVisible(aiManagerWindow) && GetForegroundWindow() == aiManagerWindow) {
-      if (aiChipField==-3&&IsWindowVisible(aiControl(AiTarget))) {
+      if ((aiChipField==-3||aiChipListed)&&IsWindowVisible(aiControl(AiTarget))) {   // a pick list: a door, a lamp's mode, a sound
         HWND combo=aiControl(AiTarget);
         const int count=int(SendMessageW(combo,CB_GETCOUNT,0,0));
         if(count>0&&(up||down||leftPress||rightPress)){

@@ -1093,7 +1093,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool connectTest = false, caveTest = false, kitTest = false, aiManagerTest = false, aiEngineeringTest = false;
+  bool connectTest = false, caveTest = false, kitTest = false, aiManagerTest = false, aiEngineeringTest = false, aiLiveTest = false;
   bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false, auditTest = false, padTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
@@ -11104,6 +11104,8 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
           e.backgroundTest = e.aiManagerTest = true;
         if (a == L"--ai-engineering-test")
           e.backgroundTest = e.aiManagerTest = e.aiEngineeringTest = true;
+        if (a == L"--ai-live-test")
+          e.backgroundTest = e.aiManagerTest = e.aiLiveTest = true;
       }
       if (args)
         LocalFree(args);
@@ -11984,10 +11986,13 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.aiManagerTest) {
       const auto folder = fs::current_path() / L".build" / L"ai-manager-proof";
       fs::create_directories(folder);
-      std::ofstream report(folder / (e.aiEngineeringTest ? L"engineering-editor-test.txt" : L"editor-test.txt"));
+      std::ofstream report(folder / (e.aiLiveTest ? L"live-editor-test.txt" : e.aiEngineeringTest ? L"engineering-editor-test.txt" : L"editor-test.txt"));
       int code = 0;
       try {
-        if(e.aiEngineeringTest){
+        if(e.aiLiveTest){
+          e.verifyAiLive(folder);
+          report << "PASS: Test it ran every Engineering rule group in the live engine\n";
+        }else if(e.aiEngineeringTest){
           e.verifyEngineeringManager(folder);
           report << "PASS: map 180 campaign import, named Director and five real rule groups\n";
         }else{

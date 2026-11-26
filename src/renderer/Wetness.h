@@ -28,6 +28,18 @@ struct WetnessMask {
  // The wetness a floor at height z here takes (0 dry): its wet where z is the mask's floor.
  float floorWet(float x,float y,float z)const;
 };
+// The outline of the films of water lying on a map's floor (World.h waterFilm). They have no shape of their own:
+// every film at one level is laid into one field with the pools it meets, walls and kerbs standing out of the water
+// count as inside it, and the field, blurred, is cut along one ragged waterline. Patches side by side or overlapping
+// are one body, a film running into a pool makes its shore, and water against a wall or a built edge lies flush.
+// inside > 0 is water; values are at (x0 + (i + .5) * Cell, y0 + (j + .5) * Cell), map-local metres.
+struct FilmShape {
+ static constexpr float Cell=.08f;
+ float surface=0,x0=0,y0=0,murk=0;int width=0,height=0;
+ std::vector<float> inside;
+ float at(float x,float y)const;   // bilinear; dry (-1) outside the field
+};
+std::vector<FilmShape> shapeFilms(const World& world);
 WetnessMask bakeWetness(const World& world,float originZ);
 // Rain on what sees the sky, outdoors (0 indoors): the map's wetness, or rainOverride when the lab
 // sets one (0 dry, 1 pouring).

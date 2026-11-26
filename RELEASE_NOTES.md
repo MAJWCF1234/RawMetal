@@ -4,6 +4,15 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.4 - Still water (2026-11-26)
+
+What spills now finds its own shape.
+
+- Shallow water pools in natural shapes. Patches run together, lie flush to walls and the sides of built pools, and make shores where they meet deeper water.
+- Campaign Builder: the AI and Entity Manager picks lamp modes and sounds from lists, and a sound block can change which sound it plays.
+- Campaign Builder: Test it runs a rule that waits on earlier steps, setting those first and saying what it set.
+- Campaign Builder: the Test it log is larger.
+
 ## v1.7.3 - Industry (2026-11-26)
 
 There is somewhere new to settle it.
