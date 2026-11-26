@@ -2,6 +2,7 @@
 // arrival, the elder's work, the mine's truce kept and broken, the scrapyard
 // toll paid and jumped, and the storm's roofs.
 #include "Game.h"
+#include "../world/CustomCampaign.h"
 #include <cmath>
 #include <fstream>
 
@@ -62,7 +63,8 @@ bool Game::testZonePeople(){
   check(g.sheltered(),"Under the fuel station canopy is out of the storm");}
  // 6. A player with nothing but the exe finds the zone under Custom Maps.
  {Game title;title.loadCustomCampaignDirectory(L"no-such-custom-maps-folder");
-  check(title.m_customCampaigns.size()==1&&title.m_customCampaigns[0]->name=="ASHFALL EXCLUSION ZONE","Custom Maps lists the zone shipped inside the exe");}
+  check(title.m_customCampaigns.size()==2&&title.m_customCampaigns[0]->name=="ASHFALL EXCLUSION ZONE","Custom Maps lists the zone shipped inside the exe");
+  check(title.m_customCampaigns.size()==2&&title.m_customCampaigns[1]->name=="Industry Deathmatch"&&title.m_customCampaigns[1]->sourceFile==DeathmatchMapFile,"and the deathmatch map built in beside it");}
  report<<checks-failed<<'/'<<checks<<" checks passed\n";return failed==0;
 }
 }

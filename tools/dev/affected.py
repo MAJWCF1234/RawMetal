@@ -207,7 +207,7 @@ def select(base=None, suite_names=None):
     if suite_names is None:
         src = open(os.path.join(ROOT, 'src', 'main.cpp'), encoding='utf-8', errors='replace').read()
         i = src.find('const std::pair<const char*,bool(*)()> tests[]')
-        suite_names = re.findall(r'\{"([a-z0-9-]+)",', src[i:src.find('};', i)])
+        suite_names = re.findall(r'\{"([a-z0-9-]+)",', src[i:src.find('std::ofstream report("each-test.txt")', i)])
 
     if not files:
         return dict(mode='none', tests=[], extras=[], audio=False, builder_open=False,
