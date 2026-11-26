@@ -1,0 +1,11 @@
+# VR body fit: a 152 cm player (tube vr-fit).
+world room
+camera 4.9 8.5 -999 0 0
+light 6 8.5 3.2 1.6 10
+light 5 6.5 3.0 1 8
+light 5 10.5 3.0 1 8
+height 152
+arms 0.33
+size 1280 720
+frames 300
+step 0.0166667

@@ -141,6 +141,20 @@ struct VrRuntime::Impl {
  std::array<bool,2> previousGrip{},consumed{},gripDown{};int drawnFrom=0;bool leftHolster=false;
  // Tracking metres to game metres (avatarScale), the hips' facing (lagging the head), the comfort vignette.
  float scale=1,bodyYaw=0,turnRate=0,vignette=0;bool bodyReady=false;
+ // Her fit to the player (AvatarFit): the standing eye and the reach learned while playing, the arm eased to it.
+ AvatarFit fit;float armFit=1,lastDt=1.f/90;
+ // From the fit and the settings (YOUR HEIGHT, SEATED MODE): the standing eye the head's height is read against,
+ // and the tracking scale.
+ void fitBody(const Settings& cfg,float headHeight){
+  const float manual=cfg.vrHeightCm>0?avatarEyeForHeight(cfg.vrHeightCm):0.f;
+  headStartY=fit.eye>0?fit.eye:headHeight;if(manual>0&&!seated)headStartY=manual;
+  scale=manual>0?avatarScale(manual,false):avatarScale(headStartY,seated);}
+ // Each tracked hand's distance from its shoulder (the hands as tracked, against her shoulders) teaches the reach;
+ // the arm fit eases to what it gives (a tenth of its range a second at most, so a learned reach never jumps).
+ void fitArms(const Settings& cfg,const AvatarPose& tracked,const AvatarSolve& solved){
+  for(int side=0;side<2;++side){const auto&h=tracked.hands[size_t(side)];if(!h.tracked)continue;const int role=this->side[0]==side?0:1;if(hands[size_t(role)].snapped)continue;
+   const Point3 d=h.wrist-solved.shoulder[size_t(side)];fit.observeReach(side,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)/scale,scale,lastDt);}
+  const float target=avatarArmFit(fit,scale,cfg.vrArmLength),step=.35f*lastDt;armFit+=std::clamp(target-armFit,-step,step);}
  VrTiming timing;int timingFrames=0;float displayHz=0;
  Point3 world(Point3 point,const Game&game)const{auto head=translation(poses[0].mDeviceToAbsoluteTracking);auto offset=rotateTracking(point-head,yaw)*scale;auto origin=game.chunkOffset(game.level());return offset+Point3{game.player().pos.x+origin.x,game.player().pos.y+origin.y,game.player().z+game.player().eye};}
  ~Impl(){if(overlay&&panel)overlay->DestroyOverlay(panel);if(shutdown&&system)shutdown();if(dll)FreeLibrary(dll);}
@@ -254,7 +268,7 @@ std::string VrRuntime::poseReport()const{
  std::ostringstream out;out.precision(2);out<<std::fixed;auto basis=[&](const char* name,const vr::HmdMatrix34_t& p){out<<name<<" x("<<p.m[0][0]<<','<<p.m[1][0]<<','<<p.m[2][0]<<") y("<<p.m[0][1]<<','<<p.m[1][1]<<','<<p.m[2][1]<<") z("<<p.m[0][2]<<','<<p.m[1][2]<<','<<p.m[2][2]<<")";};
  basis("head",m->poses[0].mDeviceToAbsoluteTracking);out<<'\n';
  for(int side=0;side<2;++side){out<<(side?"right ":"left ");basis("raw",m->raw[side]);out<<"  ";if(m->gripValid[side])basis("grip",m->gripPose[side]);else out<<"grip unavailable";out<<'\n';}
- out<<"avatar scale "<<m->scale<<", calibrated eye "<<m->headStartY<<" m, body yaw "<<m->bodyYaw<<", "<<(m->leftHanded?"left-handed":"right-handed")<<(m->seated?", seated":"")<<(m->support?", support hand on the fore-end":"")<<'\n';
+ out<<"avatar scale "<<m->scale<<", calibrated eye "<<m->headStartY<<" m, arm fit "<<m->armFit<<" (reach seen "<<m->fit.reach<<" m), body yaw "<<m->bodyYaw<<", "<<(m->leftHanded?"left-handed":"right-handed")<<(m->seated?", seated":"")<<(m->support?", support hand on the fore-end":"")<<'\n';
  return out.str();
 }
 bool VrRuntime::trackingValid()const{return m->poses[0].bPoseIsValid;}
@@ -290,12 +304,15 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  const auto&cfg=game.settings();
  m->leftHanded=cfg.vrLeftHanded;m->side=m->leftHanded?std::array<int,2>{1,0}:std::array<int,2>{0,1};m->seated=cfg.vrSeated;
  auto head=translation(m->poses[0].mDeviceToAbsoluteTracking);
- // The standing eye is the head's height when play starts or Recalibrate height is chosen; the player's
- // tracking is scaled to Claire (avatarScale) so their reach is her arm's.
- const bool recalibrate=game.takeVrRecalibrate();
+ // The standing eye is learned while playing (AvatarFit: seeded when the headset goes on, raised when the head is
+ // held higher; RECALIBRATE HEIGHT sets it, YOUR HEIGHT overrides it); the player's tracking is scaled to Claire
+ // (avatarScale) so their height is hers, and her arm is fitted to their reach (fitArms).
+ const bool recalibrate=game.takeVrRecalibrate();m->lastDt=std::clamp(dt,0.f,.1f);
  if(!m->calibrated){m->yaw=game.player().angle;m->previousHead=head;m->calibrated=true;m->bodyReady=false;}
- if(!m->calibrated||recalibrate||m->headStartY==0)m->headStartY=head.y;
- m->scale=avatarScale(m->headStartY,m->seated);
+ {const auto level=m->system->GetTrackedDeviceActivityLevel(vr::k_unTrackedDeviceIndex_Hmd);
+  const bool worn=level!=vr::k_EDeviceActivityLevel_Idle&&level!=vr::k_EDeviceActivityLevel_Standby;   // unknown counts as worn
+  if(recalibrate)m->fit.recalibrate(head.y);else m->fit.observeHead(head.y,worn,m->seated,m->lastDt);}
+ m->fitBody(cfg,head.y);
  if(m->trackingInterrupted){m->previousHead=head;m->trackingInterrupted=false;}
  if(!game.paused()&&!game.titleScreen()){auto delta=rotateTracking(head-m->previousHead,m->yaw)*m->scale;game.moveVrRoom({delta.x,delta.y});}m->previousHead=head;
  // Physical controllers (0 left, 1 right): devices, states and sticks stay physical; hands[] is by role.
@@ -399,6 +416,14 @@ bool VrRuntime::update(Game&game,InputState&input,float dt){
  return true;
 }
 AvatarPose VrRuntime::avatar(const Game& game)const{
+ // The player's hands fitted to her arm (AvatarFit): each wrist scaled about its shoulder, so a long-armed player's
+ // full stretch is hers and the arm never tears from the hand. Her body stays the same size for everyone.
+ AvatarPose p=trackedAvatar(game);if(!p.active||std::fabs(m->armFit-1)<1e-4f)return p;
+ const AvatarSolve s=solveAvatar(p,0);
+ for(int side=0;side<2;++side){auto&h=p.hands[size_t(side)];if(h.tracked)h.wrist=avatarFitWrist(s.shoulder[size_t(side)],h.wrist,m->armFit);}
+ return p;
+}
+AvatarPose VrRuntime::trackedAvatar(const Game& game)const{
  AvatarPose p;if(!m->calibrated)return p;p.active=true;
  const auto origin=game.chunkOffset(game.level());auto local=[&](Point3 w){w.x-=origin.x;w.y-=origin.y;return w;};
  const auto&hp=m->poses[0].mDeviceToAbsoluteTracking;p.head=local(m->world(translation(hp),game));
@@ -419,6 +444,7 @@ AvatarPose VrRuntime::avatar(const Game& game)const{
  p.support=m->support&&game.vrSupportGrip();p.pump=game.vrPumpOffset();p.reload=game.reloadProgress();
  return p;
 }
+VrRuntime::BodyFit VrRuntime::bodyFit()const{return {m->headStartY,m->scale,m->armFit,m->fit.reach};}
 bool VrRuntime::head(const Game& game,Point3& position,Point3& forward)const{
  if(!m->poses[0].bPoseIsValid)return false;const auto&hp=m->poses[0].mDeviceToAbsoluteTracking;position=m->world(translation(hp),game);const auto origin=game.chunkOffset(game.level());position.x-=origin.x;position.y-=origin.y;
  forward=rotateTracking({-hp.m[0][2],-hp.m[1][2],-hp.m[2][2]},m->yaw);return true;}
@@ -600,8 +626,10 @@ void VrRuntime::playHands(Game& game,InputState& input,bool focused,bool menuOpe
  M.applySupport(game);M.applyRecoil(game);
  // The hands the game uses are the avatar's: where her arms can reach (solveAvatar pulls a wrist past her
  // reach in to it), so what a hand grabs, pushes or shoots from is where her hand is drawn.
+ // Her body is never resized for the player: their reach is fitted to her arm (fitArms, avatar()).
+ const AvatarPose tracked=trackedAvatar(game);M.fitArms(game.settings(),tracked,solveAvatar(tracked,game.elapsed()));
  const AvatarPose body=avatar(game);const AvatarSolve solved=solveAvatar(body,game.elapsed());
- auto reachShift=[&](int role){const int side=M.side[size_t(role)];return solved.wrist[size_t(side)]-body.hands[size_t(side)].wrist;};
+ auto reachShift=[&](int role){const int side=M.side[size_t(role)];return solved.wrist[size_t(side)]-tracked.hands[size_t(side)].wrist;};
  // The shot: from the drawn gun's muzzle toward its sights' zero (Game::vrShotLine); without skeletal input, from
  // the controller along its pointing (the line between the hands with the support hand on).
  const auto&basis=gunHand.handFrame?gunHand.gunBasis:gunHand.basis;
@@ -620,15 +648,16 @@ void VrRuntime::playHands(Game& game,InputState& input,bool focused,bool menuOpe
  game.setVrGunInput(in);
 }
 bool VrRuntime::script(Game& game,InputState& input,const VrScript& s,float dt){
- (void)dt;current=this;auto&M=*m;
+ current=this;auto&M=*m;
  const auto&cfg=game.settings();M.leftHanded=cfg.vrLeftHanded;M.side=M.leftHanded?std::array<int,2>{1,0}:std::array<int,2>{0,1};M.seated=cfg.vrSeated;
  // The head: -z where it looks, level (no roll).
  const Point3 z=unit3(s.headForward*-1.f);Point3 x=unit3(cross3({0,1,0},z));if(dot3(x,x)<.5f)x={1,0,0};const Point3 y=cross3(z,x);
  auto&hp=M.poses[0].mDeviceToAbsoluteTracking;hp={};const Point3 axes[3]={x,y,z};
  for(int c=0;c<3;++c){hp.m[0][c]=axes[c].x;hp.m[1][c]=axes[c].y;hp.m[2][c]=axes[c].z;}hp.m[0][3]=s.head.x;hp.m[1][3]=s.head.y;hp.m[2][3]=s.head.z;
  M.poses[0].bPoseIsValid=true;
- if(!M.calibrated){M.yaw=game.player().angle;M.calibrated=true;M.bodyReady=false;M.headStartY=s.head.y;}
- M.previousHead=s.head;M.scale=avatarScale(M.headStartY,M.seated);
+ if(!M.calibrated){M.yaw=game.player().angle;M.calibrated=true;M.bodyReady=false;}
+ M.lastDt=std::clamp(dt,0.f,.1f);if(game.takeVrRecalibrate())M.fit.recalibrate(s.head.y);else M.fit.observeHead(s.head.y,true,M.seated,M.lastDt);   // a scripted headset is always worn
+ M.previousHead=s.head;M.fitBody(cfg,s.head.y);
  const Point3 forward=rotateTracking(z*-1.f,M.yaw);
  input.vrTracked=true;input.vrYaw=std::atan2(forward.y,forward.x);input.vrPitch=140.f*std::asin(std::clamp(forward.z,-1.f,1.f));input.vrEye=std::clamp(Player::StandingEye+(s.head.y-M.headStartY)*M.scale,.15f,2.5f);
  input.mouseDx=input.mouseDy=0;
@@ -889,7 +918,7 @@ bool VrRuntime::testAll(std::ostream& report){
  auto clock=std::chrono::steady_clock::now();auto lap=[&](const char* what){const auto now=std::chrono::steady_clock::now();report<<"TIME: "<<what<<' '<<std::chrono::duration<double,std::milli>(now-clock).count()<<" ms\n";clock=now;};
  run("SteamVR detection (registry key, libraries, headset off, broken runtime)",testDetection());
  run("tracking recovery, foregrip support, coordinate axes, rigid-view inversion, shoulder box",testMath());
- ok&=testSupport(report);ok&=testComfortMath(report);ok&=testAvatar(report);ok&=SoftwareRenderer::testVrAvatar(report);
+ ok&=testSupport(report);ok&=testComfortMath(report);ok&=testAvatar(report);ok&=testAvatarFit(report);ok&=SoftwareRenderer::testVrAvatar(report);
  lap("solve, arms, support");ok&=Game::testComfortMenu(report);ok&=Game::testVrHardening(report);lap("comfort menu, hardening");
  run("grip from the bound actions, with hysteresis, no stuck legacy bit",testGrip());
  ok&=Game::testVrHeldProps(report);ok&=Game::testVrHeldProps(report,[](Point3 p){return rotateTracking(p,.7f);});lap("held props");
