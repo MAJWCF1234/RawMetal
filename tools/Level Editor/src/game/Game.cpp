@@ -13,7 +13,10 @@
 
 namespace retro {
 
-Game::Game(WorldId id):m_worldId(id) { restart(); }
+Game::Game(WorldId id):Game(id,false) {}
+Game::Game(WorldId id,bool deferCampaignLoad):m_worldId(id) {
+ if(!deferCampaignLoad)restart();
+}
 void Game::restoreEditorCamera(const Player& camera){
  if(!std::isfinite(camera.pos.x)||!std::isfinite(camera.pos.y)||!std::isfinite(camera.z)||!std::isfinite(camera.angle)||!std::isfinite(camera.pitch))throw std::runtime_error("Invalid editor camera");
  m_player.pos=camera.pos;m_player.z=camera.z;m_player.angle=camera.angle;m_player.pitch=camera.pitch;
@@ -94,7 +97,7 @@ void Game::showTitleScreen(){
     m_menuSelection=0;m_menuMessage.clear();m_dragSlider=-1;m_suppressFire=true;refreshSaveSlots();
 }
 
-void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_cloths.clear();m_clothPoses.clear();m_clothMap=nullptr;m_clothLevel=-1;m_clothPlayerSeen=false;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1,4};m_lastSidearm=WeaponId::Handgun;m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
+void Game::restart(){m_previousSubdue=false;++m_sessionRevision;m_ambientNext.clear();m_ambientLatch.clear();m_acoustics={};m_hitStopRemaining=0;m_bulletImpacts.clear();m_barrelExplosions.clear();m_breakEvents.clear();m_glassBreaks.clear();m_hazmat={};m_hazmatPushCooldown=0;m_hungSuits.clear();m_suitPushCooldown=0;m_cloths.clear();m_clothPoses.clear();m_clothMap=nullptr;m_clothLevel=-1;m_clothPlayerSeen=false;m_inventoryOpen=false;m_equippedWeapon=WeaponId::Shotgun;m_weaponEquipped=true;m_switchTarget=WeaponId::Fists;m_switchRaise=false;m_medkits=0;m_selectedItem=-1;m_itemCells={12,0,2,1,4};m_lastSidearm=WeaponId::Handgun;m_states.clear();m_saveStore={};m_objectives.clear();m_questItems.clear();m_firedEvents.clear();m_scriptEvents.clear();m_friendlyActors.clear();m_summons.clear();m_summonKeys.clear();m_factionOverrides.clear();m_guardShots.clear();m_hazardSoundTimer=0;m_previousFlashlight=false;int start=m_level;for(int level=0;level<chunkCount();++level){loadLevel(level,false,false);storeChunk();if(loadProgressCounter)++*loadProgressCounter;}loadLevel(std::min(start,chunkCount()-1),false);seedScripts();updateStreaming(0);rebuildFriendlyActors();
  // Fresh worlds and restored saves share one zero-time pose initialization.
  // This stamps canonical machinery/NPC state without executing script events
  // or advancing AI work, sounds, healing or finite resource clocks.
@@ -233,9 +236,10 @@ void Game::crossChunkBoundary(){
  if(!moved.empty())remapEnemyRefs(previous,moved);
  for(auto&event:m_sounds)if(event.spatial||std::isfinite(event.z))event.position+=shift;
  m_activeLog=-1;m_logTime=0;m_pickupNoticeTime=0;
+ reportMapHealthLoad();
  if((m_worldId==WorldId::Campaign&&next>previous)||m_worldId==WorldId::Custom)saveCheckpoint();
 }
-void Game::loadLevel(int level,bool carry) {
+void Game::loadLevel(int level,bool carry,bool reportHealth) {
     float health=m_player.health;auto pools=m_player.pools;
     // Spilt liquid belongs to the maps it was spilt in: a new map (or a new game) starts dry.
     m_liquidDrops.clear();m_puddles.clear();
@@ -278,6 +282,7 @@ void Game::loadLevel(int level,bool carry) {
     seedClutter();settleLeads(m_level);
     if(m_world.hasLift()&&!m_hazmat.initialized)m_hazmat.seed(m_world);
     updateHungSuits(0);
+    if(reportHealth)reportMapHealthLoad();
 }
 void Game::sound(Sound sound,float gain,float pitch){
  bool foot=footstepSound(sound)||sound==Sound::Land;

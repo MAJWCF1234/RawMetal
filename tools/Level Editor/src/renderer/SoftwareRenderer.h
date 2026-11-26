@@ -2,6 +2,7 @@
 #include <array>
 #include "../game/Game.h"
 #include "../game/Avatar.h"
+#include "../game/MapHealth.h"
 #include <cstdint>
 #include <vector>
 #include <unordered_map>
@@ -75,6 +76,8 @@ public:
     std::vector<EditorGuide> m_editorGuides;
     float m_editorAspect=9.f/16.f;
     bool m_editorControllerAim=false;
+    void setEditorMapDiagnostics(bool enabled){m_editorMapDiagnostics=enabled;}
+    void prepareMapDiagnostics(const Game& game);
     const std::uint32_t* pixels() const { return m_pixels.data(); }
     int width() const { return m_width; }
     int height() const { return m_height; }
@@ -245,6 +248,13 @@ private:
     static bool benchVrEye(std::ostream& report);
  private:
     bool m_environmentInspection=false;
+    bool m_editorMapDiagnostics=false;
+    std::uint64_t m_diagnosticsGame=0;
+    unsigned m_diagnosticsRevision=0;
+    int m_diagnosticsLevel=-1;
+    bool m_diagnosticsAudited=false;
+    ai::NodeGraph m_debugNavigation;
+    std::vector<MapHealthIssue> m_mapIssues;
     bool m_staticGeometryBuild=false;
     std::vector<char> m_chunkFar;
     int m_buildWarm=12;std::array<double,3> m_bakeWorst{};

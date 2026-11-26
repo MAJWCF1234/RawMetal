@@ -1,6 +1,7 @@
 #include "../core/FrameProfile.h"
 #include "SoftwareRenderer.h"
 #include "DebugLayer.h"
+#include "../game/ai/Navigation.h"
 #include "Materials.h"
 #include "Wetness.h"
 #include "Projection.h"
@@ -1527,6 +1528,8 @@ void SoftwareRenderer::updatePlants(const Game& game){
  for(auto&[slot,corpse]:m_corpses){if(!corpse.carcass.built()||corpse.seen<game.elapsed()-.5f)continue;const Point3 c=corpse.carcass.centre();bodies.push_back({game.level(),{c.x,c.y,c.z-.25f},std::min(.6f,corpse.carcass.radius()*.45f),.45f,{}});}
  for(auto&[key,remains]:m_remains){if(!remains.carcass.built())continue;const Point3 c=remains.carcass.centre();bodies.push_back({int(key>>32),{c.x,c.y,c.z-.25f},std::min(.8f,remains.carcass.radius()*.45f),.5f,{}});}
  m_plants.update(game,bodies,game.elapsed());}
+#include "MapDiagnostics.inc"
+
 void SoftwareRenderer::render(const Game& game){
  // The sniper rifle's scope narrows the lens while it is at the eye; the game's own lens comes back after the frame.
  struct LensRestore{float was=Projection::horizontal;~LensRestore(){Projection::horizontal=was;}} lensRestore;

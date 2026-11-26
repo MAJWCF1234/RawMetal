@@ -482,6 +482,11 @@ int runEditorPreview(const EditorPreviewOptions& options){
    renderer->setEditorView(playing||simulating?std::vector<EditorFloorView>{}:editorFloors,playing||simulating||filmOn?std::vector<EditorGuide>{}:editorGuides);
    if(filmOn){auto cam=scene->player();cam.pos={filmX,filmY};cam.eye=Player::StandingEye;cam.z=filmEye-cam.eye;cam.crouched=cam.prone=false;
     cam.angle=filmYaw*kPi/180.f;cam.pitch=std::clamp(filmPitch*kPi/180.f*140.f,-210.f,210.f);scene->restoreEditorCamera(cam);applyFilmPuppets(*scene,filmHeld);Projection::setFieldOfView(filmFov);}
+    // The map health view: the fifth number of look.txt (DEBUGLAYER MAP in the Builder).
+    {std::ifstream look(lookControl);std::string tag;int mode=0,third=0,rebake=0,animate=1,diagnostics=0;
+     const bool show=bool(look>>tag>>mode>>third>>rebake>>animate>>diagnostics)&&tag=="LOOK"&&diagnostics!=0;
+     renderer->setEditorMapDiagnostics(show);}
+    renderer->prepareMapDiagnostics(*scene);
    renderer->render(*scene);
    if(filmOn)Projection::setFieldOfView(0);
    if(profileFrame){

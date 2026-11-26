@@ -729,6 +729,9 @@ public:
     const std::vector<Ragdoll>& hungSuits(int level)const{static const std::vector<Ragdoll> none;return level>=0&&size_t(level)<m_hungSuits.size()?m_hungSuits[size_t(level)]:none;}
     static Game hazmatInspection(int view=0);
     static bool testHazmat();
+    void advanceDebugNavigation(ai::NodeGraph& graph) const;
+    void reportMapHealthLoad() const;
+    static int runMapHealth(const wchar_t* map,const std::wstring& campaign);
     const std::vector<Enemy>& enemies() const { return m_enemies; }
     const std::vector<FriendlyActor>& friendlyActors()const{return m_friendlyActors;}
     const std::vector<FriendlyActor>& npcActors()const{return m_friendlyActors;}
@@ -836,7 +839,7 @@ public:
     Point3 vrHandOffset(int hand)const{const size_t h=size_t(hand&1);return m_vrHandProxySet[h]?m_vrHandProxy[h]-m_vrHandPosition[h]:Point3{};}   // drawn hand minus tracked hand
     static bool testClutter();
     static PropTraits propTraits(int model);
-    static bool auditMapScene(Game& game,int level);
+    static bool auditMapScene(Game& game,int level,std::vector<std::pair<std::string,unsigned>>* findings=nullptr);
     static bool testPhysicsStages();static bool testProps();static bool testPropSaves();static bool testGlass();static Game physicsInspection(int view,float seconds);
     // A test bay of its own (a test set's sockets, test leads, a charged cell): the panel close (0),
     // the cell's terminals close (1), the bench (2), the cell lifted, turned and tipped (3), a plug
@@ -1748,7 +1751,8 @@ private:
     void spawnScriptEnemy(const ScriptAction& action);
     void spawnCreature(const CreatureSpawn& spawn,float awareness=0,bool announce=false);
     void updateHazards(float dt);
-    void loadLevel(int level,bool carry);
+    explicit Game(WorldId id,bool deferCampaignLoad);
+    void loadLevel(int level,bool carry,bool reportHealth=true);
     World makeWorld(int level)const;
     void selectCustomCampaign(int index);
     // New Game: the built-in campaign from its first map. A custom prologue

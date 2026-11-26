@@ -896,6 +896,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(auto path=commandArguments().find(L"--campaign-export-test="))return retro::testCampaignEditingExport(path+23);
     if(auto path=commandArguments().find(L"--layer-export-test="))return retro::testLayerEditingExport(path+20);
     if(auto path=commandArguments().find(L"--corridor-export-test="))return retro::testCorridorEditingExport(path+23);
+    if(auto path=commandArguments().valueOf(L"--map-health=");!path.empty())
+        return retro::Game::runMapHealth(path.c_str(),commandArguments().valueOf(L"--map-health-campaign="));
+    if(commandArguments().find(L"--map-health-count"))
+        return retro::Game::runMapHealth(nullptr,commandArguments().valueOf(L"--map-health-campaign="));
     if(auto path=commandArguments().valueOf(L"--editor-validate=");!path.empty())return retro::validateEditorCampaign(path);
     if(auto path=commandArguments().valueOf(L"--editor-export=");!path.empty())return retro::exportEditorCampaign(path);
     // Open from campaign: the builder asks this engine for the game's levels (--campaign-map-list,
@@ -2010,6 +2014,10 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
           command("debuglayer stats",Stats);
           command("debuglayer off extra",Stats);
           command("debuglayer off",0);
+          command("debuglayer map",MapDiagnostics);
+          command("debuglayer map",0);
+          command("debuglayer nav",Navigation);
+          command("debuglayer issues",Issues);
           command("debug_layer all",All);
           command("debuglayer",0);
           command("debuglayer colliders",Colliders);
@@ -2022,6 +2030,16 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
           renderer->render(*game);
           pixels=renderer->pixels();
           passed&=std::find(pixels,pixels+320*180,Stroke)==pixels+320*180;
+          renderer->setEnvironmentInspection(true);
+          renderer->setEditorMapDiagnostics(true);
+          for(int slice=0;slice<64;++slice)renderer->prepareMapDiagnostics(*game);
+          renderer->render(*game);
+          pixels=renderer->pixels();
+          passed&=std::find(pixels,pixels+320*180,NavigationStroke)!=pixels+320*180;
+          renderer->setEditorMapDiagnostics(false);
+          renderer->render(*game);
+          pixels=renderer->pixels();
+          passed&=std::find(pixels,pixels+320*180,NavigationStroke)==pixels+320*180;
           return passed;
          }},
          {"projection",retro::SoftwareRenderer::testProjection},{"command-arguments",commandArgumentsTest},{"content-integrity",contentIntegrityTest},{"load-validation",loadValidationTest},
@@ -2438,7 +2456,7 @@ static int playDepthworks(PWSTR commandLine,MenuHandoff* handoff){
         if(handoff&&!game.editorRequested()&&commandArguments().find(L"--menu-editor-test")&&++menuTestFrames>90){handoff->edit=true;handoff->fresh=true;handoff->project.clear();break;}
         if(handoff&&game.editorRequested()){handoff->edit=true;handoff->fresh=game.editorStartsFresh();handoff->project=game.editorProject();break;}
         if(game.quitRequested())break;
-        audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else renderer.render(game); if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
+        audio.update(game,vrMode||window.focused()); if(vrRuntime){renderer.renderVrEye(game,0);renderer.renderVrEye(game,1);}else {renderer.prepareMapDiagnostics(game);renderer.render(game);} if(!renderer.hardwarePresentsWindow())window.present(renderer.pixels(),renderer.width(),renderer.height());
         titleTimer+=dt; if(titleTimer>.25f){titleTimer=0; wchar_t t[128];if(game.titleScreen())std::swprintf(t,128,L"Depthworks");else std::swprintf(t,128,L"Depthworks | HP %.0f | %ls %d | Monsters %d",game.player().health,game.activeFirearm()==retro::WeaponId::Handgun?L"9mm":L"Shells",game.firearmPool().total,game.enemiesRemaining());window.setCaption(t);}
     }
     if(!settingsPath.empty())game.saveSettings(settingsPath);
