@@ -60,6 +60,7 @@ const bool registered=[]{
  engine("eos","--eos-test: signs in to Epic's Dev sandbox, hosts a lobby, finds it, leaves (needs the internet and baked keys)",+[]{std::ofstream r("eos-test.txt");return net::testEos(r);});
  engine("vr","--vr-test: the avatar's solve, arms and mirror chain, the fore-end snap, comfort maths and menu, hand hardening (no headset)",+[]{std::ofstream r("vr-test.txt");return VrRuntime::testAll(r);});
  engine("vr-bench","one Quest eye headless at render scales 1-0.7 (timings in vr-bench.txt; passes when Vulkan draws)",+[]{std::ofstream r("vr-bench.txt");return SoftwareRenderer::benchVrEye(r);});
+ engine("movement","--each-test=movement: hulls and stances (stand, kneel, prone, VR crawl view), jumps, stairs, the low duct",&Game::testMovement);
  engine("doors","--each-test=doors: weight, hand, shove, sounds, battering, lock fields",&Game::testDoors);
  engine("hearing","--each-test=hearing: who hears what, through what, how far",&Game::testHearing);
  engine("settings","--each-test=settings: the pause menu's rows (sliders, toggles, pull highlight), their persistence, restart and quit",&Game::testSettings);
