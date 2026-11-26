@@ -129,6 +129,12 @@ public:
  bool head(const Game& game,Point3& position,Point3& forward)const;
  // The avatar's pose (Avatar.h) from the latest tracking and the game: what the renderer poses her body from.
  AvatarPose avatar(const Game& game)const;
+ // The same with the hands exactly where they are tracked (before her arm fit): what the fit learns the reach from.
+ AvatarPose trackedAvatar(const Game& game)const;
+ // Her fit to the player now: the standing eye the head is read against (tracking metres), the tracking scale, the
+ // arm fit (Avatar.h avatarArmFit) and the reach learned (tracking metres, 0 none yet).
+ struct BodyFit{float eye=0,scale=1,armFit=1,reach=0;};
+ BodyFit bodyFit()const;
  // The comfort vignette's strength now (the setting times how fast the view moves and turns), 0-1.
  float vignette()const;
  const VrTiming& timing()const;

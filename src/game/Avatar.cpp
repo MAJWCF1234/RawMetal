@@ -76,6 +76,58 @@ int avatarSlotAt(const AvatarPose& p,Point3 hand){
  return 0;
 }
 bool avatarPouchAt(const AvatarPose& p,Point3 wrist){return len(wrist-solveAvatar(p,0).pouchSlot)<.2f;}
+void AvatarFit::observeHead(float y,bool headsetWorn,bool seated,float dt){
+ if(!std::isfinite(y)||!std::isfinite(dt))return;
+ if(!headsetWorn){worn=false;riseTime=0;return;}
+ if(!worn){worn=true;eye=y;reach=0;riseTime=0;stretchTime={};return;}   // put on (again): whoever wears it now
+ if(eye<=0){eye=y;return;}
+ // Seated, the head is meant to stay low: standing up for a moment must not move her eye.
+ if(seated||y<=eye+Rise){riseTime=0;return;}
+ riseLow=riseTime>0?std::min(riseLow,y):y;riseTime+=dt;
+ if(riseTime>=RiseHold){eye=riseLow;riseTime=0;reach=0;stretchTime={};}   // a new standing eye: the reach is read again against it
+}
+void AvatarFit::observeReach(int hand,float distance,float scale,float dt){
+ const size_t h=size_t(hand&1);if(!std::isfinite(distance)||!(scale>0)||!std::isfinite(dt))return;
+ const float now=std::max(reach,AvatarArmReach/scale),most=AvatarArmReach*AvatarReachMost/scale;
+ // Past the most she can be fitted to (or a hand a metre and a half off: lost tracking) teaches nothing more.
+ if(distance<=now+.004f||distance>1.5f){stretchTime[h]=0;return;}
+ stretchLow[h]=stretchTime[h]>0?std::min(stretchLow[h],distance):distance;stretchTime[h]+=dt;
+ if(stretchTime[h]>=StretchHold){reach=std::min(stretchLow[h],most);stretchTime[h]=0;}
+}
+float avatarEyeForHeight(int heightCm){return float(heightCm)*.00933f;}
+float avatarArmFit(const AvatarFit& fit,float scale,int setting){
+ if(setting==1)return 1.1f;if(setting==2)return 1.f;if(setting==3)return .87f;
+ return AvatarArmReach/std::clamp(fit.reach*scale,AvatarArmReach,AvatarArmReach*AvatarReachMost);
+}
+bool testAvatarFit(std::ostream& report){
+ bool ok=true;auto check=[&](bool pass,const char* what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
+ constexpr float dt=1.f/90;auto hold=[&](AvatarFit& f,float y,float seconds,bool worn=true,bool seated=false){for(float t=0;t<seconds;t+=dt)f.observeHead(y,worn,seated,dt);};
+ {AvatarFit f;hold(f,.82f,2.f,false);check(f.eye==0,"a headset on the desk, not worn: nothing is learned");
+  hold(f,.82f,.5f);check(std::fabs(f.eye-.82f)<1e-5f,"put on at the desk: the first worn sample seeds the eye");
+  hold(f,1.64f,.5f);check(std::fabs(f.eye-.82f)<1e-5f,"stood up half a second: not yet");
+  hold(f,1.64f,.7f);check(std::fabs(f.eye-1.64f)<1e-5f,"held a second higher: the eye rises to the real standing eye");
+  hold(f,1.1f,5.f);check(std::fabs(f.eye-1.64f)<1e-5f,"ducking for five seconds does not lower it");
+  {AvatarFit g=f;for(int i=0;i<200;++i)g.observeHead(i%3==0?1.75f:1.64f,true,false,dt);check(std::fabs(g.eye-1.64f)<1e-5f,"a head bobbing up for single frames does not raise it");}
+  hold(f,1.64f,.1f,false);hold(f,1.2f,.1f);check(std::fabs(f.eye-1.2f)<1e-5f&&f.reach==0,"taken off and put on again: it starts over");}
+ {AvatarFit f;hold(f,1.40f,.2f);hold(f,1.5f,.3f);hold(f,1.47f,.9f);check(std::fabs(f.eye-1.47f)<1e-5f,"a stooped start rises to the lowest height held, not the highest");}
+ {AvatarFit f;hold(f,1.1f,.2f,true,true);hold(f,1.7f,3.f,true,true);check(std::fabs(f.eye-1.1f)<1e-5f,"seated: standing up does not move it");}
+ {AvatarFit f;f.eye=1.64f;f.worn=true;const float scale=1.42f/1.64f;
+  check(avatarArmFit(f,scale,0)==1.f,"unfitted: the hands as tracked");
+  for(float t=0;t<1;t+=dt)f.observeReach(1,.30f,scale,dt);check(f.reach==0,"a hand inside her reach teaches nothing");
+  f.observeReach(1,1.2f,scale,dt);for(float t=0;t<.5f;t+=dt)f.observeReach(1,.5f,scale,dt);check(f.reach==0,"a one-frame tracking jump teaches nothing");
+  for(float t=0;t<.3f;t+=dt)f.observeReach(1,.70f,scale,dt);check(std::fabs(f.reach-.70f)<1e-4f,"a long reach held a fifth of a second is learned");
+  check(std::fabs(.70f*scale*avatarArmFit(f,scale,0)-AvatarArmReach)<1e-4f,"the player's full stretch, scaled to her height and fitted, is exactly her arm");
+  for(float t=0;t<.3f;t+=dt)f.observeReach(0,1.3f,scale,dt);check(std::fabs(avatarArmFit(f,scale,0)-1/AvatarReachMost)<1e-4f,"no reach is drawn in by more than AvatarReachMost");
+  check(avatarArmFit(f,scale,1)>1&&avatarArmFit(f,scale,2)==1&&avatarArmFit(f,scale,3)<1,"ARM LENGTH short, average and long override the fit");
+  f.recalibrate(1.6f);check(f.reach==0&&f.eye==1.6f,"RECALIBRATE HEIGHT starts the reach over");}
+ check(std::fabs(avatarEyeForHeight(175)-1.633f)<.005f,"175 cm tall: the eyes at about 1.63 m");
+ // Her body stays her size: a fitted wrist drawn in toward the shoulder is in her reach and the solve leaves it there.
+ {AvatarPose p;p.active=true;p.head={0,0,1.42f};p.root={};p.headYaw=p.bodyYaw=0;p.hands[1].tracked=true;p.hands[1].wrist={.5f,.1f,1.2f};p.hands[1].forward={1,0,0};p.hands[1].palm={0,1,0};
+  const AvatarSolve raw=solveAvatar(p,0);const Point3 sh=raw.shoulder[1];const float d=len(p.hands[1].wrist-sh);
+  p.hands[1].wrist=avatarFitWrist(sh,p.hands[1].wrist,AvatarArmReach/d);const AvatarSolve fitted=solveAvatar(p,0);
+  check(!raw.reached[1]&&fitted.reached[1]&&len(fitted.wrist[1]-p.hands[1].wrist)<1e-4f&&len(fitted.shoulder[1]-sh)<1e-6f,"a reach past her arm, fitted, is her full stretch; her shoulders do not move");}
+ return ok;
+}
 bool testAvatar(std::ostream& report){
  bool ok=true;auto check=[&](bool pass,const char* what){report<<(pass?"PASS: ":"FAIL: ")<<what<<'\n';ok&=pass;};
  auto near=[](Point3 a,Point3 b,float e=1e-4f){return len(a-b)<e;};

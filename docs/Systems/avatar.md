@@ -10,6 +10,15 @@ In VR the player is Claire, all of her, as in VRChat. There are no floating hand
 - **Support hand.** On the shotgun, the support hand lies on the fore-end (`VrRuntime::supportPose`) and its arm reaches it. The palm is under the wood and the knuckles point away from the elbow, so the wrist is under the wood. The real hand's roll turns it by at most 35 degrees. On the pistol, the support hand wraps the gun hand (`VrRuntime::pistolSupportPose`).
 - **Belt pouch.** The pouch is on the support side of the belt (`AvatarSolve::pouchSlot`, `avatarPouchAt`). The VR hand reloads take magazines and shells from it (`src/game/VrGuns.cpp`).
 
+## Fitting the player
+
+Claire is the same size for everyone, as in VRChat. A short, an average and a tall player see the same body, the same eye height and the same arms. The player's tracking is fitted to her, not the other way round (`AvatarFit` in `src/game/Avatar.h`).
+
+- **Height.** The standing eye is learned while playing. The first sample with the headset worn seeds it, using SteamVR's activity level. A head held more than 3 cm higher for a second raises it to the lowest height held, which fixes a headset put on at a desk or a stooped start. Ducking never lowers it. Taking the headset off and on starts over. Tracking is scaled by `Player::StandingEye` over that eye.
+- **Reach.** A hand held further from its shoulder than her arm for 0.2 s teaches the player's reach. One-frame tracking jumps are ignored. The hands are then scaled toward her shoulders (`avatarArmFit`, `avatarFitWrist`), so the player's full stretch is her full stretch and her hands stay on her arms. A new standing eye forgets the reach.
+- **Overrides (VR settings).** YOUR HEIGHT (AUTO, or 120 to 220 cm) and ARM LENGTH (AUTO, SHORT, AVERAGE, LONG). RECALIBRATE HEIGHT still sets the eye to the head's height now.
+- **Checks.** `testAvatarFit` (in `--vr-test` / `engine.vr`), and the lab tube `vr-fit`. That tube runs 152, 175 (long-armed) and 198 cm players from a desk start, with pictures through her eyes.
+
 ## Code
 
 | Piece | File |

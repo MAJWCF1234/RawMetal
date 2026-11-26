@@ -25,7 +25,7 @@ bool copyTextToClipboard(const std::string& text);   // MultiplayerMenu.cpp
 namespace {
 enum Row:int{RMaster=1,RMusic,REffects,RVoiceVolume,RRenderScale,RDepth,RLens,RFrameTime,RSensitivity,RInvert,RPull,RCharacter,
  RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RProximity,RMuted,RMicTest,
- RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RViewDistance,
+ RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrBodyHeight,RVrArms,RVrLefty,RVrScale,RVrRate,RViewDistance,
  RPadLook,RPadDead,RPadSteady,RPadFilter,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RPadCurve,RPadAssist,RPadRumble,RReset,RMutedBack,RMutedName=200};
 constexpr int TabCount=int(SettingsTab::Count);   // the page column's rows; BACK is row TabCount
 struct TalkKey{int code;const char* name;};
@@ -69,7 +69,7 @@ std::vector<int> Game::settingsRows()const{
   case SettingsTab::Controller:return {RPadLook,RPadCurve,RPadDead,RPadSteady,RPadFilter,RPadAssist,RPadAim,RPadSprint,RPadCrouch,RPadBumpers,RPadSwap,RPadRumble,RReset};
   case SettingsTab::Gameplay:return {RPull,RCharacter,RReset};
   case SettingsTab::Communication:return {RTextChat,RChatFilter,RVoiceMode,RTalkKey,ROpenMic,RMic,RSpeakers,RMicVolume,RVoiceVolume,RProximity,RMuted,RMicTest,RReset};
-  case SettingsTab::Vr:return {RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrLefty,RVrScale,RVrRate,RReset};
+  case SettingsTab::Vr:return {RVrTurn,RVrVignette,RVrSeated,RVrHeight,RVrBodyHeight,RVrArms,RVrLefty,RVrScale,RVrRate,RReset};
   default:return {RReset};
  }
 }
@@ -143,6 +143,11 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RVrVignette:m.label="COMFORT VIGNETTE";m.value=s.vrVignette<=0?"OFF":percent(s.vrVignette);m.help="Darkens the edges of the view while you move or turn.";break;
    case RVrSeated:m.label="SEATED MODE";m.value=onOff(s.vrSeated);m.help="Play sitting down: the game stands you up to her height.";break;
    case RVrHeight:m.kind=MenuItem::Action;m.label="RECALIBRATE HEIGHT";m.value="";m.help="Stand as you play, then press: your head's height now is her eye.";break;
+   case RVrBodyHeight:{m.kind=MenuItem::Choice;m.label="YOUR HEIGHT";char b[32];const int cm=s.vrHeightCm;const int inches=int(std::lround(cm/2.54));
+    if(cm>0)std::snprintf(b,sizeof b,"%d CM (%d FT %d)",cm,inches/12,inches%12);m.value=cm>0?b:"AUTO";
+    m.help=cm>0?"Your own height. She stays her size; your view and reach are fitted to her.":"AUTO learns your height as you play. Set it if her eyes feel too high or low.";break;}
+   case RVrArms:{static constexpr const char* n[]={"AUTO","SHORT","AVERAGE","LONG"};m.kind=MenuItem::Choice;m.label="ARM LENGTH";m.value=n[std::clamp(s.vrArmLength,0,3)];
+    m.help=s.vrArmLength==0?"AUTO learns your reach as you stretch, so her hands stay on yours.":"Your own arms. SHORT lets her reach further, LONG draws her hands in.";break;}
    case RVrLefty:m.label="LEFT-HANDED";m.value=onOff(s.vrLeftHanded);m.help="The gun hand, the hip holster and the sticks swap sides.";break;
    case RVrScale:m.kind=MenuItem::Choice;m.label="RENDER SCALE";m.value=s.vrRenderScale<=0?"AUTO":percent(s.vrRenderScale);m.help="The headset's resolution. AUTO lowers it when frames run late.";break;
    case RVrRate:m.label="FRAME RATE READOUT";m.value=onOff(s.vrFrameRate);m.help="The headset's frame rate and GPU time, under your view.";break;
@@ -183,7 +188,7 @@ void Game::settingsReset(SettingsTab tab){
   case SettingsTab::Gameplay:s.pullHighlight=d.pullHighlight;s.character=d.character;break;
   case SettingsTab::Communication:s.textChat=d.textChat;s.chatFilter=d.chatFilter;s.voiceMode=d.voiceMode;s.pushToTalkKey=d.pushToTalkKey;s.openMicThreshold=d.openMicThreshold;
    s.micDevice=d.micDevice;s.speakerDevice=d.speakerDevice;s.micVolume=d.micVolume;s.voiceVolume=d.voiceVolume;s.proximityVoice=d.proximityVoice;break;
-  case SettingsTab::Vr:s.vrTurnSpeed=d.vrTurnSpeed;s.vrVignette=d.vrVignette;s.vrSeated=d.vrSeated;s.vrLeftHanded=d.vrLeftHanded;s.vrRenderScale=d.vrRenderScale;s.vrFrameRate=d.vrFrameRate;break;
+  case SettingsTab::Vr:s.vrHeightCm=d.vrHeightCm;s.vrArmLength=d.vrArmLength;s.vrTurnSpeed=d.vrTurnSpeed;s.vrVignette=d.vrVignette;s.vrSeated=d.vrSeated;s.vrLeftHanded=d.vrLeftHanded;s.vrRenderScale=d.vrRenderScale;s.vrFrameRate=d.vrFrameRate;break;
   default:break;
  }
 }
@@ -246,6 +251,8 @@ void Game::settingsChange(int id,int direction,bool activate){
   case RMicTest:m_micTest=!m_micTest;if(!m_micTest)m_micMonitor.reset();break;
   case RVrSeated:s.vrSeated=!s.vrSeated;break;
   case RVrHeight:if(activate){m_vrRecalibrate=true;m_menuMessage="HEIGHT SET TO YOUR HEAD NOW";}break;
+  case RVrBodyHeight:{int at=s.vrHeightCm<=0?0:(s.vrHeightCm-120)/5+1;at=cycle(at,22);s.vrHeightCm=at==0?0:120+5*(at-1);break;}
+  case RVrArms:s.vrArmLength=cycle(std::clamp(s.vrArmLength,0,3),4);break;
   case RVrLefty:s.vrLeftHanded=!s.vrLeftHanded;break;
   case RVrScale:{static constexpr float steps[]={0,1,.9f,.8f,.7f};int at=0;for(int i=0;i<5;++i)if(std::fabs(steps[i]-s.vrRenderScale)<.01f)at=i;s.vrRenderScale=steps[cycle(at,5)];break;}
   case RVrRate:s.vrFrameRate=!s.vrFrameRate;break;
