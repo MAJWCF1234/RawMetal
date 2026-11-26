@@ -185,6 +185,47 @@ void SoftwareRenderer::warmChunks(const Game& game){
   }
  }
 }
+void SoftwareRenderer::prepareAhead(const Game& game){
+ // One quiet frame's work: nothing while another bake ran this frame or a scene is still settling in.
+ static const bool off=GetEnvironmentVariableW(L"RM_NO_BUILD_AHEAD",nullptr,0)>0; // frame-time comparisons
+ if(off||!m_gpu||!m_gpuFrame||game.titleScreen()||m_environmentInspection||m_buildBudgetMs<=0||m_buildWarm>0||m_buildSpentMs>0)return;
+ auto rect=[&](int a,int b){const auto p=game.chunkOffset(a),q=game.chunkOffset(b);return std::max(std::fabs(p.x-q.x),std::fabs(p.y-q.y));};
+ const Vec2 eye=game.chunkOffset(game.level())+m_view.pos;
+ int target=-1;std::uint64_t stamp=0;float best=1e30f;
+ for(int level=0;level<game.chunkCount();++level){
+  if(level==game.level()||game.chunkResident(level))continue;
+  // Only a map a way leads to: through a door or an open edge of a map standing loaded (the map in play's first).
+  bool close=false,beside=false;
+  const Vec2 there=game.chunkOffset(level);
+  for(int other=0;other<game.chunkCount()&&!beside;++other){
+   if(other!=game.level()&&!game.chunkResident(other))continue;
+   if(rect(level,other)>24.5f)continue;
+   const World&from=game.chunkWorld(other);const Vec2 origin=game.chunkOffset(other),delta=there-origin;
+   bool way=(std::fabs(delta.y)<.01f&&((delta.x>0&&from.openEastBoundary())||(delta.x<0&&from.openWestBoundary())))||(std::fabs(delta.x)<.01f&&((delta.y>0&&from.openSouthBoundary())||(delta.y<0&&from.openNorthBoundary())));
+   for(const auto&door:from.doors())if(!way&&(door.entry||door.transfer)){const Vec2 probe{origin.x+(door.left+door.right)*.5f,origin.y+(door.entry?-.05f:24.05f)};way=probe.x>=there.x&&probe.x<there.x+24&&probe.y>=there.y&&probe.y<there.y+24;}
+   if(way){close=true;beside=other==game.level();}
+  }
+  if(!close)continue;
+  const std::uint64_t now=(game.chunkWorld(level).definitionIdentity().serial*1099511628211ull)^(std::uint64_t(game.worldId())<<56)^(std::uint64_t(game.staticRevision(level))<<8)^std::uint64_t(level+1);
+  if(auto done=m_aheadDone.find(level);done!=m_aheadDone.end()&&done->second.stamp==now&&m_gpu->staticCacheCurrent(level,done->second.key))continue;
+  const auto centre=game.chunkOffset(level)+Vec2{12,12};const float score=lengthSq(centre-eye)+(beside?0.f:1e6f);
+  if(score<best){best=score;target=level;stamp=now;}
+ }
+ if(target<0){m_aheadWorld.reset();m_aheadLevel=-1;return;}
+ if(m_aheadLevel!=target||m_aheadStamp!=stamp||!m_aheadWorld){
+  // This frame only reads the map in; its models and textures decode behind play.
+  m_aheadWorld=std::make_unique<World>(game.previewChunkWorld(target));m_aheadLevel=target;m_aheadStamp=stamp;
+  std::vector<int> models;for(const auto& f:m_aheadWorld->fixtures())if(f.model>=0&&f.model<int(m_facilityMeshes.size()))models.push_back(f.model);
+  std::sort(models.begin(),models.end());models.erase(std::unique(models.begin(),models.end()),models.end());
+  if(!models.empty())m_warmJobs.push_back(std::async(std::launch::async,[this,models]{std::vector<const Texture*> textures;
+   for(int model:models)try{warmModel(model,&textures);}catch(...){}
+   std::lock_guard hold(m_warmLock);m_gpuPending.insert(m_gpuPending.end(),textures.begin(),textures.end());}));
+  return;
+ }
+ AheadBuild build{m_aheadWorld.get(),m_vrRendering?2.:4.};
+ m_ahead=&build;try{drawScene(game,false,target);}catch(...){m_ahead=nullptr;throw;}m_ahead=nullptr;
+ if(build.done){m_aheadDone[target]={stamp,build.key};m_aheadWorld.reset();m_aheadLevel=-1;}
+}
 void SoftwareRenderer::loadWholeLibrary(){
  for(size_t model=0;model<m_facilityMeshes.size();++model)warmModel(int(model));
  for(const auto& [name,entry]:m_libraryTextures)findFacilityTexture(name);
@@ -1571,6 +1612,7 @@ void SoftwareRenderer::render(const Game& game){
    const float background=1.f-game.darkness();clear(rgb(int(12*background),int(16*background),int(18*background)));
    {perf::Scope profile(perf::Sky);drawSky(game);}
    drawScene(game);m_renderedChunks.push_back(game.level());for(int level=0;level<game.chunkCount();++level)if(level!=game.level()&&nearby(level)){m_farChunk=isFar(level);drawScene(game,false,level);m_farChunk=false;m_renderedChunks.push_back(level);}
+   prepareAhead(game);
    if(parallel){perf::Scope profile(perf::PoseWait);m_animationWorker->wait();m_poseReady=true;}if((m_vrRendering||m_vrScripted)&&!game.titleScreen())drawTrackedHands(game);else if(!game.titleScreen()&&!m_environmentInspection&&!m_bodyOutside&&((game.hiddenLocker()<0&&!game.lockerViewLocked())||game.lockerHands()))drawViewModel(game);m_poseReady=false;
   }catch(...){if(parallel)m_animationWorker->wait();m_poseReady=false;throw;}
  };

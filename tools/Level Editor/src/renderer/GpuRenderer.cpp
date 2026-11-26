@@ -22,6 +22,7 @@
 #include <fstream>
 #include <cmath>
 #include <algorithm>
+#include <future>
 #include <chrono>
 namespace retro {
 namespace {
@@ -876,7 +877,10 @@ struct GpuRenderer::Impl {
   if(queue.empty())return;
   // A fresh renderer draws its first lamp set in full. Atlas growth and material
   // resets during play must keep the same budget as any other shadow update.
-  const int budget=firstLampShadowFrame?int(queue.size()):12;
+  // During play: up to 6 lamps never drawn yet, else 3 stale ones (six faces each).
+  const bool fresh=std::any_of(queue.begin(),queue.end(),[&](const auto&q){return lampDirty[q.second]==2;});
+  if(fresh&&!firstLampShadowFrame)for(auto&q:queue)if(lampDirty[q.second]!=2)q.first+=1e7f;
+  const int budget=firstLampShadowFrame?int(queue.size()):fresh?6:3;
   firstLampShadowFrame=false;
   if(int(queue.size())>budget){std::nth_element(queue.begin(),queue.begin()+budget,queue.end());queue.resize(size_t(budget));}
   VkViewport viewport{0,0,float(ShadowSize),float(ShadowSize),0,1};VkRect2D scissor{{0,0},{ShadowSize,ShadowSize}};
@@ -914,7 +918,14 @@ struct GpuRenderer::Impl {
  std::array<std::uint64_t,12> drawStats{};
  // The last headless finish(): CPU recording, the wait for the GPU, the readback's conversion (ms).
  std::array<double,3> finishMs{};
- std::unordered_map<int,StaticCache> staticCaches;int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
+ std::unordered_map<int,StaticCache> staticCaches;std::unordered_map<int,StaticCache> pendingCaches;
+ struct Finishing {std::unique_ptr<StaticCache> cache;std::vector<uint32_t> indices;std::future<void> work;};
+ std::unordered_map<int,std::unique_ptr<Finishing>> finishing;
+ std::unordered_map<std::uint64_t,bool> castingMaterials(const StaticCache&cache);
+ void uploadStaticCache(StaticCache&cache,const std::vector<uint32_t>&indices);
+ static void sortStaticCache(StaticCache&cache,int slot,const std::unordered_map<std::uint64_t,bool>&casting,std::vector<uint32_t>&indices);
+ void installFinished(int slot);
+ int captureSlot=-1;bool capturing=false,renderingViewmodel=false;std::array<float,32> viewState{};std::uint64_t cacheHits=0;
  std::vector<Vertex> vertices;std::vector<Batch> batches;
  // VR: the first eye's batches before sorting, replayed for the second eye.
  std::vector<Batch> vrBatches;
@@ -1284,7 +1295,7 @@ GpuRenderer::GpuRenderer(void* nativeWindow):m(std::make_unique<Impl>()){
    check(vkCreateGraphicsPipelines(m->device,VK_NULL_HANDLE,1,&pipeline,nullptr,&m->shadowPipeline),"Create lamp shadow pipeline");
   }catch(...){if(shadowVert)vkDestroyShaderModule(m->device,shadowVert,nullptr);if(shadowFrag)vkDestroyShaderModule(m->device,shadowFrag,nullptr);throw;}
   vkDestroyShaderModule(m->device,shadowVert,nullptr);vkDestroyShaderModule(m->device,shadowFrag,nullptr);
-  m->createShadowAtlas(16);
+  m->createShadowAtlas(64);
   // Sun cascades share the depth pass and sampler; orthographic shaders.
   {
    VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};info.imageType=VK_IMAGE_TYPE_2D;info.format=VK_FORMAT_D16_UNORM;info.extent={Impl::SunSize,Impl::SunSize,1};info.mipLevels=1;info.arrayLayers=Impl::SunCascades;info.samples=VK_SAMPLE_COUNT_1_BIT;info.tiling=VK_IMAGE_TILING_OPTIMAL;info.usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_SRC_BIT;info.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
@@ -1566,23 +1577,31 @@ void GpuRenderer::setAtmosphere(const std::array<float,4>& atmosphere){std::copy
 bool GpuRenderer::staticCacheCurrent(int slot,std::uint64_t key)const{auto found=m->staticCaches.find(slot);return found!=m->staticCaches.end()&&found->second.key==key;}
 bool GpuRenderer::drawCached(int slot){auto found=m->staticCaches.find(slot);if(found==m->staticCaches.end()||!found->second.buffer.handle||(m->capturing&&m->captureSlot==slot))return false;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return true;}
 bool GpuRenderer::beginStaticCache(int slot,std::uint64_t key){
+ if(auto job=m->finishing.find(slot);job!=m->finishing.end()){if(job->second->cache->key==key){job->second->work.wait();m->installFinished(slot);}else m->finishing.erase(job);}
  auto found=m->staticCaches.find(slot);
  if(found!=m->staticCaches.end()&&found->second.key==key){++m->cacheHits;Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);return false;}
- auto&cache=m->staticCaches[slot];if(cache.shadowIndices.handle)m->shadowDirtyBounds.push_back(cache.bounds);m->retire(cache.buffer);m->retire(cache.shadowIndices);cache={};cache.key=key;m->captureSlot=slot;m->capturing=true;return true;
+ auto&cache=m->staticCaches[slot];if(cache.shadowIndices.handle)m->shadowDirtyBounds.push_back(cache.bounds);m->retire(cache.buffer);m->retire(cache.shadowIndices);cache={};cache.key=key;
+ if(auto kept=m->pendingCaches.find(slot);kept!=m->pendingCaches.end()){if(kept->second.key==key)cache=std::move(kept->second);m->pendingCaches.erase(kept);}
+ m->captureSlot=slot;m->capturing=true;return true;
 }
-void GpuRenderer::endStaticCache(){
+void GpuRenderer::pauseStaticCache(){
  if(!m->capturing||m->captureSlot<0)return;
- int slot=m->captureSlot;auto&cache=m->staticCaches.at(slot);std::vector<Vertex> sorted;std::vector<Impl::Batch> batches;sorted.reserve(cache.vertices.size());
+ auto found=m->staticCaches.find(m->captureSlot);m->pendingCaches[m->captureSlot]=std::move(found->second);m->staticCaches.erase(found);
+ m->capturing=false;m->captureSlot=-1;
+}
+bool GpuRenderer::cachePending(int slot,std::uint64_t key)const{auto found=m->pendingCaches.find(slot);return found!=m->pendingCaches.end()&&found->second.key==key;}
+// The CPU half of finishing a capture: it reads only the cache and the casting table, so a worker may run it.
+void GpuRenderer::Impl::sortStaticCache(StaticCache&cache,int slot,const std::unordered_map<std::uint64_t,bool>&casting,std::vector<uint32_t>&indices){
+ std::vector<Vertex> sorted;std::vector<Impl::Batch> batches;sorted.reserve(cache.vertices.size());
  std::stable_sort(cache.batches.begin(),cache.batches.end(),[](const Impl::Batch&a,const Impl::Batch&b){return a.sortKey<b.sortKey;});
  for(auto batch:cache.batches){auto oldStart=batch.start;batch.start=uint32_t(sorted.size());sorted.insert(sorted.end(),cache.vertices.begin()+oldStart,cache.vertices.begin()+oldStart+batch.count);if(!batches.empty()&&batches.back().material==batch.material)batches.back().count+=batch.count;else batches.push_back(batch);}
  cache.vertices.swap(sorted);cache.batches.swap(batches);
- m->capturing=false;m->captureSlot=-1;
- if(!cache.vertices.empty()){size_t bytes=cache.vertices.size()*sizeof(Vertex);m->makeBuffer(cache.buffer,bytes,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);std::memcpy(cache.buffer.mapped,cache.vertices.data(),bytes);
+ if(cache.vertices.empty())return;
   // Shadow casters: opaque triangles sorted by 4 m cell, then material, so a
   // lamp face draws only the runs inside its range.
   struct Caster {uint64_t cell,material;uint32_t first;};std::vector<Caster> casters;casters.reserve(cache.vertices.size()/3);
   std::array<float,6> bounds{1e30f,1e30f,1e30f,-1e30f,-1e30f,-1e30f};
-  for(const auto&batch:cache.batches){const auto*material=m->findMaterial(batch.material);if(!material)continue;const auto&mat=*material;bool casts=!mat.transparent&&!mat.additive&&slot/WorldChunkCapacity!=50; // 50: a far chunk (SoftwareRenderer::FarChunkCaches) casts no shadow
+  for(const auto&batch:cache.batches){const auto found=casting.find(batch.material);if(found==casting.end())continue;const bool casts=found->second&&slot/WorldChunkCapacity!=50; // 50: a far chunk (SoftwareRenderer::FarChunkCaches) casts no shadow
    for(uint32_t v=batch.start;v+2<batch.start+batch.count;v+=3){const Vertex*t=&cache.vertices[v];float center[3]{};
     for(int c=0;c<3;++c)for(int k=0;k<3;++k){float value=t[c].position[k];bounds[size_t(k)]=std::min(bounds[size_t(k)],value);bounds[size_t(k)+3]=std::max(bounds[size_t(k)+3],value);center[k]+=value/3.f;}
     if(!casts)continue;
@@ -1590,17 +1609,52 @@ void GpuRenderer::endStaticCache(){
    }
   }
   std::sort(casters.begin(),casters.end(),[](const Caster&a,const Caster&b){return a.cell!=b.cell?a.cell<b.cell:a.material!=b.material?a.material<b.material:a.first<b.first;});
-  std::vector<uint32_t> indices;indices.reserve(casters.size()*3);uint64_t runCell=~0ull;
+  indices.reserve(casters.size()*3);uint64_t runCell=~0ull;
   for(const auto&caster:casters){
    if(cache.shadowRuns.empty()||runCell!=caster.cell||cache.shadowRuns.back().material!=caster.material){cache.shadowRuns.push_back({caster.cell,caster.material,uint32_t(indices.size()),0,{1e30f,1e30f,1e30f},{-1e30f,-1e30f,-1e30f}});runCell=caster.cell;}
    auto&run=cache.shadowRuns.back();
    for(uint32_t c=0;c<3;++c){indices.push_back(caster.first+c);for(int k=0;k<3;++k){float value=cache.vertices[caster.first+c].position[k];run.lo[k]=std::min(run.lo[k],value);run.hi[k]=std::max(run.hi[k],value);}}
    run.count+=3;
   }
-  if(!indices.empty()){m->makeBuffer(cache.shadowIndices,indices.size()*4,VK_BUFFER_USAGE_INDEX_BUFFER_BIT);std::memcpy(cache.shadowIndices.mapped,indices.data(),indices.size()*4);}
-  cache.bounds=bounds;m->shadowDirtyBounds.push_back(bounds);
- }
+ cache.bounds=bounds;
+}
+// Which of a capture's materials cast shadows (the material table is the render thread's).
+std::unordered_map<std::uint64_t,bool> GpuRenderer::Impl::castingMaterials(const StaticCache&cache){
+ std::unordered_map<std::uint64_t,bool> casting;for(const auto&batch:cache.batches)if(const auto*material=findMaterial(batch.material))casting[batch.material]=!material->transparent&&!material->additive;return casting;
+}
+void GpuRenderer::Impl::uploadStaticCache(StaticCache&cache,const std::vector<uint32_t>&indices){
+ if(cache.vertices.empty())return;
+ size_t bytes=cache.vertices.size()*sizeof(Vertex);makeBuffer(cache.buffer,bytes,VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);std::memcpy(cache.buffer.mapped,cache.vertices.data(),bytes);
+ if(!indices.empty()){makeBuffer(cache.shadowIndices,indices.size()*4,VK_BUFFER_USAGE_INDEX_BUFFER_BIT);std::memcpy(cache.shadowIndices.mapped,indices.data(),indices.size()*4);}
+ shadowDirtyBounds.push_back(cache.bounds);
+}
+void GpuRenderer::endStaticCache(bool draw){
+ if(!m->capturing||m->captureSlot<0)return;
+ int slot=m->captureSlot;auto&cache=m->staticCaches.at(slot);std::vector<uint32_t> indices;
+ Impl::sortStaticCache(cache,slot,m->castingMaterials(cache),indices);
+ m->capturing=false;m->captureSlot=-1;
+ m->uploadStaticCache(cache,indices);
+ if(!draw)return;
  Impl::Batch marker{};marker.cache=true;marker.cacheSlot=slot;m->batches.push_back(marker);
+}
+void GpuRenderer::endStaticCacheLater(){
+ if(!m->capturing||m->captureSlot<0)return;
+ const int slot=m->captureSlot;auto found=m->staticCaches.find(slot);
+ auto job=std::make_unique<Impl::Finishing>();job->cache=std::make_unique<Impl::StaticCache>(std::move(found->second));m->staticCaches.erase(found);
+ m->capturing=false;m->captureSlot=-1;
+ auto*cache=job->cache.get();auto*indices=&job->indices;
+ job->work=std::async(std::launch::async,[cache,indices,slot,casting=m->castingMaterials(*cache)]{Impl::sortStaticCache(*cache,slot,casting,*indices);});
+ m->finishing[slot]=std::move(job);
+}
+bool GpuRenderer::cacheFinishing(int slot,std::uint64_t key)const{auto found=m->finishing.find(slot);return found!=m->finishing.end()&&found->second->cache->key==key;}
+bool GpuRenderer::pollStaticCache(int slot){
+ auto found=m->finishing.find(slot);if(found==m->finishing.end()||found->second->work.wait_for(std::chrono::seconds(0))!=std::future_status::ready)return false;
+ m->installFinished(slot);return true;
+}
+void GpuRenderer::Impl::installFinished(int slot){
+ auto found=finishing.find(slot);auto job=std::move(found->second);finishing.erase(found);job->work.get();
+ auto&cache=staticCaches[slot];if(cache.shadowIndices.handle)shadowDirtyBounds.push_back(cache.bounds);retire(cache.buffer);retire(cache.shadowIndices);
+ cache=std::move(*job->cache);uploadStaticCache(cache,job->indices);
 }
 void GpuRenderer::setLamps(const std::vector<std::array<float,16>>&input,bool enabled,int detail){
  size_t count=std::min(input.size(),size_t(Impl::MaxLamps));
@@ -1723,7 +1777,7 @@ bool GpuRenderer::shadowsPending()const{
  for(size_t i=0;i<std::min(m->lampDirty.size(),size_t(m->shadowCapacity));++i)if(m->lampDirty[i]&&m->lamps[i][7]>0)return true;
  return false;
 }
-void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->capturing=false;m->captureSlot=-1;}
+void GpuRenderer::clearStaticCaches(){for(auto&entry:m->staticCaches){if(entry.second.shadowIndices.handle)m->shadowDirtyBounds.push_back(entry.second.bounds);m->retire(entry.second.buffer);m->retire(entry.second.shadowIndices);}m->staticCaches.clear();m->pendingCaches.clear();m->finishing.clear();m->capturing=false;m->captureSlot=-1;}
 // One slot's cache goes (its owner drew nothing there this frame): the shadow passes walk every cache, so a
 // cache left behind kept casting the shadow of what had gone.
 void GpuRenderer::dropStaticCache(int slot){if(m->capturing&&m->captureSlot==slot)return;auto found=m->staticCaches.find(slot);if(found==m->staticCaches.end())return;

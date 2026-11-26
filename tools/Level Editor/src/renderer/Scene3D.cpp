@@ -777,7 +777,7 @@ const LightShaftShape& lightShaftShape(const World& w,size_t index){
 void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  perf::Scope frameProfile(perf::Scene);
  if(clearDepth)std::fill(m_zbuffer.begin(),m_zbuffer.end(),std::numeric_limits<float>::infinity());
- if(level<0)level=game.level();const auto&w=game.chunkWorld(level);
+ if(level<0)level=game.level();const auto&w=m_ahead?*m_ahead->world:game.chunkWorld(level);
  const float dormantFloor=game.dormantBelow(level);
  auto player=m_view;player.pos+=game.chunkOffset(game.level())-game.chunkOffset(level);
  // One immutable camera basis per chunk draw, rather than thread-local angle
@@ -813,7 +813,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // (the map in play waits for its first; one streaming in uses the flat room bounce until then).
  const ProbeBake* probeBake=m_farChunk?nullptr:chunkProbes(game,level,w,fixedLightSourceKey,level==game.level()||m_environmentInspection);
  const IrradianceVolume* probes=probeBake&&!probeBake->volume.empty()?&probeBake->volume:nullptr;
- if(m_gpuFrame&&m_gpu)m_gpu->useProbes(level,probeBake,m_chunkProbes[size_t(level)].key,game.chunkOffset(level));
+ if(m_gpuFrame&&m_gpu&&!m_ahead)m_gpu->useProbes(level,probeBake,m_chunkProbes[size_t(level)].key,game.chunkOffset(level));
  auto probeFill=[&](Point3 p,Point3 n){const auto s=probes->sample(p,n);return probeShoulder((s[0]*.2126f+s[1]*.7152f+s[2]*.0722f)*ProbeGain);};
  // Outdoors the sky's share of the flat ambient follows how much sky the point sees.
  auto skyOpen=[&](Point3 p,Point3 n){return probes&&w.outdoors()?.45f+.55f*probes->sample(p,n)[3]:1.f;};
@@ -1488,6 +1488,14 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  auto spendBake=[&]{const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-mainBakeStart).count();m_buildSpentMs+=ms;m_bakeWorst[m_farChunk?1:0]=std::max(m_bakeWorst[m_farChunk?1:0],ms);};
  int cacheSlot=m_farChunk?FarChunkCaches*Game::MaxChunks+w.level():w.level(); // a far chunk's whole bake is one cache of its own
  std::uint64_t geometryKey=0;
+ // The bake as numbered units in the order it draws them. A map built ahead stops once its slice is spent and
+ // takes up at that unit on a later frame; a map in sight bakes every unit left at once.
+ int resumeUnit=0,stopUnit=-1,bakedUnits=0;
+ auto bakeUnit=[&](int unit){
+  if(unit<resumeUnit||stopUnit>=0)return false;
+  if(m_ahead&&bakedUnits&&std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-mainBakeStart).count()>=m_ahead->sliceMs){stopUnit=unit;return false;}
+  ++bakedUnits;return true;};
+ constexpr int TileUnits=10,DrapeUnit=1000,StructureUnits=2000,FixtureUnits=1000000,TailUnits=2000000;
  if(m_gpuFrame){
   std::uint64_t key=1469598103934665603ull;
   auto hash=[&](std::uint64_t value){key^=value;key*=1099511628211ull;};
@@ -1523,17 +1531,19 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // A chunk's bake (its main cache, or its far LOD) waits for a frame with budget left, unless it is the player's own
   // map; meanwhile the other LOD's caches stand in, so it never blinks out. The other LOD goes once this one stands.
   const int farSlot=FarChunkCaches*Game::MaxChunks+w.level();
-  if(!m_gpu->staticCacheCurrent(cacheSlot,key)&&level!=game.level()&&m_buildBudgetMs>0&&m_buildSpentMs>=m_buildBudgetMs){
+  if(m_ahead){m_ahead->key=key;if(m_gpu->cacheFinishing(cacheSlot,key)){m_ahead->done=m_gpu->pollStaticCache(cacheSlot);return;}if(m_gpu->staticCacheCurrent(cacheSlot,key)){m_ahead->done=true;return;}}
+ if(!m_ahead&&!m_gpu->staticCacheCurrent(cacheSlot,key)&&!m_gpu->cachePending(cacheSlot,key)&&!m_gpu->cacheFinishing(cacheSlot,key)&&level!=game.level()&&m_buildBudgetMs>0&&m_buildSpentMs>=m_buildBudgetMs){
    if(m_farChunk){m_gpu->drawCached(w.level());for(int c=0;c<9;++c)m_gpu->drawCached(FixtureCellCaches*Game::MaxChunks+w.level()*9+c);}
    else m_gpu->drawCached(farSlot);
    return;}
   if(m_farChunk){m_gpu->dropStaticCache(w.level());for(int c=0;c<9;++c)m_gpu->dropStaticCache(FixtureCellCaches*Game::MaxChunks+w.level()*9+c);}
   mainBakeStart=std::chrono::steady_clock::now();
+  if(auto stage=m_stages.find(cacheSlot);stage!=m_stages.end()){if(stage->second.first==key&&m_gpu->cachePending(cacheSlot,key))resumeUnit=stage->second.second;m_stages.erase(stage);}
   buildStaticGeometry=m_gpu->beginStaticCache(cacheSlot,key);
   geometryKey=key;
  }
  m_staticGeometryBuild=m_gpuFrame&&buildStaticGeometry;
- if(m_staticGeometryBuild)++m_staticGeometryBuilds;
+ if(m_staticGeometryBuild&&!m_ahead&&!resumeUnit)++m_staticGeometryBuilds;
  // Static lighting is baked once per chunk. A frame-sized ray budget leaves
  // later surfaces at ambient only, producing flat walls and missing shadows.
  if(m_staticGeometryBuild)shadowBudget=400000;
@@ -1560,7 +1570,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   for(const auto&fixture:w.fixtures())if(fixture.visible&&fixture.height<1.4f&&fixture.model>=FirstLibraryModel&&impostorFor(fixture.model))
    for(int dy=-1;dy<=1;++dy)for(int dx=-1;dx<=1;++dx){int cx=int(fixture.position.x)+dx,cy=int(fixture.position.y)+dy;
     if(cx>=0&&cy>=0&&cx<World::Width&&cy<World::Height){auto&c=plantCover[size_t(cy*World::Width+cx)];c=std::uint8_t(std::min(255,c+(dx||dy?1:2)));}}}
- if(w.hasTerrain())for(const auto&face:w.terrain()){
+ if(w.hasTerrain()&&bakeUnit(0))for(const auto&face:w.terrain()){
   MeshVertex a{{face.a.x,face.a.y,face.a.z},0,0};
   MeshVertex b{{face.b.x,face.b.y,face.b.z},0,0};
   MeshVertex c{{face.c.x,face.c.y,face.c.z},0,0};
@@ -1608,7 +1618,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // the strip beyond its open sides (corners belong to corner maps): painted
  // ground rising into hills, wooded with impostor-only trees. Everything is
  // derived from world position, so neighbouring strips meet without seams.
- if(w.hasTerrain()&&w.zoneSky()&&m_gpuFrame&&s_impostors)if(const auto* shape=w.terrainShape();shape&&shape->horizonDepth>0){
+ if(w.hasTerrain()&&w.zoneSky()&&m_gpuFrame&&s_impostors&&bakeUnit(1))if(const auto* shape=w.terrainShape();shape&&shape->horizonDepth>0){
   const auto origin=w.definition().origin;const float cell=6.f,depth=std::ceil(shape->horizonDepth/cell)*cell;
   float minX=1e9f,minY=1e9f,maxX=-1e9f,maxY=-1e9f;
   for(int level=0;level<game.chunkCount();++level){auto o=game.chunkOffset(level);minX=std::min(minX,o.x);minY=std::min(minY,o.y);maxX=std::max(maxX,o.x+World::Width);maxY=std::max(maxY,o.y+World::Height);}
@@ -1667,7 +1677,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   cullIndex=cached.second.get();
  }
  clipArchitecture=true;
- for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){surfaceOwner=y*World::Width+x;float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
+ for(int y=0;y<World::Height;++y)for(int x=0;x<World::Width;++x){if(!bakeUnit(TileUnits+y*World::Width+x))continue;surfaceOwner=y*World::Width+x;float X=float(x),Y=float(y),Z=w.ceilingHeight(X+.5f,Y+.5f);
   // Only resident chunks reach this renderer; reject off-screen modules early.
   if(w.tile(x,y)!='#'){
    bool serviceMap=w.campaign()&&w.level()>=6&&w.level()<=9;
@@ -1773,7 +1783,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   return s.material==ChainLinkMaterial?m_chainLink:s.material==25?molten:s.material==24?m_officeTile:s.material==23?m_securityCarpet:s.material==22?m_dropCeiling:s.material==21?m_officeWall:s.material==20?m_paleSteel:s.material==19?m_redSteel:s.material==18?m_yellowSteel:s.material==17?m_glassTexture:s.material==16?m_blood:s.material==15?m_concrete:s.material==14?m_routePaint:s.material==13?m_hazard:s.material==12?m_framePaint:s.material==11?m_pressureMetal:s.material==10?m_crateTexture:s.material==9?cabWindow:s.material==8?iron:s.material==7?m_bulkhead:s.material==2?m_panelSteel:s.material==3||(w.hasLift()&&s.top-s.bottom>1.5f)?m_pressureWall:w.hasLift()?m_bulkhead:m_floor;};
  // Draped floorings (STRUCT drape=1): a path or patio that follows the land, the
  // ground's own triangles cut to its rectangle and laid 4 cm over it in its material.
- if(w.hasTerrain()){
+ if(w.hasTerrain()&&bakeUnit(DrapeUnit)){
   std::vector<const Structure*> drapes;for(const auto&s:w.structures())if(s.drape&&s.x2>s.x1&&s.y2>s.y1)drapes.push_back(&s);
   if(!drapes.empty())for(const auto&face:w.terrain()){
    const float fx1=std::min({face.a.x,face.b.x,face.c.x}),fx2=std::max({face.a.x,face.b.x,face.c.x}),fy1=std::min({face.a.y,face.b.y,face.c.y}),fy2=std::max({face.a.y,face.b.y,face.c.y});
@@ -1915,6 +1925,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
  };
  for(auto&s:w.structures()){
+  if(!bakeUnit(StructureUnits+int(&s-w.structures().data())))continue;
   surfaceOwner=World::Width*World::Height+int(&s-w.structures().data());
   // Its material's turn (STRUCT/PRIM turn=, a tread's or deck's); a storey's own floor or wall
   // finish turns with the map's surface set too.
@@ -2044,7 +2055,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
  // cache): a cell is quick to bake (no hitch when a chunk comes into range), is drawn only while in view, and a
  // frame bakes the cells far from the player only up to its budget (setBuildBudget).
  const bool splitFixtures=m_gpuFrame&&m_gpu&&!m_farChunk&&staticFixtures&&w.hasTerrain()&&w.fixtures().size()>=16;
- if(buildStaticGeometry&&staticFixtures&&!splitFixtures)for(const auto& fixture:w.fixtures())if(fixtureBakeable(fixture))bakeFixture(fixture);
+ if(buildStaticGeometry&&staticFixtures&&!splitFixtures)for(const auto& fixture:w.fixtures())if(fixtureBakeable(fixture)&&bakeUnit(FixtureUnits+int(&fixture-w.fixtures().data())))bakeFixture(fixture);
  if(m_farChunk){ // a far chunk is its one cache: no lamps, doors, signs, props or per-frame extras
   // ...but its lamps still glow: each is a self-lit fitting in the lamp's colour, so a lit district reads across
   // a gulf in the dark (render-distance.md "Underground megastructures"); it lights nothing round it.
@@ -2057,11 +2068,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    m_emissionScale=previous;}
   if(m_gpuFrame&&buildStaticGeometry){m_gpu->endStaticCache();spendBake();}
   m_staticGeometryBuild=false;shadowBudget=m_shadowBudgetLimit;return;}
- if(buildStaticGeometry)for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
+ if(buildStaticGeometry&&bakeUnit(TailUnits))for(size_t i=0;i<w.lights().size();++i)if(w.lights()[i].mount==WorldLightMount::Wall)wallLamp(w.lights()[i],lampSwitchable[i]?1:3,1.f);
  // A swinging door's posts and head never move, so they bake with the wall they
  // stand in (per-pixel lamps on Vulkan): lit like that wall from the first frame,
  // not left at ambient while a per-frame shadow budget catches up.
- if(buildStaticGeometry)for(const auto&door:w.doors())if(door.swinging){const Vec2 mid=door.centre();const float base=w.floorHeight(mid.x,mid.y)+door.z;
+ if(buildStaticGeometry&&bakeUnit(TailUnits+1))for(const auto&door:w.doors())if(door.swinging){const Vec2 mid=door.centre();const float base=w.floorHeight(mid.x,mid.y)+door.z;
   // The hinge post is the heavier one, at whichever end the leaf hangs from.
   const float hingeHalf=.09f,latchHalf=.08f,atLeft=door.hingeRight?latchHalf:hingeHalf,atRight=door.hingeRight?hingeHalf:latchHalf;
   // The wall's faces either side, read beside the jambs: the frame stands 2 cm
@@ -2083,7 +2094,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   // A brushed threshold strip across the opening: the leaf's foot clears it by a
   // finger, so the gap under a shut door reads as a dark line over bright metal.
   doorBox(door,door.left+atLeft,door.right-atRight,back+.02f,front-.02f,base,base+.008f,m_metal,1.1f);}
- if(buildStaticGeometry)for(const auto& sign:w.signs()){
+ if(buildStaticGeometry&&bakeUnit(TailUnits+2))for(const auto& sign:w.signs()){
   // A designed sign (SignArt.h) is drawn at its own proportions, so its key carries them.
   const bool designed=sign.style||sign.icon||sign.ink||sign.picture;
   std::string key=sign.title+'\n'+sign.subtitle+'\n'+std::to_string(sign.accent);
@@ -2097,12 +2108,15 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   auto left=sign.position-side*(sign.width*.5f),right=sign.position+side*(sign.width*.5f);
   quad({left.x,left.y,sign.z},{right.x,right.y,sign.z},{right.x,right.y,sign.z+sign.height},{left.x,left.y,sign.z+sign.height},found->second,1.f);
  }
- if(buildStaticGeometry&&staticFixtures)for(const auto&p:w.props()){
+ if(buildStaticGeometry&&staticFixtures&&bakeUnit(TailUnits+3))for(const auto&p:w.props()){
   Mesh* meshes[]={&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh};Texture* textures[]={&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture};
   prop(*meshes[p.kind],*textures[p.kind],p.position.x,p.position.y,p.height,p.yaw,p.footprint,w.floorHeight(p.position.x,p.position.y)+p.base);
  }
- if(m_gpuFrame&&buildStaticGeometry){m_gpu->endStaticCache();spendBake();}
+ if(m_gpuFrame&&buildStaticGeometry){
+  if(stopUnit>=0){m_gpu->pauseStaticCache();m_stages[cacheSlot]={geometryKey,stopUnit};}else if(m_ahead)m_gpu->endStaticCacheLater();else m_gpu->endStaticCache();
+  spendBake();}
  m_staticGeometryBuild=false;
+ if(m_ahead){shadowBudget=m_shadowBudgetLimit;return;}
 
  if(splitFixtures){
   std::array<std::vector<int>,9> cells;const auto& all=w.fixtures();

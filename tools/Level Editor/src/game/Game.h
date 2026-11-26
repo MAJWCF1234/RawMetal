@@ -396,6 +396,7 @@ struct WeaponMotion {float yaw=0,pitch=0,bob=0,back=0,elbow=0,bolt=0,roll=0,spri
 struct PadOptions {int look=3,dead=0,steady=0,filter=0;bool toggleAim=false,toggleSprint=false,toggleCrouch=false,bumpers=false,swapSticks=false;int curve=1,assist=1,rumble=2;};
 struct Settings {PadOptions pad;float master=1,music=.75f,effects=1,sensitivity=1;bool invertMouse=false;float depthOfField=1,lensEffects=1;
  float vrTurnSpeed=1,vrVignette=.5f;bool vrSeated=false,vrLeftHanded=false,vrFrameRate=false;float vrRenderScale=0;
+ int vrHeightCm=0,vrArmLength=0;   // VR body fit overrides: YOUR HEIGHT (cm, 0 AUTO), ARM LENGTH (0 AUTO, 1 SHORT, 2 AVERAGE, 3 LONG)
  int pullHighlight=1;   // pullHighlight: the Physgloves target's outline, 1 subtle, 0 none
  int viewDistance=1;    // viewDistance: VIDEO > VIEW DISTANCE, 0 near (x0.7), 1 normal, 2 far (x2), 3 very far (x3.5)
  std::string playerName; // playerName: MULTIPLAYER > NAME, what others see; empty uses the Windows user name
@@ -677,6 +678,8 @@ public:
     int chunkCount()const{return m_worldId==WorldId::Custom&&m_customCampaign?int(m_customCampaign->maps.size()):worldChunkCount(m_worldId);}
     Vec2 chunkOffset(int level)const{return m_worldId==WorldId::Custom&&m_customCampaign?m_customCampaign->maps.at(size_t(level))->definition.origin:chunkDefinition(m_worldId,level).origin;}
     Game chunkView(int level)const;
+    // The World ensureChunk would make now, as a copy: the renderer builds geometry ahead from it.
+    World previewChunkWorld(int level)const;
     const World& chunkWorld(int level)const{return level==m_level?m_world:m_chunks.at(size_t(level)).world;}
     const std::vector<Enemy>& chunkEnemies(int level)const{return level==m_level?m_enemies:m_chunks.at(size_t(level)).enemies;}
     const std::vector<Pickup>& chunkPickups(int level)const{return level==m_level?m_pickups:m_chunks.at(size_t(level)).pickups;}

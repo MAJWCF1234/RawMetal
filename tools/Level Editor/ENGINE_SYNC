@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit cf3c3e63758a389e546ba0c6af929d4b4ff66fb3
-# 2026-11-25 10:36, Drop the held Baby Huntsman anchors from the creature pose
+commit 25bdfeca9c869efbba88b7bb8398f7a0ea6112fa
+# 2026-11-26 01:02, release: v1.7.3, industry

@@ -287,6 +287,7 @@ __declspec(noinline) static int ashfallPerformance(bool yardOnly=false,bool sust
 //   caution            the guard squads of this chunk on Caution first
 //   set a,b,c          switch these states on first
 //   warm N             unmeasured frames first (default 30)
+//   walk               hold forward (area crossings: stutter at a seam)
 //   still              no mouse sweep (default: the Ashfall profile's sweep)
 //   open               every door in every chunk swung open first (--map-shots' open views)
 // God mode keeps the player standing, so the AI never stops on a death.
@@ -344,9 +345,9 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
   if(!(fields>>name>>level>>xText>>yText>>feetText>>yaw>>pitch>>frames)){report<<"SKIP malformed line: "<<line<<"\n\n";continue;}
   // "start start -" stands at the map's own player start.
   const float x=xText=="start"?std::nanf(""):std::stof(xText),y=yText=="start"?std::nanf(""):std::stof(yText),feet=feetText=="-"?-999.f:std::stof(feetText);
-  bool clear=false,wake=false,guards=false,caution=false,still=false,open=false,shove=false;int propCount=0;int warm=30;float distance=6;std::vector<std::pair<int,int>> spawns;std::vector<std::string> states;std::string word;
+  bool clear=false,wake=false,guards=false,caution=false,still=false,open=false,shove=false,walk=false;int propCount=0;int warm=30;float distance=6;std::vector<std::pair<int,int>> spawns;std::vector<std::string> states;std::string word;
   while(fields>>word){
-   if(word=="clear")clear=true;else if(word=="wake"){wake=true;guards=true;}else if(word=="creatures")wake=true;else if(word=="caution")caution=true;else if(word=="still")still=true;else if(word=="open")open=true;
+   if(word=="clear")clear=true;else if(word=="wake"){wake=true;guards=true;}else if(word=="creatures")wake=true;else if(word=="caution")caution=true;else if(word=="still")still=true;else if(word=="walk")walk=true;else if(word=="open")open=true;
    else if(word=="props")fields>>propCount;else if(word=="shove")shove=true;
    else if(word=="warm")fields>>warm;else if(word=="far")fields>>distance;
    else if(word=="spawn"){std::string kind;int count=0;fields>>kind>>count;int k=kindOf(kind);if(k<0){report<<"SKIP unknown creature kind "<<kind<<'\n';continue;}spawns.push_back({k,count});}
@@ -360,9 +361,10 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
   std::string placed;if(propCount)placed=" props "+std::to_string(scene.perfSpawnProps(propCount))+"/"+std::to_string(propCount);for(auto [kind,count]:spawns){int n=scene.perfSpawn(retro::CreatureKind(kind),count,distance);placed+=" "+std::string(kindNames[kind])+" "+std::to_string(n)+"/"+std::to_string(count);}
   report<<"== "<<name<<": level "<<level<<" at ("<<scene.player().pos.x<<", "<<scene.player().pos.y<<") feet "<<scene.player().z<<", yaw "<<yaw<<", pitch "<<pitch<<"; "<<frames<<" measured frames after "<<warm<<" warm-up"
         <<(wake?guards?"; wake: creatures and guards":"; wake: creatures":"; no wake")<<(placed.empty()?"":"; spawned"+placed)<<"\n   scene build "<<buildMs<<" ms\n   at start: "<<scene.perfPopulation()<<'\n';
-  std::vector<std::vector<double>> samples(columns.size());double firstFrame=0;
+  std::vector<std::vector<double>> samples(columns.size());double firstFrame=0;std::uint64_t lastBuilds=0;std::array<size_t,4> lastResidency{};
   for(int frame=-warm;frame<frames;++frame){
-   retro::InputState input{};if(!still){input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;}
+   retro::InputState input{};input.forward=walk;
+   if(!still){input.mouseDx=11;input.mouseDy=std::sin(frame*.13f)*1.7f;}
    if(wake)scene.perfWake(guards&&((frame+warm)%120==0));
    scene.perfHold();if(shove&&(frame+warm)%120==0)scene.perfShoveProps();
    retro::perf::resetFrame();retro::perf::enabled=!bare;
@@ -373,6 +375,9 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
    audio.update(scene,false);auto c=Clock::now();
    if(render){renderer->render(scene);if(window&&!renderer->hardwarePresentsWindow())window->present(renderer->pixels(),renderer->width(),renderer->height());}auto d=Clock::now();
    retro::perf::enabled=false;
+   if(render){const auto bake=renderer->takeBakeWorst();const auto res=renderer->libraryResidency();const auto builds=renderer->staticGeometryBuilds();
+    if(frame>=0&&ms(a,d)>30){report<<"   SPIKE frame "<<frame<<": "<<ms(a,d)<<" ms on level "<<scene.level()<<" | worst bake main/far/fixtures "<<bake[0]<<'/'<<bake[1]<<'/'<<bake[2]<<" | builds +"<<builds-lastBuilds<<" | meshes +"<<res[0]-lastResidency[0]<<" textures +"<<res[2]-lastResidency[2]<<" | resident";for(int l=0;l<scene.chunkCount();++l)if(scene.chunkResident(l))report<<' '<<l;report<<'\n';}
+    lastBuilds=builds;lastResidency=res;}
    if(frame==-warm)firstFrame=ms(a,d);
    if(frame<0)continue;
    std::vector<double> row(columns.size());auto stages=render?renderer->frameStages():std::array<double,3>{};
@@ -385,6 +390,9 @@ __declspec(noinline) static int perfProfile(const wchar_t* listArgument){
    csv<<name<<','<<frame;for(auto value:row)csv<<','<<value;csv<<'\n';
    for(size_t i=0;i<row.size();++i)samples[i].push_back(row[i]);
   }
+  // --perf-shot: each scene's last frame (with --perf-offscreen), for a picture comparison.
+  if(render&&args.find(L"--perf-shot")!=nullptr){std::ofstream shot(prefix+"-"+name+".ppm",std::ios::binary);shot<<"P6\n"<<renderer->width()<<' '<<renderer->height()<<"\n255\n";for(int i=0;i<renderer->width()*renderer->height();++i){const auto p=renderer->pixels()[i];const char rgb[]={char(p>>16),char(p>>8),char(p)};shot.write(rgb,3);}}
+  report<<"   ended on level "<<scene.level()<<" at ("<<scene.player().pos.x<<", "<<scene.player().pos.y<<")\n";
   report<<"   at end:   "<<scene.perfPopulation()<<"\n   first frame "<<firstFrame<<" ms; player health held "<<scene.player().health<<'\n';
   if(frames<=0){report<<'\n';continue;}
   struct Stat{double mean,p50,p95,p99,max;};
