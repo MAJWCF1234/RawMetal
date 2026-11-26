@@ -1,0 +1,8 @@
+# The Starter Map's Kits Gallery 4: the crawlspace kits (a vent run 1.2 m up, a crawl tunnel, a big pipe).
+# Tube: crawl-kits.
+world custom "custom maps/Starter Map.rmc"
+map-name Kits Gallery 4
+camera 6 19.2 -999 -90 0
+scenery-only
+size 960 540
+frames 3000

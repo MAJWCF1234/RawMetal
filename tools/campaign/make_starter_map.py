@@ -2414,9 +2414,10 @@ def building(s, slot, catalogue):
         s.absolute = [e for e in s.absolute if e[0] is not mine[0]]
         underground(s, slot, catalogue, mine[0], mine[1], mine[2], mine[3])
     # The Kits Gallery: east of the Hillside past one more stand of forest, on the forest's maps there.
-    yards = [cells.get((OX + 5 + k, 1 + len(SECTIONS) + 1 + OY)) for k in (0, 1, 2)]
+    # The fourth yard, the crawlspaces, is the forest map south of the second.
+    yards = [cells.get((OX + 5 + k, 1 + len(SECTIONS) + 1 + OY)) for k in (0, 1, 2)] + [cells.get((OX + 6, 1 + len(SECTIONS) + 2 + OY))]
     if all(y is not None and y in forest for y in yards):
-        for yard, name in zip(yards, ('Kits Gallery', 'Kits Gallery 2', 'Kits Gallery 3')):
+        for yard, name in zip(yards, ('Kits Gallery', 'Kits Gallery 2', 'Kits Gallery 3', 'Kits Gallery 4')):
             yard['name'], yard['records'] = name, []
             s.raised = [e for e in s.raised if e[0] is not yard]
             s.absolute = [e for e in s.absolute if e[0] is not yard]
@@ -2436,7 +2437,26 @@ KIT_SPOTS = {
     'kit_doorway_wide': (1, 19.5, 14.5, 0), 'kit_doorway_double': (1, 14.5, 17.5, 0), 'kit_campsite': (1, 19, 20, 0), 'kit_yard_fence': (1, 8, 22.4, 0),
     'kit_escalator': (2, 4, 7, 0), 'kit_airlock': (2, 10.5, 5.5, 0), 'kit_shower': (2, 15.5, 3.5, 0), 'kit_rebar': (2, 20, 4, 0),
     'kit_cracked_slab': (2, 17.5, 9.5, 0), 'kit_curtain_wall': (2, 6, 18, 0), 'kit_megafacade': (2, 17, 19, 0),
-    'kit_fluorescent_bank': (2, 12, 14, 0), 'kit_heavy_door': (2, 6, 13, 0), 'kit_mesh_door': (2, 21.5, 14.5, 0), 'kit_ticket_gate': (2, 12, 21.5, 0)}
+    'kit_fluorescent_bank': (2, 12, 14, 0), 'kit_heavy_door': (2, 6, 13, 0), 'kit_mesh_door': (2, 21.5, 14.5, 0), 'kit_ticket_gate': (2, 12, 21.5, 0),
+    # The fourth yard: the crawlspace kits joined into one vent run (a fifth field is the height it is set at).
+    'kit_vent_entry': (3, 6, 16.85, 0, 1.2), 'kit_vent_duct': (3, 6, 15.2, 0, 1.2), 'kit_vent_corner': (3, 6, 13.2, 0, 1.2),
+    'kit_vent_grate': (3, 7.5, 13.2, 1, 1.2), 'kit_vent_drop': (3, 12.5, 13.2, 1, 0),
+    'kit_crawl_tunnel': (3, 18.5, 5, 0), 'kit_crouch_pipe': (3, 18.5, 17, 0)}
+# More of a kit in a yard, after its KIT_SPOTS place: yard, middle x, y, quarters, height.
+KIT_MORE = [('kit_vent_duct', 3, 10, 13.2, 1, 1.2)]
+
+
+def vent_run(s, slot, m):
+    """The crawlspace yard's vent run (KIT_SPOTS yard 3): up the steps onto a deck 1.2 m high, through the Wall
+    vent's grille, north along a Vent duct on legs, round the Vent corner, east over the yard on a Vent grate (a
+    drum and a lamp under it to look down on), along a second duct and down the Vent drop to the ground. The
+    duct's lid is 0.8 m over its floor all the way, so she crawls the whole run (the lab tube crawl-kits)."""
+    s.struct(m, 3.5, 16.7, 8.5, 21, 0, 1.2, 15)                         # the deck the wall vent stands on
+    s.rec(m, 'PRIM', m['index'], 'stairs', 6, 22.05, 0, 1.6, 0, 1.2, 2, 15)   # steps up its south side, rising north
+    for x, y in ((6, 15.2), (6, 13.2), (10, 13.2)):                    # legs under the raised ducts
+        s.struct(m, x - .04, y - .04, x + .04, y + .04, 0, 1.2, 8)
+    s.rec(m, 'FIXTURE', m['index'], slot['drum'], 7.3, 12.9, 0, .749, .749, 1.08, .4, 1)
+    s.rec(m, 'LIGHT', m['index'], 8.4, 12.2, .5, 2, 0, .9, 4, 2600)    # a bare glow low under the grate
 
 
 def kits_gallery(s, slot, yards):
@@ -2458,14 +2478,19 @@ def kits_gallery(s, slot, yards):
         s.world.append('GROUND|%d|%d|%d|%d|6|1' % (ox + 1, oy + 1, ox + 23, oy + 23))
     for k in built:
         s.prefabs += ['# Kit: %s (%s)' % (k.title, k.note), 'PREFAB|' + k.key] + kitlib.prefab_lines(k, slot) + ['PREFAB_END']
-        yard, x, y, quarters = KIT_SPOTS[k.key]
+        yard, x, y, quarters, z = (KIT_SPOTS[k.key] + (0,))[:5]
         m = yards[yard]
-        s.rec(m, 'PREFAB_PLACE', m['index'], k.key, x, y, 0, quarters * HALF)
+        s.rec(m, 'PREFAB_PLACE', m['index'], k.key, x, y, z, quarters * HALF)
         w, d = (k.d, k.w) if quarters % 2 else (k.w, k.d)
         s.zone(m, x - w / 2, y - d / 2, x + w / 2, y + d / 2, ('KIT / %s' % k.title)[:40])
+    for key, yard, x, y, quarters, z in KIT_MORE:
+        m = yards[yard]
+        s.rec(m, 'PREFAB_PLACE', m['index'], key, x, y, z, quarters * HALF)
+    vent_run(s, slot, yards[3])
     s.post_sign(yards[0], 8.25, 8.2, 'KITS GALLERY', 'rooms: the Builder\'s Kits tab', 0x70b0c8, 2.0)
     s.post_sign(yards[1], 9, 12.6, 'KITS GALLERY', 'corridors, stairs, docks, outdoors', 0x70b0c8, 2.0)
     s.post_sign(yards[2], 12, 12.6, 'KITS GALLERY', 'escalator, airlock, shower, ruins, facades', 0x70b0c8, 2.0)
+    s.post_sign(yards[3], 11, 23.2, 'KITS GALLERY', 'vents, a crawl tunnel, a big pipe', 0x70b0c8, 2.0)
     for m in yards:
         s.index.append({'map': m['index'], 'section': 'OUTDOORS', 'x': 12, 'y': 12, 'title': 'KITS GALLERY',
                         'name': '%d kits from the Builder' % len(built)})

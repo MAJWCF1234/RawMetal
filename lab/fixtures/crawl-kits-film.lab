@@ -1,0 +1,9 @@
+# crawl-kits filmed for the testers: every second frame to .build/crawl-film (PNG, captioned), the HUD drawn.
+world custom "custom maps/Starter Map.rmc"
+map-name Kits Gallery 4
+camera 6 19.2 -999 -90 0
+scenery-only
+size 960 540
+frames 3000
+hud on
+film-out .build/crawl-film

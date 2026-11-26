@@ -121,7 +121,10 @@ void Game::updateMovement(const InputState& input,float dt){
   if(m_proneToggle&&m_player.grounded)m_player.prone=true;
   else if(m_player.prone&&!m_proneToggle&&m_player.grounded&&hullFits(m_player.pos,m_player.z,Player::CrouchedHeight))m_player.prone=false;
  }
- if(input.vrTracked)m_player.eye=input.vrEye;else m_player.eye+=(m_player.stanceEye()-m_player.eye)*std::min(1.f,dt*16.f);
+ // VR: lying down for real (the head under 0.65 m) lays her prone. In a crawlspace the view stays under the lid
+ // (0.1 m under the hull's top) however high the head is in the room, so it never looks out through a duct.
+ if(input.vrTracked&&m_player.crouched&&m_player.grounded&&input.vrEye<.65f)m_player.prone=true;
+ if(input.vrTracked)m_player.eye=m_player.crouched?std::min(input.vrEye,m_player.hullHeight()-.1f):input.vrEye;else m_player.eye+=(m_player.stanceEye()-m_player.eye)*std::min(1.f,dt*16.f);
  Vec2 forward{std::cos(m_player.angle),std::sin(m_player.angle)},right{-forward.y,forward.x},wish{};
  const float moveForward=input.controllerMove.y+float(int(input.forward)-int(input.back));
  const float moveRight=input.controllerMove.x+float(int(input.right)-int(input.left));
@@ -463,12 +466,18 @@ bool Game::testMovement(){
  for(int i=0;i<60;++i)game.update(input,1.f/120.f);debug<<"standing "<<game.player().pos.y<<'\n';if(game.player().pos.y>11.81f)return false;
  input.crouch=true;bool flat=false;for(int i=0;i<200;++i){game.update(input,1.f/120.f);flat|=game.player().prone;}debug<<"duck "<<game.player().pos.y<<" prone "<<flat<<'\n';if(game.player().pos.y<12.6f||!flat)return false;
  input={};game.update(input,.01f);if(game.player().pos.y<13.75f&&!game.player().crouched)return false;
+ // VR under the duct: a head held 1.5 m up in the room keeps the view under the duct (crawl tubes: crawl-kits).
+ {InputState vr{};vr.vrTracked=true;vr.vrEye=1.5f;vr.vrYaw=game.player().angle;game.update(vr,.01f);debug<<"vr under duct "<<game.player().eye<<' '<<game.player().hullHeight()<<'\n';
+  if(game.player().pos.y<13.75f&&game.player().eye>game.player().hullHeight()-.09f)return false;}
+ // VR in the open: lying down for real (the head at 0.5 m) lays her prone.
+ {auto lying=clean();InputState vr{};vr.vrTracked=true;vr.vrEye=.5f;vr.vrYaw=lying.player().angle;vr.crouch=true;for(int i=0;i<10;++i)lying.update(vr,1.f/60.f);
+  debug<<"vr lying "<<lying.player().prone<<' '<<lying.player().eye<<'\n';if(!lying.player().prone||lying.player().eye>Player::ProneHeight-.09f)return false;}
  // The Intake's 1.1 m dock bumper, cleared with a crouch-jump.
  game=clean();game.m_player.pos={11.3f,4.6f};game.m_player.angle=-kPi*.5f;game.m_velocity={0,-3.6f};bool clearedCover=false;
  for(int i=0;i<130;++i){input={};input.jump=i==0;input.crouch=i>=18;input.forward=game.player().pos.y>2.6f;game.update(input,1.f/120.f);
   if(game.player().pos.y<2.6f&&game.player().grounded&&std::fabs(game.player().z)<.01f){clearedCover=true;break;}
  }debug<<"duck-jump clear 1.1m cover "<<game.player().pos.y<<' '<<game.player().z<<' '<<clearedCover<<'\n';if(!clearedCover)return false;
- std::ofstream("movement-test.txt")<<"1.6 m standing hull, 1.05 m kneel, prone toggle and getting up, a crouch going prone under the low duct, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS\n";return true;
+ std::ofstream("movement-test.txt")<<"1.6 m standing hull, 1.05 m kneel, prone toggle and getting up, a crouch going prone under the low duct, VR view kept under the duct and VR lying down prone, crouched jump, airborne duck clearing 1.1 m cover, momentum, 60/120 Hz consistency, six-step climb and blocked standing: PASS\n";return true;
 }
 bool Game::testProgression(){
  // The Intake's freight gate (y 7.5) holds the player until E opens it.

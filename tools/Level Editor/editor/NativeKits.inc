@@ -409,5 +409,69 @@ static constexpr KitDef kitDefs[] = {
      "STRUCT|@|-3.2|-0.3|3.2|0.2|3.88|4.06|0|5\n"
      "STRUCT|@|-3.2|-0.3|3.2|0.2|6.88|7.06|0|5\n"
      "STRUCT|@|-3.2|-0.3|3.2|0.2|9.88|10.06|0|5\n"},
+    {"kit_vent_duct", L"Vent duct", L"a 3 m crawl duct, open at both ends: too low to stand or kneel in", 1.00f, 3.00f,
+     "STRUCT|@|-0.5|-1.5|0.5|1.5|0|0.05|0|8\n"
+     "STRUCT|@|-0.5|-1.5|0.5|1.5|0.8|0.85|0|2\n"
+     "STRUCT|@|-0.5|-1.5|-0.45|1.5|0.05|0.8|0|2\n"
+     "STRUCT|@|0.45|-1.5|0.5|1.5|0.05|0.8|0|2\n"
+     "STRUCT|@|-0.53|-0.52|0.53|-0.48|0.85|0.88|0|8\n"
+     "STRUCT|@|-0.53|-0.52|-0.5|-0.48|0|0.88|0|8\n"
+     "STRUCT|@|0.5|-0.52|0.53|-0.48|0|0.88|0|8\n"
+     "STRUCT|@|-0.53|0.48|0.53|0.52|0.85|0.88|0|8\n"
+     "STRUCT|@|-0.53|0.48|-0.5|0.52|0|0.88|0|8\n"
+     "STRUCT|@|0.5|0.48|0.53|0.52|0|0.88|0|8\n"},
+    {"kit_vent_corner", L"Vent corner", L"a crawl duct turning from its front to its right", 1.00f, 1.00f,
+     "STRUCT|@|-0.5|-0.5|0.5|0.5|0|0.05|0|8\n"
+     "STRUCT|@|-0.5|-0.5|0.5|0.5|0.8|0.85|0|2\n"
+     "STRUCT|@|-0.5|-0.5|0.5|-0.45|0.05|0.8|0|2\n"
+     "STRUCT|@|-0.5|-0.45|-0.45|0.5|0.05|0.8|0|2\n"},
+    {"kit_vent_grate", L"Vent grate", L"a crawl duct with a see-through grate floor: look down on the room below", 1.00f, 2.00f,
+     "STRUCT|@|-0.42|-1|0.42|1|0.02|0.05|0|52\n"
+     "STRUCT|@|-0.5|-1|-0.42|1|0|0.05|0|8\n"
+     "STRUCT|@|0.42|-1|0.5|1|0|0.05|0|8\n"
+     "STRUCT|@|-0.5|-1|0.5|1|0.8|0.85|0|2\n"
+     "STRUCT|@|-0.5|-1|-0.45|1|0.05|0.8|0|2\n"
+     "STRUCT|@|0.45|-1|0.5|1|0.05|0.8|0|2\n"
+     "STRUCT|@|-0.42|-1|0.42|-0.97|0|0.05|0|8\n"
+     "STRUCT|@|-0.42|0.97|0.42|1|0|0.05|0|8\n"},
+    {"kit_vent_drop", L"Vent drop", L"a crawl duct that drops 1.2 m to a lower one: one way down", 1.00f, 2.00f,
+     "STRUCT|@|-0.5|0|0.5|1|1.2|1.25|0|8\n"
+     "STRUCT|@|-0.5|0|0.5|1|2|2.05|0|2\n"
+     "STRUCT|@|-0.5|0|-0.45|1|1.25|2|0|2\n"
+     "STRUCT|@|0.45|0|0.5|1|1.25|2|0|2\n"
+     "STRUCT|@|-0.5|-1|0.5|0|0|0.05|0|8\n"
+     "STRUCT|@|-0.5|-1|-0.45|0|0.05|2.05|0|2\n"
+     "STRUCT|@|0.45|-1|0.5|0|0.05|2.05|0|2\n"
+     "STRUCT|@|-0.5|-1|0.5|0|2|2.05|0|2\n"
+     "STRUCT|@|-0.5|-1|0.5|-0.95|0.8|2.05|0|2\n"
+     "STRUCT|@|-0.5|0|0.5|1|0|1.2|0|2\n"},
+    {"kit_vent_entry", L"Wall vent", L"a wall with a crawl-duct mouth at the floor and a grille to pull off", 3.00f, 0.30f,
+     "STRUCT|@|-1.5|-0.15|-0.5|0.15|0|3|0|15\n"
+     "STRUCT|@|0.5|-0.15|1.5|0.15|0|3|0|15\n"
+     "STRUCT|@|-0.5|-0.15|0.5|0.15|0.8|3|0|15\n"
+     "STRUCT|@|-0.5|-0.15|0.5|0.15|0|0.05|0|8\n"
+     "STRUCT|@|-0.54|0.15|-0.5|0.19|0|0.85|0|8\n"
+     "STRUCT|@|0.5|0.15|0.54|0.19|0|0.85|0|8\n"
+     "STRUCT|@|-0.54|0.15|0.54|0.19|0.8|0.85|0|8\n"
+     "CLUTTER|@|7|0|0.22|0|0|$pwr_vent_grille|0.819|0.04|0.8|0|0|\n"
+     "LIGHT|@|0|0.4|2.4|1|1.571|0.6|4|3600\n"},
+    {"kit_crawl_tunnel", L"Crawl tunnel", L"a low concrete tunnel shored with timber: crawl only", 2.00f, 4.00f,
+     "STRUCT|@|-1|-2|1|2|0|0.04|0|42\n"
+     "STRUCT|@|-1|-2|-0.55|2|0.04|1.1|0|15\n"
+     "STRUCT|@|0.55|-2|1|2|0.04|1.1|0|15\n"
+     "STRUCT|@|-1|-2|1|-1.2|0.85|1.1|0|15\n"
+     "STRUCT|@|-1|-1.2|1|0.4|0.78|1.1|0|15\n"
+     "STRUCT|@|-1|0.4|1|2|0.9|1.1|0|15\n"
+     "STRUCT|@|-0.55|-1.31|-0.45|-1.19|0.04|0.78|0|12\n"
+     "STRUCT|@|0.45|-1.31|0.55|-1.19|0.04|0.78|0|12\n"
+     "STRUCT|@|-0.55|-1.32|0.55|-1.18|0.7|0.78|0|12\n"
+     "STRUCT|@|-0.55|0.39|-0.45|0.51|0.04|0.78|0|12\n"
+     "STRUCT|@|0.45|0.39|0.55|0.51|0.04|0.78|0|12\n"
+     "STRUCT|@|-0.55|0.38|0.55|0.52|0.7|0.78|0|12\n"
+     "FIXTURE|@|$out_debris_bricks|0|2.1|0|1.05|0.901|0.029|0.3|0\n"
+     "FIXTURE|@|$scrap_lantern|0.75|2.35|0|0.262|0.31|0.772|0|1\n"},
+    {"kit_crouch_pipe", L"Big pipe", L"a 2 m concrete pipe, 1.56 m inside: crouch to get through", 2.40f, 4.40f,
+     "FIXTURE|@|$bld_culvert|0|0|0|2|4.1|2|0|1\n"
+     "FIXTURE|@|$out_debris_bricks|0.3|2.35|0|0.817|0.701|0.023|1.2|0\n"},
 };
 static constexpr int KitCount = int(std::size(kitDefs));

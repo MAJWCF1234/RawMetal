@@ -22,6 +22,7 @@ T, H = .2, 3.0                     # wall thickness and height
 CONCRETE, STEEL, FINISH, DARK_STEEL, BRICK, TREAD, TIMBER, HAZARD = 5, 2, 3, 8, 10, 11, 12, 13
 OFFICE_WALL, CARPET, OFFICE_TILE, CLINIC_TILE, LAB_PANEL, TEAL_DADO = 21, 23, 24, 27, 28, 36
 GRATING, BUNKER, FLOOR_TILE, PLANK, CAST, WEATHERED = 7, 15, 50, 51, 42, 43
+DUCT, DUCT_FLOOR, CHAIN_LINK = 2, 8, 52   # steel panel, dark steel, see-through mesh (World.h ChainLinkMaterial)
 # Models whose front is not their south side at yaw 0 (a turn added to every placement;
 # tools/dev/model_fronts.json): the engine's office chair faces north.
 FRONT = {'office_chair': PI}
@@ -489,6 +490,81 @@ def build(catalog):
         k.box(x - .25, -.45, x + .25, .3, 0, 10.4, CONCRETE)
     for z in (4, 7, 10):                                            # ledge bands between storeys
         k.box(-3.2, -.3, 3.2, .2, z - .12, z + .06, CONCRETE)
+
+    # ---------------------------------------------------------------- crawlspaces (2026-11-26)
+    # Vent ducts sized to the player's crawl: 0.9 m wide and 0.75 m clear inside (floor top at 0.05, ceiling
+    # underside at 0.8), so standing (1.6 m) and kneeling (1.05 m) never fit and the game lays her prone (0.58 m)
+    # as she crawls in. Every piece is its own floor, walls and lid, so ducts join end to end at any height:
+    # set them on a raised floor layer to run them over a room. The front (south) is where a run comes in.
+    VW, VH, VS = .5, .85, .05      # half the outer width, the outer height, the sheet
+    def duct_shell(k, y1, y2, floor=DUCT_FLOOR, sides='WE', z=0.0):
+        if floor is not None:
+            k.box(-VW, y1, VW, y2, z, z + VS, floor)                 # the floor she crawls on
+        k.box(-VW, y1, VW, y2, z + VH - VS, z + VH, DUCT)            # the lid
+        if 'W' in sides: k.box(-VW, y1, -VW + VS, y2, z + VS, z + VH - VS, DUCT)
+        if 'E' in sides: k.box(VW - VS, y1, VW, y2, z + VS, z + VH - VS, DUCT)
+
+    def ribs(k, ys, z=0.0):
+        for y in ys:                                                  # the seams where duct sections join
+            k.box(-VW - .03, y - .02, VW + .03, y + .02, z + VH, z + VH + .03, DARK_STEEL)
+            for side in (-1, 1):
+                k.box(min(side * VW, side * (VW + .03)), y - .02, max(side * VW, side * (VW + .03)), y + .02, z, z + VH + .03, DARK_STEEL)
+
+    k = kit('kit_vent_duct', 'Vent duct', 1, 3, 'a 3 m crawl duct, open at both ends: too low to stand or kneel in')
+    duct_shell(k, -1.5, 1.5)
+    ribs(k, (-.5, .5))
+
+    k = kit('kit_vent_corner', 'Vent corner', 1, 1, 'a crawl duct turning from its front to its right')
+    k.box(-VW, -VW, VW, VW, 0, VS, DUCT_FLOOR)
+    k.box(-VW, -VW, VW, VW, VH - VS, VH, DUCT)
+    k.box(-VW, -VW, VW, -VW + VS, VS, VH - VS, DUCT)                  # the far wall
+    k.box(-VW, -VW + VS, -VW + VS, VW, VS, VH - VS, DUCT)             # the left wall
+
+    k = kit('kit_vent_grate', 'Vent grate', 1, 2, 'a crawl duct with a see-through grate floor: look down on the room below')
+    k.box(-.42, -1, .42, 1, .02, VS, CHAIN_LINK)                      # the grate: walked on, seen and heard through
+    for side in (-1, 1):                                              # the steel rails it sits in
+        k.box(min(side * .42, side * VW), -1, max(side * .42, side * VW), 1, 0, VS, DARK_STEEL)
+    duct_shell(k, -1, 1, floor=None)
+    for y1 in (-1, .97):                                              # its end bars
+        k.box(-.42, y1, .42, y1 + .03, 0, VS, DARK_STEEL)
+
+    k = kit('kit_vent_drop', 'Vent drop', 1, 2, 'a crawl duct that drops 1.2 m to a lower one: one way down')
+    D = 1.2
+    duct_shell(k, 0, 1, z=D)                                          # the upper run, its front at the south
+    k.box(-VW, -1, VW, 0, 0, VS, DUCT_FLOOR)                          # the shaft's floor, the lower run's
+    for side in (-1, 1):
+        k.box(min(side * VW, side * (VW - VS)), -1, max(side * VW, side * (VW - VS)), 0, VS, D + VH, DUCT)
+    k.box(-VW, -1, VW, 0, D + VH - VS, D + VH, DUCT)                  # the shaft's lid
+    k.box(-VW, -1, VW, -1 + VS, VH - VS, D + VH, DUCT)                # over the lower mouth (north)
+    k.box(-VW, 0, VW, 1, 0, D, DUCT)                                  # under the upper run: closed
+
+    k = kit('kit_vent_entry', 'Wall vent', 3, .3, 'a wall with a crawl-duct mouth at the floor and a grille to pull off')
+    k.box(-1.5, -.15, -VW, .15, 0, H, BUNKER)
+    k.box(VW, -.15, 1.5, .15, 0, H, BUNKER)
+    k.box(-VW, -.15, VW, .15, VH - VS, H, BUNKER)                   # over the mouth: as low as the duct's lid
+    k.box(-VW, -.15, VW, .15, 0, VS, DUCT_FLOOR)                      # the sill, level with a duct's floor
+    for x in (-VW - .04, VW):                                         # a steel frame round the mouth
+        k.box(x, .15, x + .04, .19, 0, VH, DARK_STEEL)
+    k.box(-VW - .04, .15, VW + .04, .19, VH - VS, VH, DARK_STEEL)
+    k.loose('pwr_vent_grille', 0, .22, 0)                            # loose: grab it, kick it in or crawl through it
+    k.lamp(0, .4, 2.4, .6, 4.0, 3600, mount=1, yaw=HALF)
+
+    k = kit('kit_crawl_tunnel', 'Crawl tunnel', 2, 4, 'a low concrete tunnel shored with timber: crawl only')
+    k.box(-1, -2, 1, 2, 0, .04, CAST)
+    for side in (-1, 1):                                              # rough walls, thicker at the ends
+        k.box(min(side * 1, side * .55), -2, max(side * 1, side * .55), 2, .04, 1.1, BUNKER)
+    for y1, y2, low in ((-2, -1.2, .85), (-1.2, .4, .78), (.4, 2, .9)):   # the roof sags in the middle
+        k.box(-1, y1, 1, y2, low, 1.1, BUNKER)
+    for y in (-1.25, .45):                                            # timber sets holding the sag
+        for side in (-1, 1):
+            k.box(side * .55 - (.1 if side > 0 else 0), y - .06, side * .55 + (0 if side > 0 else .1), y + .06, .04, .78, TIMBER)
+        k.box(-.55, y - .07, .55, y + .07, .7, .78, TIMBER)
+    k.fx('out_debris_bricks', 0, 2.1, 0, .3, k=.45, solid=0)          # spill at the mouth
+    k.fx('scrap_lantern', .75, 2.35, 0)
+
+    k = kit('kit_crouch_pipe', 'Big pipe', 2.4, 4.4, 'a 2 m concrete pipe, 1.56 m inside: crouch to get through')
+    k.fx('bld_culvert', 0, 0)
+    k.fx('out_debris_bricks', .3, 2.35, 0, 1.2, k=.35, solid=0)
     return kits
 
 
