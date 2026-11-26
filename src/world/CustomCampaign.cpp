@@ -790,8 +790,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    if(f.size()<12||f.size()>20)throw std::runtime_error("malformed EMITTER record");auto map=mapAt(maps,f);
    ParticleEmitter e{{number(f,2,"emitter x"),number(f,3,"emitter y")},number(f,4,"emitter z"),{number(f,5,"emitter drift x"),number(f,6,"emitter drift y")},number(f,7,"emitter rise"),number(f,8,"emitter rate"),number(f,9,"emitter radius"),number(f,10,"emitter growth"),integer(f,11,"emitter count")};
    if(given(12)){const int kind=integer(f,12,"emitter kind");if(kind<0||kind>=int(ParticleKind::Count))throw std::runtime_error("invalid emitter kind");e.kind=ParticleKind(kind);}
-   if(given(13))e.strength=number(f,13,"emitter strength");if(given(14))e.enabledFlag=stateField(f[14]);if(given(15))e.enabledValue=integer(f,15,"emitter state value");
+   // A strength past the top is the top: Builders before 1.7.3 could save one, and the whole map was refused.
+   if(given(13))e.strength=std::min(number(f,13,"emitter strength"),4.f);if(given(14))e.enabledFlag=stateField(f[14]);if(given(15))e.enabledValue=integer(f,15,"emitter state value");
    if(given(16))e.invertFlag=boolean(f,16,"emitter invert");if(given(17))e.period=number(f,17,"emitter period");if(given(18))e.onTime=number(f,18,"emitter on time");if(given(19))e.phase=number(f,19,"emitter phase");
+   if(e.kind==ParticleKind::Plume&&e.count>32)e.count=32;
    if(!validParticleEmitter(e))throw std::runtime_error("emitter parameters out of range");
    if(map->emitters.size()>=64)throw std::runtime_error("too many EMITTER records in one map");map->emitters.push_back(e);
   }else if(tag=="STAIR"){
@@ -1110,6 +1112,10 @@ std::shared_ptr<const CustomCampaign> loadEmbeddedExclusionZoneCampaign(){
  // Packed resource 346 is the Ashfall Exclusion Zone wasteland custom campaign TXT.
  auto bytes=loadResource(346);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Ashfall-Exclusion-Zone.txt");
 }
+std::shared_ptr<const CustomCampaign> loadEmbeddedDeathmatchCampaign(){
+ // Packed resource 3398 is Industry Deathmatch, the game's own deathmatch map.
+ auto bytes=loadResource(3398);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),DeathmatchMapFile);
+}
 std::shared_ptr<const CustomCampaign> loadEmbeddedPrologueCampaign(){
  // Parsed once: New Game, checkpoints and tests share the same payload.
  static const auto prologue=[]{auto bytes=loadResource(398);return loadCustomCampaignText(std::string(reinterpret_cast<const char*>(bytes.data()),bytes.size()),"RawMetal-Security-Office-Prologue.txt");}();
@@ -1118,6 +1124,7 @@ std::shared_ptr<const CustomCampaign> loadEmbeddedPrologueCampaign(){
 std::shared_ptr<const CustomCampaign> builtInCampaignForKey(std::uint64_t key){
  auto prologue=loadEmbeddedPrologueCampaign();if(prologue->key==key)return prologue;
  auto exclusion=loadEmbeddedExclusionZoneCampaign();if(exclusion->key==key)return exclusion;
+ auto arena=loadEmbeddedDeathmatchCampaign();if(arena->key==key)return arena;
  return nullptr;
 }
 static bool isOfficialCampaignExport(const std::filesystem::path& path){
@@ -1146,6 +1153,11 @@ std::vector<std::shared_ptr<const CustomCampaign>> loadCustomCampaignDirectory(c
  if(!hasExclusionZone){
   try{result.push_back(loadEmbeddedExclusionZoneCampaign());}
   catch(const std::exception& error){if(errors)errors->push_back(std::string("embedded Exclusion Zone: ")+error.what());}
+ }
+ // The deathmatch map is listed for a lone exe too; a copy in the folder wins.
+ if(std::none_of(result.begin(),result.end(),[](const auto&c){return c->sourceFile==DeathmatchMapFile;})){
+  try{result.push_back(loadEmbeddedDeathmatchCampaign());}
+  catch(const std::exception& error){if(errors)errors->push_back(std::string("embedded Industry Deathmatch: ")+error.what());}
  }
  std::sort(result.begin(),result.end(),[](auto&a,auto&b){return a->name<b->name;});return result;
 }

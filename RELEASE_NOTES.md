@@ -4,6 +4,21 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.3 - Industry (2026-11-26)
+
+There is somewhere new to settle it.
+
+- Industry Deathmatch, a new two-floor arena for six. It is built in, and Host Deathmatch starts on it.
+- Creatures take the way their size allows. Small ones follow into ducts and culverts; larger ones go round or wait at the mouth.
+- Vents, crawl tunnels and big pipes to crawl through, with a matching view in VR.
+- Doorway kits have doors that work. The shower, blast door frame and mine entrance can be walked into.
+- The next map is readied before you reach it, and lamp shadows are shared out over frames, for a smoother walk through doorways.
+- In VR, Claire keeps her own size and fits herself to your height and reach.
+- MAPS has an Engineering section.
+- Signs read as the signs of a working facility.
+- Campaign Builder: an AI and Entity Manager, with a Director for Engineering.
+- Campaign Builder: fixed a map that saved and would not open again after an emitter was given a number past its limit. Such maps now open, and the Builder holds emitter numbers within range.
+
 ## v1.7.2 - Under, through and round (2026-11-25)
 
 The works got harder to walk past.

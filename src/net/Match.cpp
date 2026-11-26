@@ -98,6 +98,7 @@ void Match::begin(){
 void Match::hostBegin(){
  const auto& lobby=m_session->lobby();
  auto campaign=findCampaign(lobby.map,{});
+ if(!campaign&&lobby.map.empty()&&m_mode==Mode::Deathmatch)campaign=findCampaign(DeathmatchMapFile,{});
  if(!campaign&&lobby.map.empty())for(const auto& c:m_game.m_customCampaigns)if(c&&!c->maps.empty()&&(m_mode==Mode::Coop?c->multiplayer.coop:c->multiplayer.deathmatch)){campaign=c;break;}
  if(!campaign||campaign->maps.empty()){end(lobby.map.empty()?"No custom map to play":"The map "+lobby.map+" is not installed");return;}
  const auto& rules=campaign->multiplayer;

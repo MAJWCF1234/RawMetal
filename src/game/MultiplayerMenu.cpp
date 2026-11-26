@@ -78,6 +78,8 @@ std::vector<int> Game::hostableMaps(net::Mode mode)const{
  std::vector<int> out;
  for(size_t i=0;i<m_customCampaigns.size();++i){const auto& c=m_customCampaigns[i];if(!c||c->maps.empty())continue;
   if(mode==net::Mode::Coop?c->multiplayer.coop:c->multiplayer.deathmatch)out.push_back(int(i));}
+ // Deathmatch starts on the game's own arena.
+ if(mode==net::Mode::Deathmatch)std::stable_partition(out.begin(),out.end(),[&](int i){return m_customCampaigns[size_t(i)]->sourceFile==DeathmatchMapFile;});
  return out;
 }
 std::string Game::customCampaignName(int index)const{
