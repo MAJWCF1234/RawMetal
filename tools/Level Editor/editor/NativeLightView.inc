@@ -10,13 +10,14 @@
 // Included inside struct Editor.
 int lightView = 0, rebakeSerial = 0;
 bool airMoves = true, thirdPersonPlay = false;
+bool mapDiagnostics = false;
 unsigned probeBakesSeen = 0;
 bool rebakeAsked = false;
 std::string lookLast;
 static constexpr const wchar_t *lightViewNames[] = {L"lit", L"probe fill", L"finish", L"no probes"};
 std::string lookText() const {
   return "LOOK " + std::to_string(lightView) + ' ' + std::to_string(int(thirdPersonPlay)) + ' ' +
-         std::to_string(rebakeSerial) + ' ' + std::to_string(int(airMoves)) + '\n';
+         std::to_string(rebakeSerial) + ' ' + std::to_string(int(airMoves)) + (mapDiagnostics ? " 1\n" : "\n");
 }
 fs::path lookFile() const { return control.parent_path() / L"look.txt"; }
 fs::path lookStatusFile() const { return control.parent_path() / L"look-status.txt"; }
@@ -70,6 +71,8 @@ void chooseLightView() {
   AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
   AppendMenuW(menu, MF_STRING, LightMenuBase + 4, L"Rebake light probes now");
   AppendMenuW(menu, MF_STRING | (airMoves ? MF_CHECKED : 0), LightMenuBase + 5, L"Air moves between edits");
+  AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+  AppendMenuW(menu, MF_STRING | (mapDiagnostics ? MF_CHECKED : 0), LightMenuBase + 6, L"Map diagnostics");
   RECT r{};
   GetWindowRect(GetDlgItem(window, LightViewButton), &r);
   int chosen = int(TrackPopupMenu(menu, TPM_RETURNCMD | TPM_LEFTALIGN, r.left, r.bottom, 0, window, nullptr));
@@ -85,6 +88,12 @@ void lightMenuChosen(int chosen) {
     airMoves = !airMoves;
     writeLook();
     message(airMoves ? L"The air moves in the picture between edits." : L"The air holds still between edits.");
+  }
+  else if (chosen == LightMenuBase + 6) {
+    mapDiagnostics = !mapDiagnostics;
+    writeLook();
+    message(mapDiagnostics ? L"Map diagnostics show collision, navigation links and red issue markers in the 3D view."
+                           : L"Map diagnostics hidden.");
   }
 }
 // The picture's answer (the status timer): a rebake that landed is said once.

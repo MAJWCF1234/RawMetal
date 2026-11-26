@@ -1,7 +1,7 @@
-// Desktop overlay, composited after the scene and before menus. Each of the
-// five layers is opt-in and reads the live world without moving bodies or lights.
-if(const unsigned debug=debuglayer::visible;
-   debug&&!game.titleScreen()&&!game.loading()&&!m_vrRendering&&!m_environmentInspection){
+// Desktop and builder overlay, composited after the scene and before menus.
+if(const unsigned debug=(m_environmentInspection?0u:debuglayer::visible)|
+                         (m_editorMapDiagnostics?debuglayer::MapDiagnostics:0u);
+   debug&&!game.titleScreen()&&!game.loading()&&!m_vrRendering){
  using namespace debuglayer;
  const Player& viewer=m_view;
  const float ca=std::cos(viewer.angle),sa=std::sin(viewer.angle);
@@ -130,6 +130,50 @@ if(const unsigned debug=debuglayer::visible;
    for(const auto& h:w.hazards()){
     const Vec2 lo=offset+Vec2{h.x1,h.y1},hi=offset+Vec2{h.x2,h.y2};
     if(nearby((lo+hi)*.5f,length(hi-lo)*.5f))bounds(lo,hi,h.bottom,h.top,hazardColor);
+   }
+  }
+ }
+ if(debug&Navigation){
+  const auto point=[](const ai::NavNode& node){
+   return Point3{node.position.x,node.position.y,node.feet+.12f};
+  };
+  for(size_t i=0;i<m_debugNavigation.nodes.size();++i){
+   const auto& node=m_debugNavigation.nodes[i];
+   if(!nearby(node.position))continue;
+   const Point3 at=point(node);
+   for(int k=0;k<node.linkCount;++k){
+    const auto& edge=m_debugNavigation.links[size_t(node.firstLink+k)];
+    if(size_t(edge.dest)>i)line(at,point(m_debugNavigation.nodes[size_t(edge.dest)]),NavigationStroke);
+   }
+   const auto color=node.hint==ai::NodeHint::Cover?0xffbc9effu:NavigationStroke;
+   line(at+Point3{-.13f,0,0},at+Point3{.13f,0,0},color);
+   line(at+Point3{0,-.13f,0},at+Point3{0,.13f,0},color);
+  }
+ }
+ if(debug&Issues){
+  size_t withoutLocation=0;
+  for(const auto& issue:m_mapIssues){
+   if(!issue.located){++withoutLocation;continue;}
+   if(!nearby(issue.position))continue;
+   const Vec2 p=issue.position;
+   constexpr float radius=.22f;
+   box(p,{1.f,0.f},radius,radius,issue.z,issue.z+.65f,IssueStroke);
+   line({p.x,p.y,issue.z+.65f},{p.x,p.y,issue.z+.88f},IssueStroke);
+   const std::string description=issue.system+" / "+issue.object;
+   label({p.x,p.y,issue.z+.88f},description.c_str(),IssueStroke);
+  }
+  const int top=(debug&Stats)?137:56;
+  const int panelWidth=std::min(m_width-8,320);
+  if(panelWidth>0){
+   char summary[96];
+   std::snprintf(summary,sizeof(summary),"MAP DIAGNOSTICS    %zu ISSUES",m_mapIssues.size());
+   fill(4,top,panelWidth,withoutLocation?43:30,rgb(8,14,22),.9f);
+   uiText(10,top+3,summary,m_mapIssues.empty()?Stroke:IssueStroke,3,11);
+   if(debug&Navigation)uiText(10,top+16,m_debugNavigation.complete?
+    "COLLISION / NAV LINKS / RED ISSUES":"COLLISION / BUILDING NAV / RED ISSUES",Stroke,3,11);
+   if(withoutLocation){
+    std::snprintf(summary,sizeof(summary),"%zu ISSUES WITHOUT A WORLD POSITION",withoutLocation);
+    uiText(10,top+29,summary,IssueStroke,3,11);
    }
   }
  }

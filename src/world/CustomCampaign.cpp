@@ -345,6 +345,7 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
    knob("pressure",ai.pressure,0,1);knob("calm",ai.calm,2,600);knob("peak",ai.peak,5,1800);float lights=1;knob("lights",lights,0,1);ai.lights=lights>=.5f;
    if(ai.peak<ai.calm)throw std::runtime_error("AI "+ai.name+": peak= must be at least calm=");
    ai.tension=stateId(ai.name+"_tension");ai.inside=stateId(ai.name+"_inside");ai.beat=stateId(ai.name+"_beat");ai.quiet=stateId(ai.name+"_quiet");
+   ai.pulse=stateId(ai.name+"_pulse");ai.mood=stateId(ai.name+"_mood");
    if(map->aiAgents.size()>=16)throw std::runtime_error("too many AIs on one map (16 at most)");map->aiAgents.push_back(std::move(ai));
   }else if(tag=="OBJECTIVE_TEXT"){
    if(f.size()!=4)throw std::runtime_error("malformed OBJECTIVE_TEXT record");auto map=mapAt(maps,f);auto id=scriptName(f,2,"objective name");auto label=decode(f[3]);
@@ -426,6 +427,10 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     if(f.size()!=7)throw std::runtime_error("malformed LATER SCRIPT_ACTION record");action.type=ScriptAction::Type::Later;action.id=scriptName(f,4,"LATER state");
     action.value=integer(f,5,"LATER value");action.amount=number(f,6,"LATER seconds");
     if(action.value< -100000||action.value>100000||action.amount<.1f||action.amount>3600)throw std::runtime_error("invalid LATER; seconds 0.1-3600");
+   }else if(kind=="SEAL"){
+    // SEAL|state|value: sets the state and swings shut every door on the map that waits on it and is locked by it now.
+    if(f.size()!=6)throw std::runtime_error("malformed SEAL SCRIPT_ACTION record");action.type=ScriptAction::Type::Seal;action.id=scriptName(f,4,"SEAL state");
+    action.value=integer(f,5,"SEAL value");if(action.value< -100000||action.value>100000)throw std::runtime_error("invalid SEAL value");
    }else if(kind=="SHAKE"){
     if(f.size()!=5)throw std::runtime_error("malformed SHAKE SCRIPT_ACTION record");action.type=ScriptAction::Type::Shake;action.amount=number(f,4,"shake amount");
     if(action.amount<=0||action.amount>3)throw std::runtime_error("invalid shake amount; use more than 0 up to 3");

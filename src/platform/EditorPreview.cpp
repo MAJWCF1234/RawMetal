@@ -47,6 +47,7 @@ int runEditorPreview(const EditorPreviewOptions& options){
   MoveFileExW(temporary.c_str(),options.status.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
  };
  auto last=std::chrono::steady_clock::now(),lastReport=last;
+ const auto lookControl=options.control.parent_path()/L"look.txt";
  int lastWidth=-1,lastHeight=-1;
  while(window.pump()){
   if(options.parent){if(!IsWindow(options.parent))break;RECT rc{};GetClientRect(options.parent,&rc);if(rc.right!=lastWidth||rc.bottom!=lastHeight){lastWidth=rc.right;lastHeight=rc.bottom;SetWindowPos(window.handle(),nullptr,0,0,std::max(1L,rc.right),std::max(1L,rc.bottom),SWP_NOZORDER|SWP_NOACTIVATE);}}
@@ -77,6 +78,10 @@ int runEditorPreview(const EditorPreviewOptions& options){
    const bool audible=!options.hidden&&((playing&&window.focused())||(audition&&hostFocused));
    if(audible&&!audio)audio=std::make_unique<AudioEngine>();
    if(audio)audio->update(*scene,audible);
+   {std::ifstream look(lookControl);std::string tag;int mode=0,third=0,rebake=0,animate=1,diagnostics=0;
+    const bool show=bool(look>>tag>>mode>>third>>rebake>>animate>>diagnostics)&&tag=="LOOK"&&diagnostics!=0;
+    renderer->setEditorMapDiagnostics(show);}
+   renderer->prepareMapDiagnostics(*scene);
    renderer->render(*scene);if(!renderer->hardwarePresentsWindow())window.present(renderer->pixels(),width,height);
    ++frame;
    if(now-lastReport>std::chrono::milliseconds(250)){report(valid?"READY":"ERROR",loadError);lastReport=now;}

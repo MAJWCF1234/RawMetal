@@ -118,6 +118,12 @@ void Game::executeScriptAction(const ScriptAction& action){
    const float d=action.index==0?-3.5f:4.5f;const Vec2 at=p.pos+Vec2{std::cos(p.angle),std::sin(p.angle)}*d;
    SoundEvent e{action.sound,at,action.amount,1,true,22,p.z+1.2f};e.aiRadius=action.value>0?float(action.value):-1.f;m_sounds.push_back(e);break;}
   case ScriptAction::Type::Later:setState(action.id,action.value);break;   // outside an event (no count to keep), at once
+  case ScriptAction::Type::Seal:{   // a lockdown: the state, then every leaf that waits on it and is locked swings shut with a slam
+   setState(action.id,action.value);
+   for(int i=0;i<int(m_world.doors().size());++i){const auto& d=m_world.doors()[size_t(i)];
+    if(d.requireState!=action.id||!doorLocked(d)||d.broken||d.open<.02f)continue;
+    m_world.setDoor(i,d.open,false);const Vec2 c=d.centre();SoundEvent e{Sound::LockerBang,c,.9f,.8f,true,16,m_world.floorHeight(c.x,c.y)+d.z+1.1f};e.aiRadius=16;m_sounds.push_back(e);}
+   break;}
   case ScriptAction::Type::ShowMessage:{
    std::string text;
    for(size_t i=0;i<action.text.size();){

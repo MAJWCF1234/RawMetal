@@ -558,6 +558,10 @@
     lightMenuChosen(LightMenuBase+4);require(rebakeSerial==1&&lookText()=="LOOK 1 0 1 1\n","Rebake did not ask the picture");
     SendMessageW(window,WM_COMMAND,ThirdPersonToggle,0);require(thirdPersonPlay&&lookText()=="LOOK 1 1 1 1\n","The play toggle did not ask for the shoulder camera");
     SendMessageW(window,WM_COMMAND,ThirdPersonToggle,0);lightMenuChosen(LightMenuBase);rebakeSerial=0;
+    lightMenuChosen(LightMenuBase+6);
+    require(mapDiagnostics&&lookText()=="LOOK 0 0 0 1 1\n","Map diagnostics did not reach the picture controls");
+    lightMenuChosen(LightMenuBase+6);
+    require(!mapDiagnostics&&lookText()=="LOOK 0 0 0 1\n","Map diagnostics did not switch off");
     std::array<Look,4> modes;for(int m=0;m<4;++m)modes[size_t(m)]=picture(L"light-"+std::to_wstring(m),"LOOK "+std::to_string(m)+" 0 0 0\n",24);
     for(int m=1;m<4;++m){require(modes[size_t(m)].mode==m,"The picture did not take light mode "+std::to_string(m));int d=differ(L"light-0",L"light-"+std::to_wstring(m));
       require(d>2000,"Light mode "+std::to_string(m)+" looks the same as lit ("+std::to_string(d)+" pixels)");}

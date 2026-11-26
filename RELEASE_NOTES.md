@@ -17,6 +17,8 @@ There is somewhere new to settle it.
 - MAPS has an Engineering section.
 - Signs read as the signs of a working facility.
 - Campaign Builder: an AI and Entity Manager, with a Director for Engineering.
+- Campaign Builder: the Director can seal a lockdown, shutting the doors behind the player, and its beats turn between quiet and fight.
+- For map makers: DEBUGLAYER MAP shows collision, navigation and map problems in the game.
 - Campaign Builder: fixed a map that saved and would not open again after an emitter was given a number past its limit. Such maps now open, and the Builder holds emitter numbers within range.
 
 ## v1.7.2 - Under, through and round (2026-11-25)

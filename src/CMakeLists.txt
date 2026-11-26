@@ -203,6 +203,7 @@ add_executable(RawMetal WIN32
     game/ExclusionAuthoringTest.cpp
     game/PrologueTest.cpp
     game/MapAudit.cpp
+    game/MapHealth.cpp
     game/Stealth.cpp
     game/LockerDoors.cpp
     game/LockerCapture.cpp

@@ -59,7 +59,7 @@ void Game::executeConsole(std::string command){
   m_consoleLog.push_back("MAP REACTOR STARTS AFTER THE CRASH.");
   m_consoleLog.push_back("MAPS ENGINEERING LISTS THE ENGINEERING DISTRICTS. MAP ENGINEERING OPENS SERVICE SPINE.");
   m_consoleLog.push_back("RELOAD / WHERE / GOD / NOCLIP / FPS / R_SCALE 50|75|100 / TEX_UP 1|2|4 / GIVE FLASHLIGHT|HANDGUN|9MM / CLEAR. ESC: CLOSE.");m_consoleLog.push_back("NOCLIP: FLY THROUGH WALLS WHERE YOU LOOK. JUMP RISES, CROUCH SINKS, SPRINT IS FASTER. NOT SAVED.");m_consoleLog.push_back("UNLOCK: OPENS THE DOOR OR TERMINAL YOU ARE LOOKING AT (PLAYTESTING; CHAPTER 2 STARTS AT MAP 68).");
-  m_consoleLog.push_back("DEBUGLAYER: TOGGLE COLLIDERS, LIGHTS, CHUNKS, HAZARDS AND STATS.");
+  m_consoleLog.push_back("DEBUGLAYER MAP: TOGGLE COLLISION, NAVIGATION AND MAP ISSUES.");
   m_consoleLog.push_back("GIVE 12 GA / 12GA / SHELLS: ADDS 16 SHOTGUN SHELLS.");
   m_consoleLog.push_back("SUMMON <KIND> [N] [ALLY|ENEMY|NEUTRAL] [AI=..] / ALLY / ENEMY / KILL / KILLALL / FREEZE / AI ON|OFF / LIST. HELP SUMMON.");
   if(verb=="maps")listMaps();
@@ -118,10 +118,11 @@ void Game::executeConsole(std::string command){
    if(arg.empty())selected=visible?0:All;
    else if(arg=="off")selected=0;
    else if(arg=="on"||arg=="all")selected=All;
-   else for(const auto& [name,layer]:{std::pair{"colliders",Colliders},{"lights",Lights},{"chunks",Chunks},{"hazards",Hazards},{"stats",Stats}})
+   else if(arg=="map")selected=visible==MapDiagnostics?0:MapDiagnostics;
+   else for(const auto& [name,layer]:{std::pair{"colliders",Colliders},{"lights",Lights},{"chunks",Chunks},{"hazards",Hazards},{"stats",Stats},{"nav",Navigation},{"issues",Issues}})
     if(arg==name){selected=layer;break;}
   }
-  if(selected<0)m_consoleLog.push_back("USE DEBUGLAYER [ON|OFF|COLLIDERS|LIGHTS|CHUNKS|HAZARDS|STATS].");
+  if(selected<0)m_consoleLog.push_back("USE DEBUGLAYER [ON|OFF|MAP|COLLIDERS|LIGHTS|CHUNKS|HAZARDS|STATS|NAV|ISSUES].");
   else{
    visible=unsigned(selected);
    m_consoleLog.push_back(visible?"DEBUG LAYER ON. CLOSE THE CONSOLE TO INSPECT.":"DEBUG LAYER OFF.");

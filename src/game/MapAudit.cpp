@@ -2,6 +2,9 @@
 #include <functional>
 #include <cctype>
 #include "Game.h"
+#include "../world/PrimitiveKinds.h"
+#include <source_location>
+#include <sstream>
 #include "Containers.h"
 #include <cstdlib>
 #include "../world/CampaignMaps.h"
@@ -38,7 +41,7 @@ std::string at(Vec2 p){char text[48];std::snprintf(text,sizeof text,"%.2f,%.2f",
 bool Game::auditMap(int level){
  Game game(WorldId::Campaign);game.loadLevel(level,false);return auditMapScene(game,level);
 }
-bool Game::auditMapScene(Game& game,int level){
+bool Game::auditMapScene(Game& game,int level,std::vector<std::pair<std::string,unsigned>>* findings){
  // Movable heavy props yield to sustained pushing and are not fixed route gates.
  for(auto&c:game.m_clutter)if(c.model>=0)c.blockedTime=.5f;
  // Doors stand open: the audit asks what is reachable, not what is unlocked.
@@ -99,7 +102,10 @@ bool Game::auditMapScene(Game& game,int level){
   }
   return r;
  };
- std::ofstream report("map-audit-"+std::to_string(level)+".txt");
+ std::ofstream reportFile;
+ std::ostream sink(nullptr);
+ if(!findings)reportFile.open("map-audit-"+std::to_string(level)+".txt");
+ std::ostream& report=findings?static_cast<std::ostream&>(sink):reportFile;
  // The player may crouch anywhere; creatures need standing room.
  const auto reach=flood(Player::ProneHeight+.02f);const auto& visited=reach.visited;
  const auto standing=flood(Player::StandingHeight+.02f);
@@ -111,7 +117,41 @@ bool Game::auditMapScene(Game& game,int level){
  };
  auto reachable=[&](Vec2 p,float z,float radius){return reachableIn(reach,p,z,radius);};
  int problems=0;
- auto fail=[&](const std::string& what){++problems;report<<what<<'\n';};
+ auto recordFailure=[&](const std::string& what,std::source_location source=std::source_location::current()){
+  ++problems;
+  if(findings)findings->emplace_back(what,source.line());
+  else report<<what<<'\n';
+ };
+ const auto& fail=recordFailure;
+ if(findings&&w.m_mapData){
+  constexpr Vec2 directions[]={{0,1},{1,0},{0,-1},{-1,0}};
+  for(size_t i=0;i<w.m_mapData->primitives.size();++i){
+   const auto& stair=w.m_mapData->primitives[i];
+   if(stair.kind!="stairs"||!stair.solid||stair.facing<0||stair.facing>=4)continue;
+   const auto size=prim::resolve(stair.kind,stair.w,stair.d,stair.h);
+   const Vec2 centre{stair.x,stair.y};
+   const auto heading=directions[stair.facing];
+   const float cosine=std::cos(stair.turn),sine=std::sin(stair.turn);
+   const Vec2 run{heading.x*cosine-heading.y*sine,heading.x*sine+heading.y*cosine};
+   const Vec2 start=centre-run*(size.d*.5f+.22f);
+   if(!reachableIn(standing,start,stair.z,.7f))continue;
+   bool climb=false;
+   for(float side:{0.f,-.2f,.2f}){
+    float feet=stair.z;
+    bool clear=true;
+    const Vec2 sideOffset{run.y*side,-run.x*side};
+    const int steps=std::max(1,int(std::ceil((size.d+.22f)/.065f)));
+    for(int step=0;step<=steps;++step){
+     const Vec2 p=start+sideOffset+run*((size.d+.20f)*float(step)/steps);
+     const float z=game.groundHeight(p,feet+.215f,.20f);
+     if(!std::isfinite(z)||z<feet-.25f||!game.hullFits(p,z+.01f,Player::StandingHeight,.20f,false,false)){clear=false;break;}
+     feet=z;
+    }
+    climb|=clear&&feet>=stair.z+size.h-.20f;
+   }
+   if(!climb)fail("UNCLIMBABLE stair["+std::to_string(i)+"] at "+at(centre)+" (standing hull cannot climb the treads)");
+  }
+ }
  {std::map<int,std::pair<int,int>> heights;for(size_t i=0;i<visited.size();++i)for(float v:visited[i]){auto& h=heights[int(std::floor(v*2))];if(!h.first++)h.second=int(i);}
   report<<"Reached floor heights (m: cells, first at):";for(auto [h,entry]:heights)report<<' '<<h*.5f<<':'<<entry.first<<'@'<<(entry.second%N+.5f)*Cell<<','<<(entry.second/N+.5f)*Cell;report<<'\n';}
  // Crawl-only perches well above the spawn floor (wall and curtain tops under a ceiling), by what holds them up.
@@ -615,7 +655,7 @@ bool Game::auditMapScene(Game& game,int level){
      if(p.x>=s.x1&&p.x<=s.x2&&p.y>=s.y1&&p.y<=s.y2&&s.top-s.bottom>=.3f&&s.bottom<base+.8f&&s.top>base-.1f){char text[96];std::snprintf(text,sizeof text,"structure[%zu] %.2f,%.2f..%.2f,%.2f z %.2f..%.2f",si,s.x1,s.y1,s.x2,s.y2,s.bottom,s.top);what=text;}}
     for(const auto& c:game.m_clutter){if(!what.empty())break;if(c.model<0||c.broken||c.height()<.45f||c.dims[0]*c.dims[1]<.3f)continue;
      if(c.footprintContains(p)&&c.z<base+.8f&&c.z+c.height()>base-.1f){char text[96];std::snprintf(text,sizeof text,"prop model %d at %.2f,%.2f z %.2f",c.model,c.pos.x,c.pos.y,c.z);what=text;}}}
-   if(!what.empty()){char text[160];std::snprintf(text,sizeof text,"BENCH ON FURNITURE terminal '%s' at %.2f,%.2f z %.2f draws its own desk in ",t.title,t.position.x,t.position.y,base);report<<text<<what<<'\n';++problems;}}
+   if(!what.empty()){char text[160];std::snprintf(text,sizeof text,"BENCH ON FURNITURE terminal '%s' at %.2f,%.2f z %.2f draws its own desk in ",t.title,t.position.x,t.position.y,base);recordFailure(std::string(text)+what);}}
   // FLOATING STRUCTURE: a visible bar, shelf or strip in mid-air touching nothing: no wall, floor,
   // roof, other structure, fixture or pipe within 3 cm.
   {const auto& st=w.structures();
@@ -684,7 +724,7 @@ bool Game::auditMapScene(Game& game,int level){
   // the lamp it sits by; a fitted lamp whose light glows away from its fitting's face; two housings that
   // intersect; a light buried inside another lamp's housing. Hard failures, not warnings: a lamp is the
   // first thing a player looks at in a dark room.
-  {auto lampFail=[&](const std::string& what){report<<"FAIL "<<what<<'\n';++problems;};
+  {auto lampFail=[&](const std::string& what,std::source_location source=std::source_location::current()){recordFailure("FAIL "+what,source);};
    auto lampModel=[&](int m){static const int list[]={ceiling_lamp,pendant_lamp,lab_desk_lamp,med_fluoro_light,mine_cage_lamp,scrap_lantern,scrap_shade_lamp,clinic_ceiling_lamp_1,clinic_ceiling_lamp_2,
     bld_lamp_cage,bld_lamp_hood,bld_ceiling_lamp,mine_lantern,lamp_strip,lamp_ceiling_tube,lamp_ceiling_bar,lamp_bulkhead,lamp_wall,lamp_gooseneck,lamp_pendant,lamp_suspended_twin_tube};
     return std::find(std::begin(list),std::end(list),m)!=std::end(list);};
@@ -803,6 +843,7 @@ bool Game::auditMapScene(Game& game,int level){
   for(int sy=0;sy<4;++sy)for(int sx=0;sx<4;++sx){size_t cell=size_t((y*4+sy)*N+x*4+sx);for(float v:visited[cell])floors.try_emplace(int(std::lround(v*1000)),false);for(float v:standing.visited[cell])floors[int(std::lround(v*1000))]=true;}
   for(auto [height,upright]:floors)report<<"BORDER "<<x<<' '<<y<<' '<<height/1000.f<<' '<<(upright?'.':'c')<<'\n';
  }
+ if(findings)return problems==0;
  // Viewpoints for the visual sweep: one per reachable 3 m block and floor.
  std::ofstream views("map-views-"+std::to_string(level)+".txt");
  for(int gy=0;gy<8;++gy)for(int gx=0;gx<8;++gx){std::vector<float> floors;

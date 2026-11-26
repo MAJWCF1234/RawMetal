@@ -18,6 +18,8 @@ void Game::seedAiAgents(){
 void Game::updateAiAgents(float dt){
  if(m_aiMinds.size()!=m_aiAgents.size())m_aiMinds.assign(m_aiAgents.size(),{});
  for(size_t i=0;i<m_aiAgents.size();++i){const AiAgent& ai=m_aiAgents[i];AiMind& mind=m_aiMinds[i];
+  // A beat's pulse lasts the one frame the blocks saw it.
+  if(state(ai.pulse))setState(ai.pulse,0);
   // After a load (or the first frame) the fractions come back from the saved states.
   if(!mind.seeded){mind.tension=float(state(ai.tension));mind.quiet=float(state(ai.quiet));mind.seeded=true;}
   // Who is in the zone, in the zone's own map frame (a body is in the active chunk's).
@@ -30,10 +32,13 @@ void Game::updateAiAgents(float dt){
   else mind.tension-=dt*3.f;
   mind.tension=std::clamp(mind.tension,0.f,100.f);
   if(inside>0)mind.quiet+=dt;
+  // Its rhythm starts quiet the first time someone comes in.
+  if(inside>0&&!state(ai.mood))setState(ai.mood,2);
   // A beat: after the calm, once the menace is high enough for the pressure (or the peak wait is up). The
   // blocks decide what a beat is (a flicker, a noise behind, a monster sent); the beat lets the menace down a third.
   const float due=70.f-40.f*ai.pressure;
-  if(inside>0&&mind.quiet>=ai.calm&&(mind.tension>=due||mind.quiet>=ai.peak)){setState(ai.beat,state(ai.beat)+1);mind.quiet=0;mind.tension*=.66f;}
+  if(inside>0&&mind.quiet>=ai.calm&&(mind.tension>=due||mind.quiet>=ai.peak)){setState(ai.beat,state(ai.beat)+1);mind.quiet=0;mind.tension*=.66f;
+   setState(ai.pulse,1);setState(ai.mood,state(ai.mood)==1?2:1);}
   setState(ai.tension,int(mind.tension));setState(ai.inside,inside);setState(ai.quiet,int(mind.quiet));
  }
  // Tenths of a second: the Lights block's hold and each Later block's count, both in saved states.

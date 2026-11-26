@@ -123,7 +123,9 @@ const std::vector<std::string_view>& knownNamedKeys(){
   // PRIM options, read by the PRIM parser (CustomCampaign.cpp).
   "hand","rails","thick",
   // Underground (CaveField.h): stands on the carved floor under it, read by World::settleExclusionFacilityOnTerrain.
-  "cave"};
+  "cave",
+  // The AI and Entity Manager (the Builder): the AI a SCRIPT_EVENT is a rule of, and the rule a wait step belongs to.
+  "graph","step"};
  return keys;
 }
 std::string recordFieldKey(std::string_view tag,std::string_view parent,int ordinal){

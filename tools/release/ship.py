@@ -185,7 +185,7 @@ def main():
         say(f'v{version} "{title}"')
         size_headroom()
         set_version(version)
-        run(['git', 'add', 'src/app.rc', 'src/renderer/SoftwareRenderer.cpp', 'RELEASE_NOTES.md'], 'git-add.txt')
+        run(['git', 'add', 'src/app.rc', 'src/renderer/SoftwareRenderer.cpp', 'src/renderer/FrontEnd.cpp', 'RELEASE_NOTES.md'], 'git-add.txt')
         if subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT).returncode != 0:
             run(['git', 'commit', '-q', '-m', f'release: v{version}, {title.lower()}'], 'git-commit.txt')
     say('syncing the Campaign Builder engine')
