@@ -390,7 +390,7 @@ std::shared_ptr<const Map> makeQuarantineWard(){
  caFix(m,model::med_scrub_sink,8.78f,4.6f,f,caE,true);
  caFix(m,model::med_first_aid_box,15.48f,4.9f,f+1.3f,caW,false);
  floorLine(m,8.5f,5.5f,15.5f,5.65f,f,13);
- wallSign(m,12.f,5.98f,f+2.65f,"HOODS ON PAST THIS DOOR","EXPOSURE TIER 3 AND OVER / WARD STAFF ONLY",2.4f,caN);
+ wallSign(m,12.f,5.98f,f+2.65f,"RESTRICTED AREA","WARD STAFF ONLY / RESPIRATOR REQUIRED",2.4f,caN);
  m.lights.push_back(caTube(12.f,3.f,roof,.55f,5.5f,5600,.04f));
  { auto l=lamp({10.2f,5.98f},f+2.4f,.3f,3.6f,3000,0,WorldLightMount::Wall,clN,true,{1.f,.5f,.06f});l.period=1.f;l.onTime=.5f;m.lights.push_back(l);}   // the cycle lamp: amber, never cleared
  kit::prop(m,model::item_dosimeter,11.3f,4.2f,f,.31f,.146f,.066f,2.1f);
@@ -608,7 +608,7 @@ std::shared_ptr<const Map> makeContainmentIntake(){
  // Door B: pilasters, lintel, the stripes, the reason on it, red until the feed, green after.
  wall(m,8.6f,22.4f,10.f,23.f,f,roof,15);wall(m,14.f,22.4f,15.4f,23.f,f,roof,15);wall(m,10.f,22.4f,14.f,23.f,f+3.2f,roof,15);
  floorLine(m,9.f,21.5f,15.f,21.7f,f,13);
- wallSign(m,12.f,22.38f,f+3.35f,"CONTAINMENT POWER: OFFLINE","DOOR B HELD ON LOSS OF FEED / ROUTE POWER FROM THE CONVERSION LAB",3.4f,caN);
+ wallSign(m,12.f,22.38f,f+3.35f,"DOOR B","POWERED FROM THE CONVERSION LAB SUPPLY",3.4f,caN);
  for(auto [x,ph]:{std::pair{9.3f,0.f},{14.7f,.7f}})m.lights.push_back(caBeacon({x,22.4f},f+2.9f,clN,ph,"cont_power"));
  {auto l=caGlow({12.f,22.1f},f+3.f,.6f,5.f,5000,{.2f,1.f,.3f});l.enabledState=stateId("cont_power");m.lights.push_back(l);}
  terminal(m,{16.1f,22.2f},"DOOR B","HELD: NO CONTAINMENT FEED. LAST OPENED 02:01 (B DETAIL, 6 MEN, KESSLER).","OPENS ON FEED. MANUAL OVERRIDE REMOVED BY ORDER 02:30.",0);
@@ -881,7 +881,7 @@ std::shared_ptr<const Map> makeContainmentService(){
  doorwayY(m,14.5f,15.9f,13.4f,13.6f,f,roof);wall(m,13.4f,15.9f,13.6f,24.f,f,roof,37);
  // the bulkhead: held on the feed
  {const int d=wallDoor(m,10.6f,13.4f,10.9f,11.1f,11.4f,12.6f,f,roof,1);m.doors[size_t(d)].requireState=stateId("cont_power");}
- wallSign(m,12.f,10.88f,f+2.62f,"BULKHEAD HELD","OPENS ON CONTAINMENT FEED",1.5f,caN);
+ wallSign(m,12.f,10.88f,f+2.62f,"BULKHEAD","POWERED DOOR / KEEP CLEAR",1.5f,caN);
  m.lights.push_back(caBeacon({10.9f,10.9f},f+2.2f,clN,0,"cont_power"));
  m.lights.push_back(caBeacon({13.1f,11.1f},f+2.2f,clS,.6f,"cont_power"));
  floorLine(m,10.6f,10.4f,13.4f,10.55f,f,13);

@@ -114,7 +114,7 @@ std::shared_ptr<const Map> makeMaterialsIntake(){
  for(float y:{3.95f,4.33f})kit::prop(m,model::item_dosimeter,14.7f,y,f+1.13f,.31f,.146f,.066f,kPi*.5f+(y-4.f)*.2f);
  taped(m,{14.79f,3.f},f+1.5f,anW,Readable::Note,"RECEIVING ORDER","EVERY CONSIGNMENT FROM DEEP EXTRACTION IS SIGNED FOR IN THE BOOTH BEFORE IT IS LIFTED.",
   "IF A CRATE IS WARM, IT GOES IN THE CAGE. IF IT KNOCKS, IT GOES IN THE CAGE AND YOU CALL ANALYSIS.");
- wallSign(m,12.f,5.03f,f+3.62f,"HANDLE AS LIVE","DEEP EXTRACTION / NOTHING IS LIFTED UNSIGNED",2.6f,anS);
+ wallSign(m,12.f,5.03f,f+3.62f,"SAMPLE RECEIVING","ALL CONSIGNMENTS SIGNED IN AT THE BOOTH",2.6f,anS);
  m.lights.push_back(inTube(10.7f,2.9f,f+3.2f,.45f,5.f,5600,.05f));m.lights.push_back(inTube(13.3f,2.9f,f+3.2f,.45f,5.f,5600,.05f));
  // --- The porters' office (northeast): onto the hall by its doorway and its window -------------------
  wall(m,15.f,4.8f,15.6f,5.f,f,f+3.2f,3);inDoorwayX(m,15.6f,16.6f,4.8f,5.f,f,f+3.2f);wall(m,16.6f,4.8f,17.f,5.f,f,f+3.2f,3);   // propped open: the booth's is the hall's one door
@@ -1121,7 +1121,7 @@ std::shared_ptr<const Map> makeFieldMeasurement(){
  wall(m,16.6f,8.8f,19.4f,9.f,f,roof,3);
  {const int d=swingDoor(m,19.4f,20.6f,8.9f,f,roof,1);m.doors[size_t(d)].requireState=stateId("lab_chem_seal");}   // the airlock, held on Chemistry's reading
  wall(m,20.6f,8.8f,22.9f,9.f,f,roof,3);
- wallSign(m,20.f,8.74f,f+2.62f,"ZONE 3 AIRLOCK","HELD ON THE CHEMISTRY READING. PURGE AT INSTRUMENTATION",2.4f,anN);
+ wallSign(m,20.f,8.74f,f+2.62f,"ZONE 3 AIRLOCK","PURGE CONTROL: INSTRUMENTATION ROOM",2.4f,anN);
  taped(m,{15.2f,8.79f},f+1.45f,anN,Readable::Note,"PAN ENTRY / 02:10","DUNNE WENT IN FOR HIS SECOND METER WITH THE TORCH IN HIS TEETH. R-46 IS OUT OF ITS PEN.",
   "NOBODY GOES IN. IF YOU HAVE TO, GO DARK AND GO SLOW. IT HEARS BOOTS.");
  // Dunne's desk: he faced the glass. His hand lamp, the recorder, the last tape in the machine

@@ -447,7 +447,7 @@ void mhHallScript(MhHall& hall){
  m.pickupSpawns.push_back({{44.4f,42.3f},P::Ammo,C});
  m.pickupSpawns.push_back({{26.4f,45.6f},P::Health,C});
  // --- Signs that guide -------------------------------------------------------------------------
- board(m,32.6f,21.f,F+1.4f,"UNIT 2 PLATFORM","CONTROL ROOM 9 / NORTH OVER THE TABLE",2.6f);
+ board(m,32.6f,21.f,F+1.4f,"UNIT 2 PLATFORM","CONTROL ROOM 9 / NORTH",2.6f);
 }
 
 const MhHall& mhHall(){

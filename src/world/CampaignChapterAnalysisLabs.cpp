@@ -123,7 +123,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  for(float x:{11.1f,11.7f,12.3f,12.9f})wall(m,x,4.86f,x+.06f,4.94f,f+2.3f,f+2.36f,8);      // the air curtain's heads, dry since the fans stalled
  m.lights.push_back(lbTube(12.f,2.8f,roof,.5f,5.f,5600,.03f));
  m.lights.push_back(lbBeacon({10.2f,4.78f},f+2.45f,-kPi*.5f,0,"lab_chem_seal"));
- wallSign(m,12.f,4.79f,f+2.75f,"SUITS PAST THIS LINE","RESPIRATOR AND OVERSUIT BEYOND THE YELLOW LINE",2.2f,anN);
+ wallSign(m,12.f,4.79f,f+2.75f,"PPE REQUIRED BEYOND THIS POINT","RESPIRATOR / OVERSUIT / GLOVES",2.2f,anN);
  floorLine(m,9.2f,4.5f,14.8f,4.62f,f,13);
  anFix(m,model::lab_id_scanner,13.75f,4.77f,f+1.1f,.3f,.06f,.41f,anN,false);
  anFix(m,model::med_first_aid_box,9.26f,1.75f,f+1.3f,.367f,.12f,.349f,anE,false);
@@ -182,7 +182,7 @@ std::shared_ptr<const Map> makeAnalyticalChemistry(){
  anFix(m,model::pwr_gate_valve,16.15f,1.2f,f+2.38f,.49f,.28f,.33f,anS,false);
  // the cycle lamp over the lab door: amber, and it never cleared
  m.lights.push_back(lbBeacon({18.1f,4.78f},f+2.45f,-kPi*.5f,.2f,"lab_chem_seal",true));
- wallSign(m,16.4f,4.79f,f+2.2f,"HOOD ON UNTIL THE LAMP CLEARS","RINSE UNDER THE ROSE / SUIT IN THE BIN / THEN UNHOOD",1.6f,anN);
+ wallSign(m,16.4f,4.79f,f+2.2f,"DECONTAMINATION","SHOWER / BAG SUIT / REMOVE HOOD LAST",1.6f,anN);
  m.lights.push_back(lbTube(19.3f,2.4f,roof,.75f,7.f,6000,.05f,.3f));
  // --- The lab: the instrument wall, two island pairs, the hoods ---------------------------------
  // The instrument wall (north): bench runs either side of both doors and the R-41 terminal, lab-panel
@@ -503,7 +503,7 @@ std::shared_ptr<const Map> makeInstrumentation(){
  m.pickupSpawns.push_back({{22.3f,18.f},PickupKind::Health,f});
  // --- The test floor: four stands, the discharge rig ---------------------------------------------
  wall(m,1.f,1.f,17.f,1.04f,f,roof,28);                                                       // clean-room facing behind the stands
- wallSign(m,8.65f,1.1f,f+2.4f,"HIGH CURRENT","NO LOOSE METAL ON THE STAND BENCHES",2.f,anS);
+ wallSign(m,8.65f,1.1f,f+2.4f,"HIGH CURRENT","NO LOOSE METAL ON TEST STANDS",2.f,anS);
  cableTray(m,{1.4f,2.45f},{16.6f,2.45f},roof-.45f);
  for(float x=2.2f;x<16.5f;x+=1.8f)for(float s:{-.17f,.17f})m.pipes.push_back({{x,2.45f+s},{x,2.45f+s},roof-.35f,.01f,roof,6});
  // A lead hangs a quarter longer than the span from its post to the cell's top.

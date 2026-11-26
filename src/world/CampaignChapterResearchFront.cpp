@@ -236,7 +236,7 @@ std::shared_ptr<const Map> makeResearchIntake(){
  rfFix(m,model::lab_id_scanner,11.23f,6.05f,f+1.f,.3f,.06f,.41f,rfW,false);
  rfFix(m,model::lab_id_scanner,13.43f,6.05f,f+1.f,.3f,.06f,.41f,rfW,false);
  for(float x:{9.8f,14.2f})rfFix(m,model::lab_status_display,x,5.771f,f+2.62f,.693f,.058f,.2f,rfS,false);
- rfSign(m,12.f,5.8f,f+2.6f,"SCREENING SUSPENDED","BY ORDER OF INTERNAL INVESTIGATIONS",3.2f,kPi,rfRed);
+ rfSign(m,12.f,5.8f,f+2.6f,"STAFF SCREENING","HAVE YOUR BADGE READY",3.2f,kPi,rfRed);
  rfFix(m,model::lab_wall_clock,9.9f,7.416f,f+2.75f,.402f,.032f,.4f,rfS,false);
  // Lane 1 keeps the staff gate; lane 3 the Investigator closed; lane 2 is the way, painted and lit.
  rfFix(m,model::ticket_gate,9.3f,6.6f,f,.4f,1.42f,1.09f,0,true);
@@ -1037,7 +1037,7 @@ std::shared_ptr<const Map> makeResearchAdministration(){
  // --- The atrium (x 12-23, y 5-16, 6 m) ----------------------------------------------------------
  rfSign(m,12.02f,13.2f,f+3.25f,"DEPTHWORKS ENERGY RESEARCH","YOUR WORK POWERS THE WORLD",4.8f,rfE,rfBlue);
  for(float y:{8.25f,14.f})wall(m,22.88f,y,23.f,y+.75f,f+2.7f,roof,paint);      // the head's face, carried out under the long plate
- rfSign(m,22.86f,11.5f,f+3.35f,"1,204 DAYS, NO LOST-TIME INCIDENT","SCREENING KEEPS US WORKING",5.6f,rfW,rfBlue);
+ rfSign(m,22.86f,11.5f,f+3.35f,"1,204 DAYS, NO LOST-TIME INCIDENT","SAFETY IS EVERYONE'S JOB",5.6f,rfW,rfBlue);
  for(Vec2 l:{Vec2{14.6f,8.4f},Vec2{19.4f,8.4f},Vec2{14.6f,13.4f},Vec2{19.4f,13.4f}})m.lights.push_back(lamp(l,roof-.2f,1.15f,9.f,5600,.04f));
  // Visitors waited here for the counter to call them.
  for(float x:{14.8f,19.2f})rfFix(m,model::bench,x,7.8f,f,1.86f,.44f,.63f,rfN,true);

@@ -447,8 +447,8 @@ std::shared_ptr<const Map> makeObservationRingNorthEast(){
  wall(m,4.6f,13.6f,7.3f,13.68f,G,G+.51f,10);wall(m,4.6f,13.68f,7.3f,14.2f,G,G+.08f,10);              // the third, over on its back
  for(float x:{5.6f,6.6f})wall(m,x-.06f,13.7f,x+.06f,14.15f,G+.08f,G+.5f,2);
  // the exhibit lecterns on the rail, a lamp over each
- for(auto [x,y,yaw,title,sub]:{std::tuple{4.2f,15.7f,anN,"RING TEST FIELD / 1984","FROM THIS RAIL THE BOARD WATCHED THE FIRST FIELD HOLD ITSELF UP FOR NINE SECONDS"},
-   {8.3f,20.6f,anE,"VISITORS","THE FIELD IS SAFE TO WATCH FROM THE RAIL. PLEASE DO NOT USE FLASH"}}){
+ for(auto [x,y,yaw,title,sub]:{std::tuple{4.2f,15.7f,anN,"RING TEST FIELD","VIEWING GALLERY / OPENED 1984"},
+   {8.3f,20.6f,anE,"VISITORS","STAY BEHIND THE RAIL / NO FLASH PHOTOGRAPHY"}}){
   const bool alongX=std::fabs(std::cos(yaw))>.5f;
   if(alongX)wall(m,x-.78f,y-.05f,x+.78f,y+.12f,G,G+1.41f,2);else wall(m,x-.12f,y-.78f,x+.05f,y+.78f,G,G+1.41f,2);   // the lectern's steel stand
   wallSign(m,x,y,G+.74f,title,sub,1.5f,yaw);

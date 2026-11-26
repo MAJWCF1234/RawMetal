@@ -517,7 +517,7 @@ std::shared_ptr<const Map> makeSecurityPerimeterYard(){
  wall(m,10.f,22.2f,14.f,22.4f,f+2.8f,f+3.1f,18);
  for(float x=10.2f;x<13.8f;x+=.5f)wall(m,x,22.16f,x+.25f,22.2f,f+2.83f,f+3.07f,13);
  for(float x:{7.6f,16.25f})for(float z=f+.2f;z<f+2.2f;z+=.5f)wall(m,x,22.16f,x+.15f,22.2f,z,z+.25f,13);
- perSign(m,12.f,22.145f,f+3.3f,"CHECKPOINT DELTA","ESCORTED STAFF ONLY / RELEASE FROM THE GATEHOUSE",3.8f,kPi,perRed);
+ perSign(m,12.f,22.145f,f+3.3f,"CHECKPOINT DELTA","ESCORTED STAFF ONLY / REPORT TO THE GATEHOUSE",3.8f,kPi,perRed);
  perWallFix(m,model::lab_status_display,12.f,22.17f,f+4.05f,.69f,.06f,.2f,kPi);
  perCamera(m,15.8f,22.2f,f+3.9f,0,-1);
  m.lights.push_back(perSwitch(lamp({9.2f,22.18f},f+2.75f,1.3f,6.f,1100,-.45f,WorldLightMount::Wall,-kPi*.5f),gate,true));
@@ -725,7 +725,7 @@ std::shared_ptr<const Map> makeCheckpointDelta(){
  wall(m,22.6f,.95f,23.f,2.95f,f,f+2.4f,7);wall(m,22.55f,1.f,22.6f,2.9f,f+.1f,f+2.3f,11);
  taped(m,{22.55f,1.95f},f+1.45f,-kPi*.5f,Readable::Note,"DO NOT OPEN","WELDED 02:52. ORDER 7.","WHATEVER YOU HEAR BEHIND IT.");
  // --- The south door ---------------------------------------------------------------------------
- perSign(m,18.f,22.945f,f+1.6f,"SOUTH DOOR","CHIEF'S OVERRIDE REQUIRED",2.2f,kPi,perRed);
+ perSign(m,18.f,22.945f,f+1.6f,"SOUTH DOOR","AUTHORISED ACCESS ONLY",2.2f,kPi,perRed);
  // --- Who is still here -----------------------------------------------------------------------
  machineryClock(m,"per_delta_clock",60000);
  perGuard(m,"per_delta_clock","per_delta",0,ActorVisual::CleanupSharpshooter,GuardSquadRole::Sharpshooter,

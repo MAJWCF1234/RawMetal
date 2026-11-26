@@ -351,7 +351,7 @@ std::shared_ptr<const Map> makeDeepMaterialsLab(){
  for(float y:{10.4f,11.6f})kit::prop(m,model::office_chair,17.f,y,f,.55f,.55f,.95f,drE);
  m.lights.push_back(lamp({7.1f,11.f},f+1.6f,.22f,2.2f,4200,0,WorldLightMount::Bare,0,false));
  m.lights.push_back(lamp({16.f,11.f},f+1.6f,.22f,2.2f,4200,0,WorldLightMount::Bare,0,false));
- wallSign(m,12.f,8.59f,f+.2f,"NO BARE HANDS ON THE SAMPLE","TONGS AND GLOVES ONLY / LOG EVERY OPENING",2.4f,drN);
+ wallSign(m,12.f,8.59f,f+.2f,"HOT CELL","GLOVES AND TONGS ONLY",2.4f,drN);
  taped(m,{14.2f,5.2f},f+1.5f,drS,Readable::Note,"SAMPLE D-7 / 3,100 M","CUT FROM BORE 7 AT 01:10. THE KERF CLOSED BEHIND THE BLADE.",
   "IT IS ORE. IT WAS MINED, NOT GROWN, AND IT CAME UP FROM BELOW ANYTHING WE SURVEYED. GLOVES.");
  // --- The south: prep room, night office, the corridor on ------------------------------------
@@ -1190,7 +1190,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  drFix(m,model::lab_notice_board,5.f,1.035f,f+1.3f,1.2f,.07f,.9f,drS,false);drFix(m,model::lab_wall_clock,7.2f,1.02f,f+2.2f,.402f,.032f,.4f,drS,false);
  extinguisher(m,1.f,5.4f,f+.6f,drE);
  kit::prop(m,model::mine_hard_hat,3.9f,6.4f,f,.279f,.351f,.153f,.4f);kit::prop(m,model::item_dosimeter,6.2f,14.55f,f+.51f,1.1f);
- wallSign(m,12.f,14.89f,f+2.6f,"BADGE AT THE READER","ONE AT A TIME / DOSIMETER ON THE OUTSIDE OF THE SUIT",2.6f,drN);
+ wallSign(m,12.f,14.89f,f+2.6f,"BADGE IN","ONE AT A TIME / DOSIMETERS WORN OUTSIDE",2.6f,drN);
  // --- The booth: his window on the hall --------------------------------------------------------
  drCounter(m,21.8f,7.f,22.9f,12.2f,f);
  for(float y:{7.8f,9.5f,11.2f})kit::prop(m,model::cctv_tv,22.4f,y,f+.9f,drW);
@@ -1336,7 +1336,7 @@ std::shared_ptr<const Map> makeDeepAccessControl(){
  zone(m,"DEEP ACCESS CONTROL / READY ROOM",15.2f,13.1f,23.f,23.f);
  zone(m,"DEEP ACCESS CONTROL / BLAST DOOR",9.f,15.2f,15.f,24.f);
  zone(m,"DEEP ACCESS CONTROL",0,0,24,24,-1000,1000,LabAir);
- wallSign(m,1.04f,14.5f,f+2.25f,"ENGINEERING","SERVICE ACCESS / RETURN VIA THIS DOOR",1.35f,drE);
+ wallSign(m,1.04f,14.5f,f+2.25f,"ENGINEERING","STAFF ONLY",1.35f,drE);
  return p;
 }
 
@@ -1505,7 +1505,7 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  wall(m,9.f,20.8f,15.f,21.3f,f+2.65f,f+3.9f,15);                                                // the header
  wall(m,9.f,20.78f,15.f,20.8f,f+2.65f,f+2.8f,13);wall(m,8.94f,20.74f,15.06f,21.3f,f+3.9f,f+4.02f,7);
  for(float x:{9.f,14.92f})wall(m,x,20.78f,x+.08f,20.8f,f,f+2.65f,13);
- wallSign(m,12.f,20.74f,f+3.05f,"NO LAMP, NO ENTRY","TALLY IN / TALLY OUT / BY ORDER OF THE MINE MANAGER",3.6f,drN);
+ wallSign(m,12.f,20.74f,f+3.05f,"MINE ENTRANCE","HARD HAT AND CAP LAMP REQUIRED",3.6f,drN);
  drFix(m,model::lab_pa_horn,13.9f,20.6f,f+3.3f,.495f,.564f,.433f,drN,false);
  for(float x:{10.03f,13.91f})wall(m,x,21.7f,x+.06f,23.4f,f,f+3.3f,32);                             // lagging
  wall(m,10.f,21.7f,14.f,23.4f,f+3.24f,f+3.3f,32);
@@ -1626,7 +1626,7 @@ std::shared_ptr<const Map> makeEngineering(int chunk){
   wall(m,x-.14f,1.f,x+.14f,10.5f,f,R,3);
   wall(m,x-.14f,18.3f,x+.14f,23.f,f,R,3);
  }
- wallSign(m,22.9f,16.1f,f+1.65f,service?"DEEP ACCESS CONTROL":"SERVICE SPINE","RETURN EAST",1.7f,drW);
+ wallSign(m,22.9f,16.1f,f+1.65f,service?"DEEP ACCESS CONTROL":"SERVICE SPINE","AUTHORISED STAFF ONLY",1.7f,drW);
  if(service){
   wallSign(m,1.1f,16.1f,f+1.65f,"FEED ISOLATION","WEST / ENGINEERING ONLY",1.95f,drE);
   drCounter(m,6.f,2.f,13.4f,3.05f,f);
@@ -1645,7 +1645,7 @@ std::shared_ptr<const Map> makeEngineering(int chunk){
     "SPARE DOSIMETERS ARE AT FEED ISOLATION. RETURN TO DEEP ACCESS CONTROL BY THIS PASSAGE.",0.f);
   zone(m,"ENGINEERING / PUMP BAY",4.2f,17.8f,19.8f,23.f);
  }else{
-  wallSign(m,5.1f,3.f,f+1.7f,"EXTRACTION BACKUP FEED","ISOLATE AT THE CORE BEFORE SERVICING",2.8f,drE);
+  wallSign(m,5.1f,3.f,f+1.7f,"BACKUP SUPPLY","ISOLATE BEFORE SERVICING",2.8f,drE);
   for(float x:{6.f,9.f,12.f,15.f,18.f}){
    drModel(m,model::pwr_switchgear_cabinet,x,4.f,f,drS,true);
    m.lights.push_back(drTube(x,6.f,R,.68f,5.5f,4700));

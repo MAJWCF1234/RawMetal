@@ -371,7 +371,7 @@ std::shared_ptr<const Map> makeSpecimenHandling(){
  m.stairs.push_back({10.f,6.f,11.6f,10.48f,fl,up,16,true,false});
  guardRail(m,8.f,5.9f,10.f,6.f,up);guardRail(m,11.6f,5.9f,17.f,6.f,up);guardRail(m,7.9f,1.f,8.f,6.f,up);
  guardRail(m,17.f,6.f,17.1f,15.f,up);guardRail(m,17.f,14.9f,23.f,15.f,up);guardRail(m,17.f,2.f,23.f,2.1f,up);
- wallSign(m,15.4f,1.06f,up+2.2f,"NO ONE UNDER A SUSPENDED LOAD","CRANE 2 WORKS THE WHOLE FLOOR",2.6f,cbS);
+ wallSign(m,15.4f,1.06f,up+2.2f,"OVERHEAD CRANE","DO NOT STAND UNDER SUSPENDED LOADS",2.6f,cbS);
  for(float x:{9.f,17.5f})m.lights.push_back(lamp({x,1.f},up+2.4f,.55f,6.f,3400,0,WorldLightMount::Wall,blS));
  terminal(m,{22.2f,4.2f},"CRANE 2 / LAST LIFTS","03:02 CAGE 7 LIFTED FOR TRANSFER TO THE THEATER. LOAD SWINGING. HELD AT 3.8 M.",
   "03:04 CAGE 7 DOOR OPEN AT HEIGHT. NOT FROM THIS CONSOLE. THE PADLOCK IS STILL ON IT.",up-fl);
@@ -1087,7 +1087,7 @@ std::shared_ptr<const Map> makeEmergencyContainment(){
  // --- The south door and the Emergency detail -----------------------------------------------------
  wall(m,8.6f,22.4f,10.f,23.f,f,roof,15);wall(m,14.f,22.4f,15.4f,23.f,f,roof,15);wall(m,10.f,22.4f,14.f,23.f,f+3.2f,roof,15);
  floorLine(m,9.f,21.5f,15.f,21.7f,f,13);
- wallSign(m,12.f,22.38f,f+3.35f,"BARRICADE DOWN","RAISED FROM THE CONTROL ROOM / EAST",3.f,cbN);
+ wallSign(m,12.f,22.38f,f+3.35f,"SOUTH BARRIER","OPERATED FROM THE CONTROL ROOM",3.f,cbN);
  for(auto [x,ph]:{std::pair{9.3f,0.f},{14.7f,.7f}})m.lights.push_back(cbBeacon({x,22.4f},f+2.9f,blN,ph,"cont_barricade"));
  {auto l=cbGlow({12.f,21.5f},f+3.5f,.6f,5.f,5000,{.2f,1.f,.3f});l.enabledState=stateId("cont_barricade");m.lights.push_back(l);}
  cbFix(m,model::lab_specimen_crate,20.6f,20.4f,f,.3f,true);
