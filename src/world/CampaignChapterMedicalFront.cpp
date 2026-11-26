@@ -723,7 +723,7 @@ std::shared_ptr<const Map> makeMedicalTriage(){
  floorLine(m,3.38f,9.03f,3.46f,10.44f,f,13);
  wall(m,1.7f,9.f,3.3f,9.3f,f+.98f,f+1.02f,20);for(float x:{1.85f,3.15f})wall(m,x-.02f,9.f,x+.02f,9.25f,f+.8f,f+.98f,20);
  mdFix(m,model::lab_id_scanner,1.4f,9.03f,f+1.1f,.3f,.06f,.41f,kPi,false);
- wallSign(m,2.5f,9.055f,f+2.5f,"WAIT TO BE BANDED","GREEN: BACK TO SHIFT / AMBER: SCREENING / RED: WARD C",1.9f,0);
+ wallSign(m,2.5f,9.055f,f+2.5f,"TRIAGE","PLEASE WAIT TO BE CALLED",1.9f,0);
  bench(m,2.4f,13.72f,f);
  mdFix(m,model::med_notice_board,2.4f,13.965f,f+1.2f,1.2f,.07f,.9f,mdN,false);
  for(auto [x,y,yaw]:{std::tuple{1.8f,13.6f,.4f},{3.f,13.75f,2.1f}})kit::prop(m,model::mine_hard_hat,x,y,f,.28f,.35f,.15f,yaw);
@@ -1276,7 +1276,7 @@ std::shared_ptr<const Map> makeMedicalImaging(){
  mdFix(m,model::lab_test_chamber,2.5f,22.25f,f+1.28f,1.14f,.68f,.64f,0,false);                              // the detector over the bed
  for(float x:{2.1f,2.9f})m.pipes.push_back({{x,22.25f},{x,22.25f},f+1.92f,.03f,f+2.28f,6});
  wall(m,2.45f,20.75f,2.75f,21.05f,f+2.22f,f+2.28f,20);
- wallSign(m,1.6f,19.6f,f+1.45f,"COUNT IN PROGRESS","DOOR SHUT / NO METAL IN THE CHAMBER",1.f,kPi);
+ wallSign(m,1.6f,19.6f,f+1.45f,"BODY COUNTER","NO METAL IN THE CHAMBER",1.f,kPi);
  for(float x:{1.55f,2.65f})mdFix(m,model::pwr_switchgear_cabinet,x,15.485f,f,1.05f,.57f,1.89f,0,true);   // the analyser racks
  mdFix(m,model::pwr_ammeter_box,3.3f,15.25f,f+1.3f,.23f,.1f,.37f,0,false);
  m.pipes.push_back({{1.6f,15.45f},{1.6f,15.45f},f+1.89f,.03f,f+2.7f,8});m.pipes.push_back({{1.6f,15.45f},{1.6f,19.9f},f+2.7f,.03f,-999,8});
@@ -1575,7 +1575,7 @@ std::shared_ptr<const Map> makeMedicalPharmacy(){
  wall(m,3.5f,3.45f,3.6f,3.55f,f+2.55f,roof,20);wall(m,4.6f,3.45f,4.9f,3.55f,f+2.55f,roof,20);
  // The time lock says what it is doing: its plate over the leaf, and on the post a signal pair,
  // red held, red winking while the delay runs, green when the bolts draw.
- m.signs.push_back({{4.1f,3.612f},f+2.59f,.96f,.37f,0,"TIME LOCK","KEY THE PAD / RELEASES IN 20 S"});
+ m.signs.push_back({{4.1f,3.612f},f+2.59f,.96f,.37f,0,"TIME LOCK","20 SECOND DELAY"});
  {auto& s=m.signs.back();s.style=2;s.accent=0xffb23a2eu;}
  {const StateId keyed=stateId("medf_cage_keyed"),running=stateId("medf_cage_running"),open=stateId("medf_cage_open");
   // Two housings one over the other, clear of each other (they were set 28 cm apart, each 57 cm tall, one

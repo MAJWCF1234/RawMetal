@@ -233,7 +233,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  wall(m,15.2f,1.f,21.8f,1.12f,G+.85f,G+2.45f,20);
  for(float y:{G+1.25f,G+1.9f})wall(m,15.5f,1.12f,21.5f,1.135f,y,y+.04f,14);
  for(float x:{16.f,18.5f,21.f})wall(m,x,1.12f,x+.04f,1.135f,G+1.25f,G+1.94f,14);
- wallSign(m,18.5f,1.175f,G+1.95f,"COOLING WATER","TOWER 2 BASIN: LIVE / RECIRC P-11 TO P-14: TRIPPED",3.6f,0);
+ wallSign(m,18.5f,1.175f,G+1.95f,"COOLING WATER","TOWER 2 BASIN / RECIRC P-11 TO P-14",3.6f,0);
  wall(m,16.05f,1.12f,16.35f,1.16f,G+1.55f,G+1.75f,25);wall(m,20.65f,1.12f,20.95f,1.16f,G+1.55f,G+1.75f,20);
  m.lights.push_back(watSwitched(watWall({16.2f,1.12f},G+1.68f,kPi*.5f,1.1f,3.f,1200,-.4f),watIsolated,true,.15f));
  m.lights.push_back(watSwitched(watWall({20.8f,1.12f},G+1.68f,kPi*.5f,1.1f,3.f,5200,.7f),watIsolated,false));
@@ -281,7 +281,7 @@ std::shared_ptr<const Map> makeWaterTreatment(){
  watRiser(m,{16.4f,17.6f},F,F+1.05f,.1f,5);
  m.structures.push_back({15.6f,17.45f,16.5f,17.75f,F,F+1.16f,false,6});
  watLiveWater(m,12.6f,15.5f,15.5f,18.4f,rsurf,30.f,.3f);
- board(m,12.f,14.6f,F+1.3f,"RESERVOIR 2","P-7 STOPPED / STILL ENERGIZED / KEEP OFF THE RAIL",3.4f);
+ board(m,12.f,14.6f,F+1.3f,"RESERVOIR 2","PUMP P-7 / KEEP OFF THE RAIL",3.4f);
  terminal(m,{17.4f,16.4f},"RESERVOIR 2 / P-7 LOCAL","P-7 STOPPED. MOTOR STILL ENERGIZED FROM MCC-2.","WATER ROUND IT SHIMMERS. HAIR STANDS UP. DO NOT LEAN ON THE RAIL.");
  m.terminals.back().yaw=kPi*.5f;
  watHum(m,"wat_reservoir_hum_ms",11.f,14.f,17.f,20.f,F-1.f,F+3.f,.45f);
@@ -400,7 +400,7 @@ std::shared_ptr<const Map> makeDrainageGallery(){
  m.lights.push_back(watSwitched(lamp({p4.x+.9f,p4.y-.7f},asurf+.08f,1.3f,5.f,12000,-.05f,WorldLightMount::Bare),watIsolated,true,.4f));
  // The fitter who went in to clear the screen: lockout tag in the water.
  watBody(m,"wat_culvert_fitter",{17.5f,15.3f},-25.45f,-kPi*.5f);
- wallSign(m,18.055f,15.6f,aroof+.06f,"CULVERT 2","LIVE / P-4 ON MCC-2 / DO NOT WADE",2.6f,kPi*.5f);
+ wallSign(m,18.055f,15.6f,aroof+.06f,"CULVERT 2","PUMP P-4 / NO WADING",2.6f,kPi*.5f);
  // --- The landing (east, from Water Treatment) ------------------------------------
  terminal(m,{22.2f,19.3f},"DRAINAGE / P-4 LOCAL","P-4 TRIPPED 01:52. MOTOR STILL FED FROM MCC-2.","CULVERT 2 IS LIVE. WALK THE OVERFLOW. MCC-2 IS AT THE SUMP WORKS.");
  m.fixtures.push_back({model::pwr_control_cabinet,{18.45f,12.25f},0,.8f,.4f,1.6f,kPi,true});
@@ -738,7 +738,7 @@ std::shared_ptr<const Map> makeCoolingTowersBasin(){
  for(float y=10.f;y<19.4f;y+=4.f)m.pipes.push_back({{14.f,y},{14.f,y},fillT,.05f,-18.8f,6});
  terminal(m,{14.2f,7.3f},"TOWER 2 / RECIRC P-11 TO P-14","TRIPPED 01:52. RESET 02:58. RESET 02:59. RESET 03:00.","RESET REFUSED: FEEDER FAULT ON MCC-2. NO FURTHER INPUT.");
  m.terminals.back().yaw=.001f;
- board(m,17.6f,8.2f,F+1.f,"BASIN CROSSING","LIVE / RECIRC STILL ENERGIZED / ISOLATE MCC-2, SUMP WORKS",2.8f);
+ board(m,17.6f,8.2f,F+1.f,"BASIN CROSSING","ISOLATE AT MCC-2 (SUMP WORKS) BEFORE CROSSING",2.8f);
  // Biocide dosing in the north-east of the apron.
  {float s=.7f;m.fixtures.push_back({model::tank_system,{19.7f,6.f},0,1.58f*s,1.62f*s,2.3f*s,0,true});}
  for(Vec2 d:{Vec2{20.4f,7.6f},Vec2{19.6f,7.7f}})m.fixtures.push_back({model::drum,d,0,.6f,.6f,.86f,0,true});
@@ -925,7 +925,7 @@ std::shared_ptr<const Map> makeHeatExchange(){
  wall(m,.8f,5.8f,1.f,10.2f,F+2.8f,F+3.f,12);
  wall(m,5.f,6.95f,5.2f,10.2f,F,R,15);wall(m,1.f,10.f,5.2f,10.2f,F,R,15);
  floorLine(m,1.f,7.9f,5.f,8.1f,F,14);
- wallSign(m,5.f-.055f,8.6f,F+1.35f,"GASKETS LIFTING","E-301 / E-304 / E-305 / STEAM RELEASE",2.4f,-kPi*.5f);
+ wallSign(m,5.f-.055f,8.6f,F+1.35f,"DANGER / HOT STEAM","EXCHANGERS E-301 TO E-305",2.4f,-kPi*.5f);
  terminal(m,{2.4f,5.75f},"HEAT EXCHANGE / ROUNDS","LOOP 02:10 88 C. 02:40 91 C. 03:05 96 C. REACTOR SCRAMMED 01:47.","NOTHING IS HEATING THIS LOOP. IT IS STILL CLIMBING.");m.terminals.back().readable=Readable::Note;
  m.terminals.back().yaw=.001f;
  // The bank that stood here had its doors a hand's breadth off the south wall;

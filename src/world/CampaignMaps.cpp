@@ -550,7 +550,7 @@ std::shared_ptr<const Map> makeReactorComplex(){
  for(auto b:{std::pair{8,2},{14,3},{21,7}})L(0).rows[b.second][b.first]='B';
  hazard(m,Hazard::Kind::Toxic,20.2f,1.2f,22.8f,4.f,lower-1,lower+1.2f,6);
  floorLine(m,20.f,4.f,23.f,4.15f,lower,13);floorLine(m,20.f,1.f,20.15f,4.15f,lower,13);
- wallSign(m,22.945f,5.2f,lower+1.8f,"DANGER","COOLANT LEAK / DO NOT ENTER",1.6f,-kPi*.5f);
+ wallSign(m,22.945f,5.2f,lower+1.8f,"DANGER","COOLANT PLANT / DO NOT ENTER",1.6f,-kPi*.5f);
 
  // --- 11A UPPER MANIFOLD (-6 m) ---------------------------------------------
  wall(m,1,15.85f,5,16,upper,-3.3f,3);wall(m,6.5f,15.85f,9,16,upper,-3.3f,3);wall(m,5,15.85f,6.5f,16,-3.9f,-3.3f,3);
@@ -1506,7 +1506,7 @@ std::shared_ptr<const Map> makeFreightAccess(){
  wall(m,20.6f,6.f,22.6f,10.f,floor,floor+.03f,8);
  floorLine(m,20.6f,5.85f,22.6f,6.f,floor+.03f,13);floorLine(m,20.6f,10.f,22.6f,10.15f,floor+.03f,13);
  for(float y:{6.3f,9.7f})wall(m,22.45f,y-.2f,22.6f,y+.2f,floor+.4f,floor+.9f,8);
- wallSign(m,22.795f,8.f,roof-.55f,"DOCK 01","TRAILER BAY / SHUTTER LOCKED OUT",1.8f,-kPi*.5f);
+ wallSign(m,22.795f,8.f,roof-.55f,"DOCK 01","TRAILER BAY / KEEP CLEAR",1.8f,-kPi*.5f);
  // Staged loads on the apron, a hand cart and a pallet jack lane.
  cargo(m,18.5f,6.5f,floor);cargo(m,18.5f,8.f,floor,false);cargo(m,17.f,6.5f,floor);
  handCart(m,15.5f,9.5f,floor);
@@ -1591,7 +1591,7 @@ std::shared_ptr<const Map> makeLiftMachinery(){
  // Car B lies wrecked at the pit bottom, its ropes coiled on top.
  wall(m,13.5f,9.5f,16.6f,14.5f,base,base+1.4f,11);wall(m,13.4f,9.4f,16.7f,14.6f,base+1.4f,base+1.6f,12);
  for(float y:{11.f,13.f})m.pipes.push_back({{14.f,y},{16.f,y},base+1.75f,.12f,base+1.75f,6});
- board(m,12.f,6.5f,base+1.2f,"SHAFTS A / B","OUT OF SERVICE / NO ENTRY TO PIT",2.6f);
+ board(m,12.f,6.5f,base+1.2f,"SHAFTS A / B","NO ENTRY TO PIT",2.6f);
  // Counterweights on their own guides along the pit's north and south walls.
  for(float x:{9.f,15.f})for(float y:{5.2f,18.8f}){wall(m,x-.5f,y-.3f,x+.5f,y+.3f,base,base+2.f,8);m.pipes.push_back({{x,y},{x,y},base+2.f,.03f,roof-.05f,6});}
  // --- East walk: the winding plant ---------------------------------------------------
@@ -1601,7 +1601,7 @@ std::shared_ptr<const Map> makeLiftMachinery(){
  // --- West walk: the auxiliary brake ------------------------------------------------
  terminal(m,{3.5f,17.5f},"AUXILIARY / BRAKE RELEASE","MAIN SHAFTS OUT OF SERVICE.","01: RELEASE AUXILIARY BRAKE.",13,stateId("freight_brake"));
  m.props.push_back({1,{3.5f,12},1.4f,1.f,0,{.45f,.65f},13});
- board(m,3.5f,15.f,walk+1.5f,"AUX BRAKE","RELEASE / THEN LOCAL CONTROL NEXT BAY",2.f);
+ board(m,3.5f,15.f,walk+1.5f,"AUX BRAKE","RELEASE BEFORE LOCAL CONTROL",2.f);
  // Mains out of the side walls along the walks.
  pipeRoute(m,{{1.05f,1.5f,walk+3.3f},{2.f,1.5f,walk+3.3f},{2.f,22.5f,walk+3.3f},{1.05f,22.5f,walk+3.3f}},.13f,1,roof);
  pipeRoute(m,{{1.05f,2.f,walk+2.5f},{2.4f,2.f,walk+2.5f},{2.4f,22.f,walk+2.5f},{1.05f,22.f,walk+2.5f}},.13f,3,roof);
@@ -1778,7 +1778,7 @@ std::shared_ptr<const Map> makeReceivingOverlook(){
  for(float bx:{x+.35f,x+2.45f})wall(m,bx,22.45f,bx+.2f,22.6f,base+.4f,base+.9f,8);
  wallLamp(m,x+1.5f,22.99f,base+4.f,-kPi*.5f,1.3f,7.f);
  }
- wallSign(m,12.f,22.945f,base+4.6f,"DOCKS 03 / 04","RECEIVING / TRAILERS HELD",2.f,kPi);
+ wallSign(m,12.f,22.945f,base+4.6f,"DOCKS 03 / 04","RECEIVING / NO PARKING",2.f,kPi);
  forklift(m,10.f,17.f,base);
  m.clutterSpawns.push_back({1,{5.5f,15.f},base});m.clutterSpawns.push_back({3,{9.f,20.f},base});
  m.pickupSpawns.push_back({{6.f,21.8f},PickupKind::Health,base});
@@ -1843,7 +1843,7 @@ std::shared_ptr<const Map> makeReceivingLanes(){
  m.fixtures.push_back({21,{14.f,12.6f},.26f,1.1f,1.05f,1.f,0,true});
  m.fixtures.push_back({22,{15.7f,14.2f},.1f,.78f,.49f,1.3f,kPi,true});
  m.fixtures.push_back({21,{13.4f,14.4f},.1f,.6f,.45f,.4f,.3f,true});
- board(m,14.6f,10.4f,base+2.7f,"INSPECTION HOLD","SEALED LOAD / ENERGY RESEARCH / NO ENTRY",3.2f);
+ board(m,14.6f,10.4f,base+2.7f,"INSPECTION HOLD","BONDED GOODS / NO ENTRY",3.2f);
  for(float y=11.3f;y<15.f;y+=.6f)floorLine(m,16.7f,y,17.f,y+.3f,base,13);
  // --- Overhead crane: runways on the north wall and bulkhead, bridge over the hold ---------
  wall(m,1.f,1.f,23.f,1.6f,-13.2f,-12.6f,12);wall(m,1.f,22.8f,23.f,23.4f,-13.2f,-12.6f,12);
@@ -2312,7 +2312,7 @@ std::shared_ptr<const Map> makeManifestOffices(){
  m.fixtures.push_back({35,{1.4f,23.2f},0,.35f,.35f,1.1f,0,true});
  m.fixtures.push_back({19,{4.2f,20.f},0,1.367f,.724f,.78f,0,true});
  for(float x:{3.7f,4.7f}){m.fixtures.push_back({18,{x,19.25f},0,.417f,.525f,.95f,kPi,true});m.fixtures.push_back({18,{x,20.75f},0,.417f,.525f,.95f,0,true});}
- wallSign(m,1.055f,20.f,f+1.6f,"STAFF NOTICES","SHIFT 02 / RADIO CHECK EVERY 30 MIN",1.4f,kPi*.5f);
+ wallSign(m,1.055f,20.f,f+1.6f,"STAFF NOTICES","RADIO CHECK EVERY 30 MIN",1.4f,kPi*.5f);
  // --- Copier corner, south-east ---------------------------------------------------------------
  for(float y:{19.6f,20.6f,21.6f})m.fixtures.push_back({31,{22.5f,y},0,.9f,.5f,.75f,-kPi*.5f,true});
  m.fixtures.push_back({37,{22.6f,23.f},0,.9f,.3f,1.8f,-kPi*.5f,true});
@@ -2353,7 +2353,7 @@ std::shared_ptr<const Map> makeManifestRouting(){
  for(float y:{6.4f,7.5f,8.6f}){m.fixtures.push_back({26,{10.75f,y},0,.55f,.55f,.95f,-kPi*.5f,true});m.fixtures.push_back({26,{12.85f,y},0,.55f,.55f,.95f,kPi*.5f,true});}
  m.fixtures.push_back({26,{11.8f,9.65f},0,.55f,.55f,.95f,0,true});
  for(Vec2 q:{Vec2{11.6f,6.6f},Vec2{12.f,8.4f}})kit::prop(m,38,(q).x,(q).y,m.layers.front().elevation+(.78f),.3f,.08f,.32f,.4f);
- wallSign(m,14.945f,7.5f,f+1.2f,"SHIFT 02 BRIEFING","DEPOT / PLATFORM 3 / DEEP FREIGHT / NO CHANGES",2.4f,-kPi*.5f);
+ wallSign(m,14.945f,7.5f,f+1.2f,"SHIFT BRIEFING","CHECK THE ROSTER BEFORE EVERY SHIFT",2.4f,-kPi*.5f);
  m.lights.push_back(lamp({11.8f,7.5f},ceil-.16f,.9f,6.f,4000));
  // --- Switch room, north-east -------------------------------------------------------------------
  officeWall(m,15.2f,3.4f,16.6f,3.6f,f,ceil);officeDoorway(m,16.6f,17.8f,3.4f,3.6f,f,ceil);officeWall(m,17.8f,3.4f,23.f,3.6f,f,ceil);

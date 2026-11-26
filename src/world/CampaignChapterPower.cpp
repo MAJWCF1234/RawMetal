@@ -300,7 +300,7 @@ std::shared_ptr<const Map> makeDistributionHub(){
  for(float y:{8.6f,14.3f}){floorLine(m,1.7f,y,9.6f,y+.1f,base,14);floorLine(m,14.4f,y,22.3f,y+.1f,base,14);}
  // --- The mimic board and its desk, west of the entry -------------------------------------------
  wall(m,1.f,1.f,8.6f,1.4f,base,base+3.f,2);
- wallSign(m,4.8f,1.455f,base+1.25f,"11 KV DISTRIBUTION","SUB A: DEAD    SWITCH HALL: DEAD    FEEDER 9: NO SUPPLY",7.f,0);
+ wallSign(m,4.8f,1.455f,base+1.25f,"11 KV DISTRIBUTION","SUB A / SWITCH HALL / FEEDER 9",7.f,0);
  for(float x:{2.6f,4.8f,7.f})m.fixtures.push_back({model::control_console,{x,2.4f},0,1.6f,.8f,1.1f,0,true});
  m.fixtures.push_back({model::office_chair,{4.8f,3.5f},0,.55f,.55f,.95f,kPi+.4f,true});
  terminal(m,{6.9f,3.6f},"DISTRIBUTION / SHIFT HANDOVER","00:58 T3 EARTH FAULT. SUB A ON T1/T2. 02:13 GRID LOST. ALL FEEDERS TRIPPED.","BLACK START: GENERATION FIRST, THEN SUB A BREAKERS, THEN LOAD CONTROL.");m.terminals.back().readable=Readable::Note;
@@ -628,7 +628,7 @@ std::shared_ptr<const Map> makeLoadControl(){
  wall(m,10.f,3.8f,14.f,4.1f,f+2.6f,roof,21);
  m.fixtures.push_back({model::water_cooler,{2.f,1.7f},0,.4f,.4f,1.2f,0,true});
  m.fixtures.push_back({model::file_cabinet_tall,{21.8f,1.6f},0,.5f,.6f,1.4f,kPi,true});
- wallSign(m,6.f,1.055f,f+1.3f,"CLOCK IN","SHIFT 2: HALE, OKAFOR, BRANDT / OUT: ---",2.f,0);
+ wallSign(m,6.f,1.055f,f+1.3f,"CLOCK STATION","CLOCK IN AND OUT EVERY SHIFT",2.f,0);
  // --- The mimic wall and the three transfer stations ---------------------------------------------
  wall(m,1.f,22.3f,23.f,23.f,f,f+2.9f,2);
  // The single-line diagram the desks face: the 11 kV bus across the top fed

@@ -369,7 +369,7 @@ std::shared_ptr<const Map> makeMaintenanceDistrict(){
  for(int i=0;i<6;++i){float x=7.6f-i*1.1f,y=12.2f+std::sin(i*1.7f)*.3f;floorLine(m,x-.5f,y,x+.4f,y+.12f,f,16);floorLine(m,x-.3f,y+.5f,x+.5f,y+.58f,f,16);}
  mntHangingBoard(m,3.f,14.6f,f+1.f,f,"HEADCOUNT","ALL B SHIFT TO CENTRAL STORES / BRING YOUR BADGE",2.4f,kPi*.5f);
  // East: the survivors' signs, a trolley and a chair left outside the aid station.
- wallSign(m,21.3f,8.255f,f+1.2f,"DON'T SHOOT","PEOPLE IN THE AID STATION / KNOCK",2.f,0);
+ wallSign(m,21.3f,8.255f,f+1.2f,"FIRST AID STATION","KNOCK FOR ATTENTION",2.f,0);
  mntFix(m,model::med_crash_cart,{21.6f,14.9f},f,.74f,.48f,1.f,.2f,true);
  mntFix(m,model::med_wheelchair,{19.6f,15.f},f,.55f,1.03f,.9f,2.6f,true);
  for(int i=0;i<3;++i)floorLine(m,17.f+i*1.7f,11.45f,17.9f+i*1.7f,11.6f,f,19);
@@ -481,7 +481,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  for(Vec2 h:{Vec2{20.96f,16.96f},Vec2{22.55f,20.56f},Vec2{21.2f,19.3f},Vec2{22.4f,15.6f}})kit::prop(m,model::mine_hard_hat,h.x,h.y,h.y>19.f&&h.y<20.f?f:(h.y<16.f?f:f+.51f),.28f,.35f,.15f,h.x*2.1f);
  for(float x:{20.4f,21.9f})wall(m,x-.25f,20.78f,x+.25f,20.86f,f+.55f,f+1.f,23);
  floorLine(m,20.1f,15.f,22.8f,15.12f,f,13);floorLine(m,20.1f,22.5f,22.8f,22.62f,f,13);
- mntSign(m,22.945f,18.8f,f+1.85f,"ASSEMBLY POINT B","FIRE / ROLL CALL / WAIT HERE TO BE COUNTED",2.4f,-kPi*.5f,mntGreen);
+ mntSign(m,22.945f,18.8f,f+1.85f,"FIRE ASSEMBLY POINT B","REPORT HERE FOR ROLL CALL",2.4f,-kPi*.5f,mntGreen);
  m.clutterSpawns.push_back({1,{21.8f,18.6f},f,.6f});m.clutterSpawns.push_back({1,{20.6f,21.9f},f,2.f});
  m.pickupSpawns.push_back({{22.3f,22.1f},PickupKind::Ammo,f});
  m.lights.push_back(lamp({21.4f,18.8f},f+3.1f,.75f,6.f,2700,0));
@@ -523,7 +523,7 @@ std::shared_ptr<const Map> makeCentralStores(){
  zone(m,"CENTRAL STORES / MEZZANINE",4,1,18,5,mz-.5f,1000);
  // --- Rack B, the bar store, against the west wall ---------------------------------------------
  mntBarRack(m,9.6f,17.1f,f,3);
- mntSign(m,1.055f,13.35f,f+3.55f,"RACK B","BAR STOCK / 20 - 80 MM / SIGN FOR EVERY CUT",3.2f,kPi*.5f);
+ mntSign(m,1.055f,13.35f,f+3.55f,"RACK B","BAR STOCK / 20 - 80 MM",3.2f,kPi*.5f);
  terminal(m,{3.7f,12.6f},"RACK B / BAR ISSUE","40 MM EN24, BAY 3: ONE LENGTH CUT TO 160 MM, TAGGED WO 7714.","E / SIGN IT OUT AND TAKE IT. LATHE 2 IS IN THE FABRICATION SHOP.",0,stateId("mnt_bar_stock"));
  m.terminals.back().yaw=kPi*.5f;
  mntTimer(m,"mnt_bar_stock","mnt_bar_stock_done",3000,3000);

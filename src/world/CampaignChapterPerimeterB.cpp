@@ -307,7 +307,7 @@ std::shared_ptr<const Map> makeRestrictedUtilities(){
  m.waterVolumes.push_back({14.4f,19.8f,18.8f,21.7f,base-.16f,base-.04f});
  hazard(m,Hazard::Kind::Anomaly,15.1f,20.3f,18.1f,21.2f,base-.5f,base+2.f,7);
  for(float x:{14.25f,18.85f})floorLine(m,x,19.6f,x+.15f,21.9f,base,13);floorLine(m,14.25f,19.6f,19.f,19.75f,base,13);
- board(m,16.6f,19.05f,base+1.15f,"CONDENSATE","STANDING WATER HUMS / KEEP OUT",2.4f);
+ board(m,16.6f,19.05f,base+1.15f,"CONDENSATE PIT","NO ENTRY / ELECTRICAL HAZARD",2.4f);
  m.lights.push_back(lamp({16.6f,20.75f},base+.35f,.7f,4.f,11000,-.05f,WorldLightMount::Bare));
  m.lights.back().flicker=.35f;
  cableTray(m,{12.6f,22.6f},{22.6f,22.6f},base+3.8f);
@@ -399,7 +399,7 @@ std::shared_ptr<const Map> makeResearchReceiving(){
  // A red hold beacon on R-114's end frame.
  wall(m,7.f,5.16f,7.2f,5.36f,base+2.8f,base+2.86f,19);
  // R-119: placard, seal, status readout; something knocks inside.
- pbSign(m,7.305f,8.71f,base+1.25f,"R-119 / LIVE / 74 KG","SEDATE ON ARRIVAL / DO NOT OPEN BELOW DECON",1.9f,pbE,pbRed);
+ pbSign(m,7.305f,8.71f,base+1.25f,"CONSIGNMENT R-119","HANDLE WITH CARE / DO NOT OPEN",1.9f,pbE,pbRed);
  pbFix(m,model::lab_status_display,7.28f,8.71f,base+2.15f,.69f,.06f,.2f,pbE+kPi,false);
  wall(m,7.25f,7.85f,7.32f,8.15f,base+1.05f,base+1.2f,19);
  // The fence: chain-link panels, one standing open as the gate, and the
@@ -761,7 +761,7 @@ std::shared_ptr<const Map> makeEnergyResearchForecourt(){
  wall(m,10.4f,10.4f,13.6f,13.6f,f,f+.9f,33);wall(m,10.7f,10.7f,13.3f,13.3f,f+.9f,f+1.05f,20);
  pbFix(m,model::lab_anomaly_relic,12.f,12.f,f+1.05f,1.5f,1.2f,1.2f,kPi*.25f,false);
  wall(m,10.4f,13.6f,13.6f,13.66f,f+.25f,f+.75f,20);
- pbSign(m,12.f,13.715f,f+.2f,"THE FIRST SAMPLE","RECOVERED 1979 / LEVEL 11 / THE REASON WE ARE HERE",3.f,pbS,pbAmber);
+ pbSign(m,12.f,13.715f,f+.2f,"SPECIMEN 001","PLEASE DO NOT TOUCH THE CASE",3.f,pbS,pbAmber);
  m.signs.back().height=.5f;
  for(Vec2 l:{Vec2{12.f,10.f},Vec2{12.f,14.f}})m.lights.push_back(lamp(l,f+.35f,1.4f,5.f,6500,.1f,WorldLightMount::Bare));
  m.lights.push_back(lamp({12.f,12.f},roof-1.5f,6.f,24.f,5600,0));

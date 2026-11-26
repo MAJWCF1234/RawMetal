@@ -161,7 +161,7 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  m.terminals.back().yaw=anW;
  taped(m,{10.01f,4.6f},f+1.5f,anE,Readable::Note,"SEAL / 01:59","WE SEALED OURSELVES IN WITH IT. THAT IS THE PROTOCOL. THE PROTOCOL WAS WRITTEN IN 1981.",
   "IF THE BOOTH LAMP GOES RED AGAIN, DO NOT RELEASE. GO OUT THROUGH THE RING. -K.");
- wallSign(m,12.f,3.3f,f+2.68f,"PRESSURE SEAL","SEALS WITH THE BOOTH / RELEASES FROM THIS SIDE",2.2f,anS);
+ wallSign(m,12.f,3.3f,f+2.68f,"PRESSURE DOOR","RELEASE ON THIS SIDE / KEEP CLEAR",2.2f,anS);
  m.lights.push_back(etBeacon({11.f,3.32f},f+2.95f,kPi*.5f,0,unsealed));
  {auto l=etWall({13.f,3.32f},f+2.95f,kPi*.5f,.3f,4.f,4000,0,etGreen);l.enabledState=unsealed;m.lights.push_back(l);}
  // the release lands: the seal's dogs let go with a bang through the passage, and the booth answers
@@ -265,7 +265,7 @@ std::shared_ptr<const Map> makeResonanceLaboratory(){
  kit::prop(m,model::item_id_card,13.4f,13.6f,f,.132f,.085f,.002f,1.1f);
  taped(m,{10.3f,14.29f},f+.62f,anN,Readable::Note,"SITTING 212 / 01:40","VOLUNTEER IN THE CHAIR, R-01 ON THE PLINTH, LAMPS STEADY. 01:52 HE SAID IT WAS WARM. 01:57 HE SAID IT HAD TURNED ROUND.",
   "01:58 BOOTH ALARM. WE SEALED THE PASSAGE, THEN THE BOOTH. NOBODY ASKED WHICH SIDE OF THE GLASS HE WAS ON.");
- wallSign(m,13.8f,14.5f,f+2.6f,"NO MOVING LIGHT","LAMPS STEADY WHILE A SAMPLE IS ON THE PLINTH",1.8f,anS);
+ wallSign(m,13.8f,14.5f,f+2.6f,"NO FLASH OR TORCHES","TEST AREA / AUTHORISED STAFF ONLY",1.8f,anS);
  // the recording desk east of the booth, its operators facing the glass
  etCounter(m,16.f,10.f,16.7f,14.f,f);
  kit::prop(m,model::crt_monitor,16.3f,10.9f,f+.9f,.42f,.4f,.38f,anE);kit::prop(m,model::keyboard,16.58f,10.9f,f+.9f,.45f,.16f,.03f,anE);
@@ -418,7 +418,7 @@ std::shared_ptr<const Map> makeHighEnergyTestBay(){
  anModel(m,model::mine_portable_generator,19.6f,21.9f,g,.3f,true);
  anFix(m,model::pwr_cable_bundle,20.f,15.f,g,4.f,.14f,.22f,kPi*.5f,false);
  extinguisher(m,23.f,14.5f,g,anW);                                                             // on the wall south of the seam (9-14 is open)
- wallSign(m,22.94f,15.6f,g+2.2f,"HIGH VOLTAGE","STAY OFF THE BAY FLOOR WHILE THE TOWERS ARE UP",2.4f,anW);
+ wallSign(m,22.94f,15.6f,g+2.2f,"HIGH VOLTAGE","KEEP OFF THE TEST FLOOR WHEN ENERGISED",2.4f,anW);
  for(float y:{16.6f,19.f})m.lights.push_back(etWall({22.98f,y},g+2.8f,kPi,.6f,7.f,3400));
  // --- The south gallery: the shot crew's lockers and suits --------------------------------------
  etSuitRail(m,1.6f,6.f,23.f,g,-kPi*.5f,4);
@@ -870,7 +870,7 @@ std::shared_ptr<const Map> makeExperimentalPower(){
   m.lights.push_back(etArcLight({x,21.6f},f+1.f,.6f,5.f,2.3f,.35f,.3f));
   etArc(m,x-.9f,21.25f,x+.9f,22.2f,f,f+2.6f,30,2.3f,.35f,.2f);
   m.lights.push_back(lamp({x,21.7f},f+3.9f,.5f,4.f,2600,0,WorldLightMount::Bare,0,false,{1.f,.6f,.25f}));m.lights.back().flicker=.6f;}   // what is still burning in it
- wallSign(m,12.f,22.26f,f+4.6f,"11 KV PLANT BUS","BANKS LIVE. FEED NOT ISOLATED",2.2f,anN);
+ wallSign(m,12.f,22.26f,f+4.6f,"11 KV PLANT BUS","DANGER / LIVE CONDUCTORS",2.2f,anN);
  // the wall's own light: floods on the frame head looking down the banks
  for(float x:{4.f,8.6f,15.6f,20.2f}){anFix(m,model::mine_cage_lamp,x,22.1f,f+9.4f,.21f,.2f,.36f,0,false);
   m.lights.push_back(lamp({x,21.97f},f+9.58f,.9f,10.f,3600,0,WorldLightMount::Bare));}   // its bulb at the cage's face (it glowed 40 cm under and in front of it)
@@ -883,7 +883,7 @@ std::shared_ptr<const Map> makeExperimentalPower(){
  etArc(m,18.4f,1.4f,22.6f,5.8f,f-.2f,f+1.2f,25,4.6f,.9f,.5f);
  anHum(m,"et_power_pool_hum",18.f,1.f,23.f,6.4f,f,f+2.f,.6f);
  m.lights.push_back(etArcLight({20.5f,3.6f},f+.6f,.5f,5.f,4.6f,.9f,.5f));
- wallSign(m,22.94f,4.f,f+2.2f,"LIVE CONDUCTORS IN WATER","KEEP OUT OF THE POOL",2.f,anW);
+ wallSign(m,22.94f,4.f,f+2.2f,"COOLING POOL","NO ENTRY / ELECTRICAL HAZARD",2.f,anW);
  // --- Stock under the landing (northwest): reels, pallets -----------------------------------------
  anFix(m,model::cable_reel,2.f,2.6f,f,1.f,2.f,2.f,0,true);anFix(m,model::cable_reel,4.4f,2.6f,f,1.f,2.f,2.f,0,true);
  anFix(m,model::pallet,3.2f,5.f,f,1.2f,1.15f,.16f,0,true);anModel(m,model::lab_specimen_crate,3.2f,5.f,f+.16f,.3f,true,.8f);
@@ -1028,7 +1028,7 @@ std::shared_ptr<const Map> makeConversionLab(){
  etArc(m,3.2f,20.6f,12.2f,21.8f,f,f+2.2f,30,3.6f,.8f);m.hazards.back().enabledFlag=routed;m.hazards.back().invertFlag=true;
  {auto l=etArcLight({7.f,21.4f},f+2.4f,.7f,7.f,3.6f,.8f);l.enabledState=routed;l.invert=true;m.lights.push_back(l);}
  {auto l=etWall({2.7f,22.98f},f+3.2f,-kPi*.5f,.5f,7.f,4000,0,etGreen);l.enabledState=routed;m.lights.push_back(l);}        // the bank's healthy lamp, once it has somewhere to send it
- wallSign(m,13.4f,22.94f,f+2.4f,"OUTPUT BUS LIVE","KEEP BACK FROM THE BANK FACE",2.f,anN);
+ wallSign(m,13.4f,22.94f,f+2.4f,"CAPACITOR BANK","DANGER / STORED ENERGY / KEEP BACK",2.f,anN);
  taped(m,{14.4f,22.99f},f+1.5f,anN,Readable::Note,"BANK / 02:50","WE RAN THE COLUMNS DOWN AT 02:46. THE BANK KEPT SENDING. THE COLUMNS KEPT FILLING.",
   "WHATEVER IS IN THE CELLS DOES NOT WANT TO BE SWITCHED OFF. IT WILL GO WHERE IT IS ROUTED. ROUTE IT SOMEWHERE THAT HELPS.");
  for(auto [x,ph]:{std::pair{2.f,0.f},{16.f,.7f}})m.lights.push_back(etBeacon({x,22.98f},f+3.2f,-kPi*.5f,ph,routed));
