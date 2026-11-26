@@ -11,6 +11,7 @@
 #include "CampaignKit.h"
 #include "CampaignExport.h"
 #include "Primitives.h"
+#include "HunterPolicy.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -1606,6 +1607,8 @@ std::shared_ptr<const Map> makeExtractionInterface(){
  return p;
 }
 
+#include "CampaignEngineering.inc"
+
 std::shared_ptr<const Map> makeEngineering(int chunk){
  auto map=std::make_shared<Map>();auto& m=*map;
  m.name=CampaignMapNames[size_t(chunk)];m.definition=CampaignChunks[size_t(chunk)];
@@ -1644,6 +1647,7 @@ std::shared_ptr<const Map> makeEngineering(int chunk){
     "CORE ISOLATION DROPPED THE RESEARCH LOAD. LEFT THE EXTRACTION COOLANT ON THE BACKUP FEED.",
     "SPARE DOSIMETERS ARE AT FEED ISOLATION. RETURN TO DEEP ACCESS CONTROL BY THIS PASSAGE.",0.f);
   zone(m,"ENGINEERING / PUMP BAY",4.2f,17.8f,19.8f,23.f);
+  buildEngineeringDirector(m,f,R);
  }else{
   wallSign(m,5.1f,3.f,f+1.7f,"BACKUP SUPPLY","ISOLATE BEFORE SERVICING",2.8f,drE);
   for(float x:{6.f,9.f,12.f,15.f,18.f}){

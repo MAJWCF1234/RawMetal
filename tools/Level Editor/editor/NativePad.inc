@@ -115,6 +115,106 @@
     }
     const bool up = padRepeat(0, s.buttons & PadUp, dt), down = padRepeat(1, s.buttons & PadDown, dt);
     const bool leftPress = padRepeat(2, s.buttons & PadLeft, dt), rightPress = padRepeat(3, s.buttons & PadRight, dt);
+    if (aiManagerWindow && IsWindowVisible(aiManagerWindow) && GetForegroundWindow() == aiManagerWindow) {
+      if (aiChipField==-3&&IsWindowVisible(aiControl(AiTarget))) {
+        HWND combo=aiControl(AiTarget);
+        const int count=int(SendMessageW(combo,CB_GETCOUNT,0,0));
+        if(count>0&&(up||down||leftPress||rightPress)){
+          const int at=int(SendMessageW(combo,CB_GETCURSEL,0,0));
+          SendMessageW(combo,CB_SETCURSEL,std::clamp(at+(up||leftPress?-1:1),0,count-1),0);
+        }
+        if(pressed&PadA)SendMessageW(aiManagerWindow,WM_COMMAND,AiChipApply,0);
+        if(pressed&PadB){
+          aiChipLine=-1;ShowWindow(combo,SW_HIDE);ShowWindow(aiControl(AiChipApply),SW_HIDE);
+          SetFocus(aiControl(AiSteps));
+        }
+        return;
+      }
+      if (aiPadTyping) {
+        constexpr std::wstring_view alphabet = L" ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.'";
+        const int length = int(alphabet.size());
+        const int delta = (rightPress ? 1 : 0) - (leftPress ? 1 : 0) + (down ? 8 : 0) - (up ? 8 : 0);
+        aiPadCharacter = (aiPadCharacter + delta + length) % length;
+        const wchar_t letter = alphabet[size_t(aiPadCharacter)];
+        HWND edit = aiControl(aiPadTyping);
+        auto text = aiText(edit);
+        if ((pressed & PadA) && text.size() < 80) { text += letter; SetWindowTextW(edit, text.c_str()); }
+        if ((pressed & PadX) && !text.empty()) { text.pop_back(); SetWindowTextW(edit, text.c_str()); }
+        if (pressed & PadB) {
+          if (aiPadTyping == AiChipValue)
+            SendMessageW(aiManagerWindow, WM_COMMAND, AiChipApply, 0);
+          if (aiPadTyping == AiRuleTitle)
+            SendMessageW(aiManagerWindow, WM_COMMAND, MAKEWPARAM(AiRuleTitle, EN_KILLFOCUS), 0);
+          aiPadTyping = 0;
+          SetWindowTextW(aiControl(20), L"◀ ▶ Panels   ▲ ▼ Rows   Ⓐ Pick / snap   Ⓑ Back");
+        } else {
+          auto hint = std::wstring(L"Pick letter  [") + letter + L"]    Ⓐ Add    Ⓧ Delete    Ⓑ Done";
+          SetWindowTextW(aiControl(20), hint.c_str());
+        }
+        return;
+      }
+      if (aiHeldBlock >= 0) {
+        const int count = int(SendMessageW(aiControl(AiSteps), LB_GETCOUNT, 0, 0));
+        if (up || down) {
+          aiSnapRow = std::clamp(aiSnapRow + (down ? 1 : -1), 0, std::max(0, count - 1));
+          SendMessageW(aiControl(AiSteps), LB_SETCURSEL, aiSnapRow, 0);
+          InvalidateRect(aiControl(AiSteps), nullptr, TRUE);
+        }
+        if (pressed & PadA) aiDropBlock();
+        if (pressed & PadB) {
+          aiHeldBlock = aiSnapRow = -1;
+          InvalidateRect(aiControl(AiSteps), nullptr, TRUE);
+        }
+        return;
+      }
+      if (pressed & PadB) { aiManagerCommand(AiDone, 0); return; }
+      if (pressed & (PadLB | PadRB)) { aiManagerCommand(pressed & PadLB ? AiUndo : AiRedo, 0); return; }
+      constexpr int controls[] = {AiOwners, AiRules, AiRuleTitle, AiSteps, AiEntities, AiPalette, AiAddDirector,
+                                   AiAddRule, AiAddStep, AiEdit, AiRemoveStep, AiUndo, AiRedo,
+                                   AiSearch, AiName, AiRename, AiChipValue, AiChipApply, AiTest, AiLinkedDirector, AiDone};
+      const int count = int(std::size(controls));
+      if (leftPress || rightPress) do {
+        aiManagerFocus = (aiManagerFocus + (rightPress ? 1 : count - 1)) % count;
+      } while(!IsWindowVisible(aiControl(controls[aiManagerFocus])));
+      if (leftPress || rightPress || up || down || (pressed & PadA)) {
+        const int id = controls[aiManagerFocus];
+        HWND focus = aiControl(id);
+        SetFocus(focus);
+        aiShowFocus(id);
+        if (id <= AiPalette && (up || down)) {
+          const int rows = int(SendMessageW(focus, LB_GETCOUNT, 0, 0));
+          if (rows > 0) {
+            const int row = int(SendMessageW(focus, LB_GETCURSEL, 0, 0));
+            SendMessageW(focus, LB_SETCURSEL, std::clamp(row + (down ? 1 : -1), 0, rows - 1), 0);
+            SendMessageW(aiManagerWindow, WM_COMMAND, MAKEWPARAM(id, LBN_SELCHANGE), LPARAM(focus));
+          }
+        }
+        if ((pressed & PadA) && id == AiPalette) {
+          const int choice = aiListRecord(AiPalette);
+          if (choice <= -100) { aiToggleCategory(choice); return; }
+          aiHeldBlock = int(SendMessageW(focus, LB_GETCURSEL, 0, 0));
+          aiSnapRow = std::max(0, int(SendMessageW(aiControl(AiSteps), LB_GETCURSEL, 0, 0)));
+          SetFocus(aiControl(AiSteps));
+          InvalidateRect(aiControl(AiSteps), nullptr, TRUE);
+        } else if (pressed & PadA) {
+          if (id == AiSteps) {
+            aiBeginChip(aiPadChip);
+            aiPadChip ^= 1;
+            if (aiChipLine >= 0&&IsWindowVisible(aiControl(AiChipValue))) { aiPadTyping = AiChipValue; aiPadCharacter = 0; }
+          } else if (id == AiSearch || id == AiName || id == AiChipValue || id == AiRuleTitle) {
+            aiPadTyping = id;
+            aiPadCharacter = 0;
+          } else {
+            SendMessageW(aiManagerWindow, WM_COMMAND, MAKEWPARAM(id, id <= AiPalette ? LBN_DBLCLK : BN_CLICKED), LPARAM(focus));
+            if ((id == AiOwners || id == AiRules) && aiRenameLine >= 0) {
+              aiPadTyping = AiName;
+              aiPadCharacter = 0;
+            }
+          }
+        }
+      }
+      return;
+    }
     if (padMenuOpen) { padMenuStep(pressed, up, down, leftPress, rightPress); return; }
     if (padPanels) { padPanelStep(pressed, up, down, leftPress, rightPress); return; }
     // The map.

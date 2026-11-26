@@ -1,5 +1,33 @@
   // The window as it looks, to a .bmp (the inspector pictures in .build/interaction/).
-  void captureEditorWindow(const fs::path& file){
+  void captureEditorWindow(const fs::path& file, HWND popup = nullptr){
+    if (popup) {
+      RECT rect{};
+      GetClientRect(popup, &rect);
+      HDC screen = GetDC(popup), dc = CreateCompatibleDC(screen);
+      HBITMAP bitmap = CreateCompatibleBitmap(screen, rect.right, rect.bottom);
+      HGDIOBJ old = SelectObject(dc, bitmap);
+      const bool painted = PrintWindow(popup, dc, PW_CLIENTONLY | PW_RENDERFULLCONTENT) != FALSE;
+      SelectObject(dc, old);
+      BITMAPINFO info{};
+      info.bmiHeader = {sizeof(BITMAPINFOHEADER), rect.right, -rect.bottom, 1, 32};
+      std::vector<char> bits(size_t(rect.right) * size_t(rect.bottom) * 4);
+      const int rows = GetDIBits(dc, bitmap, 0, UINT(rect.bottom), bits.data(), &info, DIB_RGB_COLORS);
+      DeleteObject(bitmap);
+      DeleteDC(dc);
+      ReleaseDC(popup, screen);
+      if (!painted || rows != rect.bottom) throw std::runtime_error("Could not capture the manager");
+      fs::create_directories(file.parent_path());
+      std::ofstream out(file, std::ios::binary);
+      BITMAPFILEHEADER header{};
+      header.bfType = 0x4D42;
+      header.bfOffBits = sizeof(header) + sizeof(info.bmiHeader);
+      header.bfSize = header.bfOffBits + DWORD(bits.size());
+      out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+      out.write(reinterpret_cast<const char*>(&info.bmiHeader), sizeof(info.bmiHeader));
+      out.write(bits.data(), std::streamsize(bits.size()));
+      if (!out) throw std::runtime_error("Could not write the manager picture");
+      return;
+    }
     const bool shown=IsWindowVisible(window);if(!shown)ShowWindow(window,SW_SHOWNOACTIVATE);relayout();
     RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE|RDW_UPDATENOW|RDW_ALLCHILDREN);
     RECT r{};GetClientRect(window,&r);HDC screen=GetDC(window),dc=CreateCompatibleDC(screen);auto bitmap=CreateCompatibleBitmap(screen,r.right,r.bottom);auto old=SelectObject(dc,bitmap);

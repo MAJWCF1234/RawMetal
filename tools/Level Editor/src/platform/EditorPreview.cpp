@@ -190,6 +190,8 @@ int runEditorPreview(const EditorPreviewOptions& options){
  long long revision=-1;int selected=-1,attemptedMap=-1;bool playing=false,valid=false,haveEditCamera=false;
  // Play keeps the builder's view: the camera at the moment play began comes back on Escape.
  Player editCamera{};std::shared_ptr<CustomCampaign> current;std::string loadError;unsigned long long frame=0;
+ std::vector<std::tuple<unsigned long long, StateId, int>> scriptTrace;
+ unsigned long long traceSerial=0;
  // The control and status files: memory when the builder is this process,
  // else small files (renamed into place so a reader never sees half of one).
  auto put=[&](const std::filesystem::path& path,const std::string& text){
@@ -203,6 +205,8 @@ int runEditorPreview(const EditorPreviewOptions& options){
  const HWND host=options.parent?GetAncestor(options.parent,GA_ROOT):nullptr;
  auto report=[&](const std::string& state,const std::string& detail=""){
   std::ostringstream out;out<<state<<' '<<revision<<' '<<selected<<' '<<int(playing)<<' '<<frame<<'\n'<<detail;
+  if(state=="READY")for(const auto& [serial,event,action]:scriptTrace)
+   out<<"\nAI_TRACE "<<serial<<' '<<event<<' '<<action;
   put(options.status,out.str());
  };
  auto last=std::chrono::steady_clock::now(),lastReport=last,lastHover=last;
@@ -385,8 +389,13 @@ int runEditorPreview(const EditorPreviewOptions& options){
   // spot 1 starts a fresh run at the map's own start; spot 2 drops in at the plan pointer.
   if(play!=0&&valid&&!playing&&scene){
    editCamera=scene->player();haveEditCamera=true;
-   if(spot==1&&current){auto next=std::make_unique<Game>(current);wchar_t local[32768]{};DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);if(n>0&&n<32768)next->loadSettings(std::wstring(local)+L"\\RawMetal\\settings.ini");next->update({},1.f/60);scene=std::move(next);}
-   else if(spot==2&&std::isfinite(spotX)&&std::isfinite(spotY)){auto at=scene->player();at.pos.x=spotX;at.pos.y=spotY;at.z=spotZ;at.pitch=0;scene->restoreEditorCamera(at);}
+   if((spot==1||spot==3)&&current){auto next=std::make_unique<Game>(current);wchar_t local[32768]{};DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);if(n>0&&n<32768)next->loadSettings(std::wstring(local)+L"\\RawMetal\\settings.ini");if(spot==1)next->update({},1.f/60);scene=std::move(next);}
+   if((spot==2||spot==3)&&std::isfinite(spotX)&&std::isfinite(spotY)){auto at=scene->player();at.pos.x=spotX;at.pos.y=spotY;at.z=spotZ;at.pitch=0;scene->restoreEditorCamera(at);}
+   scriptTrace.clear();
+   scene->setScriptTrace([&](StateId event,int action){
+    if(scriptTrace.size()==64)scriptTrace.erase(scriptTrace.begin());
+    scriptTrace.emplace_back(++traceSerial,event,action);
+   });
   }
   if(playing&&!(play!=0&&valid)&&scene&&haveEditCamera){scene->restoreEditorCamera(editCamera);haveEditCamera=false;}
   playing=play!=0&&valid;

@@ -64,6 +64,13 @@ struct LabAccess {
  static std::string encodeSave(const Game& g){return g.encodeSave();}
  static std::string legacySaveText(Game& g,int version){return g.legacySaveText(version);}
  static std::shared_ptr<const CustomCampaign> campaignOf(const Game& g){return g.m_customCampaign;}
+ static int scriptState(const Game &game, StateId id) { return game.state(id); }
+ static bool scriptDoorLocked(const Game &game, const Door& door) { return game.doorLocked(door); }
+ static float scriptLampPower(const Game &game, const WorldLight& lamp) { return game.lampPower(lamp); }
+ static int useAuthoredTerminal(Game& game, int index) { return game.operateTerminal(index, 0); }
+ static void engineeringTorch(Game& game) {
+   game.giveQuestItem(Game::Flashlight);game.setState(stateId("flashlight_on"),1);
+ }
  // Why the player cannot go on to `next`: 0 he can; 1 the ground is more than a step up; 2 blocked by the world; 3 by a prop.
  static int moveBlock(const Game& g,Vec2 next){const auto& p=g.m_player;float feet=p.z;const float ground=g.groundHeight(next);if(ground>feet+.215f)return 1;if(ground>feet)feet=ground;
   if(!g.hullFits(next,feet,p.hullHeight(),.2f,false,false))return 2;if(!g.hullFits(next,feet,p.hullHeight()))return 3;return 0;}

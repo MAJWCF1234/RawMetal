@@ -1,4 +1,5 @@
 #include "../../../core/FrameProfile.h"
+#include "../../../world/HunterPolicy.h"
 #include "../../Game.h"
 #include "../../CreatureAnimation.h"
 #include "../Perception.h"
@@ -508,6 +509,11 @@ void Game::updateEnemies(float dt){
   // Stalkers (the reactor's thing, the Snatcher) hunt by sight: stare, flank, rush, hide.
   const bool stalker=traits.rushSpeed>0;
   // Hurt past its threshold a recurring hunter only runs (Hunter.cpp).
+  if(e.hunter&&huntsPlayer&&m_player.health>=100.f&&flashlightOn()&&
+     lengthSq(m_player.pos-e.pos)<49.f&&std::fabs(m_player.z-e.z)<2.f&&
+     state(hunterLightRetreatState(e.hunter))&&e.stalkMode!=Enemy::StalkMode::Retreat){
+   e.stalkMode=Enemy::StalkMode::Retreat;e.stalkTimer=2.2f;e.hideSet=false;
+  }
   const bool huntedFlight=e.hunter&&e.stalkMode==Enemy::StalkMode::Retreat;bool fleeing=huntedFlight;
   // A summoned neutral runs from what fights all comers and from whoever hurt it (Summon.cpp).
   Vec2 fleeGoal{};float fleeZ=0;if(e.summon&&!fleeing)fleeing=summonFlight(e,fleeGoal,fleeZ,dt);

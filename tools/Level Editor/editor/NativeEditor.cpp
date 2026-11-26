@@ -795,7 +795,7 @@ enum {
   TurnList=2660,TurnFineBox,
   // The Multiplayer page and the Spawn tool (NativeMultiplayer.inc).
   MultiplayerTab=2670,SpawnTeamList,MpDeathmatch,MpCoop,MpMapList,MpPlayersList,MpFragList,MpTimeList,MpFriendlyFire,MpPlaceSpawns,
-  TriggerAllPlayers=2680
+  TriggerAllPlayers=2680, AiManager
 };
 // Every tool keeps its historical number (tests and saved habits use them).
 // shape: s select, t tile paint, R room, w window, c copy, v paste, a action,
@@ -1093,7 +1093,7 @@ struct Editor {
   float viewGrabX = 0, viewGrabY = 0;
   int viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
   std::vector<std::pair<size_t, std::string>> dragMates;
-  bool connectTest = false, caveTest = false, kitTest = false;
+  bool connectTest = false, caveTest = false, kitTest = false, aiManagerTest = false, aiEngineeringTest = false;
   bool backgroundTest = false, layoutTest = false, editingTest = false, funTest = false, skyTest = false, menuTest = false, outdoorTest = false, formatTest = false, finishTest = false, groundTest = false, soakTest = false, flooringTest = false, glazingTest = false, breachTest = false, growthTest = false, picturesTest = false, shapeTest = false, ghostTest = false, turnTest = false, nudgeTest = false, multiplayerTest = false, auditTest = false, padTest = false;
   int menuTestAction = 0; // 0 close, 1 play the full game from the editor
   bool menuShown = false;
@@ -1197,6 +1197,7 @@ struct Editor {
 #include "NativeMultiplayer.inc"           // the Multiplayer page and the Spawn tool
 #include "NativeMultiplayerRegression.inc" // --multiplayer-test
 #include "NativeAuditRegression.inc"       // --audit-test: the 2026-11-20 audit as checks
+#include "NativeAiManager.inc"
 #include "NativePad.inc"                   // the Xbox-style controller drives the whole Builder
 #include "NativePadRegression.inc"         // --pad-test
   // Furniture dropped near a wall backs onto it and faces the room.
@@ -5115,6 +5116,13 @@ struct Editor {
     refreshGhost();
   }
   bool shortcut(const MSG &msg) {
+    if (aiManagerWindow && (msg.hwnd == aiManagerWindow || IsChild(aiManagerWindow, msg.hwnd))) {
+      if (msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE) {
+        ShowWindow(aiManagerWindow, SW_HIDE);
+        return true;
+      }
+      return IsDialogMessageW(aiManagerWindow, const_cast<MSG *>(&msg)) != FALSE;
+    }
     // Keys typed in the Sign designer belong to it (Tab moves between its boxes), except F5 play.
     if (signDesigner && (msg.hwnd == signDesigner || IsChild(signDesigner, msg.hwnd)) &&
         !(msg.message == WM_KEYDOWN && (msg.wParam == VK_F5 || (msg.wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000)))))
@@ -5961,6 +5969,8 @@ struct Editor {
       ShowWindow(GetDlgItem(window, FilmMaker), SW_SHOW);
       y += 42;
     }
+    placeControl(GetDlgItem(window, AiManager), rx, y, 312, 30, TRUE);
+    y += 36;
     if (tool == 23)
       row(groundList, L"Ground");
     if (tool == 26)
@@ -7928,7 +7938,9 @@ struct Editor {
     auto file = session / (L"campaign-" + std::to_wstring(entry.chunk) + L".rmc");
     std::error_code ec;
     fs::remove(file, ec);
-    if (runCampaignEngine(L"--export-rmc=" + std::to_wstring(entry.chunk) + L" --out=\"" + file.wstring() + L"\"") != 0 ||
+    const std::wstring dev = entry.sealed && (aiEngineeringTest || !retro::admin::unlocked().empty()) ?
+      L" --dev-campaign" : L"";
+    if (runCampaignEngine(L"--export-rmc=" + std::to_wstring(entry.chunk) + L" --out=\"" + file.wstring() + L"\"" + dev) != 0 ||
         !fs::exists(file, ec)) {
       std::ifstream in(session / L"export-rmc.txt");
       why = L"The game could not export that level. " + wide(std::string(std::istreambuf_iterator<char>(in), {}));
@@ -10910,6 +10922,9 @@ static LRESULT CALLBACK mainProc(HWND h, UINT m, WPARAM w, LPARAM l) {
       case FilmMaker:
         e->openFilmmaker();
         break;
+      case AiManager:
+        e->openAiManager();
+        break;
       case SoundToggle: {
         sfx::muted = !sfx::muted;
         auto flag = e->root / L".build" / L"editor-sound-muted";
@@ -11085,6 +11100,10 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
           edperf::on = e.perfTest = true;
         if (a == L"--perf-baseline")
           edperf::baseline = NativeDocument::scanOnly = true;
+        if (a == L"--ai-manager-test")
+          e.backgroundTest = e.aiManagerTest = true;
+        if (a == L"--ai-engineering-test")
+          e.backgroundTest = e.aiManagerTest = e.aiEngineeringTest = true;
       }
       if (args)
         LocalFree(args);
@@ -11794,6 +11813,7 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     e.button(L"Write film list", FilmWrite);
     e.button(L"\u25B6 Render films", FilmRender);
     e.button(L"\u2707 Raw Metal Filmmaker...", FilmMaker);
+    e.button(L"AI && Entity Manager", AiManager);
     e.button(L"↺ Start fresh", StartFresh);
     for (int i = 0; i < 3; ++i)
       e.ideaButtons.push_back(e.button(L"", IdeaBase + i));
@@ -11957,6 +11977,27 @@ static int editorSession(HINSTANCE instance, const EditorDoor *door,
     if (e.multiplayerTest) { // NativeMultiplayerRegression.inc, with pictures
       int code = 0;
       try { e.verifyMultiplayer(true); } catch (const std::exception &error) { std::ofstream(e.root / L"native-editor-multiplayer-test.txt", std::ios::app) << "FAIL: " << error.what() << '\n'; code = 1; }
+      e.dirty = false;
+      DestroyWindow(e.window);
+      return code;
+    }
+    if (e.aiManagerTest) {
+      const auto folder = fs::current_path() / L".build" / L"ai-manager-proof";
+      fs::create_directories(folder);
+      std::ofstream report(folder / (e.aiEngineeringTest ? L"engineering-editor-test.txt" : L"editor-test.txt"));
+      int code = 0;
+      try {
+        if(e.aiEngineeringTest){
+          e.verifyEngineeringManager(folder);
+          report << "PASS: map 180 campaign import, named Director and five real rule groups\n";
+        }else{
+          e.verifyAiManager(folder);
+          report << "PASS: popup, Director, snapped blocks, map round trip, Undo and Redo\n";
+        }
+      } catch (const std::exception &error) {
+        report << "FAIL: " << error.what() << '\n';
+        code = 1;
+      }
       e.dirty = false;
       DestroyWindow(e.window);
       return code;
