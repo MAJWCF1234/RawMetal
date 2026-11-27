@@ -14,7 +14,7 @@
 #include <chrono>
 namespace retro {
 namespace {
-enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5, Authored=6, Scrape=7, Roll=8 };
+enum class AmbientKind : std::uint64_t { Wings=1, Machine=2, Water=3, Fire=4, Anomaly=5, Authored=6, Scrape=7, Roll=8, Skinbot=9 };
 // Loops that crossfade their tail into their head (no click on wrap).
 // Area score: the loop for each MusicCue after Default (Freight keeps its
 // original track and resource; the rest follow the zone sounds in order, and
@@ -67,7 +67,7 @@ void shapeAlertLoop(std::vector<int16_t>& pcm){
 }
 // The bank's beds (SoundBank.h): loops a map places.
 bool bankLoop(Sound sound){return sound>=Sound::AmbVent&&sound<=Sound::AmbMetalTapping;}
-bool seamlessLoop(Sound sound){return sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::MusicAlert||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum)||bankLoop(sound);}
+bool seamlessLoop(Sound sound){return sound==Sound::SkinbotMotor||sound==Sound::Machine||sound==Sound::LiftMotor||sound==Sound::ReactorMusic||areaCue(sound)>0||sound==Sound::MusicAlert||sound==Sound::WaterReturn||(sound>=Sound::ZoneWind&&sound<=Sound::AnomalyHum)||bankLoop(sound);}
 // Open-zone sounds live in the library resources from 720, in enum order.
 constexpr int ZoneSoundResource=720;
 constexpr int AreaTitleResource=2125;
@@ -78,6 +78,7 @@ constexpr int DetectionSoundResource=2180;
 // A torn lead's arc: ROT Horror Audio Bundle, electric_shock_mx_1, +5 dB, trimmed to 2.7 s.
 constexpr int LeadArcResource=2347;
 constexpr int WaterSplashResource=248;
+constexpr int SkinbotSoundResource=3401;
 constexpr int MacSoundResource=3346;   // the MAC-11 and spent-case block (Sound::MacShot on)
 // The sound bank (SoundBank.h): Horror SFX by YourPalRob, purchased; tools/audio/import_horror_sfx.py.
 constexpr int BankSoundResource=2370;
@@ -133,6 +134,7 @@ void AudioEngine::configureMask(MaskFilter& mask,int kind){
 }
 int soundResourceId(Sound sound){
  const auto i=size_t(sound);
+ if(i>=size_t(Sound::SkinbotBlade))return SkinbotSoundResource+int(i-size_t(Sound::SkinbotBlade));
  return i>=size_t(Sound::MacShot)?MacSoundResource+int(i-size_t(Sound::MacShot)):i==size_t(Sound::WaterSplash)?WaterSplashResource:i>=size_t(Sound::VoxTransformedDeath1)?VoxSoundResource+int(i-size_t(Sound::VoxTransformedDeath1)):i>=size_t(Sound::AmbVent)?BankSoundResource+int(i-size_t(Sound::AmbVent)):i==size_t(Sound::LeadArc)?LeadArcResource:i>=size_t(Sound::GlassShatter)?2255+int(i-size_t(Sound::GlassShatter)):i==size_t(Sound::MusicAlert)?AlertMusicResource:i>=size_t(Sound::DetectSting)?DetectionSoundResource+int(i-size_t(Sound::DetectSting)):i>=size_t(Sound::LockerLatch)?LockerSoundResource+int(i-size_t(Sound::LockerLatch)):i==size_t(Sound::AreaTitle)?AreaTitleResource:i>=size_t(Sound::ZoneWind)?ZoneSoundResource+int(i-size_t(Sound::ZoneWind)):i==size_t(Sound::FreightMusic)?271:i==size_t(Sound::WorkerDying)?283:i==size_t(Sound::Alarm)?396:i==size_t(Sound::AlarmDistant)?397:int(200+i);
 }
 AudioEngine::AudioEngine(bool device){
@@ -391,6 +393,22 @@ void AudioEngine::update(const Game& game,bool focused){
   if(lengthSq(pos-game.player().pos)>(radius+1.f)*(radius+1.f)){if(it!=m_voices.end())m_voices.erase(it);return;}
   if(it==m_voices.end()){play({sound,pos,gain,1,true,radius,z},emitter,true);}else{it->position=pos;it->gain=gain;it->z=z;it->radius=radius;}
  };
+ // Skinbot's loaded motors rise with travel, turns, and moving blades and spin down at rest.
+ const auto skinbotId=ambientEmitter(AmbientKind::Skinbot,game.level(),0);
+ const auto* walker=game.skinbotWalker();
+ std::erase_if(m_voices,[&](const auto& voice){return voice.sound==Sound::SkinbotMotor&&(!walker||voice.emitter!=skinbotId);});
+ if(walker){
+  const float pace=std::hypot(walker->velocityX,walker->velocityY);
+  const float effort=std::clamp(pace/skinbot::Walker::RushSpeed+.12f*walker->airborne()+.18f*std::fabs(walker->turning),0.f,1.f);
+  const float target=!walker->going?0.f:walker->curse.freeze>0?.018f:effort*.26f;
+  auto voice=std::find_if(m_voices.begin(),m_voices.end(),[&](const auto& v){return v.emitter==skinbotId;});
+  const float previous=voice==m_voices.end()?0.f:voice->gain;
+  const float gain=previous+(target-previous)*(1-std::exp(-dt*9.f));
+  if(gain>.012f){
+   loop(skinbotId,Sound::SkinbotMotor,{walker->x,walker->y},gain,walker->z+1.05f,18.f);
+   for(auto& v:m_voices)if(v.emitter==skinbotId)v.pitch=.96f+.10f*effort;
+  }else if(voice!=m_voices.end()&&target<.012f)m_voices.erase(voice);
+ }
  // The room answers: the reverb eases toward what the game measures or the map sets.
  {const auto room=game.acoustics();m_reverbWetTarget=std::clamp(room.wet,0.f,1.f);m_reverbFeedbackTarget=Reverb::feedbackFor(room.seconds);}
  std::erase_if(m_voices,[&](auto&v){int level=int((std::uint64_t(v.emitter)>>32)&0xffffu);return v.emitter>0&&!game.chunkResident(level);});

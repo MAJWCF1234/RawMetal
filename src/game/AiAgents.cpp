@@ -299,9 +299,32 @@ void Game::updateSkinbot(float dt){
   return true;
  };
  // A hard hit queues a longer charge than the ordinary wind-up.
- const float queuedRush=m_skinbot.curse.freeze>0?m_skinbot.curse.rush:0.f;
+ const auto oldFeet=m_skinbot.feet;
+ const bool wasBraced=m_skinbot.curse.freeze>0;
+ const float oldRush=m_skinbot.curse.rush;
  m_skinbot.update(dt,ground,clear,waypoint,footClear);
- if(m_skinbot.curse.freeze<=0)m_skinbot.curse.rush=std::max(queuedRush,m_skinbot.curse.rush);
+ if(wasBraced&&m_skinbot.curse.freeze<=0)m_skinbot.curse.rush=std::max(oldRush,m_skinbot.curse.rush);
+ auto foley=[&](Sound sound,skinbot::W at,float gain,float pitch,float radius){
+  SoundEvent event{sound,{at.x,at.y},gain,pitch,true,radius,at.z};event.aiRadius=-1;
+  m_sounds.push_back(event);
+ };
+ const float pace=std::hypot(m_skinbot.velocityX,m_skinbot.velocityY);
+ for(size_t leg=0;leg<oldFeet.size();++leg){
+  const auto& was=oldFeet[leg];const auto& foot=m_skinbot.feet[leg];
+  const float pitch=(leg<2?.91f:1.08f)+.035f*float(leg%2)+.05f*pace;
+  if(was.planted()&&!foot.planted()&&foot.lift>0)
+   foley(Sound::SkinbotJoint,foot.from,.23f+.05f*pace,pitch,10.f);
+  if(!was.planted()&&foot.planted()&&was.lift>0){
+   const float rise=std::max(0.f,foot.at.z-was.from.z);
+   foley(Sound::SkinbotBlade,foot.at,std::clamp(.45f+.17f*pace+.21f*rise,0.f,.88f),pitch,18.f);
+  }
+  if(!was.planted()&&!foot.planted()&&was.lift>0&&foot.lift<=0){
+   if(foot.at.z<=was.to.z+.035f)foley(Sound::SkinbotBlade,foot.at,.54f,pitch,17.f);
+   foley(Sound::SkinbotScrape,foot.at,.37f,pitch,13.f);
+  }
+ }
+ if(m_skinbot.curse.freeze<=0&&m_skinbot.curse.rush>0&&(wasBraced||oldRush<=0))
+  foley(Sound::SkinbotSurge,{m_skinbot.x,m_skinbot.y,m_skinbot.z+1.16f},.52f,1.f,20.f);
 }
 bool Game::aiRemembered(bool haunt,Vec2& at,float& z)const{
  // The AI over the map being played; its memory is in that map's frame.

@@ -18,3 +18,8 @@ The author did not make, review or endorse DepthWorks.
 Skinbot leg rig: the approach of stepping legs solved from foot targets follows
 minecraft-spider by TheCymaera, https://github.com/TheCymaera/minecraft-spider
 (its README allows commercial and non-commercial use of the source). The code here is our own.
+
+Skinbot sound effects
+---------------------
+The metal Foley is edited from Horror SFX Complete by
+YourPalRob (purchased sound-effects pack).

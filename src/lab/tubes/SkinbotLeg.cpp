@@ -5,6 +5,8 @@
 #include "lab/LabFixture.h"
 #include "world/SkinbotWalker.h"
 #include "world/ModelIds.h"
+#include "game/EngineRegressionScene.h"
+#include <fstream>
 #include <cmath>
 #include <cstdio>
 namespace retro::lab {
@@ -201,6 +203,54 @@ const bool skinbotImpact=add({
    &&!s.g().clutter().at(size_t(s.board["prop"])).projectile,std::to_string(s.board["sag"]));
   r.check("it recovers into a sustained faster charge",s.board["recovered"]>2.8&&s.board["peak"]>1.55,
           std::to_string(s.board["recovered"])+" s at up to "+std::to_string(s.board["peak"])+" m/s");
+ }
+});
+const bool skinbotAudio=add({
+ .name="skinbot-audio",.summary="The real mixer follows Skinbot's moving blades, motor and impacts",
+ .standalone=+[]{
+  auto room=regression::room();const float scale=skinbot::Walker::Scale;
+  room->fixtures.push_back({skinbot::Model,{6,10},0,1.451f*scale,1.903f*scale,2.4f,1.5707963f,false});
+  Game game(regression::campaign(room));
+  LabAccess::setGod(game,true);LabAccess::setCamera(game,{9,14},0,-1.5707963f,0);
+  AudioEngine audio(false);
+  std::vector<int16_t> pcm;
+  int plants=0,clicks=0,impacts=0,surges=0;bool trackedMotor=false,stoppedMotor=false;
+  for(int tick=0;tick<240;++tick){
+   game.update({},1.f/60);
+   const auto* walker=game.skinbotWalker();
+   if(!walker)continue;
+   if(tick==0)game.pointSkinbot({17,10});
+   if(tick==32){
+    Clutter c;c.model=model::packing_crate;c.dims={.42f,.42f,.42f};
+    c.pos={walker->x-1.8f,walker->y};c.z=walker->z+.95f;
+    c.velocity={7.f,0};c.vz=.3f;c.projectile=true;LabAccess::clutter(game).push_back(c);
+   }
+   if(tick==170)game.pointSkinbot({walker->x,walker->y});
+   for(const auto& event:game.sounds())if(event.spatial&&std::isfinite(event.z)){
+    plants+=event.sound==Sound::SkinbotBlade;clicks+=event.sound==Sound::SkinbotJoint;
+    impacts+=event.sound==Sound::SkinbotHit;surges+=event.sound==Sound::SkinbotSurge;
+   }
+   audio.update(game,true);LabAccess::silenceScore(audio);
+   bool motor=false;
+   for(const auto& voice:LabAccess::held(audio))if(voice.sound==Sound::SkinbotMotor&&voice.loop&&voice.spatial&&voice.level>0){
+    motor=true;trackedMotor|=std::fabs(voice.at.x-walker->x)<.03f&&std::fabs(voice.at.y-walker->y)<.03f;
+   }
+   if(tick==239)stoppedMotor=!motor;
+   LabAccess::mix(audio,pcm,735);
+  }
+  int peak=0;for(const auto sample:pcm)peak=std::max(peak,std::abs(int(sample)));
+  const bool pass=peak>200&&plants>=3&&clicks>=3&&impacts==1&&surges>=1&&trackedMotor&&stoppedMotor;
+  std::ofstream log("skinbot-audio-test.txt");
+  log<<(pass?"PASS":"FAIL")<<" plants "<<plants<<", clicks "<<clicks<<", impacts "<<impacts
+     <<", surge "<<surges<<", tracked motor "<<trackedMotor<<", idle motor stopped "<<stoppedMotor<<'\n';
+  if(!pass)return false;
+  std::ofstream wav("skinbot-audio-preview.wav",std::ios::binary);
+  auto write=[&](auto value){wav.write(reinterpret_cast<const char*>(&value),sizeof(value));};
+  wav.write("RIFF",4);write(uint32_t(pcm.size()*2+36));wav.write("WAVEfmt ",8);
+  write(uint32_t(16));write(uint16_t(1));write(uint16_t(2));write(uint32_t(44100));write(uint32_t(176400));
+  write(uint16_t(4));write(uint16_t(16));wav.write("data",4);write(uint32_t(pcm.size()*2));
+  wav.write(reinterpret_cast<const char*>(pcm.data()),pcm.size()*2);
+  return bool(wav);
  }
 });
 }

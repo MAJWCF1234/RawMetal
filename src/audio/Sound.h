@@ -45,6 +45,8 @@ enum class Sound {
  // slamming home) and spent cases landing, brass and a shotgun shell:
  // resources 3346 on, in this order (tools/audio/import_mac11_sounds.py).
  MacShot, MacDry, MacMagOut, MacMagIn, MacRack, CasingBrass, CasingShell,
+ // Skinbot's positional Foley and electric motor, resources 3401-3406.
+ SkinbotBlade, SkinbotJoint, SkinbotMotor, SkinbotHit, SkinbotSurge, SkinbotScrape,
  Count
 };
 // AudioEngine maps every sound from ZoneWind on to consecutive library resources
@@ -53,7 +55,7 @@ enum class Sound {
 // GlassShatter to PistolRack take consecutive resources from 2255 (the pistol from 2260); LeadArc is mapped on its own;
 // the bank block (AmbVent on) and Chapter 2's two scores after it take consecutive resources from 2370;
 // the Vox block takes consecutive resources from 2600; the MAC-11 block (MacShot on) from 3346.
-static_assert(int(Sound::Count)==int(Sound::CasingShell)+1&&int(Sound::MacShot)==int(Sound::WaterSplash)+1&&int(Sound::WaterSplash)==int(Sound::VoxGasp2)+1&&int(Sound::VoxTransformedDeath1)==int(Sound::MusicClinic)+1&&int(Sound::MusicResearch)==int(Sound::PaHostileDetected)+1&&int(Sound::AmbVent)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
+static_assert(int(Sound::Count)==int(Sound::SkinbotScrape)+1&&int(Sound::SkinbotBlade)==int(Sound::CasingShell)+1&&int(Sound::MacShot)==int(Sound::WaterSplash)+1&&int(Sound::WaterSplash)==int(Sound::VoxGasp2)+1&&int(Sound::VoxTransformedDeath1)==int(Sound::MusicClinic)+1&&int(Sound::MusicResearch)==int(Sound::PaHostileDetected)+1&&int(Sound::AmbVent)==int(Sound::LeadArc)+1,"map the new sound's resource in AudioEngine");
 inline bool gunshotSound(Sound s){return s==Sound::Shot||s==Sound::PistolShot||s==Sound::MacShot;}
 // Footsteps: the facility's metal and concrete plus the zone's dirt, grass and gravel.
 inline bool footstepSound(Sound s){return (s>=Sound::Metal1&&s<=Sound::Concrete4)||(s>=Sound::StepDirt1&&s<=Sound::StepGravel4);}
