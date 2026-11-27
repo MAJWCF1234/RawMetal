@@ -10,6 +10,7 @@ Changelog of shipped updates. Newest first. Each section is one release.
 - A low, pulsing motor follows Skinbot, rises under load, and goes quiet when it stops.
 - Hear its gears engage when it charges and the chassis ring when a thrown prop hits.
 - The same effects play in the standalone game and Campaign Builder's Play mode.
+- Known, and unchanged since v1.7.5: the gore and carcass checks still fail. A blown body comes to rest about 10 cm under the floor. This release ships with that check still red.
 
 ## v1.7.6 - Skinbot on the move (2026-11-26)
 
