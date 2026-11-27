@@ -1,3 +1,4 @@
+#include "world/SkinbotWalker.h"
 #include "renderer/RenderProfile.h"
 #include "core/FrameProfile.h"
 #include "core/NeuralTexture.h"
@@ -1995,7 +1996,7 @@ int WINAPI wWinMain(HINSTANCE,HINSTANCE,PWSTR commandLine,int){
     if(commandArguments().find(L"--each-test")){
         // The smoke chain's game tests, every one run independently: a failure
         // early in the chain must not hide the result of everything after it.
-        const std::pair<const char*,bool(*)()> tests[]={
+        const std::pair<const char*,bool(*)()> tests[]={{"skinbot-rig",+[]{std::ofstream r("skinbot-rig-test.txt");return retro::skinbot::testSkinbotRig(r);}},{"skinbot-walk",+[]{std::ofstream r("skinbot-walk-test.txt");return retro::skinbot::testSkinbotWalk(r);}},
          {"debug-layer",[](){
           using namespace retro;
           using namespace debuglayer;

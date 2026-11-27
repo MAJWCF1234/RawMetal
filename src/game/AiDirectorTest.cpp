@@ -57,6 +57,19 @@ bool Game::testAiDirector(){
   {bool second=false;for(float s=0;s<24&&g.state(stateId("beats_seen"))<3;s+=1.f/60){g.update({},1.f/60);
     if(!second&&g.state(stateId("beats_seen"))==2){second=true;check(g.state(stateId("director_mood"))==2&&g.state(stateId("fights"))==1,"the second beat turns it quiet and the fight block waits");}}
    check(second&&g.state(stateId("beats_seen"))==3&&g.state(stateId("fights"))==2&&g.state(stateId("director_mood"))==1,"the third beat is a fight again (beats "+std::to_string(g.state(stateId("beats_seen")))+", fights "+std::to_string(g.state(stateId("fights")))+")");}
+  // Memory: it keeps the 4 m patch where it last heard someone, hears nothing from a quiet step, and can ring there.
+  {g.m_player.pos={18,12};g.m_player.z=0;g.setState(stateId("director_lead"),0);g.setState(stateId("director_haunt"),0);
+   g.m_stepNoise=1;g.m_stepNoiseAge=0;g.update({},1.f/60);
+   check(g.state(stateId("director_lead"))==0,"a quiet step leaves the Director nothing to remember");
+   g.m_stepNoise=8;g.m_stepNoiseAge=0;g.update({},1.f/60);
+   check(g.state(stateId("director_lead"))==23&&g.state(stateId("director_haunt"))==23,"a loud step is remembered by its patch ("+std::to_string(g.state(stateId("director_lead")))+")");
+   g.m_player.pos={5,12};g.m_stepNoise=0;step(.5f);
+   ScriptAction seek;seek.type=ScriptAction::Type::Noise;seek.sound=Sound::OneMetalDrag;seek.amount=.8f;seek.value=30;seek.index=2;
+   const size_t heard=g.m_sounds.size();g.executeScriptAction(seek);
+   check(g.m_sounds.size()==heard+1&&std::fabs(g.m_sounds.back().position.x-18)<.01f&&std::fabs(g.m_sounds.back().position.y-14)<.01f&&g.m_sounds.back().aiRadius==30,
+         "NOISE lead rings in that patch after the player has left it, for monsters to hear");
+   g.setState(stateId("director_lead"),0);const size_t none=g.m_sounds.size();g.executeScriptAction(seek);
+   check(g.m_sounds.size()==none,"with nothing remembered it makes no sound");}
   // A SEAL record writes back as SEAL.
   {const auto text=exportRmc("Director",{{campaign->maps.at(0)}}).text;check((text.find("|SEAL|engineering_open|0")!=std::string::npos||text.find("|SEAL|#"+std::to_string(stateId("engineering_open"))+"|0")!=std::string::npos),"the exporter writes the SEAL block by name");}
  }catch(const std::exception& e){check(false,std::string("exception: ")+e.what());}

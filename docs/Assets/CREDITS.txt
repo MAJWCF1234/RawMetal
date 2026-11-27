@@ -14,3 +14,7 @@ onto the game's skeleton, its materials were reduced to flat colours, and it is
 animated with the game's own character animations.
 
 The author did not make, review or endorse DepthWorks.
+
+Skinbot leg rig: the approach of stepping legs solved from foot targets follows
+minecraft-spider by TheCymaera, https://github.com/TheCymaera/minecraft-spider
+(its README allows commercial and non-commercial use of the source). The code here is our own.

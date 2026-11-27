@@ -392,7 +392,7 @@ int runEditorPreview(const EditorPreviewOptions& options){
    if((spot==1||spot==3)&&current){auto next=std::make_unique<Game>(current);wchar_t local[32768]{};DWORD n=GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768);if(n>0&&n<32768)next->loadSettings(std::wstring(local)+L"\\RawMetal\\settings.ini");if(spot==1)next->update({},1.f/60);scene=std::move(next);}
    if((spot==2||spot==3)&&std::isfinite(spotX)&&std::isfinite(spotY)){auto at=scene->player();at.pos.x=spotX;at.pos.y=spotY;at.z=spotZ;at.pitch=0;scene->restoreEditorCamera(at);}
    // The AI manager's Test it: the switches its rule waits for, set before it plays (NativeAiManager.inc).
-   if(spot==3){const auto setup=options.control.parent_path()/L"testrule.txt";std::istringstream states(get(setup));
+   if(spot==3){scene->setEditorUnhurt();const auto setup=options.control.parent_path()/L"testrule.txt";std::istringstream states(get(setup));
     unsigned long long id=0;int value=0;bool any=false;while(states>>id>>value){scene->setState(StateId(id),value);any=true;}
     if(any)put(setup,"");}
    scriptTrace.clear();

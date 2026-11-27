@@ -420,8 +420,8 @@ std::shared_ptr<const CustomCampaign> loadCustomCampaignText(std::string text,st
     // NOISE|sound|gain|where|heard: a bank sound near the player (behind, ahead) that monsters within heard metres hear.
     if(f.size()!=8)throw std::runtime_error("malformed NOISE SCRIPT_ACTION record");action.type=ScriptAction::Type::Noise;
     const auto* row=bankSound(decode(f[4]));if(!row)throw std::runtime_error("unknown NOISE sound "+decode(f[4]));action.sound=row->sound;
-    action.amount=number(f,5,"NOISE gain");const auto where=decode(f[6]);action.index=where=="behind"?0:where=="ahead"?1:-1;action.value=integer(f,7,"NOISE heard metres");
-    if(action.index<0||action.amount<=0||action.amount>4||action.value<0||action.value>60)throw std::runtime_error("invalid NOISE; gain 0-4, where behind or ahead, heard 0-60 m");
+    action.amount=number(f,5,"NOISE gain");const auto where=decode(f[6]);action.index=where=="behind"?0:where=="ahead"?1:where=="lead"?2:where=="haunt"?3:-1;action.value=integer(f,7,"NOISE heard metres");
+    if(action.index<0||action.amount<=0||action.amount>4||action.value<0||action.value>60)throw std::runtime_error("invalid NOISE; gain 0-4, where behind, ahead, lead or haunt, heard 0-60 m");
    }else if(kind=="LATER"){
     // LATER|state|value|seconds: sets the state to the value that many seconds after the event fires.
     if(f.size()!=7)throw std::runtime_error("malformed LATER SCRIPT_ACTION record");action.type=ScriptAction::Type::Later;action.id=scriptName(f,4,"LATER state");

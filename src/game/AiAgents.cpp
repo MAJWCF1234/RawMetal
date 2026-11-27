@@ -9,6 +9,12 @@ namespace retro {
 namespace {
 StateId lightsMode(const AiAgent& ai){return stateId(ai.name+"_lights");}
 StateId lightsLeft(const AiAgent& ai){return stateId(ai.name+"_lights_left");}
+// What an AI remembers of where it heard people: its zone in patches this wide (m), so it knows an area, never a spot.
+constexpr float Patch=4.f;
+StateId heardIn(const AiAgent& ai,int patch){return stateId(ai.name+"_heard_"+std::to_string(patch));}
+StateId lastHeard(const AiAgent& ai){return stateId(ai.name+"_lead");}       // patch + 1; 0 nothing yet
+StateId mostHeard(const AiAgent& ai){return stateId(ai.name+"_haunt");}
+int patchOf(Vec2 p){return std::clamp(int(p.y/Patch),0,5)*6+std::clamp(int(p.x/Patch),0,5);}
 }
 void Game::seedAiAgents(){
  m_aiAgents.clear();
@@ -25,7 +31,12 @@ void Game::updateAiAgents(float dt){
   // Who is in the zone, in the zone's own map frame (a body is in the active chunk's).
   int inside=0;float noise=0;
   for(const auto& p:players()){if(!p.alive()||p.level!=ai.level)continue;Vec2 at=p.body->pos;if(p.level!=m_level)at=at+chunkOffset(m_level)-chunkOffset(p.level);
-   if(!ai.contains(at.x,at.y,p.body->z))continue;++inside;if(p.local&&m_stepNoiseAge<1.f)noise=std::max(noise,m_stepNoise);}
+   if(!ai.contains(at.x,at.y,p.body->z))continue;++inside;if(p.local&&m_stepNoiseAge<1.f)noise=std::max(noise,m_stepNoise);
+   // Heard: a footstep that carried, or a shot. A quiet walker leaves it nothing to remember.
+   if(p.local&&((m_stepNoiseAge<dt+.001f&&m_stepNoise>=3.f)||m_shotAge<dt+.001f)){
+    const int patch=patchOf(at);const StateId count=heardIn(ai,patch);setState(count,std::min(state(count)+1,100000));
+    setState(lastHeard(ai),patch+1);const int best=state(mostHeard(ai));
+    if(!best||state(count)>state(heardIn(ai,best-1)))setState(mostHeard(ai),patch+1);}}
   // The menace gauge: it climbs while someone is in the zone (by pressure, faster for a noisy one) and ebbs
   // when the zone is empty. Never a twitch: a footstep moves it a fraction of a point.
   if(inside>0)mind.tension+=dt*(.6f+2.4f*ai.pressure)*(1.f+std::min(noise,12.f)/12.f);
@@ -48,6 +59,34 @@ void Game::updateAiAgents(float dt){
   for(const auto& event:m_scriptEvents)for(size_t a=0;a<event.actions.size();++a){const auto& action=event.actions[a];if(action.type!=ScriptAction::Type::Later)continue;
    const StateId key=laterKey(event.id,a);const int left=state(key);if(left>1)setState(key,left-1);else if(left==1){setState(key,0);setState(action.id,action.value);if(m_scriptTrace)m_scriptTrace(event.id,int(a));}}
  }
+}
+void Game::updateSkinbot(float dt){
+ const skinbot::Ground ground=[this](float x,float y,float from){return m_world.supportBelow(x,y,from);};
+ if(m_skinbotLevel!=m_level){
+  m_skinbotLevel=-1;
+  for(const auto& f:m_world.fixtures())if(f.model==skinbot::Model&&f.visible){
+   m_skinbotHome=f.position;const float floor=m_world.floorHeight(f.position.x,f.position.y)+f.base;
+   m_skinbot.place(f.position.x,f.position.y,f.yaw,ground,floor+.3f);m_skinbotLevel=m_level;m_skinbotStop=0;m_skinbotWait=2.f;m_skinbotPointed=false;break;}
+  if(m_skinbotLevel<0)return;
+ }
+ // Its beat, until pointed elsewhere: four places round where it was put, standing dead still at each.
+ if(!m_skinbotPointed&&m_skinbot.arrived()){
+  m_skinbotWait-=dt;
+  if(m_skinbotWait<=0){static const Vec2 beat[4]={{1.2f,3.f},{-3.f,3.f},{-3.f,-2.5f},{1.2f,-2.5f}};
+   const Vec2 at=m_skinbotHome+beat[m_skinbotStop++%4];m_skinbot.pointAt(at.x,at.y);m_skinbotWait=2.5f;}
+ }
+ // It watches the player when it can see them: near, and nothing solid between (never through walls).
+ {const float dx=m_player.pos.x-m_skinbot.x,dy=m_player.pos.y-m_skinbot.y,away=std::hypot(dx,dy);
+  bool seen=away<9.f&&!dead();
+  for(int k=1;seen&&k<10;++k){const float t=float(k)/10;if(m_world.supportBelow(m_skinbot.x+dx*t,m_skinbot.y+dy*t,m_skinbot.z+3.f)>m_skinbot.z+1.5f)seen=false;}
+  if(seen)m_skinbot.watch({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye});else m_skinbot.lookAway();}
+ m_skinbot.update(dt,ground);
+}
+bool Game::aiRemembered(bool haunt,Vec2& at,float& z)const{
+ // The AI over the map being played; its memory is in that map's frame.
+ for(const auto& ai:m_aiAgents){if(ai.level!=m_level)continue;const int patch=state(haunt?mostHeard(ai):lastHeard(ai))-1;if(patch<0)continue;
+  at={(float(patch%6)+.5f)*Patch,(float(patch/6)+.5f)*Patch};z=m_world.floorHeight(at.x,at.y);return true;}
+ return false;
 }
 // A lamp in a zone its AI drives: 1 as authored, 0 dark, a stutter when flickering; tint, when asked, is the gel
 // the mode lays on it (emergency red).

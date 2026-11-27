@@ -49,6 +49,7 @@ void buildEngineeringDirector(Map& m, float floor, float roof) {
  director.pressure=.85f;director.calm=34;director.peak=50;
  director.tension=state("engineering_tension");director.inside=state("engineering_inside");
  director.beat=state("engineering_beat");director.quiet=state("engineering_quiet");
+ director.pulse=state("engineering_pulse");director.mood=state("engineering_mood");
  identify("AI",int(m.aiAgents.size()),"Engineering Director");
  m.aiAgents.push_back(director);
 
@@ -104,6 +105,12 @@ void buildEngineeringDirector(Map& m, float floor, float roof) {
  m.recordFields[recordFieldKey("SCRIPT_EVENT","",int(m.scriptEvents.size()-1))].push_back({"editorarea","Robotics sub-bay"});
  gate(hunt,"eng_lockdown");annotate(hunt,0,"Torch-shy retreat");
  annotate(hunt,1,"Skin-suit robot");annotate(hunt,2,"Wall pipes");
+
+ // The Director sends the stalker looking: on each beat once it is up, the pipes ring where you were last heard.
+ {ScriptAction search=sound(Sound::OneMetalDrag,30);search.index=2;
+  auto& seek=rule("stalker_searches","Stalker searches","Stalker",0,0,24,24,{search});
+  gate(seek,"eng_stalker_awake");gate(seek,"engineering_pulse");seek.once=false;seek.rearm=true;
+  annotate(seek,0,"Search where you were heard");}
 
  const char* breakers[]={"Breaker 1","Breaker 2","Breaker 3"};
  const char* circuits[]={"eng_breaker_1","eng_breaker_2","eng_breaker_3"};

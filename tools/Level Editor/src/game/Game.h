@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <memory>
 #include <functional>
+#include "../world/SkinbotWalker.h"
 #include "../core/Math.h"
 #include "../world/World.h"
 #include <vector>
@@ -711,6 +712,8 @@ public:
     // nothing sees, hunts or hurts. It does not walk, collect pickups, cross
     // into another map, end the campaign or save. Box triggers still fire when
     // the camera is inside them. Only the builder's throwaway copy sets this.
+    // The AI manager's Test it: the run goes on to the rule's last step, whatever hunts the tester.
+    void setEditorUnhurt(){m_god=true;m_player.health=std::max(m_player.health,100.f);}
     void setEditorObserver(bool on){m_editorObserver=on;if(on){m_god=true;m_player.health=std::max(m_player.health,100.f);}}
     bool editorObserver()const{return m_editorObserver;}
     // Simulate, clicked on the plan: run the current map's event(s) with this
@@ -783,6 +786,9 @@ public:
     const std::vector<BulletImpact>& bulletImpacts()const{return m_bulletImpacts;}
     void pinToDoor(BulletImpact& mark)const;   // a mark landing on a door's leaf rides with it (Hitscan.cpp)
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
+    // The skinbot walking on the map being played (null: none here), and sending it to a spot (a laser pointer).
+    const skinbot::Walker* skinbotWalker()const{return m_skinbotLevel==m_level?&m_skinbot:nullptr;}
+    void pointSkinbot(Vec2 at){m_skinbotPointed=true;m_skinbot.pointAt(at.x,at.y);}
     // Dead bodies' poses (SaveSections.h CorpsePose) by (creature, level, slot): the renderer keeps each body's current
     // pose here as it moves, the physics save section writes and reads them, and a body made again after a load takes
     // its pose back from here. (Kept by the game so a save holds them; written from the renderer's const view.)
@@ -1701,6 +1707,12 @@ private:
     // whole number cannot hold, rebuilt from the states after a load.
     std::vector<AiAgent> m_aiAgents;
     struct AiMind {float tension=0,quiet=0;bool seeded=false;};std::vector<AiMind> m_aiMinds;
+    // The walking skinbot (AiAgents.cpp updateSkinbot): a map's skinbot model walks its beat round where it was
+    // placed, until it is pointed somewhere. A body to look at only: it is not yet a creature, and is not saved.
+    skinbot::Walker m_skinbot;int m_skinbotLevel=-1,m_skinbotStop=0;float m_skinbotWait=0;bool m_skinbotPointed=false;Vec2 m_skinbotHome{};
+    void updateSkinbot(float dt);
+    // The middle of the patch the AI last heard someone in (or, haunt, hears them in most), if it has heard anyone.
+    bool aiRemembered(bool haunt,Vec2& at,float& z)const;
     // The Lights block: per AI, a mode (0 as authored, 1 flicker, 2 dark, 3 red) and the tenths of a second left
     // (0 until changed), in states AI_lights and AI_lights_left; the Later block: a state per Later action
     // counting tenths down (Game::laterKey).

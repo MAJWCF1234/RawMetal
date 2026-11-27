@@ -931,13 +931,14 @@ ActorPose Game::friendlyAwareness(const World& world,int level,const ActorTrack&
 }
 void Game::migrateEnemiesAcrossChunks(){
  // The open zone hands every creature on; elsewhere only a recurring hunter
- // follows its quarry through a seam (one still walking in is not handed back).
+ // follows its quarry through a seam, as does anything else in full chase (one still walking in is not handed back).
  const bool open=m_worldId==WorldId::Ashfall;
- if(!open&&std::none_of(m_enemies.begin(),m_enemies.end(),[](const Enemy&e){return e.hunter&&e.alive;}))return;
+ const auto follows=[](const Enemy&e){return e.alive&&(e.hunter||e.state==Enemy::State::Chase);};
+ if(!open&&std::none_of(m_enemies.begin(),m_enemies.end(),follows))return;
  auto sourceOrigin=chunkOffset(m_level);
  for(auto it=m_enemies.begin();it!=m_enemies.end();){
   if(it->pos.x>=0&&it->pos.x<World::Width&&it->pos.y>=0&&it->pos.y<World::Height){++it;continue;}
-  if(it->arrive>0||(!open&&!(it->hunter&&it->alive))){++it;continue;}
+  if(it->arrive>0||(!open&&!follows(*it))){++it;continue;}
   Vec2 global=it->pos+sourceOrigin;int target=m_level;
   for(int level=0;level<chunkCount();++level){auto origin=chunkOffset(level);
    if(global.x>=origin.x&&global.x<origin.x+World::Width&&global.y>=origin.y&&global.y<origin.y+World::Height){target=level;break;}

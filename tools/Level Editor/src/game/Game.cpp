@@ -194,11 +194,11 @@ void Game::crossChunkBoundary(){
  // this, changing the active chunk froze an alerted creature one metre behind
  // an invisible ownership boundary even though the terrain itself was seamless.
  std::vector<Enemy> followers;std::vector<AiTargetRef> moved;
- // A recurring hunter on the player's heels comes through after them in any
- // world: it keeps its place behind the seam and walks in at the crossing
+ // A recurring hunter on the player's heels, and anything else giving chase,
+ // comes through after them in any world: it keeps its place behind the seam and walks in at the crossing
  // (Game::hunterArrive), taking as long as the distance it had to cover.
  const bool open=m_worldId==WorldId::Ashfall;
- auto hunting=[&](const Enemy&e){return e.hunter&&e.alive&&e.awareness>0&&e.arrive<=0&&e.feeding<=0&&!e.wakeState&&e.stalkMode!=Enemy::StalkMode::Retreat&&length(e.pos-m_player.pos)<12.f;};
+ auto hunting=[&](const Enemy&e){return (e.hunter||e.state==Enemy::State::Chase)&&e.alive&&e.awareness>0&&e.arrive<=0&&e.feeding<=0&&!e.wakeState&&e.stalkMode!=Enemy::StalkMode::Retreat&&length(e.pos-m_player.pos)<12.f;};
  if(open||std::any_of(m_enemies.begin(),m_enemies.end(),hunting)){
   moved.assign(m_enemies.size(),{});std::vector<Enemy> staying;
   const Vec2 crossing=m_player.pos+shift;

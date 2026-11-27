@@ -160,7 +160,9 @@ bool Game::testStreaming(){
  if(!game.chunkResident(0)||game.m_chunks[0].world.tile(3,4)=='#')return fail(27);
  game.useDoor(0);game.updateStreaming(0);if(!game.chunkResident(0)||game.m_chunks[0].world.tile(3,4)=='#')return fail(6);
  for(int i=0;i<160;++i)game.update({},1.f/120);
- game.m_player.pos={3.5f,-.1f};game.crossChunkBoundary();if(game.level()!=0||!game.enemies().empty()||!game.pickups().empty())return fail(7);
+ // What was cleared here stays cleared. A creature giving chase may have followed from next door (it says so).
+ game.m_player.pos={3.5f,-.1f};game.crossChunkBoundary();if(game.level()!=0||!game.pickups().empty()||
+  std::any_of(game.enemies().begin(),game.enemies().end(),[](const Enemy&e){return e.originLevel!=1;}))return fail(7);
  Game joined;joined.m_level=4;joined.restart();
  if(!joined.chunkResident(5)||joined.world().tile(0,23)!='#'||joined.world().tile(1,23)=='#'||joined.m_chunks[5].world.tile(0,0)!='#'||joined.m_chunks[5].world.tile(1,0)=='#')return fail(8);
  Vec2 probe{12.f,24.1f};if(joined.worldAt(probe).level()!=5||std::fabs(probe.x-12.f)>.001f||std::fabs(probe.y-.1f)>.001f)return fail(9);

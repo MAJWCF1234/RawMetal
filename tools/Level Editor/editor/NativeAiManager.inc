@@ -138,6 +138,7 @@
             auto caption=aiRowText(AiSteps,row);
             const auto target=aiNamed(at,"editortarget");
             if(!target.empty())caption+=L": "+wide(target);
+            else if(fields[0]=="SCRIPT_EVENT")for(const auto &chip:aiChips(at))caption+=L" "+chip.text;
             aiLog+=caption+L"\r\n";
             if(aiLog.size()>3000)aiLog.erase(0,aiLog.find(L"\n")+1);
           }
@@ -460,7 +461,9 @@
     if (f.size() < 7 || f[0] != "SCRIPT_ACTION") return {};
     if (f[3] == "LIGHTS" && field == 5)
       return {{"normal", L"Normal"}, {"flicker", L"Flicker"}, {"dark", L"Dark"}, {"red", L"Emergency red"}};
-    if (f[3] == "NOISE" && field == 6) return {{"behind", L"Behind the player"}, {"ahead", L"Ahead of the player"}};
+    if (f[3] == "NOISE" && field == 6)
+      return {{"behind", L"Behind the player"}, {"ahead", L"Ahead of the player"},
+              {"lead", L"Where you were last heard"}, {"haunt", L"Where you are heard most"}};
     if (f[3] == "NOISE" && field == 4) {
       std::vector<AiChoice> sounds;
       const auto current = decoded(f[4]);
@@ -774,7 +777,8 @@
       const auto [setup, words] = aiTestSetup(fields[2]);
       channelPut(control.parent_path() / L"testrule.txt", setup);
       if (!words.empty()) aiLog = L"Set first, so this rule can run: " + words + L"\r\n";
-      SetWindowTextW(aiControl(AiPlayLog), words.empty() ? L"Waiting for this rule to run..." : aiLog.c_str());
+      aiLog += L"You cannot be hurt while testing.\r\n";
+      SetWindowTextW(aiControl(AiPlayLog), aiLog.c_str());
       ShowWindow(aiControl(AiPlayLog), SW_SHOW);
       SetTimer(aiManagerWindow, 1, 60, nullptr);
       SetWindowPos(aiManagerWindow, HWND_TOPMOST, 20, 70, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
@@ -1400,7 +1404,13 @@
       aiManagerCommand(AiTest, BN_CLICKED);
       const auto before = aiLog;   // what Test it set up, if anything
       const bool fired = pump(20000, [&] { aiReadTrace(); return aiLog != before; });
-      pump(1500, [&] { aiReadTrace(); return false; });
+      const bool delayed = title == "Cages wake";
+      pump(delayed ? 46000 : 1500, [&] { aiReadTrace(); return false; });
+      if (delayed)
+        for (const wchar_t *step : {L"Cage row 1", L"Cage row 2", L"Cage row 3"})
+          if (aiLog.find(step) == std::wstring::npos)
+            throw std::runtime_error("A delayed step never showed in the play log: " + utf8(step) + "\nLOG: " + utf8(aiLog) +
+                                     "\nSTATUS: " + channelText(status).substr(0, 600));
       out << (fired ? "RAN     " : "SILENT  ") << title << '\n';
       if (fired) { ++ran; std::istringstream lines(utf8(aiLog)); for (std::string l; std::getline(lines, l);) { while (!l.empty() && l.back() == '\r') l.pop_back(); out << "          " << l << '\n'; } }
       out.flush();

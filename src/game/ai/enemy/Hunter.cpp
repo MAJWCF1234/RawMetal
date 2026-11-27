@@ -259,6 +259,18 @@ bool Game::testChimeraHunt(){
    for(int i=0;i<int(8.f/dt)&&!inside;++i){g.m_player.pos={12.f,3.f};g.update({},dt);for(const auto&f:g.m_enemies)if(f.hunter==stateId("r117")&&f.alive&&f.arrive<=0&&f.pos.y>0&&f.pos.y<24)inside=true;}}
   std::ostringstream v;v<<"level "<<g.level()<<" followed="<<followed<<" walk-in "<<arrive<<" s, in the run="<<inside;
   check(followed&&arrive>0&&inside,"7 it comes through the seam after the player and walks in",v.str());}
+ // 8. Any creature in chase follows through a seam; one that is not chasing stays on its map.
+ for(const bool chasing:{true,false}){auto g=chimeraStage(96,{12.f,23.2f},-15,kPi*.5f);int k=-1;for(int i=0;i<int(g.m_enemies.size());++i)if(g.m_enemies[size_t(i)].hunter==stateId("r117"))k=i;
+  bool followed=false,inside=false,stayed=false;float arrive=0;
+  if(k>=0){auto&e=g.m_enemies[size_t(k)];e.hunter=0;e.wakeState=0;e.prey=-1;e.pos={12.f,19.f};e.awareness=12;e.recognition=1;e.state=chasing?Enemy::State::Chase:Enemy::State::Idle;e.lastKnown=g.m_player.pos;
+   const int from=g.level();const size_t before=g.m_enemies.size();
+   g.m_player.pos={12.f,24.05f};g.crossChunkBoundary();
+   for(const auto&f:g.m_enemies)if(f.originLevel==from&&f.arrive>0&&f.alive){followed=true;arrive=f.arrive;}
+   stayed=g.m_chunks[from].enemies.size()==before;
+   for(int i=0;i<int(8.f/dt)&&followed&&!inside;++i){g.m_player.pos={12.f,3.f};g.update({},dt);for(const auto&f:g.m_enemies)if(f.originLevel==from&&f.alive&&f.arrive<=0&&f.pos.y>0&&f.pos.y<24)inside=true;}}
+  std::ostringstream v;v<<"followed="<<followed<<" walk-in "<<arrive<<" s inside="<<inside<<" stayed="<<stayed;
+  if(chasing)check(followed&&arrive>0&&inside,"8 an ordinary creature in chase comes through the seam and walks in",v.str());
+  else check(!followed&&stayed,"8 one that is not chasing stays on its own map",v.str());}
  report<<(passed?"ALL PASSED":"FAILED")<<'\n';return passed;
 }
 // RM_CHIMERA_STAGE="level x y feet yawDeg pitch [a,b,c] [track]" re-aims --chimera-kill-frames at

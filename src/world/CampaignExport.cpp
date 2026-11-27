@@ -397,8 +397,8 @@ RmcExport exportRmc(const std::string& campaignName,const std::vector<RmcMapSour
     else if((a.type==T::Checkpoint||a.type==T::CompleteCampaign||a.type==T::EnterMainCampaign)&&only(false,false,false,false))r.f(a.type==T::Checkpoint?"CHECKPOINT":a.type==T::CompleteCampaign?"COMPLETE":"ENTER_CAMPAIGN");
     else if(a.type==T::Shake&&a.amount>0&&a.amount<=3&&only(false,false,false,true))r.f("SHAKE").n(a.amount);
     else if(a.type==T::Lights&&a.id&&a.value>=0&&a.value<=3&&a.amount>=0&&a.amount<=600&&only(true,true,false,true))r.f("LIGHTS").sth(a.id).f(a.value==0?"normal":a.value==1?"flicker":a.value==2?"dark":"red").n(a.amount);
-    else if(a.type==T::Noise&&bankSound(a.sound)&&(a.index==0||a.index==1)&&a.amount>0&&a.amount<=4&&a.value>=0&&a.value<=60&&a.id==plain.id&&a.enemyKind==plain.enemyKind&&a.position.x==plain.position.x&&a.position.y==plain.position.y&&a.z==plain.z&&a.text.empty())
-     r.f("NOISE").f(bankSound(a.sound)->name).n(a.amount).f(a.index==0?"behind":"ahead").i(a.value);
+    else if(a.type==T::Noise&&bankSound(a.sound)&&a.index>=0&&a.index<=3&&a.amount>0&&a.amount<=4&&a.value>=0&&a.value<=60&&a.id==plain.id&&a.enemyKind==plain.enemyKind&&a.position.x==plain.position.x&&a.position.y==plain.position.y&&a.z==plain.z&&a.text.empty())
+     r.f("NOISE").f(bankSound(a.sound)->name).n(a.amount).f(a.index==0?"behind":a.index==1?"ahead":a.index==2?"lead":"haunt").i(a.value);
     else if(a.type==T::Later&&a.id&&a.value>=-100000&&a.value<=100000&&a.amount>=.1f&&a.amount<=3600&&only(true,true,false,true))r.f("LATER").sth(a.id).i(a.value).n(a.amount);
     else if(a.type==T::Seal&&a.id&&a.value>=-100000&&a.value<=100000&&only(true,true,false,false))r.f("SEAL").sth(a.id).i(a.value);
     else r.f("RAW").i(int(a.type)).st(a.id).i(a.value).i(a.index).i(int(a.enemyKind)).n(a.position.x).n(a.position.y).n(a.z).n(a.amount).i(int(a.sound)).t(a.text);

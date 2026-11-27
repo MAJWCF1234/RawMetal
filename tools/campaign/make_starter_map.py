@@ -1291,6 +1291,20 @@ def showcase(s, slot, catalogue):
     exhibit(m, (18.5, 14.5, 23, 18.5), 'AMBIENT pa_access_granted / mode 2 on sc_pa', 'ON A STATE: PA', 'mode 2', 21, 16)
     plate(m, 9.4, 22.98, 2.8, 2.8, .5, 'DEAD ROOM THIS WAY >', 'REVERB 0.04 / 0.2 s, music 11: silence', 'N')
 
+    # The skinbot stands in the middle of the same hall (its own room would add a column to the building, a ring
+    # of forest round it and new numbers for every later map): the Engineering boss, full size, a still stand-in.
+    skin = json.load(open(os.path.join(ROOT, 'src', 'assets', 'library', 'catalog.json')))['skinbot']   # a library model
+    grow = 2.4 / skin['height']                                           # 2.4 m to the top of its head
+    s.rec(m, 'FIXTURE', i, skin['slot'], 12, 11, 0, round(skin['width'] * grow, 3), round(skin['depth'] * grow, 3), 2.4, 0, 0)
+    # Things on its beat to climb: a low wall, a slab, a crate.
+    s.struct(m, 8.0, 11.2, 10.3, 11.5, 0, .35, 42)
+    s.struct(m, 10.3, 13.3, 12.2, 14.8, 0, .26, 42)
+    s.struct(m, 12.2, 8.1, 12.9, 8.8, 0, .45, 20)
+    clock(m, 'sc_skin_clock')
+    actor(m, 'sc_skin_clock', 0, 0, 15.2, 11.6, 0, 0, False)              # a person, for scale
+    label(m, 8.4, 13.6, 'SKINBOT', 'full size, walking: 2.4 m tall', 'S', 2.2)
+    exhibit(m, (9, 8, 17, 14), 'SKINBOT / the Engineering boss at full size, walking its beat', 'SKINBOT', 'full size', 12, 11)
+
     m = room('Showcase Dead Room', 7, 'SHOWCASE: DEAD ROOM', row=2, title_box=(9, 1, 15, 7), ceiling=2.7)
     i = m['index']
     m['music'] = 11                                    # MusicCue Silence: no score at all

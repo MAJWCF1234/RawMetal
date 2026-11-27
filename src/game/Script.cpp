@@ -115,8 +115,11 @@ void Game::executeScriptAction(const ScriptAction& action){
    break;
   case ScriptAction::Type::Noise:{   // a sound near the player it fired for: behind them or ahead, heard by monsters within value metres
    const PlayerView* who=playerById(m_scriptPlayer);const Player& p=who&&who->body?*who->body:m_player;
-   const float d=action.index==0?-3.5f:4.5f;const Vec2 at=p.pos+Vec2{std::cos(p.angle),std::sin(p.angle)}*d;
-   SoundEvent e{action.sound,at,action.amount,1,true,22,p.z+1.2f};e.aiRadius=action.value>0?float(action.value):-1.f;m_sounds.push_back(e);break;}
+   const float d=action.index==0?-3.5f:4.5f;Vec2 at=p.pos+Vec2{std::cos(p.angle),std::sin(p.angle)}*d;float z=p.z;
+   // 2 where the AI last heard someone, 3 where it hears them most: a monster that hears it goes to look there and
+   // finds them, or not, with its own eyes and ears. With nothing remembered yet, no sound.
+   if(action.index>=2&&!aiRemembered(action.index==3,at,z))break;
+   SoundEvent e{action.sound,at,action.amount,1,true,22,z+1.2f};e.aiRadius=action.value>0?float(action.value):-1.f;m_sounds.push_back(e);break;}
   case ScriptAction::Type::Later:setState(action.id,action.value);break;   // outside an event (no count to keep), at once
   case ScriptAction::Type::Seal:{   // a lockdown: the state, then every leaf that waits on it and is locked swings shut with a slam
    setState(action.id,action.value);
@@ -206,7 +209,7 @@ void Game::updateScripts(float dt){
  if(!m_foreignFrame)m_scriptFx.clear();   // (another map's frame adds to what the host's own frame queued)
  if(m_netScriptsOff)return;   // a multiplayer guest: scripted sequences run on the host alone
  if(!m_foreignFrame)updateReceivingBreach();
- if(!m_foreignFrame)updateAiAgents(dt);
+ if(!m_foreignFrame)updateAiAgents(dt);updateSkinbot(dt);
  for(const auto&event:m_scriptEvents){
   if(!event.id)continue;
   // A co-op host with players on several maps: a map's events run in that map's frame (ForeignChunks.cpp).

@@ -1,0 +1,10 @@
+# The skinbot walking over a slab and a crate in the plain room. Tubes: skinbot-walk.
+world room
+camera 12.8 21.6 2.9 -90 -17
+light 12 15 3.2 1.6 15
+light 7 10 3 1.1 12
+light 17 10 3 1.1 12
+light 12 20 3.2 1.0 14
+size 960 540
+frames 2400
+hud off

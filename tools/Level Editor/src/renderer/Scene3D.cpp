@@ -8,6 +8,7 @@
 #include "../game/physics/PropBodies.h"
 #include "Materials.h"
 #include "Wetness.h"
+#include "../world/SkinbotRig.h"
 #include "../game/CreatureAnimation.h"
 #include "../world/ModelIds.h"
 #include "../world/GlassFracture.h"
@@ -1388,6 +1389,9 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   const float l=std::sqrt(best.x*best.x+best.y*best.y+best.z*best.z);return best*(1/l);};
  auto facility=[&](int model,float x,float y,float base,float width,float depth,float height,float yaw,unsigned parts=~0u,int partFixture=-1,float slopeX=0.f,float slopeY=0.f){
   auto&mesh=m_facilityMeshes[model];Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
+  // The skinbot is drawn where it has walked to, not where it was put.
+  const skinbot::Walker*walker=model==skinbot::Model?game.skinbotWalker():nullptr;
+  if(walker){x=walker->x;y=walker->y;base=walker->z;yaw=walker->yaw;}
   if(!m_staticGeometryBuild&&base+height<dormantFloor)return;Point3 receiver{x,y,base+height*.5f};if(!sphereVisible(receiver,std::max({width,depth,height})))return;
   float radius=std::max(width,depth);if(hidden({x-radius,y-radius,base},{x+radius,y+radius,base+height}))return;
   objectLighting=true;
@@ -1417,7 +1421,11 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    tri(face.v[0],face.v[1],face.v[2],*texture,light);
   };
   const Point3 softL=facilitySoft?softLight({x,y,base+height}):Point3{0,0,1};
+  // Its legs are bent to where its feet are (SkinbotWalker.h), and all of it leans as it stands.
+  std::array<skinbot::Pose,skinbot::LegCount> legs{};if(walker)for(int k=0;k<skinbot::LegCount;++k)legs[size_t(k)]=walker->legPose(k);
   for(auto face:facilitySoft?softmesh::refined(model,mesh):mesh.triangles){
+   if(walker&&size_t(face.part)<mesh.materialNames.size()){int leg=0,section=0;const bool isLeg=skinbot::sectionOf(mesh.materialNames[size_t(face.part)],leg,section);
+    for(auto&v:face.v){skinbot::V q{v.p.x,v.p.y,v.p.z};q=isLeg?skinbot::moveVertex(leg,section,legs[size_t(leg)],q):walker->skin(q);q=walker->lean(q);v.p={q.x,q.y,q.z};}}
    auto place=[&](Point3 p){p={p.x*width/std::max(.001f,range.x),p.y*height/std::max(.001f,range.y),p.z*depth/std::max(.001f,range.z)};const float ex=p.x*c+p.z*s,ey=-p.x*s+p.z*c;return Point3{x+ex,y+ey,base+p.y+height*.5f+ex*slopeX+ey*slopeY};};
    if(facilitySoft){const Point3 a=place(face.v[0].p-center);flatNormal=cross3(place(face.v[1].p-center)-a,place(face.v[2].p-center)-a);}
    softFace=facilitySoft?0.f:1.f;
@@ -2050,7 +2058,7 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   }
   if(m_gpu){m_gpu->setLodTag(nullptr);m_gpu->setPlantTag(-1);}
  };
- auto fixtureBakeable=[&](const Fixture& f){return f.visible&&!w.fixtureHasParts(int(&f-w.fixtures().data()))&&!soft::isSoft(f.model);};
+ auto fixtureBakeable=[&](const Fixture& f){return f.visible&&f.model!=skinbot::Model&&!w.fixtureHasParts(int(&f-w.fixtures().data()))&&!soft::isSoft(f.model);};
  // A terrain chunk with many fixtures bakes them in nine 8 m cells of their own (slot FixtureCellCaches, each its own
  // cache): a cell is quick to bake (no hitch when a chunk comes into range), is drawn only while in view, and a
  // frame bakes the cells far from the player only up to its budget (setBuildBudget).
@@ -2413,6 +2421,8 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
   ceilingLamp(light,lampMount(light),movingGeometry?w.liftLampPower():lampPower(index));
  }
  movingGeometry=false;m_emissionScale=1.f;
+ // The rigged one, every frame (where the others are drawn each frame, the loop below has it).
+ if(staticFixtures&&!m_staticGeometryBuild&&!m_farChunk)for(const auto&fixture:w.fixtures())if(fixture.visible&&fixture.model==skinbot::Model){const bool was=movingGeometry;movingGeometry=true;facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw);movingGeometry=was;}
  if(!staticFixtures)for(const auto&fixture:w.fixtures())if(fixture.visible&&!w.fixtureHasParts(int(&fixture-w.fixtures().data()))&&!soft::isSoft(fixture.model)){facilityLook=fixture.traits.get();facility(fixture.model,fixture.position.x,fixture.position.y,w.floorHeight(fixture.position.x,fixture.position.y)+fixture.base,fixture.width,fixture.depth,fixture.height,fixture.yaw,~0u,-1,fixture.slopeX,fixture.slopeY);facilityLook=nullptr;}
  // Padded fixtures have their own cache, drawn and lit as the static fixtures are: rebuilt only when a pad
  // on them moves (SoftPad::version) or wakes or sleeps, so undeformed they look exactly as they always did.
