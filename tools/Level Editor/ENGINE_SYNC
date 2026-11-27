@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 567f455680184921493dbae3d82d8ac34d461760
-# 2026-11-27 00:02, release: v1.7.7, Skinbot in the dark
+commit 374fb809a17137812a811b05c4365710fb7c49b5
+# 2026-11-27 15:25, Give Skinbot a planted catch step and sync its sprint in co-op

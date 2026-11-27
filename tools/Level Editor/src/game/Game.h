@@ -787,8 +787,8 @@ public:
     void pinToDoor(BulletImpact& mark)const;   // a mark landing on a door's leaf rides with it (Hitscan.cpp)
     const std::vector<ShotRay>& shotRays()const{return m_shotRays;}
     // The skinbot walking on the map being played (null: none here), and sending it to a spot (a laser pointer).
-    const skinbot::Walker* skinbotWalker()const{return m_skinbotLevel==m_level?&m_skinbot:nullptr;}
-    void pointSkinbot(Vec2 at){m_skinbotPointed=true;m_skinbot.pointAt(at.x,at.y);m_skinbotDetour.clear();m_skinbotRetry=0;}
+    const skinbot::Walker* skinbotWalker()const;
+    void pointSkinbot(Vec2 at);
     // Dead bodies' poses (SaveSections.h CorpsePose) by (creature, level, slot): the renderer keeps each body's current
     // pose here as it moves, the physics save section writes and reads them, and a body made again after a load takes
     // its pose back from here. (Kept by the game so a save holds them; written from the renderer's const view.)
@@ -1709,9 +1709,18 @@ private:
     struct AiMind {float tension=0,quiet=0;bool seeded=false;};std::vector<AiMind> m_aiMinds;
     // The walking skinbot (AiAgents.cpp updateSkinbot): a map's skinbot model walks its beat round where it was
     // placed, until it is pointed somewhere. A body to look at only: it is not yet a creature, and is not saved.
-    skinbot::Walker m_skinbot;int m_skinbotLevel=-1,m_skinbotStop=0;float m_skinbotWait=0;bool m_skinbotPointed=false;Vec2 m_skinbotHome{};
-    std::vector<Vec2> m_skinbotDetour;float m_skinbotRetry=0;
+    struct SkinbotState {
+        skinbot::Walker walker;
+        Vec2 home{};
+        std::vector<Vec2> detour;
+        int stop=0;
+        float wait=2.f,retry=0;
+        bool pointed=false,remote=false;
+    };
+    std::map<int,SkinbotState> m_skinbots;
     void updateSkinbot(float dt);
+    void hitSkinbot(int level,SkinbotState& bot,float impact,Vec2 direction);
+    void soundSkinbot(int level,SoundEvent event);
     // The middle of the patch the AI last heard someone in (or, haunt, hears them in most), if it has heard anyone.
     bool aiRemembered(bool haunt,Vec2& at,float& z)const;
     // The Lights block: per AI, a mode (0 as authored, 1 flicker, 2 dark, 3 red) and the tenths of a second left
