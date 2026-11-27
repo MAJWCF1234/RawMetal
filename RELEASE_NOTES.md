@@ -4,6 +4,13 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.6 - Skinbot on the move (2026-11-26)
+
+- Skinbot shoves small light props, climbs onto low obstacles, and goes around heavy objects. It waits when the path is blocked and continues when it clears.
+- The walk is quicker, with short bursts and faster foot placement on climbs.
+- A solid hit from a thrown prop makes Skinbot recoil, recover, and charge for longer.
+- Try it in Starter Map's Showcase Sound hall. Pick up a prop and throw it at Skinbot's body.
+
 ## v1.7.5 - Skinbot (2026-11-26)
 
 - Skinbot moves on four articulated legs, with foot placement and head motion driven by its walk.
