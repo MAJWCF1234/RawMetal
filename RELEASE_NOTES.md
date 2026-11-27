@@ -4,6 +4,13 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.7 - Skinbot in the dark (2026-11-27)
+
+- Skinbot's blades click and clank as they move, with a scrape when a blade slips.
+- A low, pulsing motor follows Skinbot, rises under load, and goes quiet when it stops.
+- Hear its gears engage when it charges and the chassis ring when a thrown prop hits.
+- The same effects play in the standalone game and Campaign Builder's Play mode.
+
 ## v1.7.6 - Skinbot on the move (2026-11-26)
 
 - Skinbot shoves small light props, climbs onto low obstacles, and goes around heavy objects. It waits when the path is blocked and continues when it clears.
