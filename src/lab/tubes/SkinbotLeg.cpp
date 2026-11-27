@@ -4,6 +4,7 @@
 #include "lab/LabAccess.h"
 #include "lab/LabFixture.h"
 #include "world/SkinbotWalker.h"
+#include "world/ModelIds.h"
 #include <cmath>
 #include <cstdio>
 namespace retro::lab {
@@ -36,8 +37,7 @@ const bool skinbotWalk=add({
  .capture=[](Scene& s,const Frame&){if(s.frame>=30&&s.frame<Frames&&s.frame%3==0){char l[16];std::snprintf(l,sizeof l,"v%04d",s.frame);s.shoot(l);}},
  .metrics=[](Scene& s,Report& r){
   r.check("it walks across the course",s.board["x"]>18.5,std::to_string(s.board["x"]));
-  r.check("it hesitates, slips and freezes on the way",s.board["hesitations"]>0&&s.board["slips"]>0&&s.board["freezes"]>0,
-          std::to_string(int(s.board["hesitations"]))+" / "+std::to_string(int(s.board["slips"]))+" / "+std::to_string(int(s.board["freezes"])));
+  r.check("it makes short wind-ups before its bursts",s.board["freezes"]>0,std::to_string(int(s.board["freezes"])));
   r.check("its body rides up over the slab",s.board["high"]>.2,std::to_string(s.board["high"]));}
 });
 const bool starterCourse=add({
@@ -66,6 +66,141 @@ const bool starterCourse=add({
   r.check("the creature walks the full eastbound course",s.board["east"]>19.1,std::to_string(s.board["east"]));
   r.check("the body rises over the obstacles",s.board["high"]>.2,std::to_string(s.board["high"]));
   r.check("the creature turns and walks back without being pointed",s.board["returned"]>0,"both directions");
+ }
+});
+const bool liveProps=add({
+ .name="starter-skinbot-props",.summary="Props brought into Showcase Sound change the Skinbot's walk",
+ .fixtures={"starter-skinbot-props"},
+ .setup=[](Scene& s){LabAccess::setGod(s.g(),true);},
+ .step=[](Scene& s,float){
+  auto& game=s.g();
+  const auto* before=game.skinbotWalker();
+  LabAccess::setCamera(game,{before?before->x:6.f,21.5f},1.3f,-1.5707963f,-15.f);
+  for(int tick=0;tick<19;++tick){
+   game.update({},.05f);
+   const auto* walker=game.skinbotWalker();
+   if(!walker)continue;
+   if(s.board["phase"]==0){game.pointSkinbot({6.f,16.f});s.board["phase"]=1;}
+   auto& props=LabAccess::clutter(game);
+   auto place=[&](int model,Vec2 at,std::array<float,3> size,float mass,float yaw,bool anchored=false){
+    auto traits=std::make_shared<EntityTraits>();traits->mass=mass;traits->anchored=anchored;
+    Clutter prop;prop.model=model;prop.pos=at;prop.dims=size;prop.yaw=yaw;prop.traits=traits;prop.pinned=anchored;
+    prop.z=game.world().supportBelow(at.x,at.y,.2f);prop.sleeping=true;props.push_back(prop);
+   };
+   if(s.board["phase"]==1&&walker->arrived()){
+    game.pointSkinbot({18.7f,16.f});s.board["phase"]=2;
+   }
+   if(s.board["phase"]==2&&walker->x>6.28f){
+    s.board["barrier"]=double(props.size());
+    place(model::ind_barrel,{8.f,12.f},{.65f,23.7f,1.55f},45.f,0,true);s.board["phase"]=3;
+   }
+   if(s.board["phase"]==3){
+    if(walker->x>6.9f)s.board["barrierPenetration"]++;
+    if(walker->x>6.5f)s.board["approachedBarrier"]=1;
+    s.board["closedSeconds"]+=.05;
+    if(s.board["closedSeconds"]>4){
+     props.at(size_t(s.board["barrier"])).broken=true;
+     s.board["phase"]=4;
+    }
+   }
+   if(s.board["phase"]==4&&walker->x>7.f){
+    s.board["crossedAfterRemoval"]=1;s.board["first"]=double(props.size());s.board["phase"]=5;
+    place(model::mug,{9.2f,15.68f},{.22f,.22f,.20f},.6f,0);
+    place(model::packing_crate,{12.1f,16.f},{1.15f,2.3f,.86f},12.f,0);
+    place(model::ind_barrel,{16.f,16.f},{1.2f,1.25f,1.35f},45.f,.37f);
+   }
+   if(s.board["phase"]!=5)continue;
+   const size_t first=size_t(s.board["first"]);
+   const auto& light=props.at(first);
+   const auto& step=props.at(first+1);
+   auto& heavy=props.at(first+2);
+   if(!s.board["moved"]&&walker->x>13.f&&walker->x<14.9f&&std::fabs(walker->y-16.f)>.4f){
+    s.board["moved"]=walker->y>16.f?1:-1;
+    heavy.pos={16.5f,16.f+float(s.board["moved"])*1.25f};heavy.yaw=-.55f;
+   }
+   const Vec2 drop=s.board["moved"]?Vec2{16.5f,16.f+float(s.board["moved"])*1.25f}:Vec2{16.f,16.f};
+   s.board["push"]=std::max(s.board["push"],double(length(light.pos-Vec2{9.2f,15.68f})));
+   s.board["heavyMove"]=std::max(s.board["heavyMove"],double(length(heavy.pos-drop)));
+   if(std::fabs(walker->x-drop.x)<.8f)s.board["detour"]=std::max(s.board["detour"],double(std::fabs(walker->y-drop.y)));
+   if(heavy.footprintContains({walker->x,walker->y}))s.board["overlap"]++;
+   for(const auto& foot:walker->feet){
+    if(foot.planted()&&step.footprintContains({foot.at.x,foot.at.y})&&std::fabs(foot.at.z-(step.z+step.height()))<.04f)s.board["planted"]++;
+    if(heavy.footprintContains({foot.at.x,foot.at.y})&&foot.at.z<heavy.z+heavy.height()-.04f)s.board["footOverlap"]++;
+   }
+   s.board["east"]=std::max(s.board["east"],double(walker->x));
+
+  }
+ },
+ .capture=[](Scene& s,const Frame&){
+  auto capture=[&](const char* name,bool condition){if(condition&&!s.board[name]){s.shoot(name);s.board[name]=1;}};
+  capture("01-blocked-lane",s.board["phase"]==3&&s.board["approachedBarrier"]!=0);
+  if(s.board["phase"]!=5)return;
+  const auto* walker=s.g().skinbotWalker();
+  const auto& props=s.g().clutter();
+  const size_t first=size_t(s.board["first"]);
+  const auto& step=props.at(first+1);
+  const auto& heavy=props.at(first+2);
+  capture("02-small-prop-shove",s.board["push"]>.18);
+  if(walker){
+   bool onStep=false;
+   for(const auto& foot:walker->feet)onStep|=foot.planted()&&step.footprintContains({foot.at.x,foot.at.y})
+                                           &&std::fabs(foot.at.z-(step.z+step.height()))<.04f;
+   capture("03-step-onto-crate",onStep);
+   capture("04-detour-around-barrel",s.board["moved"]!=0&&std::fabs(walker->x-heavy.pos.x)<.6f&&std::fabs(walker->y-heavy.pos.y)>1.4f);
+  }
+ },
+ .metrics=[](Scene& s,Report& r){
+  r.check("a tiny light prop moves under physical contact",s.board["push"]>.18,std::to_string(s.board["push"]));
+  r.check("the gait plants a foot on the low prop",s.board["planted"]>10,std::to_string(s.board["planted"]));
+  r.check("the body and feet go around the heavy prop",s.board["overlap"]==0&&s.board["footOverlap"]==0&&s.board["detour"]>1.25&&s.board["heavyMove"]<.08,
+          "body overlaps "+std::to_string(s.board["overlap"])+", foot overlaps "+std::to_string(s.board["footOverlap"])+", detour "+std::to_string(s.board["detour"]));
+  r.check("it replans after the heavy prop is moved mid-detour",s.board["moved"]!=0&&s.board["east"]>18.4,std::to_string(s.board["east"]));
+  r.check("it waits at a blocked lane and continues after clearance",s.board["approachedBarrier"]!=0&&s.board["barrierPenetration"]==0&&s.board["crossedAfterRemoval"]!=0,
+          "blocked for "+std::to_string(s.board["closedSeconds"])+" s, approached "+std::to_string(s.board["approachedBarrier"])+", crossed after removal "+std::to_string(s.board["crossedAfterRemoval"]));
+ }
+});
+const bool skinbotImpact=add({
+ .name="starter-skinbot-impact",.summary="A thrown crate glances off Skinbot, which stumbles before charging",
+ .fixtures={"starter-skinbot-impact"},
+ .setup=[](Scene& s){LabAccess::setGod(s.g(),true);},
+ .step=[](Scene& s,float){
+  auto& game=s.g();
+  for(int tick=0;tick<9;++tick){
+   game.update({},.025f);
+   const auto* walker=game.skinbotWalker();
+   if(!walker)continue;
+   auto launch=[&](float side){
+    Clutter c;c.model=model::packing_crate;c.dims={.42f,.42f,.42f};
+    c.pos={walker->x-1.95f,walker->y+side};c.z=walker->z+.95f;
+    c.velocity={7.f,0};c.vz=.3f;c.projectile=true;
+    auto& props=LabAccess::clutter(game);props.push_back(c);return props.size()-1;
+   };
+   s.board["elapsed"]+=.025;
+   if(s.board["elapsed"]<.03){game.pointSkinbot({19.f,12.f});launch(2.45f);}
+   if(s.board["elapsed"]<.75&&walker->curse.freeze>0)s.board["falseStumble"]=1;
+   if(s.board["elapsed"]>=.75&&s.board["thrown"]==0){s.board["thrown"]=1;s.board["prop"]=double(launch(0));}
+   if(s.board["thrown"]==0)continue;
+   if(walker->curse.freeze>0&&walker->curse.rush>3.f){
+    s.board["stumble"]=1;
+    s.board["sag"]=std::max(s.board["sag"],double(-walker->curse.sag));
+   }
+   if(s.board["stumble"]!=0&&walker->curse.freeze<=0&&walker->curse.rush>.1f){
+    s.board["recovered"]+=.025;
+    s.board["peak"]=std::max(s.board["peak"],double(std::hypot(walker->velocityX,walker->velocityY)));
+   }
+  }
+  if(const auto* walker=game.skinbotWalker())LabAccess::setCamera(game,{walker->x,17.f},1.3f,-1.5707963f,-10.f);
+ },
+ .capture=[](Scene& s,const Frame&){
+  if(s.board["stumble"]&&s.board["recovered"]==0&&!s.board["capturedImpact"]){s.shoot("01-stumble");s.board["capturedImpact"]=1;}
+  if(s.board["peak"]>1.55&&!s.board["capturedCharge"]){s.shoot("02-recovery-charge");s.board["capturedCharge"]=1;}
+ },
+ .metrics=[](Scene& s,Report& r){
+  r.check("a throw past its side does not trigger a stumble",s.board["elapsed"]>.75&&s.board["falseStumble"]==0);
+  r.check("the crate collision interrupts the walk and recoils the body",s.board["stumble"]&&s.board["sag"]>.04
+   &&!s.g().clutter().at(size_t(s.board["prop"])).projectile,std::to_string(s.board["sag"]));
+  r.check("it recovers into a sustained faster charge",s.board["recovered"]>2.8&&s.board["peak"]>1.55,
+          std::to_string(s.board["recovered"])+" s at up to "+std::to_string(s.board["peak"])+" m/s");
  }
 });
 }

@@ -1,0 +1,6 @@
+world custom "custom maps/Starter Map.rmc"
+map 42
+camera 12.8 21.5 2.1 -90 -15
+frames 62
+step 0.05
+hud off

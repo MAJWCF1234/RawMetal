@@ -17,6 +17,8 @@ namespace retro::skinbot {
 struct W {float x=0,y=0,z=0;};
 // The ground under x,y: the highest surface at or below `from`.
 using Ground=std::function<float(float x,float y,float from)>;
+using BodyClear=std::function<bool(W)>;
+using FootClear=std::function<bool(W,W)>;
 
 struct Foot {W at{},from{},to{};float progress=1;
  float time=.30f,lift=.34f;   // this step's own length and height; a slip is a step with no lift
@@ -27,7 +29,7 @@ struct Foot {W at{},from{},to{};float progress=1;
 struct Curse {
  bool on=true;std::uint32_t seed=0x5c1fb07u;
  float quiver=0,sag=0,sagSpeed=0,sway=0,swaySpeed=0;     // a tremble that dies away; a knee giving and its recovery
- float freeze=0,rush=0,nextFreeze=7,sinceSlip=3,clock=0;
+ float freeze=0,rush=0,nextRush=4.5f,sinceSlip=3,clock=0;
  int slips=0,hesitations=0,freezes=0;
  // The head: where it is turned (radians, from the body), how fast it is swinging, and its twitches.
  float headYaw=0,headPitch=0,headRoll=0,yawSpeed=0,pitchSpeed=0,rollSpeed=0,wantYaw=0,wantPitch=0,wantRoll=0,glance=1,twitch=2;
@@ -39,10 +41,10 @@ struct Curse {
 class Walker {
 public:
  static constexpr float Scale=2.4f/1.474f;          // 2.4 m to the top of its head
- static constexpr float Speed=.95f,TurnRate=1.5f;   // m/s and rad/s: a heavy prowl
- static constexpr float StepTime=.30f,StepLift=.34f;
- static constexpr float Trigger=.34f,Settle=.10f,Ahead=.55f;  // m off its place before it steps (walking, standing); lead, in steps
- static constexpr float Climb=.75f;                 // the tallest thing a foot is set up onto (m)
+ static constexpr float Speed=1.16f,RushSpeed=1.85f,TurnRate=1.7f;
+ static constexpr float StepTime=.25f,StepLift=.43f;
+ static constexpr float Trigger=.30f,Settle=.10f,Ahead=.48f;  // m off its place before it steps (walking, standing); lead, in steps
+ static constexpr float Climb=.99f;                 // the tallest thing a foot is set up onto (m)
  Curse curse{};
  bool watching=false;W watched{};                   // something it has noticed: the head goes to it
  void watch(W at){watching=true;watched=at;}
@@ -96,23 +98,26 @@ public:
  // Where leg's foot wants to be, standing: its modelled place under the body as it is.
  W home(int leg)const{const V m=joint(leg,3);W w=toWorld({m.x,0,m.z});return w;}
 
- void update(float dt,const Ground& ground){
+ void update(float dt,const Ground& ground,const BodyClear& clear={},const W* waypoint=nullptr,const FootClear& footClear={}){
   dt=std::min(dt,.05f);if(dt<=0)return;
   // The body: turn toward the goal, walk once roughly facing it, and only as fast as its feet can keep up.
   think(dt);
   float wantSpeed=0,wantTurn=0;
   if(going){const float dx=goal.x-x,dy=goal.y-y,left=std::hypot(dx,dy);
    if(left<.25f)going=false;
-   else{const float off=std::remainder(std::atan2(dx,dy)-yaw,6.2831853f);wantTurn=std::clamp(off*2.5f,-TurnRate,TurnRate);
-    wantSpeed=Speed*std::clamp(1.2f-std::fabs(off),0.f,1.f)*std::clamp(left/.8f,.3f,1.f);}}
+   else{const W target=waypoint?*waypoint:goal;const float tx=target.x-x,ty=target.y-y;
+    const float off=std::remainder(std::atan2(tx,ty)-yaw,6.2831853f);wantTurn=std::clamp(off*2.5f,-TurnRate,TurnRate);
+    wantSpeed=Speed*std::clamp(1.2f-std::fabs(off),0.f,1.f)*std::clamp(std::hypot(tx,ty)/.8f,.3f,1.f);}}
   float strain=0;for(int leg=0;leg<LegCount;++leg)if(feet[size_t(leg)].planted()){const W h=home(leg);strain=std::max(strain,std::hypot(h.x-feet[size_t(leg)].at.x,h.y-feet[size_t(leg)].at.y));}
   const float keep=std::clamp((.75f-strain)/.3f,0.f,1.f);   // a foot far behind holds the body back until it has stepped
   turning+=std::clamp(wantTurn*keep-turning,-5*dt,5*dt);yaw=std::remainder(yaw+turning*dt,6.2831853f);
   if(curse.freeze>0){wantSpeed=0;wantTurn=0;velocityX=velocityY=turning=0;}          // dead still, all at once
-  else if(curse.rush>0)wantSpeed*=1.4f;                                               // and then too smoothly
+  else if(curse.rush>0)wantSpeed*=RushSpeed/Speed;
   const float vx=std::sin(yaw)*wantSpeed*keep,vy=std::cos(yaw)*wantSpeed*keep;
   velocityX+=std::clamp(vx-velocityX,-3*dt,3*dt);velocityY+=std::clamp(vy-velocityY,-3*dt,3*dt);
-  x+=velocityX*dt;y+=velocityY*dt;
+  const W next{x+velocityX*dt,y+velocityY*dt,z};
+  if(!clear||clear(next)){x=next.x;y=next.y;}
+  else velocityX=velocityY=0;
   const bool moving=std::hypot(velocityX,velocityY)>.08f||std::fabs(turning)>.15f;
   // The feet: those in the air swing on; then the standing ones that want to move may lift, the worst off first.
   for(int leg=0;leg<LegCount;++leg){Foot& f=feet[size_t(leg)];if(f.planted())continue;
@@ -120,10 +125,17 @@ public:
    if(f.hang>0&&f.progress>=f.hangAt){f.hang-=dt;                   // it is not sure: the blade waits over the floor, shaking
     const float t=curse.clock*55.f+float(leg)*2.f;f.at.x+=std::sin(t)*.35f*dt;f.at.y+=std::cos(t*1.3f)*.35f*dt;f.at.z+=std::sin(t*.9f)*.25f*dt;
     if(f.hang>0)continue;}
-   f.progress=std::min(1.f,f.progress+dt/f.time);const float s=f.progress,e=s*s*(3-2*s);
+   const float s=std::min(1.f,f.progress+dt/f.time),e=s*s*(3-2*s);
    const float over=std::max(f.from.z,f.to.z)+f.lift;
-   f.at={f.from.x+(f.to.x-f.from.x)*e,f.from.y+(f.to.y-f.from.y)*e,
-         s<.5f?f.from.z+(over-f.from.z)*(1-(1-2*s)*(1-2*s)):f.to.z+(over-f.to.z)*(1-(2*s-1)*(2*s-1))};
+   const W nextFoot{f.from.x+(f.to.x-f.from.x)*e,f.from.y+(f.to.y-f.from.y)*e,
+                    s<.5f?f.from.z+(over-f.from.z)*(1-(1-2*s)*(1-2*s)):f.to.z+(over-f.to.z)*(1-(2*s-1)*(2*s-1))};
+   if(footClear&&!footClear(f.at,nextFoot)){
+    // Something moved into a swing. Set the blade down on this side and take a new step from there.
+    W land=f.at;land.z=ground(land.x,land.y,land.z+.03f);
+    if(footClear(f.at,land)){f.from=f.at;f.to=land;f.progress=0;f.time=.16f;f.lift=f.hang=0;}
+    continue;
+   }
+   f.progress=s;f.at=nextFoot;
    if(f.planted()){f.at=f.to;if(curse.on&&f.lift>0)landed(leg,ground);}}
   std::array<std::pair<float,int>,LegCount> wants{};
   for(int leg=0;leg<LegCount;++leg){const Foot& f=feet[size_t(leg)];const W h=home(leg);
@@ -133,17 +145,27 @@ public:
   for(const auto& [off,leg]:wants){if(off<=0||curse.freeze>0||!mayLift(leg,moving))continue;
    Foot& f=feet[size_t(leg)];f.from=f.at;f.hang=0;f.hangAt=2;
    f.time=StepTime;f.lift=StepLift;
-   if(curse.on){f.time*=curse.between(.75f,1.35f)*(curse.rush>0?.7f:1.f);f.lift*=curse.between(.8f,1.35f);
-    if(curse.rush<=0&&curse.next()<.16f){f.hang=curse.between(.22f,.6f);f.hangAt=curse.between(.35f,.55f);++curse.hesitations;curse.quiver=std::min(1.f,curse.quiver+.35f);}}
+   if(curse.on){f.time*=curse.between(.85f,1.19f)*(curse.rush>0?.68f:1.f);f.lift*=curse.between(.9f,1.19f);}
    // Land where its place will be when the step is done, and a little further, so it is not left behind at once.
    const float lead=StepTime*(1+Ahead);const float keepYaw=yaw,keepX=x,keepY=y;
    x+=velocityX*lead;y+=velocityY*lead;yaw+=turning*lead;W land=home(leg);x=keepX;y=keepY;yaw=keepYaw;
    land.z=ground(land.x,land.y,z+Climb);
    // Too high to set a foot on (a wall, a pillar): try short of it, back toward the body.
    for(int back=1;back<=3&&land.z>z+Climb-.02f;++back){const float k=1-.25f*back;land.x=x+(land.x-x)*k;land.y=y+(land.y-y)*k;land.z=ground(land.x,land.y,z+Climb);}
+   if(footClear){
+    for(int back=1;back<=3&&!footClear(f.at,land);++back){
+     land.x=(land.x+f.at.x)*.5f;land.y=(land.y+f.at.y)*.5f;land.z=ground(land.x,land.y,z+Climb);
+    }
+    if(!footClear(f.at,land))continue;
+   }
    // High enough to clear whatever lies across the step (a low wall between the two places).
    {float tallest=std::max(f.from.z,land.z);for(int k=1;k<8;++k){const float t=float(k)/8;tallest=std::max(tallest,ground(f.from.x+(land.x-f.from.x)*t,f.from.y+(land.y-f.from.y)*t,z+Climb));}
     f.lift+=std::max(0.f,tallest-std::max(f.from.z,land.z));}
+   if(land.z>f.from.z+.14f)f.time*=.85f;
+   else if(curse.on&&curse.rush<=0&&curse.next()<.055f){
+    f.hang=curse.between(.07f,.15f);f.hangAt=curse.between(.35f,.55f);++curse.hesitations;
+    curse.quiver=std::min(1.f,curse.quiver+.35f);
+   }
    f.to=land;f.progress=0;}
   // The body rides its feet: their mean height, leaning with the front-to-back and side-to-side differences.
   auto h=[&](int leg){const Foot& f=feet[size_t(leg)];return f.planted()?f.at.z:f.to.z;};
@@ -151,7 +173,7 @@ public:
   const float lengthways=std::fabs(joint(ArmL,3).z-joint(RearL,3).z)*Scale,across=std::fabs(joint(ArmR,3).x-joint(ArmL,3).x)*Scale;
   const float wantPitch=std::clamp(std::atan2((h(ArmL)+h(ArmR)-h(RearL)-h(RearR))*.5f,lengthways),-.45f,.45f);
   const float wantRoll=std::clamp(std::atan2((h(ArmR)+h(RearR)-h(ArmL)-h(RearL))*.5f,across),-.3f,.3f);
-  const float ease=1-std::exp(-dt*6);
+  const float ease=1-std::exp(-dt*(mean>z?8.f:6.f));
   z+=(mean-z)*ease;pitch+=(wantPitch-pitch)*ease;roll+=(wantRoll-roll)*ease;
  }
  int airborne()const{int n=0;for(const auto& f:feet)n+=!f.planted();return n;}
@@ -183,9 +205,9 @@ private:
   auto spring=[dt](float& at,float& speed,float want,float stiff,float damp){speed+=((want-at)*stiff-speed*damp)*dt;at+=speed*dt;};
   spring(c.sag,c.sagSpeed,0,90,7);spring(c.sway,c.swaySpeed,0,55,5);
   c.sag=std::clamp(c.sag,-.16f,.07f);c.sway=std::clamp(c.sway,-.16f,.16f);
-  if(c.freeze>0){c.freeze-=dt;if(c.freeze<=0)c.rush=c.between(.9f,1.8f);}
+  if(c.freeze>0){c.freeze-=dt;if(c.freeze<=0)c.rush=c.between(1.3f,2.2f);}
   else if(c.rush>0)c.rush-=dt;
-  else if(c.on&&going){c.nextFreeze-=dt;if(c.nextFreeze<=0){c.freeze=c.between(.5f,1.3f);c.nextFreeze=c.between(7.f,16.f);++c.freezes;}}
+  else if(c.on&&going){c.nextRush-=dt;if(c.nextRush<=0){c.freeze=c.between(.10f,.20f);c.nextRush=c.between(5.f,10.f);++c.freezes;}}
   // Where the head wants to be: on what it watches, or on one thing after another.
   if(watching){const float dx=watched.x-x,dy=watched.y-y,dz=watched.z-(z+2.f);
    c.wantYaw=std::clamp(std::remainder(std::atan2(dx,dy)-yaw,6.2831853f),-1.25f,1.25f);c.wantPitch=std::clamp(std::atan2(dz,std::max(.5f,std::hypot(dx,dy)))+.35f,-.55f,.55f);}
@@ -216,7 +238,7 @@ inline bool testSkinbotWalk(std::ostream& report){
    if(obstacles){if(gy>3.5f&&gy<7.2f)top=.3f;if(gx>-.2f&&gx<.9f&&gy>8.4f&&gy<9.4f)top=.5f;}
    return top<=from?top:0.f;};
   Walker w;w.place(0,0,0,ground,1);
-  float headFar=0,still=0;
+  float headFar=0,peakRush=0,peakWalk=0,longestPause=0,sinceRush=1;
   const std::array<W,3> route{W{0,11,0},W{5,11,0},W{5,1,0}};
   size_t leg=0;w.pointAt(route[0].x,route[0].y);
   int frames=0,slid=0,unsupported=0,adjacent=0,stretched=0,under=0,steps=0,onSlab=0;float highest=0,leanest=0;
@@ -232,11 +254,16 @@ inline bool testSkinbotWalk(std::ostream& report){
     for(int j=i+1;j<LegCount;++j)if(!f.planted()&&!w.feet[size_t(j)].planted()&&Walker::beside(i,j))++adjacent;}
    if(w.airborne()>2)++unsupported;
    headFar=std::max(headFar,std::fabs(w.curse.headYaw));
+   const float pace=std::hypot(w.velocityX,w.velocityY);
+   if(w.curse.rush>0){peakRush=std::max(peakRush,pace);sinceRush=0;}
+   else{sinceRush+=1.f/60;if(sinceRush>.35f)peakWalk=std::max(peakWalk,pace);}
+   longestPause=std::max(longestPause,w.curse.freeze);
    if(!std::isfinite(w.curse.headYaw)||!std::isfinite(w.curse.sag)||std::fabs(w.curse.sag)>.17f)++under;
    highest=std::max(highest,w.z);leanest=std::max(leanest,std::fabs(w.pitch));last=w.feet;
   }
   const std::string name=obstacles?"over a slab and a crate: ":"on a flat floor: ";
-  check(w.curse.hesitations>0&&w.curse.slips>0&&w.curse.freezes>0,name+"cursed as it goes: it hesitates ("+std::to_string(w.curse.hesitations)+"), slips ("+std::to_string(w.curse.slips)+") and freezes ("+std::to_string(w.curse.freezes)+")");
+  check(peakRush>peakWalk+.25f&&longestPause<=.2f,name+"bursts are faster than the prowl ("+
+        std::to_string(peakWalk)+" to "+std::to_string(peakRush)+" m/s), brief wind-up ("+std::to_string(longestPause)+" s)");
   check(headFar>.4f,name+"the head turns on its own ("+std::to_string(headFar*57.3f)+" degrees at most)");
   {Walker t;t.place(0,0,0,ground,1);const V shoulder=joint(ArmR,0),crown{0,1.45f,.55f};t.curse.headYaw=1;
    check(length(t.skin(shoulder)-shoulder)<.002f&&length(t.skin(crown)-crown)>.08f,name+"turning the head bends the skin and leaves the shoulders where they bolt on");}
