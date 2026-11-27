@@ -6,6 +6,7 @@
 //    doors and pickups in co-op, what the presentation reads.
 //  - MatchTest.cpp: --net-test, several Games in one process on one LoopbackHub.
 #include "NetTypes.h"
+#include "../world/SkinbotWalker.h"
 #include <array>
 #include <cstdint>
 #include <deque>
@@ -16,7 +17,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-namespace retro { class Game; struct InputState; struct CustomCampaign; class World; struct Clutter; }
+namespace retro { class Game; struct InputState; struct CustomCampaign; class World; struct Clutter; struct SoundEvent; }
 namespace retro::net {
 namespace wire { struct Writer; struct Reader; }
 
@@ -144,6 +145,9 @@ private:
  void sendSnapshot();
  void sendGuestState();
  void sendCreatures();
+ void readSkinbotPose(wire::Reader& reader);
+ void readSkinbotSound(wire::Reader& reader);
+ void smoothSkinbots(float dt);
  void sendDoors();
  void trackPickups();
  // Deathmatch: what is taken from the map is back after PickupRespawn seconds, on the host's word.
@@ -245,12 +249,16 @@ private:
  std::vector<std::vector<char>> m_pickupSeen;
  std::vector<char> m_doorSeen;std::vector<float> m_doorTouched;int m_doorLevel=-1;
  std::vector<CreatureTarget> m_creatureTargets;int m_creatureLevel=-1;
+ struct SkinbotTarget {std::uint32_t ms=0;skinbot::Walker pose;};
+ std::map<int,SkinbotTarget> m_skinbotTargets;
  int m_lastLevel=-1;
  std::size_t m_lastSnapshotBytes=0,m_bytesSent=0,m_bytesReceived=0;
  std::deque<ChatEntry> m_chat;
  std::map<PeerId,std::pair<float,float>> m_chatBuckets;   // tokens and when they were last counted, by sender
  std::array<PeerId,MaxSlots> m_chatKnown{};std::array<std::string,MaxSlots> m_chatKnownName{};bool m_chatPrimed=false;
  float m_voiceTimer=0;std::map<PeerId,float> m_peerVolume;std::map<PeerId,bool> m_peerMuted;
+ void sendSkinbotSound(int level,const SoundEvent& event);
+ friend class retro::Game;
  friend bool testMatch(std::ostream& report);
 };
 // --net-test: matches over a LoopbackHub, several Games in one process.

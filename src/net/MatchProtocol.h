@@ -22,6 +22,8 @@ enum Message:std::uint8_t{
  PropState=15,   // host -> guests on or beside that map: u32 host ms, u8 level, u8 count, {u16 id, u8 flags (1 asleep, 2 broken,
                  //   4 carried, 8 liquid byte follows, 16 map byte follows), [u8 map the id was named on], i16 x y z (1/256 m),
                  //   u32 orientation (smallest three, 10 bits each), [u8 liquid level 0-255]} (MatchProps.cpp, ~13 bytes a prop)
+ SkinbotPose=17, // host -> guests: u32 host ms, u8 level, flags, body, head, four blade contacts
+ SkinbotSound=18,// host -> guests: u8 level, u8 sound, position, gain, pitch and radius
  PropCarry=16,   // guest -> host: u8 level, u8 map named on, u16 id, i16 x y z (1/256 m), u32 orientation (what its hand holds)
  // Events (reliable)
  Shot=20,        // guest -> host: u8 weapon, u8 level, f32 x y z, i16 direction x y z, u32 seed, u32 view time (host ms)

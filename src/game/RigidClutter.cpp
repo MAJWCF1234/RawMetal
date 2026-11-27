@@ -324,10 +324,11 @@ void Game::simulateRigidProps(std::vector<Clutter>& list,int level,float dt,int 
    // or the player's own body in the solver pushes it; set out of his hull each step, a barrel would ride at a sprint.
    float left=std::max(0.f,penetration+.001f-moved);auto next=c.pos-n*left;if(left>0&&closing>.001f&&sweepFits(c.pos,next))c.pos=next;
    if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}};
-  if(level==m_level&&c.projectile&&skinbotWalker()){
-   contact({m_skinbot.x,m_skinbot.y},m_skinbot.z+skinbot::ImpactBottom,skinbot::ImpactHeight,skinbot::ImpactRadius,
-           110.f,{m_skinbot.velocityX,m_skinbot.velocityY},[](Vec2){return Vec2{};},
-           [&](float impact,Vec2 direction){if(skinbot::reactToProp(m_skinbot,impact,direction,m_sounds))m_skinbotWait=0;},[](float,Vec2){});
+  if(const auto bot=m_skinbots.find(level);c.projectile&&bot!=m_skinbots.end()){
+   const auto& walker=bot->second.walker;
+   contact({walker.x,walker.y},walker.z+skinbot::ImpactBottom,skinbot::ImpactHeight,skinbot::ImpactRadius,
+           110.f,{walker.velocityX,walker.velocityY},[](Vec2){return Vec2{};},
+           [&](float impact,Vec2 direction){hitSkinbot(level,bot->second,impact,direction);},[](float,Vec2){});
   }
   // A jointed prop he stands on (a bridge's plank, a lift) carries him; it does not strike or shove him.
   if(!onJointedTop(level,index,m_player.pos,m_player.z))contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);},[&](float dv,Vec2){m_verticalSpringVelocity-=std::min(1.f,dv*.4f);});

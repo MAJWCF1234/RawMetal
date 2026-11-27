@@ -438,6 +438,20 @@ void Match::sendCreatures(){
  for(int level=0;level<g.chunkCount();++level){
   std::vector<int> to;for(int i=0;i<MaxSlots;++i)if(i!=m_selfSlot&&seesLevel(i,level))to.push_back(i);
   if(to.empty()||!g.chunkResident(level))continue;
+  if(const auto bot=g.m_skinbots.find(level);bot!=g.m_skinbots.end()){
+   const auto& pose=bot->second.walker;
+   const unsigned flags=(pose.going?1u:0u)|(pose.curse.freeze>0?2u:0u)|(pose.catching()?4u:0u)
+       |(pose.curse.rush>0?8u:0u)|(pose.charging()?16u:0u);
+   wire::Writer w;
+   w.u8(SkinbotPose).u32(millis(m_clock)).u8(unsigned(level)).u8(flags)
+    .f32(pose.x).f32(pose.y).f32(pose.z).angle(pose.yaw).q16(pose.pitch,4096).q16(pose.roll,4096)
+    .q16(pose.velocityX,256).q16(pose.velocityY,256).q16(pose.turning,4096)
+    .q16(pose.curse.headYaw,4096).q16(pose.curse.headPitch,4096).q16(pose.curse.headRoll,4096)
+    .q16(pose.curse.sag,4096).q16(pose.curse.sway,4096).q16(pose.curse.breath,4096).unit8(pose.curse.quiver);
+   for(const auto& foot:pose.feet)
+    w.q16(foot.at.x-pose.x,1024).q16(foot.at.y-pose.y,1024).q16(foot.at.z-pose.z,1024).unit8(foot.progress);
+   for(int i:to)send(m_slots[size_t(i)].peer,State,w,false);
+  }
   const auto& list=g.chunkEnemies(level);std::vector<int> alive;
   for(size_t i=0;i<list.size()&&i<1024;++i)if(list[i].alive||list[i].deathTime<Enemy::CorpseLifetime+1)alive.push_back(int(i));
   size_t at=0;
@@ -451,6 +465,80 @@ void Match::sendCreatures(){
   }while(at<alive.size());
  }
 }
+void Match::readSkinbotPose(wire::Reader& r){
+ const auto ms=r.u32();
+ const int level=int(r.u8());
+ const unsigned flags=r.u8();
+ Game& g=m_game;
+ if(r.bad||level>=g.chunkCount()||!g.chunkResident(level))return;
+ auto previous=m_skinbotTargets.find(level);
+ if(previous!=m_skinbotTargets.end()&&std::int32_t(ms-previous->second.ms)<=0)return;
+ skinbot::Walker pose;
+ pose.setRemoteMotion(flags&1,flags&2,flags&4,flags&8,flags&16);
+ pose.x=r.f32();pose.y=r.f32();pose.z=r.f32();pose.yaw=r.angle();
+ pose.pitch=r.q16(4096);pose.roll=r.q16(4096);
+ pose.velocityX=r.q16(256);pose.velocityY=r.q16(256);pose.turning=r.q16(4096);
+ pose.curse.headYaw=r.q16(4096);pose.curse.headPitch=r.q16(4096);pose.curse.headRoll=r.q16(4096);
+ pose.curse.sag=r.q16(4096);pose.curse.sway=r.q16(4096);pose.curse.breath=r.q16(4096);pose.curse.quiver=r.unit8();
+ for(auto& foot:pose.feet){
+  foot.at={pose.x+r.q16(1024),pose.y+r.q16(1024),pose.z+r.q16(1024)};
+  foot.progress=r.unit8();
+ }
+ if(r.bad)return;
+ auto& bot=g.m_skinbots[level];
+ if(!bot.remote||std::hypot(bot.walker.x-pose.x,bot.walker.y-pose.y)>2.f)bot.walker=pose;
+ bot.remote=true;
+ m_skinbotTargets.insert_or_assign(level,SkinbotTarget{ms,pose});
+}
+
+void Match::smoothSkinbots(float dt){
+ const float blend=std::min(1.f,dt*18.f);
+ for(const auto& [level,target]:m_skinbotTargets){
+  const auto it=m_game.m_skinbots.find(level);
+  if(it==m_game.m_skinbots.end()||!it->second.remote)continue;
+  auto& live=it->second.walker;
+  const auto& pose=target.pose;
+  auto approach=[&](float& at,float to){at+=(to-at)*blend;};
+  approach(live.x,pose.x);approach(live.y,pose.y);approach(live.z,pose.z);
+  live.yaw+=std::remainder(pose.yaw-live.yaw,kTwoPi)*blend;
+  approach(live.pitch,pose.pitch);approach(live.roll,pose.roll);
+  approach(live.velocityX,pose.velocityX);approach(live.velocityY,pose.velocityY);approach(live.turning,pose.turning);
+  approach(live.curse.headYaw,pose.curse.headYaw);approach(live.curse.headPitch,pose.curse.headPitch);
+  approach(live.curse.headRoll,pose.curse.headRoll);approach(live.curse.quiver,pose.curse.quiver);
+  approach(live.curse.sag,pose.curse.sag);approach(live.curse.sway,pose.curse.sway);approach(live.curse.breath,pose.curse.breath);
+  live.curse.clock+=dt;
+  live.setRemoteMotion(pose.going,pose.curse.freeze>0,pose.catching(),pose.curse.rush>0,pose.charging());
+  for(size_t i=0;i<live.feet.size();++i){
+   auto& foot=live.feet[i];
+   const auto& next=pose.feet[i];
+   approach(foot.at.x,next.at.x);approach(foot.at.y,next.at.y);approach(foot.at.z,next.at.z);
+   foot.progress=next.progress;
+  }
+ }
+}
+
+void Match::sendSkinbotSound(int level,const SoundEvent& event){
+ if(!m_host||m_mode!=Mode::Coop||m_phase!=Phase::Playing)return;
+ wire::Writer w;
+ w.u8(SkinbotSound).u8(unsigned(level)).u8(unsigned(event.sound))
+  .f32(event.position.x).f32(event.position.y).f32(event.z).unit8(event.gain).q16(event.pitch,1024).unit8(event.radius/32.f);
+ const bool important=event.sound==Sound::SkinbotHit||event.sound==Sound::SkinbotSurge;
+ for(int i=0;i<MaxSlots;++i)if(i!=m_selfSlot&&seesLevel(i,level))
+  send(m_slots[size_t(i)].peer,important?Events:State,w,important);
+}
+
+void Match::readSkinbotSound(wire::Reader& r){
+ const int level=int(r.u8()), sound=int(r.u8());
+ const Vec2 at{r.f32(),r.f32()};
+ const float z=r.f32(),gain=r.unit8(),pitch=r.q16(1024),radius=r.unit8()*32.f;
+ Game& g=m_game;
+ if(r.bad||level>=g.chunkCount()||!g.inPlayerFrame(level)||
+    sound<int(Sound::SkinbotBlade)||sound>int(Sound::SkinbotScrape)||sound==int(Sound::SkinbotMotor))return;
+ SoundEvent event{Sound(sound),at+origin(level)-origin(g.m_level),gain,pitch,true,radius,z};
+ event.aiRadius=-1;
+ g.m_netSounds.push_back(event);
+}
+
 void Match::sendDoors(){
  const Game& g=m_game;
  for(int level=0;level<g.chunkCount();++level){
@@ -497,6 +585,7 @@ void Match::trackDoors(float){
   wire::Writer w;w.u8(DoorUse).u8(unsigned(m_game.m_level)).u16(unsigned(i)).u8(doors[i].opening?1:0);send(m_hostId,Events,w,true);}
 }
 void Match::smoothCreatures(float dt){
+ smoothSkinbots(dt);
  Game& g=m_game;if(m_creatureLevel!=g.m_level)return;const float k=std::min(1.f,dt*12.f);
  for(size_t i=0;i<m_creatureTargets.size()&&i<g.m_enemies.size();++i){const auto& t=m_creatureTargets[i];if(!t.set)continue;auto& e=g.m_enemies[i];
   e.pos=e.pos+(t.pos-e.pos)*k;e.z+=(t.z-e.z)*k;e.heading+=std::remainder(t.heading-e.heading,kTwoPi)*k;}
@@ -549,6 +638,8 @@ void Match::handleState(const Packet& p){
  if(p.from!=m_hostId)return;
  if(handleCoopState(type,r))return;   // the people (MatchCoop.cpp)
  if(handlePropState(-1,type,r))return;   // the props (MatchProps.cpp)
+ if(type==SkinbotPose&&m_mode==Mode::Coop){readSkinbotPose(r);return;}
+ if(type==SkinbotSound&&m_mode==Mode::Coop){readSkinbotSound(r);return;}
  if(type==Snapshot){
   const std::uint32_t ms=r.u32();const int round=int(r.u8());const int left=r.i16();const bool over=r.u8()!=0;const int count=int(r.u8());if(r.bad)return;
   if(m_haveSnapshot&&std::int32_t(ms-m_lastSnapshotMs)<0)return;   // an older one, overtaken
@@ -628,6 +719,7 @@ void Match::handleEvent(const Packet& p){
  }
  if(p.from!=m_hostId)return;
  switch(type){
+ case SkinbotSound:if(m_mode==Mode::Coop)readSkinbotSound(r);break;
  case ShotFx:{
   const int shooter=int(r.u8());const int weapon=int(r.u8());const int level=int(r.u8());Point3 o,e;o.x=r.f32();o.y=r.f32();o.z=r.f32();e.x=r.f32();e.y=r.f32();e.z=r.f32();
   const int kind=int(r.u8());const Point3 n=readUnit(r);if(r.bad||level>=g.chunkCount()||!g.inPlayerFrame(level))return;   // (a shot on another map is not seen here)

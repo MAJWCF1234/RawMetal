@@ -6,6 +6,7 @@
 #include "world/SkinbotWalker.h"
 #include "world/ModelIds.h"
 #include "game/EngineRegressionScene.h"
+#include "game/SkinbotImpact.h"
 #include <fstream>
 #include <cmath>
 #include <cstdio>
@@ -163,46 +164,125 @@ const bool liveProps=add({
 });
 const bool skinbotImpact=add({
  .name="starter-skinbot-impact",.summary="A thrown crate glances off Skinbot, which stumbles before charging",
- .fixtures={"starter-skinbot-impact"},
+ .fixtures={"starter-skinbot-impact","starter-skinbot-impact-side","starter-skinbot-impact-blocked"},
  .setup=[](Scene& s){LabAccess::setGod(s.g(),true);},
  .step=[](Scene& s,float){
   auto& game=s.g();
+  const auto scenario=s.fixture->value("strike","front");
   for(int tick=0;tick<9;++tick){
+   const auto* prior=game.skinbotWalker();
+   std::array<bool,skinbot::LegCount> wasPlanted{};
+   if(prior)for(size_t i=0;i<wasPlanted.size();++i)wasPlanted[i]=prior->feet[i].planted();
    game.update({},.025f);
    const auto* walker=game.skinbotWalker();
    if(!walker)continue;
-   auto launch=[&](float side){
+   auto launch=[&](Vec2 offset,Vec2 velocity){
     Clutter c;c.model=model::packing_crate;c.dims={.42f,.42f,.42f};
-    c.pos={walker->x-1.95f,walker->y+side};c.z=walker->z+.95f;
-    c.velocity={7.f,0};c.vz=.3f;c.projectile=true;
+    c.pos=Vec2{walker->x,walker->y}+offset;c.z=walker->z+.95f;
+    c.velocity=velocity;c.vz=.3f;c.projectile=true;
     auto& props=LabAccess::clutter(game);props.push_back(c);return props.size()-1;
    };
    s.board["elapsed"]+=.025;
-   if(s.board["elapsed"]<.03){game.pointSkinbot({19.f,12.f});launch(2.45f);}
-   if(s.board["elapsed"]<.75&&walker->curse.freeze>0)s.board["falseStumble"]=1;
-   if(s.board["elapsed"]>=.75&&s.board["thrown"]==0){s.board["thrown"]=1;s.board["prop"]=double(launch(0));}
+   if(s.board["elapsed"]<.03){game.pointSkinbot({19.f,12.f});launch({-1.95f,2.45f},{7,0});}
+   if(s.board["elapsed"]<.75&&walker->catching())s.board["falseStumble"]=1;
+   if(s.board["elapsed"]>=.75&&s.board["thrown"]==0){s.board["thrown"]=1;s.board["prop"]=double(scenario=="front"?launch({1.95f,0},{-7,0}):launch({0,1.95f},{0,-7}));}
    if(s.board["thrown"]==0)continue;
-   if(walker->curse.freeze>0&&walker->curse.rush>3.f){
+   if(walker->catching()){
+    if(!s.board["stumble"]&&scenario=="blocked"){
+     auto probe=*walker;
+     const skinbot::Ground ground=[&](float x,float y,float z){return game.world().supportBelow(x,y,z);};
+     // Predict which landing is chosen on clear ground, then put a real prop there before the blade moves.
+     for(int frame=0;frame<24&&!s.board["obstacle"];++frame){
+      const auto old=probe.feet;
+      probe.update(.025f,ground);
+      for(size_t i=0;i<old.size();++i)if(old[i].planted()&&!probe.feet[i].planted()){
+       const auto land=probe.feet[i].to;
+       auto traits=std::make_shared<EntityTraits>();traits->anchored=1;traits->mass=45;
+       Clutter block;block.model=model::packing_crate;block.pos={land.x,land.y};block.z=land.z;
+       block.dims={.24f,.24f,1.25f};block.traits=traits;block.pinned=true;block.sleeping=true;
+       LabAccess::clutter(game).push_back(block);
+       s.board["obstacle"]=1;s.board["blockedX"]=land.x;s.board["blockedY"]=land.y;
+       break;
+      }
+     }
+    }
+    for(size_t i=0;i<wasPlanted.size();++i)if(wasPlanted[i]&&!walker->feet[i].planted()){
+     const auto land=walker->feet[i].to;
+     s.board["catch"]=1;
+     if(s.board["obstacle"])s.board["avoided"]=std::hypot(land.x-s.board["blockedX"],land.y-s.board["blockedY"]);
+    }
     s.board["stumble"]=1;
     s.board["sag"]=std::max(s.board["sag"],double(-walker->curse.sag));
    }
-   if(s.board["stumble"]!=0&&walker->curse.freeze<=0&&walker->curse.rush>.1f){
+   if(s.board["stumble"]!=0&&!walker->catching()&&walker->curse.rush>.1f){
+    if(s.board["recovered"]==0)s.board["braced"]=walker->airborne()==0;
     s.board["recovered"]+=.025;
-    s.board["peak"]=std::max(s.board["peak"],double(std::hypot(walker->velocityX,walker->velocityY)));
+    const double speed=std::hypot(walker->velocityX,walker->velocityY);
+    s.board["peak"]=std::max(s.board["peak"],speed);
+    if(s.board["recovered"]<=.55)s.board["launchSpeed"]=std::max(s.board["launchSpeed"],speed);
+    if(speed>2.8)s.board["fastSeconds"]+=.025;
    }
   }
   if(const auto* walker=game.skinbotWalker())LabAccess::setCamera(game,{walker->x,17.f},1.3f,-1.5707963f,-10.f);
  },
  .capture=[](Scene& s,const Frame&){
-  if(s.board["stumble"]&&s.board["recovered"]==0&&!s.board["capturedImpact"]){s.shoot("01-stumble");s.board["capturedImpact"]=1;}
-  if(s.board["peak"]>1.55&&!s.board["capturedCharge"]){s.shoot("02-recovery-charge");s.board["capturedCharge"]=1;}
+  if(s.board["catch"]&&s.board["recovered"]==0&&!s.board["capturedImpact"]){s.shoot("01-catch-step");s.board["capturedImpact"]=1;}
+  if(s.board["peak"]>2.8&&!s.board["capturedCharge"]){s.shoot("02-recovery-charge");s.board["capturedCharge"]=1;}
  },
  .metrics=[](Scene& s,Report& r){
   r.check("a throw past its side does not trigger a stumble",s.board["elapsed"]>.75&&s.board["falseStumble"]==0);
   r.check("the crate collision interrupts the walk and recoils the body",s.board["stumble"]&&s.board["sag"]>.04
    &&!s.g().clutter().at(size_t(s.board["prop"])).projectile,std::to_string(s.board["sag"]));
-  r.check("it recovers into a sustained faster charge",s.board["recovered"]>2.8&&s.board["peak"]>1.55,
-          std::to_string(s.board["recovered"])+" s at up to "+std::to_string(s.board["peak"])+" m/s");
+  r.check("a thrown crate makes it take a catch step",s.board["catch"]!=0);
+  if(s.fixture->value("strike","front")=="blocked")
+   r.check("a live prop blocks the first landing and the blade finds another",s.board["obstacle"]!=0&&s.board["avoided"]>.17,
+           std::to_string(s.board["avoided"])+" m from the blocked spot");
+  r.check("it plants the catch blade before committing to the charge",s.board["braced"]&&s.board["recovered"]>2.8,
+          std::to_string(s.board["recovered"])+" s of charge after bracing");
+  if(s.fixture->value("strike","front")=="side")
+   r.check("the clear lane has a quick launch and a sustained sprint",
+           s.board["peak"]>3.2&&s.board["launchSpeed"]>2.8&&s.board["fastSeconds"]>.65,
+           std::to_string(s.board["peak"])+" m/s peak, "+
+           std::to_string(s.board["launchSpeed"])+" m/s within 550 ms, "+
+           std::to_string(s.board["fastSeconds"])+" s above 2.8 m/s");
+ }
+});
+const bool skinbotCatch=add({
+ .name="skinbot-catch",.summary="Skinbot chooses a different supported catch step for each shove",
+ .standalone=+[]{
+  std::ofstream report("skinbot-catch-test.txt");
+  const skinbot::Ground floor=[](float,float,float){return 0.f;};
+  struct Catch {int leg=-1;skinbot::W landing{};bool grounded=false;};
+  auto shove=[&](Vec2 direction,const skinbot::FootClear& clear){
+   skinbot::Walker walker;walker.place(0,0,0,floor,.2f);
+   std::vector<SoundEvent> sounds;skinbot::reactToProp(walker,18.f,direction,sounds);
+   Catch result;
+   for(int tick=0;tick<24;++tick){
+    walker.update(1.f/60,floor,{},nullptr,clear);
+    for(int leg=0;leg<skinbot::LegCount&&result.leg<0;++leg)if(!walker.feet[size_t(leg)].planted()){
+     result.leg=leg;result.landing=walker.feet[size_t(leg)].to;
+    }
+    if(result.leg>=0&&walker.feet[size_t(result.leg)].planted())result.grounded=true;
+   }
+   return result;
+  };
+  const auto front=shove({0,-1},{}),side=shove({1,0},{});
+  const auto flank=shove({1,0},[&](skinbot::W,skinbot::W to){
+   return side.leg<0||std::hypot(to.x-side.landing.x,to.y-side.landing.y)>.16f;
+  });
+  skinbot::Walker trapped;trapped.place(0,0,0,floor,.2f);
+  std::vector<SoundEvent> sounds;skinbot::reactToProp(trapped,18.f,{1,0},sounds);
+  trapped.update(1.f/60,floor);
+  const bool lifted=trapped.airborne()==1;
+  const skinbot::FootClear trappedFoot=[](skinbot::W,skinbot::W){return false;};
+  for(int tick=0;tick<60;++tick)trapped.update(1.f/60,floor,{},nullptr,trappedFoot);
+  const bool gaveUp=lifted&&!trapped.catching()&&trapped.curse.rush==0;
+  const bool pass=front.leg>=0&&side.leg>=0&&front.leg!=side.leg&&front.grounded&&side.grounded&&flank.grounded&&
+                  std::hypot(flank.landing.x-side.landing.x,flank.landing.y-side.landing.y)>.16f&&gaveUp;
+  report<<(pass?"PASS":"FAIL")<<" catch legs "<<front.leg<<'/'<<side.leg<<'/'<<flank.leg
+        <<", grounded "<<front.grounded<<'/'<<side.grounded<<'/'<<flank.grounded
+        <<", canceled with a trapped blade "<<gaveUp<<'\n';
+  return pass;
  }
 });
 const bool skinbotAudio=add({

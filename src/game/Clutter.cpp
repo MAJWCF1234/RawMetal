@@ -564,10 +564,11 @@ void Game::simulateClutter(std::vector<Clutter>&list,int level,float dt,int held
     // Inelastic normal impulse against a human-sized body; tangential motion survives.
     if(closing>.001f){float keep=(mass-.15f*actorMass)/(mass+actorMass);if(moved<penetration*.5f)keep=-.15f;c.velocity=c.velocity-n*(closing*(1-keep));c.sleeping=false;c.restTime=0;}
    };
-   if(level==m_level&&c.projectile&&skinbotWalker()){
-    contact({m_skinbot.x,m_skinbot.y},m_skinbot.z+skinbot::ImpactBottom,skinbot::ImpactHeight,skinbot::ImpactRadius,
-            110.f,{m_skinbot.velocityX,m_skinbot.velocityY},[](Vec2){return Vec2{};},
-            [&](float impact,Vec2 direction){if(skinbot::reactToProp(m_skinbot,impact,direction,m_sounds))m_skinbotWait=0;});
+   if(const auto bot=m_skinbots.find(level);c.projectile&&bot!=m_skinbots.end()){
+    const auto& walker=bot->second.walker;
+    contact({walker.x,walker.y},walker.z+skinbot::ImpactBottom,skinbot::ImpactHeight,skinbot::ImpactRadius,
+            110.f,{walker.velocityX,walker.velocityY},[](Vec2){return Vec2{};},
+            [&](float impact,Vec2 direction){hitSkinbot(level,bot->second,impact,direction);});
    }
    contact(m_player.pos-shift,m_player.z,m_player.hullHeight(),.2f,70.f,m_velocity,[&](Vec2 delta){auto before=m_player.pos;tryMove(delta);return m_player.pos-before;},[&](float damage,Vec2){receiveDamage(damage,c.pos+shift,false,false);});
    for(size_t a=0;a<m_friendlyActors.size();++a){auto&npc=m_friendlyActors[a];const auto&track=npc.track();auto offset=chunkOffset(npc.level)-chunkOffset(level);auto point=npc.pose.position+offset;if(!nearby(point,npc.pose.z,track.scale,.2f))continue;if(npc.pose.clip==4||npcHeld(a)||!autonomousActor(track)||(track.ai.enableState&&!state(track.ai.enableState)))continue;float height=friendlyHullHeight(a,track);

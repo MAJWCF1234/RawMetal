@@ -399,14 +399,16 @@ void AudioEngine::update(const Game& game,bool focused){
  std::erase_if(m_voices,[&](const auto& voice){return voice.sound==Sound::SkinbotMotor&&(!walker||voice.emitter!=skinbotId);});
  if(walker){
   const float pace=std::hypot(walker->velocityX,walker->velocityY);
-  const float effort=std::clamp(pace/skinbot::Walker::RushSpeed+.12f*walker->airborne()+.18f*std::fabs(walker->turning),0.f,1.f);
-  const float target=!walker->going?0.f:walker->curse.freeze>0?.018f:effort*.26f;
+  const bool burst=walker->charging();
+  const float cap=burst?skinbot::Walker::ChargeSpeed:skinbot::Walker::RushSpeed;
+  const float effort=std::clamp(pace/cap+.12f*walker->airborne()+.18f*std::fabs(walker->turning),0.f,1.f);
+  const float target=!walker->going?0.f:(walker->curse.freeze>0||walker->catching())?.018f:effort*(burst?.48f:.26f);
   auto voice=std::find_if(m_voices.begin(),m_voices.end(),[&](const auto& v){return v.emitter==skinbotId;});
   const float previous=voice==m_voices.end()?0.f:voice->gain;
   const float gain=previous+(target-previous)*(1-std::exp(-dt*9.f));
   if(gain>.012f){
    loop(skinbotId,Sound::SkinbotMotor,{walker->x,walker->y},gain,walker->z+1.05f,18.f);
-   for(auto& v:m_voices)if(v.emitter==skinbotId)v.pitch=.96f+.10f*effort;
+   for(auto& v:m_voices)if(v.emitter==skinbotId)v.pitch=(burst?1.08f:.96f)+.10f*effort;
   }else if(voice!=m_voices.end()&&target<.012f)m_voices.erase(voice);
  }
  // The room answers: the reverb eases toward what the game measures or the map sets.

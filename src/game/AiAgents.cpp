@@ -3,6 +3,8 @@
 // the Builder's AI and Entity Manager snaps together) read those states and act. Nothing here knows a map: the
 // Director over Chapter 2's Engineering is a zone, its knobs and the blocks wired to it, like any other.
 #include "Game.h"
+#include "SkinbotImpact.h"
+#include "../net/Match.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -169,15 +171,48 @@ void Game::updateAiAgents(float dt){
    const StateId key=laterKey(event.id,a);const int left=state(key);if(left>1)setState(key,left-1);else if(left==1){setState(key,0);setState(action.id,action.value);if(m_scriptTrace)m_scriptTrace(event.id,int(a));}}
  }
 }
+const skinbot::Walker* Game::skinbotWalker()const{
+ const auto it=m_skinbots.find(m_level);
+ return it==m_skinbots.end()?nullptr:&it->second.walker;
+}
+
+void Game::pointSkinbot(Vec2 at){
+ const auto it=m_skinbots.find(m_level);
+ if(it==m_skinbots.end()||it->second.remote)return;
+ auto& bot=it->second;
+ bot.pointed=true;
+ bot.walker.pointAt(at.x,at.y);
+ bot.detour.clear();
+ bot.retry=0;
+}
+
+void Game::soundSkinbot(int level,SoundEvent event){
+ if(m_match)m_match->sendSkinbotSound(level,event);
+ if(!inPlayerFrame(level))return;
+ event.position+=chunkOffset(level)-chunkOffset(m_level);
+ m_sounds.push_back(event);
+}
+
+void Game::hitSkinbot(int level,SkinbotState& bot,float impact,Vec2 direction){
+ if(bot.remote)return;
+ std::vector<SoundEvent> sounds;
+ if(!skinbot::reactToProp(bot.walker,impact,direction,sounds))return;
+ bot.wait=0;
+ for(const auto& sound:sounds)soundSkinbot(level,sound);
+}
+
 void Game::updateSkinbot(float dt){
  const Fixture* spawn=nullptr;
- if(m_skinbotLevel!=m_level){
-  m_skinbotLevel=-1;
+ auto found=m_skinbots.find(m_level);
+ if(found==m_skinbots.end()||found->second.remote){
   for(const auto& fixture:m_world.fixtures())if(fixture.model==skinbot::Model&&fixture.visible){spawn=&fixture;break;}
   if(!spawn)return;
+  found=m_skinbots.insert_or_assign(m_level,SkinbotState{}).first;
  }
+ auto& bot=found->second;
+ auto& walker=bot.walker;
  std::vector<SkinbotProp> props;
- const Vec2 at=spawn?spawn->position:Vec2{m_skinbot.x,m_skinbot.y};
+ const Vec2 at=spawn?spawn->position:Vec2{walker.x,walker.y};
  for(size_t i=0;i<m_clutter.size();++i){
   const auto& prop=m_clutter[i];
   const float range=12.f+prop.footprint();
@@ -191,31 +226,40 @@ void Game::updateSkinbot(float dt){
   return floor;
  };
  if(spawn){
-  m_skinbotHome=spawn->position;
+  bot.home=spawn->position;
   const float floor=m_world.floorHeight(at.x,at.y)+spawn->base;
-  m_skinbot.place(at.x,at.y,spawn->yaw,ground,floor+.3f);
-  m_skinbotLevel=m_level;m_skinbotStop=0;m_skinbotWait=2.f;m_skinbotPointed=false;
-  m_skinbotDetour.clear();m_skinbotRetry=0;
+  walker.place(at.x,at.y,spawn->yaw,ground,floor+.3f);
  }
  // Its beat, until pointed elsewhere: four places round where it was put, standing dead still at each.
- if(!m_skinbotPointed&&m_skinbot.arrived()){
-  m_skinbotWait-=dt;
-  if(m_skinbotWait<=0){
+ if(!bot.pointed&&walker.arrived()){
+  bot.wait-=dt;
+  if(bot.wait<=0){
    static const Vec2 beat[4]={{1.2f,3.f},{-3.f,3.f},{-3.f,-2.5f},{1.2f,-2.5f}};
-   const auto route=skinbotRoute(m_world,m_skinbotHome);
-   const size_t stop=size_t(m_skinbotStop++);
-   const Vec2 at=route.empty()?m_skinbotHome+beat[stop%4]:route[stop%route.size()];
-   m_skinbot.pointAt(at.x,at.y);m_skinbotWait=2.5f;m_skinbotDetour.clear();m_skinbotRetry=0;
+   const auto route=skinbotRoute(m_world,bot.home);
+   const size_t stop=size_t(bot.stop++);
+   const Vec2 at=route.empty()?bot.home+beat[stop%4]:route[stop%route.size()];
+   walker.pointAt(at.x,at.y);bot.wait=2.5f;bot.detour.clear();bot.retry=0;
   }
  }
- // It watches the player when it can see them: near, and nothing solid between (never through walls).
- {const float dx=m_player.pos.x-m_skinbot.x,dy=m_player.pos.y-m_skinbot.y,away=std::hypot(dx,dy);
-  bool seen=away<9.f&&!dead();
-  for(int k=1;seen&&k<10;++k){const float t=float(k)/10;if(m_world.supportBelow(m_skinbot.x+dx*t,m_skinbot.y+dy*t,m_skinbot.z+3.f)>m_skinbot.z+1.5f)seen=false;}
-  if(seen)m_skinbot.watch({m_player.pos.x,m_player.pos.y,m_player.z+m_player.eye});else m_skinbot.lookAway();}
- const Vec2 origin{m_skinbot.x,m_skinbot.y};
- const Vec2 goal{m_skinbot.goal.x,m_skinbot.goal.y};
- const float feet=m_skinbot.z;
+ // Watch the closest visible player on this map, including a guest when the host is elsewhere.
+ walker.lookAway();
+ float nearest=9.f;
+ for(const auto& player:players()){
+  if(player.level!=m_level||!player.alive())continue;
+  const auto& body=*player.body;
+  const Vec2 delta=body.pos-Vec2{walker.x,walker.y};
+  const float distance=length(delta);
+  if(distance>=nearest)continue;
+  bool visible=true;
+  for(int k=1;visible&&k<10;++k){
+   const Vec2 point=Vec2{walker.x,walker.y}+delta*(float(k)/10);
+   if(m_world.supportBelow(point.x,point.y,walker.z+3.f)>walker.z+1.5f)visible=false;
+  }
+  if(visible){nearest=distance;walker.watch({body.pos.x,body.pos.y,body.z+body.eye});}
+ }
+ const Vec2 origin{walker.x,walker.y};
+ const Vec2 goal{walker.goal.x,walker.goal.y};
+ const float feet=walker.z;
  auto worldClear=[&](Vec2 point,float radius){
   for(const Vec2 offset:{Vec2{},Vec2{radius,0},Vec2{-radius,0},Vec2{0,radius},Vec2{0,-radius}}){
    const Vec2 p=point+offset;
@@ -237,30 +281,30 @@ void Game::updateSkinbot(float dt){
  };
  skinbot::W steering;
  const skinbot::W* waypoint=nullptr;
- if(m_skinbot.going){
-  if(!m_skinbotDetour.empty()&&lengthSq(m_skinbotDetour.front()-origin)<.12f)m_skinbotDetour.erase(m_skinbotDetour.begin());
-  m_skinbotRetry-=dt;
-  if(m_skinbotRetry<=0){
-   m_skinbotRetry=.25f;
-   if(!m_skinbotDetour.empty()&&!skinbotSegmentClear(origin,m_skinbotDetour.front(),routeClear))m_skinbotDetour.clear();
-   if(m_skinbotDetour.empty()){
+ if(walker.going){
+  if(!bot.detour.empty()&&lengthSq(bot.detour.front()-origin)<.12f)bot.detour.erase(bot.detour.begin());
+  bot.retry-=dt;
+  if(bot.retry<=0){
+   bot.retry=.25f;
+   if(!bot.detour.empty()&&!skinbotSegmentClear(origin,bot.detour.front(),routeClear))bot.detour.clear();
+   if(bot.detour.empty()){
     const Vec2 ahead=origin+normalized(goal-origin)*std::min(3.5f,length(goal-origin));
     if(!skinbotSegmentClear(origin,ahead,routeClear)){
-     m_skinbotDetour=skinbotBypass(origin,goal,routeClear);
-     if(m_skinbotDetour.empty())m_skinbotRetry=.65f;
+     bot.detour=skinbotBypass(origin,goal,routeClear);
+     if(bot.detour.empty())bot.retry=.65f;
     }
    }
   }
-  if(!m_skinbotDetour.empty()){const Vec2 next=m_skinbotDetour.front();steering={next.x,next.y,0};waypoint=&steering;}
-  const Vec2 forward{std::sin(m_skinbot.yaw),std::cos(m_skinbot.yaw)};
-  const Vec2 intent=normalized((waypoint?m_skinbotDetour.front():goal)-origin);
-  if(dot(intent,forward)>.6f&&m_skinbot.curse.freeze<=0){
+  if(!bot.detour.empty()){const Vec2 next=bot.detour.front();steering={next.x,next.y,0};waypoint=&steering;}
+  const Vec2 forward{std::sin(walker.yaw),std::cos(walker.yaw)};
+  const Vec2 intent=normalized((waypoint?bot.detour.front():goal)-origin);
+  if(dot(intent,forward)>.6f&&walker.curse.freeze<=0&&!walker.catching()){
    const Vec2 side{-forward.y,forward.x};
    for(const auto& prop:props){
     const Vec2 delta=prop.at-origin;
     if(prop.contact!=SkinbotContact::Push||prop.top<feet-.12f||prop.bottom>feet+.28f||dot(delta,forward)<0)continue;
     bool touches=prop.penetration(origin+forward*.65f,.58f)>0;
-    for(const auto& foot:m_skinbot.feet)if(foot.at.z<prop.top+.06f&&foot.at.z>prop.bottom-.06f
+    for(const auto& foot:walker.feet)if(foot.at.z<prop.top+.06f&&foot.at.z>prop.bottom-.06f
         &&prop.penetration({foot.at.x,foot.at.y},.18f)>0)touches=true;
     if(!touches)continue;
     const auto& item=m_clutter[prop.index];
@@ -286,6 +330,11 @@ void Game::updateSkinbot(float dt){
  const skinbot::FootClear footClear=[&](skinbot::W from,skinbot::W to){
   const Vec2 start{from.x,from.y},end{to.x,to.y};
   const int samples=std::max(1,int(std::ceil(length(end-start)/.12f)));
+  if(walker.catching())for(int i=1;i<=samples;++i){
+   const float t=float(i)/samples,z=from.z+(to.z-from.z)*t+.065f;
+   const Vec2 p=start+(end-start)*t;
+   if(!m_world.fits(p.x,p.y,z,.08f,false)||m_world.doorBlocks(p.x,p.y,z,.08f))return false;
+  }
   for(const auto& prop:props)if(prop.contact==SkinbotContact::Block||blocks(prop)){
    constexpr float blade=.06f;
    const float depth=from.z>=prop.bottom-blade&&from.z<=prop.top+blade?prop.penetration(start,blade):0.f;
@@ -299,18 +348,17 @@ void Game::updateSkinbot(float dt){
   return true;
  };
  // A hard hit queues a longer charge than the ordinary wind-up.
- const auto oldFeet=m_skinbot.feet;
- const bool wasBraced=m_skinbot.curse.freeze>0;
- const float oldRush=m_skinbot.curse.rush;
- m_skinbot.update(dt,ground,clear,waypoint,footClear);
- if(wasBraced&&m_skinbot.curse.freeze<=0)m_skinbot.curse.rush=std::max(oldRush,m_skinbot.curse.rush);
+ const auto oldFeet=walker.feet;
+ const bool wasBraced=walker.curse.freeze>0||walker.catching();
+ const float oldRush=walker.curse.rush;
+ walker.update(dt,ground,clear,waypoint,footClear);
  auto foley=[&](Sound sound,skinbot::W at,float gain,float pitch,float radius){
   SoundEvent event{sound,{at.x,at.y},gain,pitch,true,radius,at.z};event.aiRadius=-1;
-  m_sounds.push_back(event);
+  soundSkinbot(m_level,event);
  };
- const float pace=std::hypot(m_skinbot.velocityX,m_skinbot.velocityY);
+ const float pace=std::hypot(walker.velocityX,walker.velocityY);
  for(size_t leg=0;leg<oldFeet.size();++leg){
-  const auto& was=oldFeet[leg];const auto& foot=m_skinbot.feet[leg];
+  const auto& was=oldFeet[leg];const auto& foot=walker.feet[leg];
   const float pitch=(leg<2?.91f:1.08f)+.035f*float(leg%2)+.05f*pace;
   if(was.planted()&&!foot.planted()&&foot.lift>0)
    foley(Sound::SkinbotJoint,foot.from,.23f+.05f*pace,pitch,10.f);
@@ -323,8 +371,8 @@ void Game::updateSkinbot(float dt){
    foley(Sound::SkinbotScrape,foot.at,.37f,pitch,13.f);
   }
  }
- if(m_skinbot.curse.freeze<=0&&m_skinbot.curse.rush>0&&(wasBraced||oldRush<=0))
-  foley(Sound::SkinbotSurge,{m_skinbot.x,m_skinbot.y,m_skinbot.z+1.16f},.52f,1.f,20.f);
+ if(walker.curse.freeze<=0&&!walker.catching()&&walker.curse.rush>0&&(wasBraced||oldRush<=0))
+  foley(Sound::SkinbotSurge,{walker.x,walker.y,walker.z+1.16f},.52f,1.f,20.f);
 }
 bool Game::aiRemembered(bool haunt,Vec2& at,float& z)const{
  // The AI over the map being played; its memory is in that map's frame.

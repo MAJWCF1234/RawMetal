@@ -43,6 +43,7 @@ public:
  static constexpr float Scale=2.4f/1.474f;          // 2.4 m to the top of its head
  static constexpr float Speed=1.16f,RushSpeed=1.85f,TurnRate=1.7f;
  static constexpr float StepTime=.25f,StepLift=.43f;
+ static constexpr float ChargeSpeed=3.65f,ChargeStepTime=.105f,ChargeStepLift=.30f,ChargeTrigger=.22f,ChargeAcceleration=11.f;
  static constexpr float Trigger=.30f,Settle=.10f,Ahead=.48f;  // m off its place before it steps (walking, standing); lead, in steps
  static constexpr float Climb=.99f;                 // the tallest thing a foot is set up onto (m)
  Curse curse{};
@@ -55,11 +56,28 @@ public:
  float velocityX=0,velocityY=0,turning=0;
 
  void place(float px,float py,float heading,const Ground& ground,float from){
+  recovery={};impactRush=false;
   x=px;y=py;yaw=heading;z=ground(px,py,from);pitch=roll=0;going=false;velocityX=velocityY=turning=0;{const bool on=curse.on;const auto seed=curse.seed;curse={};curse.on=on;curse.seed=seed;}watching=false;
   for(int leg=0;leg<LegCount;++leg){W h=home(leg);h.z=ground(h.x,h.y,z+Climb);feet[size_t(leg)]={h,h,h,1};}
  }
  void pointAt(float gx,float gy){goal={gx,gy,0};going=true;}
  bool arrived()const{return !going;}
+ bool catching()const{return recovery.time>0;}
+ bool charging()const{return impactRush&&curse.rush>0;}
+ // A co-op guest draws the host's motion and never advances these timers locally.
+ void setRemoteMotion(bool moving,bool windup,bool catchStep,bool rush,bool charge){
+  going=moving;
+  curse.freeze=windup?1.f:0.f;
+  curse.rush=rush?1.f:0.f;
+  recovery.time=catchStep?1.f:0.f;
+  impactRush=charge;
+ }
+ void catchImpact(float dx,float dy,float strength,float rush){
+  const float length=std::hypot(dx,dy);
+  if(length<.001f)return;
+  recovery={{dx/length,dy/length,0},{},strength,.65f,rush,-1};
+  curse.freeze=curse.rush=0;impactRush=false;
+ }
 
  // A model point of leg-free body, or of a posed leg, leaned as the body is (model space in, model space out).
  V lean(V p)const{
@@ -102,8 +120,9 @@ public:
   dt=std::min(dt,.05f);if(dt<=0)return;
   // The body: turn toward the goal, walk once roughly facing it, and only as fast as its feet can keep up.
   think(dt);
+  const bool charge=charging();
   float wantSpeed=0,wantTurn=0;
-  if(going){const float dx=goal.x-x,dy=goal.y-y,left=std::hypot(dx,dy);
+  if(going&&!catching()){const float dx=goal.x-x,dy=goal.y-y,left=std::hypot(dx,dy);
    if(left<.25f)going=false;
    else{const W target=waypoint?*waypoint:goal;const float tx=target.x-x,ty=target.y-y;
     const float off=std::remainder(std::atan2(tx,ty)-yaw,6.2831853f);wantTurn=std::clamp(off*2.5f,-TurnRate,TurnRate);
@@ -112,9 +131,12 @@ public:
   const float keep=std::clamp((.75f-strain)/.3f,0.f,1.f);   // a foot far behind holds the body back until it has stepped
   turning+=std::clamp(wantTurn*keep-turning,-5*dt,5*dt);yaw=std::remainder(yaw+turning*dt,6.2831853f);
   if(curse.freeze>0){wantSpeed=0;wantTurn=0;velocityX=velocityY=turning=0;}          // dead still, all at once
-  else if(curse.rush>0)wantSpeed*=RushSpeed/Speed;
-  const float vx=std::sin(yaw)*wantSpeed*keep,vy=std::cos(yaw)*wantSpeed*keep;
-  velocityX+=std::clamp(vx-velocityX,-3*dt,3*dt);velocityY+=std::clamp(vy-velocityY,-3*dt,3*dt);
+  else if(curse.rush>0)wantSpeed*=(charge?ChargeSpeed:RushSpeed)/Speed;
+  const float recoil=catching()?recovery.strength*.9f*std::max(0.f,(recovery.time-.27f)/.38f):0.f;
+  const float vx=std::sin(yaw)*wantSpeed*keep+recoil*recovery.direction.x;
+  const float vy=std::cos(yaw)*wantSpeed*keep+recoil*recovery.direction.y;
+  const float acceleration=(charge?ChargeAcceleration:3.f)*dt;
+  velocityX+=std::clamp(vx-velocityX,-acceleration,acceleration);velocityY+=std::clamp(vy-velocityY,-acceleration,acceleration);
   const W next{x+velocityX*dt,y+velocityY*dt,z};
   if(!clear||clear(next)){x=next.x;y=next.y;}
   else velocityX=velocityY=0;
@@ -122,6 +144,7 @@ public:
   // The feet: those in the air swing on; then the standing ones that want to move may lift, the worst off first.
   for(int leg=0;leg<LegCount;++leg){Foot& f=feet[size_t(leg)];if(f.planted())continue;
    if(curse.freeze>0)continue;                                      // held exactly where it was, mid step
+   if(catching())f.hang=0;
    if(f.hang>0&&f.progress>=f.hangAt){f.hang-=dt;                   // it is not sure: the blade waits over the floor, shaking
     const float t=curse.clock*55.f+float(leg)*2.f;f.at.x+=std::sin(t)*.35f*dt;f.at.y+=std::cos(t*1.3f)*.35f*dt;f.at.z+=std::sin(t*.9f)*.25f*dt;
     if(f.hang>0)continue;}
@@ -136,18 +159,21 @@ public:
     continue;
    }
    f.progress=s;f.at=nextFoot;
-   if(f.planted()){f.at=f.to;if(curse.on&&f.lift>0)landed(leg,ground);}}
+   if(f.planted()){f.at=f.to;if(curse.on&&f.lift>0&&!catching())landed(leg,ground);}}
+  const bool bracing=catching();
+  if(bracing)recover(dt,ground,footClear);
+  const float stepThreshold=moving?(charge?ChargeTrigger:Trigger):Settle;
   std::array<std::pair<float,int>,LegCount> wants{};
   for(int leg=0;leg<LegCount;++leg){const Foot& f=feet[size_t(leg)];const W h=home(leg);
    float off=std::hypot(h.x-f.at.x,h.y-f.at.y);if(!legPose(leg).reached)off+=.5f;
-   wants[size_t(leg)]={f.planted()&&off>(moving?Trigger:Settle)?off:0.f,leg};}
+   wants[size_t(leg)]={f.planted()&&off>stepThreshold?off:0.f,leg};}
   std::sort(wants.begin(),wants.end(),[](const auto&a,const auto&b){return a.first>b.first;});
-  for(const auto& [off,leg]:wants){if(off<=0||curse.freeze>0||!mayLift(leg,moving))continue;
+  for(const auto& [off,leg]:wants){if(bracing||off<=0||curse.freeze>0||!mayLift(leg,moving))continue;
    Foot& f=feet[size_t(leg)];f.from=f.at;f.hang=0;f.hangAt=2;
-   f.time=StepTime;f.lift=StepLift;
-   if(curse.on){f.time*=curse.between(.85f,1.19f)*(curse.rush>0?.68f:1.f);f.lift*=curse.between(.9f,1.19f);}
+   f.time=charge?ChargeStepTime:StepTime;f.lift=charge?ChargeStepLift:StepLift;
+   if(curse.on){f.time*=curse.between(.85f,1.19f)*(!charge&&curse.rush>0?.68f:1.f);f.lift*=curse.between(.9f,1.19f);}
    // Land where its place will be when the step is done, and a little further, so it is not left behind at once.
-   const float lead=StepTime*(1+Ahead);const float keepYaw=yaw,keepX=x,keepY=y;
+   const float lead=(charge?f.time:StepTime)*(1+Ahead);const float keepYaw=yaw,keepX=x,keepY=y;
    x+=velocityX*lead;y+=velocityY*lead;yaw+=turning*lead;W land=home(leg);x=keepX;y=keepY;yaw=keepYaw;
    land.z=ground(land.x,land.y,z+Climb);
    // Too high to set a foot on (a wall, a pillar): try short of it, back toward the body.
@@ -182,10 +208,78 @@ public:
   return pair(ArmL,ArmR)||pair(RearL,RearR)||pair(ArmL,RearL)||pair(ArmR,RearR);
  }
 private:
+ struct Recovery {
+  W direction{},landing{};
+  float strength=0,time=0,rush=0;
+  int leg=-1;
+ } recovery;
+ bool impactRush=false;
+
+ // Distance to the edges of the convex support area. Negative means the weight is outside it.
+ float supportMargin(W weight,int shifted=-1,W landing={})const{
+  std::array<W,LegCount> contact{};
+  for(int i=0;i<LegCount;++i)contact[size_t(i)]=i==shifted?landing:feet[size_t(i)].at;
+  float margin=1e6f;
+  for(int i=0;i<LegCount;++i)for(int j=i+1;j<LegCount;++j){
+   const auto a=contact[size_t(i)],b=contact[size_t(j)];
+   const float dx=b.x-a.x,dy=b.y-a.y,span=std::hypot(dx,dy);
+   if(span<.001f)continue;
+   const auto side=[&](W p){return dx*(p.y-a.y)-dy*(p.x-a.x);};
+   bool left=false,right=false;
+   for(const auto p:contact){const float sign=side(p);left|=sign>.001f;right|=sign<-.001f;}
+   if(left!=right)margin=std::min(margin,(left?1.f:-1.f)*side(weight)/span);
+  }
+  return margin;
+ }
+
+ void recover(float dt,const Ground& ground,const FootClear& clear){
+  // Let the other moving blades finish, then keep three planted while one catches the load.
+  recovery.time=std::max(.001f,recovery.time-dt);
+  if(airborne()!=0){
+   // A prop can trap a blade mid-swing. Let the normal gait resume without a charge.
+   if(recovery.time<=.001f)recovery={};
+   return;
+  }
+  if(recovery.leg>=0){
+   const auto p=feet[size_t(recovery.leg)].at;
+   if(std::hypot(p.x-recovery.landing.x,p.y-recovery.landing.y)<.05f&&std::fabs(p.z-recovery.landing.z)<.05f){
+    curse.rush=recovery.rush;impactRush=true;recovery={};return;
+   }
+   recovery.leg=-1;
+  }
+
+  const auto dir=recovery.direction;
+  const float reach=.95f+.85f*recovery.strength;
+  const W weight{x+dir.x*reach,y+dir.y*reach,z};
+  const float margin=supportMargin(weight);
+  if(margin>=.04f||recovery.time<=.001f){
+   // If it never found a safe catch, it drops the charge and goes back to its usual gait.
+   if(margin>=.04f){curse.rush=recovery.rush;impactRush=true;}
+   recovery={};return;
+  }
+  if(recovery.time<.19f)return;
+  float best=margin+.025f;
+  for(int leg=0;leg<LegCount;++leg){
+   const W start=feet[size_t(leg)].at;
+   for(const float stride:{.46f,.32f,.19f})for(const float side:{0.f,-.24f,.24f}){
+    W land{start.x+dir.x*stride-dir.y*side,start.y+dir.y*stride+dir.x*side,0};
+    land.z=ground(land.x,land.y,z+.46f);
+    if(std::fabs(land.z-start.z)>.46f||!solveSkinbotLeg(leg,unlean(toModel(land))).reached)continue;
+    const float score=supportMargin(weight,leg,land)-.1f*std::fabs(side);
+    if(score<=best)continue;
+    if(clear&&!clear(start,land))continue;
+    best=score;recovery.leg=leg;recovery.landing=land;
+   }
+  }
+  if(recovery.leg<0)return;
+  auto& foot=feet[size_t(recovery.leg)];
+  foot.from=foot.at;foot.to=recovery.landing;foot.progress=0;foot.time=.18f;foot.lift=.23f;foot.hang=0;foot.hangAt=2;
+ }
+
  // A blade just set down: the weight comes onto it and it trembles; now and then it does not hold.
  void landed(int leg,const Ground& ground){
   curse.quiver=std::min(1.f,curse.quiver+curse.between(.08f,.3f));
-  if(curse.sinceSlip<3.5f||curse.next()>.09f)return;
+  if(charging()||curse.sinceSlip<3.5f||curse.next()>.09f)return;
   for(int other=0;other<LegCount;++other)if(other!=leg&&!feet[size_t(other)].planted()&&beside(leg,other))return;
   if(airborne()>=1)return;
   // It skids out and back from where it was set: a step along the ground, no lift.
@@ -205,9 +299,9 @@ private:
   auto spring=[dt](float& at,float& speed,float want,float stiff,float damp){speed+=((want-at)*stiff-speed*damp)*dt;at+=speed*dt;};
   spring(c.sag,c.sagSpeed,0,90,7);spring(c.sway,c.swaySpeed,0,55,5);
   c.sag=std::clamp(c.sag,-.16f,.07f);c.sway=std::clamp(c.sway,-.16f,.16f);
-  if(c.freeze>0){c.freeze-=dt;if(c.freeze<=0)c.rush=c.between(1.3f,2.2f);}
-  else if(c.rush>0)c.rush-=dt;
-  else if(c.on&&going){c.nextRush-=dt;if(c.nextRush<=0){c.freeze=c.between(.10f,.20f);c.nextRush=c.between(5.f,10.f);++c.freezes;}}
+  if(!catching()&&c.freeze>0){c.freeze-=dt;if(c.freeze<=0){impactRush=false;c.rush=c.between(1.3f,2.2f);}}
+  else if(!catching()&&c.rush>0)c.rush-=dt;
+  else if(!catching()&&c.on&&going){c.nextRush-=dt;if(c.nextRush<=0){c.freeze=c.between(.10f,.20f);c.nextRush=c.between(5.f,10.f);++c.freezes;}}
   // Where the head wants to be: on what it watches, or on one thing after another.
   if(watching){const float dx=watched.x-x,dy=watched.y-y,dz=watched.z-(z+2.f);
    c.wantYaw=std::clamp(std::remainder(std::atan2(dx,dy)-yaw,6.2831853f),-1.25f,1.25f);c.wantPitch=std::clamp(std::atan2(dz,std::max(.5f,std::hypot(dx,dy)))+.35f,-.55f,.55f);}

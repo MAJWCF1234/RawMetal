@@ -57,6 +57,7 @@ template<class Keep> void diff(const Values& now,const Values& sent,Values& out,
 bool Match::clockState(std::uint32_t id)const{return std::binary_search(m_clocks.begin(),m_clocks.end(),id);}
 
 void Match::clearCoop(){
+ m_skinbotTargets.clear();
  Game& g=m_game;g.m_remoteBodies.clear();g.m_netHurts.clear();g.m_netUses.clear();
  m_sentStates.clear();m_sentObjectives.clear();m_sentProps.clear();m_clockSent.clear();m_clocks.clear();m_actorTargets.clear();
  m_syncTimer=0;m_fullSyncTimer=FullSyncInterval;m_actorTimer=0;m_lastActorsMs=0;

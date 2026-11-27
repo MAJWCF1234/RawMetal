@@ -61,6 +61,7 @@ std::string mapsText(){
    t+="ROW|"+M+"|0|"+std::to_string(row)+"|"+r+"\n";}}
  t+="CLUTTER|0|7|12|8|-999|0|17|0.6|0.6|0.6|0|0|#0\nCLUTTER|0|7|15|15|-999|0|384|0.1|0.1|0.36|0|0|#0|p.liquid=water|p.fill=0.8\nCLUTTER|0|7|9|12|-999|0|17|0.3|0.3|0.3|0|0|#0\n";
  t+="CLUTTER|2|7|12|8|-999|0|17|0.6|0.6|0.6|0|0|#0\n";
+ t+="FIXTURE|2|"+std::to_string(skinbot::Model)+"|7|10|0|2.363|3.099|2.4|1.5708|0|skinbot.route=20,10;7,10\n";
  for(int k=0;k<50;++k)t+="CLUTTER|3|7|"+std::to_string(3.f+float(k%10)*1.8f)+"|"+std::to_string(5.f+float(k/10)*1.8f)+"|-999|0|17|0.4|0.4|0.4|0|0|#0\n";
  return t+"--- CUSTOM_CAMPAIGN_DATA_END ---\n";
 }
@@ -562,6 +563,41 @@ bool Match::selfTest(std::ostream& report){
    check(guest.m_level==2&&host->m_level==0&&host->m_match->m_slots[size_t(gs)].latest.level==2,"the host sends the guest to the Annex and stays on West");
    check(!remote(*host,gs)&&!remote(guest,0),"neither draws the other: they stand at the same coordinates of maps that are not side by side");
    check(host->players().size()==1&&host->m_netForeign.size()>2&&host->m_netForeign[2]&&host->m_netKeep[2],"the host's own minds see only the host; the Annex is kept and gets a frame of its own");
+   const auto* initial=guest.skinbotWalker();
+   auto* crate=propOn(guest,2,(3u<<16)|1u);
+   const bool replicated=initial&&crate&&host->m_skinbots.contains(2)&&!host->skinbotWalker();
+   check(replicated,"the guest receives Skinbot on the Annex while the host stays on West");
+   if(replicated){
+    put(*host,guest,{initial->x,initial->y+2.5f});
+    guest.m_player.angle=-kPi*.5f;guest.m_player.pitch=0;
+    frames(10);
+    guest.m_heldClutter=int(indexOf(guest,2,crate));
+    frames(12);
+    guest.puntHeld({0,-1,.05f},.25f);
+    float hostPeak=0,guestPeak=0,worstLag=0;
+    bool hostCaught=false,guestCaught=false,guestCharge=false;
+    int hit=0,surge=0;
+    for(int tick=0;tick<165;++tick){
+     frames(1);
+     const auto& authoritative=host->m_skinbots.at(2).walker;
+     const auto* drawn=guest.skinbotWalker();
+     hostCaught|=authoritative.catching();
+     if(!drawn)continue;
+     guestCaught|=drawn->catching();
+     if(authoritative.charging())hostPeak=std::max(hostPeak,std::hypot(authoritative.velocityX,authoritative.velocityY));
+     if(drawn->charging()){
+      guestCharge|=guestCaught;
+      guestPeak=std::max(guestPeak,std::hypot(drawn->velocityX,drawn->velocityY));
+      worstLag=std::max(worstLag,std::hypot(drawn->x-authoritative.x,drawn->y-authoritative.y));
+     }
+     for(const auto& sound:guest.sounds())if(sound.spatial){hit+=sound.sound==Sound::SkinbotHit;surge+=sound.sound==Sound::SkinbotSurge;}
+    }
+    check(hostCaught&&guestCaught&&guestCharge&&hostPeak>3.2f&&guestPeak>3.2f&&worstLag<.65f,
+          "a guest's thrown crate makes Skinbot catch and sprint on both machines ("+
+          std::to_string(hostPeak)+" / "+std::to_string(guestPeak)+" m/s, at most "+std::to_string(worstLag)+" m apart)");
+    check(hit==1&&surge>=1,"the guest hears the single host impact and the charge on its own map");
+    put(*host,guest,{6.f,6.f});frames(20);
+   }
    auto creatureOn=[&](int level,Vec2 at,float heading){Enemy e;e.kind=Enemy::Kind::Huntsman;e.pos=e.home=e.lastKnown=at;e.z=e.homeZ=0;e.heading=heading;e.hp=e.maxHp=5000;
     auto& list=level==host->m_level?host->m_enemies:host->m_chunks[size_t(level)].enemies;list.push_back(e);return list.size()-1;};
    const size_t annex=creatureOn(2,{6.f,13.f},-kPi*.5f),west=creatureOn(0,{6.f,13.f},-kPi*.5f);
