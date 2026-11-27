@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit d4acea602847b74a4fb290024ab5d96fae6d9b77
-# 2026-11-26 20:14, feat: add the full-size Skinbot course to Starter Map
+commit 08271b4fe8bb09ae7ecfd6bf7cec7fa2bc98bbf1
+# 2026-11-26 23:13, release: v1.7.6, skinbot on the move
