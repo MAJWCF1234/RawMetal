@@ -7,6 +7,7 @@ Changelog of shipped updates. Newest first. Each section is one release.
 ## v1.7.5 - Skinbot (2026-11-26)
 
 - Skinbot moves on four articulated legs, with foot placement and head motion driven by its walk.
+- Starter Map's Showcase Sound hall has a full-size Skinbot course. Watch it step over slabs, turn, and walk back.
 - The Director can remember where it heard you, and pursuing creatures can follow across connected maps.
 - Campaign Builder's Test it mode protects the tester from damage while the rule plays out.
 

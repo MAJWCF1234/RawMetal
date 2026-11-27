@@ -1291,19 +1291,25 @@ def showcase(s, slot, catalogue):
     exhibit(m, (18.5, 14.5, 23, 18.5), 'AMBIENT pa_access_granted / mode 2 on sc_pa', 'ON A STATE: PA', 'mode 2', 21, 16)
     plate(m, 9.4, 22.98, 2.8, 2.8, .5, 'DEAD ROOM THIS WAY >', 'REVERB 0.04 / 0.2 s, music 11: silence', 'N')
 
-    # The skinbot stands in the middle of the same hall (its own room would add a column to the building, a ring
-    # of forest round it and new numbers for every later map): the Engineering boss, full size, a still stand-in.
+    # Showcase the full-size Skinbot and the same obstacle spacing as its walking lab.
     skin = json.load(open(os.path.join(ROOT, 'src', 'assets', 'library', 'catalog.json')))['skinbot']   # a library model
     grow = 2.4 / skin['height']                                           # 2.4 m to the top of its head
-    s.rec(m, 'FIXTURE', i, skin['slot'], 12, 11, 0, round(skin['width'] * grow, 3), round(skin['depth'] * grow, 3), 2.4, 0, 0)
-    # Things on its beat to climb: a low wall, a slab, a crate.
-    s.struct(m, 8.0, 11.2, 10.3, 11.5, 0, .35, 42)
-    s.struct(m, 10.3, 13.3, 12.2, 14.8, 0, .26, 42)
-    s.struct(m, 12.2, 8.1, 12.9, 8.8, 0, .45, 20)
+    s.rec(m, 'FIXTURE', i, skin['slot'], 6, 12, 0, round(skin['width'] * grow, 3),
+          round(skin['depth'] * grow, 3), 2.4, HALF, 0, 'skinbot.route=19.8,12;6,12.4')
+    for x1, y1, x2, y2, bottom, top in (
+        (7.9, 9.8, 8.2, 14.4, 0, .35), (9.3, 9.8, 12.2, 14.4, 0, .28),
+        (13.1, 9.8, 13.35, 14.4, 0, .5), (14.3, 9.8, 14.55, 14.4, 0, .3),
+        (15.4, 10.2, 16.2, 14, 0, .22), (16.2, 10.2, 17, 14, 0, .44),
+        (17, 10.2, 17.8, 14, 0, .22), (11, 12.5, 11.8, 13.2, .28, .62),
+        (18.6, 11, 19.3, 11.7, 0, .5),
+    ):
+        s.struct(m, x1, y1, x2, y2, bottom, top, 42)
+    for x in (7, 12, 17):
+        s.rec(m, 'LIGHT', i, x, 14.9, 3.5, 2, 0, 1.15, 9, 4100)
     clock(m, 'sc_skin_clock')
-    actor(m, 'sc_skin_clock', 0, 0, 15.2, 11.6, 0, 0, False)              # a person, for scale
-    label(m, 8.4, 13.6, 'SKINBOT', 'full size, walking: 2.4 m tall', 'S', 2.2)
-    exhibit(m, (9, 8, 17, 14), 'SKINBOT / the Engineering boss at full size, walking its beat', 'SKINBOT', 'full size', 12, 11)
+    actor(m, 'sc_skin_clock', 0, 0, 15.2, 16.5, 0, 0, False)              # a person, for scale
+    label(m, 9, 16, 'SKINBOT WALK COURSE', '2.4 M TALL / WATCH FROM THIS SIDE', 'S', 4.0)
+    exhibit(m, (5, 8, 21, 17), 'SKINBOT / full-size obstacle course, out and back', 'SKINBOT WALK COURSE', 'full size', 12, 16)
 
     m = room('Showcase Dead Room', 7, 'SHOWCASE: DEAD ROOM', row=2, title_box=(9, 1, 15, 7), ceiling=2.7)
     i = m['index']

@@ -5,6 +5,7 @@
 #include "Game.h"
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 namespace retro {
 namespace {
 StateId lightsMode(const AiAgent& ai){return stateId(ai.name+"_lights");}
@@ -13,6 +14,32 @@ StateId lightsLeft(const AiAgent& ai){return stateId(ai.name+"_lights_left");}
 constexpr float Patch=4.f;
 StateId heardIn(const AiAgent& ai,int patch){return stateId(ai.name+"_heard_"+std::to_string(patch));}
 StateId lastHeard(const AiAgent& ai){return stateId(ai.name+"_lead");}       // patch + 1; 0 nothing yet
+std::vector<Vec2> skinbotRoute(const World& world,Vec2 home){
+ const auto* map=world.mapData();
+ if(!map)return {};
+ const auto& fixtures=world.fixtures();
+ for(size_t i=0;i<fixtures.size();++i){
+  const auto& fixture=fixtures[i];
+  if(fixture.model!=skinbot::Model||!fixture.visible||lengthSq(fixture.position-home)>.001f)continue;
+  const auto fields=map->recordFields.find(recordFieldKey("FIXTURE","",int(i)));
+  if(fields==map->recordFields.end())return {};
+  const auto* route=findNamedField(fields->second,"skinbot.route");
+  if(!route)return {};
+  auto text=route->value;
+  for(char& c:text)if(c==','||c==';')c=' ';
+  std::istringstream input(text);std::vector<Vec2> points;
+  for(;;){
+   input>>std::ws;
+   if(input.eof())break;
+   Vec2 point;
+   if(!(input>>point.x>>point.y)||!std::isfinite(point.x)||!std::isfinite(point.y)||
+      point.x<1||point.x>23||point.y<1||point.y>23||points.size()==16)return {};
+   points.push_back(point);
+  }
+  return points.size()>=2?points:std::vector<Vec2>{};
+ }
+ return {};
+}
 StateId mostHeard(const AiAgent& ai){return stateId(ai.name+"_haunt");}
 int patchOf(Vec2 p){return std::clamp(int(p.y/Patch),0,5)*6+std::clamp(int(p.x/Patch),0,5);}
 }
@@ -72,8 +99,13 @@ void Game::updateSkinbot(float dt){
  // Its beat, until pointed elsewhere: four places round where it was put, standing dead still at each.
  if(!m_skinbotPointed&&m_skinbot.arrived()){
   m_skinbotWait-=dt;
-  if(m_skinbotWait<=0){static const Vec2 beat[4]={{1.2f,3.f},{-3.f,3.f},{-3.f,-2.5f},{1.2f,-2.5f}};
-   const Vec2 at=m_skinbotHome+beat[m_skinbotStop++%4];m_skinbot.pointAt(at.x,at.y);m_skinbotWait=2.5f;}
+  if(m_skinbotWait<=0){
+   static const Vec2 beat[4]={{1.2f,3.f},{-3.f,3.f},{-3.f,-2.5f},{1.2f,-2.5f}};
+   const auto route=skinbotRoute(m_world,m_skinbotHome);
+   const size_t stop=size_t(m_skinbotStop++);
+   const Vec2 at=route.empty()?m_skinbotHome+beat[stop%4]:route[stop%route.size()];
+   m_skinbot.pointAt(at.x,at.y);m_skinbotWait=2.5f;
+  }
  }
  // It watches the player when it can see them: near, and nothing solid between (never through walls).
  {const float dx=m_player.pos.x-m_skinbot.x,dy=m_player.pos.y-m_skinbot.y,away=std::hypot(dx,dy);

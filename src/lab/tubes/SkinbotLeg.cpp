@@ -40,5 +40,33 @@ const bool skinbotWalk=add({
           std::to_string(int(s.board["hesitations"]))+" / "+std::to_string(int(s.board["slips"]))+" / "+std::to_string(int(s.board["freezes"])));
   r.check("its body rides up over the slab",s.board["high"]>.2,std::to_string(s.board["high"]));}
 });
+const bool starterCourse=add({
+ .name="starter-skinbot-course",.summary="The actual Showcase Sound exhibit walks, climbs, turns and comes back unprompted",
+ .fixtures={"starter-skinbot-course"},
+ .setup=[](Scene& s){LabAccess::setGod(s.g(),true);},
+ .step=[](Scene& s,float){
+  auto& game=s.g();
+  LabAccess::setCamera(game,{12.8f,18.6f},.4f,-1.5707963f,-12.f);
+  for(int tick=0;tick<19;++tick){
+   game.update({},.05f);
+   if(const auto* walker=game.skinbotWalker()){
+    s.board["high"]=std::max(s.board["high"],double(walker->z));
+    s.board["east"]=std::max(s.board["east"],double(walker->x));
+    if(s.board["east"]>19.1&&walker->x<7.f)s.board["returned"]=1;
+   }
+  }
+ },
+ .capture=[](Scene& s,const Frame&){
+  if(s.frame==5)s.shoot("01-start-of-course");
+  if(s.frame==12)s.shoot("02-crossing-obstacles");
+  if(s.frame==25)s.shoot("03-turn-and-return");
+ },
+ .metrics=[](Scene& s,Report& r){
+  r.check("the exhibit runs in the actual Showcase Sound map",s.g().level()==42,"Starter Map chunk 42");
+  r.check("the creature walks the full eastbound course",s.board["east"]>19.1,std::to_string(s.board["east"]));
+  r.check("the body rises over the obstacles",s.board["high"]>.2,std::to_string(s.board["high"]));
+  r.check("the creature turns and walks back without being pointed",s.board["returned"]>0,"both directions");
+ }
+});
 }
 }
