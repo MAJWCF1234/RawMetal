@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit bf49baf39c23dde6eecc4127b1a419ebf2a72266
-# 2026-11-28 06:26, fix: preserve Kit menu focus and keep Claire the default
+commit 8c26705b6b9da1575c66e3421af3ede68f58dd7c
+# 2026-11-28 07:13, perf: share Kit weapon animation scenes
