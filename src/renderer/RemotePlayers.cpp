@@ -19,6 +19,8 @@ constexpr float kPiF=3.14159265f;
 constexpr Point3 TriggerSocket{.02f,.70f,1.10f},SupportSocket{-.064f,1.10f,-2.30f};  // Scene3D.cpp's shotgun sockets
 // Claire's ten materials by FBX name (Scene3D.cpp claireMaterial; resources 2302-2311 in this order).
 int materialOf(const Mesh& mesh,int part){
+ static constexpr const char* kit[]={"KitBody","KitSuit","KitHair","KitLashes","KitHands","KitNails"};
+ if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<6;++m)if(mesh.materialNames[size_t(part)].find(kit[m])!=std::string::npos)return m;
  static constexpr const char* names[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
  if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(names[m])!=std::string::npos)return m;
  return -1;
@@ -33,20 +35,20 @@ float wrap(float a){while(a>kPiF)a-=2*kPiF;while(a<-kPiF)a+=2*kPiF;return a;}
 struct SoftwareRenderer::RemoteBodies {
  struct Character{std::unique_ptr<Mesh> mesh;std::vector<unsigned char> texture,arm,head;std::vector<const Texture*> faceTexture;float headFraction=.93f;bool tried=false,ready=false;};
  // The face textures of the Limitator (1) and Leon (2) (SoftwareRenderer::playerBody); set by the renderer before a body is first asked for.
- std::array<const std::vector<const Texture*>*,3> bodyTextures{nullptr,nullptr,nullptr};
- std::array<Character,3> characters;
+ std::array<const std::vector<const Texture*>*,4> bodyTextures{nullptr,nullptr,nullptr,nullptr};
+ std::array<Character,4> characters;
  struct Body{ClaireOutside outside;int key=-1;float blendStart=-1,last=-1,gait=0,yaw=0,turned=0,health=100,hitStart=-1e9f;bool seen=false;const Mesh* mesh=nullptr;};
  std::array<Body,16> bodies;
  std::vector<RemoteBodyReport> reports;
  Character& body(int character){
-  auto& c=characters[size_t(std::clamp(character,0,2))];
+  auto& c=characters[size_t(std::clamp(character,0,3))];
   if(!c.tried){c.tried=true;
    // 0 Claire (2300 on her clips 2301 and anchors 2312). 1 the Limitator (2290 on his clips 2291 and anchors 2292),
    // a copy of his own so remote poses never fight the local body's; while he cannot load, Claire stands in for him.
    if(&c==&characters[0]){try{c.mesh=std::make_unique<Mesh>(2300,"",2301,2312);}catch(...){c.mesh.reset();}}
    else{const size_t which=size_t(&c-characters.data());const auto* textures=bodyTextures[which];
     // 2 Leon (2270 on 2271, anchors 2272): the same.
-    if(textures){try{c.mesh=which==2?std::make_unique<Mesh>(2270,"",2271,2272):std::make_unique<Mesh>(2290,"",2291,2292);if(c.mesh->triangles.size()!=textures->size())c.mesh.reset();}catch(...){c.mesh.reset();}
+    if(textures){try{c.mesh=which==3?std::make_unique<Mesh>(3410,"",3411,3412):which==2?std::make_unique<Mesh>(2270,"",2271,2272):std::make_unique<Mesh>(2290,"",2291,2292);if(c.mesh->triangles.size()!=textures->size())c.mesh.reset();}catch(...){c.mesh.reset();}
      if(c.mesh)c.faceTexture=*textures;}}
    if(c.mesh&&!c.mesh->triangles.empty()){
     // Classify once, on the bind pose: material, the arms (out past the shoulders) and the head (above the neck).
@@ -54,7 +56,7 @@ struct SoftwareRenderer::RemoteBodies {
     for(const auto& t:bind)for(const auto& v:t.v){low.x=std::min(low.x,v.p.x);low.y=std::min(low.y,v.p.y);high.x=std::max(high.x,v.p.x);high.y=std::max(high.y,v.p.y);}
     const float height=std::max(1e-4f,high.y-low.y),middle=(low.x+high.x)*.5f;double headSum=0;int headCount=0;
     c.texture.assign(bind.size(),0);c.arm.assign(bind.size(),0);c.head.assign(bind.size(),0);
-    if(&c==&characters[2]){
+    if(&c==&characters[2]||&c==&characters[3]){
      // Leon: the arms are what his arm and finger bones carry, the head what his head bone does (ears included).
      static constexpr const char* armBones[]={"Arm_L","Arm_R","ForeArm_L","ForeArm_R","Hand_L","Hand_R"};
      std::vector<std::string> names(std::begin(armBones),std::end(armBones));
@@ -79,6 +81,7 @@ SoftwareRenderer::RemoteBodies& SoftwareRenderer::remoteBodies(){if(!m_remote)m_
 const std::vector<SoftwareRenderer::RemoteBodyReport>& SoftwareRenderer::remoteBodyReports()const{static const std::vector<RemoteBodyReport> none;return m_remote?m_remote->reports:none;}
 bool SoftwareRenderer::characterBuilt(int character)const{
  if(character<=0)return true;
+ if(character==3)return !m_kitFailed;
  return character==2?!m_leonFailed:!m_limitatorFailed;   // each is in the build; only a body that failed to load is not
 }
 
@@ -97,7 +100,8 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
   if(!r.alive&&r.deathAge>4.5f){b.key=-1;b.seen=false;all.reports.push_back(report);continue;}
   // The body's face textures come from the renderer's own (playerBody); a Leon that will not load is the Limitator.
   const auto offer=[&](int which){if(!all.characters[size_t(which)].tried&&!all.bodyTextures[size_t(which)]){PlayerBody& his=playerBody(which);if(his.character==which)all.bodyTextures[size_t(which)]=&his.faceTexture;else all.characters[size_t(which)].tried=true;}};
-  if(r.character==1)offer(1);
+  if(r.character==3){offer(3);if(all.characters[3].tried&&!all.bodyTextures[3])offer(2);}
+  else if(r.character==1)offer(1);
   else if(r.character==2){offer(2);if(all.characters[2].tried&&!all.bodyTextures[2])offer(1);}
   auto& character=all.body(r.character);
   if(!character.ready){all.reports.push_back(report);continue;}
@@ -207,13 +211,14 @@ void SoftwareRenderer::drawRemotePlayers(const Game& game,const RemoteDrawHooks&
    hooks.tri(face.v[0],face.v[1],face.v[2],f<character.faceTexture.size()&&character.faceTexture[f]?*character.faceTexture[f]:m_claireTextures[f<character.texture.size()?character.texture[f]:0],.72f+.35f*std::fabs(n.z)/std::max(.001f,len));}
   // A VR player's arms: the first-person arm rig on the solve's shoulders, wrists on their tracked hands.
   if(vr){const AvatarSolve solve=solveAvatar(r.pose,now);const Point3 shift=r.position-r.pose.root;
-   const VrRig rig=poseVrArms(m_armsMesh,solve);
-   for(const auto& face:m_armsMesh.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=rigToWorld(rig,solve,face.v[i].p)+shift;}
+   Mesh& remoteArms=(&character==&all.characters[3]&&m_kitArms)?*m_kitArms:m_armsMesh;
+   const VrRig rig=poseVrArms(remoteArms,solve);
+   for(const auto& face:remoteArms.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=rigToWorld(rig,solve,face.v[i].p)+shift;}
     std::swap(v[1],v[2]);const Point3 n=cross(v[1].p-v[0].p,v[2].p-v[0].p);hooks.face(n,(v[0].p+v[1].p+v[2].p)*(1.f/3.f)-receiver);
-    const int m=materialOf(m_armsMesh,face.part);hooks.tri(v[0],v[1],v[2],m>=0?(&character==&all.characters[2]?m_leonArmTextures:m_claireTextures)[size_t(m)]:m_arms,.85f);}
+    const int m=materialOf(remoteArms,face.part);hooks.tri(v[0],v[1],v[2],m>=0?(&character==&all.characters[3]?m_kitArmTextures:&character==&all.characters[2]?m_leonArmTextures:m_claireTextures)[size_t(m)]:m_arms,.85f);}
    // The gun in the hand that holds it: the bore along the fingers, kept level about it.
    if(r.pose.inHand>=2&&r.pose.inHand<=4){const int g=r.pose.gunSide&1;const bool pistol=r.pose.inHand>=3,mac=r.pose.inHand==4;
-    const Point3 wrist=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))+shift;
+    const Point3 wrist=rigToWorld(rig,solve,remoteArms.bonePosition(g?"hand.R":"hand.L"))+shift;
     const Point3 bore=unit(r.pose.hands[size_t(g)].forward),back=bore*-1.f;Point3 up=Point3{0,0,1}-bore*bore.z;up=unit(dot(up,up)<1e-4f?Point3{1,0,0}:up);const Point3 side=cross(back,up);
     const Point3 origin=wrist+bore*.07f;held=mac?3:pistol?2:1;
     auto place=[&](Point3 p){return origin+side*p.x+up*p.y+back*p.z;};

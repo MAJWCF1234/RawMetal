@@ -120,7 +120,7 @@ std::vector<MenuItem> Game::settingsItems()const{
    case RPadRumble:{static constexpr const char* n[]={"OFF","LIGHT","STANDARD"};m.kind=MenuItem::Choice;m.label="RUMBLE";m.value=n[std::clamp(s.pad.rumble,0,2)];m.help="The controller shakes when you fire and when you are hurt.";break;}
    case RPadSwap:m.label="STICKS";m.value=s.pad.swapSticks?"SWAPPED":"STANDARD";m.help="Swapped: the left stick looks and the right stick walks, for the other hand.";break;
    case RPull:m.kind=MenuItem::Choice;m.label="PULL HIGHLIGHT";m.value=s.pullHighlight?"SUBTLE":"NONE";m.help="The outline on what the Physgloves would pull. The reticle tightens either way.";break;
-   case RCharacter:m.kind=MenuItem::Choice;m.label="CHARACTER";m.value=s.character==2?"LEON":s.character==1?"THE LIMITATOR":"CLAIRE";m.help="Who the others see in multiplayer. It takes hold the next time you join.";break;
+   case RCharacter:m.kind=MenuItem::Choice;m.label="CHARACTER";m.value=s.character==3?"KIT":s.character==2?"LEON":s.character==1?"THE LIMITATOR":"CLAIRE";m.help="Who the others see in multiplayer. It takes hold the next time you join.";break;
    case RTextChat:m.label="TEXT CHAT";m.value=onOff(s.textChat);m.help="Press T in a match to type. Off hides the others' lines and keeps the notices.";break;
    case RChatFilter:m.label="CHAT FILTER";m.value=onOff(s.chatFilter);m.help="Masks a short list of foul words with asterisks in what you read.";break;
    case RVoiceMode:m.kind=MenuItem::Choice;m.label="VOICE CHAT";m.value=net::voiceModeName(net::VoiceMode(std::clamp(s.voiceMode,0,2)));m.warn=s.voiceMode==0;
@@ -234,7 +234,7 @@ void Game::settingsChange(int id,int direction,bool activate){
   case RPadAssist:s.pad.assist=cycle(std::clamp(s.pad.assist,0,2),3);break;
   case RPadRumble:s.pad.rumble=cycle(std::clamp(s.pad.rumble,0,2),3);break;
   case RPull:s.pullHighlight=s.pullHighlight?0:1;break;
-  case RCharacter:s.character=cycle(std::clamp(s.character,0,2),3);break;
+  case RCharacter:s.character=cycle(std::clamp(s.character,0,3),4);break;
   case RTextChat:s.textChat=!s.textChat;break;
   case RChatFilter:s.chatFilter=!s.chatFilter;break;
   case RVoiceMode:s.voiceMode=cycle(std::clamp(s.voiceMode,0,2),3);break;

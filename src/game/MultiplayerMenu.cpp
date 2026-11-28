@@ -17,7 +17,7 @@ namespace retro {
 bool copyTextToClipboard(const std::string& text);
 namespace {
 enum Action:int{ActNone,ActQuick,ActBrowse,ActHost,ActJoin,ActCharacter,ActPlayerName,ActBack,ActQuickDeathmatch,ActQuickCoop,ActRefresh,ActMode,ActHideFull,
- ActLobby,ActHostMode,ActHostMap,ActHostPlayers,ActHostPrivate,ActHostName,ActHostGo,ActCopy,ActLeave,ActJoinField,ActJoinGo,ActClaire,ActLimitator,ActLeon,ActNameKey};
+ ActLobby,ActHostMode,ActHostMap,ActHostPlayers,ActHostPrivate,ActHostName,ActHostGo,ActCopy,ActLeave,ActJoinField,ActJoinGo,ActClaire,ActLimitator,ActLeon,ActKit,ActNameKey};
 constexpr int BrowseTop=190,BrowseRow=18,BrowseRows=6;
 constexpr int NameColumns=10,NameRows=4;
 constexpr std::string_view NameLetters="1234567890abcdefghijklmnopqrstuvwxyz";
@@ -32,7 +32,7 @@ void editName(std::string& name,std::string_view text){
 }
 // Game::update ticks the session itself (Match.cpp updateNet).
 void tickUpdate(Game& g,const InputState& in,float dt){g.update(in,dt);}   // Game::update pumps the session itself
-const char* characterName(int c){return c==2?"LEON":c==1?"THE LIMITATOR":"CLAIRE";}
+const char* characterName(int c){return c==3?"KIT":c==2?"LEON":c==1?"THE LIMITATOR":"CLAIRE";}
 // The map's content hash for HostOptions::mapHash: FNV-1a 64 of the .rmc file's bytes as 16 hex digits, the same
 // as net::mapFileHash (Match.h), which a guest compares it with (switch to that one call once both are in one tree).
 // A campaign with no file (the embedded Exclusion Zone) hashes its key instead.
@@ -181,7 +181,7 @@ std::vector<TitleItem> Game::titleItems()const{
    add(TitleItem::Field,X,Y,220,34,"CODE",m_joinTyped,true,ActJoinField);
    row(Y+46,busy?"JOINING":"JOIN",net::normaliseJoinCode(m_joinTyped).empty()?"":net::normaliseJoinCode(m_joinTyped),usable&&!net::normaliseJoinCode(m_joinTyped).empty(),ActJoinGo);back(Y+46+H+G);break;
   case TitlePage::Character:
-   row(Y,"CLAIRE",m_settings.character==0?"IN USE":"",true,ActClaire);row(Y+H,"THE LIMITATOR",m_settings.character==1?"IN USE":"",true,ActLimitator);row(Y+2*H,"LEON",m_settings.character==2?"IN USE":"",true,ActLeon);back(Y+3*H+G);break;
+   row(Y,"CLAIRE",m_settings.character==0?"IN USE":"",true,ActClaire);row(Y+H,"THE LIMITATOR",m_settings.character==1?"IN USE":"",true,ActLimitator);row(Y+2*H,"LEON",m_settings.character==2?"IN USE":"",true,ActLeon);row(Y+3*H,"KIT",m_settings.character==3?"IN USE":"",true,ActKit);back(Y+4*H+G);break;
  }
  return items;
 }
@@ -323,6 +323,7 @@ void Game::updateMultiplayerMenu(const InputState& input){
   case ActClaire:m_settings.character=0;m_settingsSaveDue=true;break;
   case ActLimitator:m_settings.character=1;m_settingsSaveDue=true;break;
   case ActLeon:m_settings.character=2;m_settingsSaveDue=true;break;
+  case ActKit:m_settings.character=3;m_settingsSaveDue=true;break;
   default:break;
  }
 }
@@ -355,9 +356,9 @@ bool Game::testMultiplayerMenu(std::ostream& report){
   std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0\n";Game old(campaign);old.loadSettings(path.wstring());std::filesystem::remove(path,e);check(old.settings().character==0,"an older settings file keeps Claire");
   // Leon is the third row: chosen, kept through a save and load (an unknown number is clamped to the last body).
   Game l(campaign);l.showTitleScreen();l.openTitlePage(TitlePage::Character);key(l,&InputState::menuDown);key(l,&InputState::menuDown);key(l,&InputState::menuAccept);
-  check(l.titleItems().size()==4&&l.titleItems()[2].label=="LEON"&&l.settings().character==2,"CHARACTER: three bodies and BACK, LEON chosen");
+  check(l.titleItems().size()==5&&l.titleItems()[2].label=="LEON"&&l.settings().character==2,"CHARACTER: three bodies and BACK, LEON chosen");
   l.saveSettings(path.wstring());Game m(campaign);m.loadSettings(path.wstring());check(m.settings().character==2,"Leon survives a settings save and load");
-  std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0 9\n";Game wild(campaign);wild.loadSettings(path.wstring());std::filesystem::remove(path,e);check(wild.settings().character==2,"a character number past the last is clamped to Leon");}
+  std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0 9\n";Game wild(campaign);wild.loadSettings(path.wstring());std::filesystem::remove(path,e);check(wild.settings().character==3,"a character number past the last is clamped to Kit");}
  // MULTIPLAYER > NAME: typed on the page, used by the session at once, kept through a save and load; never the
  // Windows account name, which players did not want shown.
  {net::LoopbackHub names;auto session=names.connect("Diver-1234");Game g(campaign);g.setNetSession(session.get());g.showTitleScreen();g.openTitlePage(TitlePage::Multiplayer);

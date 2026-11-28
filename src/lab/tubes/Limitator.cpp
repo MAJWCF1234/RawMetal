@@ -39,7 +39,7 @@ constexpr int HoldCount=int(sizeof(Holds)/sizeof(Holds[0]));
 constexpr float LookDown=-1.0472f*140.f;
 int holdAt(const Scene& s){return std::min(HoldCount-1,s.frame*HoldCount/std::max(1,s.frames));}
 int perHold(const Scene& s){return std::max(1,s.frames/HoldCount);}
-int wanted(int fallback){return std::clamp(int(tuned("limitator.character",float(fallback))+.5f),0,2);}
+int wanted(int fallback){return std::clamp(int(tuned("limitator.character",float(fallback))+.5f),0,3);}
 std::map<const Scene*,std::map<std::string,std::string>>& notes(){static std::map<const Scene*,std::map<std::string,std::string>> n;return n;}
 // The body faces drawn over the screen's middle: within radius (a share of the
 // frame's height) of the crosshair, sampled on a grid. Faces reaching behind
@@ -147,6 +147,7 @@ Feature tube(const char* name,const char* summary,int def){return Feature{
   const auto& rep=LabAccess::claireReport(*s.renderer);if(rep.drawn){o.point(rep.gripRight,0xff40ff,3);o.point(rep.gripLeft,0x40c0ff,3);o.point(rep.feet[0],0x40ff60,3);o.point(rep.feet[1],0x40ff60,3);}},
  .teardown=[](Scene& s){SoftwareRenderer::setThirdPerson(false);s.renderer->setBodyOrbit(0,0);LabAccess::collectBodyFaces(*s.renderer,false);LabAccess::resetBody(*s.renderer);LabAccess::settings(s.g()).character=0;}};}
 const bool limitator=add(tube("limitator","the Limitator (Settings::character 1) turned through his holds from outside, then first person 60 degrees down standing, crouched and prone",1));
+const bool kit=add(tube("kit","Kit: her own body and first-person sleeves and hands through the character holds",3));
 const bool leon=add(tube("leon","Leon (Settings::character 2) through the same holds from outside, then first person 60 degrees down standing, crouched and prone",2));
 }
 }

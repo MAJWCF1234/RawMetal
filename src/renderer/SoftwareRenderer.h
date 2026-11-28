@@ -422,7 +422,17 @@ private:
     // gun_*, mag_* and knob_* points carry its frame, its magazine and its cocking knob.
     Mesh m_fpMac{3359};bool m_fpMacPosed=false;
     Mesh m_fpRifle{3393},m_sniperFpMesh{3392};mutable bool m_fpRifleActive=false;mutable float m_fpAimPrev=0;   // the sniper rifle: the pack's rifle rig and the rifle in the MAC-11's frame (the MAC-11 paths carry both)
-    const Mesh& fpRig()const{return m_fpRifleActive?m_fpRifle:m_fpMac;}
+    bool m_kitView=false;
+    std::unique_ptr<Mesh> m_kitArms,m_kitShotgun,m_kitMac,m_kitRifle;
+    Mesh& armsMesh(){return m_kitView&&m_kitArms?*m_kitArms:m_armsMesh;}
+    const Mesh& armsMesh()const{return m_kitView&&m_kitArms?*m_kitArms:m_armsMesh;}
+    Mesh& shotgunRig(){return m_kitView&&m_kitShotgun?*m_kitShotgun:m_fpShotgun;}
+    const Mesh& shotgunRig()const{return m_kitView&&m_kitShotgun?*m_kitShotgun:m_fpShotgun;}
+    Mesh& macRig(){return m_kitView&&m_kitMac?*m_kitMac:m_fpMac;}
+    const Mesh& macRig()const{return m_kitView&&m_kitMac?*m_kitMac:m_fpMac;}
+    Mesh& rifleRigMesh(){return m_kitView&&m_kitRifle?*m_kitRifle:m_fpRifle;}
+    const Mesh& rifleRigMesh()const{return m_kitView&&m_kitRifle?*m_kitRifle:m_fpRifle;}
+    const Mesh& fpRig()const{return m_fpRifleActive?rifleRigMesh():macRig();}
     float m_tpBack=0,m_tpTime=-1;
     // Third person, standing still: her body trails the look and steps round
     // with a 90-degree turn clip once it falls more than ~60 degrees behind.
@@ -486,7 +496,11 @@ private:
     // Claire's arms in his fur.
     std::unique_ptr<Mesh> m_leonMesh;bool m_leonFailed=false,m_leonTexturesReady=false;
     std::array<Texture,4> m_leonTextures;std::array<Texture,10> m_leonArmTextures;
-    std::array<PlayerBody,3> m_playerBodies;
+    std::unique_ptr<Mesh> m_kitMesh;
+    bool m_kitFailed=false,m_kitTexturesReady=false;
+    std::array<Texture,2> m_kitFpTextures;std::array<Texture,4> m_kitTextures;
+    std::array<Texture,10> m_kitArmTextures;
+    std::array<PlayerBody,4> m_playerBodies;
     void classifyPlayerBody(PlayerBody& body);
     // The body the local player wore last frame: a change re-makes its outside
     // poser, turn measures and blends.

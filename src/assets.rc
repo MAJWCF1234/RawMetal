@@ -1922,3 +1922,19 @@
 3404 RCDATA "assets/audio/skinbot-hit.sfx"
 3405 RCDATA "assets/audio/skinbot-surge.sfx"
 3406 RCDATA "assets/audio/skinbot-scrape.sfx"
+
+// Kit's body, motion, painted materials, and her own first-person geometry.
+3410 RCDATA "assets/library/player/Kit.fbx"
+3411 RCDATA "assets/library/player/kit-animation.bin"
+3412 RCDATA "assets/library/player/kit-animation.bin.anchors"
+3413 RCDATA "assets/library/player/KitBody.png"
+3414 RCDATA "assets/library/player/KitSuit.png"
+3415 RCDATA "assets/library/player/KitHair.png"
+3416 RCDATA "assets/library/player/KitLashes.png"
+3417 RCDATA "assets/library/player/kit-arms.fbx"
+3418 RCDATA "assets/library/player/kit-shotgun.fbx"
+3419 RCDATA "assets/library/player/kit-mac11.fbx"
+3420 RCDATA "assets/library/player/kit-rifle.fbx"
+
+3421 RCDATA "assets/library/player/KitHands.png"
+3422 RCDATA "assets/library/player/KitNails.png"

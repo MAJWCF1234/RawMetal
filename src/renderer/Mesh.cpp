@@ -157,7 +157,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
  for(auto n:m_scene->nodes)if(n->mesh){description+=" mesh "+std::string(n->name.data)+" triangles "+std::to_string(n->mesh->num_triangles)+"\n";for(auto mat:n->materials)description+=" material "+std::string(mat->name.data)+"\n";}
  description+="Animation stacks: "+std::to_string(m_scene->anim_stacks.count)+"\n";
  for(auto stack:m_scene->anim_stacks)description+=std::string(stack->name.data)+"\n";
- if(id==111){
+ if(id==111||id==3417){
   // Retain the authored finger poses from the supplied left/right grab actions.
   for(auto stack:m_scene->anim_stacks){std::string name=stack->name.data;bool left=name.find("grab.L")!=std::string::npos,right=name.find("grab.R")!=std::string::npos;if(!left&&!right)continue;
    ufbx_evaluate_opts eo{};auto frame=ufbx_evaluate_scene(m_scene,stack->anim,stack->time_end,&eo,nullptr);
@@ -173,7 +173,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);grip();extract(m_scene);
   description+="Arm opening rings: "+std::to_string(openRings.size())+"\n";
  }
- if(id==2313||id==3359||id==3393){   // Claire's arms on the pack's animated shotgun (2313) or pistol (3359, the MAC-11) rig: clips are posed by name
+ if(id==2313||id==3359||id==3393||id==3418||id==3419||id==3420){   // Claire's arms on the pack's animated shotgun (2313) or pistol (3359, the MAC-11) rig: clips are posed by name
   for(auto*skin:m_scene->skin_deformers)for(auto&vertex:skin->vertices)vertex.dq_weight=1;
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);}
 }
@@ -187,7 +187,7 @@ float Mesh::creatureClipDuration(int clip)const{
  return hasDirectCreatureMotion()?m_creatureDurations[size_t(clip)]:0.f;
 }
 void Mesh::sampleCreatureClip(int clip,float phase,std::vector<Point3>& out)const{
- if(m_creatureFrames.empty()||clip<0||clip>=int(m_creatureClips))throw std::runtime_error("Missing creature clip");
+ if(m_creatureFrames.empty()||clip<0||clip>=int(m_creatureClips))throw std::runtime_error("Missing creature clip "+std::to_string(clip)+" on resource "+std::to_string(m_source.resource)+" ("+std::to_string(m_creatureClips)+" clips)");
  if(!std::isfinite(phase))throw std::runtime_error("Invalid creature phase");
  unsigned samples=m_creatureSampleCounts[size_t(clip)];
  float frame=std::clamp(phase,0.f,1.f)*(samples-1);unsigned a=unsigned(frame),b=std::min(a+1,samples-1);float blend=frame-a;

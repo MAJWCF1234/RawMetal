@@ -31,6 +31,8 @@
 #endif
 namespace retro {
 struct LabAccess {
+ static std::array<int,6> kitViewState(SoftwareRenderer& r){return {r.m_kitView?1:0,r.armsMesh().source().resource,r.shotgunRig().source().resource,r.macRig().source().resource,r.rifleRigMesh().source().resource,(r.m_fpShotgunPosed||r.m_fpMacPosed)?1:0};}
+ static void equipKitTest(Game& g,WeaponId id){if(id==WeaponId::Sniper)g.grantSniper(20);else if(id==WeaponId::Shotgun){g.m_shotgunOwned=true;g.m_player.pool(id).loaded=5;}equip(g,id);}
  static SoftwareRenderer::Texture skyTexture(int resource){return SoftwareRenderer::loadTexture(resource);}
  static void setSkybox(Game& g,std::string id){g.m_world.setSkybox(std::move(id));}
  // ---- Game ----
