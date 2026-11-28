@@ -16,9 +16,11 @@ const bool kitViews=add({
   auto state=LabAccess::kitViewState(*s.renderer);
   bool own=state[0]&&state[1]==3417&&state[2]==3418&&state[3]==3419&&state[4]==3420;
   s.board[std::string(names[v])+".own"]=own;
+  s.board[std::string(names[v])+".shared"]=LabAccess::kitSharedActions(*s.renderer)==std::array<int,4>{111,2313,3359,3393};
   if(v>=2)s.board[std::string(names[v])+".clip"]=state[5];
   s.shoot(std::string(names[v])+(at<per/2?" idle":" aim"));},
  .metrics=[](Scene& s,Report& r){for(int i=0;i<5;++i){r.check(std::string(names[i])+" uses Kit meshes",s.board[std::string(names[i])+".own"]==1);
+  r.check(std::string(names[i])+" shares existing rig animations",s.board[std::string(names[i])+".shared"]==1);
   if(i>=2)r.check(std::string(names[i])+" plays its authored clip",s.board[std::string(names[i])+".clip"]==1);}},
  .teardown=[](Scene& s){LabAccess::settings(s.g()).character=0;SoftwareRenderer::setThirdPerson(false);}
 });

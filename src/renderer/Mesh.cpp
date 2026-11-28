@@ -158,14 +158,7 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
  description+="Animation stacks: "+std::to_string(m_scene->anim_stacks.count)+"\n";
  for(auto stack:m_scene->anim_stacks)description+=std::string(stack->name.data)+"\n";
  if(id==111||id==3417){
-  // Retain the authored finger poses from the supplied left/right grab actions.
-  for(auto stack:m_scene->anim_stacks){std::string name=stack->name.data;bool left=name.find("grab.L")!=std::string::npos,right=name.find("grab.R")!=std::string::npos;if(!left&&!right)continue;
-   ufbx_evaluate_opts eo{};auto frame=ufbx_evaluate_scene(m_scene,stack->anim,stack->time_end,&eo,nullptr);
-   if(frame){for(auto n:frame->nodes){std::string bone=n->name.data;
-    if((bone.find("f_")==0||bone.find("thumb.")==0)&&bone.find(left?".L":".R")!=std::string::npos&&bone.find("_end")==std::string::npos)m_fingerGrip.push_back({n->typed_id,n->local_transform});
-   }ufbx_free_scene(frame);}
-  }
-  description+="Authored grab finger transforms: "+std::to_string(m_fingerGrip.size())+"\n";
+   cacheFingerGrips(m_scene);
   // Dual-quaternion skinning: the grip turns each hand a long way against its
   // forearm, and a linear blend over the wrist collapses the twist into a
   // pinched neck. Blended rotations keep the wrist round.
@@ -177,7 +170,43 @@ Mesh::Mesh(int id,const char* nodeFilter,int animationResource,int anchorResourc
   for(auto*skin:m_scene->skin_deformers)for(auto&vertex:skin->vertices)vertex.dq_weight=1;
   m_bindScene=m_scene;ufbx_retain_scene(m_bindScene);}
 }
-Mesh::~Mesh(){ufbx_free_scene(m_scene);ufbx_free_scene(m_bindScene);}
+Mesh::~Mesh(){ufbx_free_scene(m_scene);ufbx_free_scene(m_bindScene);ufbx_free_scene(m_actionScene);}
+void Mesh::cacheFingerGrips(ufbx_scene* actions){
+ m_fingerGrip.clear();
+ for(auto stack:actions->anim_stacks){std::string name=stack->name.data;
+  const bool left=name.find("grab.L")!=std::string::npos,right=name.find("grab.R")!=std::string::npos;
+  if(!left&&!right)continue;
+  ufbx_evaluate_opts opts{};auto frame=ufbx_evaluate_scene(actions,stack->anim,stack->time_end,&opts,nullptr);
+  if(!frame)throw std::runtime_error("Cannot evaluate authored finger grip");
+  for(auto node:frame->nodes){std::string bone=node->name.data;
+   if((bone.find("f_")==0||bone.find("thumb.")==0)&&bone.find(left?".L":".R")!=std::string::npos&&bone.find("_end")==std::string::npos){
+    auto target=ufbx_find_node(m_bindScene?m_bindScene:m_scene,node->name.data);
+    if(target)m_fingerGrip.push_back({target->typed_id,node->local_transform});
+   }
+  }
+  ufbx_free_scene(frame);
+ }
+ description+="Authored grab finger transforms: "+std::to_string(m_fingerGrip.size())+"\n";
+}
+void Mesh::shareActionsFrom(const Mesh& source){
+ if(m_actionScene||!m_bindScene||!source.m_bindScene||!source.m_bindScene->anim_stacks.count||m_bindScene->anim_stacks.count)
+  throw std::runtime_error("Shared actions require an animation-free fitted mesh and an animated source rig");
+ std::vector<std::pair<uint32_t,uint32_t>> nodes;
+ for(auto target:m_bindScene->nodes){
+  if(!target->parent||target->mesh)continue;
+  auto from=ufbx_find_node(source.m_bindScene,target->name.data);
+  if(!from){if(target->bone)throw std::runtime_error("Shared animation bone missing: "+std::string(target->name.data));continue;}
+  nodes.emplace_back(target->typed_id,from->typed_id);
+ }
+ if(nodes.empty())throw std::runtime_error("Shared animation rig has no matching nodes");
+ m_actionNodes=std::move(nodes);m_actionScene=source.m_bindScene;ufbx_retain_scene(m_actionScene);
+ m_sharedActionResource=source.m_source.resource;
+ cacheFingerGrips(m_actionScene);
+ if(!m_fingerGrip.empty()){
+  ufbx_free_scene(m_scene);m_scene=m_bindScene;ufbx_retain_scene(m_scene);grip();extract(m_scene);
+ }
+ description+="Shared animation resource: "+std::to_string(m_sharedActionResource)+"; "+std::to_string(m_actionScene->anim_stacks.count)+" actions\n";
+}
 const std::vector<MeshTriangle>& Mesh::bindTriangles()const{
  if(m_bindTriangles.empty()){m_bindTriangles.reserve(m_cachedTriangles.size());for(const auto&face:m_cachedTriangles)m_bindTriangles.push_back(face.prototype);}
  return m_bindTriangles;
@@ -538,12 +567,26 @@ void Mesh::poseTracked(Point3 right,Point3 left,const ArmHold& hold,const std::a
 }
 bool Mesh::poseAction(const char* action,float phase){
  if(!m_bindScene)return false;
- for(auto stack:m_bindScene->anim_stacks){std::string name=stack->name.data;
-  if(name.ends_with(action)){ufbx_evaluate_opts opts{};opts.evaluate_skinning=!m_positionOnlySkinning;
-   auto frame=ufbx_evaluate_scene(m_bindScene,stack->anim,stack->time_begin+(stack->time_end-stack->time_begin)*std::clamp(phase,0.f,1.f),&opts,nullptr);
-   if(!frame)return false;ufbx_free_scene(m_scene);m_scene=frame;extract(frame,m_positionOnlySkinning);return true;
-  }
- }return false;
+ auto actions=m_actionScene?m_actionScene:m_bindScene;
+ for(auto stack:actions->anim_stacks){std::string name=stack->name.data;
+  if(!name.ends_with(action))continue;
+  const double time=stack->time_begin+(stack->time_end-stack->time_begin)*std::clamp(phase,0.f,1.f);
+  ufbx_evaluate_opts opts{};opts.evaluate_skinning=!m_positionOnlySkinning;
+  ufbx_scene* frame=nullptr;
+  if(m_actionScene){
+   ufbx_evaluate_opts rigOpts{};auto rig=ufbx_evaluate_scene(m_actionScene,stack->anim,time,&rigOpts,nullptr);
+   if(!rig)return false;
+   std::vector<ufbx_transform_override> transforms;transforms.reserve(m_actionNodes.size());
+   for(auto [target,source]:m_actionNodes)transforms.push_back({target,rig->nodes[source]->local_transform});
+   ufbx_anim_opts animationOpts{};animationOpts.transform_overrides={transforms.data(),transforms.size()};
+   auto animation=ufbx_create_anim(m_bindScene,&animationOpts,nullptr);
+   if(animation)frame=ufbx_evaluate_scene(m_bindScene,animation,0,&opts,nullptr);
+   ufbx_free_anim(animation);ufbx_free_scene(rig);
+  }else frame=ufbx_evaluate_scene(m_bindScene,stack->anim,time,&opts,nullptr);
+  if(!frame)return false;
+  ufbx_free_scene(m_scene);m_scene=frame;extract(frame,m_positionOnlySkinning);return true;
+ }
+ return false;
 }
 Mesh::GripReport Mesh::gripReport(int side)const{
  GripReport r;if(!m_scene||!m_bindScene)return r;const std::string suffix=side?".L":".R";

@@ -70,6 +70,9 @@ public:
  // toward hold.elbow, and each finger bent by its tracked curl (thumb to little finger, 0 open, 1 the fist):
  // curls[0] the right hand, [1] the left.
  void poseTracked(Point3 right,Point3 left,const ArmHold& hold,const std::array<std::array<float,5>,2>& curls);
+ // Reuse an existing rig's immutable animation scene; retain this mesh's geometry and skin.
+ void shareActionsFrom(const Mesh& source);
+ int sharedActionResource()const{return m_sharedActionResource;}
  Point3 bonePosition(const char* name)const;
  std::vector<MeshTriangle> trackedHand(bool left,const std::array<float,5>& curls);
  Point3 poseAnchor(int index)const{return m_poseAnchors.at(size_t(index));}
@@ -128,6 +131,10 @@ private:
  void grip(Point3 right={-.025f,1.55f,.223f},Point3 left={-.025f,1.60f,.49f},float swing=0,float pitch=0,float yaw=0,bool skin=true,const ArmHold* hold=nullptr);
  ufbx_scene* m_scene=nullptr;
  ufbx_scene* m_bindScene=nullptr;
+ ufbx_scene* m_actionScene=nullptr;
+ int m_sharedActionResource=0;
+ std::vector<std::pair<uint32_t,uint32_t>> m_actionNodes;
+ void cacheFingerGrips(ufbx_scene* actions);
  std::vector<ufbx_transform_override> m_fingerGrip;
  std::array<std::array<float,5>,2> m_trackedCurls{};   // poseTracked's curls (pose's curl set 3)
 };

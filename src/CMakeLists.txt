@@ -21,6 +21,11 @@ target_compile_definitions(RawMetalNeuralTextureTest PRIVATE _CRT_SECURE_NO_WARN
 target_compile_definitions(RawMetalAssetPacker PRIVATE NOMINMAX)
 target_link_libraries(RawMetalAssetPacker PRIVATE cabinet bcrypt webp)
 set_target_properties(RawMetalAssetPacker PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")
+# Compact character geometry shares the existing first-person animation scenes.
+add_executable(RawMetalKitSharedActionsTest EXCLUDE_FROM_ALL tools/test_kit_shared_actions.cpp renderer/Mesh.cpp ThirdParty/ufbx/ufbx.c)
+target_include_directories(RawMetalKitSharedActionsTest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(RawMetalKitSharedActionsTest PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_link_libraries(RawMetalKitSharedActionsTest PRIVATE RawMetalNeuralTextures cabinet webp)
 add_executable(RawMetalAnimationCodecTest EXCLUDE_FROM_ALL tools/test_animation_predictor.cpp)
 target_compile_definitions(RawMetalAnimationCodecTest PRIVATE RAWMETAL_SOURCE_DIRECTORY="${CMAKE_CURRENT_SOURCE_DIR}")
 set_target_properties(RawMetalAnimationCodecTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools/$<0:>")

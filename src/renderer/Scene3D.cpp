@@ -217,6 +217,8 @@ SoftwareRenderer::PlayerBody& SoftwareRenderer::playerBody(int character){
    if(body->creatureClipCount()<unsigned(ClaireOutside::ClipCount)||!m_kitTexturesReady)throw std::runtime_error("Kit body incomplete");
    m_kitArms=std::make_unique<Mesh>(3417);m_kitShotgun=std::make_unique<Mesh>(3418);
    m_kitMac=std::make_unique<Mesh>(3419);m_kitRifle=std::make_unique<Mesh>(3420);
+   m_kitArms->shareActionsFrom(m_armsMesh);m_kitShotgun->shareActionsFrom(m_fpShotgun);
+   m_kitMac->shareActionsFrom(m_fpMac);m_kitRifle->shareActionsFrom(m_fpRifle);
    if(!m_kitArms->bones||!m_kitShotgun->bones||!m_kitMac->bones||!m_kitRifle->bones)throw std::runtime_error("Kit viewmodels incomplete");
    m_kitMesh=std::move(body);
    for(size_t i=0;i<m_kitArmTextures.size();++i)m_kitArmTextures[i]=i==4||i==5?m_kitFpTextures[i-4]:m_kitTextures[i<4?i:0];
