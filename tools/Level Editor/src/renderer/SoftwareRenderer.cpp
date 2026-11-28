@@ -273,6 +273,7 @@ bool SoftwareRenderer::enableHardware(void* window){
   for(const auto&texture:m_claireTextures)queue(texture);
   if(m_limitatorTexturesReady)for(const auto&texture:m_limitatorTextures)queue(texture);
   if(m_leonTexturesReady)for(const auto&texture:m_leonTextures)queue(texture);
+  if(m_kitTexturesReady){for(const auto&texture:m_kitTextures)queue(texture);for(const auto&texture:m_kitFpTextures)queue(texture);}
   for(const auto*texture:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})queue(*texture);
   for(const auto&texture:m_staffTextures)queue(texture);
   if(!m_logo.pixels.empty())queue(m_logo);
@@ -311,6 +312,11 @@ SoftwareRenderer::SoftwareRenderer(int w,int h):m_width(w),m_height(h),m_pixels(
  try{for(int i=0;i<2;++i){auto&texture=m_limitatorTextures[size_t(i)];texture=loadTexture(2293+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=.05f;}m_limitatorTexturesReady=true;}catch(const std::exception&){m_limitatorTexturesReady=false;}
  // Leon's four flat materials (fur, inner ear and pads, black, metal). Without them he is not offered: playerBody gives the Limitator.
  try{for(int i=0;i<4;++i){auto&texture=m_leonTextures[size_t(i)];texture=loadTexture(2273+i);deriveSurfaceNormal(texture,.3f);texture.glossStrength=.05f;}m_leonTexturesReady=true;}catch(const std::exception&){m_leonTexturesReady=false;}
+ try{
+  for(int i=0;i<4;++i){auto& texture=m_kitTextures[size_t(i)];texture=loadTexture(3413+i);deriveSurfaceNormal(texture,.2f);texture.glossStrength=.035f;}
+  for(int i=0;i<2;++i){auto& t=m_kitFpTextures[size_t(i)];t=loadTexture(3421+i);deriveSurfaceNormal(t,.12f);t.glossStrength=i?.08f:.025f;}
+  m_kitTexturesReady=true;
+ }catch(const std::exception&){m_kitTexturesReady=false;}
  // The transformed wear the same suit, drained of colour and darkened with
  // ash: half the saturation, two thirds the light, an olive cast.
  {auto scorch=[](std::uint32_t&pixel){float r=float((pixel>>16)&255),g=float((pixel>>8)&255),b=float(pixel&255),grey=r*.3f+g*.59f+b*.11f;
@@ -664,7 +670,7 @@ startupMark("engine textures"); m_concreteFloor=m_concrete;
    {&m_handgunTexture,M::BareSteel},{&m_brassTexture,M::BareSteel},{&m_weaponTexture,M::BareSteel},{&m_terrainDirt,M::Ground},{&m_terrainRock,M::Stone},{&m_coastRock,M::Stone},{&m_coastSand,M::Ground},
    {&m_cursedTexture,M::Rust},{&m_droneTexture,M::PaintedMetal},{&m_arms,M::Clothing}};
   for(auto [t,m]:named)apply(*t,m,"engine");
-  for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");if(m_limitatorTexturesReady)for(auto& t:m_limitatorTextures)apply(t,M::Clothing,"limitator");if(m_leonTexturesReady)for(auto& t:m_leonTextures)apply(t,M::Clothing,"leon");
+  for(auto& t:m_workerTextures)apply(t,M::Clothing,"worker");for(auto& t:m_claireTextures)apply(t,M::Clothing,"claire");for(auto& t:m_staffTextures)apply(t,M::Clothing,"staff");if(m_limitatorTexturesReady)for(auto& t:m_limitatorTextures)apply(t,M::Clothing,"limitator");if(m_leonTexturesReady)for(auto& t:m_leonTextures)apply(t,M::Clothing,"leon");if(m_kitTexturesReady)for(auto& t:m_kitTextures)apply(t,M::Clothing,"kit");
   for(auto* t:{&m_transformedTexture,&m_transformedGloves,&m_transformedBoots})apply(*t,M::Clothing,"transformed");
   for(auto& role:m_cleanupTextures)for(auto& t:role)apply(t,M::Clothing,"cleanup");
   for(auto* water:{&m_water,&m_murkWater,&m_coastWater})apply(*water,M::Water,"water");
@@ -1609,6 +1615,10 @@ void SoftwareRenderer::render(const Game& game){
  auto isFar=[&](int level){char& state=m_chunkFar[size_t(level)];const float gap=chunkGap(level);state=gap>Game::fullDetailRange()-(state?4.f:0.f);return state!=0;};
  auto nearby=[&](int level){if(level==game.level())return true;if(!game.chunkResident(level))return false;if(game.worldId()!=WorldId::Custom)return true;return chunkGap(level)<=viewReach;};
  warmChunks(game);
+ // Both the scene and the viewmodel worker ask for the selected body.
+ // Finish lazy character/arm construction on the render thread before either
+ // can publish or replace those meshes while the other is already using them.
+ if(!game.titleScreen())playerBody(game.settings().character);
  auto scene=[&]{bool parallel=!m_vrRendering&&!m_vrScripted&&!game.titleScreen()&&m_gpuFrame&&m_animationWorker&&!game.holdingClutter();m_poseReady=false;
   if(parallel)m_animationWorker->start([&]{prepareViewModel(game);});
   try{

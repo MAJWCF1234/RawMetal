@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "BoxSurfaces.h"
+#include "ExteriorLighting.h"
 #include "ShapeCulling.h"
 #include <chrono>
 #include "SoftMesh.h"
@@ -136,6 +137,8 @@ Point3 shotgunPlace(const ShotgunView&v,Point3 p){const float c=std::cos(v.toe),
 // Claire's textures (resources 2302-2311, in this order) by FBX material name:
 // her body and her first-person arms both carry her materials.
 static int claireMaterial(const Mesh&mesh,int part){
+ static constexpr const char* kit[]={"KitBody","KitSuit","KitHair","KitLashes","KitHands","KitNails"};
+ if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<6;++m)if(mesh.materialNames[size_t(part)].find(kit[m])!=std::string::npos)return m;
  static constexpr const char* materials[]={"SOCKS","BELTS","PANTS","BOOTS","VEST","SKIRT","JACKET","MASK","EYES","HAIR"};
  if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<10;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos)return m;
  return -1;
@@ -208,6 +211,23 @@ MedicalCaseFrame medicalCaseFrame(Point3 actorBase,float yaw,float size){
 }
 }
 SoftwareRenderer::PlayerBody& SoftwareRenderer::playerBody(int character){
+ if(character==3&&!m_kitMesh&&!m_kitFailed){
+  try{
+   auto body=std::make_unique<Mesh>(3410,"",3411,3412);
+   if(body->creatureClipCount()<unsigned(ClaireOutside::ClipCount)||!m_kitTexturesReady)throw std::runtime_error("Kit body incomplete");
+   m_kitArms=std::make_unique<Mesh>(3417);m_kitShotgun=std::make_unique<Mesh>(3418);
+   m_kitMac=std::make_unique<Mesh>(3419);m_kitRifle=std::make_unique<Mesh>(3420);
+   if(!m_kitArms->bones||!m_kitShotgun->bones||!m_kitMac->bones||!m_kitRifle->bones)throw std::runtime_error("Kit viewmodels incomplete");
+   m_kitMesh=std::move(body);
+   for(size_t i=0;i<m_kitArmTextures.size();++i)m_kitArmTextures[i]=i==4||i==5?m_kitFpTextures[i-4]:m_kitTextures[i<4?i:0];
+  }catch(const std::exception&){m_kitFailed=true;}
+ }
+ if(character==3&&m_kitMesh){
+  auto& body=m_playerBodies[3];
+  if(!body.mesh){body.character=3;body.mesh=m_kitMesh.get();body.armTextures=&m_kitArmTextures;classifyPlayerBody(body);}
+  return body;
+ }
+ if(character==3)character=2;
  // Leon is loaded the first time he is asked for; if his files are missing or do
  // not load (or his bank is not the 40 clips), he is the Limitator.
  if(character==2&&!m_leonMesh&&!m_leonFailed){
@@ -282,17 +302,19 @@ void SoftwareRenderer::classifyPlayerBody(PlayerBody& body){
  const auto& index=mesh.creatureVertexIndices();
  // Leon: a flat colour a material (by name), the head the faces his head bone carries (ears and all, so the
  // head's middle and his facing are his head's, not the ears'), and first person leaves out the head and arms.
- if(body.character==2){
+ if(body.character==2||body.character==3){
   const std::vector<float> headWeight=mesh.creatureBoneWeights({"Head"});
   auto carried=[&](const std::vector<float>& w,size_t f){float s=0;for(int c=0;c<3;++c){const size_t corner=f*3+size_t(c);if(corner<index.size()&&index[corner]<w.size())s+=w[index[corner]]/3.f;}return s;};
   float front=-1e9f,back=1e9f,sum=0;int samples=0;
   for(size_t f=0;f<bind.size();++f){body.headFace[f]=carried(headWeight,f)>.5f;
    if(body.headFace[f])for(const auto&v:bind[f].v){front=std::max(front,v.p.z);back=std::min(back,v.p.z);sum+=(v.p.y-low.y)/height;++samples;}}
   body.headHeight=samples?sum/samples:.87f;
-  static constexpr const char* materials[]={"LeonFur","LeonInner","LeonBlack","LeonMetal"};
+  static constexpr const char* leonMaterials[]={"LeonFur","LeonInner","LeonBlack","LeonMetal"};
+  static constexpr const char* kitMaterials[]={"KitBody","KitSuit","KitHair","KitLashes"};
+  const auto& materials=body.character==3?kitMaterials:leonMaterials;
   for(size_t f=0;f<bind.size();++f){const int part=bind[f].part;int texture=0;
    if(part>=0&&size_t(part)<mesh.materialNames.size())for(int m=0;m<4;++m)if(mesh.materialNames[size_t(part)].find(materials[m])!=std::string::npos)texture=m;
-   body.faceTexture[f]=&m_leonTextures[size_t(texture)];
+   body.faceTexture[f]=body.character==3?&m_kitTextures[size_t(texture)]:&m_leonTextures[size_t(texture)];
    float y=0,z=0,side=0;for(int c=0;c<3;++c){y=std::max(y,(bind[f].v[c].p.y-low.y)/height);side=std::max(side,std::fabs(bind[f].v[c].p.x-middle)/height);z+=bind[f].v[c].p.z/3.f;}
    body.faceHidden[f]=body.headFace[f]||y>.85f||carried(arm,f)>.5f||(side>.08f&&y>.66f);
    body.eyeFace[f]=body.headFace[f]&&z>back+(front-back)*.7f;}
@@ -352,13 +374,13 @@ bool SoftwareRenderer::validate3D(){
  if(m_hazard.mips.empty()||sample(m_hazard,1,1)!=m_hazard.pixels.back()||sample(m_hazard,-1,-1)!=m_hazard.pixels.front())return false;
  Texture checker{8,8,std::vector<std::uint32_t>(64)};for(int y=0;y<8;++y)for(int x=0;x<8;++x)checker.pixels[y*8+x]=(x+y)%2?0xffffffffu:0xff000000u;
  prepareDecal(checker);auto distant=sample(checker,.13f,.67f,3);if((distant&255)<126||(distant&255)>128)return false;
- for(const char*name:{"hand.R","hand.L"}){auto p=m_armsMesh.bonePosition(name);Point3 target=name[5]=='R'?Point3{-.025f,1.55f,.223f}:Point3{-.025f,1.60f,.49f};auto d=p-target;if(d.x*d.x+d.y*d.y+d.z*d.z>.0004f)return false;}
- if(m_armsMesh.bones<10||m_enemyMesh.triangles.size()<100||m_weaponMesh.triangles.size()<100)return false;
+ for(const char*name:{"hand.R","hand.L"}){auto p=armsMesh().bonePosition(name);Point3 target=name[5]=='R'?Point3{-.025f,1.55f,.223f}:Point3{-.025f,1.60f,.49f};auto d=p-target;if(d.x*d.x+d.y*d.y+d.z*d.z>.0004f)return false;}
+ if(armsMesh().bones<10||m_enemyMesh.triangles.size()<100||m_weaponMesh.triangles.size()<100)return false;
  const size_t junkTriangles[]={50,150,86,12,94,172};
  for(size_t i=0;i<6;++i)if(m_clutterMeshes[i].triangles.size()!=junkTriangles[i]||m_clutterTextures[i].pixels.empty())return false;
  for(int model=0;model<int(m_facilityMeshes.size());++model){auto&mesh=m_facilityMeshes[model];if(mesh.triangles.empty())return false;for(const auto&face:mesh.triangles)if(facilityTexture(model,face.part).pixels.empty())return false;}
- m_armsMesh.pose(0,0);auto before=m_armsMesh.triangles;m_armsMesh.pose(1,1);
- float delta=0;for(size_t i=0;i<before.size();++i)for(int j=0;j<3;++j){auto d=before[i].v[j].p-m_armsMesh.triangles[i].v[j].p;delta+=d.x*d.x+d.y*d.y+d.z*d.z;}
+ armsMesh().pose(0,0);auto before=armsMesh().triangles;armsMesh().pose(1,1);
+ float delta=0;for(size_t i=0;i<before.size();++i)for(int j=0;j<3;++j){auto d=before[i].v[j].p-armsMesh().triangles[i].v[j].p;delta+=d.x*d.x+d.y*d.y+d.z*d.z;}
  if(delta<.0001f)return false;
  clear(0);std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
  triangle3D({{-.3f,-.3f,1},0,0},{{.3f,-.3f,1},1,0},{{0,.3f,1},.5f,1},m_wall,1);
@@ -372,7 +394,7 @@ bool SoftwareRenderer::validate3D(){
 }
 void SoftwareRenderer::previewModel(int model,float angle){
  clear(0xff283038);std::fill(m_zbuffer.begin(),m_zbuffer.end(),9999.f);
- Mesh* meshes[]={&m_weaponMesh,&m_armsMesh,&m_enemyMesh,&m_waspMesh,&m_bruteMesh,&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh,&m_clutterMeshes[0],&m_clutterMeshes[1],&m_clutterMeshes[2],&m_clutterMeshes[3],&m_clutterMeshes[4],&m_clutterMeshes[5]};
+ Mesh* meshes[]={&m_weaponMesh,&armsMesh(),&m_enemyMesh,&m_waspMesh,&m_bruteMesh,&m_pumpMesh,&m_compressorMesh,&m_pipeMesh,&m_gateMesh,&m_clutterMeshes[0],&m_clutterMeshes[1],&m_clutterMeshes[2],&m_clutterMeshes[3],&m_clutterMeshes[4],&m_clutterMeshes[5]};
  Texture* textures[]={&m_weaponTexture,&m_arms,&m_enemyTexture,&m_waspTexture,&m_bruteTexture,&m_pumpTexture,&m_compressorTexture,&m_pipeTexture,&m_gateTexture,&m_clutterTextures[0],&m_clutterTextures[1],&m_clutterTextures[2],&m_clutterTextures[3],&m_clutterTextures[4],&m_clutterTextures[5]};
  auto&mesh=model>=15?m_facilityMeshes.at(model-15):*meshes[std::clamp(model,0,14)];auto&texture=*textures[std::clamp(model,0,14)];
  Point3 center=(mesh.minimum+mesh.maximum)*.5f,range=mesh.maximum-mesh.minimum;
@@ -1348,12 +1370,26 @@ void SoftwareRenderer::drawScene(const Game& game,bool clearDepth,int level){
    result.brightness[i]=illumination(probe,result.normals[i]);result.air[i]=illuminationAir;if(gloss){result.gloss[i]=normalLightingAt(probe);result.gloss[i].surfaceNormal=cameraPoint(probe+result.normals[i],game)-cameraPoint(probe,game);}
   }return result;
  };
+ NormalLighting blendedExteriorGloss;
  auto selectFaceLight=[&](const ExteriorLight& lights,Point3 normal,Point3 outward){
-  // Several supplied meshes have mixed winding. Select physical exterior
-  // lighting rather than letting an inward face borrow the opposite side.
+  // Keep mixed-winding imports on their physical exterior, then blend the
+  // probes instead of switching the entire face at a 45-degree boundary.
   if(normal.x*outward.x+normal.y*outward.y+normal.z*outward.z<0)normal=normal*-1.f;
-  size_t side=0;float alignment=-1.e30f;for(size_t i=0;i<6;++i){auto n=lights.normals[i];float dot=normal.x*n.x+normal.y*n.y+normal.z*n.z;if(dot>alignment){alignment=dot;side=i;}}
-  objectLight=lights.brightness[side];objectAir=lights.air[side];objectNormalLighting=lights.hasGloss?&lights.gloss[side]:nullptr;
+  const auto weights=exteriorLightingWeights(lights.normals,normal);
+  objectLight=0;float air=0,airWeight=0;blendedExteriorGloss={};
+  for(size_t i=0;i<6;++i){const float w=weights[i];objectLight+=lights.brightness[i]*w;
+   if(lights.air[i]>SoftwareRenderer::NoBounceAir*.5f){air+=lights.air[i]*w;airWeight+=w;}
+   if(lights.hasGloss)for(size_t k=0;k<2;++k){const float energy=lights.gloss[i].weights[k]*w;
+    blendedExteriorGloss.weights[k]+=energy;
+    blendedExteriorGloss.directions[k]=blendedExteriorGloss.directions[k]+lights.gloss[i].directions[k]*energy;}}
+  objectAir=airWeight>1.e-6f?air/airWeight:SoftwareRenderer::NoBounceAir;
+  if(lights.hasGloss){
+   for(size_t k=0;k<2;++k){auto& d=blendedExteriorGloss.directions[k];const float len=std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z);
+    if(len>1.e-8f){d=d*(1.f/len);blendedExteriorGloss.weights[k]=len;}else{d={};blendedExteriorGloss.weights[k]=0;}}
+   const float len=std::sqrt(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z);
+   if(len>1.e-8f){normal=normal*(1.f/len);blendedExteriorGloss.surfaceNormal=cameraPoint(normal,game)-cameraPoint({},game);}
+   objectNormalLighting=&blendedExteriorGloss;
+  }else objectNormalLighting=nullptr;
  };
  if(level==game.level()){const auto&v=m_view;auto hands=exteriorLight({v.pos.x,v.pos.y,v.z+v.eye-.25f},.45f,.45f,.5f,kPi*.5f-v.angle,false);
   m_handNormals=hands.normals;m_handLight=hands.brightness;m_handLightReady=true;}
@@ -4782,14 +4818,14 @@ void SoftwareRenderer::drawTrackedHands(const Game&game){
  // fingers as tracked; nothing of hers floats free of her.
  Point3 gunShift{},supportShift{};
  if(m_vrPoseReady){
-  const VrRig rig=poseVrArms(m_armsMesh,solve);
-  for(const auto&face:m_armsMesh.triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=cameraPoint(rigToWorld(rig,solve,face.v[i].p),game);}
-   const int claire=claireMaterial(m_armsMesh,face.part);triangle3D(v[0],v[1],v[2],claire>=0?(*armTextures)[size_t(claire)]:m_arms,.85f);}
+  const VrRig rig=poseVrArms(armsMesh(),solve);
+  for(const auto&face:armsMesh().triangles){MeshVertex v[3];for(int i=0;i<3;++i){v[i]=face.v[i];v[i].p=cameraPoint(rigToWorld(rig,solve,face.v[i].p),game);}
+   const int claire=claireMaterial(armsMesh(),face.part);triangle3D(v[0],v[1],v[2],claire>=0?(*armTextures)[size_t(claire)]:m_arms,.85f);}
   // The gun rides her drawn hand: where the arm put the wrist, against where the tracked wrist is.
-  const int g=pose.gunSide&1;gunShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.R":"hand.L"))-pose.hands[size_t(g)].wrist;
+  const int g=pose.gunSide&1;gunShift=rigToWorld(rig,solve,armsMesh().bonePosition(g?"hand.R":"hand.L"))-pose.hands[size_t(g)].wrist;
   if(!std::isfinite(gunShift.x)||!std::isfinite(gunShift.y)||!std::isfinite(gunShift.z)||std::sqrt(gunShift.x*gunShift.x+gunShift.y*gunShift.y+gunShift.z*gunShift.z)>.6f)gunShift={};
   // A magazine or shell rides the other hand the same way.
-  supportShift=rigToWorld(rig,solve,m_armsMesh.bonePosition(g?"hand.L":"hand.R"))-pose.hands[size_t(1-g)].wrist;
+  supportShift=rigToWorld(rig,solve,armsMesh().bonePosition(g?"hand.L":"hand.R"))-pose.hands[size_t(1-g)].wrist;
   if(!std::isfinite(supportShift.x)||!std::isfinite(supportShift.y)||!std::isfinite(supportShift.z)||std::sqrt(supportShift.x*supportShift.x+supportShift.y*supportShift.y+supportShift.z*supportShift.z)>.6f)supportShift={};
   // The holsters: the shotgun across her back, the sidearm not in hand (the pistol or the MAC-11: AvatarPose::hip) at
   // the gun hand's hip, while they are not in her hand.
@@ -5071,7 +5107,7 @@ SoftwareRenderer::FpClip SoftwareRenderer::fpShotgunClip(const Game& game)const{
 // carries it, in view space (x right, y up, z forward). The baked gun and pump
 // points are its origin and unit axes in the rig's camera space (z back).
 Point3 SoftwareRenderer::fpShotgunPoint(Point3 e,bool pump)const{
- const char*o=pump?"pump_o":"gun_o";auto at=[&](const char*n){return m_fpShotgun.bonePosition(n);};
+ const char*o=pump?"pump_o":"gun_o";auto at=[&](const char*n){return shotgunRig().bonePosition(n);};
  const Point3 origin=at(o),x=at(pump?"pump_x":"gun_x")-origin,y=at(pump?"pump_y":"gun_y")-origin,z=at(pump?"pump_z":"gun_z")-origin;
  const Point3 p=origin+x*e.x+y*e.y+z*e.z;return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};
 }
@@ -5118,16 +5154,17 @@ Point3 SoftwareRenderer::fpMacPoint(Point3 e,int part)const{
  const Point3 p=origin+x*e.x+y*e.y+z*e.z;return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};
 }
 void SoftwareRenderer::prepareViewModel(const Game& game){
+ m_kitView=playerBody(game.settings().character).character==3;
  const auto&motion=game.weaponMotion();std::array<Point3,2> lockerGrips{};const bool locker=game.lockerHands(&lockerGrips);
  if(game.heldNpc()>=0||game.takedownActive()||locker){
   auto center=kArmsRigCenter;auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();
   auto toRig=[&](Point3 world){auto p=(cameraPoint(world,game)-Point3{0,-.22f,.30f})*(1.f/kViewModelScale);p.x=-p.x;return p+center;};
-  m_armsMesh.poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
+  armsMesh().poseAttached(toRig(grips[0]),toRig(grips[1]),0,0,0,0,0);return;
  }
- if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!m_armsMesh.poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
+ if(game.unarmed()){const auto&melee=game.unarmedMelee();bool jab=game.punchAge()<melee.animLen&&!game.guarding();if(!armsMesh().poseAction(jab?(game.punchLeft()?"jab.L":"jab.R"):"guard_idle",jab?game.punchAge()/melee.animLen:std::fmod(game.elapsed()*.5f,1.f)))throw std::runtime_error("Missing authored unarmed animation");return;}
  // The MAC-11: the pack's pistol clips on her arms (fpMacClip).
  if(game.activeFirearm()==WeaponId::MachinePistol||game.activeFirearm()==WeaponId::Sniper){m_fpShotgunPosed=false;m_fpMacPosed=false;
-  const bool rifle=game.activeFirearm()==WeaponId::Sniper;m_fpRifleActive=rifle;Mesh& rig=rifle?m_fpRifle:m_fpMac;
+  const bool rifle=game.activeFirearm()==WeaponId::Sniper;m_fpRifleActive=rifle;Mesh& rig=rifle?rifleRigMesh():macRig();
   if(rig.bones){const auto clip=rifle?fpRifleClip(game):fpMacClip(game);m_fpMacPosed=rig.poseAction(clip.name,clip.phase);}return;}
  if(game.activeFirearm()==WeaponId::Handgun){
   // The pistol: both hands on the grip from pistolHold, frames and all (the
@@ -5135,12 +5172,12 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
   const auto hold=pistolHold(game);auto armCenter=kArmsRigCenter;
   auto toRig=[&](Point3 view){auto p=(view-pistolArmOffset())*(1.f/kViewModelScale);p.x=-p.x;return p+armCenter;};
   Mesh::ArmHold arms{};arms.curls=1;for(size_t side=0;side<2;++side){arms.forward[side]={-hold.forward[side].x,hold.forward[side].y,hold.forward[side].z};arms.palm[side]={-hold.palm[side].x,hold.palm[side].y,hold.palm[side].z};}
-  m_armsMesh.poseAttached(toRig(hold.wrist[0]),toRig(hold.wrist[1]),motion.elbow,0,0,game.elapsed()*2.f,game.weaponKick(),&arms);return;
+  armsMesh().poseAttached(toRig(hold.wrist[0]),toRig(hold.wrist[1]),motion.elbow,0,0,game.elapsed()*2.f,game.weaponKick(),&arms);return;
  }
  // The shotgun: the pack's authored clips (the procedural hold below remains
  // only if the baked rig is missing).
  m_fpShotgunPosed=false;
- if(m_fpShotgun.bones){const auto clip=fpShotgunClip(game);if(m_fpShotgun.poseAction(clip.name,clip.phase)){m_fpShotgunPosed=true;return;}}
+ if(shotgunRig().bones){const auto clip=fpShotgunClip(game);if(shotgunRig().poseAction(clip.name,clip.phase)){m_fpShotgunPosed=true;return;}}
  auto center=(m_weaponMesh.minimum+m_weaponMesh.maximum)*.5f,range=m_weaponMesh.maximum-m_weaponMesh.minimum;float scale=kViewModelScale/std::max({range.x,range.y,range.z});
  const auto view=shotgunView(game.aimBlend());scale*=view.scale;auto local=[&](Point3 source){return shotgunPlace(view,(source-center)*scale);};
  const Point3 pivot{view.gun.x,view.gun.y,view.gun.z-.30f};
@@ -5149,7 +5186,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  auto toRig=[&](Point3 at){auto p=(at-view.arms)*(1.f/(kViewModelScale*view.scale));p.x=-p.x;return p+armCenter;};
  auto right=animated(local(shotgunSocket(false))+view.trigger),left=animated(local(shotgunSocket(true)+Point3{0,0,motion.bolt/scale})+view.support);   // the left hand rides the pump
  const auto hands=shotgunHold();
- auto pose=[&]{m_armsMesh.poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick(),&hands);};
+ auto pose=[&]{armsMesh().poseAttached(toRig(right),toRig(left),motion.elbow,-motion.pitch,-motion.yaw,game.elapsed()*2.f,game.weaponKick(),&hands);};
  // Fit the hands to the gun: pose, see where the curled fingers landed, move
  // each wrist by the miss, pose again. The left fingertips close on the pump's
  // wood, the right on the stock's narrow wrist with the index level with the
@@ -5157,7 +5194,7 @@ void SoftwareRenderer::prepareViewModel(const Game& game){
  {const float unit=kViewModelScale*view.scale;
   auto fromRig=[&](Point3 rig){auto p=(rig-armCenter)*unit;p.x=-p.x;return p+view.arms;};
   auto at=[&](Point3 source,bool pump){return animated(local(pump?source+Point3{0,0,motion.bolt/scale}:source));};
-  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  auto bone=[&](const char*name){return fromRig(armsMesh().bonePosition(name));};
   auto closest=[](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);return a+ab*t;};
   auto len=[](Point3 v){return std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);};
   const Point3 pumpA=at({-.064f,1.22f,-3.0f},true),pumpB=at({-.064f,1.22f,-1.5f},true),wristA=at({-.064f,1.25f,1.0f},false),wristB=at({-.064f,1.15f,1.5f},false),blade=at({-.064f,1.0f,.45f},false);
@@ -5200,7 +5237,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  bool fists=game.unarmed()||locker;
  // The pistol has its own frame, parts and wrist targets (pistolHold).
  const bool pistol=!fists&&heldActor<0&&!game.takedownActive()&&game.activeFirearm()==WeaponId::Handgun;
- // The MAC-11: its own rig (m_fpMac); none of the shotgun's or the pistol's hold applies to it.
+ // The MAC-11: its own rig (macRig()); none of the shotgun's or the pistol's hold applies to it.
  const bool rifleRig=game.activeFirearm()==WeaponId::Sniper;m_fpRifleActive=rifleRig;
  const bool macGun=!fists&&heldActor<0&&!game.takedownActive()&&!locker&&(game.activeFirearm()==WeaponId::MachinePistol||rifleRig);
  PistolHold hold;if(pistol){hold=pistolHold(game);rightWrist=hold.wrist[0];leftWrist=hold.wrist[1];}
@@ -5251,9 +5288,9 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   const float drop=pistol?game.holster()*game.holster():game.holster();
   return Point3{x,y+(fists?(game.guarding()?.08f:-.04f)+motion.bob:-drop*.85f),p.z};};
  m_gripError=0;
- if(heldActor>=0||game.takedownActive()||locker){auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
+ if(heldActor>=0||game.takedownActive()||locker){auto grips=locker?lockerGrips:game.takedownActive()?game.takedownGrips():game.heldNpcGrips();for(int side=0;side<2;++side){auto delta=fromRig(armsMesh().bonePosition(side?"hand.L":"hand.R"))-cameraPoint(grips[side],game);m_gripError=std::max(m_gripError,std::sqrt(delta.x*delta.x+delta.y*delta.y+delta.z*delta.z));}}
  // A pistol's support hand off the gun (at the belt in a reload) is free.
- for(int side=0;side<2&&!fists&&!fpShotgun&&!macGun;++side){if(side&&pistol&&!hold.support)continue;auto p=fromRig(m_armsMesh.bonePosition(side?"hand.L":"hand.R"));
+ for(int side=0;side<2&&!fists&&!fpShotgun&&!macGun;++side){if(side&&pistol&&!hold.support)continue;auto p=fromRig(armsMesh().bonePosition(side?"hand.L":"hand.R"));
   auto d=p-(side?leftWrist:rightWrist);m_gripError=std::max(m_gripError,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));
  }
  // A wrist on its target is not yet a hand on the pistol, so measure the
@@ -5263,14 +5300,14 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  if(pistol){auto metres=[](Point3 d){return std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z)/kViewModelScale;};
   const Point3 butt=hold.point({0,-.072f,-.024f}),tang=hold.point({0,-.005f,-.004f}),along=tang-butt;
   auto fromAxis=[&](Point3 p){Point3 d=p-butt;float t=std::clamp((d.x*along.x+d.y*along.y+d.z*along.z)/std::max(1e-9f,along.x*along.x+along.y*along.y+along.z*along.z),0.f,1.f);return metres(d-along*t);};
-  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  auto bone=[&](const char*name){return fromRig(armsMesh().bonePosition(name));};
   m_pistolContact=std::max(metres(bone("f_index.03.R")-hold.point({0,.002f,.034f})),fromAxis(bone("f_middle.02.R")));
   if(hold.support)m_pistolContact=std::max(m_pistolContact,fromAxis(bone("f_middle.02.L")));}
  m_shotgunContact={};
  if(fpShotgun){
   // Measured on the authored pose (metres): left fingertips from the pump's
   // axis, right from the stock wrist's, the right index from the trigger blade.
-  auto view=[&](const char*n){auto p=m_fpShotgun.bonePosition(n);return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};};
+  auto view=[&](const char*n){auto p=shotgunRig().bonePosition(n);return Point3{p.x,p.y-m_fpDrop,-p.z+m_fpPush};};
   auto fromLine=[&](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);Point3 q=d-ab*t;return std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z);};
   const Point3 pumpA=fpShotgunPoint({-.064f,1.22f,-3.0f},true),pumpB=fpShotgunPoint({-.064f,1.22f,-1.5f},true),wristA=fpShotgunPoint({-.064f,1.25f,1.0f},false),wristB=fpShotgunPoint({-.064f,1.15f,1.5f},false),blade=fpShotgunPoint({-.064f,1.0f,.45f},false);
   float left=0,right=0;for(const char*f:{"index_03_l","middle_03_l","ring_03_l","pinky_03_l"})left+=fromLine(view(f),pumpA,pumpB);
@@ -5282,7 +5319,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
   auto at=[&](Point3 source,bool pump){return animated(gunLocal(pump?source+Point3{0,0,motion.bolt/gunScale}:source));};
   const float unit=kViewModelScale*shotgun.scale;
   auto fromLine=[&](Point3 p,Point3 a,Point3 b){Point3 ab=b-a,d=p-a;float t=std::clamp((d.x*ab.x+d.y*ab.y+d.z*ab.z)/std::max(1e-9f,ab.x*ab.x+ab.y*ab.y+ab.z*ab.z),0.f,1.f);Point3 q=d-ab*t;return std::sqrt(q.x*q.x+q.y*q.y+q.z*q.z)/unit;};
-  auto bone=[&](const char*name){return fromRig(m_armsMesh.bonePosition(name));};
+  auto bone=[&](const char*name){return fromRig(armsMesh().bonePosition(name));};
   const Point3 pumpA=at({-.064f,1.22f,-3.0f},true),pumpB=at({-.064f,1.22f,-1.5f},true),wristA=at({-.064f,1.25f,1.0f},false),wristB=at({-.064f,1.15f,1.5f},false),blade=at({-.064f,1.0f,.45f},false);
   float left=0,right=0;for(const char*f:{"f_index.03","f_middle.03","f_ring.03","f_pinky.03"}){left+=fromLine(bone((std::string(f)+".L").c_str()),pumpA,pumpB);}
   for(const char*f:{"f_middle.03","f_ring.03","f_pinky.03"}){right+=fromLine(bone((std::string(f)+".R").c_str()),wristA,wristB);}
@@ -5319,7 +5356,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    const Point3 o=fpMacPoint({0,0,0},0);torchAxis=unit(fpMacPoint({0,0,1},0)-o);torchSide=unit(fpMacPoint({0,-1,0},0)-o);torchUp=unit(cross3(torchAxis,torchSide));
    torchMount=rifleRig?fpMacPoint({0.f,-.085f,.42f},0):fpMacPoint({0.f,-.004f,.118f},0);torchScale=.42f;}
   else if(fists){
-   auto wrist=fromRig(m_armsMesh.bonePosition("hand.L")),elbow=fromRig(m_armsMesh.bonePosition("forearm.L"));
+   auto wrist=fromRig(armsMesh().bonePosition("hand.L")),elbow=fromRig(armsMesh().bonePosition("forearm.L"));
    torchAxis=unit(wrist-elbow);torchSide=unit(cross3(std::fabs(torchAxis.y)>.95f?Point3{0,0,1}:Point3{0,1,0},torchAxis));torchUp=unit(cross3(torchAxis,torchSide));
    // Anchor beside the visible wrist, not the elbow that leaves the desktop
    // frustum in the guard pose. The inboard saddle keeps the fist clear.
@@ -5370,8 +5407,8 @@ void SoftwareRenderer::drawViewModel(const Game& game){
     // and given the brightness of the probe side it faces.
     const float cy=std::cos(m_view.angle),sy=std::sin(m_view.angle),cp=std::cos(m_view.pitch/140.f),sp=std::sin(m_view.pitch/140.f);
     const Point3 out=n;const float forward=out.z*cp-out.y*sp;const Point3 world{-out.x*sy+forward*cy,out.x*cy+forward*sy,out.y*cp+out.z*sp};
-    size_t side=0;float best=-2;for(size_t i=0;i<6;++i){const auto d=m_handNormals[i];const float a=world.x*d.x+world.y*d.y+world.z*d.z;if(a>best){best=a;side=i;}}
-    light=m_handLight[side]*handFloor;}
+    const auto weights=exteriorLightingWeights(m_handNormals,world);light=0;
+    for(size_t i=0;i<6;++i)light+=m_handLight[i]*weights[i]*handFloor;}
    light+=game.muzzleFlash()*.65f;
    for(auto&v:face.v)v.light=std::clamp(light,.10f*handFloor,2.5f);
    triangle3D(face.v[0],face.v[1],face.v[2],texture,1.f,&roomLights);
@@ -5395,14 +5432,14 @@ void SoftwareRenderer::drawViewModel(const Game& game){
      v.p=animated(local);
     }
    }
-   const int claire=arms?claireMaterial(m_armsMesh,face.part):-1;
+   const int claire=arms?claireMaterial(armsMesh(),face.part):-1;
    carrier=arms?fists:&mesh==&m_handgunMesh||(face.part!=2&&face.part!=3);   // the shotgun's receiver and stock, not its pump
    shade(face,claire>=0?(*armTextures)[size_t(claire)]:texture);
   }
  };
  if(fpShotgun){
-  for(auto face:m_fpShotgun.triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
-   const int claire=claireMaterial(m_fpShotgun,face.part);shade(face,claire>=0?(*armTextures)[size_t(claire)]:m_arms);}
+  for(auto face:shotgunRig().triangles){for(auto&v:face.v)v.p=Point3{v.p.x,v.p.y-m_fpDrop,-v.p.z+m_fpPush};
+   const int claire=claireMaterial(shotgunRig(),face.part);shade(face,claire>=0?(*armTextures)[size_t(claire)]:m_arms);}
   // The sniper rifle rides the same baked points as the Remington (its model is fitted into the Remington's frame).
   const bool rifle=game.activeFirearm()==WeaponId::Sniper;const Mesh& longGun=rifle?m_sniperMesh:m_weaponMesh;
   for(auto face:longGun.triangles){if(!rifle&&face.part==3)continue;   // the spent shell flies as a real case (Casings.cpp)
@@ -5465,7 +5502,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
    m_macReport={true,(magTop+magBottom)*.5f,(gripTop+gripBottom)*.5f,macMotion(fpMacPoint({0,.031f,.165f},0)),empty?len(fpMacPoint({0,.057f,.072f},2)-fpMacPoint({0,.057f,.072f},0)):knobTravel,
     (fromLine(view("middle_01_r"),gripTop,gripBottom)+fromLine(view("ring_01_r"),gripTop,gripBottom))*.5f,fromLine(view("middle_01_l"),magTop,magBottom),clip.name,clip.phase};
   }
- }else{draw(m_armsMesh,m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);}
+ }else{draw(armsMesh(),m_arms,true);if(pistol)draw(m_handgunMesh,m_handgunTexture,false);else if(!fists)draw(m_weaponMesh,m_weaponTexture,false);}
  carrier=false;
  // The pack's slide is an open shell notched for the hammer: run back, its
  // rear shows the hollow inside. A breech face, slide steel, closes it.
@@ -5534,7 +5571,7 @@ void SoftwareRenderer::drawViewModel(const Game& game){
  // The source arms end in open shoulder rings. Continue those rings into dark
  // sleeves behind the camera, closing the model rather than exposing its interior.
  const Texture& sleeve=m_leatherTexture;
- for(const auto&ring:fpShotgun?std::vector<std::vector<MeshVertex>>{}:m_armsMesh.openRings){
+ for(const auto&ring:fpShotgun?std::vector<std::vector<MeshVertex>>{}:armsMesh().openRings){
   Point3 center{};for(auto v:ring)center=center+fromRig(v.p);center=center*(1.f/float(ring.size()));
   // Only upper-arm openings are extended; small mesh boundaries are left intact.
   float radius=0;for(auto v:ring){auto d=fromRig(v.p)-center;radius=std::max(radius,std::sqrt(d.x*d.x+d.y*d.y+d.z*d.z));}if(radius<.045f)continue;

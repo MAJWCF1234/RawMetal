@@ -1,4 +1,4 @@
 # Game commit the builder's engine copy (src/) was last synced to.
 # Written by tools/editor/sync_engine.py; it is the merge base of the next sync.
-commit 374fb809a17137812a811b05c4365710fb7c49b5
-# 2026-11-27 15:25, Give Skinbot a planted catch step and sync its sprint in co-op
+commit bf49baf39c23dde6eecc4127b1a419ebf2a72266
+# 2026-11-28 06:26, fix: preserve Kit menu focus and keep Claire the default
