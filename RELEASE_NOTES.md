@@ -6,7 +6,7 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ## v1.7.8 - Kit (2026-11-28)
 
-- **Kit.** A fourth character alongside Claire, Leon and the Limitator, selectable in Settings and Multiplayer.
+- **Kit.** A fourth character alongside Claire, Leon and the Limitator, selectable in Settings and Multiplayer. Claire remains the default.
 - Her short hair, pale forelock, curled tail and suit keep their shape. The jewelry-free body has 6,838 triangles and the full 40-clip movement and weapon setup.
 - First person uses Kit's own hands, nails, white cuffs and sleeves on the existing weapon rigs. The jacket's texture projection and wrist fitting are corrected.
 - Character and prop lighting blends between its probes, reducing the brightness pops as a face turns.

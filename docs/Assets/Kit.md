@@ -1,6 +1,6 @@
 # Kit
 
-Kit is character 3. The installed runtime assets are under src/assets/library/player and are embedded in the game and Builder Play engine.
+Kit is optional character 3. Claire remains default character 0. The installed runtime assets are under src/assets/library/player and are embedded in the game and Builder Play engine.
 
 - Body: 6,838 triangles; 40 animation clips and existing stance/weapon layers.
 - First person: Kit's original skin, nails and personal-set sleeves, fitted to the existing four weapon rigs. Each has 4,428 vertices and 8,000 triangles.

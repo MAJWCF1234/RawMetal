@@ -106,7 +106,7 @@ void Game::openTitlePage(TitlePage page){
   if(m_hostDraft.name.empty())m_hostDraft.name=m_netSession&&!m_netSession->displayName().empty()?m_netSession->displayName()+"'s game":"A game below";
   auto maps=hostableMaps(m_hostDraft.mode);if(std::find(maps.begin(),maps.end(),m_hostDraft.map)==maps.end())m_hostDraft.map=maps.empty()?-1:maps.front();}
  if(page==TitlePage::QuickMatch)m_quickSearching=false;
- if(page==TitlePage::Character)m_titleSelection=std::clamp(m_settings.character,0,2);
+ if(page==TitlePage::Character)m_titleSelection=std::clamp(m_settings.character,0,3);
  // The first row that can be used.
  const auto items=titleItems();
  if(page!=TitlePage::Character)for(size_t i=0;i<items.size();++i)if(items[i].enabled){m_titleSelection=int(i);break;}
@@ -358,6 +358,10 @@ bool Game::testMultiplayerMenu(std::ostream& report){
   Game l(campaign);l.showTitleScreen();l.openTitlePage(TitlePage::Character);key(l,&InputState::menuDown);key(l,&InputState::menuDown);key(l,&InputState::menuAccept);
   check(l.titleItems().size()==5&&l.titleItems()[2].label=="LEON"&&l.settings().character==2,"CHARACTER: three bodies and BACK, LEON chosen");
   l.saveSettings(path.wstring());Game m(campaign);m.loadSettings(path.wstring());check(m.settings().character==2,"Leon survives a settings save and load");
+  Game fresh(campaign);check(fresh.settings().character==0,"CHARACTER: Claire remains the default for fresh settings");
+  Game kit(campaign);kit.m_settings.character=3;kit.showTitleScreen();kit.openTitlePage(TitlePage::Character);
+  check(kit.m_titleSelection==3&&kit.titleItems()[3].label=="KIT","CHARACTER: Kit is focused when reopening her page");
+  key(kit,&InputState::menuAccept);check(kit.settings().character==3,"CHARACTER: accepting the focused Kit row keeps Kit selected");
   std::ofstream(path)<<"1 .75 1 1 0 1 1 1 1 .5 0 0 0 0 9\n";Game wild(campaign);wild.loadSettings(path.wstring());std::filesystem::remove(path,e);check(wild.settings().character==3,"a character number past the last is clamped to Kit");}
  // MULTIPLAYER > NAME: typed on the page, used by the session at once, kept through a save and load; never the
  // Windows account name, which players did not want shown.
