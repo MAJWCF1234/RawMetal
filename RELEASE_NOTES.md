@@ -4,6 +4,15 @@ Changelog of shipped updates. Newest first. Each section is one release.
 
 ---
 
+## v1.7.9 - Kit, lighter (2026-11-28)
+
+- Kit's first-person meshes now share the existing weapon-rig animation scenes, retaining her own hands, nails, cuffs and sleeves.
+- Her added compressed assets shrink from 6.27 MiB to 3.01 MiB. First-person assets shrink from 4.46 MiB to 1.20 MiB.
+- Game and Campaign Builder include the optimization. Claire remains the default character.
+- Checked all 50 actions at 1,650 poses in each build, plus before/after hardware renders and Builder Play handoff.
+- Existing test failures remain: game gore/carcass, and Builder settings/multiplayer-menu checks. These reproduce on v1.7.8.
+- Packaging-only release of the already built and verified binaries, as requested; no rebuild or binary patching. The embedded version label remains v1.7.8.
+
 ## v1.7.8 - Kit (2026-11-28)
 
 - **Kit.** A fourth character alongside Claire, Leon and the Limitator, selectable in Settings and Multiplayer. Claire remains the default.
